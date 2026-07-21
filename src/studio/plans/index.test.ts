@@ -23,7 +23,9 @@ describe("studio lesson registry", () => {
       // (Plan-kind fixtures own their slug independently of the registry key.)
       expect(source.kind === "script" ? lesson.lesson.slug : slug).toBe(slug);
       expect(lesson.lesson.title.length).toBeGreaterThan(0);
-      expect(["live", "fixture"]).toContain(lesson.runtime.defaultMode);
+      expect(["live", "fixture"]).toContain(
+        lesson.runtime.kind === "none" ? "fixture" : lesson.runtime.defaultMode,
+      );
     }
   });
 });

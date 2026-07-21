@@ -16,11 +16,28 @@ export function studioTargetIdForFile(path: string): string {
 export const STUDIO_RUN_BUTTON_TARGET_ID = "runtime-run";
 
 /**
- * The Go runner dock container. Unattended fixture renders point the attention
- * cursor here instead of the Run button, which is replaced by a sign-in button
- * for signed-out sessions and would otherwise be a missing-target failure.
+ * Runner dock containers, one per playground kind. Unattended fixture renders
+ * point the attention cursor here instead of the Run button, which is replaced
+ * by a sign-in button for signed-out sessions and would otherwise be a
+ * missing-target failure.
  */
 export const STUDIO_GO_DOCK_TARGET_ID = "go-runner-dock";
+export const STUDIO_KOTLIN_DOCK_TARGET_ID = "kotlin-runner-dock";
+export const STUDIO_RUST_DOCK_TARGET_ID = "rust-runner-dock";
+
+/** The dock the attention cursor moves toward before `runtime.run`. */
+export function dockTargetIdForRuntime(
+  kind: "go-playground" | "kotlin-playground" | "rust-playground",
+): string {
+  switch (kind) {
+    case "go-playground":
+      return STUDIO_GO_DOCK_TARGET_ID;
+    case "kotlin-playground":
+      return STUDIO_KOTLIN_DOCK_TARGET_ID;
+    case "rust-playground":
+      return STUDIO_RUST_DOCK_TARGET_ID;
+  }
+}
 
 function findByStudioTargetId(id: string): Element | null {
   const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id;

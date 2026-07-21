@@ -34,3 +34,4 @@ tmp/
 src/core/dmp/target/
 .vercel
 slide-research
+studio-out/

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
-  goRunFixtureSchema,
+  RUNTIME_KIND_FOR_LESSON,
+  studioRuntimeSchema,
   studioSlideSchema,
   studioWhiteboardAssetSchema,
   studioWorkspacePinSchema,
@@ -146,15 +147,31 @@ export const lessonScriptSchema = z
       voiceProfile: z.string().min(1),
       seed: z.number().int().nonnegative(),
     }),
-    runtime: z.object({
-      kind: z.literal("go-playground"),
-      defaultMode: z.enum(["live", "fixture"]),
-      fixture: goRunFixtureSchema,
-    }),
+    runtime: studioRuntimeSchema,
     scenes: z.array(scriptSceneSchema).min(1),
     checks: z.array(scriptCheckSchema).default([]),
   })
   .superRefine((script, ctx) => {
+    const expectedKind = RUNTIME_KIND_FOR_LESSON[script.lesson.workspace.lessonType];
+    if (script.runtime.kind !== expectedKind) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Lesson type "${script.lesson.workspace.lessonType}" requires runtime kind "${expectedKind}", got "${script.runtime.kind}"`,
+      });
+    }
+    if (script.runtime.kind === "none") {
+      for (const scene of script.scenes) {
+        for (const action of scene.actions) {
+          if (action.type === "runtime.run" || action.type === "expect.output") {
+            ctx.addIssue({
+              code: "custom",
+              message: `Action "${action.id}" (${action.type}) needs a runnable runtime, but lesson type "${script.lesson.workspace.lessonType}" has none in the studio yet`,
+            });
+          }
+        }
+      }
+    }
+
     const actionIds = new Set<string>();
     for (const scene of script.scenes) {
       for (const action of scene.actions) {

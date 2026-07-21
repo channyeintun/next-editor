@@ -144,9 +144,9 @@ export async function runStudioRender(
 
   // ---- Preflight -----------------------------------------------------------
   phase("preflight");
-  if (runtimeMode === "live" && !deps.isSignedIn) {
+  if (runtimeMode === "live" && plan.runtime.kind !== "none" && !deps.isSignedIn) {
     return failedResult(
-      "Live runtime mode needs a signed-in session for /api/go-playground; sign in or render with runtime=fixture",
+      `Live runtime mode needs a signed-in session for /api/${plan.runtime.kind}; sign in or render with runtime=fixture`,
     );
   }
 
@@ -269,7 +269,7 @@ export async function runStudioRender(
     notifySlideEvent: (event) => deps.nextEditor.handleSlideEvent(event),
     notifyWhiteboardEvent: (event) => deps.nextEditor.handleWhiteboardEvent(event),
     runtimeMode,
-    runFixture: plan.runtime.fixture,
+    runtime: plan.runtime,
     planSeed: plan.seed,
     whiteboardAssets: plan.whiteboardAssets,
     signal,

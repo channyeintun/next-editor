@@ -150,6 +150,7 @@ describe("multi-surface pilot (go-cube-tour)", () => {
     expect(types).toContain("runtime.run");
     expect(plan.slides).toHaveLength(1);
     expect(plan.whiteboardAssets).toHaveLength(2);
+    if (plan.runtime.kind === "none") throw new Error("tour pilot lost its runtime");
     expect(plan.runtime.fixture.transientErrorKinds).toEqual(["unavailable"]);
   });
 

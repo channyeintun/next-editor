@@ -1,4 +1,4 @@
-import type { StudioPlanActionType, StudioRuntimeMode } from "./plan";
+import type { StudioPlanActionType, StudioRuntimeKind, StudioRuntimeMode } from "./plan";
 
 /**
  * Receipts, render reports, and build manifests
@@ -64,7 +64,7 @@ export interface StudioBuildManifest {
   narrationAudioHash: string;
   narrationMimeType: string;
   captionsHash: string;
-  runtimeKind: "go-playground";
+  runtimeKind: StudioRuntimeKind;
   runtimeMode: StudioRuntimeMode;
   environment: {
     userAgent: string;

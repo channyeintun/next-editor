@@ -77,7 +77,7 @@ lesson:
   title: "…"
   locale: en-US
   workspace: # the PINNED starter state (exact file contents)
-    lessonType: go # the only supported execution kind today
+    lessonType: go # any workspace lesson type, see the matrix below
     name: Go Lesson
     entryFilePath: main.go
     files:
@@ -90,7 +90,7 @@ build:
   voiceProfile: pocket-alba-v1 # see src/studio/tts/profiles.ts for ids
   seed: 11 # any int ≥ 0; drives typing cadence + narration noise
 runtime:
-  kind: go-playground
+  kind: go-playground # must match lessonType (matrix below)
   defaultMode: fixture # fixture = offline deterministic; live = real service
   fixture:
     latencyMs: 1200
@@ -103,6 +103,34 @@ scenes: […] # see Scenes
 checks:
   - { type: timing.p95Ms, max: 300 } # recommended on every script
 ```
+
+### Lesson types and runtime kinds
+
+Every workspace lesson type is scriptable. `runtime.kind` is fixed by the
+lesson type — the schema rejects mismatches:
+
+| `lessonType`                                                                                            | `runtime.kind`      | can `runtime.run`? |
+| ------------------------------------------------------------------------------------------------------- | ------------------- | ------------------ |
+| `go`                                                                                                    | `go-playground`     | yes                |
+| `kotlin`                                                                                                | `kotlin-playground` | yes                |
+| `rust`                                                                                                  | `rust-playground`   | yes                |
+| `html-css`, `react`, `vue`, `solid`, `svelte`, `htmx-express`, `alpine-express`, `express-ts`, `python` | `none`              | no                 |
+
+Kind `none` lessons omit the `runtime:` block entirely (or write
+`runtime: { kind: none }`) and must not use `runtime.run` or `expect.output` —
+they teach through editing, slides, whiteboard, and `expect.file` gates. Their
+WebContainer/preview execution path is not yet driven by the studio.
+
+Per-kind fixture `result` shapes (all fields exact program truth):
+
+- `go-playground` — `{ status: success | compile-error | runtime-error, output, exitCode, compileErrors? }`
+- `kotlin-playground` — `{ status: success | compile-error | runtime-error, output, compileErrors?, warnings?, exception? }`
+- `rust-playground` — `{ status: success | compile-error | runtime-error, stdout, stderr, compileErrors?, exitDetail? }`
+
+Language formatting rules carry over from the real editors: Go files use tabs;
+Kotlin and Rust use 4-space indentation. Rust workspaces must contain
+**exactly one file, `main.rs`** (the Rust Playground executes a single crate
+root); Go and Kotlin workspaces need at least one `.go` / `.kt` file.
 
 ### Scenes, narration, and marks
 
@@ -149,11 +177,11 @@ Action catalog:
 | -------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `workspace.openFile` | `path`                                                  | Path must exist in `workspace.files`. A cursor tween to the file row is derived automatically.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `editor.type`        | `target: {file, after, occurrence}`, `text`, `cadence?` | **Insert-only.** `after` is an exact substring of the file's _current_ content; insertion happens at the end of its `occurrence`-th match (`after: ""` = start of file). The file must already be open (`workspace.openFile` first). Typed `text` is inserted verbatim — include leading `\n` and tabs. `cadence` picks how the code appears: `natural` (default — unhurried keystrokes), `fast-explainer` (brisker keystrokes), `line-by-line` (incremental reveal, one line at a time, no keystrokes), `block` (whole insertion at once after a beat). Prefer `line-by-line` or `block` for longer snippets the narration only summarizes; keystroke cadences suit short, narrated-along edits. |
-| `runtime.run`        | —                                                       | Runs every top-level `.go` file. Give it `timeoutMs: 15000`. Retries transient service failures once, silently.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `runtime.run`        | —                                                       | Runs the workspace on the lesson's playground (every `.go` file / every `.kt` file / the single `main.rs`). Playground kinds only. Give it `timeoutMs: 15000` (Rust live compiles are slow — use `30000`). Retries transient service failures once, silently.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `slide.show`         | `slideId`, `maximized` (default true)                   | `slideId` must be in `lesson.slides`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `slide.close`        | —                                                       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `whiteboard.apply`   | `open?`, `maximized?`, `upsertIds: []`                  | Ids from `lesson.whiteboardAssets`. Must open, change maximize, or upsert ≥1 asset.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `expect.output`      | `contains`, `timeoutMs`                                 | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` line fails it. Anchor with `afterAction: run`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `expect.output`      | `contains`, `timeoutMs`                                 | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` line fails it. Anchor with `afterAction: run`. Playground kinds only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `expect.file`        | `path`, `contains`                                      | Asserts the final workspace file contains the string.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Critical `editor.type` discipline:
@@ -172,8 +200,9 @@ Critical `editor.type` discipline:
 
 ### The fixture must be the truth
 
-`fixture.result.output` must be **exactly** what the real program prints
-(every line, `\n`-terminated). Two reasons: `expect.output` runs against it in
+The fixture result's program output (`output` for Go/Kotlin, `stdout` for
+Rust) must be **exactly** what the real program prints (every line,
+`\n`-terminated). Two reasons: `expect.output` runs against it in
 fixture mode, and a later `--runtime=live` render runs the real Playground —
 if your pinned program and fixture disagree, live renders fail. Mentally
 execute the final code (pinned files + your insertions) and transcribe its

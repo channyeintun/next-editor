@@ -255,7 +255,8 @@ export default function StudioController() {
       } else {
         plan = source.load();
       }
-      const mode: StudioRuntimeMode = requestedMode ?? plan.runtime.defaultMode;
+      const mode: StudioRuntimeMode =
+        requestedMode ?? (plan.runtime.kind === "none" ? "fixture" : plan.runtime.defaultMode);
 
       const result = await runStudioRender(
         plan,

@@ -7,7 +7,7 @@ import {
   createSeededRandom,
 } from "../cadence";
 import { parseStudioPlan, type StudioPlan, type StudioTargetRef } from "../plan";
-import { STUDIO_GO_DOCK_TARGET_ID } from "../targets";
+import { dockTargetIdForRuntime } from "../targets";
 import {
   markerTimeMs,
   sceneStartMs,
@@ -74,14 +74,17 @@ const CURSOR_TWEEN_MIN_MS = 250;
 /** Consecutive moves to the same target within this window are deduped. */
 const CURSOR_DEDUPE_WINDOW_MS = 5_000;
 
-function cursorTargetForAction(action: ScriptAction): StudioTargetRef | null {
+function cursorTargetForAction(action: ScriptAction, script: LessonScript): StudioTargetRef | null {
   switch (action.type) {
     case "workspace.openFile":
       return { kind: "file", path: action.path };
     case "editor.type":
       return { kind: "editor" };
     case "runtime.run":
-      return { kind: "target-id", id: STUDIO_GO_DOCK_TARGET_ID };
+      // Schema validation guarantees run actions only exist for playground kinds.
+      return script.runtime.kind === "none"
+        ? null
+        : { kind: "target-id", id: dockTargetIdForRuntime(script.runtime.kind) };
     default:
       return null;
   }
@@ -185,7 +188,7 @@ export function compileLessonScript({
   let prevAuthoredAtMs = 0;
 
   for (const entry of authored) {
-    const target = cursorTargetForAction(entry.action);
+    const target = cursorTargetForAction(entry.action, script);
     const typingMs = typingDurationOf(entry.action, typingSeed.get(entry.action.id)!);
 
     if (target) {

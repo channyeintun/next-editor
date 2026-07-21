@@ -3,25 +3,19 @@ import type { WorkspaceActions } from "../contexts/WorkspaceContext";
 import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
 import { selectPreviewState, type SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
-import {
-  GoPlaygroundClient,
-  type GoPlaygroundServiceErrorKind,
-} from "../runtime/goPlayground/client";
-import {
-  goRunResultToConsoleLines,
-  goRunServiceErrorToConsoleLines,
-  goRunStartedConsoleLines,
-} from "../runtime/goPlayground/console";
-import { appendGoConsoleLines } from "../runtime/goPlayground/consoleStore";
-import { collectGoPlaygroundFiles } from "../runtime/goPlayground/files";
+import { appendRunnerConsoleLines } from "../runtime/goPlayground/consoleStore";
 import type { SlideEvent } from "../core/src/slides";
 import type { WhiteboardEvent } from "../core/src/whiteboard";
 import { isWorkspaceTextFile } from "../types/workspace";
 import { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil } from "./async";
 import { easeInOutCubic } from "./cadence";
-import { GoRunTerminalError, runGoWithRetry } from "./goRuntimeAdapter";
+import {
+  PlaygroundTerminalError,
+  preparePlaygroundRun,
+  runErrorPrefixFor,
+} from "./playgroundRuntime";
 import type {
-  StudioPlan,
+  StudioRuntime,
   StudioRuntimeMode,
   StudioTargetRef,
   StudioWhiteboardAsset,
@@ -54,7 +48,7 @@ export interface StudioDriverDeps {
   /** Records a whiteboard event (same send the whiteboard controller makes). */
   notifyWhiteboardEvent: (event: WhiteboardEvent) => void;
   runtimeMode: StudioRuntimeMode;
-  runFixture: StudioPlan["runtime"]["fixture"];
+  runtime: StudioRuntime;
   planSeed: number;
   whiteboardAssets: readonly StudioWhiteboardAsset[];
   signal: AbortSignal;
@@ -94,13 +88,7 @@ const CURSOR_STEP_MS = 32;
 
 export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
   const { signal } = deps;
-  let goClient: GoPlaygroundClient | null = null;
   let lastCursorPoint: { x: number; y: number } | null = null;
-
-  const onAbort = () => {
-    goClient?.abort();
-  };
-  signal.addEventListener("abort", onAbort, { once: true });
 
   const activeModelPath = (): string | null => {
     const model = deps.getEditor()?.getModel();
@@ -289,51 +277,41 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     },
 
     async runWorkspace(timeoutMs) {
-      const project = deps.workspace.getProject();
-      const goFiles = collectGoPlaygroundFiles(project);
-      if (goFiles.length === 0) {
-        throw new StudioActionError("The workspace has no .go files to run");
+      if (deps.runtime.kind === "none") {
+        throw new StudioActionError(
+          'This lesson type has no runnable studio runtime yet (runtime.kind is "none")',
+        );
       }
 
-      appendGoConsoleLines(
-        deps.runtimePanelStore,
-        goRunStartedConsoleLines(goFiles.map((file) => file.path)),
-      );
+      const prepared = preparePlaygroundRun({
+        runtime: deps.runtime,
+        mode: deps.runtimeMode,
+        project: deps.workspace.getProject(),
+        timeoutMs,
+        signal,
+      });
+      appendRunnerConsoleLines(deps.runtimePanelStore, prepared.startedLines);
 
       let outcome;
       try {
-        outcome = await runGoWithRetry({
-          mode: deps.runtimeMode,
-          fixture: deps.runFixture,
-          files: goFiles,
-          timeoutMs,
-          signal,
-          getClient: () => (goClient ??= new GoPlaygroundClient()),
-          errorLinesFor: (kind, message) =>
-            goRunServiceErrorToConsoleLines(
-              kind as Exclude<GoPlaygroundServiceErrorKind, "aborted">,
-              message,
-            ),
-        });
+        outcome = await prepared.run();
       } catch (error) {
-        if (error instanceof GoRunTerminalError) {
-          appendGoConsoleLines(deps.runtimePanelStore, error.consoleLines);
+        if (error instanceof PlaygroundTerminalError) {
+          appendRunnerConsoleLines(deps.runtimePanelStore, error.consoleLines);
         }
         throw error;
       }
 
-      appendGoConsoleLines(deps.runtimePanelStore, goRunResultToConsoleLines(outcome.result));
+      appendRunnerConsoleLines(deps.runtimePanelStore, outcome.resultLines);
 
-      if (outcome.result.status !== "success") {
-        throw new StudioActionError(
-          `The program did not run cleanly (status ${outcome.result.status}, exit ${outcome.result.exitCode ?? "?"})`,
-        );
+      if (!outcome.ok) {
+        throw new StudioActionError(`The program did not run cleanly (status ${outcome.status})`);
       }
 
       return {
+        kind: deps.runtime.kind,
         mode: deps.runtimeMode,
-        status: outcome.result.status,
-        exitCode: outcome.result.exitCode ?? 0,
+        status: outcome.status,
         attempts: outcome.attempts,
         transientFailures: outcome.transientFailures,
       };
@@ -443,11 +421,15 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     },
 
     async waitForOutput({ contains, timeoutMs }) {
+      const errorPrefix =
+        deps.runtime.kind === "none" ? null : runErrorPrefixFor(deps.runtime.kind);
       let matchedLine: string | null = null;
       await waitUntil(
         () => {
           const lines = deps.runtimePanelStore.getSnapshot().context.consoleLines;
-          const errorLine = lines.find((line) => line.startsWith("[go-run error]"));
+          const errorLine = errorPrefix
+            ? lines.find((line) => line.startsWith(errorPrefix))
+            : undefined;
           if (errorLine) {
             throw new StudioActionError(`The run reported an error: ${errorLine}`);
           }
@@ -475,9 +457,8 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     },
 
     dispose() {
-      signal.removeEventListener("abort", onAbort);
-      goClient?.abort();
-      goClient = null;
+      // Live playground clients abort via the shared signal; nothing else to
+      // release — the engine instances are per-run closures.
     },
   };
 }

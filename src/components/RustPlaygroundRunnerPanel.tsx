@@ -3,6 +3,7 @@ import { useSelector } from "@xstate/store-react";
 import { Bot, ChevronDown, ChevronUp, Cog, Maximize2, Minimize2 } from "lucide-react";
 import { signInUrl, useAuth } from "@next-editor/infra";
 import AgentPanel from "./agent/AgentPanel";
+import { STUDIO_TARGET_ATTRIBUTE, STUDIO_RUST_DOCK_TARGET_ID } from "../studio/targets";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import {
   selectActiveTab,
@@ -389,6 +390,7 @@ function RustPlaygroundRunnerPanel() {
         displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "shrink-0"
       }`}
       data-cursor-replay-target="runtime-dock"
+      {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_RUST_DOCK_TARGET_ID }}
     >
       <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
         {RUST_DOCK_TABS.map((tab) => {

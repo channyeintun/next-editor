@@ -1,0 +1,109 @@
+# The borrow checker, taught through one immutable borrow: measure a String
+# by reference, then keep using the owner. Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-borrow.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-borrow
+  title: "The borrow checker: use it, don't lose it"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let owner = String::from("borrow checker");
+            println!("{owner} owns the string");
+        }
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 21
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "14 bytes, borrowed only\nborrow checker owns the string\n"
+      stderr: ""
+
+scenes:
+  - id: ownership
+    narration: >
+      Rust gives every value a single owner. Here, the variable owner holds a
+      String. Pass that String around the plain way and ownership moves; the
+      original variable becomes unusable. The borrow checker is the compiler
+      proving all of this before the program ever runs.
+    sources:
+      - title: "The Rust Book — What Is Ownership?"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
+    actions: []
+
+  - id: borrow-fn
+    narration: >
+      [[mark:type-measure]] Instead of moving the value, we borrow it. The
+      ampersand in measure's signature takes a reference. The function can read
+      the String; it never owns it.
+    sources:
+      - title: "The Rust Book — References and Borrowing"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
+    actions:
+      - id: type-measure
+        type: editor.type
+        at: { mark: type-measure, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: ""
+          occurrence: 1
+        text: "fn measure(text: &String) -> usize {\n    text.len()\n}\n\n"
+
+  - id: borrow-call
+    narration: >
+      [[mark:type-call]] Call measure with a reference to owner, and print the
+      length. Then print through owner again afterwards. The borrow checker
+      verifies the borrow ends before that final use.
+    sources:
+      - title: "std::string::String::len"
+        url: "https://doc.rust-lang.org/std/string/struct.String.html#method.len"
+    actions:
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call, offsetMs: -300 }
+        target:
+          file: main.rs
+          after: "    let owner = String::from(\"borrow checker\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let length = measure(&owner);\n    println!(\"{length} bytes, borrowed only\");\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Run it. Fourteen bytes measured through a borrow, and owner
+      still owns the string. No moves, no copies; the compiler proved every
+      access was safe.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "14 bytes, borrowed only"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "measure(&owner)"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

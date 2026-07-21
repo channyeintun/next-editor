@@ -43,7 +43,10 @@ export const STUDIO_SOURCES: Record<string, StudioLessonSource> = {
 export const DEFAULT_STUDIO_PLAN_SLUG = M0_GO_HELLO_SLUG;
 
 export function sourceRuntimeDefault(source: StudioLessonSource): "live" | "fixture" {
-  return source.load().runtime.defaultMode;
+  const runtime = source.load().runtime;
+  // Lessons without a runnable runtime execute fully locally; "fixture" is
+  // the honest label for that.
+  return runtime.kind === "none" ? "fixture" : runtime.defaultMode;
 }
 
 export function sourceTitle(source: StudioLessonSource): string {

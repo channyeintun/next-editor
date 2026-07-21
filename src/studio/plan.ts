@@ -129,9 +129,26 @@ export const studioPlanActionSchema = z.discriminatedUnion("type", [
 export type StudioPlanAction = z.infer<typeof studioPlanActionSchema>;
 export type StudioPlanActionType = StudioPlanAction["type"];
 
+/** Every lesson type the workspace supports (kept in sync with `WorkspaceLessonType`). */
+export const studioLessonTypeSchema = z.enum([
+  "html-css",
+  "react",
+  "vue",
+  "solid",
+  "svelte",
+  "htmx-express",
+  "alpine-express",
+  "express-ts",
+  "go",
+  "kotlin",
+  "python",
+  "rust",
+]);
+export type StudioLessonType = z.infer<typeof studioLessonTypeSchema>;
+
 /** Pinned workspace: full file contents, no external template resolution in M0. */
 export const studioWorkspacePinSchema = z.object({
-  lessonType: z.literal("go"),
+  lessonType: studioLessonTypeSchema,
   name: z.string().min(1),
   entryFilePath: z.string().min(1),
   files: z.record(z.string().min(1), z.string()),
@@ -216,17 +233,81 @@ export const goRunFixtureSchema = z.object({
   }),
 });
 
-export const studioRuntimeSchema = z.object({
-  kind: z.literal("go-playground"),
-  /**
-   * "live" calls the real /api/go-playground proxy (requires a signed-in
-   * session); "fixture" replays the pinned result below. Unattended renders
-   * default to the plan's declared mode; the manifest records which one ran.
-   */
-  defaultMode: z.enum(["live", "fixture"]),
-  fixture: goRunFixtureSchema,
+/** Kotlin Playground stand-in result — mirrors the worker-normalized contract. */
+export const kotlinRunFixtureSchema = z.object({
+  latencyMs: positiveMs,
+  transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
+  result: z.object({
+    status: z.enum(["success", "compile-error", "runtime-error"]),
+    output: z.string(),
+    compileErrors: z.string().optional(),
+    warnings: z.string().optional(),
+    exception: z.string().optional(),
+  }),
 });
-export type StudioRuntimeMode = z.infer<typeof studioRuntimeSchema>["defaultMode"];
+
+/** Rust Playground stand-in result — mirrors the worker-normalized contract. */
+export const rustRunFixtureSchema = z.object({
+  latencyMs: positiveMs,
+  transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
+  result: z.object({
+    status: z.enum(["success", "compile-error", "runtime-error"]),
+    stdout: z.string(),
+    stderr: z.string(),
+    compileErrors: z.string().optional(),
+    exitDetail: z.string().optional(),
+  }),
+});
+
+/**
+ * Execution-kind-specific runtime declaration. "live" calls the real
+ * /api/<kind> proxy (requires a signed-in session); "fixture" replays the
+ * pinned result. Unattended renders default to the plan's declared mode; the
+ * manifest records which one ran. Kind "none" is for the WebContainer/preview
+ * lesson types, whose run surface is a pending studio adapter — such lessons
+ * narrate, edit, and use slides/whiteboard, but carry no `runtime.run`.
+ */
+export const studioRuntimeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("none") }),
+  z.object({
+    kind: z.literal("go-playground"),
+    defaultMode: z.enum(["live", "fixture"]),
+    fixture: goRunFixtureSchema,
+  }),
+  z.object({
+    kind: z.literal("kotlin-playground"),
+    defaultMode: z.enum(["live", "fixture"]),
+    fixture: kotlinRunFixtureSchema,
+  }),
+  z.object({
+    kind: z.literal("rust-playground"),
+    defaultMode: z.enum(["live", "fixture"]),
+    fixture: rustRunFixtureSchema,
+  }),
+]);
+export type StudioRuntime = z.infer<typeof studioRuntimeSchema>;
+export type StudioRuntimeKind = StudioRuntime["kind"];
+export type StudioRuntimeMode = "live" | "fixture";
+
+/**
+ * The one runtime kind each lesson type may declare. The three Playground
+ * types execute through their selective proxies; every WebContainer/preview
+ * type is "none" until the studio grows that adapter.
+ */
+export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind> = {
+  "html-css": "none",
+  react: "none",
+  vue: "none",
+  solid: "none",
+  svelte: "none",
+  "htmx-express": "none",
+  "alpine-express": "none",
+  "express-ts": "none",
+  python: "none",
+  go: "go-playground",
+  kotlin: "kotlin-playground",
+  rust: "rust-playground",
+};
 
 export const studioPlanSchema = z
   .object({
@@ -253,6 +334,24 @@ export const studioPlanSchema = z
     actions: z.array(studioPlanActionSchema).min(1),
   })
   .superRefine((plan, ctx) => {
+    const expectedKind = RUNTIME_KIND_FOR_LESSON[plan.workspace.lessonType];
+    if (plan.runtime.kind !== expectedKind) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Lesson type "${plan.workspace.lessonType}" requires runtime kind "${expectedKind}", got "${plan.runtime.kind}"`,
+      });
+    }
+    if (plan.runtime.kind === "none") {
+      for (const action of plan.actions) {
+        if (action.type === "runtime.run" || action.type === "expect.output") {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${action.id}" (${action.type}) needs a runnable runtime, but lesson type "${plan.workspace.lessonType}" has none in the studio yet`,
+          });
+        }
+      }
+    }
+
     const ids = new Set<string>();
     for (const action of plan.actions) {
       if (ids.has(action.id)) {
