@@ -32,7 +32,7 @@ lesson:
       width: 700
       height: 40
       text: "A struct — named fields + methods"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 28
     - id: st-fields-card
       kind: rectangle
@@ -40,7 +40,7 @@ lesson:
       y: 255
       width: 680
       height: 66
-      strokeColor: "#7dd3fc"
+      strokeColor: "#1971c2"
     - id: st-fields-text
       kind: text
       x: 322
@@ -48,7 +48,7 @@ lesson:
       width: 640
       height: 30
       text: "struct Rectangle { width, height }"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: st-impl-card
       kind: rectangle
@@ -56,7 +56,7 @@ lesson:
       y: 340
       width: 680
       height: 66
-      strokeColor: "#fbbf24"
+      strokeColor: "#f08c00"
     - id: st-impl-text
       kind: text
       x: 322
@@ -64,7 +64,7 @@ lesson:
       width: 640
       height: 30
       text: "impl Rectangle { fn area(&self) -> u32 }"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: st-note
       kind: text
@@ -73,7 +73,7 @@ lesson:
       width: 680
       height: 30
       text: "&self — the method borrows the instance"
-      strokeColor: "#86efac"
+      strokeColor: "#1e1e1e"
       fontSize: 20
 
 build:

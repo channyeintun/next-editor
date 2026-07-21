@@ -28,7 +28,7 @@ lesson:
       width: 680
       height: 40
       text: "A slice — a borrowed view"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 28
     - id: sl-arr-card
       kind: rectangle
@@ -36,7 +36,7 @@ lesson:
       y: 255
       width: 660
       height: 66
-      strokeColor: "#7dd3fc"
+      strokeColor: "#1971c2"
     - id: sl-arr-text
       kind: text
       x: 322
@@ -44,7 +44,7 @@ lesson:
       width: 620
       height: 30
       text: "&numbers[1..4]   →   [20, 30, 40]"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: sl-str-card
       kind: rectangle
@@ -52,7 +52,7 @@ lesson:
       y: 340
       width: 660
       height: 66
-      strokeColor: "#fbbf24"
+      strokeColor: "#f08c00"
     - id: sl-str-text
       kind: text
       x: 322
@@ -60,7 +60,7 @@ lesson:
       width: 620
       height: 30
       text: '&text[0..6]   →   "borrow"'
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: sl-note
       kind: text
@@ -69,7 +69,7 @@ lesson:
       width: 660
       height: 30
       text: "just a pointer + a length — no copy"
-      strokeColor: "#86efac"
+      strokeColor: "#1e1e1e"
       fontSize: 20
 
 build:

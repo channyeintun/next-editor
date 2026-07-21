@@ -27,7 +27,7 @@ lesson:
       width: 640
       height: 40
       text: "Anatomy of a function"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 28
     - id: ft-sig
       kind: text
@@ -36,7 +36,7 @@ lesson:
       width: 640
       height: 34
       text: "fn add(a: i32, b: i32) -> i32"
-      strokeColor: "#7dd3fc"
+      strokeColor: "#1e1e1e"
       fontSize: 24
     - id: ft-body
       kind: text
@@ -45,7 +45,7 @@ lesson:
       width: 640
       height: 34
       text: "{  a + b  }   value — no semicolon"
-      strokeColor: "#86efac"
+      strokeColor: "#1e1e1e"
       fontSize: 22
     - id: ft-note1
       kind: text
@@ -54,7 +54,7 @@ lesson:
       width: 620
       height: 30
       text: "•  parameters must be typed"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 18
     - id: ft-note2
       kind: text
@@ -63,7 +63,7 @@ lesson:
       width: 620
       height: 30
       text: "•  ->  gives the return type"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 18
     - id: ft-note3
       kind: text
@@ -72,7 +72,7 @@ lesson:
       width: 620
       height: 30
       text: "•  the last expression is the result"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 18
 
 build:

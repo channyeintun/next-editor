@@ -27,7 +27,7 @@ lesson:
       width: 700
       height: 40
       text: "String vs &str"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 28
     - id: str-owned-card
       kind: rectangle
@@ -35,7 +35,7 @@ lesson:
       y: 255
       width: 680
       height: 66
-      strokeColor: "#7dd3fc"
+      strokeColor: "#1971c2"
     - id: str-owned-text
       kind: text
       x: 322
@@ -43,7 +43,7 @@ lesson:
       width: 640
       height: 30
       text: "String — owned, growable (heap)"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: str-borrowed-card
       kind: rectangle
@@ -51,7 +51,7 @@ lesson:
       y: 340
       width: 680
       height: 66
-      strokeColor: "#fbbf24"
+      strokeColor: "#f08c00"
     - id: str-borrowed-text
       kind: text
       x: 322
@@ -59,7 +59,7 @@ lesson:
       width: 640
       height: 30
       text: "&str — borrowed view (a literal)"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: str-note
       kind: text
@@ -68,7 +68,7 @@ lesson:
       width: 680
       height: 30
       text: "grow with: push_str · push · format!"
-      strokeColor: "#86efac"
+      strokeColor: "#1e1e1e"
       fontSize: 20
 
 build:

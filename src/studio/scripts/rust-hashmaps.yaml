@@ -32,7 +32,7 @@ lesson:
       width: 700
       height: 40
       text: "HashMap<K, V> — key → value"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 28
     - id: hm-insert-card
       kind: rectangle
@@ -40,7 +40,7 @@ lesson:
       y: 255
       width: 680
       height: 66
-      strokeColor: "#7dd3fc"
+      strokeColor: "#1971c2"
     - id: hm-insert-text
       kind: text
       x: 322
@@ -48,7 +48,7 @@ lesson:
       width: 640
       height: 30
       text: "insert(k, v)   ·   get(k) → Option"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: hm-note
       kind: text
@@ -57,7 +57,7 @@ lesson:
       width: 680
       height: 30
       text: "get returns Option — the key might be missing"
-      strokeColor: "#86efac"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: hm-entry-card
       kind: rectangle
@@ -65,7 +65,7 @@ lesson:
       y: 386
       width: 680
       height: 66
-      strokeColor: "#fbbf24"
+      strokeColor: "#f08c00"
     - id: hm-entry-text
       kind: text
       x: 322
@@ -73,7 +73,7 @@ lesson:
       width: 640
       height: 30
       text: "entry(k).or_insert(default)   ·   map[k]"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
 
 build:

@@ -27,7 +27,7 @@ lesson:
       width: 700
       height: 40
       text: "Iterators — a lazy pipeline"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 28
     - id: it-pipe-card
       kind: rectangle
@@ -35,7 +35,7 @@ lesson:
       y: 250
       width: 680
       height: 66
-      strokeColor: "#7dd3fc"
+      strokeColor: "#1971c2"
     - id: it-pipe-text
       kind: text
       x: 322
@@ -43,7 +43,7 @@ lesson:
       width: 640
       height: 30
       text: "iter → filter → map → collect"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 22
     - id: it-closure-note
       kind: text
@@ -52,7 +52,7 @@ lesson:
       width: 680
       height: 30
       text: "|n| n * 10 — a closure (inline function)"
-      strokeColor: "#fbbf24"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: it-lazy-note
       kind: text
@@ -61,7 +61,7 @@ lesson:
       width: 680
       height: 30
       text: "lazy — runs only at collect or sum"
-      strokeColor: "#86efac"
+      strokeColor: "#1e1e1e"
       fontSize: 20
 
 build:

@@ -30,7 +30,7 @@ lesson:
       width: 700
       height: 40
       text: "Vec<T> — a growable list"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 28
     - id: vec-add-card
       kind: rectangle
@@ -38,7 +38,7 @@ lesson:
       y: 255
       width: 680
       height: 66
-      strokeColor: "#7dd3fc"
+      strokeColor: "#1971c2"
     - id: vec-add-text
       kind: text
       x: 322
@@ -46,7 +46,7 @@ lesson:
       width: 640
       height: 30
       text: "let mut v = Vec::new();   v.push(x)"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: vec-use-card
       kind: rectangle
@@ -54,7 +54,7 @@ lesson:
       y: 340
       width: 680
       height: 66
-      strokeColor: "#fbbf24"
+      strokeColor: "#f08c00"
     - id: vec-use-text
       kind: text
       x: 322
@@ -62,7 +62,7 @@ lesson:
       width: 640
       height: 30
       text: "v[0] read   ·   v.len()   ·   for x in &v"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: vec-note
       kind: text
@@ -71,7 +71,7 @@ lesson:
       width: 680
       height: 30
       text: "grows on the heap — same type throughout"
-      strokeColor: "#86efac"
+      strokeColor: "#1e1e1e"
       fontSize: 20
 
 build:

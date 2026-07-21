@@ -27,7 +27,7 @@ lesson:
       width: 640
       height: 40
       text: "Control flow — three forms"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 28
     - id: cf-if-card
       kind: rectangle
@@ -35,7 +35,7 @@ lesson:
       y: 250
       width: 640
       height: 70
-      strokeColor: "#7dd3fc"
+      strokeColor: "#1971c2"
     - id: cf-if-text
       kind: text
       x: 342
@@ -43,7 +43,7 @@ lesson:
       width: 600
       height: 30
       text: "if … { } else { }   →   a value"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: cf-loop-card
       kind: rectangle
@@ -51,7 +51,7 @@ lesson:
       y: 340
       width: 640
       height: 70
-      strokeColor: "#fbbf24"
+      strokeColor: "#f08c00"
     - id: cf-for-text
       kind: text
       x: 342
@@ -59,7 +59,7 @@ lesson:
       width: 600
       height: 30
       text: "for i in 1..=n { }   →   step a range"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
     - id: cf-while-card
       kind: rectangle
@@ -67,7 +67,7 @@ lesson:
       y: 430
       width: 640
       height: 70
-      strokeColor: "#86efac"
+      strokeColor: "#2f9e44"
     - id: cf-while-text
       kind: text
       x: 342
@@ -75,7 +75,7 @@ lesson:
       width: 600
       height: 30
       text: "while cond { }   →   repeat while true"
-      strokeColor: "#e2e8f0"
+      strokeColor: "#1e1e1e"
       fontSize: 20
 
 build:
