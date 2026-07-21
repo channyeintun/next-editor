@@ -21,7 +21,12 @@ export interface PocketVoiceProfile {
   /** Immutable (revision-pinned) base URL of the exported ONNX bundle. */
   bundleBaseUrl: string;
   bundleName: string;
+  /** Built-in voice name from voices.bin, or "custom" for a cloned voice. */
   voice: string;
+  /** Cloned voice: the locally stored reference sample this profile uses. */
+  customVoiceId?: string;
+  /** Cloned voice: sample content hash — keys the synthesis cache. */
+  customVoiceSha256?: string;
   sampleRate: 24000;
   mimeType: "audio/wav";
 }
@@ -42,6 +47,28 @@ export const VOICE_PROFILES: Record<string, VoiceProfile> = {
     mimeType: "audio/wav",
   },
 };
+
+/**
+ * Profile for a locally cloned voice (pocket-tts voice cloning). Not in the
+ * static registry — cloned voices live in this browser's IndexedDB and are a
+ * render-time choice; scripts keep pinning built-in profiles.
+ */
+export function customVoiceProfileOf(voice: {
+  id: string;
+  sampleSha256: string;
+}): PocketVoiceProfile {
+  return {
+    id: `pocket-custom-${voice.id}`,
+    providerId: "pocket-tts-web",
+    bundleBaseUrl: POCKET_BUNDLE_BASE,
+    bundleName: "english_2026-04",
+    voice: "custom",
+    customVoiceId: voice.id,
+    customVoiceSha256: voice.sampleSha256,
+    sampleRate: 24000,
+    mimeType: "audio/wav",
+  };
+}
 
 export function requireVoiceProfile(id: string): VoiceProfile {
   const profile = VOICE_PROFILES[id];

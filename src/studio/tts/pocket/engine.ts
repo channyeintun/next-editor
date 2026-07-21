@@ -206,6 +206,13 @@ export interface PocketEngineConfig {
   /** Immutable base URL of the exported bundle (pinned revision). */
   bundleBaseUrl: string;
   voice: string;
+  /**
+   * Voice cloning: a 24 kHz mono reference sample. When set, the voice state
+   * is derived from this audio through the bundle's mimi encoder plus one
+   * flow-LM conditioning pass (the demo's custom-voice path) instead of the
+   * precomputed voices.bin record named by `voice`.
+   */
+  customVoiceSamples?: Float32Array;
 }
 
 export interface PocketSynthesisResult {
@@ -282,6 +289,16 @@ export class PocketTtsEngine {
     engine.tokenizer = processor;
 
     onPhase?.("tts-voice");
+    if (config.customVoiceSamples) {
+      engine.voiceState = await engine.cloneVoiceState(
+        base,
+        config.customVoiceSamples,
+        sessionOptions,
+        onPhase,
+      );
+      return engine;
+    }
+
     const voices = parseVoiceStatesBin(await fetchBundleAsset(base, "voices.bin"));
     const record = voices[config.voice];
     if (!record) {
@@ -297,6 +314,62 @@ export class PocketTtsEngine {
     engine.voiceState = engine.stateFromVoiceRecord(record);
 
     return engine;
+  }
+
+  /**
+   * Voice cloning (ported from the demo's encode_voice path): mimi-encode the
+   * reference audio to embeddings, prepend the learned BOS-before-voice
+   * embedding, and run one flow-LM pass over an empty sequence — the updated
+   * flow-LM state IS the voice. The encoder session is released afterwards.
+   */
+  private async cloneVoiceState(
+    base: string,
+    samples: Float32Array,
+    sessionOptions: ort.InferenceSession.SessionOptions,
+    onPhase?: (phase: string) => void,
+  ): Promise<OrtState> {
+    onPhase?.("tts-voice-clone");
+    const encoder = await ort.InferenceSession.create(
+      new Uint8Array(await fetchBundleAsset(base, "mimi_encoder_int8.onnx")),
+      sessionOptions,
+    );
+    try {
+      const outputs = await encoder.run({
+        audio: new ort.Tensor("float32", samples, [1, 1, samples.length]),
+      });
+      const embeddings = outputs[encoder.outputNames[0]];
+
+      let dims = embeddings.dims.slice();
+      let data = new Float32Array(embeddings.data as Float32Array);
+      while (dims.length > 3 && dims[0] === 1) {
+        dims = dims.slice(1);
+      }
+      if (dims.length < 3) {
+        dims = [1, dims[0], dims[1]];
+      }
+
+      if (this.metadata.insert_bos_before_voice && this.metadata.bos_before_voice_file) {
+        const bos = parseNpyFloat32(
+          await fetchBundleAsset(base, this.metadata.bos_before_voice_file),
+        );
+        const combined = new Float32Array(bos.data.length + data.length);
+        combined.set(bos.data, 0);
+        combined.set(data, bos.data.length);
+        data = combined;
+        dims = [1, dims[1] + bos.shape[1], dims[2]];
+      }
+
+      const state = initStateFromManifest(this.metadata.flow_lm_state_manifest);
+      const result = await this.flowLmMain.run({
+        sequence: new ort.Tensor("float32", new Float32Array(0), [1, 0, this.metadata.latent_dim]),
+        text_embeddings: new ort.Tensor("float32", data, dims),
+        ...state,
+      });
+      updateStateFromManifestOutputs(state, result, this.metadata.flow_lm_state_manifest);
+      return state;
+    } finally {
+      await encoder.release();
+    }
   }
 
   private stateFromVoiceRecord(record: VoiceRecord): OrtState {

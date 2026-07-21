@@ -46,6 +46,13 @@ lesson from the dropdown (or **Import…** a YAML file — validated and
 critiqued in the page), press **Start render**, watch, and **Create draft…**
 (sign-in required for drafts; publishing stays a separate human action).
 
+Users can also **clone their own voice** (pocket-tts voice cloning): the
+voice row offers **Record** (microphone, 2–20s) or **Clone…** (an audio
+file); the sample is stored only in the browser (IndexedDB), and selecting
+the cloned voice narrates the next render with it. Scripts keep pinning
+built-in profiles in `build.voiceProfile` — cloning is a render-time choice,
+and a draft rendered with a cloned voice says so in its description.
+
 **Agents working in this repo**:
 
 ```text

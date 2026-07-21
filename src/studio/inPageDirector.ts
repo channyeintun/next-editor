@@ -42,6 +42,12 @@ export interface InPageDirectorResult {
 
 export interface InPageDirectorOptions {
   onPhase?: (phase: string) => void;
+  /**
+   * Render-time voice override — e.g. a cloned voice from this browser's
+   * IndexedDB. When set it replaces the script's pinned `build.voiceProfile`;
+   * the profile (including the sample hash) keys every dialog's cache entry.
+   */
+  voiceProfile?: VoiceProfile;
 }
 
 interface InPageSynthProvider {
@@ -76,9 +82,9 @@ function providerFor(
 
 export async function buildPlanFromScript(
   script: LessonScript,
-  { onPhase }: InPageDirectorOptions = {},
+  { onPhase, voiceProfile }: InPageDirectorOptions = {},
 ): Promise<InPageDirectorResult> {
-  const profile = requireVoiceProfile(script.build.voiceProfile);
+  const profile = voiceProfile ?? requireVoiceProfile(script.build.voiceProfile);
   const provider = providerFor(profile, script.build.seed, onPhase);
 
   const extracted = extractNarration(

@@ -20,6 +20,15 @@ import {
   type StudioLessonSource,
 } from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
+import {
+  deleteCustomVoice,
+  listCustomVoices,
+  prepareVoiceSample,
+  saveCustomVoice,
+  type SavedCustomVoice,
+} from "./tts/customVoices";
+import { customVoiceProfileOf } from "./tts/profiles";
+import { synthesizePocketWav } from "./tts/pocketSynth";
 import { critiqueScript, estimateNarrationDurationMs, type CritiqueNote } from "./script/critic";
 import { extractNarration } from "./script/markers";
 import {
@@ -42,6 +51,7 @@ import type { RenderSemantics } from "./compare";
 // Imported-at-runtime scripts (YAML text by slug), surviving reloads within
 // the browsing session so an import → render → reload → re-render loop works.
 const IMPORTED_SCRIPTS_KEY = "next-editor:studio:imported-scripts";
+const VOICE_CHOICE_KEY = "next-editor:studio:voice-choice";
 
 function readImportedScripts(): Record<string, string> {
   try {
@@ -177,6 +187,115 @@ export default function StudioController() {
   const runningRef = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Voice cloning (pocket-tts): cloned voices live in this browser's
+  // IndexedDB; the selection overrides the script's pinned profile at render.
+  const [customVoices, setCustomVoices] = useState<SavedCustomVoice[]>([]);
+  const [voiceChoice, setVoiceChoice] = useState<string>(
+    () => localStorage.getItem(VOICE_CHOICE_KEY) ?? "default",
+  );
+  const [voiceBusy, setVoiceBusy] = useState<string | null>(null);
+  const [renderedVoiceName, setRenderedVoiceName] = useState<string | null>(null);
+  const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
+  const voiceRecorderRef = useRef<{ recorder: MediaRecorder; chunks: Blob[] } | null>(null);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+
+  useEffect(() => {
+    void listCustomVoices().then(setCustomVoices);
+  }, []);
+
+  const selectedVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
+
+  const chooseVoice = (value: string) => {
+    setVoiceChoice(value);
+    localStorage.setItem(VOICE_CHOICE_KEY, value);
+  };
+
+  const saveVoiceFromAudio = async (bytes: ArrayBuffer, suggestedName: string) => {
+    setVoiceBusy("Preparing the sample (24 kHz mono)…");
+    try {
+      const samples = await prepareVoiceSample(bytes);
+      const voice = await saveCustomVoice(suggestedName, samples);
+      setCustomVoices(await listCustomVoices());
+      chooseVoice(voice.id);
+    } finally {
+      setVoiceBusy(null);
+    }
+  };
+
+  const handleVoiceFile = async (file: File) => {
+    try {
+      await saveVoiceFromAudio(await file.arrayBuffer(), file.name.replace(/\.[^.]+$/, ""));
+    } catch (error) {
+      setFatal(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const toggleVoiceRecording = async () => {
+    const active = voiceRecorderRef.current;
+    if (active) {
+      active.recorder.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        voiceRecorderRef.current = null;
+        setVoiceRecording(false);
+        for (const track of stream.getTracks()) track.stop();
+        void new Blob(chunks, { type: recorder.mimeType })
+          .arrayBuffer()
+          .then((bytes) => saveVoiceFromAudio(bytes, "My voice"))
+          .catch((error: unknown) =>
+            setFatal(error instanceof Error ? error.message : String(error)),
+          );
+      };
+      voiceRecorderRef.current = { recorder, chunks };
+      setVoiceRecording(true);
+      recorder.start();
+      // The engine conditions on at most 20s — stop the mic there.
+      setTimeout(() => {
+        if (voiceRecorderRef.current?.recorder === recorder && recorder.state === "recording") {
+          recorder.stop();
+        }
+      }, 20_000);
+    } catch (error) {
+      setFatal(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const previewVoice = async () => {
+    if (!selectedVoice) return;
+    setVoiceBusy(`Synthesizing a preview with "${selectedVoice.name}"…`);
+    try {
+      const wav = await synthesizePocketWav(
+        customVoiceProfileOf(selectedVoice),
+        "Hi! This is my cloned voice, reading a quick preview.",
+        1,
+      );
+      const url = URL.createObjectURL(new Blob([wav.slice() as BlobPart], { type: "audio/wav" }));
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } catch (error) {
+      setFatal(error instanceof Error ? error.message : String(error));
+    } finally {
+      setVoiceBusy(null);
+    }
+  };
+
+  const removeVoice = async () => {
+    if (!selectedVoice) return;
+    if (!window.confirm(`Delete cloned voice "${selectedVoice.name}"?`)) return;
+    await deleteCustomVoice(selectedVoice.id);
+    setCustomVoices(await listCustomVoices());
+    chooseVoice("default");
+  };
+
   const sources = allSources(importedScripts);
 
   const selectLesson = (slug: string) => {
@@ -247,14 +366,18 @@ export default function StudioController() {
       const renderOptions: StudioRenderOptions = {};
       setBuildWarnings([]);
       if (source.kind === "script") {
+        const clonedVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
         const built = await buildPlanFromScript(source.load(), {
           onPhase: setPhase,
+          voiceProfile: clonedVoice ? customVoiceProfileOf(clonedVoice) : undefined,
         });
+        setRenderedVoiceName(clonedVoice?.name ?? null);
         plan = built.plan;
         renderOptions.narration = built.narration;
         setBuildWarnings(built.warnings);
       } else {
         plan = source.load();
+        setRenderedVoiceName(null);
       }
       const mode: StudioRuntimeMode =
         requestedMode ?? (plan.runtime.kind === "none" ? "fixture" : plan.runtime.defaultMode);
@@ -424,6 +547,93 @@ export default function StudioController() {
           }}
         />
       </div>
+
+      <div className="mt-2 flex items-center gap-2">
+        <select
+          value={selectedVoice ? selectedVoice.id : "default"}
+          disabled={running || voiceBusy !== null}
+          onChange={(event) => chooseVoice(event.target.value)}
+          aria-label="Narrator voice"
+          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+        >
+          <option value="default">voice: script default</option>
+          {customVoices.map((voice) => (
+            <option key={voice.id} value={voice.id}>
+              voice: {voice.name} (cloned)
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={running || voiceBusy !== null || voiceRecording}
+          onClick={() => voiceFileInputRef.current?.click()}
+          className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+          title="Clone a voice from an audio file (2–20s of clear speech)"
+        >
+          Clone…
+        </button>
+        <button
+          type="button"
+          disabled={running || voiceBusy !== null}
+          onClick={() => {
+            void toggleVoiceRecording();
+          }}
+          className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            voiceRecording
+              ? "bg-[#3b2222] text-[#ef8d8d] hover:bg-[#4d2a2a]"
+              : "bg-[#222d3b] text-[#8db8ef] hover:bg-[#2a3a4d]"
+          }`}
+          title="Record 2–20s of your voice with the microphone"
+        >
+          {voiceRecording ? "Stop" : "Record"}
+        </button>
+        {selectedVoice ? (
+          <>
+            <button
+              type="button"
+              disabled={running || voiceBusy !== null}
+              onClick={() => {
+                void previewVoice();
+              }}
+              className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+              title="Synthesize a short preview sentence with this voice"
+            >
+              Preview
+            </button>
+            <button
+              type="button"
+              disabled={running || voiceBusy !== null}
+              onClick={() => {
+                void removeVoice();
+              }}
+              className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
+              title="Delete this cloned voice from the browser"
+            >
+              ✕
+            </button>
+          </>
+        ) : null}
+        <input
+          ref={voiceFileInputRef}
+          type="file"
+          accept="audio/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) {
+              void handleVoiceFile(file);
+            }
+          }}
+        />
+      </div>
+      {voiceBusy ? <p className="mt-1 text-[12px] text-slate-400">{voiceBusy}</p> : null}
+      {voiceRecording ? (
+        <p className="mt-1 text-[12px] text-amber-300">
+          Recording… speak naturally; stops automatically at 20s.
+        </p>
+      ) : null}
+
       <p className="mt-1 text-slate-400">
         runtime <span className="font-mono text-slate-300">{effectiveModeLabel}</span>
         {" · run #"}
@@ -573,7 +783,7 @@ export default function StudioController() {
           recording={artifacts.recording}
           onClose={() => setShowDraftModal(false)}
           initialTitle={source ? sourceTitle(source) : planSlug}
-          initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${latest.result.manifest.planSlug}, plan sha256 ${latest.result.manifest.planHash.slice(0, 16)}, ${latest.result.manifest.runtimeMode} runtime). Review the full lesson before publishing.`}
+          initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${latest.result.manifest.planSlug}, plan sha256 ${latest.result.manifest.planHash.slice(0, 16)}, ${latest.result.manifest.runtimeMode} runtime${renderedVoiceName ? `, narrated with the user-cloned voice "${renderedVoiceName}"` : ""}). Review the full lesson before publishing.`}
           initialTags="studio, ai-produced"
         />
       ) : null}
