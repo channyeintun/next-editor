@@ -1,0 +1,196 @@
+# One idea: a HashMap<K,V> stores values you look up by key; get returns an
+# Option (the key might be missing), and entry updates a key or sets a default.
+# A whiteboard sketch, then insert / get+match / entry on team scores, run.
+# Output avoids iteration (HashMap order is nondeterministic).
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-hashmaps.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-hashmaps
+  title: "Rust hash maps: look up by key"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        use std::collections::HashMap;
+
+        fn main() {
+            let mut scores = HashMap::new();
+            scores.insert("blue", 10);
+            scores.insert("red", 50);
+            println!("teams: {}", scores.len());
+        }
+  whiteboardAssets:
+    - id: hm-title
+      kind: text
+      x: 300
+      y: 185
+      width: 700
+      height: 40
+      text: "HashMap<K, V> — key → value"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: hm-insert-card
+      kind: rectangle
+      x: 300
+      y: 255
+      width: 680
+      height: 66
+      strokeColor: "#7dd3fc"
+    - id: hm-insert-text
+      kind: text
+      x: 322
+      y: 277
+      width: 640
+      height: 30
+      text: "insert(k, v)   ·   get(k) → Option"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: hm-note
+      kind: text
+      x: 320
+      y: 336
+      width: 680
+      height: 30
+      text: "get returns Option — the key might be missing"
+      strokeColor: "#86efac"
+      fontSize: 20
+    - id: hm-entry-card
+      kind: rectangle
+      x: 300
+      y: 386
+      width: 680
+      height: 66
+      strokeColor: "#fbbf24"
+    - id: hm-entry-text
+      kind: text
+      x: 322
+      y: 408
+      width: 640
+      height: 30
+      text: "entry(k).or_insert(default)   ·   map[k]"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 40
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "teams: 2\nred has 50\nblue now: 15\n"
+      stderr: ""
+
+scenes:
+  - id: what-is-a-map
+    narration: >
+      [[mark:board]] A HashMap stores values you look up by key, not by
+      position. [[mark:insert-card]] You insert key-value pairs, and get a
+      value back by its key. [[mark:note]] But get returns an Option, because
+      the key might not be there. [[mark:entry-card]] And entry lets you update
+      a key, or set a default if it's missing. [[mark:board-close]] Let's try
+      it.
+    sources:
+      - title: "The Rust Book — Storing Keys with Associated Values in Hash Maps"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [hm-title]
+      - id: show-insert
+        type: whiteboard.apply
+        at: { mark: insert-card }
+        upsertIds: [hm-insert-card, hm-insert-text]
+      - id: show-note
+        type: whiteboard.apply
+        at: { mark: note }
+        upsertIds: [hm-note]
+      - id: show-entry
+        type: whiteboard.apply
+        at: { mark: entry-card }
+        upsertIds: [hm-entry-card, hm-entry-text]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: insert-and-get
+    narration: >
+      [[mark:open]] Here we insert two team scores, so the map holds two keys.
+      [[mark:type-get]] Now we look up red. get returns an Option, so we match:
+      Some means we found points, None means the key is missing. Red is there,
+      with fifty.
+    sources:
+      - title: "The Rust Book — Accessing Values in a Hash Map"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#accessing-values-in-a-hash-map"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-get
+        type: editor.type
+        at: { mark: type-get, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"teams: {}\", scores.len());\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let team = \"red\";\n    match scores.get(team) {\n        Some(points) => println!(\"{team} has {points}\"),\n        None => println!(\"{team} not found\"),\n    }\n"
+
+  - id: entry-update
+    narration: >
+      [[mark:type-entry]] entry is the update tool. For blue, or_insert gives
+      us a mutable reference — the existing ten, or a zero if blue were new. We
+      add five, so blue becomes fifteen.
+    sources:
+      - title: "The Rust Book — Updating a Value Based on the Old Value"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#updating-a-value-based-on-the-old-value"
+    actions:
+      - id: type-entry
+        type: editor.type
+        at: { mark: type-entry, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "        None => println!(\"{team} not found\"),\n    }\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    *scores.entry(\"blue\").or_insert(0) += 5;\n    println!(\"blue now: {}\", scores[\"blue\"]);\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Two teams, red has fifty, and blue climbed to
+      fifteen. A HashMap is how you store and find data by a key instead of an
+      index.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "blue now: 15"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: 'scores.entry("blue")'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

@@ -11,7 +11,14 @@ describe("studio lesson registry", () => {
       "rust-control-flow",
       "rust-data-types",
       "rust-functions",
+      "rust-hashmaps",
+      "rust-iterators",
+      "rust-match",
+      "rust-slices",
+      "rust-strings",
+      "rust-structs",
       "rust-variables",
+      "rust-vectors",
     ]);
     expect(STUDIO_SOURCES[DEFAULT_STUDIO_PLAN_SLUG]?.kind).toBe("script");
   });

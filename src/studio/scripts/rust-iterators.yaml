@@ -1,0 +1,183 @@
+# One idea: iterator adapters (filter, map) describe a lazy pipeline over a
+# sequence, using closures (|n| ...), and nothing runs until a consumer like
+# collect or sum. A whiteboard sketch, then a filter/map/collect chain + sum.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-iterators.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-iterators
+  title: "Rust iterators: lazy pipelines with closures"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let numbers = [1, 2, 3, 4, 5, 6];
+            println!("numbers: {numbers:?}");
+        }
+  whiteboardAssets:
+    - id: it-title
+      kind: text
+      x: 300
+      y: 185
+      width: 700
+      height: 40
+      text: "Iterators — a lazy pipeline"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: it-pipe-card
+      kind: rectangle
+      x: 300
+      y: 250
+      width: 680
+      height: 66
+      strokeColor: "#7dd3fc"
+    - id: it-pipe-text
+      kind: text
+      x: 322
+      y: 272
+      width: 640
+      height: 30
+      text: "iter → filter → map → collect"
+      strokeColor: "#e2e8f0"
+      fontSize: 22
+    - id: it-closure-note
+      kind: text
+      x: 320
+      y: 346
+      width: 680
+      height: 30
+      text: "|n| n * 10 — a closure (inline function)"
+      strokeColor: "#fbbf24"
+      fontSize: 20
+    - id: it-lazy-note
+      kind: text
+      x: 320
+      y: 392
+      width: 680
+      height: 30
+      text: "lazy — runs only at collect or sum"
+      strokeColor: "#86efac"
+      fontSize: 20
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 41
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "numbers: [1, 2, 3, 4, 5, 6]\nevens doubled: [20, 40, 60]\nsum: 21\n"
+      stderr: ""
+
+scenes:
+  - id: the-pipeline
+    narration: >
+      [[mark:board]] Iterators let you describe a pipeline over a sequence.
+      [[mark:pipe]] Start with iter, keep only some items with filter,
+      transform each with map, then collect the results. [[mark:closure]] Those
+      bars are closures — small inline functions, like n maps to n times ten.
+      [[mark:lazy]] And it's lazy: nothing actually runs until you collect or
+      sum at the end. [[mark:board-close]] Let's chain them.
+    sources:
+      - title: "The Rust Book — Processing a Series of Items with Iterators"
+        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [it-title]
+      - id: show-pipe
+        type: whiteboard.apply
+        at: { mark: pipe }
+        upsertIds: [it-pipe-card, it-pipe-text]
+      - id: show-closure
+        type: whiteboard.apply
+        at: { mark: closure }
+        upsertIds: [it-closure-note]
+      - id: show-lazy
+        type: whiteboard.apply
+        at: { mark: lazy }
+        upsertIds: [it-lazy-note]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: the-chain
+    narration: >
+      [[mark:open]] Here are six numbers. [[mark:type-chain]] We build a
+      pipeline. iter goes through them, copied gives plain values, filter keeps
+      the even ones, and map multiplies each by ten. collect gathers the
+      results into a Vec — twenty, forty, sixty.
+    sources:
+      - title: "The Rust Book — Iterator Adaptors"
+        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-produce-other-iterators"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-chain
+        type: editor.type
+        at: { mark: type-chain, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"numbers: {numbers:?}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let evens_doubled: Vec<i32> = numbers\n        .iter()\n        .copied()\n        .filter(|n| n % 2 == 0)\n        .map(|n| n * 10)\n        .collect();\n    println!(\"evens doubled: {evens_doubled:?}\");\n"
+
+  - id: the-consumer
+    narration: >
+      [[mark:type-sum]] Not every chain ends in collect. sum is a consumer too
+      — it goes through the numbers and adds them into one total, twenty-one.
+    sources:
+      - title: "The Rust Book — Methods that Consume the Iterator"
+        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-consume-the-iterator"
+    actions:
+      - id: type-sum
+        type: editor.type
+        at: { mark: type-sum, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"evens doubled: {evens_doubled:?}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let total: i32 = numbers.iter().sum();\n    println!(\"sum: {total}\");\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. The pipeline gives twenty, forty, sixty, and
+      sum returns twenty-one. Iterators let you say what you want, step by
+      step, and Rust runs it in one efficient pass.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "evens doubled: [20, 40, 60]"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: ".filter(|n| n % 2 == 0)"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

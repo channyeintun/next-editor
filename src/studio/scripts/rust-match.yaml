@@ -1,0 +1,191 @@
+# One idea: match compares one value against patterns in order and must be
+# exhaustive (an underscore catches the rest), and if let is the short form
+# for a single pattern. A whiteboard sketch, then a grade match and an if let.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-match.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-match
+  title: "Rust match: patterns, exhaustively"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let score = 85;
+            println!("score is {score}");
+        }
+  whiteboardAssets:
+    - id: mt-title
+      kind: text
+      x: 300
+      y: 185
+      width: 700
+      height: 40
+      text: "match — one value, many patterns"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: mt-match-card
+      kind: rectangle
+      x: 300
+      y: 255
+      width: 680
+      height: 66
+      strokeColor: "#7dd3fc"
+    - id: mt-match-text
+      kind: text
+      x: 322
+      y: 277
+      width: 640
+      height: 30
+      text: "match n { 1 => …, 2 => …, _ => … }"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: mt-note
+      kind: text
+      x: 320
+      y: 336
+      width: 680
+      height: 30
+      text: "must be exhaustive — _ catches the rest"
+      strokeColor: "#86efac"
+      fontSize: 20
+    - id: mt-iflet-card
+      kind: rectangle
+      x: 300
+      y: 386
+      width: 680
+      height: 66
+      strokeColor: "#fbbf24"
+    - id: mt-iflet-text
+      kind: text
+      x: 322
+      y: 408
+      width: 640
+      height: 30
+      text: "if let Some(x) = opt { … }   → one pattern"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 37
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "score is 85\ngrade B\nfound 7\n"
+      stderr: ""
+
+scenes:
+  - id: how-match-works
+    narration: >
+      [[mark:board]] Match compares one value against a list of patterns, in
+      order. [[mark:match-card]] The first pattern that fits wins, and match
+      returns its result. [[mark:note]] It has to be exhaustive — an underscore
+      catches everything you didn't list. [[mark:iflet]] When you only care
+      about one pattern, if let is the short form. [[mark:board-close]] Let's
+      use both.
+    sources:
+      - title: "The Rust Book — The match Control Flow Construct"
+        url: "https://doc.rust-lang.org/book/ch06-02-match.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [mt-title]
+      - id: show-match
+        type: whiteboard.apply
+        at: { mark: match-card }
+        upsertIds: [mt-match-card, mt-match-text]
+      - id: show-note
+        type: whiteboard.apply
+        at: { mark: note }
+        upsertIds: [mt-note]
+      - id: show-iflet
+        type: whiteboard.apply
+        at: { mark: iflet }
+        upsertIds: [mt-iflet-card, mt-iflet-text]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: the-match
+    narration: >
+      [[mark:open]] Here's a score. [[mark:type-match]] Now match it. Ranges
+      like ninety to one hundred map to a letter grade. Eighty-five falls in
+      the second arm, so grade becomes B. The underscore is the catch-all, and
+      match hands its result to grade.
+    sources:
+      - title: "The Rust Book — Patterns That Bind to Values"
+        url: "https://doc.rust-lang.org/book/ch06-02-match.html#patterns-that-bind-to-values"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-match
+        type: editor.type
+        at: { mark: type-match, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"score is {score}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let grade = match score {\n        90..=100 => 'A',\n        80..=89 => 'B',\n        _ => 'C',\n    };\n    println!(\"grade {grade}\");\n"
+
+  - id: if-let
+    narration: >
+      [[mark:type-iflet]] Sometimes you only want one case. Found holds Some
+      seven. If let checks for the Some pattern and pulls out the seven,
+      binding it to x. One line, no full match needed.
+    sources:
+      - title: "The Rust Book — Concise Control Flow with if let"
+        url: "https://doc.rust-lang.org/book/ch06-03-if-let.html"
+    actions:
+      - id: type-iflet
+        type: editor.type
+        at: { mark: type-iflet, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"grade {grade}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let found = Some(7);\n    if let Some(x) = found {\n        println!(\"found {x}\");\n    }\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. The score is eighty-five, the grade is B, and
+      if let found the seven inside. Match forces you to handle every case; if
+      let keeps the simple ones short.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "grade B"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "if let Some(x) = found {"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

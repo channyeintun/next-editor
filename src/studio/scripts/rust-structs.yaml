@@ -1,0 +1,195 @@
+# One idea: a struct groups related data under named, typed fields, and an
+# impl block gives it methods that borrow the instance through &self. A
+# whiteboard sketch, then an area method built on a Rectangle and run.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-structs.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-structs
+  title: "Rust structs: data plus behavior"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        struct Rectangle {
+            width: u32,
+            height: u32,
+        }
+
+        fn main() {
+            let rect = Rectangle { width: 4, height: 5 };
+            println!("width {}, height {}", rect.width, rect.height);
+        }
+  whiteboardAssets:
+    - id: st-title
+      kind: text
+      x: 300
+      y: 185
+      width: 700
+      height: 40
+      text: "A struct — named fields + methods"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: st-fields-card
+      kind: rectangle
+      x: 300
+      y: 255
+      width: 680
+      height: 66
+      strokeColor: "#7dd3fc"
+    - id: st-fields-text
+      kind: text
+      x: 322
+      y: 277
+      width: 640
+      height: 30
+      text: "struct Rectangle { width, height }"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: st-impl-card
+      kind: rectangle
+      x: 300
+      y: 340
+      width: 680
+      height: 66
+      strokeColor: "#fbbf24"
+    - id: st-impl-text
+      kind: text
+      x: 322
+      y: 362
+      width: 640
+      height: 30
+      text: "impl Rectangle { fn area(&self) -> u32 }"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: st-note
+      kind: text
+      x: 320
+      y: 436
+      width: 680
+      height: 30
+      text: "&self — the method borrows the instance"
+      strokeColor: "#86efac"
+      fontSize: 20
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 36
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "width 4, height 5\narea 20\n"
+      stderr: ""
+
+scenes:
+  - id: anatomy
+    narration: >
+      [[mark:board]] A struct groups related data under one name, with typed
+      fields. [[mark:fields]] Here, a Rectangle holds a width and a height.
+      [[mark:impl]] An impl block adds methods that work on that data.
+      [[mark:note]] Area takes &self — it borrows the rectangle to read its
+      fields. [[mark:board-close]] Let's write it.
+    sources:
+      - title: "The Rust Book — Defining and Instantiating Structs"
+        url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [st-title]
+      - id: show-fields
+        type: whiteboard.apply
+        at: { mark: fields }
+        upsertIds: [st-fields-card, st-fields-text]
+      - id: show-impl
+        type: whiteboard.apply
+        at: { mark: impl }
+        upsertIds: [st-impl-card, st-impl-text]
+      - id: show-note
+        type: whiteboard.apply
+        at: { mark: note }
+        upsertIds: [st-note]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: fields
+    narration: >
+      [[mark:open]] Here's the struct, and one Rectangle, four by five. We read
+      its fields with a dot: rect.width and rect.height. Fields are just named
+      pieces of the value.
+    sources:
+      - title: "The Rust Book — Using Structs"
+        url: "https://doc.rust-lang.org/book/ch05-02-example-structs.html"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+
+  - id: methods
+    narration: >
+      [[mark:type-impl]] Now the behavior. Inside impl Rectangle, area borrows
+      self and multiplies width by height. Because it takes &self, it can read
+      the rectangle without taking ownership. [[mark:type-call]] Then we call
+      it with rect.area().
+    sources:
+      - title: "The Rust Book — Method Syntax"
+        url: "https://doc.rust-lang.org/book/ch05-03-method-syntax.html"
+    actions:
+      - id: type-impl
+        type: editor.type
+        at: { mark: type-impl, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    height: u32,\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\nimpl Rectangle {\n    fn area(&self) -> u32 {\n        self.width * self.height\n    }\n}\n"
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target:
+          file: main.rs
+          after: "    println!(\"width {}, height {}\", rect.width, rect.height);\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    println!(\"area {}\", rect.area());\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. The fields print four and five, and area
+      returns twenty. A struct bundles data; impl gives it behavior — together
+      they're how you model things in Rust.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "area 20"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "fn area(&self) -> u32 {"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

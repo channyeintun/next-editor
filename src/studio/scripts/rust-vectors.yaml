@@ -1,0 +1,192 @@
+# One idea: a Vec<T> is a growable, heap-allocated list of one type — you push
+# to add, index to read, and loop over a reference to sum without consuming it.
+# A whiteboard sketch, then a Vec of scores built and totaled, run.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-vectors.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-vectors
+  title: "Rust vectors: a list that grows"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let mut scores = Vec::new();
+            scores.push(90);
+            scores.push(80);
+            scores.push(70);
+            println!("count: {}", scores.len());
+        }
+  whiteboardAssets:
+    - id: vec-title
+      kind: text
+      x: 300
+      y: 185
+      width: 700
+      height: 40
+      text: "Vec<T> — a growable list"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: vec-add-card
+      kind: rectangle
+      x: 300
+      y: 255
+      width: 680
+      height: 66
+      strokeColor: "#7dd3fc"
+    - id: vec-add-text
+      kind: text
+      x: 322
+      y: 277
+      width: 640
+      height: 30
+      text: "let mut v = Vec::new();   v.push(x)"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: vec-use-card
+      kind: rectangle
+      x: 300
+      y: 340
+      width: 680
+      height: 66
+      strokeColor: "#fbbf24"
+    - id: vec-use-text
+      kind: text
+      x: 322
+      y: 362
+      width: 640
+      height: 30
+      text: "v[0] read   ·   v.len()   ·   for x in &v"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: vec-note
+      kind: text
+      x: 320
+      y: 436
+      width: 680
+      height: 30
+      text: "grows on the heap — same type throughout"
+      strokeColor: "#86efac"
+      fontSize: 20
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 38
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "count: 3\nfirst: 90\ntotal: 240\n"
+      stderr: ""
+
+scenes:
+  - id: what-is-a-vec
+    narration: >
+      [[mark:board]] A Vec is a list that grows as you need it, all one type.
+      [[mark:add-card]] You start empty and push values on the end.
+      [[mark:use-card]] Then read by index, ask its length, or loop over it.
+      [[mark:note]] It lives on the heap, so it can grow at runtime.
+      [[mark:board-close]] Let's fill one.
+    sources:
+      - title: "The Rust Book — Storing Lists of Values with Vectors"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [vec-title]
+      - id: show-add
+        type: whiteboard.apply
+        at: { mark: add-card }
+        upsertIds: [vec-add-card, vec-add-text]
+      - id: show-use
+        type: whiteboard.apply
+        at: { mark: use-card }
+        upsertIds: [vec-use-card, vec-use-text]
+      - id: show-note
+        type: whiteboard.apply
+        at: { mark: note }
+        upsertIds: [vec-note]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: build-and-index
+    narration: >
+      [[mark:open]] Here we make an empty Vec and push three scores onto it.
+      Length is three. [[mark:type-index]] Indexing reads one element — scores
+      at zero is the first, ninety.
+    sources:
+      - title: "The Rust Book — Reading Elements of Vectors"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#reading-elements-of-vectors"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-index
+        type: editor.type
+        at: { mark: type-index, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"count: {}\", scores.len());\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    println!(\"first: {}\", scores[0]);\n"
+
+  - id: iterate
+    narration: >
+      [[mark:type-loop]] To add them up, we loop over a reference to the Vec
+      and sum each score. Borrowing with an ampersand means the Vec stays ours
+      after the loop — we didn't consume it.
+    sources:
+      - title: "The Rust Book — Iterating over the Values in a Vector"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#iterating-over-the-values-in-a-vector"
+    actions:
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"first: {}\", scores[0]);\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let mut total = 0;\n    for &s in &scores {\n        total += s;\n    }\n    println!(\"total: {total}\");\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Three scores, the first is ninety, and they
+      total two hundred forty. A Vec is the list you reach for when the size
+      isn't fixed.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "total: 240"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "for &s in &scores {"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

@@ -1,0 +1,190 @@
+# One idea: String is owned, growable UTF-8 text (heap); &str is a borrowed
+# view (like a literal). You grow a String with push_str/push and build new
+# ones with format!. A whiteboard sketch, then a String grown and formatted.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-strings.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-strings
+  title: "Rust strings: String vs &str"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let mut greeting = String::from("hello");
+            println!("start: {greeting}");
+        }
+  whiteboardAssets:
+    - id: str-title
+      kind: text
+      x: 300
+      y: 185
+      width: 700
+      height: 40
+      text: "String vs &str"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: str-owned-card
+      kind: rectangle
+      x: 300
+      y: 255
+      width: 680
+      height: 66
+      strokeColor: "#7dd3fc"
+    - id: str-owned-text
+      kind: text
+      x: 322
+      y: 277
+      width: 640
+      height: 30
+      text: "String — owned, growable (heap)"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: str-borrowed-card
+      kind: rectangle
+      x: 300
+      y: 340
+      width: 680
+      height: 66
+      strokeColor: "#fbbf24"
+    - id: str-borrowed-text
+      kind: text
+      x: 322
+      y: 362
+      width: 640
+      height: 30
+      text: "&str — borrowed view (a literal)"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: str-note
+      kind: text
+      x: 320
+      y: 436
+      width: 680
+      height: 30
+      text: "grow with: push_str · push · format!"
+      strokeColor: "#86efac"
+      fontSize: 20
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 39
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "start: hello\ngrown: hello, world!\nlength in bytes: 13\nhello, world! from Rust\n"
+      stderr: ""
+
+scenes:
+  - id: two-string-types
+    narration: >
+      [[mark:board]] Rust has two string types working together.
+      [[mark:owned-card]] String is owned and growable — it lives on the heap
+      and you can add to it. [[mark:borrowed-card]] And &str is a borrowed view
+      of text you don't own, like a literal. [[mark:note]] You grow a String
+      with push_str, push, or format. [[mark:board-close]] Let's build one up.
+    sources:
+      - title: "The Rust Book — Storing UTF-8 Text with Strings"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [str-title]
+      - id: show-owned
+        type: whiteboard.apply
+        at: { mark: owned-card }
+        upsertIds: [str-owned-card, str-owned-text]
+      - id: show-borrowed
+        type: whiteboard.apply
+        at: { mark: borrowed-card }
+        upsertIds: [str-borrowed-card, str-borrowed-text]
+      - id: show-note
+        type: whiteboard.apply
+        at: { mark: note }
+        upsertIds: [str-note]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: grow-it
+    narration: >
+      [[mark:open]] We start with the String hello. [[mark:type-grow]] push_str
+      adds a whole piece, comma world. push adds a single character, the
+      exclamation mark. Now len gives the size in bytes — thirteen, because
+      these characters are one byte each.
+    sources:
+      - title: "The Rust Book — Updating a String"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#updating-a-string"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-grow
+        type: editor.type
+        at: { mark: type-grow, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"start: {greeting}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    greeting.push_str(\", world\");\n    greeting.push('!');\n    println!(\"grown: {greeting}\");\n    println!(\"length in bytes: {}\", greeting.len());\n"
+
+  - id: format-it
+    narration: >
+      [[mark:type-format]] name is a &str — a borrowed literal. format! builds
+      a brand-new String from a template, dropping our values into the braces,
+      without changing the originals.
+    sources:
+      - title: "The Rust Book — Concatenation with format!"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#concatenation-with-the--operator-or-the-format-macro"
+    actions:
+      - id: type-format
+        type: editor.type
+        at: { mark: type-format, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"length in bytes: {}\", greeting.len());\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let name = \"Rust\";\n    let line = format!(\"{greeting} from {name}\");\n    println!(\"{line}\");\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Hello grows into hello comma world, thirteen
+      bytes, and format! combines it with the name. Reach for String when you
+      own and change text; &str when you're only borrowing a view.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "hello, world! from Rust"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: 'greeting.push_str(", world");'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

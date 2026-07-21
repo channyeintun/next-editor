@@ -1,0 +1,202 @@
+# One idea: a slice is a borrowed view into part of a collection — a pointer
+# plus a length, no copy — spelled &str for strings and &[T] for arrays. A
+# whiteboard sketch, then an array slice and a slice-taking function, run.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-slices.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-slices
+  title: "Rust slices: a borrowed view of your data"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let text = String::from("borrow checker");
+            let word = &text[0..6];
+            println!("slice: {word}");
+        }
+  whiteboardAssets:
+    - id: sl-title
+      kind: text
+      x: 300
+      y: 185
+      width: 680
+      height: 40
+      text: "A slice — a borrowed view"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: sl-arr-card
+      kind: rectangle
+      x: 300
+      y: 255
+      width: 660
+      height: 66
+      strokeColor: "#7dd3fc"
+    - id: sl-arr-text
+      kind: text
+      x: 322
+      y: 277
+      width: 620
+      height: 30
+      text: "&numbers[1..4]   →   [20, 30, 40]"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: sl-str-card
+      kind: rectangle
+      x: 300
+      y: 340
+      width: 660
+      height: 66
+      strokeColor: "#fbbf24"
+    - id: sl-str-text
+      kind: text
+      x: 322
+      y: 362
+      width: 620
+      height: 30
+      text: '&text[0..6]   →   "borrow"'
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: sl-note
+      kind: text
+      x: 320
+      y: 436
+      width: 660
+      height: 30
+      text: "just a pointer + a length — no copy"
+      strokeColor: "#86efac"
+      fontSize: 20
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 35
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "slice: borrow\nmiddle: [20, 30, 40]\nsum: 90\n"
+      stderr: ""
+
+scenes:
+  - id: what-is-a-slice
+    narration: >
+      [[mark:board]] A slice is a borrowed view into part of a collection. It
+      owns nothing. [[mark:arr]] Take a range of an array, and you get a slice.
+      Here, index one up to four gives the three middle numbers. [[mark:str]]
+      The same works on a string: a byte range gives you a string slice.
+      [[mark:note]] Inside, it's just a pointer and a length — no copying.
+      [[mark:board-close]] Let's build both.
+    sources:
+      - title: "The Rust Book — The Slice Type"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [sl-title]
+      - id: show-arr
+        type: whiteboard.apply
+        at: { mark: arr }
+        upsertIds: [sl-arr-card, sl-arr-text]
+      - id: show-str
+        type: whiteboard.apply
+        at: { mark: str }
+        upsertIds: [sl-str-card, sl-str-text]
+      - id: show-note
+        type: whiteboard.apply
+        at: { mark: note }
+        upsertIds: [sl-note]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: string-and-array
+    narration: >
+      [[mark:open]] Here's a String, and word borrows the first six bytes —
+      that's a string slice, written &str. [[mark:type-arr]] Now an array. We
+      slice index one up to four, and print it. Middle is a view of three
+      numbers, borrowed from the array — nothing was copied.
+    sources:
+      - title: "The Rust Book — String Slices"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-arr
+        type: editor.type
+        at: { mark: type-arr, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"slice: {word}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let numbers = [10, 20, 30, 40, 50];\n    let middle = &numbers[1..4];\n    println!(\"middle: {middle:?}\");\n"
+
+  - id: slice-parameter
+    narration: >
+      [[mark:type-sum]] Why are slices useful? A function can take a slice and
+      work on any length. Sum takes a slice of i32, adds up whatever it gets,
+      and returns the total. [[mark:type-call]] We pass middle to it directly.
+    sources:
+      - title: "The Rust Book — Slices as Parameters"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#other-slices"
+    actions:
+      - id: type-sum
+        type: editor.type
+        at: { mark: type-sum, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"middle: {middle:?}\");\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\nfn sum(slice: &[i32]) -> i32 {\n    let mut total = 0;\n    for &n in slice {\n        total += n;\n    }\n    total\n}\n"
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target:
+          file: main.rs
+          after: "    println!(\"middle: {middle:?}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    println!(\"sum: {}\", sum(middle));\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. The string slice prints borrow. The array
+      slice prints its three numbers, and sum returns ninety. Slices let you
+      pass parts of data safely, without copying — and the borrow checker keeps
+      every view valid.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "sum: 90"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "fn sum(slice: &[i32]) -> i32 {"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
