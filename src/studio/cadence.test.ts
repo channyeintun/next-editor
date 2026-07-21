@@ -45,6 +45,36 @@ describe("compileTypingChunks (chars mode)", () => {
     expect(expectedText).toBe(SAMPLE);
   });
 
+  it("types single keystrokes with slower word starts, like the reference recording", () => {
+    if (NATURAL_CADENCE.mode !== "chars") throw new Error("cadence changed mode");
+    const noJitter = { ...NATURAL_CADENCE, jitter: 0, thinkChance: 0 };
+    const chunks = compileTypingChunks("let owner = value;\n", noJitter, 7);
+    // Every chunk is one keystroke.
+    expect(chunks.filter((chunk) => chunk.text !== "\n").every((c) => c.text.length === 1)).toBe(
+      true,
+    );
+    const { expectedText } = chunkPlacements(chunks);
+    expect(expectedText).toBe("let owner = value;\n");
+    // First char of a word ("o" of owner) waits ~wordPauseMs longer than a
+    // within-word key ("w" of owner).
+    const body = chunks.filter((chunk) => chunk.text !== "\n");
+    const wordStart = body[4]; // "o" after "let "
+    const withinWord = body[5]; // "w"
+    expect(wordStart.text).toBe("o");
+    expect(wordStart.delayMs - withinWord.delayMs).toBe(NATURAL_CADENCE.wordPauseMs);
+  });
+
+  it("adds seeded think pauses at some word starts", () => {
+    if (NATURAL_CADENCE.mode !== "chars") throw new Error("cadence changed mode");
+    const always = { ...NATURAL_CADENCE, jitter: 0, thinkChance: 1 };
+    const never = { ...NATURAL_CADENCE, jitter: 0, thinkChance: 0 };
+    const withThinks = compileTypingChunks("a bb cc\n", always, 7);
+    const without = compileTypingChunks("a bb cc\n", never, 7);
+    const diff = totalTypingDurationMs(withThinks) - totalTypingDurationMs(without);
+    // Two word starts → two think pauses.
+    expect(diff).toBe(2 * NATURAL_CADENCE.thinkPauseMs!);
+  });
+
   it("keeps legacy sequential chunking for cadences without openLineFirst", () => {
     const legacy = compileTypingChunks(
       SAMPLE,

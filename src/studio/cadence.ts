@@ -37,6 +37,16 @@ export type TypingCadence =
        * glued to the end of the line being typed.
        */
       openLineFirst?: boolean;
+      /**
+       * Extra pause before the first character of a word (a chunk following a
+       * space or newline) — real typists slow down between words. From the
+       * reference human recording: word starts run ~2–4× a within-word key.
+       */
+      wordPauseMs?: number;
+      /** Occasional longer "thinking" pause added on top of a word start. */
+      thinkPauseMs?: number;
+      /** Seeded probability [0,1] that a word start also gets a think pause. */
+      thinkChance?: number;
     }
   | {
       /** Incremental reveal: whole lines appear one at a time — no keystrokes. */
@@ -54,24 +64,34 @@ export type TypingCadence =
       pauseMs: number;
     };
 
-/** Default: unhurried, human-feeling keystrokes. */
+/**
+ * Default: single keystrokes matched to the reference human recording
+ * (recording-1784617032039.ne — within-word keys median ~140ms with wide
+ * jitter, word starts ~2–4× slower, occasional ~0.6s thinking pauses).
+ */
 export const NATURAL_CADENCE: TypingCadence = {
   mode: "chars",
-  charsPerSecond: 8,
-  maxChunkChars: 3,
+  charsPerSecond: 7,
+  maxChunkChars: 1,
   lineBreakPauseMs: 380,
-  jitter: 0.35,
+  jitter: 0.4,
   openLineFirst: true,
+  wordPauseMs: 260,
+  thinkPauseMs: 600,
+  thinkChance: 0.35,
 };
 
 /** Brisker keystrokes for dense lessons — still far from teleporting text. */
 export const FAST_EXPLAINER_CADENCE: TypingCadence = {
   mode: "chars",
-  charsPerSecond: 11,
-  maxChunkChars: 4,
+  charsPerSecond: 10,
+  maxChunkChars: 1,
   lineBreakPauseMs: 260,
-  jitter: 0.25,
+  jitter: 0.3,
   openLineFirst: true,
+  wordPauseMs: 170,
+  thinkPauseMs: 400,
+  thinkChance: 0.2,
 };
 
 /** Incremental reveal: code lands line by line at reading pace. */
@@ -163,9 +183,23 @@ export function compileTypingChunks(
     const jitterFactor = 1 + (random() * 2 - 1) * cadence.jitter;
     const scaledDelay = baseDelayMs * (chunkText.length / cadence.maxChunkChars) * jitterFactor;
     const endsLine = chunkText.endsWith("\n");
+
+    // Word starts type slower: the reference recording shows the first key
+    // after a space/newline at ~2–4× a within-word key, with an occasional
+    // longer thinking pause (seeded, so plans stay reproducible).
+    const previousChar = index === 0 ? "" : chunkSource[index - 1];
+    const startsWord = previousChar === " " || previousChar === "\n";
+    let pauseMs = 0;
+    if (startsWord && cadence.wordPauseMs) {
+      pauseMs += Math.round(cadence.wordPauseMs * (1 + (random() * 2 - 1) * cadence.jitter));
+      if (cadence.thinkPauseMs && random() < (cadence.thinkChance ?? 0)) {
+        pauseMs += cadence.thinkPauseMs;
+      }
+    }
+
     const delayMs = Math.max(
       8,
-      Math.round(scaledDelay) + (endsLine ? cadence.lineBreakPauseMs : 0),
+      Math.round(scaledDelay) + pauseMs + (endsLine ? cadence.lineBreakPauseMs : 0),
     );
 
     chunks.push(withOffset({ delayMs, text: chunkText }, index));

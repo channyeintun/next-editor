@@ -139,7 +139,7 @@ scenes:
     actions:
       - id: type-call
         type: editor.type
-        at: { mark: type-call, offsetMs: -300 }
+        at: { mark: type-call, offsetMs: 0 }
         target:
           file: main.rs
           after: "    let owner = String::from(\"borrow checker\");\n"
