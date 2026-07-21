@@ -157,8 +157,14 @@ function BufferedSlideContent({ slide, stepsRevealed }: { slide: Slide; stepsRev
             key={layer.key}
             data-slide-buffer-state={isDisplayed ? "displayed" : "loading"}
             aria-hidden={isDisplayed ? undefined : true}
+            // The loading layer sits *behind* the displayed one (z-0, fully
+            // occluded by the opaque displayed layer) rather than at opacity-0.
+            // Opacity-0 lets the browser skip painting the incoming SVG, so the
+            // instant promote-on-load would reveal an unpainted (black) frame —
+            // the transition "flash". Kept occluded-but-painted, the incoming
+            // slide is already drawn when it is promoted, so the swap is seamless.
             className={`absolute inset-0 bg-black ${
-              isDisplayed ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"
+              isDisplayed ? "z-10 opacity-100" : "pointer-events-none z-0"
             }`}
           >
             <SlideContent
