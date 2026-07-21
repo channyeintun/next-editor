@@ -10,12 +10,16 @@ studio's source code. The editorial rules live in
 
 ## What you are producing
 
-One YAML file at `src/studio/scripts/<slug>.yaml`. It fully determines a
-narrated, replayable coding lesson: the starter workspace, the spoken
-narration, every editor/slide/whiteboard/runtime action, and the assertions
-that gate the build. Nothing else is hand-edited — **never** edit the emitted
-JSON under `src/studio/plans/scripts/` (build artifacts) and never touch
-`src/studio/plans/index.ts` (scripts auto-register by filename).
+One LessonScript YAML. It fully determines a narrated, replayable coding
+lesson: the starter workspace, the spoken narration, every
+editor/slide/whiteboard/runtime action, and the assertions that gate the
+build. The YAML is the _only_ artifact — it is parsed and validated in the
+browser at render time. Two ways it reaches the studio:
+
+- **Checked in** at `src/studio/scripts/<slug>.yaml` — auto-registers by
+  filename (never touch `src/studio/plans/index.ts`).
+- **Imported at runtime** — any user pastes the file into `/studio` on the
+  website via **Import…**; it is validated and critiqued in the page.
 
 ## The mental model (read this before writing)
 
@@ -37,22 +41,30 @@ JSON under `src/studio/plans/scripts/` (build artifacts) and never touch
 
 ## Workflow
 
+**Users (production website)** need no tooling at all: open `/studio`, pick a
+lesson from the dropdown (or **Import…** a YAML file — validated and
+critiqued in the page), press **Start render**, watch, and **Create draft…**
+(sign-in required for drafts; publishing stays a separate human action).
+
+**Agents working in this repo**:
+
 ```text
-1. Write   src/studio/scripts/<slug>.yaml
-2. Compile bun scripts/studio-director.ts                # validates ALL scripts
-                                                         # (or pass one path)
-   → fix schema/marker errors it reports; weigh critic notes (advisory)
-   → emits src/studio/plans/scripts/<slug>.json (+ .critique.json)
-3. Render  bun run dev   (separate terminal, keep running)
-           bun scripts/studio-render.ts <slug>           # 2 renders + gates
+1. Write    src/studio/scripts/<slug>.yaml     # auto-registers by filename
+2. Validate bun scripts/studio-director.ts     # optional preflight, all scripts
+                                               # (or pass one path)
+   → fix schema/marker errors; weigh critic notes (advisory);
+     writes <slug>.critique.json next to the YAML
+3. Render   bun run dev   (separate terminal, keep running)
+            bun scripts/studio-render.ts <slug>  # 2 headless renders + gates
    → exit 0 = every check and the repeatability comparison passed
    → artifacts in studio-out/<slug>-<timestamp>/ (reports, bundle, screenshots)
 4. A human watches the lesson (/studio?plan=<slug>) and decides on a draft.
 ```
 
-Renders need Chrome installed and network for the one-time TTS bundle
-download. If you cannot run step 3 in your environment, stop after step 2 and
-report that the render is pending.
+Step 2 is convenience — the same validation runs in the page — but it catches
+errors without a browser. Headless renders need Chrome and network for the
+one-time TTS bundle download; if your environment cannot run a browser, stop
+after step 2 and report that the render is pending.
 
 ## Schema reference
 

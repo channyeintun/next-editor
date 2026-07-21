@@ -1,3 +1,4 @@
+import YAML from "yaml";
 import type { StudioPlan } from "../plan";
 import { parseLessonScript, type LessonScript } from "../script/schema";
 import { M0_GO_HELLO_SLUG, createM0GoHelloPlan } from "./m0GoHello";
@@ -6,31 +7,32 @@ import { M0_GO_HELLO_SLUG, createM0GoHelloPlan } from "./m0GoHello";
  * Renderable lessons by slug. Two source kinds:
  * - "plan": a fully compiled plan with checked-in narration audio (the M0
  *   fixture) — rendered as-is.
- * - "script": a validated LessonScript emitted by `scripts/studio-director.ts`
- *   into `./scripts/<slug>.json`. These auto-register by filename via the
- *   glob below — authoring a new lesson never edits this file (the agent
- *   workflow depends on that; see docs/lesson-script-authoring.md). Narration
- *   is synthesized per dialog in the page by the in-page Director
- *   (pocket-tts over onnxruntime-web), scheduled around the actions, and
- *   compiled just before recording.
- * Both re-enter their parser at load, so a stale artifact fails at render
- * time with a schema message rather than mid-performance.
+ * - "script": a LessonScript YAML. The checked-in scripts under
+ *   `src/studio/scripts/*.yaml` auto-register by filename via the glob below
+ *   — authoring a new lesson never edits this file — and users can import
+ *   additional YAML at runtime in the studio UI (see StudioController).
+ *   Parsing and validation happen here in the browser; the Director CLI is
+ *   optional preflight, not a build step.
  */
 export type StudioLessonSource =
   | { kind: "plan"; load: () => StudioPlan }
   | { kind: "script"; load: () => LessonScript };
 
-const emittedScripts = import.meta.glob<{ default: unknown }>("./scripts/*.json", {
+const scriptYamls = import.meta.glob<string>("../scripts/*.yaml", {
   eager: true,
+  query: "?raw",
+  import: "default",
 });
 
+/** Parse + validate LessonScript YAML text (shared by the registry and the UI import). */
+export function parseLessonScriptYaml(yamlText: string): LessonScript {
+  return parseLessonScript(YAML.parse(yamlText));
+}
+
 const scriptSources: Record<string, StudioLessonSource> = {};
-for (const [path, module] of Object.entries(emittedScripts)) {
-  if (path.endsWith(".critique.json")) {
-    continue; // Advisory critic sidecars, not scripts.
-  }
-  const slug = path.replace(/^.*\//, "").replace(/\.json$/, "");
-  scriptSources[slug] = { kind: "script", load: () => parseLessonScript(module.default) };
+for (const [path, yamlText] of Object.entries(scriptYamls)) {
+  const slug = path.replace(/^.*\//, "").replace(/\.ya?ml$/, "");
+  scriptSources[slug] = { kind: "script", load: () => parseLessonScriptYaml(yamlText) };
 }
 
 export const STUDIO_SOURCES: Record<string, StudioLessonSource> = {

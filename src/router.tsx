@@ -180,19 +180,16 @@ export const router = createBrowserRouter([
     HydrateFallback: RouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
-  // Dev-only lesson production studio (docs/agent-lesson-production.md). The
-  // conditional spread keeps the route — and its chunk — out of production
-  // builds entirely.
-  ...(import.meta.env.DEV
-    ? [
-        {
-          path: "/studio",
-          lazy: lazyRoute(() => import("./studio/StudioRoute"), "/studio"),
-          HydrateFallback: RouteHydrateFallback,
-          ErrorBoundary: RouteErrorBoundary,
-        },
-      ]
-    : []),
+  // Lesson production studio (docs/agent-lesson-production.md): pick a
+  // LessonScript (or import one) and render it into a lesson entirely
+  // client-side. Lazy like the other app-heavy routes; rendering needs no
+  // server beyond the standard app APIs (drafts still require sign-in).
+  {
+    path: "/studio",
+    lazy: lazyRoute(() => import("./studio/StudioRoute"), "/studio"),
+    HydrateFallback: RouteHydrateFallback,
+    ErrorBoundary: RouteErrorBoundary,
+  },
   {
     path: "/learn",
     lazy: lazyRoute(() => import("@next-editor/tube"), "/learn"),

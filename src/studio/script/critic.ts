@@ -45,6 +45,13 @@ const MIN_WPM = 110;
 const MAX_WPM = 170;
 const MAX_SCENES = 5;
 const MAX_NARRATION_MS = 120_000;
+/** Pre-synthesis pacing estimate (~140 spoken wpm for the current profile). */
+const ESTIMATED_WPM = 140;
+
+/** Rough narration length before any audio exists — critic input only. */
+export function estimateNarrationDurationMs(tokenCount: number): number {
+  return Math.round((tokenCount / ESTIMATED_WPM) * 60_000);
+}
 
 function sentencesOf(text: string): string[] {
   return text

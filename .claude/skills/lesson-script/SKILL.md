@@ -27,11 +27,13 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
    - `fixture.result.output` = the real program's exact stdout.
    - Every scene needs a `sources` entry; keep sentences short.
    - Always include `checks: [{ type: timing.p95Ms, max: 300 }]`.
-4. **Compile**: `bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml`
-   - Fix every error; address `✎` critic notes (advisory, but fix
-     `sources.missing` and banned phrases).
-   - Scripts auto-register by filename — do not edit `src/studio/plans/index.ts`
-     and never hand-edit the emitted JSON in `src/studio/plans/scripts/`.
+4. **Validate**: `bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml`
+   - Optional preflight (the page validates too) but always run it: fix every
+     error; address `✎` critic notes (advisory, but fix `sources.missing` and
+     banned phrases). It writes `<slug>.critique.json` next to the YAML.
+   - Scripts auto-register by filename — do not edit
+     `src/studio/plans/index.ts`. The YAML is the only artifact; end users can
+     alternatively import it via /studio's **Import…** on the website.
 5. **Render** (needs Chrome + network; dev server in a separate terminal):
    - `bun run dev` (background), then `bun scripts/studio-render.ts <slug>`
    - Exit 0 means both renders passed all gates and repeatability. On failure,

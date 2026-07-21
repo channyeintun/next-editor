@@ -163,6 +163,15 @@ export default ({ mode }: { mode: string }) => {
           codeSplitting: {
             groups: [
               {
+                // onnxruntime-web must live alone: its threaded WASM runtime
+                // spawns pthread workers from `import.meta.url`, so the chunk
+                // it sits in is executed as a worker script — any co-bundled
+                // app code touching `window` at module top level would crash
+                // every worker (the studio's pocket-tts synthesis hangs).
+                name: "ort",
+                test: /[\\/]node_modules[\\/]onnxruntime-web[\\/]/,
+              },
+              {
                 name: "vendor",
                 test: /[\\/]node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/,
               },

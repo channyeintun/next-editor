@@ -14,10 +14,14 @@ import type { StudioPlan, StudioRuntimeMode } from "./plan";
 import {
   DEFAULT_STUDIO_PLAN_SLUG,
   STUDIO_SOURCES,
+  parseLessonScriptYaml,
   sourceRuntimeDefault,
   sourceTitle,
+  type StudioLessonSource,
 } from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
+import { critiqueScript, estimateNarrationDurationMs, type CritiqueNote } from "./script/critic";
+import { extractNarration } from "./script/markers";
 import {
   compareRenderSemantics,
   runStudioRender,
@@ -27,13 +31,50 @@ import {
 import type { RenderSemantics } from "./compare";
 
 /**
- * Dev-only render console for the studio route: prepares the pinned workspace,
- * drives one unattended render of a checked-in plan through the Performer, and
- * surfaces receipts, QA gates, and the two-render repeatability verdict
- * (docs/agent-lesson-production.md §12 M0). Results are also published on
- * `window.__NEXT_EDITOR_STUDIO__` so an automation harness can read them
- * without scraping the DOM.
+ * The studio render console: pick a lesson (checked-in scripts auto-register;
+ * additional LessonScript YAML can be imported right here), render it into a
+ * recorded lesson entirely client-side, and read receipts, QA gates, and the
+ * two-render repeatability verdict (docs/agent-lesson-production.md). Results
+ * are also published on `window.__NEXT_EDITOR_STUDIO__` so an automation
+ * harness can read them without scraping the DOM.
  */
+
+// Imported-at-runtime scripts (YAML text by slug), surviving reloads within
+// the browsing session so an import → render → reload → re-render loop works.
+const IMPORTED_SCRIPTS_KEY = "next-editor:studio:imported-scripts";
+
+function readImportedScripts(): Record<string, string> {
+  try {
+    return JSON.parse(sessionStorage.getItem(IMPORTED_SCRIPTS_KEY) ?? "{}") as Record<
+      string,
+      string
+    >;
+  } catch {
+    return {};
+  }
+}
+
+function storeImportedScript(slug: string, yamlText: string): void {
+  try {
+    sessionStorage.setItem(
+      IMPORTED_SCRIPTS_KEY,
+      JSON.stringify({ ...readImportedScripts(), [slug]: yamlText }),
+    );
+  } catch {
+    // Session storage unavailable — the import still works until reload.
+  }
+}
+
+function allSources(imported: Record<string, string>): Record<string, StudioLessonSource> {
+  const importedSources = Object.fromEntries(
+    Object.entries(imported).map(([slug, yamlText]) => [
+      slug,
+      { kind: "script", load: () => parseLessonScriptYaml(yamlText) } satisfies StudioLessonSource,
+    ]),
+  );
+  // Imported scripts shadow checked-in ones of the same slug (iteration flow).
+  return { ...STUDIO_SOURCES, ...importedSources };
+}
 
 interface StudioRunEntry {
   index: number;
@@ -107,7 +148,7 @@ function publishWindowHandle(comparison: StudioCheckResult[] | null, running: bo
 }
 
 export default function StudioController() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const actor = NextEditorActorContext.useActorRef();
   const nextEditor = useNextEditorActions();
   const workspace = useWorkspaceActions();
@@ -127,8 +168,53 @@ export default function StudioController() {
   const [comparison, setComparison] = useState<StudioCheckResult[] | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [buildWarnings, setBuildWarnings] = useState<string[]>([]);
+  const [criticNotes, setCriticNotes] = useState<CritiqueNote[]>([]);
+  const [importedScripts, setImportedScripts] = useState<Record<string, string>>(() =>
+    readImportedScripts(),
+  );
   const [showDraftModal, setShowDraftModal] = useState(false);
   const runningRef = useRef(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  const sources = allSources(importedScripts);
+
+  const selectLesson = (slug: string) => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set("plan", slug);
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  const handleImportFile = async (file: File) => {
+    setFatal(null);
+    setCriticNotes([]);
+    try {
+      const yamlText = await file.text();
+      // Same validation the render path runs — fail here with the schema
+      // message rather than at render time.
+      const script = parseLessonScriptYaml(yamlText);
+      const extracted = extractNarration(
+        script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
+      );
+      const critique = critiqueScript(
+        script,
+        extracted,
+        estimateNarrationDurationMs(extracted.tokens.length),
+      );
+      setCriticNotes(critique.notes);
+
+      const slug = script.lesson.slug;
+      storeImportedScript(slug, yamlText);
+      setImportedScripts((current) => ({ ...current, [slug]: yamlText }));
+      selectLesson(slug);
+    } catch (error) {
+      setFatal(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
 
   // The product tour would overlay the editor mid-render in a fresh profile.
   useEffect(() => {
@@ -147,10 +233,10 @@ export default function StudioController() {
     publishWindowHandle(null, true);
 
     try {
-      const source = STUDIO_SOURCES[planSlug];
+      const source = sources[planSlug];
       if (!source) {
         throw new Error(
-          `Unknown lesson "${planSlug}" — available: ${Object.keys(STUDIO_SOURCES).join(", ")}`,
+          `Unknown lesson "${planSlug}" — available: ${Object.keys(sources).join(", ")}`,
         );
       }
 
@@ -235,7 +321,7 @@ export default function StudioController() {
 
   const report = latest?.result.report ?? null;
   const artifacts = latest?.result.artifacts ?? null;
-  const source = STUDIO_SOURCES[planSlug];
+  const source = sources[planSlug];
   const effectiveModeLabel = requestedMode ?? (source ? sourceRuntimeDefault(source) : "?");
 
   const downloadBundle = () => {
@@ -284,10 +370,48 @@ export default function StudioController() {
         </span>
       </div>
 
+      <div className="mt-2 flex items-center gap-2">
+        <select
+          value={planSlug}
+          disabled={running}
+          onChange={(event) => selectLesson(event.target.value)}
+          aria-label="Lesson to render"
+          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+        >
+          {Object.keys(sources)
+            .sort()
+            .map((slug) => (
+              <option key={slug} value={slug}>
+                {slug}
+                {importedScripts[slug] ? " (imported)" : ""}
+              </option>
+            ))}
+        </select>
+        <button
+          type="button"
+          disabled={running}
+          onClick={() => importInputRef.current?.click()}
+          className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+          title="Import a LessonScript YAML (validated and critiqued here in the page)"
+        >
+          Import…
+        </button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".yaml,.yml"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) {
+              void handleImportFile(file);
+            }
+          }}
+        />
+      </div>
       <p className="mt-1 text-slate-400">
-        plan <span className="font-mono text-slate-300">{planSlug}</span>
-        {" · runtime "}
-        <span className="font-mono text-slate-300">{effectiveModeLabel}</span>
+        runtime <span className="font-mono text-slate-300">{effectiveModeLabel}</span>
         {" · run #"}
         {runHistory.length + (running ? 1 : 0) || 1}
       </p>
@@ -344,6 +468,17 @@ export default function StudioController() {
             <li key={warning}>⚠ {warning}</li>
           ))}
         </ul>
+      ) : null}
+
+      {criticNotes.length > 0 ? (
+        <div className="mt-3 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-[12px] text-sky-200">
+          <p className="font-semibold">Critic notes (advisory)</p>
+          <ul className="mt-1 space-y-0.5">
+            {criticNotes.map((note) => (
+              <li key={`${note.id}-${note.sceneId ?? ""}-${note.message}`}>✎ {note.message}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {receipts.length > 0 ? (

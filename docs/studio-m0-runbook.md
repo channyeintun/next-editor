@@ -124,9 +124,15 @@ exact.
 
 ## Running a render
 
+`/studio` ships on the production website — no tooling needed: pick a lesson
+from the dropdown (or **Import…** a LessonScript YAML, validated and
+critiqued in the page), press **Start render**, watch, download the bundle or
+**Create draft…** (sign-in required). Locally the same route runs under the
+dev server:
+
 ```text
 bun run dev
-open http://localhost:5173/studio            # dev-only route; absent from prod builds
+open http://localhost:5173/studio
 ```
 
 - Click **Start render** (a click satisfies the browser's audio autoplay policy), or
