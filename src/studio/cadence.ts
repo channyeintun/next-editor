@@ -67,7 +67,8 @@ export type TypingCadence =
 /**
  * Default: single keystrokes matched to the reference human recording
  * (recording-1784617032039.ne — within-word keys median ~140ms with wide
- * jitter, word starts ~2–4× slower, occasional ~0.6s thinking pauses).
+ * jitter, word starts ~2–4× slower, occasional thinking pauses; the think
+ * pause is tuned to 400ms, shorter than the recording's ~0.6–1s, by request).
  */
 export const NATURAL_CADENCE: TypingCadence = {
   mode: "chars",
@@ -77,7 +78,7 @@ export const NATURAL_CADENCE: TypingCadence = {
   jitter: 0.4,
   openLineFirst: true,
   wordPauseMs: 260,
-  thinkPauseMs: 600,
+  thinkPauseMs: 400,
   thinkChance: 0.35,
 };
 
@@ -90,7 +91,7 @@ export const FAST_EXPLAINER_CADENCE: TypingCadence = {
   jitter: 0.3,
   openLineFirst: true,
   wordPauseMs: 170,
-  thinkPauseMs: 400,
+  thinkPauseMs: 280,
   thinkChance: 0.2,
 };
 
