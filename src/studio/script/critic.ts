@@ -40,6 +40,41 @@ export const BANNED_PHRASES_V1 = [
   "don't worry",
 ];
 
+/**
+ * Read-aloud fingerprints (persona guide v2 "Conversational, not read-aloud"):
+ * forms a speaker would contract. Keys are matched on word boundaries; the
+ * value is the suggested contraction.
+ */
+export const UNCONTRACTED_FORMS: Record<string, string> = {
+  "it is": "it's",
+  "that is": "that's",
+  "there is": "there's",
+  "here is": "here's",
+  "what is": "what's",
+  "let us": "let's",
+  "do not": "don't",
+  "does not": "doesn't",
+  "did not": "didn't",
+  "is not": "isn't",
+  "are not": "aren't",
+  "was not": "wasn't",
+  "were not": "weren't",
+  cannot: "can't",
+  "will not": "won't",
+  "would not": "wouldn't",
+  "could not": "couldn't",
+  "should not": "shouldn't",
+  "have not": "haven't",
+  "has not": "hasn't",
+  "you are": "you're",
+  "we are": "we're",
+  "they are": "they're",
+  "you will": "you'll",
+  "we will": "we'll",
+  "you have": "you've",
+  "we have": "we've",
+};
+
 const MAX_SENTENCE_WORDS = 24;
 const MIN_WPM = 110;
 const MAX_WPM = 170;
@@ -118,6 +153,23 @@ export function critiqueScript(
         });
         break;
       }
+    }
+
+    // Conversational register: the narrator always talks, never reads.
+    // Uncontracted forms are the reliable fingerprint of read-aloud prose.
+    const readAloud: string[] = [];
+    for (const [form, contraction] of Object.entries(UNCONTRACTED_FORMS)) {
+      if (new RegExp(`\\b${form}\\b`, "i").test(lowered)) {
+        readAloud.push(`"${form}" → "${contraction}"`);
+      }
+    }
+    if (readAloud.length > 0) {
+      notes.push({
+        id: "register.read-aloud",
+        severity: "note",
+        sceneId: scene.id,
+        message: `Scene "${scene.id}" reads instead of talks — contract: ${readAloud.join(", ")} (persona guide v${CRITIC_VERSION})`,
+      });
     }
 
     // Sentence length.

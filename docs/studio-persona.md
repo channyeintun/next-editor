@@ -22,7 +22,9 @@ together.
   whiteboard, not the way a manual reads. Use contractions everywhere they are
   natural ("that's", "doesn't", "let's", "here's"); an occasional short
   question that the next sentence answers ("So who owns the String now?") is
-  encouraged.
+  encouraged. The critic enforces this mechanically: uncontracted forms
+  ("it is", "does not", "let us", …) raise a `register.read-aloud` note —
+  fix every one before rendering.
 - Short sentences still rule; target under ~20 words, hard ceiling 24.
   Conversational means natural rhythm, not rambling.
 - Address the viewer as "you", and use "let's" for shared actions — the

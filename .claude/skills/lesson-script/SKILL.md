@@ -29,8 +29,10 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
    - Always include `checks: [{ type: timing.p95Ms, max: 300 }]`.
 4. **Validate**: `bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml`
    - Optional preflight (the page validates too) but always run it: fix every
-     error; address `✎` critic notes (advisory, but fix `sources.missing` and
-     banned phrases). It writes `<slug>.critique.json` next to the YAML.
+     error; address `✎` critic notes (advisory, but ALWAYS fix
+     `sources.missing`, banned phrases, and `register.read-aloud` — the
+     narrator is always conversational, never reading). It writes
+     `<slug>.critique.json` next to the YAML.
    - Scripts auto-register by filename — do not edit
      `src/studio/plans/index.ts`. The YAML is the only artifact; end users can
      alternatively import it via /studio's **Import…** on the website.

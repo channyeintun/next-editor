@@ -27,6 +27,25 @@ describe("critiqueScript", () => {
     expect(critique.notes.filter((note) => note.id === "sources.missing")).toEqual([]);
   });
 
+  it("flags read-aloud register and suggests the contraction", () => {
+    const script = loadPilot("go-swap");
+    script.scenes[0].narration = "It is a value. The compiler does not copy it. Let us run it.";
+    const critique = critiqueScript(script, extractedOf(script), 19_375);
+    const register = critique.notes.filter((note) => note.id === "register.read-aloud");
+    expect(register).toHaveLength(1);
+    expect(register[0].sceneId).toBe(script.scenes[0].id);
+    expect(register[0].message).toContain('"it is" → "it\'s"');
+    expect(register[0].message).toContain('"does not" → "doesn\'t"');
+    expect(register[0].message).toContain('"let us" → "let\'s"');
+  });
+
+  it("accepts contracted, conversational narration", () => {
+    const script = loadPilot("go-swap");
+    script.scenes[0].narration = "It's a value. The compiler doesn't copy it. Let's run it.";
+    const critique = critiqueScript(script, extractedOf(script), 19_375);
+    expect(critique.notes.filter((note) => note.id === "register.read-aloud")).toEqual([]);
+  });
+
   it("flags banned phrases with the scene they occur in", () => {
     const script = loadPilot("go-swap");
     script.scenes[0].narration = "This is obviously easy. Simply run it.";
