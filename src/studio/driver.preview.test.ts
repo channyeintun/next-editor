@@ -97,6 +97,7 @@ function makeDriver() {
     driver: createStudioDriver(deps),
     executeCommand,
     previewEvents,
+    snapshot,
     startRuntime,
   };
 }
@@ -156,5 +157,35 @@ describe("StudioDriver WebContainer preview adapter", () => {
       }),
     });
     expect(captureScreenshot).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when the target is missing or the preview server errors", async () => {
+    const missingTarget = makeDriver();
+    missingTarget.executeCommand.mockRejectedValueOnce(
+      new Error('Preview target data-testid="missing" was not found'),
+    );
+    await expect(
+      missingTarget.driver.expectPreview({
+        actionId: "expect-missing",
+        target: { by: "testId", value: "missing" },
+        textContains: "Ready",
+        timeoutMs: 100,
+      }),
+    ).rejects.toThrow(/was not found/);
+    expect(missingTarget.captureScreenshot).toHaveBeenCalledOnce();
+
+    const serverError = makeDriver();
+    Object.assign(serverError.snapshot, {
+      errorMessage: "Vite exited before opening its port",
+      status: "error",
+    });
+    await expect(
+      serverError.driver.expectPreview({
+        actionId: "expect-after-server-error",
+        route: "/",
+        timeoutMs: 100,
+      }),
+    ).rejects.toThrow(/Vite exited before opening its port/);
+    expect(serverError.captureScreenshot).toHaveBeenCalledOnce();
   });
 });
