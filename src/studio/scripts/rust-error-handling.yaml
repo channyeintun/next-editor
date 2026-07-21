@@ -27,31 +27,15 @@ lesson:
         }
   slides:
     - id: result-slide
-      contentType: markdown
+      contentType: google
       name: Result
-      content: |
-        # Result<T, E>
-
-        For errors you can recover from:
-
-        ```
-        enum Result<T, E> { Ok(T), Err(E) }
-        ```
-
-        You must handle **both** Ok and Err.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_42
     - id: question-slide
-      contentType: markdown
+      contentType: google
       name: The ? operator
-      content: |
-        # The ? operator
-
-        ```
-        let n = text.parse()?;
-        ```
-
-        **Ok** → unwrap the value, keep going.
-
-        **Err** → return the error from this function.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_53
 
 build:
   voiceProfile: pocket-alba-v1

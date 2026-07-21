@@ -26,29 +26,15 @@ lesson:
         }
   slides:
     - id: lifetimes-slide
-      contentType: markdown
+      contentType: google
       name: Lifetimes
-      content: |
-        # Lifetimes
-
-        Every reference is valid for some span — its **lifetime**.
-
-        The compiler usually figures this out for you.
-
-        With references going in and out of a function, it can need a hint.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_108
     - id: annotation-slide
-      contentType: markdown
+      contentType: google
       name: The 'a annotation
-      content: |
-        # The lifetime parameter
-
-        ```
-        fn longest<'a>(x: &'a str, y: &'a str) -> &'a str
-        ```
-
-        `'a` ties the returned reference to the inputs.
-
-        Guarantee: the result never outlasts what it borrows.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_117
 
 build:
   voiceProfile: pocket-alba-v1

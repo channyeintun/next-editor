@@ -29,31 +29,15 @@ lesson:
         }
   slides:
     - id: enum-slide
-      contentType: markdown
+      contentType: google
       name: What is an enum
-      content: |
-        # Enums
-
-        A type that is **one of** a fixed set of variants.
-
-        ```
-        enum Status { Active, Away(u32) }
-        ```
-
-        A variant can carry data — here, minutes away.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_20
     - id: option-slide
-      contentType: markdown
+      contentType: google
       name: Option
-      content: |
-        # Option<T> — no null
-
-        Rust has no null. Instead:
-
-        ```
-        enum Option<T> { Some(T), None }
-        ```
-
-        The compiler makes you handle **both** cases.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_31
 
 build:
   voiceProfile: pocket-alba-v1

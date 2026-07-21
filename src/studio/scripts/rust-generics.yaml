@@ -40,34 +40,15 @@ lesson:
         }
   slides:
     - id: generics-slide
-      contentType: markdown
+      contentType: google
       name: Generics
-      content: |
-        # Generics
-
-        Write code once, for many types.
-
-        ```
-        fn largest<T>(list: &[T]) -> &T
-        struct Pair<T> { first: T, second: T }
-        ```
-
-        `<T>` is a type placeholder.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_64
     - id: bounds-slide
-      contentType: markdown
+      contentType: google
       name: Trait bounds
-      content: |
-        # Trait bounds
-
-        If `T` could be anything, what can you do with it?
-
-        ```
-        fn largest<T: PartialOrd>(...)
-        ```
-
-        **`T: PartialOrd`** — T must be comparable.
-
-        No runtime cost: a fast version is built per type.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_75
 
 build:
   voiceProfile: pocket-alba-v1

@@ -23,27 +23,15 @@ lesson:
         }
   slides:
     - id: move-slide
-      contentType: markdown
+      contentType: google
       name: Ownership moves
-      content: |
-        # Ownership moves
-
-        `let s2 = s1;` — the `String` **moves** to `s2`.
-
-        After the move, `s1` is no longer valid.
-
-        Use it again → **error E0382**, borrow of moved value.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_0
     - id: copy-slide
-      contentType: markdown
+      contentType: google
       name: Copy vs. clone
-      content: |
-        # Copy vs. clone
-
-        **Copy** types — `i32`, `bool`, `char` — duplicate on assign.
-
-        **Heap** types — `String`, `Vec` — move instead.
-
-        Want a real second copy? Call **`.clone()`**.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_11
 
 build:
   voiceProfile: pocket-alba-v1

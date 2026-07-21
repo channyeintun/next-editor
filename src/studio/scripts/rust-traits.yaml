@@ -39,35 +39,15 @@ lesson:
         }
   slides:
     - id: trait-slide
-      contentType: markdown
+      contentType: google
       name: Traits
-      content: |
-        # Traits
-
-        Shared behavior many types implement — like an interface.
-
-        ```
-        trait Greet {
-            fn name(&self) -> String;
-        }
-        ```
-
-        Each type provides its own `name`.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_86
     - id: default-slide
-      contentType: markdown
+      contentType: google
       name: Default methods
-      content: |
-        # Default methods
-
-        A trait can supply a **default**:
-
-        ```
-        fn hello(&self) -> String {
-            format!("Hello, {}!", self.name())
-        }
-        ```
-
-        Types use it as-is, or **override** it.
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      pageId: SLIDES_API1285888865_97
 
 build:
   voiceProfile: pocket-alba-v1
