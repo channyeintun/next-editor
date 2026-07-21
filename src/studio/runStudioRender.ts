@@ -46,6 +46,7 @@ export interface StudioRunDeps {
     | "handleWorkspaceEvent"
     | "handleSlideEvent"
     | "handleWhiteboardEvent"
+    | "handlePreviewEvent"
   >;
   getEditor: StudioDriverDeps["getEditor"];
   workspace: Pick<WorkspaceActions, "getFile" | "getProject" | "setActiveFilePath" | "loadProject">;
@@ -170,16 +171,17 @@ export async function runStudioRender(
     }
 
     phase("prepare-runtime-contract");
+    const runtime = plan.runtime;
     const actions = deps.webContainerRuntime.getActions();
     actions.resetRuntime();
     actions.configureRuntime({
-      environmentVariables: plan.runtime.environment,
+      environmentVariables: runtime.environment,
       runnerConfig: {
         enabled: true,
         runOnStartup: false,
         runOnFileSave: false,
-        initCommand: plan.runtime.initCommand,
-        runCommand: plan.runtime.runCommand,
+        initCommand: runtime.initCommand,
+        runCommand: runtime.runCommand,
       },
     });
 
@@ -191,11 +193,11 @@ export async function runStudioRender(
             current.runnerConfig.enabled === true &&
             current.runnerConfig.runOnStartup === false &&
             current.runnerConfig.runOnFileSave === false &&
-            current.runnerConfig.initCommand === plan.runtime.initCommand &&
-            current.runnerConfig.runCommand === plan.runtime.runCommand &&
+            current.runnerConfig.initCommand === runtime.initCommand &&
+            current.runnerConfig.runCommand === runtime.runCommand &&
             Object.keys(current.environmentVariables).length ===
-              Object.keys(plan.runtime.environment).length &&
-            Object.entries(plan.runtime.environment).every(
+              Object.keys(runtime.environment).length &&
+            Object.entries(runtime.environment).every(
               ([key, value]) => current.environmentVariables[key] === value,
             )
           );

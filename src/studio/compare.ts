@@ -81,42 +81,44 @@ function normalizePreviewState(recording: Recording): RenderSemantics["previewSt
 function normalizePreviewInteractions(
   recording: Recording,
 ): RenderSemantics["previewInteractionSequence"] {
-  return (recording.previewEvents ?? []).flatMap((event) => {
-    if (event.type === "preview_open") {
-      return [{ type: "open", mode: event.mode }];
-    }
-    if (event.type === "preview_route_change") {
-      return [{ type: "route", route: event.route }];
-    }
-    if (event.type === "preview_scroll") {
+  return (recording.previewEvents ?? []).flatMap(
+    (event): RenderSemantics["previewInteractionSequence"] => {
+      if (event.type === "preview_open") {
+        return [{ type: "open", mode: event.mode }];
+      }
+      if (event.type === "preview_route_change") {
+        return [{ type: "route", route: event.route }];
+      }
+      if (event.type === "preview_scroll") {
+        return [
+          {
+            type: "scroll",
+            scrollTop: event.scrollTop,
+            scrollLeft: event.scrollLeft,
+          },
+        ];
+      }
+      const interaction = event.interaction;
+      if (
+        event.type !== "preview_interaction" ||
+        !interaction ||
+        (interaction.type !== "click" &&
+          interaction.type !== "input" &&
+          interaction.type !== "scroll")
+      ) {
+        return [];
+      }
       return [
         {
-          type: "scroll",
-          scrollTop: event.scrollTop,
-          scrollLeft: event.scrollLeft,
+          type: interaction.type,
+          testId: interaction.target.testId,
+          value: interaction.data?.value,
+          scrollTop: interaction.data?.scrollTop,
+          scrollLeft: interaction.data?.scrollLeft,
         },
       ];
-    }
-    const interaction = event.interaction;
-    if (
-      event.type !== "preview_interaction" ||
-      !interaction ||
-      (interaction.type !== "click" &&
-        interaction.type !== "input" &&
-        interaction.type !== "scroll")
-    ) {
-      return [];
-    }
-    return [
-      {
-        type: interaction.type,
-        testId: interaction.target.testId,
-        value: interaction.data?.value,
-        scrollTop: interaction.data?.scrollTop,
-        scrollLeft: interaction.data?.scrollLeft,
-      },
-    ];
-  });
+    },
+  );
 }
 
 export async function extractRenderSemantics(

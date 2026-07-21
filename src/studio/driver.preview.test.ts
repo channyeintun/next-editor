@@ -1,18 +1,17 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { PreviewEvent, PreviewPanelMode, PreviewState } from "../types/slides";
-import type { StudioPreviewCommand } from "../utils/iframeStudioCommandBridge";
 import { createStudioDriver, StudioActionError, type StudioDriverDeps } from "./driver";
 
 vi.mock("../monaco", () => ({
   monaco: {},
-  workspacePathFromMonacoModelUri: vi.fn(),
+  workspacePathFromMonacoModelUri: vi.fn<() => string | null>(),
 }));
 
 function makeDriver() {
   let previewState = { isOpen: false } as PreviewState;
   const previewEvents: PreviewEvent[] = [];
-  const startRuntime = vi.fn(async () => {});
-  const executeCommand = vi.fn(async (command: StudioPreviewCommand) => ({
+  const startRuntime = vi.fn<() => Promise<void>>(async () => {});
+  const executeCommand = vi.fn<StudioDriverDeps["preview"]["executeCommand"]>(async (command) => ({
     command: command.type,
     route: "/hello?name=Ada",
     scrollLeft: 0,
@@ -29,7 +28,7 @@ function makeDriver() {
         }
       : {}),
   }));
-  const captureScreenshot = vi.fn(async () => ({
+  const captureScreenshot = vi.fn<StudioDriverDeps["preview"]["captureScreenshot"]>(async () => ({
     dataUrl: "data:image/png;base64,cHJldmlldw==",
     height: 480,
     width: 640,

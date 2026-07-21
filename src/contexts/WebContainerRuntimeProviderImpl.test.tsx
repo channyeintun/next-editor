@@ -1,6 +1,5 @@
 import { act, render } from "@testing-library/react";
 import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
-import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProviderImpl";
 import { WorkspaceProvider } from "./WorkspaceProvider";
@@ -146,11 +145,11 @@ function renderProviders(allowAmbientStart = true) {
   }
 
   render(
-    createElement(
-      WorkspaceProvider,
-      null,
-      createElement(WebContainerRuntimeProvider, { allowAmbientStart }, createElement(Capture)),
-    ),
+    <WorkspaceProvider>
+      <WebContainerRuntimeProvider allowAmbientStart={allowAmbientStart}>
+        <Capture />
+      </WebContainerRuntimeProvider>
+    </WorkspaceProvider>,
   );
 
   if (!captured.runtime || !captured.workspace || !captured.dirty) {

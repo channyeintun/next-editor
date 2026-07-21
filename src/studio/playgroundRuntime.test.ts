@@ -53,7 +53,9 @@ function projectWith(...paths: string[]) {
 }
 
 function prepare(runtime: StudioRuntime, project: { files: Record<string, unknown> }) {
-  if (runtime.kind === "none") throw new Error("test misuse");
+  if (runtime.kind === "none" || runtime.kind === "webcontainer") {
+    throw new Error("test misuse");
+  }
   return preparePlaygroundRun({
     runtime,
     mode: "fixture",

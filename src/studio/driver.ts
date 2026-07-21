@@ -577,8 +577,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       } catch (error) {
         let diagnosticScreenshot: Record<string, unknown> | undefined;
         try {
-          const screenshot = await deps.preview.captureScreenshot();
-          diagnosticScreenshot = screenshot;
+          diagnosticScreenshot = { ...(await deps.preview.captureScreenshot()) };
         } catch (screenshotError) {
           diagnosticScreenshot = {
             error:
