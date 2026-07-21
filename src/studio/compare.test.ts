@@ -3,6 +3,7 @@ import { compareRenderSemantics, type RenderSemantics } from "./compare";
 
 function makeSemantics(overrides: Partial<RenderSemantics> = {}): RenderSemantics {
   return {
+    planSha256: "planhash1",
     actionSequence: [
       { actionId: "open", actionType: "workspace.openFile", status: "ok" },
       { actionId: "run", actionType: "runtime.run", status: "ok" },

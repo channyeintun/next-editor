@@ -12,6 +12,13 @@ import { hashWorkspaceFiles, sha256Hex } from "./hash";
  */
 
 export interface RenderSemantics {
+  /**
+   * Hash of the compiled plan this render performed. Two renders are only
+   * comparable when their plan hashes match — a differing hash means the
+   * script (narration, actions, slides, …) changed between runs, and a
+   * comparison would report intentional edits as repeatability failures.
+   */
+  planSha256: string;
   actionSequence: { actionId: string; actionType: string; status: string }[];
   actionStartsMs: Record<string, number | null>;
   finalWorkspaceHash: string;
@@ -25,11 +32,13 @@ export async function extractRenderSemantics(
   recording: Recording,
   receipts: readonly ActionReceipt[],
   audioBytes: Uint8Array,
+  planSha256: string,
 ): Promise<RenderSemantics> {
   const lastRuntimeSnapshot =
     recording.runtimeSnapshot ?? (recording.runtimeEvents ?? []).at(-1)?.snapshot ?? null;
 
   return {
+    planSha256,
     actionSequence: receipts.map((receipt) => ({
       actionId: receipt.actionId,
       actionType: receipt.actionType,

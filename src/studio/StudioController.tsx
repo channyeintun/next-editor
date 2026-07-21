@@ -166,6 +166,7 @@ export default function StudioController() {
   const [receipts, setReceipts] = useState<ActionReceipt[]>([]);
   const [latest, setLatest] = useState<StudioRunEntry | null>(runHistory.at(-1) ?? null);
   const [comparison, setComparison] = useState<StudioCheckResult[] | null>(null);
+  const [baselineNote, setBaselineNote] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [buildWarnings, setBuildWarnings] = useState<string[]>([]);
   const [criticNotes, setCriticNotes] = useState<CritiqueNote[]>([]);
@@ -288,9 +289,21 @@ export default function StudioController() {
             .reverse()
             .find((run) => run.mode === mode)?.result.semantics ??
           readStoredSemantics(plan.lesson.slug, mode);
-        if (previous) {
+        // Repeatability only means something between renders of the SAME
+        // compiled plan. A different plan hash means the script was edited
+        // between runs — comparing would report the intentional edit as a
+        // failure, so reset the baseline instead.
+        if (previous && previous.planSha256 === result.semantics.planSha256) {
           nextComparison = compareRenderSemantics(previous, result.semantics);
           setComparison(nextComparison);
+          setBaselineNote(null);
+        } else {
+          setComparison(null);
+          setBaselineNote(
+            previous
+              ? "Script changed since the previous run — repeatability baseline reset. Render again to compare."
+              : null,
+          );
         }
         storeSemantics(plan.lesson.slug, mode, result.semantics);
       }
@@ -564,6 +577,8 @@ export default function StudioController() {
           initialTags="studio, ai-produced"
         />
       ) : null}
+
+      {baselineNote ? <p className="mt-3 text-[12px] text-amber-300">{baselineNote}</p> : null}
 
       {comparison ? (
         <div className="mt-3">

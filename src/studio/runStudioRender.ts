@@ -366,7 +366,12 @@ export async function runStudioRender(
       checks.push(timingGateCheck(computeTimingStats(receipts), plan.gates.timingP95MaxMs));
     }
 
-    const semantics = await extractRenderSemantics(recording, receipts, audioBytes);
+    const semantics = await extractRenderSemantics(
+      recording,
+      receipts,
+      audioBytes,
+      await sha256HexOfJson(plan),
+    );
     const allChecksOk = checks.every((check) => check.ok);
     const outcome = allChecksOk ? "passed" : "failed";
     if (!allChecksOk) {
