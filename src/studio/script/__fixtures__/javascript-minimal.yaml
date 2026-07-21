@@ -1,0 +1,81 @@
+# Minimal JavaScript LessonScript regression: proves the required JS runtime
+# contract compiles even when the lesson itself only edits and asserts a file.
+schemaVersion: 1
+
+lesson:
+  slug: javascript-minimal
+  title: "JavaScript constants (fixture)"
+  locale: en-US
+  workspace:
+    lessonType: javascript
+    name: JavaScript Fixture
+    entryFilePath: server.js
+    files:
+      package.json: |
+        {
+          "name": "studio-javascript-minimal",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "node server.js"
+          }
+        }
+      package-lock.json: |
+        {"name":"studio-javascript-minimal","version":"1.0.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"studio-javascript-minimal","version":"1.0.0"}}}
+      server.js: |
+        import { createServer } from "node:http";
+
+        const greeting = "Hello";
+
+        createServer((_request, response) => {
+          response.writeHead(200, { "content-type": "text/plain" });
+          response.end(greeting);
+        }).listen(4173);
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 17
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: npm ci --ignore-scripts --no-audit --no-fund
+  runCommand: npm run dev
+  expectedPort: 4173
+  lockfilePath: package-lock.json
+  environment: {}
+
+scenes:
+  - id: name-the-audience
+    narration: >
+      A constant gives a value a stable name. [[mark:open-file]] Open the module.
+      [[mark:add-audience]] Add an audience beside the greeting, so the intent
+      stays visible where the value is declared. [[mark:verify-audience]] The
+      final file gate checks the exact declaration.
+    sources:
+      - title: "MDN — const"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/const"
+    actions:
+      - id: open-server
+        type: workspace.openFile
+        at: { mark: open-file }
+        path: server.js
+      - id: add-audience
+        type: editor.type
+        at: { mark: add-audience }
+        cadence: block
+        target:
+          file: server.js
+          after: "const greeting = \"Hello\";\n"
+          occurrence: 1
+        text: "const audience = \"Studio\";\n"
+      - id: expect-audience
+        type: expect.file
+        at: { mark: verify-audience }
+        path: server.js
+        contains: 'const audience = "Studio";'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

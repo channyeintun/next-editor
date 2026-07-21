@@ -1,0 +1,138 @@
+# Acceptance fixture for the versioned TypeScript/WebContainer preview adapter.
+# Production support still requires two clean real-Chrome renders and a human
+# replay review; compiling this file is necessary but not sufficient evidence.
+schemaVersion: 1
+
+lesson:
+  slug: typescript-vite-preview
+  title: "TypeScript preview interaction (fixture)"
+  locale: en-US
+  workspace:
+    lessonType: typescript
+    name: TypeScript Vite Preview Fixture
+    entryFilePath: src/main.ts
+    files:
+      package.json: |
+        {
+          "name": "studio-typescript-preview",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      package-lock.json: |
+        {"name":"studio-typescript-preview","version":"1.0.0","lockfileVersion":1,"requires":true,"dependencies":{"@esbuild/aix-ppc64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.21.5.tgz","integrity":"sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==","dev":true,"optional":true},"@esbuild/android-arm":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.21.5.tgz","integrity":"sha512-vCPvzSjpPHEi1siZdlvAlsPxXl7WbOVUBBAowWug4rJHb68Ox8KualB+1ocNvT5fjv6wpkX6o/iEpbDrf68zcg==","dev":true,"optional":true},"@esbuild/android-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.21.5.tgz","integrity":"sha512-c0uX9VAUBQ7dTDCjq+wdyGLowMdtR/GoC2U5IYk/7D1H1JYC0qseD7+11iMP2mRLN9RcCMRcjC4YMclCzGwS/A==","dev":true,"optional":true},"@esbuild/android-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.21.5.tgz","integrity":"sha512-D7aPRUUNHRBwHxzxRvp856rjUHRFW1SdQATKXH2hqA0kAZb1hKmi02OpYRacl0TxIGz/ZmXWlbZgjwWYaCakTA==","dev":true,"optional":true},"@esbuild/darwin-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.21.5.tgz","integrity":"sha512-DwqXqZyuk5AiWWf3UfLiRDJ5EDd49zg6O9wclZ7kUMv2WRFr4HKjXp/5t8JZ11QbQfUS6/cRCKGwYhtNAY88kQ==","dev":true,"optional":true},"@esbuild/darwin-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.21.5.tgz","integrity":"sha512-se/JjF8NlmKVG4kNIuyWMV/22ZaerB+qaSi5MdrXtd6R08kvs2qCN4C09miupktDitvh8jRFflwGFBQcxZRjbw==","dev":true,"optional":true},"@esbuild/freebsd-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.21.5.tgz","integrity":"sha512-5JcRxxRDUJLX8JXp/wcBCy3pENnCgBR9bN6JsY4OmhfUtIHe3ZW0mawA7+RDAcMLrMIZaf03NlQiX9DGyB8h4g==","dev":true,"optional":true},"@esbuild/freebsd-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.21.5.tgz","integrity":"sha512-J95kNBj1zkbMXtHVH29bBriQygMXqoVQOQYA+ISs0/2l3T9/kj42ow2mpqerRBxDJnmkUDCaQT/dfNXWX/ZZCQ==","dev":true,"optional":true},"@esbuild/linux-arm":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.21.5.tgz","integrity":"sha512-bPb5AHZtbeNGjCKVZ9UGqGwo8EUu4cLq68E95A53KlxAPRmUyYv2D6F0uUI65XisGOL1hBP5mTronbgo+0bFcA==","dev":true,"optional":true},"@esbuild/linux-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.21.5.tgz","integrity":"sha512-ibKvmyYzKsBeX8d8I7MH/TMfWDXBF3db4qM6sy+7re0YXya+K1cem3on9XgdT2EQGMu4hQyZhan7TeQ8XkGp4Q==","dev":true,"optional":true},"@esbuild/linux-ia32":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.21.5.tgz","integrity":"sha512-YvjXDqLRqPDl2dvRODYmmhz4rPeVKYvppfGYKSNGdyZkA01046pLWyRKKI3ax8fbJoK5QbxblURkwK/MWY18Tg==","dev":true,"optional":true},"@esbuild/linux-loong64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.21.5.tgz","integrity":"sha512-uHf1BmMG8qEvzdrzAqg2SIG/02+4/DHB6a9Kbya0XDvwDEKCoC8ZRWI5JJvNdUjtciBGFQ5PuBlpEOXQj+JQSg==","dev":true,"optional":true},"@esbuild/linux-mips64el":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.21.5.tgz","integrity":"sha512-IajOmO+KJK23bj52dFSNCMsz1QP1DqM6cwLUv3W1QwyxkyIWecfafnI555fvSGqEKwjMXVLokcV5ygHW5b3Jbg==","dev":true,"optional":true},"@esbuild/linux-ppc64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.21.5.tgz","integrity":"sha512-1hHV/Z4OEfMwpLO8rp7CvlhBDnjsC3CttJXIhBi+5Aj5r+MBvy4egg7wCbe//hSsT+RvDAG7s81tAvpL2XAE4w==","dev":true,"optional":true},"@esbuild/linux-riscv64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.21.5.tgz","integrity":"sha512-2HdXDMd9GMgTGrPWnJzP2ALSokE/0O5HhTUvWIbD3YdjME8JwvSCnNGBnTThKGEB91OZhzrJ4qIIxk/SBmyDDA==","dev":true,"optional":true},"@esbuild/linux-s390x":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.21.5.tgz","integrity":"sha512-zus5sxzqBJD3eXxwvjN1yQkRepANgxE9lgOW2qLnmr8ikMTphkjgXu1HR01K4FJg8h1kEEDAqDcZQtbrRnB41A==","dev":true,"optional":true},"@esbuild/linux-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.21.5.tgz","integrity":"sha512-1rYdTpyv03iycF1+BhzrzQJCdOuAOtaqHTWJZCWvijKD2N5Xu0TtVC8/+1faWqcP9iBCWOmjmhoH94dH82BxPQ==","dev":true,"optional":true},"@esbuild/netbsd-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.21.5.tgz","integrity":"sha512-Woi2MXzXjMULccIwMnLciyZH4nCIMpWQAs049KEeMvOcNADVxo0UBIQPfSmxB3CWKedngg7sWZdLvLczpe0tLg==","dev":true,"optional":true},"@esbuild/openbsd-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.21.5.tgz","integrity":"sha512-HLNNw99xsvx12lFBUwoT8EVCsSvRNDVxNpjZ7bPn947b8gJPzeHWyNVhFsaerc0n3TsbOINvRP2byTZ5LKezow==","dev":true,"optional":true},"@esbuild/sunos-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.21.5.tgz","integrity":"sha512-6+gjmFpfy0BHU5Tpptkuh8+uw3mnrvgs+dSPQXQOv3ekbordwnzTVEb4qnIvQcYXq6gzkyTnoZ9dZG+D4garKg==","dev":true,"optional":true},"@esbuild/win32-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.21.5.tgz","integrity":"sha512-Z0gOTd75VvXqyq7nsl93zwahcTROgqvuAcYDUr+vOv8uHhNSKROyU961kgtCD1e95IqPKSQKH7tBTslnS3tA8A==","dev":true,"optional":true},"@esbuild/win32-ia32":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.21.5.tgz","integrity":"sha512-SWXFF1CL2RVNMaVs+BBClwtfZSvDgtL//G/smwAc5oVK/UPu2Gu9tIaRgFmYFFKrmg3SyAjSrElf0TiJ1v8fYA==","dev":true,"optional":true},"@esbuild/win32-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.21.5.tgz","integrity":"sha512-tQd/1efJuzPC6rCFwEvLtci/xNFcTZknmXs98FYDfGE4wP9ClFV98nyKrzJKVPMhdDnjzLhdUyMX4PsQAPjwIw==","dev":true,"optional":true},"@rollup/rollup-android-arm-eabi":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-android-arm-eabi/-/rollup-android-arm-eabi-4.62.2.tgz","integrity":"sha512-6o7ZLZK+BeenkZCFNDXqpbjw9bD6nuWonvS/lwQJp7NoVVxm6p3qE7qQ5jGuBjiFsgvqjD8mZAU5oWxTmbOeOg==","dev":true,"optional":true},"@rollup/rollup-android-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-android-arm64/-/rollup-android-arm64-4.62.2.tgz","integrity":"sha512-BaH7BllCACHoH1LguOU56UItGfUWjujlO65kS9LAodViaN4bwIKd7oeW/ZHJ/4ljr/7MIiENnNy3HJ0zXv8Zkw==","dev":true,"optional":true},"@rollup/rollup-darwin-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-darwin-arm64/-/rollup-darwin-arm64-4.62.2.tgz","integrity":"sha512-v39RCCvj4He82I9sFmk+M1VZ0PLM9sfsLVikjfx2hYBNALhrrOR2D3JjQA6AhlaSOgcR+RzrKY7e1+bT6SUO/A==","dev":true,"optional":true},"@rollup/rollup-darwin-x64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-darwin-x64/-/rollup-darwin-x64-4.62.2.tgz","integrity":"sha512-yl0y2vq3S3lHeuXhEdss6TWfKW8vkujImO12tn4ZkG/4oghr09LvdYm2RElVjokTQiUvDUGXLGsYeLqUMCKpGA==","dev":true,"optional":true},"@rollup/rollup-freebsd-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-freebsd-arm64/-/rollup-freebsd-arm64-4.62.2.tgz","integrity":"sha512-tT4pvt4qXD+vEoezupCWi+a1F0vvDiksiHc+PxRlYTOH1I6/X4id9jPxTP+Fg+545euaFT1jJVs4CEdHZAU1vw==","dev":true,"optional":true},"@rollup/rollup-freebsd-x64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-freebsd-x64/-/rollup-freebsd-x64-4.62.2.tgz","integrity":"sha512-6nU5F2wCW+qvCBhTn1pdIU3bzsIoF7EUwsCDRxilWGprQR6yd508YnH9+OKFCwpfS8pjZqDUmnCAr7exax0XCg==","dev":true,"optional":true},"@rollup/rollup-linux-arm-gnueabihf":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm-gnueabihf/-/rollup-linux-arm-gnueabihf-4.62.2.tgz","integrity":"sha512-n1GJHPOvpIfhi3TmrCeh6S6URt9BFCt0KQE3qvexyGCTAKpR4Lg+eWvNZEqu7epxwus/8ElT3hacYEucm49SZg==","dev":true,"optional":true},"@rollup/rollup-linux-arm-musleabihf":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm-musleabihf/-/rollup-linux-arm-musleabihf-4.62.2.tgz","integrity":"sha512-JqgflS8wEB+UXV/vS1RpRbifGBeN4D5lz8D8oOFbFZw4vedvdOgCFAjfBmIMdW3yL10XpQQ0Ambepw6MXrhOnA==","dev":true,"optional":true},"@rollup/rollup-linux-arm64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm64-gnu/-/rollup-linux-arm64-gnu-4.62.2.tgz","integrity":"sha512-wnFJkogWvN4jm/hQRF2UBaeUmk20j5+DmHvoyWii2b8HJDyvz1MF2OU/6ynXt2KR63rbZLWkFpoytpdc/yBuSA==","dev":true,"optional":true},"@rollup/rollup-linux-arm64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm64-musl/-/rollup-linux-arm64-musl-4.62.2.tgz","integrity":"sha512-HVu2bp0zhvJ8xHEV9+UUs7S90VadmBSY3LcIMvozbPo4AuMGDWlz3ymHLHZPX4hR67TKTt8Qp5PJ5RBg/i+RMQ==","dev":true,"optional":true},"@rollup/rollup-linux-loong64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-loong64-gnu/-/rollup-linux-loong64-gnu-4.62.2.tgz","integrity":"sha512-mQqqAV8QaoSgr9I2fKDLY2BAVvmKjWoGiu/cSYQonsLvtqwEn1E4QYfnCOcp5zoEqNhsDYin1s6jx/VJmrxlZg==","dev":true,"optional":true},"@rollup/rollup-linux-loong64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-loong64-musl/-/rollup-linux-loong64-musl-4.62.2.tgz","integrity":"sha512-IxKLoxCQ2IWi6bT2akyDUBGsOImDKB+sPp4EsTmwFQ/fMwpCKm8uLSSgP/Kx/QYUgKis6SEZ5/Nlhup0DIA0PQ==","dev":true,"optional":true},"@rollup/rollup-linux-ppc64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-ppc64-gnu/-/rollup-linux-ppc64-gnu-4.62.2.tgz","integrity":"sha512-Mk5ha2RQSgyFfmYYLkBpPnUk8D8FriBxesO1u9O75X0mHgXL1UQcH5Itl2lurWL2tj0RxV9b9tJgipac0hRY9A==","dev":true,"optional":true},"@rollup/rollup-linux-ppc64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-ppc64-musl/-/rollup-linux-ppc64-musl-4.62.2.tgz","integrity":"sha512-CjvEnqJL/0/TQ3TXX3OPIJ/kmBellrWd4heXUmHeJlTnmwjKpSJzoehLaL6Xk0ZnMHBu9dZuFADNOrtjF4v+2w==","dev":true,"optional":true},"@rollup/rollup-linux-riscv64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-riscv64-gnu/-/rollup-linux-riscv64-gnu-4.62.2.tgz","integrity":"sha512-1SiZbzwdkaDURsew/tSOrooKiYy7EQGT6m8ufavAi9NEyQb/6VuIxFXAL1fqa4iZe3g4NbNk4P7J32z2tw5Mgg==","dev":true,"optional":true},"@rollup/rollup-linux-riscv64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-riscv64-musl/-/rollup-linux-riscv64-musl-4.62.2.tgz","integrity":"sha512-nQts12zJ3NQRoE6uYljOH89v7szzLDvG2JD/vsX+vGXU8w/At1GowTZ5/7qeFQ8m7L55rpR8Okugnuo5bgjy2Q==","dev":true,"optional":true},"@rollup/rollup-linux-s390x-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-s390x-gnu/-/rollup-linux-s390x-gnu-4.62.2.tgz","integrity":"sha512-E9/ll019jhPIJgpzfZoIkBGhcz+kKNgVWYRY0zr9srBdPPFVpvOKW8VaJKUbeK+eZXyQF9ltME+Kk6affeaPgg==","dev":true,"optional":true},"@rollup/rollup-linux-x64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.62.2.tgz","integrity":"sha512-5BqxR/pshjey51iliyzTD5Xi3EN0aLmQ2lZ3lvefVV9c82BvrLo2/6OT55iifpWBufs6kdwWbuOKS841DrmK9A==","dev":true,"optional":true},"@rollup/rollup-linux-x64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-x64-musl/-/rollup-linux-x64-musl-4.62.2.tgz","integrity":"sha512-uNN83XxQrRAh/w0/pmAfibcwyb6YWt4gP+dpnQKPVJshAloQ785ii8CT8ZCIxkGg9opVsvAlGhFitSm6D1Jjpg==","dev":true,"optional":true},"@rollup/rollup-openbsd-x64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-openbsd-x64/-/rollup-openbsd-x64-4.62.2.tgz","integrity":"sha512-srjEIxSH3LRnJN6THczDHWQplqEMFiAJrTab0msUryh9kwNpkICf3Ea6q6MN/2cZwRFUNx5w+h6Hpi4QuHS6Zg==","dev":true,"optional":true},"@rollup/rollup-openharmony-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-openharmony-arm64/-/rollup-openharmony-arm64-4.62.2.tgz","integrity":"sha512-8hOJnxgbyObnCm5AlRA3A931xX19xq80RjVTKgJOvEKWqJruP/Uf12IbAOaDjjEXYRewwHLfmF0YRIdK3OwKWA==","dev":true,"optional":true},"@rollup/rollup-win32-arm64-msvc":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-arm64-msvc/-/rollup-win32-arm64-msvc-4.62.2.tgz","integrity":"sha512-mmF4AY1i0hG/bLWUctUq59gtmgaSIRa3cu/A3JFRp/sCNEme2bgDEiDS22P9FbnJB8NJNF4jPJiSP5RHQpUTDg==","dev":true,"optional":true},"@rollup/rollup-win32-ia32-msvc":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-ia32-msvc/-/rollup-win32-ia32-msvc-4.62.2.tgz","integrity":"sha512-DZgkknc6jhHrk46V25vbAM0zZkyP0nSDkJB8/dRkLTxv470dOmWDqGoEJl/9A0dFfS7yE3REOwNDxpHwSLSt0Q==","dev":true,"optional":true},"@rollup/rollup-win32-x64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-x64-gnu/-/rollup-win32-x64-gnu-4.62.2.tgz","integrity":"sha512-T6xr6ucWSFto+VGajA8YH26LdpHRuP4YLHEKAtCWvJDOlnmWcDZVCI2Jmjr+IFHDlt2zRaTAKE4tfjTaWLgJBg==","dev":true,"optional":true},"@rollup/rollup-win32-x64-msvc":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.62.2.tgz","integrity":"sha512-BfzEnDJOt9T8M989/lA37EcJgat01wLRnoi5dQf3QzOH7jzpqTAzdDbVfRljVr5r+jzKqpbHeyOfAaXxAd0PAA==","dev":true,"optional":true},"@types/estree":{"version":"1.0.9","resolved":"https://registry.npmjs.org/@types/estree/-/estree-1.0.9.tgz","integrity":"sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==","dev":true},"esbuild":{"version":"0.21.5","resolved":"https://registry.npmjs.org/esbuild/-/esbuild-0.21.5.tgz","integrity":"sha512-mg3OPMV4hXywwpoDxu3Qda5xCKQi+vCTZq8S9J/EpkhB2HzKXq4SNFZE3+NK93JYxc8VMSep+lOUSC/RVKaBqw==","dev":true,"requires":{"@esbuild/aix-ppc64":"0.21.5","@esbuild/android-arm":"0.21.5","@esbuild/android-arm64":"0.21.5","@esbuild/android-x64":"0.21.5","@esbuild/darwin-arm64":"0.21.5","@esbuild/darwin-x64":"0.21.5","@esbuild/freebsd-arm64":"0.21.5","@esbuild/freebsd-x64":"0.21.5","@esbuild/linux-arm":"0.21.5","@esbuild/linux-arm64":"0.21.5","@esbuild/linux-ia32":"0.21.5","@esbuild/linux-loong64":"0.21.5","@esbuild/linux-mips64el":"0.21.5","@esbuild/linux-ppc64":"0.21.5","@esbuild/linux-riscv64":"0.21.5","@esbuild/linux-s390x":"0.21.5","@esbuild/linux-x64":"0.21.5","@esbuild/netbsd-x64":"0.21.5","@esbuild/openbsd-x64":"0.21.5","@esbuild/sunos-x64":"0.21.5","@esbuild/win32-arm64":"0.21.5","@esbuild/win32-ia32":"0.21.5","@esbuild/win32-x64":"0.21.5"}},"fsevents":{"version":"2.3.3","resolved":"https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz","integrity":"sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==","dev":true,"optional":true},"nanoid":{"version":"3.3.16","resolved":"https://registry.npmjs.org/nanoid/-/nanoid-3.3.16.tgz","integrity":"sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==","dev":true},"picocolors":{"version":"1.1.1","resolved":"https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz","integrity":"sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==","dev":true},"postcss":{"version":"8.5.21","resolved":"https://registry.npmjs.org/postcss/-/postcss-8.5.21.tgz","integrity":"sha512-v4sDNP3fdNiWMfabO7OwOQdOX8TiQSztKyT1Wj0w+j7LDallJThJRBBBmzVGyYj0crMh7jlV4zepPkiNu9UwDQ==","dev":true,"requires":{"nanoid":"^3.3.16","picocolors":"^1.1.1","source-map-js":"^1.2.1"}},"rollup":{"version":"4.62.2","resolved":"https://registry.npmjs.org/rollup/-/rollup-4.62.2.tgz","integrity":"sha512-RFnrW4lhXA3s3eqHDZvN654g8OTjzRfqpIRJYczCGB6HzphckVAi/Qh4tbPUbRuDi7s1Llv8g/NspLkttY3gTA==","dev":true,"requires":{"@rollup/rollup-android-arm-eabi":"4.62.2","@rollup/rollup-android-arm64":"4.62.2","@rollup/rollup-darwin-arm64":"4.62.2","@rollup/rollup-darwin-x64":"4.62.2","@rollup/rollup-freebsd-arm64":"4.62.2","@rollup/rollup-freebsd-x64":"4.62.2","@rollup/rollup-linux-arm-gnueabihf":"4.62.2","@rollup/rollup-linux-arm-musleabihf":"4.62.2","@rollup/rollup-linux-arm64-gnu":"4.62.2","@rollup/rollup-linux-arm64-musl":"4.62.2","@rollup/rollup-linux-loong64-gnu":"4.62.2","@rollup/rollup-linux-loong64-musl":"4.62.2","@rollup/rollup-linux-ppc64-gnu":"4.62.2","@rollup/rollup-linux-ppc64-musl":"4.62.2","@rollup/rollup-linux-riscv64-gnu":"4.62.2","@rollup/rollup-linux-riscv64-musl":"4.62.2","@rollup/rollup-linux-s390x-gnu":"4.62.2","@rollup/rollup-linux-x64-gnu":"4.62.2","@rollup/rollup-linux-x64-musl":"4.62.2","@rollup/rollup-openbsd-x64":"4.62.2","@rollup/rollup-openharmony-arm64":"4.62.2","@rollup/rollup-win32-arm64-msvc":"4.62.2","@rollup/rollup-win32-ia32-msvc":"4.62.2","@rollup/rollup-win32-x64-gnu":"4.62.2","@rollup/rollup-win32-x64-msvc":"4.62.2","@types/estree":"1.0.9","fsevents":"~2.3.2"}},"source-map-js":{"version":"1.2.1","resolved":"https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz","integrity":"sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==","dev":true},"vite":{"version":"5.4.21","resolved":"https://registry.npmjs.org/vite/-/vite-5.4.21.tgz","integrity":"sha512-o5a9xKjbtuhY6Bi5S3+HvbRERmouabWbyUcpXXUA1u+GNUKoROi9byOJ8M0nHbHYHkYICiMlqxkg1KkYmm25Sw==","dev":true,"requires":{"esbuild":"^0.21.3","fsevents":"~2.3.3","postcss":"^8.4.43","rollup":"^4.20.0"}}}}
+      index.html: |
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Typed greeting</title>
+          </head>
+          <body>
+            <main>
+              <label for="name">Name</label>
+              <input id="name" data-testid="name-input" autocomplete="off" />
+              <button type="button" data-testid="greet-button">Greet</button>
+              <output data-testid="greeting" data-state="idle">Waiting for a name</output>
+            </main>
+            <script type="module" src="/src/main.ts"></script>
+          </body>
+        </html>
+      src/main.ts: |
+        const input = document.querySelector<HTMLInputElement>('[data-testid="name-input"]');
+        const button = document.querySelector<HTMLButtonElement>('[data-testid="greet-button"]');
+        const output = document.querySelector<HTMLOutputElement>('[data-testid="greeting"]');
+
+        if (!input || !button || !output) {
+          throw new Error("The greeting controls are missing");
+        }
+
+        button.addEventListener("click", () => {
+          const name = input.value.trim() || "friend";
+          output.textContent = `Hello, ${name}!`;
+          output.dataset.state = "ready";
+          history.pushState(null, "", `/hello?name=${encodeURIComponent(name)}`);
+        });
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 29
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: npm ci --no-audit --no-fund
+  runCommand: npm run dev
+  expectedPort: 5173
+  lockfilePath: package-lock.json
+  environment: {}
+
+scenes:
+  - id: typed-greeting
+    narration: >
+      This small Vite page uses TypeScript element types to keep its event
+      handler honest. [[mark:start-runtime]] Start the pinned workspace while
+      we trace the data flow. The input begins empty, and the output begins in
+      an idle state. A click reads the current value, writes visible text, and
+      records that the result is ready. The handler also changes the route, so
+      one interaction produces two observable outcomes. Stable test IDs let
+      the performer address those controls without guessing CSS structure or
+      screen coordinates. The runtime and iframe each acknowledge readiness
+      before an interaction can run. [[mark:fill-name]] Enter Ada through the
+      preview bridge. The input event follows the same browser path as a user
+      edit. [[mark:greet]] Click Greet. The recorded checkpoint must now see
+      the greeting text, ready state, and new route together.
+    sources:
+      - title: "TypeScript Handbook — DOM Manipulation"
+        url: "https://www.typescriptlang.org/docs/handbook/dom-manipulation.html"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start-runtime }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: wait-for-preview-server
+        type: runtime.waitForReady
+        at: { afterAction: start-runtime }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-preview-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: fill-name
+        type: preview.input
+        at: { mark: fill-name }
+        timeoutMs: 5000
+        target: { by: testId, value: name-input }
+        value: Ada
+        retry: { maxAttempts: 2, delayMs: 150 }
+      - id: click-greet
+        type: preview.click
+        at: { mark: greet }
+        timeoutMs: 5000
+        target: { by: testId, value: greet-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-greeting
+        type: expect.preview
+        at: { afterAction: click-greet }
+        timeoutMs: 5000
+        target: { by: testId, value: greeting }
+        textContains: "Hello, Ada!"
+        route: /hello?name=Ada
+        attribute: { name: data-state, value: ready }
+        retry: { maxAttempts: 3, delayMs: 150 }
+
+checks: []

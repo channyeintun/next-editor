@@ -388,3 +388,12 @@ published-deck slides, keystroke and line-by-line typing, run + gates, in the
 conversational persona register. Start from a copy of it. Smaller historical
 pilots (Go, incl. whiteboard + retry-fixture usage) live as test fixtures
 under `src/studio/script/__fixtures__/`.
+
+JavaScript/TypeScript regression fixtures live beside those pilots:
+[`javascript-minimal.yaml`](../src/studio/script/__fixtures__/javascript-minimal.yaml)
+checks the required JavaScript contract, while
+[`typescript-vite-preview.yaml`](../src/studio/script/__fixtures__/typescript-vite-preview.yaml)
+is the preview qualification case. Import the latter into `/studio` for its
+two clean real-Chrome renders. Compilation or headless CI alone does not lift
+the release-candidate gate; record both repeatability passes and complete the
+human replay review first.

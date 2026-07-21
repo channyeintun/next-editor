@@ -53,6 +53,9 @@ describe("createRuntimePreviewScript", () => {
     expect(script).toContain("minIntervalMs=100");
     expect(script).toContain("NEXT_EDITOR_PREVIEW_SCREENSHOT_REQUEST");
     expect(script).toContain("NEXT_EDITOR_PREVIEW_SCREENSHOT_RESPONSE");
+    expect(script).toContain("NEXT_EDITOR_STUDIO_PREVIEW_COMMAND");
+    expect(script).toContain("NEXT_EDITOR_STUDIO_PREVIEW_COMMAND_RESPONSE");
+    expect(script).toContain("Preview target data-testid=");
   });
 
   it("emits no closing </script> so it survives being wrapped in a <script> tag", () => {

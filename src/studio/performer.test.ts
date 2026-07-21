@@ -30,6 +30,26 @@ function makePlan(overrides?: { failRun?: boolean }): {
       }
       return { status: "success" };
     },
+    async startRuntime() {
+      calls.push("runtime-start");
+      return { status: "starting" };
+    },
+    async waitForRuntimeReady() {
+      calls.push("runtime-ready");
+      return { status: "ready" };
+    },
+    async openPreview({ mode }) {
+      calls.push(`preview-open:${mode}`);
+      return { mode };
+    },
+    async executePreviewCommand({ command }) {
+      calls.push(`preview-${command.type}`);
+      return { command: command.type };
+    },
+    async expectPreview({ actionId }) {
+      calls.push(`preview-expect:${actionId}`);
+      return { actionId };
+    },
     async showSlide({ slideId }) {
       calls.push(`slide:${slideId}`);
       return { slideId };
@@ -177,5 +197,113 @@ describe("performPlan", () => {
 
     expect(result.status).toBe("failed");
     expect(result.error).toMatch(/did not acknowledge within/);
+  });
+
+  it("dispatches the authored WebContainer preview sequence through the driver", async () => {
+    const { calls, driver } = makePlan();
+    const plan = parseStudioPlan({
+      schemaVersion: 1,
+      lesson: { slug: "preview-performer", title: "Preview performer", locale: "en-US" },
+      seed: 29,
+      workspace: {
+        lessonType: "typescript",
+        name: "Preview",
+        entryFilePath: "src/main.ts",
+        files: {
+          "package.json": "{}",
+          "package-lock.json": "{}",
+          "src/main.ts": "export {};\n",
+        },
+      },
+      narration: {
+        audioPath: "/preview.m4a",
+        mimeType: "audio/mp4",
+        expectedDurationMs: 5_000,
+        captions: {
+          id: "preview-captions",
+          language: "en",
+          cues: [{ start: 0, end: 1_000, text: "preview" }],
+        },
+      },
+      runtime: {
+        kind: "webcontainer",
+        adapterVersion: 1,
+        defaultMode: "live",
+        initCommand: "npm ci",
+        runCommand: "npm run dev",
+        expectedPort: 5173,
+        lockfilePath: "package-lock.json",
+        environment: {},
+      },
+      actions: [
+        {
+          id: "start",
+          type: "runtime.start",
+          at: 0,
+          timeoutMs: 1_000,
+          retry: { maxAttempts: 1, delayMs: 0 },
+        },
+        {
+          id: "ready",
+          type: "runtime.waitForReady",
+          at: 0,
+          timeoutMs: 1_000,
+          retry: { maxAttempts: 1, delayMs: 0 },
+        },
+        {
+          id: "open",
+          type: "preview.open",
+          at: 0,
+          timeoutMs: 1_000,
+          mode: "docked",
+          retry: { maxAttempts: 1, delayMs: 0 },
+        },
+        {
+          id: "input",
+          type: "preview.input",
+          at: 0,
+          timeoutMs: 1_000,
+          target: { by: "testId", value: "name-input" },
+          value: "Ada",
+          retry: { maxAttempts: 1, delayMs: 0 },
+        },
+        {
+          id: "click",
+          type: "preview.click",
+          at: 0,
+          timeoutMs: 1_000,
+          target: { by: "testId", value: "greet-button" },
+          retry: { maxAttempts: 1, delayMs: 0 },
+        },
+        {
+          id: "expect",
+          type: "expect.preview",
+          at: 0,
+          timeoutMs: 1_000,
+          target: { by: "testId", value: "greeting" },
+          textContains: "Hello, Ada!",
+          retry: { maxAttempts: 1, delayMs: 0 },
+        },
+      ],
+    });
+    const controller = new AbortController();
+
+    const result = await performPlan({
+      plan,
+      driver,
+      clock: makeClock(),
+      signal: controller.signal,
+      abort: () => controller.abort(),
+    });
+
+    expect(result.status).toBe("completed");
+    expect(calls).toEqual([
+      "runtime-start",
+      "runtime-ready",
+      "preview-open:docked",
+      "preview-input",
+      "preview-click",
+      "preview-expect:expect",
+    ]);
   });
 });
