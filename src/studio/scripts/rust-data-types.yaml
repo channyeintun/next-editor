@@ -150,11 +150,11 @@ runtime:
 scenes:
   - id: type-map
     narration: >
-      [[mark:board]] Every value in Rust has a type, and types come in two
-      families. [[mark:show-scalar]] Scalars hold one value — whole numbers,
-      decimals, true or false, and single characters. [[mark:show-compound]]
-      Compound types hold several — a tuple groups mixed types, an array holds
-      many of one type. [[mark:board-close]] Let's put each on screen.
+      [[mark:board]] Every value in Rust has a type. Two families.
+      [[mark:show-scalar]] Scalars hold one value — integers, floats, true or
+      false, single characters. [[mark:show-compound]] Compound types hold
+      several — a tuple mixes types, an array holds many of one.
+      [[mark:board-close]] Let's code them.
     sources:
       - title: "The Rust Book — Data Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html"
@@ -179,10 +179,10 @@ scenes:
 
   - id: scalars
     narration: >
-      [[mark:open]] Here are two scalars already. Year is annotated i32 — a
-      32-bit signed integer. Pi has no annotation, so Rust infers f64, the
-      default float. [[mark:type-scalars]] Let's add the other two. A bool is
-      true or false. A char is one Unicode character, written in single quotes.
+      [[mark:open]] Two scalars already. year, annotated i32 — a 32-bit signed
+      integer. pi has none, so Rust infers f64, the default float.
+      [[mark:type-scalars]] Add the other two. A bool: true or false. A char:
+      one Unicode character, in single quotes.
     sources:
       - title: "The Rust Book — Scalar Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#scalar-types"
@@ -203,11 +203,10 @@ scenes:
 
   - id: compound
     narration: >
-      [[mark:type-compound]] Now the compound types. A tuple packs a fixed
-      group — here an integer, a float, and a char together. We unpack it with
-      a pattern, naming each part. An array is different: a fixed number of
-      values, all the same type. We read one by index, starting at zero, and
-      its length is known ahead of time.
+      [[mark:type-compound]] Now compound types. A tuple packs a fixed group —
+      an integer, a float, a char. Unpack it with a pattern, naming each part.
+      An array is different: a fixed count, all one type. Read one by index from
+      zero; its length is known at compile time.
     sources:
       - title: "The Rust Book — Compound Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#compound-types"
@@ -224,10 +223,9 @@ scenes:
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Two scalars, then bool and char. The tuple
-      splits into its three parts. And the array gives us its first value and
-      its length. Types are fixed and checked before the program runs — no
-      surprises at runtime.
+      [[mark:run]] Run it. Two scalars, then bool and char. The tuple splits
+      into three parts. The array gives its first value and its length. Types
+      are fixed, checked before the program runs — no runtime surprises.
     sources:
       - title: "Rust Playground"
         url: "https://play.rust-lang.org/"

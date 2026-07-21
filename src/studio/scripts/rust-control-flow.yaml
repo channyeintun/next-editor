@@ -95,11 +95,11 @@ runtime:
 scenes:
   - id: forms
     narration: >
-      [[mark:board]] Control flow decides what runs next, and Rust has one
-      surprise. [[mark:if-form]] An if is an expression — it produces a value
-      you can bind to a name. [[mark:loop-form]] For loops step through a range
-      or a collection. [[mark:while-form]] While repeats as long as a condition
-      holds. [[mark:board-close]] Let's use all three.
+      [[mark:board]] Control flow, with one Rust surprise. [[mark:if-form]] if is
+      an expression — it produces a value you can bind to a name.
+      [[mark:loop-form]] for steps through a range or a collection.
+      [[mark:while-form]] while repeats while a condition holds.
+      [[mark:board-close]] Let's use all three.
     sources:
       - title: "The Rust Book — Control Flow"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html"
@@ -128,10 +128,10 @@ scenes:
 
   - id: if-expression
     narration: >
-      [[mark:open]] Here's n, set to seven. [[mark:type-if]] Watch this: the
-      whole if-else sits on the right of the equals sign. If n is even we get
-      "even", otherwise "odd", and parity is bound to that result. In many
-      languages if can't do this — in Rust it returns a value.
+      [[mark:open]] n is seven. [[mark:type-if]] The whole if-else sits on the
+      right of the equals sign. n even gives "even", otherwise "odd" — and
+      parity takes that result. Most languages can't do this. In Rust, if
+      returns a value.
     sources:
       - title: "The Rust Book — if in a let Statement"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#using-if-in-a-let-statement"
@@ -152,9 +152,9 @@ scenes:
 
   - id: for-loop
     narration: >
-      [[mark:type-for]] Now a for loop. The range one through n, inclusive,
-      gives each number in turn, and we add it to sum. That's the idiomatic
-      Rust loop: step over a range or any iterator, with no manual counter.
+      [[mark:type-for]] Now a for loop. The range one to n, inclusive, hands you
+      each number in turn — add it to sum. The Rust way — loop over a range or
+      any iterator, no manual counter.
     sources:
       - title: "The Rust Book — Looping Through a Collection with for"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#looping-through-a-collection-with-for"
@@ -171,10 +171,9 @@ scenes:
 
   - id: while-loop
     narration: >
-      [[mark:type-while]] While loops suit the times you don't know the count
-      up front. Countdown starts at three; each pass prints it and subtracts
-      one. When countdown reaches zero, the condition is false and the loop
-      ends.
+      [[mark:type-while]] Use while when you don't know the count up front.
+      countdown starts at three; each pass prints it, then subtracts one. Hit
+      zero, the condition is false, the loop ends.
     sources:
       - title: "The Rust Book — Conditional Loops with while"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#conditional-loops-with-while"
@@ -191,10 +190,9 @@ scenes:
 
   - id: run
     narration: >
-      [[mark:run]] Let's run the whole thing. Seven is odd. The sum one to
-      seven is twenty-eight. Then the countdown — three, two, one — and
-      liftoff. One expression, one range loop, one condition loop: that's the
-      core of control flow in Rust.
+      [[mark:run]] Run it. Seven is odd. Sum one to seven, twenty-eight.
+      Countdown — three, two, one — liftoff. One expression, one range loop, one
+      condition loop. That's control flow in Rust.
     sources:
       - title: "Rust Playground"
         url: "https://play.rust-lang.org/"

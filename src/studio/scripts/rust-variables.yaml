@@ -122,13 +122,11 @@ runtime:
 scenes:
   - id: sketch
     narration: >
-      [[mark:board]] Rust has a default that surprises newcomers: a variable
-      can't change. Let's sketch the three ways a name meets a value.
-      [[mark:card-immut]] By default, let binds a value, and you can't
-      reassign it. [[mark:card-mut]] Write mut, and now the same variable can
-      change. [[mark:card-shadow]] Or write let again with the same name —
-      that's a new binding, called shadowing. [[mark:board-close]] Let's write
-      each one.
+      [[mark:board]] In Rust, variables don't change by default. Three ways a
+      name meets a value. [[mark:card-immut]] Plain let binds a value — reassign
+      it and the compiler stops you. [[mark:card-mut]] Add mut, and now it can
+      change. [[mark:card-shadow]] Or write let again, same name — a brand-new
+      binding. That's shadowing. [[mark:board-close]] Let's build all three.
     sources:
       - title: "The Rust Book — Variables and Mutability"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"
@@ -157,10 +155,9 @@ scenes:
 
   - id: mutate
     narration: >
-      [[mark:open]] Here's our program. It binds count to three and prints it.
-      [[mark:type-mut]] Now watch mut in action. We bind total to count, then
-      add ten to it, in place. Because total is mut, we're allowed to change
-      it. Without mut, the compiler would reject that line.
+      [[mark:open]] Count is three, printed. [[mark:type-mut]] Now mut. Bind
+      total, add ten to it in place — that works because total is mut. Drop the
+      mut, and the compiler rejects that line.
     sources:
       - title: "The Rust Reference — Variables"
         url: "https://doc.rust-lang.org/reference/variables.html"
@@ -181,10 +178,9 @@ scenes:
 
   - id: shadow
     narration: >
-      [[mark:type-shadow]] Shadowing looks different. We use let again, with
-      the same name count. This doesn't change the old value — it creates a
-      new variable that hides the old one. Count was three; now it's four. The
-      name is reused, the binding is brand new.
+      [[mark:type-shadow]] Shadowing is different. Write let again with the same
+      name, count. The old value doesn't change — you get a new variable that
+      hides it. Count was three; now it's four. Same name, brand-new binding.
     sources:
       - title: "The Rust Book — Shadowing"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html#shadowing"
@@ -201,10 +197,9 @@ scenes:
 
   - id: run
     narration: >
-      [[mark:run]] Let's run all three. Count prints three. Total changed to
-      thirteen through mut. And count, shadowed, is now four. Immutable by
-      default keeps values steady; mut and shadowing are how you opt into
-      change, on purpose.
+      [[mark:run]] Run it. Count, three. Total, thirteen — changed through mut.
+      Count, shadowed, four. Immutable by default is the rule; mut and shadowing
+      are how you opt in.
     sources:
       - title: "Rust Playground"
         url: "https://play.rust-lang.org/"

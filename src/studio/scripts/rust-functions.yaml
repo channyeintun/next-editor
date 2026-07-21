@@ -143,11 +143,10 @@ runtime:
 scenes:
   - id: anatomy
     narration: >
-      [[mark:board]] Think of a function as a small machine. [[mark:show-in]] It
-      takes inputs — here, two and three. [[mark:show-fn]] Inside, add computes
-      a plus b. [[mark:show-out]] And it hands back the result — five. That last
-      expression, with no semicolon, is what a function returns.
-      [[mark:board-close]] Let's build one.
+      [[mark:board]] A function is a machine. [[mark:show-in]] Inputs go in —
+      two and three. [[mark:show-fn]] Inside, add computes a plus b.
+      [[mark:show-out]] Out comes the result — five. That last expression, no
+      semicolon, is the return value. [[mark:board-close]] Let's build one.
     sources:
       - title: "The Rust Book — Functions"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html"
@@ -176,10 +175,9 @@ scenes:
 
   - id: define-add
     narration: >
-      [[mark:open]] Here's our program: main calls add, which isn't written
-      yet. [[mark:type-add]] Let's write it. Two parameters, both i32, and it
-      returns an i32. The body is one expression — a plus b, no semicolon — so
-      that sum is what add returns.
+      [[mark:open]] main calls add — not written yet. [[mark:type-add]] Write
+      it. Two parameters, both i32, returns an i32. The body is one expression,
+      a plus b, no semicolon. That sum is what add returns.
     sources:
       - title: "The Rust Book — Function Parameters"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#parameters"
@@ -200,11 +198,10 @@ scenes:
 
   - id: statement-vs-expression
     narration: >
-      [[mark:type-double]] Now a function with two lines. Double computes n
-      times two and binds it to result. That line ends in a semicolon, so it's
-      a statement. [[mark:type-call]] Then result on its own, no semicolon —
-      that expression is the return value. Back in main, let's call double and
-      print what comes back.
+      [[mark:type-double]] A function with two lines. double computes n times
+      two, binds it to result — semicolon, so that's a statement.
+      [[mark:type-call]] Then result alone, no semicolon — that's the return
+      value. Back in main, call double and print the result.
     sources:
       - title: "The Rust Book — Statements and Expressions"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#statements-and-expressions"
@@ -230,9 +227,9 @@ scenes:
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Two plus three is five, and doubling five
-      gives ten. Both results came from a function's final expression.
-      Remember: the semicolon is what separates a statement from a value.
+      [[mark:run]] Run it. Two plus three, five. Double five, ten. Both came
+      from a function's final expression. The semicolon is the difference
+      between a statement and a value.
     sources:
       - title: "Rust Playground"
         url: "https://play.rust-lang.org/"
