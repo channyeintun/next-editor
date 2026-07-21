@@ -28,7 +28,7 @@ lesson:
       height: 40
       text: "match — one value, many patterns"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 36
     - id: mt-match-card
       kind: rectangle
       x: 300
@@ -44,7 +44,7 @@ lesson:
       height: 30
       text: "match n { 1 => …, 2 => …, _ => … }"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: mt-note
       kind: text
       x: 320
@@ -53,7 +53,7 @@ lesson:
       height: 30
       text: "must be exhaustive — _ catches the rest"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: mt-iflet-card
       kind: rectangle
       x: 300
@@ -69,7 +69,7 @@ lesson:
       height: 30
       text: "if let Some(x) = opt { … }   → one pattern"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
 
 build:
   voiceProfile: pocket-alba-v1

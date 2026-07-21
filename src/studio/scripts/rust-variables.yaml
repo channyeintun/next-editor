@@ -28,7 +28,7 @@ lesson:
       height: 40
       text: "let — bind a name to a value"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 36
     - id: card-immut
       kind: rectangle
       x: 300
@@ -44,7 +44,7 @@ lesson:
       height: 30
       text: "let count = 3"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: immut-label
       kind: text
       x: 320
@@ -53,7 +53,7 @@ lesson:
       height: 36
       text: "immutable"
       strokeColor: "#1e1e1e"
-      fontSize: 18
+      fontSize: 26
     - id: card-mut
       kind: rectangle
       x: 585
@@ -69,7 +69,7 @@ lesson:
       height: 30
       text: "let mut total"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: mut-label
       kind: text
       x: 605
@@ -78,7 +78,7 @@ lesson:
       height: 36
       text: "you can change it"
       strokeColor: "#1e1e1e"
-      fontSize: 18
+      fontSize: 26
     - id: card-shadow
       kind: rectangle
       x: 870
@@ -94,7 +94,7 @@ lesson:
       height: 30
       text: "let count = …"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: shadow-label
       kind: text
       x: 890
@@ -103,7 +103,7 @@ lesson:
       height: 36
       text: "new binding (shadow)"
       strokeColor: "#1e1e1e"
-      fontSize: 18
+      fontSize: 26
 
 build:
   voiceProfile: pocket-alba-v1

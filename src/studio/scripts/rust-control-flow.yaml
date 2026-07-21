@@ -28,7 +28,7 @@ lesson:
       height: 40
       text: "Control flow — three forms"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 36
     - id: cf-if-card
       kind: rectangle
       x: 320
@@ -44,7 +44,7 @@ lesson:
       height: 30
       text: "if … { } else { }   →   a value"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: cf-loop-card
       kind: rectangle
       x: 320
@@ -60,7 +60,7 @@ lesson:
       height: 30
       text: "for i in 1..=n { }   →   step a range"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: cf-while-card
       kind: rectangle
       x: 320
@@ -76,7 +76,7 @@ lesson:
       height: 30
       text: "while cond { }   →   repeat while true"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
 
 build:
   voiceProfile: pocket-alba-v1

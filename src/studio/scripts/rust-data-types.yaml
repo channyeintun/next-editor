@@ -28,7 +28,7 @@ lesson:
       height: 40
       text: "Every value has a type"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 36
     - id: scalar-card
       kind: rectangle
       x: 300
@@ -44,7 +44,7 @@ lesson:
       height: 30
       text: "Scalar — one value"
       strokeColor: "#1e1e1e"
-      fontSize: 22
+      fontSize: 30
     - id: scalar-row1
       kind: text
       x: 322
@@ -53,7 +53,7 @@ lesson:
       height: 30
       text: "i32        f64"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: scalar-row2
       kind: text
       x: 322
@@ -62,7 +62,7 @@ lesson:
       height: 30
       text: "bool       char"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: compound-card
       kind: rectangle
       x: 700
@@ -78,7 +78,7 @@ lesson:
       height: 30
       text: "Compound — many values"
       strokeColor: "#1e1e1e"
-      fontSize: 22
+      fontSize: 30
     - id: compound-row1
       kind: text
       x: 722
@@ -87,7 +87,7 @@ lesson:
       height: 30
       text: "tuple — mixed types"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: compound-row2
       kind: text
       x: 722
@@ -96,7 +96,7 @@ lesson:
       height: 30
       text: "array — same type"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
 
 build:
   voiceProfile: pocket-alba-v1

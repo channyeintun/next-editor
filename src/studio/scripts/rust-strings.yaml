@@ -28,7 +28,7 @@ lesson:
       height: 40
       text: "String vs &str"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 36
     - id: str-owned-card
       kind: rectangle
       x: 300
@@ -44,7 +44,7 @@ lesson:
       height: 30
       text: "String — owned, growable (heap)"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: str-borrowed-card
       kind: rectangle
       x: 300
@@ -60,7 +60,7 @@ lesson:
       height: 30
       text: "&str — borrowed view (a literal)"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: str-note
       kind: text
       x: 320
@@ -69,7 +69,7 @@ lesson:
       height: 30
       text: "grow with: push_str · push · format!"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
 
 build:
   voiceProfile: pocket-alba-v1

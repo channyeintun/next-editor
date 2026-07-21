@@ -31,7 +31,7 @@ lesson:
       height: 40
       text: "Vec<T> — a growable list"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 36
     - id: vec-add-card
       kind: rectangle
       x: 300
@@ -47,7 +47,7 @@ lesson:
       height: 30
       text: "let mut v = Vec::new();   v.push(x)"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: vec-use-card
       kind: rectangle
       x: 300
@@ -63,7 +63,7 @@ lesson:
       height: 30
       text: "v[0] read   ·   v.len()   ·   for x in &v"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: vec-note
       kind: text
       x: 320
@@ -72,7 +72,7 @@ lesson:
       height: 30
       text: "grows on the heap — same type throughout"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
 
 build:
   voiceProfile: pocket-alba-v1

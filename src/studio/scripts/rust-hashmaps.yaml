@@ -33,7 +33,7 @@ lesson:
       height: 40
       text: "HashMap<K, V> — key → value"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 36
     - id: hm-insert-card
       kind: rectangle
       x: 300
@@ -49,7 +49,7 @@ lesson:
       height: 30
       text: "insert(k, v)   ·   get(k) → Option"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: hm-note
       kind: text
       x: 320
@@ -58,7 +58,7 @@ lesson:
       height: 30
       text: "get returns Option — the key might be missing"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: hm-entry-card
       kind: rectangle
       x: 300
@@ -74,7 +74,7 @@ lesson:
       height: 30
       text: "entry(k).or_insert(default)   ·   map[k]"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
 
 build:
   voiceProfile: pocket-alba-v1

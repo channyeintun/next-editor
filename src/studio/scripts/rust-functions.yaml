@@ -28,7 +28,7 @@ lesson:
       height: 40
       text: "Anatomy of a function"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 36
     - id: ft-sig
       kind: text
       x: 340
@@ -37,7 +37,7 @@ lesson:
       height: 34
       text: "fn add(a: i32, b: i32) -> i32"
       strokeColor: "#1e1e1e"
-      fontSize: 24
+      fontSize: 32
     - id: ft-body
       kind: text
       x: 340
@@ -46,7 +46,7 @@ lesson:
       height: 34
       text: "{  a + b  }   value — no semicolon"
       strokeColor: "#1e1e1e"
-      fontSize: 22
+      fontSize: 30
     - id: ft-note1
       kind: text
       x: 360
@@ -55,7 +55,7 @@ lesson:
       height: 30
       text: "•  parameters must be typed"
       strokeColor: "#1e1e1e"
-      fontSize: 18
+      fontSize: 26
     - id: ft-note2
       kind: text
       x: 360
@@ -64,7 +64,7 @@ lesson:
       height: 30
       text: "•  ->  gives the return type"
       strokeColor: "#1e1e1e"
-      fontSize: 18
+      fontSize: 26
     - id: ft-note3
       kind: text
       x: 360
@@ -73,7 +73,7 @@ lesson:
       height: 30
       text: "•  the last expression is the result"
       strokeColor: "#1e1e1e"
-      fontSize: 18
+      fontSize: 26
 
 build:
   voiceProfile: pocket-alba-v1

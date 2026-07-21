@@ -29,7 +29,7 @@ lesson:
       height: 40
       text: "A slice — a borrowed view"
       strokeColor: "#1e1e1e"
-      fontSize: 28
+      fontSize: 36
     - id: sl-arr-card
       kind: rectangle
       x: 300
@@ -45,7 +45,7 @@ lesson:
       height: 30
       text: "&numbers[1..4]   →   [20, 30, 40]"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: sl-str-card
       kind: rectangle
       x: 300
@@ -61,7 +61,7 @@ lesson:
       height: 30
       text: '&text[0..6]   →   "borrow"'
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
     - id: sl-note
       kind: text
       x: 320
@@ -70,7 +70,7 @@ lesson:
       height: 30
       text: "just a pointer + a length — no copy"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 28
 
 build:
   voiceProfile: pocket-alba-v1
