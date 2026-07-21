@@ -6,7 +6,7 @@ import {
   compileTypingChunks,
   createSeededRandom,
 } from "../cadence";
-import { parseStudioPlan, type StudioPlan, type StudioTargetRef } from "../plan";
+import { parseStudioPlan, type StudioPlan, type StudioSlide, type StudioTargetRef } from "../plan";
 import { dockTargetIdForRuntime } from "../targets";
 import {
   markerTimeMs,
@@ -46,6 +46,13 @@ export interface CompileInput {
   extracted: ExtractedNarration;
   alignment: NarrationAlignment;
   narration: CompileNarrationInput;
+  /**
+   * Script slides with every google deck ref already resolved to pinned
+   * google-svg content (see script/googleSlides.ts). Required when the
+   * script references a published deck; scripts with only inline slides
+   * may omit it.
+   */
+  resolvedSlides?: StudioSlide[];
 }
 
 export interface CompileOutput {
@@ -126,6 +133,7 @@ export function compileLessonScript({
   extracted,
   alignment,
   narration,
+  resolvedSlides,
 }: CompileInput): CompileOutput {
   const warnings: string[] = [];
 
@@ -317,7 +325,17 @@ export function compileLessonScript({
     },
     seed: script.build.seed,
     workspace: script.lesson.workspace,
-    slides: script.lesson.slides,
+    slides:
+      resolvedSlides ??
+      script.lesson.slides.map((slide) => {
+        if (slide.contentType === "google") {
+          throw new CompileError(
+            `Slide "${slide.id}" references a published Google deck — resolve script slides ` +
+              `before compiling (script/googleSlides.ts resolveScriptSlides)`,
+          );
+        }
+        return slide;
+      }),
     whiteboardAssets: script.lesson.whiteboardAssets,
     narration: {
       audioPath: narration.audioPath,

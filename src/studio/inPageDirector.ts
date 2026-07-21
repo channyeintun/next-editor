@@ -1,6 +1,8 @@
+import { fetchPublishedDeck } from "../googleSlides";
 import { sha256Hex, sha256HexOfJson } from "./hash";
 import type { StudioPlan } from "./plan";
 import { compileLessonScript } from "./script/compile";
+import { resolveScriptSlides } from "./script/googleSlides";
 import { splitIntoDialogs } from "./script/dialogs";
 import { LEXICON_V1, speechTextOf } from "./script/lexicon";
 import { extractNarration } from "./script/markers";
@@ -137,6 +139,10 @@ export async function buildPlanFromScript(
     totalDurationMs: schedule.totalDurationMs,
   });
 
+  // ---- Resolve published-deck slides into pinned google-svg content ------
+  onPhase?.("slides");
+  const resolvedSlides = await resolveScriptSlides(script.lesson.slides, fetchPublishedDeck);
+
   // ---- Compile (same gates as any plan; fails closed before recording) ----
   onPhase?.("compile");
   const { plan, warnings } = compileLessonScript({
@@ -148,6 +154,7 @@ export async function buildPlanFromScript(
       mimeType: provider.mimeType,
       durationMs: schedule.totalDurationMs,
     },
+    resolvedSlides,
   });
 
   return {

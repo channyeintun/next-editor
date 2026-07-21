@@ -1,4 +1,15 @@
 {
   "version": 1,
-  "notes": []
+  "notes": [
+    {
+      "id": "scope.scenes",
+      "severity": "suggestion",
+      "message": "8 scenes (guide suggests ≤ 5) — is this still one concept?"
+    },
+    {
+      "id": "scope.length",
+      "severity": "suggestion",
+      "message": "Narration runs 163s (guide caps at 120s)"
+    }
+  ]
 }

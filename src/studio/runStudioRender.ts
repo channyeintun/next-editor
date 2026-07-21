@@ -190,6 +190,17 @@ export async function runStudioRender(
       order: index,
     })),
   });
+  // Warm every deck-sourced slide once before the recording clock starts:
+  // google-svg content embeds font data whose first paint is expensive, and
+  // that jank would otherwise delay the actions scheduled right after a
+  // slide.show/slide.close during the performance (timing-gate drift).
+  for (const slide of plan.slides) {
+    if (slide.contentType !== "google-svg") continue;
+    deps.slidesStore.trigger.setPreviewState({
+      previewState: { isOpen: true, isMaximized: true, currentSlideId: slide.id, indexv: 0 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
   deps.slidesStore.trigger.setPreviewState({
     previewState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
   });

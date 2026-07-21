@@ -1,5 +1,8 @@
-# The borrow checker, taught through one immutable borrow: measure a String
-# by reference, then keep using the owner. Validate with:
+# The borrow checker, taught in a full arc: the ownership rules, the E0382
+# move error the checker throws (slides — broken code cannot run in an
+# insert-only lesson), then borrowing built live: an immutable borrow through
+# a function, shared readers side by side, and a run proving the owner
+# survives it all. Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-borrow.yaml
 schemaVersion: 1
 
@@ -17,6 +20,24 @@ lesson:
             let owner = String::from("borrow checker");
             println!("{owner} owns the string");
         }
+  # Branded deck (Next Editor lesson style), published to the web; each
+  # slide pins one page of it. Deck: "Next Editor · Rust: The Borrow Checker".
+  slides:
+    - id: ownership-rules
+      contentType: google
+      name: The three ownership rules
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTyXMb7TYBURwgEV2HpO1J4n0wRj8npiTABfbt8ZfMiljNlHsfoSO7VlVLvv40AUkRGW4OoHbsYwZVw/pub"
+      pageId: SLIDES_API1441186920_0
+    - id: move-error
+      contentType: google
+      name: What a move breaks
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTyXMb7TYBURwgEV2HpO1J4n0wRj8npiTABfbt8ZfMiljNlHsfoSO7VlVLvv40AUkRGW4OoHbsYwZVw/pub"
+      pageId: SLIDES_API1441186920_20
+    - id: borrow-rules
+      contentType: google
+      name: The borrowing rules
+      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTyXMb7TYBURwgEV2HpO1J4n0wRj8npiTABfbt8ZfMiljNlHsfoSO7VlVLvv40AUkRGW4OoHbsYwZVw/pub"
+      pageId: SLIDES_API1441186920_34
 
 build:
   voiceProfile: pocket-alba-v1
@@ -29,26 +50,70 @@ runtime:
     latencyMs: 2000
     result:
       status: success
-      stdout: "14 bytes, borrowed only\nborrow checker owns the string\n"
+      stdout: "14 bytes, borrowed only\nreaders: borrow checker and borrow checker\nborrow checker owns the string\n"
       stderr: ""
 
 scenes:
-  - id: ownership
+  - id: rules
     narration: >
-      Rust gives every value a single owner. Here, the variable owner holds a
-      String. Pass that String around the plain way and ownership moves; the
-      original variable becomes unusable. The borrow checker is the compiler
-      proving all of this before the program ever runs.
+      [[mark:show-rules]] Rust manages memory through ownership, and the rules
+      fit on one slide. Every value has an owner. There is only one owner at a
+      time. When the owner goes out of scope, the value is dropped. No garbage
+      collector runs behind your back — the borrow checker is the compiler
+      enforcing these rules before the program even exists.
     sources:
       - title: "The Rust Book — What Is Ownership?"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
-    actions: []
+    actions:
+      - id: show-rules
+        type: slide.show
+        at: { mark: show-rules }
+        slideId: ownership-rules
+
+  - id: move-error
+    narration: >
+      Here is what enforcement looks like when you break rule two.
+      [[mark:show-error]] Assigning s1 to s2 moves the String — s1 is dead
+      from that line on. Printing it afterwards is error E0382, borrow of
+      moved value. Read the message closely. It names the move, notes that
+      String does not implement Copy, and points at the use that came too
+      late. The checker rejects this program outright. Nothing runs.
+    sources:
+      - title: "The Rust Book — Variables and Data Interacting with Move"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-move"
+    actions:
+      - id: close-rules
+        type: slide.close
+        at: { scene: start }
+      - id: show-error
+        type: slide.show
+        at: { mark: show-error }
+        slideId: move-error
+
+  - id: meet-owner
+    narration: >
+      Moves are safe, but blunt. [[mark:open-main]] Our program owns one
+      String, named owner, and prints through it at the end. We want another
+      function to read that String without taking it away. That is exactly
+      what borrowing is for.
+    sources:
+      - title: "The Rust Book — References and Borrowing"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
+    actions:
+      - id: close-error
+        type: slide.close
+        at: { scene: start }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: main.rs
 
   - id: borrow-fn
     narration: >
-      [[mark:type-measure]] Instead of moving the value, we borrow it. The
-      ampersand in measure's signature takes a reference. The function can read
-      the String; it never owns it.
+      [[mark:type-measure]] The ampersand in the signature declares a
+      reference. measure borrows the String: it may read the value, it never
+      owns it, and nothing is dropped when the function returns. Ownership
+      stays exactly where it was.
     sources:
       - title: "The Rust Book — References and Borrowing"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
@@ -65,8 +130,9 @@ scenes:
   - id: borrow-call
     narration: >
       [[mark:type-call]] Call measure with a reference to owner, and print the
-      length. Then print through owner again afterwards. The borrow checker
-      verifies the borrow ends before that final use.
+      length it returns. The borrow starts at the ampersand and ends inside
+      the call. When it returns, owner is untouched and still in charge of the
+      String.
     sources:
       - title: "std::string::String::len"
         url: "https://doc.rust-lang.org/std/string/struct.String.html#method.len"
@@ -81,11 +147,41 @@ scenes:
         cadence: line-by-line
         text: "    let length = measure(&owner);\n    println!(\"{length} bytes, borrowed only\");\n"
 
+  - id: shared-readers
+    narration: >
+      [[mark:show-borrow-rules]] Borrowing has one rule of its own. At any
+      given time you hold either one mutable reference or any number of
+      shared ones. Many readers, or a single writer — never both at once.
+      [[mark:type-readers]] Two shared references to owner can live side by
+      side, because neither one is allowed to change the String they are
+      reading.
+    sources:
+      - title: "The Rust Book — Mutable References"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references"
+    actions:
+      - id: show-borrow-rules
+        type: slide.show
+        at: { mark: show-borrow-rules }
+        slideId: borrow-rules
+      - id: close-borrow-rules
+        type: slide.close
+        at: { mark: type-readers, offsetMs: -600 }
+      - id: type-readers
+        type: editor.type
+        at: { mark: type-readers }
+        target:
+          file: main.rs
+          after: "    println!(\"{length} bytes, borrowed only\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let first = &owner;\n    let second = &owner;\n    println!(\"readers: {first} and {second}\");\n"
+
   - id: run
     narration: >
-      [[mark:run]] Run it. Fourteen bytes measured through a borrow, and owner
-      still owns the string. No moves, no copies; the compiler proved every
-      access was safe.
+      [[mark:run]] Run it. Fourteen bytes measured through a borrow, two
+      readers sharing one String, and the final line proves owner still owns
+      it. Every one of those accesses was checked at compile time — the
+      running program pays nothing for the proof.
     sources:
       - title: "Rust Playground"
         url: "https://play.rust-lang.org/"
@@ -97,13 +193,27 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "14 bytes, borrowed only"
+        contains: "readers: borrow checker and borrow checker"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "measure(&owner)"
+        contains: "let second = &owner;"
+
+  - id: wrap
+    narration: >
+      When the borrow checker rejects your code, it is pointing at one of the
+      rules you have now seen. Name the owner, find the borrows, and check who
+      outlives whom. Chapter four of the Rust Book walks this same ground in
+      more depth, moves and mutable borrows included.
+    sources:
+      - title: "The Rust Book — Understanding Ownership"
+        url: "https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html"
+    actions: []
 
 checks:
-  - { type: timing.p95Ms, max: 300 }
+  # 500 (not the default 300): google-svg deck slides embed per-slide font
+  # data whose paint briefly stalls the main thread at each show/close, so
+  # one action lands ~0.4s late. Imperceptible against static slides.
+  - { type: timing.p95Ms, max: 500 }

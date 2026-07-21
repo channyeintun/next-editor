@@ -155,12 +155,19 @@ export const studioWorkspacePinSchema = z.object({
 });
 export type StudioWorkspacePin = z.infer<typeof studioWorkspacePinSchema>;
 
-/** Pinned native slide asset (markdown/html — no external deck fetches). */
+/**
+ * Pinned slide asset. markdown/html slides carry authored content inline;
+ * google-svg slides carry the parsed, normalized SVG of one page of a
+ * published Google Slides deck — resolved once at compile time so the plan
+ * itself stays fully pinned (no fetches during the performance).
+ */
 export const studioSlideSchema = z.object({
   id: z.string().min(1),
-  contentType: z.enum(["markdown", "html"]),
+  contentType: z.enum(["markdown", "html", "google-svg"]),
   content: z.string().min(1),
   name: z.string().optional(),
+  /** Published deck the SVG came from (provenance, google-svg only). */
+  sourceUrl: z.string().url().optional(),
 });
 export type StudioSlide = z.infer<typeof studioSlideSchema>;
 

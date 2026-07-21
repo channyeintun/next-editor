@@ -131,6 +131,23 @@ export const scriptCheckSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+/**
+ * A slide sourced from one page of a published Google Slides deck
+ * (File → Share → Publish to web). The Director fetches the deck once at
+ * compile time and pins the page's normalized SVG into the plan.
+ */
+export const googleSlideRefSchema = z.object({
+  id: z.string().min(1),
+  contentType: z.literal("google"),
+  deckUrl: z.string().url(),
+  pageId: z.string().min(1),
+  name: z.string().optional(),
+});
+export type GoogleSlideRef = z.infer<typeof googleSlideRefSchema>;
+
+export const scriptSlideSchema = z.union([studioSlideSchema, googleSlideRefSchema]);
+export type ScriptSlide = z.infer<typeof scriptSlideSchema>;
+
 export const lessonScriptSchema = z
   .object({
     schemaVersion: z.literal(LESSON_SCRIPT_SCHEMA_VERSION),
@@ -139,7 +156,7 @@ export const lessonScriptSchema = z
       title: z.string().min(1),
       locale: z.string().min(1),
       workspace: studioWorkspacePinSchema,
-      slides: z.array(studioSlideSchema).default([]),
+      slides: z.array(scriptSlideSchema).default([]),
       whiteboardAssets: z.array(studioWhiteboardAssetSchema).default([]),
     }),
     build: z.object({

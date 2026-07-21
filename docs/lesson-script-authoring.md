@@ -218,6 +218,8 @@ output.
 
 ### Slides
 
+Two kinds. Inline slides carry their content in the YAML:
+
 ```yaml
 slides:
   - id: intro
@@ -227,6 +229,33 @@ slides:
       # Title
       `code` and short lines render well.
 ```
+
+Google slides pin one page of a **published** Google Slides deck
+(File → Share → Publish to web — the link contains `/d/e/…/pub`). Use the
+Next Editor lesson template's brand style for these decks. The Director
+fetches the deck once at compile time in the render page and pins the page's
+SVG into the plan; `bun scripts/studio-director.ts` verifies the page ids
+early (best-effort — offline it warns and the render page re-checks):
+
+```yaml
+slides:
+  - id: intro
+    contentType: google
+    name: Optional label
+    deckUrl: "https://docs.google.com/presentation/d/e/…/pub"
+    pageId: SLIDES_API123_0 # the deck page id; the director lists valid ids on mismatch
+```
+
+Editing the published deck between renders changes the pinned SVG — the
+repeatability comparison fails loudly rather than shipping a half-updated
+lesson. Keep lesson decks text-only where possible; Google-hosted images go
+through the app's media ingestion path at fetch time.
+
+Deck SVGs embed font data, and painting them briefly stalls the render's
+main thread at each show/close — actions scheduled right next to a
+`slide.show`/`slide.close` can start ~0.4s late. For deck-slide lessons a
+`timing.p95Ms` of `500` (instead of the default `300`) is acceptable; keep
+`300` for lessons without deck slides.
 
 ### Whiteboard assets
 

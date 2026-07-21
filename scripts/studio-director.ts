@@ -24,6 +24,9 @@ import { parseLessonScript } from "../src/studio/script/schema.ts";
 import { extractNarration, requireMarker } from "../src/studio/script/markers.ts";
 import { splitIntoDialogs } from "../src/studio/script/dialogs.ts";
 import { critiqueScript, estimateNarrationDurationMs } from "../src/studio/script/critic.ts";
+import { deckUrlsOf, resolveSlidesFromDecks } from "../src/studio/script/googleSlides.ts";
+import { fetchPublishedDeck } from "../src/googleSlides/index.ts";
+import type { ParsedDeck } from "../src/googleSlides/types.ts";
 import { requireVoiceProfile } from "../src/studio/tts/profiles.ts";
 import { sha256HexOfText } from "../src/studio/hash.ts";
 
@@ -72,6 +75,27 @@ async function directScript(scriptPath: string): Promise<void> {
     scriptPath.replace(/\.ya?ml$/, ".critique.json"),
     `${JSON.stringify(critique, null, 2)}\n`,
   );
+
+  // Published-deck slides: verify each referenced page exists. Network is
+  // best-effort here (the render page re-fetches authoritatively) — an
+  // unreachable deck is a warning, a missing page in a fetched deck an error.
+  const deckUrls = deckUrlsOf(script.lesson.slides);
+  if (deckUrls.length > 0) {
+    const decks = new Map<string, ParsedDeck>();
+    let fetched = true;
+    for (const url of deckUrls) {
+      try {
+        decks.set(url, await fetchPublishedDeck(url));
+      } catch (error) {
+        fetched = false;
+        console.warn(`  ⚠ published deck unreachable, page ids unverified: ${String(error)}`);
+      }
+    }
+    if (fetched) {
+      resolveSlidesFromDecks(script.lesson.slides, decks);
+      console.log(`  ${deckUrls.length} published deck(s) fetched — every referenced page found`);
+    }
+  }
 
   console.log(
     `  ${extracted.tokens.length} tokens across ${dialogs.length} dialogs (${script.scenes.length} scenes); ~${Math.round(estimatedDurationMs / 1000)}s estimated`,
