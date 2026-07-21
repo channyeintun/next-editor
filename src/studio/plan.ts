@@ -185,9 +185,7 @@ const expectPreviewActionSchema = planActionBase.extend({
   textContains: z.string().min(1).optional(),
   value: z.string().optional(),
   route: z.string().startsWith("/").min(1).optional(),
-  attribute: z
-    .object({ name: z.string().min(1), value: z.string() })
-    .optional(),
+  attribute: z.object({ name: z.string().min(1), value: z.string() }).optional(),
   retry: studioRetryPolicySchema,
 });
 

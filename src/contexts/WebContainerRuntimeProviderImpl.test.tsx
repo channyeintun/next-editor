@@ -149,11 +149,7 @@ function renderProviders(allowAmbientStart = true) {
     createElement(
       WorkspaceProvider,
       null,
-      createElement(
-        WebContainerRuntimeProvider,
-        { allowAmbientStart },
-        createElement(Capture),
-      ),
+      createElement(WebContainerRuntimeProvider, { allowAmbientStart }, createElement(Capture)),
     ),
   );
 

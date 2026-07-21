@@ -330,11 +330,7 @@ export function EditorLayout({
   );
 }
 
-export default function Editor({
-  overlay,
-  runtimeAutoStart = true,
-  ...props
-}: EditorProps = {}) {
+export default function Editor({ overlay, runtimeAutoStart = true, ...props }: EditorProps = {}) {
   return (
     <WorkspaceProvider>
       <WebContainerRuntimeProvider allowAmbientStart={runtimeAutoStart}>

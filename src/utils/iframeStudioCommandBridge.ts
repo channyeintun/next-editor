@@ -63,9 +63,7 @@ function isTargetInspection(value: unknown): value is StudioPreviewTargetInspect
 function isCommandResult(value: unknown): value is StudioPreviewCommandResult {
   return (
     isRecord(value) &&
-    ["ping", "click", "input", "scroll", "route", "inspect"].includes(
-      String(value.command),
-    ) &&
+    ["ping", "click", "input", "scroll", "route", "inspect"].includes(String(value.command)) &&
     typeof value.route === "string" &&
     typeof value.scrollLeft === "number" &&
     Number.isFinite(value.scrollLeft) &&
