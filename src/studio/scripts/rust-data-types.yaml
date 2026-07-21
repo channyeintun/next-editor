@@ -1,0 +1,217 @@
+# One idea: every Rust value has a fixed type, in two families — scalars (one
+# value: integer, float, bool, char) and compound types (tuple, array). A
+# whiteboard type-map, then each family is built live and run. Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-data-types.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-data-types
+  title: "Rust data types: scalars and compounds"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let year: i32 = 2015;
+            let pi = 3.14159;
+            println!("year {year}, pi {pi}");
+        }
+  whiteboardAssets:
+    - id: dt-title
+      kind: text
+      x: 300
+      y: 175
+      width: 700
+      height: 40
+      text: "Every value has a type"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: scalar-card
+      kind: rectangle
+      x: 300
+      y: 250
+      width: 340
+      height: 250
+      strokeColor: "#7dd3fc"
+    - id: scalar-head
+      kind: text
+      x: 322
+      y: 268
+      width: 300
+      height: 30
+      text: "Scalar — one value"
+      strokeColor: "#7dd3fc"
+      fontSize: 22
+    - id: scalar-row1
+      kind: text
+      x: 322
+      y: 330
+      width: 300
+      height: 30
+      text: "i32        f64"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: scalar-row2
+      kind: text
+      x: 322
+      y: 390
+      width: 300
+      height: 30
+      text: "bool       char"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: compound-card
+      kind: rectangle
+      x: 700
+      y: 250
+      width: 360
+      height: 250
+      strokeColor: "#fbbf24"
+    - id: compound-head
+      kind: text
+      x: 722
+      y: 268
+      width: 320
+      height: 30
+      text: "Compound — many values"
+      strokeColor: "#fbbf24"
+      fontSize: 22
+    - id: compound-row1
+      kind: text
+      x: 722
+      y: 330
+      width: 320
+      height: 30
+      text: "tuple — mixed types"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: compound-row2
+      kind: text
+      x: 722
+      y: 390
+      width: 320
+      height: 30
+      text: "array — same type"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 32
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "year 2015, pi 3.14159\nstable true, grade A\ntuple parts: 1, 2.5, x\nfirst score 90, count 3\n"
+      stderr: ""
+
+scenes:
+  - id: type-map
+    narration: >
+      [[mark:board]] Rust is statically typed: every value has a type the
+      compiler knows. There are two families. [[mark:scalars]] Scalars hold
+      one value — whole numbers, decimals, true or false, and single
+      characters. [[mark:compound]] Compound types hold several — a tuple
+      groups mixed types, an array holds many of one type. [[mark:board-close]]
+      Let's put each on screen.
+    sources:
+      - title: "The Rust Book — Data Types"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [dt-title]
+      - id: show-scalars
+        type: whiteboard.apply
+        at: { mark: scalars }
+        upsertIds: [scalar-card, scalar-head, scalar-row1, scalar-row2]
+      - id: show-compound
+        type: whiteboard.apply
+        at: { mark: compound }
+        upsertIds: [compound-card, compound-head, compound-row1, compound-row2]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: scalars
+    narration: >
+      [[mark:open]] Here are two scalars already. Year is annotated i32 — a
+      32-bit signed integer. Pi has no annotation, so Rust infers f64, the
+      default float. [[mark:type-scalars]] Let's add the other two. A bool is
+      true or false. A char is one Unicode character, written in single quotes.
+    sources:
+      - title: "The Rust Book — Scalar Types"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#scalar-types"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-scalars
+        type: editor.type
+        at: { mark: type-scalars, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"year {year}, pi {pi}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let stable = true;\n    let grade = 'A';\n    println!(\"stable {stable}, grade {grade}\");\n"
+
+  - id: compound
+    narration: >
+      [[mark:type-compound]] Now the compound types. A tuple packs a fixed
+      group — here an integer, a float, and a char together. We unpack it with
+      a pattern, naming each part. An array is different: a fixed number of
+      values, all the same type. We read one by index, starting at zero, and
+      its length is known ahead of time.
+    sources:
+      - title: "The Rust Book — Compound Types"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#compound-types"
+    actions:
+      - id: type-compound
+        type: editor.type
+        at: { mark: type-compound, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"stable {stable}, grade {grade}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let point = (1, 2.5, 'x');\n    let (a, b, c) = point;\n    println!(\"tuple parts: {a}, {b}, {c}\");\n    let scores = [90, 80, 70];\n    println!(\"first score {}, count {}\", scores[0], scores.len());\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Two scalars, then bool and char. The tuple
+      splits into its three parts. And the array gives us its first value and
+      its length. Types are fixed and checked before the program runs — no
+      surprises at runtime.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "first score 90, count 3"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "let scores = [90, 80, 70];"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

@@ -1,0 +1,218 @@
+# One idea: control flow in Rust, where `if` is an expression that produces a
+# value, paired with the two loops you reach for (for over a range, while on a
+# condition). A whiteboard of the three forms, then each built live and run.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-control-flow.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-control-flow
+  title: "Rust control flow: if is an expression"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let n = 7;
+            println!("n starts at {n}");
+        }
+  whiteboardAssets:
+    - id: cf-title
+      kind: text
+      x: 320
+      y: 185
+      width: 640
+      height: 40
+      text: "Control flow — three forms"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: cf-if-card
+      kind: rectangle
+      x: 320
+      y: 250
+      width: 640
+      height: 70
+      strokeColor: "#7dd3fc"
+    - id: cf-if-text
+      kind: text
+      x: 342
+      y: 272
+      width: 600
+      height: 30
+      text: "if … { } else { }   →   a value"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: cf-loop-card
+      kind: rectangle
+      x: 320
+      y: 340
+      width: 640
+      height: 70
+      strokeColor: "#fbbf24"
+    - id: cf-for-text
+      kind: text
+      x: 342
+      y: 362
+      width: 600
+      height: 30
+      text: "for i in 1..=n { }   →   step a range"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: cf-while-card
+      kind: rectangle
+      x: 320
+      y: 430
+      width: 640
+      height: 70
+      strokeColor: "#86efac"
+    - id: cf-while-text
+      kind: text
+      x: 342
+      y: 452
+      width: 600
+      height: 30
+      text: "while cond { }   →   repeat while true"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 34
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "n starts at 7\n7 is odd\nsum to 7 is 28\nt-minus 3\nt-minus 2\nt-minus 1\nliftoff\n"
+      stderr: ""
+
+scenes:
+  - id: forms
+    narration: >
+      [[mark:board]] Control flow decides what runs next, and Rust has one
+      surprise. [[mark:if-form]] An if is an expression — it produces a value
+      you can bind to a name. [[mark:loop-form]] For loops step through a range
+      or a collection. [[mark:while-form]] While repeats as long as a condition
+      holds. [[mark:board-close]] Let's use all three.
+    sources:
+      - title: "The Rust Book — Control Flow"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [cf-title]
+      - id: show-if
+        type: whiteboard.apply
+        at: { mark: if-form }
+        upsertIds: [cf-if-card, cf-if-text]
+      - id: show-loop
+        type: whiteboard.apply
+        at: { mark: loop-form }
+        upsertIds: [cf-loop-card, cf-for-text]
+      - id: show-while
+        type: whiteboard.apply
+        at: { mark: while-form }
+        upsertIds: [cf-while-card, cf-while-text]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: if-expression
+    narration: >
+      [[mark:open]] Here's n, set to seven. [[mark:type-if]] Watch this: the
+      whole if-else sits on the right of the equals sign. If n is even we get
+      "even", otherwise "odd", and parity is bound to that result. In many
+      languages if can't do this — in Rust it returns a value.
+    sources:
+      - title: "The Rust Book — if in a let Statement"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#using-if-in-a-let-statement"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-if
+        type: editor.type
+        at: { mark: type-if, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"n starts at {n}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let parity = if n % 2 == 0 { \"even\" } else { \"odd\" };\n    println!(\"{n} is {parity}\");\n"
+
+  - id: for-loop
+    narration: >
+      [[mark:type-for]] Now a for loop. The range one through n, inclusive,
+      gives each number in turn, and we add it to sum. That's the idiomatic
+      Rust loop: step over a range or any iterator, with no manual counter.
+    sources:
+      - title: "The Rust Book — Looping Through a Collection with for"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#looping-through-a-collection-with-for"
+    actions:
+      - id: type-for
+        type: editor.type
+        at: { mark: type-for, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"{n} is {parity}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let mut sum = 0;\n    for i in 1..=n {\n        sum += i;\n    }\n    println!(\"sum to {n} is {sum}\");\n"
+
+  - id: while-loop
+    narration: >
+      [[mark:type-while]] While loops suit the times you don't know the count
+      up front. Countdown starts at three; each pass prints it and subtracts
+      one. When countdown reaches zero, the condition is false and the loop
+      ends.
+    sources:
+      - title: "The Rust Book — Conditional Loops with while"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#conditional-loops-with-while"
+    actions:
+      - id: type-while
+        type: editor.type
+        at: { mark: type-while, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"sum to {n} is {sum}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let mut countdown = 3;\n    while countdown > 0 {\n        println!(\"t-minus {countdown}\");\n        countdown -= 1;\n    }\n    println!(\"liftoff\");\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run the whole thing. Seven is odd. The sum one to
+      seven is twenty-eight. Then the countdown — three, two, one — and
+      liftoff. One expression, one range loop, one condition loop: that's the
+      core of control flow in Rust.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "sum to 7 is 28"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "while countdown > 0 {"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

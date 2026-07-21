@@ -1,0 +1,206 @@
+# One idea: a Rust function names typed parameters and a return type, and its
+# last expression — with no semicolon — is the value returned (statement vs.
+# expression). A whiteboard anatomy sketch, then add + double built and run.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-functions.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-functions
+  title: "Rust functions: the last expression returns"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let sum = add(2, 3);
+            println!("2 + 3 = {sum}");
+        }
+  whiteboardAssets:
+    - id: ft-title
+      kind: text
+      x: 320
+      y: 180
+      width: 640
+      height: 40
+      text: "Anatomy of a function"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: ft-sig
+      kind: text
+      x: 340
+      y: 258
+      width: 640
+      height: 34
+      text: "fn add(a: i32, b: i32) -> i32"
+      strokeColor: "#7dd3fc"
+      fontSize: 24
+    - id: ft-body
+      kind: text
+      x: 340
+      y: 312
+      width: 640
+      height: 34
+      text: "{  a + b  }   value — no semicolon"
+      strokeColor: "#86efac"
+      fontSize: 22
+    - id: ft-note1
+      kind: text
+      x: 360
+      y: 384
+      width: 620
+      height: 30
+      text: "•  parameters must be typed"
+      strokeColor: "#e2e8f0"
+      fontSize: 18
+    - id: ft-note2
+      kind: text
+      x: 360
+      y: 424
+      width: 620
+      height: 30
+      text: "•  ->  gives the return type"
+      strokeColor: "#e2e8f0"
+      fontSize: 18
+    - id: ft-note3
+      kind: text
+      x: 360
+      y: 464
+      width: 620
+      height: 30
+      text: "•  the last expression is the result"
+      strokeColor: "#e2e8f0"
+      fontSize: 18
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 33
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "2 + 3 = 5\ndoubled is 10\n"
+      stderr: ""
+
+scenes:
+  - id: anatomy
+    narration: >
+      [[mark:board]] A function in Rust has a clear shape. [[mark:sig]] You
+      give it a name, and every parameter needs a type. The arrow declares
+      what it returns. [[mark:body]] Then the body. Here's the part worth
+      remembering: the last expression, with no semicolon, is the value
+      returned. [[mark:notes]] So there's often no return keyword at all.
+      [[mark:board-close]] Let's build one.
+    sources:
+      - title: "The Rust Book — Functions"
+        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [ft-title]
+      - id: show-sig
+        type: whiteboard.apply
+        at: { mark: sig }
+        upsertIds: [ft-sig]
+      - id: show-body
+        type: whiteboard.apply
+        at: { mark: body }
+        upsertIds: [ft-body]
+      - id: show-notes
+        type: whiteboard.apply
+        at: { mark: notes }
+        upsertIds: [ft-note1, ft-note2, ft-note3]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: define-add
+    narration: >
+      [[mark:open]] Here's our program: main calls add, which isn't written
+      yet. [[mark:type-add]] Let's write it. Two parameters, both i32, and it
+      returns an i32. The body is one expression — a plus b, no semicolon — so
+      that sum is what add returns.
+    sources:
+      - title: "The Rust Book — Function Parameters"
+        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#parameters"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-add
+        type: editor.type
+        at: { mark: type-add, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"2 + 3 = {sum}\");\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\nfn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n"
+
+  - id: statement-vs-expression
+    narration: >
+      [[mark:type-double]] Now a function with two lines. Double computes n
+      times two and binds it to result. That line ends in a semicolon, so it's
+      a statement. [[mark:type-call]] Then result on its own, no semicolon —
+      that expression is the return value. Back in main, let's call double and
+      print what comes back.
+    sources:
+      - title: "The Rust Book — Statements and Expressions"
+        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#statements-and-expressions"
+    actions:
+      - id: type-double
+        type: editor.type
+        at: { mark: type-double, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    a + b\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\nfn double(n: i32) -> i32 {\n    let result = n * 2;\n    result\n}\n"
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target:
+          file: main.rs
+          after: "    println!(\"2 + 3 = {sum}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let doubled = double(sum);\n    println!(\"doubled is {doubled}\");\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Two plus three is five, and doubling five
+      gives ten. Both results came from a function's final expression.
+      Remember: the semicolon is what separates a statement from a value.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "doubled is 10"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "fn double(n: i32) -> i32 {"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

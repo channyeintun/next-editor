@@ -1,0 +1,228 @@
+# One idea: in Rust a `let` binding is immutable by default; `mut` opts into
+# change, and a second `let` with the same name shadows (a new binding). An
+# Excalidraw sketch contrasts the three, then each is built live and run.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-variables.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-variables
+  title: "Variables in Rust: immutable by default"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let count = 3;
+            println!("count is {count}");
+        }
+  whiteboardAssets:
+    - id: vars-title
+      kind: text
+      x: 300
+      y: 180
+      width: 640
+      height: 40
+      text: "let — bind a name to a value"
+      strokeColor: "#e2e8f0"
+      fontSize: 28
+    - id: card-immut
+      kind: rectangle
+      x: 300
+      y: 260
+      width: 240
+      height: 170
+      strokeColor: "#7dd3fc"
+    - id: immut-code
+      kind: text
+      x: 320
+      y: 300
+      width: 210
+      height: 30
+      text: "let count = 3"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: immut-label
+      kind: text
+      x: 320
+      y: 372
+      width: 210
+      height: 36
+      text: "immutable"
+      strokeColor: "#7dd3fc"
+      fontSize: 18
+    - id: card-mut
+      kind: rectangle
+      x: 585
+      y: 260
+      width: 240
+      height: 170
+      strokeColor: "#fbbf24"
+    - id: mut-code
+      kind: text
+      x: 605
+      y: 300
+      width: 210
+      height: 30
+      text: "let mut total"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: mut-label
+      kind: text
+      x: 605
+      y: 372
+      width: 210
+      height: 36
+      text: "you can change it"
+      strokeColor: "#fbbf24"
+      fontSize: 18
+    - id: card-shadow
+      kind: rectangle
+      x: 870
+      y: 260
+      width: 240
+      height: 170
+      strokeColor: "#86efac"
+    - id: shadow-code
+      kind: text
+      x: 890
+      y: 300
+      width: 210
+      height: 30
+      text: "let count = …"
+      strokeColor: "#e2e8f0"
+      fontSize: 20
+    - id: shadow-label
+      kind: text
+      x: 890
+      y: 372
+      width: 210
+      height: 36
+      text: "new binding (shadow)"
+      strokeColor: "#86efac"
+      fontSize: 18
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 31
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 2000
+    result:
+      status: success
+      stdout: "count is 3\ntotal is now 13\ncount shadowed to 4\n"
+      stderr: ""
+
+scenes:
+  - id: sketch
+    narration: >
+      [[mark:board]] Rust has a default that surprises newcomers: a variable
+      can't change. Let's sketch the three ways a name meets a value.
+      [[mark:card-immut]] By default, let binds a value, and you can't
+      reassign it. [[mark:card-mut]] Write mut, and now the same variable can
+      change. [[mark:card-shadow]] Or write let again with the same name —
+      that's a new binding, called shadowing. [[mark:board-close]] Let's write
+      each one.
+    sources:
+      - title: "The Rust Book — Variables and Mutability"
+        url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [vars-title]
+      - id: show-immut
+        type: whiteboard.apply
+        at: { mark: card-immut }
+        upsertIds: [card-immut, immut-code, immut-label]
+      - id: show-mut
+        type: whiteboard.apply
+        at: { mark: card-mut }
+        upsertIds: [card-mut, mut-code, mut-label]
+      - id: show-shadow
+        type: whiteboard.apply
+        at: { mark: card-shadow }
+        upsertIds: [card-shadow, shadow-code, shadow-label]
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: board-close }
+        open: false
+
+  - id: mutate
+    narration: >
+      [[mark:open]] Here's our program. It binds count to three and prints it.
+      [[mark:type-mut]] Now watch mut in action. We bind total to count, then
+      add ten to it, in place. Because total is mut, we're allowed to change
+      it. Without mut, the compiler would reject that line.
+    sources:
+      - title: "The Rust Reference — Variables"
+        url: "https://doc.rust-lang.org/reference/variables.html"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.rs
+      - id: type-mut
+        type: editor.type
+        at: { mark: type-mut, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"count is {count}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let mut total = count;\n    total += 10;\n    println!(\"total is now {total}\");\n"
+
+  - id: shadow
+    narration: >
+      [[mark:type-shadow]] Shadowing looks different. We use let again, with
+      the same name count. This doesn't change the old value — it creates a
+      new variable that hides the old one. Count was three; now it's four. The
+      name is reused, the binding is brand new.
+    sources:
+      - title: "The Rust Book — Shadowing"
+        url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html#shadowing"
+    actions:
+      - id: type-shadow
+        type: editor.type
+        at: { mark: type-shadow, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"total is now {total}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let count = count + 1;\n    println!(\"count shadowed to {count}\");\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run all three. Count prints three. Total changed to
+      thirteen through mut. And count, shadowed, is now four. Immutable by
+      default keeps values steady; mut and shadowing are how you opt into
+      change, on purpose.
+    sources:
+      - title: "Rust Playground"
+        url: "https://play.rust-lang.org/"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "count shadowed to 4"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "let count = count + 1;"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

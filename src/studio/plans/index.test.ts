@@ -2,9 +2,17 @@ import { describe, expect, it } from "vite-plus/test";
 import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_SOURCES } from "./index";
 
 describe("studio lesson registry", () => {
-  it("registers exactly the checked-in scripts (rust-borrow only today)", () => {
+  it("registers exactly the checked-in scripts (Rust course)", () => {
     // Scripts auto-register by filename without any manual registry edit.
-    expect(Object.keys(STUDIO_SOURCES).sort()).toEqual(["rust-borrow"]);
+    // Grows as the Rust course does; keep this list in sync with the YAML
+    // files under src/studio/scripts/.
+    expect(Object.keys(STUDIO_SOURCES).sort()).toEqual([
+      "rust-borrow",
+      "rust-control-flow",
+      "rust-data-types",
+      "rust-functions",
+      "rust-variables",
+    ]);
     expect(STUDIO_SOURCES[DEFAULT_STUDIO_PLAN_SLUG]?.kind).toBe("script");
   });
 
