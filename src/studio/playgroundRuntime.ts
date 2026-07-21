@@ -42,7 +42,10 @@ const RETRYABLE_KINDS = new Set(["rate-limited", "timeout", "unavailable"]);
 const RETRY_DELAY_MS = 500;
 export const MAX_RUN_ATTEMPTS = 2;
 
-type PlaygroundRuntime = Exclude<StudioRuntime, { kind: "none" }>;
+type PlaygroundRuntime = Extract<
+  StudioRuntime,
+  { kind: "go-playground" | "kotlin-playground" | "rust-playground" }
+>;
 type FixtureOf<K extends PlaygroundRuntime["kind"]> = Extract<
   PlaygroundRuntime,
   { kind: K }

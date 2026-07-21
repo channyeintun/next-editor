@@ -7,9 +7,12 @@ import type { TextAnchor } from "./plan";
  */
 
 export class StudioActionError extends Error {
-  constructor(message: string) {
+  readonly detail?: Record<string, unknown>;
+
+  constructor(message: string, detail?: Record<string, unknown>) {
     super(message);
     this.name = "StudioActionError";
+    this.detail = detail;
   }
 }
 

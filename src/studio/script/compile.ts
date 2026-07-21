@@ -89,9 +89,11 @@ function cursorTargetForAction(action: ScriptAction, script: LessonScript): Stud
       return { kind: "editor" };
     case "runtime.run":
       // Schema validation guarantees run actions only exist for playground kinds.
-      return script.runtime.kind === "none"
-        ? null
-        : { kind: "target-id", id: dockTargetIdForRuntime(script.runtime.kind) };
+      return script.runtime.kind === "go-playground" ||
+        script.runtime.kind === "kotlin-playground" ||
+        script.runtime.kind === "rust-playground"
+        ? { kind: "target-id", id: dockTargetIdForRuntime(script.runtime.kind) }
+        : null;
     default:
       return null;
   }
@@ -272,6 +274,63 @@ export function compileLessonScript({
           };
         case "runtime.run":
           return { id: action.id, type: action.type, at, timeoutMs: action.timeoutMs };
+        case "runtime.start":
+        case "runtime.waitForReady":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            retry: action.retry,
+          };
+        case "preview.open":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            mode: action.mode,
+            retry: action.retry,
+          };
+        case "preview.click":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            target: action.target,
+            retry: action.retry,
+          };
+        case "preview.input":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            target: action.target,
+            value: action.value,
+            retry: action.retry,
+          };
+        case "preview.scroll":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            target: action.target,
+            top: action.top,
+            left: action.left,
+            retry: action.retry,
+          };
+        case "preview.route":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            route: action.route,
+            retry: action.retry,
+          };
         case "slide.show":
           return {
             id: action.id,
@@ -309,6 +368,19 @@ export function compileLessonScript({
             timeoutMs: action.timeoutMs,
             path: action.path,
             contains: action.contains,
+          };
+        case "expect.preview":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            target: action.target,
+            textContains: action.textContains,
+            value: action.value,
+            route: action.route,
+            attribute: action.attribute,
+            retry: action.retry,
           };
       }
     }),

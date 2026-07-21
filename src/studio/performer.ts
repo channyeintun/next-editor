@@ -45,6 +45,41 @@ async function invokeAction(
       return driver.typeText({ path: action.path, anchor: action.anchor, chunks: action.chunks });
     case "runtime.run":
       return driver.runWorkspace(action.timeoutMs);
+    case "runtime.start":
+      return driver.startRuntime();
+    case "runtime.waitForReady":
+      return driver.waitForRuntimeReady(action.timeoutMs);
+    case "preview.open":
+      return driver.openPreview({ mode: action.mode, timeoutMs: action.timeoutMs });
+    case "preview.click":
+      return driver.executePreviewCommand({
+        command: { type: "click", target: { testId: action.target.value } },
+        timeoutMs: action.timeoutMs,
+      });
+    case "preview.input":
+      return driver.executePreviewCommand({
+        command: {
+          type: "input",
+          target: { testId: action.target.value },
+          value: action.value,
+        },
+        timeoutMs: action.timeoutMs,
+      });
+    case "preview.scroll":
+      return driver.executePreviewCommand({
+        command: {
+          type: "scroll",
+          target: action.target ? { testId: action.target.value } : undefined,
+          top: action.top,
+          left: action.left,
+        },
+        timeoutMs: action.timeoutMs,
+      });
+    case "preview.route":
+      return driver.executePreviewCommand({
+        command: { type: "route", route: action.route },
+        timeoutMs: action.timeoutMs,
+      });
     case "slide.show":
       return driver.showSlide({ slideId: action.slideId, maximized: action.maximized });
     case "slide.close":
@@ -59,6 +94,15 @@ async function invokeAction(
       return driver.waitForOutput({ contains: action.contains, timeoutMs: action.timeoutMs });
     case "expect.file":
       return driver.expectFile({ path: action.path, contains: action.contains });
+    case "expect.preview":
+      return driver.expectPreview({
+        target: action.target,
+        textContains: action.textContains,
+        value: action.value,
+        route: action.route,
+        attribute: action.attribute,
+        timeoutMs: action.timeoutMs,
+      });
   }
 }
 
@@ -70,6 +114,7 @@ async function invokeAction(
 async function invokeWithDeadline(
   action: StudioPlanAction,
   driver: StudioDriver,
+  signal: AbortSignal,
 ): Promise<Record<string, unknown>> {
   // editor.type spends its planned chunk delays before acknowledging, and
   // expect/run actions own their internal waits; the outer deadline covers the
@@ -89,8 +134,26 @@ async function invokeWithDeadline(
     }, deadlineMs);
   });
 
+  const invokeWithRetry = async () => {
+    const retry = "retry" in action ? action.retry : { maxAttempts: 1, delayMs: 0 };
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= retry.maxAttempts; attempt++) {
+      try {
+        const detail = await invokeAction(action, driver);
+        return retry.maxAttempts > 1 ? { ...detail, commandAttempts: attempt } : detail;
+      } catch (error) {
+        lastError = error;
+        if (attempt >= retry.maxAttempts) {
+          throw error;
+        }
+        await abortableSleep(retry.delayMs, signal);
+      }
+    }
+    throw lastError;
+  };
+
   try {
-    return await Promise.race([invokeAction(action, driver), deadline]);
+    return await Promise.race([invokeWithRetry(), deadline]);
   } finally {
     window.clearTimeout(deadlineTimer);
   }
@@ -145,7 +208,7 @@ export async function performPlan({
 
     const startedAtMs = clock.nowMs();
     try {
-      const detail = await invokeWithDeadline(action, driver);
+      const detail = await invokeWithDeadline(action, driver, signal);
       const receipt: ActionReceipt = {
         actionId: action.id,
         actionType: action.type,
@@ -168,6 +231,7 @@ export async function performPlan({
         startedAtMs,
         endedAtMs: clock.nowMs(),
         error: failure,
+        ...(error instanceof StudioActionError && error.detail ? { detail: error.detail } : {}),
       };
       receipts.push(receipt);
       onProgress?.(receipt);

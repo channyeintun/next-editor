@@ -18,6 +18,13 @@ export const STUDIO_PLAN_SCHEMA_VERSION = 1;
 const nonNegativeMs = z.number().finite().min(0);
 const positiveMs = z.number().finite().positive();
 
+/** Materialized retry policy. One attempt means explicitly non-retryable. */
+export const studioRetryPolicySchema = z.object({
+  maxAttempts: z.number().int().min(1).max(3),
+  delayMs: nonNegativeMs,
+});
+export type StudioRetryPolicy = z.infer<typeof studioRetryPolicySchema>;
+
 const planActionBase = z.object({
   /** Unique, stable action id — receipts and reports key off it. */
   id: z.string().min(1),
@@ -35,6 +42,13 @@ export const studioTargetRefSchema = z.union([
   z.object({ kind: z.literal("target-id"), id: z.string().min(1) }),
 ]);
 export type StudioTargetRef = z.infer<typeof studioTargetRefSchema>;
+
+/** Stable author-owned target inside a cross-origin runtime preview. */
+export const studioPreviewTargetSchema = z.object({
+  by: z.literal("testId"),
+  value: z.string().min(1),
+});
+export type StudioPreviewTarget = z.infer<typeof studioPreviewTargetSchema>;
 
 /**
  * Text anchor inside one workspace file. Resolution is exact-substring +
@@ -87,6 +101,49 @@ const runtimeRunActionSchema = planActionBase.extend({
   type: z.literal("runtime.run"),
 });
 
+const runtimeStartActionSchema = planActionBase.extend({
+  type: z.literal("runtime.start"),
+  retry: studioRetryPolicySchema,
+});
+
+const runtimeWaitForReadyActionSchema = planActionBase.extend({
+  type: z.literal("runtime.waitForReady"),
+  retry: studioRetryPolicySchema,
+});
+
+const previewOpenActionSchema = planActionBase.extend({
+  type: z.literal("preview.open"),
+  mode: z.enum(["docked", "floating"]).default("docked"),
+  retry: studioRetryPolicySchema,
+});
+
+const previewClickActionSchema = planActionBase.extend({
+  type: z.literal("preview.click"),
+  target: studioPreviewTargetSchema,
+  retry: studioRetryPolicySchema,
+});
+
+const previewInputActionSchema = planActionBase.extend({
+  type: z.literal("preview.input"),
+  target: studioPreviewTargetSchema,
+  value: z.string(),
+  retry: studioRetryPolicySchema,
+});
+
+const previewScrollActionSchema = planActionBase.extend({
+  type: z.literal("preview.scroll"),
+  target: studioPreviewTargetSchema.optional(),
+  top: z.number().finite(),
+  left: z.number().finite().default(0),
+  retry: studioRetryPolicySchema,
+});
+
+const previewRouteActionSchema = planActionBase.extend({
+  type: z.literal("preview.route"),
+  route: z.string().startsWith("/").min(1),
+  retry: studioRetryPolicySchema,
+});
+
 const slideShowActionSchema = planActionBase.extend({
   type: z.literal("slide.show"),
   slideId: z.string().min(1),
@@ -122,16 +179,36 @@ const expectFileActionSchema = planActionBase.extend({
   contains: z.string().min(1),
 });
 
+const expectPreviewActionSchema = planActionBase.extend({
+  type: z.literal("expect.preview"),
+  target: studioPreviewTargetSchema.optional(),
+  textContains: z.string().min(1).optional(),
+  value: z.string().optional(),
+  route: z.string().startsWith("/").min(1).optional(),
+  attribute: z
+    .object({ name: z.string().min(1), value: z.string() })
+    .optional(),
+  retry: studioRetryPolicySchema,
+});
+
 export const studioPlanActionSchema = z.discriminatedUnion("type", [
   openFileActionSchema,
   cursorMoveActionSchema,
   editorTypeActionSchema,
   runtimeRunActionSchema,
+  runtimeStartActionSchema,
+  runtimeWaitForReadyActionSchema,
+  previewOpenActionSchema,
+  previewClickActionSchema,
+  previewInputActionSchema,
+  previewScrollActionSchema,
+  previewRouteActionSchema,
   slideShowActionSchema,
   slideCloseActionSchema,
   whiteboardApplyActionSchema,
   expectOutputActionSchema,
   expectFileActionSchema,
+  expectPreviewActionSchema,
 ]);
 export type StudioPlanAction = z.infer<typeof studioPlanActionSchema>;
 export type StudioPlanActionType = StudioPlanAction["type"];
@@ -284,6 +361,18 @@ export const rustRunFixtureSchema = z.object({
 export const studioRuntimeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("none") }),
   z.object({
+    kind: z.literal("webcontainer"),
+    /** Version of the Studio/WebContainer command and readiness contract. */
+    adapterVersion: z.literal(1),
+    defaultMode: z.literal("live"),
+    initCommand: z.string(),
+    runCommand: z.string().min(1),
+    expectedPort: z.number().int().min(1).max(65_535).optional(),
+    /** Exact contents are pinned in workspace.files and covered by the plan hash. */
+    lockfilePath: z.string().min(1),
+    environment: z.record(z.string().min(1), z.string()).default({}),
+  }),
+  z.object({
     kind: z.literal("go-playground"),
     defaultMode: z.enum(["live", "fixture"]),
     fixture: goRunFixtureSchema,
@@ -306,12 +395,12 @@ export type StudioRuntimeMode = "live" | "fixture";
 /**
  * The one runtime kind each lesson type may declare. The three Playground
  * languages execute through their selective proxies; the WebContainer
- * languages (javascript, typescript, python) are "none" until the studio
- * grows that adapter.
+ * JavaScript and TypeScript use the versioned WebContainer adapter; Python
+ * remains edit-only until it has a Studio-owned runtime contract.
  */
 export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind> = {
-  javascript: "none",
-  typescript: "none",
+  javascript: "webcontainer",
+  typescript: "webcontainer",
   python: "none",
   go: "go-playground",
   kotlin: "kotlin-playground",
@@ -352,7 +441,14 @@ export const studioPlanSchema = z
     }
     if (plan.runtime.kind === "none") {
       for (const action of plan.actions) {
-        if (action.type === "runtime.run" || action.type === "expect.output") {
+        if (
+          action.type === "runtime.run" ||
+          action.type === "runtime.start" ||
+          action.type === "runtime.waitForReady" ||
+          action.type.startsWith("preview.") ||
+          action.type === "expect.preview" ||
+          action.type === "expect.output"
+        ) {
           ctx.addIssue({
             code: "custom",
             message: `Action "${action.id}" (${action.type}) needs a runnable runtime, but lesson type "${plan.workspace.lessonType}" has none in the studio yet`,
@@ -360,9 +456,67 @@ export const studioPlanSchema = z
         }
       }
     }
+    if (plan.runtime.kind === "webcontainer") {
+      if (!(plan.runtime.lockfilePath in plan.workspace.files)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `WebContainer lockfile "${plan.runtime.lockfilePath}" is not in the pinned workspace`,
+        });
+      }
+      for (const action of plan.actions) {
+        if (action.type === "runtime.run" || action.type === "expect.output") {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${action.id}" (${action.type}) is a Playground command, not a WebContainer command`,
+          });
+        }
+      }
+    } else if (plan.runtime.kind !== "none") {
+      for (const action of plan.actions) {
+        if (
+          action.type === "runtime.start" ||
+          action.type === "runtime.waitForReady" ||
+          action.type.startsWith("preview.") ||
+          action.type === "expect.preview"
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${action.id}" (${action.type}) requires runtime kind "webcontainer"`,
+          });
+        }
+      }
+    }
 
     const ids = new Set<string>();
     for (const action of plan.actions) {
+      if (action.type === "preview.click" && action.retry.maxAttempts !== 1) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Action "${action.id}" is non-idempotent and must use retry.maxAttempts: 1`,
+        });
+      }
+      if (
+        action.type === "expect.preview" &&
+        action.target === undefined &&
+        action.route === undefined
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Action "${action.id}" must declare a preview target or route expectation`,
+        });
+      }
+      if (
+        action.type === "expect.preview" &&
+        action.target === undefined &&
+        (action.textContains !== undefined ||
+          action.value !== undefined ||
+          action.attribute !== undefined)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Action "${action.id}" needs a stable target for text, value, or attribute checks`,
+        });
+      }
       if (ids.has(action.id)) {
         ctx.addIssue({ code: "custom", message: `Duplicate action id "${action.id}"` });
       }

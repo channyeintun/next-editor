@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   RUNTIME_KIND_FOR_LESSON,
+  studioPreviewTargetSchema,
+  studioRetryPolicySchema,
   studioRuntimeSchema,
   studioSlideSchema,
   studioWhiteboardAssetSchema,
@@ -67,6 +69,49 @@ const scriptRuntimeRunSchema = scriptActionBase.extend({
   type: z.literal("runtime.run"),
 });
 
+const scriptRuntimeStartSchema = scriptActionBase.extend({
+  type: z.literal("runtime.start"),
+  retry: studioRetryPolicySchema,
+});
+
+const scriptRuntimeWaitForReadySchema = scriptActionBase.extend({
+  type: z.literal("runtime.waitForReady"),
+  retry: studioRetryPolicySchema,
+});
+
+const scriptPreviewOpenSchema = scriptActionBase.extend({
+  type: z.literal("preview.open"),
+  mode: z.enum(["docked", "floating"]).default("docked"),
+  retry: studioRetryPolicySchema,
+});
+
+const scriptPreviewClickSchema = scriptActionBase.extend({
+  type: z.literal("preview.click"),
+  target: studioPreviewTargetSchema,
+  retry: studioRetryPolicySchema,
+});
+
+const scriptPreviewInputSchema = scriptActionBase.extend({
+  type: z.literal("preview.input"),
+  target: studioPreviewTargetSchema,
+  value: z.string(),
+  retry: studioRetryPolicySchema,
+});
+
+const scriptPreviewScrollSchema = scriptActionBase.extend({
+  type: z.literal("preview.scroll"),
+  target: studioPreviewTargetSchema.optional(),
+  top: z.number().finite(),
+  left: z.number().finite().default(0),
+  retry: studioRetryPolicySchema,
+});
+
+const scriptPreviewRouteSchema = scriptActionBase.extend({
+  type: z.literal("preview.route"),
+  route: z.string().startsWith("/").min(1),
+  retry: studioRetryPolicySchema,
+});
+
 const scriptSlideShowSchema = scriptActionBase.extend({
   type: z.literal("slide.show"),
   slideId: z.string().min(1),
@@ -95,15 +140,35 @@ const scriptExpectFileSchema = scriptActionBase.extend({
   contains: z.string().min(1),
 });
 
+const scriptExpectPreviewSchema = scriptActionBase.extend({
+  type: z.literal("expect.preview"),
+  target: studioPreviewTargetSchema.optional(),
+  textContains: z.string().min(1).optional(),
+  value: z.string().optional(),
+  route: z.string().startsWith("/").min(1).optional(),
+  attribute: z
+    .object({ name: z.string().min(1), value: z.string() })
+    .optional(),
+  retry: studioRetryPolicySchema,
+});
+
 export const scriptActionSchema = z.discriminatedUnion("type", [
   scriptOpenFileSchema,
   scriptEditorTypeSchema,
   scriptRuntimeRunSchema,
+  scriptRuntimeStartSchema,
+  scriptRuntimeWaitForReadySchema,
+  scriptPreviewOpenSchema,
+  scriptPreviewClickSchema,
+  scriptPreviewInputSchema,
+  scriptPreviewScrollSchema,
+  scriptPreviewRouteSchema,
   scriptSlideShowSchema,
   scriptSlideCloseSchema,
   scriptWhiteboardApplySchema,
   scriptExpectOutputSchema,
   scriptExpectFileSchema,
+  scriptExpectPreviewSchema,
 ]);
 export type ScriptAction = z.infer<typeof scriptActionSchema>;
 
@@ -179,10 +244,51 @@ export const lessonScriptSchema = z
     if (script.runtime.kind === "none") {
       for (const scene of script.scenes) {
         for (const action of scene.actions) {
-          if (action.type === "runtime.run" || action.type === "expect.output") {
+          if (
+            action.type === "runtime.run" ||
+            action.type === "runtime.start" ||
+            action.type === "runtime.waitForReady" ||
+            action.type.startsWith("preview.") ||
+            action.type === "expect.preview" ||
+            action.type === "expect.output"
+          ) {
             ctx.addIssue({
               code: "custom",
               message: `Action "${action.id}" (${action.type}) needs a runnable runtime, but lesson type "${script.lesson.workspace.lessonType}" has none in the studio yet`,
+            });
+          }
+        }
+      }
+    }
+    if (script.runtime.kind === "webcontainer") {
+      if (!(script.runtime.lockfilePath in script.lesson.workspace.files)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `WebContainer lockfile "${script.runtime.lockfilePath}" is not in the pinned workspace`,
+        });
+      }
+      for (const scene of script.scenes) {
+        for (const action of scene.actions) {
+          if (action.type === "runtime.run" || action.type === "expect.output") {
+            ctx.addIssue({
+              code: "custom",
+              message: `Action "${action.id}" (${action.type}) is a Playground command, not a WebContainer command`,
+            });
+          }
+        }
+      }
+    } else if (script.runtime.kind !== "none") {
+      for (const scene of script.scenes) {
+        for (const action of scene.actions) {
+          if (
+            action.type === "runtime.start" ||
+            action.type === "runtime.waitForReady" ||
+            action.type.startsWith("preview.") ||
+            action.type === "expect.preview"
+          ) {
+            ctx.addIssue({
+              code: "custom",
+              message: `Action "${action.id}" (${action.type}) requires runtime kind "webcontainer"`,
             });
           }
         }
@@ -192,6 +298,34 @@ export const lessonScriptSchema = z
     const actionIds = new Set<string>();
     for (const scene of script.scenes) {
       for (const action of scene.actions) {
+        if (action.type === "preview.click" && action.retry.maxAttempts !== 1) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${action.id}" is non-idempotent and must use retry.maxAttempts: 1`,
+          });
+        }
+        if (
+          action.type === "expect.preview" &&
+          action.target === undefined &&
+          action.route === undefined
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${action.id}" must declare a preview target or route expectation`,
+          });
+        }
+        if (
+          action.type === "expect.preview" &&
+          action.target === undefined &&
+          (action.textContains !== undefined ||
+            action.value !== undefined ||
+            action.attribute !== undefined)
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${action.id}" needs a stable target for text, value, or attribute checks`,
+          });
+        }
         if (actionIds.has(action.id)) {
           ctx.addIssue({ code: "custom", message: `Duplicate action id "${action.id}"` });
         }

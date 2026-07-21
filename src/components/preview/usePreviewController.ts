@@ -61,6 +61,7 @@ import { hasRrwebPreviewEvents, RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrw
 import { useApiClient } from "./useApiClient";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
 import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
+import { requestStudioPreviewCommand } from "../../utils/iframeStudioCommandBridge";
 import { usePreviewPlaybackRegistration } from "./usePreviewPlaybackRegistration";
 import {
   clampCustomPreviewSize,
@@ -582,6 +583,8 @@ export function usePreviewController(): PreviewController {
     };
     previewHandle.previewScreenshotCapturer.current = () =>
       requestPreviewScreenshot(iframeRef.current);
+    previewHandle.previewCommandExecutor.current = (command, options) =>
+      requestStudioPreviewCommand(iframeRef.current, command, options);
     previewHandle.recordingStopPreparer.current = async () => {
       await requestRuntimePreviewSnapshot("recording-finalize");
     };
@@ -589,6 +592,7 @@ export function usePreviewController(): PreviewController {
     return () => {
       previewHandle.livePreviewInspectionGetter.current = null;
       previewHandle.previewScreenshotCapturer.current = null;
+      previewHandle.previewCommandExecutor.current = null;
       previewHandle.recordingStopPreparer.current = null;
     };
   }, [effectiveRuntimePreviewUrl, previewHandle, requestRuntimePreviewSnapshot]);

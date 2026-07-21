@@ -6,7 +6,20 @@ import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import { appendRunnerConsoleLines } from "../runtime/goPlayground/consoleStore";
 import type { SlideEvent } from "../core/src/slides";
 import type { WhiteboardEvent } from "../core/src/whiteboard";
+import type { PreviewPanelMode, PreviewState } from "../types/slides";
 import { isWorkspaceTextFile } from "../types/workspace";
+import type {
+  WebContainerRuntimeActions,
+  WebContainerRuntimeRecordingSnapshot,
+} from "../contexts/WebContainerRuntimeContext";
+import type {
+  PreviewCommandExecutor,
+  PreviewScreenshotCapturer,
+} from "../stores/previewAdapterHandle";
+import type {
+  StudioPreviewCommand,
+  StudioPreviewCommandResult,
+} from "../utils/iframeStudioCommandBridge";
 import { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil } from "./async";
 import { chunkPlacements, easeInOutCubic } from "./cadence";
 import {
@@ -17,6 +30,7 @@ import {
 import type {
   StudioRuntime,
   StudioRuntimeMode,
+  StudioPreviewTarget,
   StudioTargetRef,
   StudioWhiteboardAsset,
   TextAnchor,
@@ -51,6 +65,16 @@ export interface StudioDriverDeps {
   runtime: StudioRuntime;
   planSeed: number;
   whiteboardAssets: readonly StudioWhiteboardAsset[];
+  webContainerRuntime: {
+    getActions: () => Pick<WebContainerRuntimeActions, "startRuntime">;
+    getSnapshot: () => WebContainerRuntimeRecordingSnapshot;
+  };
+  preview: {
+    open: (mode: PreviewPanelMode) => void;
+    getState: () => PreviewState | null;
+    executeCommand: PreviewCommandExecutor;
+    captureScreenshot: PreviewScreenshotCapturer;
+  };
   signal: AbortSignal;
 }
 
@@ -66,6 +90,24 @@ export interface StudioDriver {
     durationMs: number;
   }): Promise<Record<string, unknown>>;
   runWorkspace(timeoutMs: number): Promise<Record<string, unknown>>;
+  startRuntime(): Promise<Record<string, unknown>>;
+  waitForRuntimeReady(timeoutMs: number): Promise<Record<string, unknown>>;
+  openPreview(input: {
+    mode: PreviewPanelMode;
+    timeoutMs: number;
+  }): Promise<Record<string, unknown>>;
+  executePreviewCommand(input: {
+    command: StudioPreviewCommand;
+    timeoutMs: number;
+  }): Promise<Record<string, unknown>>;
+  expectPreview(input: {
+    target?: StudioPreviewTarget;
+    textContains?: string;
+    value?: string;
+    route?: string;
+    attribute?: { name: string; value: string };
+    timeoutMs: number;
+  }): Promise<Record<string, unknown>>;
   showSlide(input: { slideId: string; maximized: boolean }): Promise<Record<string, unknown>>;
   closeSlide(): Promise<Record<string, unknown>>;
   applyWhiteboard(input: {
@@ -85,6 +127,38 @@ function throwIfAborted(signal: AbortSignal): void {
 }
 
 const CURSOR_STEP_MS = 32;
+
+function previewCommandTarget(target: StudioPreviewTarget | undefined) {
+  return target ? { testId: target.value } : undefined;
+}
+
+function webContainerDiagnostic(snapshot: WebContainerRuntimeRecordingSnapshot) {
+  return {
+    status: snapshot.status,
+    previewUrl: snapshot.previewUrl,
+    previewPort: snapshot.previewPort,
+    activeCommand: snapshot.activeCommand,
+    errorMessage: snapshot.errorMessage,
+    lastOutput: snapshot.lastOutput,
+    latestPreviewMessage: snapshot.latestPreviewMessage,
+    latestLifecycleEvent: snapshot.latestLifecycleEvent,
+  };
+}
+
+function assertWebContainerHealthy(snapshot: WebContainerRuntimeRecordingSnapshot): void {
+  if (snapshot.status === "error" || snapshot.errorMessage) {
+    throw new StudioActionError(
+      `WebContainer runtime failed: ${snapshot.errorMessage ?? "unknown runtime error"}`,
+      { runtime: webContainerDiagnostic(snapshot) },
+    );
+  }
+  if (snapshot.latestPreviewMessage) {
+    throw new StudioActionError(
+      `Preview ${snapshot.latestPreviewMessage.kind}: ${snapshot.latestPreviewMessage.text}`,
+      { runtime: webContainerDiagnostic(snapshot) },
+    );
+  }
+}
 
 export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
   const { signal } = deps;
@@ -280,9 +354,13 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     },
 
     async runWorkspace(timeoutMs) {
-      if (deps.runtime.kind === "none") {
+      if (
+        deps.runtime.kind !== "go-playground" &&
+        deps.runtime.kind !== "kotlin-playground" &&
+        deps.runtime.kind !== "rust-playground"
+      ) {
         throw new StudioActionError(
-          'This lesson type has no runnable studio runtime yet (runtime.kind is "none")',
+          `runtime.run requires a Playground runtime, got "${deps.runtime.kind}"`,
         );
       }
 
@@ -318,6 +396,162 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         attempts: outcome.attempts,
         transientFailures: outcome.transientFailures,
       };
+    },
+
+    async startRuntime() {
+      if (deps.runtime.kind !== "webcontainer") {
+        throw new StudioActionError(
+          `runtime.start requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
+        );
+      }
+      await deps.webContainerRuntime.getActions().startRuntime();
+      const snapshot = deps.webContainerRuntime.getSnapshot();
+      assertWebContainerHealthy(snapshot);
+      return {
+        adapterVersion: deps.runtime.adapterVersion,
+        initCommand: deps.runtime.initCommand,
+        runCommand: deps.runtime.runCommand,
+        status: snapshot.status,
+      };
+    },
+
+    async waitForRuntimeReady(timeoutMs) {
+      if (deps.runtime.kind !== "webcontainer") {
+        throw new StudioActionError(
+          `runtime.waitForReady requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
+        );
+      }
+      await waitUntil(
+        () => {
+          const snapshot = deps.webContainerRuntime.getSnapshot();
+          assertWebContainerHealthy(snapshot);
+          return (
+            snapshot.status === "ready" &&
+            Boolean(snapshot.previewUrl) &&
+            (deps.runtime.kind !== "webcontainer" ||
+              deps.runtime.expectedPort === undefined ||
+              snapshot.previewPort === deps.runtime.expectedPort)
+          );
+        },
+        {
+          timeoutMs,
+          signal,
+          description: `WebContainer server${deps.runtime.expectedPort ? ` on port ${deps.runtime.expectedPort}` : ""} to become ready`,
+          intervalMs: 50,
+        },
+      );
+      const snapshot = deps.webContainerRuntime.getSnapshot();
+      return {
+        status: snapshot.status,
+        previewUrl: snapshot.previewUrl,
+        previewPort: snapshot.previewPort,
+      };
+    },
+
+    async openPreview({ mode, timeoutMs }) {
+      if (deps.runtime.kind !== "webcontainer") {
+        throw new StudioActionError(
+          `preview.open requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
+        );
+      }
+      assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+      deps.preview.open(mode);
+      await waitUntil(() => deps.preview.getState()?.isOpen === true, {
+        timeoutMs,
+        signal,
+        description: `the ${mode} preview panel to open`,
+      });
+      const acknowledgement = await deps.preview.executeCommand(
+        { type: "ping" },
+        { timeoutMs, signal },
+      );
+      assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+      return { mode, bridge: "ready", route: acknowledgement.route };
+    },
+
+    async executePreviewCommand({ command, timeoutMs }) {
+      if (deps.runtime.kind !== "webcontainer") {
+        throw new StudioActionError(
+          `Preview commands require runtime kind "webcontainer", got "${deps.runtime.kind}"`,
+        );
+      }
+      assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+      let acknowledgement: StudioPreviewCommandResult;
+      try {
+        acknowledgement = await deps.preview.executeCommand(command, { timeoutMs, signal });
+      } catch (error) {
+        throw new StudioActionError(
+          `Preview ${command.type} command failed: ${error instanceof Error ? error.message : String(error)}`,
+          { command },
+        );
+      }
+      assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+      return { acknowledgement };
+    },
+
+    async expectPreview({
+      target,
+      textContains,
+      value,
+      route,
+      attribute,
+      timeoutMs,
+    }) {
+      if (deps.runtime.kind !== "webcontainer") {
+        throw new StudioActionError(
+          `expect.preview requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
+        );
+      }
+
+      try {
+        assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+        const inspection = await deps.preview.executeCommand(
+          { type: "inspect", target: previewCommandTarget(target) },
+          { timeoutMs, signal },
+        );
+        const mismatches: string[] = [];
+        if (route !== undefined && inspection.route !== route) {
+          mismatches.push(`route is ${JSON.stringify(inspection.route)}, expected ${JSON.stringify(route)}`);
+        }
+        if (textContains !== undefined && !inspection.target?.text.includes(textContains)) {
+          mismatches.push(`target text does not contain ${JSON.stringify(textContains)}`);
+        }
+        if (value !== undefined && inspection.target?.value !== value) {
+          mismatches.push(
+            `target value is ${JSON.stringify(inspection.target?.value)}, expected ${JSON.stringify(value)}`,
+          );
+        }
+        if (
+          attribute !== undefined &&
+          inspection.target?.attributes[attribute.name] !== attribute.value
+        ) {
+          mismatches.push(
+            `target attribute ${JSON.stringify(attribute.name)} is ${JSON.stringify(inspection.target?.attributes[attribute.name])}, expected ${JSON.stringify(attribute.value)}`,
+          );
+        }
+        if (mismatches.length > 0) {
+          throw new StudioActionError(`Preview expectation failed: ${mismatches.join("; ")}`, {
+            inspection,
+          });
+        }
+        assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+        return { inspection };
+      } catch (error) {
+        let diagnosticScreenshot: Record<string, unknown> | undefined;
+        try {
+          const screenshot = await deps.preview.captureScreenshot();
+          diagnosticScreenshot = screenshot;
+        } catch (screenshotError) {
+          diagnosticScreenshot = {
+            error: screenshotError instanceof Error ? screenshotError.message : String(screenshotError),
+          };
+        }
+        const detail = error instanceof StudioActionError ? error.detail : undefined;
+        throw new StudioActionError(error instanceof Error ? error.message : String(error), {
+          ...detail,
+          diagnosticScreenshot,
+        });
+      }
     },
 
     async showSlide({ slideId, maximized }) {
@@ -425,7 +659,11 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
 
     async waitForOutput({ contains, timeoutMs }) {
       const errorPrefix =
-        deps.runtime.kind === "none" ? null : runErrorPrefixFor(deps.runtime.kind);
+        deps.runtime.kind === "go-playground" ||
+        deps.runtime.kind === "kotlin-playground" ||
+        deps.runtime.kind === "rust-playground"
+          ? runErrorPrefixFor(deps.runtime.kind)
+          : null;
       let matchedLine: string | null = null;
       await waitUntil(
         () => {

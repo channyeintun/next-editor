@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { UploadLessonModal, useAuth } from "@next-editor/infra";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
@@ -7,6 +7,12 @@ import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { useSlidesStore } from "../contexts/SlidesStoreContext";
 import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
+import {
+  useWebContainerRuntimeActions,
+  useWebContainerRuntimeSnapshotGetter,
+} from "../hooks/useWebContainerRuntime";
+import { usePreviewPanel } from "../contexts/PreviewPanelContext";
+import { usePreviewAdapterHandle } from "../contexts/PreviewAdapterHandleContext";
 import { markTourSeen } from "../components/tour/productTour";
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
@@ -165,7 +171,16 @@ export default function StudioController() {
   const { store: runtimePanelStore } = useRuntimePanelStore();
   const { store: slidesStore } = useSlidesStore();
   const { store: whiteboardStore } = useWhiteboardStore();
+  const webContainerRuntimeActions = useWebContainerRuntimeActions();
+  const getWebContainerRuntimeSnapshot = useWebContainerRuntimeSnapshotGetter();
+  const previewPanel = usePreviewPanel();
+  const previewHandle = usePreviewAdapterHandle();
   const { isSignedIn, isLoading: authLoading } = useAuth();
+  const webContainerRuntimeActionsRef = useRef(webContainerRuntimeActions);
+
+  useLayoutEffect(() => {
+    webContainerRuntimeActionsRef.current = webContainerRuntimeActions;
+  }, [webContainerRuntimeActions]);
 
   const planSlug = searchParams.get("plan") ?? DEFAULT_STUDIO_PLAN_SLUG;
   const requestedMode = searchParams.get("runtime") === "live" ? "live" : null;
@@ -393,6 +408,28 @@ export default function StudioController() {
           runtimePanelStore,
           slidesStore,
           whiteboardStore,
+          webContainerRuntime: {
+            getActions: () => webContainerRuntimeActionsRef.current,
+            getSnapshot: getWebContainerRuntimeSnapshot,
+          },
+          preview: {
+            open: (mode) => previewPanel.openPreview(mode),
+            getState: () => previewHandle.snapshotGetter.current?.() ?? null,
+            executeCommand: (command, options) => {
+              const executor = previewHandle.previewCommandExecutor.current;
+              if (!executor) {
+                return Promise.reject(new Error("The live preview command bridge is not mounted"));
+              }
+              return executor(command, options);
+            },
+            captureScreenshot: () => {
+              const capture = previewHandle.previewScreenshotCapturer.current;
+              if (!capture) {
+                return Promise.reject(new Error("The live preview screenshot bridge is not mounted"));
+              }
+              return capture();
+            },
+          },
           isSignedIn,
           onPhase: setPhase,
           onProgress: (receipt) => setReceipts((current) => [...current, receipt]),

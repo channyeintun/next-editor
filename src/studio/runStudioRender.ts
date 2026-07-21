@@ -52,6 +52,8 @@ export interface StudioRunDeps {
   runtimePanelStore: RuntimePanelStoreInstance;
   slidesStore: SlidesStoreInstance;
   whiteboardStore: WhiteboardStoreInstance;
+  webContainerRuntime: StudioDriverDeps["webContainerRuntime"];
+  preview: StudioDriverDeps["preview"];
   isSignedIn: boolean;
   onProgress?: (receipt: ActionReceipt) => void;
   onPhase?: (phase: string) => void;
@@ -144,10 +146,19 @@ export async function runStudioRender(
 
   // ---- Preflight -----------------------------------------------------------
   phase("preflight");
-  if (runtimeMode === "live" && plan.runtime.kind !== "none" && !deps.isSignedIn) {
+  if (
+    runtimeMode === "live" &&
+    (plan.runtime.kind === "go-playground" ||
+      plan.runtime.kind === "kotlin-playground" ||
+      plan.runtime.kind === "rust-playground") &&
+    !deps.isSignedIn
+  ) {
     return failedResult(
       `Live runtime mode needs a signed-in session for /api/${plan.runtime.kind}; sign in or render with runtime=fixture`,
     );
+  }
+  if (plan.runtime.kind === "webcontainer" && runtimeMode !== "live") {
+    return failedResult('WebContainer Studio renders require runtime mode "live"');
   }
 
   let audioBytes: Uint8Array;
@@ -283,6 +294,8 @@ export async function runStudioRender(
     runtime: plan.runtime,
     planSeed: plan.seed,
     whiteboardAssets: plan.whiteboardAssets,
+    webContainerRuntime: deps.webContainerRuntime,
+    preview: deps.preview,
     signal,
   });
 

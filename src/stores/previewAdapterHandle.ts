@@ -1,5 +1,9 @@
 import type { PreviewDomPatchBatch, PreviewInitialDocument, PreviewState } from "../types/slides";
 import type { PreviewScreenshotResult } from "../utils/iframeScreenshotBridge";
+import type {
+  StudioPreviewCommand,
+  StudioPreviewCommandResult,
+} from "../utils/iframeStudioCommandBridge";
 
 export interface LivePreviewInspection {
   capturedAt: number;
@@ -26,6 +30,10 @@ export type DockWidthDeltaApplier = (delta: number) => void;
 export type LivePreviewInspectionGetter = () => Promise<LivePreviewInspection | null>;
 export type PreviewScreenshotCapturer = () => Promise<PreviewScreenshotResult>;
 export type RecordingStopPreparer = () => Promise<void>;
+export type PreviewCommandExecutor = (
+  command: StudioPreviewCommand,
+  options: { signal: AbortSignal; timeoutMs: number },
+) => Promise<StudioPreviewCommandResult>;
 
 export interface PreviewAdapterHandle {
   snapshotGetter: { current: SnapshotGetter | null };
@@ -34,6 +42,7 @@ export interface PreviewAdapterHandle {
   dockWidthDeltaApplier: { current: DockWidthDeltaApplier | null };
   livePreviewInspectionGetter: { current: LivePreviewInspectionGetter | null };
   previewScreenshotCapturer: { current: PreviewScreenshotCapturer | null };
+  previewCommandExecutor: { current: PreviewCommandExecutor | null };
   recordingStopPreparer: { current: RecordingStopPreparer | null };
 }
 
@@ -45,6 +54,7 @@ export function createPreviewAdapterHandle(): PreviewAdapterHandle {
     dockWidthDeltaApplier: { current: null },
     livePreviewInspectionGetter: { current: null },
     previewScreenshotCapturer: { current: null },
+    previewCommandExecutor: { current: null },
     recordingStopPreparer: { current: null },
   };
 }
