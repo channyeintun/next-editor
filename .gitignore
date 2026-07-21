@@ -35,3 +35,4 @@ src/core/dmp/target/
 .vercel
 slide-research
 studio-out/
+share/*.zip
