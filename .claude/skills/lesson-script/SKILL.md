@@ -10,12 +10,12 @@ coding lesson that the studio renders unattended. The full contract is in
 **docs/lesson-script-authoring.md**: read it first, entirely, every time
 (schema, marker/anchoring model, action catalog, fixture rules, failure
 table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
-`src/studio/scripts/go-swap.yaml`.
+`src/studio/scripts/rust-borrow.yaml`.
 
 ## Procedure
 
 1. **Read** `docs/lesson-script-authoring.md`, `docs/studio-persona.md`, and
-   `src/studio/scripts/go-swap.yaml`.
+   `src/studio/scripts/rust-borrow.yaml`.
 2. **Design before writing**: one concept; work out the exact final code
    (pinned files plus your insertions); mentally run it and transcribe the
    exact program output for the fixture; then write narration that speaks

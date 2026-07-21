@@ -28,7 +28,7 @@ interface CliOptions {
 
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
-    slug: "go-cube-tour",
+    slug: "rust-borrow",
     runtime: "fixture",
     runs: 2,
     baseUrl: "http://localhost:5173",

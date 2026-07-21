@@ -11,7 +11,7 @@ import { parseLessonScript, type LessonScript } from "./schema";
 
 function loadPilot(name: string): LessonScript {
   return parseLessonScript(
-    YAML.parse(readFileSync(resolve(__dirname, `../scripts/${name}.yaml`), "utf8")),
+    YAML.parse(readFileSync(resolve(__dirname, `./__fixtures__/${name}.yaml`), "utf8")),
   );
 }
 

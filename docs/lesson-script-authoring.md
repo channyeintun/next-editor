@@ -307,8 +307,10 @@ content roughly within (250,150)–(1100,650) so it is visible unzoomed.
 | `timing.p95 — … (max 300ms)` failure            | Usually a squeezed action; check the receipts in the render report for the late action.                 |
 | Repeatability FAIL on `repeat.audio`            | Should not happen (synthesis is seeded); report it as a bug rather than working around it.              |
 
-## A complete minimal example
+## A complete example
 
-`src/studio/scripts/go-swap.yaml` in this repo is the canonical small example
-(two scenes, two insertions, run + gates). `go-cube-tour.yaml` shows slides,
-whiteboard, and the retry fixture. Start from a copy of `go-swap.yaml`.
+`src/studio/scripts/rust-borrow.yaml` is the canonical example: eight scenes,
+published-deck slides, keystroke and line-by-line typing, run + gates, in the
+conversational persona register. Start from a copy of it. Smaller historical
+pilots (Go, incl. whiteboard + retry-fixture usage) live as test fixtures
+under `src/studio/script/__fixtures__/`.

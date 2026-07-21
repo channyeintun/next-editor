@@ -2,12 +2,10 @@ import { describe, expect, it } from "vite-plus/test";
 import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_SOURCES } from "./index";
 
 describe("studio lesson registry", () => {
-  it("auto-registers every emitted script by filename", () => {
-    // The pilots must be present without any manual registry edit.
-    for (const slug of ["go-cube", "go-cube-tour", "go-swap"]) {
-      expect(STUDIO_SOURCES[slug]?.kind).toBe("script");
-    }
-    expect(STUDIO_SOURCES[DEFAULT_STUDIO_PLAN_SLUG]?.kind).toBe("plan");
+  it("registers exactly the checked-in scripts (rust-borrow only today)", () => {
+    // Scripts auto-register by filename without any manual registry edit.
+    expect(Object.keys(STUDIO_SOURCES).sort()).toEqual(["rust-borrow"]);
+    expect(STUDIO_SOURCES[DEFAULT_STUDIO_PLAN_SLUG]?.kind).toBe("script");
   });
 
   it("never registers critic sidecars as lessons", () => {

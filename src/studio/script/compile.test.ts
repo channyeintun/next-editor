@@ -11,7 +11,7 @@ import { extractNarration } from "./markers";
 import { scheduleDialogs } from "./schedule";
 import { parseLessonScript, type LessonScript } from "./schema";
 
-const PILOT_PATH = resolve(__dirname, "../scripts/go-cube.yaml");
+const PILOT_PATH = resolve(__dirname, "./__fixtures__/go-cube.yaml");
 const PILOT_DURATION_MS = 21_778;
 
 function loadPilotScript(): LessonScript {
@@ -131,7 +131,7 @@ describe("compileLessonScript", () => {
   });
 });
 
-const TOUR_PATH = resolve(__dirname, "../scripts/go-cube-tour.yaml");
+const TOUR_PATH = resolve(__dirname, "./__fixtures__/go-cube-tour.yaml");
 
 describe("multi-surface pilot (go-cube-tour)", () => {
   function loadTourScript(): LessonScript {

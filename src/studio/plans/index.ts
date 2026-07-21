@@ -1,12 +1,12 @@
 import YAML from "yaml";
 import type { StudioPlan } from "../plan";
 import { parseLessonScript, type LessonScript } from "../script/schema";
-import { M0_GO_HELLO_SLUG, createM0GoHelloPlan } from "./m0GoHello";
 
 /**
  * Renderable lessons by slug. Two source kinds:
- * - "plan": a fully compiled plan with checked-in narration audio (the M0
- *   fixture) — rendered as-is.
+ * - "plan": a fully compiled plan with checked-in narration audio — rendered
+ *   as-is. (None registered today; the archived M0 fixture lives on as test
+ *   infrastructure in ./m0GoHello.)
  * - "script": a LessonScript YAML. The checked-in scripts under
  *   `src/studio/scripts/*.yaml` auto-register by filename via the glob below
  *   — authoring a new lesson never edits this file — and users can import
@@ -36,11 +36,10 @@ for (const [path, yamlText] of Object.entries(scriptYamls)) {
 }
 
 export const STUDIO_SOURCES: Record<string, StudioLessonSource> = {
-  [M0_GO_HELLO_SLUG]: { kind: "plan", load: createM0GoHelloPlan },
   ...scriptSources,
 };
 
-export const DEFAULT_STUDIO_PLAN_SLUG = M0_GO_HELLO_SLUG;
+export const DEFAULT_STUDIO_PLAN_SLUG = "rust-borrow";
 
 export function sourceRuntimeDefault(source: StudioLessonSource): "live" | "fixture" {
   const runtime = source.load().runtime;
