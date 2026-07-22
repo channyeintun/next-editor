@@ -171,13 +171,17 @@ interface ExternalBoxProps {
   title: string;
   lines: string[];
   tag: number;
+  /** Absolute x where the inbound connector begins. Defaults to x - 48 (a
+   *  direct line from the edge box). Boxes that hang off the shared egress bus
+   *  pass the bus x so the connector branches from it instead of dangling. */
+  connectorStartX?: number;
 }
 
-function ExternalBox({ x, y, title, lines, tag }: ExternalBoxProps) {
+function ExternalBox({ x, y, title, lines, tag, connectorStartX }: ExternalBoxProps) {
   return (
     <g>
       <line
-        x1={x - 48}
+        x1={connectorStartX ?? x - 48}
         y1={y + 52}
         x2={x - 4}
         y2={y + 52}
@@ -620,6 +624,7 @@ export default function ArchitecturePage() {
                 title="Room Durable Objects"
                 lines={["binary WebSockets + SQLite", "Yjs history and presence"]}
                 tag={19}
+                connectorStartX={924}
               />
 
               <ExternalBox
@@ -628,6 +633,7 @@ export default function ArchitecturePage() {
                 title="Voice Room Durable Objects"
                 lines={["voice roster + capabilities", "authorized SFU gateway"]}
                 tag={20}
+                connectorStartX={924}
               />
 
               <ExternalBox
@@ -636,11 +642,16 @@ export default function ArchitecturePage() {
                 title="Cloudflare Realtime SFU"
                 lines={["audio-only WebRTC media plane", "Opus fan-out between members"]}
                 tag={21}
+                connectorStartX={924}
               />
 
+              {/* Shared egress bus at x=924. Its top meets the Google OAuth
+                  connector (y=702), which reaches the edge box, so the whole
+                  external cluster is fed from the edge; Room/Voice DO + SFU
+                  branch off it via connectorStartX={924}. */}
               <line
                 x1={924}
-                y1={786}
+                y1={702}
                 x2={924}
                 y2={1062}
                 stroke="var(--dashline)"
