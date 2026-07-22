@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import Navbar from "@app/components/Navbar";
 import { AuthMenu } from "@next-editor/infra";
-import LoadingSpinner from "@app/components/LoadingSpinner";
 import { usePlaylist } from "../hooks/usePlaylists";
 import PlaylistDetail from "./PlaylistDetail";
+import LessonCardSkeleton from "./LessonCardSkeleton";
 
 // Route component for /learn/playlist/:slug. Unlike LessonDetailRoute (which
 // renders the embedded Editor — a lesson IS playable content), a playlist is
@@ -17,9 +17,7 @@ export default function PlaylistDetailRoute() {
   return (
     <Shell>
       {isPending ? (
-        <div className="flex justify-center py-20">
-          <LoadingSpinner />
-        </div>
+        <PlaylistDetailSkeleton />
       ) : playlist ? (
         <PlaylistDetail playlist={playlist} />
       ) : (
@@ -34,6 +32,30 @@ export default function PlaylistDetailRoute() {
         </div>
       )}
     </Shell>
+  );
+}
+
+// Mirrors PlaylistDetail's header + card grid so the layout doesn't jump when
+// the real content loads in.
+function PlaylistDetailSkeleton() {
+  return (
+    <div className="py-4" aria-hidden="true">
+      {/* Breadcrumb row (text-xs nav) */}
+      <div className="h-4 w-48 animate-pulse rounded bg-slate-800" />
+      <div className="animate-pulse py-6">
+        {/* "Playlist · N lessons" eyebrow */}
+        <div className="h-3.5 w-40 rounded bg-slate-800" />
+        {/* Title (text-2xl) */}
+        <div className="mt-1.5 h-8 w-2/3 max-w-md rounded bg-slate-800" />
+        {/* Description */}
+        <div className="mt-2 h-4 w-full max-w-2xl rounded bg-slate-800" />
+      </div>
+      <div className="grid grid-cols-1 gap-5 pb-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {Array.from({ length: 8 }, (_, i) => (
+          <LessonCardSkeleton key={i} />
+        ))}
+      </div>
+    </div>
   );
 }
 
