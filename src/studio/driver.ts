@@ -316,6 +316,15 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         },
       );
 
+      // Record a workspace snapshot of the freshly typed content. Typing is
+      // captured as editor-content frames (which rebuild Monaco on replay), but
+      // the workspace store the runner reads is restored only from workspace
+      // snapshots. Without this, replay leaves the store at the pre-typing
+      // (openFile) snapshot, so a Run after playback executes the initial
+      // program while the editor shows the final code. Timed at the type
+      // action's boundary, it can't disturb the mid-typing animation.
+      deps.notifyWorkspaceEvent();
+
       return { path, insertedChars: expected.length };
     },
 
