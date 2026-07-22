@@ -152,7 +152,7 @@ runtime:
   kind: rust-playground
   defaultMode: fixture
   fixture:
-    latencyMs: 2000
+    latencyMs: 600
     result:
       status: success
       stdout: "count: 3\nfirst: 90\ntotal: 240\n"
@@ -246,7 +246,7 @@ scenes:
     actions:
       - id: run
         type: runtime.run
-        at: { mark: run, offsetMs: 800 }
+        at: { mark: run, offsetMs: 200 }
         timeoutMs: 30000
       - id: expect-output
         type: expect.output

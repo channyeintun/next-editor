@@ -86,7 +86,7 @@ runtime:
   kind: rust-playground
   defaultMode: fixture
   fixture:
-    latencyMs: 2000
+    latencyMs: 600
     result:
       status: success
       stdout: "n starts at 7\n7 is odd\nsum to 7 is 28\nt-minus 3\nt-minus 2\nt-minus 1\nliftoff\n"
@@ -199,7 +199,7 @@ scenes:
     actions:
       - id: run
         type: runtime.run
-        at: { mark: run, offsetMs: 800 }
+        at: { mark: run, offsetMs: 200 }
         timeoutMs: 30000
       - id: expect-output
         type: expect.output
