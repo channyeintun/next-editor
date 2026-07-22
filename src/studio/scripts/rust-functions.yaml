@@ -144,7 +144,7 @@ scenes:
   - id: anatomy
     narration: >
       [[mark:board]] A function is a machine. [[mark:show-in]] Inputs go in —
-      two and three. [[mark:show-fn]] Inside, add computes a plus b.
+      two and three. [[mark:show-fn]] Inside, add computes A plus b.
       [[mark:show-out]] Out comes the result — five. That last expression, no
       semicolon, is the return value. [[mark:board-close]] Let's build one.
     sources:
@@ -177,7 +177,7 @@ scenes:
     narration: >
       [[mark:open]] main calls add — not written yet. [[mark:type-add]] Write
       it. Two parameters, both i32, returns an i32. The body is one expression,
-      a plus b, no semicolon. That sum is what add returns.
+      A plus b, no semicolon. That sum is what add returns.
     sources:
       - title: "The Rust Book — Function Parameters"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#parameters"
