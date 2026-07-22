@@ -384,7 +384,18 @@ export function compileLessonScript({
           };
       }
     }),
-  ].sort((left, right) => left.at - right.at);
+  ].sort((left, right) => {
+    if (left.at !== right.at) return left.at - right.at;
+    // Tie-break so a real action runs before a cursor tween scheduled at the
+    // same instant. A cursor move is always planned strictly before the action
+    // it announces (`at − lead − tween`), so any tie is with a *later* action's
+    // tween; letting that ~600ms tween go first would block the tied real
+    // action, since the Performer executes strictly sequentially (e.g. a
+    // type-cursor pinning openFile 599ms late when open and type are close).
+    const leftCursor = left.type === "cursor.moveTo" ? 1 : 0;
+    const rightCursor = right.type === "cursor.moveTo" ? 1 : 0;
+    return leftCursor - rightCursor;
+  });
 
   const timingCheck = script.checks.find((check) => check.type === "timing.p95Ms");
 

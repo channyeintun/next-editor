@@ -89,6 +89,18 @@ describe("compileLessonScript", () => {
     expect(ids.indexOf("cursor-open-square")).toBeLessThan(ids.indexOf("open-square"));
     expect(ids.indexOf("cursor-run")).toBeLessThan(ids.indexOf("run"));
     expect(warnings.length).toBeLessThanOrEqual(2);
+
+    // A cursor tween must never be ordered before a real action scheduled at
+    // the same instant: the serial Performer would let the ~600ms tween block
+    // it, drifting the real action off its planned mark.
+    const cursorBlocksSameInstantAction = plan.actions.some(
+      (action, i) =>
+        i > 0 &&
+        plan.actions[i - 1].at === action.at &&
+        plan.actions[i - 1].type === "cursor.moveTo" &&
+        action.type !== "cursor.moveTo",
+    );
+    expect(cursorBlocksSameInstantAction).toBe(false);
   });
 
   it("is deterministic — identical inputs produce identical plans", () => {
