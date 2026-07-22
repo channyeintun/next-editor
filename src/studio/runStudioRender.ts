@@ -106,6 +106,15 @@ export interface StudioRenderOptions {
    * synthesized these exact bytes for this plan.
    */
   narration?: { blob: Blob; bytes: Uint8Array };
+  /**
+   * Optional opt-in screen capture, pre-acquired in the "Start render" click
+   * handler (`getDisplayMedia` needs transient user activation). The recorder
+   * machine owns this stream: it mixes tab audio (the narration playing in the
+   * tab), records the performance to a standalone video, and delivers it via
+   * `onScreenRecordingReady` → `saveScreenRecordingLocally`. The video never
+   * enters the `Recording`, the `.ne` bundle, or any publish path.
+   */
+  screenStream?: MediaStream;
 }
 
 export async function runStudioRender(
@@ -124,7 +133,23 @@ export async function runStudioRender(
 
   let audioHash: string | null = null;
 
+  // Ownership of an opt-in screen-capture stream passes to the recorder machine
+  // at startRecording; until then, any early failure here must release it so the
+  // browser's capture indicator clears. After handoff the machine stops it.
+  let screenHandedOff = false;
+  const releaseUnusedScreenStream = () => {
+    if (screenHandedOff || !options.screenStream) return;
+    for (const track of options.screenStream.getTracks()) {
+      try {
+        track.stop();
+      } catch {
+        // Track may already have ended (user hit "Stop sharing"); ignore.
+      }
+    }
+  };
+
   const failedResult = async (message: string): Promise<StudioRunResult> => {
+    releaseUnusedScreenStream();
     errors.push(message);
     return {
       report: {
@@ -295,7 +320,10 @@ export async function runStudioRender(
 
   // ---- Start recording with the external narration -------------------------
   phase("start-recording");
-  deps.nextEditor.startRecording({ audioBlob });
+  // From here the recorder machine owns any screenStream (it stops the tracks on
+  // the recording-state exit that every finalize path — pass or fail — takes).
+  screenHandedOff = true;
+  deps.nextEditor.startRecording({ audioBlob, screenStream: options.screenStream });
   try {
     await waitUntil(
       () => {

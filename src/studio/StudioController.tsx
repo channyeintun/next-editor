@@ -15,6 +15,8 @@ import {
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import { usePreviewAdapterHandle } from "../contexts/PreviewAdapterHandleContext";
 import { markTourSeen } from "../components/tour/productTour";
+import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
+import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/displayCapture";
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
 import type { StudioPlan, StudioRuntimeMode } from "./plan";
@@ -206,6 +208,16 @@ export default function StudioController() {
   const runningRef = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Opt-in screen recording: capture the performance to a standalone local video
+  // (narration muxed in via tab audio) alongside the .ne bundle. Reuses the shared
+  // recording-settings toggle and the same capture path as the manual record button.
+  const { screenRecordingEnabled } = useRecordingSettings();
+  const recordingSettingsTrigger = useRecordingSettingsTrigger();
+  const [isScreenSupported, setIsScreenSupported] = useState(false);
+  useEffect(() => {
+    setIsScreenSupported(isScreenCaptureSupported());
+  }, []);
+
   // Voice cloning (pocket-tts): cloned voices live in this browser's
   // IndexedDB; the selection overrides the script's pinned profile at render.
   const [customVoices, setCustomVoices] = useState<SavedCustomVoice[]>([]);
@@ -371,6 +383,10 @@ export default function StudioController() {
     setComparison(null);
     publishWindowHandle(null, true);
 
+    // Hoisted so the catch can release the display stream if the render throws
+    // before the recorder machine takes ownership of it (e.g. plan build fails).
+    let acquiredScreenStream: MediaStream | undefined;
+
     try {
       const source = sources[planSlug];
       if (!source) {
@@ -384,6 +400,23 @@ export default function StudioController() {
       let plan: StudioPlan;
       const renderOptions: StudioRenderOptions = {};
       setBuildWarnings([]);
+
+      // Opt-in screen capture must be acquired here — the FIRST await in the
+      // click handler — while the Start-render click's transient user activation
+      // is still valid (getDisplayMedia consumes it, and the plan build below is
+      // slow). A dismissed picker or a non-gesture autostart run rejects here;
+      // that is non-fatal — the .ne bundle is the primary artifact, so render on
+      // without the video. The recorder machine owns the stream from here and
+      // saves the video via onScreenRecordingReady (saveScreenRecordingLocally).
+      if (screenRecordingEnabled && isScreenSupported) {
+        try {
+          acquiredScreenStream = await acquireDisplayStream(true);
+          renderOptions.screenStream = acquiredScreenStream;
+        } catch (error) {
+          console.warn("Studio screen capture not started; rendering without it:", error);
+        }
+      }
+
       if (source.kind === "script") {
         const clonedVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
         const built = await buildPlanFromScript(source.load(), {
@@ -478,6 +511,13 @@ export default function StudioController() {
       publishWindowHandle(nextComparison, false);
       setPhase(result.report.outcome === "passed" ? "done" : "failed");
     } catch (error) {
+      // A throw before startRecording (e.g. plan-build failure) means the
+      // recorder never took the display stream — release it so the browser's
+      // capture indicator clears. After handoff the machine owns and stops it;
+      // stopping already-ended tracks here is a harmless no-op.
+      for (const track of acquiredScreenStream?.getTracks() ?? []) {
+        track.stop();
+      }
       setFatal(error instanceof Error ? error.message : String(error));
       setPhase("failed");
       publishWindowHandle(null, false);
@@ -696,6 +736,31 @@ export default function StudioController() {
           Recording… speak naturally; stops automatically at 20s.
         </p>
       ) : null}
+
+      <label
+        className={`mt-2 flex items-center gap-2 text-[12px] ${
+          isScreenSupported ? "text-slate-300" : "text-slate-500"
+        }`}
+        title={
+          isScreenSupported
+            ? "Also capture this render as a screen recording — a video downloaded alongside the bundle (narration included, never uploaded). You'll pick a screen or tab when the render starts."
+            : "Screen recording needs a desktop browser with screen capture (getDisplayMedia)."
+        }
+      >
+        <input
+          type="checkbox"
+          checked={screenRecordingEnabled && isScreenSupported}
+          disabled={running || !isScreenSupported}
+          onChange={(event) =>
+            recordingSettingsTrigger.setScreenRecordingEnabled({ enabled: event.target.checked })
+          }
+          className="size-3.5 accent-sky-500 disabled:opacity-50"
+        />
+        Screen recording
+        <span className="text-slate-500">
+          {isScreenSupported ? "— saved locally as video" : "— unavailable on this browser"}
+        </span>
+      </label>
 
       <p className="mt-1 text-slate-400">
         runtime <span className="font-mono text-slate-300">{effectiveModeLabel}</span>

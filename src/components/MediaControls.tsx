@@ -36,7 +36,7 @@ import {
 import { useCaptionStore, useCaptionStoreTrigger } from "../hooks/useCaptionStore";
 import { usePlaybackSettings, usePlaybackSettingsTrigger } from "../hooks/usePlaybackSettings";
 import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
-import { isMobileBrowser } from "../utils/isMobileBrowser";
+import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/displayCapture";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import {
   isVoiceJoinedState,
@@ -73,58 +73,6 @@ const formatTime = (milliseconds: number): string => {
 const readCameraOverlayVisibility = (): boolean => {
   if (typeof window === "undefined") return true;
   return window.localStorage.getItem(CAMERA_OVERLAY_VISIBILITY_KEY) !== "false";
-};
-
-/**
- * Whether opt-in screen recording can be offered. `getDisplayMedia` is desktop-only (absent on
- * mobile browsers and inside iframes without the `display-capture` permission), and we also gate
- * out mobile explicitly given the landing-demo embed / OOM constraints.
- */
-const isScreenCaptureSupported = (): boolean =>
-  typeof navigator !== "undefined" &&
-  typeof navigator.mediaDevices?.getDisplayMedia === "function" &&
-  !isMobileBrowser();
-
-/**
- * Acquire the display capture stream. MUST be called as the first `await` inside the record-button
- * click handler: `getDisplayMedia` consumes transient user activation, which expires ~5s and would
- * be gone if we waited until the recording machine reached its `recording` state.
- *
- * The extra members below are Chromium-only hints (other browsers ignore unknown options), so they
- * are passed unconditionally via a widened options object.
- */
-const acquireDisplayStream = async (captureTabAudio: boolean): Promise<MediaStream> => {
-  const displayOptions = {
-    // Native surface size — downscaling screen text destroys readability; let bitrate do the work.
-    video: { frameRate: { ideal: 30, max: 30 } },
-    // When sharing a tab, Chromium offers "Also share tab audio", which captures app-emitted sound
-    // (runtime preview, external-audio narration). Firefox/Safari return no audio track — handled.
-    // While voice chat is joined, tab audio is never requested: remote
-    // collaborators' voice plays in this tab and must not be recorded.
-    audio: captureTabAudio,
-    preferCurrentTab: true,
-    selfBrowserSurface: "include",
-    surfaceSwitching: "include",
-    systemAudio: "exclude",
-  };
-
-  // Keep focus on this tab at share start (Chromium 109+); feature-detected and non-fatal.
-  const CaptureControllerCtor = (
-    window as Window & {
-      CaptureController?: new () => { setFocusBehavior?: (behavior: string) => void };
-    }
-  ).CaptureController;
-  if (CaptureControllerCtor) {
-    try {
-      const controller = new CaptureControllerCtor();
-      controller.setFocusBehavior?.("no-focus-change");
-      (displayOptions as Record<string, unknown>).controller = controller;
-    } catch {
-      // Older/partial implementations — proceed without the controller.
-    }
-  }
-
-  return navigator.mediaDevices.getDisplayMedia(displayOptions as DisplayMediaStreamOptions);
 };
 
 const PlaybackProgress = ({

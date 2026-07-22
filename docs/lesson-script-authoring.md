@@ -53,6 +53,15 @@ the cloned voice narrates the next render with it. Scripts keep pinning
 built-in profiles in `build.voiceProfile` — cloning is a render-time choice,
 and a draft rendered with a cloned voice says so in its description.
 
+The render console also offers an opt-in **Screen recording** toggle
+(desktop browsers only). When enabled, pressing **Start render** first prompts
+for a screen or tab to share, then captures the whole performance — narration
+included — to a standalone video that downloads to the local machine when the
+render finishes. This is purely a render-time capture choice: the video never
+enters the `.ne` bundle, the recording, QA gates, or any upload path (it is a
+sibling artifact for reviewing or sharing the run), so scripts need no field
+for it. Dismissing the share picker simply renders without the video.
+
 **Agents working in this repo**:
 
 ```text
