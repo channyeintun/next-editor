@@ -219,6 +219,18 @@ Critical `editor.type` discipline:
 - The drag counts as busy time like typing, so a long span can push narration.
   Keep selections short; pair every one with narration that names what is
   highlighted.
+- It performs as a hand, not a flash — modelled on a real recording of a person
+  selecting code. A button-held pointer sweeps from the first character to the
+  last, and the highlight is whatever sits under it, so it **grows with the
+  pointer** (it never snaps to full width): on one line it grows character by
+  character, and across lines it grows **line by line** as the pointer crosses
+  each line — never a per-character crawl down a block. If the range is
+  off-screen the editor first scrolls it into view smoothly, so a select can
+  point at code anywhere in the file. You author none of this — just the target.
+- After the sweep the selection **rests**, highlighted, for as long as the
+  narration keeps talking about it; the next `editor.select` or `editor.type`
+  moves it. Time the `at` mark so the highlight lands just as the words name the
+  code, then let it sit — don't chase every clause with a new select.
 
 ### The fixture must be the truth
 

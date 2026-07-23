@@ -25,7 +25,11 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      (tabs `\t`, newlines `\n`; use double-quoted YAML strings).
    - Insert-only edits; open a file before typing into it.
    - To explain code already on screen, `editor.select` drag-highlights a range
-     (`target.text`, matched byte-for-byte like `after`) — it never edits.
+     (`target.text`, matched byte-for-byte like `after`) — it never edits. The
+     highlight grows with the pointer (character by character on one line, line
+     by line across several) then rests, scrolling off-screen code into view
+     first; you author only the target, and time the `at` mark so the highlight
+     lands as the narration names the code, then let it sit.
    - `fixture.result.output` = the real program's exact stdout.
    - Every scene needs a `sources` entry; keep sentences short.
    - Always include `checks: [{ type: timing.p95Ms, max: 300 }]`.

@@ -75,13 +75,16 @@ const CADENCES = {
 
 /** How long before an action its announcing cursor move should arrive. */
 const CURSOR_ARRIVE_LEAD_MS = 200;
-/** Drag-select glide timing: a base grab plus per-character travel, seed-jittered. */
-const SELECT_DRAG_BASE_MS = 320;
-const SELECT_DRAG_PER_CHAR_MS = 9;
+// Drag-select timing: a base grab plus per-character travel, seed-jittered. The
+// driver spends this whole budget sweeping a button-held pointer across the
+// span, so it is tuned to the reference human recording (human-interactions.ne),
+// whose drag-selects ran ~333–1116ms (median ~750ms).
+const SELECT_DRAG_BASE_MS = 460;
+const SELECT_DRAG_PER_CHAR_MS = 11;
 /** Only the first ~80 chars of the span add travel time — long blocks don't crawl. */
 const SELECT_DRAG_CHAR_CAP = 80;
-const SELECT_DRAG_JITTER_MS = 160;
-const SELECT_DRAG_MAX_MS = 1_100;
+const SELECT_DRAG_JITTER_MS = 200;
+const SELECT_DRAG_MAX_MS = 1_200;
 const CURSOR_TWEEN_BASE_MS = 500;
 const CURSOR_TWEEN_JITTER_MS = 200;
 const CURSOR_TWEEN_MIN_MS = 250;
@@ -92,9 +95,12 @@ function cursorTargetForAction(action: ScriptAction, script: LessonScript): Stud
   switch (action.type) {
     case "workspace.openFile":
       return { kind: "file", path: action.path };
-    case "editor.type":
-    case "editor.select":
-      return { kind: "editor" };
+    // No attention cursor for editor edits. A select performs its own pointer
+    // drag across the range, and typing is a keyboard action — a standalone
+    // glide to the middle of the editor before either one reads as random mouse
+    // movement, so the cursor stays put until the select's own drag moves it.
+    // openFile (the file row) and runtime.run (the run control) still get a
+    // move: those point at a real click target.
     case "runtime.run":
       // Schema validation guarantees run actions only exist for playground kinds.
       return script.runtime.kind === "go-playground" ||

@@ -34,7 +34,11 @@ Read, entirely and in order, before writing:
      strings). Insert-only; open a file before typing into it.
    - To explain code already on screen, `editor.select` drag-highlights a
      range (`target.text`, matched byte-for-byte like `after`) — it never
-     edits; open the file first.
+     edits; open the file first. The highlight grows with the pointer (character
+     by character on one line, line by line across several) then rests,
+     scrolling off-screen code into view first; you author only the target, and
+     time the `at` mark so the highlight lands as the narration names the code,
+     then let it sit.
    - End insertions that sit in front of existing code with `\n` — the
      performer presses Enter first so existing code moves down naturally.
    - The fixture's program output must be exactly what the real program

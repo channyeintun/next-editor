@@ -73,6 +73,12 @@ plain words — if a phrase would need a dictionary or is an idiom, rewrite it:
   already on screen, `editor.select` drag-highlights those lines so the eye lands
   where the words do. Highlight the token the concept hinges on, and say what is
   highlighted — never "this line here" with nothing marked.
+- Let the pointer move like a hand: a drag-select sweeps across the code and the
+  highlight grows with it — character by character on one line, line by line
+  across several — then **rests** while you keep talking about it, modelled on a
+  real person's recorded pointer and selection. Time the highlight to land as the
+  words name the code, and give it a beat to sit before moving on; don't
+  re-select on every clause.
 - No fake mistakes unless the lesson explicitly teaches debugging.
 - Every runnable checkpoint must actually run; expected output is asserted, not
   narrated on faith (`expect.output`).

@@ -1,7 +1,11 @@
 # Go errors are values: read the two-value signature, point at the odd-number
 # guard and the nil happy path with drag-select, then type the idiomatic
 # `if err != nil` check and run it. The lesson never edits the pinned helper —
-# it highlights the code that is already there. Validate with:
+# it highlights the code that is already there. Each select drags like a hand —
+# the highlight grows with the pointer (the multi-line guard block grows line by
+# line, not character by character) and then rests while the narration explains
+# it — so the marks are timed to land the highlight as the words name the code
+# and give it a beat to sit. Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/go-error-values.yaml
 schemaVersion: 1
 

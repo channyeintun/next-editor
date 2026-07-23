@@ -8,6 +8,7 @@ import {
   compileTypingChunks,
   createSeededRandom,
   easeInOutCubic,
+  easeOutCubic,
   totalTypingDurationMs,
 } from "./cadence";
 
@@ -163,5 +164,25 @@ describe("easeInOutCubic", () => {
     expect(easeInOutCubic(0.5)).toBeCloseTo(0.5);
     expect(easeInOutCubic(1)).toBe(1);
     expect(easeInOutCubic(2)).toBe(1);
+  });
+});
+
+describe("easeOutCubic", () => {
+  it("clamps and hits its endpoints", () => {
+    expect(easeOutCubic(-1)).toBe(0);
+    expect(easeOutCubic(0)).toBe(0);
+    expect(easeOutCubic(1)).toBe(1);
+    expect(easeOutCubic(2)).toBe(1);
+  });
+
+  it("front-loads progress — most of the distance is covered early (careful landing)", () => {
+    // Ease-out: past the halfway distance well before halfway time, then crawls
+    // to the target. This is the drag-select "fling then settle" from the
+    // reference recording.
+    expect(easeOutCubic(0.25)).toBeGreaterThan(0.5);
+    expect(easeOutCubic(0.5)).toBeGreaterThan(0.8);
+    // Monotonic, and always ahead of the symmetric ease across the first half.
+    expect(easeOutCubic(0.25)).toBeGreaterThan(easeInOutCubic(0.25));
+    expect(easeOutCubic(0.4)).toBeGreaterThan(easeOutCubic(0.3));
   });
 });

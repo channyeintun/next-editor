@@ -249,8 +249,22 @@ export function totalTypingDurationMs(chunks: readonly TypingChunk[]): number {
   return chunks.reduce((total, chunk) => total + chunk.delayMs, 0);
 }
 
-/** Standard ease-in-out cubic used for cursor tweens. */
+/** Standard ease-in-out cubic used for a free cursor tween that starts at rest. */
 export function easeInOutCubic(t: number): number {
   const clamped = Math.min(1, Math.max(0, t));
   return clamped < 0.5 ? 4 * clamped * clamped * clamped : 1 - (-2 * clamped + 2) ** 3 / 2;
+}
+
+/**
+ * Ease-out cubic — velocity is highest at the start and decays to a near-stop.
+ * This is the profile the reference human recording (human-interactions.ne)
+ * shows for a *drag-select*: the hand flings across the span, then decelerates
+ * to land precisely on the last character. Averaged over the recording's drags
+ * the normalized velocity ran ~0.91 → 0.17 across the gesture (a monotonic
+ * decay), which cubic ease-out matches far better than the symmetric
+ * slow-fast-slow of {@link easeInOutCubic}.
+ */
+export function easeOutCubic(t: number): number {
+  const clamped = Math.min(1, Math.max(0, t));
+  return 1 - (1 - clamped) ** 3;
 }

@@ -175,6 +175,25 @@ describe("cursorReplay", () => {
     });
   });
 
+  it("holds across a long idle gap instead of drifting between gestures", () => {
+    const recording = createRecording([
+      createFrame(0, { x: 10, y: 10, visible: true }),
+      createFrame(9000, { x: 400, y: 300, visible: true }),
+    ]);
+    recording.cursorEvents = [
+      { timestamp: 0, x: 10, y: 10, visible: true },
+      { timestamp: 9000, x: 400, y: 300, visible: true },
+    ];
+    const samples = getCursorReplaySamples(recording);
+
+    // Two selections separated by seconds of narration: the cursor is parked
+    // between them, so it must not slide slowly across the editor. It holds at
+    // the first position for the whole gap…
+    expect(getCursorPositionAtTime(samples, 4500)?.cursor).toMatchObject({ x: 10, y: 10 });
+    // …and snaps to the next gesture only when that gesture begins.
+    expect(getCursorPositionAtTime(samples, 9000)?.cursor).toMatchObject({ x: 400, y: 300 });
+  });
+
   it("derives interpolated samples from frame-only recordings", () => {
     const recording = createRecording([
       createFrame(0, { x: 0, y: 0, visible: true }),

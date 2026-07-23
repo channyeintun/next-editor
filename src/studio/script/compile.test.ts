@@ -121,7 +121,7 @@ function selectScript(): LessonScript {
 }
 
 describe("compileLessonScript", () => {
-  it("materializes an editor.select drag with an announcing cursor move", () => {
+  it("materializes an editor.select drag and adds no cursor move to the editor", () => {
     const { plan } = compileLessonScript(scheduledInputFor(selectScript()));
 
     const select = plan.actions.find((action) => action.id === "point");
@@ -130,12 +130,14 @@ describe("compileLessonScript", () => {
     expect(select.selection).toEqual({ text: 'println("hi")', occurrence: 1 });
     expect(select.durationMs).toBeGreaterThan(0);
 
-    // The attention cursor glides to the editor before the highlight, like typing.
-    const ids = plan.actions.map((action) => action.id);
-    expect(ids.indexOf("cursor-point")).toBeLessThan(ids.indexOf("point"));
-    const cursor = plan.actions.find((action) => action.id === "cursor-point");
-    if (cursor?.type !== "cursor.moveTo") throw new Error("no announcing cursor for the select");
-    expect(cursor.target).toEqual({ kind: "editor" });
+    // The select performs its own pointer drag, so no standalone attention
+    // cursor glides to the middle of the editor before it (that drift read as
+    // random mouse movement). openFile/run cursors still target real click
+    // points; only the editor target is gone.
+    const editorCursor = plan.actions.some(
+      (action) => action.type === "cursor.moveTo" && action.target.kind === "editor",
+    );
+    expect(editorCursor).toBe(false);
   });
 
   it("compiles the checked-in pilot script into a valid plan", () => {

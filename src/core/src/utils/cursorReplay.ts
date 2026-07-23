@@ -13,6 +13,16 @@ import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
 
 export type CursorReplaySample = CursorRecordingEvent;
 
+// Longer than any real cursor glide: pointer motion is sampled every ~16–50ms,
+// so even a slow, deliberate move has dense samples. A gap beyond this with no
+// samples between two *different* positions therefore means the cursor was
+// parked between gestures, not gliding — hold it there instead of tweening a
+// slow drift across the gap it never made. (Recorded holds dedup to a single
+// sample, so a long same-position gap tweens to itself and is unaffected; this
+// only changes synthetic tracks like the studio's, which record the end of one
+// gesture and the start of the next far apart.)
+const IDLE_HOLD_THRESHOLD_MS = 1000;
+
 export interface CursorReplayPositionResult {
   cursor: MouseCursorPosition;
   index: number;
@@ -170,6 +180,20 @@ export const getCursorPositionAtTime = (
 
   const duration = next.timestamp - previous.timestamp;
   if (duration <= 0) {
+    return {
+      cursor: {
+        ...copyCursorPosition(previous),
+      },
+      index,
+    };
+  }
+
+  // Across a long idle gap the cursor was parked between gestures — hold it at
+  // `previous` rather than inventing a slow drift to `next` (the fake cursor
+  // sliding across the editor from one selection to the next during seconds of
+  // narration). The index advances at `next.timestamp`, so it snaps there
+  // exactly when the next gesture begins.
+  if (duration > IDLE_HOLD_THRESHOLD_MS) {
     return {
       cursor: {
         ...copyCursorPosition(previous),

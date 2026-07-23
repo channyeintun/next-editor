@@ -22,7 +22,7 @@ import type {
   StudioPreviewCommandResult,
 } from "../utils/iframeStudioCommandBridge";
 import { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil } from "./async";
-import { chunkPlacements, easeInOutCubic } from "./cadence";
+import { chunkPlacements, easeInOutCubic, easeOutCubic } from "./cadence";
 import {
   PlaygroundTerminalError,
   preparePlaygroundRun,
@@ -141,7 +141,12 @@ function throwIfAborted(signal: AbortSignal): void {
   }
 }
 
-const CURSOR_STEP_MS = 32;
+// One synthetic pointer sample per ~16ms (≈60fps). The reference human
+// recording (human-interactions.ne) samples the cursor at a 16–17ms median
+// during active motion; the lightweight cursor-events track is captured at
+// full rate (only full editor frames are throttled), so stepping this fine is
+// what makes the recorded motion read as a hand rather than a 30fps slideshow.
+const CURSOR_STEP_MS = 16;
 
 function previewCommandTarget(target: StudioPreviewTarget | undefined) {
   return target ? { testId: target.value } : undefined;
@@ -221,6 +226,57 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       }),
     );
     lastCursorPoint = { x, y };
+  };
+
+  // Whether a range sits outside the comfortable viewport band and, if so, the
+  // scrollTop that would center it. `needed: false` when it is already visible,
+  // so the caller spends no time scrolling.
+  const scrollGapForRange = (
+    editor: monaco.editor.IStandaloneCodeEditor,
+    range: monaco.Range,
+  ): { needed: boolean; target: number } => {
+    const lineHeight = editor.getOption(monaco.editor.EditorOption.lineHeight);
+    const viewH = editor.getLayoutInfo().height;
+    const top = editor.getTopForPosition(range.startLineNumber, range.startColumn);
+    const bottom = editor.getTopForPosition(range.endLineNumber, range.endColumn) + lineHeight;
+    const current = editor.getScrollTop();
+    const margin = Math.min(lineHeight * 2, viewH / 4);
+    const visible = top >= current + margin && bottom <= current + viewH - margin;
+    if (visible) return { needed: false, target: current };
+    // Center the range; clamp into the scrollable area.
+    const maxTop = Math.max(0, editor.getScrollHeight() - viewH);
+    const centered = top - Math.max(margin, (viewH - (bottom - top)) / 2);
+    return { needed: true, target: Math.max(0, Math.min(maxTop, centered)) };
+  };
+
+  // Scroll to `targetTop` with an eased, synchronously-stepped animation and
+  // resolve only once it has settled, so the caller can read final layout
+  // coordinates. setScrollTop (not Monaco's async ScrollType.Smooth) keeps the
+  // motion captured frame-by-frame and deterministic. Matches the recording,
+  // where scrolling only happened to reach off-screen code and moved smoothly,
+  // roughly a line per 16–50ms — never an instant jump.
+  const smoothScrollTo = async (
+    editor: monaco.editor.IStandaloneCodeEditor,
+    targetTop: number,
+    durationMs: number,
+  ): Promise<void> => {
+    const fromTop = editor.getScrollTop();
+    if (Math.abs(targetTop - fromTop) < 1 || durationMs <= 0) {
+      editor.setScrollTop(targetTop, monaco.editor.ScrollType.Immediate);
+      return;
+    }
+    const started = performance.now();
+    for (;;) {
+      throwIfAborted(signal);
+      const progress = Math.min(1, (performance.now() - started) / durationMs);
+      const eased = easeInOutCubic(progress);
+      editor.setScrollTop(
+        Math.round(fromTop + (targetTop - fromTop) * eased),
+        monaco.editor.ScrollType.Immediate,
+      );
+      if (progress >= 1) break;
+      await abortableSleep(CURSOR_STEP_MS, signal);
+    }
   };
 
   return {
@@ -392,7 +448,8 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         );
       }
 
-      const startPosition = model.getPositionAt(endOffset - selection.text.length);
+      const startOffset = endOffset - selection.text.length;
+      const startPosition = model.getPositionAt(startOffset);
       const endPosition = model.getPositionAt(endOffset);
       const range = new monaco.Range(
         startPosition.lineNumber,
@@ -402,19 +459,38 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       );
 
       editor.focus();
-      // Authoritative highlight: the recorder captures the model selection
-      // (EditorFrame.state.selection via onDidChangeCursorSelection), so the
-      // range replays as highlighted text no matter how the synthetic pointer
-      // drag is interpreted. We dispatch no pointerdown, so Monaco never starts
-      // a competing selection of its own.
-      editor.setSelection(range);
-      editor.revealRangeInCenterIfOutsideViewport(range, monaco.editor.ScrollType.Immediate);
+      // Start the highlight collapsed at the drag's anchor. The selection then
+      // grows only as the pointer moves. The recorder captures the model
+      // selection (EditorFrame.state.selection via onDidChangeCursorSelection),
+      // so every step replays as highlighted text. We dispatch no pointerdown,
+      // so Monaco never starts a competing selection of its own; our
+      // setSelection stays the sole authority.
+      editor.setSelection(
+        new monaco.Selection(
+          startPosition.lineNumber,
+          startPosition.column,
+          startPosition.lineNumber,
+          startPosition.column,
+        ),
+      );
 
-      // Glide a button-held pointer across the range so the recorded cursor
-      // reads as a drag-select. Endpoints come from Monaco's own layout, so the
-      // motion tracks the real characters even after the reveal scroll.
+      // Scroll the range into view first when it is off-screen (a no-op, 0ms,
+      // when already visible — the common case in a small file). The remainder
+      // of the budget is the drag, so the select's total wall-clock still equals
+      // `durationMs` (the Performer budgets a select by exactly this when
+      // checking for overlap). No pointer motion is injected before the drag —
+      // the gesture is only the drag itself.
       const node = editor.getDomNode();
       const nodeRect = node?.getBoundingClientRect() ?? null;
+
+      const gap = scrollGapForRange(editor, range);
+      const scrollMs = gap.needed ? Math.min(Math.round(durationMs * 0.4), 500) : 0;
+      if (scrollMs > 0) {
+        await smoothScrollTo(editor, gap.target, scrollMs);
+      }
+
+      // Endpoints come from Monaco's own layout, read *after* any scroll settles
+      // so the motion tracks the real characters.
       const startVisible = editor.getScrolledVisiblePosition(startPosition);
       const endVisible = editor.getScrolledVisiblePosition(endPosition);
       let dragged = false;
@@ -427,17 +503,41 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
           x: nodeRect.left + endVisible.left,
           y: nodeRect.top + endVisible.top + endVisible.height / 2,
         };
-        const started = performance.now();
+        const dragMs = Math.max(1, durationMs - scrollMs);
+
+        // The drag *is* the selection: a button-held pointer sweeps straight
+        // from the first character to the last on an ease-out curve (fast start,
+        // careful landing — the recording's drag profile), and the selection
+        // extends to whatever character sits under the pointer at each step
+        // (`getTargetAtClientPoint`). Selection and mouse are one motion — the
+        // single behaviour a hand performs — so both cases come out right for
+        // free: on one line the highlight grows character by character; across
+        // lines it grows line by line, jumping a whole line as the pointer
+        // crosses each line's vertical band. It is never a synthetic
+        // per-character crawl down a multi-line block.
+        let activePosition: monaco.IPosition = startPosition;
+        const startedDrag = performance.now();
         for (;;) {
           throwIfAborted(signal);
-          const elapsed = performance.now() - started;
-          const progress = Math.min(1, elapsed / durationMs);
-          const eased = easeInOutCubic(progress);
-          dispatchCursorPoint(
-            Math.round(from.x + (to.x - from.x) * eased),
-            Math.round(from.y + (to.y - from.y) * eased),
-            node,
-            1,
+          const progress = Math.min(1, (performance.now() - startedDrag) / dragMs);
+          const eased = easeOutCubic(progress);
+          const px = Math.round(from.x + (to.x - from.x) * eased);
+          const py = Math.round(from.y + (to.y - from.y) * eased);
+          dispatchCursorPoint(px, py, node, 1);
+          // The selection end is the character under the pointer. Keep the last
+          // good hit if a point momentarily maps to no text (gutter/overscroll);
+          // the final re-assert below guarantees the exact range regardless.
+          const hit = editor.getTargetAtClientPoint(px, py)?.position;
+          if (hit) {
+            activePosition = hit;
+          }
+          editor.setSelection(
+            new monaco.Selection(
+              startPosition.lineNumber,
+              startPosition.column,
+              activePosition.lineNumber,
+              activePosition.column,
+            ),
           );
           if (progress >= 1) {
             break;
@@ -447,6 +547,9 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
           await abortableSleep(CURSOR_STEP_MS, signal);
         }
         // Release at the range end so the recorded button state returns to idle.
+        // The selection then simply holds here while the narration continues —
+        // the recording shows a drag settling and the highlight resting, not the
+        // selection vanishing the instant it is made.
         dispatchCursorPoint(Math.round(to.x), Math.round(to.y), node, 0);
         dragged = true;
       }
