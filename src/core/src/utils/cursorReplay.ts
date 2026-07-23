@@ -15,13 +15,25 @@ export type CursorReplaySample = CursorRecordingEvent;
 
 // Longer than any real cursor glide: pointer motion is sampled every ~16–50ms,
 // so even a slow, deliberate move has dense samples. A gap beyond this with no
-// samples between two *different* positions therefore means the cursor was
-// parked between gestures, not gliding — hold it there instead of tweening a
-// slow drift across the gap it never made. (Recorded holds dedup to a single
+// samples between two *different* positions means the cursor was parked between
+// gestures, not gliding across the whole gap. (Recorded holds dedup to a single
 // sample, so a long same-position gap tweens to itself and is unaffected; this
 // only changes synthetic tracks like the studio's, which record the end of one
 // gesture and the start of the next far apart.)
 const IDLE_HOLD_THRESHOLD_MS = 1000;
+
+// Across such a gap the cursor holds at the previous position, then glides to
+// the next over this final window so it arrives from where it was exactly as the
+// next gesture begins — a real transition, never a slow drift across the whole
+// gap nor a jump out of nowhere.
+const IDLE_TRANSITION_MS = 500;
+
+// From-rest reposition easing: accelerate off the parked spot, settle onto the
+// target. Local to keep core independent of the studio's cadence helpers.
+const easeInOutReposition = (t: number): number => {
+  const c = Math.min(1, Math.max(0, t));
+  return c < 0.5 ? 4 * c * c * c : 1 - (-2 * c + 2) ** 3 / 2;
+};
 
 export interface CursorReplayPositionResult {
   cursor: MouseCursorPosition;
@@ -188,21 +200,16 @@ export const getCursorPositionAtTime = (
     };
   }
 
-  // Across a long idle gap the cursor was parked between gestures — hold it at
-  // `previous` rather than inventing a slow drift to `next` (the fake cursor
-  // sliding across the editor from one selection to the next during seconds of
-  // narration). The index advances at `next.timestamp`, so it snaps there
-  // exactly when the next gesture begins.
-  if (duration > IDLE_HOLD_THRESHOLD_MS) {
-    return {
-      cursor: {
-        ...copyCursorPosition(previous),
-      },
-      index,
-    };
-  }
-
-  const progress = Math.min(1, Math.max(0, (time - previous.timestamp) / duration));
+  // Across a long idle gap the cursor was parked between gestures: hold at
+  // `previous` through the idle, then glide to `next` only over the final
+  // IDLE_TRANSITION_MS, so it arrives from where it was exactly as the next
+  // gesture begins — not a slow drift across the whole gap, and not a jump. The
+  // gradual target keeps the on-screen cursor easing smoothly (Cursor.tsx snaps
+  // only on large per-frame jumps). Shorter gaps interpolate across their span.
+  const progress =
+    duration > IDLE_HOLD_THRESHOLD_MS
+      ? easeInOutReposition((time - (next.timestamp - IDLE_TRANSITION_MS)) / IDLE_TRANSITION_MS)
+      : Math.min(1, Math.max(0, (time - previous.timestamp) / duration));
 
   return {
     cursor: {

@@ -175,7 +175,7 @@ describe("cursorReplay", () => {
     });
   });
 
-  it("holds across a long idle gap instead of drifting between gestures", () => {
+  it("holds across a long idle gap then glides to the next position", () => {
     const recording = createRecording([
       createFrame(0, { x: 10, y: 10, visible: true }),
       createFrame(9000, { x: 400, y: 300, visible: true }),
@@ -186,11 +186,18 @@ describe("cursorReplay", () => {
     ];
     const samples = getCursorReplaySamples(recording);
 
-    // Two selections separated by seconds of narration: the cursor is parked
-    // between them, so it must not slide slowly across the editor. It holds at
-    // the first position for the whole gap…
+    // Two selections separated by seconds of narration: the cursor parks at the
+    // first position through the idle (no slow drift across the editor)…
     expect(getCursorPositionAtTime(samples, 4500)?.cursor).toMatchObject({ x: 10, y: 10 });
-    // …and snaps to the next gesture only when that gesture begins.
+    expect(getCursorPositionAtTime(samples, 8500)?.cursor).toMatchObject({ x: 10, y: 10 });
+    // …then transitions from where it was toward the next position (a real
+    // move, not a jump out of nowhere)…
+    const mid = getCursorPositionAtTime(samples, 8750)?.cursor;
+    expect(mid!.x).toBeGreaterThan(10);
+    expect(mid!.x).toBeLessThan(400);
+    expect(mid!.y).toBeGreaterThan(10);
+    expect(mid!.y).toBeLessThan(300);
+    // …arriving exactly as that gesture begins.
     expect(getCursorPositionAtTime(samples, 9000)?.cursor).toMatchObject({ x: 400, y: 300 });
   });
 
