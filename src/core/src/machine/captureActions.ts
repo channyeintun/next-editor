@@ -994,12 +994,14 @@ export const setScreenStream = ({
           actorId: `${SCREEN_RECORDER_ID_PREFIX}${screenRecorderGeneration}`,
           isRecording: false,
           mimeType: "",
+          hasAudio: false,
           startOffsetMs: 0,
         }
       : {
           actorId: null,
           isRecording: false,
           mimeType: "",
+          hasAudio: false,
           startOffsetMs: 0,
         },
   };
@@ -1023,6 +1025,7 @@ export const storeScreenStarted = ({
     screen: {
       ...context.screen,
       mimeType: event.mimeType,
+      hasAudio: event.hasAudio,
       startOffsetMs,
     },
   };
@@ -1039,6 +1042,7 @@ export const notifyScreenRecordingReady = ({
   context.onScreenRecordingReady?.({
     blob: event.blob,
     mimeType: event.mimeType || event.blob.type,
+    hasAudio: event.hasAudio,
     startOffsetMs: normalizeNonNegativeTime(event.startOffsetMs),
   });
 };
@@ -1049,6 +1053,7 @@ export const clearScreenRecording = (): Partial<EditorMachineContext> => ({
     actorId: null,
     isRecording: false,
     mimeType: "",
+    hasAudio: false,
     startOffsetMs: 0,
   },
   screenStream: null,
@@ -1067,6 +1072,7 @@ export const handleScreenError = ({
       actorId: null,
       isRecording: false,
       mimeType: "",
+      hasAudio: false,
       startOffsetMs: 0,
     },
     screenStream: null,
@@ -1092,6 +1098,7 @@ export const releaseScreenStream = ({
       actorId: null,
       isRecording: false,
       mimeType: "",
+      hasAudio: false,
       startOffsetMs: 0,
     },
   };

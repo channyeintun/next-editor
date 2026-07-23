@@ -55,12 +55,16 @@ and a draft rendered with a cloned voice says so in its description.
 
 The render console also offers an opt-in **Screen recording** toggle
 (desktop browsers only). When enabled, pressing **Start render** first prompts
-for a screen or tab to share, then captures the whole performance — narration
-included — to a standalone video that downloads to the local machine when the
-render finishes. This is purely a render-time capture choice: the video never
-enters the `.ne` bundle, the recording, QA gates, or any upload path (it is a
-sibling artifact for reviewing or sharing the run), so scripts need no field
-for it. Dismissing the share picker simply renders without the video.
+for a screen or tab to share, then captures the whole performance to a
+standalone video that downloads to the local machine when the render finishes.
+The narration is included **only** when you share a browser **tab** with "share
+tab audio" enabled — Studio plays the narration into the tab, which the browser
+can capture only as tab audio. Sharing a screen or window, or leaving tab audio
+off, records a **silent** video (saved with a `-silent` suffix). This is purely
+a render-time capture choice: the video never enters the `.ne` bundle, the
+recording, QA gates, or any upload path (it is a sibling artifact for reviewing
+or sharing the run), so scripts need no field for it. Dismissing the share
+picker simply renders without the video.
 
 **Agents working in this repo**:
 
@@ -133,13 +137,13 @@ users; the WebContainer runs any pinned JS/TS workspace). The `runtime` block
 is **required for every script**, and its kind is fixed by the lesson type —
 the schema rejects an omitted block or a mismatch:
 
-| `lessonType`               | required `runtime.kind` | execution actions                                                        |
-| -------------------------- | ----------------------- | ------------------------------------------------------------------------ |
-| `go`                       | `go-playground`         | `runtime.run`, `expect.output`                                           |
-| `kotlin`                   | `kotlin-playground`     | `runtime.run`, `expect.output`                                           |
-| `rust`                     | `rust-playground`       | `runtime.run`, `expect.output`                                           |
-| `javascript`, `typescript` | `webcontainer`          | `runtime.start`, `runtime.waitForReady`, `preview.*`, `expect.preview`   |
-| `python`                   | `none`                  | edit/slides/whiteboard plus `expect.file`; no runtime or preview actions |
+| `lessonType`               | required `runtime.kind` | execution actions                                                      |
+| -------------------------- | ----------------------- | ---------------------------------------------------------------------- |
+| `go`                       | `go-playground`         | `runtime.run`, `expect.output`                                         |
+| `kotlin`                   | `kotlin-playground`     | `runtime.run`, `expect.output`                                         |
+| `rust`                     | `rust-playground`       | `runtime.run`, `expect.output`                                         |
+| `javascript`, `typescript` | `webcontainer`          | `runtime.start`, `runtime.waitForReady`, `preview.*`, `expect.preview` |
+| `python`                   | `webcontainer`          | `runtime.start`, `expect.output` (WASI `python3`; console, no preview) |
 
 A `javascript` (Node.js) or `typescript` lesson pins whatever WebContainer
 workspace it needs — a bare server, an Express app, React, Vue, Vite, or
@@ -163,12 +167,28 @@ runtime:
 replaces the editor's ambient run configuration with these commands, disables
 run-on-startup/run-on-save, runs the nonempty init command, waits for the
 declared server, and fails closed on dependency, process, port, or iframe
-readiness errors. Do not use `runtime.run` or `expect.output` in a WebContainer script;
-assert browser-visible behavior with `expect.preview` instead.
+readiness errors. `runtime.run` is never a WebContainer command (that is the
+Playground path). A JavaScript/TypeScript lesson asserts browser-visible
+behavior with `expect.preview`, never `expect.output`.
 
-Python is currently edit-only in Studio and must write
-`runtime: { kind: none }`; `runtime` may not be omitted. Go, Kotlin, and Rust
-remain limited to their Playground services.
+A `python` lesson also runs in the WebContainer, but on the built-in WASI
+`python3`: a one-shot `python3 main.py` that prints to the console. WASI Python
+cannot bind a socket, so a Python lesson has **no dev server and no preview** —
+it omits `lockfilePath` (nothing is installed), runs via `runtime.start`, and
+asserts its console output with `expect.output` (never `runtime.waitForReady`,
+`preview.*`, or `expect.preview`):
+
+```yaml
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: "" # WASI python3 is built in — nothing to install
+  runCommand: python3 main.py
+  environment: {}
+```
+
+Go, Kotlin, and Rust remain limited to their Playground services.
 
 Per-kind fixture `result` shapes (all fields exact program truth):
 

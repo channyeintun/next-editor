@@ -15,13 +15,22 @@ import { cameraExtensionFromMime } from "./streamingRecordingCodec/format";
 
 /**
  * Generate a screen-recording filename using local time.
- * Format: `screen-recording-YYYYMMDD-HHmmss.<ext>`
+ * Format: `screen-recording-YYYYMMDD-HHmmss[-silent].<ext>`
+ *
+ * A silent recording (no audio track — the browser returned no display/tab audio and no
+ * microphone was mixed) is marked with a `-silent` suffix so the downloaded file itself is
+ * honest about missing narration.
  *
  * @param mimeType MIME type of the video (e.g., "video/webm", "video/mp4;codecs=avc1")
  * @param now Optional Date object; defaults to current time. Useful for testing.
+ * @param hasAudio Whether the video carries an audio track; false appends `-silent`.
  * @returns Filename with zero-padded date/time and extension from cameraExtensionFromMime.
  */
-export function screenRecordingFilename(mimeType: string, now: Date = new Date()): string {
+export function screenRecordingFilename(
+  mimeType: string,
+  now: Date = new Date(),
+  hasAudio = true,
+): string {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
@@ -30,7 +39,8 @@ export function screenRecordingFilename(mimeType: string, now: Date = new Date()
   const seconds = String(now.getSeconds()).padStart(2, "0");
 
   const ext = cameraExtensionFromMime(mimeType);
-  return `screen-recording-${year}${month}${day}-${hours}${minutes}${seconds}.${ext}`;
+  const suffix = hasAudio ? "" : "-silent";
+  return `screen-recording-${year}${month}${day}-${hours}${minutes}${seconds}${suffix}.${ext}`;
 }
 
 /**
@@ -44,11 +54,20 @@ export function screenRecordingFilename(mimeType: string, now: Date = new Date()
 export function saveScreenRecordingLocally({
   blob,
   mimeType,
+  hasAudio = true,
 }: {
   blob: Blob;
   mimeType: string;
+  /** False when the capture produced no audio track; marks the file `-silent` and warns. */
+  hasAudio?: boolean;
 }): void {
-  const filename = screenRecordingFilename(mimeType);
+  if (!hasAudio) {
+    console.warn(
+      'saveScreenRecordingLocally: no audio track — saving a silent video ("…-silent"). ' +
+        'To include narration, share a browser tab with "share tab audio" enabled.',
+    );
+  }
+  const filename = screenRecordingFilename(mimeType, new Date(), hasAudio);
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

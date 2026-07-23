@@ -277,7 +277,22 @@ function makePreviewRecording(plan: StudioPlan): Recording {
 
 async function checksFor(recording: Recording, plan: StudioPlan) {
   const neBytes = await encodeRecordingToStream(recording);
-  return runArtifactChecks({ recording, neBytes, plan });
+  return (await runArtifactChecks({ recording, neBytes, plan })).checks;
+}
+
+/**
+ * The heart of STUDIO-01: the gates must inspect the *decoded* artifact, never
+ * the in-memory recording. `goodInMemory` is well-formed; `encodedFrom` is the
+ * (possibly defective) recording actually encoded into the `.ne`. Every gate is
+ * expected to reflect `encodedFrom`, not `goodInMemory`.
+ */
+async function checksForMismatch(
+  goodInMemory: Recording,
+  encodedFrom: Recording,
+  plan: StudioPlan,
+) {
+  const neBytes = await encodeRecordingToStream(encodedFrom);
+  return (await runArtifactChecks({ recording: goodInMemory, neBytes, plan })).checks;
 }
 
 function failedIds(checks: { id: string; ok: boolean }[]): string[] {
@@ -291,27 +306,50 @@ describe("runArtifactChecks", () => {
     expect(failedIds(checks)).toEqual([]);
   });
 
-  it("fails on a non-finite duration", async () => {
+  it("ignores defects present only in the in-memory recording (reads the decoded artifact)", async () => {
+    // Every one of these mutations is on the in-memory object the caller passes,
+    // while the encoded bytes come from a well-formed recording. A gate that
+    // (wrongly) read the in-memory object would trip; reading the decoded
+    // artifact, all gates stay green.
     const plan = makePlan();
-    const recording = makeRecording(plan);
-    recording.duration = Number.NaN;
-    const checks = await runArtifactChecks({
-      recording,
-      neBytes: await encodeRecordingToStream(makeRecording(plan)),
-      plan,
-    });
-    expect(failedIds(checks)).toContain("duration.finite");
-  });
-
-  it("fails on regressing cursor timestamps", async () => {
-    const plan = makePlan();
-    const recording = makeRecording(plan);
-    recording.cursorEvents = [
+    const badInMemory = makeRecording(plan);
+    badInMemory.duration = Number.NaN;
+    badInMemory.captions = [];
+    badInMemory.cursorEvents = [
       { timestamp: 900, x: 1, y: 1, visible: true },
       { timestamp: 100, x: 2, y: 2, visible: true },
     ];
-    const checks = await checksFor(recording, plan);
-    expect(failedIds(checks)).toContain("cursor.monotonic");
+    badInMemory.tracks = (badInMemory.tracks ?? []).filter((track) => track.kind !== "runtime");
+    badInMemory.audioSource = undefined;
+    badInMemory.audioFile = undefined;
+    badInMemory.workspaceSnapshot!.project.files["main.go"] = {
+      path: "main.go",
+      name: "main.go",
+      language: "go",
+      content: "package main\n",
+    };
+    const { checks } = await runArtifactChecks({
+      recording: badInMemory,
+      neBytes: await encodeRecordingToStream(makeRecording(plan)),
+      plan,
+    });
+    expect(failedIds(checks)).toEqual([]);
+  });
+
+  it("fails duration.finite when the encoded artifact has a zero-length duration", async () => {
+    const plan = makePlan();
+    const good = makeRecording(plan);
+    const zeroDuration = makeRecording(plan);
+    // Collapse every timestamped record to 0 so the decoder's
+    // max(meta.duration, maxSegmentTime) resolves to a zero-length recording.
+    zeroDuration.duration = 0;
+    zeroDuration.frames = [zeroDuration.frames[0]];
+    zeroDuration.cursorEvents = [{ timestamp: 0, x: 0, y: 0, visible: false }];
+    zeroDuration.runtimeEvents = [{ timestamp: 0, snapshot: zeroDuration.runtimeSnapshot! }];
+    zeroDuration.captions = [{ ...plan.narration.captions, cues: [] }];
+    expect(failedIds(await checksForMismatch(good, zeroDuration, plan))).toContain(
+      "duration.finite",
+    );
   });
 
   it("fails when required tracks are missing", async () => {
@@ -364,7 +402,7 @@ describe("runArtifactChecks", () => {
     const plan = makePreviewPlan();
     const recording = makePreviewRecording(plan);
     recording.previewEvents!.at(-1)!.checkpoint!.target!.text = "Not saved";
-    const checks = await runArtifactChecks({
+    const { checks } = await runArtifactChecks({
       recording,
       neBytes: await encodeRecordingToStream(recording),
       plan,
@@ -395,5 +433,63 @@ describe("runArtifactChecks", () => {
     expect(failed).toContain("preview.records.required");
     expect(failed).toContain("preview.replayData");
     expect(failed).toContain("preview.noErrors");
+  });
+});
+
+describe("runArtifactChecks decoded-artifact authority (STUDIO-01)", () => {
+  it("fails checkpoint.file when the encoded artifact lacks the file content, even with a good in-memory recording", async () => {
+    const plan = makePlan();
+    const good = makeRecording(plan);
+    const missingFile = makeRecording(plan);
+    missingFile.workspaceSnapshot!.project.files["main.go"] = {
+      path: "main.go",
+      name: "main.go",
+      language: "go",
+      content: "package main\n",
+    };
+    expect(failedIds(await checksForMismatch(good, missingFile, plan))).toContain(
+      "checkpoint.file.file",
+    );
+  });
+
+  it("fails captions.attached when the encoded artifact dropped the caption track", async () => {
+    const plan = makePlan();
+    const good = makeRecording(plan);
+    const noCaptions = makeRecording(plan);
+    noCaptions.captions = [];
+    expect(failedIds(await checksForMismatch(good, noCaptions, plan))).toContain(
+      "captions.attached",
+    );
+  });
+
+  it("fails tracks.required when the encoded artifact is missing each required track", async () => {
+    const plan = makePlan();
+    const good = makeRecording(plan);
+    for (const kind of ["editor", "audio", "workspace", "runtime", "cursor"] as const) {
+      const missingTrack = makeRecording(plan);
+      missingTrack.tracks = (missingTrack.tracks ?? []).filter((track) => track.kind !== kind);
+      // Each removed required track must trip tracks.required on the decoded
+      // artifact even though the in-memory recording still has every track.
+      expect({
+        kind,
+        failed: failedIds(await checksForMismatch(good, missingTrack, plan)),
+      }).toEqual({ kind, failed: expect.arrayContaining(["tracks.required"]) });
+    }
+  });
+
+  it("fails runtime.noErrors when the encoded artifact carries an error console line", async () => {
+    const plan = makePlan();
+    const good = makeRecording(plan);
+    const erroredConsole = makeRecording(plan);
+    erroredConsole.runtimeSnapshot!.consoleLines = [
+      "[go-run] go run main.go",
+      "[go-run error] Build failed",
+    ];
+    erroredConsole.runtimeEvents = [
+      { timestamp: 1_200, snapshot: erroredConsole.runtimeSnapshot! },
+    ];
+    const failed = failedIds(await checksForMismatch(good, erroredConsole, plan));
+    expect(failed).toContain("runtime.noErrors");
+    expect(failed).toContain("checkpoint.output.out");
   });
 });

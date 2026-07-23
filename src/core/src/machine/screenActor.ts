@@ -119,6 +119,7 @@ export const screenRecordingActor = fromCallback<
   let audioContext: AudioContext | null = null;
   let chunks: Blob[] = [];
   let mimeType = "";
+  let hasAudio = false;
   let disposed = false;
   let started = false;
   let failed = false;
@@ -177,6 +178,16 @@ export const screenRecordingActor = fromCallback<
         audioContextCtor: input.audioContextCtor,
       });
       audioContext = mix.audioContext;
+      hasAudio = mix.stream.getAudioTracks().length > 0;
+      if (!hasAudio) {
+        // No display/tab audio and no mic to mix — the file will be silent. Surface it so a
+        // consumer (e.g. the studio, which plays external narration the browser can only capture
+        // as *tab* audio) does not promise "narration included" for a video that has none.
+        console.warn(
+          "screenRecordingActor: no audio track captured — the screen recording will be silent " +
+            '(share a browser tab with "share tab audio" enabled to include the narration).',
+        );
+      }
 
       mediaRecorder = new MediaRecorder(mix.stream, {
         mimeType,
@@ -223,6 +234,7 @@ export const screenRecordingActor = fromCallback<
               actorId: self.id,
               blob,
               mimeType,
+              hasAudio,
               startOffsetMs,
             });
           }
@@ -237,6 +249,7 @@ export const screenRecordingActor = fromCallback<
             type: "SCREEN_STARTED",
             actorId: self.id,
             mimeType,
+            hasAudio,
             startedAtMs,
             startedAtPerf: startedAtPerfMs,
           });

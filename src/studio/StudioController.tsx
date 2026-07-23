@@ -19,7 +19,12 @@ import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useR
 import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/displayCapture";
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
-import type { StudioPlan, StudioRuntimeMode } from "./plan";
+import { parseRuntimeModeParam, type StudioPlan, type StudioRuntimeMode } from "./plan";
+import {
+  runExposedForSelection,
+  selectRepeatabilityBaseline,
+  sourceRevisionOf,
+} from "./runSelection";
 import {
   DEFAULT_STUDIO_PLAN_SLUG,
   STUDIO_SOURCES,
@@ -98,6 +103,18 @@ function allSources(imported: Record<string, string>): Record<string, StudioLess
 interface StudioRunEntry {
   index: number;
   mode: StudioRuntimeMode;
+  /** The lesson slug this run actually performed — the selection may have moved on since. */
+  slug: string;
+  /**
+   * Identity of the source at render time. An imported script edited between
+   * runs (same slug, new YAML) changes this, so a stale bundle is never offered
+   * for the newly imported content (STUDIO-02).
+   */
+  sourceRevision: string;
+  /** Human title captured at render time; the draft-upload flow uses THIS, never the current selection. */
+  title: string;
+  /** Cloned-voice name used for this run, or null for the script default. */
+  voiceName: string | null;
   result: StudioRunResult;
 }
 
@@ -189,7 +206,12 @@ export default function StudioController() {
   }, [webContainerRuntimeActions, webContainerRuntimeMetadata]);
 
   const planSlug = searchParams.get("plan") ?? DEFAULT_STUDIO_PLAN_SLUG;
-  const requestedMode = searchParams.get("runtime") === "live" ? "live" : null;
+  // Parse both documented values (fixture | live) explicitly; an unrecognized
+  // value is surfaced below rather than silently coerced to the plan default,
+  // which could otherwise force a live-default plan onto the real service even
+  // when the caller asked for fixture (STUDIO-05).
+  const runtimeModeParam = parseRuntimeModeParam(searchParams.get("runtime"));
+  const requestedMode = runtimeModeParam.mode;
   const autostart = searchParams.get("autostart") === "1";
 
   const [phase, setPhase] = useState<string>("idle");
@@ -225,7 +247,6 @@ export default function StudioController() {
     () => localStorage.getItem(VOICE_CHOICE_KEY) ?? "default",
   );
   const [voiceBusy, setVoiceBusy] = useState<string | null>(null);
-  const [renderedVoiceName, setRenderedVoiceName] = useState<string | null>(null);
   const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
   const voiceRecorderRef = useRef<{ recorder: MediaRecorder; chunks: Blob[] } | null>(null);
   const [voiceRecording, setVoiceRecording] = useState(false);
@@ -330,6 +351,15 @@ export default function StudioController() {
   const sources = allSources(importedScripts);
 
   const selectLesson = (slug: string) => {
+    if (slug !== planSlug) {
+      // Moving to a different lesson: drop the previous run's transient verdicts
+      // so nothing stale lingers beside the new selection (STUDIO-02). The
+      // completed run stays in history; its bundle/report reappear on reselect.
+      setComparison(null);
+      setBaselineNote(null);
+      setReceipts([]);
+      setFatal(null);
+    }
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -381,6 +411,11 @@ export default function StudioController() {
     setFatal(null);
     setReceipts([]);
     setComparison(null);
+    setBaselineNote(null);
+    // Clear the previous run's bundle/report the moment a new render starts, so a
+    // pre-render failure (e.g. a plan-build throw, which never reaches setLatest)
+    // can't leave a stale passing artifact sitting beside the new error (STUDIO-02).
+    setLatest(null);
     publishWindowHandle(null, true);
 
     // Hoisted so the catch can release the display stream if the render throws
@@ -398,6 +433,7 @@ export default function StudioController() {
       // Script sources run the in-page Director first: per-dialog pocket-tts
       // synthesis (cached, seeded), joint scheduling, stitching, compilation.
       let plan: StudioPlan;
+      let voiceName: string | null = null;
       const renderOptions: StudioRenderOptions = {};
       setBuildWarnings([]);
 
@@ -423,13 +459,12 @@ export default function StudioController() {
           onPhase: setPhase,
           voiceProfile: clonedVoice ? customVoiceProfileOf(clonedVoice) : undefined,
         });
-        setRenderedVoiceName(clonedVoice?.name ?? null);
+        voiceName = clonedVoice?.name ?? null;
         plan = built.plan;
         renderOptions.narration = built.narration;
         setBuildWarnings(built.warnings);
       } else {
         plan = source.load();
-        setRenderedVoiceName(null);
       }
       const mode: StudioRuntimeMode =
         requestedMode ?? (plan.runtime.kind === "none" ? "fixture" : plan.runtime.defaultMode);
@@ -478,23 +513,34 @@ export default function StudioController() {
         renderOptions,
       );
 
-      const entry: StudioRunEntry = { index: runHistory.length + 1, mode, result };
+      const entry: StudioRunEntry = {
+        index: runHistory.length + 1,
+        mode,
+        slug: plan.lesson.slug,
+        sourceRevision: sourceRevisionOf(planSlug, importedScripts),
+        title: sourceTitle(source),
+        voiceName,
+        result,
+      };
       runHistory.push(entry);
       setLatest(entry);
 
       let nextComparison: StudioCheckResult[] | null = null;
       if (result.semantics) {
-        const previous =
+        const currentPlanHash = result.semantics.planSha256;
+        // Repeatability only means something between renders of the SAME compiled
+        // plan, so the baseline must match on plan hash — not merely runtime mode
+        // (STUDIO-04). The trailing hash guard still distinguishes "no baseline"
+        // from an edited-script reset for the note below.
+        const previous = selectRepeatabilityBaseline(
           runHistory
             .slice(0, -1)
-            .reverse()
-            .find((run) => run.mode === mode)?.result.semantics ??
-          readStoredSemantics(plan.lesson.slug, mode);
-        // Repeatability only means something between renders of the SAME
-        // compiled plan. A different plan hash means the script was edited
-        // between runs — comparing would report the intentional edit as a
-        // failure, so reset the baseline instead.
-        if (previous && previous.planSha256 === result.semantics.planSha256) {
+            .map((run) => ({ mode: run.mode, semantics: run.result.semantics })),
+          mode,
+          currentPlanHash,
+          readStoredSemantics(plan.lesson.slug, mode),
+        );
+        if (previous && previous.planSha256 === currentPlanHash) {
           nextComparison = compareRenderSemantics(previous, result.semantics);
           setComparison(nextComparison);
           setBaselineNote(null);
@@ -541,51 +587,64 @@ export default function StudioController() {
     void runRender();
   }, [autostart, authLoading, runRender]);
 
-  const report = latest?.result.report ?? null;
-  const artifacts = latest?.result.artifacts ?? null;
   const source = sources[planSlug];
+  // A completed run's bundle/report/draft are exposed only while the current
+  // selection still matches the run that produced them and nothing is rendering.
+  // This is what stops a run of lesson A being downloaded or drafted under the
+  // metadata of a since-selected lesson B (STUDIO-02).
+  const latestMatchesSelection = runExposedForSelection(
+    latest,
+    planSlug,
+    sourceRevisionOf(planSlug, importedScripts),
+    running,
+  );
+  const activeRun = latestMatchesSelection ? latest : null;
+  const report = activeRun?.result.report ?? null;
+  const artifacts = activeRun?.result.artifacts ?? null;
   const effectiveModeLabel = requestedMode ?? (source ? sourceRuntimeDefault(source) : "?");
 
   const downloadBundle = () => {
-    if (!latest || !artifacts) {
+    if (!activeRun || !artifacts) {
       return;
     }
-    const base = `lesson-${latest.result.report.planSlug}`;
+    const base = `lesson-${activeRun.result.report.planSlug}`;
     downloadBlob(`${base}.ne`, artifacts.neBlob);
     downloadBlob(artifacts.audioFileName || `${base}.m4a`, artifacts.audioBlob);
     downloadBlob(
       "build-manifest.json",
-      new Blob([canonicalJson(latest.result.manifest)], { type: "application/json" }),
+      new Blob([canonicalJson(activeRun.result.manifest)], { type: "application/json" }),
     );
     downloadBlob(
       "render-report.json",
-      new Blob([JSON.stringify(latest.result.report, null, 2)], { type: "application/json" }),
+      new Blob([JSON.stringify(activeRun.result.report, null, 2)], { type: "application/json" }),
     );
   };
 
   const downloadReport = () => {
-    if (!latest) {
+    if (!activeRun) {
       return;
     }
     downloadBlob(
       "render-report.json",
-      new Blob([JSON.stringify(latest.result.report, null, 2)], { type: "application/json" }),
+      new Blob([JSON.stringify(activeRun.result.report, null, 2)], { type: "application/json" }),
     );
   };
 
   // One surface at a time: while the draft upload is open, the render console
   // steps aside entirely instead of stacking a modal on top of a panel.
-  if (showDraftModal && artifacts && latest) {
+  if (showDraftModal && artifacts && activeRun) {
     // The standard authenticated upload flow: R2 media + a D1 draft row.
     // Publishing remains a separate owner action in the lessons UI
     // (docs/agent-lesson-production.md §10). The description pre-fills the
-    // AI-production disclosure + build provenance for the reviewer.
+    // AI-production disclosure + build provenance for the reviewer. Every field
+    // is read off the completed run entry — never the live selection — so the
+    // recording, title, and voice always describe the same render (STUDIO-02).
     return (
       <UploadLessonModal
         recording={artifacts.recording}
         onClose={() => setShowDraftModal(false)}
-        initialTitle={source ? sourceTitle(source) : planSlug}
-        initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${latest.result.manifest.planSlug}, plan sha256 ${latest.result.manifest.planHash.slice(0, 16)}, ${latest.result.manifest.runtimeMode} runtime${renderedVoiceName ? `, narrated with the user-cloned voice "${renderedVoiceName}"` : ""}). Review the full lesson before publishing.`}
+        initialTitle={activeRun.title}
+        initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${activeRun.result.manifest.planSlug}, plan sha256 ${activeRun.result.manifest.planHash.slice(0, 16)}, ${activeRun.result.manifest.runtimeMode} runtime${activeRun.voiceName ? `, narrated with the user-cloned voice "${activeRun.voiceName}"` : ""}). Review the full lesson before publishing.`}
         initialTags="studio, ai-produced"
       />
     );
@@ -743,7 +802,7 @@ export default function StudioController() {
         }`}
         title={
           isScreenSupported
-            ? "Also capture this render as a screen recording — a video downloaded alongside the bundle (narration included, never uploaded). You'll pick a screen or tab when the render starts."
+            ? 'Also capture this render as a screen recording — a video downloaded alongside the bundle (saved locally, never uploaded). You\'ll pick a screen or tab when the render starts. Narration is captured only when you share a browser tab with "share tab audio" on; sharing a screen or window records a silent video (saved as "…-silent").'
             : "Screen recording needs a desktop browser with screen capture (getDisplayMedia)."
         }
       >
@@ -767,6 +826,14 @@ export default function StudioController() {
         {" · run #"}
         {runHistory.length + (running ? 1 : 0) || 1}
       </p>
+
+      {runtimeModeParam.invalid ? (
+        <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
+          Ignoring <span className="font-mono">runtime={runtimeModeParam.raw}</span> — expected{" "}
+          <span className="font-mono">fixture</span> or <span className="font-mono">live</span>.
+          Using the plan default (<span className="font-mono">{effectiveModeLabel}</span>).
+        </p>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button

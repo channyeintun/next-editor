@@ -162,12 +162,25 @@ export interface ArtifactCheckInput {
   capturePreviewScreenshot?: () => Promise<{ dataUrl: string; height: number; width: number }>;
 }
 
+export interface ArtifactCheckOutput {
+  checks: StudioCheckResult[];
+  /**
+   * The recording every gate was evaluated against: the decoded artifact when
+   * `neBytes` round-tripped, and the in-memory recording only when decode failed
+   * (in which case `recording.decodes` failed and the build fails closed). The
+   * caller must derive the manifest's final-workspace hash and repeatability
+   * semantics from this same object so nothing is vouched for that is absent
+   * from the encoded `.ne`.
+   */
+  artifactRecording: Recording;
+}
+
 export async function runArtifactChecks({
   recording,
   neBytes,
   plan,
   capturePreviewScreenshot,
-}: ArtifactCheckInput): Promise<StudioCheckResult[]> {
+}: ArtifactCheckInput): Promise<ArtifactCheckOutput> {
   const results: StudioCheckResult[] = [];
 
   // recording.decodes
@@ -213,8 +226,14 @@ export async function runArtifactChecks({
     return previewDiagnosticPromise;
   };
 
+  // Every structural and semantic gate below inspects the decoded artifact, not
+  // the in-memory recording: the entire point of round-tripping is to prove the
+  // *encoded* bytes carry the state QA vouches for. `artifactRecording` falls
+  // back to the in-memory recording only when decode failed, in which case
+  // `recording.decodes` has already failed and the build fails closed regardless.
+
   // duration.finite
-  const duration = recording.duration;
+  const duration = artifactRecording.duration;
   results.push({
     id: "duration.finite",
     ok: Number.isFinite(duration) && duration > 0,
@@ -224,25 +243,25 @@ export async function runArtifactChecks({
   // events.monotonic — per track
   checkEventTrack(
     "frames.monotonic",
-    recording.frames.map((frame) => frame.timestamp),
+    artifactRecording.frames.map((frame) => frame.timestamp),
     duration,
     results,
   );
   checkEventTrack(
     "cursor.monotonic",
-    (recording.cursorEvents ?? []).map((event) => event.timestamp),
+    (artifactRecording.cursorEvents ?? []).map((event) => event.timestamp),
     duration,
     results,
   );
   checkEventTrack(
     "workspace.monotonic",
-    (recording.workspaceEvents ?? []).map((event) => event.timestamp),
+    (artifactRecording.workspaceEvents ?? []).map((event) => event.timestamp),
     duration,
     results,
   );
   checkEventTrack(
     "runtime.monotonic",
-    (recording.runtimeEvents ?? []).map((event) => event.timestamp),
+    (artifactRecording.runtimeEvents ?? []).map((event) => event.timestamp),
     duration,
     results,
   );
@@ -281,11 +300,12 @@ export async function runArtifactChecks({
         : `missing tracks: ${missingKinds.join(", ")}`,
   });
 
-  // audio.external
+  // audio.external — the encoded stream externalizes the blob to `audioFile`, so
+  // the decoded artifact proves external audio by `audioSource` + the reference.
   const hasAudio =
-    recording.audioSource === "external" &&
-    (recording.audioBlob instanceof Blob || Boolean(recording.audioFile));
-  const audioOffset = recording.audioStartOffsetMs ?? 0;
+    artifactRecording.audioSource === "external" &&
+    (artifactRecording.audioBlob instanceof Blob || Boolean(artifactRecording.audioFile));
+  const audioOffset = artifactRecording.audioStartOffsetMs ?? 0;
   results.push({
     id: "audio.external",
     ok: hasAudio && Number.isFinite(audioOffset) && audioOffset >= 0,
@@ -295,7 +315,7 @@ export async function runArtifactChecks({
   });
 
   // captions.attached — cue times monotonic and inside the recording
-  const track = (recording.captions ?? []).find(
+  const track = (artifactRecording.captions ?? []).find(
     (candidate) => candidate.id === plan.narration.captions.id,
   );
   if (!track) {
@@ -477,7 +497,7 @@ export async function runArtifactChecks({
       });
     }
     if (action.type === "expect.file") {
-      const files = workspaceTextFilesOf(recording);
+      const files = workspaceTextFilesOf(artifactRecording);
       const content = files[action.path];
       const matched = typeof content === "string" && content.includes(action.contains);
       results.push({
@@ -490,7 +510,7 @@ export async function runArtifactChecks({
     }
   }
 
-  return results;
+  return { checks: results, artifactRecording };
 }
 
 /** Hash of the recording's final workspace text files (repeatability + manifest). */

@@ -4,8 +4,8 @@ Implements **M0–M2** of [agent-lesson-production.md](./agent-lesson-production
 §12: a deterministic in-app Performer renders checked-in plans against pre-generated
 narration, records through the real recorder, and gates the artifact with mechanical
 QA plus a two-render repeatability comparison. M1 adds the authored `LessonScript`
-path: YAML scripts with `[[mark:…]]` narration anchors compile through the Director
-into the same plan format the M0 fixture hard-codes. M2 adds the slide and
+path: YAML scripts with `[[mark:…]]` narration anchors compile **in the render
+page** into the same plan format the M0 fixture hard-codes. M2 adds the slide and
 whiteboard surfaces, a declared-idempotent silent retry for transient Go-run
 failures, and the unattended render command below.
 
@@ -47,15 +47,29 @@ version). The production loop:
 
 ```text
 1. Pick one concept; write src/studio/scripts/<slug>.yaml (scenes, [[mark]]s,
-   per-scene sources — the critic flags unsourced scenes).
+   per-scene sources — the critic flags unsourced scenes). The file
+   auto-registers by filename; never edit src/studio/plans/index.ts.
 2. bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml
-   → compiled plan + critique JSON; fix compile errors, weigh critic notes
-   (the critic proposes; it cannot block or approve).
-3. Register the slug in src/studio/plans/index.ts.
-4. bun scripts/studio-render.ts <slug>       # two renders + repeatability
-5. Watch the rendered lesson end-to-end (/studio playback or the bundle).
-6. Create draft… → review in the lessons UI → publish (human, separate).
+   → optional preflight: validates schema/markers/dialogs, runs the advisory
+   critic, and writes <slug>.critique.json next to the YAML. It emits NO
+   compiled plan — compilation happens in the render page. Fix every error;
+   weigh critic notes (the critic proposes; it cannot block or approve).
+3. Verify in a real Chrome: bun run dev, open /studio?plan=<slug>, press
+   Start render, watch the performance, confirm "Checks (N/N ok)". The
+   headless bun scripts/studio-render.ts is a CI/repeatability audit, not the
+   authoring verify step.
+4. Watch the rendered lesson end-to-end (/studio playback).
+5. Create draft… → review in the lessons UI → publish (human, separate).
 ```
+
+> **Historical (M0/M1).** The original M0 flow hard-coded a compiled
+> `StudioPlan` and registered it by editing `src/studio/plans/index.ts`, and an
+> early Director build emitted `src/studio/plans/scripts/<slug>.json`. Neither
+> applies now: checked-in `src/studio/scripts/*.yaml` auto-register via
+> `import.meta.glob`, and the script is compiled **in the render page**
+> (`src/studio/inPageDirector.ts`) at render time. There is no emitted plan JSON
+> and no registry edit; the Director CLI only writes the `.critique.json`
+> sidecar.
 
 ### Pilots (historical — all passed 2× unattended renders, repeatability PASS)
 
@@ -79,10 +93,13 @@ bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml
 ```
 
 The Director CLI validates the script (`src/studio/script/schema.ts`), checks
-marker resolution and dialog segmentation, runs the advisory critic, and emits
-`src/studio/plans/scripts/<slug>.json` (+ critique). Emitted scripts
-**auto-register by filename** — no code edit; render at `/studio?plan=<slug>`.
-Running the Director with no arguments compiles every script.
+marker resolution and dialog segmentation, runs the advisory critic, and writes
+`<slug>.critique.json` next to the YAML. It emits **no** compiled plan — the
+in-page Director (`src/studio/inPageDirector.ts`) compiles the script at render
+time. Checked-in `src/studio/scripts/*.yaml` **auto-register by filename**
+(`import.meta.glob` in `src/studio/plans/index.ts`) — no code edit, no registry
+entry; render at `/studio?plan=<slug>`. Running the Director with no arguments
+validates every script.
 
 **Agents author lessons too**: the complete authoring contract is
 [lesson-script-authoring.md](./lesson-script-authoring.md), and Claude Code

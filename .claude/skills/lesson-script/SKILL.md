@@ -30,9 +30,12 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      by line across several) then rests, scrolling off-screen code into view
      first; you author only the target, and time the `at` mark so the highlight
      lands as the narration names the code, then let it sit.
-   - `fixture.result.output` = the real program's exact stdout.
+   - The fixture result is the program's exact output, every line
+     `\n`-terminated — `result.output` for Go/Kotlin, `result.stdout` for Rust
+     (WebContainer lessons pin the workspace instead of a fixture).
    - Every scene needs a `sources` entry; keep sentences short.
-   - Always include `checks: [{ type: timing.p95Ms, max: 300 }]`.
+   - Always include `checks: [{ type: timing.p95Ms, max: 300 }]` (`max: 500`
+     if the lesson shows Google-deck slides — deck paints cost ~0.4s).
 4. **Validate**: `bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml`
    - Optional preflight (the page validates too) but always run it: fix every
      error; address `✎` critic notes (advisory, but ALWAYS fix

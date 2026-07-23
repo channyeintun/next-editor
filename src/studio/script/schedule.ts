@@ -102,35 +102,67 @@ export function scheduleDialogs({
     }
   });
 
+  // Resolve every action's anchoring dialog + offset, following `afterAction`
+  // to its predecessor's resolved anchor — the same chain the compiler resolves.
+  // A chained action's busy time is then attributed to the dialog its root
+  // announces instead of being dropped, so dialog scheduling and the timing gate
+  // share one dependency model (STUDIO-03). Chained WebContainer/preview actions
+  // carry zero modelled busy, so this does not shift narration for them; it only
+  // matters for a bounded action authored after another.
+  const resolvedAnchor = new Map<
+    string,
+    { dialogIndex: number | null | undefined; offsetMs: number }
+  >();
+  const afterActionOf = new Map<string, string>();
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
       const anchor = action.at;
-      let dialogIndex: number | null | undefined;
-      let offsetMs = 0;
       if ("mark" in anchor) {
-        dialogIndex = markerDialogIndex.get(anchor.mark);
-        offsetMs = anchor.offsetMs;
-        if (dialogIndex === undefined) {
-          // Unknown marker — the compiler reports this with full context.
-          continue;
-        }
+        resolvedAnchor.set(action.id, {
+          dialogIndex: markerDialogIndex.get(anchor.mark),
+          offsetMs: anchor.offsetMs,
+        });
       } else if ("scene" in anchor) {
-        dialogIndex = sceneFirstDialog.get(scene.id) ?? null;
-        offsetMs = anchor.offsetMs;
+        resolvedAnchor.set(action.id, {
+          dialogIndex: sceneFirstDialog.get(scene.id) ?? null,
+          offsetMs: anchor.offsetMs,
+        });
       } else {
-        continue; // afterAction chains never push narration.
+        afterActionOf.set(action.id, anchor.afterAction);
       }
-      if (dialogIndex === null) {
-        continue; // End-of-narration marker: nothing left to push.
+    }
+  }
+  // Fixpoint: an afterAction action inherits its predecessor's resolved anchor.
+  // Leftovers are cycles/unknown references, which the compiler reports with full
+  // context; here they simply contribute no narration push.
+  let anchorProgressed = true;
+  while (afterActionOf.size > 0 && anchorProgressed) {
+    anchorProgressed = false;
+    // Deleting the just-resolved (current) entry mid-iteration is safe for a Map.
+    for (const [id, predecessorId] of afterActionOf) {
+      const inherited = resolvedAnchor.get(predecessorId);
+      if (!inherited) continue;
+      resolvedAnchor.set(id, inherited);
+      afterActionOf.delete(id);
+      anchorProgressed = true;
+    }
+  }
+
+  for (const scene of script.scenes) {
+    for (const action of scene.actions) {
+      const resolved = resolvedAnchor.get(action.id);
+      // Unknown marker or unresolved afterAction — the compiler reports it.
+      if (!resolved || resolved.dialogIndex === undefined || resolved.dialogIndex === null) {
+        continue;
       }
-      const entries = actionsByDialog.get(dialogIndex) ?? [];
+      const entries = actionsByDialog.get(resolved.dialogIndex) ?? [];
       const seed = typingSeeds.get(action.id) ?? script.build.seed;
       entries.push({
-        offsetMs,
+        offsetMs: resolved.offsetMs,
         busyMs: typingDurationOf(action, seed) + selectDurationOf(action, seed),
         actionId: action.id,
       });
-      actionsByDialog.set(dialogIndex, entries);
+      actionsByDialog.set(resolved.dialogIndex, entries);
     }
   }
 

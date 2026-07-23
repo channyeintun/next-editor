@@ -160,7 +160,7 @@ export async function runStudioRender(
         wallDurationMs: Math.round(performance.now() - wallStart),
         recordingDurationMs: null,
         receipts,
-        timing: computeTimingStats(receipts),
+        timing: computeTimingStats(receipts, plan.dependencies),
         checks: [],
         errors,
       },
@@ -458,18 +458,25 @@ export async function runStudioRender(
     neBlob = files.ne;
     audioFileName = files.audio?.name ?? "";
     const neBytes = new Uint8Array(await files.ne.arrayBuffer());
-    checks = await runArtifactChecks({
+    // The QA gates decode `neBytes` and hand back the recording they vouched for.
+    // The manifest's final-workspace hash and the repeatability semantics must be
+    // derived from that same decoded artifact — never the in-memory recording —
+    // so a passing bundle can never advertise state absent from the encoded `.ne`.
+    const { checks: artifactChecks, artifactRecording } = await runArtifactChecks({
       recording,
       neBytes,
       plan,
       capturePreviewScreenshot: deps.preview.captureScreenshot,
     });
+    checks = artifactChecks;
     if (plan.gates?.timingP95MaxMs !== undefined) {
-      checks.push(timingGateCheck(computeTimingStats(receipts), plan.gates.timingP95MaxMs));
+      checks.push(
+        timingGateCheck(computeTimingStats(receipts, plan.dependencies), plan.gates.timingP95MaxMs),
+      );
     }
 
     const semantics = await extractRenderSemantics(
-      recording,
+      artifactRecording,
       receipts,
       audioBytes,
       await sha256HexOfJson(plan),
@@ -484,8 +491,8 @@ export async function runStudioRender(
       neBytes: neBytes.byteLength,
       neHash: await sha256Hex(neBytes),
       audioFileName,
-      recordingDurationMs: recording.duration,
-      finalWorkspaceHash: await finalWorkspaceHashOf(recording),
+      recordingDurationMs: artifactRecording.duration,
+      finalWorkspaceHash: await finalWorkspaceHashOf(artifactRecording),
     });
 
     return {
@@ -497,7 +504,7 @@ export async function runStudioRender(
         wallDurationMs: Math.round(performance.now() - wallStart),
         recordingDurationMs: recording.duration,
         receipts,
-        timing: computeTimingStats(receipts),
+        timing: computeTimingStats(receipts, plan.dependencies),
         checks,
         errors,
       },
@@ -529,9 +536,13 @@ async function baseManifest(
           initCommand: plan.runtime.initCommand,
           runCommand: plan.runtime.runCommand,
           expectedPort: plan.runtime.expectedPort ?? null,
-          lockfilePath: plan.runtime.lockfilePath,
+          // Python has no lockfile (WASI python3 installs nothing); the contract
+          // then records a null path and hashes the empty string for it.
+          lockfilePath: plan.runtime.lockfilePath ?? null,
           lockfileSha256: await sha256Hex(
-            new TextEncoder().encode(plan.workspace.files[plan.runtime.lockfilePath] ?? ""),
+            new TextEncoder().encode(
+              (plan.runtime.lockfilePath && plan.workspace.files[plan.runtime.lockfilePath]) || "",
+            ),
           ),
           environmentSha256: await sha256HexOfJson(plan.runtime.environment),
         }

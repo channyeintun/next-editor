@@ -1,0 +1,57 @@
+# Acceptance fixture for Python in the WebContainer: WASI `python3` runs
+# one-shot to the console (no dev server, no preview), gated by expect.output.
+schemaVersion: 1
+
+lesson:
+  slug: python-console
+  title: "Python console (fixture)"
+  locale: en-US
+  workspace:
+    lessonType: python
+    name: Python Console Fixture
+    entryFilePath: main.py
+    files:
+      main.py: |
+        def cube(n: int) -> int:
+            return n * n * n
+
+
+        print(f"3 cubed is {cube(3)}")
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 7
+
+# Python runs on the WebContainer's built-in WASI python3: no lockfile (nothing
+# is installed), no server/port, no preview.
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: python3 main.py
+  environment: {}
+
+scenes:
+  - id: cube
+    narration: >
+      This small script cubes a number with a typed helper. [[mark:run]] Run it,
+      and the console prints the result we expect.
+    sources:
+      - title: "Python — Defining functions"
+        url: "https://docs.python.org/3/tutorial/controlflow.html#defining-functions"
+    actions:
+      - id: run
+        type: runtime.start
+        at: { mark: run }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: expect-cube
+        type: expect.output
+        at: { afterAction: run }
+        timeoutMs: 10000
+        contains: "3 cubed is 27"
+
+checks:
+  - type: timing.p95Ms
+    max: 300

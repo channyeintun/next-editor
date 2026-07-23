@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { parseStudioPlan, type StudioPlan } from "./plan";
+import { parseRuntimeModeParam, parseStudioPlan, type StudioPlan } from "./plan";
 
 /** Even per-word interpolation inside a cue, like the compiler emits. */
 function toCue(start: number, end: number, text: string) {
@@ -177,5 +177,34 @@ describe("studio plan schema", () => {
     // Word timings inside the shifted cue no longer matter for this test; the
     // cue-overlap issue alone must reject the plan.
     expect(() => parseStudioPlan(plan)).toThrow(/overlaps cue/);
+  });
+});
+
+describe("parseRuntimeModeParam (STUDIO-05)", () => {
+  it("accepts both documented values", () => {
+    expect(parseRuntimeModeParam("live")).toEqual({ mode: "live", invalid: false, raw: "live" });
+    expect(parseRuntimeModeParam("fixture")).toEqual({
+      mode: "fixture",
+      invalid: false,
+      raw: "fixture",
+    });
+  });
+
+  it("treats a missing or empty param as no request (use the plan default)", () => {
+    expect(parseRuntimeModeParam(null)).toEqual({ mode: null, invalid: false, raw: null });
+    expect(parseRuntimeModeParam("")).toEqual({ mode: null, invalid: false, raw: "" });
+  });
+
+  it("flags an unrecognized value as invalid instead of silently defaulting", () => {
+    // The bug: `fixture` (and everything but `live`) used to collapse to null and
+    // silently fall back to the plan default — a live-default plan would then
+    // contact the real service even though fixture was requested.
+    expect(parseRuntimeModeParam("staging")).toEqual({
+      mode: null,
+      invalid: true,
+      raw: "staging",
+    });
+    expect(parseRuntimeModeParam("Live").invalid).toBe(true);
+    expect(parseRuntimeModeParam("FIXTURE").invalid).toBe(true);
   });
 });

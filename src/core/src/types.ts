@@ -374,6 +374,12 @@ export interface UseNextEditorConfig {
 export interface ScreenRecordingReadyPayload {
   blob: Blob;
   mimeType: string;
+  /**
+   * Whether the video carries an audio track. False means a silent recording — the browser
+   * returned no display/tab audio and no microphone was mixed in. Consumers must not claim
+   * narration is included when this is false.
+   */
+  hasAudio: boolean;
   /** Milliseconds between the recording-session origin and the first captured screen frame. */
   startOffsetMs: number;
 }

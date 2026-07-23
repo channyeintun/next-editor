@@ -37,4 +37,18 @@ describe("screenRecordingFilename", () => {
     const filename = screenRecordingFilename("video/quicktime", testDate);
     expect(filename).toBe("screen-recording-20260320-164520.mov");
   });
+
+  it("marks a silent (audio-less) recording with a -silent suffix (STUDIO-06)", () => {
+    const testDate = new Date(2026, 6, 12, 9, 5, 3);
+    expect(screenRecordingFilename("video/webm", testDate, false)).toBe(
+      "screen-recording-20260712-090503-silent.webm",
+    );
+    // Default (and explicit true) stays suffix-free.
+    expect(screenRecordingFilename("video/webm", testDate)).toBe(
+      "screen-recording-20260712-090503.webm",
+    );
+    expect(screenRecordingFilename("video/webm", testDate, true)).toBe(
+      "screen-recording-20260712-090503.webm",
+    );
+  });
 });

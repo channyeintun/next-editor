@@ -224,6 +224,13 @@ export interface ScreenState {
   /** Detected MIME type of the screen recording container. */
   mimeType: string;
   /**
+   * Whether the capture mixed any audio track. False means a silent video: the browser returned
+   * no display/tab audio and no microphone track was supplied (e.g. a screen/window share, or a
+   * tab shared with "share tab audio" off). Consumers surface this so a "narration included"
+   * promise is not made for a file that has none.
+   */
+  hasAudio: boolean;
+  /**
    * Milliseconds between the recording-session origin (`session.startedAtPerf`) and the moment
    * the screen MediaRecorder actually started. Reported alongside the blob so a consumer could
    * later align the local video against the session timeline.
@@ -620,6 +627,8 @@ export type ScreenActorStartedEvent = {
   type: "SCREEN_STARTED";
   actorId: string;
   mimeType: string;
+  /** Whether the capture graph produced an audio track (false = silent video). */
+  hasAudio: boolean;
   startedAtMs: number;
   startedAtPerf: number;
 };
@@ -630,6 +639,8 @@ export type ScreenActorStoppedEvent = {
   actorId: string;
   blob: Blob;
   mimeType: string;
+  /** Whether the saved video carries an audio track (false = silent video). */
+  hasAudio: boolean;
   startOffsetMs: number;
 };
 
@@ -796,6 +807,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     actorId: null,
     isRecording: false,
     mimeType: "",
+    hasAudio: false,
     startOffsetMs: 0,
   },
   screenRecorderGeneration: 0,

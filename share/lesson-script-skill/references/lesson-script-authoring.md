@@ -48,6 +48,19 @@ the cloned voice narrates the next render with it. Scripts keep pinning
 built-in profiles in `build.voiceProfile` — cloning is a render-time choice,
 and a draft rendered with a cloned voice says so in its description.
 
+The render console also offers an opt-in **Screen recording** toggle
+(desktop browsers only). When enabled, pressing **Start render** first prompts
+for a screen or tab to share, then captures the whole performance to a
+standalone video that downloads to the local machine when the render finishes.
+The narration is included **only** when you share a browser **tab** with "share
+tab audio" enabled — Studio plays the narration into the tab, which the browser
+can capture only as tab audio. Sharing a screen or window, or leaving tab audio
+off, records a **silent** video (saved with a `-silent` suffix). This is purely
+a render-time capture choice: the video never enters the `.ne` bundle, the
+recording, QA gates, or any upload path (it is a sibling artifact for reviewing
+or sharing the run), so scripts need no field for it. Dismissing the share
+picker simply renders without the video.
+
 **Workflow for authors and agents**:
 
 ```text
@@ -102,26 +115,62 @@ checks:
 
 Lesson types are the six **languages** the platform teaches — not the starter
 templates (react, vue, svelte, … are just seeded workspace conveniences for
-users; the WebContainer runs any pinned JS/TS workspace). `runtime.kind` is
-fixed by the lesson type — the schema rejects mismatches:
+users; the WebContainer runs any pinned JS/TS workspace). The `runtime` block
+is **required for every script**, and its kind is fixed by the lesson type —
+the schema rejects an omitted block or a mismatch:
 
-| `lessonType`                         | `runtime.kind`      | can `runtime.run`? |
-| ------------------------------------ | ------------------- | ------------------ |
-| `go`                                 | `go-playground`     | yes                |
-| `kotlin`                             | `kotlin-playground` | yes                |
-| `rust`                               | `rust-playground`   | yes                |
-| `javascript`, `typescript`, `python` | `none`              | no                 |
+| `lessonType`               | required `runtime.kind` | execution actions                                                      |
+| -------------------------- | ----------------------- | ---------------------------------------------------------------------- |
+| `go`                       | `go-playground`         | `runtime.run`, `expect.output`                                         |
+| `kotlin`                   | `kotlin-playground`     | `runtime.run`, `expect.output`                                         |
+| `rust`                     | `rust-playground`       | `runtime.run`, `expect.output`                                         |
+| `javascript`, `typescript` | `webcontainer`          | `runtime.start`, `runtime.waitForReady`, `preview.*`, `expect.preview` |
+| `python`                   | `webcontainer`          | `runtime.start`, `expect.output` (WASI `python3`; console, no preview) |
 
 A `javascript` (Node.js) or `typescript` lesson pins whatever WebContainer
-workspace the lesson needs — a bare Node script, an Express server, a React or
-Vue app — the runtime is not limited to the starters. `python` runs the
-WebContainer's WASI script model. Go, Kotlin, and Rust are limited to their
-playground services.
+workspace it needs — a bare server, an Express app, React, Vue, Vite, or
+another deterministic workspace. It must include a pinned lockfile and this
+versioned runtime declaration (commands are exact strings and never inherited
+from ambient editor settings):
 
-Kind `none` lessons omit the `runtime:` block entirely (or write
-`runtime: { kind: none }`) and must not use `runtime.run` or `expect.output` —
-they teach through editing, slides, whiteboard, and `expect.file` gates. Their
-WebContainer execution path is not yet driven by the studio.
+```yaml
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install --frozen-lockfile
+  runCommand: pnpm dev
+  expectedPort: 5173 # optional only when the server port truly is not fixed
+  lockfilePath: pnpm-lock.yaml
+  environment: {} # non-secret, pinned values only
+```
+
+`lockfilePath` must name a file in `lesson.workspace.files`. The preflight
+replaces the editor's ambient run configuration with these commands, disables
+run-on-startup/run-on-save, runs the nonempty init command, waits for the
+declared server, and fails closed on dependency, process, port, or iframe
+readiness errors. `runtime.run` is never a WebContainer command (that is the
+Playground path). A JavaScript/TypeScript lesson asserts browser-visible
+behavior with `expect.preview`, never `expect.output`.
+
+A `python` lesson also runs in the WebContainer, but on the built-in WASI
+`python3`: a one-shot `python3 main.py` that prints to the console. WASI Python
+cannot bind a socket, so a Python lesson has **no dev server and no preview** —
+it omits `lockfilePath` (nothing is installed), runs via `runtime.start`, and
+asserts its console output with `expect.output` (never `runtime.waitForReady`,
+`preview.*`, or `expect.preview`):
+
+```yaml
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: "" # WASI python3 is built in — nothing to install
+  runCommand: python3 main.py
+  environment: {}
+```
+
+Go, Kotlin, and Rust remain limited to their Playground services.
 
 Per-kind fixture `result` shapes (all fields exact program truth):
 
@@ -175,17 +224,41 @@ Anchors (`at`) — narration-relative only, never absolute times:
 
 Action catalog:
 
-| type                 | fields                                                  | notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| -------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workspace.openFile` | `path`                                                  | Path must exist in `workspace.files`. A cursor tween to the file row is derived automatically.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `editor.type`        | `target: {file, after, occurrence}`, `text`, `cadence?` | **Insert-only.** `after` is an exact substring of the file's _current_ content; insertion happens at the end of its `occurrence`-th match (`after: ""` = start of file). The file must already be open (`workspace.openFile` first). Typed `text` is inserted verbatim — include leading `\n` and tabs. `cadence` picks how the code appears: `natural` (default — single keystrokes with word and thinking pauses, matched to a reference human typing recording), `fast-explainer` (brisker keystrokes), `line-by-line` (incremental reveal, one line at a time, no keystrokes), `block` (whole insertion at once after a beat). Prefer `line-by-line` or `block` for longer snippets the narration only summarizes; keystroke cadences suit short, narrated-along edits. |
-| `editor.select`      | `target: {file, text, occurrence}`                      | **Highlight, never edits.** Drag-selects the `occurrence`-th exact byte-for-byte match of `text` (same rule as `after`) to point at code the narration is explaining; the file must already be open (`workspace.openFile` first). It sets a real editor selection — so the range is highlighted — and glides the attention cursor across it, reading as a mouse drag-select. The seed-derived drag time counts as busy time like typing, so narration waits for it; keep spans short and let the words explain. It only reads code that is already there — use `editor.type` to add code.                                                                                                                                                                                   |
-| `runtime.run`        | —                                                       | Runs the workspace on the lesson's playground (every `.go` file / every `.kt` file / the single `main.rs`). Playground kinds only. Give it `timeoutMs: 15000` (Rust live compiles are slow — use `30000`). Retries transient service failures once, silently.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `slide.show`         | `slideId`, `maximized` (default true)                   | `slideId` must be in `lesson.slides`. Showing a slide while another is open advances **in place** (like moving to the next slide) — do not `slide.close` between consecutive slides; close only when returning to the editor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `slide.close`        | —                                                       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `whiteboard.apply`   | `open?`, `maximized?`, `upsertIds: []`                  | Ids from `lesson.whiteboardAssets`. Must open, change maximize, or upsert ≥1 asset.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `expect.output`      | `contains`, `timeoutMs`                                 | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` line fails it. Anchor with `afterAction: run`. Playground kinds only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `expect.file`        | `path`, `contains`                                      | Asserts the final workspace file contains the string.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| type                   | fields                                                                | notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspace.openFile`   | `path`                                                                | Path must exist in `workspace.files`. A cursor tween to the file row is derived automatically.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `editor.type`          | `target: {file, after, occurrence}`, `text`, `cadence?`               | **Insert-only.** `after` is an exact substring of the file's _current_ content; insertion happens at the end of its `occurrence`-th match (`after: ""` = start of file). The file must already be open (`workspace.openFile` first). Typed `text` is inserted verbatim — include leading `\n` and tabs. `cadence` picks how the code appears: `natural` (default — single keystrokes with word and thinking pauses, matched to a reference human typing recording), `fast-explainer` (brisker keystrokes), `line-by-line` (incremental reveal, one line at a time, no keystrokes), `block` (whole insertion at once after a beat). Prefer `line-by-line` or `block` for longer snippets the narration only summarizes; keystroke cadences suit short, narrated-along edits. |
+| `editor.select`        | `target: {file, text, occurrence}`                                    | **Highlight, never edits.** Drag-selects the `occurrence`-th exact byte-for-byte match of `text` (same rule as `after`) to point at code the narration is explaining; the file must already be open (`workspace.openFile` first). It sets a real editor selection — so the range is highlighted — and glides the attention cursor across it, reading as a mouse drag-select. The seed-derived drag time counts as busy time like typing, so narration waits for it; keep spans short and let the words explain. It only reads code that is already there — use `editor.type` to add code.                                                                                                                                                                                   |
+| `runtime.run`          | —                                                                     | Runs the workspace on the lesson's playground (every `.go` file / every `.kt` file / the single `main.rs`). Playground kinds only. Give it `timeoutMs: 15000` (Rust live compiles are slow — use `30000`). Retries transient service failures once, silently.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `runtime.start`        | `retry`                                                               | WebContainer only. Starts the exact configured init/run commands. Acknowledges only after startup has begun cleanly; dependency/process failures abort with runtime diagnostics.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `runtime.waitForReady` | `retry`                                                               | WebContainer only. Waits for ready status, a server URL, and `expectedPort` when declared. This is signal-based; never replace it with authored sleeps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `preview.open`         | `mode: docked \| floating`, `retry`                                   | WebContainer only. Opens the panel, then pings the injected iframe bridge. It acknowledges only when that bridge is ready.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `preview.click`        | `target`, `retry`                                                     | Clicks one stable preview target. Because clicks may have non-idempotent effects, `retry.maxAttempts` must be `1`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `preview.input`        | `target`, `value`, `retry`                                            | Sets the target's value and emits input/change events through the acknowledged bridge.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `preview.scroll`       | `target?`, `top`, `left?`, `retry`                                    | Scrolls the document or a stable target to exact coordinates; `left` defaults to `0`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `preview.route`        | `route`, `retry`                                                      | Navigates to an absolute-path route such as `/done` and acknowledges the resulting location.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `expect.preview`       | `target?`, `textContains?`, `value?`, `route?`, `attribute?`, `retry` | Requires a target or route. Text/value/attribute checks require a target. A passing observation is stored in the artifact as a DOM/route checkpoint; a failure aborts and captures a diagnostic screenshot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `slide.show`           | `slideId`, `maximized` (default true)                                 | `slideId` must be in `lesson.slides`. Showing a slide while another is open advances **in place** (like moving to the next slide) — do not `slide.close` between consecutive slides; close only when returning to the editor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `slide.close`          | —                                                                     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `whiteboard.apply`     | `open?`, `maximized?`, `upsertIds: []`                                | Ids from `lesson.whiteboardAssets`. Must open, change maximize, or upsert ≥1 asset.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `expect.output`        | `contains`, `timeoutMs`                                               | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` line fails it. Anchor with `afterAction: run`. Playground kinds only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `expect.file`          | `path`, `contains`                                                    | Asserts the final workspace file contains the string.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+
+Every WebContainer/preview action requires an explicit bounded retry policy:
+`retry: { maxAttempts: 2, delayMs: 250 }` is a reasonable readiness or
+idempotent-command default. `maxAttempts` is 1–3 and `delayMs` is nonnegative.
+Use exactly `maxAttempts: 1` for `preview.click`.
+
+Preview targets have one supported shape:
+
+```yaml
+target: { by: testId, value: save-button }
+```
+
+The rendered app must own the matching `data-testid="save-button"`. CSS
+selectors, text guesses, XPath, coordinates, and arbitrary iframe script are
+not authoring surfaces. The Studio injects a versioned `postMessage` bridge
+into WebContainer HTML and requires an acknowledgement for every command.
 
 Critical `editor.type` discipline:
 
@@ -242,6 +315,21 @@ if your pinned program and fixture disagree, live renders fail. Mentally
 execute the final code (pinned files + your insertions) and transcribe its
 output.
 
+For WebContainer lessons, the pinned workspace is the truth instead of a
+synthetic result. Pin `package.json`, the declared lockfile, every source
+file, the exact init/run commands, expected port, and non-secret environment.
+The rendered application must expose stable `data-testid` targets for every
+authored interaction or DOM assertion.
+
+Preview plans receive additional blocking artifact gates. The encoded `.ne`
+must contain a preview track, bounded and monotonic preview events, an rrweb
+Meta + FullSnapshot seed, mutation patches when interactions occur, the
+authored interaction sequence in order, and a recorded checkpoint for every
+`expect.preview`. Preview console errors, uncaught exceptions, unhandled
+rejections, runtime failures, missing targets, wrong routes/DOM, or absent
+replay data fail the render. Repeatability compares normalized preview routes,
+checkpoints, and authored interactions rather than timestamps.
+
 ### Slides
 
 Two kinds. Inline slides carry their content in the YAML:
@@ -260,8 +348,8 @@ Google slides pin one page of a **published** Google Slides deck
 (File → Share → Publish to web — the link contains `/d/e/…/pub`). Use the
 Next Editor lesson template's brand style for these decks. The Director
 fetches the deck once at compile time in the render page and pins the page's
-SVG into the plan; the import step verifies the page ids and lists valid
-ones on a mismatch:
+SVG into the plan; the deck page ids resolve during the render build in the
+page (a mismatch lists the valid ids), so keep them current:
 
 ```yaml
 slides:
@@ -324,9 +412,16 @@ content roughly within (250,150)–(1100,650) so it is visible unzoomed.
 | `⚠ …ms of silence inserted before dialog …`     | Your action outlasts the narration around it; add a sentence there or shorten the typed text.           |
 | `Anchor occurrence N of "…" not found` (render) | The `after` string doesn't match the file at perform time — check tabs/newlines and earlier insertions. |
 | `checkpoint.output.… never contains …`          | Fixture output and `expect.output` disagree, or the program doesn't print it.                           |
+| `runtime.waitForReady` times out                | Check the pinned install/run commands, lockfile, expected port, and server diagnostics in the receipt.  |
+| `Preview … command failed`                      | The iframe bridge did not acknowledge, the target's `data-testid` is missing, or the preview crashed.   |
+| `checkpoint.preview.…` failure                  | The recorded route/DOM differs from `expect.preview`; inspect the attached diagnostic screenshot.       |
+| `preview.replayData` failure                    | The artifact lacks an rrweb seed or the mutation patches required for the authored interactions.        |
 | `timing.p95 — … (max 300ms)` failure            | Usually a squeezed action; check the receipts in the render report for the late action.                 |
 | Repeatability FAIL on `repeat.audio`            | Should not happen (synthesis is seeded); report it as a bug rather than working around it.              |
 
 ## A complete example
 
-`examples/rust-borrow.yaml` (bundled beside this document) is the canonical example. Start from a copy of it.
+`examples/rust-borrow.yaml` (bundled beside this document) is the canonical
+example: eight scenes, published-deck slides, keystroke and line-by-line
+typing, run + gates, in the conversational persona register. Start from a copy
+of it.

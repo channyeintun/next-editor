@@ -276,7 +276,18 @@ export const lessonScriptSchema = z
       }
     }
     if (script.runtime.kind === "webcontainer") {
-      if (!(script.runtime.lockfilePath in script.lesson.workspace.files)) {
+      // Python runs one-shot on the WebContainer's WASI `python3`: no package
+      // install (so no lockfile), no dev server, no preview. JS/TS drive a dev
+      // server + preview and must pin a lockfile for a reproducible install.
+      const isPython = script.lesson.workspace.lessonType === "python";
+      if (script.runtime.lockfilePath === undefined) {
+        if (!isPython) {
+          ctx.addIssue({
+            code: "custom",
+            message: `A ${script.lesson.workspace.lessonType} WebContainer lesson must pin a lockfilePath for a reproducible install`,
+          });
+        }
+      } else if (!(script.runtime.lockfilePath in script.lesson.workspace.files)) {
         ctx.addIssue({
           code: "custom",
           message: `WebContainer lockfile "${script.runtime.lockfilePath}" is not in the pinned workspace`,
@@ -284,10 +295,29 @@ export const lessonScriptSchema = z
       }
       for (const scene of script.scenes) {
         for (const action of scene.actions) {
-          if (action.type === "runtime.run" || action.type === "expect.output") {
+          if (action.type === "runtime.run") {
             ctx.addIssue({
               code: "custom",
-              message: `Action "${action.id}" (${action.type}) is a Playground command, not a WebContainer command`,
+              message: `Action "${action.id}" (runtime.run) is a Playground command; a WebContainer lesson runs via runtime.start`,
+            });
+          }
+          if (isPython) {
+            // WASI Python cannot bind a socket — no server to wait for, no preview
+            // to drive; it asserts through console expect.output.
+            if (
+              action.type === "runtime.waitForReady" ||
+              action.type.startsWith("preview.") ||
+              action.type === "expect.preview"
+            ) {
+              ctx.addIssue({
+                code: "custom",
+                message: `Action "${action.id}" (${action.type}) needs a preview server; Python runs one-shot to the console — assert with expect.output`,
+              });
+            }
+          } else if (action.type === "expect.output") {
+            ctx.addIssue({
+              code: "custom",
+              message: `Action "${action.id}" (expect.output) is for console runtimes; a ${script.lesson.workspace.lessonType} preview lesson asserts with expect.preview`,
             });
           }
         }

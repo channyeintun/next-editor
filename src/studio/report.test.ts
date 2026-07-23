@@ -33,6 +33,56 @@ describe("computeTimingStats", () => {
   it("returns null with no measurable receipts", () => {
     expect(computeTimingStats([receipt({ status: "skipped", startedAtMs: null })])).toBeNull();
   });
+
+  it("measures an afterAction dependent's drift from its predecessor's ack, not its planned time (STUDIO-03)", () => {
+    // `open` is chained after `wait`, whose readiness landed 5s after `open`'s
+    // placeholder planned time. Against the planned time that is 5s of drift;
+    // against the predecessor's ack `open` started promptly (0ms).
+    const receipts = [
+      receipt({
+        actionId: "wait",
+        actionType: "runtime.waitForReady",
+        plannedAtMs: 100,
+        startedAtMs: 100,
+        endedAtMs: 5_100,
+      }),
+      receipt({
+        actionId: "open",
+        actionType: "preview.open",
+        plannedAtMs: 100,
+        startedAtMs: 5_100,
+        endedAtMs: 5_140,
+      }),
+    ];
+    // Without the dependency map: open drifts 5000ms from its placeholder.
+    expect(computeTimingStats(receipts)?.maxMs).toBe(5_000);
+    // With it: open started the instant readiness landed.
+    const withDeps = computeTimingStats(receipts, { open: "wait" });
+    expect(withDeps?.maxMs).toBe(0);
+  });
+
+  it("falls back to the planned time when the predecessor never acknowledged", () => {
+    const receipts = [
+      receipt({
+        actionId: "wait",
+        actionType: "runtime.waitForReady",
+        status: "failed",
+        plannedAtMs: 100,
+        startedAtMs: 100,
+        endedAtMs: null,
+      }),
+      receipt({
+        actionId: "open",
+        actionType: "preview.open",
+        plannedAtMs: 100,
+        startedAtMs: 300,
+        endedAtMs: 340,
+      }),
+    ];
+    // `wait` is excluded (failed); `open`'s predecessor has no ack, so drift is
+    // measured from its planned time (200ms).
+    expect(computeTimingStats(receipts, { open: "wait" })?.maxMs).toBe(200);
+  });
 });
 
 describe("timingGateCheck", () => {

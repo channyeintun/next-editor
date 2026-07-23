@@ -135,4 +135,12 @@ scenes:
         attribute: { name: data-state, value: ready }
         retry: { maxAttempts: 3, delayMs: 150 }
 
-checks: []
+# Preview support must not be qualified with an ungated fixture (STUDIO-03). The
+# timing gate compares each action's start to its planned mark, except that an
+# `afterAction`-chained action (runtime.waitForReady, open-preview, expect-*) is
+# measured relative to its predecessor's acknowledgement — so an unbounded
+# dependency install/readiness time does not fail this gate by construction. 500ms
+# matches the documented Google-deck tolerance.
+checks:
+  - type: timing.p95Ms
+    max: 500

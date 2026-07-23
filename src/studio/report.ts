@@ -75,7 +75,8 @@ export interface StudioBuildManifest {
     initCommand: string;
     runCommand: string;
     expectedPort: number | null;
-    lockfilePath: string;
+    /** Null for Python (WASI python3 installs nothing, so there is no lockfile). */
+    lockfilePath: string | null;
     lockfileSha256: string;
     environmentSha256: string;
   } | null;
@@ -108,7 +109,31 @@ export function timingGateCheck(timing: TimingStats | null, maxP95Ms: number): S
   };
 }
 
-export function computeTimingStats(receipts: readonly ActionReceipt[]): TimingStats | null {
+export function computeTimingStats(
+  receipts: readonly ActionReceipt[],
+  /**
+   * afterAction dependencies (dependent id → predecessor id) from the plan. An
+   * action gated on another has a dependency-driven start, so its planned `at`
+   * is only a placeholder; its drift is measured against when the predecessor
+   * actually acknowledged instead. This keeps a WebContainer runtime chain
+   * (start → waitForReady → preview.open) from failing the gate by construction
+   * when dependency install/readiness takes an unbounded, unknowable time
+   * (STUDIO-03). Falls back to the planned time when the predecessor's ack is
+   * unavailable (e.g. it never finished).
+   */
+  dependencies?: Readonly<Record<string, string>>,
+): TimingStats | null {
+  const endedById = new Map(receipts.map((receipt) => [receipt.actionId, receipt.endedAtMs]));
+  const referenceFor = (receipt: ActionReceipt): number => {
+    const predecessorId = dependencies?.[receipt.actionId];
+    if (predecessorId !== undefined) {
+      const predecessorEnd = endedById.get(predecessorId);
+      if (predecessorEnd !== null && predecessorEnd !== undefined) {
+        return predecessorEnd;
+      }
+    }
+    return receipt.plannedAtMs;
+  };
   const deltas = receipts
     // expect.* actions are QA gates whose start waits on prior completions,
     // not lesson content — they don't belong in the timing distribution (§5).
@@ -118,7 +143,7 @@ export function computeTimingStats(receipts: readonly ActionReceipt[]): TimingSt
         receipt.startedAtMs !== null &&
         !receipt.actionType.startsWith("expect."),
     )
-    .map((receipt) => Math.abs((receipt.startedAtMs as number) - receipt.plannedAtMs))
+    .map((receipt) => Math.abs((receipt.startedAtMs as number) - referenceFor(receipt)))
     .sort((left, right) => left - right);
 
   if (deltas.length === 0) {

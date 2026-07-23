@@ -178,6 +178,10 @@ export function compileLessonScript({
   const authored: TimedAction[] = [];
   const pending: TimedAction[] = [];
   const resolvedAt = new Map<string, number>();
+  // dependent id → predecessor id, for every `afterAction`-anchored action. Emitted
+  // into the plan so the timing gate measures a dependent's drift relative to its
+  // predecessor's acknowledgement rather than a placeholder planned time (STUDIO-03).
+  const dependencies = new Map<string, string>();
 
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
@@ -209,6 +213,7 @@ export function compileLessonScript({
       if (referenced === undefined) continue;
       entry.at = referenced;
       resolvedAt.set(entry.action.id, referenced);
+      dependencies.set(entry.action.id, anchor.afterAction);
       authored.push(entry);
       pending.splice(i, 1);
       progressed = true;
@@ -477,6 +482,7 @@ export function compileLessonScript({
     },
     runtime: script.runtime,
     gates: timingCheck ? { timingP95MaxMs: timingCheck.max } : undefined,
+    dependencies: dependencies.size > 0 ? Object.fromEntries(dependencies) : undefined,
     actions: planActions,
   };
 

@@ -390,8 +390,13 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
     initCommand: z.string(),
     runCommand: z.string().min(1),
     expectedPort: z.number().int().min(1).max(65_535).optional(),
-    /** Exact contents are pinned in workspace.files and covered by the plan hash. */
-    lockfilePath: z.string().min(1),
+    /**
+     * Exact contents are pinned in workspace.files and covered by the plan hash.
+     * Required for JavaScript/TypeScript (reproducible npm/pnpm install); omitted
+     * for Python, which runs one-shot on the WebContainer's built-in WASI
+     * `python3` with no package install (validated per lessonType below).
+     */
+    lockfilePath: z.string().min(1).optional(),
     environment: z.record(z.string().min(1), z.string()).default({}),
   }),
   z.object({
@@ -414,16 +419,42 @@ export type StudioRuntime = z.infer<typeof studioRuntimeSchema>;
 export type StudioRuntimeKind = StudioRuntime["kind"];
 export type StudioRuntimeMode = "live" | "fixture";
 
+export interface RuntimeModeParam {
+  /** The requested mode, or null when no usable `runtime` value was supplied. */
+  mode: StudioRuntimeMode | null;
+  /** True when a non-empty `runtime` value was supplied that is neither allowed value. */
+  invalid: boolean;
+  /** The raw value, echoed back for error messages. */
+  raw: string | null;
+}
+
+/**
+ * Parse the `runtime` query parameter the /studio route and the studio-render
+ * CLI both document as `fixture | live`. A missing (or empty) param yields
+ * `mode: null` so the caller uses the plan's pinned default; an unrecognized
+ * value is surfaced as `invalid` rather than silently coerced to the default —
+ * otherwise a caller who explicitly asked for `fixture` could be forced onto a
+ * plan whose default is `live`, contacting the real service (STUDIO-05).
+ */
+export function parseRuntimeModeParam(raw: string | null): RuntimeModeParam {
+  if (raw === "live" || raw === "fixture") {
+    return { mode: raw, invalid: false, raw };
+  }
+  return { mode: null, invalid: raw !== null && raw !== "", raw };
+}
+
 /**
  * The one runtime kind each lesson type may declare. The three Playground
- * languages execute through their selective proxies; the WebContainer
- * JavaScript and TypeScript use the versioned WebContainer adapter; Python
- * remains edit-only until it has a Studio-owned runtime contract.
+ * languages execute through their selective proxies; JavaScript, TypeScript, and
+ * Python all run in the versioned WebContainer adapter. JS/TS drive a dev server
+ * + preview; Python runs one-shot on the WebContainer's built-in WASI `python3`
+ * (no server, no preview) and gates on console `expect.output` — the per-lesson
+ * action rules are enforced in the plan schema's superRefine below.
  */
 export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind> = {
   javascript: "webcontainer",
   typescript: "webcontainer",
-  python: "none",
+  python: "webcontainer",
   go: "go-playground",
   kotlin: "kotlin-playground",
   rust: "rust-playground",
@@ -451,6 +482,17 @@ export const studioPlanSchema = z
         timingP95MaxMs: z.number().finite().positive().optional(),
       })
       .optional(),
+    /**
+     * afterAction dependencies (dependent id → predecessor id). The compiler
+     * emits an entry for every action anchored `afterAction`. The performer is
+     * sequential, so a dependent's planned `at` is only a placeholder — the
+     * timing gate measures its start drift relative to when its predecessor
+     * actually acknowledged, not that placeholder. Without this a WebContainer
+     * chain (runtime.start → waitForReady → preview.open) fails the timing gate
+     * by construction, since dependency install/readiness time is unbounded and
+     * unknowable at compile time (STUDIO-03).
+     */
+    dependencies: z.record(z.string(), z.string()).optional(),
     actions: z.array(studioPlanActionSchema).min(1),
   })
   .superRefine((plan, ctx) => {
@@ -479,17 +521,47 @@ export const studioPlanSchema = z
       }
     }
     if (plan.runtime.kind === "webcontainer") {
-      if (!(plan.runtime.lockfilePath in plan.workspace.files)) {
+      // Python runs one-shot on the WebContainer's WASI `python3`: no package
+      // install (so no lockfile), no dev server, no preview. JS/TS drive a dev
+      // server + preview and must pin a lockfile for a reproducible install.
+      const isPython = plan.workspace.lessonType === "python";
+      if (plan.runtime.lockfilePath === undefined) {
+        if (!isPython) {
+          ctx.addIssue({
+            code: "custom",
+            message: `A ${plan.workspace.lessonType} WebContainer lesson must pin a lockfilePath for a reproducible install`,
+          });
+        }
+      } else if (!(plan.runtime.lockfilePath in plan.workspace.files)) {
         ctx.addIssue({
           code: "custom",
           message: `WebContainer lockfile "${plan.runtime.lockfilePath}" is not in the pinned workspace`,
         });
       }
       for (const action of plan.actions) {
-        if (action.type === "runtime.run" || action.type === "expect.output") {
+        if (action.type === "runtime.run") {
           ctx.addIssue({
             code: "custom",
-            message: `Action "${action.id}" (${action.type}) is a Playground command, not a WebContainer command`,
+            message: `Action "${action.id}" (runtime.run) is a Playground command; a WebContainer lesson runs via runtime.start`,
+          });
+        }
+        if (isPython) {
+          // WASI Python cannot bind a socket, so it has no server to wait for and
+          // no preview to interact with — it asserts through console expect.output.
+          if (
+            action.type === "runtime.waitForReady" ||
+            action.type.startsWith("preview.") ||
+            action.type === "expect.preview"
+          ) {
+            ctx.addIssue({
+              code: "custom",
+              message: `Action "${action.id}" (${action.type}) needs a preview server; Python runs one-shot to the console — assert with expect.output`,
+            });
+          }
+        } else if (action.type === "expect.output") {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${action.id}" (expect.output) is for console runtimes; a ${plan.workspace.lessonType} preview lesson asserts with expect.preview`,
           });
         }
       }
@@ -543,6 +615,30 @@ export const studioPlanSchema = z
         ctx.addIssue({ code: "custom", message: `Duplicate action id "${action.id}"` });
       }
       ids.add(action.id);
+    }
+
+    if (plan.dependencies) {
+      const indexById = new Map(plan.actions.map((action, index) => [action.id, index]));
+      for (const [dependentId, predecessorId] of Object.entries(plan.dependencies)) {
+        const dependentIndex = indexById.get(dependentId);
+        const predecessorIndex = indexById.get(predecessorId);
+        if (dependentIndex === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Dependency for unknown action "${dependentId}"`,
+          });
+        } else if (predecessorIndex === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${dependentId}" depends on unknown action "${predecessorId}"`,
+          });
+        } else if (predecessorIndex >= dependentIndex) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${dependentId}" depends on "${predecessorId}", which does not precede it`,
+          });
+        }
+      }
     }
 
     for (let i = 1; i < plan.actions.length; i++) {
