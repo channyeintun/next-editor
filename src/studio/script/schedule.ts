@@ -102,32 +102,29 @@ export function scheduleDialogs({
     }
   });
 
-  // Resolve every action's anchoring dialog + offset, following `afterAction`
-  // to its predecessor's resolved anchor — the same chain the compiler resolves.
-  // A chained action's busy time is then attributed to the dialog its root
-  // announces instead of being dropped, so dialog scheduling and the timing gate
-  // share one dependency model (STUDIO-03). Chained WebContainer/preview actions
-  // carry zero modelled busy, so this does not shift narration for them; it only
-  // matters for a bounded action authored after another.
-  const resolvedAnchor = new Map<
-    string,
-    { dialogIndex: number | null | undefined; offsetMs: number }
-  >();
+  // Resolve every action's anchoring dialog, following `afterAction` to its
+  // predecessor's root anchor — the same dependency chain the compiler resolves.
+  // Modeled busy time is accumulated later, once the root marker's absolute time
+  // is known, so two chained edits reserve the sum of their durations instead of
+  // both pretending to begin at the root mark (STUDIO-03).
+  const resolvedDialog = new Map<string, number | null | undefined>();
+  const directOffset = new Map<string, number>();
+  const busyById = new Map<string, number>();
+  const predecessorById = new Map<string, string>();
   const afterActionOf = new Map<string, string>();
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
+      const seed = typingSeeds.get(action.id) ?? script.build.seed;
+      busyById.set(action.id, typingDurationOf(action, seed) + selectDurationOf(action, seed));
       const anchor = action.at;
       if ("mark" in anchor) {
-        resolvedAnchor.set(action.id, {
-          dialogIndex: markerDialogIndex.get(anchor.mark),
-          offsetMs: anchor.offsetMs,
-        });
+        resolvedDialog.set(action.id, markerDialogIndex.get(anchor.mark));
+        directOffset.set(action.id, anchor.offsetMs);
       } else if ("scene" in anchor) {
-        resolvedAnchor.set(action.id, {
-          dialogIndex: sceneFirstDialog.get(scene.id) ?? null,
-          offsetMs: anchor.offsetMs,
-        });
+        resolvedDialog.set(action.id, sceneFirstDialog.get(scene.id) ?? null);
+        directOffset.set(action.id, anchor.offsetMs);
       } else {
+        predecessorById.set(action.id, anchor.afterAction);
         afterActionOf.set(action.id, anchor.afterAction);
       }
     }
@@ -140,9 +137,8 @@ export function scheduleDialogs({
     anchorProgressed = false;
     // Deleting the just-resolved (current) entry mid-iteration is safe for a Map.
     for (const [id, predecessorId] of afterActionOf) {
-      const inherited = resolvedAnchor.get(predecessorId);
-      if (!inherited) continue;
-      resolvedAnchor.set(id, inherited);
+      if (!resolvedDialog.has(predecessorId)) continue;
+      resolvedDialog.set(id, resolvedDialog.get(predecessorId));
       afterActionOf.delete(id);
       anchorProgressed = true;
     }
@@ -150,19 +146,18 @@ export function scheduleDialogs({
 
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
-      const resolved = resolvedAnchor.get(action.id);
+      const dialogIndex = resolvedDialog.get(action.id);
       // Unknown marker or unresolved afterAction — the compiler reports it.
-      if (!resolved || resolved.dialogIndex === undefined || resolved.dialogIndex === null) {
+      if (dialogIndex === undefined || dialogIndex === null) {
         continue;
       }
-      const entries = actionsByDialog.get(resolved.dialogIndex) ?? [];
-      const seed = typingSeeds.get(action.id) ?? script.build.seed;
+      const entries = actionsByDialog.get(dialogIndex) ?? [];
       entries.push({
-        offsetMs: resolved.offsetMs,
-        busyMs: typingDurationOf(action, seed) + selectDurationOf(action, seed),
+        offsetMs: directOffset.get(action.id) ?? 0,
+        busyMs: busyById.get(action.id) ?? 0,
         actionId: action.id,
       });
-      actionsByDialog.set(resolved.dialogIndex, entries);
+      actionsByDialog.set(dialogIndex, entries);
     }
   }
 
@@ -212,9 +207,32 @@ export function scheduleDialogs({
 
     // This dialog's anchored actions may outlast it; the next dialog waits.
     const markerTimeMs = combinedTokens[dialog.firstTokenIndex].startMs;
-    for (const entry of actionsByDialog.get(i) ?? []) {
-      const actionAt = Math.max(0, markerTimeMs + entry.offsetMs);
-      busyUntilMs = Math.max(busyUntilMs, actionAt + entry.busyMs);
+    const pendingActionIds = new Set((actionsByDialog.get(i) ?? []).map((entry) => entry.actionId));
+    const entriesById = new Map(
+      (actionsByDialog.get(i) ?? []).map((entry) => [entry.actionId, entry]),
+    );
+    const modeledEndById = new Map<string, number>();
+    let actionProgressed = true;
+    while (pendingActionIds.size > 0 && actionProgressed) {
+      actionProgressed = false;
+      for (const actionId of pendingActionIds) {
+        const entry = entriesById.get(actionId)!;
+        let actionAt: number | undefined;
+        if (directOffset.has(actionId)) {
+          actionAt = Math.max(0, markerTimeMs + entry.offsetMs);
+        } else {
+          const predecessorId = predecessorById.get(actionId);
+          if (predecessorId !== undefined) {
+            actionAt = modeledEndById.get(predecessorId);
+          }
+        }
+        if (actionAt === undefined) continue;
+        const actionEnd = actionAt + entry.busyMs;
+        modeledEndById.set(actionId, actionEnd);
+        busyUntilMs = Math.max(busyUntilMs, actionEnd);
+        pendingActionIds.delete(actionId);
+        actionProgressed = true;
+      }
     }
     busyUntilMs = Math.max(busyUntilMs, 0);
   }

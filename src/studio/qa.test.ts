@@ -477,6 +477,43 @@ describe("runArtifactChecks decoded-artifact authority (STUDIO-01)", () => {
     }
   });
 
+  it.each([
+    {
+      gate: "frames.monotonic",
+      drop: (recording: Recording) => {
+        recording.frames = [];
+      },
+    },
+    {
+      gate: "cursor.monotonic",
+      drop: (recording: Recording) => {
+        recording.cursorEvents = [];
+      },
+    },
+    {
+      gate: "workspace.monotonic",
+      drop: (recording: Recording) => {
+        recording.workspaceEvents = [];
+      },
+    },
+    {
+      gate: "runtime.monotonic",
+      drop: (recording: Recording) => {
+        recording.runtimeEvents = [];
+      },
+    },
+  ])(
+    "fails $gate when the encoded artifact drops that required event stream but preserves its track metadata",
+    async ({ gate, drop }) => {
+      const plan = makePlan();
+      const good = makeRecording(plan);
+      const missingEvents = makeRecording(plan);
+      drop(missingEvents);
+
+      expect(failedIds(await checksForMismatch(good, missingEvents, plan))).toContain(gate);
+    },
+  );
+
   it("fails runtime.noErrors when the encoded artifact carries an error console line", async () => {
     const plan = makePlan();
     const good = makeRecording(plan);

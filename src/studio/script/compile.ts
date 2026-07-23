@@ -177,7 +177,8 @@ export function compileLessonScript({
   // ---- Resolve anchors to absolute times ----------------------------------
   const authored: TimedAction[] = [];
   const pending: TimedAction[] = [];
-  const resolvedAt = new Map<string, number>();
+  const resolvedEndAt = new Map<string, number>();
+  const typingSeed = typingSeedsOf(script);
   // dependent id → predecessor id, for every `afterAction`-anchored action. Emitted
   // into the plan so the timing gate measures a dependent's drift relative to its
   // predecessor's acknowledgement rather than a placeholder planned time (STUDIO-03).
@@ -190,11 +191,11 @@ export function compileLessonScript({
         const marker = requireMarker(extracted, anchor.mark);
         const at = Math.max(0, markerTimeMs(alignment, marker) + anchor.offsetMs);
         authored.push({ action, sceneId: scene.id, at });
-        resolvedAt.set(action.id, at);
+        resolvedEndAt.set(action.id, at + actionBusyMs(action, typingSeed.get(action.id)!));
       } else if ("scene" in anchor) {
         const at = Math.max(0, sceneStartMs(alignment, extracted, scene.id) + anchor.offsetMs);
         authored.push({ action, sceneId: scene.id, at });
-        resolvedAt.set(action.id, at);
+        resolvedEndAt.set(action.id, at + actionBusyMs(action, typingSeed.get(action.id)!));
       } else {
         pending.push({ action, sceneId: scene.id, at: Number.NaN });
       }
@@ -209,10 +210,17 @@ export function compileLessonScript({
       const entry = pending[i];
       const anchor = entry.action.at;
       if (!("afterAction" in anchor)) continue;
-      const referenced = resolvedAt.get(anchor.afterAction);
-      if (referenced === undefined) continue;
-      entry.at = referenced;
-      resolvedAt.set(entry.action.id, referenced);
+      const referencedEnd = resolvedEndAt.get(anchor.afterAction);
+      if (referencedEnd === undefined) continue;
+      // A modeled edit (typing/select) has a deterministic busy duration, so a
+      // dependent can carry its real planned start after that duration. Runtime
+      // and preview waits remain zero-modelled and therefore keep the predecessor
+      // start as a placeholder; their timing is measured from the actual ack.
+      entry.at = referencedEnd;
+      resolvedEndAt.set(
+        entry.action.id,
+        referencedEnd + actionBusyMs(entry.action, typingSeed.get(entry.action.id)!),
+      );
       dependencies.set(entry.action.id, anchor.afterAction);
       authored.push(entry);
       pending.splice(i, 1);
@@ -226,9 +234,6 @@ export function compileLessonScript({
   }
 
   authored.sort((left, right) => left.at - right.at);
-
-  // ---- Typing seeds (stable per authored order) + typing end times ---------
-  const typingSeed = typingSeedsOf(script);
 
   // ---- Attention cursor choreography (§7) ----------------------------------
   const random = createSeededRandom(script.build.seed ^ 0x5f3759df);

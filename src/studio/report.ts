@@ -77,7 +77,8 @@ export interface StudioBuildManifest {
     expectedPort: number | null;
     /** Null for Python (WASI python3 installs nothing, so there is no lockfile). */
     lockfilePath: string | null;
-    lockfileSha256: string;
+    /** Null when lockfilePath is null. */
+    lockfileSha256: string | null;
     environmentSha256: string;
   } | null;
   environment: {
@@ -112,10 +113,10 @@ export function timingGateCheck(timing: TimingStats | null, maxP95Ms: number): S
 export function computeTimingStats(
   receipts: readonly ActionReceipt[],
   /**
-   * afterAction dependencies (dependent id → predecessor id) from the plan. An
-   * action gated on another has a dependency-driven start, so its planned `at`
-   * is only a placeholder; its drift is measured against when the predecessor
-   * actually acknowledged instead. This keeps a WebContainer runtime chain
+   * afterAction dependencies (dependent id → predecessor id) from the plan.
+   * Their drift is measured against when the predecessor actually acknowledged;
+   * deterministic edit chains also carry a modeled planned time, while runtime
+   * and preview waits use a placeholder. This keeps a WebContainer runtime chain
    * (start → waitForReady → preview.open) from failing the gate by construction
    * when dependency install/readiness takes an unbounded, unknowable time
    * (STUDIO-03). Falls back to the planned time when the predecessor's ack is

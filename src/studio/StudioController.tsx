@@ -140,7 +140,9 @@ declare global {
 }
 
 function semanticsStorageKey(slug: string, mode: StudioRuntimeMode): string {
-  return `next-editor:studio:semantics:${slug}:${mode}`;
+  // v2 stores passing renders only; ignore older session entries that may have
+  // been written by a failed artifact check and poisoned the next comparison.
+  return `next-editor:studio:passed-semantics:v2:${slug}:${mode}`;
 }
 
 function readStoredSemantics(slug: string, mode: StudioRuntimeMode): RenderSemantics | null {
@@ -526,16 +528,20 @@ export default function StudioController() {
       setLatest(entry);
 
       let nextComparison: StudioCheckResult[] | null = null;
-      if (result.semantics) {
+      // A failed artifact may still have extractable diagnostics, but it is not
+      // a repeatability baseline and must never overwrite the last passing one.
+      if (result.semantics && result.report.outcome === "passed") {
         const currentPlanHash = result.semantics.planSha256;
         // Repeatability only means something between renders of the SAME compiled
         // plan, so the baseline must match on plan hash — not merely runtime mode
         // (STUDIO-04). The trailing hash guard still distinguishes "no baseline"
         // from an edited-script reset for the note below.
         const previous = selectRepeatabilityBaseline(
-          runHistory
-            .slice(0, -1)
-            .map((run) => ({ mode: run.mode, semantics: run.result.semantics })),
+          runHistory.slice(0, -1).map((run) => ({
+            mode: run.mode,
+            outcome: run.result.report.outcome,
+            semantics: run.result.semantics,
+          })),
           mode,
           currentPlanHash,
           readStoredSemantics(plan.lesson.slug, mode),

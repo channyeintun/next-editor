@@ -35,6 +35,8 @@ export type ScreenRecordingEmit =
       type: "SCREEN_STARTED";
       actorId: string;
       mimeType: string;
+      /** Whether the capture graph supplied an audio track. */
+      hasAudio: boolean;
       startedAtMs: number;
       startedAtPerf: number;
     }
@@ -43,6 +45,8 @@ export type ScreenRecordingEmit =
       actorId: string;
       blob: Blob;
       mimeType: string;
+      /** Whether the saved video carries an audio track. */
+      hasAudio: boolean;
       startOffsetMs: number;
     }
   | { type: "SCREEN_ERROR"; actorId: string; error: string };
@@ -105,7 +109,9 @@ export const buildScreenCaptureStream = (
 /**
  * Screen recording actor — mirrors `cameraRecordingActor`'s lifecycle shape but records a
  * pre-acquired display stream (never self-acquires; `getDisplayMedia` must run in the click
- * handler to keep transient user activation) and muxes narration audio into a standalone video.
+ * handler to keep transient user activation) and muxes available display/tab audio plus an
+ * optional microphone clone. External narration is present only when the chosen tab capture
+ * supplies it; audio-less captures are explicitly reported as silent.
  *
  * The blob is emitted via `SCREEN_STOPPED` and saved to disk by the app layer — it is never
  * folded into the `Recording`, so nothing in the machine's finalize join waits on it.

@@ -52,7 +52,7 @@ async function invokeAction(
     case "runtime.run":
       return driver.runWorkspace(action.timeoutMs);
     case "runtime.start":
-      return driver.startRuntime();
+      return driver.startRuntime(action.timeoutMs);
     case "runtime.waitForReady":
       return driver.waitForRuntimeReady(action.timeoutMs);
     case "preview.open":

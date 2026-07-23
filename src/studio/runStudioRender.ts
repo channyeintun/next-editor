@@ -502,7 +502,7 @@ export async function runStudioRender(
         runtimeMode,
         startedAtIso,
         wallDurationMs: Math.round(performance.now() - wallStart),
-        recordingDurationMs: recording.duration,
+        recordingDurationMs: artifactRecording.duration,
         receipts,
         timing: computeTimingStats(receipts, plan.dependencies),
         checks,
@@ -537,13 +537,14 @@ async function baseManifest(
           runCommand: plan.runtime.runCommand,
           expectedPort: plan.runtime.expectedPort ?? null,
           // Python has no lockfile (WASI python3 installs nothing); the contract
-          // then records a null path and hashes the empty string for it.
+          // records null for both the path and hash instead of advertising the
+          // SHA-256 of an imaginary empty lockfile.
           lockfilePath: plan.runtime.lockfilePath ?? null,
-          lockfileSha256: await sha256Hex(
-            new TextEncoder().encode(
-              (plan.runtime.lockfilePath && plan.workspace.files[plan.runtime.lockfilePath]) || "",
-            ),
-          ),
+          lockfileSha256: plan.runtime.lockfilePath
+            ? await sha256Hex(
+                new TextEncoder().encode(plan.workspace.files[plan.runtime.lockfilePath] ?? ""),
+              )
+            : null,
           environmentSha256: await sha256HexOfJson(plan.runtime.environment),
         }
       : null;

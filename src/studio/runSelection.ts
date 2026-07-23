@@ -1,5 +1,6 @@
 import type { RenderSemantics } from "./compare";
 import type { StudioRuntimeMode } from "./plan";
+import type { StudioRenderOutcome } from "./report";
 
 /**
  * Selection ↔ completed-run reconciliation for the Studio console
@@ -7,15 +8,6 @@ import type { StudioRuntimeMode } from "./plan";
  * rules that keep a render's artifact bound to the lesson that produced it can
  * be tested without mounting the controller.
  */
-
-/** djb2 — a cheap, synchronous content hash for imported-script revisions. */
-function hashString(input: string): string {
-  let hash = 5381;
-  for (let i = 0; i < input.length; i++) {
-    hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
-  }
-  return (hash >>> 0).toString(36);
-}
 
 /**
  * A synchronous identity for a selected source, so a completed run's metadata
@@ -26,7 +18,11 @@ function hashString(input: string): string {
  */
 export function sourceRevisionOf(slug: string, importedScripts: Record<string, string>): string {
   const yamlText = importedScripts[slug];
-  return yamlText === undefined ? `builtin:${slug}` : `imported:${hashString(yamlText)}`;
+  // Use the exact imported bytes as the identity. A 32-bit convenience hash can
+  // collide, which would re-expose an older recording for different YAML—the
+  // precise cross-revision mix-up this guard exists to prevent. Keep imported
+  // and built-in identities in disjoint namespaces as well.
+  return yamlText === undefined ? `builtin:${slug}` : `imported:${yamlText}`;
 }
 
 /** The immutable per-run identity a completed run carries for reconciliation. */
@@ -60,6 +56,7 @@ export function runExposedForSelection(
 /** Prior run as the repeatability baseline sees it — mode plus its render semantics. */
 export interface PriorRunSemantics {
   mode: StudioRuntimeMode;
+  outcome: StudioRenderOutcome;
   semantics: RenderSemantics | null;
 }
 
@@ -80,6 +77,11 @@ export function selectRepeatabilityBaseline(
 ): RenderSemantics | null {
   const fromHistory = [...priorRuns]
     .reverse()
-    .find((run) => run.mode === mode && run.semantics?.planSha256 === currentPlanHash)?.semantics;
+    .find(
+      (run) =>
+        run.outcome === "passed" &&
+        run.mode === mode &&
+        run.semantics?.planSha256 === currentPlanHash,
+    )?.semantics;
   return fromHistory ?? storedBaseline;
 }

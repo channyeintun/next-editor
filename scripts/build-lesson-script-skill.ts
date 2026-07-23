@@ -11,7 +11,7 @@
  * section — schema, runtime matrix, action catalog, fixtures, failure table —
  * is copied verbatim. Each edit asserts its anchor is present and unique, so a
  * canonical change that moves an anchor fails loudly here rather than silently
- * leaving stale (forked) text behind. `share/lesson-script-skill/bundle.test.ts`
+ * leaving stale (forked) text behind. `src/studio/lessonScriptSkillBundle.test.ts`
  * fails when the checked-in bundle drifts from this generator's output or from
  * the schema.
  *
@@ -133,18 +133,19 @@ export function buildReference(canonical: string): string {
     ),
   );
 
-  // T5 — Google decks resolve during the render build in the page, not on import
-  // and not via a CLI. (The forked bundle wrongly claimed the import step verified
-  // page ids.)
+  // T5 — Google decks resolve during the render build; frame that truth around
+  // website import instead of the optional in-repo Director CLI.
   out = replaceOnce(
     out,
     lines(
-      "SVG into the plan; `bun scripts/studio-director.ts` verifies the page ids",
-      "early (best-effort — offline it warns and the render page re-checks):",
+      "SVG into the plan. Deck page ids resolve during that render build (a mismatch",
+      "lists the valid ids); the Director CLI validates the YAML but does not fetch",
+      "the deck:",
     ),
     lines(
-      "SVG into the plan; the deck page ids resolve during the render build in the",
-      "page (a mismatch lists the valid ids), so keep them current:",
+      "SVG into the plan. Deck page ids resolve during the render build in the",
+      "page (a mismatch lists the valid ids); Import… validates the YAML, while",
+      "the deck is fetched only when the render starts:",
     ),
   );
 
@@ -179,8 +180,8 @@ export function buildReference(canonical: string): string {
 }
 
 export function buildPersona(canonical: string): string {
-  // The only fork surface is the intro's in-repo pointers.
-  return replaceOnce(
+  // T1 — intro: remove in-repo pointers.
+  let out = replaceOnce(
     canonical,
     lines(
       "The versioned editorial contract for studio-produced lessons",
@@ -197,6 +198,15 @@ export function buildPersona(canonical: string): string {
       "reviewers judge drafts by.",
     ),
   );
+
+  // T2 — review metrics: retain the requirement without a broken repo path.
+  out = replaceOnce(
+    out,
+    "verdicts per docs/studio-m0-runbook.md's metrics table.",
+    "verdicts alongside the lesson's production metrics.",
+  );
+
+  return out;
 }
 
 export interface BundleArtifact {

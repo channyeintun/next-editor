@@ -24,6 +24,9 @@ const ROOT = resolve(__dirname, "../..");
 const readBundle = (relative: string) =>
   readFileSync(resolve(ROOT, "share/lesson-script-skill", relative), "utf8");
 const reference = readBundle("references/lesson-script-authoring.md");
+const persona = readBundle("references/studio-persona.md");
+const canonicalReference = readFileSync(resolve(ROOT, "docs/lesson-script-authoring.md"), "utf8");
+const inRepoSkill = readFileSync(resolve(ROOT, ".claude/skills/lesson-script/SKILL.md"), "utf8");
 
 /** The action types agents author. cursor.moveTo is derived by the compiler, not authored. */
 const schemaActionTypes = studioPlanActionSchema.options.map(
@@ -235,7 +238,29 @@ describe("lesson-script skill bundle contract (SKILL-01)", () => {
 
   it("does not claim import verifies Google deck page ids (it resolves at render)", () => {
     expect(reference).not.toMatch(/import step verifies the page ids/);
-    expect(reference).toMatch(/resolve during the render build/);
+    expect(reference).toMatch(/resolve during (?:the|that) render build/);
+    expect(canonicalReference).not.toMatch(/studio-director\.ts` verifies the page ids\s+early/);
+  });
+
+  it("documents expect.output for both Playground and console-only Python lessons", () => {
+    const expectOutputRow = reference
+      .split("\n")
+      .find((line) => line.startsWith("| `expect.output`"));
+    expect(expectOutputRow).toMatch(/Python/);
+    expect(expectOutputRow).not.toMatch(/Playground kinds only/);
+  });
+
+  it("keeps every distributed reference self-contained", () => {
+    expect(persona).not.toMatch(/\b(?:docs|src|scripts)\//);
+  });
+
+  it("never instructs the in-repo agent to launch a background dev server", () => {
+    expect(inRepoSkill).not.toMatch(/bun run dev.*\(background\)/);
+    expect(inRepoSkill).toMatch(/Never launch `bun run dev` in the background/);
+  });
+
+  it("gives the long authoring reference a contents index", () => {
+    expect(reference).toMatch(/^## Contents$/m);
   });
 
   it("matches the generator output — the bundle is regenerated, not hand-forked", () => {

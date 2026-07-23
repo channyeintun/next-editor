@@ -41,6 +41,16 @@ describe("sourceRevisionOf", () => {
   it("distinguishes an imported script from a built-in of the same slug", () => {
     expect(sourceRevisionOf("shared", {})).not.toBe(sourceRevisionOf("shared", { shared: "yaml" }));
   });
+
+  it("uses exact imported bytes rather than a collision-prone short hash", () => {
+    const yaml = "lesson:\n  slug: exact\n";
+    expect(sourceRevisionOf("exact", { exact: yaml })).toBe(`imported:${yaml}`);
+  });
+
+  it("keeps imported bytes disjoint from the built-in identity namespace", () => {
+    const builtinRevision = sourceRevisionOf("exact", {});
+    expect(sourceRevisionOf("exact", { exact: builtinRevision })).not.toBe(builtinRevision);
+  });
 });
 
 describe("runExposedForSelection (STUDIO-02)", () => {
@@ -77,20 +87,24 @@ describe("selectRepeatabilityBaseline (STUDIO-04)", () => {
   it("A → B → A compares the second A against the first A, not B", () => {
     // History before the second A finishes, most-recent last: [A, B].
     const priorRuns: PriorRunSemantics[] = [
-      { mode, semantics: semanticsWithHash(hashA) },
-      { mode, semantics: semanticsWithHash(hashB) },
+      { mode, outcome: "passed", semantics: semanticsWithHash(hashA) },
+      { mode, outcome: "passed", semantics: semanticsWithHash(hashB) },
     ];
     const baseline = selectRepeatabilityBaseline(priorRuns, mode, hashA, null);
     expect(baseline?.planSha256).toBe(hashA);
   });
 
   it("ignores same-mode runs whose plan hash differs (does not pick B for an A render)", () => {
-    const priorRuns: PriorRunSemantics[] = [{ mode, semantics: semanticsWithHash(hashB) }];
+    const priorRuns: PriorRunSemantics[] = [
+      { mode, outcome: "passed", semantics: semanticsWithHash(hashB) },
+    ];
     expect(selectRepeatabilityBaseline(priorRuns, mode, hashA, null)).toBeNull();
   });
 
   it("ignores history from a different runtime mode", () => {
-    const priorRuns: PriorRunSemantics[] = [{ mode: "live", semantics: semanticsWithHash(hashA) }];
+    const priorRuns: PriorRunSemantics[] = [
+      { mode: "live", outcome: "passed", semantics: semanticsWithHash(hashA) },
+    ];
     expect(selectRepeatabilityBaseline(priorRuns, mode, hashA, null)).toBeNull();
   });
 
@@ -103,8 +117,8 @@ describe("selectRepeatabilityBaseline (STUDIO-04)", () => {
     const stored = semanticsWithHash(hashA);
     const recent = semanticsWithHash(hashA);
     const priorRuns: PriorRunSemantics[] = [
-      { mode, semantics: semanticsWithHash(hashA) },
-      { mode, semantics: recent },
+      { mode, outcome: "passed", semantics: semanticsWithHash(hashA) },
+      { mode, outcome: "passed", semantics: recent },
     ];
     expect(selectRepeatabilityBaseline(priorRuns, mode, hashA, stored)).toBe(recent);
   });
@@ -114,5 +128,17 @@ describe("selectRepeatabilityBaseline (STUDIO-04)", () => {
     // changed" reset rather than a false comparison.
     const stored = semanticsWithHash(hashB);
     expect(selectRepeatabilityBaseline([], mode, hashA, stored)).toBe(stored);
+  });
+
+  it("does not use a failed render as a repeatability baseline", () => {
+    const failed = semanticsWithHash(hashA);
+    expect(
+      selectRepeatabilityBaseline(
+        [{ mode, outcome: "failed", semantics: failed }],
+        mode,
+        hashA,
+        null,
+      ),
+    ).toBeNull();
   });
 });

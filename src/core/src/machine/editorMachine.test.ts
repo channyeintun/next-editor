@@ -1352,11 +1352,17 @@ describe("editorMachine local screen recording", () => {
     expect(actor.getSnapshot().children[screen.actorId!]).toBeDefined();
     expect(screen.isRecording).toBe(true);
     expect(screen.mimeType).toBe("video/webm;codecs=vp9,opus");
+    expect(screen.hasAudio).toBe(false);
     expect(screen.startOffsetMs).toBeGreaterThanOrEqual(0);
   });
 
   it("saves the screen blob after stop — even once the machine reaches playback — and clears context", async () => {
-    const ready: Array<{ blob: Blob; mimeType: string; startOffsetMs: number }> = [];
+    const ready: Array<{
+      blob: Blob;
+      mimeType: string;
+      hasAudio: boolean;
+      startOffsetMs: number;
+    }> = [];
     const actor = start({ onScreenRecordingReady: (payload) => ready.push(payload) });
 
     actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
@@ -1372,6 +1378,7 @@ describe("editorMachine local screen recording", () => {
     expect(ready).toHaveLength(1);
     expect(ready[0]?.blob).toBeInstanceOf(Blob);
     expect(ready[0]?.mimeType).toBe("video/webm;codecs=vp9,opus");
+    expect(ready[0]?.hasAudio).toBe(false);
     expect(actor.getSnapshot().context.screenStream).toBeNull();
     expect(actor.getSnapshot().children[screenActorId]).toBeUndefined();
   });

@@ -28,8 +28,10 @@ export const scriptAnchorSchema = z.union([
   z.object({ mark: z.string().min(1), offsetMs: offsetMs.default(0) }),
   /**
    * After the referenced action completes. The Performer is strictly
-   * sequential, so the compiled `at` equals the referenced action's `at`; the
-   * receipt records the actual (later) start.
+   * sequential. The compiler advances past deterministic typing/selection busy
+   * time; runtime/preview waits use the predecessor's planned start as a
+   * placeholder, while the receipt records the actual acknowledgement-relative
+   * start.
    */
   z.object({ afterAction: z.string().min(1) }),
 ]);
@@ -292,6 +294,32 @@ export const lessonScriptSchema = z
           code: "custom",
           message: `WebContainer lockfile "${script.runtime.lockfilePath}" is not in the pinned workspace`,
         });
+      }
+      if (isPython) {
+        if (script.runtime.lockfilePath !== undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: "A Python WebContainer lesson must omit lockfilePath (nothing is installed)",
+          });
+        }
+        if (script.runtime.expectedPort !== undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: "A Python WebContainer lesson must omit expectedPort (it has no server)",
+          });
+        }
+        if (script.runtime.initCommand.trim() !== "") {
+          ctx.addIssue({
+            code: "custom",
+            message: "A Python WebContainer lesson must use an empty initCommand",
+          });
+        }
+        if (!/^python3(?:\s|$)/.test(script.runtime.runCommand.trim())) {
+          ctx.addIssue({
+            code: "custom",
+            message: 'A Python WebContainer lesson runCommand must invoke "python3"',
+          });
+        }
       }
       for (const scene of script.scenes) {
         for (const action of scene.actions) {

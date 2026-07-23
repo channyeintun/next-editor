@@ -104,7 +104,7 @@ export interface StudioDriver {
     durationMs: number;
   }): Promise<Record<string, unknown>>;
   runWorkspace(timeoutMs: number): Promise<Record<string, unknown>>;
-  startRuntime(): Promise<Record<string, unknown>>;
+  startRuntime(timeoutMs: number): Promise<Record<string, unknown>>;
   waitForRuntimeReady(timeoutMs: number): Promise<Record<string, unknown>>;
   openPreview(input: {
     mode: PreviewPanelMode;
@@ -612,7 +612,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       };
     },
 
-    async startRuntime() {
+    async startRuntime(timeoutMs) {
       if (deps.runtime.kind !== "webcontainer") {
         throw new StudioActionError(
           `runtime.start requires runtime kind "webcontainer", got "${deps.runtime.kind}"`,
@@ -625,6 +625,36 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
           `WebContainer startup failed: ${error instanceof Error ? error.message : String(error)}`,
           { runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()) },
         );
+      }
+      // Server-style JS/TS runners acknowledge once the process has spawned;
+      // runtime.waitForReady owns their later server/port gate. Python is a
+      // console-only one-shot runner, so no later readiness action is legal:
+      // runtime.start itself must wait for a clean process exit (`ready`) or the
+      // lesson could pass after printing the expected line while still hung—or
+      // before a later non-zero exit is recorded.
+      if (deps.workspace.getProject().lessonType === "python") {
+        try {
+          await waitUntil(
+            () => {
+              const snapshot = deps.webContainerRuntime.getSnapshot();
+              assertWebContainerHealthy(snapshot);
+              return snapshot.status === "ready";
+            },
+            {
+              timeoutMs,
+              signal,
+              description: "the Python runner to exit cleanly",
+              intervalMs: 50,
+            },
+          );
+        } catch (error) {
+          if (error instanceof StudioActionError && error.detail) {
+            throw error;
+          }
+          throw new StudioActionError(error instanceof Error ? error.message : String(error), {
+            runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()),
+          });
+        }
       }
       const snapshot = deps.webContainerRuntime.getSnapshot();
       assertWebContainerHealthy(snapshot);

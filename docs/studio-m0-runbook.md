@@ -1,13 +1,14 @@
 # Studio Runbook — Deterministic Lesson Renders (M0–M4)
 
-Implements **M0–M2** of [agent-lesson-production.md](./agent-lesson-production.md)
-§12: a deterministic in-app Performer renders checked-in plans against pre-generated
-narration, records through the real recorder, and gates the artifact with mechanical
-QA plus a two-render repeatability comparison. M1 adds the authored `LessonScript`
+Implements **M0–M4** of [agent-lesson-production.md](./agent-lesson-production.md)
+§12: a deterministic in-app Performer renders checked-in plans, records through
+the real recorder, and gates the artifact with mechanical QA plus a two-render
+repeatability comparison. M1 adds the authored `LessonScript`
 path: YAML scripts with `[[mark:…]]` narration anchors compile **in the render
 page** into the same plan format the M0 fixture hard-codes. M2 adds the slide and
 whiteboard surfaces, a declared-idempotent silent retry for transient Go-run
-failures, and the unattended render command below.
+failures, and the unattended render command below. M3 adds draft handoff; M4
+adds the editorial/critic loop and in-page pocket-tts synthesis.
 
 ## Unattended renders (M2)
 
@@ -162,17 +163,19 @@ open http://localhost:5173/studio
 - Use a normal-width window (≥1280 px): the render console overlays the top-right
   and must not cover the file sidebar or runner dock the cursor tweens toward.
 
-Query params: `plan` (slug from `src/studio/plans`), `runtime` (`fixture` | `live`),
-`autostart=1`.
+Query params: `plan` (registered plan or `src/studio/scripts` slug), `runtime`
+(`fixture` | `live`), `autostart=1`.
 
 ### Runtime modes
 
-- `fixture` (default): the Go run replays the plan's pinned result through the same
-  console formatting/store path as a live run, after a fixed planned latency. Works
-  signed-out and offline; the manifest records `runtimeMode: "fixture"`.
-- `live`: the real `/api/go-playground/run` proxy — requires `bun run dev:worker`,
-  a signed-in session, and the Go-tools kill switch enabled. The pinned M0 program
-  is deterministic, so live and fixture renders produce identical console lines.
+- `fixture`: Go, Kotlin, and Rust replay the script's pinned result through the
+  same console formatting/store path as a live run, after a fixed planned
+  latency. It works signed-out and offline; the manifest records
+  `runtimeMode: "fixture"`.
+- `live`: Go/Kotlin/Rust call their authenticated Playground proxy. JavaScript,
+  TypeScript, and console-only Python run their pinned commands in the
+  WebContainer and therefore require `live`; JS/TS additionally wait for the
+  declared preview server and acknowledged iframe bridge.
 
 ## What exists (map)
 
@@ -212,13 +215,12 @@ narration ends, which is why every plan action must finish before
   (planned/actual clock times, error); a failure aborts the shared signal, stops the
   recording immediately, and produces a report-only result.
 
-## Known M0 limitations (intentional; M1+ work)
+## Historical M0 limitations (superseded)
 
-- No YAML `LessonScript`, narration markers, TTS provider adapter, or forced
-  alignment — captions are hand-timed in the plan fixture, and regenerating the
-  narration requires updating the plan's pinned duration/cue times (see the script
-  header).
-- Fixture renders don't visually press Run (and signed-out sessions show the
-  sign-in button), so the cursor targets the runner dock, not the button.
-- The upload-to-draft flow (M3) is not wired; bundles are download-only.
-- One plan, one execution kind (`go-playground`).
+The first hard-coded M0 fixture had no LessonScript/markers/TTS path, offered
+downloads only, and supported one `go-playground` plan. M1–M4 superseded those
+constraints: YAML scripts compile in-page, pocket-tts produces aligned
+narration/captions, passing runs can enter the draft flow, and the runtime
+matrix now covers all six documented lesson languages. The fixture-mode Run
+gesture remains console-driven rather than a literal button click; receipts and
+artifact checkpoints are authoritative for that path.

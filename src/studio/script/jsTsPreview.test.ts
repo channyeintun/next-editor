@@ -182,6 +182,20 @@ describe("JavaScript and TypeScript Studio fixtures", () => {
     expect(() => parseLessonScript(withPreview)).toThrow(/Python runs one-shot to the console/);
   });
 
+  it("rejects Python runtime fields that contradict the console-only contract", () => {
+    const invalidRuntimeVariants: Array<[Record<string, unknown>, RegExp]> = [
+      [{ lockfilePath: "main.py" }, /must omit lockfilePath/],
+      [{ expectedPort: 5173 }, /must omit expectedPort/],
+      [{ initCommand: "npm install" }, /empty initCommand/],
+      [{ runCommand: "node main.py" }, /must invoke "python3"/],
+    ];
+    for (const [runtimePatch, message] of invalidRuntimeVariants) {
+      const raw = YAML.parse(readFileSync(resolve(FIXTURE_ROOT, "python-console.yaml"), "utf8"));
+      Object.assign(raw.runtime, runtimePatch);
+      expect(() => parseLessonScript(raw)).toThrow(message);
+    }
+  });
+
   it("rejects a JS/TS WebContainer lesson without a lockfile", () => {
     const noLock = YAML.parse(
       readFileSync(resolve(FIXTURE_ROOT, "typescript-vite-preview.yaml"), "utf8"),

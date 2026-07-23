@@ -27,10 +27,12 @@ function checkEventTrack(
   timestamps: readonly number[],
   durationMs: number,
   results: StudioCheckResult[],
+  required = false,
 ): void {
   // Trailing samples may land a beat after the audio-driven finalize; allow a
   // small overhang rather than failing renders on scheduler jitter.
   const overhangMs = 1_000;
+  const present = !required || timestamps.length > 0;
   const monotonic = isMonotonicNonDecreasing(timestamps);
   const inBounds = timestamps.every(
     (timestamp) =>
@@ -38,12 +40,14 @@ function checkEventTrack(
   );
   results.push({
     id,
-    ok: monotonic && inBounds,
-    detail: monotonic
-      ? inBounds
-        ? `${timestamps.length} events, monotonic and in bounds`
-        : `event outside [0, ${Math.round(durationMs + overhangMs)}]ms`
-      : "timestamps regress",
+    ok: present && monotonic && inBounds,
+    detail: !present
+      ? "required event stream is empty"
+      : monotonic
+        ? inBounds
+          ? `${timestamps.length} events, monotonic and in bounds`
+          : `event outside [0, ${Math.round(durationMs + overhangMs)}]ms`
+        : "timestamps regress",
   });
 }
 
@@ -246,24 +250,28 @@ export async function runArtifactChecks({
     artifactRecording.frames.map((frame) => frame.timestamp),
     duration,
     results,
+    true,
   );
   checkEventTrack(
     "cursor.monotonic",
     (artifactRecording.cursorEvents ?? []).map((event) => event.timestamp),
     duration,
     results,
+    true,
   );
   checkEventTrack(
     "workspace.monotonic",
     (artifactRecording.workspaceEvents ?? []).map((event) => event.timestamp),
     duration,
     results,
+    true,
   );
   checkEventTrack(
     "runtime.monotonic",
     (artifactRecording.runtimeEvents ?? []).map((event) => event.timestamp),
     duration,
     results,
+    true,
   );
   checkEventTrack(
     "preview.events.monotonic",

@@ -88,4 +88,4 @@ plain words — if a phrase would need a dictionary or is an idiom, rewrite it:
 The critic proposes; it never approves. A human watches every draft end-to-end
 before publishing, checking: concept lands, narration matches what is on screen,
 pacing feels intentional, sources support the claims. Record review minutes and
-verdicts per docs/studio-m0-runbook.md's metrics table.
+verdicts alongside the lesson's production metrics.

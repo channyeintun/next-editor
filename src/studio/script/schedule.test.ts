@@ -79,6 +79,50 @@ describe("scheduleDialogs", () => {
     expect(nextDialog.startMs).toBeGreaterThanOrEqual(Math.floor(typingEnds));
   });
 
+  it("reserves cumulative busy time for a modeled afterAction chain", () => {
+    const script = loadPilot("go-cube");
+    const scene = script.scenes[0];
+    const firstIndex = scene.actions.findIndex((action) => action.id === "type-cube");
+    const first = scene.actions[firstIndex];
+    if (first?.type !== "editor.type") throw new Error("pilot changed");
+    const second = {
+      ...first,
+      id: "type-more",
+      at: { afterAction: first.id } as const,
+      text: "\n// a second modeled edit\n",
+    };
+    scene.actions.splice(firstIndex + 1, 0, second);
+
+    const { extracted, dialogs, schedule } = scheduleFor(script);
+    const { plan } = compileLessonScript({
+      script,
+      extracted,
+      alignment: schedule.alignment,
+      narration: {
+        audioPath: "studio-tts://test",
+        mimeType: "audio/wav",
+        durationMs: schedule.totalDurationMs,
+      },
+    });
+
+    const firstPlan = plan.actions.find((action) => action.id === first.id);
+    const secondPlan = plan.actions.find((action) => action.id === second.id);
+    if (firstPlan?.type !== "editor.type" || secondPlan?.type !== "editor.type") {
+      throw new Error("compiled typing actions missing");
+    }
+    const firstBusyMs = firstPlan.chunks.reduce((total, chunk) => total + chunk.delayMs, 0);
+    const secondBusyMs = secondPlan.chunks.reduce((total, chunk) => total + chunk.delayMs, 0);
+    expect(secondPlan.at).toBe(firstPlan.at + firstBusyMs);
+
+    if (!("mark" in first.at)) throw new Error("pilot changed");
+    const marker = extracted.markers.get(first.at.mark)!;
+    const dialogIndex = dialogs.findIndex(
+      (dialog) => dialog.firstTokenIndex === marker.beforeTokenIndex,
+    );
+    const nextDialog = schedule.timeline[dialogIndex + 1];
+    expect(nextDialog.startMs).toBeGreaterThanOrEqual(secondPlan.at + secondBusyMs);
+  });
+
   it("produces an alignment the compiler accepts without overlap failures", () => {
     const script = loadPilot("go-cube-tour");
     const { extracted, schedule } = scheduleFor(script);

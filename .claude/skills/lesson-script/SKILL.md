@@ -46,11 +46,15 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      `src/studio/plans/index.ts`. The YAML is the only artifact; end users can
      alternatively import it via /studio's **Import…** on the website.
 5. **Render — verify in the user's Chrome, never headless** (user rule):
-   - `bun run dev` (background), then drive the real Chrome via
-     claude-in-chrome: open `/studio?plan=<slug>`, press **Start render**,
+   - Use an already-running foreground dev server, then drive the real Chrome
+     via claude-in-chrome: open `/studio?plan=<slug>`, press **Start render**,
      and watch the performance live (slides, typing, run) with periodic
      screenshots. Confirm the checks heading (e.g. "Checks (13/13 ok)") and
      scan the receipts for drift.
+   - Never launch `bun run dev` in the background, detached, or concurrently
+     with another tool. If no server is already available, ask the user to run
+     it in a separate foreground terminal; otherwise stop after step 4 and
+     report that the browser render is pending.
    - Do NOT run `bun scripts/studio-render.ts` for verification — the user
      wants to see the render happen and judge its visual feel.
    - On failure, the receipts panel names the failing action; see the failure

@@ -376,8 +376,8 @@ export const rustRunFixtureSchema = z.object({
  * /api/<kind> proxy (requires a signed-in session); "fixture" replays the
  * pinned result. Unattended renders default to the plan's declared mode; the
  * manifest records which one ran. Kind "webcontainer" is the versioned JS/TS
- * lifecycle and preview contract. Kind "none" is reserved for lesson types
- * (currently Python) that narrate, edit, and use slides/whiteboard without a
+ * lifecycle and preview contract. Kind "none" remains reserved for future
+ * lesson types that narrate, edit, and use slides/whiteboard without a
  * Studio-owned execution surface.
  */
 export const studioRuntimeSchema = z.discriminatedUnion("kind", [
@@ -484,13 +484,13 @@ export const studioPlanSchema = z
       .optional(),
     /**
      * afterAction dependencies (dependent id → predecessor id). The compiler
-     * emits an entry for every action anchored `afterAction`. The performer is
-     * sequential, so a dependent's planned `at` is only a placeholder — the
-     * timing gate measures its start drift relative to when its predecessor
-     * actually acknowledged, not that placeholder. Without this a WebContainer
-     * chain (runtime.start → waitForReady → preview.open) fails the timing gate
-     * by construction, since dependency install/readiness time is unbounded and
-     * unknowable at compile time (STUDIO-03).
+     * emits an entry for every action anchored `afterAction`. Deterministic
+     * typing/selection chains carry modeled planned times; runtime and preview
+     * waits cannot. In both cases the timing gate measures a dependent's drift
+     * from its predecessor's actual acknowledgement. Without this a
+     * WebContainer chain (runtime.start → waitForReady → preview.open) fails the
+     * timing gate by construction, since dependency install/readiness time is
+     * unbounded and unknowable at compile time (STUDIO-03).
      */
     dependencies: z.record(z.string(), z.string()).optional(),
     actions: z.array(studioPlanActionSchema).min(1),
@@ -537,6 +537,32 @@ export const studioPlanSchema = z
           code: "custom",
           message: `WebContainer lockfile "${plan.runtime.lockfilePath}" is not in the pinned workspace`,
         });
+      }
+      if (isPython) {
+        if (plan.runtime.lockfilePath !== undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: "A Python WebContainer lesson must omit lockfilePath (nothing is installed)",
+          });
+        }
+        if (plan.runtime.expectedPort !== undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: "A Python WebContainer lesson must omit expectedPort (it has no server)",
+          });
+        }
+        if (plan.runtime.initCommand.trim() !== "") {
+          ctx.addIssue({
+            code: "custom",
+            message: "A Python WebContainer lesson must use an empty initCommand",
+          });
+        }
+        if (!/^python3(?:\s|$)/.test(plan.runtime.runCommand.trim())) {
+          ctx.addIssue({
+            code: "custom",
+            message: 'A Python WebContainer lesson runCommand must invoke "python3"',
+          });
+        }
       }
       for (const action of plan.actions) {
         if (action.type === "runtime.run") {
