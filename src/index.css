@@ -52,6 +52,43 @@ body {
   color: white;
 }
 
+@layer base {
+  /* Tailwind v4 preflight leaves buttons with cursor: default; restore the
+     pointer affordance everywhere except disabled controls. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Keyboard-only focus ring for interactive elements that don't declare
+     their own focus styling. Components that opt out with `outline-none`
+     (paired with focus:border/ring replacements) still win over this. */
+  :where(a, button, input, select, textarea, summary, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid var(--color-pinata-purple);
+    outline-offset: 2px;
+  }
+
+  /* Monaco and xterm paint their own focus affordances (caret, cursor
+     layer); a ring around their hidden textareas reads as a glitch. */
+  .monaco-editor :focus-visible,
+  .xterm :focus-visible {
+    outline: none;
+  }
+}
+
+/* Collapse decorative motion for users who ask for it. Durations stay >0 so
+   transitionend/animationend listeners still fire. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .xterm-terminal {
   --terminal-background: #15191f;
   height: 100%;

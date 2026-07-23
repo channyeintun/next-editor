@@ -271,7 +271,7 @@ function GoogleSlidesImport({
             if (e.key === "Enter" && url.trim() && !isLoading) runImport(url.trim());
           }}
           placeholder="https://docs.google.com/presentation/d/e/…/pub"
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#0f1219] px-3 py-1.5 text-xs text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-400/70"
+          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#0f1219] px-3 py-1.5 text-xs text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-400/70"
         />
         <button
           type="button"
@@ -460,7 +460,7 @@ export default function SlidesManager({
                   ? "<h1>Title</h1>\n<p>Content</p>"
                   : "# Title\n\nContent here..."
               }
-              className="h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#11141c] px-4 py-3 font-mono text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-400/70"
+              className="h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#11141c] px-4 py-3 font-mono text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-400/70"
             />
           </div>
 

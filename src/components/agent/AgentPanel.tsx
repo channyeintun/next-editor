@@ -587,7 +587,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                 aria-label="Message the agent"
                 placeholder="Ask anything about this workspace"
                 rows={2}
-                className="h-14 min-h-14 w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-14 min-h-14 w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
               />
               {attachmentError ? (
                 <p className="px-3 pb-2 text-[11px] text-amber-400">{attachmentError}</p>
@@ -668,7 +668,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                     onChange={(event) => setModelQuery(event.target.value)}
                     placeholder="Search OpenRouter models"
                     aria-label="Search OpenRouter models"
-                    className="h-9 w-full rounded-md border border-slate-700 bg-[#11141c] pl-9 pr-3 text-xs text-slate-100 outline-none placeholder:text-slate-600 focus:border-slate-500"
+                    className="h-9 w-full rounded-md border border-slate-700 bg-[#11141c] pl-9 pr-3 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-slate-500"
                   />
                 </div>
                 <div className="mt-2 flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-md border border-slate-800 p-2">

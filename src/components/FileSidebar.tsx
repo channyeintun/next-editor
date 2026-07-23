@@ -599,7 +599,7 @@ function FileSidebarPanel() {
     return (
       <div className="px-1.5">
         <div
-          className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5"
+          className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 transition-colors focus-within:border-slate-500"
           style={{ paddingLeft: getSidebarTreePaddingLeft(depth) }}
         >
           <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>

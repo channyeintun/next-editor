@@ -558,7 +558,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         {currentRecording && !isRecording && (
           <>
             <button
+              type="button"
               onClick={handlePlayPause}
+              aria-label={isPlaying ? "Pause" : hasEnded ? "Replay" : "Play"}
               className={`flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer pointer-events-auto ${transportButtonWidth}`}
             >
               {isPlaying ? (
