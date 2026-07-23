@@ -43,7 +43,12 @@ browser at render time. Two ways it reaches the studio:
    the compiler schedule. It fails (before any render) on impossibilities and
    warns when your actions force more than ~2.5s of silence ("add narration
    here or shorten the action").
-3. The whole performance is recorded live in the editor, then mechanically
+3. Studio automatically adds a **two-second quiet recording handle** before
+   the first dialog and after the later of the final dialog or action. This
+   gives recording and optional screen capture time to settle and keeps the
+   voice from starting or ending abruptly. Do not create filler scenes or
+   timing offsets to imitate this buffer.
+4. The whole performance is recorded live in the editor, then mechanically
    verified: the run output must appear in the recorded console, edited files
    must contain what you asserted, action start times must hit their plan
    times within the timing gate. A render that fails any gate produces no

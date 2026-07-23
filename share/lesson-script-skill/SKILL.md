@@ -43,6 +43,9 @@ Read, entirely and in order, before writing:
      performer presses Enter first so existing code moves down naturally.
    - The fixture's program output must be exactly what the real program
      prints, every line `\n`-terminated.
+   - Studio automatically reserves two quiet seconds before the first dialog
+     and after the final dialog/action. Do not add filler narration, blank
+     scenes, or timing offsets to manufacture recording buffers.
    - Every scene needs a `sources` entry; keep sentences under ~20 words.
    - Always include `checks: [{ type: timing.p95Ms, max: 300 }]`
      (`max: 500` if the lesson shows Google-deck slides).

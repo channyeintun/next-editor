@@ -25,6 +25,7 @@ const readBundle = (relative: string) =>
   readFileSync(resolve(ROOT, "share/lesson-script-skill", relative), "utf8");
 const reference = readBundle("references/lesson-script-authoring.md");
 const persona = readBundle("references/studio-persona.md");
+const distributedSkill = readBundle("SKILL.md");
 const canonicalReference = readFileSync(resolve(ROOT, "docs/lesson-script-authoring.md"), "utf8");
 const inRepoSkill = readFileSync(resolve(ROOT, ".claude/skills/lesson-script/SKILL.md"), "utf8");
 
@@ -257,6 +258,13 @@ describe("lesson-script skill bundle contract (SKILL-01)", () => {
   it("never instructs the in-repo agent to launch a background dev server", () => {
     expect(inRepoSkill).not.toMatch(/bun run dev.*\(background\)/);
     expect(inRepoSkill).toMatch(/Never launch `bun run dev` in the background/);
+  });
+
+  it("documents Studio's automatic recording buffers in both agent skills", () => {
+    for (const skill of [inRepoSkill, distributedSkill]) {
+      expect(skill).toMatch(/two quiet seconds before the first dialog/);
+      expect(skill).toMatch(/after the final dialog\/action/);
+    }
   });
 
   it("gives the long authoring reference a contents index", () => {

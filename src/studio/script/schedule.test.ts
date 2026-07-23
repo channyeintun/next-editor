@@ -6,7 +6,7 @@ import { compileLessonScript, typingDurationOf, typingSeedsOf } from "./compile"
 import { splitIntoDialogs } from "./dialogs";
 import { LEXICON_V1 } from "./lexicon";
 import { extractNarration, type ExtractedNarration } from "./markers";
-import { ScheduleError, scheduleDialogs } from "./schedule";
+import { RECORDING_BUFFER_MS, ScheduleError, scheduleDialogs } from "./schedule";
 import { parseLessonScript, type LessonScript } from "./schema";
 
 function loadPilot(name: string): LessonScript {
@@ -45,6 +45,18 @@ function scheduleFor(script: LessonScript) {
 }
 
 describe("scheduleDialogs", () => {
+  it("keeps two-second quiet handles before and after the authored performance", () => {
+    const { schedule } = scheduleFor(loadPilot("go-swap"));
+    const firstDialog = schedule.timeline[0];
+    const lastDialog = schedule.timeline.at(-1)!;
+
+    expect(RECORDING_BUFFER_MS).toBe(2_000);
+    expect(firstDialog.startMs).toBe(RECORDING_BUFFER_MS);
+    expect(schedule.totalDurationMs).toBeGreaterThanOrEqual(
+      lastDialog.startMs + lastDialog.durationMs + RECORDING_BUFFER_MS,
+    );
+  });
+
   it("keeps dialogs ordered, non-overlapping, and inside the total duration", () => {
     const { schedule } = scheduleFor(loadPilot("go-cube-tour"));
     for (let i = 0; i < schedule.timeline.length; i++) {

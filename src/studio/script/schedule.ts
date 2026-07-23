@@ -19,14 +19,16 @@ import { selectDurationOf, typingDurationOf, typingSeedsOf } from "./compile";
  * compiler uses, so both stages see identical numbers.
  */
 
-/** Silence before the first dialog (recording lead-in). */
-const START_SILENCE_MS = 500;
+/**
+ * Quiet handles around the authored performance. The opening gives the
+ * recorder/screen capture time to settle before the voice starts; the closing
+ * keeps the final word or action from running into auto-finalize.
+ */
+export const RECORDING_BUFFER_MS = 2_000;
 /** Natural breath between consecutive dialogs. */
 const MIN_GAP_MS = 350;
 /** Clearance between an action finishing and narration resuming. */
 const BUSY_PAD_MS = 250;
-/** Silence after the last dialog before the recording auto-finalizes. */
-const TAIL_SILENCE_MS = 1_500;
 /** Inserted silence beyond this reads as dead air — surfaced as a warning. */
 const SILENCE_WARN_MS = 2_500;
 /** Estimated synthesizer padding inside each per-dialog segment. */
@@ -174,7 +176,7 @@ export function scheduleDialogs({
       throw new ScheduleError(`Dialog "${dialog.id}" has invalid duration ${durationMs}ms`);
     }
 
-    const naturalStartMs = i === 0 ? START_SILENCE_MS : previousEndMs + MIN_GAP_MS;
+    const naturalStartMs = i === 0 ? RECORDING_BUFFER_MS : previousEndMs + MIN_GAP_MS;
     const startMs = Math.max(naturalStartMs, Math.ceil(busyUntilMs + BUSY_PAD_MS));
     const insertedSilenceMs = startMs - naturalStartMs;
     if (insertedSilenceMs > SILENCE_WARN_MS) {
@@ -237,7 +239,7 @@ export function scheduleDialogs({
     busyUntilMs = Math.max(busyUntilMs, 0);
   }
 
-  const totalDurationMs = Math.ceil(Math.max(previousEndMs, busyUntilMs) + TAIL_SILENCE_MS);
+  const totalDurationMs = Math.ceil(Math.max(previousEndMs, busyUntilMs) + RECORDING_BUFFER_MS);
   const alignment: NarrationAlignment = { tokens: combinedTokens, durationMs: totalDurationMs };
 
   return { timeline, alignment, totalDurationMs, warnings };

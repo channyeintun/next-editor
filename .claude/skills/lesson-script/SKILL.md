@@ -33,6 +33,9 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
    - The fixture result is the program's exact output, every line
      `\n`-terminated — `result.output` for Go/Kotlin, `result.stdout` for Rust
      (WebContainer lessons pin the workspace instead of a fixture).
+   - Studio automatically reserves two quiet seconds before the first dialog
+     and after the final dialog/action. Do not add filler narration, blank
+     scenes, or timing offsets to manufacture recording buffers.
    - Every scene needs a `sources` entry; keep sentences short.
    - Always include `checks: [{ type: timing.p95Ms, max: 300 }]` (`max: 500`
      if the lesson shows Google-deck slides — deck paints cost ~0.4s).
