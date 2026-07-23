@@ -139,7 +139,7 @@ scenes:
         at: { mark: select-err-arm }
         target:
           file: main.rs
-          text: "Err(_) => println!(\"could not parse\"),"
+          text: 'Err(_) => println!("could not parse"),'
           occurrence: 1
 
   - id: run

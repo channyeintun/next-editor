@@ -57,6 +57,10 @@ describe("studio lesson registry", () => {
   });
 
   it("keeps every authored editor target valid after the preceding insertions", () => {
+    // Collect every unresolved anchor so one bad script reports all of its
+    // misses at once instead of failing on the first.
+    const missingAnchors: string[] = [];
+
     for (const [slug, source] of Object.entries(STUDIO_SOURCES)) {
       if (source.kind !== "script") continue;
       const script = source.load();
@@ -67,9 +71,12 @@ describe("studio lesson registry", () => {
           if (action.type === "editor.type") {
             const content = files[action.target.file];
             const offset = resolveAnchorOffset(content, action.target);
-            expect(offset, `${slug}/${action.id} has a missing typing anchor`).not.toBeNull();
+            if (offset === null) {
+              missingAnchors.push(`${slug}/${action.id} has a missing typing anchor`);
+              continue;
+            }
             files[action.target.file] =
-              content.slice(0, offset!) + action.text + content.slice(offset!);
+              content.slice(0, offset) + action.text + content.slice(offset);
           }
           if (action.type === "editor.select") {
             const content = files[action.target.file];
@@ -77,14 +84,22 @@ describe("studio lesson registry", () => {
               after: action.target.text,
               occurrence: action.target.occurrence,
             });
-            expect(offset, `${slug}/${action.id} has a missing selection target`).not.toBeNull();
+            if (offset === null) {
+              missingAnchors.push(`${slug}/${action.id} has a missing selection target`);
+            }
           }
         }
       }
     }
+
+    expect(missingAnchors).toEqual([]);
   });
 
   it("compiles every script with recording handles and authored selection gestures", () => {
+    // Every Rust lesson must author at least one mouse gesture; Go predates
+    // the requirement, so the check is per-slug rather than global.
+    const rustScriptsWithoutGestures: string[] = [];
+
     for (const [slug, source] of Object.entries(STUDIO_SOURCES)) {
       if (source.kind !== "script") continue;
       const script = source.load();
@@ -104,7 +119,7 @@ describe("studio lesson registry", () => {
           ? {
               id: slide.id,
               contentType: "google-svg",
-              content: "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>",
+              content: '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
               name: slide.name,
               sourceUrl: slide.deckUrl,
             }
@@ -149,9 +164,11 @@ describe("studio lesson registry", () => {
         editBusyUntilMs = action.at + busyMs;
       }
 
-      if (slug.startsWith("rust-")) {
-        expect(authoredSelects.length, `${slug} mouse gestures`).toBeGreaterThan(0);
+      if (slug.startsWith("rust-") && authoredSelects.length === 0) {
+        rustScriptsWithoutGestures.push(slug);
       }
     }
+
+    expect(rustScriptsWithoutGestures).toEqual([]);
   });
 });
