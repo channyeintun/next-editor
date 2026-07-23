@@ -1,4 +1,16 @@
 import type { ReactNode } from "react";
+import {
+  FilePlus2,
+  FolderPlus,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightOpen,
+  PenTool,
+  Presentation,
+  Settings,
+  Upload,
+  Users,
+} from "lucide-react";
 import { DEFAULT_FILE_SIDEBAR_WIDTH, readStoredFileSidebarCollapsed } from "../utils/sidebarLayout";
 
 // Structural stand-in for the editor chrome (header, file sidebar, code surface,
@@ -8,41 +20,22 @@ import { DEFAULT_FILE_SIDEBAR_WIDTH, readStoredFileSidebarCollapsed } from "../u
 // (route chunk → lesson lookup → CodeEditor/Monaco) renders a bare centered
 // spinner on an otherwise empty page, and the whole UI pops in at once at the end.
 //
+// The header and sidebar chrome are static copies of the real elements (same
+// icons, labels, and geometry as EditorHeader/FileSidebar) so they don't flash
+// from placeholder boxes to icons when the real chunk lands — only inert, so
+// nothing here is focusable or announces as a control. The file list and code
+// surface stay empty: the real ones start empty too.
+//
 // Deliberately dependency-free (no contexts, no stores): it is rendered from the
 // router's HydrateFallback, so it has to sit in the eager bundle and cannot
 // assume any provider is mounted.
 
-const CODE_LINES: readonly { indent: number; width: string }[] = [
-  { indent: 0, width: "38%" },
-  { indent: 0, width: "52%" },
-  { indent: 0, width: "26%" },
-  { indent: 1, width: "61%" },
-  { indent: 1, width: "44%" },
-  { indent: 2, width: "48%" },
-  { indent: 2, width: "33%" },
-  { indent: 1, width: "56%" },
-  { indent: 0, width: "22%" },
-  { indent: 0, width: "45%" },
-  { indent: 1, width: "58%" },
-  { indent: 1, width: "36%" },
-  { indent: 2, width: "41%" },
-  { indent: 1, width: "29%" },
-  { indent: 0, width: "18%" },
-];
-
-const FILE_ROWS: readonly { indent: number; width: string }[] = [
-  { indent: 0, width: "62%" },
-  { indent: 1, width: "48%" },
-  { indent: 1, width: "56%" },
-  { indent: 1, width: "38%" },
-  { indent: 0, width: "44%" },
-  { indent: 0, width: "58%" },
-  { indent: 0, width: "34%" },
-];
+const HEADER_ICON_CLASS =
+  "inline-flex size-8 items-center justify-center rounded-lg text-slate-400";
 
 export interface EditorShellSkeletonProps {
-  /** Real breadcrumb when the caller already knows the lesson title; a shimmer
-   *  placeholder stands in for it otherwise. */
+  /** Real breadcrumb when the caller already knows the lesson title; the
+   *  header's static "Editor" label stands in for it otherwise. */
   breadcrumb?: ReactNode;
   /** Fill the parent (`h-full`) instead of the viewport (`h-dvh`) — matches the
    *  same prop on Editor/CodeEditor so the skeleton can stand in for either. */
@@ -65,18 +58,37 @@ export default function EditorShellSkeleton({
       className={`${fill ? "h-full" : "h-dvh"} flex flex-col overflow-hidden bg-[#11141c] text-white`}
       role="status"
     >
-      <div className="flex items-center justify-between px-4 py-1.5" aria-hidden="true">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="size-8 shrink-0 rounded-lg bg-white/5" />
-          {breadcrumb ?? <div className="h-3 w-40 animate-pulse rounded bg-slate-800" />}
+      <div className="bg-[#11141c] px-4 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <div aria-hidden="true" className={HEADER_ICON_CLASS}>
+            {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </div>
+          {breadcrumb ?? (
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Editor
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="size-8 rounded-lg bg-white/5" />
-          <div className="size-8 rounded-lg bg-white/5" />
-          <div className="mx-1 h-4 w-px bg-slate-700" />
-          <div className="size-8 rounded-lg bg-white/5" />
-          <div className="size-8 rounded-lg bg-white/5" />
-          <div className="size-8 rounded-lg bg-white/5" />
+        <div className="flex items-center gap-2" aria-hidden="true">
+          <div className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-slate-400">
+            <Users size={15} />
+            <span>Live</span>
+          </div>
+          <div className={HEADER_ICON_CLASS}>
+            <Settings size={16} />
+          </div>
+          <div className="h-4 w-px bg-slate-700 mx-1" />
+          <div className="flex items-center gap-2">
+            <div className={HEADER_ICON_CLASS}>
+              <PenTool size={16} />
+            </div>
+            <div className="flex h-8 items-center rounded-lg px-2.5 text-slate-400">
+              <Presentation className="size-4" />
+            </div>
+            <div className={HEADER_ICON_CLASS}>
+              <PanelRightOpen size={16} />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -87,37 +99,28 @@ export default function EditorShellSkeleton({
             style={{ width: DEFAULT_FILE_SIDEBAR_WIDTH }}
           >
             <div className="border-b border-slate-800 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                Files
-              </p>
-            </div>
-            <div className="animate-pulse space-y-2.5 p-3">
-              {FILE_ROWS.map((row, index) => (
-                <div
-                  className="flex items-center gap-2"
-                  key={index}
-                  style={{ paddingLeft: row.indent * 14 }}
-                >
-                  <div className="size-3.5 shrink-0 rounded-sm bg-slate-800" />
-                  <div className="h-3 rounded bg-slate-800" style={{ width: row.width }} />
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  Files
+                </p>
+                <div className="flex items-center gap-1 text-slate-400">
+                  <span className="inline-flex size-5 items-center justify-center">
+                    <FilePlus2 size={14} />
+                  </span>
+                  <span className="inline-flex size-5 items-center justify-center">
+                    <FolderPlus size={14} />
+                  </span>
+                  <span className="inline-flex size-5 items-center justify-center">
+                    <Upload size={14} />
+                  </span>
                 </div>
-              ))}
+              </div>
             </div>
           </aside>
         )}
 
         <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-hidden rounded-t-md bg-[#181d24]">
-            <div className="animate-pulse space-y-3 px-6 py-4">
-              {CODE_LINES.map((line, index) => (
-                <div
-                  className="h-3 rounded bg-white/5"
-                  key={index}
-                  style={{ marginLeft: line.indent * 24, width: line.width }}
-                />
-              ))}
-            </div>
-          </div>
+          <div className="min-h-0 flex-1 rounded-t-md bg-[#181d24]" />
         </div>
       </div>
 
