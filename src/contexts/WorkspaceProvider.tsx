@@ -35,11 +35,18 @@ import { writeStoredFileSidebarCollapsed } from "../utils/sidebarLayout";
 
 interface WorkspaceProviderProps {
   children: React.ReactNode;
+  /** Recording this surface is about to load, when it comes from a prop instead
+   *  of `?url=` — see createInitialWorkspaceSnapshot. Start empty rather than
+   *  from the persisted workspace, which the recording would only overwrite. */
+  pendingRecordingUrl?: string;
 }
 
-export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }) => {
+export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
+  children,
+  pendingRecordingUrl,
+}) => {
   const initialSnapshotRef = useRef<StoredWorkspaceSnapshot | null>(
-    createInitialWorkspaceSnapshot(),
+    createInitialWorkspaceSnapshot(pendingRecordingUrl),
   );
   const workspaceStoreRef = useRef(createWorkspaceStore(initialSnapshotRef.current));
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());

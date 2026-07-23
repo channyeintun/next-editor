@@ -235,8 +235,18 @@ function hasPendingRecordingUrl(): boolean {
   }
 }
 
-export function createInitialWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
-  if (hasPendingRecordingUrl()) {
+/**
+ * `pendingRecordingUrl` is how a surface that loads a recording from a prop
+ * rather than `?url=` — the /learn/:slug detail view — declares that its real
+ * content is still in flight. Without it, the persisted workspace wins the
+ * race and the editor mounts showing the *previous* session's files until the
+ * `.ne` lands and replaces them. Sniffing the query string can't see that case:
+ * a lesson URL carries no `url` param at all.
+ */
+export function createInitialWorkspaceSnapshot(
+  pendingRecordingUrl?: string,
+): StoredWorkspaceSnapshot | null {
+  if (pendingRecordingUrl || hasPendingRecordingUrl()) {
     return null;
   }
 

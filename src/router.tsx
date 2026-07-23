@@ -3,6 +3,7 @@ import { createBrowserRouter, isRouteErrorResponse, useParams, useRouteError } f
 import { usePostHog } from "@posthog/react";
 import Breadcrumb from "./components/Breadcrumb";
 import EditorShellSkeleton from "./components/EditorShellSkeleton";
+import LessonGallerySkeleton from "./components/LessonGallerySkeleton";
 import LoadingSpinner from "./components/LoadingSpinner";
 import LandingPageRoute from "./components/LandingPageRoute";
 import { lessonTitleFromSlug } from "./utils/lessonSlug";
@@ -223,7 +224,7 @@ export const router = createBrowserRouter([
   {
     path: "/learn",
     lazy: lazyRoute(() => import("@next-editor/tube"), "/learn"),
-    HydrateFallback: RouteHydrateFallback,
+    HydrateFallback: LessonGallerySkeleton,
     ErrorBoundary: RouteErrorBoundary,
   },
   {
@@ -236,7 +237,8 @@ export const router = createBrowserRouter([
       () => import("@next-editor/tube").then((m) => ({ default: m.PlaylistDetailRoute })),
       "/learn/playlist/:slug",
     ),
-    HydrateFallback: RouteHydrateFallback,
+    // Same shell: a playlist is a navbar plus a shelf of lesson cards.
+    HydrateFallback: LessonGallerySkeleton,
     ErrorBoundary: RouteErrorBoundary,
   },
   {

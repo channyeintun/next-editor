@@ -349,7 +349,7 @@ export function EditorLayout({
 
 export default function Editor({ overlay, runtimeAutoStart = true, ...props }: EditorProps = {}) {
   return (
-    <WorkspaceProvider>
+    <WorkspaceProvider pendingRecordingUrl={props.recordingUrl}>
       <WebContainerRuntimeProvider allowAmbientStart={runtimeAutoStart}>
         <SlidesStoreProvider>
           <WhiteboardStoreProvider>

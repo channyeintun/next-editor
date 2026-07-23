@@ -1,9 +1,11 @@
 /* oxlint-disable vitest/require-mock-type-parameters */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createInitialWorkspaceSnapshot,
   createWorkspaceStore,
   normalizeProject,
   toPersistedSnapshot,
+  WORKSPACE_STORAGE_KEY,
   type StoredWorkspaceSnapshot,
 } from "./workspaceStore";
 import {
@@ -399,5 +401,49 @@ describe("persistWorkspaceAssets", () => {
         ]),
       ),
     ).rejects.toMatchObject({ name: "WorkspaceAssetPersistenceError", cause: quotaError });
+  });
+});
+
+describe("createInitialWorkspaceSnapshot", () => {
+  afterEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState(null, "", "/");
+  });
+
+  function storeWorkspace(filePath: string, content: string) {
+    window.localStorage.setItem(
+      WORKSPACE_STORAGE_KEY,
+      JSON.stringify(
+        toPersistedSnapshot({
+          activeFilePath: filePath,
+          project: makeProject([makeFile(filePath, content)]),
+        }),
+      ),
+    );
+  }
+
+  it("starts empty when a recording is coming from a prop", () => {
+    // /learn/:slug passes the .ne as a prop and carries no `url` param, so the
+    // persisted workspace would otherwise win the race and the editor would
+    // mount showing the previous session's files until the recording lands.
+    storeWorkspace("previous.html", "<p>previous session</p>");
+
+    expect(createInitialWorkspaceSnapshot("/media/lessons/abc/lesson.ne")).toBeNull();
+  });
+
+  it("starts empty when a recording is coming from ?url=", () => {
+    storeWorkspace("previous.html", "<p>previous session</p>");
+    window.history.replaceState(null, "", "/code?url=%2Flessons%2Fintro%2Fintro.ne");
+
+    expect(createInitialWorkspaceSnapshot()).toBeNull();
+  });
+
+  it("restores the persisted workspace when no recording is pending", () => {
+    storeWorkspace("index.html", "<p>mine</p>");
+
+    const snapshot = createInitialWorkspaceSnapshot();
+
+    expect(snapshot?.activeFilePath).toBe("index.html");
+    expect(snapshot?.project.files["index.html"].content).toBe("<p>mine</p>");
   });
 });
