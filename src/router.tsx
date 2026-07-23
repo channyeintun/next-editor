@@ -1,8 +1,11 @@
 import { useEffect, type ComponentType } from "react";
-import { createBrowserRouter, isRouteErrorResponse, useRouteError } from "react-router";
+import { createBrowserRouter, isRouteErrorResponse, useParams, useRouteError } from "react-router";
 import { usePostHog } from "@posthog/react";
+import Breadcrumb from "./components/Breadcrumb";
+import EditorShellSkeleton from "./components/EditorShellSkeleton";
 import LoadingSpinner from "./components/LoadingSpinner";
 import LandingPageRoute from "./components/LandingPageRoute";
+import { lessonTitleFromSlug } from "./utils/lessonSlug";
 
 const DYNAMIC_IMPORT_RECOVERY_PARAM = "__route_reload";
 const DYNAMIC_IMPORT_ERROR_PATTERN =
@@ -160,6 +163,33 @@ function RouteHydrateFallback() {
   );
 }
 
+// Editor-shaped routes get the editor shell instead: their chunk carries the
+// whole chrome (header, file tree, Monaco), so a bare spinner is the only thing
+// on screen for the entire download. The skeleton is eager-bundle-safe — plain
+// markup, no providers — so it paints as soon as the app boots.
+function EditorRouteHydrateFallback() {
+  return <EditorShellSkeleton showPlayerBar />;
+}
+
+// /learn/:slug serves both lesson detail and author profiles (see
+// LearnSlugRoute); only the former is an editor. The slug is already in the URL,
+// so the breadcrumb can name the lesson before anything has been fetched.
+function LearnSlugHydrateFallback() {
+  const { slug } = useParams();
+
+  if (slug?.startsWith("@")) {
+    return <RouteHydrateFallback />;
+  }
+
+  const placeholderTitle = lessonTitleFromSlug(slug);
+  return (
+    <EditorShellSkeleton
+      breadcrumb={placeholderTitle ? <Breadcrumb title={placeholderTitle} /> : undefined}
+      showPlayerBar
+    />
+  );
+}
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -171,7 +201,7 @@ export const router = createBrowserRouter([
   {
     path: "/code",
     lazy: lazyRoute(() => import("./components/CodeRoute"), "/code"),
-    HydrateFallback: RouteHydrateFallback,
+    HydrateFallback: EditorRouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
   {
@@ -218,7 +248,7 @@ export const router = createBrowserRouter([
       () => import("@next-editor/tube").then((m) => ({ default: m.LearnSlugRoute })),
       "/learn/:slug",
     ),
-    HydrateFallback: RouteHydrateFallback,
+    HydrateFallback: LearnSlugHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
 ]);

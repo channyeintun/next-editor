@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { useLesson } from "../hooks/useLessons";
 import LessonDetail from "./LessonDetail";
-import LoadingSpinner from "@app/components/LoadingSpinner";
+import Breadcrumb from "@app/components/Breadcrumb";
+import EditorShellSkeleton from "@app/components/EditorShellSkeleton";
+import { lessonTitleFromSlug } from "@app/utils/lessonSlug";
 
 // Route component for /learn/:slug. Resolves the slug to a lesson (so the detail
 // view is deep-linkable with a clean URL and no query params), then renders the
@@ -12,11 +14,17 @@ export default function LessonDetailRoute() {
   const { slug } = useParams();
   const { data: lesson, isPending, isError } = useLesson(slug);
 
+  // The editor shell rather than a lone spinner: this gate is one of several on
+  // the way to a playable lesson (route chunk → this lookup → CodeEditor/Monaco),
+  // and they all now paint the same layout, so the page assembles in place
+  // instead of flashing between unrelated screens.
   if (isPending) {
+    const placeholderTitle = lessonTitleFromSlug(slug);
     return (
-      <Centered>
-        <LoadingSpinner />
-      </Centered>
+      <EditorShellSkeleton
+        breadcrumb={placeholderTitle ? <Breadcrumb title={placeholderTitle} /> : undefined}
+        showPlayerBar
+      />
     );
   }
 

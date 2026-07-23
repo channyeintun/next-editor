@@ -40,6 +40,7 @@ import CameraOverlay from "./CameraOverlay";
 import CaptionsOverlay from "./CaptionsOverlay";
 import CursorComponent from "./Cursor.tsx";
 import LoadingSpinner from "./LoadingSpinner.tsx";
+import EditorShellSkeleton, { EditorPlayerBarSkeleton } from "./EditorShellSkeleton.tsx";
 import RecordingLoadError from "./RecordingLoadError.tsx";
 import { ApiClientStoreProvider } from "../contexts/ApiClientStoreContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
@@ -282,7 +283,16 @@ export function EditorLayout({
       data-cursor-replay-target="app"
     >
       <div className="flex-1 relative overflow-hidden" data-cursor-replay-target="editor-surface">
-        <CodeEditor showImportExport={!readOnly} breadcrumb={breadcrumb} />
+        {/* CodeEditor statically pulls in Monaco, so its chunk is by far the
+            heaviest thing on the critical path. Without a boundary here the
+            suspension reaches the root and React can commit nothing at all —
+            the caller's loading spinner stays alone on screen until Monaco
+            lands, then the entire UI pops in at once. The skeleton lets the
+            shell, the player bar, and the "Loading recording…" overlay paint
+            immediately instead. */}
+        <Suspense fallback={<EditorShellSkeleton breadcrumb={breadcrumb} fill />}>
+          <CodeEditor showImportExport={!readOnly} breadcrumb={breadcrumb} />
+        </Suspense>
         <CursorComponent />
         <CameraOverlay />
         <CaptionsOverlay />
@@ -308,6 +318,13 @@ export function EditorLayout({
           <RecordingLoadError message={dropError} onDismiss={clearDropError} />
         ) : null}
       </div>
+
+      {/* MediaControls renders nothing until a recording exists, so a surface
+          that is fetching one (the /learn detail view) would otherwise grow a
+          player bar mid-load and shove the code surface upward. */}
+      {recordingUrl && !currentRecording && !urlError && !dropError ? (
+        <EditorPlayerBarSkeleton />
+      ) : null}
 
       <MediaControls
         recordMode={!readOnly}
