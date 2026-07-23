@@ -23,6 +23,10 @@ function makePlan(overrides?: { failRun?: boolean }): {
       calls.push("cursor");
       return {};
     },
+    async selectRange({ path, selection }) {
+      calls.push(`select:${path}:${selection.text}`);
+      return { path };
+    },
     async runWorkspace() {
       calls.push("run");
       if (overrides?.failRun) {
@@ -145,6 +149,56 @@ describe("performPlan", () => {
       expect(receipt.startedAtMs!).toBeGreaterThanOrEqual(receipt.plannedAtMs - 1);
       expect(receipt.endedAtMs!).toBeGreaterThanOrEqual(receipt.startedAtMs!);
     }
+  });
+
+  it("dispatches an editor.select through the driver with its resolved range", async () => {
+    const { calls, driver } = makePlan();
+    const plan = parseStudioPlan({
+      schemaVersion: 1,
+      lesson: { slug: "select-performer", title: "Select performer", locale: "en-US" },
+      seed: 3,
+      workspace: {
+        lessonType: "go",
+        name: "T",
+        entryFilePath: "main.go",
+        files: { "main.go": "package main\n\nfunc main() {}\n" },
+      },
+      narration: {
+        audioPath: "/x.m4a",
+        mimeType: "audio/mp4",
+        expectedDurationMs: 5_000,
+        captions: { id: "c", language: "en", cues: [{ start: 0, end: 1_000, text: "hi" }] },
+      },
+      runtime: {
+        kind: "go-playground",
+        defaultMode: "fixture",
+        fixture: { latencyMs: 10, result: { status: "success", output: "ok\n", exitCode: 0 } },
+      },
+      actions: [
+        { id: "open", type: "workspace.openFile", at: 20, timeoutMs: 1_000, path: "main.go" },
+        {
+          id: "highlight",
+          type: "editor.select",
+          at: 60,
+          timeoutMs: 1_000,
+          path: "main.go",
+          selection: { text: "func main()", occurrence: 1 },
+          durationMs: 400,
+        },
+      ],
+    });
+    const controller = new AbortController();
+
+    const result = await performPlan({
+      plan,
+      driver,
+      clock: makeClock(),
+      signal: controller.signal,
+      abort: () => controller.abort(),
+    });
+
+    expect(result.status).toBe("completed");
+    expect(calls).toEqual(["open:main.go", "select:main.go:func main()"]);
   });
 
   it("fails closed: a failing action aborts and skips the rest", async () => {

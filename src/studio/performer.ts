@@ -43,6 +43,12 @@ async function invokeAction(
       return driver.moveCursor({ target: action.target, durationMs: action.durationMs });
     case "editor.type":
       return driver.typeText({ path: action.path, anchor: action.anchor, chunks: action.chunks });
+    case "editor.select":
+      return driver.selectRange({
+        path: action.path,
+        selection: action.selection,
+        durationMs: action.durationMs,
+      });
     case "runtime.run":
       return driver.runWorkspace(action.timeoutMs);
     case "runtime.start":
@@ -117,14 +123,16 @@ async function invokeWithDeadline(
   driver: StudioDriver,
   signal: AbortSignal,
 ): Promise<Record<string, unknown>> {
-  // editor.type spends its planned chunk delays before acknowledging, and
-  // expect/run actions own their internal waits; the outer deadline covers the
-  // whole command either way.
-  const typingBudgetMs =
+  // editor.type spends its planned chunk delays and editor.select spends its
+  // drag-glide duration before acknowledging; expect/run actions own their
+  // internal waits. The outer deadline covers the whole command either way.
+  const timedEditBudgetMs =
     action.type === "editor.type"
       ? action.chunks.reduce((total, chunk) => total + chunk.delayMs, 0)
-      : 0;
-  const deadlineMs = action.timeoutMs + typingBudgetMs;
+      : action.type === "editor.select"
+        ? action.durationMs
+        : 0;
+  const deadlineMs = action.timeoutMs + timedEditBudgetMs;
 
   let deadlineTimer: number | undefined;
   const deadline = new Promise<never>((_, reject) => {

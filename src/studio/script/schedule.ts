@@ -3,7 +3,7 @@ import { estimateAlignment, type NarrationAlignment, AlignmentError } from "./al
 import type { NarrationDialog } from "./dialogs";
 import type { ExtractedNarration } from "./markers";
 import type { LessonScript } from "./schema";
-import { typingDurationOf, typingSeedsOf } from "./compile";
+import { selectDurationOf, typingDurationOf, typingSeedsOf } from "./compile";
 
 /**
  * Joint dialog/action scheduling: instead of squeezing actions into one fixed
@@ -93,7 +93,7 @@ export function scheduleDialogs({
   // grouped so their busy time can push the *next* dialog.
   const actionsByDialog = new Map<
     number,
-    { offsetMs: number; typingMs: number; actionId: string }[]
+    { offsetMs: number; busyMs: number; actionId: string }[]
   >();
   const sceneFirstDialog = new Map<string, number>();
   dialogs.forEach((dialog, index) => {
@@ -124,9 +124,10 @@ export function scheduleDialogs({
         continue; // End-of-narration marker: nothing left to push.
       }
       const entries = actionsByDialog.get(dialogIndex) ?? [];
+      const seed = typingSeeds.get(action.id) ?? script.build.seed;
       entries.push({
         offsetMs,
-        typingMs: typingDurationOf(action, typingSeeds.get(action.id) ?? script.build.seed),
+        busyMs: typingDurationOf(action, seed) + selectDurationOf(action, seed),
         actionId: action.id,
       });
       actionsByDialog.set(dialogIndex, entries);
@@ -181,7 +182,7 @@ export function scheduleDialogs({
     const markerTimeMs = combinedTokens[dialog.firstTokenIndex].startMs;
     for (const entry of actionsByDialog.get(i) ?? []) {
       const actionAt = Math.max(0, markerTimeMs + entry.offsetMs);
-      busyUntilMs = Math.max(busyUntilMs, actionAt + entry.typingMs);
+      busyUntilMs = Math.max(busyUntilMs, actionAt + entry.busyMs);
     }
     busyUntilMs = Math.max(busyUntilMs, 0);
   }

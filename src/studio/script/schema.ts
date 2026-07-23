@@ -42,6 +42,17 @@ export const scriptTextTargetSchema = z.object({
   occurrence: z.number().int().min(1).default(1),
 });
 
+/**
+ * Selection targets name the exact code to highlight: the `occurrence`-th
+ * byte-for-byte match of `text` in the file's current content becomes the
+ * selected range (same exact-substring rule as `editor.type`'s `after`).
+ */
+export const scriptSelectTargetSchema = z.object({
+  file: z.string().min(1),
+  text: z.string().min(1),
+  occurrence: z.number().int().min(1).default(1),
+});
+
 const scriptActionBase = z.object({
   id: z.string().min(1),
   at: scriptAnchorSchema,
@@ -63,6 +74,11 @@ const scriptEditorTypeSchema = scriptActionBase.extend({
    */
   cadence: z.enum(["natural", "fast-explainer", "line-by-line", "block"]).default("natural"),
   text: z.string().min(1),
+});
+
+const scriptEditorSelectSchema = scriptActionBase.extend({
+  type: z.literal("editor.select"),
+  target: scriptSelectTargetSchema,
 });
 
 const scriptRuntimeRunSchema = scriptActionBase.extend({
@@ -153,6 +169,7 @@ const scriptExpectPreviewSchema = scriptActionBase.extend({
 export const scriptActionSchema = z.discriminatedUnion("type", [
   scriptOpenFileSchema,
   scriptEditorTypeSchema,
+  scriptEditorSelectSchema,
   scriptRuntimeRunSchema,
   scriptRuntimeStartSchema,
   scriptRuntimeWaitForReadySchema,
@@ -358,6 +375,12 @@ export const lessonScriptSchema = z
           ctx.addIssue({
             code: "custom",
             message: `Action "${action.id}" types into "${action.target.file}" which is not in the pinned workspace`,
+          });
+        }
+        if (action.type === "editor.select" && !(action.target.file in workspaceFiles)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Action "${action.id}" selects in "${action.target.file}" which is not in the pinned workspace`,
           });
         }
         if (action.type === "expect.file" && !(action.path in workspaceFiles)) {

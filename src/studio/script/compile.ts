@@ -75,6 +75,13 @@ const CADENCES = {
 
 /** How long before an action its announcing cursor move should arrive. */
 const CURSOR_ARRIVE_LEAD_MS = 200;
+/** Drag-select glide timing: a base grab plus per-character travel, seed-jittered. */
+const SELECT_DRAG_BASE_MS = 320;
+const SELECT_DRAG_PER_CHAR_MS = 9;
+/** Only the first ~80 chars of the span add travel time — long blocks don't crawl. */
+const SELECT_DRAG_CHAR_CAP = 80;
+const SELECT_DRAG_JITTER_MS = 160;
+const SELECT_DRAG_MAX_MS = 1_100;
 const CURSOR_TWEEN_BASE_MS = 500;
 const CURSOR_TWEEN_JITTER_MS = 200;
 const CURSOR_TWEEN_MIN_MS = 250;
@@ -86,6 +93,7 @@ function cursorTargetForAction(action: ScriptAction, script: LessonScript): Stud
     case "workspace.openFile":
       return { kind: "file", path: action.path };
     case "editor.type":
+    case "editor.select":
       return { kind: "editor" };
     case "runtime.run":
       // Schema validation guarantees run actions only exist for playground kinds.
@@ -128,6 +136,27 @@ export function typingDurationOf(action: ScriptAction, seed: number): number {
     (total, chunk) => total + chunk.delayMs,
     0,
   );
+}
+
+/**
+ * Materialized drag-glide duration for an `editor.select` (0 for any other
+ * action). Longer spans travel a little longer, capped so a whole-block
+ * selection never crawls; the seed adds reproducible jitter so plans stay
+ * byte-identical between the scheduler and the compiler.
+ */
+export function selectDurationOf(action: ScriptAction, seed: number): number {
+  if (action.type !== "editor.select") {
+    return 0;
+  }
+  const chars = Math.min(action.target.text.length, SELECT_DRAG_CHAR_CAP);
+  const base = SELECT_DRAG_BASE_MS + chars * SELECT_DRAG_PER_CHAR_MS;
+  const jitter = Math.round(createSeededRandom(seed)() * SELECT_DRAG_JITTER_MS);
+  return Math.min(SELECT_DRAG_MAX_MS, Math.round(base + jitter));
+}
+
+/** Time a timed edit keeps the Performer busy: typing chunks or a select drag. */
+function actionBusyMs(action: ScriptAction, seed: number): number {
+  return typingDurationOf(action, seed) + selectDurationOf(action, seed);
 }
 
 export function compileLessonScript({
@@ -199,7 +228,7 @@ export function compileLessonScript({
 
   for (const entry of authored) {
     const target = cursorTargetForAction(entry.action, script);
-    const typingMs = typingDurationOf(entry.action, typingSeed.get(entry.action.id)!);
+    const busyMs = actionBusyMs(entry.action, typingSeed.get(entry.action.id)!);
 
     if (target) {
       const alreadyThere =
@@ -234,7 +263,7 @@ export function compileLessonScript({
     }
 
     prevAuthoredAtMs = entry.at;
-    lastBusyUntilMs = Math.max(lastBusyUntilMs, entry.at + typingMs);
+    lastBusyUntilMs = Math.max(lastBusyUntilMs, entry.at + busyMs);
   }
 
   // ---- Assemble the plan ---------------------------------------------------
@@ -271,6 +300,16 @@ export function compileLessonScript({
               CADENCES[action.cadence],
               typingSeed.get(action.id)!,
             ),
+          };
+        case "editor.select":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            path: action.target.file,
+            selection: { text: action.target.text, occurrence: action.target.occurrence },
+            durationMs: selectDurationOf(action, typingSeed.get(action.id)!),
           };
         case "runtime.run":
           return { id: action.id, type: action.type, at, timeoutMs: action.timeoutMs };

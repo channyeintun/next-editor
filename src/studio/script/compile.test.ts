@@ -77,7 +77,67 @@ describe("lexicon", () => {
   });
 });
 
+/** A minimal Go script whose only edit is an `editor.select` drag-highlight. */
+function selectScript(): LessonScript {
+  return parseLessonScript({
+    schemaVersion: 1,
+    lesson: {
+      slug: "go-select",
+      title: "Highlighting a line",
+      locale: "en-US",
+      workspace: {
+        lessonType: "go",
+        name: "Go Lesson",
+        entryFilePath: "main.go",
+        files: { "main.go": 'package main\n\nfunc main() {\n\tprintln("hi")\n}\n' },
+      },
+    },
+    build: { voiceProfile: "pocket-alba-v1", seed: 7 },
+    runtime: {
+      kind: "go-playground",
+      defaultMode: "fixture",
+      fixture: { latencyMs: 100, result: { status: "success", output: "hi\n", exitCode: 0 } },
+    },
+    scenes: [
+      {
+        id: "look",
+        narration:
+          "First we open the program. [[mark:open]] Here is main, the entry point. " +
+          "[[mark:point]] Look at this line closely, it prints hi to the screen for us.",
+        sources: [{ title: "A Tour of Go", url: "https://go.dev/tour/welcome/1" }],
+        actions: [
+          { id: "open", type: "workspace.openFile", at: { mark: "open" }, path: "main.go" },
+          {
+            id: "point",
+            type: "editor.select",
+            at: { mark: "point" },
+            target: { file: "main.go", text: 'println("hi")', occurrence: 1 },
+          },
+        ],
+      },
+    ],
+    checks: [{ type: "timing.p95Ms", max: 300 }],
+  });
+}
+
 describe("compileLessonScript", () => {
+  it("materializes an editor.select drag with an announcing cursor move", () => {
+    const { plan } = compileLessonScript(scheduledInputFor(selectScript()));
+
+    const select = plan.actions.find((action) => action.id === "point");
+    if (select?.type !== "editor.select") throw new Error("select action was not compiled");
+    expect(select.path).toBe("main.go");
+    expect(select.selection).toEqual({ text: 'println("hi")', occurrence: 1 });
+    expect(select.durationMs).toBeGreaterThan(0);
+
+    // The attention cursor glides to the editor before the highlight, like typing.
+    const ids = plan.actions.map((action) => action.id);
+    expect(ids.indexOf("cursor-point")).toBeLessThan(ids.indexOf("point"));
+    const cursor = plan.actions.find((action) => action.id === "cursor-point");
+    if (cursor?.type !== "cursor.moveTo") throw new Error("no announcing cursor for the select");
+    expect(cursor.target).toEqual({ kind: "editor" });
+  });
+
   it("compiles the checked-in pilot script into a valid plan", () => {
     const { plan, warnings } = compileLessonScript(scheduledInputFor(loadPilotScript()));
 

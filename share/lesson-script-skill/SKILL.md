@@ -32,6 +32,9 @@ Read, entirely and in order, before writing:
    - `editor.type` anchors (`after`) must match the file content
      byte-for-byte (tabs `\t`, newlines `\n`; use double-quoted YAML
      strings). Insert-only; open a file before typing into it.
+   - To explain code already on screen, `editor.select` drag-highlights a
+     range (`target.text`, matched byte-for-byte like `after`) — it never
+     edits; open the file first.
    - End insertions that sit in front of existing code with `\n` — the
      performer presses Enter first so existing code moves down naturally.
    - The fixture's program output must be exactly what the real program

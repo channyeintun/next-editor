@@ -1,0 +1,156 @@
+# Go errors are values: read the two-value signature, point at the odd-number
+# guard and the nil happy path with drag-select, then type the idiomatic
+# `if err != nil` check and run it. The lesson never edits the pinned helper —
+# it highlights the code that is already there. Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/go-error-values.yaml
+schemaVersion: 1
+
+lesson:
+  slug: go-error-values
+  title: "Go errors are values"
+  locale: en-US
+  workspace:
+    lessonType: go
+    name: Go Lesson
+    entryFilePath: main.go
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"errors"
+        	"fmt"
+        )
+
+        func half(n int) (int, error) {
+        	if n%2 != 0 {
+        		return 0, errors.New("cannot halve an odd number")
+        	}
+        	return n / 2, nil
+        }
+
+        func main() {
+        	fmt.Println("halving numbers")
+        }
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 42
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 1200
+    result:
+      status: success
+      exitCode: 0
+      output: "halving numbers\nhalf of 10 is 5\n"
+
+scenes:
+  - id: meet
+    narration: >
+      [[mark:open]] Here's a small Go program, with one helper called half.
+      [[mark:sig]] Look at its signature. It returns two values: an int, and an
+      error. In Go, that's how a function reports a problem — an error, right
+      beside the result.
+    sources:
+      - title: "A Tour of Go — Multiple results"
+        url: "https://go.dev/tour/basics/6"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.go
+      - id: select-sig
+        type: editor.select
+        at: { mark: sig }
+        target:
+          file: main.go
+          text: "(int, error)"
+          occurrence: 1
+
+  - id: guard
+    narration: >
+      [[mark:guard]] What if the number is odd? Then half has no valid answer.
+      So it returns zero, and an error that explains why.
+    sources:
+      - title: "Effective Go — Errors"
+        url: "https://go.dev/doc/effective_go#errors"
+    actions:
+      - id: select-guard
+        type: editor.select
+        at: { mark: guard }
+        target:
+          file: main.go
+          text: "if n%2 != 0 {\n\t\treturn 0, errors.New(\"cannot halve an odd number\")\n\t}"
+          occurrence: 1
+
+  - id: happy
+    narration: >
+      [[mark:ok]] And when the number is even? It returns the result, and nil.
+      nil is the zero value for an error — it means nothing went wrong.
+    sources:
+      - title: "A Tour of Go — Errors"
+        url: "https://go.dev/tour/methods/19"
+    actions:
+      - id: select-ok
+        type: editor.select
+        at: { mark: ok }
+        target:
+          file: main.go
+          text: "return n / 2, nil"
+          occurrence: 1
+
+  - id: use-it
+    narration: >
+      [[mark:call]] Now let's use half. We call it with ten, and read back both
+      values at once. [[mark:check]] Here's the pattern you'll see everywhere in
+      Go. Check the error first. If err isn't nil, print it and return early —
+      don't touch the result.
+    sources:
+      - title: "A Tour of Go — Errors"
+        url: "https://go.dev/tour/methods/19"
+    actions:
+      - id: type-call
+        type: editor.type
+        at: { mark: call, offsetMs: -400 }
+        target:
+          file: main.go
+          after: "\tfmt.Println(\"halving numbers\")\n"
+          occurrence: 1
+        cadence: block
+        text: "\tresult, err := half(10)\n\tif err != nil {\n\t\tfmt.Println(\"error:\", err)\n\t\treturn\n\t}\n\tfmt.Println(\"half of 10 is\", result)\n"
+      - id: select-check
+        type: editor.select
+        at: { mark: check }
+        target:
+          file: main.go
+          text: "if err != nil {"
+          occurrence: 1
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Ten is even, so half returns five and a nil
+      error. The check passes, and we print the result.
+    sources:
+      - title: "A Tour of Go — Functions"
+        url: "https://go.dev/tour/basics/4"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 800 }
+        timeoutMs: 15000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "half of 10 is 5"
+        timeoutMs: 6000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.go
+        contains: "if err != nil"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }

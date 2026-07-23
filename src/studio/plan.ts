@@ -64,6 +64,20 @@ export const textAnchorSchema = z.object({
 export type TextAnchor = z.infer<typeof textAnchorSchema>;
 
 /**
+ * Selection span inside one workspace file. Resolution is exact-substring +
+ * occurrence (same rule as `TextAnchor`): the `occurrence`-th match of `text`
+ * becomes the highlighted range. A missing occurrence fails the action — the
+ * Performer never guesses a range.
+ */
+export const selectionAnchorSchema = z.object({
+  /** Exact substring to select (byte-for-byte, including `\n` and `\t`). */
+  text: z.string().min(1),
+  /** 1-based occurrence of `text` within the file. */
+  occurrence: z.number().int().min(1).default(1),
+});
+export type SelectionAnchor = z.infer<typeof selectionAnchorSchema>;
+
+/**
  * One pre-compiled typing burst: wait `delayMs` since the previous chunk, then
  * insert `text`. Chunks normally land in text order; `offsetInText` (the
  * chunk's position within the action's final inserted text) lets a chunk land
@@ -95,6 +109,14 @@ const editorTypeActionSchema = planActionBase.extend({
   anchor: textAnchorSchema,
   /** Materialized chunk schedule; total typing time is the sum of delays. */
   chunks: z.array(typingChunkSchema).min(1),
+});
+
+const editorSelectActionSchema = planActionBase.extend({
+  type: z.literal("editor.select"),
+  path: z.string().min(1),
+  selection: selectionAnchorSchema,
+  /** Materialized drag-glide duration across the range (seed-derived at compile time). */
+  durationMs: positiveMs,
 });
 
 const runtimeRunActionSchema = planActionBase.extend({
@@ -193,6 +215,7 @@ export const studioPlanActionSchema = z.discriminatedUnion("type", [
   openFileActionSchema,
   cursorMoveActionSchema,
   editorTypeActionSchema,
+  editorSelectActionSchema,
   runtimeRunActionSchema,
   runtimeStartActionSchema,
   runtimeWaitForReadyActionSchema,
@@ -546,6 +569,12 @@ export const studioPlanSchema = z
           message: `Action "${action.id}" types into "${action.path}" which is not in the pinned workspace`,
         });
       }
+      if (action.type === "editor.select" && !(action.path in plan.workspace.files)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Action "${action.id}" selects in "${action.path}" which is not in the pinned workspace`,
+        });
+      }
       if (action.type === "cursor.moveTo" && action.target.kind === "file") {
         if (!(action.target.path in plan.workspace.files)) {
           ctx.addIssue({
@@ -574,17 +603,25 @@ export const studioPlanSchema = z
       }
     }
 
-    // Typing must fit between its start and the next scheduled action: a run
-    // scheduled before the edit can finish is an impossible overlap (§5).
+    // A timed edit must fit between its start and the next scheduled action:
+    // the Performer is sequential, so a later action scheduled before this one
+    // can finish is an impossible overlap (§5). Typing spends its chunk delays;
+    // a select spends its drag-glide duration.
     for (let i = 0; i < plan.actions.length; i++) {
       const action = plan.actions[i];
-      if (action.type !== "editor.type") continue;
-      const typingMs = action.chunks.reduce((total, chunk) => total + chunk.delayMs, 0);
+      const busyMs =
+        action.type === "editor.type"
+          ? action.chunks.reduce((total, chunk) => total + chunk.delayMs, 0)
+          : action.type === "editor.select"
+            ? action.durationMs
+            : 0;
+      if (busyMs === 0) continue;
       const next = plan.actions[i + 1];
-      if (next && action.at + typingMs > next.at) {
+      if (next && action.at + busyMs > next.at) {
+        const label = action.type === "editor.type" ? "Typing" : "Selection";
         ctx.addIssue({
           code: "custom",
-          message: `Typing action "${action.id}" (${typingMs}ms) overlaps "${next.id}" at ${next.at}ms`,
+          message: `${label} action "${action.id}" (${busyMs}ms) overlaps "${next.id}" at ${next.at}ms`,
         });
       }
     }

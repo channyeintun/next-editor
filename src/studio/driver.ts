@@ -29,6 +29,7 @@ import {
   runErrorPrefixFor,
 } from "./playgroundRuntime";
 import type {
+  SelectionAnchor,
   StudioRuntime,
   StudioRuntimeMode,
   StudioPreviewTarget,
@@ -95,6 +96,11 @@ export interface StudioDriver {
   }): Promise<Record<string, unknown>>;
   moveCursor(input: {
     target: StudioTargetRef;
+    durationMs: number;
+  }): Promise<Record<string, unknown>>;
+  selectRange(input: {
+    path: string;
+    selection: SelectionAnchor;
     durationMs: number;
   }): Promise<Record<string, unknown>>;
   runWorkspace(timeoutMs: number): Promise<Record<string, unknown>>;
@@ -195,11 +201,13 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     return { editor, model };
   };
 
-  const dispatchCursorPoint = (x: number, y: number, element: Element) => {
+  const dispatchCursorPoint = (x: number, y: number, element: Element, buttons = 0) => {
     // Synthetic pointer input rides the exact capture path human input uses:
     // the mouse-tracking actor listens on the document in the capture phase,
     // so dispatching on the element under the point yields target-aware
     // samples (`createCursorPositionFromClientPoint` walks up from `target`).
+    // `buttons` is 0 for a plain attention move and 1 during a select drag, so
+    // the recorded cursor reads as a press-drag over the highlighted range.
     const under = document.elementFromPoint(x, y) ?? element;
     under.dispatchEvent(
       new PointerEvent("pointermove", {
@@ -209,7 +217,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         cancelable: true,
         composed: true,
         pointerType: "mouse",
-        buttons: 0,
+        buttons,
       }),
     );
     lastCursorPoint = { x, y };
@@ -369,6 +377,91 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       }
 
       return { target: describeStudioTarget(target) };
+    },
+
+    async selectRange({ path, selection, durationMs }) {
+      const { editor, model } = requireEditorForPath(path);
+      const content = model.getValue();
+      const endOffset = resolveAnchorOffset(content, {
+        after: selection.text,
+        occurrence: selection.occurrence,
+      });
+      if (endOffset === null) {
+        throw new StudioActionError(
+          `Selection occurrence ${selection.occurrence} of ${JSON.stringify(selection.text)} not found in "${path}"`,
+        );
+      }
+
+      const startPosition = model.getPositionAt(endOffset - selection.text.length);
+      const endPosition = model.getPositionAt(endOffset);
+      const range = new monaco.Range(
+        startPosition.lineNumber,
+        startPosition.column,
+        endPosition.lineNumber,
+        endPosition.column,
+      );
+
+      editor.focus();
+      // Authoritative highlight: the recorder captures the model selection
+      // (EditorFrame.state.selection via onDidChangeCursorSelection), so the
+      // range replays as highlighted text no matter how the synthetic pointer
+      // drag is interpreted. We dispatch no pointerdown, so Monaco never starts
+      // a competing selection of its own.
+      editor.setSelection(range);
+      editor.revealRangeInCenterIfOutsideViewport(range, monaco.editor.ScrollType.Immediate);
+
+      // Glide a button-held pointer across the range so the recorded cursor
+      // reads as a drag-select. Endpoints come from Monaco's own layout, so the
+      // motion tracks the real characters even after the reveal scroll.
+      const node = editor.getDomNode();
+      const nodeRect = node?.getBoundingClientRect() ?? null;
+      const startVisible = editor.getScrolledVisiblePosition(startPosition);
+      const endVisible = editor.getScrolledVisiblePosition(endPosition);
+      let dragged = false;
+      if (node && nodeRect && startVisible && endVisible) {
+        const from = {
+          x: nodeRect.left + startVisible.left,
+          y: nodeRect.top + startVisible.top + startVisible.height / 2,
+        };
+        const to = {
+          x: nodeRect.left + endVisible.left,
+          y: nodeRect.top + endVisible.top + endVisible.height / 2,
+        };
+        const started = performance.now();
+        for (;;) {
+          throwIfAborted(signal);
+          const elapsed = performance.now() - started;
+          const progress = Math.min(1, elapsed / durationMs);
+          const eased = easeInOutCubic(progress);
+          dispatchCursorPoint(
+            Math.round(from.x + (to.x - from.x) * eased),
+            Math.round(from.y + (to.y - from.y) * eased),
+            node,
+            1,
+          );
+          if (progress >= 1) {
+            break;
+          }
+          // setTimeout stepping (not rAF) so the drag advances in a background
+          // tab, matching moveCursor.
+          await abortableSleep(CURSOR_STEP_MS, signal);
+        }
+        // Release at the range end so the recorded button state returns to idle.
+        dispatchCursorPoint(Math.round(to.x), Math.round(to.y), node, 0);
+        dragged = true;
+      }
+
+      // Re-assert and verify the final range — a select that drifted off its
+      // target would silently teach the wrong lines, so fail closed instead.
+      editor.setSelection(range);
+      const applied = editor.getSelection();
+      if (!applied || !monaco.Range.equalsRange(range, applied)) {
+        throw new StudioActionError(
+          `Selection did not settle over ${JSON.stringify(selection.text)} in "${path}"`,
+        );
+      }
+
+      return { path, selectedChars: selection.text.length, dragged };
     },
 
     async runWorkspace(timeoutMs) {

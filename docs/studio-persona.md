@@ -71,6 +71,10 @@ plain words — if a phrase would need a dictionary or is an idiom, rewrite it:
 
 - Narrate _why_, show _what_: the typed code is visible — read out only the part
   the concept hinges on (the type set, the extra multiply), not every token.
+- Point with the mouse, not with words: when the narration explains code that is
+  already on screen, `editor.select` drag-highlights those lines so the eye lands
+  where the words do. Highlight the token the concept hinges on, and say what is
+  highlighted — never "this line here" with nothing marked.
 - No fake mistakes unless the lesson explicitly teaches debugging.
 - Every runnable checkpoint must actually run; expected output is asserted, not
   narrated on faith (`expect.output`).

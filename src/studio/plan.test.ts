@@ -113,6 +113,49 @@ describe("studio plan schema", () => {
     expect(() => parseStudioPlan(plan)).toThrow(/overlaps/);
   });
 
+  it("accepts an editor.select drag action", () => {
+    const plan = clonePlan(createTestPlan());
+    plan.actions.splice(3, 0, {
+      id: "highlight",
+      at: 5_000,
+      timeoutMs: 1_000,
+      type: "editor.select",
+      path: "main.rs",
+      selection: { text: "println!", occurrence: 1 },
+      durationMs: 500,
+    });
+    const parsed = parseStudioPlan(plan);
+    expect(parsed.actions.find((action) => action.id === "highlight")?.type).toBe("editor.select");
+  });
+
+  it("rejects a select drag that overlaps the next action", () => {
+    const plan = clonePlan(createTestPlan());
+    plan.actions.splice(3, 0, {
+      id: "highlight",
+      at: 5_000,
+      timeoutMs: 1_000,
+      type: "editor.select",
+      path: "main.rs",
+      selection: { text: "println!", occurrence: 1 },
+      durationMs: 60_000,
+    });
+    expect(() => parseStudioPlan(plan)).toThrow(/Selection action "highlight" .* overlaps/);
+  });
+
+  it("rejects a select in a file outside the pinned workspace", () => {
+    const plan = clonePlan(createTestPlan());
+    plan.actions.splice(3, 0, {
+      id: "highlight",
+      at: 5_000,
+      timeoutMs: 1_000,
+      type: "editor.select",
+      path: "missing.rs",
+      selection: { text: "println!", occurrence: 1 },
+      durationMs: 500,
+    });
+    expect(() => parseStudioPlan(plan)).toThrow(/not in the pinned workspace/);
+  });
+
   it("rejects references to files outside the pinned workspace", () => {
     const plan = clonePlan(createTestPlan());
     const open = plan.actions.find((action) => action.type === "workspace.openFile");
