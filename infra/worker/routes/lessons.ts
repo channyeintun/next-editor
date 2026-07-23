@@ -3,7 +3,6 @@ import type { Env } from "../env";
 import {
   deleteLesson,
   getLessonById,
-  getPublishedLessonBySlug,
   insertDraftLesson,
   listOwnedLessons,
   listPublishedLessons,
@@ -17,15 +16,16 @@ import { lessonRowToLesson, lessonRowToOwnedLesson } from "../../db/types";
 import { getCurrentUser } from "../auth/session";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 import { cached, getCache, invalidateCache, lessonListKey, lessonSlugKey } from "../cache";
+import { findPublishedLessonBySlug } from "../lessonCatalog";
 
 const DEFAULT_PAGE_SIZE = 12;
-// Short TTLs: a newly published/edited lesson should show up in the public
-// gallery/detail views within roughly this long. The list isn't invalidated
-// key-by-key on writes (see invalidateCache calls below) — every paginated
-// page would need tracking for a marginal staleness win, so it just relies
-// on this TTL instead.
+// Short TTL: a newly published/edited lesson should show up in the public
+// gallery within roughly this long. The list isn't invalidated key-by-key on
+// writes (see invalidateCache calls below) — every paginated page would need
+// tracking for a marginal staleness win, so it just relies on this TTL
+// instead. The per-slug equivalent lives in lessonCatalog.ts, shared with the
+// edge render.
 const LIST_CACHE_TTL_SECONDS = 60;
-const SLUG_CACHE_TTL_SECONDS = 300;
 
 function slugify(title: string): string {
   const base = title
@@ -327,19 +327,7 @@ lessonsRoute.get("/mine", async (c) => {
 // specificity for a literal-vs-param conflict (it currently doesn't, but this
 // ordering keeps the file correct even if that assumption changes).
 lessonsRoute.get("/:slug", async (c) => {
-  const slug = c.req.param("slug");
-  // A cache miss on a not-found slug is never populated: cached() treats a
-  // stored `null` the same as "no entry" and re-queries D1 every time. Fine
-  // here — 404s are cheap and rare enough not to need their own cache path.
-  const lesson = await cached(
-    getCache(c.env),
-    lessonSlugKey(slug),
-    SLUG_CACHE_TTL_SECONDS,
-    async () => {
-      const row = await getPublishedLessonBySlug(c.env.DB, slug);
-      return row ? lessonRowToLesson(row) : null;
-    },
-  );
+  const lesson = await findPublishedLessonBySlug(c.env, c.req.param("slug"));
   if (!lesson) {
     return c.json({ error: "not found" }, 404);
   }

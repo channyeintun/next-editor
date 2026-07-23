@@ -18,6 +18,8 @@ import { kotlinPlaygroundRoute } from "./routes/kotlinPlayground";
 import { rustPlaygroundRoute } from "./routes/rustPlayground";
 import { collaborationRoute } from "./routes/collaboration";
 import { renderLandingResponse } from "./ssr/landing";
+import { renderLessonDetailResponse, renderMissingLessonResponse } from "./ssr/lessonDetail";
+import { findPublishedLessonBySlug } from "./lessonCatalog";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -88,6 +90,41 @@ app.route("/api/slide-images", slideImagesRoute);
 // receive its semantic content in the initial HTML. The hydrated browser app
 // takes over after load; editor and lesson routes keep their existing CSR path.
 app.get("/", async (c) => renderLandingResponse(await c.env.ASSETS.fetch(c.req.raw)));
+
+// Data-only SSR for lesson detail. The page itself stays client-rendered (the
+// editor is Monaco + WebContainers), but resolving the row here gives crawlers
+// real per-lesson metadata instead of the generic shell every lesson URL used
+// to serve, and dehydrates that same row into the React Query cache so the
+// browser skips the /api/lessons/:slug round trip it would otherwise make on
+// a direct visit. In-app navigations never reach this handler — the gallery
+// and playlist views seed the same cache entry from the list they already
+// hold (tube/src/hooks/useLessons.ts).
+//
+// Any failure degrades to the untouched SPA shell: an un-decorated document
+// still works, an error page does not.
+app.get("/learn/:slug", async (c) => {
+  const slug = c.req.param("slug");
+  const assetResponse = await c.env.ASSETS.fetch(c.req.raw);
+
+  // Author profiles share this path segment (see LearnSlugRoute) and aren't
+  // lessons at all.
+  if (slug.startsWith("@")) {
+    return assetResponse;
+  }
+
+  try {
+    const lesson = await findPublishedLessonBySlug(c.env, slug);
+    if (!lesson) {
+      return await renderMissingLessonResponse(assetResponse, slug);
+    }
+
+    const origin = c.env.PUBLIC_URL || new URL(c.req.url).origin;
+    return await renderLessonDetailResponse(assetResponse, { lesson, slug, origin });
+  } catch (error) {
+    console.error("Lesson detail SSR failed", { slug }, error);
+    return assetResponse;
+  }
+});
 
 // Workers Static Assets already tried to match the request against dist/ and
 // missed before this Worker ran (exact-match static files — JS chunks, the

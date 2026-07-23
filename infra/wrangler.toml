@@ -67,6 +67,10 @@ react = "react"
 "react-dom/server.edge" = "react-dom/server.edge"
 "react-router" = "react-router"
 "lucide-react" = "lucide-react"
+# Lesson-detail edge SSR dehydrates the same React Query cache the browser
+# hydrates, so the Worker builds against the identical query implementation.
+"@tanstack/react-query" = "@tanstack/react-query"
+"@tanstack/query-core" = "@tanstack/query-core"
 "cookie-es" = "cookie-es"
 "scheduler" = "scheduler"
 "@upstash/qstash" = "@upstash/qstash"

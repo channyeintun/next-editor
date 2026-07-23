@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
+import { hydrateServerQueryState } from "./queryClient";
 import { loadDmpCodec } from "./storage/dmpCodec/dmpCodec";
 import posthog from "posthog-js";
 import { PostHogProvider } from "@posthog/react";
@@ -36,6 +37,10 @@ installPerformanceMetricsReporter((metrics) => {
 // Warm the diff-match-patch WASM codec that the recording encode/decode/replay
 // paths require, so it's ready before the user starts recording.
 void loadDmpCodec();
+
+// Before the first render, so a server-resolved query is already in the cache
+// when the route that needs it mounts (and never fetches for itself).
+hydrateServerQueryState();
 
 const root = document.getElementById("root")!;
 const app = (

@@ -155,6 +155,36 @@ The introduction lesson therefore **never touches D1** and keeps being served as
 plain edge-cached JSON + static assets — exactly the "frequent access" carve-out
 requested.
 
+### Who resolves the slug, and when
+
+`findLessonBySlug` above is the _fallback_, not the usual path. A lesson row
+reaches the detail route by whichever of these got there first:
+
+| Arrival                        | Resolver                                                      | Client fetch? |
+| ------------------------------ | ------------------------------------------------------------- | ------------- |
+| In-app click from a list       | The list query seeds `["lessons","detail",slug]`              | No            |
+| Direct URL / refresh / crawler | Worker resolves at the edge, dehydrates into the document     | No            |
+| Anything else                  | `findLessonBySlug` (seed manifest, then `/api/lessons/:slug`) | Yes           |
+
+- **Seeding** (`primeLessonDetails`, `tube/src/hooks/useLessons.ts`): the gallery
+  and playlist queries already download whole `Lesson` objects for every card
+  they render, so their query functions write each one to the detail key. Opening
+  a card — or auto-advancing through a playlist — then resolves from cache.
+- **Edge render** (`infra/worker/ssr/lessonDetail.ts`): `GET /learn/:slug` in the
+  Worker resolves the slug through the same `findPublishedLessonBySlug` the JSON
+  API uses (`infra/worker/lessonCatalog.ts`, so the two can't disagree), rewrites
+  the shell's generic `<title>`/OG/Twitter/canonical tags with the lesson's own,
+  appends `Course` JSON-LD, and parks a dehydrated React Query cache in a
+  `<script type="application/json">`. `hydrateServerQueryState()` adopts it before
+  the first render (`src/queryClient.ts`).
+
+This is **data-only SSR**: `#root` ships empty, because the lesson page _is_ the
+editor (Monaco, WebContainers, the whole provider stack) and none of that renders
+on a Worker. The browser still mounts the app exactly as before — it just does so
+with the lesson already in hand. An unknown slug gets a `noindex` 404 shell with
+the miss dehydrated too, so the client can render "Lesson not found" without
+repeating the lookup, and any edge failure degrades to the untouched SPA shell.
+
 ## Caching — Cloudflare Workers KV
 
 The "Short TTL" cache in the table above is `infra/worker/cache.ts`: a

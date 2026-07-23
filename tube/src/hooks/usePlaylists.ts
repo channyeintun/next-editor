@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { findPlaylistBySlug } from "../lib/playlists";
+import { primeLessonDetails } from "./useLessons";
 
 // Single playlist by slug for the public detail route and the lesson page's
 // playlist mode. (The My Library manage panel uses infra's owner-scoped
@@ -10,9 +11,20 @@ import { findPlaylistBySlug } from "../lib/playlists";
 // Same live-data override of the app's default staleTime: Infinity, since
 // playlist membership changes as the owner edits it.
 export function usePlaylist(slug: string | undefined) {
+  const queryClient = useQueryClient();
+
   return useQuery({
     queryKey: ["playlists", "detail", slug],
-    queryFn: () => findPlaylistBySlug(slug!),
+    queryFn: async () => {
+      const playlist = await findPlaylistBySlug(slug!);
+      // A playlist carries its members in full, so opening one from here — or
+      // auto-advancing to the next lesson in playlist mode — needs no further
+      // lookup.
+      if (playlist) {
+        primeLessonDetails(queryClient, playlist.lessons);
+      }
+      return playlist;
+    },
     enabled: !!slug,
     staleTime: 60_000,
   });
