@@ -79,9 +79,9 @@ scenes:
 
   - id: clone-it
     narration: >
-      [[mark:open]] So here's a String, s1. [[mark:type-clone]] We call clone to
-      make s2 a full, independent copy. Now both s1 and s2 own their own
-      String — nothing moved, and both print fine.
+      [[mark:open]] So here's a String, s1. [[mark:type-clone]] We call clone
+      to make s2 a full, independent copy. [[mark:select-clone]] That clone call
+      leaves s1 valid. Both names own a String, and both print fine.
     sources:
       - title: "The Rust Book — Variables and Data Interacting with Clone"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-clone"
@@ -102,12 +102,19 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let s2 = s1.clone();\n    println!(\"s1 = {s1}, s2 = {s2}\");\n"
+      - id: select-clone
+        type: editor.select
+        at: { mark: select-clone }
+        target:
+          file: main.rs
+          text: "s1.clone()"
+          occurrence: 1
 
   - id: copy-it
     narration: >
-      [[mark:type-copy]] Now a plain integer. n is five, and m gets a copy of
-      it. Because i32 is Copy, n is still valid afterward — nothing moved, both
-      hold five.
+      [[mark:type-copy]] Now a plain integer. [[mark:select-copy]] n is five,
+      and m gets a copy of it. Because i32 is Copy, n is still valid afterward.
+      Nothing moved, and both names hold five.
     sources:
       - title: "The Rust Book — What Is Ownership?"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
@@ -121,6 +128,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let n = 5;\n    let m = n;\n    println!(\"n = {n}, m = {m}\");\n"
+      - id: select-copy
+        type: editor.select
+        at: { mark: select-copy }
+        target:
+          file: main.rs
+          text: "let m = n;"
+          occurrence: 1
 
   - id: run
     narration: >

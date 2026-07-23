@@ -9,7 +9,7 @@
     {
       "id": "scope.length",
       "severity": "suggestion",
-      "message": "Narration runs 166s (guide caps at 120s)"
+      "message": "Narration runs 167s (guide caps at 120s)"
     }
   ]
 }

@@ -125,10 +125,10 @@ scenes:
 
   - id: grow-it
     narration: >
-      [[mark:open]] We start with the String hello. [[mark:type-grow]] push_str
-      adds a whole piece, comma world. push adds a single character, the
-      exclamation mark. Now len gives the size in bytes — thirteen, because
-      these characters are one byte each.
+      [[mark:open]] We start with the String hello. [[mark:type-grow]] Let's
+      grow it in two steps. [[mark:select-grow]] push_str adds a whole piece,
+      comma world. push adds one character, the exclamation mark. Now len gives
+      the size in bytes: thirteen, because these characters are one byte each.
     sources:
       - title: "The Rust Book — Updating a String"
         url: "https://doc.rust-lang.org/book/ch08-02-strings.html#updating-a-string"
@@ -146,12 +146,19 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    greeting.push_str(\", world\");\n    greeting.push('!');\n    println!(\"grown: {greeting}\");\n    println!(\"length in bytes: {}\", greeting.len());\n"
+      - id: select-grow
+        type: editor.select
+        at: { mark: select-grow }
+        target:
+          file: main.rs
+          text: "    greeting.push_str(\", world\");\n    greeting.push('!');"
+          occurrence: 1
 
   - id: format-it
     narration: >
-      [[mark:type-format]] name is a &str — a borrowed literal. format! builds
-      a brand-new String from a template, dropping our values into the braces,
-      without changing the originals.
+      [[mark:type-format]] name is a &str, a borrowed literal.
+      [[mark:select-format]] format! builds a new String from a template,
+      dropping our values into the braces without changing the originals.
     sources:
       - title: "The Rust Book — Concatenation with format!"
         url: "https://doc.rust-lang.org/book/ch08-02-strings.html#concatenation-with-the--operator-or-the-format-macro"
@@ -165,6 +172,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let name = \"Rust\";\n    let line = format!(\"{greeting} from {name}\");\n    println!(\"{line}\");\n"
+      - id: select-format
+        type: editor.select
+        at: { mark: select-format }
+        target:
+          file: main.rs
+          text: 'format!("{greeting} from {name}")'
+          occurrence: 1
 
   - id: run
     narration: >

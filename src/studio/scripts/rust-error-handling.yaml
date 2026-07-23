@@ -84,9 +84,10 @@ scenes:
   - id: the-ok-path
     narration: >
       [[mark:open]] Here's a function that parses text into a number.
-      [[mark:type-ok]] See the question-mark after parse? If parsing fails, the
-      error returns right here. Otherwise we double the number and wrap it in
-      Ok. First we call it with twenty-one and match the Ok.
+      [[mark:select-question]] See the question-mark after parse? If parsing
+      fails, the error returns right here. Otherwise we double the number and
+      wrap it in Ok. [[mark:type-ok]] First we call it with twenty-one and match
+      the Ok.
     sources:
       - title: "The Rust Book — Where the ? Operator Can Be Used"
         url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#where-the--operator-can-be-used"
@@ -98,6 +99,13 @@ scenes:
         type: workspace.openFile
         at: { mark: open }
         path: main.rs
+      - id: select-question
+        type: editor.select
+        at: { mark: select-question }
+        target:
+          file: main.rs
+          text: "text.parse()?"
+          occurrence: 1
       - id: type-ok
         type: editor.type
         at: { mark: type-ok, offsetMs: -400 }
@@ -111,8 +119,8 @@ scenes:
   - id: the-err-path
     narration: >
       [[mark:type-err]] Now we call it with the word oops, which can't be a
-      number. This time parse fails, the question-mark returns the error, and
-      our match lands on the Err arm instead.
+      number. [[mark:select-err-arm]] This time parse fails, the question-mark
+      returns the error, and our match lands on the Err arm instead.
     sources:
       - title: "The Rust Book — To panic! or Not to panic!"
         url: "https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html"
@@ -126,6 +134,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    match parse_and_double(\"oops\") {\n        Ok(v) => println!(\"ok: {v}\"),\n        Err(_) => println!(\"could not parse\"),\n    }\n"
+      - id: select-err-arm
+        type: editor.select
+        at: { mark: select-err-arm }
+        target:
+          file: main.rs
+          text: "Err(_) => println!(\"could not parse\"),"
+          occurrence: 1
 
   - id: run
     narration: >

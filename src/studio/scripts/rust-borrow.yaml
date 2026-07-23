@@ -110,9 +110,10 @@ scenes:
 
   - id: borrow-fn
     narration: >
-      [[mark:type-measure]] See the ampersand in the signature? That declares
-      a reference. measure borrows the String: it can read the value, but it
-      never owns it, and nothing is dropped when the function returns.
+      [[mark:type-measure]] Let's add measure.
+      [[mark:select-borrow-type]] See the ampersand in the signature? That
+      declares a reference. measure borrows the String: it can read the value,
+      but it never owns it. Nothing is dropped when the function returns.
       Ownership stays right where it was.
     sources:
       - title: "The Rust Book — References and Borrowing"
@@ -126,13 +127,20 @@ scenes:
           after: ""
           occurrence: 1
         text: "fn measure(text: &String) -> usize {\n    text.len()\n}\n\n"
+      - id: select-borrow-type
+        type: editor.select
+        at: { mark: select-borrow-type }
+        target:
+          file: main.rs
+          text: "&String"
+          occurrence: 1
 
   - id: borrow-call
     narration: >
       [[mark:type-call]] Now let's call measure with a reference to owner, and
-      print the length we get back. The borrow starts at the ampersand and
-      ends inside the call. And when the call returns, owner is unchanged —
-      it still owns the String.
+      print the length we get back. [[mark:select-owner-borrow]] The borrow
+      starts at the ampersand and ends inside the call. When the call returns,
+      owner is unchanged. It still owns the String.
     sources:
       - title: "std::string::String::len"
         url: "https://doc.rust-lang.org/std/string/struct.String.html#method.len"
@@ -146,15 +154,22 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let length = measure(&owner);\n    println!(\"{length} bytes, borrowed only\");\n"
+      - id: select-owner-borrow
+        type: editor.select
+        at: { mark: select-owner-borrow }
+        target:
+          file: main.rs
+          text: "&owner"
+          occurrence: 1
 
   - id: shared-readers
     narration: >
       [[mark:show-borrow-rules]] Borrowing has one rule of its own. At any
       time, you can have either one mutable reference, or any number of
       shared ones. Many readers, or a single writer — never both at once.
-      [[mark:type-readers]] So two shared references to owner can exist at
-      the same time, because neither one can change the String they're
-      reading.
+      [[mark:type-readers]] Let's add two shared references to owner.
+      [[mark:select-readers]] They can exist at the same time because neither
+      one can change the String they're reading.
     sources:
       - title: "The Rust Book — Mutable References"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references"
@@ -175,6 +190,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let first = &owner;\n    let second = &owner;\n    println!(\"readers: {first} and {second}\");\n"
+      - id: select-readers
+        type: editor.select
+        at: { mark: select-readers }
+        target:
+          file: main.rs
+          text: "    let first = &owner;\n    let second = &owner;"
+          occurrence: 1
 
   - id: run
     narration: >

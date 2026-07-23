@@ -179,9 +179,10 @@ scenes:
   - id: the-chain
     narration: >
       [[mark:open]] Here are six numbers. [[mark:type-chain]] We build a
-      pipeline. iter goes through them, copied gives plain values, filter keeps
-      the even ones, and map multiplies each by ten. collect gathers the
-      results into a Vec — twenty, forty, sixty.
+      pipeline. iter goes through them, and copied gives plain values.
+      [[mark:select-transform-chain]] filter keeps the even ones, map multiplies
+      each by ten, and collect gathers the results into a Vec: twenty, forty,
+      sixty.
     sources:
       - title: "The Rust Book — Iterator Adaptors"
         url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-produce-other-iterators"
@@ -199,11 +200,19 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let evens_doubled: Vec<i32> = numbers\n        .iter()\n        .copied()\n        .filter(|n| n % 2 == 0)\n        .map(|n| n * 10)\n        .collect();\n    println!(\"evens doubled: {evens_doubled:?}\");\n"
+      - id: select-transform-chain
+        type: editor.select
+        at: { mark: select-transform-chain }
+        target:
+          file: main.rs
+          text: "        .filter(|n| n % 2 == 0)\n        .map(|n| n * 10)\n        .collect();"
+          occurrence: 1
 
   - id: the-consumer
     narration: >
-      [[mark:type-sum]] Not every chain ends in collect. sum is a consumer too
-      — it goes through the numbers and adds them into one total, twenty-one.
+      [[mark:type-sum]] Not every chain ends in collect.
+      [[mark:select-sum]] sum is a consumer too. It goes through the numbers and
+      adds them into one total, twenty-one.
     sources:
       - title: "The Rust Book — Methods that Consume the Iterator"
         url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-consume-the-iterator"
@@ -217,6 +226,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let total: i32 = numbers.iter().sum();\n    println!(\"sum: {total}\");\n"
+      - id: select-sum
+        type: editor.select
+        at: { mark: select-sum }
+        target:
+          file: main.rs
+          text: ".sum()"
+          occurrence: 1
 
   - id: run
     narration: >

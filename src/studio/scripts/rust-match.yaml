@@ -123,9 +123,10 @@ scenes:
   - id: the-match
     narration: >
       [[mark:open]] Here's a score. [[mark:type-match]] Now match it. Ranges
-      like ninety to one hundred map to a letter grade. Eighty-five falls in
-      the second arm, so grade becomes B. The underscore is the catch-all, and
-      match hands its result to grade.
+      like ninety to one hundred map to a letter grade.
+      [[mark:select-grade-arm]] Eighty-five falls in the second arm, so grade
+      becomes B. The
+      underscore is the catch-all, and match hands its result to grade.
     sources:
       - title: "The Rust Book — Patterns That Bind to Values"
         url: "https://doc.rust-lang.org/book/ch06-02-match.html#patterns-that-bind-to-values"
@@ -143,12 +144,19 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let grade = match score {\n        90..=100 => 'A',\n        80..=89 => 'B',\n        _ => 'C',\n    };\n    println!(\"grade {grade}\");\n"
+      - id: select-grade-arm
+        type: editor.select
+        at: { mark: select-grade-arm }
+        target:
+          file: main.rs
+          text: "80..=89 => 'B'"
+          occurrence: 1
 
   - id: if-let
     narration: >
       [[mark:type-iflet]] Sometimes you only want one case. Found holds Some
-      seven. If let checks for the Some pattern and pulls out the seven,
-      binding it to x. One line, no full match needed.
+      seven. [[mark:select-if-let]] If let checks for the Some pattern and
+      pulls out the seven, binding it to x. One line, no full match needed.
     sources:
       - title: "The Rust Book — Concise Control Flow with if let"
         url: "https://doc.rust-lang.org/book/ch06-03-if-let.html"
@@ -162,6 +170,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let found = Some(7);\n    if let Some(x) = found {\n        println!(\"found {x}\");\n    }\n"
+      - id: select-if-let
+        type: editor.select
+        at: { mark: select-if-let }
+        target:
+          file: main.rs
+          text: "if let Some(x) = found {"
+          occurrence: 1
 
   - id: run
     narration: >

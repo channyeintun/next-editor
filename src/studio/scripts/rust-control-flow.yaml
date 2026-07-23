@@ -128,10 +128,10 @@ scenes:
 
   - id: if-expression
     narration: >
-      [[mark:open]] n is seven. [[mark:type-if]] The whole if-else sits on the
-      right of the equals sign. n even gives "even", otherwise "odd" — and
-      parity takes that result. Most languages can't do this. In Rust, if
-      returns a value.
+      [[mark:open]] n is seven. [[mark:type-if]] Let's bind parity.
+      [[mark:select-if-expression]] The whole if-else sits on the right of the
+      equals sign. An even n gives "even"; otherwise it gives "odd". Parity
+      takes that result because Rust's if returns a value.
     sources:
       - title: "The Rust Book — if in a let Statement"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#using-if-in-a-let-statement"
@@ -149,12 +149,19 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let parity = if n % 2 == 0 { \"even\" } else { \"odd\" };\n    println!(\"{n} is {parity}\");\n"
+      - id: select-if-expression
+        type: editor.select
+        at: { mark: select-if-expression }
+        target:
+          file: main.rs
+          text: 'if n % 2 == 0 { "even" } else { "odd" }'
+          occurrence: 1
 
   - id: for-loop
     narration: >
-      [[mark:type-for]] Now a for loop. The range one to n, inclusive, hands you
-      each number in turn — add it to sum. The Rust way — loop over a range or
-      any iterator, no manual counter.
+      [[mark:type-for]] Now a for loop. [[mark:select-range]] The range one to
+      n, inclusive, hands you each number in turn. We add each one to sum. Rust
+      loops over a range or any iterator, with no manual counter.
     sources:
       - title: "The Rust Book — Looping Through a Collection with for"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#looping-through-a-collection-with-for"
@@ -168,12 +175,20 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let mut sum = 0;\n    for i in 1..=n {\n        sum += i;\n    }\n    println!(\"sum to {n} is {sum}\");\n"
+      - id: select-range
+        type: editor.select
+        at: { mark: select-range }
+        target:
+          file: main.rs
+          text: "1..=n"
+          occurrence: 1
 
   - id: while-loop
     narration: >
-      [[mark:type-while]] Use while when you don't know the count up front.
-      countdown starts at three; each pass prints it, then subtracts one. Hit
-      zero, the condition is false, the loop ends.
+      [[mark:type-while]] Now add a countdown. [[mark:select-while]] Use while
+      when you don't know the count up front. It starts at three; each pass
+      prints and subtracts one. At zero, the condition is false and the loop
+      ends.
     sources:
       - title: "The Rust Book — Conditional Loops with while"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#conditional-loops-with-while"
@@ -187,6 +202,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let mut countdown = 3;\n    while countdown > 0 {\n        println!(\"t-minus {countdown}\");\n        countdown -= 1;\n    }\n    println!(\"liftoff\");\n"
+      - id: select-while
+        type: editor.select
+        at: { mark: select-while }
+        target:
+          file: main.rs
+          text: "while countdown > 0 {"
+          occurrence: 1
 
   - id: run
     narration: >

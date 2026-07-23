@@ -176,8 +176,9 @@ scenes:
   - id: define-add
     narration: >
       [[mark:open]] main calls add — not written yet. [[mark:type-add]] Write
-      it. Two parameters, both i32, returns an i32. The body is one expression,
-      A plus b, no semicolon. That sum is what add returns.
+      it. Two parameters, both i32, return an i32.
+      [[mark:select-add-expression]] The body is one expression, A plus b, with
+      no semicolon. That sum is what add returns.
     sources:
       - title: "The Rust Book — Function Parameters"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#parameters"
@@ -195,13 +196,21 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "\nfn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n"
+      - id: select-add-expression
+        type: editor.select
+        at: { mark: select-add-expression }
+        target:
+          file: main.rs
+          text: "a + b"
+          occurrence: 1
 
   - id: statement-vs-expression
     narration: >
       [[mark:type-double]] A function with two lines. double computes n times
-      two, binds it to result — semicolon, so that's a statement.
-      [[mark:type-call]] Then result alone, no semicolon — that's the return
-      value. Back in main, call double and print the result.
+      two and binds it to result. The semicolon makes that a statement.
+      [[mark:select-double-expression]] Then result stands alone, with no
+      semicolon. That's the return value. [[mark:type-call]] Back in main, call
+      double and print the result.
     sources:
       - title: "The Rust Book — Statements and Expressions"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#statements-and-expressions"
@@ -215,6 +224,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "\nfn double(n: i32) -> i32 {\n    let result = n * 2;\n    result\n}\n"
+      - id: select-double-expression
+        type: editor.select
+        at: { mark: select-double-expression }
+        target:
+          file: main.rs
+          text: "    let result = n * 2;\n    result"
+          occurrence: 1
       - id: type-call
         type: editor.type
         at: { mark: type-call }

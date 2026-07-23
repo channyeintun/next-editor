@@ -187,9 +187,9 @@ scenes:
   - id: insert-and-get
     narration: >
       [[mark:open]] Here we insert two team scores, so the map holds two keys.
-      [[mark:type-get]] Now we look up red. get returns an Option, so we match:
-      Some means we found points, None means the key is missing. Red is there,
-      with fifty.
+      [[mark:type-get]] Now we look up red. [[mark:select-get]] get returns an
+      Option, so we match: Some means we found points, while None means the key
+      is missing. Red is there, with fifty.
     sources:
       - title: "The Rust Book — Accessing Values in a Hash Map"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#accessing-values-in-a-hash-map"
@@ -207,12 +207,19 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let team = \"red\";\n    match scores.get(team) {\n        Some(points) => println!(\"{team} has {points}\"),\n        None => println!(\"{team} not found\"),\n    }\n"
+      - id: select-get
+        type: editor.select
+        at: { mark: select-get }
+        target:
+          file: main.rs
+          text: "scores.get(team)"
+          occurrence: 1
 
   - id: entry-update
     narration: >
-      [[mark:type-entry]] entry is the update tool. For blue, or_insert gives
-      us a mutable reference — the existing ten, or a zero if blue were new. We
-      add five, so blue becomes fifteen.
+      [[mark:type-entry]] Now update blue. [[mark:select-entry]] entry finds the
+      key, and or_insert gives us a mutable reference: the existing ten, or zero
+      if blue were new. We add five, so blue becomes fifteen.
     sources:
       - title: "The Rust Book — Updating a Value Based on the Old Value"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#updating-a-value-based-on-the-old-value"
@@ -226,6 +233,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    *scores.entry(\"blue\").or_insert(0) += 5;\n    println!(\"blue now: {}\", scores[\"blue\"]);\n"
+      - id: select-entry
+        type: editor.select
+        at: { mark: select-entry }
+        target:
+          file: main.rs
+          text: 'scores.entry("blue").or_insert(0)'
+          occurrence: 1
 
   - id: run
     narration: >

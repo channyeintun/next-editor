@@ -84,9 +84,10 @@ scenes:
   - id: build-longest
     narration: >
       [[mark:open]] Here, main calls longest on two strings, but longest isn't
-      written yet. [[mark:type-longest]] There we go. The lifetime marker on x,
-      y, and the return type ties them together. Whichever string we return, it
-      stays valid as long as both inputs do.
+      written yet. [[mark:type-longest]] There we go.
+      [[mark:select-lifetime]] The lifetime marker on x, y, and the return type
+      ties them together. Whichever string we return, it stays valid as long as
+      both inputs do.
     sources:
       - title: "The Rust Book — Lifetime Annotations in Function Signatures"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-annotations-in-function-signatures"
@@ -107,6 +108,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "\nfn longest<'a>(x: &'a str, y: &'a str) -> &'a str {\n    if x.len() > y.len() {\n        x\n    } else {\n        y\n    }\n}\n"
+      - id: select-lifetime
+        type: editor.select
+        at: { mark: select-lifetime }
+        target:
+          file: main.rs
+          text: "fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {"
+          occurrence: 1
 
   - id: run
     narration: >

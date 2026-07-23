@@ -94,8 +94,10 @@ scenes:
 
   - id: dog-uses-default
     narration: >
-      [[mark:open]] Here's the Greet trait. Dog implements only name, returning
-      Rex. So Dog uses the default hello — and calling it gives Hello, Rex.
+      [[mark:open]] Here's the Greet trait.
+      [[mark:select-default-hello]] Its hello method is already defined once.
+      Dog implements only name, returning Rex. So Dog uses that default, and
+      calling it gives Hello, Rex.
     sources:
       - title: "The Rust Book — Implementing a Trait on a Type"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#implementing-a-trait-on-a-type"
@@ -107,11 +109,19 @@ scenes:
         type: workspace.openFile
         at: { mark: open }
         path: main.rs
+      - id: select-default-hello
+        type: editor.select
+        at: { mark: select-default-hello }
+        target:
+          file: main.rs
+          text: "    fn hello(&self) -> String {\n        format!(\"Hello, {}!\", self.name())\n    }"
+          occurrence: 1
 
   - id: robot-overrides
     narration: >
-      [[mark:type-robot]] Now Robot. It implements name, returning Unit-7, and
-      this time it overrides hello with its own beeping version.
+      [[mark:type-robot]] Now Robot. It implements name, returning Unit-7.
+      [[mark:select-robot-hello]] This time it overrides hello with its own
+      beeping version.
       [[mark:type-call]] We create a Robot and call hello on it.
     sources:
       - title: "The Rust Book — Traits as Parameters"
@@ -126,6 +136,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "\nstruct Robot;\n\nimpl Greet for Robot {\n    fn name(&self) -> String {\n        String::from(\"Unit-7\")\n    }\n    fn hello(&self) -> String {\n        format!(\"BEEP. I am {}.\", self.name())\n    }\n}\n"
+      - id: select-robot-hello
+        type: editor.select
+        at: { mark: select-robot-hello }
+        target:
+          file: main.rs
+          text: "    fn hello(&self) -> String {\n        format!(\"BEEP. I am {}.\", self.name())\n    }"
+          occurrence: 1
       - id: type-call
         type: editor.type
         at: { mark: type-call }

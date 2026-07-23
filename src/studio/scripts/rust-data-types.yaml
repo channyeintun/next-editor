@@ -179,8 +179,9 @@ scenes:
 
   - id: scalars
     narration: >
-      [[mark:open]] Two scalars already. year, annotated i32 — a 32-bit signed
-      integer. pi has none, so Rust infers f64, the default float.
+      [[mark:open]] Two scalars already. [[mark:select-year-type]] year is
+      annotated i32, a 32-bit signed integer. pi has no annotation, so Rust
+      infers f64, the default float.
       [[mark:type-scalars]] Add the other two. A bool: true or false. A char:
       one Unicode character, in single quotes.
     sources:
@@ -191,6 +192,13 @@ scenes:
         type: workspace.openFile
         at: { mark: open }
         path: main.rs
+      - id: select-year-type
+        type: editor.select
+        at: { mark: select-year-type }
+        target:
+          file: main.rs
+          text: "year: i32"
+          occurrence: 1
       - id: type-scalars
         type: editor.type
         at: { mark: type-scalars, offsetMs: -400 }
@@ -203,10 +211,10 @@ scenes:
 
   - id: compound
     narration: >
-      [[mark:type-compound]] Now compound types. A tuple packs a fixed group —
-      an integer, a float, a char. Unpack it with a pattern, naming each part.
-      An array is different: a fixed count, all one type. Read one by index from
-      zero; its length is known at compile time.
+      [[mark:type-compound]] Now compound types. [[mark:select-tuple]] A tuple
+      packs a fixed group: an integer, a float, and a char. A pattern unpacks
+      and names each part. [[mark:select-array]] An array has a fixed count, all
+      one type. Read one by index from zero; its length is known at compile time.
     sources:
       - title: "The Rust Book — Compound Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#compound-types"
@@ -220,6 +228,20 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let point = (1, 2.5, 'x');\n    let (a, b, c) = point;\n    println!(\"tuple parts: {a}, {b}, {c}\");\n    let scores = [90, 80, 70];\n    println!(\"first score {}, count {}\", scores[0], scores.len());\n"
+      - id: select-tuple
+        type: editor.select
+        at: { mark: select-tuple }
+        target:
+          file: main.rs
+          text: "    let point = (1, 2.5, 'x');\n    let (a, b, c) = point;"
+          occurrence: 1
+      - id: select-array
+        type: editor.select
+        at: { mark: select-array }
+        target:
+          file: main.rs
+          text: "let scores = [90, 80, 70];"
+          occurrence: 1
 
   - id: run
     narration: >

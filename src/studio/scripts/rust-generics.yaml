@@ -98,9 +98,10 @@ scenes:
   - id: one-function-many-types
     narration: >
       [[mark:open]] Here's largest, already finding the biggest number in a
-      slice. [[mark:type-words]] The same function, unchanged, works on words
-      too — Rust compares strings alphabetically and returns the largest. One
-      function, two types.
+      slice. [[mark:select-generic-bound]] Its T must support PartialOrd, so the
+      function can compare values. [[mark:type-words]] The same function,
+      unchanged, works on words too. Rust compares strings alphabetically and
+      returns the largest. One function, two types.
     sources:
       - title: "The Rust Book — In Function Definitions"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
@@ -112,6 +113,13 @@ scenes:
         type: workspace.openFile
         at: { mark: open }
         path: main.rs
+      - id: select-generic-bound
+        type: editor.select
+        at: { mark: select-generic-bound }
+        target:
+          file: main.rs
+          text: "T: PartialOrd"
+          occurrence: 1
       - id: type-words
         type: editor.type
         at: { mark: type-words, offsetMs: -400 }
@@ -125,8 +133,8 @@ scenes:
   - id: generic-struct
     narration: >
       [[mark:type-pair]] Structs can be generic too. Pair holds two values of
-      the same type. Here we make a Pair of integers and read both fields. Swap
-      in strings, and it would just work.
+      the same type. [[mark:select-pair]] Here we make a Pair of integers and
+      read both fields. Swap in strings, and the same definition still works.
     sources:
       - title: "The Rust Book — In Struct Definitions"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-struct-definitions"
@@ -140,6 +148,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let p = Pair { first: 1, second: 2 };\n    println!(\"pair: {}, {}\", p.first, p.second);\n"
+      - id: select-pair
+        type: editor.select
+        at: { mark: select-pair }
+        target:
+          file: main.rs
+          text: "Pair { first: 1, second: 2 }"
+          occurrence: 1
 
   - id: run
     narration: >

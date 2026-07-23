@@ -251,10 +251,11 @@ scenes:
 
   - id: string-and-array
     narration: >
-      [[mark:open]] Here's a String, and word borrows the first six bytes —
-      that's a string slice, written &str. [[mark:type-arr]] Now an array. We
-      slice index one up to four, and print it. Middle is a view of three
-      numbers, borrowed from the array — nothing was copied.
+      [[mark:open]] Here's a String. [[mark:select-string-slice]] Word borrows
+      the first six bytes. That's a string slice, written &str.
+      [[mark:type-arr]] Now an array. [[mark:select-array-slice]] We slice index
+      one up to four and print it. Middle is a view of three numbers borrowed
+      from the array. Nothing was copied.
     sources:
       - title: "The Rust Book — String Slices"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices"
@@ -263,6 +264,13 @@ scenes:
         type: workspace.openFile
         at: { mark: open }
         path: main.rs
+      - id: select-string-slice
+        type: editor.select
+        at: { mark: select-string-slice }
+        target:
+          file: main.rs
+          text: "&text[0..6]"
+          occurrence: 1
       - id: type-arr
         type: editor.type
         at: { mark: type-arr, offsetMs: -400 }
@@ -272,12 +280,20 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let numbers = [10, 20, 30, 40, 50];\n    let middle = &numbers[1..4];\n    println!(\"middle: {middle:?}\");\n"
+      - id: select-array-slice
+        type: editor.select
+        at: { mark: select-array-slice }
+        target:
+          file: main.rs
+          text: "&numbers[1..4]"
+          occurrence: 1
 
   - id: slice-parameter
     narration: >
-      [[mark:type-sum]] Why are slices useful? A function can take a slice and
-      work on any length. Sum takes a slice of i32, adds up whatever it gets,
-      and returns the total. [[mark:type-call]] We pass middle to it directly.
+      [[mark:type-sum]] Why are slices useful? Let's add sum.
+      [[mark:select-slice-parameter]] It takes a slice of i32 and works on any
+      length. It adds whatever it gets and returns the total.
+      [[mark:type-call]] We pass middle to it directly.
     sources:
       - title: "The Rust Book — Slices as Parameters"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#other-slices"
@@ -291,6 +307,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "\nfn sum(slice: &[i32]) -> i32 {\n    let mut total = 0;\n    for &n in slice {\n        total += n;\n    }\n    total\n}\n"
+      - id: select-slice-parameter
+        type: editor.select
+        at: { mark: select-slice-parameter }
+        target:
+          file: main.rs
+          text: "&[i32]"
+          occurrence: 1
       - id: type-call
         type: editor.type
         at: { mark: type-call }

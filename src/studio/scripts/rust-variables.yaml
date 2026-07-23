@@ -155,9 +155,9 @@ scenes:
 
   - id: mutate
     narration: >
-      [[mark:open]] Count is three, printed. [[mark:type-mut]] Now mut. Bind
-      total, add ten to it in place — that works because total is mut. Drop the
-      mut, and the compiler rejects that line.
+      [[mark:open]] Count is three, printed. [[mark:type-mut]] Now bind total
+      and add ten in place. [[mark:select-mut]] The mut keyword allows that
+      change. Remove mut, and the compiler rejects the assignment.
     sources:
       - title: "The Rust Reference — Variables"
         url: "https://doc.rust-lang.org/reference/variables.html"
@@ -175,12 +175,20 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let mut total = count;\n    total += 10;\n    println!(\"total is now {total}\");\n"
+      - id: select-mut
+        type: editor.select
+        at: { mark: select-mut }
+        target:
+          file: main.rs
+          text: "let mut total = count;"
+          occurrence: 1
 
   - id: shadow
     narration: >
-      [[mark:type-shadow]] Shadowing is different. Write let again with the same
-      name, count. The old value doesn't change — you get a new variable that
-      hides it. Count was three; now it's four. Same name, brand-new binding.
+      [[mark:type-shadow]] Shadowing is different.
+      [[mark:select-shadow]] This second let uses the same name, count. The old
+      value doesn't change. You get a new variable that hides it. Count was
+      three; now it's four. Same name, brand-new binding.
     sources:
       - title: "The Rust Book — Shadowing"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html#shadowing"
@@ -194,6 +202,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let count = count + 1;\n    println!(\"count shadowed to {count}\");\n"
+      - id: select-shadow
+        type: editor.select
+        at: { mark: select-shadow }
+        target:
+          file: main.rs
+          text: "let count = count + 1;"
+          occurrence: 1
 
   - id: run
     narration: >

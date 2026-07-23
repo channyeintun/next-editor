@@ -196,8 +196,8 @@ scenes:
   - id: build-and-index
     narration: >
       [[mark:open]] Here we make an empty Vec and push three scores onto it.
-      Length is three. [[mark:type-index]] Indexing reads one element — scores
-      at zero is the first, ninety.
+      Length is three. [[mark:type-index]] Add one indexed read.
+      [[mark:select-index]] Scores at zero is the first element, ninety.
     sources:
       - title: "The Rust Book — Reading Elements of Vectors"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#reading-elements-of-vectors"
@@ -215,12 +215,19 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    println!(\"first: {}\", scores[0]);\n"
+      - id: select-index
+        type: editor.select
+        at: { mark: select-index }
+        target:
+          file: main.rs
+          text: "scores[0]"
+          occurrence: 1
 
   - id: iterate
     narration: >
       [[mark:type-loop]] To add them up, we loop over a reference to the Vec
-      and sum each score. Borrowing with an ampersand means the Vec stays ours
-      after the loop — we didn't consume it.
+      and sum each score. [[mark:select-borrowed-loop]] The ampersands show that
+      we borrow the Vec and each score. The Vec stays ours after the loop.
     sources:
       - title: "The Rust Book — Iterating over the Values in a Vector"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#iterating-over-the-values-in-a-vector"
@@ -234,6 +241,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let mut total = 0;\n    for &s in &scores {\n        total += s;\n    }\n    println!(\"total: {total}\");\n"
+      - id: select-borrowed-loop
+        type: editor.select
+        at: { mark: select-borrowed-loop }
+        target:
+          file: main.rs
+          text: "for &s in &scores {"
+          occurrence: 1
 
   - id: run
     narration: >

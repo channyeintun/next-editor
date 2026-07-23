@@ -85,8 +85,9 @@ scenes:
   - id: match-the-enum
     narration: >
       [[mark:open]] Here are our two statuses. [[mark:type-describe]] describe
-      matches on the status. Active gives a fixed message. Away binds the number
-      inside the variant, so we can print how many minutes. We call it on both.
+      matches on the status. Active gives a fixed message.
+      [[mark:select-away]] Away binds the number inside the variant, so we can
+      print how many minutes. We call it on both.
     sources:
       - title: "The Rust Book — The match Control Flow Construct"
         url: "https://doc.rust-lang.org/book/ch06-02-match.html"
@@ -107,12 +108,20 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    println!(\"{}\", describe(&a));\n    println!(\"{}\", describe(&b));\n}\n\nfn describe(s: &Status) -> String {\n    match s {\n        Status::Active => String::from(\"active now\"),\n        Status::Away(mins) => format!(\"away for {mins} min\"),\n    }\n"
+      - id: select-away
+        type: editor.select
+        at: { mark: select-away }
+        target:
+          file: main.rs
+          text: "Status::Away(mins)"
+          occurrence: 1
 
   - id: option-match
     narration: >
       [[mark:type-option]] Now an Option holding Some seven. We match it too:
-      Some hands us the value, None would be the empty case. There's no way to
-      forget the None — that's how Rust removes null crashes.
+      [[mark:select-option-arms]] Some hands us the value, while None is the
+      empty case. There's no way to forget the None. That's how Rust removes
+      null crashes.
     sources:
       - title: "The Rust Book — Concise Control Flow with if let"
         url: "https://doc.rust-lang.org/book/ch06-03-if-let.html"
@@ -126,6 +135,13 @@ scenes:
           occurrence: 1
         cadence: line-by-line
         text: "    let found: Option<i32> = Some(7);\n    match found {\n        Some(v) => println!(\"value {v}\"),\n        None => println!(\"no value\"),\n    }\n"
+      - id: select-option-arms
+        type: editor.select
+        at: { mark: select-option-arms }
+        target:
+          file: main.rs
+          text: "        Some(v) => println!(\"value {v}\"),\n        None => println!(\"no value\"),"
+          occurrence: 1
 
   - id: run
     narration: >
