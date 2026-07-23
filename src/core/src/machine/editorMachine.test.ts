@@ -715,6 +715,78 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  it("keeps typed editor content visible when a same-file workspace snapshot follows it", async () => {
+    const editor = new MockEditor(new MockTextModel("outside"));
+    const initialWorkspace = createWorkspaceSnapshot("before");
+    const typedWorkspace = createWorkspaceSnapshot("after");
+    let currentWorkspace = createWorkspaceSnapshot("outside");
+
+    const recording: Recording = {
+      ...createRecording(),
+      duration: 300,
+      frames: [
+        {
+          timestamp: 0,
+          isKeyframe: true,
+          state: {
+            content: "before",
+            selection,
+            position: { lineNumber: 1, column: 1 },
+            viewState: null,
+            mouseCursor: { x: 0, y: 0, visible: false },
+          },
+        },
+        {
+          timestamp: 100,
+          isKeyframe: true,
+          state: {
+            content: "after",
+            selection,
+            position: { lineNumber: 1, column: 1 },
+            viewState: null,
+            mouseCursor: { x: 0, y: 0, visible: false },
+          },
+        },
+      ],
+      workspaceEvents: [
+        {
+          timestamp: 0,
+          snapshot: initialWorkspace,
+        },
+        {
+          // Studio captures this after the editor-content frame so the
+          // runnable workspace has the typed code during and after replay.
+          timestamp: 101,
+          snapshot: typedWorkspace,
+        },
+      ],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: {
+          current: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+        },
+        getWorkspaceSnapshot: () => currentWorkspace,
+        applyWorkspaceSnapshot: (snapshot) => {
+          currentWorkspace = snapshot;
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    expect(editor.getValue()).toBe("before");
+
+    actor.send({ type: "TICK", timestamp: 150, currentTime: 150 });
+
+    expect(currentWorkspace.project.files["index.html"].content).toBe("after");
+    expect(editor.getValue()).toBe("after");
+
+    actor.stop();
+  });
+
   it("waits for Monaco model sync before applying frames after replayed file switches", async () => {
     const editor = new MockEditor(new MockTextModel("outside"));
     const firstWorkspace = createTwoFileWorkspaceSnapshot("a.ts", "a-snapshot", "b-before-open");

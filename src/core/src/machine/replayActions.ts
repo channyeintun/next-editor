@@ -1,5 +1,6 @@
 import type { EditorMachineContext, EditorMachineEvent } from "./types";
 import type { EditorFrame } from "../types";
+import type { WorkspaceRecordingEvent } from "../../../types/workspace";
 import { areWorkspaceSnapshotsEqual, isWorkspaceTextFile } from "../../../types/workspace";
 import {
   reconstructFrameAtIndex,
@@ -50,6 +51,52 @@ const resolveBoundedReplayTime = (
     context.timeline.duration,
     context.timeline.currentTime,
   );
+
+const editorModelBoundaryTimeCache = new WeakMap<readonly WorkspaceRecordingEvent[], number[]>();
+
+/**
+ * Frames before the latest active-editor identity change belong to a different
+ * Monaco model and must not be applied after a workspace replay switches files.
+ *
+ * Same-file workspace snapshots are deliberately not boundaries. Studio writes
+ * one immediately after `editor.type` so the runnable workspace receives the
+ * final code; its timestamp is necessarily a beat later than the editor frame
+ * that captured the visible edit. Treating every workspace event as a boundary
+ * drops that typed frame until the next cursor/selection frame.
+ */
+function latestEditorModelBoundaryTime(
+  workspaceEvents: readonly WorkspaceRecordingEvent[] | undefined,
+  lastAppliedIndex: number,
+): number | null {
+  if (!workspaceEvents?.length || lastAppliedIndex < 0) {
+    return null;
+  }
+
+  const boundedIndex = Math.min(lastAppliedIndex, workspaceEvents.length - 1);
+  let boundaryTimes = editorModelBoundaryTimeCache.get(workspaceEvents);
+  if (!boundaryTimes) {
+    boundaryTimes = [];
+    editorModelBoundaryTimeCache.set(workspaceEvents, boundaryTimes);
+  }
+
+  // Recording streams append events to the same array, so extend the cache
+  // only as far as this replay cursor needs instead of rescanning on every tick.
+  for (let index = boundaryTimes.length; index <= boundedIndex; index += 1) {
+    const event = workspaceEvents[index];
+    if (index === 0) {
+      boundaryTimes.push(event.timestamp);
+      continue;
+    }
+
+    const previousEvent = workspaceEvents[index - 1];
+    const changedModel =
+      event.snapshot.project.id !== previousEvent.snapshot.project.id ||
+      event.snapshot.activeFilePath !== previousEvent.snapshot.activeFilePath;
+    boundaryTimes.push(changedModel ? event.timestamp : boundaryTimes[index - 1]);
+  }
+
+  return boundaryTimes[boundedIndex] ?? null;
+}
 
 export const setRecording = ({
   context,
@@ -260,10 +307,12 @@ export const applyFrameAtTime = ({
 
   let frame: EditorFrame | null = null;
   const targetFrame = frames[frameIndex];
-  const latestWorkspaceEvent =
-    recording.workspaceEvents?.[context.lastAppliedWorkspaceEventIndex] ?? null;
+  const editorModelBoundaryTime = latestEditorModelBoundaryTime(
+    recording.workspaceEvents,
+    context.lastAppliedWorkspaceEventIndex,
+  );
 
-  if (latestWorkspaceEvent && targetFrame.timestamp < latestWorkspaceEvent.timestamp) {
+  if (editorModelBoundaryTime !== null && targetFrame.timestamp < editorModelBoundaryTime) {
     return {
       lastAppliedFrameIndex: frameIndex,
       currentFrame: null,
