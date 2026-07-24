@@ -121,6 +121,33 @@ describe("getChatReplayResult", () => {
     expect(result.snapshotToApply?.status).toBe("done");
   });
 
+  // Forward playback advances one event per tick and continues from the retained
+  // fold rather than re-folding from the checkpoint; the result must be identical
+  // to a cold fold to the same point, including across a checkpoint.
+  it("walking forward event by event matches a cold fold at every step", () => {
+    const times = CHAT_EVENTS.map((event) => event.timestamp);
+    let lastAppliedIndex = -1;
+
+    for (const [index, currentTime] of times.entries()) {
+      const walked = getChatReplayResult({
+        chatEvents: CHAT_EVENTS,
+        currentTime,
+        lastAppliedIndex,
+      });
+      // A cold fold to the same instant, on a separate array so it cannot share
+      // the walk's retained state.
+      const cold = getChatReplayResult({
+        chatEvents: [...CHAT_EVENTS],
+        currentTime,
+        lastAppliedIndex: -1,
+      });
+
+      expect(walked.nextIndex).toBe(index);
+      expect(walked.snapshotToApply).toEqual(cold.snapshotToApply);
+      lastAppliedIndex = walked.nextIndex;
+    }
+  });
+
   it("returns no snapshot when the cursor index hasn't changed", () => {
     const first = getChatReplayResult({
       chatEvents: CHAT_EVENTS,
