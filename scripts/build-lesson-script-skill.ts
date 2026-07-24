@@ -15,14 +15,25 @@
  * fails when the checked-in bundle drifts from this generator's output or from
  * the schema.
  *
- *   bun scripts/build-lesson-script-skill.ts            # write the bundle
- *   bun scripts/build-lesson-script-skill.ts --check    # verify it is current
+ * The distributable archive is built here too. It used to be zipped by hand,
+ * which is how it ended up three days behind the directory — advertising an
+ * action catalog the importer had already moved past.
+ *
+ *   bun scripts/build-lesson-script-skill.ts            # write the bundle + zip
+ *   bun scripts/build-lesson-script-skill.ts --check    # verify both are current
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { unzipSync, zipSync } from "fflate";
 
 const ROOT = resolve(__dirname, "..");
+const BUNDLE_DIR = "share/lesson-script-skill";
+export const ZIP_PATH = "share/lesson-script-skill.zip";
+/** Directory the archive unpacks to — what "Use it with…" in the README assumes. */
+const ZIP_ROOT = "lesson-script-skill";
+/** Pinned so the archive is byte-reproducible across machines and runs. */
+const ZIP_MTIME = new Date("2020-01-01T00:00:00Z");
 
 function replaceOnce(text: string, marker: string, replacement: string): string {
   const index = text.indexOf(marker);
@@ -222,15 +233,80 @@ export function buildBundle(): BundleArtifact[] {
 
   return [
     {
-      path: "share/lesson-script-skill/references/lesson-script-authoring.md",
+      path: `${BUNDLE_DIR}/references/lesson-script-authoring.md`,
       content: buildReference(canonicalReference),
     },
     {
-      path: "share/lesson-script-skill/references/studio-persona.md",
+      path: `${BUNDLE_DIR}/references/studio-persona.md`,
       content: buildPersona(canonicalPersona),
     },
-    { path: "share/lesson-script-skill/examples/rust-borrow.yaml", content: exampleYaml },
+    { path: `${BUNDLE_DIR}/examples/rust-borrow.yaml`, content: exampleYaml },
   ];
+}
+
+/**
+ * Everything the archive ships: the three generated documents above plus the two
+ * authored ones. SKILL.md and README.md are written by hand — they are the
+ * website-facing procedure, not a transform of an in-repo document — but they
+ * still have to be packaged from their current contents, never from whatever was
+ * on disk the last time someone ran `zip` manually.
+ */
+export function bundleFiles(): BundleArtifact[] {
+  const authored = [`${BUNDLE_DIR}/SKILL.md`, `${BUNDLE_DIR}/README.md`].map((path) => ({
+    path,
+    content: readFileSync(resolve(ROOT, path), "utf8"),
+  }));
+  return [...authored, ...buildBundle()].sort((left, right) =>
+    left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+  );
+}
+
+function zipEntryName(bundlePath: string): string {
+  return bundlePath.replace(`${BUNDLE_DIR}/`, `${ZIP_ROOT}/`);
+}
+
+export function buildZip(): Uint8Array {
+  const encoder = new TextEncoder();
+  const entries: Record<string, [Uint8Array, { mtime: Date }]> = {};
+  for (const artifact of bundleFiles()) {
+    entries[zipEntryName(artifact.path)] = [encoder.encode(artifact.content), { mtime: ZIP_MTIME }];
+  }
+  return zipSync(entries, { level: 9 });
+}
+
+/**
+ * Archive entries that disagree with the current bundle. An absent archive is not
+ * drift — it is gitignored, so a fresh clone simply has not built it yet.
+ */
+export function zipDrift(): string[] {
+  const absolute = resolve(ROOT, ZIP_PATH);
+  if (!existsSync(absolute)) {
+    return [];
+  }
+
+  const decoder = new TextDecoder();
+  const current = unzipSync(new Uint8Array(readFileSync(absolute)));
+  const drift: string[] = [];
+  const expected = new Set<string>();
+
+  for (const artifact of bundleFiles()) {
+    const name = zipEntryName(artifact.path);
+    expected.add(name);
+    const bytes = current[name];
+    if (!bytes) {
+      drift.push(`${name} (missing)`);
+    } else if (decoder.decode(bytes) !== artifact.content) {
+      drift.push(name);
+    }
+  }
+
+  for (const name of Object.keys(current)) {
+    if (!name.endsWith("/") && !expected.has(name)) {
+      drift.push(`${name} (unexpected)`);
+    }
+  }
+
+  return drift;
 }
 
 // CLI: write the bundle, or (with --check) verify it is current and exit non-zero
@@ -252,6 +328,19 @@ if (import.meta.main) {
       console.log(`build-lesson-script-skill: wrote ${artifact.path}`);
     }
   }
+
+  // The archive is what people actually download, so it is rebuilt (or verified)
+  // from the same file set rather than zipped by hand.
+  if (check) {
+    for (const entry of zipDrift()) {
+      drifted = true;
+      console.error(`build-lesson-script-skill: OUT OF DATE ${ZIP_PATH} → ${entry}`);
+    }
+  } else {
+    writeFileSync(resolve(ROOT, ZIP_PATH), buildZip());
+    console.log(`build-lesson-script-skill: wrote ${ZIP_PATH}`);
+  }
+
   if (check && drifted) {
     console.error("Run: bun scripts/build-lesson-script-skill.ts");
     process.exit(1);

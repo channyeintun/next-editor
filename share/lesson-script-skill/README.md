@@ -42,8 +42,5 @@ markdown, and with humans.
 5. Sign in and **Create draft…** to upload it like any recording. A human
    reviews before anything is published.
 
-To make a zip for sharing or claude.ai upload:
-
-```sh
-zip -r lesson-script-skill.zip lesson-script-skill
-```
+A ready-made `lesson-script-skill.zip` ships beside this folder for sharing or
+claude.ai upload.

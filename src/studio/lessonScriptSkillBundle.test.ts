@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
-import { buildBundle } from "../../scripts/build-lesson-script-skill";
+import { buildBundle, zipDrift } from "../../scripts/build-lesson-script-skill";
 import { parseLessonScript } from "./script/schema";
 import {
   RUNTIME_KIND_FOR_LESSON,
@@ -297,6 +297,13 @@ describe("lesson-script skill bundle contract (SKILL-01)", () => {
     }
   });
 
+  it("documents editor.select in both agent skills", () => {
+    for (const skill of [inRepoSkill, distributedSkill]) {
+      expect(skill).toMatch(/`editor\.select` drag-highlights/);
+      expect(skill).toMatch(/matched byte-for-byte/);
+    }
+  });
+
   it("gives the long authoring reference a contents index", () => {
     expect(reference).toMatch(/^## Contents$/m);
   });
@@ -307,5 +314,12 @@ describe("lesson-script skill bundle contract (SKILL-01)", () => {
       .map((artifact) => artifact.path);
     // Stale entries mean: run bun scripts/build-lesson-script-skill.ts
     expect(stale).toEqual([]);
+  });
+
+  // The archive is the artifact people actually download. Hand-zipping let it fall
+  // three days behind the directory, shipping an action catalog the importer had
+  // already moved past. It is gitignored, so an absent archive is not drift.
+  it("ships an archive that matches the bundle", () => {
+    expect(zipDrift()).toEqual([]);
   });
 });
