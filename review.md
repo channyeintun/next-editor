@@ -3,7 +3,8 @@
 **Date:** 2026-07-25 · **Branch:** `main` @ `e48efad` · **Machine:** macOS workstation
 **Scope requested:** `src/core` (incl. the recording and replay state machines) and
 `src/studio` (agent lesson production, incl. its agent skills).
-**Mode:** review only — nothing in this pass was changed.
+**Mode:** review; every finding below was subsequently fixed — see
+[Resolution](#resolution) for the commit per finding.
 
 Continues the ID space of `docs/studio-agent-skill-review-2026-07-23.md`
 (STUDIO-01…06, SKILL-01…02, all of which read as landed). Everything below is new.
@@ -498,8 +499,31 @@ Probe scripts were run from the repo root and removed afterwards; no files were 
 
 ---
 
-## Recommended commit message
+## Resolution
 
-```
-docs(review): record core, replay-machine, and studio lesson-pipeline review
-```
+All sixteen findings are fixed, in the order above, one commit each.
+
+| Finding   | Commit    | What landed                                                                     |
+| --------- | --------- | ------------------------------------------------------------------------------- |
+| CORE-01   | `76f9bea` | Whiteboard/preview replay caches extend instead of building once                |
+| STUDIO-07 | `32d750f` | afterAction resolves forward; authoring position is the same-instant tiebreak   |
+| CORE-03   | `ecaad7b` | Keyframe index scan tracks how far it has run and extends                       |
+| CORE-02   | `007f59d` | Chat fold retained per array; forward playback applies one delta                |
+| STUDIO-08 | `30a0cf5` | Guarded last-action read; LessonScript rejects an action-less lesson            |
+| SKILL-04  | `a9d71de` | Read-aloud lint narrowed to always-contractible positions; all phrases reported |
+| SKILL-03  | `8dcd0cb` | Skill archive generated and verified entry-by-entry, not zipped by hand         |
+| CORE-04   | `0a8a430` | Late microphone blob accepted at machine root and spliced into the recording    |
+| CORE-05   | `4ea5eb0` | Unreachable `isSeeking` guards removed from preview and slide replay            |
+| CORE-06   | `deefe2f` | Slide state scans backwards in place instead of reversing the prefix            |
+| CORE-07   | `a1fe057` | Redundant partial cursor reset dropped from `finalizeRecording`                 |
+| CORE-08   | `6d24b9e` | Workspace snapshot read lazily — the property the test asserted is now real     |
+| STUDIO-09 | `9209505` | `checks` narrowed to the one real gate, and that gate made mandatory            |
+| STUDIO-10 | `002d7bd` | Live whiteboard published through the shared fold replay uses                   |
+| STUDIO-11 | `f8df524` | Discarded `performance.now()` timestamps replaced with a named placeholder      |
+| STUDIO-12 | `f950fa4` | Target ids escaped as a CSS string rather than an identifier                    |
+
+Verification after the last commit: **44 test files, 391 tests passing** across
+`src/core` + `src/studio` (up from 370 — the fixes added 21 regression tests), and
+zero `tsc` errors in either tree. The repo-wide `bun run typecheck` still fails in
+`tube/`, which declares `@tanstack/react-virtual` but does not have it installed —
+pre-existing and untouched by this work.
