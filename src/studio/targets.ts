@@ -40,7 +40,12 @@ export function dockTargetIdForRuntime(
 }
 
 function findByStudioTargetId(id: string): Element | null {
-  const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id;
+  // The id is interpolated into a *quoted* attribute selector, so it needs CSS
+  // string escaping — the closing quote and backslashes — not `CSS.escape`, which
+  // escapes identifiers. `CSS.escape` happened to work for every id in use, since
+  // its output survives the string tokenizer intact, but it is the wrong escape
+  // for this position and only accidentally correct.
+  const escaped = id.replace(/["\\]/g, "\\$&");
   return document.querySelector(`[${STUDIO_TARGET_ATTRIBUTE}="${escaped}"]`);
 }
 
