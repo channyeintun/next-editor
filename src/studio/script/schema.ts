@@ -368,6 +368,17 @@ export const lessonScriptSchema = z
       }
     }
 
+    // Caught here rather than at compile time: `scenes[].actions` defaults to []
+    // so a narration-only script parses, and the compiled plan would then fail the
+    // plan schema's non-empty `actions` rule with no hint of what to add.
+    if (script.scenes.every((scene) => scene.actions.length === 0)) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "This lesson has no actions — narration alone never touches the editor. Add at least one action (workspace.openFile, editor.type, …) to a scene",
+      });
+    }
+
     const actionIds = new Set<string>();
     for (const scene of script.scenes) {
       for (const action of scene.actions) {

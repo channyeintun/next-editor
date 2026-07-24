@@ -748,8 +748,12 @@ export const studioPlanSchema = z
       }
     }
 
-    const lastAction = plan.actions[plan.actions.length - 1];
-    if (lastAction.at >= plan.narration.expectedDurationMs) {
+    // `actions` is required to be non-empty, but that is a *continuable* check —
+    // Zod still runs this refinement with an empty array — so the last-action read
+    // below must not assume one exists, or a plan compiled from an action-less
+    // lesson fails with a TypeError instead of the schema's own message.
+    const lastAction = plan.actions.at(-1);
+    if (lastAction && lastAction.at >= plan.narration.expectedDurationMs) {
       ctx.addIssue({
         code: "custom",
         message: `Action "${lastAction.id}" starts after the narration ends; the recording stops with the audio`,

@@ -281,4 +281,14 @@ describe("lessonScriptSchema", () => {
     raw.scenes[1].actions[3].at = { afterAction: "ghost" };
     expect(() => parseLessonScript(raw)).toThrow(/unknown action "ghost"/);
   });
+
+  // `actions` defaults to [], so a narration-only script used to parse and only
+  // blow up later inside plan validation with an unrelated message.
+  it("rejects a lesson with no actions in any scene", () => {
+    const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
+    for (const scene of raw.scenes) {
+      scene.actions = [];
+    }
+    expect(() => parseLessonScript(raw)).toThrow(/no actions/);
+  });
 });

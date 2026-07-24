@@ -171,6 +171,15 @@ describe("studio plan schema", () => {
     expect(() => parseStudioPlan(plan)).toThrow(/after the narration ends/);
   });
 
+  // `actions: []` is a *continuable* failure, so Zod still runs the plan's
+  // superRefine with an empty array. Reading the last action unguarded there threw
+  // a TypeError out of safeParse instead of reporting the schema's own message.
+  it("reports an empty action list rather than throwing", () => {
+    const plan = createTestPlan() as unknown as { actions: unknown[] };
+    plan.actions = [];
+    expect(() => parseStudioPlan(plan)).toThrow(/expected array to have >=1 items/);
+  });
+
   it("rejects overlapping caption cues", () => {
     const plan = clonePlan(createTestPlan());
     plan.narration.captions.cues[1].start = plan.narration.captions.cues[0].end - 50;

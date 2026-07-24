@@ -35,12 +35,42 @@ const schemaActionTypes = studioPlanActionSchema.options.map(
 );
 const authoredActionTypes = schemaActionTypes.filter((type) => type !== "cursor.moveTo").sort();
 
+/**
+ * Every lesson must perform at least one action — narration alone never touches
+ * the editor — and opening the entry file is the smallest action valid for every
+ * lesson type.
+ */
+function withOpeningScene<T extends { lesson: { workspace: { entryFilePath: string } } }>(
+  script: T,
+) {
+  return {
+    ...script,
+    scenes: [
+      {
+        id: "s",
+        narration: "Here is one small idea worth knowing.",
+        actions: [
+          {
+            id: "open",
+            type: "workspace.openFile",
+            at: { scene: "start" },
+            path: script.lesson.workspace.entryFilePath,
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** A minimal, schema-valid script for each advertised lesson type. */
 function minimalScript(lessonType: StudioLessonType): unknown {
+  return withOpeningScene(minimalScriptShell(lessonType));
+}
+
+function minimalScriptShell(lessonType: StudioLessonType) {
   const base = {
     schemaVersion: 1 as const,
     build: { voiceProfile: "pocket-alba-v1", seed: 1 },
-    scenes: [{ id: "s", narration: "Here is one small idea worth knowing." }],
   };
   const workspace = (files: Record<string, string>, entryFilePath: string) => ({
     lessonType,
