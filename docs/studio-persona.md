@@ -24,7 +24,10 @@ together.
   question that the next sentence answers ("So who owns the String now?") is
   encouraged. The critic enforces this mechanically: uncontracted forms
   ("it is", "does not", "let us", …) raise a `register.read-aloud` note —
-  fix every one before rendering.
+  fix every one before rendering. The note only ever names forms that really do
+  contract where they appear, so applying it is always safe: clause-final
+  positions that cannot contract ("leave it as it is", "yes we will") and
+  ambiguous ones ("we have to name the owner") are deliberately not flagged.
 - Short sentences still rule; target under ~20 words, hard ceiling 24.
   Conversational means natural rhythm, not rambling.
 - Address the viewer as "you", and use "let's" for shared actions — the

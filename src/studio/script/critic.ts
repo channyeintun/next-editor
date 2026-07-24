@@ -42,8 +42,21 @@ export const BANNED_PHRASES_V1 = [
 
 /**
  * Read-aloud fingerprints (persona guide v2 "Conversational, not read-aloud"):
- * forms a speaker would contract. Keys are matched on word boundaries; the
- * value is the suggested contraction.
+ * forms a speaker would contract. The value is the suggested contraction.
+ *
+ * This note is mandatory-fix, so it must not fire on prose that is already
+ * correct — an author (or an agent) told to fix every one would otherwise write
+ * something wrong. Two rules keep it sound:
+ *
+ * - "you have" / "we have" are deliberately absent. "you have three files" and
+ *   "we have to name the owner" are ordinary English; "you've three files" is
+ *   archaic and "we've to name" is simply wrong.
+ * - every form here is matched mid-clause only (see READ_ALOUD_SUFFIX). A form
+ *   that ends a clause cannot contract — "leave it as it is", "yes we will" —
+ *   while the same words mid-clause can: "it is faster", "we will look".
+ *
+ * The cost is a few missed clause-final negations ("No, I have not."), which is
+ * the right trade for a check whose notes are meant to be applied unconditionally.
  */
 export const UNCONTRACTED_FORMS: Record<string, string> = {
   "it is": "it's",
@@ -71,9 +84,18 @@ export const UNCONTRACTED_FORMS: Record<string, string> = {
   "they are": "they're",
   "you will": "you'll",
   "we will": "we'll",
-  "you have": "you've",
-  "we have": "we've",
 };
+
+/**
+ * Requires a following word on the same clause, so only contractible positions
+ * match. A comma or full stop right after the form fails this — which is exactly
+ * where the contraction would be wrong.
+ */
+const READ_ALOUD_SUFFIX = "(?=\\s+[a-z0-9])";
+
+function escapeForRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 const MAX_SENTENCE_WORDS = 24;
 const MIN_WPM = 110;
@@ -142,24 +164,31 @@ export function critiqueScript(
     const displayText = sceneTokens.join(" ");
     const lowered = displayText.toLowerCase();
 
-    // Banned filler (longest phrases first so "just simply" wins over "simply").
+    // Banned filler. Longest phrases first so "just simply" wins over "simply",
+    // and each match is blanked out so the shorter phrase inside it is not also
+    // reported. Every distinct phrase in the scene gets its own note — reporting
+    // one at a time would make an author fix, re-run, and find the next.
+    let unreported = lowered;
     for (const phrase of [...BANNED_PHRASES_V1].sort((a, b) => b.length - a.length)) {
-      if (new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(lowered)) {
-        notes.push({
-          id: `phrase.${phrase.replace(/\s+/g, "-")}`,
-          severity: "note",
-          sceneId: scene.id,
-          message: `Banned phrase "${phrase}" in scene "${scene.id}" (persona guide v${CRITIC_VERSION})`,
-        });
-        break;
+      const pattern = new RegExp(`\\b${escapeForRegExp(phrase)}\\b`, "gi");
+      const stripped = unreported.replace(pattern, " ");
+      if (stripped === unreported) {
+        continue;
       }
+      unreported = stripped;
+      notes.push({
+        id: `phrase.${phrase.replace(/\s+/g, "-")}`,
+        severity: "note",
+        sceneId: scene.id,
+        message: `Banned phrase "${phrase}" in scene "${scene.id}" (persona guide v${CRITIC_VERSION})`,
+      });
     }
 
     // Conversational register: the narrator always talks, never reads.
     // Uncontracted forms are the reliable fingerprint of read-aloud prose.
     const readAloud: string[] = [];
     for (const [form, contraction] of Object.entries(UNCONTRACTED_FORMS)) {
-      if (new RegExp(`\\b${form}\\b`, "i").test(lowered)) {
+      if (new RegExp(`\\b${escapeForRegExp(form)}\\b${READ_ALOUD_SUFFIX}`, "i").test(lowered)) {
         readAloud.push(`"${form}" → "${contraction}"`);
       }
     }

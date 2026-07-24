@@ -39,6 +39,16 @@ describe("critiqueScript", () => {
     expect(register[0].message).toContain('"let us" → "let\'s"');
   });
 
+  // The note is mandatory-fix, so it must never name a form that cannot contract
+  // where it appears — an author applying it would otherwise write bad English.
+  it("leaves uncontractible and ambiguous forms alone", () => {
+    const script = loadPilot("go-swap");
+    script.scenes[0].narration =
+      "Leave it as it is. Yes we will. And we have to name the owner, so you have two files.";
+    const critique = critiqueScript(script, extractedOf(script), 19_375);
+    expect(critique.notes.filter((note) => note.id === "register.read-aloud")).toEqual([]);
+  });
+
   it("accepts contracted, conversational narration", () => {
     const script = loadPilot("go-swap");
     script.scenes[0].narration = "It's a value. The compiler doesn't copy it. Let's run it.";
@@ -51,8 +61,22 @@ describe("critiqueScript", () => {
     script.scenes[0].narration = "This is obviously easy. Simply run it.";
     const critique = critiqueScript(script, extractedOf(script), 19_375);
     const phraseNotes = critique.notes.filter((note) => note.id.startsWith("phrase."));
-    expect(phraseNotes.length).toBeGreaterThan(0);
+    // Every distinct banned phrase, not just the first one found.
+    expect(phraseNotes.map((note) => note.id).sort()).toEqual([
+      "phrase.easy",
+      "phrase.obviously",
+      "phrase.simply",
+    ]);
     expect(phraseNotes[0].sceneId).toBe("swap-function");
+  });
+
+  it("does not double-report a short banned phrase nested in a longer one", () => {
+    const script = loadPilot("go-swap");
+    script.scenes[0].narration = "You just simply call it.";
+    const critique = critiqueScript(script, extractedOf(script), 19_375);
+    expect(
+      critique.notes.filter((note) => note.id.startsWith("phrase.")).map((note) => note.id),
+    ).toEqual(["phrase.just-simply"]);
   });
 
   it("flags missing sources and over-long sentences", () => {
