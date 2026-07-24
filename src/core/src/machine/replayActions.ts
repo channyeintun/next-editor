@@ -111,6 +111,18 @@ export const setRecording = ({
   const recording = normalizeRecordingData(loaded.recording);
   const duration = normalizeTimelineDuration(loaded.duration);
 
+  // A microphone blob can land while the load actor is in flight — the
+  // `stoppingRecording` watchdog finalizes 2s after STOP, so a slower
+  // MediaRecorder.stop() misses the snapshot the actor was handed. `finalizeRecording`
+  // clears `audio.source`, so a source still set to "microphone" here means exactly
+  // that: the root AUDIO_RECORDING_STOPPED handler ran after finalize. Reattach
+  // rather than lose the narration.
+  if (!recording.audioBlob && context.audio.blob && context.audio.source === "microphone") {
+    recording.audioBlob = context.audio.blob;
+    recording.audioSource = "microphone";
+    recording.audioStartOffsetMs = recording.audioStartOffsetMs ?? context.audio.startOffsetMs;
+  }
+
   const initialWorkspaceEvent = recording.workspaceEvents?.[0];
   const initialRuntimeEvent = recording.runtimeEvents?.[0];
 

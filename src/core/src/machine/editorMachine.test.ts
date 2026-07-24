@@ -235,6 +235,33 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  // `stoppingRecording` finalizes 2s after STOP whether or not the recorder has
+  // reported. A slower MediaRecorder.stop() then delivers the whole narration to a
+  // machine that has already reached playback, where it used to be dropped — the
+  // lesson came out silently silent.
+  it("attaches a microphone blob that arrives after the finalize watchdog", async () => {
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null } },
+    }).start();
+
+    const recording = createRecording();
+    delete recording.audioBlob;
+    delete recording.audioSource;
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    expect(actor.getSnapshot().context.recording!.audioBlob).toBeUndefined();
+
+    const blob = new Blob(["late narration"], { type: "audio/webm" });
+    actor.send({ type: "AUDIO_RECORDING_STOPPED", blob });
+
+    const loaded = actor.getSnapshot().context.recording!;
+    expect(loaded.audioBlob).toBe(blob);
+    expect(loaded.audioSource).toBe("microphone");
+    expect(getPlaybackAudioState(loaded)).not.toBeNull();
+
+    actor.stop();
+  });
+
   it("replaces the loaded recording when LOAD_RECORDING arrives during playback", async () => {
     const actor = createActor(editorMachine, {
       input: {

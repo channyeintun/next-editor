@@ -839,6 +839,53 @@ export const storeAudioBlob = ({
   };
 };
 
+/**
+ * Accept a microphone blob that arrives after the session has already finalized.
+ *
+ * `stoppingRecording` gives `MediaRecorder.stop()` 2s before a watchdog finalizes
+ * anyway; a slower stop then delivers `AUDIO_RECORDING_STOPPED` in `loading` or
+ * `playback`, where the capture-side handlers no longer exist. The blob is the
+ * entire narration, so dropping it produced a silently silent lesson — the track
+ * metadata still advertised audio (the timeslice fragments made `hasAudio` true)
+ * while `Recording.audioBlob` was undefined, so playback and export found none.
+ *
+ * Splice it into the finalized recording instead. An already-attached blob wins:
+ * the normal path has run and this is a duplicate.
+ */
+export const attachLateAudioBlob = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "AUDIO_RECORDING_STOPPED") return {};
+
+  const audio = {
+    ...context.audio,
+    blob: event.blob,
+    isRecording: false,
+    mediaRecorder: null,
+    chunks: [],
+    mimeType: event.blob.type,
+    source: "microphone" as const,
+  };
+
+  if (!context.recording || context.recording.audioBlob) {
+    return { audio };
+  }
+
+  return {
+    audio,
+    recording: {
+      ...context.recording,
+      audioBlob: event.blob,
+      audioSource: "microphone" as const,
+      audioStartOffsetMs: context.recording.audioStartOffsetMs ?? 0,
+    },
+  };
+};
+
 export const storeAudioStarted = ({
   context,
   event,

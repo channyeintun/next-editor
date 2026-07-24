@@ -44,6 +44,7 @@ import {
   notifyRecordingStart,
   notifyRecordingStop,
   storeAudioBlob,
+  attachLateAudioBlob,
   storeAudioStarted,
   storeCameraBlob,
   captureAudioChunk,
@@ -189,6 +190,7 @@ export const editorMachine = setup({
     notifyRecordingStart,
     notifyRecordingStop,
     storeAudioBlob: assign(storeAudioBlob),
+    attachLateAudioBlob: assign(attachLateAudioBlob),
     storeAudioStarted: assign(storeAudioStarted),
     storeCameraBlob: assign(storeCameraBlob),
     captureAudioChunk: assign(captureAudioChunk),
@@ -269,6 +271,15 @@ export const editorMachine = setup({
         actions: [...SET_EDITOR_REF_ACTIONS],
       },
     ],
+    // The `stoppingRecording` watchdog finalizes 2s after STOP, so a slower
+    // MediaRecorder.stop() delivers its blob once the machine has already reached
+    // `loading`/`playback`, where the capture-side handlers are gone. That blob is
+    // the whole narration — accept it wherever it lands and splice it into the
+    // finalized recording. `recording`/`stoppingRecording` keep their own, more
+    // specific handlers and take precedence there.
+    AUDIO_RECORDING_STOPPED: {
+      actions: "attachLateAudioBlob",
+    },
     ADD_CAPTION_TRACK: {
       actions: "addCaptionTrack",
     },
