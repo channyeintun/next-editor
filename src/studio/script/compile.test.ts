@@ -261,6 +261,26 @@ describe("multi-surface pilot (go-cube-tour)", () => {
     raw.scenes[1].actions[0].upsertIds = ["ghost"];
     expect(() => parseLessonScript(raw)).toThrow(/not pinned/);
   });
+
+  // The Performer emits a drawn apply frame by frame and runs strictly
+  // sequentially, so an unmodelled draw would start every later action late
+  // and fail the timing gate.
+  it("models a drawn apply as busy time", () => {
+    const raw = YAML.parse(readFileSync(TOUR_PATH, "utf8"));
+    raw.scenes[1].actions[0].drawMs = 600;
+    raw.scenes[1].actions[1].at = { afterAction: "open-board" };
+
+    const { plan } = compileLessonScript(scheduledInputFor(parseLessonScript(raw)));
+    const at = (id: string) => plan.actions.find((action) => action.id === id)!.at;
+    expect(at("label-board") - at("open-board")).toBe(600);
+  });
+
+  it("rejects a draw budget the action's own timeout cannot cover", () => {
+    const raw = YAML.parse(readFileSync(TOUR_PATH, "utf8"));
+    raw.scenes[1].actions[0].drawMs = 3_000;
+    raw.scenes[1].actions[0].timeoutMs = 1_000;
+    expect(() => parseLessonScript(raw)).toThrow(/shorter than the action's timeoutMs/);
+  });
 });
 
 describe("lessonScriptSchema", () => {

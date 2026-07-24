@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   RUNTIME_KIND_FOR_LESSON,
+  WHITEBOARD_DRAW_MAX_MS,
   studioPreviewTargetSchema,
   studioRetryPolicySchema,
   studioRuntimeSchema,
@@ -140,12 +141,23 @@ const scriptSlideCloseSchema = scriptActionBase.extend({
   type: z.literal("slide.close"),
 });
 
-const scriptWhiteboardApplySchema = scriptActionBase.extend({
-  type: z.literal("whiteboard.apply"),
-  open: z.boolean().optional(),
-  maximized: z.boolean().optional(),
-  upsertIds: z.array(z.string().min(1)).default([]),
-});
+const scriptWhiteboardApplySchema = scriptActionBase
+  .extend({
+    type: z.literal("whiteboard.apply"),
+    open: z.boolean().optional(),
+    maximized: z.boolean().optional(),
+    upsertIds: z.array(z.string().min(1)).default([]),
+    /**
+     * Draw the upserts in over this budget instead of applying them in one
+     * frame. Shapes grow from their corner, text types, freedraw strokes
+     * trace, and several assets are drawn one after another. `0` (default)
+     * keeps the instant apply.
+     */
+    drawMs: z.number().finite().nonnegative().max(WHITEBOARD_DRAW_MAX_MS).default(0),
+  })
+  .refine((action) => action.drawMs < action.timeoutMs, {
+    message: "whiteboard.apply drawMs must be shorter than the action's timeoutMs",
+  });
 
 const scriptExpectOutputSchema = scriptActionBase.extend({
   type: z.literal("expect.output"),

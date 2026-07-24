@@ -8,6 +8,7 @@ import {
 } from "../cadence";
 import { parseStudioPlan, type StudioPlan, type StudioSlide, type StudioTargetRef } from "../plan";
 import { dockTargetIdForRuntime } from "../targets";
+import { whiteboardDrawDurationMs } from "../whiteboardAssets";
 import {
   markerTimeMs,
   sceneStartMs,
@@ -168,9 +169,25 @@ export function selectDurationOf(action: ScriptAction, seed: number): number {
   return Math.min(SELECT_DRAG_MAX_MS, Math.round(base + jitter));
 }
 
-/** Time a timed edit keeps the Performer busy: typing chunks or a select drag. */
+/** Time a drawn whiteboard apply spends emitting its frames. */
+export function whiteboardDrawDurationOf(action: ScriptAction): number {
+  if (action.type !== "whiteboard.apply") {
+    return 0;
+  }
+  return whiteboardDrawDurationMs(action.upsertIds.length, action.drawMs);
+}
+
+/**
+ * Time a timed action keeps the Performer busy: typing chunks, a select drag,
+ * or the frames of a drawn whiteboard apply. The Performer runs plan order
+ * sequentially, so anything not modeled here pushes every later action late.
+ */
 function actionBusyMs(action: ScriptAction, seed: number): number {
-  return typingDurationOf(action, seed) + selectDurationOf(action, seed);
+  return (
+    typingDurationOf(action, seed) +
+    selectDurationOf(action, seed) +
+    whiteboardDrawDurationOf(action)
+  );
 }
 
 export function compileLessonScript({
@@ -428,6 +445,7 @@ export function compileLessonScript({
             open: action.open,
             maximized: action.maximized,
             upsertIds: action.upsertIds,
+            drawMs: action.drawMs,
           };
         case "expect.output":
           return {

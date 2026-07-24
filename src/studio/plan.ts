@@ -18,6 +18,13 @@ export const STUDIO_PLAN_SCHEMA_VERSION = 1;
 const nonNegativeMs = z.number().finite().min(0);
 const positiveMs = z.number().finite().positive();
 
+/**
+ * Ceiling on a drawn `whiteboard.apply`. A diagram that takes longer than this
+ * to appear has stopped being an illustration and started being the lesson;
+ * it also has to stay under the action's own `timeoutMs`.
+ */
+export const WHITEBOARD_DRAW_MAX_MS = 6_000;
+
 /** Materialized retry policy. One attempt means explicitly non-retryable. */
 export const studioRetryPolicySchema = z.object({
   maxAttempts: z.number().int().min(1).max(3),
@@ -183,12 +190,21 @@ const whiteboardApplyActionSchema = planActionBase
     maximized: z.boolean().optional(),
     /** Ids from `plan.whiteboardAssets` to upsert onto the board. */
     upsertIds: z.array(z.string().min(1)).default([]),
+    /**
+     * Draw the upserts in over this budget instead of applying them in one
+     * frame: shapes grow, text types, strokes trace, and multiple assets are
+     * staggered in order. `0` (the default) keeps the single-frame apply.
+     */
+    drawMs: z.number().finite().nonnegative().max(WHITEBOARD_DRAW_MAX_MS).default(0),
   })
   .refine(
     (action) =>
       action.open !== undefined || action.maximized !== undefined || action.upsertIds.length > 0,
     { message: "whiteboard.apply must open/close, change maximize, or upsert at least one asset" },
-  );
+  )
+  .refine((action) => action.drawMs < action.timeoutMs, {
+    message: "whiteboard.apply drawMs must be shorter than the action's timeoutMs",
+  });
 
 const expectOutputActionSchema = planActionBase.extend({
   type: z.literal("expect.output"),
@@ -277,17 +293,34 @@ export const studioSlideSchema = z.object({
 export type StudioSlide = z.infer<typeof studioSlideSchema>;
 
 /**
+ * Hand-drawn annotation strokes. Each is generated inside the asset's box as
+ * one continuous freedraw path, so it can be revealed point by point the way a
+ * presenter draws it.
+ */
+export const studioWhiteboardStrokeSchema = z.enum([
+  "underline",
+  "strike",
+  "circle",
+  "check",
+  "arrow-right",
+  "arrow-down",
+]);
+export type StudioWhiteboardStroke = z.infer<typeof studioWhiteboardStrokeSchema>;
+
+/**
  * Authored whiteboard asset: a small declarative spec the driver expands into
  * a full Excalidraw element (seeded, deterministic) at apply time.
  */
 export const studioWhiteboardAssetSchema = z.object({
   id: z.string().min(1),
-  kind: z.enum(["rectangle", "ellipse", "text"]),
+  kind: z.enum(["rectangle", "ellipse", "text", "freedraw"]),
   x: z.number().finite(),
   y: z.number().finite(),
   width: z.number().finite().positive(),
   height: z.number().finite().positive(),
   text: z.string().optional(),
+  /** `freedraw` only: which stroke fills the asset's box. */
+  stroke: studioWhiteboardStrokeSchema.default("underline"),
   strokeColor: z.string().default("#e2e8f0"),
   backgroundColor: z.string().default("transparent"),
   fontSize: z.number().finite().positive().default(20),

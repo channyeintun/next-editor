@@ -260,7 +260,7 @@ Action catalog:
 | `expect.preview`       | `target?`, `textContains?`, `value?`, `route?`, `attribute?`, `retry` | Requires a target or route. Text/value/attribute checks require a target. A passing observation is stored in the artifact as a DOM/route checkpoint; a failure aborts and captures a diagnostic screenshot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `slide.show`           | `slideId`, `maximized` (default true)                                 | `slideId` must be in `lesson.slides`. Showing a slide while another is open advances **in place** (like moving to the next slide) — do not `slide.close` between consecutive slides; close only when returning to the editor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `slide.close`          | —                                                                     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `whiteboard.apply`     | `open?`, `maximized?`, `upsertIds: []`                                | Ids from `lesson.whiteboardAssets`. Must open, change maximize, or upsert ≥1 asset.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `whiteboard.apply`     | `open?`, `maximized?`, `upsertIds: []`, `drawMs?`                     | Ids from `lesson.whiteboardAssets`. Must open, change maximize, or upsert ≥1 asset. `drawMs` draws the upserts in instead of applying them at once (see Whiteboard assets); it must be under the action's `timeoutMs` and at most 6000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `expect.output`        | `contains`, `timeoutMs`                                               | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` line fails it. Use with Playground runtimes after `runtime.run`, or with console-only Python after `runtime.start`; it is not a JavaScript/TypeScript preview assertion.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `expect.file`          | `path`, `contains`                                                    | Asserts the final workspace file contains the string.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
@@ -410,8 +410,44 @@ whiteboardAssets:
     }
 ```
 
-Kinds: `rectangle`, `ellipse`, `text`. Coordinates are canvas pixels; keep
-content roughly within (250,150)–(1100,650) so it is visible unzoomed.
+Kinds: `rectangle`, `ellipse`, `text`, `freedraw`. Coordinates are canvas
+pixels; keep content roughly within (250,150)–(1100,650) so it is visible
+unzoomed.
+
+A `freedraw` asset is a hand-drawn annotation stroke generated inside its box.
+Pick one with `stroke`: `underline`, `strike`, `circle`, `check`,
+`arrow-right`, or `arrow-down`. Size the box around whatever it annotates —
+`circle` inscribes the box, `underline` runs along its bottom edge:
+
+```yaml
+- { id: circle-owner, kind: freedraw, stroke: circle, x: 340, y: 280, width: 240, height: 90 }
+```
+
+### Drawing a diagram in
+
+By default an apply puts its assets on the board in a single frame. `drawMs`
+spends a budget drawing them instead, the way a presenter would:
+
+```yaml
+- id: show-vec
+  type: whiteboard.apply
+  at: { mark: show-vec }
+  upsertIds: [vec-box0, vec-box1, vec-box2]
+  drawMs: 900
+```
+
+The assets are drawn **one after another**, sharing the budget — nine ids and
+`drawMs: 900` is a 100 ms stagger, not nine boxes at once. Within an asset,
+shapes grow from their top-left corner, text types in a character at a time,
+and a `freedraw` stroke traces point by point. The recorded lesson interpolates
+between the recorded steps, so playback is smooth even though the live render
+you watch in Chrome steps at 20 fps.
+
+Use it for the diagram the narration is actively building — the box being
+introduced, the arrow being drawn, the term being circled. A `drawMs` on
+scene-setting furniture (a title, a legend, a board that is merely re-opened)
+only makes the lesson wait. The budget is also busy time: the actions after it
+are planned that much later, so keep it inside the narration beat it belongs to.
 
 ## Editorial requirements (summary — full text in studio-persona.md)
 

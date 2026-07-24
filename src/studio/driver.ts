@@ -39,7 +39,11 @@ import type {
   TypingChunk,
 } from "./plan";
 import { describeStudioTarget, resolveStudioTarget } from "./targets";
-import { buildWhiteboardElement } from "./whiteboardAssets";
+import {
+  WHITEBOARD_DRAW_FRAME_MS,
+  buildWhiteboardElement,
+  planWhiteboardDrawFrames,
+} from "./whiteboardAssets";
 
 export { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil };
 
@@ -129,6 +133,8 @@ export interface StudioDriver {
     open?: boolean;
     maximized?: boolean;
     upsertIds: readonly string[];
+    /** Budget for drawing the upserts in step by step; 0 applies them at once. */
+    drawMs?: number;
   }): Promise<Record<string, unknown>>;
   waitForOutput(input: { contains: string; timeoutMs: number }): Promise<Record<string, unknown>>;
   expectFile(input: { path: string; contains: string }): Promise<Record<string, unknown>>;
@@ -891,7 +897,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       return {};
     },
 
-    async applyWhiteboard({ open, maximized, upsertIds }) {
+    async applyWhiteboard({ open, maximized, upsertIds, drawMs = 0 }) {
       const assets = upsertIds.map((assetId) => {
         const asset = deps.whiteboardAssets.find((candidate) => candidate.id === assetId);
         if (!asset) {
@@ -899,39 +905,62 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         }
         return asset;
       });
-      const upserts = assets.map((asset) => buildWhiteboardElement(asset, deps.planSeed));
 
-      const current = deps.whiteboardStore.getSnapshot().context.scene;
-      const event: WhiteboardEvent = {
-        timestamp: RECORDER_ASSIGNS_TIMESTAMP,
-        ...(upserts.length > 0 ? { upserts } : {}),
-        ...(open === undefined || open === current.isOpen ? {} : { isOpen: open }),
-        ...(maximized === undefined || maximized === current.isMaximized
-          ? {}
-          : { isMaximized: maximized }),
-      };
       // Same pair the whiteboard controller's flush performs: record the delta,
       // then publish the updated scene for the mounted panel — through the same
       // fold replay uses, so the live board and the recording can never disagree
       // about element order. Rebuilding the array by hand appended a re-upserted
       // element at the end while the replay fold kept its original slot, and
       // authored assets carry no `index`, so array order is all Excalidraw has.
-      deps.notifyWhiteboardEvent(event);
-      deps.whiteboardStore.trigger.setScene({ scene: applyWhiteboardEvent(current, event) });
+      let scene = deps.whiteboardStore.getSnapshot().context.scene;
+      const openedAt = scene.isOpen;
+      const publish = (event: WhiteboardEvent) => {
+        deps.notifyWhiteboardEvent(event);
+        scene = applyWhiteboardEvent(scene, event);
+        deps.whiteboardStore.trigger.setScene({ scene });
+      };
+      const panelFlags = (): Partial<WhiteboardEvent> => ({
+        ...(open === undefined || open === scene.isOpen ? {} : { isOpen: open }),
+        ...(maximized === undefined || maximized === scene.isMaximized
+          ? {}
+          : { isMaximized: maximized }),
+      });
+
+      const frames = planWhiteboardDrawFrames(assets.length, drawMs);
+      if (frames.length === 0) {
+        const upserts = assets.map((asset) => buildWhiteboardElement(asset, deps.planSeed));
+        publish({
+          timestamp: RECORDER_ASSIGNS_TIMESTAMP,
+          ...(upserts.length > 0 ? { upserts } : {}),
+          ...panelFlags(),
+        });
+      } else {
+        // A drawn apply is the same delta track at a finer grain: one event per
+        // step, each carrying only the element being drawn right then. Replay
+        // interpolates between those steps (replayState/whiteboard.ts), so the
+        // recorded ~20Hz frames come back as a continuous stroke, and the panel
+        // opens on the first frame rather than after the drawing.
+        for (const frame of frames) {
+          publish({
+            timestamp: RECORDER_ASSIGNS_TIMESTAMP,
+            upserts: [buildWhiteboardElement(assets[frame.assetIndex], deps.planSeed, frame)],
+            ...panelFlags(),
+          });
+          await abortableSleep(WHITEBOARD_DRAW_FRAME_MS, signal);
+        }
+      }
 
       await waitUntil(
         () => {
-          const scene = deps.whiteboardStore.getSnapshot().context.scene;
+          const applied = deps.whiteboardStore.getSnapshot().context.scene;
           return (
-            (open === undefined || scene.isOpen === open) &&
-            upserts.every((element) =>
-              scene.elements.some((candidate) => candidate.id === element.id),
-            )
+            (open === undefined || applied.isOpen === open) &&
+            assets.every((asset) => applied.elements.some((candidate) => candidate.id === asset.id))
           );
         },
         { timeoutMs: 2_000, signal, description: "the whiteboard scene to apply" },
       );
-      return { upserted: upserts.length, open: open ?? current.isOpen };
+      return { upserted: assets.length, open: open ?? openedAt, frames: frames.length };
     },
 
     async waitForOutput({ contains, timeoutMs }) {
