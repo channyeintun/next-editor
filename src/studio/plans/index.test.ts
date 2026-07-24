@@ -14,6 +14,7 @@ describe("studio lesson registry", () => {
     // Grows as the course does; keep this list in sync with the YAML files
     // under src/studio/scripts/.
     expect(Object.keys(STUDIO_SOURCES).sort()).toEqual([
+      "go-crash-course",
       "go-error-values",
       "next-editor-state-machine",
       "rust-borrow",
