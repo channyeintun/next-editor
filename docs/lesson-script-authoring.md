@@ -141,8 +141,13 @@ runtime:
       output: "line one\nline two\n"
 scenes: […] # see Scenes
 checks:
-  - { type: timing.p95Ms, max: 300 } # recommended on every script
+  - { type: timing.p95Ms, max: 300 } # required on every script
 ```
+
+`timing.p95Ms` is the only check a script declares, and it is mandatory. The
+artifact gates (`recording.decodes`, `runtime.noErrors`, track/caption/preview
+checks, …) run on every render and are not configurable — there is nothing to
+opt into or out of.
 
 ### Lesson types and runtime kinds
 

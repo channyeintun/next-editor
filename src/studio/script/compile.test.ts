@@ -282,6 +282,14 @@ describe("lessonScriptSchema", () => {
     expect(() => parseLessonScript(raw)).toThrow(/unknown action "ghost"/);
   });
 
+  // Every skill and doc says to include the timing gate, but `checks` defaulted
+  // to [] — so omitting it silently rendered with no timing gate at all.
+  it("rejects a lesson that declares no timing gate", () => {
+    const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
+    raw.checks = [];
+    expect(() => parseLessonScript(raw)).toThrow(/must declare a timing gate/);
+  });
+
   // `actions` defaults to [], so a narration-only script used to parse and only
   // blow up later inside plan validation with an unrelated message.
   it("rejects a lesson with no actions in any scene", () => {

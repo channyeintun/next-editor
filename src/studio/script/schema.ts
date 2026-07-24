@@ -204,9 +204,13 @@ export const scriptSceneSchema = z.object({
 });
 export type ScriptScene = z.infer<typeof scriptSceneSchema>;
 
+/**
+ * Per-script QA thresholds. Only checks that a script can actually configure
+ * belong here: artifact gates like `recording.decodes` and `runtime.noErrors`
+ * run on every render regardless, so declaring them was decorative — the value
+ * never reached the plan, and omitting them switched nothing off.
+ */
 export const scriptCheckSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("recording.decodes") }),
-  z.object({ type: z.literal("runtime.noErrors") }),
   z.object({
     type: z.literal("timing.p95Ms"),
     max: z.number().finite().positive(),
@@ -366,6 +370,17 @@ export const lessonScriptSchema = z
           }
         }
       }
+    }
+
+    // The timing gate is the one QA threshold a script owns, and it only exists
+    // when declared — an omitted `checks` block used to mean "render with no
+    // timing gate at all", silently, while every skill and doc says to include it.
+    if (!script.checks.some((check) => check.type === "timing.p95Ms")) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Every lesson must declare a timing gate: checks: [{ type: timing.p95Ms, max: 300 }] (use max: 500 when the lesson shows Google-deck slides)",
+      });
     }
 
     // Caught here rather than at compile time: `scenes[].actions` defaults to []

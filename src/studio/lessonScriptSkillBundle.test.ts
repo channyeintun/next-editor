@@ -71,6 +71,8 @@ function minimalScriptShell(lessonType: StudioLessonType) {
   const base = {
     schemaVersion: 1 as const,
     build: { voiceProfile: "pocket-alba-v1", seed: 1 },
+    // The one QA threshold a script owns, and it is required.
+    checks: [{ type: "timing.p95Ms", max: 300 }],
   };
   const workspace = (files: Record<string, string>, entryFilePath: string) => ({
     lessonType,
