@@ -79,6 +79,13 @@ export default ({ mode }: { mode: string }) => {
       }),
     ] as unknown as PluginOption[],
     resolve: {
+      // tube/ installs its own dependencies (it is not a root workspace), so a
+      // package it depends on resolves React from tube/node_modules while the
+      // app's react-dom resolves the root copy — two React instances, whose
+      // shared internals are then null ("Cannot read properties of null
+      // (reading 'useEffect')"). Its source is compiled by this config, so it
+      // has to share this config's React.
+      dedupe: ["react", "react-dom"],
       alias: {
         // Compile the tube workspace package from source so it goes through the
         // app's JSX/Tailwind/React-Compiler pipeline (not pre-bundled from
@@ -117,7 +124,11 @@ export default ({ mode }: { mode: string }) => {
       },
       server: {
         deps: {
-          inline: ["y-monaco"],
+          // y-monaco imports Monaco's deep editor API entrypoint (see the alias
+          // above). @tanstack/react-query is inlined so its `react` import goes
+          // through this config's resolver — externalized, Node resolves it to
+          // tube/node_modules/react and `resolve.dedupe` never sees it.
+          inline: ["y-monaco", "@tanstack/react-query"],
         },
       },
     },
