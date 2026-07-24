@@ -116,13 +116,17 @@ function resolveWorkspaceSnapshotForReplay({
 export function getWorkspaceReplayResult({
   workspaceEvents,
   currentTime,
-  currentSnapshot,
   getCurrentSnapshot,
   lastAppliedIndex,
 }: {
   workspaceEvents: WorkspaceRecordingEvent[];
   currentTime: number;
-  currentSnapshot?: WorkspaceRecordingSnapshot | null;
+  /**
+   * Read lazily: the live snapshot is only needed to decide whether the resolved
+   * one is worth applying, which is only when the cursor moves. Playback ticks at
+   * rAF rate and the cursor is unchanged on almost all of them, so an eager read
+   * would walk the whole workspace many times a second for nothing.
+   */
   getCurrentSnapshot?: () => WorkspaceRecordingSnapshot | null;
   lastAppliedIndex: number;
 }): WorkspaceReplayResult {
@@ -133,8 +137,7 @@ export function getWorkspaceReplayResult({
   });
 
   if (replayCursor.latestEvent && replayCursor.nextIndex !== lastAppliedIndex) {
-    const snapshot =
-      currentSnapshot !== undefined ? currentSnapshot : (getCurrentSnapshot?.() ?? null);
+    const snapshot = getCurrentSnapshot?.() ?? null;
     const snapshotToApply = resolveWorkspaceSnapshotForReplay({
       workspaceEvents,
       nextIndex: replayCursor.nextIndex,

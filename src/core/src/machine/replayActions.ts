@@ -1,6 +1,6 @@
 import type { EditorMachineContext, EditorMachineEvent } from "./types";
 import type { EditorFrame } from "../types";
-import type { WorkspaceRecordingEvent } from "../../../types/workspace";
+import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import { areWorkspaceSnapshotsEqual, isWorkspaceTextFile } from "../../../types/workspace";
 import {
   reconstructFrameAtIndex,
@@ -893,18 +893,28 @@ export const applyWorkspaceEventsAtTime = ({
     return {};
   }
 
-  const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
+  // Read at most once per tick, and only if the replay actually needs it — the
+  // cursor is unchanged on almost every tick, and reading it walks the workspace.
+  let readSnapshot: WorkspaceRecordingSnapshot | null | undefined;
+  const currentWorkspaceSnapshot = () => {
+    if (readSnapshot === undefined) {
+      readSnapshot = context.getWorkspaceSnapshot?.() ?? null;
+    }
+    return readSnapshot;
+  };
+
   const replayResult = getWorkspaceReplayResult({
     workspaceEvents: recording.workspaceEvents,
     currentTime: resolveBoundedReplayTime(context, event),
-    currentSnapshot: currentWorkspaceSnapshot,
+    getCurrentSnapshot: currentWorkspaceSnapshot,
     lastAppliedIndex: lastAppliedWorkspaceEventIndex,
   });
 
   if (replayResult.snapshotToApply) {
+    // Already memoized — resolving `snapshotToApply` is what read it.
+    const snapshot = currentWorkspaceSnapshot();
     const activeFileChanged =
-      Boolean(currentWorkspaceSnapshot) &&
-      currentWorkspaceSnapshot?.activeFilePath !== replayResult.snapshotToApply.activeFilePath;
+      Boolean(snapshot) && snapshot?.activeFilePath !== replayResult.snapshotToApply.activeFilePath;
 
     applyWorkspaceSnapshot(replayResult.snapshotToApply);
     return {

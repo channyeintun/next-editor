@@ -379,7 +379,7 @@ describe("replayState", () => {
     const equalCurrentSnapshot = getWorkspaceReplayResult({
       workspaceEvents,
       currentTime: 100,
-      currentSnapshot: secondSnapshot,
+      getCurrentSnapshot: () => secondSnapshot,
       lastAppliedIndex: 0,
     });
 
@@ -389,7 +389,7 @@ describe("replayState", () => {
     const backwardSeek = getWorkspaceReplayResult({
       workspaceEvents,
       currentTime: 50,
-      currentSnapshot: secondSnapshot,
+      getCurrentSnapshot: () => secondSnapshot,
       lastAppliedIndex: 1,
     });
 
@@ -415,7 +415,7 @@ describe("replayState", () => {
     const resizeForward = getWorkspaceReplayResult({
       workspaceEvents,
       currentTime: 100,
-      currentSnapshot,
+      getCurrentSnapshot: () => currentSnapshot,
       lastAppliedIndex: 0,
     });
 
@@ -438,7 +438,7 @@ describe("replayState", () => {
     const initialReplay = getWorkspaceReplayResult({
       workspaceEvents,
       currentTime: 0,
-      currentSnapshot,
+      getCurrentSnapshot: () => currentSnapshot,
       lastAppliedIndex: -1,
     });
 
@@ -471,7 +471,7 @@ describe("replayState", () => {
     const backwardSeek = getWorkspaceReplayResult({
       workspaceEvents,
       currentTime: 100,
-      currentSnapshot,
+      getCurrentSnapshot: () => currentSnapshot,
       lastAppliedIndex: 2,
     });
 
@@ -499,7 +499,7 @@ describe("replayState", () => {
     const resizeForward = getWorkspaceReplayResult({
       workspaceEvents,
       currentTime: 100,
-      currentSnapshot,
+      getCurrentSnapshot: () => currentSnapshot,
       lastAppliedIndex: 0,
     });
 
@@ -532,7 +532,7 @@ describe("replayState", () => {
     const backwardSeek = getWorkspaceReplayResult({
       workspaceEvents,
       currentTime: 100,
-      currentSnapshot,
+      getCurrentSnapshot: () => currentSnapshot,
       lastAppliedIndex: 2,
     });
 
@@ -559,7 +559,7 @@ describe("replayState", () => {
     const scrollForward = getWorkspaceReplayResult({
       workspaceEvents,
       currentTime: 100,
-      currentSnapshot: firstSnapshot,
+      getCurrentSnapshot: () => firstSnapshot,
       lastAppliedIndex: 0,
     });
 
@@ -569,7 +569,7 @@ describe("replayState", () => {
     const backwardSeek = getWorkspaceReplayResult({
       workspaceEvents,
       currentTime: 50,
-      currentSnapshot: scrolledSnapshot,
+      getCurrentSnapshot: () => scrolledSnapshot,
       lastAppliedIndex: 1,
     });
 
