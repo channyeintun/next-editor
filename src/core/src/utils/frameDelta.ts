@@ -28,7 +28,15 @@ import {
 } from "../../../types/textEdit";
 
 const LINEAR_SCAN_LIMIT = 128;
-const keyframeIndexCache = new WeakMap<DeltaFrame[], number[]>();
+
+interface KeyframeIndex {
+  /** Ascending frame indices that are keyframes. */
+  indices: number[];
+  /** How far into `frames` the scan has run — streams append to the same array. */
+  scannedLength: number;
+}
+
+const keyframeIndexCache = new WeakMap<DeltaFrame[], KeyframeIndex>();
 
 /**
  * Finds the length of the common prefix between two strings, in code units,
@@ -712,17 +720,25 @@ export function findNearestKeyframeIndex(frames: DeltaFrame[], targetIndex: numb
   if (!frames.length) return -1;
 
   const boundedTargetIndex = Math.min(targetIndex, frames.length - 1);
-  let keyframeIndices = keyframeIndexCache.get(frames);
+  let cached = keyframeIndexCache.get(frames);
 
-  if (!keyframeIndices) {
-    keyframeIndices = [];
-    for (let i = 0; i < frames.length; i++) {
-      if (isKeyframe(frames[i])) {
-        keyframeIndices.push(i);
-      }
-    }
-    keyframeIndexCache.set(frames, keyframeIndices);
+  if (!cached) {
+    cached = { indices: [], scannedLength: 0 };
+    keyframeIndexCache.set(frames, cached);
   }
+
+  // Streaming playback appends decoded frames to this same array in place
+  // (APPEND_RECORDING_DELTA), so the scan is extended rather than run once. A scan
+  // frozen at the pre-stream length still reconstructs correctly — the delta walk
+  // re-bases on any keyframe it passes — but it walks from a far older keyframe,
+  // turning a bounded seek into one over the whole streamed tail.
+  const keyframeIndices = cached.indices;
+  for (let i = cached.scannedLength; i < frames.length; i++) {
+    if (isKeyframe(frames[i])) {
+      keyframeIndices.push(i);
+    }
+  }
+  cached.scannedLength = frames.length;
 
   let low = 0;
   let high = keyframeIndices.length - 1;

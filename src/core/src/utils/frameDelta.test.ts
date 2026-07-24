@@ -13,6 +13,7 @@ import {
   createContentDelta,
   createContentEditDelta,
   createFrameDelta,
+  findNearestKeyframeIndex,
   reconstructFrameAtIndex,
 } from "./frameDelta";
 import {
@@ -277,5 +278,25 @@ describe("previewState delta stays incremental", () => {
         expect(reconstructed.state.previewState).toEqual(preview(contents[index], index));
       }
     });
+  });
+});
+
+describe("keyframe index cache", () => {
+  // Streaming playback (APPEND_RECORDING_DELTA) pushes decoded frames into the
+  // same array the cache is keyed on, so the scan has to keep up with it.
+  it("sees keyframes appended after the index was first built", () => {
+    const keyframe = (timestamp: number, content: string): Keyframe => ({
+      ...frameAt(timestamp, content),
+      isKeyframe: true,
+    });
+    const frames = [keyframe(0, "one"), { timestamp: 100, isKeyframe: false as const }];
+
+    expect(findNearestKeyframeIndex(frames, 1)).toBe(0);
+
+    frames.push(keyframe(200, "two"), { timestamp: 300, isKeyframe: false as const });
+
+    expect(findNearestKeyframeIndex(frames, 3)).toBe(2);
+    expect(findNearestKeyframeIndex(frames, 2)).toBe(2);
+    expect(findNearestKeyframeIndex(frames, 1)).toBe(0);
   });
 });
