@@ -176,8 +176,20 @@ export function scheduleDialogs({
       throw new ScheduleError(`Dialog "${dialog.id}" has invalid duration ${durationMs}ms`);
     }
 
+    // An action anchored to this dialog with a negative offset starts *before* its
+    // mark, and its mark sits only DIALOG_LEAD_MS into the dialog. Clearing just
+    // BUSY_PAD_MS therefore lets such an action begin while the previous edit is
+    // still typing — an overlap the plan gate rejects, after the whole narration
+    // has been synthesized. Reserve whatever the pull-back needs beyond the lead.
+    const pullBackMs = -Math.min(
+      0,
+      ...(actionsByDialog.get(i) ?? []).map((entry) => entry.offsetMs),
+    );
     const naturalStartMs = i === 0 ? RECORDING_BUFFER_MS : previousEndMs + MIN_GAP_MS;
-    const startMs = Math.max(naturalStartMs, Math.ceil(busyUntilMs + BUSY_PAD_MS));
+    const startMs = Math.max(
+      naturalStartMs,
+      Math.ceil(busyUntilMs + BUSY_PAD_MS + Math.max(0, pullBackMs - DIALOG_LEAD_MS)),
+    );
     const insertedSilenceMs = startMs - naturalStartMs;
     if (insertedSilenceMs > SILENCE_WARN_MS) {
       warnings.push(

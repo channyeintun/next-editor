@@ -152,6 +152,28 @@ describe("scheduleDialogs", () => {
     expect(plan.actions.at(-1)!.at).toBeLessThan(schedule.totalDurationMs);
   });
 
+  // go-swap anchors `type-call` at `mark - 300ms`, and a mark sits only
+  // DIALOG_LEAD_MS into its dialog. Clearing just BUSY_PAD_MS therefore started
+  // that typing 20ms before the previous edit had finished, and the whole
+  // narration was synthesized before the plan gate rejected the overlap.
+  it("clears an action that is anchored before its own mark", () => {
+    const script = loadPilot("go-swap");
+    const { extracted, schedule } = scheduleFor(script);
+
+    expect(() =>
+      compileLessonScript({
+        script,
+        extracted,
+        alignment: schedule.alignment,
+        narration: {
+          audioPath: "studio-tts://test",
+          mimeType: "audio/wav",
+          durationMs: schedule.totalDurationMs,
+        },
+      }),
+    ).not.toThrow();
+  });
+
   it("is deterministic for identical inputs", () => {
     const first = scheduleFor(loadPilot("go-swap")).schedule;
     const second = scheduleFor(loadPilot("go-swap")).schedule;
