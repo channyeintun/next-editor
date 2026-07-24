@@ -26,19 +26,43 @@ const SLIDE_STRUCTURAL_EVENT_TYPES = new Set<SlideEvent["type"]>([
   "slide_minimize",
 ]);
 
+/**
+ * The most recent matching event at or before `eventIndex`. Scanning backwards
+ * in place (rather than reversing a copy of the prefix) keeps state reconstruction
+ * allocation-free and lets each query stop at its first hit — which for these
+ * predicates is usually within a few events.
+ */
+function findLastEventAtOrBefore(
+  slideEvents: SlideEvent[],
+  eventIndex: number,
+  matches: (event: SlideEvent) => boolean,
+): SlideEvent | undefined {
+  for (let index = eventIndex; index >= 0; index -= 1) {
+    if (matches(slideEvents[index])) {
+      return slideEvents[index];
+    }
+  }
+  return undefined;
+}
+
 function buildSlideStateAtEvent(slideEvents: SlideEvent[], eventIndex: number): SlidePreviewState {
   const slideEvent = slideEvents[eventIndex];
-  const relevantEvents = slideEvents.slice(0, eventIndex + 1).reverse();
-  const lastVisibilityEvent = relevantEvents.find((event) =>
+  const lastVisibilityEvent = findLastEventAtOrBefore(slideEvents, eventIndex, (event) =>
     SLIDE_VISIBILITY_EVENT_TYPES.has(event.type),
   );
-  const lastPositionEvent = relevantEvents.find((event) => Boolean(event.slideId));
-  const lastViewEvent = relevantEvents.find(
+  const lastPositionEvent = findLastEventAtOrBefore(slideEvents, eventIndex, (event) =>
+    Boolean(event.slideId),
+  );
+  const lastViewEvent = findLastEventAtOrBefore(
+    slideEvents,
+    eventIndex,
     (event) =>
       SLIDE_VISIBILITY_EVENT_TYPES.has(event.type) || SLIDE_STRUCTURAL_EVENT_TYPES.has(event.type),
   );
   const targetSlideId = slideEvent.slideId || lastPositionEvent?.slideId;
-  const lastIndexEvent = relevantEvents.find(
+  const lastIndexEvent = findLastEventAtOrBefore(
+    slideEvents,
+    eventIndex,
     (event) =>
       (targetSlideId ? event.slideId === targetSlideId : true) &&
       event.indexv !== undefined &&
