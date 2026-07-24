@@ -174,3 +174,60 @@ export function areWhiteboardViewsEqual(
   if (!a || !b) return false;
   return a.scrollX === b.scrollX && a.scrollY === b.scrollY && a.zoom === b.zoom;
 }
+
+/**
+ * Excalidraw z-orders elements by their fractional `index` field (lexicographic
+ * by design), but a Map-based upsert rebuilds the array in insertion order — an
+ * upsert of an existing id keeps its original slot even when the change was a
+ * bring-to-front. Excalidraw's updateScene treats array order as the truth and
+ * rewrites disagreeing `index` fields (syncInvalidIndices), so the array must be
+ * sorted by `index` before it ever reaches updateScene.
+ */
+export function compareWhiteboardElementIndices(
+  a: WhiteboardElementJSON,
+  b: WhiteboardElementJSON,
+): number {
+  const aIndex = typeof a.index === "string" ? a.index : undefined;
+  const bIndex = typeof b.index === "string" ? b.index : undefined;
+  if (aIndex === undefined || bIndex === undefined || aIndex === bIndex) return 0;
+  return aIndex < bIndex ? -1 : 1;
+}
+
+/**
+ * Fold one whiteboard delta into a scene. Shared by replay (replayState/whiteboard.ts)
+ * and by the studio driver, which publishes the same delta to the live board — if the
+ * two disagreed about element order, a lesson would render one z-order live and a
+ * different one on replay, since `index` is absent on authored assets and array order
+ * is then all Excalidraw has to go on.
+ */
+export function applyWhiteboardEvent(
+  state: WhiteboardSceneState,
+  event: WhiteboardEvent,
+): WhiteboardSceneState {
+  let elements = state.elements;
+
+  if (event.upserts?.length || event.removedIds?.length) {
+    const byId = new Map(elements.map((element) => [element.id, element]));
+
+    if (event.upserts) {
+      for (const element of event.upserts) {
+        byId.set(element.id, element);
+      }
+    }
+
+    if (event.removedIds) {
+      for (const id of event.removedIds) {
+        byId.delete(id);
+      }
+    }
+
+    elements = Array.from(byId.values()).sort(compareWhiteboardElementIndices);
+  }
+
+  return {
+    elements,
+    view: event.view ?? state.view,
+    isOpen: event.isOpen ?? state.isOpen,
+    isMaximized: event.isMaximized ?? state.isMaximized,
+  };
+}

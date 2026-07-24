@@ -1,4 +1,6 @@
 import {
+  applyWhiteboardEvent,
+  compareWhiteboardElementIndices,
   EMPTY_WHITEBOARD_SCENE,
   type WhiteboardElementJSON,
   type WhiteboardEvent,
@@ -34,51 +36,6 @@ export interface WhiteboardReplayResult {
 }
 
 const whiteboardReplayIndexCache = new WeakMap<WhiteboardEvent[], WhiteboardReplayIndex>();
-
-// Excalidraw z-orders elements by their fractional `index` field (lexicographic
-// by design), but the fold below rebuilds the array in Map-insertion order —
-// an upsert of an existing id keeps its original slot even when the change was
-// a bring-to-front. Excalidraw's updateScene treats array order as the truth
-// and rewrites disagreeing `index` fields (syncInvalidIndices), so the array
-// must be sorted by `index` before it ever reaches updateScene.
-function compareElementIndices(a: WhiteboardElementJSON, b: WhiteboardElementJSON): number {
-  const aIndex = typeof a.index === "string" ? a.index : undefined;
-  const bIndex = typeof b.index === "string" ? b.index : undefined;
-  if (aIndex === undefined || bIndex === undefined || aIndex === bIndex) return 0;
-  return aIndex < bIndex ? -1 : 1;
-}
-
-function applyWhiteboardEvent(
-  state: WhiteboardSceneState,
-  event: WhiteboardEvent,
-): WhiteboardSceneState {
-  let elements = state.elements;
-
-  if (event.upserts?.length || event.removedIds?.length) {
-    const byId = new Map(elements.map((element) => [element.id, element]));
-
-    if (event.upserts) {
-      for (const element of event.upserts) {
-        byId.set(element.id, element);
-      }
-    }
-
-    if (event.removedIds) {
-      for (const id of event.removedIds) {
-        byId.delete(id);
-      }
-    }
-
-    elements = Array.from(byId.values()).sort(compareElementIndices);
-  }
-
-  return {
-    elements,
-    view: event.view ?? state.view,
-    isOpen: event.isOpen ?? state.isOpen,
-    isMaximized: event.isMaximized ?? state.isMaximized,
-  };
-}
 
 function getWhiteboardReplayIndex(events: WhiteboardEvent[]): WhiteboardReplayIndex {
   let replayIndex = whiteboardReplayIndexCache.get(events);
@@ -205,7 +162,7 @@ function getInterpolatedState(
     return undefined;
   }
 
-  return { ...baseState, elements: elements.sort(compareElementIndices) };
+  return { ...baseState, elements: elements.sort(compareWhiteboardElementIndices) };
 }
 
 export function getWhiteboardReplayResult({

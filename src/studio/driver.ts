@@ -5,7 +5,7 @@ import { selectPreviewState, type SlidesStoreInstance } from "../stores/slidesSt
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import { appendRunnerConsoleLines } from "../runtime/goPlayground/consoleStore";
 import type { SlideEvent } from "../core/src/slides";
-import type { WhiteboardEvent } from "../core/src/whiteboard";
+import { applyWhiteboardEvent, type WhiteboardEvent } from "../core/src/whiteboard";
 import type { PreviewEvent, PreviewPanelMode, PreviewState } from "../types/slides";
 import { isWorkspaceTextFile } from "../types/workspace";
 import type {
@@ -900,20 +900,13 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
           : { isMaximized: maximized }),
       };
       // Same pair the whiteboard controller's flush performs: record the delta,
-      // then publish the updated scene for the mounted panel.
+      // then publish the updated scene for the mounted panel — through the same
+      // fold replay uses, so the live board and the recording can never disagree
+      // about element order. Rebuilding the array by hand appended a re-upserted
+      // element at the end while the replay fold kept its original slot, and
+      // authored assets carry no `index`, so array order is all Excalidraw has.
       deps.notifyWhiteboardEvent(event);
-      const upsertedIds = new Set(upserts.map((element) => element.id));
-      deps.whiteboardStore.trigger.setScene({
-        scene: {
-          elements: [
-            ...current.elements.filter((element) => !upsertedIds.has(element.id)),
-            ...upserts,
-          ],
-          view: current.view,
-          isOpen: open ?? current.isOpen,
-          isMaximized: maximized ?? current.isMaximized,
-        },
-      });
+      deps.whiteboardStore.trigger.setScene({ scene: applyWhiteboardEvent(current, event) });
 
       await waitUntil(
         () => {

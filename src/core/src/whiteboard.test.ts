@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  applyWhiteboardEvent,
   areWhiteboardViewsEqual,
   deriveWhiteboardDelta,
+  EMPTY_WHITEBOARD_SCENE,
   rebaseWhiteboardDelta,
   snapshotWhiteboardDelta,
   type WhiteboardElementJSON,
@@ -177,5 +179,43 @@ describe("areWhiteboardViewsEqual", () => {
   it("is false when either side is undefined", () => {
     expect(areWhiteboardViewsEqual(undefined, { scrollX: 0, scrollY: 0, zoom: 1 })).toBe(false);
     expect(areWhiteboardViewsEqual({ scrollX: 0, scrollY: 0, zoom: 1 }, undefined)).toBe(false);
+  });
+});
+
+describe("applyWhiteboardEvent", () => {
+  const element = (id: string, index?: string) =>
+    ({ id, version: 1, versionNonce: 1, isDeleted: false, ...(index ? { index } : {}) }) as never;
+
+  // The studio driver publishes the live scene through this same fold. Rebuilding
+  // the array by hand moved a re-upserted element to the end while replay kept its
+  // original slot — and authored assets carry no `index`, so array order is the
+  // only z-order Excalidraw has.
+  it("keeps a re-upserted element in its original slot", () => {
+    const scene = {
+      ...EMPTY_WHITEBOARD_SCENE,
+      elements: [element("a"), element("b"), element("c")],
+    };
+
+    const next = applyWhiteboardEvent(scene, { timestamp: 0, upserts: [element("a")] });
+
+    expect(next.elements.map((item) => item.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("orders by fractional index when the elements carry one", () => {
+    const scene = { ...EMPTY_WHITEBOARD_SCENE, elements: [element("a", "a2"), element("b", "a1")] };
+
+    const next = applyWhiteboardEvent(scene, { timestamp: 0, upserts: [element("c", "a0")] });
+
+    expect(next.elements.map((item) => item.id)).toEqual(["c", "b", "a"]);
+  });
+
+  it("carries view and panel flags forward when the delta omits them", () => {
+    const scene = { ...EMPTY_WHITEBOARD_SCENE, isOpen: true, isMaximized: true };
+
+    const next = applyWhiteboardEvent(scene, { timestamp: 0, upserts: [element("a")] });
+
+    expect(next.isOpen).toBe(true);
+    expect(next.isMaximized).toBe(true);
+    expect(next.view).toBe(scene.view);
   });
 });
