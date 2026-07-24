@@ -796,13 +796,11 @@ export const finalizeRecording = ({
       ...context.timeline,
       duration,
     },
-    lastAppliedFrameIndex: -1,
-    lastAppliedPreviewEventIndex: -1,
-    lastAppliedPreviewPatchBatchIndex: -1,
-    lastAppliedSlideEventIndex: -1,
-    lastAppliedWorkspaceEventIndex: -1,
-    lastAppliedRuntimeEventIndex: -1,
-    lastAppliedWhiteboardEventIndex: -1,
+    // Replay cursors are deliberately not reset here. Every path out of this
+    // action targets `loading`, whose `setRecording` establishes all of them
+    // (including the chat cursor, which this action never reset) against the
+    // recording that is actually loaded. Resetting a subset here read as an
+    // exhaustive list while being neither exhaustive nor load-bearing.
   };
 };
 
