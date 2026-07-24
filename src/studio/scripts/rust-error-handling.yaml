@@ -1,9 +1,8 @@
 # One idea: recoverable errors are values — Result<T,E> is Ok or Err, and the
 # ? operator unwraps Ok or returns Err early, so you handle failure without
 # exceptions. Slides introduce Result + ?; the editor calls a parsing function
-# on good and bad input and matches both, then runs.
-# NOTE: slides are interim inline markdown — to be swapped to the branded
-# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# on good and bad input and matches both, then runs. Slides pin the branded
+# "Next Editor · Rust" Google deck.
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-error-handling.yaml
 schemaVersion: 1
@@ -118,9 +117,10 @@ scenes:
 
   - id: the-err-path
     narration: >
-      [[mark:type-err]] Now we call it with the word oops, which can't be a
-      number. [[mark:select-err-arm]] This time parse fails, the question-mark
-      returns the error, and our match lands on the Err arm instead.
+      So what about bad input? [[mark:type-err]] Let's call it again with the
+      word oops, which can't be a number. [[mark:select-err-arm]] This time
+      parse fails, the question-mark returns the error, and our match lands on
+      the Err arm instead.
     sources:
       - title: "The Rust Book — To panic! or Not to panic!"
         url: "https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html"
