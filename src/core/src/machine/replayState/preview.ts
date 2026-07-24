@@ -187,8 +187,10 @@ export function getPreviewReplayResult({
     };
   }
 
-  let nextIndex = isSeeking ? -1 : lastAppliedIndex;
-  let retainedState = isSeeking ? undefined : lastAppliedState;
+  // Forward playback: apply every event crossed since the last tick, so transient
+  // interactions (clicks, refreshes) are replayed rather than skipped over.
+  let nextIndex = lastAppliedIndex;
+  let retainedState = lastAppliedState;
   const appliedStates: PreviewState[] = [];
 
   if (
@@ -208,17 +210,9 @@ export function getPreviewReplayResult({
     }
 
     const nextPreviewState = mergePreviewEventState(previewEvent, retainedState);
-
-    if (!isSeeking) {
-      appliedStates.push(nextPreviewState.appliedState);
-    }
-
+    appliedStates.push(nextPreviewState.appliedState);
     retainedState = nextPreviewState.retainedState;
     nextIndex = index;
-  }
-
-  if (isSeeking && retainedState) {
-    appliedStates.push(retainedState);
   }
 
   return {

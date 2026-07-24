@@ -109,6 +109,8 @@ export function getSlideReplayResult({
     };
   }
 
+  // Forward playback: apply every event crossed since the last tick, so a
+  // navigation the viewer should see is not skipped over.
   let nextIndex = lastAppliedIndex;
   const applications: SlideReplayApplication[] = [];
 
@@ -120,8 +122,6 @@ export function getSlideReplayResult({
     nextIndex = -1;
   }
 
-  let lastMatchedEventIndex = -1;
-
   for (let index = nextIndex + 1; index < slideEvents.length; index++) {
     const slideEvent = slideEvents[index];
 
@@ -129,25 +129,13 @@ export function getSlideReplayResult({
       break;
     }
 
-    if (isSeeking) {
-      lastMatchedEventIndex = index;
-    } else {
-      const application = createSlideReplayApplication(slideEvents, slides, index);
-
-      if (application) {
-        applications.push(application);
-      }
-    }
-
-    nextIndex = index;
-  }
-
-  if (isSeeking && lastMatchedEventIndex >= 0) {
-    const application = createSlideReplayApplication(slideEvents, slides, lastMatchedEventIndex);
+    const application = createSlideReplayApplication(slideEvents, slides, index);
 
     if (application) {
       applications.push(application);
     }
+
+    nextIndex = index;
   }
 
   return {
