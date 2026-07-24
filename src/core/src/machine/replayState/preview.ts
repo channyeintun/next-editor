@@ -120,23 +120,28 @@ function mergePreviewEventState(
 }
 
 function getPreviewReplayIndex(previewEvents: PreviewEvent[]): PreviewReplayIndex {
-  const cachedIndex = previewReplayIndexCache.get(previewEvents);
+  let replayIndex = previewReplayIndexCache.get(previewEvents);
 
-  if (cachedIndex) {
-    return cachedIndex;
+  if (!replayIndex) {
+    replayIndex = { retainedStates: [] };
+    previewReplayIndexCache.set(previewEvents, replayIndex);
   }
 
-  let retainedState: PreviewState | undefined;
-  const retainedStates: PreviewState[] = [];
-
-  for (const previewEvent of previewEvents) {
-    const nextPreviewState = mergePreviewEventState(previewEvent, retainedState);
-    retainedState = nextPreviewState.retainedState;
-    retainedStates.push(retainedState);
+  // Streaming playback appends to this same array in place (APPEND_RECORDING_DELTA),
+  // so the fold is *extended* rather than built once — a cache that stopped at the
+  // pre-stream length would hand back `undefined` for every streamed-in index, and a
+  // seek there would apply an empty preview state (losing isOpen/mode/size/content).
+  // The fold is a pure prefix scan, so extending is exact.
+  const { retainedStates } = replayIndex;
+  for (let index = retainedStates.length; index < previewEvents.length; index += 1) {
+    retainedStates.push(
+      mergePreviewEventState(
+        previewEvents[index],
+        index === 0 ? undefined : retainedStates[index - 1],
+      ).retainedState,
+    );
   }
 
-  const replayIndex = { retainedStates };
-  previewReplayIndexCache.set(previewEvents, replayIndex);
   return replayIndex;
 }
 

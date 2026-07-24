@@ -81,22 +81,24 @@ function applyWhiteboardEvent(
 }
 
 function getWhiteboardReplayIndex(events: WhiteboardEvent[]): WhiteboardReplayIndex {
-  const cached = whiteboardReplayIndexCache.get(events);
+  let replayIndex = whiteboardReplayIndexCache.get(events);
 
-  if (cached) {
-    return cached;
+  if (!replayIndex) {
+    replayIndex = { retainedStates: [] };
+    whiteboardReplayIndexCache.set(events, replayIndex);
   }
 
-  let state = EMPTY_WHITEBOARD_SCENE;
-  const retainedStates: WhiteboardSceneState[] = [];
-
-  for (const event of events) {
-    state = applyWhiteboardEvent(state, event);
-    retainedStates.push(state);
+  // Streaming playback appends to this same array in place (APPEND_RECORDING_DELTA),
+  // so the fold is *extended* rather than built once — a cache that stopped at the
+  // pre-stream length would hand back `undefined` for every streamed-in index, which
+  // freezes the board and crashes the interpolation path. The fold is a pure prefix
+  // scan, so extending is exact. Same technique as `latestEditorModelBoundaryTime`.
+  const { retainedStates } = replayIndex;
+  for (let index = retainedStates.length; index < events.length; index += 1) {
+    const base = index === 0 ? EMPTY_WHITEBOARD_SCENE : retainedStates[index - 1];
+    retainedStates.push(applyWhiteboardEvent(base, events[index]));
   }
 
-  const replayIndex = { retainedStates };
-  whiteboardReplayIndexCache.set(events, replayIndex);
   return replayIndex;
 }
 

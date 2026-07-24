@@ -1045,4 +1045,115 @@ describe("replayState", () => {
     });
     expect(result.stateToApply?.elements.map((element) => element.id)).toEqual(["b", "a"]);
   });
+
+  // Streaming playback (APPEND_RECORDING_DELTA) pushes newly decoded records into the
+  // *same* track arrays the replay index caches are keyed on. A cache built once at
+  // first access would then stop short of the streamed-in events.
+  describe("streamed-in events (arrays appended to in place)", () => {
+    it("keeps folding whiteboard events appended after the index was first built", () => {
+      const whiteboardEvents: WhiteboardEvent[] = [
+        {
+          timestamp: 0,
+          upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }],
+          isOpen: true,
+        },
+      ];
+
+      // Build the cache at the pre-stream length.
+      getWhiteboardReplayResult({ whiteboardEvents, currentTime: 0, lastAppliedIndex: -1 });
+
+      whiteboardEvents.push({
+        timestamp: 1000,
+        upserts: [{ id: "b", version: 1, versionNonce: 2, isDeleted: false }],
+      });
+
+      const streamed = getWhiteboardReplayResult({
+        whiteboardEvents,
+        currentTime: 1000,
+        lastAppliedIndex: 0,
+      });
+      expect(streamed.nextIndex).toBe(1);
+      expect(streamed.stateToApply?.elements.map((element) => element.id)).toEqual(["a", "b"]);
+    });
+
+    it("interpolates into a whiteboard event appended after the index was first built", () => {
+      const whiteboardEvents: WhiteboardEvent[] = [
+        {
+          timestamp: 0,
+          upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }],
+          isOpen: true,
+        },
+        {
+          timestamp: 1000,
+          upserts: [{ id: "b", version: 1, versionNonce: 2, isDeleted: false }],
+        },
+      ];
+
+      getWhiteboardReplayResult({ whiteboardEvents, currentTime: 0, lastAppliedIndex: -1 });
+
+      whiteboardEvents.push({
+        timestamp: 2000,
+        upserts: [
+          {
+            id: "c",
+            type: "freedraw",
+            points: [
+              [0, 0],
+              [1, 1],
+            ],
+            version: 1,
+            versionNonce: 3,
+            isDeleted: false,
+          },
+        ],
+      });
+
+      // A tick inside the streamed-in event's interpolation window used to throw.
+      expect(() =>
+        getWhiteboardReplayResult({
+          whiteboardEvents,
+          currentTime: 1950,
+          lastAppliedIndex: 1,
+        }),
+      ).not.toThrow();
+    });
+
+    it("seeks into preview events appended after the index was first built", () => {
+      const previewEvents: PreviewEvent[] = [
+        {
+          type: "preview_open",
+          timestamp: 0,
+          isOpen: true,
+          size: "small",
+          mode: "docked",
+          content: "<h1>one</h1>",
+        },
+      ];
+
+      getPreviewReplayResult({
+        previewEvents,
+        currentTime: 0,
+        lastAppliedIndex: -1,
+        isSeeking: true,
+      });
+
+      previewEvents.push({
+        type: "preview_refresh",
+        timestamp: 1000,
+        content: "<h1>two</h1>",
+      });
+
+      const streamed = getPreviewReplayResult({
+        previewEvents,
+        currentTime: 1000,
+        lastAppliedIndex: -1,
+        isSeeking: true,
+      });
+      expect(streamed.nextIndex).toBe(1);
+      // Carried forward from the first event, not lost to an empty state.
+      expect(streamed.retainedState?.isOpen).toBe(true);
+      expect(streamed.retainedState?.mode).toBe("docked");
+      expect(streamed.retainedState?.content).toBe("<h1>two</h1>");
+    });
+  });
 });
