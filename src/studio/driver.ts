@@ -148,6 +148,17 @@ function throwIfAborted(signal: AbortSignal): void {
 // what makes the recorded motion read as a hand rather than a 30fps slideshow.
 const CURSOR_STEP_MS = 16;
 
+/**
+ * Placeholder for the `timestamp` field on events handed to the recorder. The
+ * capture appenders always overwrite it with the session-relative time
+ * (core/machine/recordingSession.ts), so the value here never survives. It used
+ * to be `performance.now()`, which reads like exactly the wall-clock/recording-clock
+ * mixup the RecordingSession docblock warns against — and would be one the moment
+ * an appender stopped overwriting (QA compares recorded timestamps against planned
+ * action times, so a raw reading would fail every preview gate).
+ */
+const RECORDER_ASSIGNS_TIMESTAMP = 0;
+
 function previewCommandTarget(target: StudioPreviewTarget | undefined) {
   return target ? { testId: target.value } : undefined;
 }
@@ -801,7 +812,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
         deps.notifyPreviewEvent({
           type: "preview_checkpoint",
-          timestamp: performance.now(),
+          timestamp: RECORDER_ASSIGNS_TIMESTAMP,
           checkpoint: {
             actionId,
             route: inspection.route,
@@ -837,7 +848,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       // the store so the panel renders it (no collaboration in studio renders).
       deps.notifySlideEvent({
         type: "slide_open",
-        timestamp: performance.now(),
+        timestamp: RECORDER_ASSIGNS_TIMESTAMP,
         slideId,
         isMaximized: maximized,
         indexv: 0,
@@ -865,7 +876,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       const previewState = selectPreviewState(deps.slidesStore.getSnapshot().context);
       deps.notifySlideEvent({
         type: "slide_close",
-        timestamp: performance.now(),
+        timestamp: RECORDER_ASSIGNS_TIMESTAMP,
         slideId: previewState.currentSlideId ?? undefined,
       });
       deps.slidesStore.trigger.setPreviewState({
@@ -892,7 +903,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
 
       const current = deps.whiteboardStore.getSnapshot().context.scene;
       const event: WhiteboardEvent = {
-        timestamp: performance.now(),
+        timestamp: RECORDER_ASSIGNS_TIMESTAMP,
         ...(upserts.length > 0 ? { upserts } : {}),
         ...(open === undefined || open === current.isOpen ? {} : { isOpen: open }),
         ...(maximized === undefined || maximized === current.isMaximized
