@@ -64,6 +64,14 @@ interface TimedAction {
   action: ScriptAction;
   sceneId: string;
   at: number;
+  /**
+   * Position in scene/action authoring order. Two actions can resolve to the same
+   * absolute time — most often a group anchored `afterAction` to one predecessor,
+   * since runtime/preview/expect actions have zero modelled busy time — and the
+   * Performer executes plan order strictly sequentially. This is the tiebreak that
+   * makes "same instant" fall back to the order the author wrote.
+   */
+  authoredIndex: number;
 }
 
 const CADENCES = {
@@ -176,7 +184,7 @@ export function compileLessonScript({
 
   // ---- Resolve anchors to absolute times ----------------------------------
   const authored: TimedAction[] = [];
-  const pending: TimedAction[] = [];
+  let pending: TimedAction[] = [];
   const resolvedEndAt = new Map<string, number>();
   const typingSeed = typingSeedsOf(script);
   // dependent id → predecessor id, for every `afterAction`-anchored action. Emitted
@@ -184,34 +192,45 @@ export function compileLessonScript({
   // predecessor's acknowledgement rather than a placeholder planned time (STUDIO-03).
   const dependencies = new Map<string, string>();
 
+  let authoredIndex = 0;
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
       const anchor = action.at;
+      const entry = { action, sceneId: scene.id, at: Number.NaN, authoredIndex };
+      authoredIndex += 1;
       if ("mark" in anchor) {
         const marker = requireMarker(extracted, anchor.mark);
-        const at = Math.max(0, markerTimeMs(alignment, marker) + anchor.offsetMs);
-        authored.push({ action, sceneId: scene.id, at });
-        resolvedEndAt.set(action.id, at + actionBusyMs(action, typingSeed.get(action.id)!));
+        entry.at = Math.max(0, markerTimeMs(alignment, marker) + anchor.offsetMs);
+        authored.push(entry);
+        resolvedEndAt.set(action.id, entry.at + actionBusyMs(action, typingSeed.get(action.id)!));
       } else if ("scene" in anchor) {
-        const at = Math.max(0, sceneStartMs(alignment, extracted, scene.id) + anchor.offsetMs);
-        authored.push({ action, sceneId: scene.id, at });
-        resolvedEndAt.set(action.id, at + actionBusyMs(action, typingSeed.get(action.id)!));
+        entry.at = Math.max(0, sceneStartMs(alignment, extracted, scene.id) + anchor.offsetMs);
+        authored.push(entry);
+        resolvedEndAt.set(action.id, entry.at + actionBusyMs(action, typingSeed.get(action.id)!));
       } else {
-        pending.push({ action, sceneId: scene.id, at: Number.NaN });
+        pending.push(entry);
       }
     }
   }
 
-  // afterAction chains: iterate until fixpoint; anything left is a cycle.
+  // afterAction chains: iterate until fixpoint; anything left is a cycle. The pass
+  // runs forward through `pending` so a chain resolves in one sweep and a group
+  // sharing one predecessor is appended in authored order rather than reversed.
   let progressed = true;
   while (pending.length > 0 && progressed) {
     progressed = false;
-    for (let i = pending.length - 1; i >= 0; i--) {
-      const entry = pending[i];
+    const stillPending: TimedAction[] = [];
+    for (const entry of pending) {
       const anchor = entry.action.at;
-      if (!("afterAction" in anchor)) continue;
+      if (!("afterAction" in anchor)) {
+        stillPending.push(entry);
+        continue;
+      }
       const referencedEnd = resolvedEndAt.get(anchor.afterAction);
-      if (referencedEnd === undefined) continue;
+      if (referencedEnd === undefined) {
+        stillPending.push(entry);
+        continue;
+      }
       // A modeled edit (typing/select) has a deterministic busy duration, so a
       // dependent can carry its real planned start after that duration. Runtime
       // and preview waits remain zero-modelled and therefore keep the predecessor
@@ -223,9 +242,9 @@ export function compileLessonScript({
       );
       dependencies.set(entry.action.id, anchor.afterAction);
       authored.push(entry);
-      pending.splice(i, 1);
       progressed = true;
     }
+    pending = stillPending;
   }
   if (pending.length > 0) {
     throw new CompileError(
@@ -233,7 +252,10 @@ export function compileLessonScript({
     );
   }
 
-  authored.sort((left, right) => left.at - right.at);
+  // Ties fall back to authoring order: zero-busy dependents of one predecessor all
+  // land on the same instant, and the Performer runs plan order sequentially, so
+  // without this the author's sequence would silently invert.
+  authored.sort((left, right) => left.at - right.at || left.authoredIndex - right.authoredIndex);
 
   // ---- Attention cursor choreography (§7) ----------------------------------
   const random = createSeededRandom(script.build.seed ^ 0x5f3759df);

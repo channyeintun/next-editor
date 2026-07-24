@@ -203,6 +203,28 @@ describe("compileLessonScript", () => {
     expectOutput.at = { afterAction: "run" };
     expect(() => compileLessonScript(compileInputFor(script))).toThrow(/cycle/);
   });
+
+  // Zero-busy dependents of one predecessor all land on the same instant, and the
+  // Performer executes plan order strictly sequentially — so the compiled order at
+  // that instant has to be the order the author wrote.
+  it("keeps authored order for actions sharing one afterAction predecessor", () => {
+    const script = loadPilotScript();
+    const scene = script.scenes[1];
+    const run = scene.actions.find((action) => action.id === "run")!;
+    const expectOutput = scene.actions.find((action) => action.id === "expect-output")!;
+    const expectFile = scene.actions.find((action) => action.id === "expect-file-main")!;
+    expectOutput.at = { afterAction: "run" };
+    expectFile.at = { afterAction: "run" };
+
+    const { plan } = compileLessonScript(scheduledInputFor(script));
+    const order = plan.actions.map((action) => action.id);
+    const runIndex = order.indexOf(run.id);
+    expect(order.indexOf("expect-output")).toBeGreaterThan(runIndex);
+    expect(order.indexOf("expect-file-main")).toBeGreaterThan(order.indexOf("expect-output"));
+    // Same instant — the tiebreak, not the timestamp, is what orders them.
+    const at = (id: string) => plan.actions.find((action) => action.id === id)!.at;
+    expect(at("expect-file-main")).toBe(at("expect-output"));
+  });
 });
 
 const TOUR_PATH = resolve(__dirname, "./__fixtures__/go-cube-tour.yaml");
