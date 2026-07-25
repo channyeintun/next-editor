@@ -203,6 +203,41 @@ function writeIframeContent(
   }
 }
 
+/**
+ * Whether the preview frame may keep `allow-same-origin`.
+ *
+ * The flag is only dangerous on the `srcdoc` path: an about:srcdoc document
+ * inherits its embedder's origin, so recorded HTML from a `.ne` would run as
+ * first-party script on the app's origin.
+ *
+ * On the live WebContainer URL the flag is REQUIRED, not merely harmless. That
+ * document is cross-origin, so the flag only preserves *its own* origin — and
+ * without it the preview lands in an opaque origin where its service worker
+ * cannot register, and WebContainer replaces the app with its "enable storage
+ * partitioning" placeholder.
+ *
+ * The condition mirrors the effect that actually assigns `iframe.src`, rather
+ * than `isLiveRuntimePreviewActive` (which additionally requires
+ * `runtimeStatus === "ready"`, and so would miss the window where the URL is
+ * already assigned but the status has not caught up).
+ */
+export function shouldAllowSameOriginPreview({
+  hasRecording,
+  isPlaybackPreviewActive,
+  runsInWebContainer,
+  hasRuntimePreviewUrl,
+}: {
+  hasRecording: boolean;
+  isPlaybackPreviewActive: boolean;
+  runsInWebContainer: boolean;
+  hasRuntimePreviewUrl: boolean;
+}): boolean {
+  // No recording open: ordinary authoring of the user's own content.
+  if (!hasRecording) return true;
+  // Showing the live runtime URL — cross-origin, and it needs the flag.
+  return !isPlaybackPreviewActive && runsInWebContainer && hasRuntimePreviewUrl;
+}
+
 export function shouldUsePlaybackPreview({
   currentRecording,
   isPlaying,
@@ -336,6 +371,17 @@ export function usePreviewController(): PreviewController {
     lessonRunsInWebContainer(lessonType) &&
     effectiveRuntimeStatus === "ready" &&
     Boolean(effectiveRuntimePreviewUrl);
+  // True in exactly the states where the effect below points this frame at the
+  // cross-origin WebContainer URL via `src` (see the `runtimePreviewSrcNeedsReset`
+  // branch). Deliberately mirrors that condition rather than
+  // `isLiveRuntimePreviewActive`, which also requires `runtimeStatus === "ready"`
+  // and so would miss the window where the URL is already assigned.
+  const allowSameOriginPreview = shouldAllowSameOriginPreview({
+    hasRecording: Boolean(currentRecording),
+    isPlaybackPreviewActive,
+    runsInWebContainer: lessonRunsInWebContainer(lessonType),
+    hasRuntimePreviewUrl: Boolean(runtimePreviewUrl),
+  });
   const isRuntimeManagedPreview = lessonRunsInWebContainer(lessonType) && runnerConfig.enabled;
   const runtimePreviewState = getRuntimePreviewState(
     effectiveRuntimeStatus,
@@ -961,7 +1007,20 @@ export function usePreviewController(): PreviewController {
     runtimePreviewUrl,
     updateIframeContent,
     requestRuntimePreviewSnapshot,
+    // Changing the sandbox mode remounts the frame (RuntimePreviewRenderer keys
+    // on it, because a sandbox change does not apply to an already-loaded
+    // document). The new element starts empty, so this effect has to re-run and
+    // repaint it — otherwise the preview would go blank on the transition.
+    allowSameOriginPreview,
   ]);
+
+  // Paired with the dependency above: the content short-circuits below compare
+  // against `lastContentRef`, which still holds what the *previous* element was
+  // showing. Clearing it on a remount lets the placeholder/content path write
+  // again instead of deciding it is already up to date.
+  useEffect(() => {
+    lastContentRef.current = "";
+  }, [allowSameOriginPreview]);
 
   useEffect(() => {
     if (isPlaybackPreviewActive) {
@@ -1330,10 +1389,7 @@ export function usePreviewController(): PreviewController {
     iframeRef,
     replayContainerRef,
     isRrwebReplayActive,
-    // Keyed on "is a recording loaded", not "is it playing": once a `.ne` is
-    // open, its HTML can reach this frame through the snapshot path both during
-    // playback and after the viewer takes manual control of the workspace.
-    allowSameOriginPreview: !currentRecording,
+    allowSameOriginPreview,
     size,
     isOpen,
     panelMode,
