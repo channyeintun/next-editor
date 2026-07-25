@@ -14,6 +14,30 @@ import type { Env } from "../env";
 // this route on session + lesson status instead of relying on the key alone.
 export const mediaRoute = new Hono<{ Bindings: Env }>();
 
+// Content types this route will hand to a browser as-is. Everything else is
+// rewritten to application/octet-stream + Content-Disposition: attachment, so
+// no stored type can turn a /media URL into a same-origin HTML document. Kept
+// in sync with the extension map in routes/uploads.ts plus the raster types
+// routes/slideImages.ts stores. Deliberately excludes text/html, image/svg+xml,
+// and anything else a browser executes script from.
+const RENDERABLE_CONTENT_TYPES = new Set([
+  "application/octet-stream",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/wav",
+  "audio/webm",
+  "image/avif",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "text/vtt",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+]);
+
 // Hono's bare "/*" wildcard doesn't populate a "*" param (verified empirically
 // against a running dev server — it came back undefined); ":key{.+}" is the
 // form that actually captures the tail into c.req.param("key").
@@ -30,12 +54,25 @@ mediaRoute.get("/:key{.+}", async (c) => {
 
   const headers = new Headers();
   object.writeHttpMetadata(headers);
+  // The stored content-type is replayed to a browser on this app's own origin,
+  // so a stored `text/html` would execute as first-party script on direct
+  // navigation. routes/uploads.ts derives the stored type from the filename
+  // extension, but this route also serves objects written by other paths
+  // (collaboration assets take their MIME from the uploader's header) and
+  // objects stored before that fix — so the renderable set is pinned here too.
+  // Anything outside it is served as an inert download.
+  //
+  // `nosniff` alone is NOT sufficient and never was: it stops the browser
+  // sniffing *away from* a declared type, but a declared text/html is still
+  // parsed as a document. Likewise the upload extension allow-list constrains
+  // the URL, not the type the browser dispatches on.
+  const storedContentType = headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!RENDERABLE_CONTENT_TYPES.has(storedContentType)) {
+    headers.set("content-type", "application/octet-stream");
+    headers.set("content-disposition", "attachment");
+  }
   headers.set("etag", object.httpEtag);
   headers.set("accept-ranges", "bytes");
-  // Defense in depth: stops the browser from re-sniffing a mislabeled upload
-  // into an executable content-type (e.g. text/html) regardless of what
-  // content-type was stored — the upload route's extension allow-list is the
-  // primary defense (see routes/uploads.ts).
   headers.set("x-content-type-options", "nosniff");
   // Imported slides render inside a sandboxed srcdoc iframe. That frame has
   // an opaque origin, so these otherwise same-origin image requests must opt

@@ -14,6 +14,41 @@ export const uploadsRoute = new Hono<{ Bindings: Env }>();
 
 const THUMBNAIL_FILENAME_RE = /\.(?:png|jpe?g)$/i;
 const CAPTION_FILENAME_RE = /\.vtt$/i;
+
+// The stored content-type is derived from the filename extension, never copied
+// from the request header. R2 replays whatever type was stored (routes/media.ts
+// -> writeHttpMetadata) from the app's own origin, so trusting the uploader's
+// header would let any signed-in user park `Content-Type: text/html` on a
+// `.png` key and get script execution on nexteditor.dev. `nosniff` does NOT
+// help here: it stops the browser sniffing *away from* a declared type, but a
+// declared text/html is still parsed as a document. The route's extension
+// allow-list constrains the URL, not the type the browser acts on — so the
+// type has to come from the extension. Mirrors the ALLOWED_CONTENT_TYPES
+// approach already used by routes/slideImages.ts.
+const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+  ne: "application/octet-stream",
+  ogg: "audio/ogg",
+  weba: "audio/webm",
+  webm: "video/webm",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  m4a: "audio/mp4",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  vtt: "text/vtt",
+};
+
+function storedContentTypeFor(filename: string): string {
+  const extension = filename.slice(filename.lastIndexOf(".") + 1).toLowerCase();
+  // Object.hasOwn, not a bare lookup: an extension of `constructor` would
+  // otherwise resolve through the prototype chain to a non-string.
+  return Object.hasOwn(CONTENT_TYPE_BY_EXTENSION, extension)
+    ? CONTENT_TYPE_BY_EXTENSION[extension]
+    : "application/octet-stream";
+}
 // Recordings (audio/video/.ne) are legitimately much larger than a thumbnail
 // image; this is a hard backstop against storage abuse, not a tuned product
 // limit — raise it if real recordings ever get rejected.
@@ -70,7 +105,7 @@ const handleMediaUpload = async (c: Context<{ Bindings: Env }>) => {
   const key = `lessons/${id}/${filename}`;
   await c.env.BUCKET.put(key, c.req.raw.body, {
     httpMetadata: {
-      contentType: c.req.header("content-type") ?? "application/octet-stream",
+      contentType: storedContentTypeFor(filename),
     },
   });
 
