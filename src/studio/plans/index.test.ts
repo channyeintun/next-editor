@@ -9,13 +9,14 @@ import { RECORDING_BUFFER_MS, scheduleDialogs } from "../script/schedule";
 import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_SOURCES } from "./index";
 
 describe("studio lesson registry", () => {
-  it("registers exactly the checked-in scripts (Rust course + Go + Next Editor)", () => {
+  it("registers exactly the checked-in scripts (Rust course + Go + Kotlin + Next Editor)", () => {
     // Scripts auto-register by filename without any manual registry edit.
     // Grows as the course does; keep this list in sync with the YAML files
     // under src/studio/scripts/.
     expect(Object.keys(STUDIO_SOURCES).sort()).toEqual([
       "go-crash-course",
       "go-error-values",
+      "kotlin-crash-course",
       "next-editor-state-machine",
       "rust-borrow",
       "rust-control-flow",

@@ -1,0 +1,2401 @@
+# Kotlin crash course — the whole language in one file, built from a bare main.
+#
+# Structured after Atomic Kotlin's seven sections (Programming Basics,
+# Introduction to Objects, Usability, Functional Programming,
+# Object-Oriented Programming, Preventing Failure, Power Tools), then brought
+# forward to the Kotlin the compiler actually accepts today. The book stops at
+# Kotlin 1.5 (2021); this lesson runs on 2.4.10, the version the Playground
+# proxy pins, so it also teaches what landed since: the K2 compiler, `data
+# object`, guard conditions in `when`, multi-dollar string interpolation, and
+# coroutines — which the book never covers at all.
+#
+# Covers, in order: val/var and type inference; string templates and the
+# multi-dollar prefix; `if` as an expression; ranges, `for`, `while` and `in`;
+# expression-bodied functions with default and named arguments; `vararg`; data
+# classes with copy/destructuring/equality; read-only and mutable collections;
+# infix notation (starting from the `to` already on screen in `mapOf`); enum
+# classes with a constructor property and `entries`; nullable types with `?.`,
+# `?:`, `?.let` and `!!`; extension functions and properties; a sealed
+# interface with a `data object` and an exhaustive `when` carrying a guard
+# condition; lambdas, `it`, and member references; hand-written higher-order
+# functions and a receiver lambda (`StringBuilder.() -> Unit`); lazy sequences;
+# interfaces, abstract classes and polymorphism; class delegation with `by`; a
+# companion object behind a private constructor plus a plain `object`
+# singleton; operator overloading; `by lazy` and `lateinit`; a generic function
+# with a `Comparable` constraint and an `inline`/`reified` one; `require`
+# inside `runCatching` and `try` as an expression; the `apply` scope function;
+# `suspend` functions run concurrently with `async`/`awaitAll`; and finally
+# `typealias`, an `@JvmInline value class`, and context parameters (Stable in
+# 2.4). Then it runs the lot.
+#
+# Coverage is checked against Atomic Kotlin's atom list, not by eye: an earlier
+# draft silently skipped infix, enums, higher-order declarations, vararg,
+# try/catch, `object`, `lateinit`, `!!`, `while` and reified — including the
+# especially bad case of using infix `to` on screen without ever naming it.
+#
+# Insert-only, including the `import` line, which is inserted at the top of the
+# file at the moment coroutines need it — the way a developer adds one. Each
+# topic inserts its top-level declaration at the end of the file first, then
+# the call in main, so every anchor is the previous topic's last line and stays
+# predictable. `operator fun plus` is the one exception: it is inserted into
+# Point's existing header line, turning `data class Point(...)` into a body,
+# which insert-only edits allow because nothing is removed.
+#
+# The program is verified against the real Kotlin Playground compiler
+# (api.kotlinlang.org 2.4.10, confType java — the exact endpoint the worker
+# proxies), not read off the page: zero errors, zero warnings, and three runs
+# produce identical bytes. Nothing printed depends on scheduling — awaitAll
+# returns results in the order the coroutines were started.
+#
+# Opens on the history the book's 2021 edition could not have: the timeline
+# from the 2011 announcement to 2.4, then how the compiler itself works —
+# one K2 front end feeding four back ends (JVM/Android, JS, Wasm, Native).
+#
+# Six drawn boards, wiped between topics with `clear: true`: the timeline, the
+# compiler, the shape of a Kotlin file, the nullable/non-nullable type split,
+# the sealed hierarchy, and coroutines fanning out. The first open and the last
+# close sit inside the studio's quiet recording handles, so the voice never
+# starts or ends over a panel animation.
+#
+# Boards are authored for Excalidraw's dark theme, which inverts colors, so the
+# mid-tone palette (#1971c2, #2f9e44, #f08c00, #e03131, #9c36b5) draws as the
+# lighter version of the same hue and #1e1e1e draws as white — see the note
+# above `whiteboardAssets` for what each color means.
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/kotlin-crash-course.yaml
+schemaVersion: 1
+
+lesson:
+  slug: kotlin-crash-course
+  title: "Kotlin crash course: the whole language in one file"
+  locale: en-US
+  workspace:
+    lessonType: kotlin
+    name: Kotlin Lesson
+    entryFilePath: Main.kt
+    files:
+      Main.kt: |
+        fun main() {
+            println("Kotlin, in one file")
+        }
+  # Authored for Excalidraw's DARK theme (WhiteboardPanel pins theme="dark"),
+  # which applies invert(93%) hue-rotate(180deg) to the canvas: #1e1e1e draws as
+  # near-white, and the standard mid-tone Excalidraw palette below draws as the
+  # legible lighter version of the same hue. Colour carries meaning here — blue
+  # names the thing under discussion, green is what is safe or already done,
+  # orange is the caveat, red is the part under the spotlight, purple is the
+  # result. Never author pale/near-white: it inverts to near-black and vanishes.
+  #
+  # Sizes follow the studio legibility rule (titles >= 36, labels >= 28): the
+  # hand-drawn font is tight, the board shows at 100% zoom, and autoResize keeps
+  # each label on one line, so a bigger font just needs a wider box.
+  whiteboardAssets:
+    # --- Board one: where Kotlin came from (vertical, so labels get room) ----
+    - {
+        id: hist-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 660,
+        height: 46,
+        fontSize: 36,
+        text: "Where Kotlin came from",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: hist-axis,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 300,
+        y: 214,
+        width: 52,
+        height: 336,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: hist-y1,
+        kind: text,
+        x: 376,
+        y: 222,
+        width: 130,
+        height: 38,
+        fontSize: 30,
+        text: "2011",
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: hist-l1,
+        kind: text,
+        x: 516,
+        y: 224,
+        width: 420,
+        height: 36,
+        fontSize: 28,
+        text: "announced",
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: hist-y2,
+        kind: text,
+        x: 376,
+        y: 287,
+        width: 130,
+        height: 38,
+        fontSize: 30,
+        text: "2016",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: hist-l2,
+        kind: text,
+        x: 516,
+        y: 289,
+        width: 420,
+        height: 36,
+        fontSize: 28,
+        text: "1.0 stable",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: hist-y3,
+        kind: text,
+        x: 376,
+        y: 352,
+        width: 130,
+        height: 38,
+        fontSize: 30,
+        text: "2019",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: hist-l3,
+        kind: text,
+        x: 516,
+        y: 354,
+        width: 420,
+        height: 36,
+        fontSize: 28,
+        text: "Android goes Kotlin",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: hist-y4,
+        kind: text,
+        x: 376,
+        y: 417,
+        width: 130,
+        height: 38,
+        fontSize: 30,
+        text: "2024",
+        strokeColor: "#e03131",
+      }
+    - {
+        id: hist-l4,
+        kind: text,
+        x: 516,
+        y: 419,
+        width: 420,
+        height: 36,
+        fontSize: 28,
+        text: "2.0 and the K2 compiler",
+        strokeColor: "#e03131",
+      }
+    - {
+        id: hist-y5,
+        kind: text,
+        x: 376,
+        y: 482,
+        width: 130,
+        height: 38,
+        fontSize: 30,
+        text: "2026",
+        strokeColor: "#9c36b5",
+      }
+    - {
+        id: hist-l5,
+        kind: text,
+        x: 516,
+        y: 484,
+        width: 420,
+        height: 36,
+        fontSize: 28,
+        text: "2.4 today",
+        strokeColor: "#9c36b5",
+      }
+    - {
+        id: hist-note,
+        kind: text,
+        x: 300,
+        y: 566,
+        width: 680,
+        height: 38,
+        fontSize: 28,
+        text: "JetBrains, open source since 2012",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: hist-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 566,
+        width: 470,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    # --- Board two: one compiler, every target ------------------------------
+    - {
+        id: comp-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 680,
+        height: 46,
+        fontSize: 36,
+        text: "One compiler, every target",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-src-box,
+        kind: rectangle,
+        x: 300,
+        y: 310,
+        width: 232,
+        height: 68,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-src-text,
+        kind: text,
+        x: 320,
+        y: 328,
+        width: 200,
+        height: 36,
+        fontSize: 28,
+        text: "your .kt files",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 548,
+        y: 324,
+        width: 64,
+        height: 44,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-k2-box,
+        kind: rectangle,
+        x: 628,
+        y: 302,
+        width: 172,
+        height: 84,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: comp-k2-text,
+        kind: text,
+        x: 664,
+        y: 326,
+        width: 120,
+        height: 40,
+        fontSize: 32,
+        text: "K2",
+        strokeColor: "#e03131",
+      }
+    - {
+        id: comp-k2-note,
+        kind: text,
+        x: 628,
+        y: 398,
+        width: 260,
+        height: 36,
+        fontSize: 28,
+        text: "front end",
+        strokeColor: "#e03131",
+      }
+    - {
+        id: comp-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 816,
+        y: 324,
+        width: 64,
+        height: 44,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-jvm-box,
+        kind: rectangle,
+        x: 894,
+        y: 202,
+        width: 206,
+        height: 62,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: comp-jvm-text,
+        kind: text,
+        x: 912,
+        y: 218,
+        width: 176,
+        height: 36,
+        fontSize: 28,
+        text: "JVM, Android",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: comp-js-box,
+        kind: rectangle,
+        x: 894,
+        y: 278,
+        width: 206,
+        height: 62,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: comp-js-text,
+        kind: text,
+        x: 912,
+        y: 294,
+        width: 176,
+        height: 36,
+        fontSize: 28,
+        text: "JavaScript",
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: comp-wasm-box,
+        kind: rectangle,
+        x: 894,
+        y: 354,
+        width: 206,
+        height: 62,
+        strokeColor: "#9c36b5",
+      }
+    - {
+        id: comp-wasm-text,
+        kind: text,
+        x: 912,
+        y: 370,
+        width: 176,
+        height: 36,
+        fontSize: 28,
+        text: "WebAssembly",
+        strokeColor: "#9c36b5",
+      }
+    - {
+        id: comp-native-box,
+        kind: rectangle,
+        x: 894,
+        y: 430,
+        width: 206,
+        height: 62,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: comp-native-text,
+        kind: text,
+        x: 912,
+        y: 446,
+        width: 176,
+        height: 36,
+        fontSize: 28,
+        text: "Native (LLVM)",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: comp-note,
+        kind: text,
+        x: 300,
+        y: 546,
+        width: 680,
+        height: 38,
+        fontSize: 28,
+        text: "K2 is the default since 2.0",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 546,
+        width: 400,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    # --- Board three: the shape of a Kotlin file ----------------------------
+    - {
+        id: kt-title,
+        kind: text,
+        x: 300,
+        y: 156,
+        width: 680,
+        height: 46,
+        fontSize: 36,
+        text: "The shape of a Kotlin file",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: kt-main-box,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 360,
+        height: 72,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: kt-main-text,
+        kind: text,
+        x: 324,
+        y: 258,
+        width: 320,
+        height: 36,
+        fontSize: 28,
+        text: "fun main()",
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: kt-entry-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 284,
+        y: 232,
+        width: 392,
+        height: 88,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: kt-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 458,
+        y: 324,
+        width: 48,
+        height: 44,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: kt-decl-box,
+        kind: rectangle,
+        x: 300,
+        y: 380,
+        width: 360,
+        height: 72,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: kt-decl-text,
+        kind: text,
+        x: 324,
+        y: 398,
+        width: 320,
+        height: 36,
+        fontSize: 28,
+        text: "fun, class, val",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: kt-note,
+        kind: text,
+        x: 300,
+        y: 506,
+        width: 680,
+        height: 38,
+        fontSize: 28,
+        text: "no class wrapper required",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: kt-note-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 506,
+        width: 440,
+        height: 42,
+        strokeColor: "#f08c00",
+      }
+    # --- Board four: nullable and non-nullable are different types ----------
+    - {
+        id: nl-title,
+        kind: text,
+        x: 300,
+        y: 156,
+        width: 680,
+        height: 46,
+        fontSize: 36,
+        text: "Two different types",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: nl-box-1,
+        kind: rectangle,
+        x: 300,
+        y: 246,
+        width: 280,
+        height: 104,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: nl-text-1,
+        kind: text,
+        x: 328,
+        y: 278,
+        width: 240,
+        height: 40,
+        fontSize: 30,
+        text: "String",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: nl-note-1,
+        kind: text,
+        x: 300,
+        y: 368,
+        width: 300,
+        height: 36,
+        fontSize: 28,
+        text: "never null",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: nl-box-2,
+        kind: rectangle,
+        x: 660,
+        y: 246,
+        width: 280,
+        height: 104,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: nl-text-2,
+        kind: text,
+        x: 688,
+        y: 278,
+        width: 240,
+        height: 40,
+        fontSize: 30,
+        text: "String?",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: nl-note-2,
+        kind: text,
+        x: 660,
+        y: 368,
+        width: 320,
+        height: 36,
+        fontSize: 28,
+        text: "may hold null",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: nl-note,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 700,
+        height: 38,
+        fontSize: 28,
+        text: "the compiler keeps them apart",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: nl-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 470,
+        width: 490,
+        height: 42,
+        strokeColor: "#1e1e1e",
+      }
+    # --- Board five: a sealed hierarchy -------------------------------------
+    - {
+        id: sh-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 680,
+        height: 46,
+        fontSize: 36,
+        text: "A sealed set of types",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sh-shape-box,
+        kind: rectangle,
+        x: 470,
+        y: 226,
+        width: 250,
+        height: 76,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: sh-shape-text,
+        kind: text,
+        x: 500,
+        y: 246,
+        width: 210,
+        height: 40,
+        fontSize: 30,
+        text: "Shape",
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: sh-arrow-left,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 396,
+        y: 312,
+        width: 62,
+        height: 58,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sh-arrow-right,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 714,
+        y: 312,
+        width: 62,
+        height: 58,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sh-circle-box,
+        kind: rectangle,
+        x: 290,
+        y: 384,
+        width: 250,
+        height: 76,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: sh-circle-text,
+        kind: text,
+        x: 320,
+        y: 404,
+        width: 210,
+        height: 38,
+        fontSize: 28,
+        text: "Circle",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: sh-origin-box,
+        kind: rectangle,
+        x: 650,
+        y: 384,
+        width: 250,
+        height: 76,
+        strokeColor: "#9c36b5",
+      }
+    - {
+        id: sh-origin-text,
+        kind: text,
+        x: 680,
+        y: 404,
+        width: 210,
+        height: 38,
+        fontSize: 28,
+        text: "Origin",
+        strokeColor: "#9c36b5",
+      }
+    - {
+        id: sh-note,
+        kind: text,
+        x: 300,
+        y: 516,
+        width: 700,
+        height: 38,
+        fontSize: 28,
+        text: "when needs no else branch",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: sh-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 516,
+        width: 460,
+        height: 42,
+        strokeColor: "#f08c00",
+      }
+    # --- Board six: coroutines fanning out ----------------------------------
+    - {
+        id: co-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 700,
+        height: 46,
+        fontSize: 36,
+        text: "three suspend calls, one wait",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: co-box-1,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 240,
+        height: 66,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: co-text-1,
+        kind: text,
+        x: 322,
+        y: 256,
+        width: 200,
+        height: 36,
+        fontSize: 28,
+        text: "fetchOne(1)",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: co-box-2,
+        kind: rectangle,
+        x: 300,
+        y: 326,
+        width: 240,
+        height: 66,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: co-text-2,
+        kind: text,
+        x: 322,
+        y: 342,
+        width: 200,
+        height: 36,
+        fontSize: 28,
+        text: "fetchOne(2)",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: co-box-3,
+        kind: rectangle,
+        x: 300,
+        y: 412,
+        width: 240,
+        height: 66,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: co-text-3,
+        kind: text,
+        x: 322,
+        y: 428,
+        width: 200,
+        height: 36,
+        fontSize: 28,
+        text: "fetchOne(3)",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: co-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 560,
+        y: 336,
+        width: 110,
+        height: 46,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: co-await-box,
+        kind: rectangle,
+        x: 690,
+        y: 318,
+        width: 250,
+        height: 88,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: co-await-text,
+        kind: text,
+        x: 716,
+        y: 344,
+        width: 210,
+        height: 38,
+        fontSize: 28,
+        text: "awaitAll()",
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: co-result,
+        kind: text,
+        x: 690,
+        y: 432,
+        width: 260,
+        height: 40,
+        fontSize: 30,
+        text: "[1, 4, 9]",
+        strokeColor: "#9c36b5",
+      }
+    - {
+        id: co-note,
+        kind: text,
+        x: 300,
+        y: 528,
+        width: 700,
+        height: 38,
+        fontSize: 28,
+        text: "results keep their order",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: co-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 528,
+        width: 420,
+        height: 42,
+        strokeColor: "#f08c00",
+      }
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 23
+
+runtime:
+  kind: kotlin-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 600
+    result:
+      status: success
+      output: "Kotlin, in one file\nKotlin 2.3, 6 letters\nval stays put, var moved to 2.4\na literal $0 needs no escape when Kotlin sets the prefix\nK2 compiler\nsum 15, [1, 4, 7, 10], true, countdown 0\n12\n_hi_ **hi**\nred-green-blue\nPoint(x=3, y=10) x=3 y=10 equal=true\n3 6 [1, 2]\n2 pow 10 = 1024\n[LOW=1, MEDIUM=5, HIGH=10]\n-1 nothing\nforced length 6\nKOTLIN! Java\nbig circle, circle 2, origin\n[6, 4, 5]\n[Kotlin, Scala]\n15 [KOTLIN, JAVA, SCALA]\n27 Kotlin2.4\n[1, 2, 4, 8, 16]\n[squawk, moo] parrot says squawk\nSQUAWK parrot\n1 2 2\n1 2\nPoint(x=4, y=6)\ndark\nlateinit false then true /api\n9 z\n[a, b]\nFailure(java.lang.IllegalArgumentException: 7 is odd) Success(4)\n12 -1\nlangs=3\n[1, 4, 9]\nDONE UserId(raw=7)\n> context parameters\n"
+
+scenes:
+  - id: history
+    narration: >
+      [[mark:draw-2011]] Kotlin comes from JetBrains, the company that makes
+      IntelliJ. They started building it in 2010, and showed it to the world in
+      2011. [[mark:draw-2016]] Version one point zero arrived in February 2016.
+      That's when the language settled down, and promised to stop breaking your
+      code. [[mark:draw-2019]] Then Google made Kotlin its preferred language
+      for Android, and a lot of people arrived at once.
+      [[mark:draw-2024]] In 2024, version two brought a new compiler.
+      [[mark:draw-2026]] And today we're on two point four.
+      [[mark:draw-hist-note]] It's been open source the whole way.
+    sources:
+      - {
+          title: "Kotlin — 10 Years of Kotlin: the past",
+          url: "https://kotlinlang.org/lp/10yearsofkotlin/past/",
+        }
+      - { title: "Kotlin docs — FAQ", url: "https://kotlinlang.org/docs/faq.html" }
+      - { title: "Android Developers — Kotlin", url: "https://developer.android.com/kotlin" }
+    actions:
+      # Both land in the two quiet seconds the studio reserves before the first
+      # dialog, so the panel is open and titled when the voice starts.
+      - {
+          id: open-board,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -1700 },
+          open: true,
+        }
+      - {
+          id: draw-hist-title,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -1200 },
+          upsertIds: [hist-title, hist-axis],
+          drawMs: 900,
+        }
+      - {
+          id: draw-2011,
+          type: whiteboard.apply,
+          at: { mark: draw-2011 },
+          upsertIds: [hist-y1, hist-l1],
+          drawMs: 800,
+        }
+      - {
+          id: draw-2016,
+          type: whiteboard.apply,
+          at: { mark: draw-2016 },
+          upsertIds: [hist-y2, hist-l2],
+          drawMs: 800,
+        }
+      - {
+          id: draw-2019,
+          type: whiteboard.apply,
+          at: { mark: draw-2019 },
+          upsertIds: [hist-y3, hist-l3],
+          drawMs: 800,
+        }
+      - {
+          id: draw-2024,
+          type: whiteboard.apply,
+          at: { mark: draw-2024 },
+          upsertIds: [hist-y4, hist-l4],
+          drawMs: 800,
+        }
+      - {
+          id: draw-2026,
+          type: whiteboard.apply,
+          at: { mark: draw-2026 },
+          upsertIds: [hist-y5, hist-l5],
+          drawMs: 800,
+        }
+      - {
+          id: draw-hist-note,
+          type: whiteboard.apply,
+          at: { mark: draw-hist-note },
+          upsertIds: [hist-note, hist-underline],
+          drawMs: 900,
+        }
+
+  - id: compiler
+    narration: >
+      [[mark:draw-comp-src]] So what happens when you press run? The compiler
+      reads your Kotlin files. [[mark:draw-comp-k2]] The front end works out
+      what every name means, checks the types, and decides whether the program
+      holds together. That part was rebuilt for version two, and it's called
+      K2. [[mark:draw-comp-targets]] Then a back end turns the result into
+      something that runs: bytecode for the JVM and Android, JavaScript for the
+      browser, WebAssembly, or native machine code through LLVM.
+      [[mark:draw-comp-note]] Same language, same front end, four places to run
+      it. We'll stay on the JVM today.
+    sources:
+      - {
+          title: "What's new in Kotlin 2.0.0 — the K2 compiler",
+          url: "https://kotlinlang.org/docs/whatsnew20.html",
+        }
+      - { title: "Kotlin docs — FAQ", url: "https://kotlinlang.org/docs/faq.html" }
+    actions:
+      # The timeline is wiped — this diagram reuses its canvas.
+      - id: draw-comp-src
+        type: whiteboard.apply
+        at: { mark: draw-comp-src }
+        clear: true
+        upsertIds: [comp-title, comp-src-box, comp-src-text, comp-arrow-1]
+        drawMs: 1600
+      - {
+          id: draw-comp-k2,
+          type: whiteboard.apply,
+          at: { mark: draw-comp-k2 },
+          upsertIds: [comp-k2-box, comp-k2-text, comp-k2-note],
+          drawMs: 1100,
+        }
+      - id: draw-comp-targets
+        type: whiteboard.apply
+        at: { mark: draw-comp-targets }
+        upsertIds:
+          [
+            comp-arrow-2,
+            comp-jvm-box,
+            comp-jvm-text,
+            comp-js-box,
+            comp-js-text,
+            comp-wasm-box,
+            comp-wasm-text,
+            comp-native-box,
+            comp-native-text,
+          ]
+        drawMs: 2600
+      - {
+          id: draw-comp-note,
+          type: whiteboard.apply,
+          at: { mark: draw-comp-note },
+          upsertIds: [comp-note, comp-underline],
+          drawMs: 900,
+        }
+
+  - id: shape
+    narration: >
+      [[mark:draw-kt-title]] Now, the shape of a Kotlin file.
+      [[mark:draw-main]] Fun main is where the program starts,
+      [[mark:circle-entry]] and it doesn't have to sit inside a class.
+      [[mark:draw-decls]] Functions, classes and values all live at the top
+      level of the file. [[mark:draw-note]] That's the first thing to unlearn
+      if you're coming from Java. [[mark:to-code]] Let's build the language
+      from there.
+    sources:
+      - {
+          title: "Kotlin docs — Basic syntax",
+          url: "https://kotlinlang.org/docs/basic-syntax.html",
+        }
+      - { title: "Kotlin docs — Functions", url: "https://kotlinlang.org/docs/functions.html" }
+    actions:
+      # The compiler diagram is wiped — this sketch reuses its canvas.
+      - id: draw-kt-title
+        type: whiteboard.apply
+        at: { mark: draw-kt-title }
+        clear: true
+        upsertIds: [kt-title]
+        drawMs: 700
+      - {
+          id: draw-main,
+          type: whiteboard.apply,
+          at: { mark: draw-main },
+          upsertIds: [kt-main-box, kt-main-text],
+          drawMs: 800,
+        }
+      - {
+          id: circle-entry,
+          type: whiteboard.apply,
+          at: { mark: circle-entry },
+          upsertIds: [kt-entry-circle],
+          drawMs: 800,
+        }
+      - {
+          id: draw-decls,
+          type: whiteboard.apply,
+          at: { mark: draw-decls },
+          upsertIds: [kt-arrow-1, kt-decl-box, kt-decl-text],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-note,
+          type: whiteboard.apply,
+          at: { mark: draw-note },
+          upsertIds: [kt-note, kt-note-underline],
+          drawMs: 900,
+        }
+      - { id: close-board, type: whiteboard.apply, at: { mark: to-code }, open: false }
+
+  - id: values
+    narration: >
+      [[mark:open-main]] Here's the starting point: a main function, one line
+      of output, and nothing else in the file. [[mark:type-values]] Values
+      first. We'll name the language, add a version number, and print them
+      together. [[mark:select-val]] Val names something that never changes, and
+      you'll reach for it almost every time. Var is the one that can be
+      reassigned. Neither line names a type, because Kotlin reads it from the
+      value on the right.
+    sources:
+      - {
+          title: "Kotlin docs — Variables",
+          url: "https://kotlinlang.org/docs/basic-syntax.html#variables",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: Main.kt }
+      - id: type-values
+        type: editor.type
+        at: { mark: type-values, offsetMs: -400 }
+        target: { file: Main.kt, after: "    println(\"Kotlin, in one file\")\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\n    val language = \"Kotlin\"\n    var release = 2.3\n    println(\"$language $release, ${language.length} letters\")\n    release = 2.4\n    println(\"val stays put, var moved to $release\")\n"
+      - id: select-val
+        type: editor.select
+        at: { mark: select-val }
+        target:
+          {
+            file: Main.kt,
+            text: "    val language = \"Kotlin\"\n    var release = 2.3",
+            occurrence: 1,
+          }
+
+  - id: templates
+    narration: >
+      Those printed lines are string templates. A dollar sign pulls a value
+      straight into the text, and curly braces hold a whole expression.
+      [[mark:type-template]] Kotlin two point two added a way to move that
+      prefix. [[mark:select-template]] Two dollars now start an interpolation,
+      so a single dollar is plain text. That saves a lot of escaping when the
+      string is full of currency or shell syntax.
+    sources:
+      - {
+          title: "Kotlin docs — String templates",
+          url: "https://kotlinlang.org/docs/strings.html#string-templates",
+        }
+      - {
+          title: "Kotlin docs — Multi-dollar string interpolation",
+          url: "https://kotlinlang.org/docs/strings.html#multi-dollar-string-interpolation",
+        }
+    actions:
+      - id: type-template
+        type: editor.type
+        at: { mark: type-template, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"val stays put, var moved to $release\")\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "    println($$\"\"\"a literal $0 needs no escape when $$language sets the prefix\"\"\")\n"
+      - id: select-template
+        type: editor.select
+        at: { mark: select-template }
+        target: { file: Main.kt, text: '$$"""', occurrence: 1 }
+
+  - id: expressions
+    narration: >
+      [[mark:type-if]] Now, if. [[mark:select-if]] In Kotlin this is an
+      expression, not a statement — it produces a value, so era gets whichever
+      branch runs. That's why Kotlin has no separate ternary operator. It
+      doesn't need one.
+    sources:
+      - {
+          title: "Kotlin docs — If expression",
+          url: "https://kotlinlang.org/docs/control-flow.html#if-expression",
+        }
+    actions:
+      - id: type-if
+        type: editor.type
+        at: { mark: type-if, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "    println($$\"\"\"a literal $0 needs no escape when $$language sets the prefix\"\"\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    val era = if (release >= 2.0) \"K2 compiler\" else \"legacy\"\n    println(era)\n"
+      - id: select-if
+        type: editor.select
+        at: { mark: select-if }
+        target:
+          { file: Main.kt, text: 'if (release >= 2.0) "K2 compiler" else "legacy"', occurrence: 1 }
+
+  - id: loops
+    narration: >
+      [[mark:type-loop]] Ranges and loops go together, and Kotlin gives you a
+      couple of ways to walk one. [[mark:select-range]] One dot dot five is a
+      range you can loop over, and step jumps through it.
+      [[mark:select-while]] While is here too, for counting down to a condition
+      instead of walking a sequence. [[mark:select-in]] And the in keyword does
+      double duty: it walks a range in a for loop, and it asks whether
+      something is contained somewhere.
+    sources:
+      - {
+          title: "Kotlin docs — Ranges and progressions",
+          url: "https://kotlinlang.org/docs/ranges.html",
+        }
+      - {
+          title: "Kotlin docs — For loops",
+          url: "https://kotlinlang.org/docs/control-flow.html#for-loops",
+        }
+    actions:
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop, offsetMs: -400 }
+        target: { file: Main.kt, after: "    println(era)\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\n    var sum = 0\n    for (n in 1..5) sum += n\n    var countdown = 3\n    while (countdown > 0) countdown--\n    println(\"sum $sum, ${(1..10 step 3).toList()}, ${\"K\" in language}, countdown $countdown\")\n"
+      - id: select-range
+        type: editor.select
+        at: { mark: select-range }
+        target: { file: Main.kt, text: "for (n in 1..5) sum += n", occurrence: 1 }
+      - id: select-while
+        type: editor.select
+        at: { mark: select-while }
+        target: { file: Main.kt, text: "while (countdown > 0) countdown--", occurrence: 1 }
+      - id: select-in
+        type: editor.select
+        at: { mark: select-in }
+        target: { file: Main.kt, text: '${"K" in language}', occurrence: 1 }
+
+  - id: functions
+    narration: >
+      [[mark:type-funcs]] Functions come in two shapes. [[mark:select-exprbody]]
+      When the body is a single expression you write an equals sign and skip
+      the braces, and the return type is inferred. [[mark:type-call-funcs]] Now
+      let's call them. [[mark:select-default]] Wrap has a default, so you can
+      leave it out — and when you do pass it, naming the argument at the call
+      site says what it means.
+    sources:
+      - {
+          title: "Kotlin docs — Default arguments",
+          url: "https://kotlinlang.org/docs/functions.html#default-arguments",
+        }
+      - {
+          title: "Kotlin docs — Named arguments",
+          url: "https://kotlinlang.org/docs/functions.html#named-arguments",
+        }
+    actions:
+      - id: type-funcs
+        type: editor.type
+        at: { mark: type-funcs, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"sum $sum, ${(1..10 step 3).toList()}, ${\"K\" in language}, countdown $countdown\")\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nfun area(width: Int, height: Int) = width * height\n\nfun tag(text: String, wrap: String = \"_\") = \"$wrap$text$wrap\"\n"
+      - id: select-exprbody
+        type: editor.select
+        at: { mark: select-exprbody }
+        target:
+          {
+            file: Main.kt,
+            text: "fun area(width: Int, height: Int) = width * height",
+            occurrence: 1,
+          }
+      - id: type-call-funcs
+        type: editor.type
+        at: { mark: type-call-funcs }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"sum $sum, ${(1..10 step 3).toList()}, ${\"K\" in language}, countdown $countdown\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    println(area(3, 4))\n    println(\"${tag(\"hi\")} ${tag(\"hi\", wrap = \"**\")}\")\n"
+      - id: select-default
+        type: editor.select
+        at: { mark: select-default }
+        target: { file: Main.kt, text: 'wrap: String = "_"', occurrence: 1 }
+
+  - id: varargs
+    narration: >
+      [[mark:type-vararg]] A parameter marked vararg takes any number of
+      arguments. [[mark:select-vararg]] Inside the function, parts is an array,
+      so joinToString works on it directly.
+      [[mark:type-call-vararg]] Three arguments here, but it would take one, or
+      ten.
+    sources:
+      - {
+          title: "Kotlin docs — Variable number of arguments (varargs)",
+          url: "https://kotlinlang.org/docs/functions.html#variable-number-of-arguments-varargs",
+        }
+    actions:
+      - id: type-vararg
+        type: editor.type
+        at: { mark: type-vararg, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "fun tag(text: String, wrap: String = \"_\") = \"$wrap$text$wrap\"\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nfun joinAll(vararg parts: String) = parts.joinToString(\"-\")\n"
+      - id: select-vararg
+        type: editor.select
+        at: { mark: select-vararg }
+        target: { file: Main.kt, text: "vararg parts: String", occurrence: 1 }
+      - id: type-call-vararg
+        type: editor.type
+        at: { mark: type-call-vararg }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${tag(\"hi\")} ${tag(\"hi\", wrap = \"**\")}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "    println(joinAll(\"red\", \"green\", \"blue\"))\n"
+
+  - id: dataclass
+    narration: >
+      [[mark:type-point]] A data class is a class you keep values in.
+      [[mark:type-use-point]] Kotlin writes the useful parts for you.
+      [[mark:select-copy]] Copy builds a changed version without touching the
+      original, and it takes named arguments too. [[mark:select-destructure]]
+      This line pulls the properties out into two variables. And equals compares
+      the values, so two points built the same way are equal.
+    sources:
+      - {
+          title: "Kotlin docs — Data classes",
+          url: "https://kotlinlang.org/docs/data-classes.html",
+        }
+      - {
+          title: "Kotlin docs — Destructuring declarations",
+          url: "https://kotlinlang.org/docs/destructuring-declarations.html",
+        }
+    actions:
+      - id: type-point
+        type: editor.type
+        at: { mark: type-point, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "fun joinAll(vararg parts: String) = parts.joinToString(\"-\")\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\ndata class Point(val x: Int, val y: Int)\n"
+      - id: type-use-point
+        type: editor.type
+        at: { mark: type-use-point }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(joinAll(\"red\", \"green\", \"blue\"))\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\n    val start = Point(3, 4)\n    val moved = start.copy(y = 10)\n    val (x, y) = moved\n    println(\"$moved x=$x y=$y equal=${start == Point(3, 4)}\")\n"
+      - id: select-copy
+        type: editor.select
+        at: { mark: select-copy }
+        target: { file: Main.kt, text: "start.copy(y = 10)", occurrence: 1 }
+      - id: select-destructure
+        type: editor.select
+        at: { mark: select-destructure }
+        target: { file: Main.kt, text: "val (x, y) = moved", occurrence: 1 }
+
+  - id: collections
+    narration: >
+      [[mark:type-collections]] Lists, sets and maps have two versions each.
+      [[mark:select-listof]] listOf gives you a read-only view — there's no add
+      method on it. You ask for mutableListOf when you want to change one.
+      That's a habit worth keeping: start read-only, and widen it when you have
+      to.
+    sources:
+      - {
+          title: "Kotlin docs — Collections overview",
+          url: "https://kotlinlang.org/docs/collections-overview.html",
+        }
+    actions:
+      - id: type-collections
+        type: editor.type
+        at: { mark: type-collections, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"$moved x=$x y=$y equal=${start == Point(3, 4)}\")\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\n    val langs = listOf(\"Kotlin\", \"Java\", \"Scala\")\n    val sizes = mapOf(\"Kotlin\" to 6, \"Java\" to 4)\n    println(\"${langs.size} ${sizes[\"Kotlin\"]} ${setOf(1, 1, 2)}\")\n"
+      - id: select-listof
+        type: editor.select
+        at: { mark: select-listof }
+        target: { file: Main.kt, text: 'listOf("Kotlin", "Java", "Scala")', occurrence: 1 }
+
+  - id: infix
+    narration: >
+      [[mark:select-to]] Look at that map again. The word to, sitting between
+      the key and the value, is a normal function called with infix notation:
+      no dot, no brackets. [[mark:type-infix]] You can write your own.
+      [[mark:select-infix]] Mark a single-argument member or extension function
+      infix, and callers get that spelling. [[mark:type-use-infix]] So two pow
+      ten reads like an operator, but it's a function you control.
+    sources:
+      - {
+          title: "Kotlin docs — Infix notation",
+          url: "https://kotlinlang.org/docs/functions.html#infix-notation",
+        }
+      - {
+          title: "Kotlin API — to",
+          url: "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/to.html",
+        }
+    actions:
+      - id: select-to
+        type: editor.select
+        at: { mark: select-to }
+        target: { file: Main.kt, text: '"Kotlin" to 6', occurrence: 1 }
+      - id: type-infix
+        type: editor.type
+        at: { mark: type-infix, offsetMs: -400 }
+        target:
+          { file: Main.kt, after: "data class Point(val x: Int, val y: Int)\n", occurrence: 1 }
+        cadence: block
+        text: "\ninfix fun Int.pow(exp: Int): Int {\n    var result = 1\n    repeat(exp) { result *= this }\n    return result\n}\n"
+      - id: select-infix
+        type: editor.select
+        at: { mark: select-infix }
+        target: { file: Main.kt, text: "infix fun Int.pow(exp: Int)", occurrence: 1 }
+      - id: type-use-infix
+        type: editor.type
+        at: { mark: type-use-infix }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${langs.size} ${sizes[\"Kotlin\"]} ${setOf(1, 1, 2)}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    println(\"2 pow 10 = ${2 pow 10}\")\n"
+
+  - id: enums
+    narration: >
+      [[mark:type-enum]] An enum class is a fixed set of instances.
+      [[mark:select-enum-prop]] Each constant can carry data and behaviour —
+      these three each hold a weight, and they share a label function.
+      [[mark:type-use-enum]] Entries gives you all of them in order. It replaced
+      the older values method back in Kotlin one point nine, and it's the one to
+      reach for now.
+    sources:
+      - {
+          title: "Kotlin docs — Enum classes",
+          url: "https://kotlinlang.org/docs/enum-classes.html",
+        }
+      - {
+          title: "Kotlin docs — Working with enum constants",
+          url: "https://kotlinlang.org/docs/enum-classes.html#working-with-enum-constants",
+        }
+    actions:
+      - id: type-enum
+        type: editor.type
+        at: { mark: type-enum, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "infix fun Int.pow(exp: Int): Int {\n    var result = 1\n    repeat(exp) { result *= this }\n    return result\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nenum class Level(val weight: Int) {\n    LOW(1), MEDIUM(5), HIGH(10);\n\n    fun label() = \"$name=$weight\"\n}\n"
+      - id: select-enum-prop
+        type: editor.select
+        at: { mark: select-enum-prop }
+        target: { file: Main.kt, text: "LOW(1), MEDIUM(5), HIGH(10);", occurrence: 1 }
+      - id: type-use-enum
+        type: editor.type
+        at: { mark: type-use-enum }
+        target: { file: Main.kt, after: "    println(\"2 pow 10 = ${2 pow 10}\")\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\n    println(Level.entries.map { it.label() })\n"
+
+  - id: nullability
+    narration: >
+      Now the part Kotlin is best known for. [[mark:draw-null]] String and
+      String with a question mark are two different types.
+      [[mark:draw-null-note]] The compiler won't let you mix them up, so a null
+      can't reach code that never expected one. [[mark:close-null]]
+      [[mark:type-null]] Here's how you work with the nullable one.
+      [[mark:select-safe]] Question mark dot returns null instead of calling
+      into nothing, [[mark:select-elvis]] and the elvis operator supplies a
+      value when it does. [[mark:type-bang]] And there's an escape hatch.
+      [[mark:select-bang]] Two exclamation marks say "trust me, this isn't
+      null", and throw if you're wrong. Use it when you know something the
+      compiler can't — and expect to be wrong sometimes.
+    sources:
+      - { title: "Kotlin docs — Null safety", url: "https://kotlinlang.org/docs/null-safety.html" }
+      - {
+          title: "Kotlin docs — Not-null assertion operator",
+          url: "https://kotlinlang.org/docs/null-safety.html#not-null-assertion-operator",
+        }
+    actions:
+      - {
+          id: open-null-board,
+          type: whiteboard.apply,
+          at: { mark: draw-null, offsetMs: -700 },
+          open: true,
+        }
+      # The sealed sketch comes later — this diagram reuses the cleared canvas.
+      - id: draw-null
+        type: whiteboard.apply
+        at: { mark: draw-null }
+        clear: true
+        upsertIds: [nl-title, nl-box-1, nl-text-1, nl-note-1, nl-box-2, nl-text-2, nl-note-2]
+        drawMs: 2300
+      - {
+          id: draw-null-note,
+          type: whiteboard.apply,
+          at: { mark: draw-null-note },
+          upsertIds: [nl-note, nl-underline],
+          drawMs: 900,
+        }
+      - { id: close-null-board, type: whiteboard.apply, at: { mark: close-null }, open: false }
+      - id: type-null
+        type: editor.type
+        at: { mark: type-null }
+        target:
+          { file: Main.kt, after: "    println(Level.entries.map { it.label() })\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\n    val absent: String? = null\n    println(\"${absent?.length ?: -1} ${absent?.let { \"found\" } ?: \"nothing\"}\")\n"
+      - id: select-safe
+        type: editor.select
+        at: { mark: select-safe }
+        target: { file: Main.kt, text: "absent?.length", occurrence: 1 }
+      - id: select-elvis
+        type: editor.select
+        at: { mark: select-elvis }
+        target: { file: Main.kt, text: "?: -1", occurrence: 1 }
+      - id: type-bang
+        type: editor.type
+        at: { mark: type-bang }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${absent?.length ?: -1} ${absent?.let { \"found\" } ?: \"nothing\"}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "    val present: String? = language\n    println(\"forced length ${present!!.length}\")\n"
+      - id: select-bang
+        type: editor.select
+        at: { mark: select-bang }
+        target: { file: Main.kt, text: "present!!.length", occurrence: 1 }
+
+  - id: extensions
+    narration: >
+      [[mark:type-ext]] You can add functions to a type you don't own.
+      [[mark:select-ext]] Shout is written on String itself, so every string in
+      the program has it. [[mark:type-use-ext]] And properties work the same
+      way. Nothing is patched at runtime — Kotlin resolves these statically,
+      which is why they cost nothing extra.
+    sources:
+      - { title: "Kotlin docs — Extensions", url: "https://kotlinlang.org/docs/extensions.html" }
+      - {
+          title: "Kotlin docs — Extension properties",
+          url: "https://kotlinlang.org/docs/extensions.html#extension-properties",
+        }
+    actions:
+      - id: type-ext
+        type: editor.type
+        at: { mark: type-ext, offsetMs: -400 }
+        target: { file: Main.kt, after: "    fun label() = \"$name=$weight\"\n}\n", occurrence: 1 }
+        cadence: block
+        text: "\nfun String.shout() = uppercase() + \"!\"\n\nval List<String>.second: String get() = this[1]\n"
+      - id: select-ext
+        type: editor.select
+        at: { mark: select-ext }
+        target: { file: Main.kt, text: "fun String.shout()", occurrence: 1 }
+      - id: type-use-ext
+        type: editor.type
+        at: { mark: type-use-ext }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"forced length ${present!!.length}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    println(\"${\"kotlin\".shout()} ${langs.second}\")\n"
+
+  - id: sealedwhen
+    narration: >
+      [[mark:type-sealed]] A sealed interface fixes the list of types that can
+      implement it. [[mark:draw-sealed]] Shape has exactly two, and the compiler
+      knows both. [[mark:draw-sealed-note]] So a when over a Shape needs no else
+      branch — cover every case and it's complete. Miss one and you get an
+      error, not a surprise at runtime. [[mark:close-sealed]]
+      [[mark:select-dataobject]] Origin is a data object: a single instance,
+      with a readable toString. That arrived in Kotlin one point nine.
+      [[mark:select-guard]] And this is newer still. A guard condition adds an
+      if to a branch, so two branches can test the same type and pick on the
+      value. [[mark:type-use-sealed]] Let's call it three times.
+    sources:
+      - {
+          title: "Kotlin docs — Sealed classes and interfaces",
+          url: "https://kotlinlang.org/docs/sealed-classes.html",
+        }
+      - {
+          title: "Kotlin docs — Data objects",
+          url: "https://kotlinlang.org/docs/object-declarations.html#data-objects",
+        }
+      - {
+          title: "Kotlin docs — Guard conditions in when expressions",
+          url: "https://kotlinlang.org/docs/control-flow.html#guard-conditions-in-when-expressions",
+        }
+    actions:
+      - id: type-sealed
+        type: editor.type
+        at: { mark: type-sealed, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "val List<String>.second: String get() = this[1]\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nsealed interface Shape\n\ndata class Circle(val radius: Int) : Shape\n\ndata object Origin : Shape\n\nfun describe(shape: Shape): String = when (shape) {\n    is Circle if shape.radius > 10 -> \"big circle\"\n    is Circle -> \"circle ${shape.radius}\"\n    Origin -> \"origin\"\n}\n"
+      - {
+          id: open-sealed-board,
+          type: whiteboard.apply,
+          at: { mark: draw-sealed, offsetMs: -700 },
+          open: true,
+        }
+      - id: draw-sealed
+        type: whiteboard.apply
+        at: { mark: draw-sealed }
+        clear: true
+        upsertIds:
+          [
+            sh-title,
+            sh-shape-box,
+            sh-shape-text,
+            sh-arrow-left,
+            sh-arrow-right,
+            sh-circle-box,
+            sh-circle-text,
+            sh-origin-box,
+            sh-origin-text,
+          ]
+        drawMs: 2600
+      - {
+          id: draw-sealed-note,
+          type: whiteboard.apply,
+          at: { mark: draw-sealed-note },
+          upsertIds: [sh-note, sh-underline],
+          drawMs: 900,
+        }
+      - { id: close-sealed-board, type: whiteboard.apply, at: { mark: close-sealed }, open: false }
+      - id: select-dataobject
+        type: editor.select
+        at: { mark: select-dataobject }
+        target: { file: Main.kt, text: "data object Origin : Shape", occurrence: 1 }
+      - id: select-guard
+        type: editor.select
+        at: { mark: select-guard }
+        target:
+          { file: Main.kt, text: 'is Circle if shape.radius > 10 -> "big circle"', occurrence: 1 }
+      - id: type-use-sealed
+        type: editor.type
+        at: { mark: type-use-sealed }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${\"kotlin\".shout()} ${langs.second}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    println(\"${describe(Circle(20))}, ${describe(Circle(2))}, ${describe(Origin)}\")\n"
+
+  - id: lambdas
+    narration: >
+      [[mark:type-lambdas]] Lambdas go in curly braces. [[mark:select-it]] When
+      a lambda takes one argument you can leave it unnamed and call it it.
+      [[mark:select-fold]] Fold carries a running value through the collection,
+      which is how sum and count and join are all built.
+      [[mark:select-memberref]] And when the lambda would only call one
+      function, a member reference names that function instead.
+    sources:
+      - {
+          title: "Kotlin docs — Lambda expressions",
+          url: "https://kotlinlang.org/docs/lambdas.html",
+        }
+      - {
+          title: "Kotlin docs — Collection operations",
+          url: "https://kotlinlang.org/docs/collection-operations.html",
+        }
+    actions:
+      - id: type-lambdas
+        type: editor.type
+        at: { mark: type-lambdas, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${describe(Circle(20))}, ${describe(Circle(2))}, ${describe(Origin)}\")\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\n    println(langs.map { it.length })\n    println(langs.filter { it.length > 4 })\n    println(\"${langs.fold(0) { acc, s -> acc + s.length }} ${langs.map(String::uppercase)}\")\n"
+      - id: select-it
+        type: editor.select
+        at: { mark: select-it }
+        target: { file: Main.kt, text: "langs.map { it.length }", occurrence: 1 }
+      - id: select-fold
+        type: editor.select
+        at: { mark: select-fold }
+        target: { file: Main.kt, text: "langs.fold(0) { acc, s -> acc + s.length }", occurrence: 1 }
+      - id: select-memberref
+        type: editor.select
+        at: { mark: select-memberref }
+        target: { file: Main.kt, text: "String::uppercase", occurrence: 1 }
+
+  - id: higherorder
+    narration: >
+      Map and filter take lambdas. You can write functions that do the same.
+      [[mark:type-hof]] Here are two. [[mark:select-hof]] applyTwice declares a
+      parameter whose type is a function: takes an Int, returns an Int. That's
+      all a higher-order function is. [[mark:select-extlambda]] The second one
+      is a receiver lambda — inside that block, this is the StringBuilder, so
+      you call append with no prefix. It's how apply itself is written, and how
+      most Kotlin builders work. [[mark:type-use-hof]] Let's use both.
+    sources:
+      - {
+          title: "Kotlin docs — Higher-order functions",
+          url: "https://kotlinlang.org/docs/lambdas.html#higher-order-functions",
+        }
+      - {
+          title: "Kotlin docs — Function literals with receiver",
+          url: "https://kotlinlang.org/docs/lambdas.html#function-literals-with-receiver",
+        }
+    actions:
+      - id: type-hof
+        type: editor.type
+        at: { mark: type-hof, offsetMs: -400 }
+        target: { file: Main.kt, after: "    Origin -> \"origin\"\n}\n", occurrence: 1 }
+        cadence: block
+        text: "\nfun applyTwice(n: Int, op: (Int) -> Int): Int = op(op(n))\n\nfun buildLabel(build: StringBuilder.() -> Unit): String = StringBuilder().apply(build).toString()\n"
+      - id: select-hof
+        type: editor.select
+        at: { mark: select-hof }
+        target: { file: Main.kt, text: "op: (Int) -> Int", occurrence: 1 }
+      - id: select-extlambda
+        type: editor.select
+        at: { mark: select-extlambda }
+        target: { file: Main.kt, text: "build: StringBuilder.() -> Unit", occurrence: 1 }
+      - id: type-use-hof
+        type: editor.type
+        at: { mark: type-use-hof }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${langs.fold(0) { acc, s -> acc + s.length }} ${langs.map(String::uppercase)}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    println(\"${applyTwice(3) { it * 3 }} ${buildLabel { append(language); append(release) }}\")\n"
+
+  - id: sequences
+    narration: >
+      [[mark:type-seq]] Those list operations each build a new list.
+      [[mark:select-seq]] A sequence is the lazy version: it computes one item
+      at a time, only as far as you ask. This one is endless, and take five is
+      what stops it.
+    sources:
+      - { title: "Kotlin docs — Sequences", url: "https://kotlinlang.org/docs/sequences.html" }
+    actions:
+      - id: type-seq
+        type: editor.type
+        at: { mark: type-seq, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${applyTwice(3) { it * 3 }} ${buildLabel { append(language); append(release) }}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    println(generateSequence(1) { it * 2 }.take(5).toList())\n"
+      - id: select-seq
+        type: editor.select
+        at: { mark: select-seq }
+        target: { file: Main.kt, text: "generateSequence(1) { it * 2 }.take(5)", occurrence: 1 }
+
+  - id: oop
+    narration: >
+      [[mark:type-oop]] Interfaces name behaviour, and an abstract class can
+      carry some of it. [[mark:select-abstract]] Animal fills in label and
+      intro, and leaves speak to whoever extends it.
+      [[mark:select-override]] Override is a keyword you have to write —
+      Kotlin won't let you shadow a method by accident.
+      [[mark:type-use-oop]] Both animals go into one list typed as Speaker, and
+      each one answers for itself.
+    sources:
+      - { title: "Kotlin docs — Interfaces", url: "https://kotlinlang.org/docs/interfaces.html" }
+      - { title: "Kotlin docs — Inheritance", url: "https://kotlinlang.org/docs/inheritance.html" }
+    actions:
+      - id: type-oop
+        type: editor.type
+        at: { mark: type-oop, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "fun buildLabel(build: StringBuilder.() -> Unit): String = StringBuilder().apply(build).toString()\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\ninterface Speaker {\n    fun speak(): String\n    fun label(): String\n}\n\nabstract class Animal(private val species: String) : Speaker {\n    override fun label() = species\n    fun intro() = \"$species says ${speak()}\"\n}\n\nclass Parrot : Animal(\"parrot\") {\n    override fun speak() = \"squawk\"\n}\n\nclass Cow : Animal(\"cow\") {\n    override fun speak() = \"moo\"\n}\n"
+      - id: select-abstract
+        type: editor.select
+        at: { mark: select-abstract }
+        target:
+          {
+            file: Main.kt,
+            text: "abstract class Animal(private val species: String) : Speaker {",
+            occurrence: 1,
+          }
+      - id: select-override
+        type: editor.select
+        at: { mark: select-override }
+        target: { file: Main.kt, text: '    override fun speak() = "squawk"', occurrence: 1 }
+      - id: type-use-oop
+        type: editor.type
+        at: { mark: type-use-oop }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(generateSequence(1) { it * 2 }.take(5).toList())\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    val animals: List<Speaker> = listOf(Parrot(), Cow())\n    println(\"${animals.map { it.speak() }} ${Parrot().intro()}\")\n"
+
+  - id: delegation
+    narration: >
+      [[mark:type-delegate]] Kotlin would rather you compose than inherit, and
+      it has a keyword for it. [[mark:select-by]] By inner means every Speaker
+      method is forwarded to inner, for free. Megaphone overrides speak and
+      writes nothing else — [[mark:type-use-delegate]] so label still comes
+      from the parrot it wraps.
+    sources:
+      - { title: "Kotlin docs — Delegation", url: "https://kotlinlang.org/docs/delegation.html" }
+    actions:
+      - id: type-delegate
+        type: editor.type
+        at: { mark: type-delegate, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "class Cow : Animal(\"cow\") {\n    override fun speak() = \"moo\"\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nclass Megaphone(private val inner: Speaker) : Speaker by inner {\n    override fun speak() = inner.speak().uppercase()\n}\n"
+      - id: select-by
+        type: editor.select
+        at: { mark: select-by }
+        target: { file: Main.kt, text: ": Speaker by inner", occurrence: 1 }
+      - id: type-use-delegate
+        type: editor.type
+        at: { mark: type-use-delegate }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${animals.map { it.speak() }} ${Parrot().intro()}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    val loud = Megaphone(Parrot())\n    println(\"${loud.speak()} ${loud.label()}\")\n"
+
+  - id: companion
+    narration: >
+      [[mark:type-session]] Kotlin has no static keyword.
+      [[mark:select-companion]] A companion object holds what belongs to the
+      class rather than to one instance, and it's a real object you can pass
+      around. [[mark:select-private-ctor]] This constructor is private, so open
+      is the only way in. [[mark:type-use-session]] Two sessions, and the count
+      they share. [[mark:type-object]] And a plain object declaration is a
+      singleton on its own — [[mark:select-object]] one instance, created the
+      first time you touch it, no class needed.
+      [[mark:type-use-object]] Same object both times, so the count keeps
+      climbing.
+    sources:
+      - {
+          title: "Kotlin docs — Companion objects",
+          url: "https://kotlinlang.org/docs/object-declarations.html#companion-objects",
+        }
+      - {
+          title: "Kotlin docs — Object declarations",
+          url: "https://kotlinlang.org/docs/object-declarations.html#object-declarations-overview",
+        }
+      - {
+          title: "Kotlin docs — Visibility modifiers",
+          url: "https://kotlinlang.org/docs/visibility-modifiers.html",
+        }
+    actions:
+      - id: type-session
+        type: editor.type
+        at: { mark: type-session, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "class Megaphone(private val inner: Speaker) : Speaker by inner {\n    override fun speak() = inner.speak().uppercase()\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nclass Session private constructor(val id: Int) {\n    companion object {\n        var created = 0\n        fun open(): Session {\n            created++\n            return Session(created)\n        }\n    }\n}\n"
+      - id: select-companion
+        type: editor.select
+        at: { mark: select-companion }
+        target: { file: Main.kt, text: "    companion object {", occurrence: 1 }
+      - id: select-private-ctor
+        type: editor.select
+        at: { mark: select-private-ctor }
+        target:
+          { file: Main.kt, text: "class Session private constructor(val id: Int)", occurrence: 1 }
+      - id: type-use-session
+        type: editor.type
+        at: { mark: type-use-session }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${loud.speak()} ${loud.label()}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    println(\"${Session.open().id} ${Session.open().id} ${Session.created}\")\n"
+      - id: type-object
+        type: editor.type
+        at: { mark: type-object }
+        target:
+          {
+            file: Main.kt,
+            after: "            return Session(created)\n        }\n    }\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nobject Registry {\n    private val names = mutableListOf<String>()\n    fun add(name: String): Int {\n        names += name\n        return names.size\n    }\n}\n"
+      - id: select-object
+        type: editor.select
+        at: { mark: select-object }
+        target: { file: Main.kt, text: "object Registry {", occurrence: 1 }
+      - id: type-use-object
+        type: editor.type
+        at: { mark: type-use-object }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${Session.open().id} ${Session.open().id} ${Session.created}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "    println(\"${Registry.add(\"first\")} ${Registry.add(\"second\")}\")\n"
+
+  - id: operators
+    narration: >
+      [[mark:type-operator]] Operators are functions with fixed names.
+      [[mark:select-operator]] Write plus with the operator keyword and the plus
+      sign starts working on your type. [[mark:type-use-operator]] The list is
+      fixed, so you can't invent new symbols — which keeps the code readable.
+    sources:
+      - {
+          title: "Kotlin docs — Operator overloading",
+          url: "https://kotlinlang.org/docs/operator-overloading.html",
+        }
+    actions:
+      # Inserted into Point's existing header line: insert-only edits can grow a
+      # one-line declaration into a body because nothing is removed.
+      - id: type-operator
+        type: editor.type
+        at: { mark: type-operator, offsetMs: -400 }
+        target: { file: Main.kt, after: "data class Point(val x: Int, val y: Int)", occurrence: 1 }
+        cadence: block
+        text: " {\n    operator fun plus(other: Point) = Point(x + other.x, y + other.y)\n}"
+      - id: select-operator
+        type: editor.select
+        at: { mark: select-operator }
+        target: { file: Main.kt, text: "operator fun plus(other: Point)", occurrence: 1 }
+      - id: type-use-operator
+        type: editor.type
+        at: { mark: type-use-operator }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${Registry.add(\"first\")} ${Registry.add(\"second\")}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    println(Point(1, 2) + Point(3, 4))\n"
+
+  - id: lazydelegate
+    narration: >
+      [[mark:type-settings]] A property can hand its work to something else.
+      [[mark:select-lazy]] By lazy runs that block the first time you read the
+      property, then remembers the answer. [[mark:type-use-settings]] It's the
+      tidy way to defer expensive setup. [[mark:type-lateinit]] When the value
+      arrives later from outside, lateinit is the other tool.
+      [[mark:select-lateinit]] It lets a non-null var start empty, and you can
+      ask whether it's been set yet. Read it too early and it throws, which is
+      the trade you're making.
+    sources:
+      - {
+          title: "Kotlin docs — Delegated properties",
+          url: "https://kotlinlang.org/docs/delegated-properties.html",
+        }
+      - {
+          title: "Kotlin docs — Late-initialized properties",
+          url: "https://kotlinlang.org/docs/properties.html#late-initialized-properties-and-variables",
+        }
+    actions:
+      - id: type-settings
+        type: editor.type
+        at: { mark: type-settings, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "object Registry {\n    private val names = mutableListOf<String>()\n    fun add(name: String): Int {\n        names += name\n        return names.size\n    }\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nclass Settings {\n    val theme: String by lazy { \"dark\" }\n}\n"
+      - id: select-lazy
+        type: editor.select
+        at: { mark: select-lazy }
+        target: { file: Main.kt, text: 'by lazy { "dark" }', occurrence: 1 }
+      - id: type-use-settings
+        type: editor.type
+        at: { mark: type-use-settings }
+        target: { file: Main.kt, after: "    println(Point(1, 2) + Point(3, 4))\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\n    println(Settings().theme)\n"
+      - id: type-lateinit
+        type: editor.type
+        at: { mark: type-lateinit }
+        target:
+          {
+            file: Main.kt,
+            after: "class Settings {\n    val theme: String by lazy { \"dark\" }\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nclass Service {\n    lateinit var endpoint: String\n    fun ready() = this::endpoint.isInitialized\n}\n"
+      - id: select-lateinit
+        type: editor.select
+        at: { mark: select-lateinit }
+        target: { file: Main.kt, text: "lateinit var endpoint: String", occurrence: 1 }
+      - id: type-use-lateinit
+        type: editor.type
+        at: { mark: select-lateinit, offsetMs: 2400 }
+        target: { file: Main.kt, after: "    println(Settings().theme)\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "    val svc = Service()\n    val beforeInit = svc.ready()\n    svc.endpoint = \"/api\"\n    println(\"lateinit $beforeInit then ${svc.ready()} ${svc.endpoint}\")\n"
+
+  - id: generics
+    narration: >
+      [[mark:type-generics]] Generics let one function serve many types.
+      [[mark:select-constraint]] The constraint is the interesting part: T has
+      to be Comparable, so the body can call max on it.
+      [[mark:type-use-generics]] One function, ints and strings, nothing to
+      convert. [[mark:type-reified]] Now a harder one. Normally a generic type
+      is erased at runtime, so you can't ask what T was.
+      [[mark:select-reified]] Mark the function inline and the parameter
+      reified, and you can — the compiler pastes the real type in at every call
+      site. [[mark:type-use-reified]] So this picks the strings out of a mixed
+      list.
+    sources:
+      - { title: "Kotlin docs — Generics", url: "https://kotlinlang.org/docs/generics.html" }
+      - {
+          title: "Kotlin docs — Reified type parameters",
+          url: "https://kotlinlang.org/docs/inline-functions.html#reified-type-parameters",
+        }
+    actions:
+      - id: type-generics
+        type: editor.type
+        at: { mark: type-generics, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "class Service {\n    lateinit var endpoint: String\n    fun ready() = this::endpoint.isInitialized\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nfun <T : Comparable<T>> largest(values: List<T>): T = values.max()\n"
+      - id: select-constraint
+        type: editor.select
+        at: { mark: select-constraint }
+        target: { file: Main.kt, text: "<T : Comparable<T>>", occurrence: 1 }
+      - id: type-use-generics
+        type: editor.type
+        at: { mark: type-use-generics }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"lateinit $beforeInit then ${svc.ready()} ${svc.endpoint}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    println(\"${largest(listOf(3, 9, 4))} ${largest(listOf(\"a\", \"z\"))}\")\n"
+      - id: type-reified
+        type: editor.type
+        at: { mark: type-reified }
+        target:
+          {
+            file: Main.kt,
+            after: "fun <T : Comparable<T>> largest(values: List<T>): T = values.max()\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\ninline fun <reified T> onlyOf(items: List<Any>): List<T> = items.filterIsInstance<T>()\n"
+      - id: select-reified
+        type: editor.select
+        at: { mark: select-reified }
+        target: { file: Main.kt, text: "inline fun <reified T>", occurrence: 1 }
+      - id: type-use-reified
+        type: editor.type
+        at: { mark: type-use-reified }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${largest(listOf(3, 9, 4))} ${largest(listOf(\"a\", \"z\"))}\")\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "    println(onlyOf<String>(listOf(1, \"a\", 2, \"b\")))\n"
+
+  - id: failure
+    narration: >
+      [[mark:type-halve]] Kotlin has exceptions, and it also has a way to keep
+      them as values. [[mark:select-require]] Require throws when the condition
+      fails, and states what was expected. [[mark:select-runcatching]]
+      runCatching wraps the whole block in a Result, so the caller gets success
+      or failure to inspect instead of a thrown exception to catch.
+      [[mark:type-use-halve]] Here's one of each. [[mark:type-trycatch]] And
+      when you do want to catch, try is an expression like everything else.
+      [[mark:select-trycatch]] Whichever branch runs, its value becomes the
+      result — so a parse with a fallback is one expression, no temporary
+      variable.
+    sources:
+      - { title: "Kotlin docs — Exceptions", url: "https://kotlinlang.org/docs/exceptions.html" }
+      - {
+          title: "Kotlin docs — Try as an expression",
+          url: "https://kotlinlang.org/docs/exceptions.html#try-is-an-expression",
+        }
+      - {
+          title: "Kotlin API — runCatching",
+          url: "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/run-catching.html",
+        }
+    actions:
+      - id: type-halve
+        type: editor.type
+        at: { mark: type-halve, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "inline fun <reified T> onlyOf(items: List<Any>): List<T> = items.filterIsInstance<T>()\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nfun halve(n: Int): Result<Int> = runCatching {\n    require(n % 2 == 0) { \"$n is odd\" }\n    n / 2\n}\n"
+      - id: select-require
+        type: editor.select
+        at: { mark: select-require }
+        target: { file: Main.kt, text: 'require(n % 2 == 0) { "$n is odd" }', occurrence: 1 }
+      - id: select-runcatching
+        type: editor.select
+        at: { mark: select-runcatching }
+        target: { file: Main.kt, text: "Result<Int> = runCatching", occurrence: 1 }
+      - id: type-use-halve
+        type: editor.type
+        at: { mark: type-use-halve }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(onlyOf<String>(listOf(1, \"a\", 2, \"b\")))\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    println(\"${halve(7)} ${halve(8)}\")\n"
+      - id: type-trycatch
+        type: editor.type
+        at: { mark: type-trycatch }
+        target:
+          {
+            file: Main.kt,
+            after: "fun halve(n: Int): Result<Int> = runCatching {\n    require(n % 2 == 0) { \"$n is odd\" }\n    n / 2\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nfun parseOr(text: String, fallback: Int): Int =\n    try {\n        text.toInt()\n    } catch (e: NumberFormatException) {\n        fallback\n    }\n"
+      - id: select-trycatch
+        type: editor.select
+        at: { mark: select-trycatch }
+        target:
+          {
+            file: Main.kt,
+            text: "    try {\n        text.toInt()\n    } catch (e: NumberFormatException) {",
+            occurrence: 1,
+          }
+      - id: type-use-trycatch
+        type: editor.type
+        at: { mark: select-trycatch, offsetMs: 2600 }
+        target:
+          { file: Main.kt, after: "    println(\"${halve(7)} ${halve(8)}\")\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "    println(\"${parseOr(\"12\", 0)} ${parseOr(\"nope\", -1)}\")\n"
+
+  - id: scopefns
+    narration: >
+      [[mark:type-scope]] Scope functions run a block against an object.
+      [[mark:select-apply]] Apply hands you the object as this, then returns it,
+      which makes it the one to reach for when you're configuring something.
+      Let, run, with and also are the others, and they differ only in what they
+      pass and what they give back.
+    sources:
+      - {
+          title: "Kotlin docs — Scope functions",
+          url: "https://kotlinlang.org/docs/scope-functions.html",
+        }
+    actions:
+      - id: type-scope
+        type: editor.type
+        at: { mark: type-scope, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "    println(\"${parseOr(\"12\", 0)} ${parseOr(\"nope\", -1)}\")\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\n    val report = StringBuilder().apply {\n        append(\"langs=\")\n        append(langs.size)\n    }.toString()\n    println(report)\n"
+      - id: select-apply
+        type: editor.select
+        at: { mark: select-apply }
+        target: { file: Main.kt, text: "StringBuilder().apply {", occurrence: 1 }
+
+  - id: coroutines
+    narration: >
+      Now the piece that changed Kotlin most, and the one the older books never
+      had. [[mark:type-import]] Coroutines need one import.
+      [[mark:type-coroutines]] A suspend function can pause without blocking the
+      thread it runs on. [[mark:draw-coro]] Async starts each call right away,
+      so all three wait at the same time. [[mark:draw-coro-note]] awaitAll
+      collects them, and the results come back in the order they were started,
+      not the order they finished. [[mark:close-coro]]
+      [[mark:type-use-coroutines]] That's the whole idea: concurrent code that
+      reads top to bottom.
+    sources:
+      - {
+          title: "Kotlin docs — Coroutines",
+          url: "https://kotlinlang.org/docs/coroutines-overview.html",
+        }
+      - {
+          title: "Kotlin docs — Concurrent using async",
+          url: "https://kotlinlang.org/docs/composing-suspending-functions.html#concurrent-using-async",
+        }
+    actions:
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import, offsetMs: -400 }
+        target: { file: Main.kt, after: "", occurrence: 1 }
+        cadence: block
+        text: "import kotlinx.coroutines.*\n\n"
+      - id: type-coroutines
+        type: editor.type
+        at: { mark: type-coroutines }
+        target:
+          {
+            file: Main.kt,
+            after: "fun parseOr(text: String, fallback: Int): Int =\n    try {\n        text.toInt()\n    } catch (e: NumberFormatException) {\n        fallback\n    }\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nsuspend fun fetchOne(id: Int): Int {\n    delay(10)\n    return id * id\n}\n\nfun fetchAll(): List<Int> = runBlocking {\n    (1..3).map { async { fetchOne(it) } }.awaitAll()\n}\n"
+      - {
+          id: open-coro-board,
+          type: whiteboard.apply,
+          at: { mark: draw-coro, offsetMs: -700 },
+          open: true,
+        }
+      - id: draw-coro
+        type: whiteboard.apply
+        at: { mark: draw-coro }
+        clear: true
+        upsertIds:
+          [
+            co-title,
+            co-box-1,
+            co-text-1,
+            co-box-2,
+            co-text-2,
+            co-box-3,
+            co-text-3,
+            co-arrow,
+            co-await-box,
+            co-await-text,
+          ]
+        drawMs: 2600
+      - {
+          id: draw-coro-note,
+          type: whiteboard.apply,
+          at: { mark: draw-coro-note },
+          upsertIds: [co-result, co-note, co-underline],
+          drawMs: 1200,
+        }
+      - { id: close-coro-board, type: whiteboard.apply, at: { mark: close-coro }, open: false }
+      - id: type-use-coroutines
+        type: editor.type
+        at: { mark: type-use-coroutines }
+        target: { file: Main.kt, after: "    println(report)\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\n    println(fetchAll())\n"
+
+  - id: modern
+    narration: >
+      Three more that the older books can't have. [[mark:type-modern]] Let's
+      put all three in at once. [[mark:select-typealias]] A typealias gives a
+      long type a short name —
+      handy once function types start appearing in signatures.
+      [[mark:select-valueclass]] A value class wraps one value for type safety,
+      and the compiler unwraps it where it can, so you get a distinct UserId
+      type at close to no cost. [[mark:select-context]] And context parameters,
+      which went stable in two point four: the function declares what it needs
+      from its surroundings, and callers supply it once instead of threading it
+      through every call. [[mark:type-use-modern]] Let's use all three: a
+      handler named through the alias, a wrapped id, and a prefix supplied once
+      by with.
+    sources:
+      - {
+          title: "What's new in Kotlin 2.4.0 — context parameters",
+          url: "https://kotlinlang.org/docs/whatsnew24.html",
+        }
+      - {
+          title: "Kotlin docs — Inline value classes",
+          url: "https://kotlinlang.org/docs/inline-classes.html",
+        }
+      - {
+          title: "Kotlin docs — Type aliases",
+          url: "https://kotlinlang.org/docs/type-aliases.html",
+        }
+    actions:
+      - id: type-modern
+        type: editor.type
+        at: { mark: type-modern, offsetMs: -400 }
+        target:
+          {
+            file: Main.kt,
+            after: "fun fetchAll(): List<Int> = runBlocking {\n    (1..3).map { async { fetchOne(it) } }.awaitAll()\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\ntypealias Handler = (String) -> String\n\n@JvmInline\nvalue class UserId(val raw: Int)\n\ncontext(prefix: String)\nfun stamp(text: String) = \"$prefix$text\"\n"
+      - id: select-typealias
+        type: editor.select
+        at: { mark: select-typealias }
+        target: { file: Main.kt, text: "typealias Handler = (String) -> String", occurrence: 1 }
+      - id: select-valueclass
+        type: editor.select
+        at: { mark: select-valueclass }
+        target:
+          { file: Main.kt, text: "@JvmInline\nvalue class UserId(val raw: Int)", occurrence: 1 }
+      - id: select-context
+        type: editor.select
+        at: { mark: select-context }
+        target: { file: Main.kt, text: "context(prefix: String)", occurrence: 1 }
+      - id: type-use-modern
+        type: editor.type
+        at: { mark: type-use-modern }
+        target: { file: Main.kt, after: "    println(fetchAll())\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\n    val shout: Handler = { it.uppercase() }\n    println(\"${shout(\"done\")} ${UserId(7)}\")\n    with(\"> \") { println(stamp(\"context parameters\")) }\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run the whole file. The values, the templates, the if
+      expression, the loops and the range. Default arguments, named arguments,
+      and the vararg join. The copied point, destructured and equal by value.
+      Collections, then two to the tenth through an infix function, then the
+      enum. The nullable pair and the forced one. Extensions, and the sealed
+      types with the guard picking the big circle. Lambdas, fold, member
+      references, our own higher-order functions, the lazy sequence. Both
+      animals speaking, the megaphone delegating, sessions and the singleton.
+      Added points, the lazy theme, lateinit before and after. Generics, the
+      reified filter, a failure and a success, the caught parse. And three
+      coroutines in order, then the modern three.
+    sources:
+      - { title: "Kotlin Playground", url: "https://play.kotlinlang.org/" }
+    actions:
+      - { id: run, type: runtime.run, at: { mark: run, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-output,
+          type: expect.output,
+          at: { afterAction: run },
+          contains: "2 pow 10 = 1024",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-main,
+          type: expect.file,
+          at: { afterAction: run },
+          path: Main.kt,
+          contains: "infix fun Int.pow",
+        }
+
+  - id: wrap
+    narration: >
+      That's the language, in one file. Null safety in the type system, data
+      classes and sealed types for the shapes your data takes, infix and
+      operator functions for the ones you want to read like notation, and
+      coroutines for the work that waits. Kotlin two point four arrived this
+      month, and it's still moving — collection literals are in preview right
+      now, so square brackets will build a list the way they build one in most
+      other languages. Everything else in this lesson is stable today.
+    sources:
+      - { title: "What's new in Kotlin 2.4.0", url: "https://kotlinlang.org/docs/whatsnew24.html" }
+      - {
+          title: "Kotlin language features and proposals",
+          url: "https://kotlinlang.org/docs/kotlin-language-features-and-proposals.html",
+        }
+    actions: []
+checks:
+  - { type: timing.p95Ms, max: 300 }
