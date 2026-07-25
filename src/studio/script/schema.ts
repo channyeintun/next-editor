@@ -148,6 +148,11 @@ const scriptWhiteboardApplySchema = scriptActionBase
     maximized: z.boolean().optional(),
     upsertIds: z.array(z.string().min(1)).default([]),
     /**
+     * Wipe the board before drawing: an apply otherwise only adds, so a second
+     * diagram sharing the first one's coordinates would land on top of it.
+     */
+    clear: z.boolean().default(false),
+    /**
      * Draw the upserts in over this budget instead of applying them in one
      * frame. Shapes grow from their corner, text types, freedraw strokes
      * trace, and several assets are drawn one after another. `0` (default)

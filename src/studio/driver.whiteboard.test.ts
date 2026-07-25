@@ -115,6 +115,35 @@ describe("StudioDriver whiteboard drawing", () => {
     expect(settle(replay(events))).toEqual(finished);
   });
 
+  it("wipes the board before drawing when asked", async () => {
+    const { driver, events, getScene } = makeDriver();
+
+    await driver.applyWhiteboard({ open: true, upsertIds: ["box"] });
+    const before = events.length;
+    const result = await driver.applyWhiteboard({ upsertIds: ["label"], clear: true, drawMs: 100 });
+
+    // The removal rides the first frame, so the board is empty before the pen
+    // moves — and it is not repeated on later frames of the same draw.
+    const drawEvents = events.slice(before);
+    expect(drawEvents[0].removedIds).toEqual(["box"]);
+    expect(drawEvents.slice(1).every((event) => event.removedIds === undefined)).toBe(true);
+    expect(getScene().elements.map((element) => element.id)).toEqual(["label"]);
+    expect(replay(events).elements.map((element) => element.id)).toEqual(["label"]);
+    expect(result).toMatchObject({ wiped: 1 });
+  });
+
+  it("never wipes an element the same action is redrawing", async () => {
+    // applyWhiteboardEvent removes after it upserts, so an id in both lists
+    // would be deleted instead of redrawn.
+    const { driver, events, getScene } = makeDriver();
+
+    await driver.applyWhiteboard({ open: true, upsertIds: ["box", "label"] });
+    await driver.applyWhiteboard({ upsertIds: ["label"], clear: true });
+
+    expect(events.at(-1)!.removedIds).toEqual(["box"]);
+    expect(getScene().elements.map((element) => element.id)).toEqual(["label"]);
+  });
+
   it("traces a freedraw stroke as a growing prefix of its points", async () => {
     const underline = studioWhiteboardAssetSchema.parse({
       id: "underline",

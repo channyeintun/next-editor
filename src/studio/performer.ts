@@ -96,6 +96,7 @@ async function invokeAction(
         maximized: action.maximized,
         upsertIds: action.upsertIds,
         drawMs: action.drawMs,
+        clear: action.clear,
       });
     case "expect.output":
       return driver.waitForOutput({ contains: action.contains, timeoutMs: action.timeoutMs });

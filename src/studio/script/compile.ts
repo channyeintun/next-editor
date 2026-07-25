@@ -445,6 +445,7 @@ export function compileLessonScript({
             open: action.open,
             maximized: action.maximized,
             upsertIds: action.upsertIds,
+            clear: action.clear,
             drawMs: action.drawMs,
           };
         case "expect.output":

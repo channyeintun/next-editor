@@ -191,6 +191,13 @@ const whiteboardApplyActionSchema = planActionBase
     /** Ids from `plan.whiteboardAssets` to upsert onto the board. */
     upsertIds: z.array(z.string().min(1)).default([]),
     /**
+     * Wipe the board first — everything already on it is removed, then this
+     * action's upserts are drawn onto the empty canvas. Without this a second
+     * diagram authored over the same coordinates draws on top of the first,
+     * since an apply otherwise only ever adds.
+     */
+    clear: z.boolean().default(false),
+    /**
      * Draw the upserts in over this budget instead of applying them in one
      * frame: shapes grow, text types, strokes trace, and multiple assets are
      * staggered in order. `0` (the default) keeps the single-frame apply.
@@ -199,8 +206,14 @@ const whiteboardApplyActionSchema = planActionBase
   })
   .refine(
     (action) =>
-      action.open !== undefined || action.maximized !== undefined || action.upsertIds.length > 0,
-    { message: "whiteboard.apply must open/close, change maximize, or upsert at least one asset" },
+      action.open !== undefined ||
+      action.maximized !== undefined ||
+      action.upsertIds.length > 0 ||
+      action.clear,
+    {
+      message:
+        "whiteboard.apply must open/close, change maximize, clear the board, or upsert at least one asset",
+    },
   )
   .refine((action) => action.drawMs < action.timeoutMs, {
     message: "whiteboard.apply drawMs must be shorter than the action's timeoutMs",
