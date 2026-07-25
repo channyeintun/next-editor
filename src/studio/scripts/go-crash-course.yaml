@@ -1,15 +1,19 @@
-# A Go crash course in one lesson: the shape of a Go file — package clause,
-# imports, functions, and func main as the one entry point — sketched on the
-# whiteboard, then built and run in the editor. It deliberately stops short of
-# the two-value return, which `go-error-values.yaml` teaches on its own.
+# Go crash course: one lesson that tours the language's essentials in a single
+# file — the shape of a Go program, short variable declarations, slices with len
+# and cap, maps and the two-value lookup, structs with a method receiver, and the
+# result-plus-error return — then runs the whole thing.
 #
-# The whiteboard work is drawn, not pasted: every `whiteboard.apply` that adds
-# assets carries a `drawMs` budget, so boxes grow from their corner, labels type
-# a character at a time, and the freedraw strokes (the arrows, the circles, the
-# underline) trace point by point. Both panel moves sit inside the studio's own
-# quiet recording handles — the board opens and is titled during the two seconds
-# before the first word, and closes after the last one — so the voice never
-# starts or ends on top of a panel animation.
+# A survey, not a single concept: it deliberately takes the critic's
+# `scope.scenes` note (9 scenes against a suggested 5). `go-error-values.yaml`
+# still owns the deep dive on errors; this lesson only passes through it.
+#
+# Three drawn boards, wiped between topics with `clear: true` (an apply only ever
+# adds, and closing the panel keeps the elements, so a new diagram over the same
+# coordinates would land on top of the old one). Every board is drawn rather than
+# pasted: boxes grow from their corner, labels type a character at a time, and
+# the freedraw strokes trace point by point. The first open and the last close sit
+# inside the studio's own quiet recording handles, so the voice never starts or
+# ends on top of a panel animation.
 #
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/go-crash-course.yaml
@@ -17,7 +21,7 @@ schemaVersion: 1
 
 lesson:
   slug: go-crash-course
-  title: "Go in one file: package, imports, and one entry point"
+  title: "Go crash course: a whole program, one piece at a time"
   locale: en-US
   workspace:
     lessonType: go
@@ -39,7 +43,7 @@ lesson:
     # --- Board one: the shape of a Go file ---------------------------------
     - id: anat-title
       kind: text
-      x: 340
+      x: 300
       y: 164
       width: 440
       height: 40
@@ -48,16 +52,16 @@ lesson:
       fontSize: 30
     - id: anat-pkg-box
       kind: rectangle
-      x: 340
+      x: 300
       y: 226
-      width: 320
-      height: 64
+      width: 300
+      height: 60
       strokeColor: "#1e1e1e"
     - id: anat-pkg-text
       kind: text
-      x: 364
-      y: 244
-      width: 280
+      x: 322
+      y: 242
+      width: 260
       height: 30
       text: "package main"
       strokeColor: "#1e1e1e"
@@ -65,23 +69,23 @@ lesson:
     - id: anat-arrow-1
       kind: freedraw
       stroke: arrow-down
-      x: 478
-      y: 298
-      width: 48
-      height: 40
+      x: 436
+      y: 294
+      width: 44
+      height: 36
       strokeColor: "#1e1e1e"
     - id: anat-imp-box
       kind: rectangle
-      x: 340
-      y: 350
-      width: 320
-      height: 64
+      x: 300
+      y: 338
+      width: 300
+      height: 60
       strokeColor: "#1e1e1e"
     - id: anat-imp-text
       kind: text
-      x: 364
-      y: 368
-      width: 280
+      x: 322
+      y: 354
+      width: 260
       height: 30
       text: 'import "fmt"'
       strokeColor: "#1e1e1e"
@@ -89,23 +93,23 @@ lesson:
     - id: anat-arrow-2
       kind: freedraw
       stroke: arrow-down
-      x: 478
-      y: 422
-      width: 48
-      height: 40
+      x: 436
+      y: 406
+      width: 44
+      height: 36
       strokeColor: "#1e1e1e"
     - id: anat-main-box
       kind: rectangle
-      x: 340
-      y: 474
-      width: 320
-      height: 64
+      x: 300
+      y: 450
+      width: 300
+      height: 60
       strokeColor: "#1e1e1e"
     - id: anat-main-text
       kind: text
-      x: 364
-      y: 492
-      width: 280
+      x: 322
+      y: 466
+      width: 260
       height: 30
       text: "func main()"
       strokeColor: "#1e1e1e"
@@ -113,101 +117,199 @@ lesson:
     - id: anat-entry-circle
       kind: freedraw
       stroke: circle
-      x: 324
-      y: 462
-      width: 352
-      height: 88
+      x: 286
+      y: 444
+      width: 328
+      height: 74
       strokeColor: "#1e1e1e"
-    # --- Board two: main calls, the function returns ------------------------
-    - id: ret-title
+    # --- Board two: a slice over its backing array --------------------------
+    - id: sl-title
       kind: text
-      x: 340
+      x: 300
       y: 164
-      width: 620
+      width: 520
       height: 40
-      text: "main calls, the function returns"
+      text: "A slice points at an array"
       strokeColor: "#1e1e1e"
       fontSize: 30
-    - id: ret-main-box
+    - id: sl-box-0
       kind: rectangle
-      x: 340
-      y: 248
-      width: 220
+      x: 320
+      y: 250
+      width: 92
       height: 80
       strokeColor: "#1e1e1e"
-    - id: ret-main-text
+    - id: sl-val-0
       kind: text
-      x: 364
-      y: 274
-      width: 190
+      x: 348
+      y: 276
+      width: 60
       height: 34
-      text: "func main()"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: ret-arrow
-      kind: freedraw
-      stroke: arrow-right
-      x: 578
-      y: 266
-      width: 112
-      height: 44
-      strokeColor: "#1e1e1e"
-    - id: ret-fn-box
-      kind: rectangle
-      x: 708
-      y: 248
-      width: 220
-      height: 80
-      strokeColor: "#1e1e1e"
-    - id: ret-fn-text
-      kind: text
-      x: 740
-      y: 274
-      width: 190
-      height: 34
-      text: "triple(7)"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: ret-down-arrow
-      kind: freedraw
-      stroke: arrow-down
-      x: 794
-      y: 342
-      width: 48
-      height: 40
-      strokeColor: "#1e1e1e"
-    - id: ret-val-text
-      kind: text
-      x: 800
-      y: 392
-      width: 80
-      height: 36
-      text: "21"
+      text: "90"
       strokeColor: "#1e1e1e"
       fontSize: 26
-    - id: ret-val-circle
-      kind: freedraw
-      stroke: circle
-      x: 772
-      y: 382
-      width: 124
-      height: 56
+    - id: sl-box-1
+      kind: rectangle
+      x: 420
+      y: 250
+      width: 92
+      height: 80
       strokeColor: "#1e1e1e"
-    - id: ret-note
+    - id: sl-val-1
       kind: text
-      x: 340
-      y: 470
-      width: 600
+      x: 448
+      y: 276
+      width: 60
       height: 34
-      text: "one package, nothing to import"
+      text: "80"
       strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: ret-note-underline
+      fontSize: 26
+    - id: sl-box-2
+      kind: rectangle
+      x: 520
+      y: 250
+      width: 92
+      height: 80
+      strokeColor: "#1e1e1e"
+    - id: sl-val-2
+      kind: text
+      x: 548
+      y: 276
+      width: 60
+      height: 34
+      text: "70"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: sl-box-3
+      kind: rectangle
+      x: 620
+      y: 250
+      width: 92
+      height: 80
+      strokeColor: "#1e1e1e"
+    - id: sl-len-underline
       kind: freedraw
       stroke: underline
-      x: 340
-      y: 470
-      width: 520
+      x: 320
+      y: 332
+      width: 292
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: sl-len-label
+      kind: text
+      x: 320
+      y: 380
+      width: 200
+      height: 34
+      text: "len 3"
+      strokeColor: "#1e1e1e"
+      fontSize: 24
+    - id: sl-cap-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 320
+      y: 436
+      width: 392
+      height: 40
+      strokeColor: "#1e1e1e"
+    - id: sl-cap-label
+      kind: text
+      x: 320
+      y: 488
+      width: 200
+      height: 34
+      text: "cap 4"
+      strokeColor: "#1e1e1e"
+      fontSize: 24
+    # --- Board three: result and error --------------------------------------
+    - id: tv-title
+      kind: text
+      x: 300
+      y: 164
+      width: 560
+      height: 40
+      text: "A result and an error"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: tv-call-box
+      kind: rectangle
+      x: 300
+      y: 250
+      width: 240
+      height: 80
+      strokeColor: "#1e1e1e"
+    - id: tv-call-text
+      kind: text
+      x: 330
+      y: 276
+      width: 200
+      height: 34
+      text: "halve(7)"
+      strokeColor: "#1e1e1e"
+      fontSize: 24
+    - id: tv-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 560
+      y: 268
+      width: 110
+      height: 44
+      strokeColor: "#1e1e1e"
+    - id: tv-val-box
+      kind: rectangle
+      x: 700
+      y: 226
+      width: 200
+      height: 64
+      strokeColor: "#1e1e1e"
+    - id: tv-val-text
+      kind: text
+      x: 788
+      y: 244
+      width: 60
+      height: 30
+      text: "0"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: tv-err-box
+      kind: rectangle
+      x: 700
+      y: 322
+      width: 200
+      height: 64
+      strokeColor: "#1e1e1e"
+    - id: tv-err-text
+      kind: text
+      x: 724
+      y: 340
+      width: 180
+      height: 30
+      text: "7 is odd"
+      strokeColor: "#1e1e1e"
+      fontSize: 24
+    - id: tv-err-circle
+      kind: freedraw
+      stroke: circle
+      x: 684
+      y: 310
+      width: 232
+      height: 88
+      strokeColor: "#1e1e1e"
+    - id: tv-note
+      kind: text
+      x: 300
+      y: 440
+      width: 620
+      height: 34
+      text: "check the error, then use the result"
+      strokeColor: "#1e1e1e"
+      fontSize: 24
+    - id: tv-note-underline
+      kind: freedraw
+      stroke: underline
+      x: 300
+      y: 440
+      width: 470
       height: 40
       strokeColor: "#1e1e1e"
 
@@ -223,16 +325,16 @@ runtime:
     result:
       status: success
       exitCode: 0
-      output: "Go, in one file\ntriple 7 is 21\n"
+      output: "Go, in one file\nGo 3\n[90 80 70] 3 4\n36 true\npoint 3,4\n0 7 is odd\n"
 
 scenes:
   - id: shape
     narration: >
       [[mark:draw-pkg]] Every Go file opens with a package clause.
       [[mark:draw-imp]] Under that, the imports it needs. [[mark:draw-funcs]]
-      And then the functions. That's the whole shape of a Go file.
-      [[mark:circle-main]] One of them is special. In package main, func main
-      is where the program starts. [[mark:to-code]] Let's open a real file.
+      And then the functions. That's the whole shape. [[mark:circle-main]] In
+      package main, func main is where the program starts. [[mark:to-code]]
+      Let's build one up, piece by piece.
     sources:
       - title: "A Tour of Go — Packages"
         url: "https://go.dev/tour/basics/1"
@@ -280,9 +382,10 @@ scenes:
 
   - id: read
     narration: >
-      [[mark:open-main]] Here's the file. [[mark:select-package]] Package main
-      tells Go this is a program, not a library. [[mark:select-print]] And main
-      prints one line. That's a complete Go program.
+      [[mark:open-main]] Here's the starting point. [[mark:select-package]]
+      Package main makes this a program, not a library.
+      [[mark:select-print]] And main prints one line. That already compiles and
+      runs.
     sources:
       - title: "The Go Programming Language Specification — Package clause"
         url: "https://go.dev/ref/spec#Package_clause"
@@ -306,58 +409,187 @@ scenes:
           text: 'fmt.Println("Go, in one file")'
           occurrence: 1
 
-  - id: add-func
+  - id: vars
     narration: >
-      [[mark:type-triple]] Let's add a second function, right below main.
-      [[mark:select-sig]] It takes an int and returns an int. Both types are
-      written out. Go never guesses them.
+      [[mark:type-vars]] First, variables. [[mark:select-declare]] Colon equals
+      declares and assigns in one step. Go reads the type from the value, so
+      name is a string and count is an int.
     sources:
-      - title: "A Tour of Go — Functions"
-        url: "https://go.dev/tour/basics/4"
+      - title: "A Tour of Go — Short variable declarations"
+        url: "https://go.dev/tour/basics/10"
     actions:
-      - id: type-triple
+      - id: type-vars
         type: editor.type
-        at: { mark: type-triple, offsetMs: -400 }
-        target:
-          file: main.go
-          after: "\tfmt.Println(\"Go, in one file\")\n}\n"
-          occurrence: 1
-        cadence: line-by-line
-        text: "\nfunc triple(n int) int {\n\treturn n * 3\n}\n"
-      - id: select-sig
-        type: editor.select
-        at: { mark: select-sig }
-        target:
-          file: main.go
-          text: "(n int) int"
-          occurrence: 1
-
-  - id: call-and-run
-    narration: >
-      [[mark:type-call]] Now main can call it. Same package, so there's nothing
-      to import. [[mark:select-call]] One call, one value back. [[mark:run]]
-      Let's run it. Seven tripled is twenty one.
-    sources:
-      - title: "The Go Programming Language Specification — Declarations and scope"
-        url: "https://go.dev/ref/spec#Declarations_and_scope"
-      - title: "Go Playground"
-        url: "https://go.dev/play/"
-    actions:
-      - id: type-call
-        type: editor.type
-        at: { mark: type-call, offsetMs: -400 }
+        at: { mark: type-vars, offsetMs: -400 }
         target:
           file: main.go
           after: "\tfmt.Println(\"Go, in one file\")\n"
           occurrence: 1
-        text: "\tfmt.Println(\"triple 7 is\", triple(7))\n"
-      - id: select-call
+        cadence: line-by-line
+        text: "\n\tname := \"Go\"\n\tcount := 3\n\tfmt.Println(name, count)\n"
+      - id: select-declare
         type: editor.select
-        at: { mark: select-call }
+        at: { mark: select-declare }
         target:
           file: main.go
-          text: "triple(7)"
+          text: 'name := "Go"'
           occurrence: 1
+
+  - id: slices
+    narration: >
+      [[mark:type-slices]] Next, slices — Go's growable lists.
+      [[mark:draw-slice]] A slice points at an array underneath.
+      [[mark:draw-len]] Length is how many values you've put in.
+      [[mark:draw-cap]] Capacity is how much room that array has. Append filled
+      the third slot and left one spare. [[mark:close-slice]] Back to the code.
+    sources:
+      - title: "The Go Blog — Go Slices: usage and internals"
+        url: "https://go.dev/blog/slices-intro"
+    actions:
+      - id: type-slices
+        type: editor.type
+        at: { mark: type-slices, offsetMs: -400 }
+        target:
+          file: main.go
+          after: "\tfmt.Println(name, count)\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n\tscores := []int{90, 80}\n\tscores = append(scores, 70)\n\tfmt.Println(scores, len(scores), cap(scores))\n"
+      - id: open-slice-board
+        type: whiteboard.apply
+        at: { mark: draw-slice, offsetMs: -700 }
+        open: true
+      # The anatomy sketch is wiped here — this diagram reuses its canvas.
+      - id: draw-slice
+        type: whiteboard.apply
+        at: { mark: draw-slice }
+        clear: true
+        upsertIds: [sl-title, sl-box-0, sl-val-0, sl-box-1, sl-val-1, sl-box-2, sl-val-2, sl-box-3]
+        drawMs: 2400
+      - id: draw-len
+        type: whiteboard.apply
+        at: { mark: draw-len }
+        upsertIds: [sl-len-underline, sl-len-label]
+        drawMs: 900
+      - id: draw-cap
+        type: whiteboard.apply
+        at: { mark: draw-cap }
+        upsertIds: [sl-cap-arrow, sl-cap-label]
+        drawMs: 1000
+      - id: close-slice-board
+        type: whiteboard.apply
+        at: { mark: close-slice }
+        open: false
+
+  - id: maps
+    narration: >
+      [[mark:type-maps]] Maps hold key and value pairs.
+      [[mark:select-comma-ok]] Reading one gives you two things: the value, and
+      whether the key was there at all.
+    sources:
+      - title: "The Go Blog — Go maps in action"
+        url: "https://go.dev/blog/maps"
+    actions:
+      - id: type-maps
+        type: editor.type
+        at: { mark: type-maps, offsetMs: -400 }
+        target:
+          file: main.go
+          after: "\tfmt.Println(scores, len(scores), cap(scores))\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n\tages := map[string]int{\"ada\": 36}\n\tage, found := ages[\"ada\"]\n\tfmt.Println(age, found)\n"
+      - id: select-comma-ok
+        type: editor.select
+        at: { mark: select-comma-ok }
+        target:
+          file: main.go
+          text: 'age, found := ages["ada"]'
+          occurrence: 1
+
+  - id: structs
+    narration: >
+      [[mark:type-point]] Structs group fields under one name.
+      [[mark:type-use-point]] And here we build one and print it.
+      [[mark:select-receiver]] That receiver, p point, attaches the method to
+      the type. Go has no classes. A method is a function with a receiver.
+    sources:
+      - title: "A Tour of Go — Structs"
+        url: "https://go.dev/tour/moretypes/2"
+      - title: "A Tour of Go — Methods"
+        url: "https://go.dev/tour/methods/1"
+    actions:
+      - id: type-point
+        type: editor.type
+        at: { mark: type-point, offsetMs: -400 }
+        target:
+          file: main.go
+          after: "\tfmt.Println(age, found)\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\ntype point struct {\n\tx int\n\ty int\n}\n\nfunc (p point) label() string {\n\treturn fmt.Sprintf(\"point %d,%d\", p.x, p.y)\n}\n"
+      - id: type-use-point
+        type: editor.type
+        at: { mark: type-use-point }
+        target:
+          file: main.go
+          after: "\tfmt.Println(age, found)\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n\tp := point{x: 3, y: 4}\n\tfmt.Println(p.label())\n"
+      - id: select-receiver
+        type: editor.select
+        at: { mark: select-receiver }
+        target:
+          file: main.go
+          text: "(p point)"
+          occurrence: 1
+
+  - id: errors
+    narration: >
+      [[mark:type-halve]] Last piece: what happens when a function can't do its
+      job. [[mark:type-use-halve]] We call it, and read back both values.
+      [[mark:select-results]] A Go function returns its result and an error
+      together. Seven is odd, so halve returns zero and an error.
+    sources:
+      - title: "Effective Go — Multiple return values"
+        url: "https://go.dev/doc/effective_go#multiple-returns"
+    actions:
+      - id: type-halve
+        type: editor.type
+        at: { mark: type-halve, offsetMs: -400 }
+        target:
+          file: main.go
+          after: "\treturn fmt.Sprintf(\"point %d,%d\", p.x, p.y)\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\nfunc halve(n int) (int, error) {\n\tif n%2 != 0 {\n\t\treturn 0, fmt.Errorf(\"%d is odd\", n)\n\t}\n\treturn n / 2, nil\n}\n"
+      - id: type-use-halve
+        type: editor.type
+        at: { mark: type-use-halve }
+        target:
+          file: main.go
+          after: "\tfmt.Println(p.label())\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n\thalf, err := halve(7)\n\tfmt.Println(half, err)\n"
+      - id: select-results
+        type: editor.select
+        at: { mark: select-results }
+        target:
+          file: main.go
+          text: "(int, error)"
+          occurrence: 1
+
+  - id: run
+    narration: >
+      [[mark:run]] Now let's run all of it. Name and count. The slice, with its
+      length and capacity. The map lookup. The struct's label. And the error
+      from seven.
+    sources:
+      - title: "Go Playground"
+        url: "https://go.dev/play/"
+    actions:
       - id: run
         type: runtime.run
         at: { mark: run, offsetMs: 200 }
@@ -365,25 +597,25 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "triple 7 is 21"
+        contains: "[90 80 70] 3 4"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.go
-        contains: "func triple(n int) int"
+        contains: "func halve(n int) (int, error)"
 
   - id: recap
     narration: >
-      [[mark:draw-recap]] So that's a Go program. One package, one entry point.
-      [[mark:circle-ret]] main calls what it needs, and gets values back.
-      [[mark:board-close]] That's the whole shape.
+      [[mark:draw-recap]] So that's Go in one file. [[mark:circle-err]] One
+      package, types written out, and errors returned to you, not thrown.
+      [[mark:draw-note]] Check the error, then use the result.
     sources:
       - title: "How to Write Go Code"
         url: "https://go.dev/doc/code"
     actions:
       # Reopened a beat ahead of the words, for the same reason the first open
-      # sits in the lead handle.
+      # sits in the lead handle. The slice diagram is wiped for this one.
       - id: open-recap
         type: whiteboard.apply
         at: { mark: draw-recap, offsetMs: -700 }
@@ -391,23 +623,34 @@ scenes:
       - id: draw-recap
         type: whiteboard.apply
         at: { mark: draw-recap }
-        upsertIds: [ret-title, ret-main-box, ret-main-text, ret-arrow, ret-fn-box, ret-fn-text]
-        drawMs: 1800
-      - id: draw-return
+        clear: true
+        upsertIds:
+          [
+            tv-title,
+            tv-call-box,
+            tv-call-text,
+            tv-arrow,
+            tv-val-box,
+            tv-val-text,
+            tv-err-box,
+            tv-err-text,
+          ]
+        drawMs: 2400
+      - id: circle-err
         type: whiteboard.apply
-        at: { mark: circle-ret }
-        upsertIds: [ret-down-arrow, ret-val-text, ret-val-circle]
-        drawMs: 1200
+        at: { mark: circle-err }
+        upsertIds: [tv-err-circle]
+        drawMs: 900
       - id: draw-note
         type: whiteboard.apply
-        at: { mark: board-close }
-        upsertIds: [ret-note, ret-note-underline]
+        at: { mark: draw-note }
+        upsertIds: [tv-note, tv-note-underline]
         drawMs: 800
       # Lands in the trailing quiet handle: the final sentence finishes, the
       # board closes, then the studio's two seconds of silence close the tape.
       - id: close-recap
         type: whiteboard.apply
-        at: { mark: board-close, offsetMs: 2800 }
+        at: { mark: draw-note, offsetMs: 2800 }
         open: false
 
 checks:
