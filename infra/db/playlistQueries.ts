@@ -245,7 +245,15 @@ export async function updatePlaylist(
     values.push(params.description);
   }
   if (sets.length === 0) {
-    return getPlaylistById(db, id);
+    // Owner-scoped, matching the UPDATE below. The unscoped getPlaylistById
+    // here let `PATCH /api/playlists/:id` with an empty body read back another
+    // user's row and — worse — made the route invalidate that playlist's cache
+    // key (routes/playlists.ts), an unauthenticated-cost KV eviction primitive.
+    const row = await db
+      .prepare("SELECT * FROM playlists WHERE id = ? AND owner_id = ?")
+      .bind(id, ownerId)
+      .first<PlaylistRow>();
+    return row ?? null;
   }
   sets.push("updated_at = ?");
   values.push(Date.now(), id, ownerId);

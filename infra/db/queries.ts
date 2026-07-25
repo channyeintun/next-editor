@@ -217,6 +217,21 @@ export async function getLessonById(db: D1Database, id: string): Promise<LessonR
   return row ?? null;
 }
 
+// Owner-scoped counterpart to getLessonById. Callers acting on behalf of a
+// signed-in user must use this one, so a miss is indistinguishable from a
+// lesson that does not exist.
+export async function getOwnedLessonById(
+  db: D1Database,
+  id: string,
+  ownerId: string,
+): Promise<LessonRow | null> {
+  const row = await db
+    .prepare("SELECT * FROM lessons WHERE id = ? AND owner_id = ?")
+    .bind(id, ownerId)
+    .first<LessonRow>();
+  return row ?? null;
+}
+
 export interface InsertDraftLessonParams {
   id: string;
   slug: string;
@@ -303,7 +318,11 @@ export async function updateLesson(
     values.push(params.thumbnail);
   }
   if (sets.length === 0) {
-    return getLessonById(db, id);
+    // A no-op update still has to answer as the owner-scoped UPDATE below
+    // would. Using the unscoped getLessonById here made `PATCH /api/lessons/:id`
+    // with an empty body a read oracle for any lesson id, including drafts the
+    // author had unpublished, defeating the route's 404-for-non-owners contract.
+    return getOwnedLessonById(db, id, ownerId);
   }
   sets.push("updated_at = ?");
   values.push(Date.now(), id, ownerId);
