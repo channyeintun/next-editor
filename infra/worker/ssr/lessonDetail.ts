@@ -46,9 +46,18 @@ function serializeForScript(value: unknown): string {
     .replace(/\u2029/g, "\\u2029");
 }
 
+// Every String.replace below passes its replacement as a FUNCTION, never as a
+// string. A replacement string honours `$&`, `` $` ``, `$'` and `$1` as
+// substitution patterns, and the values spliced in here (lesson title and
+// description) are attacker-authored: the HTML escapers deliberately leave `$`
+// alone, so a title of `$'$'$'$'` made each pass re-insert the rest of the
+// document, and injectLessonDocument runs eight such passes over each other's
+// output. A 12-character title reached gigabytes, which is not a throw the
+// caller's try/catch can catch — the isolate is killed and takes co-resident
+// requests with it. The function form has no substitution semantics at all.
 function appendToHead(document: string, html: string): string {
   return document.includes("</head>")
-    ? document.replace("</head>", `${html}\n  </head>`)
+    ? document.replace("</head>", () => `${html}\n  </head>`)
     : document;
 }
 
@@ -63,7 +72,9 @@ function setMeta(
 ): string {
   const tag = `<meta ${attribute}="${key}" content="${escapeAttribute(content)}" />`;
   const pattern = new RegExp(`<meta[^>]*\\s${attribute}="${escapeRegExp(key)}"[^>]*>`, "i");
-  return pattern.test(document) ? document.replace(pattern, tag) : appendToHead(document, tag);
+  return pattern.test(document)
+    ? document.replace(pattern, () => tag)
+    : appendToHead(document, tag);
 }
 
 function removeMeta(document: string, attribute: "name" | "property", key: string): string {
@@ -72,13 +83,15 @@ function removeMeta(document: string, attribute: "name" | "property", key: strin
 }
 
 function setTitle(document: string, title: string): string {
-  return document.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeText(title)}</title>`);
+  return document.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeText(title)}</title>`);
 }
 
 function setCanonical(document: string, href: string): string {
   const tag = `<link rel="canonical" href="${escapeAttribute(href)}" />`;
   const pattern = /<link[^>]*\srel="canonical"[^>]*>/i;
-  return pattern.test(document) ? document.replace(pattern, tag) : appendToHead(document, tag);
+  return pattern.test(document)
+    ? document.replace(pattern, () => tag)
+    : appendToHead(document, tag);
 }
 
 const IMAGE_MIME_TYPES: Record<string, string> = {

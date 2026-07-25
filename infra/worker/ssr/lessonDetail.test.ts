@@ -41,6 +41,37 @@ function readQueryState(document: string): unknown {
 }
 
 describe("lesson detail SSR", () => {
+  it("treats $-substitution patterns in lesson text as literals, not replacements", () => {
+    // `$'` and `` $` `` are substitution patterns when a replacement is passed
+    // to String.replace as a string, and the HTML escapers deliberately do not
+    // touch `$`. Title and description are attacker-authored and uncapped, and
+    // injectLessonDocument runs eight sequential rewrites over each other's
+    // output — so this expanded multiplicatively and could kill the isolate.
+    const document = injectLessonDocument(INDEX_HTML, {
+      ...CONTEXT,
+      lesson: { ...LESSON, title: "$'$'$'$'", description: "$`$`$`$`" },
+    });
+
+    expect(document).toContain("<title>$'$'$'$' | Next Editor</title>");
+    expect(document).toContain('<meta name="description" content="$`$`$`$`" />');
+    // The real signal: no runaway growth. The shell is ~4.6 KB and the injected
+    // metadata adds well under 4 KB; anything near the shell's own size means a
+    // substitution pattern expanded instead of being copied literally.
+    expect(document.length).toBeLessThan(INDEX_HTML.length + 4096);
+  });
+
+  it("treats $-substitution patterns in an unknown slug as literals", async () => {
+    // Reachable with no account and no lesson: any GET /learn/<anything>.
+    const slug = "$`".repeat(64);
+    const response = await renderMissingLessonResponse(
+      new Response(INDEX_HTML, { headers: { "content-type": "text/html" } }),
+      slug,
+    );
+    const body = await response.text();
+
+    expect(body.length).toBeLessThan(INDEX_HTML.length + 4096);
+  });
+
   it("replaces the shell's generic metadata against the real index.html", () => {
     const document = injectLessonDocument(INDEX_HTML, CONTEXT);
 
