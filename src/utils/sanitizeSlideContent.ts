@@ -38,6 +38,13 @@ function sanitizeElement(element: Element): void {
       element.removeAttribute(attribute.name);
       continue;
     }
+    // A `nonce` on authored markup is never legitimate, and leaving it would
+    // let content forge the value the slide document's CSP trusts for its own
+    // animation bridge (see createSandboxedSlideDocument).
+    if (name === "nonce") {
+      element.removeAttribute(attribute.name);
+      continue;
+    }
     if (URL_ATTRIBUTES.has(name) && !isSafeUrl(attribute.value, element.localName.toLowerCase())) {
       element.removeAttribute(attribute.name);
       continue;
@@ -61,6 +68,17 @@ function sanitizeElement(element: Element): void {
 export function sanitizeSlideContent(content: string, mimeType: "text/html" | "image/svg+xml") {
   const document = new DOMParser().parseFromString(content, mimeType);
   const root = mimeType === "text/html" ? document.body : document.documentElement;
+
+  // The root has to face the element check too, not just attribute scrubbing.
+  // `querySelectorAll("*")` below enumerates descendants only, so for the SVG
+  // branch — where `root` is whatever element the author put first and the
+  // return value is `root.outerHTML` — a document whose root IS a forbidden
+  // element (`<script>…</script>` parses fine as XML) passed straight through
+  // with its own tag intact. Dropping the whole document is right here: the
+  // root is the content, so there is nothing to salvage from it.
+  if (FORBIDDEN_ELEMENTS.has(root.localName.toLowerCase())) {
+    return "";
+  }
 
   sanitizeElement(root);
 

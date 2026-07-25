@@ -3,7 +3,15 @@ import { sanitizeSlideContent } from "./sanitizeSlideContent";
 export const SLIDE_ANIMATION_INIT_MESSAGE_TYPE = "NEXT_EDITOR_SLIDE_ANIMATION_INIT";
 export const SLIDE_ANIMATION_REVEAL_MESSAGE_TYPE = "NEXT_EDITOR_SLIDE_ANIMATION_REVEAL";
 
-const SLIDE_ANIMATION_SCRIPT_NONCE = "next-editor-slide-animation";
+// Generated once per page load rather than hardcoded. A CSP nonce is only a
+// control if content cannot predict it: as a source literal it was readable in
+// the shipped bundle, so `script-src 'nonce-<constant>'` was equivalent to
+// 'unsafe-inline' for any authored slide that simply spelled the constant out.
+// Slide markup is authored ahead of time and rendered in an opaque-origin
+// frame, so it can never observe this value. Stable across renders on purpose —
+// a fresh nonce per call would change srcDoc and reload every slide frame.
+// sanitizeSlideContent also strips `nonce` from authored markup.
+const SLIDE_ANIMATION_SCRIPT_NONCE = crypto.randomUUID();
 
 function createSlideContentSecurityPolicy(animationBridge: boolean): string {
   return [

@@ -20,7 +20,31 @@ describe("GoogleSvgSlide", () => {
     expect(iframe?.getAttribute("referrerpolicy")).toBe("no-referrer");
     expect(iframe?.srcdoc).toContain(minimalSvg);
     expect(iframe?.srcdoc).toContain("Content-Security-Policy");
-    expect(iframe?.srcdoc).toContain("script-src 'nonce-next-editor-slide-animation'");
+
+    // The nonce is generated at runtime, not hardcoded, so assert the property
+    // that matters: the CSP trusts exactly the nonce the bridge script carries,
+    // and that value is not a guessable constant an authored slide could spell
+    // out to get itself trusted.
+    const nonce = /script-src 'nonce-([^']+)'/.exec(iframe?.srcdoc ?? "")?.[1];
+    expect(nonce).toBeDefined();
+    expect(nonce).not.toBe("next-editor-slide-animation");
+    expect(iframe?.srcdoc).toContain(`<script nonce="${nonce}">`);
+  });
+
+  it("drops a document whose root element is itself forbidden", () => {
+    // `<script>` parses as well-formed XML, so documentElement is the script
+    // itself — it has no descendants for the element sweep to visit, and the
+    // SVG branch returns root.outerHTML. Without a root-level check this was
+    // re-emitted verbatim, and an authored `nonce` would have matched the CSP.
+    const { container } = render(
+      <GoogleSvgSlide
+        content={'<script nonce="next-editor-slide-animation">alert(1)</script>'}
+        stepsRevealed={0}
+      />,
+    );
+    const srcDoc = container.querySelector("iframe")?.srcdoc ?? "";
+    expect(srcDoc).not.toContain("alert(1)");
+    expect(srcDoc).not.toContain('nonce="next-editor-slide-animation"');
   });
 
   it("renders with steps and stepsRevealed without crashing", () => {
