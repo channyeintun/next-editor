@@ -29,6 +29,16 @@ import {
 import { fetchPublishedDeck, GoogleSlidesParseError } from "../googleSlides";
 import { applyDeckToSlides } from "../googleSlides/importDeck";
 
+/** Guards an href/fetch target that came out of deserialized slide data. */
+function isHttpsUrl(value: string | undefined): value is string {
+  if (!value) return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 interface SlidesManagerProps {
   slides: Slide[];
   onSlidesChange: (slides: Slide[]) => void;
@@ -182,7 +192,14 @@ function GoogleSlidesImport({
   const [error, setError] = useState<string | null>(null);
 
   const googleSlides = slides.filter((slide) => slide.contentType === "google-svg");
-  const sourceUrl = googleSlides.find((slide) => slide.sourceUrl)?.sourceUrl;
+  // Only the *import* path validates this URL (isPublishedDeckUrl). Slides
+  // deserialized from a `.ne`, a studio plan, or the collaboration teaching
+  // document carry an unvalidated string that is also persisted to
+  // localStorage — so a `javascript:` URL would execute in the app origin on
+  // click, and runImport below would re-fetch an arbitrary host from the
+  // viewer's browser. Re-check the scheme at the point of use.
+  const rawSourceUrl = googleSlides.find((slide) => slide.sourceUrl)?.sourceUrl;
+  const sourceUrl = isHttpsUrl(rawSourceUrl) ? rawSourceUrl : undefined;
 
   const runImport = async (deckUrl: string) => {
     setIsLoading(true);

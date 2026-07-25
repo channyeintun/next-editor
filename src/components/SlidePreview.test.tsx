@@ -95,6 +95,7 @@ describe("SlidePreview local follow intent", () => {
     fireEvent(
       window,
       new MessageEvent("message", {
+        origin: window.location.origin,
         data: {
           type: "IFRAME_INTERACTION",
           payload: {
@@ -114,6 +115,35 @@ describe("SlidePreview local follow intent", () => {
         interaction: expect.objectContaining({ type: "click" }),
       }),
     );
+  });
+
+  it("ignores interaction messages from a foreign origin or a malformed payload", () => {
+    stopFollowing.mockClear();
+    const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
+    render(
+      <SlidePreview slides={slides} currentSlideIndex={0} isOpen onSlideEvent={onSlideEvent} />,
+    );
+
+    // A page framing the app, or window.opener, must not be able to cancel
+    // follow-mode or forge events into a live recording.
+    fireEvent(
+      window,
+      new MessageEvent("message", {
+        origin: "https://evil.example",
+        data: { type: "IFRAME_INTERACTION", payload: { type: "click" } },
+      }),
+    );
+    // A missing payload used to throw a TypeError inside the listener.
+    fireEvent(
+      window,
+      new MessageEvent("message", {
+        origin: window.location.origin,
+        data: { type: "IFRAME_INTERACTION" },
+      }),
+    );
+
+    expect(stopFollowing).not.toHaveBeenCalled();
+    expect(onSlideEvent).not.toHaveBeenCalled();
   });
 
   it("shows an unavailable room slide without falling back and offers asset retry", () => {

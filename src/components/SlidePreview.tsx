@@ -70,8 +70,18 @@ function SlidePreview({
     const handleMessage = (event: MessageEvent) => {
       if (isPlaying) return;
 
+      // Only frames belonging to this page may drive recording state. Slide and
+      // preview frames are sandboxed, so they post from an opaque ("null")
+      // origin; everything legitimate is one of those or same-origin. Without
+      // this, any page framing the app — the worker sets no frame-ancestors —
+      // as well as window.opener and the untrusted runtime preview frame could
+      // cancel follow-mode and forge interaction events into a live recording.
+      if (event.origin !== "null" && event.origin !== window.location.origin) return;
+
       const { type, payload } = event.data || {};
-      if (type === "IFRAME_INTERACTION") {
+      // payload was dereferenced unguarded, so a bare {type:"IFRAME_INTERACTION"}
+      // threw a TypeError inside the listener.
+      if (type === "IFRAME_INTERACTION" && payload && typeof payload === "object") {
         collaboration?.stopFollowing("local-slide-input");
         const interaction = {
           type: payload.type,

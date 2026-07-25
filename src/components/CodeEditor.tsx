@@ -165,6 +165,18 @@ function displayParticipantName(participant: { name: string | null; username: st
 }
 
 /**
+ * Monaco renders `hoverMessage.value` as Markdown. `username` is charset-safe,
+ * but `name` comes straight from the Google ID token's `name` claim with only a
+ * length check, so a peer whose account name contains Markdown could render a
+ * link or a remote image inside another participant's editor hover — phishing
+ * plus an IP beacon that fires on hovering their cursor. Escaping the syntax
+ * characters keeps the name readable while making it inert.
+ */
+function escapeMarkdown(value: string): string {
+  return value.replace(/[\\`*_{}[\]()#+\-.!<>|~]/g, "\\$&");
+}
+
+/**
  * CodeEditor Component - Monaco Editor wrapper with recording and replay capabilities
  */
 
@@ -867,7 +879,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
               options: {
                 className: `collaboration-selection collaboration-color-${colorIndex}`,
-                hoverMessage: { value: displayParticipantName(selection.participant) },
+                hoverMessage: {
+                  value: escapeMarkdown(displayParticipantName(selection.participant)),
+                },
               },
             });
           }
@@ -875,7 +889,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             range: new monaco.Range(head.lineNumber, head.column, head.lineNumber, head.column),
             options: {
               beforeContentClassName: `collaboration-cursor collaboration-color-${colorIndex}`,
-              hoverMessage: { value: displayParticipantName(selection.participant) },
+              hoverMessage: {
+                value: escapeMarkdown(displayParticipantName(selection.participant)),
+              },
             },
           });
         }
@@ -911,7 +927,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
             options: {
               className: `collaboration-selection collaboration-color-${colorIndex}`,
-              hoverMessage: { value: participantName },
+              hoverMessage: { value: escapeMarkdown(participantName) },
             },
           });
         }
@@ -919,7 +935,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           range: new monaco.Range(head.lineNumber, head.column, head.lineNumber, head.column),
           options: {
             beforeContentClassName: `collaboration-cursor collaboration-color-${colorIndex}`,
-            hoverMessage: { value: participantName },
+            hoverMessage: { value: escapeMarkdown(participantName) },
           },
         });
         labels.push({
@@ -984,7 +1000,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
           options: {
             className: `collaboration-selection collaboration-color-${color}`,
-            hoverMessage: { value: participantName },
+            hoverMessage: { value: escapeMarkdown(participantName) },
           },
         });
       }
@@ -992,7 +1008,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         range: new monaco.Range(head.lineNumber, head.column, head.lineNumber, head.column),
         options: {
           beforeContentClassName: `collaboration-cursor collaboration-color-${color}`,
-          hoverMessage: { value: participantName },
+          hoverMessage: { value: escapeMarkdown(participantName) },
         },
       });
       cursorLabels.push({

@@ -232,6 +232,16 @@ export default ({ mode }: { mode: string }) => {
       hmr: {
         overlay: true, // Show errors in overlay
       },
+      fs: {
+        // Vite's built-in deny list covers `.env*` but this project's Worker
+        // secrets live in `infra/.dev.vars` (GOOGLE_CLIENT_SECRET,
+        // SESSION_SECRET, the QStash signing keys), which is inside the served
+        // root and matches no default pattern — so `GET /infra/.dev.vars` was
+        // served verbatim. Harmless on a stock localhost bind, but a single
+        // unauthenticated request once the dev server is started with `--host`
+        // or on a shared/CI box. Vite merges these with its defaults.
+        deny: [".dev.vars", ".dev.vars.*", "**/.dev.vars", "**/.dev.vars.*"],
+      },
       // Routes implemented so far by the Tube Worker (`bun run dev:worker`,
       // see infra/wrangler.toml). Deliberately NOT a blanket "/api" proxy: that
       // would shadow proxyPlugin's existing /api/proxy dev route above before

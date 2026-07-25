@@ -60,7 +60,14 @@ export async function cached<T>(
 
   try {
     const serialized = JSON.stringify(value);
-    if (serialized !== undefined) {
+    // `value === null` is skipped, not just `serialized === undefined`:
+    // JSON.stringify(null) is the string "null", so a not-found lookup used to
+    // pass this guard and write an entry — which the read above then rejects
+    // (`hit !== null`), so it could never be served. Every unauthenticated
+    // request for a nonexistent slug or an out-of-range page therefore minted a
+    // billable KV write, at an attacker-chosen key, that did nothing. Skipping
+    // it changes no behaviour: such an entry was never readable.
+    if (value !== null && serialized !== undefined) {
       await cache.put(key, serialized, {
         expirationTtl: Math.max(ttlSeconds, KV_MIN_EXPIRATION_TTL_SECONDS),
       });
