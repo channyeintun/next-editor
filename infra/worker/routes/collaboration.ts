@@ -1046,8 +1046,21 @@ collaborationRoute.all("/rooms/:roomId/voice/sfu/*", async (c) => {
       });
     }
   }
-  const contentLength = Number(c.req.header("content-length") ?? "0");
-  if (!Number.isFinite(contentLength) || contentLength > MAX_VOICE_SFU_REQUEST_BYTES) {
+  // A declared Content-Length is REQUIRED, not defaulted to 0. Defaulting made
+  // a chunked request (no Content-Length) sail past this check, and the body is
+  // then streamed to the voice DO, which buffers the whole thing with
+  // request.text() before it applies its own byte cap — so an authenticated
+  // member could exhaust the Durable Object's memory and take down voice for
+  // everyone in the room. The header is only the cheap first gate; the DO still
+  // enforces the real limit on what it actually read.
+  const contentLengthHeader = c.req.header("content-length");
+  const contentLength = Number(contentLengthHeader);
+  if (
+    contentLengthHeader === undefined ||
+    !Number.isFinite(contentLength) ||
+    contentLength < 0 ||
+    contentLength > MAX_VOICE_SFU_REQUEST_BYTES
+  ) {
     return c.json({ error: "payload too large" }, 413, { "Cache-Control": "no-store" });
   }
   const capability = voiceCapabilitySchema.safeParse(c.req.header(VOICE_CAPABILITY_HEADER));
