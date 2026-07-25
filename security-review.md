@@ -29,19 +29,19 @@ workspace. The secrets sweep came back clean, including full git history.
 | 5   | Empty-body `PATCH` bypasses ownership on lessons and playlists           | Medium   | Confirmed | ✅ Fixed  |
 | 6   | Slide sanitizer skips the root element; CSP nonce is a constant          | Medium   | Confirmed | ✅ Fixed  |
 | 7   | Open redirect in the OAuth `returnTo` (backslash bypass)                 | Medium   | Confirmed | ✅ Fixed  |
-| 8   | Any editor-role peer can permanently brick a collaboration room          | Medium   | Confirmed | ⬜ Open   |
+| 8   | Any editor-role peer can permanently brick a collaboration room          | Medium   | Confirmed | ✅ Fixed  |
 | 9   | Voice DO buffers an unbounded body when `Content-Length` is absent       | Medium   | Confirmed | ✅ Fixed  |
 | 10  | `/media` serves collaboration assets with no membership check            | Medium   | Plausible | ✅ Fixed  |
 | 11  | `/api/proxy` is an unauthenticated open forward proxy                    | Medium   | Confirmed | ◐ Partial |
 | 12  | Playground rate limiters are a non-atomic read-modify-write              | Medium   | Plausible | ⬜ Open   |
-| 13  | Voice roster fillable by one member via client-chosen session ids        | Medium   | Confirmed | ⬜ Open   |
+| 13  | Voice roster fillable by one member via client-chosen session ids        | Medium   | Confirmed | ✅ Fixed  |
 | 14  | `.ne` decode has no aggregate decompression cap                          | Medium   | Plausible | ✅ Fixed  |
-| 15  | Whiteboard replay folds the entire event array                           | Medium   | Plausible | ⬜ Open   |
+| 15  | Whiteboard replay folds the entire event array                           | Medium   | Plausible | ✅ Fixed  |
 | 16  | No Content-Security-Policy on any app response                           | Medium   | Plausible | ⬜ Open   |
 | 17  | Login CSRF on `/api/auth/google/onetap`                                  | Low–Med  | Plausible | ⬜ Open   |
 | 18  | Prototype-chain lookups in plain-object tables (5 sites)                 | Low      | Confirmed | ✅ Fixed  |
 | 19  | `SlidePreview` message handler checks neither origin nor source          | Low      | Confirmed | ✅ Fixed  |
-| 20  | Recording-supplied URLs reach media/fetch sinks unvalidated              | Low      | Confirmed | ⬜ Open   |
+| 20  | Recording-supplied URLs reach media/fetch sinks unvalidated              | Low      | Confirmed | ✅ Fixed  |
 | 21  | Negative lookups write a KV entry that is never read                     | Low      | Plausible | ✅ Fixed  |
 | 22  | Vite dev server serves `infra/.dev.vars`                                 | Low      | Plausible | ✅ Fixed  |
 | 23  | Unvalidated slide `sourceUrl` rendered as `<a href>`                     | Low      | Plausible | ✅ Fixed  |
@@ -232,7 +232,7 @@ than trusting the handshake cookie's stored value.
 
 ---
 
-## 8. Any editor-role peer can permanently brick a collaboration room — MEDIUM ⬜ Open
+## 8. Any editor-role peer can permanently brick a collaboration room — MEDIUM ✅ Fixed
 
 **Where:** [projectDocument.ts:425](src/collaboration/projectDocument.ts)
 
@@ -251,9 +251,10 @@ nulled); a fresh join gets nothing. "Unrecoverable" should read "unrecoverable f
 owner's only remedy is to close it and create a new one, since `seedCollaborationProject` throws if
 already seeded.
 
-**Fix:** validate the project root's structural metadata server-side in `acceptDocumentUpdate`,
-rejecting updates that change `schemaVersion` or destroy the `nodes`/`texts` maps — the way teaching
-transitions are already guarded.
+**Fixed** in `60a281d`. `assertCollaborationProjectStructure` runs in the DO on _every_ inbound
+update, not only teaching ones — a few root reads. It also rejects replacing `nodes`/`texts`/
+`metadata` with a scalar, which was worse than it looked: `childMap()` silently overwrites a non-map
+with a fresh empty one, so the next read would have discarded every file and its contents.
 
 ---
 
@@ -328,7 +329,7 @@ safe. It wants a deliberate decision about which hosts to permit, plus a rate li
   cache helper explicitly overrides that elsewhere. _Panel correction:_ "unmetered" is too strong —
   the route requires sign-in and identical sources are content-addressed — but the burst bypass is
   real independent of KV semantics.
-- **13 · Voice roster exhaustion**
+- **13 · Voice roster exhaustion — ✅ Fixed in `35204cc`.**
   ([voiceDurableObject.ts:429](infra/worker/collaboration/voiceDurableObject.ts)). Seats are counted
   per socket keyed on `(userId, collaborationSessionId)`, and `collaborationSessionId` is a
   _client-chosen_ query parameter validated only for UUID shape. One member opening 10 sockets with
@@ -338,7 +339,7 @@ safe. It wants a deliberate decision about which hosts to permit, plus a rate li
   per-call, so the 64 MiB cap bounds one _segment_; the only aggregate limits are compressed bytes
   and record count. ~30 segments (~2 MB on the wire) retain ~1.9 GB. Decode starts automatically
   from `?url=` with no user interaction. Victim-tab OOM only — no server impact.
-- **15 · Whiteboard replay fold**
+- **15 · Whiteboard replay fold — ✅ Fixed in `35204cc`.**
   ([whiteboard.ts:56](src/core/src/machine/replayState/whiteboard.ts)). The loop folds _every_ event
   rather than stopping at the playback index, retaining one fully-sorted scene per event. Also
   degrades legitimate long whiteboard recordings, so worth fixing on performance grounds alone.
@@ -391,7 +392,7 @@ preview and slide frames their own real documents rather than papering over it i
   guard. Any frame — including the untrusted preview iframe — can cancel follow-mode and forge a
   `slide_interaction` into the live recording. Every sibling bridge in the repo _does_ check, so
   this is an outlier rather than a design choice. Recording-state corruption only.
-- **20 · Recording-supplied URLs at media sinks.** `audio.src`
+- **20 · Recording-supplied URLs at media sinks — ✅ Fixed in `b1db166`.** `audio.src`
   ([audioActor.ts:298](src/core/src/machine/audioActor.ts)), `<video src>`
   ([CameraOverlay.tsx:402](src/components/CameraOverlay.tsx)), the preview `iframe.src` fallback
   ([runtimePreview.ts:157](src/components/preview/runtimePreview.ts)), caption `fetch`
@@ -529,24 +530,20 @@ Recorded so the clean areas mean "examined", not "skipped":
 
 ## Remaining work, in order
 
-Eighteen findings are fixed (1–7, 9, 10, 14, 18, 19, 21–25) and one is partially fixed (11). What is
-left, most worth doing first:
+Twenty-two findings are fixed (1–10, 13–15, 18–25) and one is partially fixed (11). Every finding an
+ordinary user or peer can trigger is now closed. What is left:
 
-1. **Finding 8** — room bricking. Validate the project root's structural metadata server-side, so an
-   `editor` cannot persist a value that breaks the room for everyone permanently. The largest
-   remaining item, and the only remaining one an ordinary participant can trigger.
-2. **Finding 13** — count voice seats per `userId`, not per client-chosen session UUID.
-3. **Finding 12** — the playground limiter's concurrent-burst bypass. Needs a Durable Object or the
-   Rate Limiting binding for an atomic increment; note that `cacheTtl` is _not_ a partial mitigation,
-   since KV's minimum is 60 s, the same as the default it already gets.
-4. **Finding 11 (rest)** — decide which hosts `/api/proxy` should serve and add a rate limit.
-5. **Finding 15** — bound the whiteboard fold by the playback index. Also a straight performance win
-   for long legitimate recordings.
-6. **Finding 16** — CSP, but only once the preview and slide frames have their own documents; see
+1. **Finding 12** — the playground limiter's concurrent-burst bypass. Needs a Durable Object or the
+   Rate Limiting binding for an atomic increment. Note that passing `cacheTtl` is _not_ a partial
+   mitigation, since KV's minimum is 60 s — the same as the default it already gets.
+2. **Finding 11 (rest)** — decide which hosts `/api/proxy` should serve, and add a rate limit.
+3. **Finding 16** — CSP, but only once the preview and slide frames have their own documents; see
    the srcdoc-inheritance trap above. This is also what would restore finding 1's lost scroll and
    interaction fidelity.
-7. **Findings 17, 20, 26, 27** — as capacity allows. 27 is dormant code; do it before wiring the
-   remote runtime up, not after.
+4. **Finding 17** — a server-issued nonce on the One Tap flow, plus an `Origin` check.
+5. **Finding 26** — per-user storage quotas.
+6. **Finding 27** — `remote-runtime`. Dormant code; do it before wiring the remote runtime up, not
+   after.
 
 ### Deliberately not attempted
 
