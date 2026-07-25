@@ -47,6 +47,7 @@ function Preview() {
       replayContainerRef={controller.replayContainerRef}
       isRrwebReplayActive={controller.isRrwebReplayActive}
       disablePointerEvents={controller.disablePointerEvents}
+      allowSameOrigin={controller.allowSameOriginPreview}
     />
   );
 

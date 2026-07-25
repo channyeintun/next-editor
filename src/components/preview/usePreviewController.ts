@@ -84,6 +84,8 @@ export interface PreviewController {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   replayContainerRef: RefObject<HTMLDivElement | null>;
   isRrwebReplayActive: boolean;
+  /** See RuntimePreviewRenderer — false once recorded HTML can reach the frame. */
+  allowSameOriginPreview: boolean;
   size: PreviewSize;
   isOpen: boolean;
   panelMode: PreviewPanelMode;
@@ -1328,6 +1330,10 @@ export function usePreviewController(): PreviewController {
     iframeRef,
     replayContainerRef,
     isRrwebReplayActive,
+    // Keyed on "is a recording loaded", not "is it playing": once a `.ne` is
+    // open, its HTML can reach this frame through the snapshot path both during
+    // playback and after the viewer takes manual control of the workspace.
+    allowSameOriginPreview: !currentRecording,
     size,
     isOpen,
     panelMode,
