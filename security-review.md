@@ -25,13 +25,13 @@ workspace. The secrets sweep came back clean, including full git history.
 | 1   | Preview iframe replays recorded HTML with `allow-same-origin`            | **High** | Confirmed | ✅ Fixed |
 | 2   | Upload stores attacker-chosen `Content-Type`; `/media` replays it inline | **High** | Confirmed | ✅ Fixed |
 | 3   | SSR lesson text expands as a `String.replace` substitution pattern       | **High** | Confirmed | ✅ Fixed |
-| 4   | Collaboration invite auto-claims on page load → attacker files execute   | **High** | Confirmed | ⬜ Open  |
+| 4   | Collaboration invite auto-claims on page load → attacker files execute   | **High** | Confirmed | ✅ Fixed |
 | 5   | Empty-body `PATCH` bypasses ownership on lessons and playlists           | Medium   | Confirmed | ✅ Fixed |
 | 6   | Slide sanitizer skips the root element; CSP nonce is a constant          | Medium   | Confirmed | ✅ Fixed |
-| 7   | Open redirect in the OAuth `returnTo` (backslash bypass)                 | Medium   | Confirmed | ⬜ Open  |
+| 7   | Open redirect in the OAuth `returnTo` (backslash bypass)                 | Medium   | Confirmed | ✅ Fixed |
 | 8   | Any editor-role peer can permanently brick a collaboration room          | Medium   | Confirmed | ⬜ Open  |
-| 9   | Voice DO buffers an unbounded body when `Content-Length` is absent       | Medium   | Confirmed | ⬜ Open  |
-| 10  | `/media` serves collaboration assets with no membership check            | Medium   | Plausible | ⬜ Open  |
+| 9   | Voice DO buffers an unbounded body when `Content-Length` is absent       | Medium   | Confirmed | ✅ Fixed |
+| 10  | `/media` serves collaboration assets with no membership check            | Medium   | Plausible | ✅ Fixed |
 | 11  | `/api/proxy` is an unauthenticated open forward proxy                    | Medium   | Confirmed | ⬜ Open  |
 | 12  | Playground rate limiters are a non-atomic read-modify-write              | Medium   | Plausible | ⬜ Open  |
 | 13  | Voice roster fillable by one member via client-chosen session ids        | Medium   | Confirmed | ⬜ Open  |
@@ -39,7 +39,7 @@ workspace. The secrets sweep came back clean, including full git history.
 | 15  | Whiteboard replay folds the entire event array                           | Medium   | Plausible | ⬜ Open  |
 | 16  | No Content-Security-Policy on any app response                           | Medium   | Plausible | ⬜ Open  |
 | 17  | Login CSRF on `/api/auth/google/onetap`                                  | Low–Med  | Plausible | ⬜ Open  |
-| 18  | Prototype-chain lookups in plain-object tables (4 sites)                 | Low      | Confirmed | ⬜ Open  |
+| 18  | Prototype-chain lookups in plain-object tables (5 sites)                 | Low      | Confirmed | ✅ Fixed |
 | 19  | `SlidePreview` message handler checks neither origin nor source          | Low      | Confirmed | ⬜ Open  |
 | 20  | Recording-supplied URLs reach media/fetch sinks unvalidated              | Low      | Confirmed | ⬜ Open  |
 | 21  | Negative lookups write a KV entry that is never read                     | Low      | Plausible | ⬜ Open  |
@@ -138,7 +138,7 @@ paths and fail against the previous code.
 
 ---
 
-## 4. Collaboration invite auto-claims on page load — HIGH ⬜ Open
+## 4. Collaboration invite auto-claims on page load — HIGH ✅ Fixed
 
 **Where:** [CollaborationContext.tsx:603](src/contexts/CollaborationContext.tsx) (effect at 595–628)
 
@@ -163,7 +163,9 @@ The panel verified the consequences of one click by a signed-in victim:
 Execution is confined to the WebContainer sandbox, and it is one-click rather than zero-click — but
 the file replacement and the auto-run land together.
 
-**Fix:** render an invitation preview (room, inviter, role) and claim only from a click handler.
+**Fixed** in `4374536`. The token is staged as `pendingInviteToken` and claimed only from
+`acceptInvitation`, called from a real button. The prompt states what accepting does — replaces the
+workspace, runs that project, reveals your presence — so the choice is informed rather than implicit.
 
 ---
 
@@ -212,7 +214,7 @@ and the bridge nonce is generated per page load.
 
 ---
 
-## 7. Open redirect in the OAuth `returnTo` — MEDIUM ⬜ Open
+## 7. Open redirect in the OAuth `returnTo` — MEDIUM ✅ Fixed
 
 **Where:** [google.ts:52-57](infra/worker/auth/google.ts) (guard), emitted at `:201`
 
@@ -224,9 +226,9 @@ stored in the signed handshake cookie at `/login` and emitted unmodified at the 
 The victim completes a genuine Google sign-in on the real domain and lands on the attacker's page —
 a high-credibility phishing pivot.
 
-**Fix:** resolve and re-serialize instead of prefix-matching:
-`const u = new URL(value, "https://placeholder.invalid"); return u.origin === "https://placeholder.invalid" ? u.pathname + u.search + u.hash : "/";`
-and re-validate at the callback, not only at `/login`.
+**Fixed** in `d8186b7`. `sanitizeReturnTo` resolves against a placeholder origin and re-serializes,
+which collapses `/\`, `/\/` and the tab/newline variants alike, and the callback re-sanitizes rather
+than trusting the handshake cookie's stored value.
 
 ---
 
@@ -255,7 +257,7 @@ transitions are already guarded.
 
 ---
 
-## 9. Voice DO buffers an unbounded body when `Content-Length` is absent — MEDIUM ⬜ Open
+## 9. Voice DO buffers an unbounded body when `Content-Length` is absent — MEDIUM ✅ Fixed
 
 **Where:** [collaboration.ts:1049](infra/worker/routes/collaboration.ts),
 [voiceDurableObject.ts:854](infra/worker/collaboration/voiceDurableObject.ts)
@@ -268,12 +270,12 @@ check. Every other body reader in this component bounds while streaming; this on
 An authenticated member sending a chunked body far larger than the cap can exhaust the Durable
 Object's memory, taking every participant's voice session with it.
 
-**Fix:** reject a missing `Content-Length` at the Worker, and read the DO body through a bounded
-streaming reader.
+**Fixed** in `6a7adc5`. The Worker requires a declared `Content-Length` rather than defaulting it,
+and the DO reads through a bounded reader that cancels once the cap is passed.
 
 ---
 
-## 10. `/media` serves collaboration assets with no membership check — MEDIUM ⬜ Open
+## 10. `/media` serves collaboration assets with no membership check — MEDIUM ✅ Fixed
 
 **Where:** [media.ts:26](infra/worker/routes/media.ts)
 
@@ -287,8 +289,8 @@ delete the objects. The genuine delta is: a **revoked** member keeps permanent u
 access to every asset id they saw, since `/media` never re-checks membership; any leaked URL is
 permanently public; and the defanging headers are lost.
 
-**Fix:** restrict the wildcard to genuinely public prefixes (`lessons/`, `slide-images/`) and 404
-everything else, so new namespaces are private by default.
+**Fixed** in `d8186b7`. The wildcard allow-lists `lessons/` and `slide-images/` and 404s everything
+else, so a namespace added to this bucket later is private by default.
 
 ---
 
@@ -370,13 +372,14 @@ preview and slide frames their own real documents rather than papering over it i
   the hidden-`fetch` variant is a third-party cookie write that Safari blocks and Chrome/Firefox
   partition; the reliable variant is a top-level form POST, which visibly lands the victim on a JSON
   response. Low–Medium.
-- **18 · Prototype-chain lookups.** Plain object literals indexed by untrusted strings, where `??`
-  does not fire for an inherited member: [StudioController.tsx:596](src/studio/StudioController.tsx)
-  (`?plan=constructor` crashes the route during render),
-  [lexicon.ts:38](src/studio/script/lexicon.ts), [workspace.ts:648](src/types/workspace.ts),
-  [profiles.ts:74](src/studio/tts/profiles.ts). **`lexicon.ts` is a real correctness bug with no
-  attacker at all** — a lesson narrating the ordinary word "constructor" splices
-  `function Object() { [native code] }` into the TTS audio and caption alignment.
+- **18 · Prototype-chain lookups — ✅ Fixed in `a5dbb38`.** Plain object literals indexed by
+  untrusted strings, where `??` does not fire for an inherited member:
+  [StudioController.tsx](src/studio/StudioController.tsx) (`?plan=constructor` crashed the route
+  during render, outside any try/catch), [lexicon.ts](src/studio/script/lexicon.ts),
+  [workspace.ts](src/types/workspace.ts), [profiles.ts](src/studio/tts/profiles.ts), and the SSR
+  image-MIME lookup. **`lexicon.ts` was a real product bug with no attacker at all** — a lesson
+  narrating the ordinary word "constructor" spliced `function Object() { [native code] }` into the
+  TTS audio and the caption alignment, and that ships in the published lesson.
 - **19 · `SlidePreview` message handler** ([SlidePreview.tsx:73](src/components/SlidePreview.tsx)).
   Validates neither `event.origin` nor `event.source`, then dereferences `payload.type` with no null
   guard. Any frame — including the untrusted preview iframe — can cancel follow-mode and forge a
@@ -518,17 +521,23 @@ Recorded so the clean areas mean "examined", not "skipped":
 
 ---
 
-## Recommended order
+## Remaining work, in order
 
-1. **Finding 4** — invite auto-claim. One click, attacker code executes.
-2. **Finding 7** — open redirect. Small, contained fix.
-3. **Findings 9, 13** — voice DO memory and roster exhaustion.
-4. **Finding 8** — room bricking (server-side structural validation).
-5. **Findings 10, 11, 12** — `/media` prefixes, proxy auth, atomic rate limiting.
-6. **Findings 14, 15** — client-side decode and replay bounds.
-7. **Finding 16** — CSP, once the preview and slide frames have their own documents.
-8. **Findings 17–26** — as capacity allows; 18's `lexicon.ts` case is a product bug worth fixing
-   regardless of security.
+Ten findings are fixed (1, 2, 3, 4, 5, 6, 7, 9, 10, 18). What is left, most worth doing first:
+
+1. **Finding 8** — room bricking. Validate the project root's structural metadata server-side, so an
+   `editor` cannot persist a value that breaks the room for everyone permanently.
+2. **Finding 13** — count voice seats per `userId`, not per client-chosen session UUID.
+3. **Finding 12** — the playground limiter's concurrent-burst bypass; move the counter to a Durable
+   Object or the Rate Limiting binding, and pass an explicit `cacheTtl` in the meantime.
+4. **Finding 11** — constrain `/api/proxy` to the hosts it exists to serve, and expand IPv6 literals
+   before the private-range check.
+5. **Findings 14, 15** — aggregate decode budget and a playback-index-bounded whiteboard fold. Both
+   also help legitimate long recordings.
+6. **Finding 16** — CSP, but only once the preview and slide frames have their own documents; see
+   the srcdoc-inheritance trap above. This is also what would restore finding 1's lost scroll and
+   interaction fidelity.
+7. **Findings 17, 19–27** — as capacity allows.
 
 Scans are nondeterministic and this complements — does not replace — SAST, dependency scanning and
 code review.
