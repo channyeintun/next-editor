@@ -20,35 +20,35 @@ workspace. The secrets sweep came back clean, including full git history.
 
 ## Summary
 
-| #   | Finding                                                                  | Severity | Verdict   | Status   |
-| --- | ------------------------------------------------------------------------ | -------- | --------- | -------- |
-| 1   | Preview iframe replays recorded HTML with `allow-same-origin`            | **High** | Confirmed | ✅ Fixed |
-| 2   | Upload stores attacker-chosen `Content-Type`; `/media` replays it inline | **High** | Confirmed | ✅ Fixed |
-| 3   | SSR lesson text expands as a `String.replace` substitution pattern       | **High** | Confirmed | ✅ Fixed |
-| 4   | Collaboration invite auto-claims on page load → attacker files execute   | **High** | Confirmed | ✅ Fixed |
-| 5   | Empty-body `PATCH` bypasses ownership on lessons and playlists           | Medium   | Confirmed | ✅ Fixed |
-| 6   | Slide sanitizer skips the root element; CSP nonce is a constant          | Medium   | Confirmed | ✅ Fixed |
-| 7   | Open redirect in the OAuth `returnTo` (backslash bypass)                 | Medium   | Confirmed | ✅ Fixed |
-| 8   | Any editor-role peer can permanently brick a collaboration room          | Medium   | Confirmed | ⬜ Open  |
-| 9   | Voice DO buffers an unbounded body when `Content-Length` is absent       | Medium   | Confirmed | ✅ Fixed |
-| 10  | `/media` serves collaboration assets with no membership check            | Medium   | Plausible | ✅ Fixed |
-| 11  | `/api/proxy` is an unauthenticated open forward proxy                    | Medium   | Confirmed | ⬜ Open  |
-| 12  | Playground rate limiters are a non-atomic read-modify-write              | Medium   | Plausible | ⬜ Open  |
-| 13  | Voice roster fillable by one member via client-chosen session ids        | Medium   | Confirmed | ⬜ Open  |
-| 14  | `.ne` decode has no aggregate decompression cap                          | Medium   | Plausible | ⬜ Open  |
-| 15  | Whiteboard replay folds the entire event array                           | Medium   | Plausible | ⬜ Open  |
-| 16  | No Content-Security-Policy on any app response                           | Medium   | Plausible | ⬜ Open  |
-| 17  | Login CSRF on `/api/auth/google/onetap`                                  | Low–Med  | Plausible | ⬜ Open  |
-| 18  | Prototype-chain lookups in plain-object tables (5 sites)                 | Low      | Confirmed | ✅ Fixed |
-| 19  | `SlidePreview` message handler checks neither origin nor source          | Low      | Confirmed | ⬜ Open  |
-| 20  | Recording-supplied URLs reach media/fetch sinks unvalidated              | Low      | Confirmed | ⬜ Open  |
-| 21  | Negative lookups write a KV entry that is never read                     | Low      | Plausible | ⬜ Open  |
-| 22  | Vite dev server serves `infra/.dev.vars`                                 | Low      | Plausible | ⬜ Open  |
-| 23  | Unvalidated slide `sourceUrl` rendered as `<a href>`                     | Low      | Plausible | ⬜ Open  |
-| 24  | Peer display name rendered as Markdown in Monaco hovers                  | Low      | Plausible | ⬜ Open  |
-| 25  | Peer-controlled `tname` grows the victim's Y.Doc                         | Low      | Plausible | ⬜ Open  |
-| 26  | Unbounded orphaned R2 uploads; room create/close storage growth          | Low      | Confirmed | ⬜ Open  |
-| 27  | `remote-runtime` pre-deployment hardening (5 issues)                     | Low*     | Plausible | ⬜ Open  |
+| #   | Finding                                                                  | Severity | Verdict   | Status    |
+| --- | ------------------------------------------------------------------------ | -------- | --------- | --------- |
+| 1   | Preview iframe replays recorded HTML with `allow-same-origin`            | **High** | Confirmed | ✅ Fixed  |
+| 2   | Upload stores attacker-chosen `Content-Type`; `/media` replays it inline | **High** | Confirmed | ✅ Fixed  |
+| 3   | SSR lesson text expands as a `String.replace` substitution pattern       | **High** | Confirmed | ✅ Fixed  |
+| 4   | Collaboration invite auto-claims on page load → attacker files execute   | **High** | Confirmed | ✅ Fixed  |
+| 5   | Empty-body `PATCH` bypasses ownership on lessons and playlists           | Medium   | Confirmed | ✅ Fixed  |
+| 6   | Slide sanitizer skips the root element; CSP nonce is a constant          | Medium   | Confirmed | ✅ Fixed  |
+| 7   | Open redirect in the OAuth `returnTo` (backslash bypass)                 | Medium   | Confirmed | ✅ Fixed  |
+| 8   | Any editor-role peer can permanently brick a collaboration room          | Medium   | Confirmed | ⬜ Open   |
+| 9   | Voice DO buffers an unbounded body when `Content-Length` is absent       | Medium   | Confirmed | ✅ Fixed  |
+| 10  | `/media` serves collaboration assets with no membership check            | Medium   | Plausible | ✅ Fixed  |
+| 11  | `/api/proxy` is an unauthenticated open forward proxy                    | Medium   | Confirmed | ◐ Partial |
+| 12  | Playground rate limiters are a non-atomic read-modify-write              | Medium   | Plausible | ⬜ Open   |
+| 13  | Voice roster fillable by one member via client-chosen session ids        | Medium   | Confirmed | ⬜ Open   |
+| 14  | `.ne` decode has no aggregate decompression cap                          | Medium   | Plausible | ✅ Fixed  |
+| 15  | Whiteboard replay folds the entire event array                           | Medium   | Plausible | ⬜ Open   |
+| 16  | No Content-Security-Policy on any app response                           | Medium   | Plausible | ⬜ Open   |
+| 17  | Login CSRF on `/api/auth/google/onetap`                                  | Low–Med  | Plausible | ⬜ Open   |
+| 18  | Prototype-chain lookups in plain-object tables (5 sites)                 | Low      | Confirmed | ✅ Fixed  |
+| 19  | `SlidePreview` message handler checks neither origin nor source          | Low      | Confirmed | ✅ Fixed  |
+| 20  | Recording-supplied URLs reach media/fetch sinks unvalidated              | Low      | Confirmed | ⬜ Open   |
+| 21  | Negative lookups write a KV entry that is never read                     | Low      | Plausible | ✅ Fixed  |
+| 22  | Vite dev server serves `infra/.dev.vars`                                 | Low      | Plausible | ✅ Fixed  |
+| 23  | Unvalidated slide `sourceUrl` rendered as `<a href>`                     | Low      | Plausible | ✅ Fixed  |
+| 24  | Peer display name rendered as Markdown in Monaco hovers                  | Low      | Plausible | ✅ Fixed  |
+| 25  | Peer-controlled `tname` grows the victim's Y.Doc                         | Low      | Plausible | ✅ Fixed  |
+| 26  | Unbounded orphaned R2 uploads; room create/close storage growth          | Low      | Confirmed | ⬜ Open   |
+| 27  | `remote-runtime` pre-deployment hardening (5 issues)                     | Low*     | Plausible | ⬜ Open   |
 
 \* `remote-runtime` is **not deployed** — see §27.
 
@@ -308,8 +308,14 @@ Related, same file: `isPubliclyRoutableHost` does not block IPv4-mapped IPv6 lit
 none of the denied prefixes, and the dotted-quad guard never runs because the string contains `:`.
 Mitigated by the https-and-port-443 requirement, so metadata endpoints stay out of reach.
 
-**Fix:** constrain the destination to the hosts actually needed, add a per-IP rate limit, lower the
-size cap, and expand IPv6 literals before the check.
+**Partially fixed** in `33aae79`: the IPv6 gap is closed — the embedded v4 address is extracted and
+run through the v4 rules, and `fe80::/10` is matched as a range rather than as literal text. Public
+addresses are covered in both directions by the tests.
+
+**Still open:** the route remains unauthenticated with no host allow-list and a 200 MiB cap. That
+part is deliberately left alone — narrowing the destination set touches the avatar and slide-image
+paths that depend on it, and getting the allow-list wrong breaks image loading rather than failing
+safe. It wants a deliberate decision about which hosts to permit, plus a rate limit.
 
 ---
 
@@ -327,7 +333,7 @@ size cap, and expand IPv6 literals before the check.
   per socket keyed on `(userId, collaborationSessionId)`, and `collaborationSessionId` is a
   _client-chosen_ query parameter validated only for UUID shape. One member opening 10 sockets with
   fresh UUIDs fills a 10-seat room and locks out the owner.
-- **14 · `.ne` aggregate decompression cap**
+- **14 · `.ne` aggregate decompression cap — ✅ Fixed in `33aae79`.**
   ([format.ts:323](src/storage/streamingRecordingCodec/format.ts)). `boundedUnzlib`'s counter is
   per-call, so the 64 MiB cap bounds one _segment_; the only aggregate limits are compressed bytes
   and record count. ~30 segments (~2 MB on the wire) retain ~1.9 GB. Decode starts automatically
@@ -363,7 +369,7 @@ preview and slide frames their own real documents rather than papering over it i
 
 ---
 
-## 17–26. Lower-severity findings ⬜ Open
+## 17–26. Lower-severity findings
 
 - **17 · Login CSRF on `/api/auth/google/onetap`** ([google.ts:107](infra/worker/auth/google.ts)).
   No origin check, no nonce; `c.req.json()` parses a `text/plain` body, so no preflight is needed.
@@ -380,7 +386,7 @@ preview and slide frames their own real documents rather than papering over it i
   image-MIME lookup. **`lexicon.ts` was a real product bug with no attacker at all** — a lesson
   narrating the ordinary word "constructor" spliced `function Object() { [native code] }` into the
   TTS audio and the caption alignment, and that ships in the published lesson.
-- **19 · `SlidePreview` message handler** ([SlidePreview.tsx:73](src/components/SlidePreview.tsx)).
+- **19 · `SlidePreview` message handler — ✅ Fixed in `1fe60f6`.** ([SlidePreview.tsx:73](src/components/SlidePreview.tsx)).
   Validates neither `event.origin` nor `event.source`, then dereferences `payload.type` with no null
   guard. Any frame — including the untrusted preview iframe — can cancel follow-mode and forge a
   `slide_interaction` into the live recording. Every sibling bridge in the repo _does_ check, so
@@ -392,22 +398,22 @@ preview and slide frames their own real documents rather than papering over it i
   ([useUrlLoader.ts:162](src/hooks/useUrlLoader.ts)) and chat `<img src>` all take a
   recording-declared URL with no scheme allow-list. The header itself is a bare type assertion. Not
   script execution, but arbitrary outbound requests from a victim's browser.
-- **21 · Negative KV writes** ([cache.ts:64](infra/worker/cache.ts)). `JSON.stringify(null)` is
+- **21 · Negative KV writes — ✅ Fixed in `1fe60f6`.** ([cache.ts:64](infra/worker/cache.ts)). `JSON.stringify(null)` is
   `"null"`, so the guard passes and a 404 writes an entry the read path then rejects. The comment
   asserting otherwise is wrong. _Panel correction:_ a wasted-write and cost bug, not a DoS —
   entries carry a TTL.
-- **22 · Dev server serves `infra/.dev.vars`** ([vite.config.ts](vite.config.ts)). Vite's default
+- **22 · Dev server serves `infra/.dev.vars` — ✅ Fixed in `1fe60f6`.** ([vite.config.ts](vite.config.ts)). Vite's default
   `fs.deny` covers `.env*` but not wrangler's secret file, which holds `GOOGLE_CLIENT_SECRET`,
   `SESSION_SECRET`, and the QStash keys. Not reachable from an arbitrary website by default
   (localhost bind, `allowedHosts`, CORS), so it matters when run with `--host` or on a shared host.
-- **23 · Slide `sourceUrl` as `<a href>`** ([SlidesManager.tsx:222](src/components/SlidesManager.tsx)).
+- **23 · Slide `sourceUrl` as `<a href>` — ✅ Fixed in `1fe60f6`.** ([SlidesManager.tsx:222](src/components/SlidesManager.tsx)).
   Only the import path validates the URL; the deserialize path does not, and the value is persisted
   to `localStorage`. A `javascript:` URL executes on click once the viewer takes manual control.
-- **24 · Peer display name as Markdown** ([CodeEditor.tsx:870](src/components/CodeEditor.tsx)).
+- **24 · Peer display name as Markdown — ✅ Fixed in `1fe60f6`.** ([CodeEditor.tsx:870](src/components/CodeEditor.tsx)).
   `hoverMessage` is an `IMarkdownString`; `name` comes from the Google ID token with only a length
   check. Renders a link or remote image in the victim's hover — phishing and an IP beacon. Monaco
   refuses `command:` without `isTrusted`, so no script execution.
-- **25 · Peer-controlled `tname`** ([monacoAwareness.ts:33](src/collaboration/monacoAwareness.ts)).
+- **25 · Peer-controlled `tname` — ✅ Fixed in `33aae79`.** ([monacoAwareness.ts:33](src/collaboration/monacoAwareness.ts)).
   The schema accepts any ≤1024-char `tname` and the DO copies it verbatim; `doc.get(tname)`
   permanently inserts a new root type in the victim's document. _Panel correction:_ the result is
   discarded and empty root types are not encoded into updates, so there is no corruption and no
@@ -523,21 +529,34 @@ Recorded so the clean areas mean "examined", not "skipped":
 
 ## Remaining work, in order
 
-Ten findings are fixed (1, 2, 3, 4, 5, 6, 7, 9, 10, 18). What is left, most worth doing first:
+Eighteen findings are fixed (1–7, 9, 10, 14, 18, 19, 21–25) and one is partially fixed (11). What is
+left, most worth doing first:
 
 1. **Finding 8** — room bricking. Validate the project root's structural metadata server-side, so an
-   `editor` cannot persist a value that breaks the room for everyone permanently.
+   `editor` cannot persist a value that breaks the room for everyone permanently. The largest
+   remaining item, and the only remaining one an ordinary participant can trigger.
 2. **Finding 13** — count voice seats per `userId`, not per client-chosen session UUID.
-3. **Finding 12** — the playground limiter's concurrent-burst bypass; move the counter to a Durable
-   Object or the Rate Limiting binding, and pass an explicit `cacheTtl` in the meantime.
-4. **Finding 11** — constrain `/api/proxy` to the hosts it exists to serve, and expand IPv6 literals
-   before the private-range check.
-5. **Findings 14, 15** — aggregate decode budget and a playback-index-bounded whiteboard fold. Both
-   also help legitimate long recordings.
+3. **Finding 12** — the playground limiter's concurrent-burst bypass. Needs a Durable Object or the
+   Rate Limiting binding for an atomic increment; note that `cacheTtl` is _not_ a partial mitigation,
+   since KV's minimum is 60 s, the same as the default it already gets.
+4. **Finding 11 (rest)** — decide which hosts `/api/proxy` should serve and add a rate limit.
+5. **Finding 15** — bound the whiteboard fold by the playback index. Also a straight performance win
+   for long legitimate recordings.
 6. **Finding 16** — CSP, but only once the preview and slide frames have their own documents; see
    the srcdoc-inheritance trap above. This is also what would restore finding 1's lost scroll and
    interaction fidelity.
-7. **Findings 17, 19–27** — as capacity allows.
+7. **Findings 17, 20, 26, 27** — as capacity allows. 27 is dormant code; do it before wiring the
+   remote runtime up, not after.
+
+### Deliberately not attempted
+
+Three areas were left alone because a wrong fix would break working behaviour rather than fail safe,
+and each needs a product decision rather than a code change:
+
+- **Finding 11's host allow-list** — narrowing it touches avatar and slide-image loading.
+- **Finding 16's CSP** — WebContainer, Monaco and the slide frames each need specific directives, and
+  srcdoc inheritance means an app-level policy silently governs the slide frames too.
+- **Finding 26's storage quotas** — a per-user cap changes when uploads start failing for real users.
 
 Scans are nondeterministic and this complements — does not replace — SAST, dependency scanning and
 code review.
