@@ -41,9 +41,22 @@ const RENDERABLE_CONTENT_TYPES = new Set([
 // Hono's bare "/*" wildcard doesn't populate a "*" param (verified empirically
 // against a running dev server — it came back undefined); ":key{.+}" is the
 // form that actually captures the tail into c.req.param("key").
+// The bucket is shared with namespaces that are NOT public. Collaboration room
+// assets live at collaboration/rooms/<roomId>/assets/<sha256> and have their own
+// read route (routes/collaboration.ts) which requires a session, checks room
+// membership and the room's status, and serves the bytes defanged. This
+// wildcard bypassed all of it and returned the same bytes to anyone — so a
+// member removed from a room kept permanent unauthenticated access to every
+// asset id they had seen. Allow-listing the public prefixes here means a
+// namespace added to this bucket later is private by default.
+const PUBLIC_KEY_PREFIXES = ["lessons/", "slide-images/"];
+
 mediaRoute.get("/:key{.+}", async (c) => {
   const key = c.req.param("key");
   if (!key) {
+    return c.json({ error: "not found" }, 404);
+  }
+  if (!PUBLIC_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) {
     return c.json({ error: "not found" }, 404);
   }
 

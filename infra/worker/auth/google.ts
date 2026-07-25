@@ -47,13 +47,29 @@ async function pkceChallengeFromVerifier(verifier: string): Promise<string> {
 }
 
 // Rejects anything but a same-origin relative path, so a malicious
-// `?returnTo=` can't turn a real login into an open redirect (absolute URLs
-// and protocol-relative "//host" paths are both rejected).
-function sanitizeReturnTo(value: string | undefined | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+// `?returnTo=` can't turn a real login into an open redirect.
+//
+// Resolved against a placeholder origin rather than prefix-matched. A
+// `startsWith("//")` test only catches the protocol-relative form: browsers
+// resolve a `Location` header with the WHATWG URL parser, which treats `\` as
+// `/` for special schemes, so `/\evil.com` (and `/\/evil.com`, and tab- or
+// newline-separated variants) parsed as a host and sent the victim
+// cross-origin straight after a genuine Google sign-in. Re-serializing from the
+// parser is what makes every one of those forms collapse to a real path.
+export function sanitizeReturnTo(value: string | undefined | null): string {
+  if (!value) {
     return "/";
   }
-  return value;
+  const placeholder = "https://placeholder.invalid";
+  try {
+    const resolved = new URL(value, placeholder);
+    if (resolved.origin !== placeholder) {
+      return "/";
+    }
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return "/";
+  }
 }
 
 // The id_token comes directly from Google's token endpoint over a
@@ -198,5 +214,8 @@ googleAuthRoute.get("/callback", async (c) => {
   const session = await createSession(c.env.DB, user.id);
   setSessionCookie(c, session.id);
 
-  return c.redirect(handshake.returnTo, 302);
+  // Re-sanitized rather than trusted from the handshake cookie: this is the
+  // value that actually reaches the browser as a Location header, so it is the
+  // one that has to be safe regardless of how it was stored.
+  return c.redirect(sanitizeReturnTo(handshake.returnTo), 302);
 });
