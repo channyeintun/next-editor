@@ -85,7 +85,16 @@ export default ({ mode }: { mode: string }) => {
       // shared internals are then null ("Cannot read properties of null
       // (reading 'useEffect')"). Its source is compiled by this config, so it
       // has to share this config's React.
-      dedupe: ["react", "react-dom"],
+      //
+      // @tanstack/react-query is on the list for the same reason, one level up:
+      // a second copy means a second QueryClientContext, so tube's useQuery
+      // never sees the provider App.tsx renders from the root copy ("No
+      // QueryClient set, use QueryClientProvider to set one" on /learn). Dev
+      // hides this — the dep optimizer keys pre-bundles by bare specifier, so
+      // both importers land on one chunk — but the build resolves per importer
+      // and shipped two react-query copies. query-core carries QueryClient
+      // itself, so it has to travel with react-query.
+      dedupe: ["react", "react-dom", "@tanstack/react-query", "@tanstack/query-core"],
       alias: {
         // Compile the tube workspace package from source so it goes through the
         // app's JSX/Tailwind/React-Compiler pipeline (not pre-bundled from
