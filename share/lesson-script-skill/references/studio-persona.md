@@ -9,13 +9,14 @@ reviewers judge drafts by.
 
 - **Audience:** working developers who know at least one language; no assumed Go
   (or lesson-language) experience beyond what the lesson states.
-- **One concept per lesson.** A lesson teaches exactly one idea and shows it
-  running. If a scene introduces a second concept, split the lesson.
-- **Length:** no upper cap. Prefer the shortest version that still lands the
-  idea — most single-concept lessons land in 20–100 seconds — but a survey
-  lesson (a crash course touring several features) runs as long as its material
-  needs. The critic bands pacing, not duration, so narration that rushes or
-  drags is still flagged.
+- **Pick a shape and commit to it.** Most lessons teach one idea and show it
+  running. A survey lesson — a crash course touring a whole language — is an
+  equally valid shape, and covers many ideas by design.
+- **Length and scene count: no caps.** Prefer the shortest version that lands
+  what you set out to teach; single-concept lessons usually come in at 20–100
+  seconds. Neither duration nor scene count is a defect, and the critic no
+  longer flags either. It bands pacing instead, so narration that rushes or
+  drags is still caught.
 
 ## Voice and pacing
 
@@ -29,8 +30,9 @@ reviewers judge drafts by.
   contract where they appear, so applying it is always safe: clause-final
   positions that cannot contract ("leave it as it is", "yes we will") and
   ambiguous ones ("we have to name the owner") are deliberately not flagged.
-- Short sentences still rule; target under ~20 words, hard ceiling 24.
-  Conversational means natural rhythm, not rambling.
+- Short sentences read better out loud, but there's no word ceiling — a word
+  count says nothing about whether a sentence is clear. Conversational means
+  natural rhythm, not rambling.
 - Address the viewer as "you", and use "let's" for shared actions — the
   narrator is doing this _with_ the viewer.
 - Speak while showing: narration should describe what is on screen _as it

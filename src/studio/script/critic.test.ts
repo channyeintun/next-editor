@@ -79,15 +79,32 @@ describe("critiqueScript", () => {
     ).toEqual(["phrase.just-simply"]);
   });
 
-  it("flags missing sources and over-long sentences", () => {
+  it("flags missing sources", () => {
     const script = loadPilot("go-swap");
     script.scenes[0].sources = [];
-    script.scenes[0].narration =
-      "This sentence keeps going and going and going and going and going and going and going and going and going and going and going and going far past the ceiling.";
     const critique = critiqueScript(script, extractedOf(script), 19_375);
-    const ids = critique.notes.map((note) => note.id);
-    expect(ids).toContain("sources.missing");
-    expect(ids).toContain("sentence.long");
+    expect(critique.notes.map((note) => note.id)).toContain("sources.missing");
+  });
+
+  // Scope and sentence length are shape, not defects: a survey lesson tours many
+  // ideas across many scenes, and a word count says nothing about clarity. Only
+  // pacing is banded, and it is measured against the real narration duration.
+  it("never flags a lesson for its length, scene count, or sentence length", () => {
+    const script = loadPilot("go-swap");
+    script.scenes[0].narration =
+      "This sentence keeps going and going and going and going and going and going and going and going and going and going and going and going far past any old ceiling.";
+    const scene = script.scenes[0];
+    script.scenes = Array.from({ length: 14 }, (_, index) => ({
+      ...scene,
+      id: `${scene.id}-${index}`,
+    }));
+    const extracted = extractedOf(script);
+    // Duration matched to the token count so the pacing band stays satisfied.
+    const durationMs = Math.round((extracted.tokens.length / 140) * 60_000);
+    const ids = critiqueScript(script, extracted, durationMs).notes.map((note) => note.id);
+    expect(ids).not.toContain("sentence.long");
+    expect(ids).not.toContain("scope.scenes");
+    expect(ids).not.toContain("scope.length");
   });
 
   it("flags out-of-band pacing in both directions", () => {

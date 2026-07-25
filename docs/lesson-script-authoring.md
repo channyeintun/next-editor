@@ -435,7 +435,10 @@ unzoomed.
 A `freedraw` asset is a hand-drawn annotation stroke generated inside its box.
 Pick one with `stroke`: `underline`, `strike`, `circle`, `check`,
 `arrow-right`, or `arrow-down`. Size the box around whatever it annotates —
-`circle` inscribes the box, `underline` runs along its bottom edge:
+`circle` inscribes the box, `underline` runs along its bottom edge. Strokes
+always use the thin pen (stroke width 1, not the authorable field) — freedraw
+renders heavier than a shape outline at the same width, and anything thicker
+reads as a marker blob over the diagram:
 
 ```yaml
 - { id: circle-owner, kind: freedraw, stroke: circle, x: 340, y: 280, width: 240, height: 90 }
@@ -484,11 +487,11 @@ of the previous board while wiping the rest works.
 
 ## Editorial requirements (summary — full text in studio-persona.md)
 
-- **One concept per lesson**, usually 20–100 seconds of narration. There is no
-  upper cap: a survey lesson that tours several features runs as long as its
-  material needs.
-- Sentences under ~20 words (hard ceiling 24). No filler: _simply, obviously,
-  easy, delve, in this video, don't worry_ etc. are flagged.
+- **Pick a shape**: one concept taught and run (usually 20–100 seconds), or a
+  survey that tours many. Neither narration length nor scene count is capped,
+  and the critic does not flag either.
+- Short sentences read better out loud, but no length is flagged. No filler:
+  _simply, obviously, easy, delve, in this video, don't worry_ etc. are flagged.
 - Every scene cites ≥1 source (official docs/spec/tour URLs preferred).
 - Narrate _why_; the typed code shows _what_. No fake mistakes.
 - The critic (`✎` lines from the director) is advisory — address the notes or

@@ -97,23 +97,14 @@ function escapeForRegExp(literal: string): string {
   return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const MAX_SENTENCE_WORDS = 24;
 const MIN_WPM = 110;
 const MAX_WPM = 170;
-const MAX_SCENES = 5;
 /** Pre-synthesis pacing estimate (~140 spoken wpm for the current profile). */
 const ESTIMATED_WPM = 140;
 
 /** Rough narration length before any audio exists — critic input only. */
 export function estimateNarrationDurationMs(tokenCount: number): number {
   return Math.round((tokenCount / ESTIMATED_WPM) * 60_000);
-}
-
-function sentencesOf(text: string): string[] {
-  return text
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 0);
 }
 
 export function critiqueScript(
@@ -141,16 +132,12 @@ export function critiqueScript(
     });
   }
 
-  // Scope: one concept per lesson. Narration length is deliberately unbounded —
-  // a survey lesson (a crash course) runs as long as its material needs, and the
-  // pacing band above already catches narration that rushes or drags.
-  if (script.scenes.length > MAX_SCENES) {
-    notes.push({
-      id: "scope.scenes",
-      severity: "suggestion",
-      message: `${script.scenes.length} scenes (guide suggests ≤ ${MAX_SCENES}) — is this still one concept?`,
-    });
-  }
+  // No scope limits. Scene count and narration length are shape, not defects: a
+  // survey lesson that tours a whole language legitimately runs to fourteen
+  // scenes and several minutes, and flagging that taught nothing while making
+  // every crash course look broken. What remains below lints narration quality —
+  // pacing, sentence length, banned filler, register, missing sources — none of
+  // which penalize a lesson for covering a lot.
 
   for (const scene of script.scenes) {
     const sceneTokens =
@@ -195,18 +182,9 @@ export function critiqueScript(
       });
     }
 
-    // Sentence length.
-    for (const sentence of sentencesOf(displayText)) {
-      const sentenceWords = sentence.split(/\s+/).length;
-      if (sentenceWords > MAX_SENTENCE_WORDS) {
-        notes.push({
-          id: "sentence.long",
-          severity: "suggestion",
-          sceneId: scene.id,
-          message: `A ${sentenceWords}-word sentence in scene "${scene.id}" (ceiling ${MAX_SENTENCE_WORDS}): "${sentence.slice(0, 60)}…"`,
-        });
-      }
-    }
+    // No sentence-length ceiling either — a word count says nothing about
+    // whether a sentence is clear, and the pacing band already catches
+    // narration that outruns the voice.
 
     // Claim sourcing.
     if (scene.sources.length === 0) {
