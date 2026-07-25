@@ -45,7 +45,10 @@ import {
   validateCollaborationTeachingDocument,
   type CollaborationTeachingIntegrity,
 } from "../../../src/collaboration/teachingDocument";
-import { projectCollaborationDocument } from "../../../src/collaboration/projectDocument";
+import {
+  assertCollaborationProjectStructure,
+  projectCollaborationDocument,
+} from "../../../src/collaboration/projectDocument";
 import {
   applyEncodedYjsUpdate,
   decodeYjsSnapshot,
@@ -858,6 +861,13 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       } finally {
         validationDocument.off("afterTransaction", observeTransaction);
       }
+      // Runs on EVERY update, not only teaching ones. `schemaVersion` and the
+      // nodes/texts/metadata maps are ordinary CRDT keys on the project root,
+      // and nothing else guarded them: an `editor` could set schemaVersion to a
+      // value that makes every participant's projection throw, persisted to
+      // SQLite and rebroadcast, leaving the room permanently unusable for
+      // everyone including its owner. Cheap — a few root reads.
+      assertCollaborationProjectStructure(validationDocument);
       if (teachingTouched) {
         const after = validateCollaborationTeachingDocument(validationDocument);
         assertCollaborationTeachingTransition(before, after);
@@ -871,7 +881,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       this.rejectSocket(
         socket,
         "invalid-message",
-        "Invalid teaching-surface update",
+        "Invalid document update",
         true,
         1008,
         input.updateId,

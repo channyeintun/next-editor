@@ -3,7 +3,9 @@ import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { isWorkspaceTextFile } from "../types/workspace";
 import {
+  assertCollaborationProjectStructure,
   COLLABORATION_ORIGIN,
+  COLLABORATION_PROJECT_ROOT,
   CollaborationProjectController,
   getCollaborationNodes,
   getCollaborationTexts,
@@ -24,6 +26,41 @@ function idFactory() {
   let index = 0;
   return () => IDS[index++] ?? `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 }
+
+describe("collaboration project structure guard", () => {
+  it("accepts an unseeded document and a correctly seeded one", () => {
+    // Unseeded: the room exists but nothing has been written yet.
+    expect(() => assertCollaborationProjectStructure(new Y.Doc())).not.toThrow();
+
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, createStarterHtmlCssWorkspace(), { idFactory: idFactory() });
+    expect(() => assertCollaborationProjectStructure(doc)).not.toThrow();
+  });
+
+  it("rejects a poisoned schemaVersion that would brick the room for everyone", () => {
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, createStarterHtmlCssWorkspace(), { idFactory: idFactory() });
+
+    // One ordinary CRDT write, well under the update size limit. Before this
+    // guard it was persisted and rebroadcast, and projectCollaborationDocument
+    // then threw for every participant — permanently, with no way to reset it.
+    doc.getMap(COLLABORATION_PROJECT_ROOT).set("schemaVersion", 2);
+
+    expect(() => assertCollaborationProjectStructure(doc)).toThrow(/schema version/i);
+    expect(() => projectCollaborationDocument(doc)).toThrow(/schema version/i);
+  });
+
+  it("rejects replacing a child map with a scalar", () => {
+    // childMap() silently overwrites a non-map with a fresh empty one, so this
+    // would have discarded every file and its contents on the next read.
+    for (const key of ["texts", "nodes", "metadata"]) {
+      const doc = new Y.Doc();
+      seedCollaborationProject(doc, createStarterHtmlCssWorkspace(), { idFactory: idFactory() });
+      doc.getMap(COLLABORATION_PROJECT_ROOT).set(key, "not-a-map");
+      expect(() => assertCollaborationProjectStructure(doc)).toThrow(new RegExp(key));
+    }
+  });
+});
 
 describe("collaboration project document", () => {
   it("round-trips a workspace through stable folder/file nodes", () => {

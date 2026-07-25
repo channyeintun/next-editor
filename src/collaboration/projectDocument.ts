@@ -420,6 +420,49 @@ function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
   );
 }
 
+/**
+ * Asserts the structural invariants of the project root that everything else
+ * assumes. Cheap enough (a handful of root reads) to run on every inbound
+ * update, and it must be, because these keys are ordinary CRDT entries that any
+ * peer allowed to write the document can set.
+ *
+ * Two things were reachable before this ran server-side:
+ *
+ * - Setting `schemaVersion` to anything else made projectCollaborationDocument
+ *   throw for *every* participant including the owner. The client swallows that
+ *   into a local error, so remote edits stop reaching the workspace and cursors,
+ *   follow-mode and file resolution all die. The value is persisted, so every
+ *   later join is broken too and nothing in the UI can reset it — the room is
+ *   unrecoverable and the only remedy is to abandon it.
+ * - Replacing `nodes`/`texts`/`metadata` with a non-map is worse than it looks:
+ *   `childMap` silently *overwrites* a non-map with a fresh empty one, so the
+ *   next read would discard every file and its contents.
+ *
+ * Neither is something a legitimate client ever does — the schema version is
+ * written once at seed time and the child maps are only ever created as maps.
+ */
+export function assertCollaborationProjectStructure(doc: Y.Doc): void {
+  const root = projectRoot(doc);
+
+  // Absent is fine: the document has not been seeded yet, and the seeding
+  // update itself sets the correct value before this runs on its result.
+  const schemaVersion = root.get("schemaVersion");
+  if (schemaVersion !== undefined && schemaVersion !== COLLABORATION_DOCUMENT_SCHEMA_VERSION) {
+    throw new CollaborationProjectError("Unsupported collaboration document schema version");
+  }
+
+  for (const key of [
+    COLLABORATION_PROJECT_METADATA,
+    COLLABORATION_PROJECT_NODES,
+    COLLABORATION_PROJECT_TEXTS,
+  ]) {
+    const value = root.get(key);
+    if (value !== undefined && !(value instanceof Y.Map)) {
+      throw new CollaborationProjectError(`Collaboration project "${key}" must be a map`);
+    }
+  }
+}
+
 export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectProjection {
   const root = projectRoot(doc);
   if (root.get("schemaVersion") !== COLLABORATION_DOCUMENT_SCHEMA_VERSION) {
