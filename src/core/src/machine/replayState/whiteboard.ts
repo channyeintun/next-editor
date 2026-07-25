@@ -37,7 +37,27 @@ export interface WhiteboardReplayResult {
 
 const whiteboardReplayIndexCache = new WeakMap<WhiteboardEvent[], WhiteboardReplayIndex>();
 
-function getWhiteboardReplayIndex(events: WhiteboardEvent[]): WhiteboardReplayIndex {
+/**
+ * Folds events into retained scenes up to (and including) `throughIndex`.
+ *
+ * Only as far as the caller actually needs. This used to fold the *entire*
+ * array on every call, regardless of where playback had reached, while keeping
+ * every intermediate scene alive — and applyWhiteboardEvent allocates a fresh,
+ * fully-sorted element array per event. A track of n events therefore retained
+ * ~n²/2 element slots and performed n sorts before the first frame could be
+ * shown. Nothing bounded n except the codec's million-record ceiling, so a
+ * recording with tens of thousands of tiny events (a few hundred KB compressed)
+ * hung the tab and then exhausted memory, on the main thread inside a state
+ * machine action where it could not be interrupted.
+ *
+ * The fold is a pure prefix scan, so computing a prefix of it is exact — and
+ * long legitimate recordings get the same win, since seeking near the start no
+ * longer pays for the whole track.
+ */
+function getWhiteboardReplayIndex(
+  events: WhiteboardEvent[],
+  throughIndex: number,
+): WhiteboardReplayIndex {
   let replayIndex = whiteboardReplayIndexCache.get(events);
 
   if (!replayIndex) {
@@ -51,7 +71,8 @@ function getWhiteboardReplayIndex(events: WhiteboardEvent[]): WhiteboardReplayIn
   // freezes the board and crashes the interpolation path. The fold is a pure prefix
   // scan, so extending is exact. Same technique as `latestEditorModelBoundaryTime`.
   const { retainedStates } = replayIndex;
-  for (let index = retainedStates.length; index < events.length; index += 1) {
+  const limit = Math.min(throughIndex, events.length - 1);
+  for (let index = retainedStates.length; index <= limit; index += 1) {
     const base = index === 0 ? EMPTY_WHITEBOARD_SCENE : retainedStates[index - 1];
     retainedStates.push(applyWhiteboardEvent(base, events[index]));
   }
@@ -141,7 +162,7 @@ function getInterpolatedState(
   const fraction = (currentTime - windowStart) / (upcoming.timestamp - windowStart);
   const baseState =
     nextIndex >= 0
-      ? getWhiteboardReplayIndex(events).retainedStates[nextIndex]
+      ? getWhiteboardReplayIndex(events, nextIndex).retainedStates[nextIndex]
       : EMPTY_WHITEBOARD_SCENE;
   const baseById = new Map(baseState.elements.map((element) => [element.id, element]));
 
@@ -201,6 +222,6 @@ export function getWhiteboardReplayResult({
 
   return {
     nextIndex,
-    stateToApply: getWhiteboardReplayIndex(whiteboardEvents).retainedStates[nextIndex],
+    stateToApply: getWhiteboardReplayIndex(whiteboardEvents, nextIndex).retainedStates[nextIndex],
   };
 }

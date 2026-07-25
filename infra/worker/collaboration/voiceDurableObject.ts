@@ -52,6 +52,14 @@ export const VOICE_SESSION_HEADER = "X-Collaboration-Voice-Session";
 export { VOICE_CAPABILITY_HEADER };
 export const VOICE_CONNECTION_HEADER = "X-Voice-Connection";
 const MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE = 12;
+/**
+ * Concurrent voice sockets one account may hold. Seats are counted per user, so
+ * this is not a seat limit — it only stops a single member from growing the
+ * socket table (and the fan-out cost of every roster broadcast) without bound.
+ * Generous enough for a laptop plus a phone, plus a lingering socket that has
+ * not yet been reaped.
+ */
+const MAX_VOICE_SOCKETS_PER_USER = 4;
 const MAX_PENDING_SFU_REQUESTS_PER_CONNECTION = 4;
 const ACCESS_REVALIDATION_INTERVAL_MS = 5_000;
 const UPSTREAM_TIMEOUT_MS = 15_000;
@@ -444,22 +452,38 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     }
 
     // A second socket for the same (userId, collaborationSessionId) is a
-    // reconnect generation; anything else counts toward the room cap.
+    // reconnect generation and replaces the old one.
+    //
+    // Seats are counted by DISTINCT USER, not per socket. They used to be
+    // per-socket keyed on (userId, collaborationSessionId), and
+    // collaborationSessionId is a client-chosen query parameter validated only
+    // for UUID shape — so one member could open `maxMembers` sockets with a
+    // fresh UUID each time, fill the roster with phantom participants, and lock
+    // every other member (including the room owner) out of voice with a 409.
     const superseded: Array<{ socket: WebSocket; attachment: VoiceSocketAttachment }> = [];
-    let occupied = 0;
+    const occupiedUserIds = new Set<string>();
+    let ownConcurrentSockets = 0;
     for (const entry of this.activeSockets()) {
-      if (
-        entry.attachment.userId === session.userId &&
-        entry.attachment.collaborationSessionId === session.collaborationSessionId
-      ) {
-        superseded.push(entry);
-      } else {
-        occupied += 1;
+      if (entry.attachment.userId === session.userId) {
+        if (entry.attachment.collaborationSessionId === session.collaborationSessionId) {
+          superseded.push(entry);
+        } else {
+          // A genuine second tab/device for the same person. It shares their
+          // seat, but is still bounded so sockets cannot grow without limit.
+          ownConcurrentSockets += 1;
+        }
+        continue;
       }
+      occupiedUserIds.add(entry.attachment.userId);
     }
     const capacity = Math.min(session.maxMembers, MAX_VOICE_ROSTER_SIZE);
-    if (occupied >= capacity) {
+    // The joining user is not in the set, so an existing seat of theirs never
+    // costs a second one.
+    if (occupiedUserIds.size >= capacity) {
       return Response.json({ error: "voice room is full" }, { status: 409 });
+    }
+    if (ownConcurrentSockets >= MAX_VOICE_SOCKETS_PER_USER) {
+      return Response.json({ error: "too many concurrent voice connections" }, { status: 409 });
     }
 
     const attachment: VoiceSocketAttachment = {
