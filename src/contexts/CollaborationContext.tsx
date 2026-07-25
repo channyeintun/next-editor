@@ -161,6 +161,11 @@ interface CollaborationContextValue {
   isTeachingLoading: boolean;
   canRetryAssets: boolean;
   error: string | null;
+  /** A `?invite=` token staged for confirmation. Never claimed automatically. */
+  pendingInviteToken: string | null;
+  isAcceptingInvitation: boolean;
+  acceptInvitation: () => Promise<void>;
+  declineInvitation: () => void;
   createRoom: () => Promise<CollaborationRoomSession>;
   joinRoom: (roomId: string) => void;
   leaveRoom: () => Promise<void>;
@@ -330,6 +335,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const undoManagerRef = useRef<Y.UndoManager | null>(null);
   const [runtimeVersion, setRuntimeVersion] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
+  const [isAcceptingInvitation, setIsAcceptingInvitation] = useState(false);
   const [retryableAssetError, setRetryableAssetError] = useState<string | null>(null);
   const canRetryAssets = localError !== null && localError === retryableAssetError;
   const [members, setMembers] = useState<CollaborationMember[]>([]);
@@ -592,40 +599,65 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Claiming an invitation is a state-changing POST that permanently adds the
+  // caller to someone else's room, and joining reprojects the room's document
+  // over the local workspace — which then auto-starts the runtime and runs the
+  // room's package scripts. Firing that from a bare `?invite=` on mount made a
+  // single link enough to plant and execute another person's files in a
+  // signed-in visitor's workspace, and to start broadcasting their identity,
+  // cursor and open file. So the token is only staged here; `acceptInvitation`
+  // has to be called from a real user gesture.
   useEffect(() => {
-    if (!inviteToken || isAuthLoading || claimingTokenRef.current === inviteToken) return;
+    if (!inviteToken || isAuthLoading) {
+      setPendingInviteToken(null);
+      return;
+    }
     if (!isSignedIn) {
+      setPendingInviteToken(null);
       setLocalError("Sign in to accept this collaboration invitation.");
       return;
     }
-    claimingTokenRef.current = inviteToken;
-    let cancelled = false;
-    void claimCollaborationInvitation(inviteToken)
-      .then((session: CollaborationRoomSession) => {
-        if (cancelled) return;
-        setLocalError(null);
-        setSearchParams(
-          (current) => {
-            const next = new URLSearchParams(current);
-            next.delete("invite");
-            next.set("room", session.room.id);
-            return next;
-          },
-          { replace: true },
-        );
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setLocalError(
-            messageFromError(error, "The collaboration invitation could not be accepted."),
-          );
-          claimingTokenRef.current = null;
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [inviteToken, isAuthLoading, isSignedIn, setSearchParams]);
+    if (claimingTokenRef.current === inviteToken) return;
+    setPendingInviteToken(inviteToken);
+  }, [inviteToken, isAuthLoading, isSignedIn]);
+
+  const acceptInvitation = useCallback(async () => {
+    const token = pendingInviteToken;
+    if (!token || claimingTokenRef.current === token) return;
+    claimingTokenRef.current = token;
+    setIsAcceptingInvitation(true);
+    try {
+      const session = await claimCollaborationInvitation(token);
+      setLocalError(null);
+      setPendingInviteToken(null);
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete("invite");
+          next.set("room", session.room.id);
+          return next;
+        },
+        { replace: true },
+      );
+    } catch (error: unknown) {
+      setLocalError(messageFromError(error, "The collaboration invitation could not be accepted."));
+      claimingTokenRef.current = null;
+    } finally {
+      setIsAcceptingInvitation(false);
+    }
+  }, [pendingInviteToken, setSearchParams]);
+
+  const declineInvitation = useCallback(() => {
+    setPendingInviteToken(null);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("invite");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   useEffect(() => {
     if (!roomId || inviteToken) {
@@ -1715,6 +1747,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       isTeachingLoading,
       canRetryAssets,
       error: localError ?? machineSnapshot?.context.error ?? null,
+      pendingInviteToken,
+      isAcceptingInvitation,
+      acceptInvitation,
+      declineInvitation,
       createRoom,
       joinRoom,
       leaveRoom,
@@ -1752,6 +1788,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       connectionState,
       createInvitation,
       createRoom,
+      pendingInviteToken,
+      isAcceptingInvitation,
+      acceptInvitation,
+      declineInvitation,
       exportRoom,
       getNodeIdForPath,
       getPathForNodeId,

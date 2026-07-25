@@ -154,6 +154,33 @@ describe("CollaborationProvider", () => {
     mocks.initializeTeaching.mockResolvedValue(undefined);
   });
 
+  it("stages an ?invite= token for confirmation instead of claiming it on mount", async () => {
+    // Claiming joins the room, which reprojects its document over the local
+    // workspace and auto-starts the runtime — so a bare link must never do it.
+    const { claimCollaborationInvitation } = await import("@next-editor/infra");
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+
+    render(
+      <MemoryRouter initialEntries={["/code?invite=attacker-token"]}>
+        <TestProviders>
+          <Probe />
+        </TestProviders>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(collaboration!.pendingInviteToken).toBe("attacker-token"));
+    expect(claimCollaborationInvitation).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await collaboration!.acceptInvitation();
+    });
+    expect(claimCollaborationInvitation).toHaveBeenCalledWith("attacker-token");
+  });
+
   it("seeds the current workspace and moves the editor into the created room URL", async () => {
     mocks.createRoom.mockResolvedValue(roomSession);
     mocks.getRoom.mockRejectedValue({ response: { status: 404 } });

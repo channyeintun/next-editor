@@ -291,6 +291,44 @@ export default function CollaborationPanel() {
 
   return (
     <div className="relative">
+      {/*
+        Joining a room reprojects its document over the local workspace, which
+        auto-starts the runtime and runs that project's package scripts. That
+        must never happen from a bare link, so a `?invite=` token is staged and
+        only claimed from this button.
+      */}
+      {collaboration.pendingInviteToken ? (
+        <div
+          role="dialog"
+          aria-label="Collaboration invitation"
+          className="absolute right-0 top-10 z-50 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700 bg-[#171b25] p-4 text-left shadow-2xl"
+        >
+          <p className="text-sm font-semibold text-white">Join this collaboration room?</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-400">
+            Accepting replaces your current workspace with the room&apos;s files and runs that
+            project. Your name and what you have open become visible to everyone in the room.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={collaboration.isAcceptingInvitation}
+              onClick={() => void collaboration.acceptInvitation()}
+              className="inline-flex h-8 flex-1 items-center justify-center rounded-lg bg-emerald-500/20 px-3 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/30 disabled:opacity-50"
+            >
+              {collaboration.isAcceptingInvitation ? "Joining…" : "Join room"}
+            </button>
+            <button
+              type="button"
+              disabled={collaboration.isAcceptingInvitation}
+              onClick={collaboration.declineInvitation}
+              className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-semibold text-slate-400 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <button
         data-tour="collaboration"
         type="button"
