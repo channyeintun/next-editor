@@ -1,31 +1,33 @@
 # Go crash course — the whole language in one file, built from a bare main.
 #
-# Covers, in order: package + imports, constants and the two declaration forms,
-# `for` as the only loop keyword, slices with append/len/cap, `range`, maps and
-# the comma-ok lookup, `switch` without break, structs with pointer and value
-# receivers, implicitly satisfied interfaces, `defer`, sentinel errors with %w
-# wrapping, generics with a type constraint, and goroutines feeding a channel
-# under a WaitGroup. Then it runs the lot.
-#
-# A survey, so it takes the critic's `scope.scenes` note on purpose — fourteen
-# scenes is not "one concept", which is the whole point of a crash course.
-# `go-error-values.yaml` still owns the deep dive on errors.
+# Covers, in order: package + imports; constants and both declaration forms;
+# pointers with & and *; `for` as the only loop keyword; arrays against slices
+# and `make` with capacity; append/len/cap; `range`; bytes against runes; maps
+# and the comma-ok lookup; `switch` without break; iota constants with a String
+# method; structs with pointer and value receivers; embedding; implicitly
+# satisfied interfaces; a type switch over `any`; variadic functions and
+# closures; `defer`; panic/recover with a named return; sentinel errors with %w
+# wrapping and errors.Is; generics with a type constraint; goroutines feeding a
+# channel under a WaitGroup; a mutex; and `select`. Then it runs the lot.
 #
 # Insert-only, including the import block: it is pinned as a parenthesized group
 # holding only "fmt", and "errors" and "sync" are inserted into it at the moment
-# the lesson needs them (a bare `import "fmt"` could not be grown without a
-# replace, which the editor actions do not allow).
+# the lesson needs them, in the order gofmt wants (a bare `import "fmt"` could
+# not be grown without a replace, which editor actions do not allow). Each topic
+# inserts its declaration at the end of the file first, then the call in main —
+# so every anchor is the previous topic's last line and stays predictable.
 #
 # Four drawn boards, wiped between topics with `clear: true`: the file's anatomy,
 # a slice over its backing array, interface satisfaction, and goroutines feeding a
 # channel. Boxes grow from their corner, labels type a character at a time, and
-# the freedraw strokes trace point by point. The first open and the last close sit
-# inside the studio's quiet recording handles, so the voice never starts or ends
-# over a panel animation.
+# the freedraw strokes trace point by point with the thin pen. The first open and
+# the last close sit inside the studio's quiet recording handles, so the voice
+# never starts or ends over a panel animation.
 #
-# The program's output is verified against the real Go toolchain, not read off the
-# page: gofmt and vet clean, and five runs produce identical bytes (collect() sums
-# its goroutine results so scheduling cannot reorder the output).
+# The program is verified against the real Go toolchain, not read off the page:
+# gofmt and vet clean, and eight runs produce identical bytes. Nothing printed
+# depends on goroutine scheduling — collect() and tally() sum their results, and
+# race() has a value waiting on only one channel.
 #
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/go-crash-course.yaml
@@ -50,392 +52,484 @@ lesson:
         func main() {
         	fmt.Println("Go, in one file")
         }
-  # Authored dark (#1e1e1e): the whiteboard renders with Excalidraw's dark
-  # theme, which inverts element colors, so near-black draws as white. Pale
-  # colors would invert to near-black and disappear.
+  # Authored dark (#1e1e1e): the whiteboard renders with Excalidraw's dark theme,
+  # which inverts element colors, so near-black draws as white. Pale colors would
+  # invert to near-black and disappear. Freedraw strokes always use the thin pen.
   whiteboardAssets:
     # --- Board one: the shape of a Go file ---------------------------------
-    - id: anat-title
-      kind: text
-      x: 300
-      y: 164
-      width: 440
-      height: 40
-      text: "The shape of a Go file"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: anat-pkg-box
-      kind: rectangle
-      x: 300
-      y: 226
-      width: 300
-      height: 60
-      strokeColor: "#1e1e1e"
-    - id: anat-pkg-text
-      kind: text
-      x: 322
-      y: 242
-      width: 260
-      height: 30
-      text: "package main"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: anat-arrow-1
-      kind: freedraw
-      stroke: arrow-down
-      x: 436
-      y: 294
-      width: 44
-      height: 36
-      strokeColor: "#1e1e1e"
-    - id: anat-imp-box
-      kind: rectangle
-      x: 300
-      y: 338
-      width: 300
-      height: 60
-      strokeColor: "#1e1e1e"
-    - id: anat-imp-text
-      kind: text
-      x: 322
-      y: 354
-      width: 260
-      height: 30
-      text: "import ( … )"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: anat-arrow-2
-      kind: freedraw
-      stroke: arrow-down
-      x: 436
-      y: 406
-      width: 44
-      height: 36
-      strokeColor: "#1e1e1e"
-    - id: anat-main-box
-      kind: rectangle
-      x: 300
-      y: 450
-      width: 300
-      height: 60
-      strokeColor: "#1e1e1e"
-    - id: anat-main-text
-      kind: text
-      x: 322
-      y: 466
-      width: 260
-      height: 30
-      text: "func main()"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: anat-entry-circle
-      kind: freedraw
-      stroke: circle
-      x: 286
-      y: 444
-      width: 328
-      height: 74
-      strokeColor: "#1e1e1e"
+    - {
+        id: anat-title,
+        kind: text,
+        x: 300,
+        y: 164,
+        width: 440,
+        height: 40,
+        fontSize: 30,
+        text: "The shape of a Go file",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: anat-pkg-box,
+        kind: rectangle,
+        x: 300,
+        y: 226,
+        width: 300,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: anat-pkg-text,
+        kind: text,
+        x: 322,
+        y: 242,
+        width: 260,
+        height: 30,
+        fontSize: 24,
+        text: "package main",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: anat-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 436,
+        y: 294,
+        width: 44,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: anat-imp-box,
+        kind: rectangle,
+        x: 300,
+        y: 338,
+        width: 300,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: anat-imp-text,
+        kind: text,
+        x: 322,
+        y: 354,
+        width: 260,
+        height: 30,
+        fontSize: 24,
+        text: "import ( … )",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: anat-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 436,
+        y: 406,
+        width: 44,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: anat-main-box,
+        kind: rectangle,
+        x: 300,
+        y: 450,
+        width: 300,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: anat-main-text,
+        kind: text,
+        x: 322,
+        y: 466,
+        width: 260,
+        height: 30,
+        fontSize: 24,
+        text: "func main()",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: anat-entry-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 286,
+        y: 444,
+        width: 328,
+        height: 74,
+        strokeColor: "#1e1e1e",
+      }
     # --- Board two: a slice over its backing array --------------------------
-    - id: sl-title
-      kind: text
-      x: 300
-      y: 164
-      width: 520
-      height: 40
-      text: "A slice is a window on an array"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: sl-box-0
-      kind: rectangle
-      x: 320
-      y: 250
-      width: 92
-      height: 80
-      strokeColor: "#1e1e1e"
-    - id: sl-val-0
-      kind: text
-      x: 348
-      y: 276
-      width: 60
-      height: 34
-      text: "90"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: sl-box-1
-      kind: rectangle
-      x: 420
-      y: 250
-      width: 92
-      height: 80
-      strokeColor: "#1e1e1e"
-    - id: sl-val-1
-      kind: text
-      x: 448
-      y: 276
-      width: 60
-      height: 34
-      text: "80"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: sl-box-2
-      kind: rectangle
-      x: 520
-      y: 250
-      width: 92
-      height: 80
-      strokeColor: "#1e1e1e"
-    - id: sl-val-2
-      kind: text
-      x: 548
-      y: 276
-      width: 60
-      height: 34
-      text: "70"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: sl-box-3
-      kind: rectangle
-      x: 620
-      y: 250
-      width: 92
-      height: 80
-      strokeColor: "#1e1e1e"
-    - id: sl-len-underline
-      kind: freedraw
-      stroke: underline
-      x: 320
-      y: 332
-      width: 292
-      height: 36
-      strokeColor: "#1e1e1e"
-    - id: sl-len-label
-      kind: text
-      x: 320
-      y: 380
-      width: 200
-      height: 34
-      text: "len 3"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: sl-cap-arrow
-      kind: freedraw
-      stroke: arrow-right
-      x: 320
-      y: 436
-      width: 392
-      height: 40
-      strokeColor: "#1e1e1e"
-    - id: sl-cap-label
-      kind: text
-      x: 320
-      y: 488
-      width: 200
-      height: 34
-      text: "cap 4"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
+    - {
+        id: sl-title,
+        kind: text,
+        x: 300,
+        y: 164,
+        width: 520,
+        height: 40,
+        fontSize: 30,
+        text: "A slice is a window on an array",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-box-0,
+        kind: rectangle,
+        x: 320,
+        y: 250,
+        width: 92,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-val-0,
+        kind: text,
+        x: 348,
+        y: 276,
+        width: 60,
+        height: 34,
+        fontSize: 26,
+        text: "90",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-box-1,
+        kind: rectangle,
+        x: 420,
+        y: 250,
+        width: 92,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-val-1,
+        kind: text,
+        x: 448,
+        y: 276,
+        width: 60,
+        height: 34,
+        fontSize: 26,
+        text: "80",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-box-2,
+        kind: rectangle,
+        x: 520,
+        y: 250,
+        width: 92,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-val-2,
+        kind: text,
+        x: 548,
+        y: 276,
+        width: 60,
+        height: 34,
+        fontSize: 26,
+        text: "70",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-box-3,
+        kind: rectangle,
+        x: 620,
+        y: 250,
+        width: 92,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-len-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 320,
+        y: 332,
+        width: 292,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-len-label,
+        kind: text,
+        x: 320,
+        y: 380,
+        width: 200,
+        height: 34,
+        fontSize: 24,
+        text: "len 3",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-cap-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 320,
+        y: 436,
+        width: 392,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: sl-cap-label,
+        kind: text,
+        x: 320,
+        y: 488,
+        width: 200,
+        height: 34,
+        fontSize: 24,
+        text: "cap 4",
+        strokeColor: "#1e1e1e",
+      }
     # --- Board three: interface satisfaction --------------------------------
-    - id: if-title
-      kind: text
-      x: 300
-      y: 164
-      width: 540
-      height: 40
-      text: "point already fits shape"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: if-point-box
-      kind: rectangle
-      x: 300
-      y: 250
-      width: 240
-      height: 100
-      strokeColor: "#1e1e1e"
-    - id: if-point-text
-      kind: text
-      x: 328
-      y: 268
-      width: 200
-      height: 34
-      text: "point"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: if-point-method
-      kind: text
-      x: 328
-      y: 308
-      width: 200
-      height: 30
-      text: "area() int"
-      strokeColor: "#1e1e1e"
-      fontSize: 20
-    - id: if-arrow
-      kind: freedraw
-      stroke: arrow-right
-      x: 560
-      y: 278
-      width: 110
-      height: 44
-      strokeColor: "#1e1e1e"
-    - id: if-shape-box
-      kind: rectangle
-      x: 700
-      y: 250
-      width: 240
-      height: 100
-      strokeColor: "#1e1e1e"
-    - id: if-shape-text
-      kind: text
-      x: 728
-      y: 268
-      width: 200
-      height: 34
-      text: "shape"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: if-shape-method
-      kind: text
-      x: 728
-      y: 308
-      width: 200
-      height: 30
-      text: "area() int"
-      strokeColor: "#1e1e1e"
-      fontSize: 20
-    - id: if-note
-      kind: text
-      x: 300
-      y: 420
-      width: 520
-      height: 34
-      text: "no implements keyword"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: if-note-underline
-      kind: freedraw
-      stroke: underline
-      x: 300
-      y: 420
-      width: 380
-      height: 40
-      strokeColor: "#1e1e1e"
+    - {
+        id: if-title,
+        kind: text,
+        x: 300,
+        y: 164,
+        width: 540,
+        height: 40,
+        fontSize: 30,
+        text: "point already fits shape",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: if-point-box,
+        kind: rectangle,
+        x: 300,
+        y: 250,
+        width: 240,
+        height: 100,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: if-point-text,
+        kind: text,
+        x: 328,
+        y: 268,
+        width: 200,
+        height: 34,
+        fontSize: 26,
+        text: "point",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: if-point-method,
+        kind: text,
+        x: 328,
+        y: 308,
+        width: 200,
+        height: 30,
+        fontSize: 20,
+        text: "area() int",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: if-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 560,
+        y: 278,
+        width: 110,
+        height: 44,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: if-shape-box,
+        kind: rectangle,
+        x: 700,
+        y: 250,
+        width: 240,
+        height: 100,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: if-shape-text,
+        kind: text,
+        x: 728,
+        y: 268,
+        width: 200,
+        height: 34,
+        fontSize: 26,
+        text: "shape",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: if-shape-method,
+        kind: text,
+        x: 728,
+        y: 308,
+        width: 200,
+        height: 30,
+        fontSize: 20,
+        text: "area() int",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: if-note,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 520,
+        height: 34,
+        fontSize: 24,
+        text: "no implements keyword",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: if-note-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 420,
+        width: 380,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
     # --- Board four: goroutines feeding a channel ---------------------------
-    - id: go-title
-      kind: text
-      x: 300
-      y: 164
-      width: 560
-      height: 40
-      text: "goroutines feed a channel"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: go-box-1
-      kind: rectangle
-      x: 300
-      y: 240
-      width: 180
-      height: 56
-      strokeColor: "#1e1e1e"
-    - id: go-text-1
-      kind: text
-      x: 326
-      y: 254
-      width: 140
-      height: 30
-      text: "go 1"
-      strokeColor: "#1e1e1e"
-      fontSize: 22
-    - id: go-box-2
-      kind: rectangle
-      x: 300
-      y: 316
-      width: 180
-      height: 56
-      strokeColor: "#1e1e1e"
-    - id: go-text-2
-      kind: text
-      x: 326
-      y: 330
-      width: 140
-      height: 30
-      text: "go 2"
-      strokeColor: "#1e1e1e"
-      fontSize: 22
-    - id: go-box-3
-      kind: rectangle
-      x: 300
-      y: 392
-      width: 180
-      height: 56
-      strokeColor: "#1e1e1e"
-    - id: go-text-3
-      kind: text
-      x: 326
-      y: 406
-      width: 140
-      height: 30
-      text: "go 3"
-      strokeColor: "#1e1e1e"
-      fontSize: 22
-    - id: go-arrow-in
-      kind: freedraw
-      stroke: arrow-right
-      x: 500
-      y: 322
-      width: 110
-      height: 44
-      strokeColor: "#1e1e1e"
-    - id: go-chan-box
-      kind: rectangle
-      x: 630
-      y: 300
-      width: 200
-      height: 88
-      strokeColor: "#1e1e1e"
-    - id: go-chan-text
-      kind: text
-      x: 656
-      y: 330
-      width: 180
-      height: 34
-      text: "chan int"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: go-arrow-out
-      kind: freedraw
-      stroke: arrow-right
-      x: 840
-      y: 322
-      width: 90
-      height: 44
-      strokeColor: "#1e1e1e"
-    - id: go-sum-text
-      kind: text
-      x: 950
-      y: 330
-      width: 120
-      height: 36
-      text: "sum 14"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: go-note
-      kind: text
-      x: 300
-      y: 486
-      width: 560
-      height: 34
-      text: "wait group closes the channel"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: go-note-underline
-      kind: freedraw
-      stroke: underline
-      x: 300
-      y: 486
-      width: 430
-      height: 40
-      strokeColor: "#1e1e1e"
+    - {
+        id: go-title,
+        kind: text,
+        x: 300,
+        y: 164,
+        width: 560,
+        height: 40,
+        fontSize: 30,
+        text: "goroutines feed a channel",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-box-1,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 180,
+        height: 56,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-text-1,
+        kind: text,
+        x: 326,
+        y: 254,
+        width: 140,
+        height: 30,
+        fontSize: 22,
+        text: "go 1",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-box-2,
+        kind: rectangle,
+        x: 300,
+        y: 316,
+        width: 180,
+        height: 56,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-text-2,
+        kind: text,
+        x: 326,
+        y: 330,
+        width: 140,
+        height: 30,
+        fontSize: 22,
+        text: "go 2",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-box-3,
+        kind: rectangle,
+        x: 300,
+        y: 392,
+        width: 180,
+        height: 56,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-text-3,
+        kind: text,
+        x: 326,
+        y: 406,
+        width: 140,
+        height: 30,
+        fontSize: 22,
+        text: "go 3",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-arrow-in,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 500,
+        y: 322,
+        width: 110,
+        height: 44,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-chan-box,
+        kind: rectangle,
+        x: 630,
+        y: 300,
+        width: 200,
+        height: 88,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-chan-text,
+        kind: text,
+        x: 656,
+        y: 330,
+        width: 180,
+        height: 34,
+        fontSize: 24,
+        text: "chan int",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-arrow-out,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 840,
+        y: 322,
+        width: 90,
+        height: 44,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-sum-text,
+        kind: text,
+        x: 950,
+        y: 330,
+        width: 120,
+        height: 36,
+        fontSize: 26,
+        text: "sum 14",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-note,
+        kind: text,
+        x: 300,
+        y: 486,
+        width: 560,
+        height: 34,
+        fontSize: 24,
+        text: "wait group closes the channel",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: go-note-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 486,
+        width: 430,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -449,7 +543,7 @@ runtime:
     result:
       status: success
       exitCode: 0
-      output: "Go, in one file\ngo.dev Go 3 1.5\ntotal 6\n0=90 1=80 2=70 len 3 cap 4\nada is 36\ncount is three\npoint 6,8\narea 48\n(deferred runs last)\ndescribed\nhalve 7: odd number true\n9 2.5\nsum 14\n"
+      output: "Go, in one file\ngo.dev Go 3 1.5\nbumped 15 via 15\ntotal 6\n[1 0 0] 1 8\n0=90 1=80 2=70 len 3 cap 4\nbytes 6 runes 5\nada is 36\ncount is three\nhigh true\npoint 6,8\nbase 9 9 w\narea 48\nint 7 string go other\n6 240\ncounter 2\n(deferred runs last)\ndescribed\nrecovered: boom\nhalve 7: odd number true\n9 2.5\nsum 14\ntally 10\nselect first\n"
 
 scenes:
   - id: shape
@@ -457,84 +551,112 @@ scenes:
       [[mark:draw-pkg]] Every Go file starts with a package clause.
       [[mark:draw-imp]] Then the imports it needs. [[mark:draw-funcs]] Then the
       functions. [[mark:circle-main]] And func main, in package main, is where
-      the program starts. [[mark:to-code]] Let's build a whole program from
+      the program starts. [[mark:to-code]] We'll build the whole language from
       there.
     sources:
-      - title: "A Tour of Go — Packages"
-        url: "https://go.dev/tour/basics/1"
-      - title: "The Go Programming Language Specification — Program execution"
-        url: "https://go.dev/ref/spec#Program_execution"
+      - { title: "A Tour of Go — Packages", url: "https://go.dev/tour/basics/1" }
+      - {
+          title: "The Go Programming Language Specification — Program execution",
+          url: "https://go.dev/ref/spec#Program_execution",
+        }
     actions:
       # Both land in the two quiet seconds the studio reserves before the first
       # dialog, so the panel is open and titled when the voice starts. The
       # title's draw budget is busy time, so it finishes clear of that dialog
       # rather than pushing the opening handle past two seconds.
-      - id: open-board
-        type: whiteboard.apply
-        at: { scene: start, offsetMs: -1700 }
-        open: true
-      - id: draw-title
-        type: whiteboard.apply
-        at: { scene: start, offsetMs: -1200 }
-        upsertIds: [anat-title]
-        drawMs: 700
-      - id: draw-pkg
-        type: whiteboard.apply
-        at: { mark: draw-pkg }
-        upsertIds: [anat-pkg-box, anat-pkg-text]
-        drawMs: 800
-      - id: draw-imp
-        type: whiteboard.apply
-        at: { mark: draw-imp }
-        upsertIds: [anat-arrow-1, anat-imp-box, anat-imp-text]
-        drawMs: 1000
-      - id: draw-funcs
-        type: whiteboard.apply
-        at: { mark: draw-funcs }
-        upsertIds: [anat-arrow-2, anat-main-box, anat-main-text]
-        drawMs: 1000
-      - id: circle-main
-        type: whiteboard.apply
-        at: { mark: circle-main }
-        upsertIds: [anat-entry-circle]
-        drawMs: 900
-      - id: close-board
-        type: whiteboard.apply
-        at: { mark: to-code }
-        open: false
+      - {
+          id: open-board,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -1700 },
+          open: true,
+        }
+      - {
+          id: draw-title,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -1200 },
+          upsertIds: [anat-title],
+          drawMs: 700,
+        }
+      - {
+          id: draw-pkg,
+          type: whiteboard.apply,
+          at: { mark: draw-pkg },
+          upsertIds: [anat-pkg-box, anat-pkg-text],
+          drawMs: 800,
+        }
+      - {
+          id: draw-imp,
+          type: whiteboard.apply,
+          at: { mark: draw-imp },
+          upsertIds: [anat-arrow-1, anat-imp-box, anat-imp-text],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-funcs,
+          type: whiteboard.apply,
+          at: { mark: draw-funcs },
+          upsertIds: [anat-arrow-2, anat-main-box, anat-main-text],
+          drawMs: 1000,
+        }
+      - {
+          id: circle-main,
+          type: whiteboard.apply,
+          at: { mark: circle-main },
+          upsertIds: [anat-entry-circle],
+          drawMs: 900,
+        }
+      - { id: close-board, type: whiteboard.apply, at: { mark: to-code }, open: false }
 
   - id: values
     narration: >
       [[mark:open-main]] Here's the starting point. [[mark:type-values]] Values
-      first. [[mark:select-short-decl]] Colon equals declares and assigns, and
-      Go takes the type from the value. Const is fixed at compile time. Var lets
-      you name the type yourself, or leave it to Go.
+      first. [[mark:select-short-decl]] Colon equals declares and assigns, and Go
+      takes the type from the value. Const is fixed at compile time. Var lets you
+      name the type yourself, or leave it to Go.
     sources:
-      - title: "A Tour of Go — Short variable declarations"
-        url: "https://go.dev/tour/basics/10"
-      - title: "The Go Programming Language Specification — Constant declarations"
-        url: "https://go.dev/ref/spec#Constant_declarations"
+      - {
+          title: "A Tour of Go — Short variable declarations",
+          url: "https://go.dev/tour/basics/10",
+        }
     actions:
-      - id: open-main
-        type: workspace.openFile
-        at: { mark: open-main }
-        path: main.go
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: main.go }
       - id: type-values
         type: editor.type
         at: { mark: type-values, offsetMs: -400 }
-        target:
-          file: main.go
-          after: "\tfmt.Println(\"Go, in one file\")\n"
-          occurrence: 1
+        target: { file: main.go, after: "\tfmt.Println(\"Go, in one file\")\n", occurrence: 1 }
         cadence: line-by-line
         text: "\n\tconst site = \"go.dev\"\n\tname, count := \"Go\", 3\n\tvar ratio = 1.5\n\tfmt.Println(site, name, count, ratio)\n"
       - id: select-short-decl
         type: editor.select
         at: { mark: select-short-decl }
+        target: { file: main.go, text: 'name, count := "Go", 3', occurrence: 1 }
+
+  - id: pointers
+    narration: >
+      [[mark:type-bump]] A pointer holds an address. [[mark:type-use-bump]] So we
+      pass the address of n, with an ampersand. [[mark:select-deref]] And a star
+      reads or writes through it. Bump changed the real n, not a copy. Go has
+      pointers, but no pointer arithmetic.
+    sources:
+      - { title: "A Tour of Go — Pointers", url: "https://go.dev/tour/moretypes/1" }
+    actions:
+      - id: type-bump
+        type: editor.type
+        at: { mark: type-bump, offsetMs: -400 }
         target:
-          file: main.go
-          text: 'name, count := "Go", 3'
-          occurrence: 1
+          { file: main.go, after: "\tfmt.Println(site, name, count, ratio)\n}\n", occurrence: 1 }
+        cadence: block
+        text: "\nfunc bump(v *int) {\n\t*v += 5\n}\n"
+      - id: type-use-bump
+        type: editor.type
+        at: { mark: type-use-bump }
+        target: { file: main.go, after: "\tfmt.Println(site, name, count, ratio)\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\n\tn := 10\n\tbump(&n)\n\tfmt.Println(\"bumped\", n, \"via\", *(&n))\n"
+      - id: select-deref
+        type: editor.select
+        at: { mark: select-deref }
+        target: { file: main.go, text: "*v += 5", occurrence: 1 }
 
   - id: loops
     narration: >
@@ -542,51 +664,66 @@ scenes:
       counting loops, while loops, and loops that never stop. There's no while
       and no do.
     sources:
-      - title: "A Tour of Go — For"
-        url: "https://go.dev/tour/flowcontrol/1"
+      - { title: "A Tour of Go — For", url: "https://go.dev/tour/flowcontrol/1" }
     actions:
       - id: type-for
         type: editor.type
         at: { mark: type-for, offsetMs: -400 }
         target:
-          file: main.go
-          after: "\tfmt.Println(site, name, count, ratio)\n"
-          occurrence: 1
+          { file: main.go, after: "\tfmt.Println(\"bumped\", n, \"via\", *(&n))\n", occurrence: 1 }
         cadence: line-by-line
         text: "\n\ttotal := 0\n\tfor i := 1; i <= count; i++ {\n\t\ttotal += i\n\t}\n\tfmt.Println(\"total\", total)\n"
       - id: select-for
         type: editor.select
         at: { mark: select-for }
-        target:
-          file: main.go
-          text: "for i := 1; i <= count; i++ {"
-          occurrence: 1
+        target: { file: main.go, text: "for i := 1; i <= count; i++ {", occurrence: 1 }
+
+  - id: arrays
+    narration: >
+      [[mark:type-arrays]] Arrays have a fixed length, baked into the type.
+      [[mark:select-make]] Make builds a slice with a length and a capacity, so it
+      can grow without reallocating straight away. You'll reach for slices almost
+      every time.
+    sources:
+      - { title: "A Tour of Go — Arrays", url: "https://go.dev/tour/moretypes/6" }
+    actions:
+      - id: type-arrays
+        type: editor.type
+        at: { mark: type-arrays, offsetMs: -400 }
+        target: { file: main.go, after: "\tfmt.Println(\"total\", total)\n", occurrence: 1 }
+        cadence: block
+        text: "\n\tvar arr [3]int\n\tarr[0] = 1\n\tbuf := make([]int, 0, 8)\n\tbuf = append(buf, 2)\n\tfmt.Println(arr, len(buf), cap(buf))\n"
+      - id: select-make
+        type: editor.select
+        at: { mark: select-make }
+        target: { file: main.go, text: "make([]int, 0, 8)", occurrence: 1 }
 
   - id: slices
     narration: >
-      [[mark:type-slices]] Slices are Go's growable lists, and append adds to
-      one. [[mark:draw-slice]] A slice is a window onto an array.
-      [[mark:draw-len]] Length is how many values it holds.
-      [[mark:draw-cap]] Capacity is the room in that array, before Go has to
-      allocate a bigger one. [[mark:close-slice]] And range walks it,
-      [[mark:select-range]] handing you the index and the value each time.
+      [[mark:type-slices]] Slices are Go's growable lists, and append adds to one.
+      [[mark:draw-slice]] A slice is a window onto an array. [[mark:draw-len]]
+      Length is how many values it holds. [[mark:draw-cap]] Capacity is the room
+      in that array, before Go has to allocate a bigger one.
+      [[mark:close-slice]] And range walks it, [[mark:select-range]] handing you
+      the index and the value each time.
     sources:
-      - title: "The Go Blog — Go Slices: usage and internals"
-        url: "https://go.dev/blog/slices-intro"
+      - {
+          title: "The Go Blog — Go Slices: usage and internals",
+          url: "https://go.dev/blog/slices-intro",
+        }
     actions:
       - id: type-slices
         type: editor.type
         at: { mark: type-slices, offsetMs: -400 }
-        target:
-          file: main.go
-          after: "\tfmt.Println(\"total\", total)\n"
-          occurrence: 1
+        target: { file: main.go, after: "\tfmt.Println(arr, len(buf), cap(buf))\n", occurrence: 1 }
         cadence: block
         text: "\n\tscores := []int{90, 80}\n\tscores = append(scores, 70)\n\tfor i, s := range scores {\n\t\tfmt.Print(i, \"=\", s, \" \")\n\t}\n\tfmt.Println(\"len\", len(scores), \"cap\", cap(scores))\n"
-      - id: open-slice-board
-        type: whiteboard.apply
-        at: { mark: draw-slice, offsetMs: -700 }
-        open: true
+      - {
+          id: open-slice-board,
+          type: whiteboard.apply,
+          at: { mark: draw-slice, offsetMs: -700 },
+          open: true,
+        }
       # The anatomy sketch is wiped — this diagram reuses its canvas.
       - id: draw-slice
         type: whiteboard.apply
@@ -594,150 +731,225 @@ scenes:
         clear: true
         upsertIds: [sl-title, sl-box-0, sl-val-0, sl-box-1, sl-val-1, sl-box-2, sl-val-2, sl-box-3]
         drawMs: 2400
-      - id: draw-len
-        type: whiteboard.apply
-        at: { mark: draw-len }
-        upsertIds: [sl-len-underline, sl-len-label]
-        drawMs: 900
-      - id: draw-cap
-        type: whiteboard.apply
-        at: { mark: draw-cap }
-        upsertIds: [sl-cap-arrow, sl-cap-label]
-        drawMs: 1000
-      - id: close-slice-board
-        type: whiteboard.apply
-        at: { mark: close-slice }
-        open: false
+      - {
+          id: draw-len,
+          type: whiteboard.apply,
+          at: { mark: draw-len },
+          upsertIds: [sl-len-underline, sl-len-label],
+          drawMs: 900,
+        }
+      - {
+          id: draw-cap,
+          type: whiteboard.apply,
+          at: { mark: draw-cap },
+          upsertIds: [sl-cap-arrow, sl-cap-label],
+          drawMs: 1000,
+        }
+      - { id: close-slice-board, type: whiteboard.apply, at: { mark: close-slice }, open: false }
       - id: select-range
         type: editor.select
         at: { mark: select-range }
+        target: { file: main.go, text: "for i, s := range scores {", occurrence: 1 }
+
+  - id: strings
+    narration: >
+      [[mark:type-strings]] A Go string is bytes, not characters.
+      [[mark:select-runes]] This word is five letters but six bytes, because the
+      accented one takes two. Convert to runes when you need characters.
+    sources:
+      - {
+          title: "The Go Blog — Strings, bytes, runes and characters in Go",
+          url: "https://go.dev/blog/strings",
+        }
+    actions:
+      - id: type-strings
+        type: editor.type
+        at: { mark: type-strings, offsetMs: -400 }
         target:
-          file: main.go
-          text: "for i, s := range scores {"
-          occurrence: 1
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"len\", len(scores), \"cap\", cap(scores))\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\n\tword := \"héllo\"\n\tfmt.Println(\"bytes\", len(word), \"runes\", len([]rune(word)))\n"
+      - id: select-runes
+        type: editor.select
+        at: { mark: select-runes }
+        target: { file: main.go, text: "len([]rune(word))", occurrence: 1 }
 
   - id: maps
     narration: >
       [[mark:type-maps]] Maps hold keys and values. [[mark:select-comma-ok]] A
-      lookup gives back two things: the value, and whether the key was there.
-      That second value is how you tell a missing key from a zero.
+      lookup gives back two things: the value, and whether the key was there. That
+      second value is how you tell a missing key from a zero.
     sources:
-      - title: "The Go Blog — Go maps in action"
-        url: "https://go.dev/blog/maps"
+      - { title: "The Go Blog — Go maps in action", url: "https://go.dev/blog/maps" }
     actions:
       - id: type-maps
         type: editor.type
         at: { mark: type-maps, offsetMs: -400 }
         target:
-          file: main.go
-          after: "\tfmt.Println(\"len\", len(scores), \"cap\", cap(scores))\n"
-          occurrence: 1
+          {
+            file: main.go,
+            after: "\tfmt.Println(\"bytes\", len(word), \"runes\", len([]rune(word)))\n",
+            occurrence: 1,
+          }
         cadence: line-by-line
         text: "\n\tages := map[string]int{\"ada\": 36}\n\tif age, found := ages[\"ada\"]; found {\n\t\tfmt.Println(\"ada is\", age)\n\t}\n"
       - id: select-comma-ok
         type: editor.select
         at: { mark: select-comma-ok }
-        target:
-          file: main.go
-          text: 'if age, found := ages["ada"]; found {'
-          occurrence: 1
+        target: { file: main.go, text: 'if age, found := ages["ada"]; found {', occurrence: 1 }
 
   - id: branch
     narration: >
-      [[mark:type-switch]] Switch needs no break. [[mark:select-switch]] Each
-      case stops on its own, and the value can be any type, not only a number.
+      [[mark:type-switch]] Switch needs no break. [[mark:select-switch]] Each case
+      stops on its own, and the value can be any type, not only a number.
     sources:
-      - title: "A Tour of Go — Switch"
-        url: "https://go.dev/tour/flowcontrol/9"
+      - { title: "A Tour of Go — Switch", url: "https://go.dev/tour/flowcontrol/9" }
     actions:
       - id: type-switch
         type: editor.type
         at: { mark: type-switch, offsetMs: -400 }
-        target:
-          file: main.go
-          after: "\t\tfmt.Println(\"ada is\", age)\n\t}\n"
-          occurrence: 1
+        target: { file: main.go, after: "\t\tfmt.Println(\"ada is\", age)\n\t}\n", occurrence: 1 }
         cadence: block
         text: "\n\tswitch count {\n\tcase 3:\n\t\tfmt.Println(\"count is three\")\n\tdefault:\n\t\tfmt.Println(\"count is other\")\n\t}\n"
       - id: select-switch
         type: editor.select
         at: { mark: select-switch }
+        target: { file: main.go, text: "switch count {", occurrence: 1 }
+
+  - id: enums
+    narration: >
+      [[mark:type-level]] Go has no enum keyword. [[mark:select-iota]] Iota
+      numbers a constant block from zero, and a named type gives those numbers
+      meaning. [[mark:type-use-level]] Add a String method and printing shows the
+      name instead of the number.
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Iota",
+          url: "https://go.dev/ref/spec#Iota",
+        }
+      - { title: "fmt.Stringer", url: "https://pkg.go.dev/fmt#Stringer" }
+    actions:
+      - id: type-level
+        type: editor.type
+        at: { mark: type-level, offsetMs: -400 }
+        target: { file: main.go, after: "\t*v += 5\n}\n", occurrence: 1 }
+        cadence: block
+        text: "\ntype level int\n\nconst (\n\tlow level = iota\n\tmid\n\thigh\n)\n\nfunc (l level) String() string {\n\treturn [...]string{\"low\", \"mid\", \"high\"}[l]\n}\n"
+      - id: select-iota
+        type: editor.select
+        at: { mark: select-iota }
+        target: { file: main.go, text: "low level = iota", occurrence: 1 }
+      - id: type-use-level
+        type: editor.type
+        at: { mark: type-use-level }
         target:
-          file: main.go
-          text: "switch count {"
-          occurrence: 1
+          { file: main.go, after: "\t\tfmt.Println(\"count is other\")\n\t}\n", occurrence: 1 }
+        cadence: block
+        text: "\n\tfmt.Println(high, high == 2)\n"
 
   - id: structs
     narration: >
-      [[mark:type-point]] Structs group fields under a name, and methods attach
-      to the type. [[mark:type-use-point]] So we build a point and scale it.
+      [[mark:type-point]] Structs group fields under a name, and methods attach to
+      the type. [[mark:type-use-point]] So we build a point and scale it.
       [[mark:select-pointer]] That star makes the receiver a pointer, so scale
       changes the real point instead of a copy.
     sources:
-      - title: "A Tour of Go — Structs"
-        url: "https://go.dev/tour/moretypes/2"
-      - title: "A Tour of Go — Pointer receivers"
-        url: "https://go.dev/tour/methods/4"
+      - { title: "A Tour of Go — Structs", url: "https://go.dev/tour/moretypes/2" }
+      - { title: "A Tour of Go — Pointer receivers", url: "https://go.dev/tour/methods/4" }
     actions:
       - id: type-point
         type: editor.type
         at: { mark: type-point, offsetMs: -400 }
         target:
-          file: main.go
-          after: "\t\tfmt.Println(\"count is other\")\n\t}\n}\n"
-          occurrence: 1
+          {
+            file: main.go,
+            after: "\treturn [...]string{\"low\", \"mid\", \"high\"}[l]\n}\n",
+            occurrence: 1,
+          }
         cadence: block
         text: "\ntype point struct {\n\tx int\n\ty int\n}\n\nfunc (p *point) scale(by int) {\n\tp.x *= by\n\tp.y *= by\n}\n\nfunc (p point) label() string {\n\treturn fmt.Sprintf(\"point %d,%d\", p.x, p.y)\n}\n"
       - id: type-use-point
         type: editor.type
         at: { mark: type-use-point }
-        target:
-          file: main.go
-          after: "\t\tfmt.Println(\"count is other\")\n\t}\n"
-          occurrence: 1
+        target: { file: main.go, after: "\tfmt.Println(high, high == 2)\n", occurrence: 1 }
         cadence: line-by-line
         text: "\n\tp := point{x: 3, y: 4}\n\tp.scale(2)\n\tfmt.Println(p.label())\n"
       - id: select-pointer
         type: editor.select
         at: { mark: select-pointer }
+        target: { file: main.go, text: "func (p *point) scale(by int) {", occurrence: 1 }
+
+  - id: embedding
+    narration: >
+      [[mark:type-base]] Go has no inheritance. [[mark:type-use-base]] Instead you
+      embed one struct in another. [[mark:select-embed]] Wrapper has no name for
+      that field, so base's fields and methods come through as if they were its
+      own. Composition, not a class tree.
+    sources:
+      - { title: "Effective Go — Embedding", url: "https://go.dev/doc/effective_go#embedding" }
+    actions:
+      - id: type-base
+        type: editor.type
+        at: { mark: type-base, offsetMs: -400 }
         target:
-          file: main.go
-          text: "func (p *point) scale(by int) {"
-          occurrence: 1
+          {
+            file: main.go,
+            after: "\treturn fmt.Sprintf(\"point %d,%d\", p.x, p.y)\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\ntype base struct {\n\tid int\n}\n\nfunc (b base) who() string {\n\treturn fmt.Sprint(\"base \", b.id)\n}\n\ntype wrapper struct {\n\tbase\n\tname string\n}\n"
+      - id: type-use-base
+        type: editor.type
+        at: { mark: type-use-base }
+        target: { file: main.go, after: "\tfmt.Println(p.label())\n", occurrence: 1 }
+        cadence: block
+        text: "\n\tw := wrapper{base: base{id: 9}, name: \"w\"}\n\tfmt.Println(w.who(), w.id, w.name)\n"
+      - id: select-embed
+        type: editor.select
+        at: { mark: select-embed }
+        target: { file: main.go, text: "type wrapper struct {\n\tbase", occurrence: 1 }
 
   - id: interfaces
     narration: >
       [[mark:type-shape]] Interfaces name behaviour, not data.
-      [[mark:type-use-shape]] Point already has an area method, so it fits
-      shape. [[mark:draw-iface]] Nothing had to say so. [[mark:draw-iface-note]]
-      Go compares the methods, and the type either fits or it doesn't.
+      [[mark:type-use-shape]] Point already has an area method, so it fits shape.
+      [[mark:draw-iface]] Nothing had to say so. [[mark:draw-iface-note]] Go
+      compares the methods, and the type either fits or it doesn't.
       [[mark:close-iface]] There's no implements keyword to write.
     sources:
-      - title: "A Tour of Go — Interfaces are implemented implicitly"
-        url: "https://go.dev/tour/methods/10"
+      - {
+          title: "A Tour of Go — Interfaces are implemented implicitly",
+          url: "https://go.dev/tour/methods/10",
+        }
     actions:
       - id: type-shape
         type: editor.type
         at: { mark: type-shape, offsetMs: -400 }
         target:
-          file: main.go
-          after: "\treturn fmt.Sprintf(\"point %d,%d\", p.x, p.y)\n}\n"
-          occurrence: 1
+          {
+            file: main.go,
+            after: "\ntype wrapper struct {\n\tbase\n\tname string\n}\n",
+            occurrence: 1,
+          }
         cadence: block
         text: "\nfunc (p point) area() int {\n\treturn p.x * p.y\n}\n\ntype shape interface {\n\tarea() int\n}\n"
       - id: type-use-shape
         type: editor.type
         at: { mark: type-use-shape }
-        target:
-          file: main.go
-          after: "\tfmt.Println(p.label())\n"
-          occurrence: 1
+        target: { file: main.go, after: "\tfmt.Println(w.who(), w.id, w.name)\n", occurrence: 1 }
         cadence: line-by-line
         text: "\n\tvar s shape = p\n\tfmt.Println(\"area\", s.area())\n"
-      - id: open-iface-board
-        type: whiteboard.apply
-        at: { mark: draw-iface, offsetMs: -700 }
-        open: true
+      - {
+          id: open-iface-board,
+          type: whiteboard.apply,
+          at: { mark: draw-iface, offsetMs: -700 },
+          open: true,
+        }
       - id: draw-iface
         type: whiteboard.apply
         at: { mark: draw-iface }
@@ -754,15 +966,76 @@ scenes:
             if-shape-method,
           ]
         drawMs: 2400
-      - id: draw-iface-note
-        type: whiteboard.apply
-        at: { mark: draw-iface-note }
-        upsertIds: [if-note, if-note-underline]
-        drawMs: 900
-      - id: close-iface-board
-        type: whiteboard.apply
-        at: { mark: close-iface }
-        open: false
+      - {
+          id: draw-iface-note,
+          type: whiteboard.apply,
+          at: { mark: draw-iface-note },
+          upsertIds: [if-note, if-note-underline],
+          drawMs: 900,
+        }
+      - { id: close-iface-board, type: whiteboard.apply, at: { mark: close-iface }, open: false }
+
+  - id: typeswitch
+    narration: >
+      [[mark:type-kind]] Any holds a value of any type. [[mark:type-use-kind]] To
+      get at it you ask what it is. [[mark:select-typeswitch]] A type switch tests
+      the concrete type and binds it, so each case has a real typed value to work
+      with.
+    sources:
+      - { title: "A Tour of Go — Type switches", url: "https://go.dev/tour/methods/16" }
+    actions:
+      - id: type-kind
+        type: editor.type
+        at: { mark: type-kind, offsetMs: -400 }
+        target:
+          { file: main.go, after: "\ntype shape interface {\n\tarea() int\n}\n", occurrence: 1 }
+        cadence: block
+        text: "\nfunc kind(v any) string {\n\tswitch t := v.(type) {\n\tcase int:\n\t\treturn fmt.Sprint(\"int \", t)\n\tcase string:\n\t\treturn \"string \" + t\n\tdefault:\n\t\treturn \"other\"\n\t}\n}\n"
+      - id: type-use-kind
+        type: editor.type
+        at: { mark: type-use-kind }
+        target: { file: main.go, after: "\tfmt.Println(\"area\", s.area())\n", occurrence: 1 }
+        cadence: block
+        text: "\n\tfmt.Println(kind(7), kind(\"go\"), kind(1.5))\n"
+      - id: select-typeswitch
+        type: editor.select
+        at: { mark: select-typeswitch }
+        target: { file: main.go, text: "switch t := v.(type) {", occurrence: 1 }
+
+  - id: funcs
+    narration: >
+      [[mark:type-sum]] Functions are values in Go. [[mark:type-use-sum]] Sum
+      takes any number of ints, and three dots spreads a slice into it.
+      [[mark:select-closure]] Counter returns a function that keeps its own n
+      alive. That's a closure.
+    sources:
+      - {
+          title: "Effective Go — Variadic functions",
+          url: "https://go.dev/doc/effective_go#functions",
+        }
+      - { title: "A Tour of Go — Function closures", url: "https://go.dev/tour/moretypes/25" }
+    actions:
+      - id: type-sum
+        type: editor.type
+        at: { mark: type-sum, offsetMs: -400 }
+        target: { file: main.go, after: "\t\treturn \"other\"\n\t}\n}\n", occurrence: 1 }
+        cadence: block
+        text: "\nfunc sum(nums ...int) int {\n\tt := 0\n\tfor _, v := range nums {\n\t\tt += v\n\t}\n\treturn t\n}\n\nfunc counter() func() int {\n\tn := 0\n\treturn func() int {\n\t\tn++\n\t\treturn n\n\t}\n}\n"
+      - id: type-use-sum
+        type: editor.type
+        at: { mark: type-use-sum }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(kind(7), kind(\"go\"), kind(1.5))\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\n\tfmt.Println(sum(1, 2, 3), sum(scores...))\n\tnext := counter()\n\tnext()\n\tfmt.Println(\"counter\", next())\n"
+      - id: select-closure
+        type: editor.select
+        at: { mark: select-closure }
+        target: { file: main.go, text: "func counter() func() int {", occurrence: 1 }
 
   - id: defer
     narration: >
@@ -771,34 +1044,62 @@ scenes:
       [[mark:select-defer]] The deferred line runs last, even if the function
       panics on the way out. That's how Go closes files and unlocks things.
     sources:
-      - title: "The Go Blog — Defer, Panic, and Recover"
-        url: "https://go.dev/blog/defer-panic-and-recover"
+      - {
+          title: "The Go Blog — Defer, Panic, and Recover",
+          url: "https://go.dev/blog/defer-panic-and-recover",
+        }
     actions:
       - id: type-defer
         type: editor.type
         at: { mark: type-defer, offsetMs: -400 }
         target:
-          file: main.go
-          after: "\ntype shape interface {\n\tarea() int\n}\n"
-          occurrence: 1
+          {
+            file: main.go,
+            after: "\treturn func() int {\n\t\tn++\n\t\treturn n\n\t}\n}\n",
+            occurrence: 1,
+          }
         cadence: block
         text: "\nfunc describe() string {\n\tdefer fmt.Println(\"(deferred runs last)\")\n\treturn \"described\"\n}\n"
       - id: type-use-defer
         type: editor.type
         at: { mark: type-use-defer }
-        target:
-          file: main.go
-          after: "\tfmt.Println(\"area\", s.area())\n"
-          occurrence: 1
+        target: { file: main.go, after: "\tfmt.Println(\"counter\", next())\n", occurrence: 1 }
         cadence: block
         text: "\n\tfmt.Println(describe())\n"
       - id: select-defer
         type: editor.select
         at: { mark: select-defer }
-        target:
-          file: main.go
-          text: 'defer fmt.Println("(deferred runs last)")'
-          occurrence: 1
+        target: { file: main.go, text: 'defer fmt.Println("(deferred runs last)")', occurrence: 1 }
+
+  - id: recover
+    narration: >
+      [[mark:type-safe]] A panic unwinds the stack. [[mark:type-use-safe]] Recover,
+      inside a deferred function, stops it and hands you the value.
+      [[mark:select-named-return]] And that named result lets the deferred
+      function set what gets returned. Save panics for bugs you can't recover
+      from.
+    sources:
+      - {
+          title: "The Go Blog — Defer, Panic, and Recover",
+          url: "https://go.dev/blog/defer-panic-and-recover",
+        }
+    actions:
+      - id: type-safe
+        type: editor.type
+        at: { mark: type-safe, offsetMs: -400 }
+        target: { file: main.go, after: "\treturn \"described\"\n}\n", occurrence: 1 }
+        cadence: block
+        text: "\nfunc safe() (msg string) {\n\tdefer func() {\n\t\tif r := recover(); r != nil {\n\t\t\tmsg = fmt.Sprint(\"recovered: \", r)\n\t\t}\n\t}()\n\tpanic(\"boom\")\n}\n"
+      - id: type-use-safe
+        type: editor.type
+        at: { mark: type-use-safe }
+        target: { file: main.go, after: "\tfmt.Println(describe())\n", occurrence: 1 }
+        cadence: block
+        text: "\n\tfmt.Println(safe())\n"
+      - id: select-named-return
+        type: editor.select
+        at: { mark: select-named-return }
+        target: { file: main.go, text: "func safe() (msg string) {", occurrence: 1 }
 
   - id: errors
     narration: >
@@ -808,44 +1109,33 @@ scenes:
       [[mark:select-wrap]] Percent w wraps one error inside another, so code
       further up can still recognise the original.
     sources:
-      - title: "The Go Blog — Working with Errors in Go 1.13"
-        url: "https://go.dev/blog/go1.13-errors"
-      - title: "Effective Go — Errors"
-        url: "https://go.dev/doc/effective_go#errors"
+      - {
+          title: "The Go Blog — Working with Errors in Go 1.13",
+          url: "https://go.dev/blog/go1.13-errors",
+        }
+      - { title: "Effective Go — Errors", url: "https://go.dev/doc/effective_go#errors" }
     actions:
       - id: type-import-errors
         type: editor.type
         at: { mark: type-import-errors, offsetMs: -400 }
-        target:
-          file: main.go
-          after: "import (\n"
-          occurrence: 1
+        target: { file: main.go, after: "import (\n", occurrence: 1 }
         text: "\t\"errors\"\n"
       - id: type-errors
         type: editor.type
         at: { mark: type-errors }
-        target:
-          file: main.go
-          after: "\treturn \"described\"\n}\n"
-          occurrence: 1
+        target: { file: main.go, after: "\tpanic(\"boom\")\n}\n", occurrence: 1 }
         cadence: block
         text: "\nvar errOdd = errors.New(\"odd number\")\n\nfunc halve(n int) (int, error) {\n\tif n%2 != 0 {\n\t\treturn 0, fmt.Errorf(\"halve %d: %w\", n, errOdd)\n\t}\n\treturn n / 2, nil\n}\n"
       - id: type-use-errors
         type: editor.type
         at: { mark: type-use-errors }
-        target:
-          file: main.go
-          after: "\tfmt.Println(describe())\n"
-          occurrence: 1
+        target: { file: main.go, after: "\tfmt.Println(safe())\n", occurrence: 1 }
         cadence: line-by-line
         text: "\n\tif _, err := halve(7); err != nil {\n\t\tfmt.Println(err, errors.Is(err, errOdd))\n\t}\n"
       - id: select-wrap
         type: editor.select
         at: { mark: select-wrap }
-        target:
-          file: main.go
-          text: 'fmt.Errorf("halve %d: %w", n, errOdd)'
-          occurrence: 1
+        target: { file: main.go, text: 'fmt.Errorf("halve %d: %w", n, errOdd)', occurrence: 1 }
 
   - id: generics
     narration: >
@@ -854,135 +1144,170 @@ scenes:
       types. [[mark:select-generic]] That's the type parameter. Largest works on
       ints or floats, from one body, with nothing to convert.
     sources:
-      - title: "Go — Tutorial: Getting started with generics"
-        url: "https://go.dev/doc/tutorial/generics"
+      - {
+          title: "Go — Tutorial: Getting started with generics",
+          url: "https://go.dev/doc/tutorial/generics",
+        }
     actions:
       - id: type-generic
         type: editor.type
         at: { mark: type-generic, offsetMs: -400 }
-        target:
-          file: main.go
-          after: "\treturn n / 2, nil\n}\n"
-          occurrence: 1
+        target: { file: main.go, after: "\treturn n / 2, nil\n}\n", occurrence: 1 }
         cadence: block
         text: "\nfunc largest[T int | float64](values []T) T {\n\tbest := values[0]\n\tfor _, v := range values[1:] {\n\t\tif v > best {\n\t\t\tbest = v\n\t\t}\n\t}\n\treturn best\n}\n"
       - id: type-use-generic
         type: editor.type
         at: { mark: type-use-generic }
         target:
-          file: main.go
-          after: "\t\tfmt.Println(err, errors.Is(err, errOdd))\n\t}\n"
-          occurrence: 1
+          {
+            file: main.go,
+            after: "\t\tfmt.Println(err, errors.Is(err, errOdd))\n\t}\n",
+            occurrence: 1,
+          }
         cadence: block
         text: "\n\tfmt.Println(largest([]int{3, 9, 4}), largest([]float64{2.5, 1.5}))\n"
       - id: select-generic
         type: editor.select
         at: { mark: select-generic }
-        target:
-          file: main.go
-          text: "[T int | float64]"
-          occurrence: 1
+        target: { file: main.go, text: "[T int | float64]", occurrence: 1 }
 
   - id: concurrency
     narration: >
       [[mark:type-import-sync]] Now the part Go is known for.
-      [[mark:type-collect]] Go, in front of a call, starts a goroutine — a
-      thread so cheap you can start thousands. [[mark:draw-go]] Three of them
-      run here. [[mark:draw-chan]] A channel carries values between them
-      safely. [[mark:draw-note]] The wait group tells us when the senders have
-      finished, so the channel can close. [[mark:close-go]] Ranging over a
-      channel reads until that happens.
+      [[mark:type-collect]] Go, in front of a call, starts a goroutine — a thread
+      so cheap you can start thousands. [[mark:draw-go]] Three of them run here.
+      [[mark:draw-chan]] A channel carries values between them safely.
+      [[mark:draw-note]] The wait group tells us when the senders have finished,
+      so the channel can close. [[mark:close-go]] Ranging over a channel reads
+      until that happens.
     sources:
-      - title: "A Tour of Go — Goroutines"
-        url: "https://go.dev/tour/concurrency/1"
-      - title: "Effective Go — Concurrency"
-        url: "https://go.dev/doc/effective_go#concurrency"
+      - { title: "A Tour of Go — Goroutines", url: "https://go.dev/tour/concurrency/1" }
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
     actions:
       - id: type-import-sync
         type: editor.type
         at: { mark: type-import-sync, offsetMs: -400 }
-        target:
-          file: main.go
-          after: "\t\"fmt\"\n"
-          occurrence: 1
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
         text: "\t\"sync\"\n"
       - id: type-collect
         type: editor.type
         at: { mark: type-collect }
-        target:
-          file: main.go
-          after: "\treturn best\n}\n"
-          occurrence: 1
+        target: { file: main.go, after: "\treturn best\n}\n", occurrence: 1 }
         cadence: block
-        text: "\nfunc collect() int {\n\tresults := make(chan int)\n\tvar wg sync.WaitGroup\n\tfor i := 1; i <= 3; i++ {\n\t\twg.Add(1)\n\t\tgo func(n int) {\n\t\t\tdefer wg.Done()\n\t\t\tresults <- n * n\n\t\t}(i)\n\t}\n\tgo func() {\n\t\twg.Wait()\n\t\tclose(results)\n\t}()\n\tsum := 0\n\tfor v := range results {\n\t\tsum += v\n\t}\n\treturn sum\n}\n"
-      - id: type-use-collect
-        type: editor.type
-        at: { mark: type-collect, offsetMs: 1200 }
-        target:
-          file: main.go
-          after: "\tfmt.Println(largest([]int{3, 9, 4}), largest([]float64{2.5, 1.5}))\n"
-          occurrence: 1
-        cadence: block
-        text: "\n\tfmt.Println(\"sum\", collect())\n"
-      - id: open-go-board
-        type: whiteboard.apply
-        at: { mark: draw-go, offsetMs: -700 }
-        open: true
+        text: "\nfunc collect() int {\n\tresults := make(chan int)\n\tvar wg sync.WaitGroup\n\tfor i := 1; i <= 3; i++ {\n\t\twg.Add(1)\n\t\tgo func(k int) {\n\t\t\tdefer wg.Done()\n\t\t\tresults <- k * k\n\t\t}(i)\n\t}\n\tgo func() {\n\t\twg.Wait()\n\t\tclose(results)\n\t}()\n\tsum := 0\n\tfor v := range results {\n\t\tsum += v\n\t}\n\treturn sum\n}\n"
+      - {
+          id: open-go-board,
+          type: whiteboard.apply,
+          at: { mark: draw-go, offsetMs: -700 },
+          open: true,
+        }
       - id: draw-go
         type: whiteboard.apply
         at: { mark: draw-go }
         clear: true
         upsertIds: [go-title, go-box-1, go-text-1, go-box-2, go-text-2, go-box-3, go-text-3]
         drawMs: 2100
-      - id: draw-chan
-        type: whiteboard.apply
-        at: { mark: draw-chan }
-        upsertIds: [go-arrow-in, go-chan-box, go-chan-text, go-arrow-out, go-sum-text]
-        drawMs: 1500
-      - id: draw-note
-        type: whiteboard.apply
-        at: { mark: draw-note }
-        upsertIds: [go-note, go-note-underline]
-        drawMs: 900
-      - id: close-go-board
-        type: whiteboard.apply
-        at: { mark: close-go }
-        open: false
+      - {
+          id: draw-chan,
+          type: whiteboard.apply,
+          at: { mark: draw-chan },
+          upsertIds: [go-arrow-in, go-chan-box, go-chan-text, go-arrow-out, go-sum-text],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-note,
+          type: whiteboard.apply,
+          at: { mark: draw-note },
+          upsertIds: [go-note, go-note-underline],
+          drawMs: 900,
+        }
+      - { id: close-go-board, type: whiteboard.apply, at: { mark: close-go }, open: false }
+
+  - id: sync
+    narration: >
+      [[mark:type-tally]] Channels aren't the only tool. [[mark:select-mutex]] A
+      mutex guards shared state directly, when passing it around would be
+      awkward. [[mark:type-race]] Select is the other half of channels.
+      [[mark:select-select]] It waits on several at once, and takes whichever is
+      ready first.
+    sources:
+      - { title: "sync.Mutex", url: "https://pkg.go.dev/sync#Mutex" }
+      - { title: "A Tour of Go — Select", url: "https://go.dev/tour/concurrency/5" }
+    actions:
+      - id: type-tally
+        type: editor.type
+        at: { mark: type-tally, offsetMs: -400 }
+        target:
+          {
+            file: main.go,
+            after: "\tfor v := range results {\n\t\tsum += v\n\t}\n\treturn sum\n}\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\nfunc tally() int {\n\tvar mu sync.Mutex\n\tvar wg sync.WaitGroup\n\ttotal := 0\n\tfor i := 1; i <= 4; i++ {\n\t\twg.Add(1)\n\t\tgo func(k int) {\n\t\t\tdefer wg.Done()\n\t\t\tmu.Lock()\n\t\t\ttotal += k\n\t\t\tmu.Unlock()\n\t\t}(i)\n\t}\n\twg.Wait()\n\treturn total\n}\n"
+      - id: select-mutex
+        type: editor.select
+        at: { mark: select-mutex }
+        target: { file: main.go, text: "mu.Lock()", occurrence: 1 }
+      - id: type-race
+        type: editor.type
+        at: { mark: type-race }
+        target: { file: main.go, after: "\twg.Wait()\n\treturn total\n}\n", occurrence: 1 }
+        cadence: block
+        text: "\nfunc race() string {\n\ta := make(chan string, 1)\n\tb := make(chan string, 1)\n\ta <- \"first\"\n\tselect {\n\tcase v := <-a:\n\t\treturn v\n\tcase v := <-b:\n\t\treturn v\n\t}\n}\n"
+      # Chained rather than mark-anchored: the three result lines follow the
+      # select declaration immediately, and an own mark would have to be timed
+      # against type-race's draw budget by hand.
+      - id: type-use-conc
+        type: editor.type
+        at: { afterAction: type-race }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(largest([]int{3, 9, 4}), largest([]float64{2.5, 1.5}))\n",
+            occurrence: 1,
+          }
+        cadence: block
+        text: "\n\tfmt.Println(\"sum\", collect())\n\tfmt.Println(\"tally\", tally())\n\tfmt.Println(\"select\", race())\n"
+      - id: select-select
+        type: editor.select
+        at: { mark: select-select }
+        target: { file: main.go, text: "select {", occurrence: 1 }
 
   - id: run
     narration: >
-      [[mark:run]] Let's run the whole file. The values and the loop total. The
-      slice, with its length and capacity. The map, and the switch. The scaled
-      point, and its area through the interface. The deferred line arriving
-      first. The wrapped error. Generics on two types. And fourteen, summed from
-      three goroutines.
+      [[mark:run]] Let's run the whole file. Values, pointers, the loop total. The
+      array and the slice, with length and capacity. Bytes against runes. The map,
+      the switch, the named constant. The scaled point, the embedded field, the
+      area through an interface. The type switch, variadic sum, and closure. The
+      deferred line arriving first, then the recovered panic. The wrapped error.
+      Generics on two types. And three concurrency results at the end.
     sources:
-      - title: "Go Playground"
-        url: "https://go.dev/play/"
+      - { title: "Go Playground", url: "https://go.dev/play/" }
     actions:
-      - id: run
-        type: runtime.run
-        at: { mark: run, offsetMs: 200 }
-        timeoutMs: 15000
-      - id: expect-output
-        type: expect.output
-        at: { afterAction: run }
-        contains: "sum 14"
-        timeoutMs: 8000
-      - id: expect-file-main
-        type: expect.file
-        at: { afterAction: run }
-        path: main.go
-        contains: "func largest[T int | float64](values []T) T"
+      - { id: run, type: runtime.run, at: { mark: run, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-output,
+          type: expect.output,
+          at: { afterAction: run },
+          contains: "select first",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-main,
+          type: expect.file,
+          at: { afterAction: run },
+          path: main.go,
+          contains: "func largest[T int | float64](values []T) T",
+        }
 
   - id: wrap
     narration: >
-      That's a tour of Go in one file. A small language, with few keywords, and
-      types you can see rather than guess. All of it comes from the standard
-      library and the language itself.
+      That's the language, in one file. Twenty five keywords, types you can see
+      rather than guess, and concurrency built into the syntax. All of it comes
+      from the standard library and the language itself.
     sources:
-      - title: "Effective Go"
-        url: "https://go.dev/doc/effective_go"
+      - { title: "Effective Go", url: "https://go.dev/doc/effective_go" }
     actions: []
 
 checks:

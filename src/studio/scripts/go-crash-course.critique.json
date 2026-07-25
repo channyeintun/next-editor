@@ -1,10 +1,4 @@
 {
   "version": 2,
-  "notes": [
-    {
-      "id": "scope.scenes",
-      "severity": "suggestion",
-      "message": "14 scenes (guide suggests ≤ 5) — is this still one concept?"
-    }
-  ]
+  "notes": []
 }
