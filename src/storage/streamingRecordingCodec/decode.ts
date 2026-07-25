@@ -14,6 +14,8 @@ import type { WhiteboardEvent } from "../../core/src/whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
 import {
   decodeRecords,
+  createInflationBudget,
+  type InflationBudget,
   decodeWorkspaceAssetPayload,
   findFooterStart,
   hasMagicAt,
@@ -153,8 +155,9 @@ interface DecodedStreamState {
 function mergeFinalMetadata(
   current: RecordingStreamMeta,
   payload: Uint8Array,
+  budget: InflationBudget,
 ): RecordingStreamMeta {
-  const records = decodeRecords<RecordingStreamMeta>(payload);
+  const records = decodeRecords<RecordingStreamMeta>(payload, budget);
   const candidate = records[records.length - 1];
 
   if (
@@ -253,6 +256,9 @@ function assembleRecording(state: DecodedStreamState): Recording {
 
 function decodeSegments(bytes: Uint8Array): Recording {
   const parsedHeader = parseHeader(bytes);
+  // One budget for the whole stream: MAX_INFLATED_SEGMENT_BYTES bounds each
+  // segment, this bounds their sum.
+  const budget = createInflationBudget();
   let meta = parsedHeader.meta;
   const { headerEnd, formatVersion } = parsedHeader;
   const footerStart = findFooterStart(bytes, headerEnd);
@@ -295,28 +301,36 @@ function decodeSegments(bytes: Uint8Array): Recording {
       case SEGMENT_KIND.frames: {
         // Per-segment marker resolution — self-contained, no cross-segment carry
         // (see framePreviewContentDedup.ts).
-        const records = hydrateFramePreviewContent(decodeRecords<DeltaFrame>(segment.payload));
+        const records = hydrateFramePreviewContent(
+          decodeRecords<DeltaFrame>(segment.payload, budget),
+        );
         assertFrameFormatCompatibility(records, formatVersion);
         frames.push(...records);
         break;
       }
       case SEGMENT_KIND.slide:
-        slideEvents.push(...decodeRecords<SlideEvent>(segment.payload));
+        slideEvents.push(...decodeRecords<SlideEvent>(segment.payload, budget));
         break;
       case SEGMENT_KIND.preview:
-        previewEvents.push(...decodeRecords<PreviewEvent>(segment.payload));
+        previewEvents.push(...decodeRecords<PreviewEvent>(segment.payload, budget));
         break;
       case SEGMENT_KIND.previewDoc:
-        previewInitialDocuments.push(...decodeRecords<PreviewInitialDocument>(segment.payload));
+        previewInitialDocuments.push(
+          ...decodeRecords<PreviewInitialDocument>(segment.payload, budget),
+        );
         break;
       case SEGMENT_KIND.previewPatch:
         previewPatchBatches.push(
-          ...hydratePreviewPatchBatches(decodeRecords<PreviewDomPatchBatch>(segment.payload)),
+          ...hydratePreviewPatchBatches(
+            decodeRecords<PreviewDomPatchBatch>(segment.payload, budget),
+          ),
         );
         break;
       case SEGMENT_KIND.workspace:
         workspaceEvents.push(
-          ...hydrateWorkspaceEvents(decodeRecords<WorkspaceRecordingEvent>(segment.payload)),
+          ...hydrateWorkspaceEvents(
+            decodeRecords<WorkspaceRecordingEvent>(segment.payload, budget),
+          ),
         );
         break;
       case SEGMENT_KIND.workspaceAsset: {
@@ -330,19 +344,19 @@ function decodeSegments(bytes: Uint8Array): Recording {
         break;
       }
       case SEGMENT_KIND.runtime:
-        runtimeEvents.push(...decodeRecords<RuntimeRecordingEvent>(segment.payload));
+        runtimeEvents.push(...decodeRecords<RuntimeRecordingEvent>(segment.payload, budget));
         break;
       case SEGMENT_KIND.cursor:
-        cursorEvents.push(...decodeRecords<CursorRecordingEvent>(segment.payload));
+        cursorEvents.push(...decodeRecords<CursorRecordingEvent>(segment.payload, budget));
         break;
       case SEGMENT_KIND.whiteboard:
-        whiteboardEvents.push(...decodeRecords<WhiteboardEvent>(segment.payload));
+        whiteboardEvents.push(...decodeRecords<WhiteboardEvent>(segment.payload, budget));
         break;
       case SEGMENT_KIND.chat:
-        chatEvents.push(...decodeRecords<ChatRecordingEvent>(segment.payload));
+        chatEvents.push(...decodeRecords<ChatRecordingEvent>(segment.payload, budget));
         break;
       case SEGMENT_KIND.finalMeta:
-        meta = mergeFinalMetadata(meta, segment.payload);
+        meta = mergeFinalMetadata(meta, segment.payload, budget);
         break;
     }
     const decodedRecordCount =
@@ -447,6 +461,8 @@ const STREAMING_READER_INITIAL_CAPACITY = 64 * 1024;
 
 export function createStreamingRecordingReader(): StreamingRecordingReader {
   let buffer = new Uint8Array(0);
+  // One budget for the lifetime of this reader, matching decodeSegments.
+  const budget = createInflationBudget();
   let retainedLength = 0;
   let totalLength = 0;
 
@@ -585,7 +601,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         // frame once, as it arrives. `getRecording()` then skips the
         // whole-recording normalize pass (`prenormalized`), so progressive decoding
         // stays O(total bytes) instead of re-cloning every frame per interval.
-        const records = hydrateFramePreviewContent(decodeRecords<DeltaFrame>(payload)).map(
+        const records = hydrateFramePreviewContent(decodeRecords<DeltaFrame>(payload, budget)).map(
           normalizeDeltaFrame,
         );
         assertFrameFormatCompatibility(records, currentFormatVersion);
@@ -594,25 +610,25 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         break;
       }
       case SEGMENT_KIND.slide: {
-        const records = decodeRecords<SlideEvent>(payload);
+        const records = decodeRecords<SlideEvent>(payload, budget);
         pendingRecordCount = records.length;
         commit = () => slideEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.preview: {
-        const records = decodeRecords<PreviewEvent>(payload);
+        const records = decodeRecords<PreviewEvent>(payload, budget);
         pendingRecordCount = records.length;
         commit = () => previewEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.previewDoc: {
-        const records = decodeRecords<PreviewInitialDocument>(payload);
+        const records = decodeRecords<PreviewInitialDocument>(payload, budget);
         pendingRecordCount = records.length;
         commit = () => previewInitialDocuments.push(...records);
         break;
       }
       case SEGMENT_KIND.previewPatch: {
-        const records = decodeRecords<PreviewDomPatchBatch>(payload);
+        const records = decodeRecords<PreviewDomPatchBatch>(payload, budget);
         pendingRecordCount = records.length;
         // Hydration advances the template list, so it runs inside `commit` — a
         // decode throw above must leave the dedup state untouched.
@@ -620,7 +636,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         break;
       }
       case SEGMENT_KIND.workspace: {
-        const records = decodeRecords<WorkspaceRecordingEvent>(payload);
+        const records = decodeRecords<WorkspaceRecordingEvent>(payload, budget);
         pendingRecordCount = records.length;
         // Hydration advances the carry map, so it runs inside `commit` — a decode
         // throw above must leave the dedup state untouched along with the arrays.
@@ -641,31 +657,31 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         break;
       }
       case SEGMENT_KIND.runtime: {
-        const records = decodeRecords<RuntimeRecordingEvent>(payload);
+        const records = decodeRecords<RuntimeRecordingEvent>(payload, budget);
         pendingRecordCount = records.length;
         commit = () => runtimeEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.cursor: {
-        const records = decodeRecords<CursorRecordingEvent>(payload);
+        const records = decodeRecords<CursorRecordingEvent>(payload, budget);
         pendingRecordCount = records.length;
         commit = () => cursorEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.whiteboard: {
-        const records = decodeRecords<WhiteboardEvent>(payload);
+        const records = decodeRecords<WhiteboardEvent>(payload, budget);
         pendingRecordCount = records.length;
         commit = () => whiteboardEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.chat: {
-        const records = decodeRecords<ChatRecordingEvent>(payload);
+        const records = decodeRecords<ChatRecordingEvent>(payload, budget);
         pendingRecordCount = records.length;
         commit = () => chatEvents.push(...records);
         break;
       }
       case SEGMENT_KIND.finalMeta: {
-        const finalMeta = mergeFinalMetadata(meta, payload);
+        const finalMeta = mergeFinalMetadata(meta, payload, budget);
         commit = () => {
           meta = finalMeta;
         };

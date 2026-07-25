@@ -302,6 +302,32 @@ export function decodeWorkspaceAssetPayload(payload: Uint8Array): WorkspaceRecor
   return { descriptor, bytes: payload.slice(bytesStart) };
 }
 
+/**
+ * Running total of inflated bytes for ONE stream.
+ *
+ * MAX_INFLATED_SEGMENT_BYTES bounds a single segment, but nothing bounded the
+ * sum: a stream may hold many segments, and the only stream-level limits are on
+ * *compressed* bytes and on record count. DEFLATE reaches ~1000:1, so ~30
+ * segments of ~65 KiB each — about 2 MB on the wire, far under MAX_STREAM_BYTES
+ * — inflated to roughly 1.9 GB of retained records, and the record cap never
+ * tripped because each segment held a single huge record. Decoding starts
+ * automatically from a `?url=` link, so that was a tab kill with no interaction.
+ *
+ * The ceiling is deliberately far above any real recording (8× a single
+ * segment's cap) so this only ever fires on a stream engineered to blow memory.
+ */
+export const MAX_INFLATED_STREAM_BYTES = 512 * 1024 * 1024;
+
+export interface InflationBudget {
+  remaining: number;
+}
+
+export function createInflationBudget(
+  maxBytes: number = MAX_INFLATED_STREAM_BYTES,
+): InflationBudget {
+  return { remaining: maxBytes };
+}
+
 function boundedUnzlib(payload: Uint8Array, maxBytes: number, label: string): Uint8Array {
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -316,11 +342,19 @@ function boundedUnzlib(payload: Uint8Array, maxBytes: number, label: string): Ui
   return concatChunks(chunks, total);
 }
 
-export function decodeRecords<T>(payload: Uint8Array): T[] {
+export function decodeRecords<T>(payload: Uint8Array, budget?: InflationBudget): T[] {
   if (payload.byteLength > MAX_COMPRESSED_SEGMENT_BYTES) {
     throw new Error("Invalid SCR3 stream: segment exceeds the compressed size limit");
   }
-  const decoded = msgpackDecode(boundedUnzlib(payload, MAX_INFLATED_SEGMENT_BYTES, "segment"));
+  // Whichever is tighter: this segment's own cap, or what the stream has left.
+  const limit = budget
+    ? Math.min(MAX_INFLATED_SEGMENT_BYTES, budget.remaining)
+    : MAX_INFLATED_SEGMENT_BYTES;
+  const inflated = boundedUnzlib(payload, limit, budget ? "stream" : "segment");
+  if (budget) {
+    budget.remaining -= inflated.byteLength;
+  }
+  const decoded = msgpackDecode(inflated);
   if (!Array.isArray(decoded)) return [];
   if (decoded.length > MAX_DECODED_RECORDS) {
     throw new Error("Invalid SCR3 stream: segment contains too many records");

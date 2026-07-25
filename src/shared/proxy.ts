@@ -35,6 +35,16 @@ export function isPubliclyRoutableHost(hostname: string): boolean {
 
   const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
   if (bare.includes(":")) {
+    // An IPv4-mapped address carries a v4 target inside a v6 literal, and the
+    // WHATWG parser re-serializes it in hex — `https://[::ffff:127.0.0.1]/`
+    // becomes `[::ffff:7f00:1]`, which matches none of the textual prefixes
+    // below, while isBlockedIpv4 never runs because the string contains ":".
+    // Extract the embedded v4 address and run it through the v4 rules.
+    const mapped = embeddedIpv4(bare);
+    if (mapped !== null) return !isBlockedIpv4(mapped);
+    // fe80::/10 covers fe80–febf, not just the literal "fe80:" text form.
+    const firstGroup = bare.startsWith("::") ? "" : bare.split(":")[0];
+    if (firstGroup.length === 4 && /^fe[89ab]/.test(firstGroup)) return false;
     return !(
       bare === "::" ||
       bare === "::1" ||
@@ -45,6 +55,22 @@ export function isPubliclyRoutableHost(hostname: string): boolean {
     );
   }
   return true;
+}
+
+/**
+ * Dotted-quad form of an IPv4-mapped/compatible IPv6 literal, or null when the
+ * address does not embed one. Handles both the textual `::ffff:127.0.0.1` form
+ * and the hex form the URL parser normalizes it to (`::ffff:7f00:1`).
+ */
+function embeddedIpv4(bare: string): string | null {
+  const trailingDotted = /:((?:\d{1,3}\.){3}\d{1,3})$/.exec(bare);
+  if (trailingDotted) return trailingDotted[1];
+
+  const hex = /^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(bare);
+  if (!hex) return null;
+  const high = Number.parseInt(hex[1], 16);
+  const low = Number.parseInt(hex[2], 16);
+  return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
 }
 
 function validateTarget(url: URL): string | null {

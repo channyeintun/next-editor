@@ -27,6 +27,20 @@ describe("isPubliclyRoutableHost", () => {
     ["fe80::1", false],
     ["fd00::1", false],
     ["ff00::1", false],
+    // IPv4-mapped IPv6. The URL parser re-serializes these in hex, so the
+    // textual prefix checks never saw them and the dotted-quad guard was
+    // skipped because the string contains ":".
+    ["::ffff:127.0.0.1", false],
+    ["::ffff:7f00:1", false], // 127.0.0.1, as `new URL()` normalizes it
+    ["::ffff:a9fe:a9fe", false], // 169.254.169.254 (cloud metadata)
+    ["::ffff:a00:5", false], // 10.0.0.5
+    ["::ffff:c0a8:1", false], // 192.168.0.1
+    ["[::ffff:7f00:1]", false], // bracketed, as URL.hostname reports it
+    ["::ffff:808:808", true], // 8.8.8.8 stays reachable
+    // fe80::/10 is fe80–febf, not only the literal "fe80:" text.
+    ["fea0::1", false],
+    ["febf::1", false],
+    ["2001:4860:4860::8888", true],
   ])("%s -> %s", (host, expected) => {
     expect(isPubliclyRoutableHost(host)).toBe(expected);
   });
