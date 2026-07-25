@@ -80,9 +80,14 @@ _Panel correction:_ for lessons whose runtime has not booted, the write actually
 `<script>` does not run, but `on*` attributes and nested `<iframe srcdoc>` do. Both branches
 execute; only the mechanism differs.
 
-**Fixed** in `6e2309d`. The frame drops `allow-same-origin` as soon as a recording is loaded, with a
-`key` change so React mounts a new element (changing `sandbox` does not re-apply to a loaded
-document). **Deliberate trade-off:** on the static-snapshot path the parent can no longer reach into
+**Fixed** in `6e2309d`, corrected in `9606f1f`. The frame drops `allow-same-origin` on every
+`srcdoc` path once a recording is loaded, with a `key` change so React mounts a new element
+(changing `sandbox` does not re-apply to a loaded document). The first attempt keyed on "is a
+recording loaded" alone, which also stripped the flag from the **live WebContainer URL** — that
+document is cross-origin, so the flag preserves its own origin there and is required for its service
+worker to register. Without it WebContainer showed its "enable storage partitioning" placeholder
+instead of the app. The rule now mirrors the effect that assigns `iframe.src`, and lives in
+`shouldAllowSameOriginPreview` with tests in both directions. **Deliberate trade-off:** on the static-snapshot path the parent can no longer reach into
 the frame, so replayed scroll and interaction capture degrade for loaded recordings. The rrweb
 replay path that published WebContainer lessons use is unaffected. Restoring full fidelity needs a
 nonce-guarded `postMessage` bridge inside the document, as `sandboxedSlideDocument` already does.
