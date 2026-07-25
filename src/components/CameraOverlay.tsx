@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { selectIsPlaying, selectRecording } from "../core/src/useNextEditor";
+import { allowedRecordingMediaUrl } from "../core/src/utils/mediaUrl";
 
 export const CAMERA_OVERLAY_VISIBILITY_KEY = "next-editor-camera-overlay-visible";
 export const CAMERA_OVERLAY_POSITION_KEY = "next-editor-camera-overlay-position";
@@ -127,7 +128,11 @@ const CameraOverlay: React.FC = () => {
   const cameraBlob = recording?.cameraBlob instanceof Blob ? recording.cameraBlob : null;
   // External camera video (sibling file or hosted URL) referenced by the recording. Preferred over
   // an inline blob so the browser range-streams the video instead of holding it all in memory.
-  const cameraUrl = recording?.cameraUrl ?? null;
+  // Scheme-checked: the header this comes from is decoded with a bare type
+  // assertion, so a hostile recording could otherwise point a <video src> at an
+  // arbitrary scheme. Rejecting falls back to the inline blob or the live
+  // preview, exactly as a recording with no external camera already does.
+  const cameraUrl = allowedRecordingMediaUrl(recording?.cameraUrl);
   const cameraStartOffsetMs = recording?.cameraStartOffsetMs ?? 0;
   // Live preview takes over whenever the camera toggle is on and there is no recorded camera to
   // replay (i.e. idle or actively recording). During playback, the loaded recording wins and

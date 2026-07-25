@@ -1,5 +1,6 @@
 import { fromCallback } from "xstate";
 import { getSupportedAudioMimeType } from "../utils/audioMimeType";
+import { isAllowedRecordingMediaUrl } from "../utils/mediaUrl";
 import {
   normalizeNonNegativeTime,
   normalizePlaybackSpeed,
@@ -294,7 +295,11 @@ export const audioPlaybackActor = fromCallback<
   audio.preservesPitch = true;
 
   let currentObjectUrl: string | null = null;
-  if (input.audioUrl) {
+  // The recording's audioUrl is decoded from the `.ne` header with no runtime
+  // validation, so it is scheme-checked before it reaches `src`. A rejected URL
+  // falls through to the local blob, which is the same path a recording with no
+  // external audio already takes.
+  if (isAllowedRecordingMediaUrl(input.audioUrl)) {
     audio.src = input.audioUrl;
   } else {
     currentObjectUrl = URL.createObjectURL(input.blob);

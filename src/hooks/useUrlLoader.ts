@@ -150,6 +150,26 @@ async function fetchVttFile(url: string): Promise<CaptionTrack | null> {
  * (mirrors `buildMediaCandidates`, kept to a single candidate since captions are optional and
  * multi-language guessing would be over-engineering for this low-priority case).
  */
+/**
+ * Resolves one declared caption file against the recording's URL, returning it
+ * only when it stays a sibling of that recording. Captions are companion files
+ * by definition, so this is exactly the intended relationship — and it stops a
+ * recording naming an absolute URL, which `new URL(file, base)` would pass
+ * through untouched, from making a viewer's browser fetch an arbitrary origin.
+ */
+function resolveSiblingCaptionUrl(file: string, neUrl: string): string | null {
+  try {
+    const base = new URL(neUrl, typeof location === "undefined" ? undefined : location.href);
+    const resolved = new URL(file, base);
+    if (resolved.origin !== base.origin) return null;
+    const directory = base.pathname.slice(0, base.pathname.lastIndexOf("/") + 1);
+    if (!resolved.pathname.startsWith(directory)) return null;
+    return resolved.toString();
+  } catch {
+    return null;
+  }
+}
+
 async function fetchSiblingCaptions(
   neUrl: string,
   captionFiles?: string[],
@@ -158,8 +178,16 @@ async function fetchSiblingCaptions(
     return [];
   }
 
+  // `new URL(file, neUrl)` returns `file` unchanged when it is already
+  // absolute, so a recording could name any origin here and have the viewer's
+  // browser fetch it. Caption tracks are siblings of the `.ne`, so anything
+  // that does not resolve under the recording's own directory is dropped —
+  // which also keeps the scheme http(s), inherited from neUrl.
   const results = await Promise.allSettled(
-    captionFiles.map((file) => fetchVttFile(new URL(file, neUrl).toString())),
+    captionFiles
+      .map((file) => resolveSiblingCaptionUrl(file, neUrl))
+      .filter((url): url is string => url !== null)
+      .map((url) => fetchVttFile(url)),
   );
   const tracks: CaptionTrack[] = [];
   for (const result of results) {
