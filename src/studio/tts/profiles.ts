@@ -71,7 +71,9 @@ export function customVoiceProfileOf(voice: {
 }
 
 export function requireVoiceProfile(id: string): VoiceProfile {
-  const profile = VOICE_PROFILES[id];
+  // Object.hasOwn so an id like "constructor" misses rather than resolving to
+  // an inherited member and slipping past the falsy guard below.
+  const profile = Object.hasOwn(VOICE_PROFILES, id) ? VOICE_PROFILES[id] : undefined;
   if (!profile) {
     throw new Error(
       `Unknown voice profile "${id}" — known: ${Object.keys(VOICE_PROFILES).join(", ")}`,

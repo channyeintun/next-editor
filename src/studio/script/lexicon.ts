@@ -35,7 +35,13 @@ export function spokenFormOf(token: string, lexicon: PronunciationLexicon): stri
     return token;
   }
   const [, prefix = "", core = "", suffix = ""] = match;
-  const replacement = core ? (lexicon.entries[core] ?? core) : core;
+  // Object.hasOwn, not `?? core`: `entries` is a plain object literal, so an
+  // ordinary narration token like "constructor" (or "toString", "valueOf")
+  // resolves through the prototype chain to a function, which is non-nullish —
+  // so `??` never fired and the template below stringified it, splicing
+  // "function Object() { [native code] }" into the TTS audio and the caption
+  // alignment. No attacker needed; "constructor" is everyday lesson vocabulary.
+  const replacement = core && Object.hasOwn(lexicon.entries, core) ? lexicon.entries[core] : core;
   return `${prefix}${replacement}${suffix}`;
 }
 

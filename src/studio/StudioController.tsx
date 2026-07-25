@@ -97,7 +97,14 @@ function allSources(imported: Record<string, string>): Record<string, StudioLess
     ]),
   );
   // Imported scripts shadow checked-in ones of the same slug (iteration flow).
-  return { ...STUDIO_SOURCES, ...importedSources };
+  // Null-prototype so a `?plan=` of `constructor`/`toString`/`__proto__` misses
+  // instead of resolving to an inherited member: the callers' falsy guards let
+  // one through, and calling `.load()` on it threw during render — outside any
+  // try/catch — dropping the whole /studio route into its error boundary.
+  return Object.assign(Object.create(null) as Record<string, StudioLessonSource>, {
+    ...STUDIO_SOURCES,
+    ...importedSources,
+  });
 }
 
 interface StudioRunEntry {

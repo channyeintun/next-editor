@@ -104,8 +104,14 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 };
 
 function imageMimeType(path: string): string | null {
+  // Object.hasOwn: a thumbnail path ending `.constructor` would otherwise
+  // resolve through the prototype chain to a function, which `?? null` does not
+  // catch, and land in an og:image:type meta tag.
   const extension = /\.([a-z0-9]+)(?:\?|#|$)/i.exec(path)?.[1]?.toLowerCase();
-  return extension ? (IMAGE_MIME_TYPES[extension] ?? null) : null;
+  if (!extension || !Object.hasOwn(IMAGE_MIME_TYPES, extension)) {
+    return null;
+  }
+  return IMAGE_MIME_TYPES[extension];
 }
 
 // "4:12" → "PT4M12S", "1:02:03" → "PT1H2M3S". Google's Course rich result wants

@@ -645,7 +645,14 @@ export function isBinaryWorkspacePath(path: string): boolean {
 }
 
 export function getWorkspaceFileMimeType(path: string): string {
-  return WORKSPACE_FILE_MIME_TYPES[getWorkspaceFileExtension(path)] ?? "application/octet-stream";
+  // Object.hasOwn: the table is a plain object literal, so a file named
+  // `x.constructor` resolved to an inherited function. That is non-nullish, so
+  // `??` did not fire and a function was returned where a string is declared —
+  // getWorkspaceMediaKind's `.startsWith` then threw mid-render.
+  const extension = getWorkspaceFileExtension(path);
+  return Object.hasOwn(WORKSPACE_FILE_MIME_TYPES, extension)
+    ? WORKSPACE_FILE_MIME_TYPES[extension]
+    : "application/octet-stream";
 }
 
 export type WorkspaceMediaKind = "image" | "video" | "audio" | "other";
