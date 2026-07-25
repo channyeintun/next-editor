@@ -484,7 +484,9 @@ of the previous board while wiping the rest works.
 
 ## Editorial requirements (summary — full text in studio-persona.md)
 
-- **One concept per lesson**, 20–100 seconds of narration.
+- **One concept per lesson**, usually 20–100 seconds of narration. There is no
+  upper cap: a survey lesson that tours several features runs as long as its
+  material needs.
 - Sentences under ~20 words (hard ceiling 24). No filler: _simply, obviously,
   easy, delve, in this video, don't worry_ etc. are flagged.
 - Every scene cites ≥1 source (official docs/spec/tour URLs preferred).

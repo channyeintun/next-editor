@@ -13,8 +13,11 @@ together.
   (or lesson-language) experience beyond what the lesson states.
 - **One concept per lesson.** A lesson teaches exactly one idea and shows it
   running. If a scene introduces a second concept, split the lesson.
-- **Length:** 20–100 seconds of narration. Prefer the shortest version that still
-  lands the idea.
+- **Length:** no upper cap. Prefer the shortest version that still lands the
+  idea — most single-concept lessons land in 20–100 seconds — but a survey
+  lesson (a crash course touring several features) runs as long as its material
+  needs. The critic bands pacing, not duration, so narration that rushes or
+  drags is still flagged.
 
 ## Voice and pacing
 

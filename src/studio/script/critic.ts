@@ -101,7 +101,6 @@ const MAX_SENTENCE_WORDS = 24;
 const MIN_WPM = 110;
 const MAX_WPM = 170;
 const MAX_SCENES = 5;
-const MAX_NARRATION_MS = 120_000;
 /** Pre-synthesis pacing estimate (~140 spoken wpm for the current profile). */
 const ESTIMATED_WPM = 140;
 
@@ -142,19 +141,14 @@ export function critiqueScript(
     });
   }
 
-  // Scope: one concept per lesson.
+  // Scope: one concept per lesson. Narration length is deliberately unbounded —
+  // a survey lesson (a crash course) runs as long as its material needs, and the
+  // pacing band above already catches narration that rushes or drags.
   if (script.scenes.length > MAX_SCENES) {
     notes.push({
       id: "scope.scenes",
       severity: "suggestion",
       message: `${script.scenes.length} scenes (guide suggests ≤ ${MAX_SCENES}) — is this still one concept?`,
-    });
-  }
-  if (narrationDurationMs > MAX_NARRATION_MS) {
-    notes.push({
-      id: "scope.length",
-      severity: "suggestion",
-      message: `Narration runs ${Math.round(narrationDurationMs / 1000)}s (guide caps at ${MAX_NARRATION_MS / 1000}s)`,
     });
   }
 
