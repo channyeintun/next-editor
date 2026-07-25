@@ -280,6 +280,12 @@ export function buildWhiteboardElement(
       y: asset.y + offsetY,
       width: Math.max(...xs) - Math.min(...xs),
       height: Math.max(...ys) - Math.min(...ys),
+      // Always the thin pen. Excalidraw's widths are 1 thin / 2 bold / 4 extra
+      // bold, and freedraw renders heavier than a shape outline at the same
+      // number — simulated pressure widens the middle of every stroke. At 2 the
+      // annotations read as fat marker blobs next to the boxes they annotate,
+      // so this is fixed at 1 rather than left to the author.
+      strokeWidth: 1,
       points: drawn,
       // Excalidraw ignores `pressures` entirely when it simulates them, which
       // is what its own freehand tool records for a mouse-drawn stroke.

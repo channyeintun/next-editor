@@ -73,6 +73,15 @@ describe("buildWhiteboardElement", () => {
     });
   });
 
+  it("draws every stroke with the thin pen", () => {
+    // Excalidraw: 1 thin, 2 bold, 4 extra bold. Freedraw renders heavier than a
+    // shape outline at the same number, so strokes stay on 1 while the boxes
+    // they annotate keep 2.
+    expect(buildWhiteboardElement(STROKE, 7).strokeWidth).toBe(1);
+    expect(buildWhiteboardElement(STROKE, 7, { progress: 0.3, version: 1 }).strokeWidth).toBe(1);
+    expect(buildWhiteboardElement(RECT, 7).strokeWidth).toBe(2);
+  });
+
   it("builds a freedraw stroke as points relative to where the pen landed", () => {
     const stroke = buildWhiteboardElement(STROKE, 7);
     const points = stroke.points as [number, number][];
