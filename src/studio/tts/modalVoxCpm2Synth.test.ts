@@ -9,7 +9,9 @@ afterEach(() => {
 describe("synthesizeModalVoxCpm2Wav", () => {
   it("calls only the same-origin Worker route and returns WAV bytes", async () => {
     const wav = new Uint8Array([82, 73, 70, 70]);
-    const fetchSpy = vi.fn(async () => {
+    const fetchSpy = vi.fn<
+      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+    >(async () => {
       return new Response(wav.slice().buffer, {
         status: 200,
         headers: { "Content-Type": "audio/wav" },

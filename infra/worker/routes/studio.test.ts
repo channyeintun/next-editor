@@ -88,7 +88,8 @@ describe("studioRoute capabilities", () => {
 
 describe("studioRoute VoxCPM2 proxy", () => {
   it("rechecks the D1 flag before contacting Modal", async () => {
-    const fetchSpy = vi.fn();
+    const fetchSpy =
+      vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal("fetch", fetchSpy);
 
     const response = await postSynthesis(makeEnv({ DB: dbWithAccess(USER, false) }));
@@ -98,7 +99,8 @@ describe("studioRoute VoxCPM2 proxy", () => {
   });
 
   it("rejects malformed and overlong synthesis requests", async () => {
-    const fetchSpy = vi.fn();
+    const fetchSpy =
+      vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal("fetch", fetchSpy);
 
     expect((await postSynthesis(makeEnv(), "not-json")).status).toBe(400);
@@ -145,7 +147,9 @@ describe("studioRoute VoxCPM2 proxy", () => {
   });
 
   it("rejects a non-Modal endpoint and an unexpected upstream response", async () => {
-    const fetchSpy = vi.fn(async () => {
+    const fetchSpy = vi.fn<
+      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+    >(async () => {
       return new Response(JSON.stringify({ error: "bad" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
