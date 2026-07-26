@@ -146,4 +146,29 @@ describe.skipIf(!hasArtifact)("dmp codec (diff-match-patch in Rust)", () => {
       expect(() => codec.applyDelta(wrong, delta)).toThrow(DmpBaseMismatchError);
     }
   });
+
+  it("bounds a bulk structural edit instead of stalling the recorder", async () => {
+    const codec = await load();
+    // Myers is O(N·D): a large document that changes *throughout* (rename-all,
+    // reformat, agent rewrite) used to run unbounded — 16s for this input, on
+    // the thread that records frames. WORK_BUDGET caps it (src/core/dmp/src/lib.rs).
+    const base = Array.from(
+      { length: 10_000 },
+      (_, i) => `  const value${i} = compute(input${i}, ${i});`,
+    ).join("\n");
+    const target = base.replaceAll("value", "result");
+
+    const a = enc.encode(base);
+    const b = enc.encode(target);
+
+    const started = performance.now();
+    const delta = codec.diffDelta(a, b);
+    const elapsed = performance.now() - started;
+
+    // Budget is ~200ms of diff; allow generous slack for slow/loaded CI while
+    // still failing loudly if the bound is ever removed (unbounded is ~16s).
+    expect(elapsed).toBeLessThan(3_000);
+    // Degrading to a replace must stay *correct* — only the delta gets bigger.
+    expect(dec.decode(codec.applyDelta(a, delta))).toBe(target);
+  });
 });

@@ -26,6 +26,9 @@
 // `(len << 2) | type`, so each buffer and each single op must stay under ~2^30
 // bytes. The varint reader matches this (it stops at `shift > 28`). Comfortable
 // for editor-sized documents; callers must not feed it gigabyte inputs.
+//
+// TIME BOUND: the diff is also bounded in *effort* (see WORK_BUDGET), because
+// `diffDelta` runs synchronously on the recorder's thread and Myers is O(N·D).
 
 #![no_std]
 #![allow(non_snake_case)] // diffDelta / applyDelta / freeBuf are the JS-facing ABI names.
@@ -321,6 +324,72 @@ fn common_suffix(a: &[u8], b: &[u8]) -> usize {
 }
 
 // ---------------------------------------------------------------------------
+// Work budget.
+//
+// Myers is O(N·D). D is tiny for this codec's usual input (affix trimming
+// leaves a small changed middle, so the bisect often does no work at all), but
+// it grows with N when a large document changes *throughout* — a reformat, a
+// rename-all, an agent rewriting a file — and the cost then goes quadratic.
+// `diffDelta` is called synchronously from the recorder, so an unbounded diff
+// is a frozen UI: measured on this module, a symbol rename across a 456 KB file
+// took 16s and a full rewrite 48s.
+//
+// The reference implementation bounds this with a wall-clock deadline
+// (`Diff_Timeout`, 1s) and, once it expires, breaks out of the bisect and emits
+// the subproblem as a plain replace. A clock would mean a host import, and this
+// module's whole shape depends on importing nothing (see the header), so the
+// bound here is *effort* rather than time: charge the bisect for each level's
+// k-loop span and take the same fallback once the budget is spent. Effort is a
+// faithful proxy — measured throughput is ~240k charges/ms, near-constant
+// across input sizes — and unlike a clock it is deterministic, so identical
+// inputs always yield an identical delta on every machine.
+//
+// The budget is per `diffDelta` call (reset on entry), not per bisect, so the
+// recursive splits can't multiply it. Exhausting it costs delta *size*, never
+// correctness: the fallback is a valid delta and `applyDelta` still
+// reconstructs `b` exactly.
+//
+// 50M charges is ~200ms. The level is set by that size/latency trade rather
+// than by real recordings, which never reach it at all: the whole 11-minute
+// Kotlin lesson recording spends 0 charges, because affix trimming alone
+// resolves all 118 of its content changes. It only binds on bulk structural
+// edits, and there the measured shape is bimodal — edits that still yield a
+// compact delta cost <40M (a 2000-line file with every 10th line deleted: 39M,
+// ~150ms, 1.2 KB delta), while the ones worth abandoning cost 4x-100x more
+// (the same file renamed throughout: 162M; a 10000-line rewrite: 11B, 48s).
+// Cutting at 50M keeps the good deltas and still caps the rest at ~200ms.
+// ---------------------------------------------------------------------------
+const WORK_BUDGET: u64 = 50_000_000;
+
+struct Budget {
+    left: UnsafeCell<u64>,
+}
+
+// Sound for the same reason as Heap: single-threaded wasm.
+unsafe impl Sync for Budget {}
+
+static BUDGET: Budget = Budget {
+    left: UnsafeCell::new(WORK_BUDGET),
+};
+
+fn budget_reset() {
+    unsafe { *BUDGET.left.get() = WORK_BUDGET }
+}
+
+/// Charge `n` units; false once the budget is spent.
+fn budget_spend(n: u64) -> bool {
+    unsafe {
+        let left = &mut *BUDGET.left.get();
+        if *left <= n {
+            *left = 0;
+            return false;
+        }
+        *left -= n;
+        true
+    }
+}
+
+// ---------------------------------------------------------------------------
 // diff-match-patch core (faithful port of diff_main / diff_compute /
 // diff_bisect / diff_bisectSplit, operating on bytes instead of UTF-16 units).
 // ---------------------------------------------------------------------------
@@ -386,6 +455,13 @@ fn diff_bisect(ops: &mut Ops, a: &[u8], b: &[u8]) {
 
     let mut d = 0;
     while d < max_d {
+        // Charge this level's forward + reverse k-loop spans (each visits d + 1
+        // diagonals). Out of budget: stop searching and take the replace
+        // fallthrough below, exactly as the reference does on deadline expiry.
+        if !budget_spend((d as u64 + 1) * 2) {
+            break;
+        }
+
         // Forward path.
         let mut k1 = -d + k1start;
         while k1 <= d - k1end {
@@ -463,9 +539,11 @@ fn diff_bisect(ops: &mut Ops, a: &[u8], b: &[u8]) {
         d += 1;
     }
 
-    // Fallthrough: emit a full replace (a correct, if suboptimal, diff). In the
-    // reference this is the deadline branch; with no deadline here the middle
-    // snake is always found within max_d, so this is effectively unreachable.
+    // Fallthrough: emit a replace for this subproblem — a correct, if
+    // suboptimal, diff. Reached only by exhausting WORK_BUDGET (the reference's
+    // deadline branch); the middle snake is otherwise always found within
+    // max_d. Note this replaces only the range handed to *this* bisect, so the
+    // prefix/suffix already matched by the callers upstream is still preserved.
     ops.emit(DELETE, 0, a.len());
     ops.emit(INSERT, b.as_ptr() as usize, b.len());
 }
@@ -544,6 +622,7 @@ pub extern "C" fn diffDelta(a_ptr: u32, a_len: u32, b_ptr: u32, b_len: u32) -> u
     let b = unsafe { core::slice::from_raw_parts(b_ptr as *const u8, b_len as usize) };
 
     let mut ops = Ops::new();
+    budget_reset();
     diff_main(&mut ops, a, b);
 
     // Every delta starts with a mandatory CHECK op carrying the base hash, so a
