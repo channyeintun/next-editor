@@ -45,8 +45,10 @@ export interface AlignmentMargins {
   tailMs: number;
 }
 
-const SENTENCE_END_PATTERN = /[.!?:]["')\]]*$/;
-const CLAUSE_END_PATTERN = /[,;]["')\]]*$/;
+// Include Burmese full stop (။) and little section (၊) so caption and pause
+// boundaries remain natural for my-MM narration.
+const SENTENCE_END_PATTERN = /[.!?:။]["')\]]*$/;
+const CLAUSE_END_PATTERN = /[,;၊]["')\]]*$/;
 
 /** Pause weight in "virtual characters" appended after a token. */
 function pauseWeightOf(token: string): number {
@@ -56,7 +58,7 @@ function pauseWeightOf(token: string): number {
 }
 
 function speechWeightOf(token: string, lexicon: PronunciationLexicon): number {
-  const spoken = spokenFormOf(token, lexicon).replace(/[^A-Za-z0-9]/g, "");
+  const spoken = spokenFormOf(token, lexicon).replace(/[^\p{L}\p{M}\p{N}]/gu, "");
   // Even a bare punctuation token costs a beat.
   return Math.max(spoken.length, 2) + pauseWeightOf(token);
 }

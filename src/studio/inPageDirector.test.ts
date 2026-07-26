@@ -14,6 +14,8 @@ const tts = vi.hoisted(() => ({
   putCachedDialogWav: vi.fn<(...args: unknown[]) => Promise<void>>(),
   synthesizePocketWav:
     vi.fn<(profile: unknown, speechText: string, noiseSeed: number) => Promise<Uint8Array>>(),
+  synthesizeModalVoxCpm2Wav:
+    vi.fn<(profile: unknown, speechText: string, seed: number) => Promise<Uint8Array>>(),
 }));
 
 vi.mock("./tts/dialogCache", () => ({
@@ -24,6 +26,10 @@ vi.mock("./tts/dialogCache", () => ({
 vi.mock("./tts/pocketSynth", () => ({
   preloadPocket: tts.preloadPocket,
   synthesizePocketWav: tts.synthesizePocketWav,
+}));
+
+vi.mock("./tts/modalVoxCpm2Synth", () => ({
+  synthesizeModalVoxCpm2Wav: tts.synthesizeModalVoxCpm2Wav,
 }));
 
 const { buildPlanFromScript } = await import("./inPageDirector");
@@ -43,6 +49,11 @@ describe("buildPlanFromScript narration", () => {
       const tokenCount = speechText.split(/\s+/).length;
       const durationMs = 400 + tokenCount * 320;
       return encodeWavPcm16(new Int16Array(Math.ceil(24 * durationMs)), 24_000);
+    });
+    tts.synthesizeModalVoxCpm2Wav.mockReset().mockImplementation(async (_, speechText) => {
+      const tokenCount = speechText.split(/\s+/).length;
+      const durationMs = 400 + tokenCount * 320;
+      return encodeWavPcm16(new Int16Array(Math.ceil(48 * durationMs)), 48_000);
     });
   });
 
@@ -73,5 +84,22 @@ describe("buildPlanFromScript narration", () => {
     expect(tts.getCachedDialogWav.mock.calls.map(([requestHash]) => requestHash)).not.toContain(
       legacyHash,
     );
+  });
+
+  it("dispatches a Modal VoxCPM2 profile without loading Pocket-TTS", async () => {
+    const script = loadPilot();
+    script.lesson.locale = "my-MM";
+    const result = await buildPlanFromScript(script, {
+      voiceProfile: VOICE_PROFILES["modal-voxcpm2-burmese-v1"],
+    });
+
+    expect(tts.preloadPocket).not.toHaveBeenCalled();
+    expect(tts.synthesizePocketWav).not.toHaveBeenCalled();
+    expect(tts.synthesizeModalVoxCpm2Wav).toHaveBeenCalled();
+    expect(tts.synthesizeModalVoxCpm2Wav.mock.calls.map(([, , seed]) => seed)).toEqual(
+      Array.from({ length: result.dialogCount }, () => script.build.seed),
+    );
+    expect(result.plan.lesson.locale).toBe("my-MM");
+    expect(result.plan.narration.mimeType).toBe("audio/wav");
   });
 });

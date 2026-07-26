@@ -37,6 +37,20 @@ describe("estimateAlignment", () => {
     const extracted = extractNarration(NARRATION);
     expect(() => estimateAlignment(extracted.tokens, 100, LEXICON_V1)).toThrow(AlignmentError);
   });
+
+  it("weights Burmese letters instead of treating each phrase as punctuation", () => {
+    const extracted = extractNarration([
+      { sceneId: "my", narration: "မင်္ဂလာပါ။ ဒီသင်ခန်းစာမှာ Go ကို လေ့လာမယ်။" },
+    ]);
+    const alignment = estimateAlignment(extracted.tokens, 8_000, LEXICON_V1, {
+      leadMs: 0,
+      tailMs: 0,
+    });
+    const firstDuration = alignment.tokens[0].endMs - alignment.tokens[0].startMs;
+    const shortLatinDuration = alignment.tokens[3].endMs - alignment.tokens[3].startMs;
+
+    expect(firstDuration).toBeGreaterThan(shortLatinDuration);
+  });
 });
 
 describe("validateAlignment", () => {
@@ -105,5 +119,16 @@ describe("buildCaptionTrack", () => {
     const sceneTwoFirstToken = extracted.tokens[extracted.scenes[1].firstTokenIndex];
     const cueStartingSceneTwo = track.cues.find((cue) => cue.text.startsWith(sceneTwoFirstToken));
     expect(cueStartingSceneTwo).toBeDefined();
+  });
+
+  it("breaks Burmese captions at the Burmese full stop", () => {
+    const extracted = extractNarration([
+      { sceneId: "my", narration: "ပထမစာကြောင်းပါ။ ဒုတိယစာကြောင်းပါ။" },
+    ]);
+    const alignment = estimateAlignment(extracted.tokens, 5_000, LEXICON_V1);
+    const track = buildCaptionTrack(alignment, extracted, { id: "my", language: "my" });
+
+    expect(track.cues).toHaveLength(2);
+    expect(track.cues[0].text).toBe("ပထမစာကြောင်းပါ။");
   });
 });

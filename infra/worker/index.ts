@@ -17,6 +17,7 @@ import { goPlaygroundRoute } from "./routes/goPlayground";
 import { kotlinPlaygroundRoute } from "./routes/kotlinPlayground";
 import { rustPlaygroundRoute } from "./routes/rustPlayground";
 import { collaborationRoute } from "./routes/collaboration";
+import { studioRoute } from "./routes/studio";
 import { renderLandingResponse } from "./ssr/landing";
 import { renderLessonDetailResponse, renderMissingLessonResponse } from "./ssr/lessonDetail";
 import { findPublishedLessonBySlug } from "./lessonCatalog";
@@ -81,6 +82,7 @@ app.route("/api/go-playground", goPlaygroundRoute);
 app.route("/api/kotlin-playground", kotlinPlaygroundRoute);
 app.route("/api/rust-playground", rustPlaygroundRoute);
 app.route("/api/collaboration", collaborationRoute);
+app.route("/api/studio", studioRoute);
 // Slide-image R2 ingestion. The pre-/api/proxy-rename alias /api/slide-image
 // (singular) is gone: every persisted document that referenced it was
 // migrated to /media/slide-images/<hash> hrefs on 2026-07-11.

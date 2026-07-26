@@ -43,6 +43,11 @@ RUST_PLAYGROUND_ENABLED = "true"
 #   wrangler secret put QSTASH_TOKEN               --config infra/wrangler.toml
 #   wrangler secret put QSTASH_CURRENT_SIGNING_KEY --config infra/wrangler.toml
 #   wrangler secret put QSTASH_NEXT_SIGNING_KEY    --config infra/wrangler.toml
+# Private Burmese Studio narration is enabled per user in D1 and also requires
+# all three Modal values. Keep the proxy token pair out of [vars]:
+#   wrangler secret put VOXCPM2_MODAL_ENDPOINT    --config infra/wrangler.toml
+#   wrangler secret put MODAL_PROXY_TOKEN_ID      --config infra/wrangler.toml
+#   wrangler secret put MODAL_PROXY_TOKEN_SECRET  --config infra/wrangler.toml
 
 # Custom Domain: routes all paths of nexteditor.dev to this Worker. Requires
 # the zone to already be on Cloudflare (nameservers pointed here) — done by

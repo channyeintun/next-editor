@@ -12,12 +12,13 @@ import { getCachedDialogWav, putCachedDialogWav } from "./tts/dialogCache";
 import { narrationNoiseSeed } from "./tts/pocket/noise";
 import { preloadPocket, synthesizePocketWav } from "./tts/pocketSynth";
 import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/profiles";
+import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
 import { stitchWavSegments, wavDurationMs } from "./tts/wav";
 
 /**
  * The in-page Director stage (narration + compile at render time): split the
  * script's narration at its markers into dialogs, synthesize each with
- * pocket-tts over onnxruntime-web (per-dialog content-addressed cache),
+ * the selected voice provider (per-dialog content-addressed cache),
  * schedule dialogs jointly with the actions, stitch one narration WAV, and
  * compile the absolute-time plan. Deterministic throughout: dialogs are
  * seeded, so edits only re-synthesize the changed spans and repeat builds
@@ -58,7 +59,7 @@ interface InPageSynthProvider {
   preload(): Promise<unknown>;
   synthesize(speechText: string): Promise<Uint8Array>;
   /** Shared narration seed folded into each dialog's request hash. */
-  noiseSeed: number;
+  seed: number;
 }
 
 function providerFor(
@@ -72,15 +73,22 @@ function providerFor(
       return {
         sampleRate: profile.sampleRate,
         mimeType: profile.mimeType,
-        noiseSeed,
+        seed: noiseSeed,
         preload: () => preloadPocket(profile, onPhase),
         synthesize: (speechText) => synthesizePocketWav(profile, speechText, noiseSeed),
       };
     }
-    default:
-      throw new Error(
-        `Voice profile "${profile.id}" (${profile.providerId}) cannot synthesize in the page`,
-      );
+    case "voxcpm2-modal":
+      return {
+        sampleRate: profile.sampleRate,
+        mimeType: profile.mimeType,
+        seed: buildSeed,
+        // The first synthesis request intentionally owns any scale-to-zero
+        // cold start; a separate preload request would spend Modal credits
+        // without producing reusable audio.
+        preload: async () => undefined,
+        synthesize: (speechText) => synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
+      };
   }
 }
 
@@ -111,7 +119,7 @@ export async function buildPlanFromScript(
       profile,
       speechText,
       lexiconVersion: LEXICON_V1.version,
-      seed: provider.noiseSeed,
+      seed: provider.seed,
     });
     dialogHashes.push(requestHash);
 

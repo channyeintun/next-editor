@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { UploadLessonModal, useAuth } from "@next-editor/infra";
+import { UploadLessonModal, useAuth, useStudioCapabilities } from "@next-editor/infra";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
@@ -41,7 +41,7 @@ import {
   saveCustomVoice,
   type SavedCustomVoice,
 } from "./tts/customVoices";
-import { customVoiceProfileOf } from "./tts/profiles";
+import { customVoiceProfileOf, MODAL_VOXCPM2_BURMESE_PROFILE } from "./tts/profiles";
 import { synthesizePocketWav } from "./tts/pocketSynth";
 import { critiqueScript, estimateNarrationDurationMs, type CritiqueNote } from "./script/critic";
 import { extractNarration } from "./script/markers";
@@ -52,6 +52,7 @@ import {
   type StudioRunResult,
 } from "./runStudioRender";
 import type { RenderSemantics } from "./compare";
+import { validateNarrationLanguage, type StudioNarrationLanguage } from "./narrationLanguage";
 
 /**
  * The studio render console: pick a lesson (checked-in scripts auto-register;
@@ -122,6 +123,8 @@ interface StudioRunEntry {
   title: string;
   /** Cloned-voice name used for this run, or null for the script default. */
   voiceName: string | null;
+  /** TTS implementation used to produce this run's narration. */
+  narrationProvider: string | null;
   result: StudioRunResult;
 }
 
@@ -205,7 +208,9 @@ export default function StudioController() {
   const getWebContainerRuntimeSnapshot = useWebContainerRuntimeSnapshotGetter();
   const previewPanel = usePreviewPanel();
   const previewHandle = usePreviewAdapterHandle();
-  const { isSignedIn, isLoading: authLoading } = useAuth();
+  const { user, isSignedIn, isLoading: authLoading } = useAuth();
+  const { capabilities: studioCapabilities, isLoading: studioCapabilitiesLoading } =
+    useStudioCapabilities(user?.id ?? null);
   const webContainerRuntimeActionsRef = useRef(webContainerRuntimeActions);
   const webContainerRuntimeMetadataRef = useRef(webContainerRuntimeMetadata);
 
@@ -236,6 +241,7 @@ export default function StudioController() {
     readImportedScripts(),
   );
   const [showDraftModal, setShowDraftModal] = useState(false);
+  const [narrationLanguage, setNarrationLanguage] = useState<StudioNarrationLanguage>("en");
   const runningRef = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -259,6 +265,30 @@ export default function StudioController() {
   const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
   const voiceRecorderRef = useRef<{ recorder: MediaRecorder; chunks: Blob[] } | null>(null);
   const [voiceRecording, setVoiceRecording] = useState(false);
+
+  const chooseNarrationLanguage = (language: StudioNarrationLanguage) => {
+    if (language === narrationLanguage) return;
+    setNarrationLanguage(language);
+    // A completed bundle belongs to the provider that synthesized it. Do not
+    // leave that artifact exposed after the provider selection changes.
+    setLatest(null);
+    setComparison(null);
+    setBaselineNote(null);
+    setReceipts([]);
+    setFatal(null);
+  };
+
+  useEffect(() => {
+    if (
+      !studioCapabilitiesLoading &&
+      !studioCapabilities.burmeseVoxCpm2 &&
+      narrationLanguage === "my"
+    ) {
+      setNarrationLanguage("en");
+      setLatest(null);
+      setComparison(null);
+    }
+  }, [narrationLanguage, studioCapabilities.burmeseVoxCpm2, studioCapabilitiesLoading]);
 
   useEffect(() => {
     void listCustomVoices().then(setCustomVoices);
@@ -439,10 +469,11 @@ export default function StudioController() {
         );
       }
 
-      // Script sources run the in-page Director first: per-dialog pocket-tts
-      // synthesis (cached, seeded), joint scheduling, stitching, compilation.
+      // Script sources run the in-page Director first: per-dialog synthesis
+      // (cached, seeded), joint scheduling, stitching, compilation.
       let plan: StudioPlan;
       let voiceName: string | null = null;
+      let narrationProvider: string | null = null;
       const renderOptions: StudioRenderOptions = {};
       setBuildWarnings([]);
 
@@ -463,16 +494,36 @@ export default function StudioController() {
       }
 
       if (source.kind === "script") {
-        const clonedVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
-        const built = await buildPlanFromScript(source.load(), {
+        const script = source.load();
+        const languageError = validateNarrationLanguage(script.lesson.locale, narrationLanguage);
+        if (languageError) throw new Error(languageError);
+
+        if (narrationLanguage === "my" && !studioCapabilities.burmeseVoxCpm2) {
+          throw new Error("Burmese · VoxCPM2 (Modal) is not enabled for this user");
+        }
+
+        const clonedVoice =
+          narrationLanguage === "en"
+            ? (customVoices.find((voice) => voice.id === voiceChoice) ?? null)
+            : null;
+        const built = await buildPlanFromScript(script, {
           onPhase: setPhase,
-          voiceProfile: clonedVoice ? customVoiceProfileOf(clonedVoice) : undefined,
+          voiceProfile:
+            narrationLanguage === "my"
+              ? MODAL_VOXCPM2_BURMESE_PROFILE
+              : clonedVoice
+                ? customVoiceProfileOf(clonedVoice)
+                : undefined,
         });
         voiceName = clonedVoice?.name ?? null;
+        narrationProvider = narrationLanguage === "my" ? "VoxCPM2 (Modal)" : "Pocket-TTS";
         plan = built.plan;
         renderOptions.narration = built.narration;
         setBuildWarnings(built.warnings);
       } else {
+        if (narrationLanguage === "my") {
+          throw new Error("Burmese narration is available for LessonScript sources only");
+        }
         plan = source.load();
       }
       const mode: StudioRuntimeMode =
@@ -529,6 +580,7 @@ export default function StudioController() {
         sourceRevision: sourceRevisionOf(planSlug, importedScripts),
         title: sourceTitle(source),
         voiceName,
+        narrationProvider,
         result,
       };
       runHistory.push(entry);
@@ -657,7 +709,7 @@ export default function StudioController() {
         recording={artifacts.recording}
         onClose={() => setShowDraftModal(false)}
         initialTitle={activeRun.title}
-        initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${activeRun.result.manifest.planSlug}, plan sha256 ${activeRun.result.manifest.planHash.slice(0, 16)}, ${activeRun.result.manifest.runtimeMode} runtime${activeRun.voiceName ? `, narrated with the user-cloned voice "${activeRun.voiceName}"` : ""}). Review the full lesson before publishing.`}
+        initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${activeRun.result.manifest.planSlug}, plan sha256 ${activeRun.result.manifest.planHash.slice(0, 16)}, ${activeRun.result.manifest.runtimeMode} runtime${activeRun.narrationProvider ? `, ${activeRun.narrationProvider} narration` : ""}${activeRun.voiceName ? ` with the user-cloned voice "${activeRun.voiceName}"` : ""}). Review the full lesson before publishing.`}
         initialTags="studio, ai-produced"
       />
     );
@@ -723,91 +775,117 @@ export default function StudioController() {
         />
       </div>
 
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2">
         <select
-          value={selectedVoice ? selectedVoice.id : "default"}
-          disabled={running || voiceBusy !== null}
-          onChange={(event) => chooseVoice(event.target.value)}
-          aria-label="Narrator voice"
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+          value={narrationLanguage}
+          disabled={running || studioCapabilitiesLoading || voiceBusy !== null || voiceRecording}
+          onChange={(event) =>
+            chooseNarrationLanguage(event.target.value as StudioNarrationLanguage)
+          }
+          aria-label="Narration language and provider"
+          className="w-full rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
         >
-          <option value="default">voice: script default</option>
-          {customVoices.map((voice) => (
-            <option key={voice.id} value={voice.id}>
-              voice: {voice.name} (cloned)
-            </option>
-          ))}
+          <option value="en">English · Pocket-TTS</option>
+          {studioCapabilities.burmeseVoxCpm2 ? (
+            <option value="my">မြန်မာ · VoxCPM2 (Modal)</option>
+          ) : null}
         </select>
-        <button
-          type="button"
-          disabled={running || voiceBusy !== null || voiceRecording}
-          onClick={() => voiceFileInputRef.current?.click()}
-          className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-          title="Clone a voice from an audio file (2–20s of clear speech)"
-        >
-          Clone…
-        </button>
-        <button
-          type="button"
-          disabled={running || voiceBusy !== null}
-          onClick={() => {
-            void toggleVoiceRecording();
-          }}
-          className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-            voiceRecording
-              ? "bg-[#3b2222] text-[#ef8d8d] hover:bg-[#4d2a2a]"
-              : "bg-[#222d3b] text-[#8db8ef] hover:bg-[#2a3a4d]"
-          }`}
-          title="Record 2–20s of your voice with the microphone"
-        >
-          {voiceRecording ? "Stop" : "Record"}
-        </button>
-        {selectedVoice ? (
-          <>
-            <button
-              type="button"
-              disabled={running || voiceBusy !== null}
-              onClick={() => {
-                void previewVoice();
-              }}
-              className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-              title="Synthesize a short preview sentence with this voice"
-            >
-              Preview
-            </button>
-            <button
-              type="button"
-              disabled={running || voiceBusy !== null}
-              onClick={() => {
-                void removeVoice();
-              }}
-              className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
-              title="Delete this cloned voice from the browser"
-            >
-              ✕
-            </button>
-          </>
-        ) : null}
-        <input
-          ref={voiceFileInputRef}
-          type="file"
-          accept="audio/*"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) {
-              void handleVoiceFile(file);
-            }
-          }}
-        />
       </div>
-      {voiceBusy ? <p className="mt-1 text-[12px] text-slate-400">{voiceBusy}</p> : null}
-      {voiceRecording ? (
-        <p className="mt-1 text-[12px] text-amber-300">
-          Recording… speak naturally; stops automatically at 20s.
+
+      {narrationLanguage === "en" ? (
+        <>
+          <div className="mt-2 flex items-center gap-2">
+            <select
+              value={selectedVoice ? selectedVoice.id : "default"}
+              disabled={running || voiceBusy !== null}
+              onChange={(event) => chooseVoice(event.target.value)}
+              aria-label="Narrator voice"
+              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+            >
+              <option value="default">voice: script default</option>
+              {customVoices.map((voice) => (
+                <option key={voice.id} value={voice.id}>
+                  voice: {voice.name} (cloned)
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={running || voiceBusy !== null || voiceRecording}
+              onClick={() => voiceFileInputRef.current?.click()}
+              className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+              title="Clone a voice from an audio file (2–20s of clear speech)"
+            >
+              Clone…
+            </button>
+            <button
+              type="button"
+              disabled={running || voiceBusy !== null}
+              onClick={() => {
+                void toggleVoiceRecording();
+              }}
+              className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                voiceRecording
+                  ? "bg-[#3b2222] text-[#ef8d8d] hover:bg-[#4d2a2a]"
+                  : "bg-[#222d3b] text-[#8db8ef] hover:bg-[#2a3a4d]"
+              }`}
+              title="Record 2–20s of your voice with the microphone"
+            >
+              {voiceRecording ? "Stop" : "Record"}
+            </button>
+            {selectedVoice ? (
+              <>
+                <button
+                  type="button"
+                  disabled={running || voiceBusy !== null}
+                  onClick={() => {
+                    void previewVoice();
+                  }}
+                  className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Synthesize a short preview sentence with this voice"
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  disabled={running || voiceBusy !== null}
+                  onClick={() => {
+                    void removeVoice();
+                  }}
+                  className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Delete this cloned voice from the browser"
+                >
+                  ✕
+                </button>
+              </>
+            ) : null}
+            <input
+              ref={voiceFileInputRef}
+              type="file"
+              accept="audio/*"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) {
+                  void handleVoiceFile(file);
+                }
+              }}
+            />
+          </div>
+          {voiceBusy ? <p className="mt-1 text-[12px] text-slate-400">{voiceBusy}</p> : null}
+          {voiceRecording ? (
+            <p className="mt-1 text-[12px] text-amber-300">
+              Recording… speak naturally; stops automatically at 20s.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="mt-1 text-[12px] text-slate-400">
+          Uses your private Modal deployment. The selected LessonScript must use{" "}
+          <span className="font-mono text-slate-300">locale: my-MM</span>.
         </p>
-      ) : null}
+      )}
 
       <label
         className={`mt-2 flex items-center gap-2 text-[12px] ${

@@ -51,3 +51,5 @@ export {
 export type { OwnedPlaylist, OwnedPlaylistWithMembership, PlaylistSummary } from "../db/types";
 export { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./upload/thumbnailConstraints";
 export { resizeThumbnail } from "./upload/resizeThumbnail";
+export { useStudioCapabilities } from "./studio/useStudioCapabilities";
+export type { StudioCapabilities } from "./studio/useStudioCapabilities";

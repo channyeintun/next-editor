@@ -252,6 +252,8 @@ export default ({ mode }: { mode: string }) => {
         "/api/lessons": "http://localhost:8787",
         "/api/auth": "http://localhost:8787",
         "/api/uploads": "http://localhost:8787",
+        // Authenticated Studio capabilities and the D1-gated Modal TTS proxy.
+        "/api/studio": "http://localhost:8787",
         // Authenticated collaboration HTTP and WebSocket routes.
         "/api/collaboration": "http://localhost:8787",
         // Slide-image R2 ingestion (Worker-only — R2 lives behind wrangler).

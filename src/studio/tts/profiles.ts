@@ -7,12 +7,10 @@ import { sha256HexOfJson } from "../hash";
  * a narration segment is synthesized once and every later build reuses
  * identical bytes from the cache.
  *
- * The one provider is `pocket-tts-web`: Kyutai's pocket-tts exported to ONNX
- * and run in the page over onnxruntime-web (KevinAHM's export, pinned
- * revision). Seeded flow-matching noise makes synthesis reproducible. A
- * future provider (hosted TTS with real word timestamps, another local
- * model) plugs in as a new profile shape in this union plus a branch in the
- * in-page Director's provider dispatch.
+ * `pocket-tts-web` runs Kyutai's English model in the page over
+ * onnxruntime-web. `voxcpm2-modal` calls the authenticated first-party Worker
+ * proxy, which is separately authorized by a per-user D1 flag. Provider
+ * credentials are deliberately absent from profiles and request hashes.
  */
 
 export interface PocketVoiceProfile {
@@ -31,7 +29,21 @@ export interface PocketVoiceProfile {
   mimeType: "audio/wav";
 }
 
-export type VoiceProfile = PocketVoiceProfile;
+export interface ModalVoxCpm2VoiceProfile {
+  id: string;
+  providerId: "voxcpm2-modal";
+  model: "openbmb/VoxCPM2";
+  /** Immutable Hugging Face model revision baked into the Modal image. */
+  modelRevision: string;
+  /** Pinned inference package baked into the Modal image. */
+  packageVersion: string;
+  cfgValue: 2;
+  inferenceTimesteps: 10;
+  sampleRate: 48000;
+  mimeType: "audio/wav";
+}
+
+export type VoiceProfile = PocketVoiceProfile | ModalVoxCpm2VoiceProfile;
 
 const POCKET_BUNDLE_BASE =
   "https://huggingface.co/spaces/KevinAHM/pocket-tts-web/resolve/d0c0c79b7712256a32d691c67f20b8ae2e020d00/onnx/english_2026-04";
@@ -46,7 +58,22 @@ export const VOICE_PROFILES: Record<string, VoiceProfile> = {
     sampleRate: 24000,
     mimeType: "audio/wav",
   },
+  "modal-voxcpm2-burmese-v1": {
+    id: "modal-voxcpm2-burmese-v1",
+    providerId: "voxcpm2-modal",
+    model: "openbmb/VoxCPM2",
+    modelRevision: "bffb3df5a29440629464e5e839f4d214c8714c3d",
+    packageVersion: "2.0.3",
+    cfgValue: 2,
+    inferenceTimesteps: 10,
+    sampleRate: 48000,
+    mimeType: "audio/wav",
+  },
 };
+
+export const MODAL_VOXCPM2_BURMESE_PROFILE = VOICE_PROFILES[
+  "modal-voxcpm2-burmese-v1"
+] as ModalVoxCpm2VoiceProfile;
 
 /**
  * Profile for a locally cloned voice (pocket-tts voice cloning). Not in the
@@ -86,7 +113,7 @@ export interface TtsRequest {
   profile: VoiceProfile;
   speechText: string;
   lexiconVersion: number;
-  /** Shared narration noise seed for seeded providers (pocket-tts flow matching). */
+  /** Shared narration seed for deterministic providers. */
   seed?: number;
 }
 
