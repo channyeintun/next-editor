@@ -75,6 +75,7 @@ class VoxCpm2Tts:
         from fastapi import HTTPException
         from fastapi.responses import Response
         import soundfile as sf
+        import torch
 
         if set(item) != {"text", "seed"}:
             raise HTTPException(status_code=400, detail="'text' and 'seed' are required")
@@ -97,13 +98,14 @@ class VoxCpm2Tts:
                 detail=f"'seed' must be an integer between 0 and {MAX_SEED}",
             )
 
-        # Do not log the lesson text. A shared seed across a Studio render helps
-        # keep independently generated dialogs in the same voice.
+        # VoxCPM 2.0.3 uses PyTorch's RNG but does not accept a `seed` keyword.
+        # Reset it before each request so a shared Studio seed keeps independently
+        # generated dialogs in the same voice. Do not log the lesson text.
+        torch.manual_seed(seed)
         wav = self.model.generate(
             text=text.strip(),
             cfg_value=CFG_VALUE,
             inference_timesteps=INFERENCE_TIMESTEPS,
-            seed=seed,
         )
 
         output = io.BytesIO()
