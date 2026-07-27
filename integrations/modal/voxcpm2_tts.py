@@ -59,7 +59,14 @@ class VoxCpm2Tts:
     def load_model(self) -> None:
         from voxcpm import VoxCPM
 
-        self.model = VoxCPM.from_pretrained(MODEL_DIR, load_denoiser=False)
+        # VoxCPM's optimized path runs a multi-minute torch.compile warm-up on
+        # L4 cold starts, which exceeds the Modal Web Function proxy deadline.
+        # Eager CUDA inference avoids that 524 while retaining GPU execution.
+        self.model = VoxCPM.from_pretrained(
+            MODEL_DIR,
+            load_denoiser=False,
+            optimize=False,
+        )
         sample_rate = int(self.model.tts_model.sample_rate)
         if sample_rate != SAMPLE_RATE:
             raise RuntimeError(

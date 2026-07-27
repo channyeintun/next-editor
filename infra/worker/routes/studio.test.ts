@@ -143,6 +143,7 @@ describe("studioRoute VoxCPM2 proxy", () => {
       "Modal-Key": "wk-test",
       "Modal-Secret": "ws-test",
     });
+    expect(init?.signal).toBeUndefined();
     expect(JSON.parse(String(init?.body))).toEqual({ text: "မင်္ဂလာပါ။", seed: 42 });
   });
 

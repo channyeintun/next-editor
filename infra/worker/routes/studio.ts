@@ -12,7 +12,6 @@ export const studioRoute = new Hono<{ Bindings: Env }>();
 const MAX_REQUEST_BYTES = 16 * 1024;
 const MAX_TEXT_CHARS = 2_000;
 const MAX_SEED = 0x7fffffff;
-const UPSTREAM_TIMEOUT_MS = 10 * 60 * 1_000;
 
 interface ModalConfig {
   endpoint: string;
@@ -128,7 +127,6 @@ studioRoute.post("/tts/voxcpm2", async (c) => {
       : c.json({ error: request.error }, 400);
   }
 
-  const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
   let upstream: Response;
   try {
     upstream = await fetch(modal.endpoint, {
@@ -140,15 +138,10 @@ studioRoute.post("/tts/voxcpm2", async (c) => {
         "Modal-Secret": modal.tokenSecret,
       },
       body: JSON.stringify({ text: request.text, seed: request.seed }),
-      signal: upstreamSignal,
     });
-  } catch (error) {
-    const timedOut =
-      upstreamSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
-    console.error("VoxCPM2 Modal request failed", { timedOut });
-    return timedOut
-      ? c.json({ error: "Burmese narration generation timed out" }, 504)
-      : c.json({ error: "Burmese narration service is unavailable" }, 502);
+  } catch {
+    console.error("VoxCPM2 Modal request failed");
+    return c.json({ error: "Burmese narration service is unavailable" }, 502);
   }
 
   const contentType = upstream.headers.get("content-type")?.toLowerCase() ?? "";
