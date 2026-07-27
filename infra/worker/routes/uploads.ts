@@ -5,6 +5,7 @@ import { getLessonById } from "../../db/queries";
 import { getCurrentUser } from "../auth/session";
 import { MAX_THUMBNAIL_BYTES } from "../../client/upload/thumbnailConstraints";
 import { MAX_CAPTION_BYTES } from "../../client/upload/captionConstraints";
+import { MAX_MEDIA_BYTES } from "../../client/upload/mediaConstraints";
 
 // Mounted at /api/uploads in worker/index.ts. The client PUTs bytes through
 // this same-origin authenticated Worker route, which streams them into R2
@@ -50,9 +51,10 @@ function storedContentTypeFor(filename: string): string {
     : "application/octet-stream";
 }
 // Recordings (audio/video/.ne) are legitimately much larger than a thumbnail
-// image; this is a hard backstop against storage abuse, not a tuned product
-// limit — raise it if real recordings ever get rejected.
-const MAX_MEDIA_BYTES = 200 * 1024 * 1024;
+// image, so they get the platform ceiling rather than a tuned product limit.
+// It deliberately matches Cloudflare's own request-body cap: a higher number
+// here would be unreachable — the edge already rejected the request — and would
+// only mean oversized uploads fail as an opaque 413 instead of the JSON below.
 
 // filename must be exactly what buildRecordingFiles (src/storage/RecordingStorage.ts)
 // already computed client-side (e.g. "recording-1.ogg", "<id>.ne") — constrained to a

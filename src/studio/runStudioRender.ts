@@ -18,6 +18,7 @@ import { sha256Hex, sha256HexOfJson, hashWorkspaceFiles } from "./hash";
 import type { StudioPlan, StudioRuntimeMode } from "./plan";
 import { performPlan } from "./performer";
 import { runArtifactChecks, finalWorkspaceHashOf } from "./qa";
+import { encodeWavToOggOpus, OGG_OPUS_MIME } from "./tts/opus";
 import {
   computeTimingStats,
   timingGateCheck,
@@ -465,7 +466,19 @@ export async function runStudioRender(
   let neBlob: Blob;
   let audioFileName = "";
   try {
-    const files = await buildRecordingFiles(recording, baseFilename);
+    // The render itself plays the PCM16 WAV, because timing, `audioHash`, and
+    // the repeatability semantics are all anchored to its exact sample count.
+    // Only the artifact is compressed: uncompressed narration runs ~5.8 MB per
+    // minute, which puts a lesson of any real length past the upload's request
+    // body cap and makes every viewer download it. Encoding failing is fatal —
+    // falling back to the WAV would just ship the unpublishable bundle.
+    const publishedAudioBlob = new Blob(
+      [(await encodeWavToOggOpus(audioBytes, { signal })).slice() as BlobPart],
+      { type: OGG_OPUS_MIME },
+    );
+    const publishedRecording: Recording = { ...recording, audioBlob: publishedAudioBlob };
+
+    const files = await buildRecordingFiles(publishedRecording, baseFilename);
     neBlob = files.ne;
     audioFileName = files.audio?.name ?? "";
     const neBytes = new Uint8Array(await files.ne.arrayBuffer());
@@ -474,7 +487,7 @@ export async function runStudioRender(
     // derived from that same decoded artifact — never the in-memory recording —
     // so a passing bundle can never advertise state absent from the encoded `.ne`.
     const { checks: artifactChecks, artifactRecording } = await runArtifactChecks({
-      recording,
+      recording: publishedRecording,
       neBytes,
       plan,
       capturePreviewScreenshot: deps.preview.captureScreenshot,
@@ -521,7 +534,9 @@ export async function runStudioRender(
       },
       manifest,
       semantics,
-      artifacts: allChecksOk ? { neBlob, audioBlob, audioFileName, recording } : null,
+      artifacts: allChecksOk
+        ? { neBlob, audioBlob: publishedAudioBlob, audioFileName, recording: publishedRecording }
+        : null,
     };
   } catch (error) {
     const failed = await failedResult(

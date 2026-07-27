@@ -3,6 +3,7 @@ import { buildRecordingFiles } from "@app/storage/RecordingStorage";
 import { serializeCuesToVtt } from "@app/captions/serializeVtt";
 import { apiClient } from "../apiClient";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
+import { formatMediaBytes, MAX_MEDIA_BYTES } from "./mediaConstraints";
 
 export function formatDuration(durationMs: number): string {
   const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
@@ -120,6 +121,18 @@ export async function uploadLesson(
     : null;
   if (input.thumbnail && thumbnailFilename) {
     targets.push({ filename: thumbnailFilename, blob: input.thumbnail });
+  }
+
+  // Checked before the first PUT, not per-request: Cloudflare rejects an
+  // oversized body at the edge, so the failure would otherwise arrive as a bare
+  // 413 — after uploading everything ahead of it — with nothing naming the file
+  // that lost.
+  const oversized = targets.find((target) => target.blob.size > MAX_MEDIA_BYTES);
+  if (oversized) {
+    throw new Error(
+      `${oversized.filename} is ${formatMediaBytes(oversized.blob.size)}, over the ` +
+        `${formatMediaBytes(MAX_MEDIA_BYTES)} upload limit`,
+    );
   }
 
   const totalBytes = targets.reduce((sum, target) => sum + target.blob.size, 0) || 1;
