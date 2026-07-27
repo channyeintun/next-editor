@@ -156,6 +156,15 @@ function throwIfAborted(signal: AbortSignal): void {
 // what makes the recorded motion read as a hand rather than a 30fps slideshow.
 const CURSOR_STEP_MS = 16;
 
+// The preview.open handshake re-sends instead of waiting. A command message
+// posted before the frame's document exists lands in a window with no listener
+// and is dropped, so that request can never be answered — only time out. One
+// long ping would therefore spend the whole action budget proving nothing,
+// which is why each attempt is short and the loop keeps knocking until the
+// injected bridge answers.
+const PREVIEW_HANDSHAKE_PING_TIMEOUT_MS = 500;
+const PREVIEW_HANDSHAKE_RETRY_INTERVAL_MS = 100;
+
 /**
  * Placeholder for the `timestamp` field on events handed to the recorder. The
  * capture appenders always overwrite it with the session-relative time
@@ -735,21 +744,56 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         );
       }
       assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+      // Both phases below share this single deadline: `timeoutMs` is the whole
+      // action's budget, matching what the Performer races the call against.
+      // Spending it once per phase made the action unsatisfiable by
+      // construction — the outer deadline always fired first, which is why the
+      // failure surfaced as a bare "did not acknowledge" with no diagnostic.
+      const deadlineAt = performance.now() + timeoutMs;
+      const remainingMs = () => Math.max(0, deadlineAt - performance.now());
+
       deps.preview.open(mode);
       await waitUntil(() => deps.preview.getState()?.isOpen === true, {
-        timeoutMs,
+        timeoutMs: remainingMs(),
         signal,
         description: `the ${mode} preview panel to open`,
       });
-      let acknowledgement: StudioPreviewCommandResult;
-      try {
-        acknowledgement = await deps.preview.executeCommand(
-          { type: "ping" },
-          { timeoutMs, signal },
-        );
-      } catch (error) {
+
+      // Opening the panel only mounts the frame. The controller effect then
+      // assigns `src`, and the dev server's document — carrying the injected
+      // bridge — starts loading after that. runtime.waitForReady proves the
+      // server is listening, never that this frame has finished loading from
+      // it, so the bridge is what has to be waited on here.
+      let acknowledgement: StudioPreviewCommandResult | null = null;
+      let handshakeError: unknown = null;
+      while (acknowledgement === null && remainingMs() > 0) {
+        throwIfAborted(signal);
+        assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+        try {
+          acknowledgement = await deps.preview.executeCommand(
+            { type: "ping" },
+            {
+              timeoutMs: Math.min(PREVIEW_HANDSHAKE_PING_TIMEOUT_MS, remainingMs()),
+              signal,
+            },
+          );
+        } catch (error) {
+          handshakeError = error;
+          await abortableSleep(
+            Math.min(PREVIEW_HANDSHAKE_RETRY_INTERVAL_MS, remainingMs()),
+            signal,
+          );
+        }
+      }
+      if (acknowledgement === null) {
+        const cause =
+          handshakeError instanceof Error
+            ? handshakeError.message
+            : handshakeError === null
+              ? "the panel took the whole budget to open"
+              : String(handshakeError);
         throw new StudioActionError(
-          `Preview iframe did not become ready: ${error instanceof Error ? error.message : String(error)}`,
+          `Preview iframe did not become ready within ${timeoutMs}ms: ${cause}`,
           { runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()) },
         );
       }

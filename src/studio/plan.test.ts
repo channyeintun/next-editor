@@ -151,7 +151,10 @@ describe("studio plan schema", () => {
       y: 100,
       width: 300,
       height: 180,
+      stroke: "underline",
       strokeColor: "#ffffff",
+      backgroundColor: "transparent",
+      fontSize: 20,
     });
     plan.actions.splice(3, 0, {
       id: "draw-diagram",
@@ -159,6 +162,7 @@ describe("studio plan schema", () => {
       timeoutMs: 10_000,
       type: "whiteboard.apply",
       upsertIds: ["diagram"],
+      clear: false,
       drawMs: 6_000,
     });
     expect(() => parseStudioPlan(plan)).toThrow(

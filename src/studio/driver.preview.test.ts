@@ -148,6 +148,48 @@ describe("StudioDriver WebContainer preview adapter", () => {
     ]);
   });
 
+  it("keeps knocking until the frame has loaded the injected bridge", async () => {
+    const { driver, executeCommand } = makeDriver();
+    // The frame is still navigating to the dev server, so the command message
+    // lands in a document with no listener and the request can only time out.
+    let unloadedAttempts = 1;
+    executeCommand.mockImplementation(async (command, options) => {
+      if (unloadedAttempts > 0) {
+        unloadedAttempts -= 1;
+        await new Promise((resolve) => window.setTimeout(resolve, options.timeoutMs));
+        throw new Error(`Preview command timed out after ${options.timeoutMs}ms`);
+      }
+      return { command: command.type, route: "/", scrollLeft: 0, scrollTop: 0 };
+    });
+
+    await expect(driver.openPreview({ mode: "docked", timeoutMs: 2_000 })).resolves.toMatchObject({
+      bridge: "ready",
+    });
+    // One dropped ping must not spend the action's whole budget: the second
+    // attempt is what proves the handshake re-sends rather than waiting.
+    expect(executeCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails inside its own budget when the preview bridge never answers", async () => {
+    const { driver, executeCommand } = makeDriver();
+    executeCommand.mockImplementation(async (_command, options) => {
+      await new Promise((resolve) => window.setTimeout(resolve, options.timeoutMs));
+      throw new Error(`Preview command timed out after ${options.timeoutMs}ms`);
+    });
+
+    const startedAt = performance.now();
+    await expect(driver.openPreview({ mode: "docked", timeoutMs: 1_200 })).rejects.toMatchObject({
+      name: StudioActionError.name,
+      message: expect.stringContaining("did not become ready within 1200ms"),
+      detail: expect.objectContaining({
+        runtime: expect.objectContaining({ previewPort: 5173 }),
+      }),
+    });
+    // The Performer races this call against the same timeoutMs, so overrunning
+    // it would replace this diagnostic with a bare "did not acknowledge".
+    expect(performance.now() - startedAt).toBeLessThan(2_000);
+  });
+
   it("does not acknowledge a Python runtime until its one-shot process exits cleanly", async () => {
     const { driver, snapshot, startRuntime } = makeDriver({ lessonType: "python" });
     Object.assign(snapshot, {
