@@ -46,8 +46,10 @@ export interface ModalVoxCpm2VoiceProfile {
    *
    * v2 (2026-07-28): conversational — v1's "educator"/"steady pace" phrasing
    * made the model read the script aloud rather than talk through it.
+   * v3 (2026-07-28): defers rate, energy, and pitch to the reference
+   * recording — v2's mood words made the delivery soft, slow, and sleepy.
    */
-  voiceDesignId: "burmese-educator-v2";
+  voiceDesignId: "burmese-educator-v3";
   /** Browser-local reference sample used to keep one speaker across dialogs. */
   referenceVoiceId?: string;
   /** Reference sample hash — keys the synthesis cache without embedding audio. */
@@ -80,7 +82,7 @@ export const VOICE_PROFILES: Record<string, VoiceProfile> = {
     model: "openbmb/VoxCPM2",
     modelRevision: "bffb3df5a29440629464e5e839f4d214c8714c3d",
     packageVersion: "2.0.3",
-    voiceDesignId: "burmese-educator-v2",
+    voiceDesignId: "burmese-educator-v3",
     referenceSampleRate: 24000,
     cfgValue: 2,
     inferenceTimesteps: 10,

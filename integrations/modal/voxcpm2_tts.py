@@ -37,20 +37,25 @@ MAX_REFERENCE_WAV_BYTES = 44 + REFERENCE_SAMPLE_RATE * MAX_REFERENCE_SECONDS * 2
 # steady pace is exactly what reading aloud sounds like, because the rhythm
 # comes from the page instead of the thought. The model obliged and recited.
 #
-# v2 keeps the warmth and clarity but asks for the uneven rhythm of speech
-# aimed at one person, and rules out the reading register outright.
+# v2 stopped the reciting, but paid for it in mood words — "warm, relaxed",
+# "slower on the point that matters", pauses "where someone would stop to
+# gather it". The model delivered precisely that: soft, slow, and sleepy.
+#
+# v3 keeps only the register (one developer talking to one friend) and hands
+# rate, energy, and pitch back to the reference recording, which already
+# carries the delivery this narration wants. No adjective here sets a mood.
 #
 # Changing this text REQUIRES bumping `voiceDesignId` in
 # src/studio/tts/profiles.ts. That id is what carries the prompt version into
 # the TTS request hash; without the bump every already-synthesized dialog keeps
 # its old delivery from the browser cache and the change appears to do nothing.
 VOICE_DESIGN_PROMPT = (
-    "A Burmese software developer explaining an idea to one friend, speaking "
-    "spontaneously rather than reading aloud: warm, relaxed, medium-pitched, "
-    "and easy to follow. The rhythm is uneven the way real conversation is — "
-    "quicker through a familiar aside, slower on the point that matters, pitch "
-    "rising and falling with the thought, with short natural pauses where "
-    "someone would stop to gather it. Never lecturing, announcing, or reciting"
+    "Speak in the reference recording's own delivery — the same speaking rate, "
+    "the same energy, the same pitch range — as if that speaker had simply "
+    "kept talking. A Burmese software developer telling a friend how something "
+    "works, at full conversational speed: alert, direct, and quick to move "
+    "from one sentence into the next. Never soft, hushed, drowsy, or drawn "
+    "out; never lecturing or reciting"
 )
 
 
