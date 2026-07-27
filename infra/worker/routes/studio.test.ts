@@ -1,7 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { encodeWavPcm16 } from "../../../src/studio/tts/wav";
 import type { UserRow } from "../../db/types";
 import type { Env } from "../env";
 import { studioRoute } from "./studio";
+
+function base64Of(bytes: Uint8Array): string {
+  const chunks: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
+  }
+  return btoa(chunks.join(""));
+}
+
+function referenceAudioBase64(seconds = 5): string {
+  return base64Of(encodeWavPcm16(new Int16Array(24_000 * seconds), 24_000));
+}
+
+const REFERENCE_AUDIO_BASE64 = referenceAudioBase64();
 
 const USER: UserRow = {
   id: "user-1",
@@ -51,7 +66,16 @@ function request(
   return studioRoute.request(`https://nexteditor.dev${path}`, { ...init, headers }, env);
 }
 
-function postSynthesis(env: Env, body: BodyInit = JSON.stringify({ text: "မင်္ဂလာပါ။", seed: 42 })) {
+function synthesisBody(overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    text: "မင်္ဂလာပါ။",
+    seed: 42,
+    referenceAudioBase64: REFERENCE_AUDIO_BASE64,
+    ...overrides,
+  });
+}
+
+function postSynthesis(env: Env, body: BodyInit = synthesisBody()) {
   return request("/tts/voxcpm2", env, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -105,21 +129,28 @@ describe("studioRoute VoxCPM2 proxy", () => {
 
     expect((await postSynthesis(makeEnv(), "not-json")).status).toBe(400);
     expect(
-      (await postSynthesis(makeEnv(), JSON.stringify({ text: "x".repeat(2_001), seed: 42 })))
+      (await postSynthesis(makeEnv(), JSON.stringify({ text: "မင်္ဂလာပါ။", seed: 42 }))).status,
+    ).toBe(400);
+    expect(
+      (await postSynthesis(makeEnv(), synthesisBody({ text: "x".repeat(2_001) }))).status,
+    ).toBe(400);
+    expect((await postSynthesis(makeEnv(), synthesisBody({ provider: "other" }))).status).toBe(400);
+    expect(
+      (await postSynthesis(makeEnv(), synthesisBody({ referenceAudioBase64: "not-base64" })))
         .status,
     ).toBe(400);
     expect(
       (
         await postSynthesis(
           makeEnv(),
-          JSON.stringify({ text: "မင်္ဂလာပါ။", seed: 42, provider: "other" }),
+          synthesisBody({ referenceAudioBase64: referenceAudioBase64(4) }),
         )
       ).status,
     ).toBe(400);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("sends only text, seed, and Modal proxy credentials upstream", async () => {
+  it("sends only validated text, seed, reference audio, and proxy credentials upstream", async () => {
     const wav = new Uint8Array([82, 73, 70, 70]);
     const fetchSpy = vi.fn<
       (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -144,7 +175,11 @@ describe("studioRoute VoxCPM2 proxy", () => {
       "Modal-Secret": "ws-test",
     });
     expect(init?.signal).toBeUndefined();
-    expect(JSON.parse(String(init?.body))).toEqual({ text: "မင်္ဂလာပါ။", seed: 42 });
+    expect(JSON.parse(String(init?.body))).toEqual({
+      text: "မင်္ဂလာပါ။",
+      seed: 42,
+      reference_audio_base64: REFERENCE_AUDIO_BASE64,
+    });
   });
 
   it("rejects a non-Modal endpoint and an unexpected upstream response", async () => {

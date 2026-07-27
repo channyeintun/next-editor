@@ -2592,7 +2592,7 @@ scenes:
         contains: 'guard: "hasTwoStableChecks"'
       - id: expect-final-store-file
         type: expect.file
-        at: { afterAction: select-actor-send }
+        at: { afterAction: expect-final-machine-file }
         path: src/main.tsx
         contains: "activityStore.trigger.addNote()"
 

@@ -9,9 +9,19 @@ import { isUserFeatureEnabled, STUDIO_BURMESE_VOXCPM2_FEATURE } from "../../db/f
 // a hidden option can never be invoked by calling the route directly.
 export const studioRoute = new Hono<{ Bindings: Env }>();
 
-const MAX_REQUEST_BYTES = 16 * 1024;
+const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 const MAX_TEXT_CHARS = 2_000;
 const MAX_SEED = 0x7fffffff;
+const REFERENCE_SAMPLE_RATE = 24_000;
+const MIN_REFERENCE_SECONDS = 5;
+const MAX_REFERENCE_SECONDS = 20;
+const WAV_HEADER_BYTES = 44;
+const MAX_REFERENCE_WAV_BYTES =
+  WAV_HEADER_BYTES + REFERENCE_SAMPLE_RATE * MAX_REFERENCE_SECONDS * 2;
+const RIFF = 0x46464952;
+const WAVE = 0x45564157;
+const FMT_ = 0x20746d66;
+const DATA = 0x61746164;
 
 interface ModalConfig {
   endpoint: string;
@@ -50,8 +60,56 @@ async function hasBurmeseTtsAccess(env: Env, userId: string): Promise<boolean> {
 }
 
 type SynthesisRequestValidation =
-  | { ok: true; text: string; seed: number }
+  | { ok: true; text: string; seed: number; referenceAudioBase64: string }
   | { ok: false; status: 400 | 413; error: string };
+
+function validateReferenceAudioBase64(
+  raw: unknown,
+): { ok: true; value: string } | { ok: false; error: string } {
+  if (
+    typeof raw !== "string" ||
+    raw.length === 0 ||
+    raw.length % 4 !== 0 ||
+    raw.length > Math.ceil(MAX_REFERENCE_WAV_BYTES / 3) * 4 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(raw)
+  ) {
+    return { ok: false, error: "reference audio must be a 5–20s mono 24 kHz PCM16 WAV" };
+  }
+
+  let bytes: Uint8Array;
+  try {
+    const binary = atob(raw);
+    bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  } catch {
+    return { ok: false, error: "reference audio is not valid base64" };
+  }
+
+  const minBytes = WAV_HEADER_BYTES + REFERENCE_SAMPLE_RATE * MIN_REFERENCE_SECONDS * 2;
+  if (bytes.byteLength < minBytes || bytes.byteLength > MAX_REFERENCE_WAV_BYTES) {
+    return { ok: false, error: "reference audio must contain 5–20 seconds of speech" };
+  }
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const dataBytes = view.getUint32(40, true);
+  if (
+    view.getUint32(0, true) !== RIFF ||
+    view.getUint32(4, true) !== bytes.byteLength - 8 ||
+    view.getUint32(8, true) !== WAVE ||
+    view.getUint32(12, true) !== FMT_ ||
+    view.getUint32(16, true) !== 16 ||
+    view.getUint16(20, true) !== 1 ||
+    view.getUint16(22, true) !== 1 ||
+    view.getUint32(24, true) !== REFERENCE_SAMPLE_RATE ||
+    view.getUint32(28, true) !== REFERENCE_SAMPLE_RATE * 2 ||
+    view.getUint16(32, true) !== 2 ||
+    view.getUint16(34, true) !== 16 ||
+    view.getUint32(36, true) !== DATA ||
+    dataBytes !== bytes.byteLength - WAV_HEADER_BYTES
+  ) {
+    return { ok: false, error: "reference audio must be a mono 24 kHz PCM16 WAV" };
+  }
+  return { ok: true, value: raw };
+}
 
 async function validateSynthesisRequest(request: Request): Promise<SynthesisRequestValidation> {
   const requestBody = await readBodyWithLimit(request, MAX_REQUEST_BYTES);
@@ -73,11 +131,24 @@ async function validateSynthesisRequest(request: Request): Promise<SynthesisRequ
   }
 
   const keys = Object.keys(body).sort();
-  if (keys.length !== 2 || keys[0] !== "seed" || keys[1] !== "text") {
-    return { ok: false, status: 400, error: "'text' and 'seed' are the only supported fields" };
+  if (
+    keys.length !== 3 ||
+    keys[0] !== "referenceAudioBase64" ||
+    keys[1] !== "seed" ||
+    keys[2] !== "text"
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "'text', 'seed', and 'referenceAudioBase64' are the only supported fields",
+    };
   }
 
-  const { text: rawText, seed } = body as Record<string, unknown>;
+  const {
+    text: rawText,
+    seed,
+    referenceAudioBase64: rawReferenceAudio,
+  } = body as Record<string, unknown>;
   const text = typeof rawText === "string" ? rawText.trim() : "";
   if (!text || text.length > MAX_TEXT_CHARS) {
     return {
@@ -94,7 +165,17 @@ async function validateSynthesisRequest(request: Request): Promise<SynthesisRequ
     };
   }
 
-  return { ok: true, text, seed: seed as number };
+  const referenceAudio = validateReferenceAudioBase64(rawReferenceAudio);
+  if (!referenceAudio.ok) {
+    return { ok: false, status: 400, error: referenceAudio.error };
+  }
+
+  return {
+    ok: true,
+    text,
+    seed: seed as number,
+    referenceAudioBase64: referenceAudio.value,
+  };
 }
 
 studioRoute.get("/capabilities", async (c) => {
@@ -137,7 +218,11 @@ studioRoute.post("/tts/voxcpm2", async (c) => {
         "Modal-Key": modal.tokenId,
         "Modal-Secret": modal.tokenSecret,
       },
-      body: JSON.stringify({ text: request.text, seed: request.seed }),
+      body: JSON.stringify({
+        text: request.text,
+        seed: request.seed,
+        reference_audio_base64: request.referenceAudioBase64,
+      }),
     });
   } catch {
     console.error("VoxCPM2 Modal request failed");

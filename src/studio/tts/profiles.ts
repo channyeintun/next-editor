@@ -37,6 +37,13 @@ export interface ModalVoxCpm2VoiceProfile {
   modelRevision: string;
   /** Pinned inference package baked into the Modal image. */
   packageVersion: string;
+  /** Server-pinned prompt version controlling the narrator's delivery. */
+  voiceDesignId: "burmese-educator-v1";
+  /** Browser-local reference sample used to keep one speaker across dialogs. */
+  referenceVoiceId?: string;
+  /** Reference sample hash — keys the synthesis cache without embedding audio. */
+  referenceVoiceSha256?: string;
+  referenceSampleRate: 24000;
   cfgValue: 2;
   inferenceTimesteps: 10;
   sampleRate: 48000;
@@ -64,6 +71,8 @@ export const VOICE_PROFILES: Record<string, VoiceProfile> = {
     model: "openbmb/VoxCPM2",
     modelRevision: "bffb3df5a29440629464e5e839f4d214c8714c3d",
     packageVersion: "2.0.3",
+    voiceDesignId: "burmese-educator-v1",
+    referenceSampleRate: 24000,
     cfgValue: 2,
     inferenceTimesteps: 10,
     sampleRate: 48000,
@@ -74,6 +83,19 @@ export const VOICE_PROFILES: Record<string, VoiceProfile> = {
 export const MODAL_VOXCPM2_BURMESE_PROFILE = VOICE_PROFILES[
   "modal-voxcpm2-burmese-v1"
 ] as ModalVoxCpm2VoiceProfile;
+
+/** Bind the server-pinned Burmese narrator style to one browser-local speaker. */
+export function modalVoxCpm2BurmeseProfileOf(voice: {
+  id: string;
+  sampleSha256: string;
+}): ModalVoxCpm2VoiceProfile {
+  return {
+    ...MODAL_VOXCPM2_BURMESE_PROFILE,
+    id: `${MODAL_VOXCPM2_BURMESE_PROFILE.id}-reference-${voice.sampleSha256}`,
+    referenceVoiceId: voice.id,
+    referenceVoiceSha256: voice.sampleSha256,
+  };
+}
 
 /**
  * Profile for a locally cloned voice (pocket-tts voice cloning). Not in the
@@ -123,8 +145,9 @@ export interface TtsRequest {
  *
  * v1: per-dialog silence trimming
  * v2: one deterministic noise seed shared by every dialog in a render
+ * v3: mandatory reference-voice identity for Modal VoxCPM2 narration
  */
-export const TTS_PIPELINE_VERSION = 2;
+export const TTS_PIPELINE_VERSION = 3;
 
 /** Content address of one synthesis request; the cache key for its audio. */
 export function ttsRequestHash(request: TtsRequest): Promise<string> {

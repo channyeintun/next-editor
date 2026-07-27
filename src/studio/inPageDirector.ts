@@ -22,8 +22,9 @@ import { stitchWavSegments, wavDurationMs } from "./tts/wav";
  * schedule dialogs jointly with the actions, stitch one narration WAV, and
  * compile the absolute-time plan. Deterministic throughout: dialogs are
  * seeded, so edits only re-synthesize the changed spans and repeat builds
- * reproduce identical audio. All dialogs share one noise seed to keep the
- * voice's pitch and timbre stable across independently generated spans.
+ * reproduce identical audio. Pocket-TTS dialogs share one noise seed; Modal
+ * VoxCPM2 dialogs additionally reuse one recorded reference for stable speaker
+ * identity.
  */
 
 export interface BuiltNarration {

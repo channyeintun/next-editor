@@ -10,16 +10,24 @@ available only when the signed-in user has the
 1. `GET /api/studio/capabilities` checks the session, D1 flag, and Modal
    configuration. The Studio shows `မြန်မာ · VoxCPM2 (Modal)` only when all
    are present.
-2. Each uncached Burmese dialog is posted to
+2. The user records or uploads 5–20 seconds of the narrator. Each uncached
+   Burmese dialog posts the text, seed, and that same PCM16 reference WAV to
    `POST /api/studio/tts/voxcpm2`.
 3. The Worker rechecks the session and D1 flag, then calls the private Modal
-   Web Function with Modal proxy-auth headers.
+   Web Function with Modal proxy-auth headers. It accepts only mono 24 kHz
+   PCM16 reference audio within the duration bound.
 4. The browser receives PCM16 mono WAV audio and keeps using the existing
    dialog cache, scheduler, stitcher, captions, and render pipeline.
 
 Next Editor does not add a synthesis timeout to the upstream request. It waits
 until Modal responds or the client or hosting infrastructure closes the
 connection.
+
+The selected sample stays in browser IndexedDB between runs. It is sent
+transiently for each uncached Burmese dialog, used as VoxCPM2's
+`reference_wav_path`, and discarded at the end of that request. The Worker and
+Modal function do not persist or log it. Reusing the recording fixes the
+speaker identity; the server-pinned `burmese-educator-v1` prompt fixes delivery.
 
 UI visibility is not authorization. Calling the synthesis endpoint directly
 without the D1 flag returns `403`, and the Modal credentials never reach the
@@ -33,6 +41,8 @@ The deployment pins:
 - `openbmb/VoxCPM2` revision
   `bffb3df5a29440629464e5e839f4d214c8714c3d`
 - 48 kHz PCM16 WAV, CFG 2.0, and 10 inference steps
+- the `burmese-educator-v1` delivery prompt plus a required 5–20 second
+  per-render narrator reference
 - eager CUDA inference; VoxCPM's `torch.compile` warm-up is disabled because it
   exceeds the Web Function proxy deadline on an L4 cold start
 - one L4 container maximum, scaling to zero after one idle minute
@@ -122,9 +132,10 @@ lesson:
   locale: my-MM
 ```
 
-Choose `မြန်မာ · VoxCPM2 (Modal)` before rendering. Studio rejects a Burmese
-provider paired with a non-Burmese script (and vice versa); this option selects
-TTS, it does not translate English narration.
+Choose `မြန်မာ · VoxCPM2 (Modal)`, then record or upload 5–20 seconds of clear
+narrator speech before rendering. Studio rejects a missing reference, a
+Burmese provider paired with a non-Burmese script, or the reverse pairing. The
+provider option selects TTS; it does not translate English narration.
 
 Previously synthesized dialogs remain in the browser's content-addressed
 cache. Clear that site's IndexedDB only when intentionally forcing fresh

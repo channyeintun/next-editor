@@ -7,7 +7,11 @@ Cloudflare Worker is the only caller and holds the proxy token pair.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import io
+import tempfile
+import wave
 
 import modal
 
@@ -21,6 +25,45 @@ CFG_VALUE = 2.0
 INFERENCE_TIMESTEPS = 10
 MAX_TEXT_CHARS = 2_000
 MAX_SEED = 0x7FFFFFFF
+REFERENCE_SAMPLE_RATE = 24_000
+MIN_REFERENCE_SECONDS = 5
+MAX_REFERENCE_SECONDS = 20
+MAX_REFERENCE_WAV_BYTES = 44 + REFERENCE_SAMPLE_RATE * MAX_REFERENCE_SECONDS * 2
+VOICE_DESIGN_PROMPT = (
+    "A warm Burmese educator with a clear, confident, medium-pitched voice, "
+    "calm natural emotion, and a steady conversational pace for technical teaching"
+)
+
+
+def decode_reference_wav(encoded: object) -> bytes:
+    if not isinstance(encoded, str) or not encoded:
+        raise ValueError("reference audio is required")
+    if len(encoded) > ((MAX_REFERENCE_WAV_BYTES + 2) // 3) * 4:
+        raise ValueError("reference audio is too large")
+    try:
+        reference_wav = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError("reference audio is not valid base64") from error
+
+    try:
+        with wave.open(io.BytesIO(reference_wav), "rb") as reader:
+            frame_rate = reader.getframerate()
+            if (
+                reader.getnchannels() != 1
+                or reader.getsampwidth() != 2
+                or frame_rate != REFERENCE_SAMPLE_RATE
+                or reader.getcomptype() != "NONE"
+            ):
+                raise ValueError("reference audio must be a mono 24 kHz PCM16 WAV")
+            duration_seconds = reader.getnframes() / frame_rate
+            if not MIN_REFERENCE_SECONDS <= duration_seconds <= MAX_REFERENCE_SECONDS:
+                raise ValueError(
+                    f"reference audio must contain {MIN_REFERENCE_SECONDS}–"
+                    f"{MAX_REFERENCE_SECONDS} seconds of speech"
+                )
+    except (EOFError, wave.Error) as error:
+        raise ValueError("reference audio must be a valid WAV") from error
+    return reference_wav
 
 
 def download_model() -> None:
@@ -84,8 +127,11 @@ class VoxCpm2Tts:
         import soundfile as sf
         import torch
 
-        if set(item) != {"text", "seed"}:
-            raise HTTPException(status_code=400, detail="'text' and 'seed' are required")
+        if set(item) != {"text", "seed", "reference_audio_base64"}:
+            raise HTTPException(
+                status_code=400,
+                detail="'text', 'seed', and reference audio are required",
+            )
 
         text = item.get("text")
         seed = item.get("seed")
@@ -104,16 +150,26 @@ class VoxCpm2Tts:
                 status_code=400,
                 detail=f"'seed' must be an integer between 0 and {MAX_SEED}",
             )
+        try:
+            reference_wav = decode_reference_wav(item.get("reference_audio_base64"))
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
 
         # VoxCPM 2.0.3 uses PyTorch's RNG but does not accept a `seed` keyword.
         # Reset it before each request so a shared Studio seed keeps independently
-        # generated dialogs in the same voice. Do not log the lesson text.
-        torch.manual_seed(seed)
-        wav = self.model.generate(
-            text=text.strip(),
-            cfg_value=CFG_VALUE,
-            inference_timesteps=INFERENCE_TIMESTEPS,
-        )
+        # generated dialogs reproducible. The same reference recording fixes the
+        # speaker identity; the server-pinned prompt fixes delivery. Do not log
+        # either the lesson text or reference audio.
+        with tempfile.NamedTemporaryFile(suffix=".wav") as reference_file:
+            reference_file.write(reference_wav)
+            reference_file.flush()
+            torch.manual_seed(seed)
+            wav = self.model.generate(
+                text=f"({VOICE_DESIGN_PROMPT}) {text.strip()}",
+                reference_wav_path=reference_file.name,
+                cfg_value=CFG_VALUE,
+                inference_timesteps=INFERENCE_TIMESTEPS,
+            )
 
         output = io.BytesIO()
         sf.write(output, wav, SAMPLE_RATE, format="WAV", subtype="PCM_16")

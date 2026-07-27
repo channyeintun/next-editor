@@ -1,6 +1,30 @@
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { MODAL_VOXCPM2_BURMESE_PROFILE } from "./profiles";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { SavedCustomVoice } from "./customVoices";
+import { modalVoxCpm2BurmeseProfileOf, MODAL_VOXCPM2_BURMESE_PROFILE } from "./profiles";
 import { synthesizeModalVoxCpm2Wav } from "./modalVoxCpm2Synth";
+
+const voiceStore = vi.hoisted(() => ({
+  getCustomVoice: vi.fn<(id: string) => Promise<SavedCustomVoice | null>>(),
+}));
+
+vi.mock("./customVoices", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./customVoices")>();
+  return { ...actual, getCustomVoice: voiceStore.getCustomVoice };
+});
+
+const SAVED_VOICE: SavedCustomVoice = {
+  id: "voice-1",
+  name: "Narrator",
+  createdAtIso: "2026-07-27T00:00:00.000Z",
+  sampleRate: 24_000,
+  samples: new Float32Array(24_000 * 5),
+  sampleSha256: "a".repeat(64),
+};
+const PROFILE = modalVoxCpm2BurmeseProfileOf(SAVED_VOICE);
+
+beforeEach(() => {
+  voiceStore.getCustomVoice.mockReset().mockResolvedValue(SAVED_VOICE);
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -19,17 +43,24 @@ describe("synthesizeModalVoxCpm2Wav", () => {
     });
     vi.stubGlobal("fetch", fetchSpy);
 
-    const result = await synthesizeModalVoxCpm2Wav(MODAL_VOXCPM2_BURMESE_PROFILE, "မင်္ဂလာပါ။", 42);
+    const result = await synthesizeModalVoxCpm2Wav(PROFILE, "မင်္ဂလာပါ။", 42);
 
     expect(result).toEqual(wav);
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/studio/tts/voxcpm2",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "same-origin",
-        body: JSON.stringify({ text: "မင်္ဂလာပါ။", seed: 42 }),
-      }),
-    );
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("/api/studio/tts/voxcpm2");
+    expect(init).toMatchObject({ method: "POST", credentials: "same-origin" });
+    const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(payload.text).toBe("မင်္ဂလာပါ။");
+    expect(payload.seed).toBe(42);
+    expect(typeof payload.referenceAudioBase64).toBe("string");
+    expect(atob(String(payload.referenceAudioBase64)).slice(0, 4)).toBe("RIFF");
+  });
+
+  it("requires a browser-local reference voice", async () => {
+    await expect(
+      synthesizeModalVoxCpm2Wav(MODAL_VOXCPM2_BURMESE_PROFILE, "စာသား", 1),
+    ).rejects.toThrow("requires a recorded reference voice");
   });
 
   it("surfaces the Worker's safe error message", async () => {
@@ -43,9 +74,9 @@ describe("synthesizeModalVoxCpm2Wav", () => {
       }),
     );
 
-    await expect(
-      synthesizeModalVoxCpm2Wav(MODAL_VOXCPM2_BURMESE_PROFILE, "စာသား", 1),
-    ).rejects.toThrow("VoxCPM2 narration: not enabled");
+    await expect(synthesizeModalVoxCpm2Wav(PROFILE, "စာသား", 1)).rejects.toThrow(
+      "VoxCPM2 narration: not enabled",
+    );
   });
 
   it("rejects a successful non-WAV response", async () => {
@@ -59,8 +90,6 @@ describe("synthesizeModalVoxCpm2Wav", () => {
       }),
     );
 
-    await expect(
-      synthesizeModalVoxCpm2Wav(MODAL_VOXCPM2_BURMESE_PROFILE, "စာသား", 1),
-    ).rejects.toThrow("non-WAV");
+    await expect(synthesizeModalVoxCpm2Wav(PROFILE, "စာသား", 1)).rejects.toThrow("non-WAV");
   });
 });

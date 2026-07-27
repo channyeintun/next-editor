@@ -1,16 +1,18 @@
 import { sha256Hex } from "../hash";
 
 /**
- * Cloned voices (pocket-tts voice cloning): the user's reference audio,
- * stored locally in IndexedDB. The voice itself is derived at render time —
- * the sample runs through the bundle's mimi encoder and one flow-LM
- * conditioning pass (see pocket/engine.ts) — so the stored artifact is only
- * the prepared 24 kHz mono sample. Voices never leave the browser.
+ * User reference voices, stored locally in IndexedDB as prepared 24 kHz mono
+ * samples. Pocket-TTS derives its voice state entirely in the browser. When
+ * explicitly selected for Burmese Modal narration, the same sample is sent
+ * transiently through the authenticated Worker to Modal for speaker
+ * conditioning; neither service persists it.
  */
 
 export const VOICE_SAMPLE_RATE = 24_000;
 /** Reference sample bounds: enough voice to condition on, small enough to store. */
 export const MIN_SAMPLE_SECONDS = 2;
+/** VoxCPM2 needs a longer reference to preserve one speaker reliably. */
+export const MIN_VOXCPM2_REFERENCE_SECONDS = 5;
 export const MAX_SAMPLE_SECONDS = 20;
 
 export interface SavedCustomVoice {

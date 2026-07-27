@@ -61,12 +61,15 @@ lesson from the dropdown (or **Import…** a YAML file — validated and
 critiqued in the page), press **Start render**, watch, and **Create draft…**
 (sign-in required for drafts; publishing stays a separate human action).
 
-Users can also **clone their own voice** (pocket-tts voice cloning): the
-voice row offers **Record** (microphone, 2–20s) or **Clone…** (an audio
-file); the sample is stored only in the browser (IndexedDB), and selecting
-the cloned voice narrates the next render with it. Scripts keep pinning
-built-in profiles in `build.voiceProfile` — cloning is a render-time choice,
-and a draft rendered with a cloned voice says so in its description.
+Users can also provide a narrator reference: the voice row offers **Record**
+(microphone) or an audio-file picker. The prepared sample is stored in the
+browser (IndexedDB). English Pocket-TTS cloning accepts 2–20s and stays
+entirely local. Burmese VoxCPM2 renders require a selected 5–20s reference and
+send it transiently through the authenticated Worker to the private Modal
+function for every uncached dialog; neither service persists it. Reusing that
+reference keeps one speaker across the render. Scripts keep pinning built-in
+profiles in `build.voiceProfile` — reference selection is a render-time choice,
+and the draft description records the selected voice name.
 
 The render console also offers an opt-in **Screen recording** toggle
 (desktop browsers only). When enabled, pressing **Start render** first prompts
