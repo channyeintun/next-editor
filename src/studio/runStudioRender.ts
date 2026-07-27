@@ -6,6 +6,7 @@ import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
 import type { SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import { EMPTY_WHITEBOARD_SCENE } from "../core/src/whiteboard";
+import { loadWhiteboardPanel } from "../components/whiteboardPanelLoader";
 import { buildRecordingFiles } from "../storage/RecordingStorage";
 import { collectWorkspaceFolders, type WorkspaceProject } from "../types/workspace";
 import { createWorkspaceFile } from "../starters/shared";
@@ -265,6 +266,16 @@ export async function runStudioRender(
 
   // ---- Pin the workspace + surface assets ----------------------------------
   phase("prepare-workspace");
+  if (plan.actions.some((action) => action.type === "whiteboard.apply")) {
+    phase("prepare-whiteboard");
+    try {
+      await loadWhiteboardPanel();
+    } catch (error) {
+      return failedResult(
+        `Whiteboard preload failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
   deps.nextEditor.clearRecording();
   deps.preview.close();
   deps.workspace.loadProject(workspaceProjectFromPlan(plan), plan.workspace.entryFilePath);

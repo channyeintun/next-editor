@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
-import { compileLessonScript, typingDurationOf, typingSeedsOf } from "./compile";
+import {
+  compileLessonScript,
+  typingDurationOf,
+  typingSeedsOf,
+  whiteboardDrawDurationOf,
+} from "./compile";
 import { splitIntoDialogs } from "./dialogs";
 import { LEXICON_V1 } from "./lexicon";
 import { extractNarration, type ExtractedNarration } from "./markers";
@@ -89,6 +94,29 @@ describe("scheduleDialogs", () => {
     const typingEnds = Math.max(0, markTime + typeCube.at.offsetMs) + typingMs;
     const nextDialog = schedule.timeline[dialogIndex + 1];
     expect(nextDialog.startMs).toBeGreaterThanOrEqual(Math.floor(typingEnds));
+  });
+
+  it("pushes narration until an anchored whiteboard drawing finishes", () => {
+    const script = loadPilot("go-cube-tour");
+    const draw = script.scenes
+      .flatMap((scene) => scene.actions)
+      .find((action) => action.id === "open-board");
+    if (draw?.type !== "whiteboard.apply" || !("mark" in draw.at)) {
+      throw new Error("pilot changed");
+    }
+    draw.drawMs = 6_000;
+
+    const { extracted, dialogs, schedule } = scheduleFor(script);
+    const marker = extracted.markers.get(draw.at.mark)!;
+    const dialogIndex = dialogs.findIndex(
+      (dialog) => dialog.firstTokenIndex === marker.beforeTokenIndex,
+    );
+    expect(dialogIndex).toBeGreaterThanOrEqual(0);
+
+    const markTime = schedule.alignment.tokens[marker.beforeTokenIndex].startMs;
+    const drawingEnds = Math.max(0, markTime + draw.at.offsetMs) + whiteboardDrawDurationOf(draw);
+    const nextDialog = schedule.timeline[dialogIndex + 1];
+    expect(nextDialog.startMs).toBeGreaterThanOrEqual(Math.floor(drawingEnds));
   });
 
   it("reserves cumulative busy time for a modeled afterAction chain", () => {

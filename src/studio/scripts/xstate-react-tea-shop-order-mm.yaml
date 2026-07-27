@@ -1830,7 +1830,7 @@ scenes:
       boolean type တွေ မှန်နေလို့ လက်ခံမှာပါ။ ဒါပေမဲ့ အော်ဒါတစ်ခုက အဲဒီ State သုံးခုမှာ
       တစ်ပြိုင်နက် ရှိနေလို့မရဘူးလေ။ Flag တစ်ခု ပြောင်းဖို့ မေ့သွားတာနဲ့ ဒီလို impossible
       State ပေါ်လာနိုင်တယ်။ Compiler က ဒီအမှားကို မဖမ်းနိုင်တာက အော်ဒါစည်းမျဉ်းကို data
-      ပုံစံထဲ မထည့်ထားလို့ပါ။ [[mark:show-finite-value]] လက်ရှိအခြေအနေကို ready လို
+      ပုံစံထဲမှာ မထည့်ထားလို့ပါ။ [[mark:show-finite-value]] လက်ရှိအခြေအနေကို ready လို
       နာမည်ပါတဲ့ value တစ်ခုတည်းနဲ့ ဖော်ပြလိုက်ရင် အမှန်တရားက တစ်ခုတည်းဖြစ်သွားမယ်။ ready
       ဖြစ်နေချိန်မှာ received နဲ့ served တစ်ပြိုင်နက် ဖြစ်နေတဲ့ပုံစံကို ဖန်တီးလို့မရတော့ဘူး။
       ဒီလို နာမည်ပေးထားတဲ့ State အကန့်အသတ်တစ်စုက finite automaton ရဲ့ အခြေခံပါ။
@@ -1847,10 +1847,14 @@ scenes:
     actions:
       - id: open-why-state-board
         type: whiteboard.apply
-        at: { mark: open-why-board }
+        at: { mark: open-why-board, offsetMs: -450 }
         open: true
         maximized: true
         clear: true
+        upsertIds: []
+      - id: draw-why-state-contrast
+        type: whiteboard.apply
+        at: { mark: open-why-board }
         upsertIds: [why-title, booleans-box, booleans-heading, booleans-body]
         drawMs: 1500
       - id: mark-invalid-boolean-state
@@ -1881,14 +1885,17 @@ scenes:
       [[mark:open-domain-board]] ဒီသဘောတရားကို လက်ဖက်ရည်နဲ့ ပလာတာအော်ဒါနဲ့ ချိတ်ကြည့်မယ်။
       State အစုက Received၊ Preparing၊ Packing၊ Ready နဲ့ Served ပါ။ Initial State က Received
       ဖြစ်ပြီး လက်ရှိ State ကို အဲဒီနာမည်ငါးခုထဲက တစ်ခုနဲ့ပဲ ဖော်ပြမယ်။ Event အစုမှာ
-      START_PREPARING၊ PACK_ORDER၊ CHECK_ITEM၊ REMAKE နဲ့ SERVE ရှိမယ်။ Transition က
-      State နဲ့ Event အတွဲတစ်ခုကို နောက် State တစ်ခုနဲ့ ချိတ်ပေးတယ်။
-      [[mark:draw-domain-states]] အော်ဒါစာရွက်ရောက်လာတာနဲ့ Received မှာ စမယ်။ ဆိုင်ဝန်ထမ်းက
-      စပြင်တဲ့အခါ START_PREPARING Event ရောက်ပြီး Preparing ဆီ ရွှေ့မယ်။ လက်ဖက်ရည်နဲ့ ပလာတာ
-      ပြင်ပြီး ထုပ်ပိုးဖို့အဆင်သင့်ဖြစ်ရင် PACK_ORDER Event က Packing ဆီပို့မယ်။ ထုပ်ပိုးပြီး
-      အော်ဒါလက်မှတ်ရလာရင် onDone Event နဲ့ Ready ဆီ ရောက်မယ်။ Ready မှာ နှစ်မျိုးလုံး
-      မှန်မမှန်စစ်ပြီးမှ SERVE Event က Served Final State ဆီ ပို့ခွင့်ရမယ်။ ဒီ Event နာမည်တွေက
-      button နာမည်တွေ မဟုတ်ပါဘူး။ START_PREPARING ဆိုတာ အော်ဒါကို စပြင်လိုက်ပြီဆိုတဲ့
+      Start preparing၊ Pack order၊ Check item၊ Remake နဲ့ Serve ရှိမယ်။ Diagram မှာတော့
+      code ထဲက နာမည်အတိုင်း စာလုံးအကြီးနဲ့ underscore တွေခံပြီး ပြထားမယ်။ Transition က State နဲ့
+      Event အတွဲတစ်ခုကို နောက် State တစ်ခုနဲ့ ချိတ်ပေးတယ်။
+      [[mark:draw-received-state]] အော်ဒါစာရွက်ရောက်လာတာနဲ့ Received မှာ စမယ်။
+      [[mark:draw-preparing-state]] ဆိုင်ဝန်ထမ်းက စပြင်တဲ့အခါ Start preparing Event ရောက်ပြီး
+      Preparing ဆီ ရွှေ့မယ်။ [[mark:draw-packing-state]] လက်ဖက်ရည်နဲ့ ပလာတာ ပြင်ပြီး
+      ထုပ်ပိုးဖို့အဆင်သင့်ဖြစ်ရင် Pack order Event က Packing ဆီပို့မယ်။
+      [[mark:draw-ready-state]] ထုပ်ပိုးပြီး အော်ဒါလက်မှတ်ရလာရင် onDone Event နဲ့ Ready ဆီ
+      ရောက်မယ်။ [[mark:draw-served-state]] Ready မှာ နှစ်မျိုးလုံး မှန်မမှန်စစ်ပြီးမှ Serve
+      Event က Served Final State ဆီ ပို့ခွင့်ရမယ်။ ဒီ Event နာမည်တွေက button နာမည်တွေ
+      မဟုတ်ပါဘူး။ Start preparing ဆိုတာ အော်ဒါကို စပြင်လိုက်ပြီဆိုတဲ့
       ဖြစ်ရပ်ကို နာမည်ပေးထားတာပါ။ ဒါကြောင့် UI ကပို့ပို့၊ API ကပို့ပို့၊ test ကပို့ပို့
       model က နားလည်တဲ့ Event က အတူတူပဲ။ အခုမှ ဒီ finite automaton ကို XState Machine
       config အဖြစ် ဘယ်လိုရေးမလဲ ဆက်ကြည့်မယ်။
@@ -1912,37 +1919,31 @@ scenes:
         clear: true
         upsertIds: [domain-title, domain-subtitle]
         drawMs: 700
-      - id: draw-order-state-path
+      - id: draw-received-order-state
         type: whiteboard.apply
-        at: { mark: draw-domain-states }
-        timeoutMs: 6000
-        upsertIds:
-          [
-            received-box,
-            received-label,
-            received-note,
-            arrow-one,
-            event-one,
-            preparing-box,
-            preparing-label,
-            preparing-note,
-            arrow-two,
-            event-two,
-            packing-box,
-            packing-label,
-            packing-note,
-            arrow-on-done,
-            event-on-done,
-            ready-box,
-            ready-label,
-            ready-note,
-            arrow-three,
-            event-three,
-            served-box,
-            served-label,
-            served-note,
-          ]
-        drawMs: 4200
+        at: { mark: draw-received-state }
+        upsertIds: [received-box, received-label, received-note]
+        drawMs: 650
+      - id: draw-preparing-order-state
+        type: whiteboard.apply
+        at: { mark: draw-preparing-state }
+        upsertIds: [arrow-one, event-one, preparing-box, preparing-label, preparing-note]
+        drawMs: 950
+      - id: draw-packing-order-state
+        type: whiteboard.apply
+        at: { mark: draw-packing-state }
+        upsertIds: [arrow-two, event-two, packing-box, packing-label, packing-note]
+        drawMs: 950
+      - id: draw-ready-order-state
+        type: whiteboard.apply
+        at: { mark: draw-ready-state }
+        upsertIds: [arrow-on-done, event-on-done, ready-box, ready-label, ready-note]
+        drawMs: 950
+      - id: draw-served-order-state
+        type: whiteboard.apply
+        at: { mark: draw-served-state }
+        upsertIds: [arrow-three, event-three, served-box, served-label, served-note]
+        drawMs: 950
 
   - id: context-actions-guards
     narration: >
@@ -1950,18 +1951,19 @@ scenes:
       စကြမယ်။ Named State က အော်ဒါရောက်နေတဲ့အဆင့်ကို ပြနိုင်ပေမဲ့ ဆက်မှတ်ထားရမယ့် data လည်း
       ရှိသေးတယ်။
       ဒီဥပမာမှာ ထုပ်ပိုးပြီးရလာတဲ့ packingTicket နဲ့ စစ်ပြီးသားပစ္စည်းအရေအတွက် checkedItems ပါ။
-      ဒီလို data ကို XState ရဲ့ Context ထဲမှာ ထားမယ်။ [[mark:draw-domain-guard]] Diagram
+      ဒီလို data ကို XState ရဲ့ Context ထဲမှာ ထားမယ်။ [[mark:draw-domain-context]] Diagram
       အောက်မှာ checkedItems ကို ထည့်လိုက်မယ်။ Actor က Snapshot အသစ်ထုတ်ပေးတိုင်း State value နဲ့
-      Context နှစ်ခုလုံး ပါလာမယ်။ Ready မှာ CHECK_ITEM Event တစ်ကြိမ်ရတိုင်း checkNextItem
+      Context နှစ်ခုလုံး ပါလာမယ်။ Ready မှာ Check item Event တစ်ကြိမ်ရတိုင်း checkNextItem
       Action ကိုခေါ်ပြီး assign နဲ့ checkedItems ကို တစ်တိုးပေးမယ်။ မူလ object ကို
-      ပြင်တာမဟုတ်ဘဲ နောက် Snapshot အတွက် Context အသစ်ကို တွက်ပေးတာပါ။ CHECK_ITEM Transition မှာ
+      ပြင်တာမဟုတ်ဘဲ နောက် Snapshot အတွက် Context အသစ်ကို တွက်ပေးတာပါ။ Check item Transition မှာ
       target မပါဘူး။ ဒါကြောင့် Ready ကနေ မထွက်ဘဲ Context ပဲ ပြောင်းသွားမယ်။ XState က
-      ဒီပုံစံကို targetless Transition လို့ ခေါ်တယ်။ အခု လက်ဖက်ရည်တစ်မျိုးပဲ စစ်ပြီးသေးချိန်
-      SERVE Event ရောက်လာရင်ရော ဘာဖြစ်မလဲ။ ဒီနေရာမှာ Guard သုံးမယ်။ Guard က Transition
-      မလုပ်ခင် true ဒါမှမဟုတ် false ပြန်ပေးတဲ့ function ပါ။ hasCheckedBothItems Guard က
-      Context ကိုကြည့်ပြီး နှစ်မျိုးလုံးစစ်ပြီးမှ true ပြန်ပေးမယ်။ မပြည့်သေးရင် SERVE Event
+      ဒီပုံစံကို targetless Transition လို့ ခေါ်တယ်။ [[mark:draw-domain-guard]] အခု
+      လက်ဖက်ရည်တစ်မျိုးပဲ စစ်ပြီးသေးချိန် Serve Event ရောက်လာရင်ရော ဘာဖြစ်မလဲ။ ဒီနေရာမှာ Guard
+      သုံးမယ်။ Guard က Transition မလုပ်ခင် true ဒါမှမဟုတ် false ပြန်ပေးတဲ့ function ပါ။
+      hasCheckedBothItems Guard က
+      Context ကိုကြည့်ပြီး နှစ်မျိုးလုံးစစ်ပြီးမှ true ပြန်ပေးမယ်။ မပြည့်သေးရင် Serve Event
       ရောက်လာလည်း State မပြောင်းဘူး။ Guard ထဲမှာ API မခေါ်ဘူး၊ log မရေးဘူး။ တူညီတဲ့ Context
-      ပေးရင် အဖြေတူဖို့ စစ်ဆေးချက်ပဲ ထားမယ်။ ပစ္စည်းတစ်ခုမှားနေတာတွေ့ရင် REMAKE Event က
+      ပေးရင် အဖြေတူဖို့ စစ်ဆေးချက်ပဲ ထားမယ်။ ပစ္စည်းတစ်ခုမှားနေတာတွေ့ရင် Remake Event က
       Preparing ဆီ ပြန်ပို့ပြီး checkedItems ကို သုည ပြန်ထားမယ်။ [[mark:emphasize-domain-rule]]
       React မှာ Serve order button ကို disable လုပ်တာက လက်ရှိ မနှိပ်နိုင်သေးကြောင်း
       အသုံးပြုသူကို ပြတာပါ။ တကယ်တမ်း ကျော်လို့မရအောင် ထိန်းထားတာက Machine ထဲက Guard ဖြစ်တယ်။
@@ -1976,12 +1978,16 @@ scenes:
       - title: "Stately Docs — Eventless and targetless transitions"
         url: "https://stately.ai/docs/transitions"
     actions:
+      - id: draw-order-context
+        type: whiteboard.apply
+        at: { mark: draw-domain-context }
+        upsertIds: [context-box, context-label, context-action]
+        drawMs: 900
       - id: draw-order-guard
         type: whiteboard.apply
         at: { mark: draw-domain-guard }
-        timeoutMs: 5000
-        upsertIds: [context-box, context-label, context-action, guard-box, guard-label, guard-rule]
-        drawMs: 1800
+        upsertIds: [guard-box, guard-label, guard-rule]
+        drawMs: 900
       - id: emphasize-domain-invariant
         type: whiteboard.apply
         at: { mark: emphasize-domain-rule }
@@ -2048,7 +2054,7 @@ scenes:
   - id: invoked-actor-lifecycle
     narration: >
       လက်ဖက်ရည်နဲ့ ပလာတာ ပြင်ပြီးသွားပေမဲ့ ထုပ်ပိုးတာ၊ အော်ဒါလက်မှတ်ထုတ်တာလို အလုပ်က
-      ခဏကြာနိုင်တယ်။ ဒီလို async အလုပ်ကို React useEffect ထဲ Promise ခေါ်ပြီး isLoading flag
+      ခဏကြာနိုင်တယ်။ ဒီလို async အလုပ်ကို React useEffect ထဲမှာ Promise ခေါ်ပြီး isLoading flag
       ပြောင်းလည်းရပါတယ်။ ဒါပေမဲ့ Promise က ဘယ်အချိန်စလဲ၊ ပြီးရင် ဘယ် State သွားလဲဆိုတာ
       နေရာအမျိုးမျိုးမှာ လိုက်ဖတ်ရမယ်။ XState မှာတော့ async အလုပ်ကိုလည်း Actor အဖြစ်
       ထားနိုင်တယ်။ [[mark:draw-invoked-parent]] Parent Order Actor က Packing State ထဲ
@@ -2248,7 +2254,7 @@ scenes:
 
   - id: implement-machine
     narration: >
-      [[mark:close-concept-board]] Whiteboard ပေါ်က ပုံကို နားလည်သွားပြီဆိုတော့ အခု Editor
+      Whiteboard ပေါ်က ပုံကို နားလည်သွားပြီဆိုတော့ အခု [[mark:close-concept-board]] Editor
       ထဲဝင်ပြီး အဲဒီပုံကို code အဖြစ် ပြောင်းကြည့်ကြရအောင်။ Workspace မှာ React၊ xstate၊
       @xstate/react နဲ့ @xstate/store-react version အတိအကျ သတ်မှတ်ထားတယ်။ ဒါကြောင့် ဒီသင်ခန်းစာကို
       နောက်တစ်ခါ run လည်း တူညီတဲ့ API ကိုပဲ သုံးမယ်။ [[mark:open-main-file]] main.tsx အပေါ်ဆုံးက
@@ -2256,8 +2262,8 @@ scenes:
       Machine ကို React Component နဲ့ ချိတ်ဖို့ useMachine ပေးတယ်။ @xstate/store-react က
       createStore နဲ့ Store အတွက် useSelector ပေးတယ်။ Package တစ်ခုချင်းစီက ဘာလုပ်ပေးလဲ
       အရင်ခွဲသိထားရင် code အောက်ပိုင်းကို ဖတ်ရတာ ပိုလွယ်သွားမယ်။ [[mark:select-event-union]] အခု
-      OrderEvent union ကို ကြည့်မယ်။ START_PREPARING၊ PACK_ORDER၊ CHECK_ITEM၊ REMAKE နဲ့ SERVE
-      က Actor လက်ခံနိုင်တဲ့ Event တွေပါ။ PACK_ORDER Event မှာ order ID လို data
+      OrderEvent union ကို ကြည့်မယ်။ Start preparing၊ Pack order၊ Check item၊ Remake နဲ့ Serve
+      က Actor လက်ခံနိုင်တဲ့ Event တွေပါ။ Pack order Event မှာ order ID လို data
       ထည့်ချင်ရင် union member ထဲ field ထပ်ထည့်နိုင်တယ်။ ဒီလို union ရေးထားတာကြောင့် Event
       နာမည်စာလုံးမှားတာနဲ့ လိုအပ်တဲ့ data မပါတာကို TypeScript က code ရေးနေချိန်မှာ ပြောနိုင်တယ်။
       [[mark:type-machine]] setup API နဲ့ Context၊ Events၊ Guard နဲ့ Action type တွေကို Actor
@@ -2391,7 +2397,7 @@ scenes:
       တကယ့် app မှာ ဒီ function က order ID ကို input အဖြစ်ယူပြီး packing API ကို ခေါ်နိုင်တယ်။ Promise
       ပြန်ပေးတဲ့ value က Actor output ဖြစ်လာမယ်။ ဒါကြောင့် onDone ရောက်ချိန် event.output က
       ဘယ်ပုံစံရှိမလဲကို TypeScript သိထားနိုင်တယ်။ [[mark:select-invoke-source]] Preparing မှာ
-      PACK_ORDER Event ဝင်ရင် target က Packing ဖြစ်တယ်။ Packing State ဝင်မှ invoke က
+      Pack order Event ဝင်ရင် target က Packing ဖြစ်တယ်။ Packing State ဝင်မှ invoke က
       packOrder Actor ကို start လုပ်တယ်။ React re-render ဖြစ်တိုင်း API ကို
       ပြန်ခေါ်နေတာမျိုး မဟုတ်ပါဘူး။ Packing State ကိုဝင်တဲ့အချိန်နဲ့ Actor စတဲ့အချိန်ကို
       ချိတ်ထားတာပါ။ [[mark:select-invoke-completion]] onDone ရောက်ရင် Ready ဆီ Transition
@@ -2431,16 +2437,16 @@ scenes:
   - id: implement-guards-actions
     narration: >
       Async အပိုင်းပြီးပြီဆိုတော့ အခု Event တစ်ခု ရလာတဲ့အခါ ချက်ချင်းဆုံးဖြတ်ပေးမယ့် Transition
-      အပိုင်းကို ဆက်ကြည့်ကြမယ်။ [[mark:select-machine-guard]] SERVE handler မှာ target မရွေးခင်
+      အပိုင်းကို ဆက်ကြည့်ကြမယ်။ [[mark:select-machine-guard]] Serve handler မှာ target မရွေးခင်
       hasCheckedBothItems Guard ကို အရင်ခေါ်မယ်။ ဒီ Guard က Context ကိုဖတ်ပြီး true သို့မဟုတ် false
       ပြန်ပေးတယ်။ true ဖြစ်မှ served ဆီသွားမယ်။ false ဖြစ်ရင် လက်ရှိ Ready Snapshot ကိုပဲ
       ဆက်ထားမယ်။ React button ကို မတော်တဆ enable လုပ်မိသွားရင်တောင် ဒီ Guard ရှိနေသရွေ့
       နှစ်မျိုးလုံးမစစ်ဘဲ အော်ဒါကို Serve လုပ်လို့မရပါဘူး။ [[mark:select-machine-action]]
-      CHECK_ITEM က checkNextItem Action
+      Check item က checkNextItem Action
       ကို ခေါ်တယ်။ assign callback က လက်ရှိ Context ကို လက်ခံပြီး checkedItems value အသစ်တွက်တယ်။
       XState က State value နဲ့ Context အသစ်ကို Snapshot တစ်ခုတည်းအဖြစ် ထုတ်ပေးမယ်။ Action ကို
       checkNextItem လို့ နာမည်ပေးထားတာကြောင့် config ဖတ်ချိန်မှာ ဘာလုပ်ချင်တာလဲ သိသာတယ်။
-      [[mark:select-remake-path]] REMAKE Transition က Ready ဆီကနေ Preparing
+      [[mark:select-remake-path]] Remake Transition က Ready ဆီကနေ Preparing
       ဆီပြန်သွားပြီး resetItemChecks Action နဲ့ checkedItems ကို သုည လုပ်တယ်။ State ပြောင်းတာနဲ့
       checkedItems ပြန်စတာကို Transition တစ်ကြိမ်တည်းမှာ လုပ်ပေးတာပါ။ State က Preparing
       ဖြစ်သွားပေမဲ့ checkedItems အဟောင်းကျန်နေတဲ့ Snapshot ကြားထဲ မပေါ်ဘူး။ Guard၊ Action နဲ့
@@ -2555,10 +2561,10 @@ scenes:
       သိနိုင်မှာပါ။ Snapshot ထဲက value ကို string ပြောင်းပြီး stateLabels နဲ့ လူဖတ်လို့ရတဲ့
       Received၊ Preparing စတဲ့စာသားတွေအဖြစ် ပြမယ်။ Context ထဲက checkedItems နဲ့ packingTicket
       ကိုလည်း တိုက်ရိုက်ဖတ်မယ်။ [[mark:select-snapshot-can]] Serve order button မှာ snapshot.can ကို
-      သုံးထားတယ်။ လက်ရှိ Snapshot မှာ SERVE Event ပို့ရင် Transition ဖြစ်နိုင်မလား Machine ကို
+      သုံးထားတယ်။ လက်ရှိ Snapshot မှာ Serve Event ပို့ရင် Transition ဖြစ်နိုင်မလား Machine ကို
       အရင်မေးတာပါ။ false ဆို button ကို disable ပြမယ်။ ဒါပေမဲ့ button ပုံစံတစ်ခုတည်းကို
       အားကိုးထားတာမဟုတ်ဘူး။ Event တကယ်ရောက်လာချိန် Guard က ထပ်စစ်မယ်။ [[mark:select-react-send]]
-      Start preparing button ကိုနှိပ်ရင် send နဲ့ START_PREPARING Event ပို့ထားတာကို
+      Start preparing button ကိုနှိပ်ရင် send နဲ့ Start preparing Event ပို့ထားတာကို
       ဒီမှာတွေ့ရတယ်။ Component က
       state variable အများကြီးကို တစ်ခုချင်းစီ လိုက်ပြင်နေစရာ မလိုတော့ပါဘူး။ Actor က Snapshot
       အသစ်ထုတ်ပေးပြီး React က အဲဒီ Snapshot အတိုင်း UI ကို ပြန်ဆွဲမယ်။ ဒီနေရာမှာ UI နဲ့
@@ -2626,11 +2632,11 @@ scenes:
       Start preparing တစ်ခုပဲ နှိပ်လို့ရမယ်။ Pack order၊ Check next item နဲ့ Serve order
       တွေကို နှိပ်လို့မရသေးဘူး။ React က button တစ်ခုစီမှာ snapshot.can ကိုခေါ်ပြီး
       “ဒီ Snapshot မှာ ဒီ Event ပို့လို့ရပြီလား” လို့ Machine ကို မေးထားတာပါ။
-      [[mark:start-order]] အခု Start preparing ကိုနှိပ်မယ်။ Component က START_PREPARING
+      [[mark:start-order]] အခု Start preparing ကိုနှိပ်မယ်။ Component က Start preparing
       Event ကို Actor ဆီပို့တယ်။ Received State မှာ အဲဒီ Event အတွက် Transition ရှိလို့ Actor က
       Preparing Snapshot အသစ်ကို ထုတ်ပေးမယ်။ Workflow ပေါ်မှာ Received က ပြီးသွားတဲ့အဆင့်ဖြစ်ပြီး
       Preparing ကို ထင်ရှားအောင် ပြမယ်။ [[mark:pack-order]] လက်ဖက်ရည်နဲ့ ပလာတာ
-      ပြင်ပြီးပြီဆိုတော့ Pack order ကိုနှိပ်မယ်။ PACK_ORDER Event ဝင်တဲ့အခါ Ready ကို
+      ပြင်ပြီးပြီဆိုတော့ Pack order ကိုနှိပ်မယ်။ Pack order Event ဝင်တဲ့အခါ Ready ကို
       တန်းမရောက်သေးဘူး။ အရင်ဆုံး Packing State ဝင်ပြီး Promise Actor ကို start လုပ်မယ်။
       Promise ပြီးမှ onDone Transition က Ready ဆီပို့ပြီး Action က TKT-2048 packing ticket ကို
       Context ထဲ သိမ်းမယ်။ ဒါကြောင့် Preview မှာ Packing ကို အရင်မြင်ရပြီး နောက်မှ Ready နဲ့
@@ -2718,18 +2724,18 @@ scenes:
       ပလာတာမပါသေးတာလည်း ဖြစ်နိုင်တယ်။ အောင်မြင်တဲ့လမ်းတစ်လမ်းတည်းကြည့်ပြီး Machine မှန်တယ်လို့
       မဆုံးဖြတ်သင့်ဘူး။ ပစ္စည်းမှားလို့ ပြန်ပြင်ရတဲ့လမ်းကိုပါ စမ်းကြည့်ရအောင်။
       [[mark:first-check-before-remake]] အရင်ဆုံး Check next item ကို တစ်ကြိမ်နှိပ်မယ်။
-      CHECK_ITEM Event အတွက် target မပါတဲ့ Transition က State ကို Ready မှာပဲထားပြီး
+      Check item Event အတွက် target မပါတဲ့ Transition က State ကို Ready မှာပဲထားပြီး
       checkNextItem Action ကို run မယ်။ ဒါကြောင့် State မပြောင်းပေမဲ့ Context ထဲက checkedItems
       က သုညကနေ တစ် ဖြစ်သွားမယ်။ Transition ဆိုတိုင်း State နာမည်ပြောင်းရမယ်လို့
       မယူဆသင့်ပါဘူး။ State မပြောင်းဘဲ Action လုပ်ဖို့လည်း Transition သုံးနိုင်တယ်။
       [[mark:remake-order]] အခု ပထမဆုံးစစ်တဲ့ပစ္စည်း မှားနေတာတွေ့တယ်ဆိုပါစို့။ Make again ကို
-      နှိပ်လိုက်ရင် REMAKE Event ရောက်ပြီး Machine က Preparing ဆီပြန်သွားမယ်။ တစ်ချိန်တည်းမှာ
+      နှိပ်လိုက်ရင် Remake Event ရောက်ပြီး Machine က Preparing ဆီပြန်သွားမယ်။ တစ်ချိန်တည်းမှာ
       resetItemChecks Action က checkedItems ကို သုည ပြန်ထားမယ်။ ပြန်ပြင်မယ့်အော်ဒါမှာ
       အရင်စစ်ထားတဲ့ရလဒ်ကို ဆက်မသုံးသင့်လို့ပါ။ ဒီစည်းမျဉ်းကို Component ထဲမှာ if statement နဲ့
       လိုက်ပြင်စရာမလိုဘူး။ Transition နဲ့ Action က တစ်နေရာတည်းမှာ ဖော်ပြထားတယ်။
       [[mark:repack-order]] နှစ်မျိုးလုံး ပြန်ပြင်ပြီးပြီဆိုတော့ Pack order ကို
       ပြန်နှိပ်မယ်။ Packing State ဝင်ပြီး Promise Actor အသစ်တစ်ခု စမယ်။ အဲဒီ Actor ပြီးမှ
-      Ready ဆီပြန်ရောက်မယ်။ ဒီလမ်းကို စမ်းလိုက်တာနဲ့ REMAKE Transition၊ reset Action နဲ့ invoke
+      Ready ဆီပြန်ရောက်မယ်။ ဒီလမ်းကို စမ်းလိုက်တာနဲ့ Remake Transition၊ reset Action နဲ့ invoke
       သုံးခုလုံး အလုပ်လုပ်ကြောင်း မြင်ရပြီ။
     sources:
       - title: "Stately Docs — State machine transitions"
@@ -2802,15 +2808,15 @@ scenes:
       ဘယ်လိုထိန်းလဲ
       ကြည့်မယ်။ [[mark:inspect-guarded-serve]] checkedItems က သုညဖြစ်နေတဲ့အတွက် Serve order
       button ကို နှိပ်လို့မရဘူး။ “Button ကို disable လုပ်ထားရင် လုံလောက်ပြီမဟုတ်လား” လို့
-      မေးနိုင်တယ်။ မလုံလောက်ပါဘူး။ UI မဟုတ်တဲ့ API ဒါမှမဟုတ် test ကလည်း SERVE Event
+      မေးနိုင်တယ်။ မလုံလောက်ပါဘူး။ UI မဟုတ်တဲ့ API ဒါမှမဟုတ် test ကလည်း Serve Event
       ပို့နိုင်တယ်။ တကယ့်စည်းမျဉ်းက Machine ထဲက hasCheckedBothItems Guard ပါ။ React မှာသုံးတဲ့
       snapshot.can က အဲဒီ Machine စည်းမျဉ်းကို မေးပြီး button ကို ဘယ်လိုပြရမလဲ ဆုံးဖြတ်တာပါ။
       [[mark:first-final-check]] Check next item ကို တစ်ကြိမ်နှိပ်မယ်။ checkedItems က
       တစ်ဖြစ်သွားပေမဲ့ လက်ဖက်ရည်နဲ့ ပလာတာထဲက တစ်မျိုးပဲစစ်ရသေးလို့ Guard က false ပဲ။
-      ဒီအချိန် SERVE Event တကယ်ပို့လည်း Machine က Ready မှာပဲ ဆက်ရှိမယ်။
+      ဒီအချိန် Serve Event တကယ်ပို့လည်း Machine က Ready မှာပဲ ဆက်ရှိမယ်။
       [[mark:second-final-check]] Check next item ကို ဒုတိယအကြိမ် နှိပ်လိုက်ရင် checkedItems က
       နှစ်ဖြစ်လာမယ်။ နှစ်မျိုးလုံးစစ်ပြီးပြီမို့ snapshot.can က true ပြန်ပေးပြီး Serve order
-      ကို နှိပ်လို့ရလာမယ်။ [[mark:serve-order]] Serve order ကိုနှိပ်လိုက်ရင် SERVE Event က
+      ကို နှိပ်လို့ရလာမယ်။ [[mark:serve-order]] Serve order ကိုနှိပ်လိုက်ရင် Serve Event က
       Guard ကို နောက်တစ်ကြိမ်ဖြတ်ရတယ်။ Guard က true ပြန်မှ Served Final State ကို ရောက်မယ်။
       ဒီဥပမာမှာ UI နဲ့ Machine က စည်းမျဉ်းတစ်ခုတည်းကို သုံးထားတယ်။ React က ခွင့်ပြုချက်ကို
       ကိုယ်တိုင်မဆုံးဖြတ်ဘူး။ Machine ကိုမေးပြီးပြတယ်၊ Event ရောက်လာရင် Machine ကပဲ
@@ -2978,7 +2984,7 @@ scenes:
       Selector နဲ့ဖတ်ဖို့ပဲလိုရင် XState Store က ပိုသင့်တော်နိုင်တယ်။ ဒီသင်ခန်းစာမှာ order note
       draft နဲ့ notes ကို Store ထဲထားခဲ့တာ အဲဒီအကြောင်းပါ။ နောက်ဆုံး စစ်ဆေးတဲ့အခါ
       အောင်မြင်တဲ့လမ်းတစ်ခုတည်း စမ်းရုံနဲ့တော့ မလုံလောက်ပါဘူး။ ခွင့်မပြုသေးတဲ့ Event၊ Guard
-      မပြည့်သေးတဲ့အခြေအနေ၊ async Actor အလုပ်လုပ်နေချိန်နဲ့ REMAKE လို ပြန်ဆုတ်တဲ့လမ်းကိုပါ
+      မပြည့်သေးတဲ့အခြေအနေ၊ async Actor အလုပ်လုပ်နေချိန်နဲ့ Remake လို ပြန်ဆုတ်တဲ့လမ်းကိုပါ
       စမ်းကြည့်ရပါတယ်။ snapshot.matches
       နဲ့ State ကိုစစ်နိုင်ပြီး snapshot.can နဲ့ Event ပို့လို့ရမရ စစ်နိုင်တယ်။ ဒီအခြေခံတွေကို
       ရသွားပြီဆိုရင်တော့ nested States၊ parallel States၊ Actor systems နဲ့ persistence တွေကို
@@ -2996,10 +3002,14 @@ scenes:
     actions:
       - id: open-course-recap-board
         type: whiteboard.apply
-        at: { mark: open-recap-board }
+        at: { mark: open-recap-board, offsetMs: -450 }
         open: true
         maximized: true
         clear: true
+        upsertIds: []
+      - id: draw-course-recap-heading
+        type: whiteboard.apply
+        at: { mark: open-recap-board }
         upsertIds: [recap-title, recap-subtitle]
         drawMs: 900
       - id: recap-state-model-and-rules

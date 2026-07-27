@@ -142,6 +142,30 @@ describe("studio plan schema", () => {
     expect(() => parseStudioPlan(plan)).toThrow(/Selection action "highlight" .* overlaps/);
   });
 
+  it("rejects a whiteboard drawing that overlaps the next action", () => {
+    const plan = clonePlan(createTestPlan());
+    plan.whiteboardAssets.push({
+      id: "diagram",
+      kind: "rectangle",
+      x: 100,
+      y: 100,
+      width: 300,
+      height: 180,
+      strokeColor: "#ffffff",
+    });
+    plan.actions.splice(3, 0, {
+      id: "draw-diagram",
+      at: 5_000,
+      timeoutMs: 10_000,
+      type: "whiteboard.apply",
+      upsertIds: ["diagram"],
+      drawMs: 6_000,
+    });
+    expect(() => parseStudioPlan(plan)).toThrow(
+      /Whiteboard drawing action "draw-diagram" .* overlaps/,
+    );
+  });
+
   it("rejects a select in a file outside the pinned workspace", () => {
     const plan = clonePlan(createTestPlan());
     plan.actions.splice(3, 0, {

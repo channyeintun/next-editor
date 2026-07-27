@@ -47,11 +47,12 @@ import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
 import { startTour } from "./tour/productTour";
 import CollaborationSurfaceBridge from "./CollaborationSurfaceBridge";
 import CollaborationFollowOverlay from "./CollaborationFollowOverlay";
+import { loadWhiteboardPanel } from "./whiteboardPanelLoader";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
 // Bundles Excalidraw (~180KB gzip) — deferred until the panel is actually opened,
 // not just until this component mounts (see the `isOpen` gate around its render).
-const WhiteboardPanel = lazy(() => import("./WhiteboardPanel"));
+const WhiteboardPanel = lazy(loadWhiteboardPanel);
 
 // Initial value for the autoplay once-per-load guard below. A sentinel (not
 // undefined) because `recordingUrl` is legitimately undefined on ?url= and

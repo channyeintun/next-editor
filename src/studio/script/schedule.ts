@@ -3,7 +3,12 @@ import { estimateAlignment, type NarrationAlignment, AlignmentError } from "./al
 import type { NarrationDialog } from "./dialogs";
 import type { ExtractedNarration } from "./markers";
 import type { LessonScript } from "./schema";
-import { selectDurationOf, typingDurationOf, typingSeedsOf } from "./compile";
+import {
+  selectDurationOf,
+  typingDurationOf,
+  typingSeedsOf,
+  whiteboardDrawDurationOf,
+} from "./compile";
 
 /**
  * Joint dialog/action scheduling: instead of squeezing actions into one fixed
@@ -117,7 +122,12 @@ export function scheduleDialogs({
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
       const seed = typingSeeds.get(action.id) ?? script.build.seed;
-      busyById.set(action.id, typingDurationOf(action, seed) + selectDurationOf(action, seed));
+      busyById.set(
+        action.id,
+        typingDurationOf(action, seed) +
+          selectDurationOf(action, seed) +
+          whiteboardDrawDurationOf(action),
+      );
       const anchor = action.at;
       if ("mark" in anchor) {
         resolvedDialog.set(action.id, markerDialogIndex.get(anchor.mark));

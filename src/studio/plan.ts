@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CaptionTrack } from "../core/src/types";
+import { whiteboardDrawDurationMs } from "./whiteboardAssets";
 
 /**
  * Compiled lesson plan — the deterministic contract between the Director (asset
@@ -771,10 +772,11 @@ export const studioPlanSchema = z
       }
     }
 
-    // A timed edit must fit between its start and the next scheduled action:
+    // A timed action must fit between its start and the next scheduled action:
     // the Performer is sequential, so a later action scheduled before this one
-    // can finish is an impossible overlap (§5). Typing spends its chunk delays;
-    // a select spends its drag-glide duration.
+    // can finish is an impossible overlap (§5). Typing spends its chunk delays,
+    // a select spends its drag-glide duration, and a drawn whiteboard apply
+    // spends one 20 fps frame budget per sequential asset.
     for (let i = 0; i < plan.actions.length; i++) {
       const action = plan.actions[i];
       const busyMs =
@@ -782,11 +784,18 @@ export const studioPlanSchema = z
           ? action.chunks.reduce((total, chunk) => total + chunk.delayMs, 0)
           : action.type === "editor.select"
             ? action.durationMs
-            : 0;
+            : action.type === "whiteboard.apply"
+              ? whiteboardDrawDurationMs(action.upsertIds.length, action.drawMs)
+              : 0;
       if (busyMs === 0) continue;
       const next = plan.actions[i + 1];
       if (next && action.at + busyMs > next.at) {
-        const label = action.type === "editor.type" ? "Typing" : "Selection";
+        const label =
+          action.type === "editor.type"
+            ? "Typing"
+            : action.type === "editor.select"
+              ? "Selection"
+              : "Whiteboard drawing";
         ctx.addIssue({
           code: "custom",
           message: `${label} action "${action.id}" (${busyMs}ms) overlaps "${next.id}" at ${next.at}ms`,
