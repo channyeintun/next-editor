@@ -36,7 +36,7 @@ describe("studio lesson registry", () => {
       "rust-traits",
       "rust-variables",
       "rust-vectors",
-      "xstate-react-incident-response-mm",
+      "xstate-react-tea-shop-order-mm",
     ]);
     expect(STUDIO_SOURCES[DEFAULT_STUDIO_PLAN_SLUG]?.kind).toBe("script");
   });
