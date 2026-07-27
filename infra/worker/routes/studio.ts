@@ -63,6 +63,18 @@ type SynthesisRequestValidation =
   | { ok: true; text: string; seed: number; referenceAudioBase64: string }
   | { ok: false; status: 400 | 413; error: string };
 
+/**
+ * Validate the reference clip without ever materializing it as bytes. The clip
+ * is forwarded to Modal as the same base64 string that arrived, so the only
+ * things worth checking are its encoding, its decoded length, and its 44-byte
+ * WAV header — and every one of those is available without decoding the body.
+ *
+ * This runs on a ~1.28 MB payload, so the shape of the check is a CPU budget,
+ * not a style question: decoding the whole clip through
+ * `Uint8Array.from(binary, …)` cost ~44 ms of Worker CPU per request on a 20s
+ * reference and tripped the CPU limit. `atob` validates the alphabet and
+ * `btoa` round-trip validates canonical form, both in native code, for ~0.4 ms.
+ */
 function validateReferenceAudioBase64(
   raw: unknown,
 ): { ok: true; value: string } | { ok: false; error: string } {
@@ -70,30 +82,39 @@ function validateReferenceAudioBase64(
     typeof raw !== "string" ||
     raw.length === 0 ||
     raw.length % 4 !== 0 ||
-    raw.length > Math.ceil(MAX_REFERENCE_WAV_BYTES / 3) * 4 ||
-    !/^[A-Za-z0-9+/]*={0,2}$/.test(raw)
+    raw.length > Math.ceil(MAX_REFERENCE_WAV_BYTES / 3) * 4
   ) {
     return { ok: false, error: "reference audio must be a 5–20s mono 24 kHz PCM16 WAV" };
   }
 
-  let bytes: Uint8Array;
+  // `atob` throws on characters outside the base64 alphabet, and its forgiving
+  // decode tolerates whitespace and non-canonical padding that the re-encode
+  // then rejects — so what we validate is byte-for-byte what Modal decodes.
+  let binary: string;
   try {
-    const binary = atob(raw);
-    bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    binary = atob(raw);
   } catch {
     return { ok: false, error: "reference audio is not valid base64" };
   }
+  if (btoa(binary) !== raw) {
+    return { ok: false, error: "reference audio is not valid base64" };
+  }
 
+  const byteLength = binary.length;
   const minBytes = WAV_HEADER_BYTES + REFERENCE_SAMPLE_RATE * MIN_REFERENCE_SECONDS * 2;
-  if (bytes.byteLength < minBytes || bytes.byteLength > MAX_REFERENCE_WAV_BYTES) {
+  if (byteLength < minBytes || byteLength > MAX_REFERENCE_WAV_BYTES) {
     return { ok: false, error: "reference audio must contain 5–20 seconds of speech" };
   }
 
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const header = new Uint8Array(WAV_HEADER_BYTES);
+  for (let index = 0; index < WAV_HEADER_BYTES; index++) {
+    header[index] = binary.charCodeAt(index);
+  }
+  const view = new DataView(header.buffer);
   const dataBytes = view.getUint32(40, true);
   if (
     view.getUint32(0, true) !== RIFF ||
-    view.getUint32(4, true) !== bytes.byteLength - 8 ||
+    view.getUint32(4, true) !== byteLength - 8 ||
     view.getUint32(8, true) !== WAVE ||
     view.getUint32(12, true) !== FMT_ ||
     view.getUint32(16, true) !== 16 ||
@@ -104,7 +125,7 @@ function validateReferenceAudioBase64(
     view.getUint16(32, true) !== 2 ||
     view.getUint16(34, true) !== 16 ||
     view.getUint32(36, true) !== DATA ||
-    dataBytes !== bytes.byteLength - WAV_HEADER_BYTES
+    dataBytes !== byteLength - WAV_HEADER_BYTES
   ) {
     return { ok: false, error: "reference audio must be a mono 24 kHz PCM16 WAV" };
   }

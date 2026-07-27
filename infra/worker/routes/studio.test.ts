@@ -150,6 +150,42 @@ describe("studioRoute VoxCPM2 proxy", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("accepts a maximum-length reference clip and rejects miscoded base64", async () => {
+    const fetchSpy = vi.fn<
+      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+    >(async () => {
+      return new Response(new Uint8Array([82, 73, 70, 70]).slice().buffer, {
+        status: 200,
+        headers: { "Content-Type": "audio/wav" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    // A 20s clip is the ~1.28 MB body that tripped the Worker CPU limit, so it
+    // has to survive validation rather than be rejected or time out.
+    const longest = synthesisBody({ referenceAudioBase64: referenceAudioBase64(20) });
+    expect((await postSynthesis(makeEnv(), longest)).status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+
+    const tooLong = synthesisBody({ referenceAudioBase64: referenceAudioBase64(21) });
+    expect((await postSynthesis(makeEnv(), tooLong)).status).toBe(400);
+
+    // Same decoded bytes, non-canonical trailing bits: a plain charset test
+    // accepts this, so what we validated would not be what Modal decodes.
+    const nonCanonical = synthesisBody({
+      referenceAudioBase64: `${REFERENCE_AUDIO_BASE64.slice(0, -2)}B=`,
+    });
+    expect((await postSynthesis(makeEnv(), nonCanonical)).status).toBe(400);
+
+    // Whitespace keeping the length a multiple of 4, which atob decodes anyway.
+    const spaced = synthesisBody({
+      referenceAudioBase64: `${REFERENCE_AUDIO_BASE64.slice(0, 8)}    ${REFERENCE_AUDIO_BASE64.slice(8)}`,
+    });
+    expect((await postSynthesis(makeEnv(), spaced)).status).toBe(400);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
   it("sends only validated text, seed, reference audio, and proxy credentials upstream", async () => {
     const wav = new Uint8Array([82, 73, 70, 70]);
     const fetchSpy = vi.fn<
