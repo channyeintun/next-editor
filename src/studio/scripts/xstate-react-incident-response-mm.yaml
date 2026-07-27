@@ -1,0 +1,3027 @@
+# Burmese foundational course: model a production Incident Response workflow with
+# XState, connect its Actor to React, and keep activity notes in XState Store.
+# The first eight scenes teach the concepts with whiteboards. Implementation
+# starts only after the Machine, Actor/Snapshot, React hooks, and Store are clear.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/xstate-react-incident-response-mm.yaml
+schemaVersion: 1
+
+lesson:
+  slug: xstate-react-incident-response-mm
+  title: "React မှာ XState — Incident Response Workflow"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: XState Incident Response Desk
+    entryFilePath: src/main.tsx
+    files:
+      package.json: |
+        {
+          "name": "xstate-incident-response-desk",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "dependencies": {
+            "@xstate/react": "6.1.0",
+            "@xstate/store-react": "2.0.0",
+            "react": "19.2.8",
+            "react-dom": "19.2.8",
+            "xstate": "5.32.2"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      package-lock.json: |
+        {"name":"xstate-incident-response-desk","version":"1.0.0","lockfileVersion":1,"requires":true,"dependencies":{"@esbuild/aix-ppc64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.21.5.tgz","integrity":"sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==","dev":true,"optional":true},"@esbuild/android-arm":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.21.5.tgz","integrity":"sha512-vCPvzSjpPHEi1siZdlvAlsPxXl7WbOVUBBAowWug4rJHb68Ox8KualB+1ocNvT5fjv6wpkX6o/iEpbDrf68zcg==","dev":true,"optional":true},"@esbuild/android-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.21.5.tgz","integrity":"sha512-c0uX9VAUBQ7dTDCjq+wdyGLowMdtR/GoC2U5IYk/7D1H1JYC0qseD7+11iMP2mRLN9RcCMRcjC4YMclCzGwS/A==","dev":true,"optional":true},"@esbuild/android-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.21.5.tgz","integrity":"sha512-D7aPRUUNHRBwHxzxRvp856rjUHRFW1SdQATKXH2hqA0kAZb1hKmi02OpYRacl0TxIGz/ZmXWlbZgjwWYaCakTA==","dev":true,"optional":true},"@esbuild/darwin-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.21.5.tgz","integrity":"sha512-DwqXqZyuk5AiWWf3UfLiRDJ5EDd49zg6O9wclZ7kUMv2WRFr4HKjXp/5t8JZ11QbQfUS6/cRCKGwYhtNAY88kQ==","dev":true,"optional":true},"@esbuild/darwin-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.21.5.tgz","integrity":"sha512-se/JjF8NlmKVG4kNIuyWMV/22ZaerB+qaSi5MdrXtd6R08kvs2qCN4C09miupktDitvh8jRFflwGFBQcxZRjbw==","dev":true,"optional":true},"@esbuild/freebsd-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.21.5.tgz","integrity":"sha512-5JcRxxRDUJLX8JXp/wcBCy3pENnCgBR9bN6JsY4OmhfUtIHe3ZW0mawA7+RDAcMLrMIZaf03NlQiX9DGyB8h4g==","dev":true,"optional":true},"@esbuild/freebsd-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.21.5.tgz","integrity":"sha512-J95kNBj1zkbMXtHVH29bBriQygMXqoVQOQYA+ISs0/2l3T9/kj42ow2mpqerRBxDJnmkUDCaQT/dfNXWX/ZZCQ==","dev":true,"optional":true},"@esbuild/linux-arm":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.21.5.tgz","integrity":"sha512-bPb5AHZtbeNGjCKVZ9UGqGwo8EUu4cLq68E95A53KlxAPRmUyYv2D6F0uUI65XisGOL1hBP5mTronbgo+0bFcA==","dev":true,"optional":true},"@esbuild/linux-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.21.5.tgz","integrity":"sha512-ibKvmyYzKsBeX8d8I7MH/TMfWDXBF3db4qM6sy+7re0YXya+K1cem3on9XgdT2EQGMu4hQyZhan7TeQ8XkGp4Q==","dev":true,"optional":true},"@esbuild/linux-ia32":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.21.5.tgz","integrity":"sha512-YvjXDqLRqPDl2dvRODYmmhz4rPeVKYvppfGYKSNGdyZkA01046pLWyRKKI3ax8fbJoK5QbxblURkwK/MWY18Tg==","dev":true,"optional":true},"@esbuild/linux-loong64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.21.5.tgz","integrity":"sha512-uHf1BmMG8qEvzdrzAqg2SIG/02+4/DHB6a9Kbya0XDvwDEKCoC8ZRWI5JJvNdUjtciBGFQ5PuBlpEOXQj+JQSg==","dev":true,"optional":true},"@esbuild/linux-mips64el":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.21.5.tgz","integrity":"sha512-IajOmO+KJK23bj52dFSNCMsz1QP1DqM6cwLUv3W1QwyxkyIWecfafnI555fvSGqEKwjMXVLokcV5ygHW5b3Jbg==","dev":true,"optional":true},"@esbuild/linux-ppc64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.21.5.tgz","integrity":"sha512-1hHV/Z4OEfMwpLO8rp7CvlhBDnjsC3CttJXIhBi+5Aj5r+MBvy4egg7wCbe//hSsT+RvDAG7s81tAvpL2XAE4w==","dev":true,"optional":true},"@esbuild/linux-riscv64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.21.5.tgz","integrity":"sha512-2HdXDMd9GMgTGrPWnJzP2ALSokE/0O5HhTUvWIbD3YdjME8JwvSCnNGBnTThKGEB91OZhzrJ4qIIxk/SBmyDDA==","dev":true,"optional":true},"@esbuild/linux-s390x":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.21.5.tgz","integrity":"sha512-zus5sxzqBJD3eXxwvjN1yQkRepANgxE9lgOW2qLnmr8ikMTphkjgXu1HR01K4FJg8h1kEEDAqDcZQtbrRnB41A==","dev":true,"optional":true},"@esbuild/linux-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.21.5.tgz","integrity":"sha512-1rYdTpyv03iycF1+BhzrzQJCdOuAOtaqHTWJZCWvijKD2N5Xu0TtVC8/+1faWqcP9iBCWOmjmhoH94dH82BxPQ==","dev":true,"optional":true},"@esbuild/netbsd-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.21.5.tgz","integrity":"sha512-Woi2MXzXjMULccIwMnLciyZH4nCIMpWQAs049KEeMvOcNADVxo0UBIQPfSmxB3CWKedngg7sWZdLvLczpe0tLg==","dev":true,"optional":true},"@esbuild/openbsd-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.21.5.tgz","integrity":"sha512-HLNNw99xsvx12lFBUwoT8EVCsSvRNDVxNpjZ7bPn947b8gJPzeHWyNVhFsaerc0n3TsbOINvRP2byTZ5LKezow==","dev":true,"optional":true},"@esbuild/sunos-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.21.5.tgz","integrity":"sha512-6+gjmFpfy0BHU5Tpptkuh8+uw3mnrvgs+dSPQXQOv3ekbordwnzTVEb4qnIvQcYXq6gzkyTnoZ9dZG+D4garKg==","dev":true,"optional":true},"@esbuild/win32-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.21.5.tgz","integrity":"sha512-Z0gOTd75VvXqyq7nsl93zwahcTROgqvuAcYDUr+vOv8uHhNSKROyU961kgtCD1e95IqPKSQKH7tBTslnS3tA8A==","dev":true,"optional":true},"@esbuild/win32-ia32":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.21.5.tgz","integrity":"sha512-SWXFF1CL2RVNMaVs+BBClwtfZSvDgtL//G/smwAc5oVK/UPu2Gu9tIaRgFmYFFKrmg3SyAjSrElf0TiJ1v8fYA==","dev":true,"optional":true},"@esbuild/win32-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.21.5.tgz","integrity":"sha512-tQd/1efJuzPC6rCFwEvLtci/xNFcTZknmXs98FYDfGE4wP9ClFV98nyKrzJKVPMhdDnjzLhdUyMX4PsQAPjwIw==","dev":true,"optional":true},"@rollup/rollup-android-arm-eabi":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-android-arm-eabi/-/rollup-android-arm-eabi-4.62.2.tgz","integrity":"sha512-6o7ZLZK+BeenkZCFNDXqpbjw9bD6nuWonvS/lwQJp7NoVVxm6p3qE7qQ5jGuBjiFsgvqjD8mZAU5oWxTmbOeOg==","dev":true,"optional":true},"@rollup/rollup-android-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-android-arm64/-/rollup-android-arm64-4.62.2.tgz","integrity":"sha512-BaH7BllCACHoH1LguOU56UItGfUWjujlO65kS9LAodViaN4bwIKd7oeW/ZHJ/4ljr/7MIiENnNy3HJ0zXv8Zkw==","dev":true,"optional":true},"@rollup/rollup-darwin-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-darwin-arm64/-/rollup-darwin-arm64-4.62.2.tgz","integrity":"sha512-v39RCCvj4He82I9sFmk+M1VZ0PLM9sfsLVikjfx2hYBNALhrrOR2D3JjQA6AhlaSOgcR+RzrKY7e1+bT6SUO/A==","dev":true,"optional":true},"@rollup/rollup-darwin-x64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-darwin-x64/-/rollup-darwin-x64-4.62.2.tgz","integrity":"sha512-yl0y2vq3S3lHeuXhEdss6TWfKW8vkujImO12tn4ZkG/4oghr09LvdYm2RElVjokTQiUvDUGXLGsYeLqUMCKpGA==","dev":true,"optional":true},"@rollup/rollup-freebsd-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-freebsd-arm64/-/rollup-freebsd-arm64-4.62.2.tgz","integrity":"sha512-tT4pvt4qXD+vEoezupCWi+a1F0vvDiksiHc+PxRlYTOH1I6/X4id9jPxTP+Fg+545euaFT1jJVs4CEdHZAU1vw==","dev":true,"optional":true},"@rollup/rollup-freebsd-x64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-freebsd-x64/-/rollup-freebsd-x64-4.62.2.tgz","integrity":"sha512-6nU5F2wCW+qvCBhTn1pdIU3bzsIoF7EUwsCDRxilWGprQR6yd508YnH9+OKFCwpfS8pjZqDUmnCAr7exax0XCg==","dev":true,"optional":true},"@rollup/rollup-linux-arm-gnueabihf":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm-gnueabihf/-/rollup-linux-arm-gnueabihf-4.62.2.tgz","integrity":"sha512-n1GJHPOvpIfhi3TmrCeh6S6URt9BFCt0KQE3qvexyGCTAKpR4Lg+eWvNZEqu7epxwus/8ElT3hacYEucm49SZg==","dev":true,"optional":true},"@rollup/rollup-linux-arm-musleabihf":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm-musleabihf/-/rollup-linux-arm-musleabihf-4.62.2.tgz","integrity":"sha512-JqgflS8wEB+UXV/vS1RpRbifGBeN4D5lz8D8oOFbFZw4vedvdOgCFAjfBmIMdW3yL10XpQQ0Ambepw6MXrhOnA==","dev":true,"optional":true},"@rollup/rollup-linux-arm64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm64-gnu/-/rollup-linux-arm64-gnu-4.62.2.tgz","integrity":"sha512-wnFJkogWvN4jm/hQRF2UBaeUmk20j5+DmHvoyWii2b8HJDyvz1MF2OU/6ynXt2KR63rbZLWkFpoytpdc/yBuSA==","dev":true,"optional":true},"@rollup/rollup-linux-arm64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm64-musl/-/rollup-linux-arm64-musl-4.62.2.tgz","integrity":"sha512-HVu2bp0zhvJ8xHEV9+UUs7S90VadmBSY3LcIMvozbPo4AuMGDWlz3ymHLHZPX4hR67TKTt8Qp5PJ5RBg/i+RMQ==","dev":true,"optional":true},"@rollup/rollup-linux-loong64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-loong64-gnu/-/rollup-linux-loong64-gnu-4.62.2.tgz","integrity":"sha512-mQqqAV8QaoSgr9I2fKDLY2BAVvmKjWoGiu/cSYQonsLvtqwEn1E4QYfnCOcp5zoEqNhsDYin1s6jx/VJmrxlZg==","dev":true,"optional":true},"@rollup/rollup-linux-loong64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-loong64-musl/-/rollup-linux-loong64-musl-4.62.2.tgz","integrity":"sha512-IxKLoxCQ2IWi6bT2akyDUBGsOImDKB+sPp4EsTmwFQ/fMwpCKm8uLSSgP/Kx/QYUgKis6SEZ5/Nlhup0DIA0PQ==","dev":true,"optional":true},"@rollup/rollup-linux-ppc64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-ppc64-gnu/-/rollup-linux-ppc64-gnu-4.62.2.tgz","integrity":"sha512-Mk5ha2RQSgyFfmYYLkBpPnUk8D8FriBxesO1u9O75X0mHgXL1UQcH5Itl2lurWL2tj0RxV9b9tJgipac0hRY9A==","dev":true,"optional":true},"@rollup/rollup-linux-ppc64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-ppc64-musl/-/rollup-linux-ppc64-musl-4.62.2.tgz","integrity":"sha512-CjvEnqJL/0/TQ3TXX3OPIJ/kmBellrWd4heXUmHeJlTnmwjKpSJzoehLaL6Xk0ZnMHBu9dZuFADNOrtjF4v+2w==","dev":true,"optional":true},"@rollup/rollup-linux-riscv64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-riscv64-gnu/-/rollup-linux-riscv64-gnu-4.62.2.tgz","integrity":"sha512-1SiZbzwdkaDURsew/tSOrooKiYy7EQGT6m8ufavAi9NEyQb/6VuIxFXAL1fqa4iZe3g4NbNk4P7J32z2tw5Mgg==","dev":true,"optional":true},"@rollup/rollup-linux-riscv64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-riscv64-musl/-/rollup-linux-riscv64-musl-4.62.2.tgz","integrity":"sha512-nQts12zJ3NQRoE6uYljOH89v7szzLDvG2JD/vsX+vGXU8w/At1GowTZ5/7qeFQ8m7L55rpR8Okugnuo5bgjy2Q==","dev":true,"optional":true},"@rollup/rollup-linux-s390x-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-s390x-gnu/-/rollup-linux-s390x-gnu-4.62.2.tgz","integrity":"sha512-E9/ll019jhPIJgpzfZoIkBGhcz+kKNgVWYRY0zr9srBdPPFVpvOKW8VaJKUbeK+eZXyQF9ltME+Kk6affeaPgg==","dev":true,"optional":true},"@rollup/rollup-linux-x64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.62.2.tgz","integrity":"sha512-5BqxR/pshjey51iliyzTD5Xi3EN0aLmQ2lZ3lvefVV9c82BvrLo2/6OT55iifpWBufs6kdwWbuOKS841DrmK9A==","dev":true,"optional":true},"@rollup/rollup-linux-x64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-x64-musl/-/rollup-linux-x64-musl-4.62.2.tgz","integrity":"sha512-uNN83XxQrRAh/w0/pmAfibcwyb6YWt4gP+dpnQKPVJshAloQ785ii8CT8ZCIxkGg9opVsvAlGhFitSm6D1Jjpg==","dev":true,"optional":true},"@rollup/rollup-openbsd-x64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-openbsd-x64/-/rollup-openbsd-x64-4.62.2.tgz","integrity":"sha512-srjEIxSH3LRnJN6THczDHWQplqEMFiAJrTab0msUryh9kwNpkICf3Ea6q6MN/2cZwRFUNx5w+h6Hpi4QuHS6Zg==","dev":true,"optional":true},"@rollup/rollup-openharmony-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-openharmony-arm64/-/rollup-openharmony-arm64-4.62.2.tgz","integrity":"sha512-8hOJnxgbyObnCm5AlRA3A931xX19xq80RjVTKgJOvEKWqJruP/Uf12IbAOaDjjEXYRewwHLfmF0YRIdK3OwKWA==","dev":true,"optional":true},"@rollup/rollup-win32-arm64-msvc":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-arm64-msvc/-/rollup-win32-arm64-msvc-4.62.2.tgz","integrity":"sha512-mmF4AY1i0hG/bLWUctUq59gtmgaSIRa3cu/A3JFRp/sCNEme2bgDEiDS22P9FbnJB8NJNF4jPJiSP5RHQpUTDg==","dev":true,"optional":true},"@rollup/rollup-win32-ia32-msvc":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-ia32-msvc/-/rollup-win32-ia32-msvc-4.62.2.tgz","integrity":"sha512-DZgkknc6jhHrk46V25vbAM0zZkyP0nSDkJB8/dRkLTxv470dOmWDqGoEJl/9A0dFfS7yE3REOwNDxpHwSLSt0Q==","dev":true,"optional":true},"@rollup/rollup-win32-x64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-x64-gnu/-/rollup-win32-x64-gnu-4.62.2.tgz","integrity":"sha512-T6xr6ucWSFto+VGajA8YH26LdpHRuP4YLHEKAtCWvJDOlnmWcDZVCI2Jmjr+IFHDlt2zRaTAKE4tfjTaWLgJBg==","dev":true,"optional":true},"@rollup/rollup-win32-x64-msvc":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.62.2.tgz","integrity":"sha512-BfzEnDJOt9T8M989/lA37EcJgat01wLRnoi5dQf3QzOH7jzpqTAzdDbVfRljVr5r+jzKqpbHeyOfAaXxAd0PAA==","dev":true,"optional":true},"@types/estree":{"version":"1.0.9","resolved":"https://registry.npmjs.org/@types/estree/-/estree-1.0.9.tgz","integrity":"sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==","dev":true},"esbuild":{"version":"0.21.5","resolved":"https://registry.npmjs.org/esbuild/-/esbuild-0.21.5.tgz","integrity":"sha512-mg3OPMV4hXywwpoDxu3Qda5xCKQi+vCTZq8S9J/EpkhB2HzKXq4SNFZE3+NK93JYxc8VMSep+lOUSC/RVKaBqw==","dev":true,"requires":{"@esbuild/aix-ppc64":"0.21.5","@esbuild/android-arm":"0.21.5","@esbuild/android-arm64":"0.21.5","@esbuild/android-x64":"0.21.5","@esbuild/darwin-arm64":"0.21.5","@esbuild/darwin-x64":"0.21.5","@esbuild/freebsd-arm64":"0.21.5","@esbuild/freebsd-x64":"0.21.5","@esbuild/linux-arm":"0.21.5","@esbuild/linux-arm64":"0.21.5","@esbuild/linux-ia32":"0.21.5","@esbuild/linux-loong64":"0.21.5","@esbuild/linux-mips64el":"0.21.5","@esbuild/linux-ppc64":"0.21.5","@esbuild/linux-riscv64":"0.21.5","@esbuild/linux-s390x":"0.21.5","@esbuild/linux-x64":"0.21.5","@esbuild/netbsd-x64":"0.21.5","@esbuild/openbsd-x64":"0.21.5","@esbuild/sunos-x64":"0.21.5","@esbuild/win32-arm64":"0.21.5","@esbuild/win32-ia32":"0.21.5","@esbuild/win32-x64":"0.21.5"}},"fsevents":{"version":"2.3.3","resolved":"https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz","integrity":"sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==","dev":true,"optional":true},"nanoid":{"version":"3.3.16","resolved":"https://registry.npmjs.org/nanoid/-/nanoid-3.3.16.tgz","integrity":"sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==","dev":true},"picocolors":{"version":"1.1.1","resolved":"https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz","integrity":"sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==","dev":true},"postcss":{"version":"8.5.21","resolved":"https://registry.npmjs.org/postcss/-/postcss-8.5.21.tgz","integrity":"sha512-v4sDNP3fdNiWMfabO7OwOQdOX8TiQSztKyT1Wj0w+j7LDallJThJRBBBmzVGyYj0crMh7jlV4zepPkiNu9UwDQ==","dev":true,"requires":{"nanoid":"^3.3.16","picocolors":"^1.1.1","source-map-js":"^1.2.1"}},"rollup":{"version":"4.62.2","resolved":"https://registry.npmjs.org/rollup/-/rollup-4.62.2.tgz","integrity":"sha512-RFnrW4lhXA3s3eqHDZvN654g8OTjzRfqpIRJYczCGB6HzphckVAi/Qh4tbPUbRuDi7s1Llv8g/NspLkttY3gTA==","dev":true,"requires":{"@rollup/rollup-android-arm-eabi":"4.62.2","@rollup/rollup-android-arm64":"4.62.2","@rollup/rollup-darwin-arm64":"4.62.2","@rollup/rollup-darwin-x64":"4.62.2","@rollup/rollup-freebsd-arm64":"4.62.2","@rollup/rollup-freebsd-x64":"4.62.2","@rollup/rollup-linux-arm-gnueabihf":"4.62.2","@rollup/rollup-linux-arm-musleabihf":"4.62.2","@rollup/rollup-linux-arm64-gnu":"4.62.2","@rollup/rollup-linux-arm64-musl":"4.62.2","@rollup/rollup-linux-loong64-gnu":"4.62.2","@rollup/rollup-linux-loong64-musl":"4.62.2","@rollup/rollup-linux-ppc64-gnu":"4.62.2","@rollup/rollup-linux-ppc64-musl":"4.62.2","@rollup/rollup-linux-riscv64-gnu":"4.62.2","@rollup/rollup-linux-riscv64-musl":"4.62.2","@rollup/rollup-linux-s390x-gnu":"4.62.2","@rollup/rollup-linux-x64-gnu":"4.62.2","@rollup/rollup-linux-x64-musl":"4.62.2","@rollup/rollup-openbsd-x64":"4.62.2","@rollup/rollup-openharmony-arm64":"4.62.2","@rollup/rollup-win32-arm64-msvc":"4.62.2","@rollup/rollup-win32-ia32-msvc":"4.62.2","@rollup/rollup-win32-x64-gnu":"4.62.2","@rollup/rollup-win32-x64-msvc":"4.62.2","@types/estree":"1.0.9","fsevents":"~2.3.2"}},"source-map-js":{"version":"1.2.1","resolved":"https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz","integrity":"sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==","dev":true},"vite":{"version":"5.4.21","resolved":"https://registry.npmjs.org/vite/-/vite-5.4.21.tgz","integrity":"sha512-o5a9xKjbtuhY6Bi5S3+HvbRERmouabWbyUcpXXUA1u+GNUKoROi9byOJ8M0nHbHYHkYICiMlqxkg1KkYmm25Sw==","dev":true,"requires":{"esbuild":"^0.21.3","fsevents":"~2.3.3","postcss":"^8.4.43","rollup":"^4.20.0"}},"@xstate/react":{"version":"6.1.0","resolved":"https://registry.npmjs.org/@xstate/react/-/react-6.1.0.tgz","integrity":"sha512-ep9F0jGTI63B/jE8GHdMpUqtuz7yRebNaKv8EMUaiSi29NOglywc2X2YSOV/ygbIK+LtmgZ0q9anoEA2iBSEOw==","requires":{"use-isomorphic-layout-effect":"^1.1.2","use-sync-external-store":"^1.2.0"}},"@xstate/store":{"version":"4.1.0","resolved":"https://registry.npmjs.org/@xstate/store/-/store-4.1.0.tgz","integrity":"sha512-r6wDC2Tk1VIe99gVb8VgmV3ZoIMfFpJ0HK8hVYDUIPfCQqfYbsz7vscakE9NWWb/oVpvXNNMH35ioITTplCTDw=="},"@xstate/store-react":{"version":"2.0.0","resolved":"https://registry.npmjs.org/@xstate/store-react/-/store-react-2.0.0.tgz","integrity":"sha512-i8rXkUHfZqHUijgA/IORXDESAuHwO939jHIsEtf3nitJkOy1AcZ73DMaAlLqH03nVS082PJkUZFRAu5nwb9Fxg==","requires":{"@xstate/store":"^4.0.0"}},"react":{"version":"19.2.8","resolved":"https://registry.npmjs.org/react/-/react-19.2.8.tgz","integrity":"sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw=="},"react-dom":{"version":"19.2.8","resolved":"https://registry.npmjs.org/react-dom/-/react-dom-19.2.8.tgz","integrity":"sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ==","requires":{"scheduler":"^0.27.0"}},"scheduler":{"version":"0.27.0","resolved":"https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz","integrity":"sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q=="},"use-isomorphic-layout-effect":{"version":"1.2.1","resolved":"https://registry.npmjs.org/use-isomorphic-layout-effect/-/use-isomorphic-layout-effect-1.2.1.tgz","integrity":"sha512-tpZZ+EX0gaghDAiFR37hj5MgY6ZN55kLiPkJsKxBMZ6GZdOSPJXiOzPM984oPYZ5AnehYx5WQp1+ME8I/P/pRA=="},"use-sync-external-store":{"version":"1.6.0","resolved":"https://registry.npmjs.org/use-sync-external-store/-/use-sync-external-store-1.6.0.tgz","integrity":"sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w=="},"xstate":{"version":"5.32.2","resolved":"https://registry.npmjs.org/xstate/-/xstate-5.32.2.tgz","integrity":"sha512-uDrojEQYYb4cEeB/SpKDBQlnL2969N5ltmVak4jUMUC6VVRuhi7PCnTBxe4YlQ8YLzdaOEOuVR48CRQPE2o0Uw=="}}}
+      index.html: |
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <meta name="theme-color" content="#07111f" />
+            <title>Incident Response Desk</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <script type="module" src="/src/main.tsx"></script>
+          </body>
+        </html>
+      src/main.tsx: |
+        import React from "react";
+        import { createRoot } from "react-dom/client";
+        import { assign, fromPromise, setup } from "xstate";
+        import { useMachine } from "@xstate/react";
+        import {
+          createStore,
+          useSelector as useStoreSelector,
+        } from "@xstate/store-react";
+        import "./styles.css";
+
+        type IncidentEvent =
+          | { type: "ACKNOWLEDGE" }
+          | { type: "APPLY_MITIGATION" }
+          | { type: "VERIFY" }
+          | { type: "REGRESS" }
+          | { type: "RESOLVE" };
+
+        // MACHINE_IMPLEMENTATION
+
+        const activityStore = createStore({
+          context: {
+            draft: "",
+            notes: ["Pager opened the P1 incident."] as string[],
+          },
+          on: {
+            // STORE_TRANSITIONS
+          },
+        });
+
+        const stateLabels: Record<string, string> = {
+          reported: "Reported",
+          investigating: "Investigating",
+          mitigating: "Mitigating",
+          monitoring: "Monitoring",
+          resolved: "Resolved",
+        };
+
+        const workflow = [
+          "reported",
+          "investigating",
+          "mitigating",
+          "monitoring",
+          "resolved",
+        ];
+
+        function IncidentApp() {
+          // REACT_BINDINGS
+
+          const state = String(snapshot.value);
+          const stableChecks = snapshot.context.stableChecks;
+
+          return (
+            <main className="shell">
+              <header className="hero">
+                <div>
+                  <p className="eyebrow">P1 INCIDENT · CHECKOUT API</p>
+                  <h1>Incident Response Desk</h1>
+                  <p className="subtitle">
+                    A clear incident workflow with separate activity notes.
+                  </p>
+                </div>
+                <output
+                  className={`status status-${state}`}
+                  data-testid="incident-state"
+                  data-state={state}
+                >
+                  {stateLabels[state]}
+                </output>
+              </header>
+
+              <section className="workflow" aria-label="Incident workflow">
+                {workflow.map((step, index) => (
+                  <React.Fragment key={step}>
+                    <div
+                      className="state-card"
+                      data-active={state === step}
+                      data-complete={workflow.indexOf(state) > index}
+                    >
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <strong>{stateLabels[step]}</strong>
+                    </div>
+                    {index < workflow.length - 1 && <span className="connector">→</span>}
+                  </React.Fragment>
+                ))}
+              </section>
+
+              <div className="grid">
+                <section className="panel">
+                  <div className="panel-heading">
+                    <div>
+                      <p className="kicker">STATE MACHINE</p>
+                      <h2>Workflow controls</h2>
+                    </div>
+                    <span className="actor-chip">Actor running</span>
+                  </div>
+
+                  <div className="actions">
+                    <button
+                      data-testid="acknowledge-button"
+                      disabled={!snapshot.can({ type: "ACKNOWLEDGE" })}
+                      onClick={() => send({ type: "ACKNOWLEDGE" })}
+                    >
+                      Acknowledge
+                    </button>
+                    <button
+                      data-testid="mitigate-button"
+                      disabled={!snapshot.can({ type: "APPLY_MITIGATION" })}
+                      onClick={() => send({ type: "APPLY_MITIGATION" })}
+                    >
+                      Apply mitigation
+                    </button>
+                    <button
+                      data-testid="verify-button"
+                      disabled={!snapshot.can({ type: "VERIFY" })}
+                      onClick={() => send({ type: "VERIFY" })}
+                    >
+                      Record stable check
+                    </button>
+                    <button
+                      data-testid="regress-button"
+                      disabled={!snapshot.can({ type: "REGRESS" })}
+                      onClick={() => send({ type: "REGRESS" })}
+                    >
+                      Report regression
+                    </button>
+                    <button
+                      className="resolve"
+                      data-testid="resolve-button"
+                      aria-disabled={!snapshot.can({ type: "RESOLVE" })}
+                      disabled={!snapshot.can({ type: "RESOLVE" })}
+                      onClick={() => send({ type: "RESOLVE" })}
+                    >
+                      Resolve incident
+                    </button>
+                  </div>
+
+                  <div className="guard-card">
+                    <div>
+                      <span className="guard-label">GUARD</span>
+                      <strong>stableChecks ≥ 2</strong>
+                    </div>
+                    <div className="verification">
+                      <output data-testid="mitigation-id">
+                        {snapshot.context.mitigationId ?? "No mitigation yet"}
+                      </output>
+                      <output data-testid="check-count">{stableChecks} / 2 stable checks</output>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="panel-heading">
+                    <div>
+                      <p className="kicker store">XSTATE STORE</p>
+                      <h2>Activity notes</h2>
+                    </div>
+                    <span className="store-chip">{notes.length} notes</span>
+                  </div>
+
+                  <label htmlFor="activity-note">Operator note</label>
+                  <div className="note-composer">
+                    <input
+                      id="activity-note"
+                      data-testid="note-input"
+                      value={draft}
+                      onChange={(event) =>
+                        activityStore.trigger.changeDraft({ value: event.target.value })
+                      }
+                      placeholder="What changed?"
+                    />
+                    <button
+                      data-testid="add-note-button"
+                      disabled={!draft.trim()}
+                      onClick={() => activityStore.trigger.addNote()}
+                    >
+                      Add note
+                    </button>
+                  </div>
+
+                  <ul className="activity-list" data-testid="activity-list">
+                    {notes.map((note, index) => (
+                      <li key={`${note}-${index}`}>
+                        <span>{String(index + 1).padStart(2, "0")}</span>
+                        {note}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+            </main>
+          );
+        }
+
+        const root = document.getElementById("root");
+
+        if (!root) {
+          throw new Error("Missing React root");
+        }
+
+        createRoot(root).render(
+          <React.StrictMode>
+            <IncidentApp />
+          </React.StrictMode>,
+        );
+      src/styles.css: |
+        :root {
+          font-family:
+            Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+            "Segoe UI", sans-serif;
+          color: #e8f0ff;
+          background: #07111f;
+          font-synthesis: none;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          min-width: 320px;
+          min-height: 100vh;
+          background:
+            radial-gradient(circle at 15% 10%, rgba(124, 58, 237, 0.24), transparent 28rem),
+            radial-gradient(circle at 85% 20%, rgba(14, 165, 233, 0.18), transparent 26rem),
+            #07111f;
+        }
+
+        button,
+        input {
+          font: inherit;
+        }
+
+        button {
+          border: 1px solid #334766;
+          border-radius: 12px;
+          padding: 0.72rem 0.9rem;
+          color: #dce8fb;
+          background: #14243a;
+          cursor: pointer;
+          transition:
+            transform 150ms ease,
+            border-color 150ms ease,
+            background 150ms ease;
+        }
+
+        button:hover:not(:disabled) {
+          transform: translateY(-1px);
+          border-color: #60a5fa;
+          background: #1b3150;
+        }
+
+        button:disabled {
+          cursor: not-allowed;
+          opacity: 0.34;
+        }
+
+        .shell {
+          width: min(1120px, calc(100% - 2rem));
+          margin: 0 auto;
+          padding: 2.5rem 0 3rem;
+        }
+
+        .hero {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 2rem;
+          margin-bottom: 1.6rem;
+        }
+
+        .eyebrow,
+        .kicker {
+          margin: 0 0 0.45rem;
+          color: #a78bfa;
+          font-size: 0.74rem;
+          font-weight: 800;
+          letter-spacing: 0.16em;
+        }
+
+        h1,
+        h2,
+        p {
+          margin-top: 0;
+        }
+
+        h1 {
+          margin-bottom: 0.45rem;
+          font-size: clamp(2rem, 5vw, 3.4rem);
+          line-height: 1;
+          letter-spacing: -0.05em;
+        }
+
+        h2 {
+          margin-bottom: 0;
+          font-size: 1.25rem;
+        }
+
+        .subtitle {
+          margin-bottom: 0;
+          color: #8fa5c4;
+        }
+
+        .status {
+          border: 1px solid;
+          border-radius: 999px;
+          padding: 0.65rem 1rem;
+          font-weight: 800;
+          box-shadow: 0 0 30px rgba(96, 165, 250, 0.12);
+        }
+
+        .status-reported {
+          color: #fda4af;
+          border-color: #be123c;
+          background: rgba(190, 18, 60, 0.16);
+        }
+
+        .status-investigating {
+          color: #d8b4fe;
+          border-color: #7e22ce;
+          background: rgba(126, 34, 206, 0.16);
+        }
+
+        .status-mitigating {
+          color: #fde68a;
+          border-color: #b45309;
+          background: rgba(180, 83, 9, 0.16);
+        }
+
+        .status-monitoring {
+          color: #7dd3fc;
+          border-color: #0369a1;
+          background: rgba(3, 105, 161, 0.16);
+        }
+
+        .status-resolved {
+          color: #86efac;
+          border-color: #15803d;
+          background: rgba(21, 128, 61, 0.16);
+        }
+
+        .workflow {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 1.25rem;
+        }
+
+        .state-card {
+          display: flex;
+          flex: 1;
+          align-items: center;
+          gap: 0.6rem;
+          min-height: 64px;
+          border: 1px solid #253a58;
+          border-radius: 14px;
+          padding: 0.8rem;
+          color: #7f94b2;
+          background: rgba(13, 29, 49, 0.82);
+        }
+
+        .state-card span {
+          color: #536b8e;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 0.75rem;
+        }
+
+        .state-card[data-active="true"] {
+          color: #f8fbff;
+          border-color: #60a5fa;
+          background: linear-gradient(135deg, rgba(37, 99, 235, 0.25), rgba(124, 58, 237, 0.2));
+          box-shadow: 0 0 24px rgba(96, 165, 250, 0.16);
+        }
+
+        .state-card[data-complete="true"] {
+          color: #86efac;
+          border-color: #166534;
+        }
+
+        .connector {
+          color: #4d668a;
+          font-size: 1.25rem;
+        }
+
+        .grid {
+          display: grid;
+          grid-template-columns: 1.08fr 0.92fr;
+          gap: 1.25rem;
+        }
+
+        .panel {
+          border: 1px solid #213755;
+          border-radius: 20px;
+          padding: 1.25rem;
+          background: rgba(10, 24, 42, 0.9);
+          box-shadow: 0 22px 70px rgba(0, 0, 0, 0.24);
+        }
+
+        .panel-heading {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 1rem;
+          margin-bottom: 1.25rem;
+        }
+
+        .kicker.store {
+          color: #22d3ee;
+        }
+
+        .actor-chip,
+        .store-chip {
+          border-radius: 999px;
+          padding: 0.4rem 0.65rem;
+          font-size: 0.72rem;
+          font-weight: 800;
+        }
+
+        .actor-chip {
+          color: #c4b5fd;
+          background: rgba(124, 58, 237, 0.22);
+        }
+
+        .store-chip {
+          color: #67e8f9;
+          background: rgba(8, 145, 178, 0.2);
+        }
+
+        .actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.7rem;
+        }
+
+        .actions .resolve {
+          color: #bbf7d0;
+          border-color: #166534;
+          background: rgba(21, 128, 61, 0.18);
+        }
+
+        .guard-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          margin-top: 1rem;
+          border: 1px solid #92400e;
+          border-radius: 14px;
+          padding: 0.9rem;
+          background: rgba(146, 64, 14, 0.13);
+        }
+
+        .guard-card strong {
+          display: block;
+          margin-top: 0.25rem;
+        }
+
+        .guard-label {
+          color: #fbbf24;
+          font-size: 0.7rem;
+          font-weight: 900;
+          letter-spacing: 0.14em;
+        }
+
+        .guard-card output {
+          color: #fcd34d;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 0.8rem;
+        }
+
+        .verification {
+          display: grid;
+          gap: 0.3rem;
+          text-align: right;
+        }
+
+        label {
+          display: block;
+          margin-bottom: 0.45rem;
+          color: #9fb1ca;
+          font-size: 0.8rem;
+          font-weight: 700;
+        }
+
+        .note-composer {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 0.6rem;
+        }
+
+        input {
+          min-width: 0;
+          border: 1px solid #2c4364;
+          border-radius: 12px;
+          padding: 0.72rem 0.85rem;
+          color: #eff6ff;
+          outline: none;
+          background: #0b1a2d;
+        }
+
+        input:focus {
+          border-color: #22d3ee;
+          box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1);
+        }
+
+        .activity-list {
+          display: grid;
+          gap: 0.6rem;
+          max-height: 220px;
+          margin: 1rem 0 0;
+          padding: 0;
+          overflow: auto;
+          list-style: none;
+        }
+
+        .activity-list li {
+          display: flex;
+          gap: 0.7rem;
+          border-left: 2px solid #0891b2;
+          border-radius: 0 10px 10px 0;
+          padding: 0.7rem;
+          color: #cbd8ea;
+          background: rgba(8, 145, 178, 0.08);
+        }
+
+        .activity-list span {
+          color: #22d3ee;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 0.72rem;
+        }
+
+        @media (max-width: 820px) {
+          .hero {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .status {
+            align-self: flex-start;
+          }
+
+          .workflow {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .connector {
+            display: none;
+          }
+
+          .grid {
+            grid-template-columns: 1fr;
+          }
+        }
+  whiteboardAssets:
+    # Board 0 — boolean combinations versus one explicit finite state.
+    - id: why-title
+      kind: text
+      x: 370
+      y: 160
+      width: 600
+      height: 46
+      text: "WHY MODEL STATE?"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: booleans-box
+      kind: rectangle
+      x: 275
+      y: 255
+      width: 330
+      height: 235
+      strokeColor: "#e03131"
+      backgroundColor: "#fff5f5"
+    - id: booleans-heading
+      kind: text
+      x: 320
+      y: 280
+      width: 240
+      height: 34
+      text: "BOOLEAN FLAGS"
+      strokeColor: "#c92a2a"
+      fontSize: 25
+    - id: booleans-body
+      kind: text
+      x: 320
+      y: 340
+      width: 245
+      height: 125
+      text: "isReported = true\nisInvestigating = true\nisMonitoring = true\nisResolved = false"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: invalid-circle
+      kind: freedraw
+      stroke: circle
+      x: 300
+      y: 328
+      width: 285
+      height: 105
+      strokeColor: "#e03131"
+    - id: model-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 620
+      y: 345
+      width: 100
+      height: 30
+      strokeColor: "#7048e8"
+    - id: state-value-box
+      kind: rectangle
+      x: 735
+      y: 285
+      width: 330
+      height: 175
+      strokeColor: "#2f9e44"
+      backgroundColor: "#ebfbee"
+    - id: state-value-heading
+      kind: text
+      x: 790
+      y: 315
+      width: 220
+      height: 34
+      text: "FINITE STATE"
+      strokeColor: "#2b8a3e"
+      fontSize: 25
+    - id: state-value-body
+      kind: text
+      x: 775
+      y: 380
+      width: 250
+      height: 42
+      text: 'state = "monitoring"'
+      strokeColor: "#1e1e1e"
+      fontSize: 24
+    - id: invalid-rule
+      kind: text
+      x: 350
+      y: 515
+      width: 650
+      height: 34
+      text: "State value တစ်ခုတည်းဆို မဖြစ်နိုင်တဲ့အတွဲ မပေါ်တော့ဘူး"
+      strokeColor: "#7048e8"
+      fontSize: 24
+    - id: course-map-box
+      kind: rectangle
+      x: 300
+      y: 570
+      width: 750
+      height: 58
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: course-map-label
+      kind: text
+      x: 330
+      y: 587
+      width: 690
+      height: 28
+      text: "STATE MODEL  →  ACTOR  →  REACT HOOKS  →  XSTATE STORE"
+      strokeColor: "#1971c2"
+      fontSize: 21
+
+    # Board 1 — real-world Incident Response domain model.
+    - id: domain-title
+      kind: text
+      x: 300
+      y: 160
+      width: 760
+      height: 46
+      text: "INCIDENT RESPONSE — model the workflow first"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: domain-subtitle
+      kind: text
+      x: 390
+      y: 215
+      width: 580
+      height: 30
+      text: "Finite State + Event → Transition"
+      strokeColor: "#7048e8"
+      fontSize: 23
+    - id: reported-box
+      kind: rectangle
+      x: 250
+      y: 320
+      width: 145
+      height: 115
+      strokeColor: "#e03131"
+      backgroundColor: "#fff5f5"
+    - id: reported-label
+      kind: text
+      x: 263
+      y: 348
+      width: 120
+      height: 34
+      text: "REPORTED"
+      strokeColor: "#c92a2a"
+      fontSize: 21
+    - id: reported-note
+      kind: text
+      x: 265
+      y: 392
+      width: 115
+      height: 24
+      text: "Pager fires"
+      strokeColor: "#495057"
+      fontSize: 17
+    - id: arrow-one
+      kind: freedraw
+      stroke: arrow-right
+      x: 395
+      y: 364
+      width: 45
+      height: 24
+      strokeColor: "#f08c00"
+    - id: event-one
+      kind: text
+      x: 382
+      y: 288
+      width: 75
+      height: 30
+      text: "ACK"
+      strokeColor: "#f08c00"
+      fontSize: 16
+    - id: investigating-box
+      kind: rectangle
+      x: 440
+      y: 320
+      width: 165
+      height: 115
+      strokeColor: "#7048e8"
+      backgroundColor: "#f3f0ff"
+    - id: investigating-label
+      kind: text
+      x: 449
+      y: 348
+      width: 147
+      height: 34
+      text: "INVESTIGATING"
+      strokeColor: "#6741d9"
+      fontSize: 19
+    - id: investigating-note
+      kind: text
+      x: 463
+      y: 392
+      width: 120
+      height: 24
+      text: "Find cause"
+      strokeColor: "#495057"
+      fontSize: 17
+    - id: arrow-two
+      kind: freedraw
+      stroke: arrow-right
+      x: 605
+      y: 364
+      width: 45
+      height: 24
+      strokeColor: "#1971c2"
+    - id: event-two
+      kind: text
+      x: 595
+      y: 288
+      width: 70
+      height: 30
+      text: "APPLY"
+      strokeColor: "#1971c2"
+      fontSize: 17
+    - id: mitigating-box
+      kind: rectangle
+      x: 650
+      y: 320
+      width: 145
+      height: 115
+      strokeColor: "#f08c00"
+      backgroundColor: "#fff4e6"
+    - id: mitigating-label
+      kind: text
+      x: 660
+      y: 348
+      width: 125
+      height: 34
+      text: "MITIGATING"
+      strokeColor: "#e67700"
+      fontSize: 20
+    - id: mitigating-note
+      kind: text
+      x: 665
+      y: 392
+      width: 115
+      height: 24
+      text: "Invoke Actor"
+      strokeColor: "#495057"
+      fontSize: 17
+    - id: arrow-on-done
+      kind: freedraw
+      stroke: arrow-right
+      x: 795
+      y: 364
+      width: 40
+      height: 24
+      strokeColor: "#1971c2"
+    - id: event-on-done
+      kind: text
+      x: 785
+      y: 288
+      width: 60
+      height: 30
+      text: "onDone"
+      strokeColor: "#1971c2"
+      fontSize: 16
+    - id: monitoring-box
+      kind: rectangle
+      x: 835
+      y: 320
+      width: 150
+      height: 115
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: monitoring-label
+      kind: text
+      x: 844
+      y: 348
+      width: 132
+      height: 34
+      text: "MONITORING"
+      strokeColor: "#1971c2"
+      fontSize: 20
+    - id: monitoring-note
+      kind: text
+      x: 853
+      y: 392
+      width: 115
+      height: 24
+      text: "Verify health"
+      strokeColor: "#495057"
+      fontSize: 17
+    - id: arrow-three
+      kind: freedraw
+      stroke: arrow-right
+      x: 985
+      y: 364
+      width: 35
+      height: 24
+      strokeColor: "#2f9e44"
+    - id: event-three
+      kind: text
+      x: 970
+      y: 288
+      width: 65
+      height: 30
+      text: "RESOLVE"
+      strokeColor: "#2f9e44"
+      fontSize: 17
+    - id: resolved-box
+      kind: rectangle
+      x: 1020
+      y: 320
+      width: 115
+      height: 115
+      strokeColor: "#2f9e44"
+      backgroundColor: "#ebfbee"
+    - id: resolved-label
+      kind: text
+      x: 1025
+      y: 348
+      width: 105
+      height: 34
+      text: "RESOLVED"
+      strokeColor: "#2b8a3e"
+      fontSize: 19
+    - id: resolved-note
+      kind: text
+      x: 1038
+      y: 392
+      width: 80
+      height: 24
+      text: "Final"
+      strokeColor: "#495057"
+      fontSize: 17
+    - id: context-box
+      kind: rectangle
+      x: 685
+      y: 500
+      width: 275
+      height: 92
+      strokeColor: "#f08c00"
+      backgroundColor: "#fff4e6"
+    - id: context-label
+      kind: text
+      x: 710
+      y: 520
+      width: 225
+      height: 28
+      text: "Context: stableChecks"
+      strokeColor: "#e67700"
+      fontSize: 21
+    - id: context-action
+      kind: text
+      x: 735
+      y: 558
+      width: 175
+      height: 24
+      text: "VERIFY → assign +1"
+      strokeColor: "#495057"
+      fontSize: 17
+    - id: guard-box
+      kind: ellipse
+      x: 955
+      y: 500
+      width: 170
+      height: 92
+      strokeColor: "#d9480f"
+      backgroundColor: "#fff4e6"
+    - id: guard-label
+      kind: text
+      x: 982
+      y: 519
+      width: 115
+      height: 28
+      text: "GUARD"
+      strokeColor: "#d9480f"
+      fontSize: 22
+    - id: guard-rule
+      kind: text
+      x: 978
+      y: 555
+      width: 125
+      height: 24
+      text: "checks ≥ 2"
+      strokeColor: "#495057"
+      fontSize: 18
+    - id: domain-rule
+      kind: text
+      x: 280
+      y: 515
+      width: 360
+      height: 72
+      text: "Impossible transitions\nstay impossible."
+      strokeColor: "#7048e8"
+      fontSize: 27
+
+    # Board 2 — XState Actor and React dataflow.
+    - id: actor-title
+      kind: text
+      x: 340
+      y: 165
+      width: 650
+      height: 46
+      text: "Machine logic becomes a running Actor"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: logic-box
+      kind: rectangle
+      x: 275
+      y: 280
+      width: 205
+      height: 170
+      strokeColor: "#7048e8"
+      backgroundColor: "#f3f0ff"
+    - id: logic-heading
+      kind: text
+      x: 320
+      y: 305
+      width: 120
+      height: 34
+      text: "MACHINE"
+      strokeColor: "#7048e8"
+      fontSize: 25
+    - id: logic-body
+      kind: text
+      x: 305
+      y: 360
+      width: 150
+      height: 66
+      text: "States\nTransitions\nGuards"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: actor-create-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 480
+      y: 344
+      width: 85
+      height: 28
+      strokeColor: "#f08c00"
+    - id: actor-create-label
+      kind: text
+      x: 482
+      y: 300
+      width: 95
+      height: 28
+      text: "useMachine"
+      strokeColor: "#f08c00"
+      fontSize: 18
+    - id: actor-box
+      kind: ellipse
+      x: 565
+      y: 265
+      width: 220
+      height: 200
+      strokeColor: "#f08c00"
+      backgroundColor: "#fff4e6"
+    - id: actor-heading
+      kind: text
+      x: 625
+      y: 310
+      width: 100
+      height: 36
+      text: "ACTOR"
+      strokeColor: "#e67700"
+      fontSize: 28
+    - id: actor-body
+      kind: text
+      x: 610
+      y: 365
+      width: 130
+      height: 56
+      text: "send(event)\nget Snapshot"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: snapshot-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 785
+      y: 325
+      width: 85
+      height: 25
+      strokeColor: "#1971c2"
+    - id: event-arrow-back
+      kind: freedraw
+      stroke: arrow-right
+      x: 785
+      y: 395
+      width: 85
+      height: 25
+      strokeColor: "#e03131"
+    - id: snapshot-label
+      kind: text
+      x: 790
+      y: 286
+      width: 90
+      height: 28
+      text: "Snapshot →"
+      strokeColor: "#1971c2"
+      fontSize: 17
+    - id: event-label
+      kind: text
+      x: 795
+      y: 430
+      width: 75
+      height: 28
+      text: "← Event"
+      strokeColor: "#e03131"
+      fontSize: 17
+    - id: react-box
+      kind: rectangle
+      x: 870
+      y: 280
+      width: 225
+      height: 170
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: react-heading
+      kind: text
+      x: 930
+      y: 305
+      width: 110
+      height: 34
+      text: "REACT UI"
+      strokeColor: "#1971c2"
+      fontSize: 25
+    - id: react-body
+      kind: text
+      x: 905
+      y: 360
+      width: 155
+      height: 64
+      text: "render Snapshot\nsend user Event"
+      strokeColor: "#1e1e1e"
+      fontSize: 19
+    - id: selector-box
+      kind: rectangle
+      x: 360
+      y: 520
+      width: 650
+      height: 72
+      strokeColor: "#2f9e44"
+      backgroundColor: "#ebfbee"
+    - id: selector-label
+      kind: text
+      x: 395
+      y: 541
+      width: 585
+      height: 32
+      text: "useActorRef + useSelector → fine-grained subscription"
+      strokeColor: "#2b8a3e"
+      fontSize: 22
+
+    # Board 3 — invoked Actor lifecycle.
+    - id: invoke-title
+      kind: text
+      x: 350
+      y: 165
+      width: 650
+      height: 46
+      text: "ASYNC WORK IS AN INVOKED ACTOR"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: parent-actor-box
+      kind: rectangle
+      x: 285
+      y: 290
+      width: 230
+      height: 165
+      strokeColor: "#7048e8"
+      backgroundColor: "#f3f0ff"
+    - id: parent-actor-label
+      kind: text
+      x: 325
+      y: 320
+      width: 150
+      height: 34
+      text: "INCIDENT ACTOR"
+      strokeColor: "#7048e8"
+      fontSize: 22
+    - id: parent-state-label
+      kind: text
+      x: 330
+      y: 385
+      width: 140
+      height: 30
+      text: "mitigating"
+      strokeColor: "#1e1e1e"
+      fontSize: 22
+    - id: invoke-child-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 515
+      y: 355
+      width: 85
+      height: 28
+      strokeColor: "#f08c00"
+    - id: invoke-child-label
+      kind: text
+      x: 520
+      y: 305
+      width: 90
+      height: 28
+      text: "invoke"
+      strokeColor: "#f08c00"
+      fontSize: 19
+    - id: promise-actor-box
+      kind: ellipse
+      x: 600
+      y: 270
+      width: 275
+      height: 205
+      strokeColor: "#f08c00"
+      backgroundColor: "#fff4e6"
+    - id: promise-actor-label
+      kind: text
+      x: 645
+      y: 310
+      width: 185
+      height: 34
+      text: "PROMISE ACTOR"
+      strokeColor: "#e67700"
+      fontSize: 24
+    - id: promise-actor-body
+      kind: text
+      x: 648
+      y: 370
+      width: 180
+      height: 62
+      text: "apply mitigation\nreturn changeId"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: done-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 875
+      y: 325
+      width: 85
+      height: 25
+      strokeColor: "#2f9e44"
+    - id: error-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 875
+      y: 410
+      width: 85
+      height: 25
+      strokeColor: "#e03131"
+    - id: done-state
+      kind: text
+      x: 960
+      y: 298
+      width: 150
+      height: 60
+      text: "onDone\n→ monitoring"
+      strokeColor: "#2f9e44"
+      fontSize: 19
+    - id: error-state
+      kind: text
+      x: 960
+      y: 385
+      width: 160
+      height: 60
+      text: "onError\n→ investigating"
+      strokeColor: "#e03131"
+      fontSize: 19
+    - id: invoke-rule-box
+      kind: rectangle
+      x: 360
+      y: 535
+      width: 650
+      height: 72
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: invoke-rule
+      kind: text
+      x: 395
+      y: 556
+      width: 585
+      height: 32
+      text: "State ကထွက်ရင် invoked Actor ကို ရပ်ပေးတယ်"
+      strokeColor: "#1971c2"
+      fontSize: 22
+
+    # Board 4 — Choosing React hooks.
+    - id: hooks-title
+      kind: text
+      x: 345
+      y: 165
+      width: 680
+      height: 46
+      text: "@xstate/react — HOOK ရွေးနည်း"
+      strokeColor: "#1e1e1e"
+      fontSize: 31
+    - id: use-machine-card
+      kind: rectangle
+      x: 275
+      y: 270
+      width: 250
+      height: 205
+      strokeColor: "#7048e8"
+      backgroundColor: "#f3f0ff"
+    - id: use-machine-heading
+      kind: text
+      x: 320
+      y: 300
+      width: 160
+      height: 34
+      text: "useMachine"
+      strokeColor: "#7048e8"
+      fontSize: 25
+    - id: use-machine-body
+      kind: text
+      x: 310
+      y: 360
+      width: 180
+      height: 78
+      text: "snapshot\nsend\nactorRef"
+      strokeColor: "#1e1e1e"
+      fontSize: 21
+    - id: use-ref-card
+      kind: rectangle
+      x: 560
+      y: 270
+      width: 250
+      height: 205
+      strokeColor: "#f08c00"
+      backgroundColor: "#fff4e6"
+    - id: use-ref-heading
+      kind: text
+      x: 605
+      y: 300
+      width: 160
+      height: 34
+      text: "useActorRef"
+      strokeColor: "#e67700"
+      fontSize: 25
+    - id: use-ref-body
+      kind: text
+      x: 595
+      y: 360
+      width: 180
+      height: 78
+      text: "ActorRef\nSnapshot subscription\nမရှိ"
+      strokeColor: "#1e1e1e"
+      fontSize: 19
+    - id: use-selector-card
+      kind: rectangle
+      x: 845
+      y: 270
+      width: 250
+      height: 205
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: use-selector-heading
+      kind: text
+      x: 885
+      y: 300
+      width: 170
+      height: 34
+      text: "useSelector"
+      strokeColor: "#1971c2"
+      fontSize: 25
+    - id: use-selector-body
+      kind: text
+      x: 880
+      y: 360
+      width: 180
+      height: 78
+      text: "selected value\ncompare function\nပြောင်းမှ re-render"
+      strokeColor: "#1e1e1e"
+      fontSize: 19
+    - id: context-provider-box
+      kind: rectangle
+      x: 365
+      y: 535
+      width: 640
+      height: 72
+      strokeColor: "#2f9e44"
+      backgroundColor: "#ebfbee"
+    - id: context-provider-label
+      kind: text
+      x: 405
+      y: 556
+      width: 565
+      height: 32
+      text: "createActorContext → React tree ထဲ Actor တစ်ခု မျှဝေသုံးမယ်"
+      strokeColor: "#2b8a3e"
+      fontSize: 21
+
+    # Board 5 — XState Store event and selector flow.
+    - id: store-flow-title
+      kind: text
+      x: 335
+      y: 165
+      width: 700
+      height: 46
+      text: "XSTATE STORE — EVENT နဲ့ CONTEXT ပြောင်းခြင်း"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: old-context-box
+      kind: rectangle
+      x: 260
+      y: 305
+      width: 175
+      height: 130
+      strokeColor: "#7048e8"
+      backgroundColor: "#f3f0ff"
+    - id: old-context-label
+      kind: text
+      x: 280
+      y: 335
+      width: 135
+      height: 62
+      text: "Context\nnotes: [1]"
+      strokeColor: "#7048e8"
+      fontSize: 21
+    - id: trigger-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 435
+      y: 350
+      width: 80
+      height: 25
+      strokeColor: "#f08c00"
+    - id: trigger-label
+      kind: text
+      x: 435
+      y: 300
+      width: 90
+      height: 28
+      text: "trigger.*"
+      strokeColor: "#f08c00"
+      fontSize: 18
+    - id: store-transition-box
+      kind: rectangle
+      x: 515
+      y: 285
+      width: 235
+      height: 170
+      strokeColor: "#f08c00"
+      backgroundColor: "#fff4e6"
+    - id: store-transition-label
+      kind: text
+      x: 540
+      y: 315
+      width: 185
+      height: 95
+      text: "Transition\n(context, event)\n→ next context"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: next-context-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 750
+      y: 350
+      width: 75
+      height: 25
+      strokeColor: "#0891b2"
+    - id: next-context-box
+      kind: rectangle
+      x: 825
+      y: 305
+      width: 190
+      height: 130
+      strokeColor: "#0891b2"
+      backgroundColor: "#e3fafc"
+    - id: next-context-label
+      kind: text
+      x: 845
+      y: 335
+      width: 150
+      height: 62
+      text: "Snapshot\nnotes: [2]"
+      strokeColor: "#087f8c"
+      fontSize: 21
+    - id: selector-notify-arrow
+      kind: freedraw
+      stroke: arrow-down
+      x: 900
+      y: 435
+      width: 28
+      height: 65
+      strokeColor: "#1971c2"
+    - id: selector-notify-box
+      kind: rectangle
+      x: 740
+      y: 510
+      width: 350
+      height: 90
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: selector-notify-label
+      kind: text
+      x: 770
+      y: 532
+      width: 290
+      height: 48
+      text: "useSelector notifies React\nonly when selection changes"
+      strokeColor: "#1971c2"
+      fontSize: 19
+    - id: store-purity-rule
+      kind: text
+      x: 280
+      y: 520
+      width: 390
+      height: 70
+      text: "Transition က Context အသစ်ကို\nပြန်ပေးတယ်"
+      strokeColor: "#7048e8"
+      fontSize: 23
+
+    # Board 6 — Machine versus XState Store.
+    - id: compare-title
+      kind: text
+      x: 315
+      y: 165
+      width: 720
+      height: 46
+      text: "Machine သုံးမလား၊ Store သုံးမလား"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: machine-card
+      kind: rectangle
+      x: 285
+      y: 260
+      width: 340
+      height: 260
+      strokeColor: "#7048e8"
+      backgroundColor: "#f3f0ff"
+    - id: machine-package
+      kind: text
+      x: 330
+      y: 285
+      width: 250
+      height: 32
+      text: "xstate + @xstate/react"
+      strokeColor: "#7048e8"
+      fontSize: 22
+    - id: machine-purpose
+      kind: text
+      x: 335
+      y: 345
+      width: 240
+      height: 105
+      text: "Finite States\nAllowed Transitions\nGuard + Actor"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: machine-example
+      kind: text
+      x: 350
+      y: 475
+      width: 210
+      height: 28
+      text: "Incident workflow"
+      strokeColor: "#6741d9"
+      fontSize: 20
+    - id: store-card
+      kind: rectangle
+      x: 700
+      y: 260
+      width: 365
+      height: 260
+      strokeColor: "#0891b2"
+      backgroundColor: "#e3fafc"
+    - id: store-package
+      kind: text
+      x: 735
+      y: 285
+      width: 300
+      height: 32
+      text: "@xstate/store-react"
+      strokeColor: "#087f8c"
+      fontSize: 23
+    - id: store-purpose
+      kind: text
+      x: 755
+      y: 345
+      width: 255
+      height: 105
+      text: "Context updates\ntrigger.* Events\nuseSelector"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: store-example
+      kind: text
+      x: 790
+      y: 475
+      width: 185
+      height: 28
+      text: "Activity notes"
+      strokeColor: "#087f8c"
+      fontSize: 20
+    - id: shared-rule-box
+      kind: rectangle
+      x: 395
+      y: 560
+      width: 560
+      height: 62
+      strokeColor: "#f08c00"
+      backgroundColor: "#fff4e6"
+    - id: shared-rule
+      kind: text
+      x: 430
+      y: 578
+      width: 500
+      height: 30
+      text: "Machine → workflow   |   Store → UI data"
+      strokeColor: "#e67700"
+      fontSize: 21
+
+    # Board 7 — Course recap and implementation checklist.
+    - id: recap-title
+      kind: text
+      x: 330
+      y: 85
+      width: 700
+      height: 48
+      text: "XSTATE + REACT — ပြန်လည်သုံးသပ်ချက်"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: recap-subtitle
+      kind: text
+      x: 360
+      y: 140
+      width: 640
+      height: 34
+      text: "State Model → Actor → React → စစ်ဆေးခြင်း"
+      strokeColor: "#495057"
+      fontSize: 22
+    - id: recap-model-card
+      kind: rectangle
+      x: 155
+      y: 215
+      width: 285
+      height: 145
+      strokeColor: "#7048e8"
+      backgroundColor: "#f3f0ff"
+    - id: recap-model-heading
+      kind: text
+      x: 195
+      y: 240
+      width: 210
+      height: 28
+      text: "1 · State Model"
+      strokeColor: "#6741d9"
+      fontSize: 23
+    - id: recap-model-body
+      kind: text
+      x: 200
+      y: 286
+      width: 200
+      height: 52
+      text: "State + Event\n+ Transition"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: recap-rules-card
+      kind: rectangle
+      x: 500
+      y: 215
+      width: 285
+      height: 145
+      strokeColor: "#f08c00"
+      backgroundColor: "#fff4e6"
+    - id: recap-rules-heading
+      kind: text
+      x: 540
+      y: 240
+      width: 210
+      height: 28
+      text: "2 · Machine Rules"
+      strokeColor: "#e67700"
+      fontSize: 23
+    - id: recap-rules-body
+      kind: text
+      x: 545
+      y: 286
+      width: 200
+      height: 52
+      text: "Context + Guard\n+ Action"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: recap-actor-card
+      kind: rectangle
+      x: 845
+      y: 215
+      width: 285
+      height: 145
+      strokeColor: "#e03131"
+      backgroundColor: "#fff5f5"
+    - id: recap-actor-heading
+      kind: text
+      x: 885
+      y: 240
+      width: 210
+      height: 28
+      text: "3 · Actor"
+      strokeColor: "#c92a2a"
+      fontSize: 23
+    - id: recap-actor-body
+      kind: text
+      x: 890
+      y: 286
+      width: 200
+      height: 52
+      text: "invoke\nonDone / onError"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: recap-react-card
+      kind: rectangle
+      x: 155
+      y: 420
+      width: 285
+      height: 145
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: recap-react-heading
+      kind: text
+      x: 195
+      y: 445
+      width: 210
+      height: 28
+      text: "4 · React Hooks"
+      strokeColor: "#1971c2"
+      fontSize: 23
+    - id: recap-react-body
+      kind: text
+      x: 200
+      y: 491
+      width: 200
+      height: 52
+      text: "useMachine\nuseSelector"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: recap-store-card
+      kind: rectangle
+      x: 500
+      y: 420
+      width: 285
+      height: 145
+      strokeColor: "#0891b2"
+      backgroundColor: "#e3fafc"
+    - id: recap-store-heading
+      kind: text
+      x: 540
+      y: 445
+      width: 210
+      height: 28
+      text: "5 · XState Store"
+      strokeColor: "#087f8c"
+      fontSize: 23
+    - id: recap-store-body
+      kind: text
+      x: 545
+      y: 491
+      width: 200
+      height: 52
+      text: "createStore\ntrigger.* + Selector"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: recap-test-card
+      kind: rectangle
+      x: 845
+      y: 420
+      width: 285
+      height: 145
+      strokeColor: "#2f9e44"
+      backgroundColor: "#ebfbee"
+    - id: recap-test-heading
+      kind: text
+      x: 885
+      y: 445
+      width: 210
+      height: 28
+      text: "6 · Check Paths"
+      strokeColor: "#2b8a3e"
+      fontSize: 23
+    - id: recap-test-body
+      kind: text
+      x: 890
+      y: 491
+      width: 200
+      height: 52
+      text: "snapshot.matches\nsnapshot.can"
+      strokeColor: "#1e1e1e"
+      fontSize: 20
+    - id: recap-rule-box
+      kind: rectangle
+      x: 350
+      y: 610
+      width: 580
+      height: 60
+      strokeColor: "#7048e8"
+      backgroundColor: "#f3f0ff"
+    - id: recap-rule
+      kind: text
+      x: 390
+      y: 627
+      width: 500
+      height: 28
+      text: "Machine က ဆုံးဖြတ်တယ် · React က ပြတယ်"
+      strokeColor: "#6741d9"
+      fontSize: 22
+
+build:
+  # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+  # profile at render time when the signed-in user has the D1 capability.
+  voiceProfile: pocket-alba-v1
+  seed: 83
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: npm ci --no-audit --no-fund
+  runCommand: npm run dev
+  expectedPort: 5173
+  lockfilePath: package-lock.json
+  environment: {}
+
+scenes:
+  - id: why-explicit-state
+    narration: >
+      ဒီသင်ခန်းစာမှာ XState API စာရင်းကို တစ်ခုပြီးတစ်ခု ဖတ်ပြမှာ မဟုတ်ပါဘူး။ တကယ့်လုပ်ငန်းခွင်က
+      ပြဿနာတစ်ခုကို အတူပုံဖော်ပြီး ဘာကြောင့် XState လိုအပ်လာသလဲဆိုတာကနေ စကြရအောင်။ Checkout API
+      ပျက်သွားပြီး P1 Incident တက်လာတယ်လို့ အတူမြင်ယောင်ကြည့်ရအောင်။ အဖွဲ့က Incident အခြေအနေကို React UI
+      မှာ ပြချင်တယ်။ [[mark:open-why-board]] ပထမဆုံး စိတ်ကူးရနိုင်တာက isReported၊ isInvestigating၊
+      isMonitoring နဲ့ isResolved ဆိုတဲ့ boolean flag လေးခုထားတာပါ။ Flag တစ်ခုချင်းစီကို
+      ကြည့်ရင်တော့ နားလည်ရလွယ်ပါတယ်။ ဒါပေမဲ့ flag လေးခုပေါင်းလိုက်ရင် ဖြစ်နိုင်တဲ့ အတွဲအစပ်က
+      ဆယ့်ခြောက်မျိုးအထိ ရှိလာနိုင်ပါတယ်။ အဲဒီဆယ့်ခြောက်မျိုးလုံးက လုပ်ငန်းအရ မှန်သလားဆိုတော့
+      မမှန်ပါဘူး။ [[mark:show-invalid-booleans]] ဒီမှာ Reported၊ Investigating နဲ့ Monitoring
+      သုံးခုလုံး true ဖြစ်နေတယ်။ TypeScript အနေနဲ့ကတော့ boolean အမျိုးအစားတွေ မှန်နေတာမို့
+      လက်ခံပေးလိုက်မှာပါ။ ဒါပေမဲ့ Incident တစ်ခုက အဲဒီ State သုံးခုမှာ တစ်ပြိုင်နက် ရှိနေလို့
+      မရဘူးလေ။ UI တစ်နေရာမှာ flag တစ်ခု ပြောင်းဖို့ မေ့သွားတာနဲ့ ဒီလို impossible State တွေ
+      ပေါ်လာတတ်ပါတယ်။ ဒီအမှားကို compiler က မကယ်နိုင်တာ ဘာကြောင့်လဲဆိုတော့ လုပ်ငန်းစည်းမျဉ်းကို
+      data ပုံစံထဲ မထည့်ထားလို့ပါ။ [[mark:show-finite-value]] Finite State Model သုံးလိုက်ရင်
+      လက်ရှိအခြေအနေကို value တစ်ခုတည်းနဲ့ ဖော်ပြပေးမှာပါ။ State က monitoring ဆိုရင် reported နဲ့
+      resolved တစ်ပြိုင်နက် ဖြစ်နေတဲ့ အခြေအနေမျိုးကို ဖန်တီးလို့ကို မရတော့ဘူး။ ပြောင်းလဲချင်ရင်
+      Event ပို့လိုက်ရုံပါပဲ။ Machine က လက်ရှိ State နဲ့ Event ကိုကြည့်ပြီး ခွင့်ပြုထားတဲ့
+      Transition ရှိမှ နောက် State ကို ပြောင်းပေးမှာပါ။ [[mark:show-course-map]] ဒါကြောင့်
+      အရင်ဆုံး State ကို ဘယ်လိုပုံဖော်မလဲဆိုတာ လေ့လာမယ်။ ပြီးရင် Machine ကို run ပေးတဲ့ Actor၊
+      React နဲ့ ချိတ်တဲ့ Hook တွေ၊ XState Store နဲ့ နောက်ဆုံး စစ်ဆေးပုံအထိ ဆက်သွားမယ်။
+      ဒီအခြေခံပုံကို နားလည်ပြီးမှ Editor ထဲဝင်ပြီး code ရေးကြမယ်။
+    sources:
+      - title: "Stately Docs — State machines"
+        url: "https://stately.ai/docs/machines"
+      - title: "Stately Docs — Finite states"
+        url: "https://stately.ai/docs/finite-states"
+      - title: "Stately Docs — Events and transitions"
+        url: "https://stately.ai/docs/transitions"
+    actions:
+      - id: open-why-state-board
+        type: whiteboard.apply
+        at: { mark: open-why-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [why-title, booleans-box, booleans-heading, booleans-body]
+        drawMs: 1500
+      - id: mark-invalid-boolean-state
+        type: whiteboard.apply
+        at: { mark: show-invalid-booleans }
+        upsertIds: [invalid-circle]
+        drawMs: 800
+      - id: show-single-finite-value
+        type: whiteboard.apply
+        at: { mark: show-finite-value }
+        upsertIds:
+          [model-arrow, state-value-box, state-value-heading, state-value-body, invalid-rule]
+        drawMs: 1500
+      - id: show-full-course-map
+        type: whiteboard.apply
+        at: { mark: show-course-map }
+        upsertIds: [course-map-box, course-map-label]
+        drawMs: 900
+
+  - id: incident-domain
+    narration: >
+      အခု Incident တစ်ခု ဘယ်လိုရွေ့သွားမလဲဆိုတာ Statechart ပေါ်မှာ အတူဆွဲကြည့်ရအောင်။ ဒီနေရာမှာ
+      စကားလုံးသုံးလုံးကို သေချာခွဲခြားနားလည်ထားဖို့ လိုပါတယ်။ State ဆိုတာ လက်ရှိ ဘယ်အခြေအနေမှာ
+      ရှိနေလဲဆိုတာကို ပြောတာပါ။ Event ဆိုတာကတော့ ဘာဖြစ်လာသလဲဆိုတာကို ပြောတာပါ။ Transition ကတော့ ဒီ
+      State မှာ ဒီ Event ရလာရင် ဘယ်ကိုသွားမလဲဆိုတာကို ပြောတာပါ။ [[mark:open-domain-board]]
+      အဲဒီသုံးခုကို Incident အဆင့်တွေထဲ ထည့်ကြည့်မယ်။ [[mark:draw-domain-states]] Pager က alert
+      ပို့လာချိန်မှာ Incident က Reported ဆိုတဲ့ initial State မှာ စတင်ပါတယ်။ Operator တစ်ယောက်က
+      တာဝန်ယူလိုက်တဲ့အခါ ACKNOWLEDGE Event ပို့လိုက်မယ်။ Machine က အဲဒီ Event ကို Reported မှာ
+      လက်ခံထားလို့ Investigating ဆီ ရွေ့သွားမယ်။ အကြောင်းရင်းရှာပြီး ပြင်ဆင်ချက်အသုံးပြုဖို့
+      အဆင်သင့်ဖြစ်ရင် APPLY_MITIGATION Event ပို့လိုက်မယ်။ အဲဒီအခါ Mitigating State ဝင်ပြီး
+      နောက်မှာရေးမယ့် async Actor ကို စတင်ပေးမယ်။ ပြင်ဆင်ချက်အောင်မြင်သွားရင် Actor ရဲ့ onDone က
+      Monitoring ဆီ အလိုအလျောက် ပို့ပေးမှာပါ။ Monitoring မှာတော့ production metric တွေ
+      တည်ငြိမ်လာမလာ စောင့်ကြည့်မယ်။ စစ်ဆေးမှုတွေ ပြည့်မှ RESOLVE Event က Resolved Final State ဆီ
+      ရောက်ခွင့်ရမယ်။ Final State ဆိုတာ ဒီ Incident ကို ကိုင်တွယ်တဲ့ Actor
+      အလုပ်ပြီးဆုံးသွားပြီလို့ ပြောတာပါ။ ဒီ Event နာမည်တွေက button နာမည်တွေ မဟုတ်ပါဘူး။
+      ACKNOWLEDGE ဆိုတာ တာဝန်ယူပြီးပြီဆိုတဲ့ ဖြစ်ရပ်ကို နာမည်ပေးထားတာပါ။ ဒါကြောင့် UI ကပို့လည်း ဒီ
+      Event၊ API ကပို့လည်း ဒီ Event၊ test ကပို့လည်း ဒီ Event ကိုပဲ အသုံးပြုနိုင်ပါတယ်။
+      ခွင့်ပြုထားတဲ့ လမ်းကြောင်းအားလုံးကို Machine တစ်နေရာမှာ ဖတ်လို့ရလာမှာပါ။
+    sources:
+      - title: "Stately Docs — State machines"
+        url: "https://stately.ai/docs/machines"
+      - title: "Stately Docs — Events and transitions"
+        url: "https://stately.ai/docs/transitions"
+      - title: "Stately Docs — Final states"
+        url: "https://stately.ai/docs/final-states"
+    actions:
+      - id: open-incident-domain-board
+        type: whiteboard.apply
+        at: { mark: open-domain-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [domain-title, domain-subtitle]
+        drawMs: 700
+      - id: draw-incident-state-path
+        type: whiteboard.apply
+        at: { mark: draw-domain-states }
+        timeoutMs: 6000
+        upsertIds:
+          [
+            reported-box,
+            reported-label,
+            reported-note,
+            arrow-one,
+            event-one,
+            investigating-box,
+            investigating-label,
+            investigating-note,
+            arrow-two,
+            event-two,
+            mitigating-box,
+            mitigating-label,
+            mitigating-note,
+            arrow-on-done,
+            event-on-done,
+            monitoring-box,
+            monitoring-label,
+            monitoring-note,
+            arrow-three,
+            event-three,
+            resolved-box,
+            resolved-label,
+            resolved-note,
+          ]
+        drawMs: 4200
+
+  - id: context-actions-guards
+    narration: >
+      State က Incident ရောက်နေတဲ့အဆင့်ကို ပြနိုင်ပေမဲ့ ဆက်သိမ်းထားရမယ့် data တွေလည်း ရှိသေးတယ်။
+      ဥပမာ ပြင်ဆင်ချက်ရဲ့ change ID နဲ့ metric တည်ငြိမ်ကြောင်း စစ်ပြီးတဲ့အကြိမ်ရေပါ။ ဒီလို data
+      မျိုးကို XState မှာတော့ Context ထဲမှာ ထားပါတယ်။ [[mark:draw-domain-guard]] Diagram အောက်မှာ
+      stableChecks ကို ထည့်လိုက်မယ်။ Actor က Snapshot အသစ်ထုတ်တိုင်း State value နဲ့ Context
+      နှစ်ခုလုံး ပါလာမယ်။ Monitoring မှာ VERIFY Event တစ်ကြိမ်ရတိုင်း recordStableCheck Action ကို
+      ခေါ်မယ်။ အဲဒီ Action က assign သုံးပြီး stableChecks ကို တစ်တိုးပေးမယ်။ မူလ object ကို
+      ပြင်လိုက်တာမဟုတ်ဘဲ နောက် Snapshot အတွက် Context အသစ်ကို တွက်ပေးတာပါ။ VERIFY Transition မှာ
+      target မပါဘူး။ ဒါကြောင့် Monitoring ကနေ မထွက်ဘဲ Context ပဲ ပြောင်းသွားတယ်။ XState က
+      ဒီပုံစံကို targetless Transition လို့ ခေါ်တယ်။ အခု ဒီမှာ မေးစရာတစ်ခု ရှိလာပါပြီ။ Stable
+      check တစ်ကြိမ်ပဲ ရှိသေးချိန် RESOLVE Event ရောက်လာရင် ဘာလုပ်မလဲ။ ဒီမှာ Guard သုံးမယ်။ Guard
+      ဆိုတာကတော့ Transition မလုပ်ခင်မှာ true သို့မဟုတ် false ကို ပြန်ပေးတဲ့ function တစ်ခုပါ။
+      hasTwoStableChecks Guard က Context ကိုကြည့်ပြီး နှစ်ကြိမ်ပြည့်မှ true ပြန်ပေးမယ်။
+      မပြည့်သေးရင် RESOLVE ရောက်လာပေမဲ့ State မပြောင်းဘူး။ Guard ထဲမှာ API မခေါ်ဘူး၊ log မရေးဘူး။
+      တူညီတဲ့ Context ပေးရင် အဖြေတူတူရအောင် စစ်ဆေးမှုကိုသာ ထားမယ်။ Metric ပြန်ဆိုးလာရင် REGRESS
+      Event က Investigating ဆီ ပြန်ပို့ပြီး stableChecks ကို သုည ပြန်ထားမယ်။
+      [[mark:emphasize-domain-rule]] React မှာ RESOLVE button ကို disable လုပ်တာက အသုံးပြုသူကို
+      လက်ရှိမလုပ်နိုင်သေးကြောင်း ပြပေးတာပါ။ တကယ်တမ်း မဖြတ်ကျော်နိုင်အောင် ထိန်းထားတာက Machine ထဲက
+      Guard ဖြစ်တယ်။ UI နဲ့ Machine နှစ်ခုလုံးမှာ တူတဲ့စည်းမျဉ်းရေးထားတာမဟုတ်ဘူး။ UI က Machine
+      ကိုမေးပြီး အဖြေကိုပြနေတာပါ။
+    sources:
+      - title: "Stately Docs — Context"
+        url: "https://stately.ai/docs/context"
+      - title: "Stately Docs — Actions"
+        url: "https://stately.ai/docs/actions"
+      - title: "Stately Docs — Guards"
+        url: "https://stately.ai/docs/guards"
+      - title: "Stately Docs — Eventless and targetless transitions"
+        url: "https://stately.ai/docs/transitions"
+    actions:
+      - id: draw-incident-guard
+        type: whiteboard.apply
+        at: { mark: draw-domain-guard }
+        timeoutMs: 5000
+        upsertIds: [context-box, context-label, context-action, guard-box, guard-label, guard-rule]
+        drawMs: 1800
+      - id: emphasize-domain-invariant
+        type: whiteboard.apply
+        at: { mark: emphasize-domain-rule }
+        upsertIds: [domain-rule]
+        drawMs: 700
+
+  - id: actor-react-model
+    narration: >
+      ဒီနေရာမှာ Machine နဲ့ Actor ကို တစ်ခုတည်းလို့ မှားမယူဆမိဖို့ အရေးကြီးပါတယ်။ Machine
+      ဆိုတာကတော့ စည်းမျဉ်းစာရွက်တစ်ခုနဲ့ တူပါတယ်။ ဘယ် State က စမလဲ၊ Event ရလာရင် ဘယ် Transition
+      လုပ်မလဲဆိုတာ ရေးထားပေမဲ့ သူ့ဘာသာ အလုပ်လုပ်မနေသေးဘူး။ [[mark:draw-machine-logic]] XState က
+      ဒီစည်းမျဉ်းတွေကို Actor Logic လို့ သတ်မှတ်တယ်။ Logic တစ်ခုတည်းကနေ Incident တစ်ခုစီအတွက်
+      Actor သီးခြား ဖန်တီးနိုင်တယ်။ Machine တစ်ခုလုံးကို ပုံတူကူးရေးတာ မဟုတ်ပါဘူး။
+      စည်းမျဉ်းတူပေမဲ့ Actor တစ်ခုစီမှာ ကိုယ်ပိုင် Snapshot နဲ့ ကိုယ်ပိုင် Context ရှိလာမယ်။
+      [[mark:draw-running-actor]] Actor ဖန်တီးပြီး start လုပ်လိုက်မှ Event လက်ခံနိုင်တယ်။ ActorRef
+      က အဲဒီ Actor ကို Event ပို့ဖို့ သိမ်းထားတဲ့ reference ပါ။ send နဲ့ Event ပို့လိုက်ရင် Actor
+      က လက်ရှိ Snapshot ကိုယူပြီး Machine Logic အတိုင်း နောက် Snapshot ကိုတွက်မယ်။ Snapshot ထဲမှာ
+      state.value နဲ့ context သာမက status၊ matches နဲ့ can လည်း အသုံးပြုနိုင်တယ်။ matches က Actor
+      ဘယ် State မှာရှိလဲ မေးဖို့သုံးတယ်။ can က Event တစ်ခုကို လက်ရှိ State မှာ လက်ခံနိုင်မလား
+      ကြိုမေးဖို့သုံးတယ်။ [[mark:draw-react-loop]] React ဘက်ကတော့ Snapshot ရလာရင် UI ကို render
+      လုပ်မယ်။ အသုံးပြုသူက button နှိပ်ရင် Event တစ်ခု ပြန်ပို့မယ်။ ဒီလို လည်ပတ်နေချိန်မှာ React က
+      နောက် State ကို ကိုယ်တိုင် မရွေးဘူး။ React က Event ပို့လိုက်တယ်၊ Machine က ရွေးချယ်ပေးတယ်၊
+      ပြီးတော့ React က ရလာတဲ့ Snapshot ကို ပြပေးတာမျိုးပါ။ useMachine သုံးလိုက်ရင် Component
+      စတင်ချိန်မှာ Actor ကို ဖန်တီးပြီး start လုပ်ပေးသလို Component ပျောက်သွားချိန်မှာလည်း
+      ရပ်ပေးပါတယ်။
+    sources:
+      - title: "Stately Docs — Actors"
+        url: "https://stately.ai/docs/actors"
+      - title: "Stately Docs — State machine snapshots"
+        url: "https://stately.ai/docs/states"
+      - title: "Stately Docs — @xstate/react"
+        url: "https://stately.ai/docs/xstate-react"
+    actions:
+      - id: draw-machine-logic
+        type: whiteboard.apply
+        at: { mark: draw-machine-logic }
+        clear: true
+        upsertIds: [actor-title, logic-box, logic-heading, logic-body]
+        drawMs: 1200
+      - id: draw-running-actor
+        type: whiteboard.apply
+        at: { mark: draw-running-actor }
+        upsertIds: [actor-create-arrow, actor-create-label, actor-box, actor-heading, actor-body]
+        drawMs: 1500
+      - id: draw-react-event-loop
+        type: whiteboard.apply
+        at: { mark: draw-react-loop }
+        timeoutMs: 5000
+        upsertIds:
+          [
+            snapshot-arrow,
+            event-arrow-back,
+            snapshot-label,
+            event-label,
+            react-box,
+            react-heading,
+            react-body,
+            selector-box,
+            selector-label,
+          ]
+        drawMs: 2400
+
+  - id: invoked-actor-lifecycle
+    narration: >
+      Incident ကို စုံစမ်းတာနဲ့တင် အလုပ်က မပြီးသေးပါဘူး။ ပြင်ဆင်ချက်ကို server ဆီပို့ရမယ်ဆိုတော့
+      async အလုပ်တစ်ခု ရှိလာပြီ။ React useEffect ထဲ Promise ခေါ်ပြီး isLoading flag
+      ပြောင်းလည်းရတယ်။ ဒါပေမဲ့ အဲဒီ Promise ကို ဘယ်အချိန်စတယ်၊ ဘယ်အချိန်ရပ်တယ်၊ အောင်မြင်ရင် ဘယ်
+      State သွားတယ်ဆိုတာ နေရာအမျိုးမျိုးမှာ လိုက်ဖတ်ရမယ်။ XState မှာဆိုရင် ဒီလို async
+      အလုပ်တွေကိုလည်း Actor အဖြစ် ထားနိုင်ပါတယ်။ [[mark:draw-invoked-parent]] Parent Incident
+      Actor က Mitigating State ဝင်တဲ့အခါ invoke ကိုတွေ့မယ်။ ဒီ State ဝင်မှ
+      ပြင်ဆင်ချက်စပို့မယ်ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ [[mark:draw-invoked-child]] applyMitigation ကို
+      fromPromise နဲ့ရေးထားလို့ Promise Actor တစ်ခု start ဖြစ်မယ်။ Parent က
+      အဖြေစောင့်နေတဲ့အချိန်ကို Mitigating State က ပြထားပြီးသား ဖြစ်တဲ့အတွက် isLoading flag
+      ထပ်ထားစရာ မလိုတော့ပါဘူး။ Promise ပြီးသွားရင် onDone က Monitoring ဆီပို့မယ်။ ပြန်လာတဲ့
+      changeId ကို assign နဲ့ Parent Context ထဲ သိမ်းမယ်။ မအောင်မြင်ရင် onError က Investigating ဆီ
+      ပြန်ပို့မယ်။ အောင်မြင်တဲ့လမ်းနဲ့ မအောင်မြင်တဲ့လမ်း နှစ်ခုလုံးကို Statechart မှာ
+      တန်းမြင်ရတယ်။ [[mark:draw-invoke-rule]] နောက်ထပ် အရေးကြီးတာက ဘယ်သူက ဒီ Actor
+      ကိုပိုင်လဲဆိုတာပါ။ Parent က Mitigating State ကနေ ထွက်သွားရင် invoke လုပ်ထားတဲ့ Actor ကို
+      XState က ရပ်ပေးမယ်။ Component အနှံ့ Promise reference လိုက်သိမ်းပြီး ကိုယ်တိုင်ရှင်းစရာ
+      လျော့သွားတယ်။ ဒီဥပမာမှာတော့ အလုပ်လုပ်ပုံကို မြင်ရအောင် မီလီစက္ကန့် ခုနစ်ရာကြာတဲ့ Promise
+      သုံးမယ်။ တကယ့်စနစ်မှာ အဲဒီနေရာကို fetch သို့မဟုတ် API client နဲ့ အစားထိုးနိုင်တယ်။
+    sources:
+      - title: "Stately Docs — Invoking actors"
+        url: "https://stately.ai/docs/invoke"
+      - title: "Stately Docs — Promise actors"
+        url: "https://stately.ai/docs/promise-actors"
+      - title: "Stately Docs — Actors"
+        url: "https://stately.ai/docs/actors"
+    actions:
+      - id: draw-invoked-parent-actor
+        type: whiteboard.apply
+        at: { mark: draw-invoked-parent }
+        clear: true
+        upsertIds: [invoke-title, parent-actor-box, parent-actor-label, parent-state-label]
+        drawMs: 1200
+      - id: draw-invoked-promise-actor
+        type: whiteboard.apply
+        at: { mark: draw-invoked-child }
+        timeoutMs: 5000
+        upsertIds:
+          [
+            invoke-child-arrow,
+            invoke-child-label,
+            promise-actor-box,
+            promise-actor-label,
+            promise-actor-body,
+            done-arrow,
+            error-arrow,
+            done-state,
+            error-state,
+          ]
+        drawMs: 2400
+      - id: draw-invoked-lifecycle-rule
+        type: whiteboard.apply
+        at: { mark: draw-invoke-rule }
+        upsertIds: [invoke-rule-box, invoke-rule]
+        drawMs: 900
+
+  - id: react-hook-boundaries
+    narration: >
+      Actor ကို React နဲ့ ချိတ်ဖို့အတွက် Hook တစ်မျိုးတည်းပဲ ရှိတာတော့ မဟုတ်ပါဘူး။ ဘယ် Hook
+      ရွေးမလဲဆိုတာ Machine စည်းမျဉ်းကို မပြောင်းဘူး။ Actor ရဲ့ ဘယ်ပြောင်းလဲမှုကြောင့် Component
+      ကို re-render လုပ်စေချင်လဲဆိုတာ ရွေးတာပါ။ [[mark:draw-use-machine]] useMachine က Machine
+      Logic ကိုလက်ခံပြီး snapshot၊ send နဲ့ actorRef သုံးခု ပြန်ပေးတယ်။ Component တစ်ခုက Snapshot
+      အများစုကို သုံးနေတယ်ဆိုရင်တော့ ဒီ Hook နဲ့ စပြီး အသုံးပြုတာက ပိုပြီး နားလည်ရလွယ်ပါတယ်။
+      useMachine ဟာ Machine အတွက် နာမည်ပေးထားတဲ့ useActor ပုံစံတစ်ခုပါ။
+      [[mark:draw-use-actor-ref]] useActorRef ကလည်း Actor ကိုဖန်တီးပြီး start လုပ်ပေးတယ်။ ဒါပေမဲ့
+      ActorRef တစ်ခုတည်း ပြန်ပေးတာကြောင့် Snapshot အသစ်တိုင်း ဒီ Component re-render မဖြစ်ဘူး။
+      Event ပို့ရုံပဲလုပ်တဲ့ toolbar တစ်ခုဆို useActorRef က သင့်တော်နိုင်တယ်။
+      [[mark:draw-use-selector]] State တစ်စိတ်တစ်ပိုင်းကို ပြချင်ရင် useSelector သုံးမယ်။ ဥပမာ
+      stableChecks number ကိုသာ ရွေးထားရင် အဲဒီ number ပြောင်းမှ Component re-render ဖြစ်မယ်။
+      number နဲ့ string လို value တွေကိုတော့ ပုံမှန် equality စစ်တာနဲ့ လုံလောက်တယ်။ Selector က
+      object သို့မဟုတ် array အသစ်အမြဲပြန်ပေးရင် value တူနေပေမဲ့ reference အသစ်ဖြစ်နေမယ်။
+      အဲဒီအခါမျိုးမှာ selector ကို တည်ငြိမ်အောင် ရေးတာမျိုး ဒါမှမဟုတ် compare function
+      ပေးတာမျိုးကို စဉ်းစားပေးရပါမယ်။ [[mark:draw-actor-context]] Actor တစ်ခုကို React tree အနှံ့
+      မျှဝေချင်ရင် createActorContext သုံးနိုင်တယ်။ သူက Provider နဲ့ useActorRef၊ useSelector
+      helper တွေ ဖန်တီးပေးတယ်။ ဒီဥပမာမှာ အပိုင်းအားလုံးကို မျက်နှာပြင်တစ်ခုထဲပြမှာမို့ useMachine
+      သုံးမယ်။ Component တွေခွဲလာတဲ့အခါ useActorRef နဲ့ useSelector ဘယ်လိုရွေးမလဲကို ဒီပုံနဲ့
+      ပြန်စဉ်းစားနိုင်တယ်။
+    sources:
+      - title: "Stately Docs — @xstate/react"
+        url: "https://stately.ai/docs/xstate-react"
+      - title: "Stately Docs — @xstate/react useSelector"
+        url: "https://stately.ai/docs/xstate-react"
+    actions:
+      - id: draw-use-machine-hook
+        type: whiteboard.apply
+        at: { mark: draw-use-machine }
+        clear: true
+        upsertIds: [hooks-title, use-machine-card, use-machine-heading, use-machine-body]
+        drawMs: 1200
+      - id: draw-use-actor-ref-hook
+        type: whiteboard.apply
+        at: { mark: draw-use-actor-ref }
+        upsertIds: [use-ref-card, use-ref-heading, use-ref-body]
+        drawMs: 1100
+      - id: draw-use-selector-hook
+        type: whiteboard.apply
+        at: { mark: draw-use-selector }
+        upsertIds: [use-selector-card, use-selector-heading, use-selector-body]
+        drawMs: 1100
+      - id: draw-create-actor-context
+        type: whiteboard.apply
+        at: { mark: draw-actor-context }
+        upsertIds: [context-provider-box, context-provider-label]
+        drawMs: 900
+
+  - id: store-event-flow
+    narration: >
+      XState Store ဆိုတဲ့ နာမည်ကို ကြားလိုက်တာနဲ့ State Machine ကို သေးအောင် လုပ်ထားတာလို့ ထင်စရာ
+      ရှိပါတယ်။ တကယ်တမ်းကျတော့ အသုံးပြုရတဲ့ အကြောင်းရင်းက မတူပါဘူး။ State အဆင့်လိုက်ကူးရမယ့်
+      စည်းမျဉ်းမရှိဘဲ data ကို Event နဲ့ ပြောင်းချင်တဲ့အခါ သုံးတဲ့ Store ပါ။ Incident dashboard
+      မှာ operator ရေးတဲ့ draft နဲ့ note စာရင်းကို အတူစဉ်းစားကြည့်ရအောင်။ Note တစ်ခုထည့်ဖို့ Statechart
+      တစ်ခုလုံး မလိုဘူး။ ဒါပေမဲ့ ဘယ် Event ကြောင့် data ပြောင်းသလဲကို ရှင်းရှင်းလင်းလင်း
+      သိချင်တယ်။ [[mark:draw-store-old-context]] createStore မှာ စစချင်းသုံးမယ့် Context နဲ့ Event
+      တစ်ခုစီကို ကိုင်တွယ်မယ့် function တွေ ထည့်မယ်။ ဒီဥပမာမှာ Context ထဲ draft string နဲ့ notes
+      array ရှိတယ်။ [[mark:draw-store-transition]] အသုံးပြုသူက Add note နှိပ်ရင်
+      store.trigger.addNote ကို ခေါ်မယ်။ addNote function က လက်ရှိ Context ကိုရပြီး Context
+      အသစ်တစ်ခု ပြန်ပေးရတယ်။ Draft ကိုရှင်းမယ်၊ note အသစ်ကို array ထဲထည့်မယ်၊ မပြောင်းတဲ့ field
+      တွေကို spread နဲ့ ဆက်ယူမယ်။ Draft က အလွတ်ဖြစ်နေရင် undefined ပြန်ပေးနိုင်တယ်။ အဲဒီအခါ Store
+      က ဒီ Event နဲ့ data မပြောင်းသင့်ဘူးလို့ သိမယ်။ [[mark:draw-store-next-context]] Context
+      အသစ်ပြန်လာတာနဲ့ Store Snapshot အသစ် ထုတ်ပေးမယ်။ XState Store က ဖန်တီးလိုက်တာနဲ့
+      အလုပ်လုပ်နေပြီ ဖြစ်တဲ့အတွက် Actor လိုမျိုး start သီးခြား ခေါ်ပေးစရာ မလိုပါဘူး။
+      [[mark:draw-store-notification]] React ဘက်မှာ @xstate/store-react ရဲ့ useSelector နဲ့ လိုတဲ့
+      value ကို ရွေးမယ်။ notes ကိုရွေးထားတဲ့ Component က notes ပြောင်းမှ re-render ဖြစ်မယ်။ draft
+      ကိုရွေးထားတဲ့ input က draft ပြောင်းမှ re-render ဖြစ်မယ်။ Store ကို module အပြင်ဘက်မှာ
+      ဖန်တီးထားရင် Component အများကြီးက တစ်ခုတည်းကို မျှဝေသုံးနိုင်တယ်။ Component တစ်ခုစီအတွက်
+      Store သီးခြားလိုရင် useStore သုံးပြီး အဲဒီ Component အသက်ရှင်နေသရွေ့သာ ရှိမယ့် Store
+      ဖန်တီးနိုင်တယ်။
+    sources:
+      - title: "Stately Docs — XState Store"
+        url: "https://stately.ai/docs/xstate-store"
+      - title: "Stately Docs — @xstate/store-react"
+        url: "https://stately.ai/docs/xstate-store/react"
+    actions:
+      - id: draw-store-initial-context
+        type: whiteboard.apply
+        at: { mark: draw-store-old-context }
+        clear: true
+        upsertIds: [store-flow-title, old-context-box, old-context-label]
+        drawMs: 1100
+      - id: draw-store-transition-function
+        type: whiteboard.apply
+        at: { mark: draw-store-transition }
+        upsertIds: [trigger-arrow, trigger-label, store-transition-box, store-transition-label]
+        drawMs: 1500
+      - id: draw-store-next-snapshot
+        type: whiteboard.apply
+        at: { mark: draw-store-next-context }
+        upsertIds: [next-context-arrow, next-context-box, next-context-label, store-purity-rule]
+        drawMs: 1500
+      - id: draw-store-selector-notification
+        type: whiteboard.apply
+        at: { mark: draw-store-notification }
+        upsertIds: [selector-notify-arrow, selector-notify-box, selector-notify-label]
+        drawMs: 1200
+
+  - id: machine-versus-store
+    narration: >
+      အခုဆို Machine နဲ့ Store နှစ်ခုလုံး ဘယ်လိုအလုပ်လုပ်လဲ မြင်ပြီးပြီ။ ဒါဆို data တစ်ခုရလာတိုင်း
+      ဘယ်ဘက်မှာထားမလဲ။ ဒီမေးခွန်းနဲ့ စဉ်းစားကြည့်ရအောင်။ ဒီ data မှာ သွားရမယ့်အစဉ်နဲ့
+      မသွားရမယ့်လမ်း ရှိသလား။ [[mark:draw-machine-card]] Incident အဆင့်တွေမှာ လုပ်ရမယ့်အစဉ်
+      ရှိတယ်။ Investigating မရောက်ဘဲ Monitoring မရောက်ရဘူး။ Stable check မပြည့်ဘဲ Resolve
+      မလုပ်ရဘူး။ Mitigation အလုပ်လုပ်နေချိန်နဲ့ ပြီးသွားချိန်ကို သီးခြား State ပြရမယ်။ ဒီလို
+      လုပ်ရမယ့်အစဉ်၊ Guard နဲ့ Final State ရှိတဲ့အတွက် XState Machine ထဲထားမယ်။ နောက်ပိုင်း parent
+      State၊ parallel State ဒါမှမဟုတ် child Actor ထပ်လိုလာရင်လည်း Statechart က ဆက်တိုးလို့ရတယ်။
+      [[mark:draw-store-card]] Operator note စာရင်းနဲ့ draft text က အသုံးပြုသူရိုက်လိုက်တာနဲ့ UI
+      မှာ ချက်ချင်းပြောင်းရမယ့် data ပါ။ Draft ပြောင်းပြီး note ထည့်တာမှာ သွားရမယ့် State အစဉ်
+      မရှိဘူး။ Context ကို Event နဲ့ ပြောင်းပြီး React က လိုတဲ့ value ရွေးဖို့ပဲ လိုတယ်။ ဒါကြောင့်
+      XState Store ထဲထားမယ်။ [[mark:draw-shared-rule]] နှစ်ခုလုံး Event သုံးတာတူပေမဲ့ ထိန်းရတဲ့အရာ
+      မတူဘူး။ Machine က Incident ဘယ်အဆင့်မှာရှိလဲနဲ့ ဘယ်ကိုသွားခွင့်ရှိလဲ ထိန်းမယ်။ Store က
+      operator ရေးနေတဲ့ data ကို ထိန်းမယ်။ Machine Context ထဲ UI draft အားလုံး ထည့်စရာမလိုဘူး။
+      Store ထဲမှာလည်း isInvestigating boolean ပြန်ဆောက်ပြီး Machine နဲ့ ကိုက်ညီအောင်
+      လိုက်ညှိစရာမလိုဘူး။ Incident State ကို သိချင်ရင် Actor Snapshot ကိုမေးမယ်။ Note ကို
+      သိချင်ရင် Store Snapshot ကိုမေးမယ်။ ဘယ် data ကို ဘယ်သူက ထိန်းချုပ်ထားလဲဆိုတာ
+      ရှင်းရှင်းလင်းလင်း ဖြစ်နေဖို့က အဓိကပါပဲ။ အခုမှ implementation ကို စကြမယ်။
+    sources:
+      - title: "Stately Docs — XState Store"
+        url: "https://stately.ai/docs/xstate-store"
+      - title: "Stately Docs — @xstate/store-react"
+        url: "https://stately.ai/docs/xstate-store/react"
+    actions:
+      - id: draw-machine-responsibility
+        type: whiteboard.apply
+        at: { mark: draw-machine-card }
+        clear: true
+        upsertIds: [compare-title, machine-card, machine-package, machine-purpose, machine-example]
+        drawMs: 1500
+      - id: draw-store-responsibility
+        type: whiteboard.apply
+        at: { mark: draw-store-card }
+        upsertIds: [store-card, store-package, store-purpose, store-example]
+        drawMs: 1500
+      - id: draw-responsibility-rule
+        type: whiteboard.apply
+        at: { mark: draw-shared-rule }
+        upsertIds: [shared-rule-box, shared-rule]
+        drawMs: 900
+
+  - id: implement-machine
+    narration: >
+      [[mark:close-concept-board]] Whiteboard ပေါ်က ပုံကို နားလည်သွားပြီဆိုတော့ အခု Editor
+      ထဲဝင်ပြီး အဲဒီပုံကို code အဖြစ် ပြောင်းကြည့်ကြရအောင်။ Workspace မှာ React၊ xstate၊
+      @xstate/react နဲ့ @xstate/store-react version အတိအကျ သတ်မှတ်ထားတယ်။ ဒါကြောင့် ဒီသင်ခန်းစာကို
+      နောက်တစ်ခါ run လည်း တူညီတဲ့ API ကိုပဲ သုံးမယ်။ [[mark:open-main-file]] main.tsx အပေါ်ဆုံးက
+      import တွေကနေ စကြည့်ရအောင်။ xstate က setup၊ assign နဲ့ fromPromise ကို ပေးတယ်။ @xstate/react က
+      Machine ကို React Component နဲ့ ချိတ်ဖို့ useMachine ပေးတယ်။ @xstate/store-react က
+      createStore နဲ့ Store အတွက် useSelector ပေးတယ်။ Package တစ်ခုချင်းစီက ဘာလုပ်ပေးလဲ
+      အရင်ခွဲသိထားရင် code အောက်ပိုင်းကို ဖတ်ရတာ ပိုလွယ်သွားမယ်။ [[mark:select-event-union]] အခု
+      IncidentEvent union ကို ကြည့်မယ်။ ACKNOWLEDGE၊ APPLY_MITIGATION၊ VERIFY၊ REGRESS နဲ့ RESOLVE
+      က Actor လက်ခံနိုင်တဲ့ Event တွေပါ။ APPLY_MITIGATION Event မှာ incident ID လို data
+      ထည့်ချင်ရင် union member ထဲ field ထပ်ထည့်နိုင်တယ်။ ဒီလို union ရေးထားတာကြောင့် Event
+      နာမည်စာလုံးမှားတာနဲ့ လိုအပ်တဲ့ data မပါတာကို TypeScript က code ရေးနေချိန်မှာ ပြောနိုင်တယ်။
+      [[mark:type-machine]] setup API နဲ့ Context၊ Events၊ Guard နဲ့ Action type တွေကို Actor
+      Logic တွေနဲ့အတူ နာမည်ပေးပြီး Machine တည်ဆောက်မယ်။ setup ကိုခေါ်လိုက်တာနဲ့ Actor မစသေးဘူး။
+      ဘယ် type နဲ့ ဘယ် implementation တွေ အသုံးပြုမလဲဆိုတာ စုစည်းထားတာပါ။ အဲဒီ setup ကနေ
+      createMachine ခေါ်ပြီး id၊ initial၊ context နဲ့ states သတ်မှတ်မယ်။
+      [[mark:select-initial-state]] reported က initial State ဖြစ်ပြီး resolved က Final State
+      ဖြစ်တယ်။ Actor instance အသစ်တစ်ခုစီက stableChecks သုညနဲ့ mitigationId null ပါတဲ့ initial
+      Context ကို ရမယ်။ states object က မျက်နှာပြင်စာရင်း မဟုတ်ဘူးဆိုတာ ဒီမှာ သတိထားရပါတယ်။ State
+      တစ်ခုစီမှာ ဘယ် Event လက်ခံပြီး ဘယ်ကိုသွားမလဲ ရေးထားတဲ့နေရာပါ။ Event handler မရှိတဲ့ State
+      မှာ Event ပို့ရင် ဘာမှမပြောင်းဘူး။ React Component ထဲမှာ if statement အများကြီး ရေးပြီး
+      ဒီစည်းမျဉ်းကို ပြန်တည်ဆောက်စရာ မလိုတော့ဘူး။
+    sources:
+      - title: "Stately Docs — Setup"
+        url: "https://stately.ai/docs/setup"
+      - title: "Stately Docs — Actions"
+        url: "https://stately.ai/docs/actions"
+      - title: "Stately Docs — Guards"
+        url: "https://stately.ai/docs/guards"
+    actions:
+      - id: close-concepts-whiteboard
+        type: whiteboard.apply
+        at: { mark: close-concept-board }
+        open: false
+      - id: open-incident-main-file
+        type: workspace.openFile
+        at: { mark: open-main-file }
+        path: src/main.tsx
+      - id: select-incident-event-protocol
+        type: editor.select
+        at: { mark: select-event-union }
+        target:
+          file: src/main.tsx
+          text: "type IncidentEvent ="
+          occurrence: 1
+      - id: type-incident-machine
+        type: editor.type
+        at: { mark: type-machine }
+        cadence: block
+        target:
+          file: src/main.tsx
+          after: "// MACHINE_IMPLEMENTATION\n"
+          occurrence: 1
+        text: |
+
+          const incidentMachine = setup({
+            types: {} as {
+              context: {
+                stableChecks: number;
+                mitigationId: string | null;
+              };
+              events: IncidentEvent;
+            },
+            actors: {
+              applyMitigation: fromPromise(async () => {
+                await new Promise<void>((resolve) => setTimeout(resolve, 700));
+                return { changeId: "CHG-2048" };
+              }),
+            },
+            guards: {
+              hasTwoStableChecks: ({ context }) => context.stableChecks >= 2,
+            },
+            actions: {
+              recordStableCheck: assign({
+                stableChecks: ({ context }) => context.stableChecks + 1,
+              }),
+              storeMitigation: assign({
+                mitigationId: ({ event }) => event.output.changeId,
+              }),
+              resetVerification: assign({
+                stableChecks: 0,
+              }),
+            },
+          }).createMachine({
+            id: "incident",
+            initial: "reported",
+            context: {
+              stableChecks: 0,
+              mitigationId: null,
+            },
+            states: {
+              reported: {
+                on: { ACKNOWLEDGE: "investigating" },
+              },
+              investigating: {
+                on: { APPLY_MITIGATION: "mitigating" },
+              },
+              mitigating: {
+                invoke: {
+                  src: "applyMitigation",
+                  onDone: {
+                    target: "monitoring",
+                    actions: "storeMitigation",
+                  },
+                  onError: "investigating",
+                },
+              },
+              monitoring: {
+                on: {
+                  VERIFY: { actions: "recordStableCheck" },
+                  REGRESS: {
+                    target: "investigating",
+                    actions: "resetVerification",
+                  },
+                  RESOLVE: {
+                    guard: "hasTwoStableChecks",
+                    target: "resolved",
+                  },
+                },
+              },
+              resolved: {
+                type: "final",
+              },
+            },
+          });
+      - id: select-machine-initial-state
+        type: editor.select
+        at: { mark: select-initial-state }
+        target:
+          file: src/main.tsx
+          text: 'initial: "reported"'
+          occurrence: 1
+
+  - id: implement-invoked-actor
+    narration: >
+      Machine block ကြီးကို အစအဆုံး တစ်ခါတည်း မဖတ်ဘဲ async အပိုင်းကို အရင်ခွဲကြည့်ရအောင်။
+      [[mark:select-promise-logic]] actors ထဲမှာ applyMitigation ကို fromPromise Actor Logic
+      အဖြစ်သတ်မှတ်ထားတယ်။ ဒီဥပမာမှာ Promise က မီလီစက္ကန့် ခုနစ်ရာစောင့်ပြီး CHG-2048 ဆိုတဲ့ change
+      ID ပြန်ပေးမယ်။ အချိန်ခဏစောင့်ထားတာက Mitigating State ကို မျက်စိနဲ့မြင်နိုင်ဖို့ပါ။ တကယ့် app
+      မှာ ဒီ function က incident ID ကို input အဖြစ်ယူပြီး API ကို ပြင်ဆင်ချက်ပို့နိုင်တယ်။ Promise
+      ပြန်ပေးတဲ့ value က Actor output ဖြစ်လာမယ်။ ဒါကြောင့် onDone ရောက်ချိန် event.output က
+      ဘယ်ပုံစံရှိမလဲကို TypeScript သိထားနိုင်တယ်။ [[mark:select-invoke-source]] Investigating မှာ
+      APPLY_MITIGATION Event ဝင်ရင် target က Mitigating ဖြစ်တယ်။ Mitigating State ဝင်မှ invoke က
+      applyMitigation Actor ကို start လုပ်တယ်။ React re-render ဖြစ်တိုင်း API ကို
+      ပြန်ခေါ်နေတာမျိုး မဟုတ်ပါဘူး။ Mitigating State ကိုဝင်တဲ့အချိန်နဲ့ Actor စတဲ့အချိန်ကို
+      ချိတ်ထားတာပါ။ [[mark:select-invoke-completion]] onDone ရောက်ရင် Monitoring ဆီ Transition
+      လုပ်ပြီး storeMitigation Action က output changeId ကို Context ထဲ assign လုပ်တယ်။ onError
+      ဖြစ်ရင် Investigating ဆီပြန်သွားမယ်။ နောက်ပိုင်း retry Event ထည့်ချင်ရင် အဲဒီ State မှာ
+      ထပ်ရေးနိုင်တယ်။ အောင်မြင်ရင် ဘယ်ကိုသွားမလဲ၊ မအောင်မြင်ရင် ဘယ်ကိုပြန်မလဲကို တစ်နေရာမှာ
+      ဖတ်လို့ရတယ်။ isLoading နဲ့ error string ကို React နေရာအမျိုးမျိုးမှာ ကိုယ်တိုင်
+      လိုက်ညှိနေစရာ မလိုတော့ပါဘူး။
+    sources:
+      - title: "Stately Docs — Promise actors"
+        url: "https://stately.ai/docs/promise-actors"
+      - title: "Stately Docs — Invoking actors"
+        url: "https://stately.ai/docs/invoke"
+    actions:
+      - id: select-promise-actor-logic
+        type: editor.select
+        at: { mark: select-promise-logic }
+        target:
+          file: src/main.tsx
+          text: "fromPromise(async () => {"
+          occurrence: 1
+      - id: select-invoked-actor-source
+        type: editor.select
+        at: { mark: select-invoke-source }
+        target:
+          file: src/main.tsx
+          text: 'src: "applyMitigation"'
+          occurrence: 1
+      - id: select-invoked-actor-completion
+        type: editor.select
+        at: { mark: select-invoke-completion }
+        target:
+          file: src/main.tsx
+          text: 'actions: "storeMitigation"'
+          occurrence: 1
+
+  - id: implement-guards-actions
+    narration: >
+      Async အပိုင်းပြီးပြီဆိုတော့ အခု Event တစ်ခု ရလာတဲ့အခါ ချက်ချင်းဆုံးဖြတ်တဲ့ Transition
+      အပိုင်းကို ဆက်ကြည့်ကြမယ်။ [[mark:select-machine-guard]] RESOLVE handler မှာ target မရွေးခင်
+      hasTwoStableChecks Guard ကို အရင်ခေါ်မယ်။ ဒီ Guard က Context ကိုဖတ်ပြီး true သို့မဟုတ် false
+      ပြန်ပေးတယ်။ true ဖြစ်မှ resolved ဆီသွားမယ်။ false ဖြစ်ရင် လက်ရှိ Monitoring Snapshot ကိုပဲ
+      ဆက်ထားမယ်။ React button ကို မတော်တဆ enable လုပ်မိသွားရင်တောင် ဒီ Guard ရှိနေသရွေ့ Incident
+      ကို စောစောပိတ်လို့ မရပါဘူး။ [[mark:select-machine-action]] VERIFY က recordStableCheck Action
+      ကို ခေါ်တယ်။ assign callback က လက်ရှိ Context ကို လက်ခံပြီး stableChecks value အသစ်တွက်တယ်။
+      XState က State value နဲ့ Context အသစ်ကို Snapshot တစ်ခုတည်းအဖြစ် ထုတ်ပေးမယ်။ Action ကို
+      recordStableCheck လို့ နာမည်ပေးထားတာကြောင့် config ဖတ်ချိန်မှာ ဘာလုပ်ချင်တာလဲ သိသာတယ်။
+      [[mark:select-regression-path]] REGRESS Transition က Monitoring ဆီကနေ Investigating
+      ဆီပြန်သွားပြီး resetVerification Action နဲ့ stableChecks ကို သုည လုပ်တယ်။ State ပြောင်းတာနဲ့
+      stableChecks ပြန်စတာကို Transition တစ်ကြိမ်တည်းမှာ လုပ်ပေးတာပါ။ State က Investigating
+      ဖြစ်သွားပေမဲ့ stableChecks အဟောင်းကျန်နေတဲ့ Snapshot ကြားထဲ မပေါ်ဘူး။ Guard၊ Action နဲ့
+      target ကို အတူကြည့်လိုက်ရင် Incident ပိတ်ခွင့်ပေးတဲ့ စည်းမျဉ်းတစ်ခုလုံးကို ဖတ်လို့ရတယ်။
+    sources:
+      - title: "Stately Docs — Guards"
+        url: "https://stately.ai/docs/guards"
+      - title: "Stately Docs — Actions and assign"
+        url: "https://stately.ai/docs/actions"
+      - title: "Stately Docs — Events and transitions"
+        url: "https://stately.ai/docs/transitions"
+    actions:
+      - id: select-incident-guard
+        type: editor.select
+        at: { mark: select-machine-guard }
+        target:
+          file: src/main.tsx
+          text: 'guard: "hasTwoStableChecks"'
+          occurrence: 1
+      - id: select-context-assignment
+        type: editor.select
+        at: { mark: select-machine-action }
+        target:
+          file: src/main.tsx
+          text: "stableChecks: ({ context }) => context.stableChecks + 1"
+          occurrence: 1
+      - id: select-regression-transition
+        type: editor.select
+        at: { mark: select-regression-path }
+        target:
+          file: src/main.tsx
+          text: 'actions: "resetVerification"'
+          occurrence: 1
+
+  - id: implement-store
+    narration: >
+      Machine ပြီးပြီဆိုတော့ operator note တွေကို ထိန်းပေးမယ့် activityStore ကို ရေးကြည့်ကြမယ်။
+      Store ရဲ့ initial Context မှာ draft အလွတ်တစ်ခုနဲ့ Pager ဖွင့်ထားကြောင်း note တစ်ခု
+      ထည့်ထားတယ်။ [[mark:type-activity-store]] on object ထဲ Event နှစ်ခု ထည့်မယ်။ changeDraft က
+      input ကပို့လာတဲ့ value ကို လက်ခံပြီး draft အသစ်ပါတဲ့ Context ပြန်ပေးတယ်။ Context ထဲ notes
+      လည်းရှိတာကြောင့် spread နဲ့ အဟောင်းကိုယူပြီး draft တစ်ခုပဲ ပြောင်းထားတယ်။ addNote က draft
+      ရှေ့နောက်က whitespace တွေ ဖယ်မယ်။ စာမရှိရင် undefined ပြန်ပေးလို့ Store မပြောင်းဘူး။
+      စာရှိရင် draft ကိုရှင်းပြီး note အသစ်ပါတဲ့ array တစ်ခု ပြန်ဆောက်မယ်။ ဒီ function နှစ်ခုကို
+      ကြည့်လိုက်ရုံနဲ့ Event တစ်ခုစီကြောင့် data ဘယ်လိုပြောင်းသွားလဲ သိနိုင်ပါတယ်။
+      [[mark:select-store-trigger]] React input က activityStore.trigger.changeDraft ကို
+      ခေါ်ထားတာကို ဒီမှာတွေ့ရတယ်။ XState Machine ရဲ့ send က type ပါတဲ့ Event object လက်ခံတယ်။
+      Store ရဲ့ trigger ကတော့
+      Event နာမည်နဲ့ method ဖန်တီးပေးတယ်။ ဒါကြောင့် trigger.changeDraft ခေါ်ချိန် value payload
+      မပါရင် TypeScript ကပြောပေးမယ်။ addNote မှာ payload မလိုလို့ trigger.addNote ကို argument
+      မပါဘဲ ခေါ်နိုင်တယ်။ [[mark:select-store-selector]] import မှာ Store ရဲ့ useSelector ကို
+      useStoreSelector လို့ နာမည်ပြောင်းထားတယ်။ Actor အတွက် Selector နဲ့ Store အတွက် Selector
+      မရောအောင် နာမည်ခွဲထားတာပါ။ နောက် React binding အပိုင်းမှာ draft နဲ့ notes ကို
+      သီးခြားရွေးမယ်။
+    sources:
+      - title: "Stately Docs — XState Store transitions"
+        url: "https://stately.ai/docs/xstate-store"
+      - title: "Stately Docs — @xstate/store-react useSelector"
+        url: "https://stately.ai/docs/xstate-store/react"
+    actions:
+      - id: type-activity-store-transitions
+        type: editor.type
+        at: { mark: type-activity-store }
+        cadence: line-by-line
+        target:
+          file: src/main.tsx
+          after: "    // STORE_TRANSITIONS\n"
+          occurrence: 1
+        text: |
+          changeDraft: (context, event: { value: string }) => ({
+            ...context,
+            draft: event.value,
+          }),
+          addNote: (context) => {
+            const note = context.draft.trim();
+
+            if (!note) {
+              return;
+            }
+
+            return {
+              ...context,
+              draft: "",
+              notes: [...context.notes, note],
+            };
+          },
+      - id: select-store-trigger-call
+        type: editor.select
+        at: { mark: select-store-trigger }
+        target:
+          file: src/main.tsx
+          text: "activityStore.trigger.changeDraft({ value: event.target.value })"
+          occurrence: 1
+      - id: select-store-selector-import
+        type: editor.select
+        at: { mark: select-store-selector }
+        target:
+          file: src/main.tsx
+          text: "useSelector as useStoreSelector"
+          occurrence: 1
+
+  - id: bind-react
+    narration: >
+      အခုဆိုရင် Machine နဲ့ Store နှစ်ခုလုံး ရှိနေပြီပေါ့။ React Component က သူတို့ဆီက value
+      ယူပြီး Event ပြန်ပို့ဖို့သာ ကျန်တော့တယ်။ [[mark:type-react-bindings]] useMachine ကို
+      incidentMachine နဲ့ခေါ်မယ်။ သူပြန်ပေးတဲ့ snapshot က UI ပြဖို့သုံးမယ်၊ send က အသုံးပြုသူရဲ့
+      Event ပို့ဖို့သုံးမယ်။ ပြီးရင် useStoreSelector နှစ်ကြိမ်ခေါ်ပြီး draft နဲ့ notes ကို
+      သီးခြားရွေးမယ်။ draft ပဲပြောင်းရင် notes ကိုရွေးထားတဲ့ Selector ရဲ့ result က မပြောင်းဘူး။
+      Note ထည့်မှသာ အဲဒီ result ပြောင်းမယ်။ ဒီလိုမျိုး ရွေးထားတဲ့အတွက် Component တွေကို
+      ခွဲလိုက်တဲ့အခါ ဘယ်အစိတ်အပိုင်းက ဘာကြောင့် re-render ဖြစ်မလဲဆိုတာကို ရှင်းရှင်းလင်းလင်း
+      သိနိုင်မှာပါ။ Snapshot ထဲက value ကို string ပြောင်းပြီး stateLabels နဲ့ လူဖတ်လို့ရတဲ့
+      Reported၊ Investigating စတဲ့စာသားတွေ ပြမယ်။ Context ထဲက stableChecks နဲ့ mitigationId
+      ကိုလည်း တိုက်ရိုက်ဖတ်မယ်။ [[mark:select-snapshot-can]] RESOLVE button မှာ snapshot.can ကို
+      သုံးထားတယ်။ လက်ရှိ Snapshot မှာ RESOLVE Event ပို့ရင် Transition ဖြစ်နိုင်မလား Machine ကို
+      အရင်မေးတာပါ။ false ဆို button ကို disable ပြမယ်။ ဒါပေမဲ့ button ပုံစံတစ်ခုတည်းကို
+      အားကိုးထားတာမဟုတ်ဘူး။ Event တကယ်ရောက်လာချိန် Guard က ထပ်စစ်မယ်။ [[mark:select-react-send]]
+      Acknowledge button ကိုနှိပ်ရင် send နဲ့ ACKNOWLEDGE Event ပို့ထားတာကို ဒီမှာတွေ့ရတယ်။ Component က
+      state variable အများကြီးကို တစ်ခုချင်းစီ လိုက်ပြင်နေစရာ မလိုတော့ပါဘူး။ Actor က Snapshot
+      အသစ်ထုတ်ပေးပြီး React က အဲဒီ Snapshot အတိုင်း UI ကို ပြန်ဆွဲမယ်။ ဒီနေရာမှာ UI နဲ့
+      လုပ်ငန်းစည်းမျဉ်း ဘယ်လိုခွဲထားလဲ မြင်လာပြီ။
+    sources:
+      - title: "Stately Docs — @xstate/react useMachine"
+        url: "https://stately.ai/docs/xstate-react"
+      - title: "Stately Docs — @xstate/store-react"
+        url: "https://stately.ai/docs/xstate-store/react"
+      - title: "React Docs — Responding to events"
+        url: "https://react.dev/learn/responding-to-events"
+    actions:
+      - id: type-react-state-bindings
+        type: editor.type
+        at: { mark: type-react-bindings }
+        cadence: block
+        target:
+          file: src/main.tsx
+          after: "  // REACT_BINDINGS\n"
+          occurrence: 1
+        text: |
+
+          const [snapshot, send] = useMachine(incidentMachine);
+          const draft = useStoreSelector(
+            activityStore,
+            (storeSnapshot) => storeSnapshot.context.draft,
+          );
+          const notes = useStoreSelector(
+            activityStore,
+            (storeSnapshot) => storeSnapshot.context.notes,
+          );
+      - id: select-snapshot-can
+        type: editor.select
+        at: { mark: select-snapshot-can }
+        target:
+          file: src/main.tsx
+          text: 'snapshot.can({ type: "RESOLVE" })'
+          occurrence: 1
+      - id: select-actor-send
+        type: editor.select
+        at: { mark: select-react-send }
+        target:
+          file: src/main.tsx
+          text: 'send({ type: "ACKNOWLEDGE" })'
+          occurrence: 1
+      - id: expect-final-machine-file
+        type: expect.file
+        at: { mark: select-react-send }
+        path: src/main.tsx
+        contains: 'guard: "hasTwoStableChecks"'
+      - id: expect-final-store-file
+        type: expect.file
+        at: { mark: select-react-send }
+        path: src/main.tsx
+        contains: "activityStore.trigger.addNote()"
+
+  - id: run-incident-workflow
+    narration: >
+      Code အပိုင်းတွေကို တစ်ခုချင်းစီ ကြည့်ပြီးပြီဆိုတော့ အခု အဲဒီအပိုင်းတွေ တကယ် ချိတ်ဆက်ပြီး
+      အလုပ်လုပ်ပုံကို Browser ထဲမှာ လိုက်ကြည့်ရအောင်။ [[mark:start-incident-runtime]] WebContainer
+      ကို start လုပ်မယ်။ Dependency တွေ install လုပ်ပြီး Vite server အသင့်ဖြစ်မှ Preview
+      ပွင့်လာမယ်။ Dashboard ကို စတွေ့တဲ့အချိန်မှာ Reported က initial State အဖြစ် ရှိနေပါလိမ့်မယ်။
+      ဒီအချိန် ဘယ် button ကို နှိပ်လို့ရမလဲ အရင်ခန့်မှန်းကြည့်ရအောင်။ Incident ကို တာဝန်ယူကြောင်း
+      မပြောရသေးတဲ့အတွက် Acknowledge တစ်ခုပဲ နှိပ်လို့ရမယ်။ Apply mitigation၊ Record stable check
+      နဲ့ Resolve incident တွေကို နှိပ်လို့မရသေးဘူး။ React က button တစ်ခုစီမှာ snapshot.can
+      ကိုခေါ်ပြီး “ဒီ Snapshot မှာ ဒီ Event ပို့လို့ရပြီလား” လို့ Machine ကို မေးထားတာပါ။
+      [[mark:acknowledge-incident]] အခု Acknowledge ကိုနှိပ်မယ်။ Component က ACKNOWLEDGE Event ကို
+      Actor ဆီပို့တယ်။ Reported State မှာ အဲဒီ Event အတွက် Transition ရှိတဲ့အတွက် Actor က
+      Investigating Snapshot အသစ်ကို ထုတ်ပေးတယ်။ Workflow ပေါ်မှာ Reported က ပြီးသွားတဲ့အဆင့်အဖြစ်
+      ပြောင်းပြီး Investigating ကို ထင်ရှားအောင် ပြမယ်။ [[mark:mitigate-incident]] Apply
+      mitigation ကို နှိပ်လိုက်ရင် APPLY_MITIGATION Event ဝင်မယ်။ ဒီတစ်ခါတော့ State နှစ်ခုကြားက
+      အချိန်ကွာခြားမှုကို သတိထားကြည့်ရအောင်။ Monitoring ကို တန်းမရောက်ဘူး။ အရင်ဆုံး Mitigating State
+      ဝင်ပြီး Promise Actor ကို start လုပ်မယ်။ Promise ပြီးသွားတဲ့အခါ onDone Transition က
+      Monitoring ဆီပို့ပြီး Action က CHG-2048 ကို Context ထဲသိမ်းမယ်။ ဒါကြောင့် Preview မှာ
+      Mitigating ကို အရင်မြင်ရပြီး နောက်မှ Monitoring နဲ့ change ID ကို မြင်ရမယ်။ State တစ်ခု
+      ထပ်ထည့်ထားတာက အလှဆင်ဖို့အတွက်တော့ မဟုတ်ပါဘူး။ ပြင်ဆင်ချက်ကို အသုံးပြုနေဆဲနဲ့
+      အသုံးပြုပြီးသွားပြီဆိုတဲ့ အခြေအနေနှစ်ခုကို မှားယွင်းမရအောင် Machine ထဲမှာ ခွဲထားတာပါ။
+    sources:
+      - title: "Stately Docs — @xstate/react"
+        url: "https://stately.ai/docs/xstate-react"
+      - title: "Stately Docs — State machine transitions"
+        url: "https://stately.ai/docs/transitions"
+      - title: "Vite Docs — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: start-incident-preview-runtime
+        type: runtime.start
+        at: { mark: start-incident-runtime }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: wait-for-incident-preview
+        type: runtime.waitForReady
+        at: { afterAction: start-incident-preview-runtime }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-incident-preview
+        type: preview.open
+        at: { afterAction: wait-for-incident-preview }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-reported-snapshot
+        type: expect.preview
+        at: { afterAction: open-incident-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: incident-state }
+        textContains: "Reported"
+        attribute: { name: data-state, value: reported }
+        retry: { maxAttempts: 3, delayMs: 150 }
+      - id: click-acknowledge-incident
+        type: preview.click
+        at: { mark: acknowledge-incident }
+        timeoutMs: 5000
+        target: { by: testId, value: acknowledge-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-investigating-snapshot
+        type: expect.preview
+        at: { afterAction: click-acknowledge-incident }
+        timeoutMs: 5000
+        target: { by: testId, value: incident-state }
+        textContains: "Investigating"
+        attribute: { name: data-state, value: investigating }
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: click-mitigate-incident
+        type: preview.click
+        at: { mark: mitigate-incident }
+        timeoutMs: 5000
+        target: { by: testId, value: mitigate-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-mitigating-snapshot
+        type: expect.preview
+        at: { afterAction: click-mitigate-incident }
+        timeoutMs: 5000
+        target: { by: testId, value: incident-state }
+        textContains: "Mitigating"
+        attribute: { name: data-state, value: mitigating }
+        retry: { maxAttempts: 2, delayMs: 100 }
+      - id: expect-monitoring-snapshot
+        type: expect.preview
+        at: { afterAction: expect-mitigating-snapshot }
+        timeoutMs: 5000
+        target: { by: testId, value: incident-state }
+        textContains: "Monitoring"
+        attribute: { name: data-state, value: monitoring }
+        retry: { maxAttempts: 3, delayMs: 400 }
+      - id: expect-mitigation-id
+        type: expect.preview
+        at: { afterAction: expect-monitoring-snapshot }
+        timeoutMs: 5000
+        target: { by: testId, value: mitigation-id }
+        textContains: "CHG-2048"
+        retry: { maxAttempts: 3, delayMs: 100 }
+
+  - id: run-regression-path
+    narration: >
+      Monitoring ရောက်တာနဲ့ Resolved ဆီ တန်းသွားလိုက်ရင် လက်တွေ့ပြတာက မြန်မြန်ပြီးသွားမှာပါ။
+      ဒါပေမဲ့ လက်တွေ့ Incident မှာ metric က ပြန်ဆိုးလာနိုင်တယ်။
+      အောင်မြင်တဲ့လမ်းတစ်လမ်းတည်းကြည့်ပြီး Machine မှန်တယ်လို့ မဆုံးဖြတ်သင့်ဘူး။
+      ပြန်ဆုတ်ရတဲ့လမ်းကိုလည်း စမ်းကြည့်ရအောင်။ [[mark:first-check-before-regression]] ပထမဆုံး
+      Record stable check ကို တစ်ကြိမ်နှိပ်မယ်။ VERIFY Event အတွက် target မရှိတဲ့ Transition က
+      State ကို Monitoring မှာပဲ ထားပြီး recordStableCheck Action ကို run တယ်။ ဒါကြောင့် State
+      မပြောင်းပေမဲ့ Context ထဲက stableChecks က သုညကနေ တစ် ဖြစ်သွားမယ်။ ဒီနေရာလေးက အရေးကြီးပါတယ်။
+      Transition ဆိုတိုင်း State နာမည်ပြောင်းရမယ်လို့ မယူဆသင့်ပါဘူး။ State မပြောင်းဘဲ Action
+      လုပ်ဖို့လည်း Transition သုံးနိုင်တယ်။ [[mark:regress-incident]] အခု metric
+      ပြန်ဆိုးလာတယ်လို့ယူဆပြီး Report regression ကိုနှိပ်မယ်။ REGRESS Event ရလာရင် Machine က
+      Investigating ဆီပြန်သွားပြီး resetVerification Action နဲ့ stableChecks ကို သုည ပြန်ထားတယ်။
+      အရင်က စစ်ထားတဲ့ ရလဒ်ကို ပြဿနာပြန်စစ်တဲ့အခါ ဆက်သုံးလို့ မသင့်တော်လို့ပါ။ ဒီစည်းမျဉ်းကို
+      Component ထဲမှာ if statement နဲ့ လိုက်ပြင်စရာမလိုဘူး။ Transition နဲ့ Action က တစ်နေရာတည်းမှာ
+      ရှင်းရှင်းလင်းလင်း ပြထားတယ်။ [[mark:reapply-mitigation]] ပြဿနာအကြောင်းရင်းကို
+      ထပ်ရှာပြီးပြီလို့ယူဆမယ်။ Apply mitigation ကို ပြန်နှိပ်လိုက်ရင် Mitigating State ဝင်ပြီး
+      Promise Actor အသစ်တစ်ခု စတင်မယ်။ အဲဒီ Actor ပြီးမှ Monitoring ဆီပြန်ရောက်မယ်။
+      ဒီလိုပြန်လည်ကိုင်တွယ်ရတဲ့လမ်းကို စမ်းလိုက်တာကြောင့် REGRESS Transition၊ reset Action နဲ့
+      invoke ကို တစ်ခါတည်း အလုပ်လုပ်ကြောင်း မြင်ရပြီ။
+    sources:
+      - title: "Stately Docs — State machine transitions"
+        url: "https://stately.ai/docs/transitions"
+      - title: "Stately Docs — Actions"
+        url: "https://stately.ai/docs/actions"
+      - title: "Stately Docs — Invoked actors"
+        url: "https://stately.ai/docs/invoke"
+    actions:
+      - id: click-check-before-regression
+        type: preview.click
+        at: { mark: first-check-before-regression }
+        timeoutMs: 5000
+        target: { by: testId, value: verify-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-check-before-regression
+        type: expect.preview
+        at: { afterAction: click-check-before-regression }
+        timeoutMs: 5000
+        target: { by: testId, value: check-count }
+        textContains: "1 / 2 stable checks"
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: click-regress-incident
+        type: preview.click
+        at: { mark: regress-incident }
+        timeoutMs: 5000
+        target: { by: testId, value: regress-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-investigating-after-regression
+        type: expect.preview
+        at: { afterAction: click-regress-incident }
+        timeoutMs: 5000
+        target: { by: testId, value: incident-state }
+        textContains: "Investigating"
+        attribute: { name: data-state, value: investigating }
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: expect-check-reset-after-regression
+        type: expect.preview
+        at: { afterAction: expect-investigating-after-regression }
+        timeoutMs: 5000
+        target: { by: testId, value: check-count }
+        textContains: "0 / 2 stable checks"
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: click-reapply-mitigation
+        type: preview.click
+        at: { mark: reapply-mitigation }
+        timeoutMs: 5000
+        target: { by: testId, value: mitigate-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-mitigating-after-regression
+        type: expect.preview
+        at: { afterAction: click-reapply-mitigation }
+        timeoutMs: 5000
+        target: { by: testId, value: incident-state }
+        textContains: "Mitigating"
+        attribute: { name: data-state, value: mitigating }
+        retry: { maxAttempts: 2, delayMs: 100 }
+      - id: expect-monitoring-after-regression
+        type: expect.preview
+        at: { afterAction: expect-mitigating-after-regression }
+        timeoutMs: 5000
+        target: { by: testId, value: incident-state }
+        textContains: "Monitoring"
+        attribute: { name: data-state, value: monitoring }
+        retry: { maxAttempts: 3, delayMs: 400 }
+
+  - id: run-guard-and-resolve
+    narration: >
+      Monitoring ကို ပြန်ရောက်လာပါပြီ။ ဒီတစ်ခါတော့ Resolve လုပ်ခွင့်ကို Guard က ဘယ်လိုထိန်းထားလဲ
+      သေချာကြည့်မယ်။ [[mark:inspect-guarded-resolve]] stableChecks က သုည ဖြစ်နေတဲ့အတွက် Resolve
+      incident button ကို နှိပ်လို့မရဘူး။ “Button ကို disable လုပ်ထားရင် လုံလောက်ပြီ မဟုတ်လား”
+      လို့ မေးစရာ ရှိနိုင်ပါတယ်။ မလုံလောက်ပါဘူး။ UI မဟုတ်တဲ့ API ဒါမှမဟုတ် test က RESOLVE Event
+      ပို့လာနိုင်တယ်။ တကယ့်စည်းမျဉ်းက Machine ထဲက hasTwoStableChecks Guard ဖြစ်တယ်။ React
+      မှာသုံးထားတဲ့ snapshot.can ကတော့ အဲဒီ Machine စည်းမျဉ်းကိုကြည့်ပြီး လက်ရှိ UI ကို
+      ဘယ်လိုပြရမလဲ သိအောင် မေးထားတာပါ။ [[mark:first-final-check]] Record stable check ကို
+      တစ်ကြိမ်နှိပ်မယ်။ stableChecks က တစ် ဖြစ်သွားပေမဲ့ Guard က false ပဲဖြစ်နေသေးလို့ Resolve ကို
+      မလုပ်နိုင်သေးဘူး။ ဒီအချိန် RESOLVE Event တကယ်ပို့လိုက်ရင်လည်း Machine က Monitoring မှာပဲ
+      ဆက်ရှိနေမယ်။ [[mark:second-final-check]] ဒုတိယအကြိမ် စစ်ပြီးတဲ့အခါ stableChecks က နှစ်
+      ဖြစ်လာတယ်။ အခု snapshot.can က true ပြန်ပေးပြီး Resolve incident ကို နှိပ်လို့ရလာမယ်။
+      [[mark:resolve-incident]] Resolve ကိုနှိပ်လိုက်ရင် RESOLVE Event က Guard ကို
+      နောက်တစ်ကြိမ်ဖြတ်ရတယ်။ Guard က true ပြန်မှ Resolved Final State ကို ရောက်မယ်။ ဒီဥပမာမှာ UI
+      နဲ့ Machine က စည်းမျဉ်းတစ်ခုတည်းကိုပဲ သုံးထားတာကို မြင်ရမှာပါ။ React က ခွင့်ပြုချက်ကို
+      ကိုယ်တိုင် မဆုံးဖြတ်ဘူး။ Machine ကိုမေးပြီး ပြတယ်၊ Event ရောက်လာရင် Machine ကပဲ
+      နောက်ဆုံးဆုံးဖြတ်တယ်။
+    sources:
+      - title: "Stately Docs — Guards"
+        url: "https://stately.ai/docs/guards"
+      - title: "Stately Docs — State snapshots"
+        url: "https://stately.ai/docs/states"
+      - title: "Stately Docs — @xstate/react"
+        url: "https://stately.ai/docs/xstate-react"
+    actions:
+      - id: expect-resolve-guarded
+        type: expect.preview
+        at: { mark: inspect-guarded-resolve }
+        timeoutMs: 5000
+        target: { by: testId, value: resolve-button }
+        textContains: "Resolve incident"
+        attribute: { name: aria-disabled, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: click-first-final-check
+        type: preview.click
+        at: { mark: first-final-check }
+        timeoutMs: 5000
+        target: { by: testId, value: verify-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-first-final-check
+        type: expect.preview
+        at: { afterAction: click-first-final-check }
+        timeoutMs: 5000
+        target: { by: testId, value: check-count }
+        textContains: "1 / 2 stable checks"
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: expect-resolve-still-guarded
+        type: expect.preview
+        at: { afterAction: expect-first-final-check }
+        timeoutMs: 5000
+        target: { by: testId, value: resolve-button }
+        attribute: { name: aria-disabled, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: click-second-final-check
+        type: preview.click
+        at: { mark: second-final-check }
+        timeoutMs: 5000
+        target: { by: testId, value: verify-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-second-final-check
+        type: expect.preview
+        at: { afterAction: click-second-final-check }
+        timeoutMs: 5000
+        target: { by: testId, value: check-count }
+        textContains: "2 / 2 stable checks"
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: expect-resolve-allowed
+        type: expect.preview
+        at: { afterAction: expect-second-final-check }
+        timeoutMs: 5000
+        target: { by: testId, value: resolve-button }
+        attribute: { name: aria-disabled, value: "false" }
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: click-resolve-incident
+        type: preview.click
+        at: { mark: resolve-incident }
+        timeoutMs: 5000
+        target: { by: testId, value: resolve-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-resolved-snapshot
+        type: expect.preview
+        at: { afterAction: click-resolve-incident }
+        timeoutMs: 5000
+        target: { by: testId, value: incident-state }
+        textContains: "Resolved"
+        attribute: { name: data-state, value: resolved }
+        retry: { maxAttempts: 3, delayMs: 100 }
+
+  - id: run-activity-store
+    narration: >
+      Incident Actor က Resolved Final State ကို ရောက်သွားပါပြီ။ ဒါပေမဲ့ ဘေးက Activity notes ကို
+      ဆက်ရေးလို့ရနေသေးတာကို ဒီမှာမြင်ရတယ်။ အကြောင်းက note စာရင်းကို Incident Machine ထဲမှာ မထားဘဲ XState
+      Store က သီးခြားထိန်းထားလို့ပါ။ [[mark:enter-activity-note]] Operator note အဖြစ် Database
+      latency is normal လို့ input ထဲမှာ ရေးကြည့်မယ်။ စာလုံးရိုက်တိုင်း changeDraft Event က Store
+      ဆီရောက်တယ်။ အဲဒီ Transition က draft ပါတဲ့ Context အသစ်ကို ပြန်ပေးမယ်။ React မှာ draft
+      ကိုရွေးထားတဲ့ Selector က value ပြောင်းသွားတာကို သိပြီး input ကို re-render လုပ်ပေးတယ်။
+      [[mark:add-activity-note]] Add note က addNote Event ပို့မယ်။ addNote Transition က ရှိပြီးသား
+      array ကို တိုက်ရိုက်မပြင်ဘဲ notes array အသစ်တစ်ခု ဖန်တီးပြီး draft ကို အလွတ်ပြန်ထားတယ်။
+      ဒါကြောင့် note စာရင်းမှာ စာကြောင်းအသစ်ပေါ်လာပြီး input က ပြန်ရှင်းသွားမယ်။ ဒီအချိန် Incident
+      State ကို ပြန်ကြည့်ရအောင်။ Store မှာ data ပြောင်းပေမဲ့ Machine ရဲ့ Snapshot က Resolved
+      အတိုင်းပဲ။ Operator note ပြောင်းလိုက်တာနဲ့ Incident က Reported ပြန်ဖြစ်သွားစရာ
+      အကြောင်းမရှိပါဘူး။ Workflow အဆင့်နဲ့ UI မှာရေးနေတဲ့ data ကို မတူတဲ့နေရာနှစ်ခုမှာ
+      ထိန်းထားလို့ ဒီလိုစိတ်ချရတာပါ။
+    sources:
+      - title: "Stately Docs — @xstate/store-react"
+        url: "https://stately.ai/docs/xstate-store/react"
+      - title: "Stately Docs — XState Store"
+        url: "https://stately.ai/docs/xstate-store"
+      - title: "React Docs — Updating arrays in state"
+        url: "https://react.dev/learn/updating-arrays-in-state"
+    actions:
+      - id: enter-incident-activity-note
+        type: preview.input
+        at: { mark: enter-activity-note }
+        timeoutMs: 5000
+        target: { by: testId, value: note-input }
+        value: "Database latency is normal"
+        retry: { maxAttempts: 2, delayMs: 150 }
+      - id: expect-activity-draft
+        type: expect.preview
+        at: { afterAction: enter-incident-activity-note }
+        timeoutMs: 5000
+        target: { by: testId, value: note-input }
+        value: "Database latency is normal"
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: click-add-activity-note
+        type: preview.click
+        at: { mark: add-activity-note }
+        timeoutMs: 5000
+        target: { by: testId, value: add-note-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-activity-note
+        type: expect.preview
+        at: { afterAction: click-add-activity-note }
+        timeoutMs: 5000
+        target: { by: testId, value: activity-list }
+        textContains: "Database latency is normal"
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: expect-activity-draft-cleared
+        type: expect.preview
+        at: { afterAction: expect-activity-note }
+        timeoutMs: 5000
+        target: { by: testId, value: note-input }
+        value: ""
+        retry: { maxAttempts: 3, delayMs: 100 }
+      - id: expect-machine-stays-resolved
+        type: expect.preview
+        at: { afterAction: expect-activity-draft-cleared }
+        timeoutMs: 5000
+        target: { by: testId, value: incident-state }
+        textContains: "Resolved"
+        attribute: { name: data-state, value: resolved }
+        retry: { maxAttempts: 3, delayMs: 100 }
+
+  - id: course-recap
+    narration: >
+      [[mark:open-recap-board]] သင်ခန်းစာအစမှာ boolean flag လေးခုကြောင့် ဖြစ်နိုင်တဲ့ အခြေအနေ
+      ဆယ့်ခြောက်မျိုးအထိ ပေါ်လာတာကို ကြည့်ခဲ့ကြပါတယ်။ အခုတော့ Incident တစ်ခုလုံးကို Machine တစ်ခု၊
+      Actor တစ်ခုနဲ့ အလုပ်လုပ်အောင် ရေးပြီး Browser ထဲမှာ အစအဆုံး စမ်းခဲ့ပြီးပြီ။ နောက်လုပ်မယ့်
+      application တစ်ခုမှာ XState သုံးမသုံး ဆုံးဖြတ်ရတဲ့အခါ ဒီပုံနဲ့ ပြန်စဉ်းစားလို့ရပါတယ်။
+      [[mark:recap-model-and-rules]] ပထမ မေးခွန်းက “အသုံးပြုသူက ဘာလုပ်လို့ရတယ်၊
+      ဘာလုပ်လို့မရဘူးဆိုတဲ့ အစဉ်ရှိသလား” ပါ။ ရှိတယ်ဆိုရင် အရင်ဆုံး အဲဒီ State တွေကို နာမည်ပေးမယ်။
+      ပြီးတော့ ဖြစ်လာနိုင်တာတွေကို Event အဖြစ်ရေးပြီး State နဲ့ Event ကြားက ခွင့်ပြုထားတဲ့လမ်းကို
+      Transition နဲ့ ချိတ်မယ်။ State နာမည်တစ်ခုနဲ့ မလုံလောက်တဲ့ stableChecks၊ mitigationId လို
+      data ကို Context ထဲထားမယ်။ Event ကို လက်ခံမလား စစ်ဖို့ Guard သုံးပြီး Context ပြောင်းဖို့
+      Action သုံးမယ်။ ဒီအဆင့်မှာတော့ React button တွေကို မစဉ်းစားသေးဘဲ လုပ်ငန်းစည်းမျဉ်းတွေကို
+      အရင် ရှင်းရှင်းလင်းလင်း ဖြစ်အောင် လုပ်တာပါ။ [[mark:recap-actor-and-react]] ဒုတိယ မေးခွန်းက
+      “အချိန်ယူတဲ့အလုပ် ဒါမှမဟုတ် ပြင်ပ API ခေါ်တာရှိသလား” ပါ။ ရှိရင် Promise Actor လို Actor
+      logic တစ်ခုရေးပြီး State ထဲက invoke နဲ့ စတင်နိုင်တယ်။ onDone နဲ့ အောင်မြင်တဲ့လမ်း၊ onError
+      နဲ့ မအောင်မြင်တဲ့လမ်းကို Machine ထဲမှာပဲ ဖော်ပြနိုင်တယ်။ React Component က Machine ကို run
+      ပြီး Snapshot ကိုပြမယ်၊ Event ကိုပို့မယ်။ Component သေးသေးလေးအတွက် useMachine က လွယ်တယ်။
+      ActorRef ကို အပိုင်းများစွာမျှဝေရင် useActorRef သို့မဟုတ် createActorContext ကို
+      စဉ်းစားနိုင်တယ်။ Component တစ်ခုက Snapshot ထဲက value အနည်းငယ်ပဲလိုရင် useSelector နဲ့ အဲဒီ
+      value ကိုပဲ ရွေးနိုင်တယ်။ [[mark:recap-store-and-checks]] တတိယ မေးခွန်းက “ဒီ data မှာ State
+      အဆင့်လိုက်သွားရမယ့် စည်းမျဉ်းရှိသလား” ပါ။ မရှိဘဲ Event နဲ့ Context ပြောင်းပြီး React က
+      Selector နဲ့ဖတ်ဖို့ပဲလိုရင် XState Store က ပိုသင့်တော်နိုင်တယ်။ ဒီသင်ခန်းစာမှာ activity
+      draft နဲ့ notes ကို Store ထဲထားခဲ့တာ အဲဒီအကြောင်းပါ။ နောက်ဆုံး စစ်ဆေးတဲ့အခါ
+      အောင်မြင်တဲ့လမ်းတစ်ခုတည်း စမ်းရုံနဲ့တော့ မလုံလောက်ပါဘူး။ ခွင့်မပြုသေးတဲ့ Event၊ Guard
+      မပြည့်သေးတဲ့အခြေအနေ၊ async Actor အလုပ်လုပ်နေချိန်နဲ့ REGRESS လို ပြန်ဆုတ်တဲ့လမ်းကိုပါ
+      စမ်းကြည့်ရပါတယ်။ snapshot.matches
+      နဲ့ State ကိုစစ်နိုင်ပြီး snapshot.can နဲ့ Event ပို့လို့ရမရ စစ်နိုင်တယ်။ ဒီအခြေခံတွေကို
+      ရသွားပြီဆိုရင်တော့ nested States၊ parallel States၊ Actor systems နဲ့ persistence တွေကို
+      ဆက်ပြီး လေ့လာနိုင်ပါပြီ။ အဓိကမှတ်ထားရမယ့်အချက်က Machine က ဘာဖြစ်ရမလဲဆုံးဖြတ်ပြီး React က
+      အဲဒီဆုံးဖြတ်ချက်ကို အသုံးပြုသူမြင်အောင်ပြတာပါ။
+    sources:
+      - title: "Stately Docs — State machines"
+        url: "https://stately.ai/docs/machines"
+      - title: "Stately Docs — Actors"
+        url: "https://stately.ai/docs/actors"
+      - title: "Stately Docs — @xstate/react"
+        url: "https://stately.ai/docs/xstate-react"
+      - title: "Stately Docs — @xstate/store-react"
+        url: "https://stately.ai/docs/xstate-store/react"
+    actions:
+      - id: open-course-recap-board
+        type: whiteboard.apply
+        at: { mark: open-recap-board }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: [recap-title, recap-subtitle]
+        drawMs: 900
+      - id: recap-state-model-and-rules
+        type: whiteboard.apply
+        at: { mark: recap-model-and-rules }
+        upsertIds:
+          [
+            recap-model-card,
+            recap-model-heading,
+            recap-model-body,
+            recap-rules-card,
+            recap-rules-heading,
+            recap-rules-body,
+          ]
+        drawMs: 1700
+      - id: recap-actors-and-react
+        type: whiteboard.apply
+        at: { mark: recap-actor-and-react }
+        upsertIds:
+          [
+            recap-actor-card,
+            recap-actor-heading,
+            recap-actor-body,
+            recap-react-card,
+            recap-react-heading,
+            recap-react-body,
+          ]
+        drawMs: 1700
+      - id: recap-store-and-testing
+        type: whiteboard.apply
+        at: { mark: recap-store-and-checks }
+        upsertIds:
+          [
+            recap-store-card,
+            recap-store-heading,
+            recap-store-body,
+            recap-test-card,
+            recap-test-heading,
+            recap-test-body,
+            recap-rule-box,
+            recap-rule,
+          ]
+        drawMs: 2100
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
