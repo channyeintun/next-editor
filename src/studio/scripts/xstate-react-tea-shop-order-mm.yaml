@@ -1,7 +1,7 @@
 # Burmese foundational course: model a familiar tea-shop order workflow with
 # XState, connect its Actor to React, and keep counter notes in XState Store.
-# The first eight scenes teach the concepts with whiteboards. Implementation
-# starts only after the Machine, Actor/Snapshot, React hooks, and Store are clear.
+# The first six scenes use the tea-shop story as a visual model. API names and
+# implementation details wait until the editor is visible.
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/xstate-react-tea-shop-order-mm.yaml
 schemaVersion: 1
@@ -607,17 +607,17 @@ lesson:
           }
         }
   whiteboardAssets:
-    # Board 0 — boolean combinations versus one explicit finite state.
+    # Board 0 — one order needs one unambiguous current stage.
     - id: why-title
       kind: text
       x: 370
       y: 160
       width: 600
       height: 46
-      text: "WHY NAME STATES?"
+      text: "အော်ဒါ #24 အခု ဘယ်အဆင့်မှာလဲ?"
       strokeColor: "#1e1e1e"
       fontSize: 36
-    - id: booleans-box
+    - id: conflicting-status-box
       kind: rectangle
       x: 275
       y: 255
@@ -625,25 +625,25 @@ lesson:
       height: 235
       strokeColor: "#e03131"
       backgroundColor: "#fff5f5"
-    - id: booleans-heading
+    - id: conflicting-status-heading
       kind: text
       x: 320
       y: 280
       width: 240
       height: 34
-      text: "BOOLEAN FLAGS"
+      text: "မရှင်းတဲ့အဖြေ"
       strokeColor: "#c92a2a"
       fontSize: 25
-    - id: booleans-body
+    - id: conflicting-status-body
       kind: text
       x: 320
       y: 340
       width: 245
       height: 125
-      text: "isReceived = true\nisPreparing = true\nisReady = true\nisServed = false"
+      text: "RECEIVED  ✓\nPREPARING ✓\nREADY     ✓"
       strokeColor: "#1e1e1e"
       fontSize: 20
-    - id: invalid-circle
+    - id: conflicting-status-circle
       kind: freedraw
       stroke: circle
       x: 300
@@ -651,7 +651,7 @@ lesson:
       width: 285
       height: 105
       strokeColor: "#e03131"
-    - id: model-arrow
+    - id: clarify-status-arrow
       kind: freedraw
       stroke: arrow-right
       x: 620
@@ -659,7 +659,7 @@ lesson:
       width: 100
       height: 30
       strokeColor: "#7048e8"
-    - id: state-value-box
+    - id: current-status-box
       kind: rectangle
       x: 735
       y: 285
@@ -667,34 +667,34 @@ lesson:
       height: 175
       strokeColor: "#2f9e44"
       backgroundColor: "#ebfbee"
-    - id: state-value-heading
+    - id: current-status-heading
       kind: text
       x: 790
       y: 315
       width: 220
       height: 34
-      text: "ONE NAMED STATE"
+      text: "တစ်ခုတည်းသောအဖြေ"
       strokeColor: "#2b8a3e"
       fontSize: 25
-    - id: state-value-body
+    - id: current-status-body
       kind: text
       x: 775
       y: 380
       width: 250
       height: 42
-      text: 'state = "ready"'
+      text: "READY"
       strokeColor: "#1e1e1e"
       fontSize: 24
-    - id: invalid-rule
+    - id: one-stage-rule
       kind: text
       x: 350
       y: 515
       width: 650
       height: 34
-      text: "Named state တစ်ခုတည်းဆို မဖြစ်နိုင်တဲ့အတွဲ မပေါ်တော့ဘူး"
+      text: "အော်ဒါတစ်ခု · လက်ရှိအဆင့်တစ်ခု"
       strokeColor: "#7048e8"
       fontSize: 24
-    - id: course-map-box
+    - id: next-action-box
       kind: rectangle
       x: 300
       y: 570
@@ -702,24 +702,24 @@ lesson:
       height: 58
       strokeColor: "#1971c2"
       backgroundColor: "#e7f5ff"
-    - id: course-map-label
+    - id: next-action-label
       kind: text
       x: 330
       y: 587
       width: 690
       height: 28
-      text: "NAMED STATES  →  FINITE AUTOMATON  →  XSTATE  →  REACT"
+      text: "လက်ရှိအဆင့်  →  နောက်လုပ်ခွင့်ရှိတာ"
       strokeColor: "#1971c2"
       fontSize: 21
 
-    # Board 1 — the tea-shop workflow as a finite automaton.
+    # Board 1 — the order ticket moving through the real shop.
     - id: domain-title
       kind: text
       x: 300
       y: 160
       width: 760
       height: 46
-      text: "FINITE AUTOMATON — TEA SHOP ORDER"
+      text: "အော်ဒါ #24 ရဲ့ ခရီးလမ်း"
       strokeColor: "#1e1e1e"
       fontSize: 32
     - id: domain-subtitle
@@ -728,7 +728,7 @@ lesson:
       y: 215
       width: 580
       height: 30
-      text: "Finite State + Event → Transition"
+      text: "တစ်ဆင့်ပြီးမှ နောက်တစ်ဆင့်"
       strokeColor: "#7048e8"
       fontSize: 23
     - id: received-box
@@ -754,7 +754,7 @@ lesson:
       y: 392
       width: 115
       height: 24
-      text: "Order arrives"
+      text: "ကောင်တာ"
       strokeColor: "#495057"
       fontSize: 17
     - id: arrow-one
@@ -771,7 +771,7 @@ lesson:
       y: 288
       width: 75
       height: 30
-      text: "START"
+      text: "စပြင်"
       strokeColor: "#f08c00"
       fontSize: 16
     - id: preparing-box
@@ -797,7 +797,7 @@ lesson:
       y: 392
       width: 120
       height: 24
-      text: "Make items"
+      text: "မီးဖို"
       strokeColor: "#495057"
       fontSize: 17
     - id: arrow-two
@@ -814,7 +814,7 @@ lesson:
       y: 288
       width: 70
       height: 30
-      text: "PACK"
+      text: "ထုပ်ပိုး"
       strokeColor: "#1971c2"
       fontSize: 17
     - id: packing-box
@@ -840,7 +840,7 @@ lesson:
       y: 392
       width: 115
       height: 24
-      text: "Invoke Actor"
+      text: "ပါဆယ်"
       strokeColor: "#495057"
       fontSize: 17
     - id: arrow-on-done
@@ -857,7 +857,7 @@ lesson:
       y: 288
       width: 60
       height: 30
-      text: "onDone"
+      text: "လက်မှတ်ရ"
       strokeColor: "#1971c2"
       fontSize: 16
     - id: ready-box
@@ -883,7 +883,7 @@ lesson:
       y: 392
       width: 115
       height: 24
-      text: "Check 2 items"
+      text: "စစ်ဆေး"
       strokeColor: "#495057"
       fontSize: 17
     - id: arrow-three
@@ -900,7 +900,7 @@ lesson:
       y: 288
       width: 65
       height: 30
-      text: "SERVE"
+      text: "တည်ခင်း"
       strokeColor: "#2f9e44"
       fontSize: 17
     - id: served-box
@@ -926,7 +926,7 @@ lesson:
       y: 392
       width: 80
       height: 24
-      text: "Final"
+      text: "စားပွဲ"
       strokeColor: "#495057"
       fontSize: 17
     - id: context-box
@@ -943,18 +943,18 @@ lesson:
       y: 520
       width: 225
       height: 28
-      text: "Context: checkedItems"
+      text: "အော်ဒါကတ်"
       strokeColor: "#e67700"
       fontSize: 21
     - id: context-action
       kind: text
-      x: 735
+      x: 705
       y: 558
-      width: 175
+      width: 235
       height: 24
-      text: "CHECK_ITEM → assign +1"
+      text: "☐ လက်ဖက်ရည်   ☐ ပလာတာ"
       strokeColor: "#495057"
-      fontSize: 17
+      fontSize: 16
     - id: guard-box
       kind: ellipse
       x: 955
@@ -965,40 +965,40 @@ lesson:
       backgroundColor: "#fff4e6"
     - id: guard-label
       kind: text
-      x: 982
+      x: 968
       y: 519
-      width: 115
+      width: 145
       height: 28
-      text: "GUARD"
+      text: "စစ်ဆေးရေးဂိတ်"
       strokeColor: "#d9480f"
-      fontSize: 22
+      fontSize: 18
     - id: guard-rule
       kind: text
-      x: 978
+      x: 970
       y: 555
-      width: 125
+      width: 140
       height: 24
-      text: "items ≥ 2"
+      text: "2 / 2 ဖြစ်မှဖွင့်"
       strokeColor: "#495057"
-      fontSize: 18
+      fontSize: 17
     - id: domain-rule
       kind: text
       x: 280
       y: 515
       width: 360
       height: 72
-      text: "Impossible transitions\nstay impossible."
+      text: "တစ်ခုမှားရင်\nPREPARING ဆီပြန်"
       strokeColor: "#7048e8"
       fontSize: 27
 
-    # Board 2 — XState Actor and React dataflow.
+    # Board 2 — a shared rule sheet, one live order, and the counter screen.
     - id: actor-title
       kind: text
       x: 340
       y: 165
       width: 650
       height: 46
-      text: "Machine logic becomes a running Actor"
+      text: "စည်းမျဉ်းစာရွက်က အော်ဒါကို မရွှေ့ဘူး"
       strokeColor: "#1e1e1e"
       fontSize: 32
     - id: logic-box
@@ -1011,22 +1011,22 @@ lesson:
       backgroundColor: "#f3f0ff"
     - id: logic-heading
       kind: text
-      x: 320
+      x: 295
       y: 305
-      width: 120
+      width: 165
       height: 34
-      text: "MACHINE"
+      text: "ဆိုင်စည်းမျဉ်း"
       strokeColor: "#7048e8"
-      fontSize: 25
+      fontSize: 22
     - id: logic-body
       kind: text
-      x: 305
+      x: 295
       y: 360
-      width: 150
+      width: 165
       height: 66
-      text: "States\nTransitions\nGuards"
+      text: "ဘယ်အဆင့်ကနေ\nဘယ်အဆင့်ကို"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 18
     - id: actor-create-arrow
       kind: freedraw
       stroke: arrow-right
@@ -1041,7 +1041,7 @@ lesson:
       y: 300
       width: 95
       height: 28
-      text: "useMachine"
+      text: "အော်ဒါဖွင့်"
       strokeColor: "#f08c00"
       fontSize: 18
     - id: actor-box
@@ -1054,22 +1054,22 @@ lesson:
       backgroundColor: "#fff4e6"
     - id: actor-heading
       kind: text
-      x: 625
+      x: 595
       y: 310
-      width: 100
+      width: 160
       height: 36
-      text: "ACTOR"
+      text: "အော်ဒါ #24"
       strokeColor: "#e67700"
-      fontSize: 28
+      fontSize: 24
     - id: actor-body
       kind: text
-      x: 610
+      x: 595
       y: 365
-      width: 130
+      width: 160
       height: 56
-      text: "send(event)\nget Snapshot"
+      text: "လက်ရှိ READY\nစစ်ပြီး 2 / 2"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 18
     - id: snapshot-arrow
       kind: freedraw
       stroke: arrow-right
@@ -1078,32 +1078,24 @@ lesson:
       width: 85
       height: 25
       strokeColor: "#1971c2"
-    - id: event-arrow-back
-      kind: freedraw
-      stroke: arrow-right
-      x: 785
-      y: 395
-      width: 85
-      height: 25
-      strokeColor: "#e03131"
     - id: snapshot-label
       kind: text
-      x: 790
+      x: 785
       y: 286
-      width: 90
+      width: 100
       height: 28
-      text: "Snapshot →"
+      text: "အခြေအနေ →"
       strokeColor: "#1971c2"
-      fontSize: 17
+      fontSize: 16
     - id: event-label
       kind: text
-      x: 795
+      x: 775
       y: 430
-      width: 75
+      width: 120
       height: 28
-      text: "← Event"
+      text: "← တောင်းဆိုမှု"
       strokeColor: "#e03131"
-      fontSize: 17
+      fontSize: 16
     - id: react-box
       kind: rectangle
       x: 870
@@ -1114,22 +1106,22 @@ lesson:
       backgroundColor: "#e7f5ff"
     - id: react-heading
       kind: text
-      x: 930
+      x: 892
       y: 305
-      width: 110
+      width: 185
       height: 34
-      text: "REACT UI"
+      text: "ကောင်တာမျက်နှာပြင်"
       strokeColor: "#1971c2"
-      fontSize: 25
+      fontSize: 20
     - id: react-body
       kind: text
-      x: 905
+      x: 895
       y: 360
-      width: 155
+      width: 175
       height: 64
-      text: "render Snapshot\nsend user Event"
+      text: "အခြေအနေပြ\nခလုတ်နှိပ်မှု ပို့"
       strokeColor: "#1e1e1e"
-      fontSize: 19
+      fontSize: 18
     - id: selector-box
       kind: rectangle
       x: 360
@@ -1144,18 +1136,18 @@ lesson:
       y: 541
       width: 585
       height: 32
-      text: "useActorRef + useSelector → fine-grained subscription"
+      text: "React က တောင်းဆိုမှုကိုပို့တယ် · Actor က နောက်အဆင့်ကိုဆုံးဖြတ်တယ်"
       strokeColor: "#2b8a3e"
-      fontSize: 22
+      fontSize: 19
 
-    # Board 3 — invoked Actor lifecycle.
+    # Board 3 — the packing state owns a time-taking child job.
     - id: invoke-title
       kind: text
       x: 350
       y: 165
       width: 650
       height: 46
-      text: "ASYNC WORK IS AN INVOKED ACTOR"
+      text: "PACKING ဝင်ရင် ထုပ်ပိုးအလုပ် စတယ်"
       strokeColor: "#1e1e1e"
       fontSize: 32
     - id: parent-actor-box
@@ -1172,16 +1164,16 @@ lesson:
       y: 320
       width: 150
       height: 34
-      text: "ORDER ACTOR"
+      text: "အော်ဒါ #24"
       strokeColor: "#7048e8"
-      fontSize: 22
+      fontSize: 21
     - id: parent-state-label
       kind: text
       x: 330
       y: 385
       width: 140
       height: 30
-      text: "packing"
+      text: "PACKING"
       strokeColor: "#1e1e1e"
       fontSize: 22
     - id: invoke-child-arrow
@@ -1198,7 +1190,7 @@ lesson:
       y: 305
       width: 90
       height: 28
-      text: "invoke"
+      text: "အလုပ်အပ်"
       strokeColor: "#f08c00"
       fontSize: 19
     - id: promise-actor-box
@@ -1211,22 +1203,22 @@ lesson:
       backgroundColor: "#fff4e6"
     - id: promise-actor-label
       kind: text
-      x: 645
+      x: 625
       y: 310
-      width: 185
+      width: 225
       height: 34
-      text: "PROMISE ACTOR"
+      text: "ထုပ်ပိုးအလုပ်"
       strokeColor: "#e67700"
-      fontSize: 24
+      fontSize: 22
     - id: promise-actor-body
       kind: text
-      x: 648
+      x: 625
       y: 370
-      width: 180
+      width: 225
       height: 62
-      text: "pack order\nreturn ticket"
+      text: "လက်ဖက်ရည် + ပလာတာ\nလက်မှတ်ထုတ်"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 18
     - id: done-arrow
       kind: freedraw
       stroke: arrow-right
@@ -1249,7 +1241,7 @@ lesson:
       y: 298
       width: 150
       height: 60
-      text: "onDone\n→ ready"
+      text: "✓ လက်မှတ်ရ\n→ READY"
       strokeColor: "#2f9e44"
       fontSize: 19
     - id: error-state
@@ -1258,7 +1250,7 @@ lesson:
       y: 385
       width: 160
       height: 60
-      text: "onError\n→ preparing"
+      text: "✕ အဆင်မပြေ\n→ PREPARING"
       strokeColor: "#e03131"
       fontSize: 19
     - id: invoke-rule-box
@@ -1275,245 +1267,18 @@ lesson:
       y: 556
       width: 585
       height: 32
-      text: "State ကထွက်ရင် invoked Actor ကို ရပ်ပေးတယ်"
+      text: "PACKING ကထွက်ရင် မပြီးသေးတဲ့အလုပ်ကို ရပ်မယ်"
       strokeColor: "#1971c2"
-      fontSize: 22
-
-    # Board 4 — Choosing React hooks.
-    - id: hooks-title
-      kind: text
-      x: 345
-      y: 165
-      width: 680
-      height: 46
-      text: "@xstate/react — HOOK ရွေးနည်း"
-      strokeColor: "#1e1e1e"
-      fontSize: 31
-    - id: use-machine-card
-      kind: rectangle
-      x: 275
-      y: 270
-      width: 250
-      height: 205
-      strokeColor: "#7048e8"
-      backgroundColor: "#f3f0ff"
-    - id: use-machine-heading
-      kind: text
-      x: 320
-      y: 300
-      width: 160
-      height: 34
-      text: "useMachine"
-      strokeColor: "#7048e8"
-      fontSize: 25
-    - id: use-machine-body
-      kind: text
-      x: 310
-      y: 360
-      width: 180
-      height: 78
-      text: "snapshot\nsend\nactorRef"
-      strokeColor: "#1e1e1e"
-      fontSize: 21
-    - id: use-ref-card
-      kind: rectangle
-      x: 560
-      y: 270
-      width: 250
-      height: 205
-      strokeColor: "#f08c00"
-      backgroundColor: "#fff4e6"
-    - id: use-ref-heading
-      kind: text
-      x: 605
-      y: 300
-      width: 160
-      height: 34
-      text: "useActorRef"
-      strokeColor: "#e67700"
-      fontSize: 25
-    - id: use-ref-body
-      kind: text
-      x: 595
-      y: 360
-      width: 180
-      height: 78
-      text: "ActorRef\nSnapshot subscription\nမရှိ"
-      strokeColor: "#1e1e1e"
-      fontSize: 19
-    - id: use-selector-card
-      kind: rectangle
-      x: 845
-      y: 270
-      width: 250
-      height: 205
-      strokeColor: "#1971c2"
-      backgroundColor: "#e7f5ff"
-    - id: use-selector-heading
-      kind: text
-      x: 885
-      y: 300
-      width: 170
-      height: 34
-      text: "useSelector"
-      strokeColor: "#1971c2"
-      fontSize: 25
-    - id: use-selector-body
-      kind: text
-      x: 880
-      y: 360
-      width: 180
-      height: 78
-      text: "selected value\ncompare function\nပြောင်းမှ re-render"
-      strokeColor: "#1e1e1e"
-      fontSize: 19
-    - id: context-provider-box
-      kind: rectangle
-      x: 365
-      y: 535
-      width: 640
-      height: 72
-      strokeColor: "#2f9e44"
-      backgroundColor: "#ebfbee"
-    - id: context-provider-label
-      kind: text
-      x: 405
-      y: 556
-      width: 565
-      height: 32
-      text: "createActorContext → React tree ထဲ Actor တစ်ခု မျှဝေသုံးမယ်"
-      strokeColor: "#2b8a3e"
-      fontSize: 21
-
-    # Board 5 — XState Store event and selector flow.
-    - id: store-flow-title
-      kind: text
-      x: 335
-      y: 165
-      width: 700
-      height: 46
-      text: "XSTATE STORE — EVENT နဲ့ CONTEXT ပြောင်းခြင်း"
-      strokeColor: "#1e1e1e"
-      fontSize: 32
-    - id: old-context-box
-      kind: rectangle
-      x: 260
-      y: 305
-      width: 175
-      height: 130
-      strokeColor: "#7048e8"
-      backgroundColor: "#f3f0ff"
-    - id: old-context-label
-      kind: text
-      x: 280
-      y: 335
-      width: 135
-      height: 62
-      text: "Context\nnotes: [1]"
-      strokeColor: "#7048e8"
-      fontSize: 21
-    - id: trigger-arrow
-      kind: freedraw
-      stroke: arrow-right
-      x: 435
-      y: 350
-      width: 80
-      height: 25
-      strokeColor: "#f08c00"
-    - id: trigger-label
-      kind: text
-      x: 435
-      y: 300
-      width: 90
-      height: 28
-      text: "trigger.*"
-      strokeColor: "#f08c00"
-      fontSize: 18
-    - id: store-transition-box
-      kind: rectangle
-      x: 515
-      y: 285
-      width: 235
-      height: 170
-      strokeColor: "#f08c00"
-      backgroundColor: "#fff4e6"
-    - id: store-transition-label
-      kind: text
-      x: 540
-      y: 315
-      width: 185
-      height: 95
-      text: "Transition\n(context, event)\n→ next context"
-      strokeColor: "#1e1e1e"
       fontSize: 20
-    - id: next-context-arrow
-      kind: freedraw
-      stroke: arrow-right
-      x: 750
-      y: 350
-      width: 75
-      height: 25
-      strokeColor: "#0891b2"
-    - id: next-context-box
-      kind: rectangle
-      x: 825
-      y: 305
-      width: 190
-      height: 130
-      strokeColor: "#0891b2"
-      backgroundColor: "#e3fafc"
-    - id: next-context-label
-      kind: text
-      x: 845
-      y: 335
-      width: 150
-      height: 62
-      text: "Snapshot\nnotes: [2]"
-      strokeColor: "#087f8c"
-      fontSize: 21
-    - id: selector-notify-arrow
-      kind: freedraw
-      stroke: arrow-down
-      x: 900
-      y: 435
-      width: 28
-      height: 65
-      strokeColor: "#1971c2"
-    - id: selector-notify-box
-      kind: rectangle
-      x: 740
-      y: 510
-      width: 350
-      height: 90
-      strokeColor: "#1971c2"
-      backgroundColor: "#e7f5ff"
-    - id: selector-notify-label
-      kind: text
-      x: 770
-      y: 532
-      width: 290
-      height: 48
-      text: "useSelector notifies React\nonly when selection changes"
-      strokeColor: "#1971c2"
-      fontSize: 19
-    - id: store-purity-rule
-      kind: text
-      x: 280
-      y: 520
-      width: 390
-      height: 70
-      text: "Transition က Context အသစ်ကို\nပြန်ပေးတယ်"
-      strokeColor: "#7048e8"
-      fontSize: 23
 
-    # Board 6 — Machine versus XState Store.
+    # Board 4 — workflow state versus independent counter notes.
     - id: compare-title
       kind: text
       x: 315
       y: 165
       width: 720
       height: 46
-      text: "Machine သုံးမလား၊ Store သုံးမလား"
+      text: "အဆင့်လား၊ မှတ်စုလား?"
       strokeColor: "#1e1e1e"
       fontSize: 32
     - id: machine-card
@@ -1530,25 +1295,25 @@ lesson:
       y: 285
       width: 250
       height: 32
-      text: "xstate + @xstate/react"
+      text: "သွားရမယ့်အစဉ် ရှိသလား?"
       strokeColor: "#7048e8"
-      fontSize: 22
+      fontSize: 19
     - id: machine-purpose
       kind: text
       x: 335
       y: 345
       width: 240
       height: 105
-      text: "Finite States\nAllowed Transitions\nGuard + Actor"
+      text: "RECEIVED → READY\nမသွားရမယ့်လမ်းရှိ\nစစ်ဆေးရေးဂိတ်ရှိ"
       strokeColor: "#1e1e1e"
-      fontSize: 20
+      fontSize: 19
     - id: machine-example
       kind: text
       x: 350
       y: 475
       width: 210
       height: 28
-      text: "Tea order workflow"
+      text: "✓ MACHINE"
       strokeColor: "#6741d9"
       fontSize: 20
     - id: store-card
@@ -1565,16 +1330,16 @@ lesson:
       y: 285
       width: 300
       height: 32
-      text: "@xstate/store-react"
+      text: "Data ပဲပြောင်းတာလား?"
       strokeColor: "#087f8c"
-      fontSize: 23
+      fontSize: 20
     - id: store-purpose
       kind: text
       x: 755
       y: 345
       width: 255
       height: 105
-      text: "Context updates\ntrigger.* Events\nuseSelector"
+      text: "စာရေး\nစာပြင်\nစာရင်းထဲထည့်"
       strokeColor: "#1e1e1e"
       fontSize: 20
     - id: store-example
@@ -1583,7 +1348,7 @@ lesson:
       y: 475
       width: 185
       height: 28
-      text: "Counter notes"
+      text: "✓ STORE"
       strokeColor: "#087f8c"
       fontSize: 20
     - id: shared-rule-box
@@ -1600,18 +1365,18 @@ lesson:
       y: 578
       width: 500
       height: 30
-      text: "Machine → workflow   |   Store → UI data"
+      text: "Workflow → Machine · Notes → Store"
       strokeColor: "#e67700"
       fontSize: 21
 
-    # Board 7 — Course recap and implementation checklist.
+    # Board 5 — a question-led recap of responsibilities.
     - id: recap-title
       kind: text
       x: 330
       y: 85
       width: 700
       height: 48
-      text: "XSTATE + REACT — ပြန်လည်သုံးသပ်ချက်"
+      text: "အော်ဒါ #24 ကို ပြန်လိုက်ကြည့်မယ်"
       strokeColor: "#1e1e1e"
       fontSize: 32
     - id: recap-subtitle
@@ -1620,9 +1385,9 @@ lesson:
       y: 140
       width: 640
       height: 34
-      text: "Named States → Finite Automaton → XState → React"
+      text: "ဒီမေးခွန်းခြောက်ခု ဖြေနိုင်ရင် အဓိကအယူအဆ ရပြီ"
       strokeColor: "#495057"
-      fontSize: 22
+      fontSize: 20
     - id: recap-model-card
       kind: rectangle
       x: 155
@@ -1633,20 +1398,20 @@ lesson:
       backgroundColor: "#f3f0ff"
     - id: recap-model-heading
       kind: text
-      x: 195
+      x: 180
       y: 240
-      width: 210
+      width: 235
       height: 28
-      text: "1 · Named States"
+      text: "1 · အခုဘယ်အဆင့်?"
       strokeColor: "#6741d9"
-      fontSize: 23
+      fontSize: 21
     - id: recap-model-body
       kind: text
       x: 200
       y: 286
       width: 200
       height: 52
-      text: "Finite set\none active value"
+      text: "State တစ်ခုတည်း\nREADY"
       strokeColor: "#1e1e1e"
       fontSize: 20
     - id: recap-rules-card
@@ -1659,20 +1424,20 @@ lesson:
       backgroundColor: "#fff4e6"
     - id: recap-rules-heading
       kind: text
-      x: 540
+      x: 525
       y: 240
-      width: 210
+      width: 235
       height: 28
-      text: "2 · Finite Automaton"
+      text: "2 · နောက်ဘာလုပ်ခွင့်?"
       strokeColor: "#e67700"
-      fontSize: 23
+      fontSize: 20
     - id: recap-rules-body
       kind: text
       x: 545
       y: 286
       width: 200
       height: 52
-      text: "Initial + Event\n+ Transition"
+      text: "Event\n+ ခွင့်ပြုထားတဲ့လမ်း"
       strokeColor: "#1e1e1e"
       fontSize: 20
     - id: recap-actor-card
@@ -1685,20 +1450,20 @@ lesson:
       backgroundColor: "#fff5f5"
     - id: recap-actor-heading
       kind: text
-      x: 885
+      x: 870
       y: 240
-      width: 210
+      width: 235
       height: 28
-      text: "3 · Actor"
+      text: "3 · ဘယ်သူဆုံးဖြတ်?"
       strokeColor: "#c92a2a"
-      fontSize: 23
+      fontSize: 20
     - id: recap-actor-body
       kind: text
       x: 890
       y: 286
       width: 200
       height: 52
-      text: "invoke\nonDone / onError"
+      text: "Actor\nအော်ဒါ #24"
       strokeColor: "#1e1e1e"
       fontSize: 20
     - id: recap-react-card
@@ -1711,20 +1476,20 @@ lesson:
       backgroundColor: "#e7f5ff"
     - id: recap-react-heading
       kind: text
-      x: 195
+      x: 180
       y: 445
-      width: 210
+      width: 235
       height: 28
-      text: "4 · React Hooks"
+      text: "4 · ဘယ်သူပြသလဲ?"
       strokeColor: "#1971c2"
-      fontSize: 23
+      fontSize: 20
     - id: recap-react-body
       kind: text
       x: 200
       y: 491
       width: 200
       height: 52
-      text: "useMachine\nuseSelector"
+      text: "React\nအခြေအနေပြ + Event ပို့"
       strokeColor: "#1e1e1e"
       fontSize: 20
     - id: recap-store-card
@@ -1737,20 +1502,20 @@ lesson:
       backgroundColor: "#e3fafc"
     - id: recap-store-heading
       kind: text
-      x: 540
+      x: 525
       y: 445
-      width: 210
+      width: 235
       height: 28
-      text: "5 · XState Store"
+      text: "5 · ဘာကိုသီးခြားထား?"
       strokeColor: "#087f8c"
-      fontSize: 23
+      fontSize: 20
     - id: recap-store-body
       kind: text
       x: 545
       y: 491
       width: 200
       height: 52
-      text: "createStore\ntrigger.* + Selector"
+      text: "Store\nCounter notes"
       strokeColor: "#1e1e1e"
       fontSize: 20
     - id: recap-test-card
@@ -1763,20 +1528,20 @@ lesson:
       backgroundColor: "#ebfbee"
     - id: recap-test-heading
       kind: text
-      x: 885
+      x: 870
       y: 445
-      width: 210
+      width: 235
       height: 28
-      text: "6 · Check Paths"
+      text: "6 · ဂိတ်ဖွင့်ပြီလား?"
       strokeColor: "#2b8a3e"
-      fontSize: 23
+      fontSize: 19
     - id: recap-test-body
       kind: text
       x: 890
       y: 491
       width: 200
       height: 52
-      text: "snapshot.matches\nsnapshot.can"
+      text: "Guard\n2 / 2"
       strokeColor: "#1e1e1e"
       fontSize: 20
     - id: recap-rule-box
@@ -1793,9 +1558,9 @@ lesson:
       y: 627
       width: 500
       height: 28
-      text: "Machine က ဆုံးဖြတ်တယ် · React က ပြတယ်"
+      text: "Machine ဆုံးဖြတ် · React ပြ · Store data ထိန်း"
       strokeColor: "#6741d9"
-      fontSize: 22
+      fontSize: 19
 
 build:
   # Studio replaces this built-in profile with the selected Burmese VoxCPM2
@@ -1816,27 +1581,17 @@ runtime:
 scenes:
   - id: why-explicit-state
     narration: >
-      App တစ်ခုမဆောက်ခင် အခြေအနေတွေကို နာမည်တိတိကျကျ ပေးတတ်ဖို့ ဘာကြောင့်အရေးကြီးတာလဲ
-      အရင်ကြည့်ရအောင်။ ဖောက်သည်က လက်ဖက်ရည်တစ်ခွက်နဲ့ ပလာတာတစ်ပွဲ မှာလိုက်တယ်ဆိုပါစို့။
-      ဆိုင်ဝန်ထမ်းတွေက အော်ဒါ Received လား၊ Preparing လား၊ Ready လားဆိုတာ တစ်ခါတည်း
-      ပြောနိုင်ရမယ်။ Named State ဆိုတာ မျက်နှာပြင်ပေါ်က label တစ်ခုသက်သက် မဟုတ်ဘူး။
-      အခုဘာဖြစ်နေတယ်၊ နောက်ဘာလုပ်ခွင့်ရှိတယ်ဆိုတဲ့ စည်းမျဉ်းတွေကို အဖွဲ့တစ်ဖွဲ့လုံး
-      အဓိပ္ပာယ်တူတူ နားလည်စေတဲ့ နာမည်ပါ။ [[mark:open-why-board]] State တစ်ခုတည်းမထားဘဲ
-      isReceived၊ isPreparing၊ isReady နဲ့ isServed ဆိုတဲ့ boolean flag လေးခုနဲ့
-      စရေးမယ်ဆိုပါစို့။ Flag တစ်ခုချင်းစီကိုကြည့်ရင် နားလည်ရလွယ်တယ်။ ဒါပေမဲ့ လေးခုပေါင်းလိုက်ရင်
-      ဖြစ်နိုင်တဲ့ အတွဲအစပ်က ဆယ့်ခြောက်မျိုးအထိ ရှိလာနိုင်တယ်။ အဲဒီဆယ့်ခြောက်မျိုးလုံးက
-      အော်ဒါတစ်ခုအတွက် မှန်နိုင်သလားဆိုတော့ မမှန်နိုင်ပါဘူး။ [[mark:show-invalid-booleans]]
-      ဒီမှာ Received၊ Preparing နဲ့ Ready သုံးခုလုံး true ဖြစ်နေတယ်။ TypeScript အတွက်တော့
-      boolean type တွေ မှန်နေလို့ လက်ခံမှာပါ။ ဒါပေမဲ့ အော်ဒါတစ်ခုက အဲဒီ State သုံးခုမှာ
-      တစ်ပြိုင်နက် ရှိနေလို့မရဘူးလေ။ Flag တစ်ခု ပြောင်းဖို့ မေ့သွားတာနဲ့ ဒီလို impossible
-      State ပေါ်လာနိုင်တယ်။ Compiler က ဒီအမှားကို မဖမ်းနိုင်တာက အော်ဒါစည်းမျဉ်းကို data
-      ပုံစံထဲမှာ မထည့်ထားလို့ပါ။ [[mark:show-finite-value]] လက်ရှိအခြေအနေကို ready လို
-      နာမည်ပါတဲ့ value တစ်ခုတည်းနဲ့ ဖော်ပြလိုက်ရင် အမှန်တရားက တစ်ခုတည်းဖြစ်သွားမယ်။ ready
-      ဖြစ်နေချိန်မှာ received နဲ့ served တစ်ပြိုင်နက် ဖြစ်နေတဲ့ပုံစံကို ဖန်တီးလို့မရတော့ဘူး။
-      ဒီလို နာမည်ပေးထားတဲ့ State အကန့်အသတ်တစ်စုက finite automaton ရဲ့ အခြေခံပါ။
-      [[mark:show-course-map]] နောက်တစ်ဆင့်မှာ ဒီ named States တွေကို finite automaton
-      တစ်ခုအဖြစ် ဘယ်လိုချိတ်မလဲ ကြည့်မယ်။ အဲဒီ model ကို နားလည်ပြီးမှ XState၊ Actor၊ React
-      Hooks နဲ့ Store ဆီ ဆက်သွားမယ်။
+      Code ကို ခဏထားပြီး ဆိုင်ထဲက အော်ဒါနံပါတ် ၂၄ ကိုပဲ လိုက်ကြည့်မယ်။
+      လက်ဖက်ရည်တစ်ခွက်နဲ့ ပလာတာတစ်ပွဲ မှာထားတယ်။ ဝန်ထမ်းအသစ်က ဒီအော်ဒါ
+      အခုဘယ်အဆင့်မှာလဲလို့ မေးလာတယ်ဆိုပါစို့။ [[mark:open-why-board]] Received လည်းဟုတ်၊
+      Preparing လည်းဟုတ်၊ Ready လည်းဟုတ်လို့ ဖြေရင် ဘယ်သူက ဘာဆက်လုပ်ရမလဲ မသိတော့ဘူး။
+      [[mark:show-conflicting-statuses]] တံဆိပ်သုံးခု တစ်ပြိုင်နက်မှန်နေတာက ဆိုင်မှာ
+      မဖြစ်သင့်တဲ့အခြေအနေပါ။ [[mark:show-current-stage]] အော်ဒါကတ်မှာ Ready တစ်ခုတည်း
+      ထားလိုက်ရင် အဖြေရှင်းသွားတယ်။ အခုနေရာက Ready။ နောက်လုပ်လို့ရတာက
+      ပစ္စည်းနှစ်ခုစစ်ပြီး တည်ခင်းဖို့။ ဒီလို လက်ရှိအဆင့်ကို အဖြေတစ်ခုတည်းနဲ့
+      ပြောတာကို State လို့ခေါ်မယ်။ [[mark:show-next-action]] State က label တစ်ခုတည်း
+      မဟုတ်ဘူး။ နောက်ဘာလုပ်ခွင့်ရှိလဲဆိုတာပါ ရှင်းစေတယ်။ အခု အော်ဒါကတ်သွားမယ့်လမ်းကို
+      ဆက်ဆွဲကြည့်မယ်။
     sources:
       - title: "Stately Docs — State machines"
         url: "https://stately.ai/docs/machines"
@@ -1855,50 +1610,45 @@ scenes:
       - id: draw-why-state-contrast
         type: whiteboard.apply
         at: { mark: open-why-board }
-        upsertIds: [why-title, booleans-box, booleans-heading, booleans-body]
-        drawMs: 1500
-      - id: mark-invalid-boolean-state
-        type: whiteboard.apply
-        at: { mark: show-invalid-booleans }
-        upsertIds: [invalid-circle]
-        drawMs: 800
-      - id: show-single-finite-value
-        type: whiteboard.apply
-        at: { mark: show-finite-value }
         upsertIds:
-          [model-arrow, state-value-box, state-value-heading, state-value-body, invalid-rule]
+          [why-title, conflicting-status-box, conflicting-status-heading, conflicting-status-body]
         drawMs: 1500
-      - id: show-full-course-map
+      - id: circle-conflicting-statuses
         type: whiteboard.apply
-        at: { mark: show-course-map }
-        upsertIds: [course-map-box, course-map-label]
+        at: { mark: show-conflicting-statuses }
+        upsertIds: [conflicting-status-circle]
+        drawMs: 800
+      - id: show-one-current-stage
+        type: whiteboard.apply
+        at: { mark: show-current-stage }
+        upsertIds:
+          [
+            clarify-status-arrow,
+            current-status-box,
+            current-status-heading,
+            current-status-body,
+            one-stage-rule,
+          ]
+        drawMs: 1500
+      - id: show-state-next-action
+        type: whiteboard.apply
+        at: { mark: show-next-action }
+        upsertIds: [next-action-box, next-action-label]
         drawMs: 900
 
   - id: finite-automaton-order
     narration: >
-      Named States တွေ ရပြီဆိုတော့ အခု finite automaton ဆိုတာ ဘာလဲ ကြည့်ရအောင်။ Finite
-      automaton ကို finite state machine လို့လည်း ခေါ်တယ်။ သူ့မှာ အကန့်အသတ်ရှိတဲ့ State
-      စာရင်းတစ်ခု၊ စတင်မယ့် initial State တစ်ခု၊ လက်ခံနိုင်တဲ့ input စာရင်းတစ်ခုနဲ့
-      လက်ရှိ State ပေါ်မူတည်ပြီး input တစ်ခုရလာရင် ဘယ် State သွားမလဲ ဆုံးဖြတ်တဲ့ transition
-      function တစ်ခု ရှိတယ်။ App တစ်ခုမှာ input ကို Event လို့ စဉ်းစားလို့ရပါတယ်။ တချို့
-      model တွေမှာ အလုပ်ပြီးဆုံးကြောင်းပြတဲ့ Final State လည်း သတ်မှတ်ထားတယ်။
-      [[mark:open-domain-board]] ဒီသဘောတရားကို လက်ဖက်ရည်နဲ့ ပလာတာအော်ဒါနဲ့ ချိတ်ကြည့်မယ်။
-      State အစုက Received၊ Preparing၊ Packing၊ Ready နဲ့ Served ပါ။ Initial State က Received
-      ဖြစ်ပြီး လက်ရှိ State ကို အဲဒီနာမည်ငါးခုထဲက တစ်ခုနဲ့ပဲ ဖော်ပြမယ်။ Event အစုမှာ
-      Start preparing၊ Pack order၊ Check item၊ Remake နဲ့ Serve ရှိမယ်။ Diagram မှာတော့
-      code ထဲက နာမည်အတိုင်း စာလုံးအကြီးနဲ့ underscore တွေခံပြီး ပြထားမယ်။ Transition က State နဲ့
-      Event အတွဲတစ်ခုကို နောက် State တစ်ခုနဲ့ ချိတ်ပေးတယ်။
-      [[mark:draw-received-state]] အော်ဒါစာရွက်ရောက်လာတာနဲ့ Received မှာ စမယ်။
-      [[mark:draw-preparing-state]] ဆိုင်ဝန်ထမ်းက စပြင်တဲ့အခါ Start preparing Event ရောက်ပြီး
-      Preparing ဆီ ရွှေ့မယ်။ [[mark:draw-packing-state]] လက်ဖက်ရည်နဲ့ ပလာတာ ပြင်ပြီး
-      ထုပ်ပိုးဖို့အဆင်သင့်ဖြစ်ရင် Pack order Event က Packing ဆီပို့မယ်။
-      [[mark:draw-ready-state]] ထုပ်ပိုးပြီး အော်ဒါလက်မှတ်ရလာရင် onDone Event နဲ့ Ready ဆီ
-      ရောက်မယ်။ [[mark:draw-served-state]] Ready မှာ နှစ်မျိုးလုံး မှန်မမှန်စစ်ပြီးမှ Serve
-      Event က Served Final State ဆီ ပို့ခွင့်ရမယ်။ ဒီ Event နာမည်တွေက button နာမည်တွေ
-      မဟုတ်ပါဘူး။ Start preparing ဆိုတာ အော်ဒါကို စပြင်လိုက်ပြီဆိုတဲ့
-      ဖြစ်ရပ်ကို နာမည်ပေးထားတာပါ။ ဒါကြောင့် UI ကပို့ပို့၊ API ကပို့ပို့၊ test ကပို့ပို့
-      model က နားလည်တဲ့ Event က အတူတူပဲ။ အခုမှ ဒီ finite automaton ကို XState Machine
-      config အဖြစ် ဘယ်လိုရေးမလဲ ဆက်ကြည့်မယ်။
+      [[mark:open-domain-board]] အော်ဒါနံပါတ် ၂၄ ရဲ့လမ်းကို စာရွက်ပေါ်မှာ ဆွဲကြည့်မယ်။
+      [[mark:draw-received-state]] ကောင်တာက လက်ခံလိုက်တဲ့ Received မှာ စတယ်။
+      [[mark:draw-preparing-state]] ဝန်ထမ်းက စပြင်လိုက်ရင် Preparing ကို ရွှေ့တယ်။
+      [[mark:draw-packing-state]] လက်ဖက်ရည်နဲ့ ပလာတာ နှစ်မျိုးလုံးပြီးရင် Packing။
+      ဒီအဆင့်မှာ ပစ္စည်းတွေထုပ်ပြီး အော်ဒါလက်မှတ် ထုတ်နေတယ်။
+      [[mark:draw-ready-state]] လက်မှတ်ရလာရင် Ready ကို ရောက်တယ်။
+      [[mark:draw-served-state]] နှစ်မျိုးလုံး မှန်မမှန်စစ်ပြီးမှ Served ကို ရောက်မယ်။
+      မြှားပေါ်က စပြင်၊ ထုပ်ပိုး၊ တည်ခင်းလို ဖြစ်ရပ်တွေကို Event လို့ခေါ်တယ်။
+      အရေးကြီးတာက ပုံထဲမှာရှိတဲ့လမ်းပဲ သွားခွင့်ရှိတာပါ။ Received ကနေ Ready ကို
+      တိုက်ရိုက်သွားတဲ့မြှား မရှိဘူး။ အဆင့်တွေ၊ Event တွေနဲ့ ခွင့်ပြုထားတဲ့လမ်းတွေ
+      စုပြထားတဲ့ ဒီပုံက State Machine ဖြစ်တယ်။
     sources:
       - title: "NIST Dictionary — Finite state machine"
         url: "https://xlinux.nist.gov/dads/HTML/finiteStateMachine.html"
@@ -1947,27 +1697,18 @@ scenes:
 
   - id: context-actions-guards
     narration: >
-      Finite automaton ကို နားလည်ပြီဆိုတော့ အခုမှ ဒီ model ကို XState နဲ့ရေးတဲ့အပိုင်း
-      စကြမယ်။ Named State က အော်ဒါရောက်နေတဲ့အဆင့်ကို ပြနိုင်ပေမဲ့ ဆက်မှတ်ထားရမယ့် data လည်း
-      ရှိသေးတယ်။
-      ဒီဥပမာမှာ ထုပ်ပိုးပြီးရလာတဲ့ packingTicket နဲ့ စစ်ပြီးသားပစ္စည်းအရေအတွက် checkedItems ပါ။
-      ဒီလို data ကို XState ရဲ့ Context ထဲမှာ ထားမယ်။ [[mark:draw-domain-context]] Diagram
-      အောက်မှာ checkedItems ကို ထည့်လိုက်မယ်။ Actor က Snapshot အသစ်ထုတ်ပေးတိုင်း State value နဲ့
-      Context နှစ်ခုလုံး ပါလာမယ်။ Ready မှာ Check item Event တစ်ကြိမ်ရတိုင်း checkNextItem
-      Action ကိုခေါ်ပြီး assign နဲ့ checkedItems ကို တစ်တိုးပေးမယ်။ မူလ object ကို
-      ပြင်တာမဟုတ်ဘဲ နောက် Snapshot အတွက် Context အသစ်ကို တွက်ပေးတာပါ။ Check item Transition မှာ
-      target မပါဘူး။ ဒါကြောင့် Ready ကနေ မထွက်ဘဲ Context ပဲ ပြောင်းသွားမယ်။ XState က
-      ဒီပုံစံကို targetless Transition လို့ ခေါ်တယ်။ [[mark:draw-domain-guard]] အခု
-      လက်ဖက်ရည်တစ်မျိုးပဲ စစ်ပြီးသေးချိန် Serve Event ရောက်လာရင်ရော ဘာဖြစ်မလဲ။ ဒီနေရာမှာ Guard
-      သုံးမယ်။ Guard က Transition မလုပ်ခင် true ဒါမှမဟုတ် false ပြန်ပေးတဲ့ function ပါ။
-      hasCheckedBothItems Guard က
-      Context ကိုကြည့်ပြီး နှစ်မျိုးလုံးစစ်ပြီးမှ true ပြန်ပေးမယ်။ မပြည့်သေးရင် Serve Event
-      ရောက်လာလည်း State မပြောင်းဘူး။ Guard ထဲမှာ API မခေါ်ဘူး၊ log မရေးဘူး။ တူညီတဲ့ Context
-      ပေးရင် အဖြေတူဖို့ စစ်ဆေးချက်ပဲ ထားမယ်။ ပစ္စည်းတစ်ခုမှားနေတာတွေ့ရင် Remake Event က
-      Preparing ဆီ ပြန်ပို့ပြီး checkedItems ကို သုည ပြန်ထားမယ်။ [[mark:emphasize-domain-rule]]
-      React မှာ Serve order button ကို disable လုပ်တာက လက်ရှိ မနှိပ်နိုင်သေးကြောင်း
-      အသုံးပြုသူကို ပြတာပါ။ တကယ်တမ်း ကျော်လို့မရအောင် ထိန်းထားတာက Machine ထဲက Guard ဖြစ်တယ်။
-      UI မှာ စည်းမျဉ်းတစ်ခု ထပ်ရေးထားတာမဟုတ်ဘူး။ UI က Machine ကိုမေးပြီး အဖြေကို ပြနေတာပါ။
+      ဒီလမ်းပုံမှာ မပါတဲ့ အသေးစိတ်တစ်ခု ရှိသေးတယ်။ Ready ရောက်တဲ့အခါ
+      လက်ဖက်ရည်နဲ့ ပလာတာ နှစ်မျိုးလုံး စစ်ရမယ်။ [[mark:draw-domain-context]]
+      အော်ဒါကတ်အောက်မှာ အမှန်ခြစ်နှစ်ခု ထည့်မယ်။ ပထမတစ်ခုစစ်ပြီးလည်း အော်ဒါက
+      Ready မှာပဲရှိတယ်။ နေရာမပြောင်းဘဲ ကတ်ပေါ်ကမှတ်တမ်းပဲ ပြောင်းသွားတာ။
+      ဒီလို အဆင့်နဲ့အတူ သယ်သွားရတဲ့ data ကို Context လို့ခေါ်ပြီး ကတ်ကို
+      ပြောင်းပေးတဲ့အလုပ်ကို Action လို့ခေါ်မယ်။ [[mark:draw-domain-guard]]
+      Ready ရဲ့ထွက်ပေါက်မှာ စစ်ဆေးရေးဂိတ်ရှိတယ်။ အမှန်ခြစ်က ၂ ခုမှာ ၂ ခု
+      မပြည့်သေးရင် တည်ခင်းဖို့တောင်းဆိုလည်း တံခါးမဖွင့်ဘူး။ ဒီလို
+      ဖြတ်သွားခွင့်ရှိမရှိ စစ်တဲ့စည်းမျဉ်းက Guard ပါ။
+      [[mark:emphasize-domain-rule]] တစ်ခုမှားနေရင် Preparing ဆီပြန်ပြီး
+      အမှန်ခြစ်တွေကို ပြန်စမယ်။ UI က တည်ခင်းခလုတ်ကို ပိတ်ပြနိုင်ပေမဲ့
+      တကယ့်စည်းမျဉ်းက ဒီဂိတ်ထဲမှာ ရှိတယ်။
     sources:
       - title: "Stately Docs — Context"
         url: "https://stately.ai/docs/context"
@@ -1996,24 +1737,16 @@ scenes:
 
   - id: actor-react-model
     narration: >
-      ဒီနေရာမှာ Machine နဲ့ Actor ကို တစ်ခုတည်းလို့ မှားမယူဆမိဖို့ အရေးကြီးပါတယ်။ Machine
-      ဆိုတာ အော်ဒါလုပ်ငန်းစဉ်ရဲ့ စည်းမျဉ်းစာရွက်တစ်ခုနဲ့ တူပါတယ်။ ဘယ် State က စမလဲ၊ Event
-      ရလာရင် ဘယ် Transition
-      လုပ်မလဲဆိုတာ ရေးထားပေမဲ့ သူ့ဘာသာ အလုပ်လုပ်မနေသေးဘူး။ [[mark:draw-machine-logic]] XState က
-      ဒီစည်းမျဉ်းတွေကို Actor Logic လို့ သတ်မှတ်တယ်။ Logic တစ်ခုတည်းကနေ Order တစ်ခုစီအတွက်
-      Actor သီးခြား ဖန်တီးနိုင်တယ်။ Machine တစ်ခုလုံးကို ပုံတူကူးရေးတာ မဟုတ်ပါဘူး။
-      စည်းမျဉ်းတူပေမဲ့ Actor တစ်ခုစီမှာ ကိုယ်ပိုင် Snapshot နဲ့ ကိုယ်ပိုင် Context ရှိလာမယ်။
-      [[mark:draw-running-actor]] Actor ဖန်တီးပြီး start လုပ်လိုက်မှ Event လက်ခံနိုင်တယ်။ ActorRef
-      က အဲဒီ Actor ကို Event ပို့ဖို့ သိမ်းထားတဲ့ reference ပါ။ send နဲ့ Event ပို့လိုက်ရင် Actor
-      က လက်ရှိ Snapshot ကိုယူပြီး Machine Logic အတိုင်း နောက် Snapshot ကိုတွက်မယ်။ Snapshot ထဲမှာ
-      state.value နဲ့ context သာမက status၊ matches နဲ့ can လည်း အသုံးပြုနိုင်တယ်။ matches က Actor
-      ဘယ် State မှာရှိလဲ မေးဖို့သုံးတယ်။ can က Event တစ်ခုကို လက်ရှိ State မှာ လက်ခံနိုင်မလား
-      ကြိုမေးဖို့သုံးတယ်။ [[mark:draw-react-loop]] React ဘက်ကတော့ Snapshot ရလာရင် UI ကို render
-      လုပ်မယ်။ အသုံးပြုသူက button နှိပ်ရင် Event တစ်ခု ပြန်ပို့မယ်။ ဒီလို လည်ပတ်နေချိန်မှာ React က
-      နောက် State ကို ကိုယ်တိုင် မရွေးဘူး။ React က Event ပို့လိုက်တယ်၊ Machine က ရွေးချယ်ပေးတယ်၊
-      ပြီးတော့ React က ရလာတဲ့ Snapshot ကို ပြပေးတာမျိုးပါ။ useMachine သုံးလိုက်ရင် Component
-      စတင်ချိန်မှာ Actor ကို ဖန်တီးပြီး start လုပ်ပေးသလို Component ပျောက်သွားချိန်မှာလည်း
-      ရပ်ပေးပါတယ်။
+      ပုံဆွဲပြီးသွားပေမဲ့ စည်းမျဉ်းစာရွက်က သူ့ဘာသာ အော်ဒါကို မရွှေ့နိုင်ဘူး။
+      [[mark:draw-machine-logic]] ဘယ်အဆင့်ကနေ ဘယ်အဆင့်ကို သွားခွင့်ရှိလဲဆိုတာ
+      ဒီစာရွက်က ပြောပေးရုံပါ။ [[mark:draw-running-actor]] အော်ဒါနံပါတ် ၂၄ ကို
+      တကယ်စဖွင့်လိုက်မှ လက်ရှိအဆင့်နဲ့ အော်ဒါကတ်ကို ကိုင်ထားတဲ့ Actor တစ်ခု
+      အလုပ်လုပ်လာတယ်။ နောက်အော်ဒါနံပါတ် ၂၅ ကလည်း စည်းမျဉ်းတူတူ သုံးပေမဲ့
+      သူ့ Actor၊ သူ့အဆင့်နဲ့ သူ ရှိမယ်။ [[mark:draw-react-loop]] ကောင်တာမျက်နှာပြင်က
+      Actor ဆီက အခြေအနေကိုယူပြီး ပြတယ်။ လူက ခလုတ်နှိပ်ရင် Event ကို Actor ဆီ
+      ပြန်ပို့တယ်။ Actor က စည်းမျဉ်းကိုစစ်ပြီး နောက်အခြေအနေကို ပြန်ပေးတယ်။
+      React က နောက်အဆင့်ကို မရွေးဘူး။ React က ပြပြီး တောင်းဆိုမှုကိုပို့တယ်။
+      Actor က ဆုံးဖြတ်တယ်။ ဒီတာဝန်ခွဲထားတာကိုပဲ မှတ်ထားရမယ်။
     sources:
       - title: "Stately Docs — Actors"
         url: "https://stately.ai/docs/actors"
@@ -2040,7 +1773,6 @@ scenes:
         upsertIds:
           [
             snapshot-arrow,
-            event-arrow-back,
             snapshot-label,
             event-label,
             react-box,
@@ -2053,24 +1785,16 @@ scenes:
 
   - id: invoked-actor-lifecycle
     narration: >
-      လက်ဖက်ရည်နဲ့ ပလာတာ ပြင်ပြီးသွားပေမဲ့ ထုပ်ပိုးတာ၊ အော်ဒါလက်မှတ်ထုတ်တာလို အလုပ်က
-      ခဏကြာနိုင်တယ်။ ဒီလို async အလုပ်ကို React useEffect ထဲမှာ Promise ခေါ်ပြီး isLoading flag
-      ပြောင်းလည်းရပါတယ်။ ဒါပေမဲ့ Promise က ဘယ်အချိန်စလဲ၊ ပြီးရင် ဘယ် State သွားလဲဆိုတာ
-      နေရာအမျိုးမျိုးမှာ လိုက်ဖတ်ရမယ်။ XState မှာတော့ async အလုပ်ကိုလည်း Actor အဖြစ်
-      ထားနိုင်တယ်။ [[mark:draw-invoked-parent]] Parent Order Actor က Packing State ထဲ
-      ရောက်တဲ့အခါ invoke ကို စမယ်။ အဓိပ္ပာယ်က Packing State ဝင်မှ အော်ဒါထုပ်ပိုးတဲ့အလုပ်
-      စမယ်ဆိုတာပါ။
-      [[mark:draw-invoked-child]] packOrder ကို fromPromise နဲ့ရေးထားလို့ Promise Actor တစ်ခု
-      start ဖြစ်မယ်။ အဖြေစောင့်နေတဲ့အချိန်ကို Packing State က ပြထားပြီးသားမို့ isLoading flag
-      ထပ်ထားစရာ မလိုတော့ဘူး။ Promise ပြီးရင် onDone က Ready ဆီပို့ပြီး ပြန်လာတဲ့ ticket ကို
-      assign နဲ့ Parent Context ထဲ သိမ်းမယ်။ မအောင်မြင်ရင် onError က Preparing ဆီ
-      ပြန်ပို့မယ်။ အောင်မြင်တဲ့လမ်းနဲ့ မအောင်မြင်တဲ့လမ်း နှစ်ခုလုံးကို Statechart မှာ
-      တန်းမြင်ရတယ်။ [[mark:draw-invoke-rule]] နောက်ထပ် အရေးကြီးတာက ဒီ Actor ကို ဘယ်သူပိုင်လဲ
-      ဆိုတာပါ။ Parent က Packing State ကနေ ထွက်သွားရင် invoke လုပ်ထားတဲ့ Actor ကို XState က
-      ရပ်ပေးမယ်။ Component အနှံ့ Promise reference လိုက်သိမ်းပြီး ကိုယ်တိုင်ရှင်းစရာ
-      လျော့သွားတယ်။ ဒီဥပမာမှာ အလုပ်လုပ်ပုံမြင်ရအောင် မီလီစက္ကန့် ခုနစ်ရာကြာတဲ့ Promise
-      သုံးမယ်။ တကယ့် app မှာ အဲဒီနေရာကို packing API ခေါ်တဲ့ fetch ဒါမှမဟုတ် API client နဲ့
-      အစားထိုးနိုင်တယ်။
+      ထုပ်ပိုးတာနဲ့ အော်ဒါလက်မှတ်ထုတ်တာက ခဏကြာတယ်။
+      [[mark:draw-invoked-parent]] အော်ဒါ Actor က Packing ဝင်တဲ့အချိန်မှာပဲ
+      ဒီအလုပ်ကို စတင်မယ်။ စောင့်နေတဲ့အချိန်ကို Packing ဆိုတဲ့အဆင့်က
+      မြင်သာအောင် ပြထားပြီးသားပါ။ [[mark:draw-invoked-child]] ထုပ်ပိုးအလုပ်ကို
+      သီးခြား Actor တစ်ခုဆီ အပ်မယ်။ အလုပ်ပြီးပြီး လက်မှတ်ပြန်ရရင် Ready။
+      အဆင်မပြေရင် Preparing ဆီပြန်ပြီး ပြန်ပြင်မယ်။ အောင်မြင်တဲ့လမ်းနဲ့
+      ပြန်လုပ်ရမယ့်လမ်း နှစ်ခုလုံးကို ပုံထဲမှာ တစ်ခါတည်း မြင်ရတယ်။
+      [[mark:draw-invoke-rule]] ဒီအလုပ်ကို Packing အဆင့်က ပိုင်တယ်။
+      အဲဒီအဆင့်ကနေ ထွက်သွားရင် မပြီးသေးတဲ့အလုပ်ကို ရပ်မယ်။ အချိန်ယူတဲ့အလုပ်ကို
+      ဘယ်အချိန်စပြီး ဘယ်အချိန်ရပ်မလဲဆိုတာ workflow နဲ့အတူ ထားလိုက်တာပါ။
     sources:
       - title: "Stately Docs — Invoking actors"
         url: "https://stately.ai/docs/invoke"
@@ -2108,127 +1832,20 @@ scenes:
         upsertIds: [invoke-rule-box, invoke-rule]
         drawMs: 900
 
-  - id: react-hook-boundaries
-    narration: >
-      Actor ကို React နဲ့ ချိတ်ဖို့ ရွေးစရာ Hook တစ်မျိုးထက်မက ရှိတယ်။ ဘယ် Hook ရွေးမလဲဆိုတာ
-      Machine စည်းမျဉ်းကို မပြောင်းဘူး။ Actor ရဲ့ ဘယ်ပြောင်းလဲမှုကြောင့် Component
-      ကို re-render လုပ်စေချင်လဲဆိုတာ ရွေးတာပါ။ [[mark:draw-use-machine]] useMachine က Machine
-      Logic ကိုလက်ခံပြီး snapshot၊ send နဲ့ actorRef သုံးခု ပြန်ပေးတယ်။ Component တစ်ခုက Snapshot
-      အများစုကို သုံးနေတယ်ဆိုရင်တော့ ဒီ Hook နဲ့ စပြီး အသုံးပြုတာက ပိုပြီး နားလည်ရလွယ်ပါတယ်။
-      useMachine ဟာ Machine အတွက် နာမည်ပေးထားတဲ့ useActor ပုံစံတစ်ခုပါ။
-      [[mark:draw-use-actor-ref]] useActorRef ကလည်း Actor ကိုဖန်တီးပြီး start လုပ်ပေးတယ်။ ဒါပေမဲ့
-      ActorRef တစ်ခုတည်း ပြန်ပေးတာကြောင့် Snapshot အသစ်တိုင်း ဒီ Component re-render မဖြစ်ဘူး။
-      Event ပို့ရုံပဲလုပ်တဲ့ toolbar တစ်ခုဆို useActorRef က သင့်တော်နိုင်တယ်။
-      [[mark:draw-use-selector]] State တစ်စိတ်တစ်ပိုင်းကို ပြချင်ရင် useSelector သုံးမယ်။ ဥပမာ
-      checkedItems number ကိုသာ ရွေးထားရင် အဲဒီ number ပြောင်းမှ Component re-render ဖြစ်မယ်။
-      number နဲ့ string လို value တွေကိုတော့ ပုံမှန် equality စစ်တာနဲ့ လုံလောက်တယ်။ Selector က
-      object သို့မဟုတ် array အသစ်အမြဲပြန်ပေးရင် value တူနေပေမဲ့ reference အသစ်ဖြစ်နေမယ်။
-      အဲဒီအခါမျိုးမှာ selector ကို တည်ငြိမ်အောင် ရေးတာမျိုး ဒါမှမဟုတ် compare function
-      ပေးတာမျိုးကို စဉ်းစားပေးရပါမယ်။ [[mark:draw-actor-context]] Actor တစ်ခုကို React tree အနှံ့
-      မျှဝေချင်ရင် createActorContext သုံးနိုင်တယ်။ သူက Provider နဲ့ useActorRef၊ useSelector
-      helper တွေ ဖန်တီးပေးတယ်။ ဒီဥပမာမှာ အပိုင်းအားလုံးကို မျက်နှာပြင်တစ်ခုထဲပြမှာမို့ useMachine
-      သုံးမယ်။ Component တွေခွဲလာတဲ့အခါ useActorRef နဲ့ useSelector ဘယ်လိုရွေးမလဲကို ဒီပုံနဲ့
-      ပြန်စဉ်းစားနိုင်တယ်။
-    sources:
-      - title: "Stately Docs — @xstate/react"
-        url: "https://stately.ai/docs/xstate-react"
-      - title: "Stately Docs — @xstate/react useSelector"
-        url: "https://stately.ai/docs/xstate-react"
-    actions:
-      - id: draw-use-machine-hook
-        type: whiteboard.apply
-        at: { mark: draw-use-machine }
-        clear: true
-        upsertIds: [hooks-title, use-machine-card, use-machine-heading, use-machine-body]
-        drawMs: 1200
-      - id: draw-use-actor-ref-hook
-        type: whiteboard.apply
-        at: { mark: draw-use-actor-ref }
-        upsertIds: [use-ref-card, use-ref-heading, use-ref-body]
-        drawMs: 1100
-      - id: draw-use-selector-hook
-        type: whiteboard.apply
-        at: { mark: draw-use-selector }
-        upsertIds: [use-selector-card, use-selector-heading, use-selector-body]
-        drawMs: 1100
-      - id: draw-create-actor-context
-        type: whiteboard.apply
-        at: { mark: draw-actor-context }
-        upsertIds: [context-provider-box, context-provider-label]
-        drawMs: 900
-
-  - id: store-event-flow
-    narration: >
-      XState Store ဆိုတာကို ကြားလိုက်ရင် State Machine ကိုပဲ သေးအောင်လုပ်ထားတာလို့
-      ထင်စရာရှိတယ်။ တကယ်တမ်းကျတော့ အသုံးပြုရတဲ့ အကြောင်းရင်းက မတူပါဘူး။ State
-      အဆင့်လိုက်ကူးရမယ့်
-      စည်းမျဉ်းမရှိဘဲ data ကို Event နဲ့ ပြောင်းချင်တဲ့အခါ သုံးတဲ့ Store ပါ။ အော်ဒါမျက်နှာပြင်မှာ
-      ဆိုင်ဝန်ထမ်းရေးတဲ့ draft နဲ့ note စာရင်းကို စဉ်းစားကြည့်ရအောင်။ Note တစ်ခုထည့်ဖို့
-      Statechart တစ်ခုလုံး မလိုဘူး။ ဒါပေမဲ့ ဘယ် Event ကြောင့် data ပြောင်းသွားလဲကို
-      ရှင်းရှင်းလင်းလင်း သိချင်တယ်။ [[mark:draw-store-old-context]] createStore မှာ
-      စစချင်းသုံးမယ့် Context နဲ့ Event
-      တစ်ခုစီကို ကိုင်တွယ်မယ့် function တွေ ထည့်မယ်။ ဒီဥပမာမှာ Context ထဲ draft string နဲ့ notes
-      array ရှိတယ်။ [[mark:draw-store-transition]] အသုံးပြုသူက Add note နှိပ်ရင်
-      orderNotesStore.trigger.addNote ကို ခေါ်မယ်။ addNote function က လက်ရှိ Context ကိုရပြီး Context
-      အသစ်တစ်ခု ပြန်ပေးရတယ်။ Draft ကိုရှင်းမယ်၊ note အသစ်ကို array ထဲထည့်မယ်၊ မပြောင်းတဲ့ field
-      တွေကို spread နဲ့ ဆက်ယူမယ်။ Draft က အလွတ်ဖြစ်နေရင် undefined ပြန်ပေးနိုင်တယ်။ အဲဒီအခါ Store
-      က ဒီ Event နဲ့ data မပြောင်းသင့်ဘူးလို့ သိမယ်။ [[mark:draw-store-next-context]] Context
-      အသစ်ပြန်လာတာနဲ့ Store Snapshot အသစ် ထုတ်ပေးမယ်။ XState Store က ဖန်တီးလိုက်တာနဲ့
-      အလုပ်လုပ်နေပြီ ဖြစ်တဲ့အတွက် Actor လိုမျိုး start သီးခြား ခေါ်ပေးစရာ မလိုပါဘူး။
-      [[mark:draw-store-notification]] React ဘက်မှာ @xstate/store-react ရဲ့ useSelector နဲ့ လိုတဲ့
-      value ကို ရွေးမယ်။ notes ကိုရွေးထားတဲ့ Component က notes ပြောင်းမှ re-render ဖြစ်မယ်။ draft
-      ကိုရွေးထားတဲ့ input က draft ပြောင်းမှ re-render ဖြစ်မယ်။ Store ကို module အပြင်ဘက်မှာ
-      ဖန်တီးထားရင် Component အများကြီးက တစ်ခုတည်းကို မျှဝေသုံးနိုင်တယ်။ Component တစ်ခုစီအတွက်
-      Store သီးခြားလိုရင် useStore သုံးပြီး အဲဒီ Component အသက်ရှင်နေသရွေ့သာ ရှိမယ့် Store
-      ဖန်တီးနိုင်တယ်။
-    sources:
-      - title: "Stately Docs — XState Store"
-        url: "https://stately.ai/docs/xstate-store"
-      - title: "Stately Docs — @xstate/store-react"
-        url: "https://stately.ai/docs/xstate-store/react"
-    actions:
-      - id: draw-store-initial-context
-        type: whiteboard.apply
-        at: { mark: draw-store-old-context }
-        clear: true
-        upsertIds: [store-flow-title, old-context-box, old-context-label]
-        drawMs: 1100
-      - id: draw-store-transition-function
-        type: whiteboard.apply
-        at: { mark: draw-store-transition }
-        upsertIds: [trigger-arrow, trigger-label, store-transition-box, store-transition-label]
-        drawMs: 1500
-      - id: draw-store-next-snapshot
-        type: whiteboard.apply
-        at: { mark: draw-store-next-context }
-        upsertIds: [next-context-arrow, next-context-box, next-context-label, store-purity-rule]
-        drawMs: 1500
-      - id: draw-store-selector-notification
-        type: whiteboard.apply
-        at: { mark: draw-store-notification }
-        upsertIds: [selector-notify-arrow, selector-notify-box, selector-notify-label]
-        drawMs: 1200
-
   - id: machine-versus-store
     narration: >
-      အခုဆို Machine နဲ့ Store နှစ်ခုလုံး ဘယ်လိုအလုပ်လုပ်လဲ မြင်ပြီးပြီ။ ဒါဆို data တစ်ခုရလာတိုင်း
-      ဘယ်ဘက်မှာထားမလဲ။ ဒီ data ကို ဘယ်နေရာမှာထားသင့်လဲဆိုတဲ့ မေးခွန်းနဲ့ စဉ်းစားကြည့်ရအောင်။
-      ဒီ data မှာ သွားရမယ့်အစဉ်နဲ့
-      မသွားရမယ့်လမ်း ရှိသလား။ [[mark:draw-machine-card]] အော်ဒါအဆင့်တွေမှာ လုပ်ရမယ့်အစဉ်
-      ရှိတယ်။ Preparing မရောက်ဘဲ Ready မရောက်ရဘူး။ လက်ဖက်ရည်နဲ့ ပလာတာ နှစ်မျိုးလုံး မစစ်ရသေးဘဲ
-      Serve လုပ်လို့မရဘူး။ ထုပ်ပိုးနေချိန်နဲ့ ထုပ်ပိုးပြီးချိန်ကို သီးခြား State ပြရမယ်။ ဒီလို
-      လုပ်ရမယ့်အစဉ်၊ Guard နဲ့ Final State ရှိတဲ့အတွက် XState Machine ထဲထားမယ်။ နောက်ပိုင်း parent
-      State၊ parallel State ဒါမှမဟုတ် child Actor ထပ်လိုလာရင်လည်း Statechart က ဆက်တိုးလို့ရတယ်။
-      [[mark:draw-store-card]] ဆိုင်ဝန်ထမ်းရေးတဲ့ note စာရင်းနဲ့ draft text က ရိုက်လိုက်တာနဲ့ UI
-      မှာ ချက်ချင်းပြောင်းရမယ့် data ပါ။ Draft ပြောင်းပြီး note ထည့်တာမှာ သွားရမယ့် State အစဉ်
-      မရှိဘူး။ Context ကို Event နဲ့ ပြောင်းပြီး React က လိုတဲ့ value ရွေးဖို့ပဲ လိုတယ်။ ဒါကြောင့်
-      XState Store ထဲထားမယ်။ [[mark:draw-shared-rule]] နှစ်ခုလုံး Event သုံးတာတူပေမဲ့ ထိန်းရတဲ့အရာ
-      မတူဘူး။ Machine က အော်ဒါ ဘယ်အဆင့်မှာရှိလဲနဲ့ ဘယ်ကိုသွားခွင့်ရှိလဲ ထိန်းမယ်။ Store က
-      ဆိုင်ဝန်ထမ်းရေးနေတဲ့ data ကို ထိန်းမယ်။ Machine Context ထဲ UI draft အားလုံး ထည့်စရာမလိုဘူး။
-      Store ထဲမှာလည်း isPreparing boolean ပြန်ဆောက်ပြီး Machine နဲ့ ကိုက်ညီအောင်
-      လိုက်ညှိစရာမလိုဘူး။ အော်ဒါ State ကို သိချင်ရင် Actor Snapshot ကိုမေးမယ်။ Note ကို
-      သိချင်ရင် Store Snapshot ကိုမေးမယ်။ ဘယ် data ကို ဘယ်သူက ထိန်းချုပ်ထားလဲဆိုတာ
-      ရှင်းရှင်းလင်းလင်း ဖြစ်နေဖို့က အဓိကပါပဲ။ အခုမှ implementation ကို စကြမယ်။
+      မျက်နှာပြင်တစ်ခုတည်းမှာရှိပေမဲ့ အော်ဒါအဆင့်နဲ့ Counter notes က
+      တူတဲ့ပြဿနာ မဟုတ်ဘူး။ ဘယ်ဘက်မှာထားမလဲဆိုတာ မရွေးခင် မေးခွန်းတစ်ခုမေးမယ်။
+      ဒီ data မှာ သွားရမယ့်အစဉ်နဲ့ မသွားရမယ့်လမ်း ရှိသလား။
+      [[mark:draw-machine-card]] အော်ဒါမှာ အစဉ်ရှိတယ်။ Preparing မဖြတ်ဘဲ Ready
+      မရောက်ရဘူး။ နှစ်ခုလုံးမစစ်ဘဲ Served မရောက်ရဘူး။ ဒါကြောင့် workflow ကို
+      Machine က ထိန်းမယ်။ [[mark:draw-store-card]] Counter note ကတော့ စာရေး၊
+      စာပြင်၊ စာရင်းထဲထည့်တာပဲ။ သွားရမယ့် State လမ်းကြောင်းမရှိဘူး။
+      ဒီလို လွတ်လပ်တဲ့ UI data ကို Store က ထိန်းမယ်။
+      [[mark:draw-shared-rule]] Machine က အော်ဒါဘယ်အဆင့်မှာရှိလဲ ဆုံးဖြတ်တယ်။
+      Store က ဝန်ထမ်းရေးနေတဲ့မှတ်စုကို သိမ်းတယ်။ ပိုင်ရှင်နှစ်ယောက် သီးခြားထားလို့
+      note တစ်ကြောင်းထည့်တာနဲ့ အော်ဒါအဆင့် မပြောင်းဘူး။ အခု ဒီပုံတွေကို Editor ထဲမှာ
+      code နဲ့ ချိတ်ကြည့်မယ်။
     sources:
       - title: "Stately Docs — XState Store"
         url: "https://stately.ai/docs/xstate-store"
@@ -2254,29 +1871,20 @@ scenes:
 
   - id: implement-machine
     narration: >
-      Whiteboard ပေါ်က ပုံကို နားလည်သွားပြီဆိုတော့ အခု [[mark:close-concept-board]] Editor
-      ထဲဝင်ပြီး အဲဒီပုံကို code အဖြစ် ပြောင်းကြည့်ကြရအောင်။ Workspace မှာ React၊ xstate၊
-      @xstate/react နဲ့ @xstate/store-react version အတိအကျ သတ်မှတ်ထားတယ်။ ဒါကြောင့် ဒီသင်ခန်းစာကို
-      နောက်တစ်ခါ run လည်း တူညီတဲ့ API ကိုပဲ သုံးမယ်။ [[mark:open-main-file]] main.tsx အပေါ်ဆုံးက
-      import တွေကနေ စကြည့်ရအောင်။ xstate က setup၊ assign နဲ့ fromPromise ကို ပေးတယ်။ @xstate/react က
-      Machine ကို React Component နဲ့ ချိတ်ဖို့ useMachine ပေးတယ်။ @xstate/store-react က
-      createStore နဲ့ Store အတွက် useSelector ပေးတယ်။ Package တစ်ခုချင်းစီက ဘာလုပ်ပေးလဲ
-      အရင်ခွဲသိထားရင် code အောက်ပိုင်းကို ဖတ်ရတာ ပိုလွယ်သွားမယ်။ [[mark:select-event-union]] အခု
-      OrderEvent union ကို ကြည့်မယ်။ Start preparing၊ Pack order၊ Check item၊ Remake နဲ့ Serve
-      က Actor လက်ခံနိုင်တဲ့ Event တွေပါ။ Pack order Event မှာ order ID လို data
-      ထည့်ချင်ရင် union member ထဲ field ထပ်ထည့်နိုင်တယ်။ ဒီလို union ရေးထားတာကြောင့် Event
-      နာမည်စာလုံးမှားတာနဲ့ လိုအပ်တဲ့ data မပါတာကို TypeScript က code ရေးနေချိန်မှာ ပြောနိုင်တယ်။
-      [[mark:type-machine]] setup API နဲ့ Context၊ Events၊ Guard နဲ့ Action type တွေကို Actor
-      Logic တွေနဲ့အတူ နာမည်ပေးပြီး Machine တည်ဆောက်မယ်။ setup ကိုခေါ်လိုက်ရုံနဲ့ Actor က
-      စအလုပ်လုပ်သွားတာ မဟုတ်ပါဘူး။
-      ဘယ် type နဲ့ ဘယ် implementation တွေ အသုံးပြုမလဲဆိုတာ စုစည်းထားတာပါ။ အဲဒီ setup ကနေ
-      createMachine ခေါ်ပြီး id၊ initial၊ context နဲ့ states သတ်မှတ်မယ်။
-      [[mark:select-initial-state]] received က initial State ဖြစ်ပြီး served က Final State
-      ဖြစ်တယ်။ Actor instance အသစ်တစ်ခုစီက checkedItems သုညနဲ့ packingTicket null ပါတဲ့ initial
-      Context ကို ရမယ်။ states object က မျက်နှာပြင်စာရင်း မဟုတ်ဘူးဆိုတာ ဒီမှာ သတိထားရပါတယ်။ State
-      တစ်ခုစီမှာ ဘယ် Event လက်ခံပြီး ဘယ်ကိုသွားမလဲ ရေးထားတဲ့နေရာပါ။ Event handler မရှိတဲ့ State
-      မှာ Event ပို့ရင် ဘာမှမပြောင်းဘူး။ React Component ထဲမှာ if statement အများကြီး ရေးပြီး
-      ဒီစည်းမျဉ်းကို ပြန်တည်ဆောက်စရာ မလိုတော့ဘူး။
+      Whiteboard ပေါ်က ပုံကို အခု [[mark:close-concept-board]] Editor ထဲက
+      code နဲ့ ချိတ်မယ်။ [[mark:open-main-file]] main.tsx မှာ လိုတဲ့ package တွေ
+      ထည့်ထားပြီးသားပါ။ Import တစ်ကြောင်းချင်း မဖတ်ဘဲ ပုံရဲ့ ဘယ်အစိတ်အပိုင်းက
+      ဘယ် code ဖြစ်လာလဲကိုပဲ လိုက်ကြည့်မယ်။ [[mark:select-event-union]]
+      မြှားပေါ်က စပြင်၊ ထုပ်ပိုး၊ စစ်ဆေး၊ ပြန်ပြင်နဲ့ တည်ခင်းဆိုတဲ့
+      ဖြစ်ရပ်တွေက OrderEvent ဖြစ်လာတယ်။ ဒီစာရင်းပြင်ပက Event နာမည်မှားပို့ရင်
+      TypeScript က ကြိုပြောနိုင်မယ်။ [[mark:type-machine]] Machine တစ်ခုလုံးကို
+      ထည့်လိုက်မယ်။ အပေါ်ပိုင်းက ထုပ်ပိုးအလုပ်၊ စစ်ဆေးရေးဂိတ်နဲ့ အော်ဒါကတ်ပြောင်းပုံကို
+      နာမည်ပေးထားတယ်။ အောက်က states က Whiteboard ပေါ်က အကွက်ငါးခုနဲ့
+      မြှားတွေကို တိုက်ရိုက်ဖော်ပြတယ်။ [[mark:select-initial-state]] Received က
+      စမှတ်ဖြစ်ပြီး Served က အဆုံးမှတ်။ အော်ဒါအသစ်တိုင်း အမှန်ခြစ်သုညနဲ့
+      လက်မှတ်မရှိသေးတဲ့ Context ကနေ စမယ်။ State တစ်ခုမှာ Event အတွက်
+      လမ်းမရှိရင် အော်ဒါက မရွှေ့ဘူး။ နောက်အပိုင်းတွေမှာ Packing အလုပ်နဲ့
+      စစ်ဆေးရေးဂိတ်ကို သီးခြား ချဲ့ကြည့်မယ်။
     sources:
       - title: "Stately Docs — Setup"
         url: "https://stately.ai/docs/setup"
@@ -2967,36 +2575,19 @@ scenes:
 
   - id: course-recap
     narration: >
-      [[mark:open-recap-board]] သင်ခန်းစာအစမှာ boolean flag လေးခုကြောင့် ဖြစ်နိုင်တဲ့ အခြေအနေ
-      ဆယ့်ခြောက်မျိုးအထိ ပေါ်လာနိုင်တာကို ကြည့်ခဲ့တယ်။ အဲဒီကနေ Received၊ Preparing၊ Packing၊
-      Ready နဲ့ Served ဆိုတဲ့ named States တစ်စုကို သတ်မှတ်ပြီး finite automaton တစ်ခု
-      တည်ဆောက်ခဲ့တယ်။ အခုဆို အဲဒီ model ကို XState Machine နဲ့ Actor အဖြစ် run ပြီး Browser
-      ထဲမှာ အစအဆုံး စမ်းပြီးသွားပြီ။ နောက် application တစ်ခုမှာ XState သုံးမသုံး ဆုံးဖြတ်ရင်
-      ဒီအစဉ်နဲ့ ပြန်စဉ်းစားလို့ရပါတယ်။ [[mark:recap-model-and-rules]] ပထမ မေးခွန်းက
-      “လက်ရှိအခြေအနေကို နာမည်တစ်ခုတည်းနဲ့ တိတိကျကျ ပြောနိုင်သလား” ပါ။ Named States
-      သတ်မှတ်ပြီးရင် initial State၊ လက်ခံနိုင်တဲ့ Events နဲ့ State တစ်ခုကနေ တစ်ခုသွားတဲ့
-      Transitions ကို ချိတ်မယ်။ ဒီအဆင့်မှာ finite automaton ကို စာရွက်ပေါ်မှာတောင်
-      ရှင်းပြနိုင်ရမယ်။ ပြီးမှ checkedItems၊ packingTicket လို data ကို Context ထဲထားမယ်။
-      Event ကို လက်ခံမလားစစ်ဖို့ Guard သုံးပြီး Context ပြောင်းဖို့ Action သုံးမယ်။ React
-      button တွေမစဉ်းစားခင် အော်ဒါစည်းမျဉ်းကို model ထဲမှာ ရှင်းအောင်လုပ်တာပါ။
-      [[mark:recap-actor-and-react]] ဒုတိယ မေးခွန်းက
-      “အချိန်ယူတဲ့အလုပ် ဒါမှမဟုတ် ပြင်ပ API ခေါ်တာရှိသလား” ပါ။ ရှိရင် Promise Actor လို Actor
-      logic တစ်ခုရေးပြီး State ထဲက invoke နဲ့ စတင်နိုင်တယ်။ onDone နဲ့ အောင်မြင်တဲ့လမ်း၊ onError
-      နဲ့ မအောင်မြင်တဲ့လမ်းကို Machine ထဲမှာပဲ ဖော်ပြနိုင်တယ်။ React Component က Machine ကို run
-      ပြီး Snapshot ကိုပြမယ်၊ Event ကိုပို့မယ်။ Component သေးသေးလေးအတွက် useMachine က လွယ်တယ်။
-      ActorRef ကို အပိုင်းများစွာမျှဝေရင် useActorRef သို့မဟုတ် createActorContext ကို
-      စဉ်းစားနိုင်တယ်။ Component တစ်ခုက Snapshot ထဲက value အနည်းငယ်ပဲလိုရင် useSelector နဲ့ အဲဒီ
-      value ကိုပဲ ရွေးနိုင်တယ်။ [[mark:recap-store-and-checks]] တတိယ မေးခွန်းက “ဒီ data မှာ State
-      အဆင့်လိုက်သွားရမယ့် စည်းမျဉ်းရှိသလား” ပါ။ မရှိဘဲ Event နဲ့ Context ပြောင်းပြီး React က
-      Selector နဲ့ဖတ်ဖို့ပဲလိုရင် XState Store က ပိုသင့်တော်နိုင်တယ်။ ဒီသင်ခန်းစာမှာ order note
-      draft နဲ့ notes ကို Store ထဲထားခဲ့တာ အဲဒီအကြောင်းပါ။ နောက်ဆုံး စစ်ဆေးတဲ့အခါ
-      အောင်မြင်တဲ့လမ်းတစ်ခုတည်း စမ်းရုံနဲ့တော့ မလုံလောက်ပါဘူး။ ခွင့်မပြုသေးတဲ့ Event၊ Guard
-      မပြည့်သေးတဲ့အခြေအနေ၊ async Actor အလုပ်လုပ်နေချိန်နဲ့ Remake လို ပြန်ဆုတ်တဲ့လမ်းကိုပါ
-      စမ်းကြည့်ရပါတယ်။ snapshot.matches
-      နဲ့ State ကိုစစ်နိုင်ပြီး snapshot.can နဲ့ Event ပို့လို့ရမရ စစ်နိုင်တယ်။ ဒီအခြေခံတွေကို
-      ရသွားပြီဆိုရင်တော့ nested States၊ parallel States၊ Actor systems နဲ့ persistence တွေကို
-      ဆက်ပြီး လေ့လာနိုင်ပါပြီ။ အဓိကမှတ်ထားရမယ့်အချက်က Machine က ဘာဖြစ်ရမလဲဆုံးဖြတ်ပြီး React က
-      အဲဒီဆုံးဖြတ်ချက်ကို အသုံးပြုသူမြင်အောင်ပြတာပါ။
+      [[mark:open-recap-board]] အော်ဒါနံပါတ် ၂၄ ကို နောက်ဆုံးတစ်ခေါက်
+      ပြန်လိုက်ကြည့်မယ်။ API နာမည်တွေကို အလွတ်ကျက်ဖို့မလိုဘူး။
+      ဒီမေးခွန်းတွေ ဖြေနိုင်ရင် ကိုယ့် app မှာ ပြန်သုံးနိုင်ပြီ။
+      [[mark:recap-model-and-rules]] အခုဘယ်အဆင့်မှာလဲ။ အဖြေက State
+      တစ်ခုတည်းဖြစ်ရမယ်။ နောက်ဘာလုပ်ခွင့်ရှိလဲ။ Event အတွက်
+      ခွင့်ပြုထားတဲ့လမ်း ရှိရမယ်။ [[mark:recap-actor-and-react]]
+      အော်ဒါတစ်ခုချင်းစီရဲ့ လက်ရှိအခြေအနေကို ဘယ်သူကိုင်ပြီး ဆုံးဖြတ်လဲ။
+      Actor က ကိုင်ထားတယ်။ ဘယ်သူပြသလဲ။ React က အခြေအနေကိုပြပြီး
+      Event ကိုပို့တယ်။ [[mark:recap-store-and-checks]] ဘာကိုသီးခြားထားမလဲ။
+      အစဉ်မရှိတဲ့ Counter notes လို data ကို Store က ထိန်းတယ်။
+      ဒီလမ်းကို ဖြတ်လို့ရပြီလား။ Guard က စစ်မယ်။ Machine ကဆုံးဖြတ်၊ React ကပြ၊
+      Store က သီးခြား data ကိုထိန်းတယ်။ ဒီတာဝန်ခွဲပုံ ရှင်းနေသရွေ့
+      implementation ကြီးလာလည်း အော်ဒါစည်းမျဉ်း မပျောက်ဘူး။
     sources:
       - title: "Stately Docs — State machines"
         url: "https://stately.ai/docs/machines"
