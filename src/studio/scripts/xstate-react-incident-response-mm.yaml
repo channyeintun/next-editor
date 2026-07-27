@@ -2587,12 +2587,12 @@ scenes:
           occurrence: 1
       - id: expect-final-machine-file
         type: expect.file
-        at: { mark: select-react-send }
+        at: { afterAction: select-actor-send }
         path: src/main.tsx
         contains: 'guard: "hasTwoStableChecks"'
       - id: expect-final-store-file
         type: expect.file
-        at: { mark: select-react-send }
+        at: { afterAction: select-actor-send }
         path: src/main.tsx
         contains: "activityStore.trigger.addNote()"
 
