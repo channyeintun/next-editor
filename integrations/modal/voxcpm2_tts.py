@@ -29,9 +29,28 @@ REFERENCE_SAMPLE_RATE = 24_000
 MIN_REFERENCE_SECONDS = 5
 MAX_REFERENCE_SECONDS = 20
 MAX_REFERENCE_WAV_BYTES = 44 + REFERENCE_SAMPLE_RATE * MAX_REFERENCE_SECONDS * 2
+# Delivery is pinned here, server-side, so a lesson's narration cannot drift
+# with a client-supplied prompt.
+#
+# v1 asked for a "warm educator" with a "steady pace" for "technical teaching".
+# Every part of that describes a lecture: an educator addresses a room, and a
+# steady pace is exactly what reading aloud sounds like, because the rhythm
+# comes from the page instead of the thought. The model obliged and recited.
+#
+# v2 keeps the warmth and clarity but asks for the uneven rhythm of speech
+# aimed at one person, and rules out the reading register outright.
+#
+# Changing this text REQUIRES bumping `voiceDesignId` in
+# src/studio/tts/profiles.ts. That id is what carries the prompt version into
+# the TTS request hash; without the bump every already-synthesized dialog keeps
+# its old delivery from the browser cache and the change appears to do nothing.
 VOICE_DESIGN_PROMPT = (
-    "A warm Burmese educator with a clear, confident, medium-pitched voice, "
-    "calm natural emotion, and a steady conversational pace for technical teaching"
+    "A Burmese software developer explaining an idea to one friend, speaking "
+    "spontaneously rather than reading aloud: warm, relaxed, medium-pitched, "
+    "and easy to follow. The rhythm is uneven the way real conversation is — "
+    "quicker through a familiar aside, slower on the point that matters, pitch "
+    "rising and falling with the thought, with short natural pauses where "
+    "someone would stop to gather it. Never lecturing, announcing, or reciting"
 )
 
 

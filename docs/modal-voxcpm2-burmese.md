@@ -27,7 +27,13 @@ The selected sample stays in browser IndexedDB between runs. It is sent
 transiently for each uncached Burmese dialog, used as VoxCPM2's
 `reference_wav_path`, and discarded at the end of that request. The Worker and
 Modal function do not persist or log it. Reusing the recording fixes the
-speaker identity; the server-pinned `burmese-educator-v1` prompt fixes delivery.
+speaker identity; the server-pinned `burmese-educator-v2` prompt fixes delivery.
+
+The prompt text lives only in `integrations/modal/voxcpm2_tts.py` and is never
+sent by the client. `voiceDesignId` in `src/studio/tts/profiles.ts` carries its
+version into the per-dialog TTS request hash, so the two must be bumped
+together: editing the prompt alone leaves every cached dialog on the old
+delivery, and redeploying Modal alone changes nothing the browser asks for.
 
 UI visibility is not authorization. Calling the synthesis endpoint directly
 without the D1 flag returns `403`, and the Modal credentials never reach the
@@ -41,7 +47,7 @@ The deployment pins:
 - `openbmb/VoxCPM2` revision
   `bffb3df5a29440629464e5e839f4d214c8714c3d`
 - 48 kHz PCM16 WAV, CFG 2.0, and 10 inference steps
-- the `burmese-educator-v1` delivery prompt plus a required 5–20 second
+- the `burmese-educator-v2` delivery prompt plus a required 5–20 second
   per-render narrator reference
 - eager CUDA inference; VoxCPM's `torch.compile` warm-up is disabled because it
   exceeds the Web Function proxy deadline on an L4 cold start

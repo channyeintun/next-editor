@@ -37,8 +37,17 @@ export interface ModalVoxCpm2VoiceProfile {
   modelRevision: string;
   /** Pinned inference package baked into the Modal image. */
   packageVersion: string;
-  /** Server-pinned prompt version controlling the narrator's delivery. */
-  voiceDesignId: "burmese-educator-v1";
+  /**
+   * Server-pinned prompt version controlling the narrator's delivery. The
+   * prompt text itself lives in integrations/modal/voxcpm2_tts.py and never
+   * crosses the wire; this id exists so the prompt version reaches
+   * `ttsRequestHash`. Bump it in lockstep with that text, or cached dialogs
+   * keep replaying the old delivery.
+   *
+   * v2 (2026-07-28): conversational — v1's "educator"/"steady pace" phrasing
+   * made the model read the script aloud rather than talk through it.
+   */
+  voiceDesignId: "burmese-educator-v2";
   /** Browser-local reference sample used to keep one speaker across dialogs. */
   referenceVoiceId?: string;
   /** Reference sample hash — keys the synthesis cache without embedding audio. */
@@ -71,7 +80,7 @@ export const VOICE_PROFILES: Record<string, VoiceProfile> = {
     model: "openbmb/VoxCPM2",
     modelRevision: "bffb3df5a29440629464e5e839f4d214c8714c3d",
     packageVersion: "2.0.3",
-    voiceDesignId: "burmese-educator-v1",
+    voiceDesignId: "burmese-educator-v2",
     referenceSampleRate: 24000,
     cfgValue: 2,
     inferenceTimesteps: 10,
