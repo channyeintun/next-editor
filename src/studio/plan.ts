@@ -141,6 +141,10 @@ const runtimeWaitForReadyActionSchema = planActionBase.extend({
   retry: studioRetryPolicySchema,
 });
 
+const runtimeCollapseDockActionSchema = planActionBase.extend({
+  type: z.literal("runtime.collapseDock"),
+});
+
 const previewOpenActionSchema = planActionBase.extend({
   type: z.literal("preview.open"),
   mode: z.enum(["docked", "floating"]).default("docked"),
@@ -249,6 +253,7 @@ export const studioPlanActionSchema = z.discriminatedUnion("type", [
   runtimeRunActionSchema,
   runtimeStartActionSchema,
   runtimeWaitForReadyActionSchema,
+  runtimeCollapseDockActionSchema,
   previewOpenActionSchema,
   previewClickActionSchema,
   previewInputActionSchema,

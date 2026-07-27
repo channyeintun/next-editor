@@ -33,6 +33,7 @@ function makeDriver(whiteboardAssets = ASSETS) {
       setActiveFilePath: () => {},
     },
     notifyWorkspaceEvent: () => {},
+    notifyRuntimeEvent: () => {},
     runtimePanelStore: {} as StudioDriverDeps["runtimePanelStore"],
     slidesStore: {} as StudioDriverDeps["slidesStore"],
     whiteboardStore: {

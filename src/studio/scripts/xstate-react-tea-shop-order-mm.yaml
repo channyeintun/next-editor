@@ -2289,6 +2289,13 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-concept-board }
         open: false
+      # The board comes down and the editor becomes the stage for the rest of
+      # the lesson, so the runner dock stops earning its space here. It starts
+      # expanded and nothing re-opens it, so this one action covers every
+      # explanation that follows.
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: close-concepts-whiteboard }
       - id: open-order-main-file
         type: workspace.openFile
         at: { mark: open-main-file }

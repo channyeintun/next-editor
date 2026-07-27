@@ -42,6 +42,10 @@ function makePlan(overrides?: { failRun?: boolean }): {
       calls.push("runtime-ready");
       return { status: "ready" };
     },
+    async collapseRuntimeDock() {
+      calls.push("runtime-collapse-dock");
+      return { collapsed: true };
+    },
     async openPreview({ mode }) {
       calls.push(`preview-open:${mode}`);
       return { mode };

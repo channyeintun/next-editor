@@ -46,6 +46,7 @@ export interface StudioRunDeps {
     | "clearRecording"
     | "addCaptionTrack"
     | "handleWorkspaceEvent"
+    | "handleRuntimeEvent"
     | "handleSlideEvent"
     | "handleWhiteboardEvent"
     | "handlePreviewEvent"
@@ -380,6 +381,7 @@ export async function runStudioRender(
     getEditor: deps.getEditor,
     workspace: deps.workspace,
     notifyWorkspaceEvent: () => deps.nextEditor.handleWorkspaceEvent(),
+    notifyRuntimeEvent: () => deps.nextEditor.handleRuntimeEvent(),
     runtimePanelStore: deps.runtimePanelStore,
     slidesStore: deps.slidesStore,
     whiteboardStore: deps.whiteboardStore,

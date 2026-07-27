@@ -55,6 +55,8 @@ async function invokeAction(
       return driver.startRuntime(action.timeoutMs);
     case "runtime.waitForReady":
       return driver.waitForRuntimeReady(action.timeoutMs);
+    case "runtime.collapseDock":
+      return driver.collapseRuntimeDock(action.timeoutMs);
     case "preview.open":
       return driver.openPreview({ mode: action.mode, timeoutMs: action.timeoutMs });
     case "preview.click":

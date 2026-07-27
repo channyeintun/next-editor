@@ -98,6 +98,13 @@ const scriptRuntimeWaitForReadySchema = scriptActionBase.extend({
   retry: studioRetryPolicySchema,
 });
 
+// Running a lesson's code opens the runner dock and nothing closes it again, so
+// it sits over the editor through the explanation that follows. This hands that
+// back to the author: collapse it once the output has been read.
+const scriptRuntimeCollapseDockSchema = scriptActionBase.extend({
+  type: z.literal("runtime.collapseDock"),
+});
+
 const scriptPreviewOpenSchema = scriptActionBase.extend({
   type: z.literal("preview.open"),
   mode: z.enum(["docked", "floating"]).default("docked"),
@@ -192,6 +199,7 @@ export const scriptActionSchema = z.discriminatedUnion("type", [
   scriptRuntimeRunSchema,
   scriptRuntimeStartSchema,
   scriptRuntimeWaitForReadySchema,
+  scriptRuntimeCollapseDockSchema,
   scriptPreviewOpenSchema,
   scriptPreviewClickSchema,
   scriptPreviewInputSchema,
@@ -286,6 +294,8 @@ export const lessonScriptSchema = z
             action.type === "runtime.run" ||
             action.type === "runtime.start" ||
             action.type === "runtime.waitForReady" ||
+            // A lesson with no runtime never renders a runner dock to collapse.
+            action.type === "runtime.collapseDock" ||
             action.type.startsWith("preview.") ||
             action.type === "expect.preview" ||
             action.type === "expect.output"

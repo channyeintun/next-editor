@@ -49,6 +49,7 @@ function makeDriver(options: { lessonType?: "python" | "typescript" } = {}) {
       setActiveFilePath: () => {},
     },
     notifyWorkspaceEvent: () => {},
+    notifyRuntimeEvent: () => {},
     runtimePanelStore: {} as StudioDriverDeps["runtimePanelStore"],
     slidesStore: {} as StudioDriverDeps["slidesStore"],
     whiteboardStore: {} as StudioDriverDeps["whiteboardStore"],

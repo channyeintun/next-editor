@@ -367,6 +367,7 @@ export function compileLessonScript({
             durationMs: selectDurationOf(action, typingSeed.get(action.id)!),
           };
         case "runtime.run":
+        case "runtime.collapseDock":
           return { id: action.id, type: action.type, at, timeoutMs: action.timeoutMs };
         case "runtime.start":
         case "runtime.waitForReady":

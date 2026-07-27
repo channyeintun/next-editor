@@ -1,6 +1,6 @@
 import { monaco, workspacePathFromMonacoModelUri } from "../monaco";
 import type { WorkspaceActions } from "../contexts/WorkspaceContext";
-import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
+import { selectIsCollapsed, type RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
 import { selectPreviewState, type SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import { appendRunnerConsoleLines } from "../runtime/goPlayground/consoleStore";
@@ -60,6 +60,8 @@ export interface StudioDriverDeps {
   workspace: Pick<WorkspaceActions, "getFile" | "getProject" | "setActiveFilePath">;
   /** Records the active-file change on the workspace track (same call the sidebar makes). */
   notifyWorkspaceEvent: () => void;
+  /** Records the runner dock's state on the runtime track (same send the dock makes). */
+  notifyRuntimeEvent: () => void;
   runtimePanelStore: RuntimePanelStoreInstance;
   slidesStore: SlidesStoreInstance;
   whiteboardStore: WhiteboardStoreInstance;
@@ -110,6 +112,7 @@ export interface StudioDriver {
   runWorkspace(timeoutMs: number): Promise<Record<string, unknown>>;
   startRuntime(timeoutMs: number): Promise<Record<string, unknown>>;
   waitForRuntimeReady(timeoutMs: number): Promise<Record<string, unknown>>;
+  collapseRuntimeDock(timeoutMs: number): Promise<Record<string, unknown>>;
   openPreview(input: {
     mode: PreviewPanelMode;
     timeoutMs: number;
@@ -735,6 +738,28 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         previewUrl: snapshot.previewUrl,
         previewPort: snapshot.previewPort,
       };
+    },
+
+    async collapseRuntimeDock(timeoutMs) {
+      const panel = deps.runtimePanelStore;
+      if (selectIsCollapsed(panel.getSnapshot().context)) {
+        return { collapsed: true, alreadyCollapsed: true };
+      }
+
+      panel.trigger.setIsCollapsed({ collapsed: true });
+      await waitUntil(() => selectIsCollapsed(panel.getSnapshot().context), {
+        timeoutMs,
+        signal,
+        description: "the runner dock to collapse",
+      });
+
+      // The dock records itself by diffing its own state on render, so the
+      // recording only learns about this once the panel has re-rendered. Nudging
+      // the runtime track here means the collapse is captured at the action's
+      // time rather than whenever the next unrelated runtime change lands — a
+      // gap that would otherwise leave the dock covering the editor on replay.
+      deps.notifyRuntimeEvent();
+      return { collapsed: true };
     },
 
     async openPreview({ mode, timeoutMs }) {
