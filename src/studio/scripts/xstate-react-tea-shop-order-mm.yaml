@@ -1581,17 +1581,18 @@ runtime:
 scenes:
   - id: why-explicit-state
     narration: >
-      Code ကို ခဏထားပြီး ဆိုင်ထဲက အော်ဒါနံပါတ် ၂၄ ကိုပဲ လိုက်ကြည့်မယ်။
-      လက်ဖက်ရည်တစ်ခွက်နဲ့ ပလာတာတစ်ပွဲ မှာထားတယ်။ ဝန်ထမ်းအသစ်က ဒီအော်ဒါ
-      အခုဘယ်အဆင့်မှာလဲလို့ မေးလာတယ်ဆိုပါစို့။ [[mark:open-why-board]] Received လည်းဟုတ်၊
-      Preparing လည်းဟုတ်၊ Ready လည်းဟုတ်လို့ ဖြေရင် ဘယ်သူက ဘာဆက်လုပ်ရမလဲ မသိတော့ဘူး။
-      [[mark:show-conflicting-statuses]] တံဆိပ်သုံးခု တစ်ပြိုင်နက်မှန်နေတာက ဆိုင်မှာ
-      မဖြစ်သင့်တဲ့အခြေအနေပါ။ [[mark:show-current-stage]] အော်ဒါကတ်မှာ Ready တစ်ခုတည်း
-      ထားလိုက်ရင် အဖြေရှင်းသွားတယ်။ အခုနေရာက Ready။ နောက်လုပ်လို့ရတာက
-      ပစ္စည်းနှစ်ခုစစ်ပြီး တည်ခင်းဖို့။ ဒီလို လက်ရှိအဆင့်ကို အဖြေတစ်ခုတည်းနဲ့
-      ပြောတာကို State လို့ခေါ်မယ်။ [[mark:show-next-action]] State က label တစ်ခုတည်း
-      မဟုတ်ဘူး။ နောက်ဘာလုပ်ခွင့်ရှိလဲဆိုတာပါ ရှင်းစေတယ်။ အခု အော်ဒါကတ်သွားမယ့်လမ်းကို
-      ဆက်ဆွဲကြည့်မယ်။
+      Code ကို ခဏဘေးထားပြီး ဆိုင်က အော်ဒါနံပါတ် ၂၄ ကို ကြည့်ရအောင်။
+      လက်ဖက်ရည်တစ်ခွက်၊ ပလာတာတစ်ပွဲ မှာထားတယ်။ ဝန်ထမ်းအသစ်က
+      ဒီအော်ဒါ အခုဘယ်ရောက်နေလဲလို့ မေးတယ်ဆိုပါစို့။
+      [[mark:open-why-board]] Received လည်းဟုတ်၊ Preparing လည်းဟုတ်၊
+      Ready လည်းဟုတ်ဆိုရင် ဘာဆက်လုပ်ရမလဲ ဝေခွဲမရတော့ဘူး။
+      [[mark:show-conflicting-statuses]] တံဆိပ်သုံးခု တစ်ပြိုင်နက်မှန်နေတာ
+      ဆိုင်မှာ မဖြစ်သင့်ဘူး။ [[mark:show-current-stage]] အော်ဒါကတ်ပေါ်မှာ
+      Ready တစ်ခုပဲထားလိုက်တော့ ရှင်းသွားပြီ။ အခု Ready ရောက်နေတယ်။
+      နောက်တစ်ဆင့်က ပစ္စည်းနှစ်ခုစစ်ပြီး တည်ခင်းဖို့။ အော်ဒါရဲ့ လက်ရှိအဆင့် —
+      ဒါက State ပဲ။ [[mark:show-next-action]] State ဆိုတာ နာမည်တစ်ခုသက်သက်
+      မဟုတ်ဘူး။ ဒီအချိန် ဘာဆက်လုပ်လို့ရလဲပါ ပြောပေးတယ်။ ဒါဆို
+      အော်ဒါသွားမယ့်လမ်းကို ဆက်ဆွဲကြည့်ရအောင်။
     sources:
       - title: "Stately Docs — State machines"
         url: "https://stately.ai/docs/machines"
@@ -1638,17 +1639,17 @@ scenes:
 
   - id: finite-automaton-order
     narration: >
-      [[mark:open-domain-board]] အော်ဒါနံပါတ် ၂၄ ရဲ့လမ်းကို စာရွက်ပေါ်မှာ ဆွဲကြည့်မယ်။
-      [[mark:draw-received-state]] ကောင်တာက လက်ခံလိုက်တဲ့ Received မှာ စတယ်။
-      [[mark:draw-preparing-state]] ဝန်ထမ်းက စပြင်လိုက်ရင် Preparing ကို ရွှေ့တယ်။
-      [[mark:draw-packing-state]] လက်ဖက်ရည်နဲ့ ပလာတာ နှစ်မျိုးလုံးပြီးရင် Packing။
-      ဒီအဆင့်မှာ ပစ္စည်းတွေထုပ်ပြီး အော်ဒါလက်မှတ် ထုတ်နေတယ်။
-      [[mark:draw-ready-state]] လက်မှတ်ရလာရင် Ready ကို ရောက်တယ်။
-      [[mark:draw-served-state]] နှစ်မျိုးလုံး မှန်မမှန်စစ်ပြီးမှ Served ကို ရောက်မယ်။
-      မြှားပေါ်က စပြင်၊ ထုပ်ပိုး၊ တည်ခင်းလို ဖြစ်ရပ်တွေကို Event လို့ခေါ်တယ်။
-      အရေးကြီးတာက ပုံထဲမှာရှိတဲ့လမ်းပဲ သွားခွင့်ရှိတာပါ။ Received ကနေ Ready ကို
-      တိုက်ရိုက်သွားတဲ့မြှား မရှိဘူး။ အဆင့်တွေ၊ Event တွေနဲ့ ခွင့်ပြုထားတဲ့လမ်းတွေ
-      စုပြထားတဲ့ ဒီပုံက State Machine ဖြစ်တယ်။
+      [[mark:open-domain-board]] အော်ဒါနံပါတ် ၂၄ သွားမယ့်လမ်းကို
+      ဆွဲကြည့်ရအောင်။ [[mark:draw-received-state]] ကောင်တာက လက်ခံတာနဲ့
+      Received မှာ စမယ်။ [[mark:draw-preparing-state]] စပြင်လိုက်ရင်
+      Preparing။ [[mark:draw-packing-state]] လက်ဖက်ရည်နဲ့ ပလာတာ
+      ပြီးပြီဆို Packing။ ဒီမှာ ပစ္စည်းထုပ်ပြီး အော်ဒါလက်မှတ် ထုတ်နေမယ်။
+      [[mark:draw-ready-state]] လက်မှတ်ရပြီဆို Ready။
+      [[mark:draw-served-state]] နှစ်မျိုးလုံးစစ်ပြီးမှ Served။
+      မြှားပေါ်က စပြင်၊ ထုပ်ပိုး၊ တည်ခင်းဆိုတာတွေက Event တွေ။
+      ဒီမှာ သတိထားကြည့်။ ပုံထဲမှာရှိတဲ့လမ်းပဲ သွားလို့ရတယ်။
+      Received ကနေ Ready ကို တန်းခုန်လို့မရဘူး။ ဒီလို အဆင့်တွေ၊
+      Event တွေ၊ သွားလို့ရတဲ့လမ်းတွေကို စုထားတဲ့ပုံက State Machine ပဲ။
     sources:
       - title: "NIST Dictionary — Finite state machine"
         url: "https://xlinux.nist.gov/dads/HTML/finiteStateMachine.html"
@@ -1697,18 +1698,18 @@ scenes:
 
   - id: context-actions-guards
     narration: >
-      ဒီလမ်းပုံမှာ မပါတဲ့ အသေးစိတ်တစ်ခု ရှိသေးတယ်။ Ready ရောက်တဲ့အခါ
-      လက်ဖက်ရည်နဲ့ ပလာတာ နှစ်မျိုးလုံး စစ်ရမယ်။ [[mark:draw-domain-context]]
-      အော်ဒါကတ်အောက်မှာ အမှန်ခြစ်နှစ်ခု ထည့်မယ်။ ပထမတစ်ခုစစ်ပြီးလည်း အော်ဒါက
-      Ready မှာပဲရှိတယ်။ နေရာမပြောင်းဘဲ ကတ်ပေါ်ကမှတ်တမ်းပဲ ပြောင်းသွားတာ။
-      ဒီလို အဆင့်နဲ့အတူ သယ်သွားရတဲ့ data ကို Context လို့ခေါ်ပြီး ကတ်ကို
-      ပြောင်းပေးတဲ့အလုပ်ကို Action လို့ခေါ်မယ်။ [[mark:draw-domain-guard]]
-      Ready ရဲ့ထွက်ပေါက်မှာ စစ်ဆေးရေးဂိတ်ရှိတယ်။ အမှန်ခြစ်က ၂ ခုမှာ ၂ ခု
-      မပြည့်သေးရင် တည်ခင်းဖို့တောင်းဆိုလည်း တံခါးမဖွင့်ဘူး။ ဒီလို
-      ဖြတ်သွားခွင့်ရှိမရှိ စစ်တဲ့စည်းမျဉ်းက Guard ပါ။
-      [[mark:emphasize-domain-rule]] တစ်ခုမှားနေရင် Preparing ဆီပြန်ပြီး
-      အမှန်ခြစ်တွေကို ပြန်စမယ်။ UI က တည်ခင်းခလုတ်ကို ပိတ်ပြနိုင်ပေမဲ့
-      တကယ့်စည်းမျဉ်းက ဒီဂိတ်ထဲမှာ ရှိတယ်။
+      လမ်းပုံထဲမှာ အသေးစိတ်တစ်ခု ကျန်သေးတယ်။ Ready ရောက်ရင်
+      လက်ဖက်ရည်နဲ့ ပလာတာ နှစ်ခုလုံး စစ်ရမယ်။
+      [[mark:draw-domain-context]] အော်ဒါကတ်အောက်မှာ အမှန်ခြစ်နှစ်ခု
+      ထည့်မယ်။ တစ်ခုစစ်ပြီးလည်း Ready မှာပဲ။ နေရာမရွှေ့ဘူး။
+      ကတ်ပေါ်ကမှတ်တမ်းပဲ ပြောင်းတယ်။ ဒီလို အဆင့်နဲ့အတူသယ်သွားတဲ့
+      data က Context။ ကတ်ကိုပြောင်းပေးတဲ့အလုပ်က Action။
+      [[mark:draw-domain-guard]] Ready ရဲ့ထွက်ပေါက်မှာ စစ်ဆေးရေးဂိတ်
+      ထားမယ်။ နှစ်ခုလုံးမစစ်ရသေးရင် တည်ခင်းခိုင်းလည်း ဂိတ်မဖွင့်ဘူး။
+      သွားခွင့်ရှိမရှိ စစ်ပေးတာ Guard။ [[mark:emphasize-domain-rule]]
+      တစ်ခုမှားရင် Preparing ပြန်ပြီး အမှန်ခြစ်တွေကို သုညကနေပြန်စမယ်။
+      UI မှာ တည်ခင်းခလုတ်ကို ပိတ်ပြထားလို့ရတယ်။ ဒါပေမဲ့ အော်ဒါကို
+      တကယ်တားထားတာ ဒီ Guard ပဲ။
     sources:
       - title: "Stately Docs — Context"
         url: "https://stately.ai/docs/context"
@@ -1737,16 +1738,17 @@ scenes:
 
   - id: actor-react-model
     narration: >
-      ပုံဆွဲပြီးသွားပေမဲ့ စည်းမျဉ်းစာရွက်က သူ့ဘာသာ အော်ဒါကို မရွှေ့နိုင်ဘူး။
-      [[mark:draw-machine-logic]] ဘယ်အဆင့်ကနေ ဘယ်အဆင့်ကို သွားခွင့်ရှိလဲဆိုတာ
-      ဒီစာရွက်က ပြောပေးရုံပါ။ [[mark:draw-running-actor]] အော်ဒါနံပါတ် ၂၄ ကို
-      တကယ်စဖွင့်လိုက်မှ လက်ရှိအဆင့်နဲ့ အော်ဒါကတ်ကို ကိုင်ထားတဲ့ Actor တစ်ခု
-      အလုပ်လုပ်လာတယ်။ နောက်အော်ဒါနံပါတ် ၂၅ ကလည်း စည်းမျဉ်းတူတူ သုံးပေမဲ့
-      သူ့ Actor၊ သူ့အဆင့်နဲ့ သူ ရှိမယ်။ [[mark:draw-react-loop]] ကောင်တာမျက်နှာပြင်က
-      Actor ဆီက အခြေအနေကိုယူပြီး ပြတယ်။ လူက ခလုတ်နှိပ်ရင် Event ကို Actor ဆီ
-      ပြန်ပို့တယ်။ Actor က စည်းမျဉ်းကိုစစ်ပြီး နောက်အခြေအနေကို ပြန်ပေးတယ်။
-      React က နောက်အဆင့်ကို မရွေးဘူး။ React က ပြပြီး တောင်းဆိုမှုကိုပို့တယ်။
-      Actor က ဆုံးဖြတ်တယ်။ ဒီတာဝန်ခွဲထားတာကိုပဲ မှတ်ထားရမယ်။
+      ပုံဆွဲထားရုံနဲ့ အော်ဒါက သူ့ဘာသာ ရွှေ့မသွားဘူး။
+      [[mark:draw-machine-logic]] ဒီစည်းမျဉ်းစာရွက်က ဘယ်အဆင့်ကနေ
+      ဘယ်အဆင့်ကို သွားလို့ရလဲ ပြောပေးရုံ။ [[mark:draw-running-actor]]
+      အော်ဒါနံပါတ် ၂၄ ကို စဖွင့်လိုက်မှ လက်ရှိအဆင့်နဲ့ အော်ဒါကတ်ကို
+      ကိုင်ထားတဲ့ Actor တစ်ခု အလုပ်လုပ်လာမယ်။ အော်ဒါနံပါတ် ၂၅ လည်း
+      စည်းမျဉ်းတူတူ သုံးတယ်။ ဒါပေမဲ့ သူ့ Actor၊ သူ့အဆင့်နဲ့သူ။
+      [[mark:draw-react-loop]] ကောင်တာမျက်နှာပြင်က Actor ဆီက
+      အခြေအနေကိုယူပြတယ်။ ခလုတ်နှိပ်ရင် Event ပြန်ပို့တယ်။ Actor က
+      စည်းမျဉ်းစစ်ပြီး အခြေအနေအသစ် ပြန်ပေးတယ်။ React က နောက်အဆင့်ကို
+      မရွေးဘူး။ သူက အခြေအနေပြမယ်၊ တောင်းဆိုမှု ပို့မယ်။ ဆုံးဖြတ်တာ Actor။
+      အဓိကက ဒီတာဝန်ခွဲပုံပဲ။
     sources:
       - title: "Stately Docs — Actors"
         url: "https://stately.ai/docs/actors"
@@ -1785,16 +1787,16 @@ scenes:
 
   - id: invoked-actor-lifecycle
     narration: >
-      ထုပ်ပိုးတာနဲ့ အော်ဒါလက်မှတ်ထုတ်တာက ခဏကြာတယ်။
-      [[mark:draw-invoked-parent]] အော်ဒါ Actor က Packing ဝင်တဲ့အချိန်မှာပဲ
-      ဒီအလုပ်ကို စတင်မယ်။ စောင့်နေတဲ့အချိန်ကို Packing ဆိုတဲ့အဆင့်က
-      မြင်သာအောင် ပြထားပြီးသားပါ။ [[mark:draw-invoked-child]] ထုပ်ပိုးအလုပ်ကို
-      သီးခြား Actor တစ်ခုဆီ အပ်မယ်။ အလုပ်ပြီးပြီး လက်မှတ်ပြန်ရရင် Ready။
-      အဆင်မပြေရင် Preparing ဆီပြန်ပြီး ပြန်ပြင်မယ်။ အောင်မြင်တဲ့လမ်းနဲ့
-      ပြန်လုပ်ရမယ့်လမ်း နှစ်ခုလုံးကို ပုံထဲမှာ တစ်ခါတည်း မြင်ရတယ်။
-      [[mark:draw-invoke-rule]] ဒီအလုပ်ကို Packing အဆင့်က ပိုင်တယ်။
-      အဲဒီအဆင့်ကနေ ထွက်သွားရင် မပြီးသေးတဲ့အလုပ်ကို ရပ်မယ်။ အချိန်ယူတဲ့အလုပ်ကို
-      ဘယ်အချိန်စပြီး ဘယ်အချိန်ရပ်မလဲဆိုတာ workflow နဲ့အတူ ထားလိုက်တာပါ။
+      ထုပ်ပိုးပြီး လက်မှတ်ထုတ်တာ နည်းနည်းအချိန်ယူမယ်။
+      [[mark:draw-invoked-parent]] အော်ဒါ Actor က Packing ဝင်တာနဲ့
+      ဒီအလုပ်စမယ်။ စောင့်နေရတဲ့အချိန်ကို Packing အဆင့်က ပြထားပြီးသား။
+      [[mark:draw-invoked-child]] ထုပ်ပိုးအလုပ်ကို သီးခြား Actor ဆီ
+      အပ်မယ်။ လက်မှတ်ရရင် Ready။ အဆင်မပြေရင် Preparing ပြန်ပြီး
+      ပြင်မယ်။ အောင်မြင်တဲ့လမ်းရော ပြန်လုပ်ရမယ့်လမ်းရော ပုံထဲမှာ
+      တန်းမြင်ရတယ်။ [[mark:draw-invoke-rule]] ဒီအလုပ်ကို Packing အဆင့်က
+      ပိုင်တယ်။ Packing က ထွက်သွားရင် မပြီးသေးတဲ့အလုပ်ကို ရပ်မယ်။
+      အချိန်ယူတဲ့အလုပ်ကို ဘယ်အချိန်စ၊ ဘယ်အချိန်ရပ်ဆိုတာ workflow နဲ့အတူ
+      ထိန်းထားတာ။
     sources:
       - title: "Stately Docs — Invoking actors"
         url: "https://stately.ai/docs/invoke"
@@ -1835,17 +1837,17 @@ scenes:
   - id: machine-versus-store
     narration: >
       မျက်နှာပြင်တစ်ခုတည်းမှာရှိပေမဲ့ အော်ဒါအဆင့်နဲ့ Counter notes က
-      တူတဲ့ပြဿနာ မဟုတ်ဘူး။ ဘယ်ဘက်မှာထားမလဲဆိုတာ မရွေးခင် မေးခွန်းတစ်ခုမေးမယ်။
-      ဒီ data မှာ သွားရမယ့်အစဉ်နဲ့ မသွားရမယ့်လမ်း ရှိသလား။
-      [[mark:draw-machine-card]] အော်ဒါမှာ အစဉ်ရှိတယ်။ Preparing မဖြတ်ဘဲ Ready
-      မရောက်ရဘူး။ နှစ်ခုလုံးမစစ်ဘဲ Served မရောက်ရဘူး။ ဒါကြောင့် workflow ကို
-      Machine က ထိန်းမယ်။ [[mark:draw-store-card]] Counter note ကတော့ စာရေး၊
-      စာပြင်၊ စာရင်းထဲထည့်တာပဲ။ သွားရမယ့် State လမ်းကြောင်းမရှိဘူး။
-      ဒီလို လွတ်လပ်တဲ့ UI data ကို Store က ထိန်းမယ်။
-      [[mark:draw-shared-rule]] Machine က အော်ဒါဘယ်အဆင့်မှာရှိလဲ ဆုံးဖြတ်တယ်။
-      Store က ဝန်ထမ်းရေးနေတဲ့မှတ်စုကို သိမ်းတယ်။ ပိုင်ရှင်နှစ်ယောက် သီးခြားထားလို့
-      note တစ်ကြောင်းထည့်တာနဲ့ အော်ဒါအဆင့် မပြောင်းဘူး။ အခု ဒီပုံတွေကို Editor ထဲမှာ
-      code နဲ့ ချိတ်ကြည့်မယ်။
+      ပြဿနာချင်းမတူဘူး။ ဘယ်မှာထားမလဲ မဆုံးဖြတ်ခင် ဒီလိုမေးကြည့်။
+      ဒီ data မှာ သွားရမယ့်အစဉ်၊ မသွားရမယ့်လမ်း ရှိလား။
+      [[mark:draw-machine-card]] အော်ဒါမှာရှိတယ်။ Preparing မဖြတ်ဘဲ
+      Ready မရောက်ရဘူး။ နှစ်ခုလုံးမစစ်ဘဲ Served မရောက်ရဘူး။
+      ဒါကြောင့် workflow ကို Machine က ထိန်းမယ်။
+      [[mark:draw-store-card]] Counter note ကတော့ စာရေး၊ စာပြင်၊
+      စာရင်းထဲထည့်တာပဲ။ သွားရမယ့် State လမ်းကြောင်းမရှိဘူး။
+      ဒီလို UI data ကို Store က ထိန်းမယ်။ [[mark:draw-shared-rule]]
+      Machine က အော်ဒါဘယ်အဆင့်လဲ ဆုံးဖြတ်တယ်။ Store က ဝန်ထမ်းမှတ်စုကို
+      သိမ်းတယ်။ ပိုင်ရှင်နှစ်ခုခွဲထားတော့ note ထည့်လည်း အော်ဒါအဆင့်
+      မပြောင်းဘူး။ ဒါဆို ဒီပုံတွေကို Editor ထဲက code နဲ့ ချိတ်ကြည့်ရအောင်။
     sources:
       - title: "Stately Docs — XState Store"
         url: "https://stately.ai/docs/xstate-store"
@@ -1871,20 +1873,21 @@ scenes:
 
   - id: implement-machine
     narration: >
-      Whiteboard ပေါ်က ပုံကို အခု [[mark:close-concept-board]] Editor ထဲက
-      code နဲ့ ချိတ်မယ်။ [[mark:open-main-file]] main.tsx မှာ လိုတဲ့ package တွေ
-      ထည့်ထားပြီးသားပါ။ Import တစ်ကြောင်းချင်း မဖတ်ဘဲ ပုံရဲ့ ဘယ်အစိတ်အပိုင်းက
-      ဘယ် code ဖြစ်လာလဲကိုပဲ လိုက်ကြည့်မယ်။ [[mark:select-event-union]]
-      မြှားပေါ်က စပြင်၊ ထုပ်ပိုး၊ စစ်ဆေး၊ ပြန်ပြင်နဲ့ တည်ခင်းဆိုတဲ့
-      ဖြစ်ရပ်တွေက OrderEvent ဖြစ်လာတယ်။ ဒီစာရင်းပြင်ပက Event နာမည်မှားပို့ရင်
-      TypeScript က ကြိုပြောနိုင်မယ်။ [[mark:type-machine]] Machine တစ်ခုလုံးကို
-      ထည့်လိုက်မယ်။ အပေါ်ပိုင်းက ထုပ်ပိုးအလုပ်၊ စစ်ဆေးရေးဂိတ်နဲ့ အော်ဒါကတ်ပြောင်းပုံကို
-      နာမည်ပေးထားတယ်။ အောက်က states က Whiteboard ပေါ်က အကွက်ငါးခုနဲ့
-      မြှားတွေကို တိုက်ရိုက်ဖော်ပြတယ်။ [[mark:select-initial-state]] Received က
-      စမှတ်ဖြစ်ပြီး Served က အဆုံးမှတ်။ အော်ဒါအသစ်တိုင်း အမှန်ခြစ်သုညနဲ့
-      လက်မှတ်မရှိသေးတဲ့ Context ကနေ စမယ်။ State တစ်ခုမှာ Event အတွက်
-      လမ်းမရှိရင် အော်ဒါက မရွှေ့ဘူး။ နောက်အပိုင်းတွေမှာ Packing အလုပ်နဲ့
-      စစ်ဆေးရေးဂိတ်ကို သီးခြား ချဲ့ကြည့်မယ်။
+      Whiteboard ပေါ်ကပုံကို အခု [[mark:close-concept-board]] Editor ထဲက
+      code နဲ့ ချိတ်ကြည့်မယ်။ [[mark:open-main-file]] main.tsx မှာ လိုတဲ့
+      package တွေ ထည့်ထားပြီးသား။ Import တစ်ကြောင်းချင်း မဖတ်တော့ဘူး။
+      ပုံရဲ့ ဘယ်အစိတ်အပိုင်းက code ဘယ်နေရာဖြစ်လာလဲပဲ ကြည့်ရအောင်။
+      [[mark:select-event-union]] မြှားပေါ်က စပြင်၊ ထုပ်ပိုး၊ စစ်ဆေး၊
+      ပြန်ပြင်နဲ့ တည်ခင်းဆိုတဲ့ ဖြစ်ရပ်တွေ OrderEvent ထဲ ဝင်လာတယ်။
+      ဒီစာရင်းထဲမပါတဲ့ Event ပို့မိရင် TypeScript က ကြိုပြောပေးမယ်။
+      [[mark:type-machine]] Machine တစ်ခုလုံး ထည့်လိုက်မယ်။ အပေါ်ပိုင်းမှာ
+      ထုပ်ပိုးအလုပ်၊ စစ်ဆေးရေးဂိတ်နဲ့ အော်ဒါကတ်ပြောင်းပုံ ရှိတယ်။
+      အောက်က states ကတော့ Whiteboard ပေါ်က အကွက်ငါးခုနဲ့ မြှားတွေပါပဲ။
+      [[mark:select-initial-state]] Received က စမှတ်၊ Served က အဆုံးမှတ်။
+      အော်ဒါအသစ်တိုင်း checkedItems သုည၊ packingTicket မရှိသေးတဲ့
+      Context နဲ့ စမယ်။ State တစ်ခုမှာ Event အတွက် လမ်းမရှိရင်
+      အော်ဒါက မရွှေ့ဘူး။ နောက်မှာ Packing အလုပ်နဲ့ စစ်ဆေးရေးဂိတ်ကို
+      တစ်ခုချင်း ချဲ့ကြည့်မယ်။
     sources:
       - title: "Stately Docs — Setup"
         url: "https://stately.ai/docs/setup"
@@ -2005,22 +2008,19 @@ scenes:
 
   - id: implement-invoked-actor
     narration: >
-      Machine config တစ်ခုလုံးကို တစ်ခါတည်း မကြည့်ဘဲ async အပိုင်းကို အရင်ခွဲကြည့်ရအောင်။
-      [[mark:select-promise-logic]] actors ထဲမှာ packOrder ကို fromPromise Actor Logic
-      အဖြစ်သတ်မှတ်ထားတယ်။ ဒီဥပမာမှာ Promise က မီလီစက္ကန့် ခုနစ်ရာစောင့်ပြီး TKT-2048 ဆိုတဲ့
-      packing ticket ပြန်ပေးမယ်။ အချိန်ခဏစောင့်ထားတာက Packing State ကို မျက်စိနဲ့မြင်နိုင်ဖို့ပါ။
-      တကယ့် app မှာ ဒီ function က order ID ကို input အဖြစ်ယူပြီး packing API ကို ခေါ်နိုင်တယ်။ Promise
-      ပြန်ပေးတဲ့ value က Actor output ဖြစ်လာမယ်။ ဒါကြောင့် onDone ရောက်ချိန် event.output က
-      ဘယ်ပုံစံရှိမလဲကို TypeScript သိထားနိုင်တယ်။ [[mark:select-invoke-source]] Preparing မှာ
-      Pack order Event ဝင်ရင် target က Packing ဖြစ်တယ်။ Packing State ဝင်မှ invoke က
-      packOrder Actor ကို start လုပ်တယ်။ React re-render ဖြစ်တိုင်း API ကို
-      ပြန်ခေါ်နေတာမျိုး မဟုတ်ပါဘူး။ Packing State ကိုဝင်တဲ့အချိန်နဲ့ Actor စတဲ့အချိန်ကို
-      ချိတ်ထားတာပါ။ [[mark:select-invoke-completion]] onDone ရောက်ရင် Ready ဆီ Transition
-      လုပ်ပြီး storePackingTicket Action က output ticket ကို Context ထဲ assign လုပ်တယ်။ onError
-      ဖြစ်ရင် Preparing ဆီပြန်သွားမယ်။ နောက်ပိုင်း retry Event ထည့်ချင်ရင် အဲဒီ State မှာ
-      ထပ်ရေးနိုင်တယ်။ အောင်မြင်ရင် ဘယ်ကိုသွားမလဲ၊ မအောင်မြင်ရင် ဘယ်ကိုပြန်မလဲကို တစ်နေရာမှာ
-      ဖတ်လို့ရတယ်။ isLoading နဲ့ error string ကို React နေရာအမျိုးမျိုးမှာ ကိုယ်တိုင်
-      လိုက်ညှိနေစရာ မလိုတော့ပါဘူး။
+      Machine config အကုန်တစ်ခါတည်း မကြည့်ဘဲ async အပိုင်းကို
+      ခွဲကြည့်ရအောင်။ [[mark:select-promise-logic]] actors ထဲမှာ packOrder ကို
+      fromPromise နဲ့ သတ်မှတ်ထားတယ်။ ဒီ demo မှာ မီလီစက္ကန့် ခုနစ်ရာစောင့်ပြီး
+      TKT-2048 ဆိုတဲ့ ticket ပြန်ပေးမယ်။ Packing State ကို မျက်စိနဲ့
+      မြင်ရအောင် ခဏစောင့်ထားတာ။ တကယ့် app ဆို ဒီနေရာမှာ packing API ခေါ်မယ်။
+      Promise ပြန်လာတဲ့ value က Actor output ဖြစ်သွားလို့ onDone ရောက်ရင်
+      event.output ဘယ်ပုံစံလဲ TypeScript သိတယ်။ [[mark:select-invoke-source]]
+      Pack order Event ဝင်ရင် Packing ကိုသွားမယ်။ Packing ရောက်တာနဲ့
+      packOrder Actor စမယ်။ React re-render တိုင်း API ခေါ်နေတာ မဟုတ်ဘူး။
+      [[mark:select-invoke-completion]] onDone ဆို Ready သွားပြီး ticket ကို
+      Context ထဲ သိမ်းမယ်။ onError ဆို Preparing ပြန်မယ်။ အောင်မြင်ရင်
+      ဘယ်သွားမလဲ၊ မအောင်မြင်ရင် ဘယ်ပြန်မလဲ တစ်နေရာတည်းမှာ မြင်ရတယ်။
+      isLoading နဲ့ error state တွေကို React ထဲမှာ လိုက်ညှိနေစရာ မလိုတော့ဘူး။
     sources:
       - title: "Stately Docs — Promise actors"
         url: "https://stately.ai/docs/promise-actors"
@@ -2051,22 +2051,19 @@ scenes:
 
   - id: implement-guards-actions
     narration: >
-      Async အပိုင်းပြီးပြီဆိုတော့ အခု Event တစ်ခု ရလာတဲ့အခါ ချက်ချင်းဆုံးဖြတ်ပေးမယ့် Transition
-      အပိုင်းကို ဆက်ကြည့်ကြမယ်။ [[mark:select-machine-guard]] Serve handler မှာ target မရွေးခင်
-      hasCheckedBothItems Guard ကို အရင်ခေါ်မယ်။ ဒီ Guard က Context ကိုဖတ်ပြီး true သို့မဟုတ် false
-      ပြန်ပေးတယ်။ true ဖြစ်မှ served ဆီသွားမယ်။ false ဖြစ်ရင် လက်ရှိ Ready Snapshot ကိုပဲ
-      ဆက်ထားမယ်။ React button ကို မတော်တဆ enable လုပ်မိသွားရင်တောင် ဒီ Guard ရှိနေသရွေ့
-      နှစ်မျိုးလုံးမစစ်ဘဲ အော်ဒါကို Serve လုပ်လို့မရပါဘူး။ [[mark:select-machine-action]]
-      Check item က checkNextItem Action
-      ကို ခေါ်တယ်။ assign callback က လက်ရှိ Context ကို လက်ခံပြီး checkedItems value အသစ်တွက်တယ်။
-      XState က State value နဲ့ Context အသစ်ကို Snapshot တစ်ခုတည်းအဖြစ် ထုတ်ပေးမယ်။ Action ကို
-      checkNextItem လို့ နာမည်ပေးထားတာကြောင့် config ဖတ်ချိန်မှာ ဘာလုပ်ချင်တာလဲ သိသာတယ်။
-      [[mark:select-remake-path]] Remake Transition က Ready ဆီကနေ Preparing
-      ဆီပြန်သွားပြီး resetItemChecks Action နဲ့ checkedItems ကို သုည လုပ်တယ်။ State ပြောင်းတာနဲ့
-      checkedItems ပြန်စတာကို Transition တစ်ကြိမ်တည်းမှာ လုပ်ပေးတာပါ။ State က Preparing
-      ဖြစ်သွားပေမဲ့ checkedItems အဟောင်းကျန်နေတဲ့ Snapshot ကြားထဲ မပေါ်ဘူး။ Guard၊ Action နဲ့
-      target ကို အတူကြည့်လိုက်ရင် အော်ဒါကို Serve လုပ်ခွင့်ပေးတဲ့ စည်းမျဉ်းတစ်ခုလုံးကို
-      ဖတ်လို့ရတယ်။
+      Async အပိုင်းပြီးပြီ။ အခု Event ရောက်တာနဲ့ ဆုံးဖြတ်ရမယ့် Transition
+      တွေ ကြည့်မယ်။ [[mark:select-machine-guard]] Serve handler က target မရွေးခင်
+      hasCheckedBothItems Guard ကို စစ်တယ်။ Context ဖတ်လို့ true ရမှ
+      Served ကိုသွားမယ်။ false ဆို Ready မှာပဲ ဆက်နေမယ်။ React button ကို
+      မတော်တဆ ဖွင့်ပေးမိရင်တောင် ဒီ Guard ရှိသရွေ့ နှစ်မျိုးလုံးမစစ်ဘဲ
+      Serve လုပ်လို့မရဘူး။ [[mark:select-machine-action]] Check item ရောက်ရင်
+      checkNextItem Action အလုပ်လုပ်မယ်။ assign က လက်ရှိ Context ကိုယူပြီး
+      checkedItems အသစ်တွက်တယ်။ အဲဒီနောက် XState က State နဲ့ Context ပါတဲ့
+      Snapshot အသစ် ထုတ်ပေးမယ်။ [[mark:select-remake-path]] Remake က Ready ကနေ
+      Preparing ပြန်သွားပြီး checkedItems ကို သုညပြန်ထားတယ်။ State ပြောင်းတာနဲ့
+      စစ်ဆေးမှုကို ပြန်စတာ Transition တစ်ခုတည်းမှာပြီးသွားလို့ count အဟောင်းပါတဲ့
+      ကြားအခြေအနေ မပေါ်ဘူး။ Guard၊ Action နဲ့ target ကို စုဖတ်လိုက်ရင်
+      အော်ဒါတည်ခင်းခွင့် စည်းမျဉ်းတစ်ခုလုံး မြင်ရပြီ။
     sources:
       - title: "Stately Docs — Guards"
         url: "https://stately.ai/docs/guards"
