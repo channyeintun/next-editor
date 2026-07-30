@@ -11,11 +11,13 @@ export const CAMERA_OVERLAY_VISIBILITY_EVENT = "next-editor-camera-overlay-visib
 /** Dispatched by MediaControls when the camera capture toggle flips, to drive the live preview. */
 export const CAMERA_OVERLAY_PREVIEW_EVENT = "next-editor-camera-overlay-preview";
 
-// Portrait rounded-rectangle ("squircle") framing: a 4:5 vertical card with softly rounded corners,
-// rather than a circle. The face crop reads better tall, matching a webcam picture-in-picture.
+// Rounded-rectangle picture-in-picture framing: a square card whose corner radius stays modest
+// (~11% of its width) so the face crop reads as a framed webcam tile rather than a blurred-out
+// bubble. Paired with the bright hairline border below, this matches the familiar screen-recording
+// PiP look.
 const OVERLAY_WIDTH = 176;
 const OVERLAY_HEIGHT = 176;
-const OVERLAY_RADIUS = 32;
+const OVERLAY_RADIUS = 20;
 const EDGE_PADDING = 24;
 const MEDIA_CONTROLS_CLEARANCE = 88;
 const DRIFT_THRESHOLD_MS = 250;
@@ -374,10 +376,10 @@ const CameraOverlay: React.FC = () => {
         onClick={handleRestore}
         title="Show camera"
         aria-label="Show camera"
-        className={`fixed top-0 z-44 flex h-14 w-7 cursor-pointer items-center justify-center bg-slate-950/90 text-white shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 transition-colors hover:bg-slate-800 ${
+        className={`fixed top-0 z-44 flex h-14 w-7 cursor-pointer items-center justify-center bg-slate-950/90 text-white shadow-2xl shadow-black/50 transition-colors hover:bg-slate-800 ${
           dockSide === "left"
-            ? "left-0 rounded-r-full border border-l-0 border-white/25"
-            : "right-0 rounded-l-full border border-r-0 border-white/25"
+            ? "left-0 rounded-r-full border-2 border-l-0 border-white/70"
+            : "right-0 rounded-l-full border-2 border-r-0 border-white/70"
         }`}
         style={{ transform: `translateY(${getMinimizedHandleTop(position)}px)` }}
       >
@@ -392,7 +394,9 @@ const CameraOverlay: React.FC = () => {
 
   return (
     <div
-      className="group fixed left-0 top-0 z-999 cursor-grab touch-none overflow-hidden border border-white/25 bg-slate-950 shadow-2xl shadow-slate-950/40 ring-2 ring-black/20 active:cursor-grabbing"
+      // The border is the frame: a bright hairline reads as a deliberate edge against the dark
+      // editor, where the old dim border plus dark outer ring just blurred the card into it.
+      className="group fixed left-0 top-0 z-999 cursor-grab touch-none overflow-hidden border-2 border-white/70 bg-slate-950 shadow-2xl shadow-black/50 active:cursor-grabbing"
       style={{
         width: OVERLAY_WIDTH,
         height: OVERLAY_HEIGHT,
