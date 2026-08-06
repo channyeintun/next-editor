@@ -496,6 +496,46 @@ export type StudioRuntime = z.infer<typeof studioRuntimeSchema>;
 export type StudioRuntimeKind = StudioRuntime["kind"];
 export type StudioRuntimeMode = "live" | "fixture";
 
+/**
+ * The runtimes that execute code through a Playground engine rather than the
+ * WebContainer: they have a Run button, a console, and a pinned run fixture.
+ *
+ * Derived from that last property rather than listed, so a Playground language
+ * added to `studioRuntimeSchema` later joins this union on its own — neither
+ * `webcontainer` (adapter config, no fixture) nor `none` carries one.
+ */
+export type StudioPlaygroundRuntime = Extract<StudioRuntime, { fixture: unknown }>;
+export type StudioPlaygroundRuntimeKind = StudioPlaygroundRuntime["kind"];
+
+const PLAYGROUND_RUNTIME_KINDS = new Set<string>([
+  "go-playground",
+  "kotlin-playground",
+  "rust-playground",
+  "kite-playground",
+] satisfies StudioPlaygroundRuntimeKind[]);
+
+/**
+ * Whether a runtime kind runs code on a Playground engine.
+ *
+ * Callers ask here instead of spelling the kinds out again. A hand-written
+ * `kind !== "go-playground" && …` chain silently excludes any kind added later,
+ * and the render failure it produces blames the script ("runtime.run requires a
+ * Playground runtime") rather than the chain — which is exactly how
+ * `kite-playground` shipped with a Run action it could never perform.
+ */
+export function isPlaygroundRuntimeKind(kind: string): kind is StudioPlaygroundRuntimeKind {
+  return PLAYGROUND_RUNTIME_KINDS.has(kind);
+}
+
+/**
+ * The same question asked about a whole runtime, which is what a caller needs
+ * to hand it to the Playground engine: narrowing `runtime.kind` alone does not
+ * narrow `runtime`, so the fixture stays invisible to the type checker.
+ */
+export function isPlaygroundRuntime(runtime: StudioRuntime): runtime is StudioPlaygroundRuntime {
+  return isPlaygroundRuntimeKind(runtime.kind);
+}
+
 export interface RuntimeModeParam {
   /** The requested mode, or null when no usable `runtime` value was supplied. */
   mode: StudioRuntimeMode | null;
@@ -521,8 +561,9 @@ export function parseRuntimeModeParam(raw: string | null): RuntimeModeParam {
 }
 
 /**
- * The one runtime kind each lesson type may declare. The three Playground
- * languages execute through their selective proxies; JavaScript, TypeScript, and
+ * The one runtime kind each lesson type may declare. Go, Kotlin, and Rust
+ * execute through their selective proxies, Kite on its in-page WebAssembly
+ * compiler; JavaScript, TypeScript, and
  * Python all run in the versioned WebContainer adapter. JS/TS drive a dev server
  * + preview; Python runs one-shot on the WebContainer's built-in WASI `python3`
  * (no server, no preview) and gates on console `expect.output` — the per-lesson

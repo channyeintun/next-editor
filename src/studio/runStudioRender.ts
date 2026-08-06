@@ -175,6 +175,11 @@ export async function runStudioRender(
 
   // ---- Preflight -----------------------------------------------------------
   phase("preflight");
+  // The *proxied* playgrounds, which is deliberately not every playground:
+  // `kite-playground` compiles in the page on its own WebAssembly build of
+  // `kitec`, so a live Kite render calls no `/api/…` route and needs no session.
+  // Do not add it here to "match the others" — it would lock a lesson that has
+  // no service behind a sign-in.
   if (
     runtimeMode === "live" &&
     (plan.runtime.kind === "go-playground" ||

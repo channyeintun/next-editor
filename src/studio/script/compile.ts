@@ -6,7 +6,13 @@ import {
   compileTypingChunks,
   createSeededRandom,
 } from "../cadence";
-import { parseStudioPlan, type StudioPlan, type StudioSlide, type StudioTargetRef } from "../plan";
+import {
+  isPlaygroundRuntimeKind,
+  parseStudioPlan,
+  type StudioPlan,
+  type StudioSlide,
+  type StudioTargetRef,
+} from "../plan";
 import { dockTargetIdForRuntime } from "../targets";
 import { whiteboardDrawDurationMs } from "../whiteboardAssets";
 import {
@@ -112,9 +118,7 @@ function cursorTargetForAction(action: ScriptAction, script: LessonScript): Stud
     // move: those point at a real click target.
     case "runtime.run":
       // Schema validation guarantees run actions only exist for playground kinds.
-      return script.runtime.kind === "go-playground" ||
-        script.runtime.kind === "kotlin-playground" ||
-        script.runtime.kind === "rust-playground"
+      return isPlaygroundRuntimeKind(script.runtime.kind)
         ? { kind: "target-id", id: dockTargetIdForRuntime(script.runtime.kind) }
         : null;
     default:

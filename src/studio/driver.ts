@@ -28,6 +28,7 @@ import {
   preparePlaygroundRun,
   runErrorPrefixFor,
 } from "./playgroundRuntime";
+import { isPlaygroundRuntime, isPlaygroundRuntimeKind } from "./plan";
 import type {
   SelectionAnchor,
   StudioRuntime,
@@ -599,18 +600,15 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     },
 
     async runWorkspace(timeoutMs) {
-      if (
-        deps.runtime.kind !== "go-playground" &&
-        deps.runtime.kind !== "kotlin-playground" &&
-        deps.runtime.kind !== "rust-playground"
-      ) {
+      const runtime = deps.runtime;
+      if (!isPlaygroundRuntime(runtime)) {
         throw new StudioActionError(
-          `runtime.run requires a Playground runtime, got "${deps.runtime.kind}"`,
+          `runtime.run requires a Playground runtime, got "${runtime.kind}"`,
         );
       }
 
       const prepared = preparePlaygroundRun({
-        runtime: deps.runtime,
+        runtime,
         mode: deps.runtimeMode,
         project: deps.workspace.getProject(),
         timeoutMs,
@@ -1062,12 +1060,9 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     },
 
     async waitForOutput({ contains, timeoutMs }) {
-      const errorPrefix =
-        deps.runtime.kind === "go-playground" ||
-        deps.runtime.kind === "kotlin-playground" ||
-        deps.runtime.kind === "rust-playground"
-          ? runErrorPrefixFor(deps.runtime.kind)
-          : null;
+      const errorPrefix = isPlaygroundRuntimeKind(deps.runtime.kind)
+        ? runErrorPrefixFor(deps.runtime.kind)
+        : null;
       let matchedLine: string | null = null;
       await waitUntil(
         () => {

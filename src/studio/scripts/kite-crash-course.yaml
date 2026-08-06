@@ -1,4 +1,35 @@
+# Kite: a crash course.
+#
+# A survey lesson — it tours a whole language rather than teaching one idea, so
+# it is long by design (docs/studio-persona.md, "pick a shape and commit to it").
+#
+# Four whiteboard boards open the lesson and one interrupts it, because the
+# things a viewer needs before the code — why this language exists, what happens
+# when you press Run, how many words there are to learn, and the one rule about
+# failure — are not things a file of source can show. The board is never
+# maximized: it opens docked so the editor stays in frame beside it.
+#
+# Boards are authored for Excalidraw's dark theme, which inverts colors, so the
+# mid-tone palette (#1971c2, #2f9e44, #f08c00, #e03131, #6741d9) draws as the
+# lighter version of the same hue and #1e1e1e draws as white — see the note
+# above `whiteboardAssets` for what each color means.
+#
+# The 27 keywords this lesson claims are the compiler's own census, not a count
+# taken from prose: `KEYWORDS` in `kite-lexer/src/kinds.rs` is an array of
+# exactly `TokenKind::KEYWORD_COUNT == 27` entries, and the lesson names all of
+# them. `while`, `loop`, `const` and `null` are absent from that array, which is
+# what the narration means when it says the language has no `while` keyword and
+# no null — the "for does all three jobs" claim is likewise `ForHeader::{Loop,
+# In, While}` in the parser, spelled out in the AST.
+#
+# src/studio/kiteCrashCourse.test.ts replays the typing actions below through the
+# bundled `kite-compiler.wasm` and checks the pinned fixture against what it
+# really prints, so the code and the fixture cannot drift apart.
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/kite-crash-course.yaml
 schemaVersion: 1
+
 lesson:
   slug: kite-crash-course
   title: "Kite: a crash course"
@@ -13,22 +44,817 @@ lesson:
 
         fn main() {
         }
+  # Authored for Excalidraw's DARK theme (WhiteboardPanel pins theme="dark"),
+  # which applies invert(93%) hue-rotate(180deg) to the canvas: #1e1e1e draws as
+  # near-white, and the standard mid-tone Excalidraw palette below draws as the
+  # legible lighter version of the same hue. Colour carries meaning here — blue
+  # names the thing under discussion, green is what is safe or already done,
+  # orange is the caveat, red is the part under the spotlight, purple is the
+  # result. Never author pale/near-white: it inverts to near-black and vanishes.
+  #
+  # Sizes follow the studio legibility rule (titles >= 36, labels >= 28): the
+  # hand-drawn font is tight, the board shows at 100% zoom, and autoResize keeps
+  # each label on one line, so a bigger font just needs a wider box.
+  whiteboardAssets:
+    # --- Board one: why this language exists --------------------------------
+    - {
+        id: why-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 660,
+        height: 46,
+        fontSize: 36,
+        text: "Why Kite",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: why-kite-box,
+        kind: rectangle,
+        x: 300,
+        y: 224,
+        width: 300,
+        height: 150,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: why-kite-t1,
+        kind: text,
+        x: 324,
+        y: 246,
+        width: 250,
+        height: 38,
+        fontSize: 30,
+        text: "Kite",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: why-kite-t2,
+        kind: text,
+        x: 324,
+        y: 300,
+        width: 250,
+        height: 36,
+        fontSize: 28,
+        text: "compiles to Wasm",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: why-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 620,
+        y: 274,
+        width: 110,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: why-page-box,
+        kind: rectangle,
+        x: 750,
+        y: 224,
+        width: 300,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: why-page-t1,
+        kind: text,
+        x: 774,
+        y: 246,
+        width: 250,
+        height: 38,
+        fontSize: 30,
+        text: "runs in the page",
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: why-page-t2,
+        kind: text,
+        x: 774,
+        y: 300,
+        width: 250,
+        height: 36,
+        fontSize: 28,
+        text: "beside HTML, CSS",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: why-note,
+        kind: text,
+        x: 300,
+        y: 416,
+        width: 750,
+        height: 40,
+        fontSize: 30,
+        text: "for the parts of a page worth type checking",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: why-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 422,
+        width: 700,
+        height: 36,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: why-pos-1,
+        kind: text,
+        x: 300,
+        y: 492,
+        width: 360,
+        height: 36,
+        fontSize: 28,
+        text: "27 keywords",
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: why-pos-2,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 360,
+        height: 36,
+        fontSize: 28,
+        text: "no null",
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: why-pos-3,
+        kind: text,
+        x: 700,
+        y: 492,
+        width: 360,
+        height: 36,
+        fontSize: 28,
+        text: "one formatter",
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: why-pos-4,
+        kind: text,
+        x: 700,
+        y: 540,
+        width: 360,
+        height: 36,
+        fontSize: 28,
+        text: "language version 1",
+        strokeColor: "#6741d9",
+      }
+
+    # --- Board two: what happens when you press Run --------------------------
+    - {
+        id: comp-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 700,
+        height: 46,
+        fontSize: 36,
+        text: "When you press Run",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-src-box,
+        kind: rectangle,
+        x: 300,
+        y: 214,
+        width: 300,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: comp-src-t,
+        kind: text,
+        x: 324,
+        y: 238,
+        width: 250,
+        height: 36,
+        fontSize: 28,
+        text: "main.kite",
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: comp-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 420,
+        y: 300,
+        width: 56,
+        height: 58,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-check-box,
+        kind: rectangle,
+        x: 300,
+        y: 364,
+        width: 300,
+        height: 132,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: comp-check-t1,
+        kind: text,
+        x: 324,
+        y: 382,
+        width: 250,
+        height: 36,
+        fontSize: 28,
+        text: "kitec checks",
+        strokeColor: "#e03131",
+      }
+    - {
+        id: comp-check-t2,
+        kind: text,
+        x: 324,
+        y: 422,
+        width: 250,
+        height: 34,
+        fontSize: 28,
+        text: "names, types,",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-check-t3,
+        kind: text,
+        x: 324,
+        y: 456,
+        width: 250,
+        height: 34,
+        fontSize: 28,
+        text: "every match arm",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 420,
+        y: 502,
+        width: 56,
+        height: 52,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-out-box,
+        kind: rectangle,
+        x: 300,
+        y: 558,
+        width: 300,
+        height: 72,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: comp-out-t,
+        kind: text,
+        x: 324,
+        y: 578,
+        width: 250,
+        height: 36,
+        fontSize: 28,
+        text: "WebAssembly",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: comp-note-1,
+        kind: text,
+        x: 690,
+        y: 300,
+        width: 400,
+        height: 40,
+        fontSize: 30,
+        text: "and kitec is itself",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: comp-note-2,
+        kind: text,
+        x: 690,
+        y: 344,
+        width: 400,
+        height: 40,
+        fontSize: 30,
+        text: "WebAssembly",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: comp-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 668,
+        y: 286,
+        width: 400,
+        height: 112,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: comp-note-3,
+        kind: text,
+        x: 690,
+        y: 434,
+        width: 400,
+        height: 36,
+        fontSize: 28,
+        text: "so it loads into this page",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: comp-note-4,
+        kind: text,
+        x: 690,
+        y: 480,
+        width: 400,
+        height: 36,
+        fontSize: 28,
+        text: "no server, no sign-in",
+        strokeColor: "#1e1e1e",
+      }
+
+    # --- Board three: the whole vocabulary, grouped --------------------------
+    - {
+        id: kw-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 760,
+        height: 46,
+        fontSize: 36,
+        text: "The whole language: 27 words",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: kw-g1,
+        kind: text,
+        x: 300,
+        y: 224,
+        width: 200,
+        height: 36,
+        fontSize: 28,
+        text: "bind",
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: kw-w1,
+        kind: text,
+        x: 508,
+        y: 224,
+        width: 560,
+        height: 36,
+        fontSize: 28,
+        text: "let   var",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: kw-g2,
+        kind: text,
+        x: 300,
+        y: 284,
+        width: 200,
+        height: 36,
+        fontSize: 28,
+        text: "declare",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: kw-w2a,
+        kind: text,
+        x: 508,
+        y: 284,
+        width: 560,
+        height: 36,
+        fontSize: 28,
+        text: "fn   type   struct   enum",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: kw-w2b,
+        kind: text,
+        x: 508,
+        y: 324,
+        width: 560,
+        height: 36,
+        fontSize: 28,
+        text: "trait   impl   use   pub   self",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: kw-g3,
+        kind: text,
+        x: 300,
+        y: 384,
+        width: 200,
+        height: 36,
+        fontSize: 28,
+        text: "flow",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: kw-w3a,
+        kind: text,
+        x: 508,
+        y: 384,
+        width: 560,
+        height: 36,
+        fontSize: 28,
+        text: "if   else   for   in   match",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: kw-w3b,
+        kind: text,
+        x: 508,
+        y: 424,
+        width: 560,
+        height: 36,
+        fontSize: 28,
+        text: "break   continue   return   defer",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: kw-g4,
+        kind: text,
+        x: 300,
+        y: 484,
+        width: 200,
+        height: 36,
+        fontSize: 28,
+        text: "values",
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: kw-w4,
+        kind: text,
+        x: 508,
+        y: 484,
+        width: 560,
+        height: 36,
+        fontSize: 28,
+        text: "true   false   nil   as",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: kw-g5,
+        kind: text,
+        x: 300,
+        y: 544,
+        width: 200,
+        height: 36,
+        fontSize: 28,
+        text: "fail, wait",
+        strokeColor: "#e03131",
+      }
+    - {
+        id: kw-w5,
+        kind: text,
+        x: 508,
+        y: 544,
+        width: 560,
+        height: 36,
+        fontSize: 28,
+        text: "check   async   await",
+        strokeColor: "#1e1e1e",
+      }
+
+    # --- Board four: the one rule about failure ------------------------------
+    - {
+        id: err-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 760,
+        height: 46,
+        fontSize: 36,
+        text: "How a Kite function fails",
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: err-fn-box,
+        kind: rectangle,
+        x: 300,
+        y: 222,
+        width: 420,
+        height: 86,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: err-fn-t,
+        kind: text,
+        x: 324,
+        y: 248,
+        width: 370,
+        height: 36,
+        fontSize: 28,
+        text: "divide(a, b)",
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: err-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 736,
+        y: 244,
+        width: 92,
+        height: 46,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: err-val-box,
+        kind: rectangle,
+        x: 846,
+        y: 200,
+        width: 210,
+        height: 62,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: err-val-t,
+        kind: text,
+        x: 870,
+        y: 214,
+        width: 170,
+        height: 36,
+        fontSize: 28,
+        text: "a number",
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: err-err-box,
+        kind: rectangle,
+        x: 846,
+        y: 276,
+        width: 210,
+        height: 62,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: err-err-t,
+        kind: text,
+        x: 870,
+        y: 290,
+        width: 170,
+        height: 36,
+        fontSize: 28,
+        text: "an error",
+        strokeColor: "#e03131",
+      }
+    - {
+        id: err-rule-1,
+        kind: text,
+        x: 300,
+        y: 366,
+        width: 760,
+        height: 40,
+        fontSize: 30,
+        text: "you can't read the number",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: err-rule-2,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 760,
+        height: 40,
+        fontSize: 30,
+        text: "until the error has been tested",
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: err-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 416,
+        width: 660,
+        height: 38,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: err-check-t1,
+        kind: text,
+        x: 300,
+        y: 486,
+        width: 300,
+        height: 38,
+        fontSize: 30,
+        text: "check err",
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: err-check-t2,
+        kind: text,
+        x: 300,
+        y: 536,
+        width: 760,
+        height: 36,
+        fontSize: 28,
+        text: "= if it failed, hand it to my caller",
+        strokeColor: "#1e1e1e",
+      }
+
 build:
   voiceProfile: pocket-alba-v1
   seed: 11
+
 runtime:
   kind: kite-playground
   defaultMode: fixture
   fixture:
-    latencyMs: 900
+    # 200ms run offset + 600ms latency puts the output on screen at ~0.8s, right
+    # as the "let's run it" lead ends, so the narration reads a result that is
+    # already visible instead of announcing one that has not arrived.
+    latencyMs: 600
     transientErrorKinds: []
     result:
       status: success
       stdout: "Kite & Co, visit 1\nfirst time here, open is true\ncounted 10\n(tally is done)\ntally 12\n3 names, first kite\na kite costs 40\nsquares 1 4 9 16\nevens 2\na quarter of a kite is 10.0\nand math.max_int is positive: true\nkite at 40\nkite x2\ncard ending 4242\ncredit, net 30\nloudest wind\nas expected: nothing divides by zero\nmean 4\nrestocked to 12\n"
       stderr: ""
+
 scenes:
+  - id: why
+    narration: >
+      [[mark:draw-why-kite]] Kite is a small language, and the shortest way to
+      say what it's for is to say where it runs. It compiles to WebAssembly.
+      [[mark:draw-why-page]] Not to a server, and not to a binary you ship —
+      to the thing a browser already knows how to load, so it sits in a page
+      next to the HTML and the CSS. [[mark:draw-why-note]] The idea is that
+      you write the parts of a page that are worth type checking in Kite, and
+      leave the rest alone. [[mark:draw-why-pos]] And it's deliberately small.
+      Twenty-seven keywords, no null, one formatter with no options to argue
+      about, and a language version pinned at one — so what you learn today
+      stays true. Let's look at what happens when you run it.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      # Both land in the two quiet seconds the studio reserves before the first
+      # dialog, so the panel is open and titled when the voice starts. The board
+      # opens docked — never maximized — so the editor stays in frame beside it.
+      - {
+          id: open-board,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -1700 },
+          open: true,
+        }
+      - {
+          id: draw-why-title,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -1200 },
+          upsertIds: [why-title],
+          drawMs: 600,
+        }
+      - {
+          id: draw-why-kite,
+          type: whiteboard.apply,
+          at: { mark: draw-why-kite },
+          upsertIds: [why-kite-box, why-kite-t1, why-kite-t2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-why-page,
+          type: whiteboard.apply,
+          at: { mark: draw-why-page },
+          upsertIds: [why-arrow, why-page-box, why-page-t1, why-page-t2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-why-note,
+          type: whiteboard.apply,
+          at: { mark: draw-why-note },
+          upsertIds: [why-note, why-underline],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-why-pos,
+          type: whiteboard.apply,
+          at: { mark: draw-why-pos },
+          upsertIds: [why-pos-1, why-pos-2, why-pos-3, why-pos-4],
+          drawMs: 1600,
+        }
+
+  - id: compiler
+    narration: >
+      [[mark:draw-comp-src]] You press Run, and the compiler reads your file.
+      [[mark:draw-comp-check]] It works out what every name means, checks the
+      types line up, and makes sure you've handled every case you said you
+      would. If any of that fails, nothing runs — you get the error instead.
+      [[mark:draw-comp-out]] What comes out the other side is WebAssembly.
+      [[mark:draw-comp-note]] Now here's the part worth stopping on. The
+      compiler is itself WebAssembly. [[mark:draw-comp-where]] So it loads into
+      this page, the same way your program does, and answers from here. There's
+      no server behind this lesson, nothing to sign in to, and nothing that can
+      be down when you come back to it. Which means everything after this is
+      running on your machine.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+      - {
+          title: "WebAssembly — Concepts",
+          url: "https://developer.mozilla.org/en-US/docs/WebAssembly/Concepts",
+        }
+    actions:
+      # The first board is wiped — this diagram reuses its canvas.
+      - id: draw-comp-src
+        type: whiteboard.apply
+        at: { mark: draw-comp-src }
+        clear: true
+        upsertIds: [comp-title, comp-src-box, comp-src-t, comp-arrow-1]
+        drawMs: 1500
+      - {
+          id: draw-comp-check,
+          type: whiteboard.apply,
+          at: { mark: draw-comp-check },
+          upsertIds: [comp-check-box, comp-check-t1, comp-check-t2, comp-check-t3],
+          drawMs: 1700,
+        }
+      - {
+          id: draw-comp-out,
+          type: whiteboard.apply,
+          at: { mark: draw-comp-out },
+          upsertIds: [comp-arrow-2, comp-out-box, comp-out-t],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-comp-note,
+          type: whiteboard.apply,
+          at: { mark: draw-comp-note },
+          upsertIds: [comp-note-1, comp-note-2, comp-circle],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-comp-where,
+          type: whiteboard.apply,
+          at: { mark: draw-comp-where },
+          upsertIds: [comp-note-3, comp-note-4],
+          drawMs: 1100,
+        }
+
+  - id: keywords
+    narration: >
+      [[mark:draw-kw-bind]] Before any code, here's the whole vocabulary, so
+      you know how much there is. Two words bind a value.
+      [[mark:draw-kw-declare]] Nine declare things — functions, types, structs,
+      enums, traits, and the words that say who can see them.
+      [[mark:draw-kw-flow]] Nine steer the program. There's one loop keyword in
+      that row, and you'll see why in a moment. [[mark:draw-kw-values]] Four are
+      values and conversion — and notice what's missing from that row, because
+      there's no null anywhere in this language. [[mark:draw-kw-fail]] And three
+      are about failing and waiting. [[mark:kw-to-code]] That's it. That's the
+      list. Every keyword you're about to see is one of these twenty-seven, and
+      by the end we'll have used all of them.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      # The compiler diagram is wiped — the vocabulary reuses its canvas.
+      - id: draw-kw-bind
+        type: whiteboard.apply
+        at: { mark: draw-kw-bind }
+        clear: true
+        upsertIds: [kw-title, kw-g1, kw-w1]
+        drawMs: 1400
+      - {
+          id: draw-kw-declare,
+          type: whiteboard.apply,
+          at: { mark: draw-kw-declare },
+          upsertIds: [kw-g2, kw-w2a, kw-w2b],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-kw-flow,
+          type: whiteboard.apply,
+          at: { mark: draw-kw-flow },
+          upsertIds: [kw-g3, kw-w3a, kw-w3b],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-kw-values,
+          type: whiteboard.apply,
+          at: { mark: draw-kw-values },
+          upsertIds: [kw-g4, kw-w4],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-kw-fail,
+          type: whiteboard.apply,
+          at: { mark: draw-kw-fail },
+          upsertIds: [kw-g5, kw-w5],
+          drawMs: 1100,
+        }
+      - { id: close-board, type: whiteboard.apply, at: { mark: kw-to-code }, open: false }
+
   - id: shape
-    narration: "Kite is a small language that compiles to WebAssembly, and this is a whole program. There's a function called main, and that's where a run starts. [[mark:open]] Notice what isn't here: no build file, no class wrapped around a function, no ceremony. The whole language is twenty-seven keywords, and by the end of this you'll have seen every one of them. [[mark:values]] Two ways to name a value. Let binds once. Var is the one you're allowed to reassign, and you say so up front — so anything not marked var can be read without wondering who changed it. Text goes inside a string with a backslash and parentheses."
+    narration: >
+      [[mark:open]] Here's the whole program we're starting from. A function
+      called main, and that's where a run begins. Notice what isn't here: no
+      build file, no class wrapped around the function, nothing to configure.
+      [[mark:values]] So, two ways to name a value. Let binds once. Var is the
+      one you're allowed to reassign, and you have to say so up front — which
+      means anything not marked var can be read without wondering who changed
+      it later. That last line puts a value inside a string with a backslash and
+      parentheses.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -42,8 +868,14 @@ scenes:
         cadence: line-by-line
         target: { file: main.kite, after: "fn main() {\n", occurrence: 1 }
         text: "    // `let` binds once; `var` is the one that can be reassigned.\n    let shop = \"Kite & Co\"\n    var visits = 0\n    visits += 1\n    io.print(\"\\(shop), visit \\(visits)\")\n\n"
+
   - id: modules
-    narration: "[[mark:use]] Use imports a module. A Kite module is a directory, so the files beside this one are already part of the same program and need no import at all — use is for reaching outside it, here into the standard library. The prelude is the exception: it's in scope everywhere without asking."
+    narration: >
+      [[mark:use]] Use imports a module. A Kite module is a directory, so the
+      files sitting beside this one are already part of the same program and
+      need no import at all — use is for reaching outside it, and here that's
+      the standard library. There's one exception: the prelude, which is in
+      scope everywhere without asking for it.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -53,8 +885,13 @@ scenes:
         cadence: line-by-line
         target: { file: main.kite, after: "// A crash course in Kite.\n\n", occurrence: 1 }
         text: "use std/math\n\n"
+
   - id: aliases
-    narration: "[[mark:type]] Type gives a type a second spelling. An alias is replaced by what it names before anything else is checked, so the two are interchangeable everywhere — a Prices is a map, not a new type wrapping one."
+    narration: >
+      [[mark:type]] Type gives a type a second spelling. An alias gets replaced
+      by what it names before anything else is checked, so the two are
+      interchangeable everywhere — a Prices is a map, not a new type that wraps
+      one. We'll use this name in a minute.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -64,8 +901,16 @@ scenes:
         cadence: line-by-line
         target: { file: main.kite, after: "use std/math\n\n", occurrence: 1 }
         text: "/// An alias is a second spelling, interchangeable with what it names.\ntype Prices = { str: int }\n\n"
+
   - id: branch
-    narration: "[[mark:branch]] If and else read the way they do everywhere else. The condition needs no parentheses, and the braces aren't optional. [[mark:bools]] True and false are the two bool literals, and a condition has to actually be a bool — there's no truthiness to learn, and no zero that quietly means no."
+    narration: >
+      [[mark:branch]] If and else read the way they do everywhere else. The
+      condition needs no parentheses around it, and the braces aren't optional,
+      so there's no argument to have about where a one-line body goes. The
+      condition here checks two things with a double ampersand, and both
+      branches print. [[mark:bools]] True and false are the two bool literals,
+      and a condition has to actually be a bool. There's no truthiness to learn
+      here, and no zero that quietly means no.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -84,8 +929,14 @@ scenes:
         type: editor.select
         at: { mark: bools }
         target: { file: main.kite, text: "    let open = true\n", occurrence: 1 }
+
   - id: loops
-    narration: "[[mark:loops]] Here's a real surprise. Kite has no while, and no loop keyword. For does all three jobs: for x in something iterates, for followed by a condition is a while, and a bare for on its own runs until you break out. One keyword, three headers, nothing to look up."
+    narration: >
+      [[mark:loops]] Here's the first real surprise. Kite has no while, and no
+      loop keyword either. For does all three jobs: for something in a list
+      walks the list, for followed by a condition is a while, and a bare for on
+      its own runs until you break out of it. One keyword, three headers,
+      nothing extra to look up. This one adds up three numbers.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -95,8 +946,23 @@ scenes:
         cadence: line-by-line
         target: { file: main.kite, after: "    }\n\n", occurrence: 1 }
         text: "    // There is no `while` and no `loop`: `for` covers all three.\n    var counted = 0\n    for n in [2, 3, 5] {\n        counted += n\n    }\n    io.print(\"counted \\(counted)\")\n\n"
+
   - id: flow
-    narration: "[[mark:tally]] Three more keywords in one small function. [[mark:skip]] Continue skips to the next turn of the loop. [[mark:stop]] Break leaves it. [[mark:defer]] And defer runs its line on the way out, however the function leaves — so cleanup sits next to the thing it cleans up, instead of at the bottom where you have to trust every path reaches it. [[mark:call]] Watch the order when we run: the deferred line prints before the value it computed."
+    narration: >
+      [[mark:tally]] Now a function that adds up an order, and it carries three
+      more keywords at once. It takes a list of numbers and hands back a single
+      number. Watch the three lines that steer it as they land — one skips a
+      value, one stops the loop early, and one runs at the very end no matter
+      how the function leaves. The rule the function follows is: ignore the
+      zeroes, and stop completely at the first order that's too big.
+      [[mark:skip]] Continue skips to the next turn of the loop, so a zero adds
+      nothing and we move on. [[mark:stop]] Break leaves the loop altogether —
+      that nine hundred stops the count where it stands. [[mark:defer]] And
+      defer runs its line on the way out, however the function leaves. So the
+      cleanup sits next to the thing it cleans up, instead of at the bottom
+      where you'd have to trust that every path reaches it. [[mark:call]] Watch
+      the order when we run this at the end: the deferred line prints before the
+      value it computed.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -126,8 +992,14 @@ scenes:
         target:
           { file: main.kite, after: "    io.print(\"counted \\(counted)\")\n\n", occurrence: 1 }
         text: "    // `break` and `continue` steer a loop; `defer` runs on the way out.\n    io.print(\"tally \\(tally([5, 0, 7, 900, 1]))\")\n\n"
+
   - id: slices
-    narration: "[[mark:slices]] A list of values is a slice, in square brackets, and its type is written the same way. [[mark:prelude]] Length is a method. First comes from the prelude, and hands back an Option rather than a value, because a list might be empty. Or-else is where you supply the fallback."
+    narration: >
+      [[mark:slices]] A list of values is a slice, written in square brackets,
+      and its type is written the same way — so a list of ints is int in
+      brackets. [[mark:prelude]] Length is a method on it. First comes from the
+      prelude, and it hands back an Option rather than a value, because a list
+      might be empty. Or-else is where you supply the fallback for that.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -146,8 +1018,15 @@ scenes:
         type: editor.select
         at: { mark: prelude }
         target: { file: main.kite, text: 'or_else(first(names), "none")', occurrence: 1 }
+
   - id: maps
-    narration: "[[mark:maps]] A map is written with braces, keys to values — and here it's declared through that alias, which is the map type by another name. [[mark:lookup]] Looking a key up also answers an Option, for the same reason a list's first does: it might not be there. Kite makes you say what happens when it isn't, right where you ask."
+    narration: >
+      [[mark:maps]] A map is written with braces, keys pointing at values — and
+      here it's declared through that alias from earlier, which is this map type
+      by another name. [[mark:lookup]] Looking a key up also answers with an
+      Option, for the same reason a list's first does: the key might not be
+      there. Kite makes you say what happens when it isn't, right at the point
+      where you ask.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -166,8 +1045,16 @@ scenes:
         type: editor.select
         at: { mark: lookup }
         target: { file: main.kite, text: 'or_else(prices["kite"], 0)', occurrence: 1 }
+
   - id: closures
-    narration: "[[mark:closures]] Closures are ordinary values. The parameters go between pipes and the body is an expression. Map, filter, count and about forty others are in the prelude and take them. One rule: a closure captures by value, so it can't capture a var. If it could you'd write to a copy and never see the change, so the language refuses the line rather than letting you find out later."
+    narration: >
+      [[mark:closures]] Closures are ordinary values here. The parameters go
+      between pipe characters and the body is an expression. Map, filter, count
+      and about forty others live in the prelude and take them, so most of the
+      work you'd write a loop for is already a function. There's one rule worth
+      knowing: a closure captures by value, so it can't capture a var. If it
+      could, you'd be writing to a copy and never seeing the change, so the
+      language refuses the line rather than letting you find that out later.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -182,8 +1069,14 @@ scenes:
             occurrence: 1,
           }
         text: "    // Closures are ordinary values, and the prelude takes them.\n    let squares = map([1, 2, 3, 4], |n: int| n * n)\n    let shown = join(map(squares, |n: int| \"\\(n)\"), \" \")\n    io.print(\"squares \\(shown)\")\n    io.print(\"evens \\(count([1, 2, 3, 4], |n: int| divides(n, 2)))\")\n\n"
+
   - id: conversions
-    narration: "[[mark:as]] As converts, and you have to write it. There are no implicit numeric conversions in Kite — an int doesn't quietly become a float because the other side of the expression was one. [[mark:module]] And there's that imported module being used, qualified by its name."
+    narration: >
+      [[mark:as]] As converts a value from one type to another, and you have to
+      write it yourself. There are no implicit numeric conversions in Kite — an
+      int doesn't quietly turn into a float because the other side of the
+      expression happened to be one. [[mark:module]] And there's that imported
+      module finally being used, with its name in front of what you're calling.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -202,8 +1095,17 @@ scenes:
         type: editor.select
         at: { mark: module }
         target: { file: main.kite, text: "math.max_int() > 0", occurrence: 1 }
+
   - id: structs
-    narration: "[[mark:struct]] A struct is a named group of fields. Fields are read-only unless the field itself says var, so a type decides what about it can move. [[mark:pub]] And there's pub. Without it a declaration is private to its module; with it, the module lets it out. Private is the default, which is the way round you want. [[mark:doc]] The triple-slash comments are documentation, and the compiler reads them — that's the text an editor shows on hover."
+    narration: >
+      [[mark:struct]] A struct is a named group of fields — here, a line item in
+      a very small shop. Fields are read-only unless the field itself says var,
+      so a type gets to decide which parts of it can move. Name and price are
+      fixed once it's built; stock can change. [[mark:pub]] And there's pub.
+      Without it a declaration is private to its module; with it, the module
+      lets it out. Private is the default, which is the way round you want.
+      [[mark:doc]] Those triple-slash lines are documentation, and the compiler
+      reads them — that's the text an editor shows you on hover.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -221,8 +1123,17 @@ scenes:
         type: editor.select
         at: { mark: doc }
         target: { file: main.kite, text: "/// A line item in a very small shop.", occurrence: 1 }
+
   - id: methods
-    narration: "[[mark:impl]] Methods live in an impl block, apart from the data. A method that only reads takes self. [[mark:varself]] One that writes takes var self, so the signature tells you which is which before you read the body. [[mark:use-it]] Structs are references, so selling one is visible out here afterwards. No pointers to take, and no copy to be surprised by."
+    narration: >
+      [[mark:impl]] Methods live in an impl block, written apart from the data
+      they work on. Two of them here: one builds a label out of the fields, and
+      one sells some of the stock. A method that only reads takes self, and you
+      can see that on the first one. [[mark:varself]] The one that writes takes
+      var self instead — so the signature tells you which is which before you
+      read a single line of the body. [[mark:use-it]] And structs are
+      references, so selling one is visible out here afterwards. There are no
+      pointers to take, and no hidden copy to be surprised by.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -247,8 +1158,17 @@ scenes:
             occurrence: 1,
           }
         text: "    // Structs are references, so `sell` is visible here afterwards.\n    var kite = Item{ name: \"kite\", price: 40, stock: 3 }\n    io.print(kite.label())\n    kite.sell(1)\n"
+
   - id: traits
-    narration: "[[mark:trait]] A trait is behaviour a type promises: signatures, no bodies. [[mark:implfor]] Then you implement it for a type, and because the two are written separately you can give a trait to a type you didn't define. [[mark:calldesc]] Calling it looks like any other method."
+    narration: >
+      [[mark:trait]] A trait is behaviour that a type promises to have. It's
+      signatures and no bodies — a list of what you'll be able to call, with the
+      how left out. Here it's one method that turns something into text. Then
+      underneath, the part that supplies the bodies for a particular type.
+      [[mark:implfor]] That's impl Describe for Item. Because the trait and the
+      implementation are written separately, you can give a trait to a type you
+      didn't define — the type doesn't have to know the trait exists.
+      [[mark:calldesc]] And calling it looks like any other method.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -268,8 +1188,21 @@ scenes:
         cadence: line-by-line
         target: { file: main.kite, after: "    kite.sell(1)\n", occurrence: 1 }
         text: "    io.print(kite.describe())\n\n"
+
   - id: enums
-    narration: "[[mark:enum]] An enum names every shape a value may take, and a variant can carry data. [[mark:match]] Match pulls the shape apart and binds what's inside, and it's exhaustive — miss a variant and the program doesn't compile, with the missing ones named in the error. That's what makes adding a variant safe: the compiler shows you every place that has to change. [[mark:calls]] And match is an expression, so it returns."
+    narration: >
+      [[mark:enum]] An enum names every shape a value is allowed to take, and a
+      variant can carry data along with it. This one is a payment: it's either
+      cash, which carries nothing, or a card, which carries the last four
+      digits, or credit, which carries a number of days. Three shapes, and no
+      fourth. Underneath it, a function that turns any payment into text.
+      [[mark:match]] Match is how you pull a shape apart, and it binds what was
+      inside so you can use it. The important part is that it's exhaustive: miss
+      a variant and the program doesn't compile, and the error names the ones
+      you missed. That's what makes adding a variant later a safe thing to do —
+      the compiler walks you through every place that has to change.
+      [[mark:calls]] And match is an expression, so it returns a value straight
+      out of the arm that matched.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -294,8 +1227,15 @@ scenes:
         cadence: line-by-line
         target: { file: main.kite, after: "    io.print(kite.describe())\n\n", occurrence: 1 }
         text: "    // An enum plus `match`, which the compiler checks is exhaustive.\n    io.print(describe_payment(Card(last4: \"4242\")))\n    io.print(describe_payment(Credit(days: 30)))\n\n"
+
   - id: generics
-    narration: "[[mark:generic]] Generics use angle brackets, and they're checked once where they're written rather than at every call. [[mark:option]] This one returns an Option, which is how Kite spells the absence of a value. There's no null. A thing that might not be there says so in its type, and you can't read it without answering that first."
+    narration: >
+      [[mark:generic]] Generics use angle brackets, and the T there stands for
+      whatever type you hand it. They're checked once, where they're written,
+      rather than again at every call site. [[mark:option]] This one gives back
+      an Option, which is how Kite spells the absence of a value. There's no
+      null in this language at all. A thing that might not be there says so in
+      its type, and you can't read it without answering that question first.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -321,8 +1261,70 @@ scenes:
             occurrence: 1,
           }
         text: "    // Option is how \"no value\" is spelled. There is no null in Kite.\n    io.print(\"loudest \\(or_else(loudest(names), \"none\"))\")\n\n"
+
+  - id: errorboard
+    narration: >
+      [[mark:draw-err-fn]] Before the last few keywords, let's put one idea on
+      the board, because it's the promise Kite makes that the languages it
+      borrows from don't. Take a function that divides two numbers. It can fail
+      — someone might pass a zero. [[mark:draw-err-out]] So it doesn't answer
+      with a number. It answers with two things: a number, and an error that
+      says why there isn't one. [[mark:draw-err-rule]] And here's the rule the
+      compiler keeps for you. You can't read the number until the error has been
+      tested. Not "you shouldn't" — the program won't compile.
+      [[mark:draw-err-check]] Handling it on the spot is one option. The other
+      is one keyword: check, which says if this failed, hand it back to whoever
+      called me. [[mark:err-to-code]] Let's write both.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      # Re-open the docked board mid-lesson, wiping the vocabulary behind it.
+      - {
+          id: reopen-board,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -400 },
+          open: true,
+        }
+      - id: draw-err-fn
+        type: whiteboard.apply
+        at: { mark: draw-err-fn }
+        clear: true
+        upsertIds: [err-title, err-fn-box, err-fn-t]
+        drawMs: 1400
+      - {
+          id: draw-err-out,
+          type: whiteboard.apply,
+          at: { mark: draw-err-out },
+          upsertIds: [err-arrow, err-val-box, err-val-t, err-err-box, err-err-t],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-err-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-err-rule },
+          upsertIds: [err-rule-1, err-rule-2, err-underline],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-err-check,
+          type: whiteboard.apply,
+          at: { mark: draw-err-check },
+          upsertIds: [err-check-t1, err-check-t2],
+          drawMs: 1300,
+        }
+      - { id: close-err-board, type: whiteboard.apply, at: { mark: err-to-code }, open: false }
+
   - id: errors
-    narration: "Now the promise Kite makes that the languages it borrows from don't. [[mark:divide]] A function that can fail answers with two things: a value and an error. Look at the failing return — where the number should be there's an underscore. Not a zero, not an empty string. On that path there's no number, and the language says so instead of inventing one. Nil is the error that isn't one. [[mark:tainted]] So a call hands you both, and the compiler won't let you read the value until the error's been tested. Move that print above the test and it stops compiling. Ignore the error entirely and that's rejected too. The failure path gets written on the line where it happens."
+    narration: >
+      [[mark:divide]] Here's that function. Look at the failing return, the one
+      inside the if — where the number should be, there's an underscore. Not a
+      zero, not an empty string. On that path there's no number, and the
+      language lets you say so instead of inventing one. And on the good path,
+      the error slot says nil. Nil is the error that isn't one.
+      [[mark:tainted]] So a call hands you both at once, and you name them both.
+      Move that print above the test and it stops compiling. Ignore the error
+      completely and that's rejected too. The failure path gets written on the
+      line where the failure can happen, which is the whole point.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -343,8 +1345,21 @@ scenes:
             occurrence: 1,
           }
         text: "    // A failure is an ordinary value, and cannot be read until it is tested.\n    let (bad, berr) = divide(1, 0)\n    if berr != nil {\n        io.print(\"as expected: \\(berr.message())\")\n    }\n\n"
+
   - id: check
-    narration: "Handling a failure where it happens is one case. Handing it to your caller is the other, and it's most of what you'll actually write. [[mark:check]] That gets one keyword. Check means: if this failed, return it to whoever called me. [[mark:margin]] It sits on a line of its own, so you can read down the left margin of a function and see every place it can fail. That's deliberate — it isn't a question mark buried at the end of an expression. [[mark:usemean]] The caller handles it once, at the top."
+    narration: >
+      [[mark:check]] Handling a failure where it happens is one case. Handing it
+      to your caller is the other, and it's most of what you'll actually write.
+      That gets the one keyword. This function works out a mean, and the divide
+      inside it can fail — but it isn't this function's job to decide what to do
+      about that. So it doesn't. Check err means: if this failed, return it to
+      whoever called me. [[mark:margin]] It sits on a line of its own, so you
+      can read down the left edge of a function and see every place it can fail.
+      That's deliberate — it isn't a question mark tucked away at the end of a
+      long expression. [[mark:usemean]] And the caller handles it once, at the
+      top, before using the value. That's the shape almost all Kite error
+      handling takes: check it up the chain until you reach the one place that
+      knows what to do, and deal with it there.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -369,8 +1384,18 @@ scenes:
             occurrence: 1,
           }
         text: "    // `check` hands the failure to our caller instead of handling it here.\n    let (avg, err) = mean([2, 4, 6])\n    if err != nil {\n        io.print(\"failed: \\(err.message())\")\n        return\n    }\n    io.print(\"mean \\(avg)\")\n\n"
+
   - id: async
-    narration: "Two keywords left. [[mark:asyncfn]] An async function can suspend, and calling one hands back a Task rather than a value. [[mark:mainasync]] A function that waits has to be async itself, main included — so suspension is visible in the signature and never hides inside a call that looks ordinary. [[mark:await]] Await is what turns the task back into the value. That's twenty-seven."
+    narration: >
+      [[mark:asyncfn]] Two keywords left, and they go together. An async
+      function is one that's allowed to pause partway through, and calling one
+      hands you back a Task rather than the value you asked for. Think of the
+      Task as a receipt for a result that isn't ready yet. [[mark:mainasync]] A
+      function that waits for one has to be async itself — main included, which
+      is why we're adding that word to it now. So pausing is always visible in
+      the signature, and never hides inside a call that looks ordinary.
+      [[mark:await]] And await is what turns the Task back into the value.
+      That's twenty-seven.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -392,14 +1417,22 @@ scenes:
         cadence: line-by-line
         target: { file: main.kite, after: "    io.print(\"mean \\(avg)\")\n\n", occurrence: 1 }
         text: "    // `await` waits for a task and unwraps it.\n    let restock = await restocked(kite, 10)\n    io.print(\"restocked to \\(restock)\")\n"
+
   - id: run
-    narration: "That's the whole language. [[mark:run]] Run it. The compiler is itself WebAssembly, so it loads into this page and answers from here — no server, no sign-in, nothing to be rate limited by and nothing that can go down. Nineteen lines. Notice the deferred line printing before the tally it belongs to, the division by zero coming back as a value we printed on purpose, and the mean arriving through a check. Nothing crashed and nothing was quietly swallowed, because there was never a way to write the version that does."
+    narration: >
+      That's the whole language. [[mark:run]] Let's run it. Remember, the
+      compiler is WebAssembly, so it loaded into this page and answered from
+      here — nothing left the machine. Nineteen lines. Look for three of them in
+      particular: the deferred line printing before the tally it belongs to, the
+      division by zero coming back as a value we printed on purpose, and the
+      mean arriving through a check. Nothing crashed, and nothing was quietly
+      swallowed, because there was never a way to write the version that does.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
       - id: run-final
         type: runtime.run
-        at: { mark: run }
+        at: { mark: run, offsetMs: 200 }
         timeoutMs: 20000
       - id: saw-0
         type: expect.output
@@ -461,13 +1494,29 @@ scenes:
         at: { afterAction: saw-10 }
         path: main.kite
         contains: "check err"
+
   - id: wrap
-    narration: "[[mark:wrap]] Twenty-seven keywords, and you've now seen all of them. Go has twenty-five, C has thirty-two, Rust thirty-nine, Swift over ninety. That number is a design position rather than a boast: one loop keyword, no null, one formatter with no options, and one rule about failure that the compiler keeps for you. Kite targets WebAssembly first, so it's meant to sit beside HTML and CSS and take the parts of a page worth type checking. And the version is the point — Kite pins its language at one and doesn't intend to break you later. What you just learned is what it stays."
+    narration: >
+      [[mark:wrap]] Twenty-seven keywords, and you've now seen every one of
+      them. For comparison, Go has twenty-five and Rust has thirty-eight. That
+      number is a design position rather than a boast: one loop
+      keyword, no null, one formatter with nothing to configure, and one rule
+      about failure that the compiler keeps for you. Kite targets WebAssembly
+      first, so it's meant to sit beside HTML and CSS and take the parts of a
+      page worth type checking. And the version is the point — Kite pins its
+      language at one and doesn't intend to break you later. What you just
+      learned is what it stays.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+      - { title: "The Go Programming Language Specification", url: "https://go.dev/ref/spec" }
+      - {
+          title: "The Rust Reference — Keywords",
+          url: "https://doc.rust-lang.org/reference/keywords.html",
+        }
     actions:
       - id: tidy-up
         type: runtime.collapseDock
         at: { mark: wrap }
+
 checks:
   - { type: timing.p95Ms, max: 300 }
