@@ -686,8 +686,8 @@ scenes:
       you write the parts of a page that are worth type checking in Kite, and
       leave the rest alone. [[mark:draw-why-pos]] And it's deliberately small.
       Twenty-seven keywords, no null, one formatter with no options to argue
-      about, and a language version pinned at one — so what you learn today
-      stays true. Let's look at what happens when you run it.
+      about, and the language version is pinned at one, so what you learn today
+      keeps working. Let's look at what happens when you run it.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -1503,9 +1503,9 @@ scenes:
       keyword, no null, one formatter with nothing to configure, and one rule
       about failure that the compiler keeps for you. Kite targets WebAssembly
       first, so it's meant to sit beside HTML and CSS and take the parts of a
-      page worth type checking. And the version is the point — Kite pins its
-      language at one and doesn't intend to break you later. What you just
-      learned is what it stays.
+      page worth type checking. And that version number is the point. Kite pins
+      its language at one, so it isn't planning to break your code later. What
+      you learned today is the language you'll come back to.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
       - { title: "The Go Programming Language Specification", url: "https://go.dev/ref/spec" }
