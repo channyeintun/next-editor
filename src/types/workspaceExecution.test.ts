@@ -34,6 +34,9 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   python: "webcontainer",
   rust: "rust-playground",
   kite: "kite-playground",
+  // The web starter is a Vite project, so it builds and serves in the
+  // container like any other — the compiler it installs is WebAssembly.
+  "kite-web": "webcontainer",
 };
 
 // Kite joins these because it also runs code without the WebContainer — but it

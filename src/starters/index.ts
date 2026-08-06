@@ -34,6 +34,7 @@ const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => Workspace
   python: () => import("./python").then((module) => module.createStarterPythonWorkspace),
   rust: () => import("./rust").then((module) => module.createStarterRustWorkspace),
   kite: () => import("./kite").then((module) => module.createStarterKiteWorkspace),
+  "kite-web": () => import("./kiteWeb").then((module) => module.createStarterKiteWebWorkspace),
 };
 
 /** Lazily load and build a fresh starter workspace for the given lesson type. */

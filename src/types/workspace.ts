@@ -87,7 +87,8 @@ export type WorkspaceLessonType =
   | "kotlin"
   | "python"
   | "rust"
-  | "kite";
+  | "kite"
+  | "kite-web";
 
 /**
  * Every browser-runtime lesson type is served by its own dev server inside the
@@ -113,6 +114,10 @@ const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "javascript",
   "typescript",
   "python",
+  // Kite's compiler is WebAssembly, so `vite-plugin-kite` builds inside the
+  // container with nothing native installed — which a `kite` lesson does not
+  // need, because it compiles in the page and has no server or preview.
+  "kite-web",
 ]);
 
 export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boolean {

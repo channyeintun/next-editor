@@ -13,6 +13,7 @@
 //   kite_run(ptr, len) -> ptr     compile and run; answers with what it printed
 //   kite_check(ptr, len) -> ptr   diagnostics, or nothing at all
 //   kite_format(ptr, len) -> ptr  the source, laid out the one way
+//   kite_check_module(ptr, len)   as `kite_check`, over a whole module
 //   kite_answer_length() -> len   how long the last answer is
 //   kite_free(ptr, len)           give a buffer back
 //
@@ -28,6 +29,7 @@ export interface KiteCompilerExports {
   kite_run(pointer: number, length: number): number;
   kite_check(pointer: number, length: number): number;
   kite_format(pointer: number, length: number): number;
+  kite_check_module(pointer: number, length: number): number;
 }
 
 export interface KiteCompiler {
@@ -37,6 +39,15 @@ export interface KiteCompiler {
   check(source: string): string;
   /** The source, laid out the one way. */
   format(source: string): string;
+  /**
+   * Diagnostics for a whole module, or "" when it is clean.
+   *
+   * A Kite module is a *directory*, so a program that says `use checkout` has
+   * a sibling the checker has to see. `check` takes one file and would report
+   * that sibling missing. `siblings` is keyed by module name — `checkout`,
+   * not `checkout.kite`, because that is what `use` names.
+   */
+  checkModule(entry: string, siblings?: Record<string, string>): string;
 }
 
 const encoder = new TextEncoder();
@@ -74,7 +85,69 @@ export function kiteCompilerFromExports(exports: KiteCompilerExports): KiteCompi
     run: (source) => callWithSource(exports, exports.kite_run, source),
     check: (source) => callWithSource(exports, exports.kite_check, source),
     format: (source) => callWithSource(exports, exports.kite_format, source),
+    checkModule: (entry, siblings = {}) =>
+      callWithFramedModule(exports, exports.kite_check_module, entry, siblings),
   };
+}
+
+/**
+ * The framing `kite_check_module` reads:
+ *
+ *     u32 count, then per entry: u32 name length, name, u32 body length, body
+ *
+ * Little-endian, which is what Wasm's memory is. The first entry is the
+ * program and the rest are its siblings, because this side has no directory
+ * for the compiler to read.
+ */
+function frameModule(entry: string, siblings: Record<string, string>): Uint8Array {
+  const entries: [string, Uint8Array][] = [["main", encoder.encode(entry)]];
+  for (const [name, source] of Object.entries(siblings)) {
+    entries.push([name, encoder.encode(source)]);
+  }
+
+  let total = 4;
+  for (const [name, body] of entries) {
+    total += 4 + encoder.encode(name).length + 4 + body.length;
+  }
+
+  const out = new Uint8Array(total);
+  const view = new DataView(out.buffer);
+  let at = 0;
+  view.setUint32(at, entries.length, true);
+  at += 4;
+  for (const [name, body] of entries) {
+    const encoded = encoder.encode(name);
+    view.setUint32(at, encoded.length, true);
+    at += 4;
+    out.set(encoded, at);
+    at += encoded.length;
+    view.setUint32(at, body.length, true);
+    at += 4;
+    out.set(body, at);
+    at += body.length;
+  }
+  return out;
+}
+
+/** As {@link callWithSource}, for the calls that take a framed module. */
+function callWithFramedModule(
+  exports: KiteCompilerExports,
+  entry: (pointer: number, length: number) => number,
+  source: string,
+  siblings: Record<string, string>,
+): string {
+  const input = frameModule(source, siblings);
+  const at = exports.kite_alloc(input.length);
+  new Uint8Array(exports.memory.buffer, at, input.length).set(input);
+
+  const answer = entry(at, input.length);
+  const length = exports.kite_answer_length();
+  // Copied out before anything else allocates; see callWithSource.
+  const bytes = new Uint8Array(exports.memory.buffer, answer, length).slice();
+
+  exports.kite_free(answer, length);
+  exports.kite_free(at, input.length);
+  return decoder.decode(bytes);
 }
 
 /**
@@ -100,8 +173,11 @@ export function loadKiteCompiler(): Promise<KiteCompiler> {
   if (!pending) {
     pending = import("../../core/kite/build/kite-compiler.wasm").then((wasm) =>
       kiteCompilerFromExports(
-        (wasm as unknown as { default?: KiteCompilerExports } & KiteCompilerExports).default ??
-          (wasm as unknown as KiteCompilerExports),
+        (
+          wasm as unknown as {
+            default?: KiteCompilerExports;
+          } & KiteCompilerExports
+        ).default ?? (wasm as unknown as KiteCompilerExports),
       ),
     );
   }
