@@ -4,10 +4,11 @@ import { createWorkspaceFile } from "./shared";
 /**
  * Kite lesson starter: a single-file console program.
  *
- * Unlike the Go, Kotlin and Rust starters, **nothing leaves the page**. Kite's
- * compiler targets WebAssembly, so Run and Format instantiate it in the browser
- * and answer without a service — no proxy, no sign-in, no rate limit, and no
- * lesson that stops working because a public playground is down.
+ * Unlike the Go, Kotlin and Rust starters, **nothing leaves the page**. `kitec`
+ * is a Rust program — normally a native binary you install — and Rust builds for
+ * WebAssembly too, so a Wasm build of that same compiler instantiates in the
+ * browser and answers without a service: no proxy, no sign-in, no rate limit,
+ * and no lesson that stops working because a public playground is down.
  *
  * A Kite module is a directory, so sibling `.kite` files belong to the same
  * program; a run compiles `main.kite`.
@@ -18,8 +19,8 @@ export function createStarterKiteWorkspace(): WorkspaceProject {
       "main.kite",
       `// Kite lesson workspace
 //
-// Press Run to compile and run main.kite. The compiler is WebAssembly and
-// runs in this page, so nothing is sent anywhere. Press Format any time to
+// Press Run to compile and run main.kite. This page loads a WebAssembly build
+// of the Kite compiler, so nothing is sent anywhere. Press Format any time to
 // lay the file out the one way.
 
 struct User {
@@ -74,8 +75,8 @@ fn main() {
       "README.md",
       `# Kite Lesson
 
-1. Open \`main.kite\` and press **Run**. The compiler is WebAssembly and runs
-   in this page — nothing is sent to a server.
+1. Open \`main.kite\` and press **Run**. This page loads a WebAssembly build of
+   the Kite compiler, so it runs here — nothing is sent to a server.
 2. Press **Format** any time to lay the source out the one way. Kite has one
    layout and no options.
 3. A Kite module is a *directory*: sibling \`.kite\` files are part of the same

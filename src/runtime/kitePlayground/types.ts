@@ -2,9 +2,9 @@
  * Contracts for the Kite Playground runner.
  *
  * Unlike the Go, Kotlin and Rust Playgrounds, **there is no Worker proxy and no
- * upstream service.** Kite's compiler targets WebAssembly, so the whole
- * toolchain — check, format, run — instantiates in the browser and answers
- * without a network round trip. That removes a whole class of failure the other
+ * upstream service.** `kitec` is a Rust program, and Rust builds for
+ * WebAssembly, so a Wasm build of the whole toolchain — check, format, run —
+ * instantiates in the browser and answers without a network round trip. That removes a whole class of failure the other
  * three have to model: no authentication, no rate limit, no upstream outage,
  * and no lesson that stops working because a public playground is down.
  *

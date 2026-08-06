@@ -37,11 +37,13 @@ import { areStructuredDataEqual } from "../utils/equality";
 /**
  * Focused Run console for Kite lessons, mirroring RustPlaygroundRunnerPanel.
  *
- * The one difference is the one that matters: **there is no service**. Kite's
- * compiler is WebAssembly, so Run and Format instantiate it in this page and
- * answer without a network round trip — no proxy, no sign-in button, no rate
- * limit, and no lesson that breaks because a public playground is down. That is
- * why this panel has no auth branch at all where the other three have one.
+ * The one difference is the one that matters: **there is no service**. `kitec`
+ * is a Rust program, normally a native binary, and Rust builds for WebAssembly
+ * too — so Run and Format instantiate a Wasm build of that same compiler in this
+ * page and answer without a network round trip: no proxy, no sign-in button, no
+ * rate limit, and no lesson that breaks because a public playground is down.
+ * That is why this panel has no auth branch at all where the other three have
+ * one.
  *
  * A Kite module is a directory, so every `.kite` file in the workspace is part
  * of the same program: Format touches all of them, and a run compiles

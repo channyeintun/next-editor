@@ -328,7 +328,7 @@ lesson:
         width: 400,
         height: 40,
         fontSize: 30,
-        text: "and kitec is itself",
+        text: "kitec is a Rust program",
         strokeColor: "#f08c00",
       }
     - {
@@ -339,7 +339,7 @@ lesson:
         width: 400,
         height: 40,
         fontSize: 30,
-        text: "WebAssembly",
+        text: "Rust builds to Wasm too",
         strokeColor: "#f08c00",
       }
     - {
@@ -360,7 +360,7 @@ lesson:
         width: 400,
         height: 36,
         fontSize: 28,
-        text: "so it loads into this page",
+        text: "so it can run in this page",
         strokeColor: "#1e1e1e",
       }
     - {
@@ -371,7 +371,7 @@ lesson:
         width: 400,
         height: 36,
         fontSize: 28,
-        text: "no server, no sign-in",
+        text: "same errors as a terminal",
         strokeColor: "#1e1e1e",
       }
 
@@ -679,10 +679,11 @@ scenes:
   - id: why
     narration: >
       [[mark:draw-why-kite]] Kite is a small language, and the shortest way to
-      say what it's for is to say where it runs. It compiles to WebAssembly.
-      [[mark:draw-why-page]] Not to a server, and not to a binary you ship —
-      to the thing a browser already knows how to load, so it sits in a page
-      next to the HTML and the CSS. [[mark:draw-why-note]] The idea is that
+      say what it's for is to say where it runs. It compiles to WebAssembly,
+      which it was designed around rather than given later.
+      [[mark:draw-why-page]] That's the thing a browser already knows how to
+      load, so a Kite program sits in a page next to the HTML and the CSS.
+      [[mark:draw-why-note]] The idea is that
       you write the parts of a page that are worth type checking in Kite, and
       leave the rest alone. [[mark:draw-why-pos]] And it's deliberately small.
       Twenty-seven keywords, no null, one formatter with no options to argue
@@ -741,14 +742,16 @@ scenes:
       [[mark:draw-comp-src]] You press Run, and the compiler reads your file.
       [[mark:draw-comp-check]] It works out what every name means, checks the
       types line up, and makes sure you've handled every case you said you
-      would. If any of that fails, nothing runs — you get the error instead.
+      would. If any of that fails, nothing runs, and you get the error instead.
       [[mark:draw-comp-out]] What comes out the other side is WebAssembly.
-      [[mark:draw-comp-note]] Now here's the part worth stopping on. The
-      compiler is itself WebAssembly. [[mark:draw-comp-where]] So it loads into
-      this page, the same way your program does, and answers from here. There's
-      no server behind this lesson, nothing to sign in to, and nothing that can
-      be down when you come back to it. Which means everything after this is
-      running on your machine.
+      [[mark:draw-comp-note]] Now here's the part worth stopping on, and it's
+      about this page rather than about Kite. Normally kitec is a program you
+      install and run in a terminal, like any other compiler. But it's written
+      in Rust, and Rust builds for WebAssembly too. [[mark:draw-comp-where]] So
+      there's a build of that same compiler that runs in a browser, and that's
+      the one this page loaded. No server, and nothing to sign in to. The errors
+      you'll see are the ones a terminal would show, because either way it's the
+      same compiler.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
       - {
@@ -1420,9 +1423,9 @@ scenes:
 
   - id: run
     narration: >
-      That's the whole language. [[mark:run]] Let's run it. Remember, the
-      compiler is WebAssembly, so it loaded into this page and answered from
-      here — nothing left the machine. Nineteen lines. Look for three of them in
+      That's the whole language. [[mark:run]] Let's run it. Remember, that's the
+      compiler working here in the page rather than on a server, so nothing left
+      your machine. Nineteen lines. Look for three of them in
       particular: the deferred line printing before the tally it belongs to, the
       division by zero coming back as a value we printed on purpose, and the
       mean arriving through a check. Nothing crashed, and nothing was quietly

@@ -122,8 +122,9 @@ export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boole
 /**
  * Which backend executes code for a lesson. `go`, `kotlin`, and `rust`
  * lessons compile through their respective playground proxies on the main
- * Worker. `kite` compiles in the browser — its compiler is WebAssembly, so it
- * needs no proxy and no service. Everything else keeps the WebContainer
+ * Worker. `kite` compiles in the browser: `kitec` is a Rust program, and the
+ * Wasm build of it runs here, so it needs no proxy and no service. Everything
+ * else keeps the WebContainer
  * runtime. Derived from
  * `lessonType` — never persisted as a second field (see
  * docs/go-lessons-selective-runtime-plan.md §6).

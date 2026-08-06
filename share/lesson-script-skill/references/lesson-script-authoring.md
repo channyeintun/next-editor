@@ -195,10 +195,13 @@ runtime:
 ```
 
 Go, Kotlin, and Rust remain limited to their Playground services.
-A `kite` lesson is the one that needs **no service at all**. Kite's compiler
-targets WebAssembly, so Run and Format instantiate it in the page: no proxy, no
-sign-in, no rate limit, and no lesson that stops working because a public
-playground is down. Its fixture `transientErrorKinds` therefore admits only
+A `kite` lesson is the one that needs **no service at all**. `kitec` is a Rust
+program — normally a native binary you install — and Rust builds for WebAssembly
+too, so Run and Format instantiate a Wasm build of that same compiler in the
+page: no proxy, no sign-in, no rate limit, and no lesson that stops working
+because a public playground is down. (Note for narration: the compiler is not
+"made of" WebAssembly — Wasm is what Kite _compiles to_, and separately what
+this page's build of the compiler runs as.) Its fixture `transientErrorKinds` therefore admits only
 `unavailable` — a lesson cannot be throttled by something it never calls. A
 Kite module is a _directory_, so sibling `.kite` files belong to the same
 program and a run compiles `main.kite`.
