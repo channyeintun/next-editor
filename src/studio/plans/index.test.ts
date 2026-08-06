@@ -16,6 +16,7 @@ describe("studio lesson registry", () => {
     expect(Object.keys(STUDIO_SOURCES).sort()).toEqual([
       "go-crash-course",
       "go-error-values",
+      "kite-crash-course",
       "kotlin-crash-course",
       "next-editor-state-machine",
       "rust-borrow",

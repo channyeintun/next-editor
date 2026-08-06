@@ -1,0 +1,473 @@
+schemaVersion: 1
+lesson:
+  slug: kite-crash-course
+  title: "Kite: a crash course"
+  locale: en-US
+  workspace:
+    lessonType: kite
+    name: Kite Crash Course
+    entryFilePath: main.kite
+    files:
+      main.kite: |
+        // A crash course in Kite.
+
+        fn main() {
+        }
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 11
+runtime:
+  kind: kite-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 900
+    transientErrorKinds: []
+    result:
+      status: success
+      stdout: "Kite & Co, visit 1\nfirst time here, open is true\ncounted 10\n(tally is done)\ntally 12\n3 names, first kite\na kite costs 40\nsquares 1 4 9 16\nevens 2\na quarter of a kite is 10.0\nand math.max_int is positive: true\nkite at 40\nkite x2\ncard ending 4242\ncredit, net 30\nloudest wind\nas expected: nothing divides by zero\nmean 4\nrestocked to 12\n"
+      stderr: ""
+scenes:
+  - id: shape
+    narration: "Kite is a small language that compiles to WebAssembly, and this is a whole program. There's a function called main, and that's where a run starts. [[mark:open]] Notice what isn't here: no build file, no class wrapped around a function, no ceremony. The whole language is twenty-seven keywords, and by the end of this you'll have seen every one of them. [[mark:values]] Two ways to name a value. Let binds once. Var is the one you're allowed to reassign, and you say so up front — so anything not marked var can be read without wondering who changed it. Text goes inside a string with a backslash and parentheses."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open }
+        path: main.kite
+      - id: type-values
+        type: editor.type
+        at: { mark: values }
+        cadence: line-by-line
+        target: { file: main.kite, after: "fn main() {\n", occurrence: 1 }
+        text: "    // `let` binds once; `var` is the one that can be reassigned.\n    let shop = \"Kite & Co\"\n    var visits = 0\n    visits += 1\n    io.print(\"\\(shop), visit \\(visits)\")\n\n"
+  - id: modules
+    narration: "[[mark:use]] Use imports a module. A Kite module is a directory, so the files beside this one are already part of the same program and need no import at all — use is for reaching outside it, here into the standard library. The prelude is the exception: it's in scope everywhere without asking."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-use
+        type: editor.type
+        at: { mark: use }
+        cadence: line-by-line
+        target: { file: main.kite, after: "// A crash course in Kite.\n\n", occurrence: 1 }
+        text: "use std/math\n\n"
+  - id: aliases
+    narration: "[[mark:type]] Type gives a type a second spelling. An alias is replaced by what it names before anything else is checked, so the two are interchangeable everywhere — a Prices is a map, not a new type wrapping one."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-alias
+        type: editor.type
+        at: { mark: type }
+        cadence: line-by-line
+        target: { file: main.kite, after: "use std/math\n\n", occurrence: 1 }
+        text: "/// An alias is a second spelling, interchangeable with what it names.\ntype Prices = { str: int }\n\n"
+  - id: branch
+    narration: "[[mark:branch]] If and else read the way they do everywhere else. The condition needs no parentheses, and the braces aren't optional. [[mark:bools]] True and false are the two bool literals, and a condition has to actually be a bool — there's no truthiness to learn, and no zero that quietly means no."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-branch
+        type: editor.type
+        at: { mark: branch }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"\\(shop), visit \\(visits)\")\n\n",
+            occurrence: 1,
+          }
+        text: "    // `if` and `else` read the way you expect, and `bool` is `true`/`false`.\n    let open = true\n    if open && visits == 1 {\n        io.print(\"first time here, open is \\(open)\")\n    } else {\n        io.print(\"closed today, open is \\(false)\")\n    }\n\n"
+      - id: select-bools
+        type: editor.select
+        at: { mark: bools }
+        target: { file: main.kite, text: "    let open = true\n", occurrence: 1 }
+  - id: loops
+    narration: "[[mark:loops]] Here's a real surprise. Kite has no while, and no loop keyword. For does all three jobs: for x in something iterates, for followed by a condition is a while, and a bare for on its own runs until you break out. One keyword, three headers, nothing to look up."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-loop
+        type: editor.type
+        at: { mark: loops }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    }\n\n", occurrence: 1 }
+        text: "    // There is no `while` and no `loop`: `for` covers all three.\n    var counted = 0\n    for n in [2, 3, 5] {\n        counted += n\n    }\n    io.print(\"counted \\(counted)\")\n\n"
+  - id: flow
+    narration: "[[mark:tally]] Three more keywords in one small function. [[mark:skip]] Continue skips to the next turn of the loop. [[mark:stop]] Break leaves it. [[mark:defer]] And defer runs its line on the way out, however the function leaves — so cleanup sits next to the thing it cleans up, instead of at the bottom where you have to trust every path reaches it. [[mark:call]] Watch the order when we run: the deferred line prints before the value it computed."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-tally
+        type: editor.type
+        at: { mark: tally }
+        cadence: line-by-line
+        target: { file: main.kite, after: "type Prices = { str: int }\n\n", occurrence: 1 }
+        text: "/// Skipping zeroes and stopping at the first oversized order.\nfn tally(orders: [int]) -> int {\n    defer io.print(\"(tally is done)\")\n    var total = 0\n    for n in orders {\n        if n == 0 {\n            continue\n        }\n        if n > 100 {\n            break\n        }\n        total += n\n    }\n    return total\n}\n\n"
+      - id: select-continue
+        type: editor.select
+        at: { mark: skip }
+        target: { file: main.kite, text: "            continue\n", occurrence: 1 }
+      - id: select-break
+        type: editor.select
+        at: { mark: stop }
+        target: { file: main.kite, text: "            break\n", occurrence: 1 }
+      - id: select-defer
+        type: editor.select
+        at: { mark: defer }
+        target:
+          { file: main.kite, text: "    defer io.print(\"(tally is done)\")\n", occurrence: 1 }
+      - id: type-call-tally
+        type: editor.type
+        at: { mark: call }
+        cadence: line-by-line
+        target:
+          { file: main.kite, after: "    io.print(\"counted \\(counted)\")\n\n", occurrence: 1 }
+        text: "    // `break` and `continue` steer a loop; `defer` runs on the way out.\n    io.print(\"tally \\(tally([5, 0, 7, 900, 1]))\")\n\n"
+  - id: slices
+    narration: "[[mark:slices]] A list of values is a slice, in square brackets, and its type is written the same way. [[mark:prelude]] Length is a method. First comes from the prelude, and hands back an Option rather than a value, because a list might be empty. Or-else is where you supply the fallback."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-slice
+        type: editor.type
+        at: { mark: slices }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"tally \\(tally([5, 0, 7, 900, 1]))\")\n\n",
+            occurrence: 1,
+          }
+        text: "    // A slice, and the prelude that comes with it.\n    let names = [\"kite\", \"string\", \"wind\"]\n    io.print(\"\\(names.len()) names, first \\(or_else(first(names), \"none\"))\")\n\n"
+      - id: select-prelude
+        type: editor.select
+        at: { mark: prelude }
+        target: { file: main.kite, text: 'or_else(first(names), "none")', occurrence: 1 }
+  - id: maps
+    narration: "[[mark:maps]] A map is written with braces, keys to values — and here it's declared through that alias, which is the map type by another name. [[mark:lookup]] Looking a key up also answers an Option, for the same reason a list's first does: it might not be there. Kite makes you say what happens when it isn't, right where you ask."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-map
+        type: editor.type
+        at: { mark: maps }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"\\(names.len()) names, first \\(or_else(first(names), \"none\"))\")\n\n",
+            occurrence: 1,
+          }
+        text: "    // A map, named through the alias. Lookup answers an Option.\n    let prices: Prices = { \"kite\": 40, \"string\": 5 }\n    io.print(\"a kite costs \\(or_else(prices[\"kite\"], 0))\")\n\n"
+      - id: select-lookup
+        type: editor.select
+        at: { mark: lookup }
+        target: { file: main.kite, text: 'or_else(prices["kite"], 0)', occurrence: 1 }
+  - id: closures
+    narration: "[[mark:closures]] Closures are ordinary values. The parameters go between pipes and the body is an expression. Map, filter, count and about forty others are in the prelude and take them. One rule: a closure captures by value, so it can't capture a var. If it could you'd write to a copy and never see the change, so the language refuses the line rather than letting you find out later."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-closure
+        type: editor.type
+        at: { mark: closures }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"a kite costs \\(or_else(prices[\"kite\"], 0))\")\n\n",
+            occurrence: 1,
+          }
+        text: "    // Closures are ordinary values, and the prelude takes them.\n    let squares = map([1, 2, 3, 4], |n: int| n * n)\n    let shown = join(map(squares, |n: int| \"\\(n)\"), \" \")\n    io.print(\"squares \\(shown)\")\n    io.print(\"evens \\(count([1, 2, 3, 4], |n: int| divides(n, 2)))\")\n\n"
+  - id: conversions
+    narration: "[[mark:as]] As converts, and you have to write it. There are no implicit numeric conversions in Kite — an int doesn't quietly become a float because the other side of the expression was one. [[mark:module]] And there's that imported module being used, qualified by its name."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-as
+        type: editor.type
+        at: { mark: as }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"evens \\(count([1, 2, 3, 4], |n: int| divides(n, 2)))\")\n\n",
+            occurrence: 1,
+          }
+        text: "    // `as` converts explicitly. Kite has no implicit numeric conversion.\n    let quarter = 40 as float / 4.0\n    io.print(\"a quarter of a kite is \\(quarter)\")\n    io.print(\"and math.max_int is positive: \\(math.max_int() > 0)\")\n\n"
+      - id: select-module
+        type: editor.select
+        at: { mark: module }
+        target: { file: main.kite, text: "math.max_int() > 0", occurrence: 1 }
+  - id: structs
+    narration: "[[mark:struct]] A struct is a named group of fields. Fields are read-only unless the field itself says var, so a type decides what about it can move. [[mark:pub]] And there's pub. Without it a declaration is private to its module; with it, the module lets it out. Private is the default, which is the way round you want. [[mark:doc]] The triple-slash comments are documentation, and the compiler reads them — that's the text an editor shows on hover."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-struct
+        type: editor.type
+        at: { mark: struct }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    return total\n}\n\n", occurrence: 1 }
+        text: "/// A line item in a very small shop. `pub` is what crosses a module boundary.\npub struct Item {\n    name: str\n    price: int\n    var stock: int\n}\n\n"
+      - id: select-pub
+        type: editor.select
+        at: { mark: pub }
+        target: { file: main.kite, text: "pub struct Item {\n", occurrence: 1 }
+      - id: select-doc
+        type: editor.select
+        at: { mark: doc }
+        target: { file: main.kite, text: "/// A line item in a very small shop.", occurrence: 1 }
+  - id: methods
+    narration: "[[mark:impl]] Methods live in an impl block, apart from the data. A method that only reads takes self. [[mark:varself]] One that writes takes var self, so the signature tells you which is which before you read the body. [[mark:use-it]] Structs are references, so selling one is visible out here afterwards. No pointers to take, and no copy to be surprised by."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-impl
+        type: editor.type
+        at: { mark: impl }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    var stock: int\n}\n\n", occurrence: 1 }
+        text: "impl Item {\n    /// A method that only reads takes `self`.\n    fn label(self) -> str {\n        return \"\\(self.name) at \\(self.price)\"\n    }\n\n    /// One that writes takes `var self`.\n    fn sell(var self, n: int) {\n        self.stock -= n\n    }\n}\n\n"
+      - id: select-varself
+        type: editor.select
+        at: { mark: varself }
+        target: { file: main.kite, text: "    fn sell(var self, n: int) {\n", occurrence: 1 }
+      - id: type-use-struct
+        type: editor.type
+        at: { mark: use-it }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"and math.max_int is positive: \\(math.max_int() > 0)\")\n\n",
+            occurrence: 1,
+          }
+        text: "    // Structs are references, so `sell` is visible here afterwards.\n    var kite = Item{ name: \"kite\", price: 40, stock: 3 }\n    io.print(kite.label())\n    kite.sell(1)\n"
+  - id: traits
+    narration: "[[mark:trait]] A trait is behaviour a type promises: signatures, no bodies. [[mark:implfor]] Then you implement it for a type, and because the two are written separately you can give a trait to a type you didn't define. [[mark:calldesc]] Calling it looks like any other method."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-trait
+        type: editor.type
+        at: { mark: trait }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    }\n}\n\n", occurrence: 1 }
+        text: "/// A trait is behaviour a type promises.\ntrait Describe {\n    fn describe(self) -> str\n}\n\nimpl Describe for Item {\n    fn describe(self) -> str {\n        return \"\\(self.name) x\\(self.stock)\"\n    }\n}\n\n"
+      - id: select-implfor
+        type: editor.select
+        at: { mark: implfor }
+        target: { file: main.kite, text: "impl Describe for Item {\n", occurrence: 1 }
+      - id: type-describe
+        type: editor.type
+        at: { mark: calldesc }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    kite.sell(1)\n", occurrence: 1 }
+        text: "    io.print(kite.describe())\n\n"
+  - id: enums
+    narration: "[[mark:enum]] An enum names every shape a value may take, and a variant can carry data. [[mark:match]] Match pulls the shape apart and binds what's inside, and it's exhaustive — miss a variant and the program doesn't compile, with the missing ones named in the error. That's what makes adding a variant safe: the compiler shows you every place that has to change. [[mark:calls]] And match is an expression, so it returns."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-enum
+        type: editor.type
+        at: { mark: enum }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "        return \"\\(self.name) x\\(self.stock)\"\n    }\n}\n\n",
+            occurrence: 1,
+          }
+        text: "/// An enum names every shape a value is allowed to take.\nenum Payment {\n    Cash\n    Card(last4: str)\n    Credit(days: int)\n}\n\nfn describe_payment(p: Payment) -> str {\n    return match p {\n        Cash => \"cash\",\n        Card(last4) => \"card ending \\(last4)\",\n        Credit(days) => \"credit, net \\(days)\",\n    }\n}\n\n"
+      - id: select-match
+        type: editor.select
+        at: { mark: match }
+        target: { file: main.kite, text: "    return match p {\n", occurrence: 1 }
+      - id: type-payments
+        type: editor.type
+        at: { mark: calls }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    io.print(kite.describe())\n\n", occurrence: 1 }
+        text: "    // An enum plus `match`, which the compiler checks is exhaustive.\n    io.print(describe_payment(Card(last4: \"4242\")))\n    io.print(describe_payment(Credit(days: 30)))\n\n"
+  - id: generics
+    narration: "[[mark:generic]] Generics use angle brackets, and they're checked once where they're written rather than at every call. [[mark:option]] This one returns an Option, which is how Kite spells the absence of a value. There's no null. A thing that might not be there says so in its type, and you can't read it without answering that first."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-generic
+        type: editor.type
+        at: { mark: generic }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "        Credit(days) => \"credit, net \\(days)\",\n    }\n}\n\n",
+            occurrence: 1,
+          }
+        text: "/// Generics are checked once, where they are written.\nfn loudest<T>(items: [T]) -> Option<T> {\n    return last(items)\n}\n\n"
+      - id: type-option
+        type: editor.type
+        at: { mark: option }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(describe_payment(Credit(days: 30)))\n\n",
+            occurrence: 1,
+          }
+        text: "    // Option is how \"no value\" is spelled. There is no null in Kite.\n    io.print(\"loudest \\(or_else(loudest(names), \"none\"))\")\n\n"
+  - id: errors
+    narration: "Now the promise Kite makes that the languages it borrows from don't. [[mark:divide]] A function that can fail answers with two things: a value and an error. Look at the failing return — where the number should be there's an underscore. Not a zero, not an empty string. On that path there's no number, and the language says so instead of inventing one. Nil is the error that isn't one. [[mark:tainted]] So a call hands you both, and the compiler won't let you read the value until the error's been tested. Move that print above the test and it stops compiling. Ignore the error entirely and that's rejected too. The failure path gets written on the line where it happens."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-divide
+        type: editor.type
+        at: { mark: divide }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    return last(items)\n}\n\n", occurrence: 1 }
+        text: "/// A quotient, or a reason there is not one.\nfn divide(a: int, b: int) -> (int, error) {\n    if b == 0 {\n        return _, errors.new(\"nothing divides by zero\")\n    }\n    return a / b, nil\n}\n\n"
+      - id: type-use-divide
+        type: editor.type
+        at: { mark: tainted }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"loudest \\(or_else(loudest(names), \"none\"))\")\n\n",
+            occurrence: 1,
+          }
+        text: "    // A failure is an ordinary value, and cannot be read until it is tested.\n    let (bad, berr) = divide(1, 0)\n    if berr != nil {\n        io.print(\"as expected: \\(berr.message())\")\n    }\n\n"
+  - id: check
+    narration: "Handling a failure where it happens is one case. Handing it to your caller is the other, and it's most of what you'll actually write. [[mark:check]] That gets one keyword. Check means: if this failed, return it to whoever called me. [[mark:margin]] It sits on a line of its own, so you can read down the left margin of a function and see every place it can fail. That's deliberate — it isn't a question mark buried at the end of an expression. [[mark:usemean]] The caller handles it once, at the top."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-mean
+        type: editor.type
+        at: { mark: check }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    return a / b, nil\n}\n\n", occurrence: 1 }
+        text: "/// The mean, propagating the failure rather than handling it.\nfn mean(totals: [int]) -> (int, error) {\n    let (avg, err) = divide(sum(totals), totals.len())\n    check err\n    return avg, nil\n}\n\n"
+      - id: select-margin
+        type: editor.select
+        at: { mark: margin }
+        target: { file: main.kite, text: "    check err\n", occurrence: 1 }
+      - id: type-use-mean
+        type: editor.type
+        at: { mark: usemean }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "        io.print(\"as expected: \\(berr.message())\")\n    }\n\n",
+            occurrence: 1,
+          }
+        text: "    // `check` hands the failure to our caller instead of handling it here.\n    let (avg, err) = mean([2, 4, 6])\n    if err != nil {\n        io.print(\"failed: \\(err.message())\")\n        return\n    }\n    io.print(\"mean \\(avg)\")\n\n"
+  - id: async
+    narration: "Two keywords left. [[mark:asyncfn]] An async function can suspend, and calling one hands back a Task rather than a value. [[mark:mainasync]] A function that waits has to be async itself, main included — so suspension is visible in the signature and never hides inside a call that looks ordinary. [[mark:await]] Await is what turns the task back into the value. That's twenty-seven."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-async-fn
+        type: editor.type
+        at: { mark: asyncfn }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    return avg, nil\n}\n\n", occurrence: 1 }
+        text: "/// An async function answers with a Task, which `await` unwraps.\nasync fn restocked(item: Item, by: int) -> int {\n    return item.stock + by\n}\n\n"
+      - id: type-async-main
+        type: editor.type
+        at: { mark: mainasync }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    return item.stock + by\n}\n\n", occurrence: 1 }
+        text: "async "
+      - id: type-await
+        type: editor.type
+        at: { mark: await }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    io.print(\"mean \\(avg)\")\n\n", occurrence: 1 }
+        text: "    // `await` waits for a task and unwraps it.\n    let restock = await restocked(kite, 10)\n    io.print(\"restocked to \\(restock)\")\n"
+  - id: run
+    narration: "That's the whole language. [[mark:run]] Run it. The compiler is itself WebAssembly, so it loads into this page and answers from here — no server, no sign-in, nothing to be rate limited by and nothing that can go down. Nineteen lines. Notice the deferred line printing before the tally it belongs to, the division by zero coming back as a value we printed on purpose, and the mean arriving through a check. Nothing crashed and nothing was quietly swallowed, because there was never a way to write the version that does."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: run-final
+        type: runtime.run
+        at: { mark: run }
+        timeoutMs: 20000
+      - id: saw-0
+        type: expect.output
+        at: { afterAction: run-final }
+        contains: "Kite & Co, visit 1"
+        timeoutMs: 20000
+      - id: saw-1
+        type: expect.output
+        at: { afterAction: saw-0 }
+        contains: "open is true"
+        timeoutMs: 20000
+      - id: saw-2
+        type: expect.output
+        at: { afterAction: saw-1 }
+        contains: "(tally is done)"
+        timeoutMs: 20000
+      - id: saw-3
+        type: expect.output
+        at: { afterAction: saw-2 }
+        contains: "tally 12"
+        timeoutMs: 20000
+      - id: saw-4
+        type: expect.output
+        at: { afterAction: saw-3 }
+        contains: "a quarter of a kite is 10.0"
+        timeoutMs: 20000
+      - id: saw-5
+        type: expect.output
+        at: { afterAction: saw-4 }
+        contains: "kite x2"
+        timeoutMs: 20000
+      - id: saw-6
+        type: expect.output
+        at: { afterAction: saw-5 }
+        contains: "card ending 4242"
+        timeoutMs: 20000
+      - id: saw-7
+        type: expect.output
+        at: { afterAction: saw-6 }
+        contains: "loudest wind"
+        timeoutMs: 20000
+      - id: saw-8
+        type: expect.output
+        at: { afterAction: saw-7 }
+        contains: "as expected: nothing divides by zero"
+        timeoutMs: 20000
+      - id: saw-9
+        type: expect.output
+        at: { afterAction: saw-8 }
+        contains: "mean 4"
+        timeoutMs: 20000
+      - id: saw-10
+        type: expect.output
+        at: { afterAction: saw-9 }
+        contains: "restocked to 12"
+        timeoutMs: 20000
+      - id: file-has-check
+        type: expect.file
+        at: { afterAction: saw-10 }
+        path: main.kite
+        contains: "check err"
+  - id: wrap
+    narration: "[[mark:wrap]] Twenty-seven keywords, and you've now seen all of them. Go has twenty-five, C has thirty-two, Rust thirty-nine, Swift over ninety. That number is a design position rather than a boast: one loop keyword, no null, one formatter with no options, and one rule about failure that the compiler keeps for you. Kite targets WebAssembly first, so it's meant to sit beside HTML and CSS and take the parts of a page worth type checking. And the version is the point — Kite pins its language at one and doesn't intend to break you later. What you just learned is what it stays."
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: tidy-up
+        type: runtime.collapseDock
+        at: { mark: wrap }
+checks:
+  - { type: timing.p95Ms, max: 300 }
