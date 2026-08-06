@@ -416,6 +416,7 @@ function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
       "kotlin",
       "python",
       "rust",
+      "kite",
     ].includes(value)
   );
 }

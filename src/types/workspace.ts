@@ -86,7 +86,8 @@ export type WorkspaceLessonType =
   | "go"
   | "kotlin"
   | "python"
-  | "rust";
+  | "rust"
+  | "kite";
 
 /**
  * Every browser-runtime lesson type is served by its own dev server inside the
@@ -121,7 +122,9 @@ export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boole
 /**
  * Which backend executes code for a lesson. `go`, `kotlin`, and `rust`
  * lessons compile through their respective playground proxies on the main
- * Worker; everything else keeps the WebContainer runtime. Derived from
+ * Worker. `kite` compiles in the browser — its compiler is WebAssembly, so it
+ * needs no proxy and no service. Everything else keeps the WebContainer
+ * runtime. Derived from
  * `lessonType` — never persisted as a second field (see
  * docs/go-lessons-selective-runtime-plan.md §6).
  */
@@ -129,12 +132,15 @@ export type WorkspaceExecutionKind =
   | "webcontainer"
   | "go-playground"
   | "kotlin-playground"
-  | "rust-playground";
+  | "rust-playground"
+  | "kite-playground";
 
 export function executionKindForLessonType(
   lessonType: WorkspaceLessonType,
 ): WorkspaceExecutionKind {
   switch (lessonType) {
+    case "kite":
+      return "kite-playground";
     case "go":
       return "go-playground";
     case "kotlin":
@@ -527,6 +533,15 @@ export function inferLanguageFromPath(path: string): string {
   }
 
   if (normalizedPath.endsWith(".rs")) {
+    return "rust";
+  }
+
+  // Monaco has no Kite grammar, and `rust` is much the closest fit — the same
+  // choice `.gitattributes` makes for GitHub. Shared outright: fn, let, match,
+  // struct, enum, trait, impl, pub, use, as, type, self, async, await, true,
+  // false. What misses is small: `var` and `check` are not Rust keywords, and
+  // `nil` is spelled `None` there.
+  if (normalizedPath.endsWith(".kite")) {
     return "rust";
   }
 

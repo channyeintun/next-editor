@@ -127,6 +127,21 @@ function minimalScriptShell(lessonType: StudioLessonType) {
           fixture: { latencyMs: 10, result: { status: "success", stdout: "", stderr: "" } },
         },
       };
+    case "kite":
+      return {
+        ...base,
+        lesson: {
+          slug: "t-kite",
+          title: "T",
+          locale: "en-US",
+          workspace: workspace({ "main.kite": "fn main() {\n}\n" }, "main.kite"),
+        },
+        runtime: {
+          kind: "kite-playground",
+          defaultMode: "fixture",
+          fixture: { latencyMs: 10, result: { status: "success", stdout: "", stderr: "" } },
+        },
+      };
     case "javascript":
       return {
         ...base,

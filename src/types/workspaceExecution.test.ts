@@ -13,6 +13,7 @@ import { normalizeProject } from "../stores/workspaceProjectSupport";
 import { createStarterGoWorkspace } from "../starters/go";
 import { createStarterKotlinWorkspace } from "../starters/kotlin";
 import { createStarterPythonWorkspace } from "../starters/python";
+import { createStarterKiteWorkspace } from "../starters/kite";
 import { createStarterRustWorkspace } from "../starters/rust";
 
 // Record keys make this exhaustive at compile time: adding a lesson type
@@ -32,9 +33,17 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   kotlin: "kotlin-playground",
   python: "webcontainer",
   rust: "rust-playground",
+  kite: "kite-playground",
 };
 
-const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set(["go", "kotlin", "rust"]);
+// Kite joins these because it also runs code without the WebContainer — but it
+// is the only one that needs no service to do it, compiling in the page.
+const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
+  "go",
+  "kotlin",
+  "rust",
+  "kite",
+]);
 
 // WebContainer lessons whose runner is a script that exits instead of a dev
 // server — they keep Run and Terminal but have no preview surface.
@@ -94,6 +103,28 @@ describe("rust workspace model", () => {
     expect(normalized.files["main.rs"].language).toBe("rust");
     expect(normalized.files["main.rs"].content).toContain("fn main()");
     expect(normalized.files["README.md"].language).toBe("markdown");
+  });
+});
+
+describe("kite workspace model", () => {
+  it("colours .kite with Monaco's rust grammar, which is the closest fit", () => {
+    expect(inferLanguageFromPath("main.kite")).toBe("rust");
+    expect(inferLanguageFromPath("src/checkout.kite")).toBe("rust");
+  });
+
+  it("round-trips a kite starter through project normalization without falling back", () => {
+    const starter = createStarterKiteWorkspace();
+    const normalized = normalizeProject(starter);
+
+    expect(normalized.lessonType).toBe("kite");
+    expect(normalized.entryFilePath).toBe("main.kite");
+    expect(normalized.files["main.kite"].content).toContain("fn main()");
+    expect(normalized.files["README.md"].language).toBe("markdown");
+  });
+
+  it("executes in the page rather than through a playground proxy", () => {
+    expect(executionKindForLessonType("kite")).toBe("kite-playground");
+    expect(lessonRunsInWebContainer("kite")).toBe(false);
   });
 });
 

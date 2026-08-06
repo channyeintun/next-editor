@@ -167,6 +167,7 @@ const KNOWN_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "kotlin",
   "python",
   "rust",
+  "kite",
 ]);
 
 function inferWorkspaceLessonType(

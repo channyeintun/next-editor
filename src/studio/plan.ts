@@ -283,6 +283,7 @@ export const studioLessonTypeSchema = z.enum([
   "go",
   "kotlin",
   "rust",
+  "kite",
 ]);
 export type StudioLessonType = z.infer<typeof studioLessonTypeSchema>;
 
@@ -424,6 +425,25 @@ export const rustRunFixtureSchema = z.object({
 });
 
 /**
+ * Kite stand-in result.
+ *
+ * The transient error kinds are two rather than three: Kite's compiler is
+ * WebAssembly running in the page, so a lesson cannot be rate-limited by a
+ * service it does not call.
+ */
+export const kiteRunFixtureSchema = z.object({
+  latencyMs: positiveMs,
+  transientErrorKinds: z.array(z.enum(["unavailable"])).default([]),
+  result: z.object({
+    status: z.enum(["success", "compile-error", "runtime-error"]),
+    stdout: z.string(),
+    stderr: z.string(),
+    compileErrors: z.string().optional(),
+    exitDetail: z.string().optional(),
+  }),
+});
+
+/**
  * Execution-kind-specific runtime declaration. "live" calls the real
  * /api/<kind> proxy (requires a signed-in session); "fixture" replays the
  * pinned result. Unattended renders default to the plan's declared mode; the
@@ -465,6 +485,11 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
     kind: z.literal("rust-playground"),
     defaultMode: z.enum(["live", "fixture"]),
     fixture: rustRunFixtureSchema,
+  }),
+  z.object({
+    kind: z.literal("kite-playground"),
+    defaultMode: z.enum(["live", "fixture"]),
+    fixture: kiteRunFixtureSchema,
   }),
 ]);
 export type StudioRuntime = z.infer<typeof studioRuntimeSchema>;
@@ -510,6 +535,7 @@ export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind
   go: "go-playground",
   kotlin: "kotlin-playground",
   rust: "rust-playground",
+  kite: "kite-playground",
 };
 
 export const studioPlanSchema = z

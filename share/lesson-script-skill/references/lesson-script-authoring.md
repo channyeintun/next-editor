@@ -147,6 +147,7 @@ the schema rejects an omitted block or a mismatch:
 | `go`                       | `go-playground`         | `runtime.run`, `expect.output`                                         |
 | `kotlin`                   | `kotlin-playground`     | `runtime.run`, `expect.output`                                         |
 | `rust`                     | `rust-playground`       | `runtime.run`, `expect.output`                                         |
+| `kite`                     | `kite-playground`       | `runtime.run`, `expect.output`                                         |
 | `javascript`, `typescript` | `webcontainer`          | `runtime.start`, `runtime.waitForReady`, `preview.*`, `expect.preview` |
 | `python`                   | `webcontainer`          | `runtime.start`, `expect.output` (WASI `python3`; console, no preview) |
 
@@ -194,12 +195,20 @@ runtime:
 ```
 
 Go, Kotlin, and Rust remain limited to their Playground services.
+A `kite` lesson is the one that needs **no service at all**. Kite's compiler
+targets WebAssembly, so Run and Format instantiate it in the page: no proxy, no
+sign-in, no rate limit, and no lesson that stops working because a public
+playground is down. Its fixture `transientErrorKinds` therefore admits only
+`unavailable` — a lesson cannot be throttled by something it never calls. A
+Kite module is a _directory_, so sibling `.kite` files belong to the same
+program and a run compiles `main.kite`.
 
 Per-kind fixture `result` shapes (all fields exact program truth):
 
 - `go-playground` — `{ status: success | compile-error | runtime-error, output, exitCode, compileErrors? }`
 - `kotlin-playground` — `{ status: success | compile-error | runtime-error, output, compileErrors?, warnings?, exception? }`
 - `rust-playground` — `{ status: success | compile-error | runtime-error, stdout, stderr, compileErrors?, exitDetail? }`
+- `kite-playground` — `{ status: success | compile-error | runtime-error, stdout, stderr, compileErrors?, exitDetail? }`
 
 Language formatting rules carry over from the real editors: Go files use tabs;
 Kotlin and Rust use 4-space indentation. Rust workspaces must contain

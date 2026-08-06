@@ -15,6 +15,13 @@ import {
   kotlinRunStartedConsoleLines,
 } from "../runtime/kotlinPlayground/console";
 import { collectKotlinPlaygroundFiles } from "../runtime/kotlinPlayground/files";
+import { KitePlaygroundClient, KitePlaygroundServiceError } from "../runtime/kitePlayground/client";
+import {
+  kiteRunResultToConsoleLines,
+  kiteRunServiceErrorToConsoleLines,
+  kiteRunStartedConsoleLines,
+} from "../runtime/kitePlayground/console";
+import { collectKitePlaygroundFiles } from "../runtime/kitePlayground/files";
 import { RustPlaygroundClient, RustPlaygroundServiceError } from "../runtime/rustPlayground/client";
 import {
   rustRunResultToConsoleLines,
@@ -44,7 +51,7 @@ export const MAX_RUN_ATTEMPTS = 2;
 
 type PlaygroundRuntime = Extract<
   StudioRuntime,
-  { kind: "go-playground" | "kotlin-playground" | "rust-playground" }
+  { kind: "go-playground" | "kotlin-playground" | "rust-playground" | "kite-playground" }
 >;
 type FixtureOf<K extends PlaygroundRuntime["kind"]> = Extract<
   PlaygroundRuntime,
@@ -277,6 +284,55 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
         serviceErrorLines: (errorKind, message) =>
           rustRunServiceErrorToConsoleLines(
             errorKind as Parameters<typeof rustRunServiceErrorToConsoleLines>[0],
+            message,
+          ),
+      };
+    }
+
+    case "kite-playground": {
+      let client: KitePlaygroundClient | null = null;
+      return {
+        label: "kite",
+        collectFiles: collectKitePlaygroundFiles,
+        // A Kite module is a directory, so siblings are part of the same
+        // program — but a run compiles the entry, so one has to be named.
+        validateFiles: (files) =>
+          files.length === 0
+            ? "Add a .kite file to run this lesson"
+            : files.length === 1 || files.some((file) => file.path === "main.kite")
+              ? null
+              : "Name the file this lesson runs main.kite",
+        startedLines: () => kiteRunStartedConsoleLines(),
+        runLive: async (files, timeoutMs, signal) => {
+          client ??= new KitePlaygroundClient();
+          const activeClient = client;
+          const result = await liveAttempt(
+            () => activeClient.run({ files }),
+            () => activeClient.dispose(),
+            (error) =>
+              error instanceof KitePlaygroundServiceError
+                ? { kind: error.kind, message: error.message }
+                : null,
+            timeoutMs,
+            signal,
+          );
+          return {
+            resultLines: kiteRunResultToConsoleLines(result),
+            ok: result.status === "success",
+            status: result.status,
+          };
+        },
+        runFixtureResult: (fixture) => {
+          const result = (fixture as FixtureOf<"kite-playground">).result;
+          return {
+            resultLines: kiteRunResultToConsoleLines(result),
+            ok: result.status === "success",
+            status: result.status,
+          };
+        },
+        serviceErrorLines: (errorKind, message) =>
+          kiteRunServiceErrorToConsoleLines(
+            errorKind as Parameters<typeof kiteRunServiceErrorToConsoleLines>[0],
             message,
           ),
       };
