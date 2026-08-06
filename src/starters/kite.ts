@@ -51,9 +51,11 @@ fn main() {
     let ada = User{ name: "Ada", logins: 3 }
     io.print(ada.describe())
 
-    // Edit these and press Run again.
+    // Edit these and press Run again. A slice has no text form of its own —
+    // \`int\`, \`float\`, \`bool\` and \`str\` render themselves and nothing else
+    // does — so it is turned into one here rather than guessed at.
     let squares = map([1, 2, 3, 4, 5], |n: int| n * n)
-    io.print("Squares: \\(squares)")
+    io.print("Squares: \\(join(map(squares, |n: int| "\\(n)"), ", "))")
 
     let (half, err) = divide(10, 2)
     if err != nil {
