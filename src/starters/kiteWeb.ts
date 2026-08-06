@@ -486,9 +486,6 @@ pub fn parse_price(text: str) -> int {
     }
     return pounds * 100 + pence
 }
-
-fn main() {
-}
 `,
     ),
     "src/style.css": createWorkspaceFile(
