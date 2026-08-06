@@ -12,6 +12,7 @@ import {
   type WorkspaceFile,
   type WorkspaceFileContent,
   type WorkspaceFileEncoding,
+  WORKSPACE_LESSON_TYPES,
   type WorkspaceLessonType,
   type WorkspaceProject,
   type WorkspaceTreeFile,
@@ -152,23 +153,7 @@ export function remapCollapsedFolders(
   );
 }
 
-const KNOWN_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
-  "html-css",
-  "react",
-  "vue",
-  "solid",
-  "svelte",
-  "htmx-express",
-  "alpine-express",
-  "express-ts",
-  "javascript",
-  "typescript",
-  "go",
-  "kotlin",
-  "python",
-  "rust",
-  "kite",
-]);
+const KNOWN_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set(WORKSPACE_LESSON_TYPES);
 
 function inferWorkspaceLessonType(
   project: Pick<WorkspaceProject, "files"> & { lessonType?: string },
@@ -239,7 +224,9 @@ function canonicalizeProjectFiles(
     } catch (error) {
       if (error instanceof WorkspaceProjectValidationError) throw error;
       if (error instanceof WorkspacePathError) {
-        throw new WorkspaceProjectValidationError(error.message, { cause: error });
+        throw new WorkspaceProjectValidationError(error.message, {
+          cause: error,
+        });
       }
       throw error;
     }
@@ -285,7 +272,9 @@ export function normalizeProject(project: WorkspaceProject): WorkspaceProject {
     } catch (error) {
       if (error instanceof WorkspaceProjectValidationError) throw error;
       if (error instanceof WorkspacePathError) {
-        throw new WorkspaceProjectValidationError(error.message, { cause: error });
+        throw new WorkspaceProjectValidationError(error.message, {
+          cause: error,
+        });
       }
       throw error;
     }

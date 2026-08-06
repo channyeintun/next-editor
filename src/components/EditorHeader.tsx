@@ -41,6 +41,8 @@ import {
 import {
   lessonRunsInWebContainer,
   lessonSupportsPreview,
+  WORKSPACE_LESSON_TYPE_LABELS,
+  WORKSPACE_LESSON_TYPES,
   type WorkspaceLessonType,
 } from "../types/workspace";
 import { createStarterWorkspaceForLessonType } from "../starters";
@@ -53,22 +55,10 @@ import { useSlidesContext } from "../contexts/SlidesContext";
 const LESSON_TYPE_OPTIONS: Array<{
   value: WorkspaceLessonType;
   label: string;
-}> = [
-  { value: "html-css", label: "HTML / CSS" },
-  { value: "react", label: "React" },
-  { value: "vue", label: "Vue" },
-  { value: "solid", label: "Solid" },
-  { value: "svelte", label: "Svelte" },
-  { value: "htmx-express", label: "HTMX + Express" },
-  { value: "alpine-express", label: "Alpine AJAX + Express" },
-  { value: "express-ts", label: "Express + TypeScript" },
-  { value: "javascript", label: "JavaScript / Node.js" },
-  { value: "typescript", label: "TypeScript" },
-  { value: "go", label: "Go" },
-  { value: "kotlin", label: "Kotlin" },
-  { value: "python", label: "Python" },
-  { value: "rust", label: "Rust" },
-];
+}> = WORKSPACE_LESSON_TYPES.map((value) => ({
+  value,
+  label: WORKSPACE_LESSON_TYPE_LABELS[value],
+}));
 
 const HEADER_ICON_BUTTON_CLASS =
   "inline-flex size-8 items-center justify-center rounded-lg transition-colors";
@@ -262,7 +252,9 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
     try {
       await exportAsFile(currentRecording);
-      posthog?.capture("recording_exported", { recording_duration: currentRecording.duration });
+      posthog?.capture("recording_exported", {
+        recording_duration: currentRecording.duration,
+      });
     } catch (error) {
       console.error("Export failed:", error);
     }

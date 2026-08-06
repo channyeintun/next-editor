@@ -11,6 +11,7 @@ import {
   getWorkspaceFileMimeType,
   inferLanguageFromPath,
   isWorkspaceAssetFile,
+  isWorkspaceLessonType,
   isWorkspaceTextFile,
   parseWorkspacePath,
   type WorkspaceFile,
@@ -105,7 +106,10 @@ function splitPath(path: string): { parentPath: string; name: string } {
   const separator = normalized.lastIndexOf("/");
   return separator < 0
     ? { parentPath: "", name: normalized }
-    : { parentPath: normalized.slice(0, separator), name: normalized.slice(separator + 1) };
+    : {
+        parentPath: normalized.slice(0, separator),
+        name: normalized.slice(separator + 1),
+      };
 }
 
 function sortedFolderPaths(project: WorkspaceProject): string[] {
@@ -396,29 +400,6 @@ function namesByNode(
   }
 
   return result;
-}
-
-function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
-  return (
-    typeof value === "string" &&
-    [
-      "html-css",
-      "react",
-      "vue",
-      "solid",
-      "svelte",
-      "htmx-express",
-      "alpine-express",
-      "express-ts",
-      "javascript",
-      "typescript",
-      "go",
-      "kotlin",
-      "python",
-      "rust",
-      "kite",
-    ].includes(value)
-  );
 }
 
 /**

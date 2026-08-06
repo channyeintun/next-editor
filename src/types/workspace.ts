@@ -91,6 +91,42 @@ export type WorkspaceLessonType =
   | "kite-web";
 
 /**
+ * Display names, and the order the lesson-type picker offers them in.
+ *
+ * A `Record` keyed by the union rather than a hand-kept array: adding a lesson
+ * type without naming it fails the typecheck. Three separate lists used to
+ * enumerate these by hand, and all three drifted — `kite` was runnable for a
+ * while but absent from the picker, so nothing offered it.
+ */
+export const WORKSPACE_LESSON_TYPE_LABELS: Record<WorkspaceLessonType, string> = {
+  "html-css": "HTML / CSS",
+  react: "React",
+  vue: "Vue",
+  solid: "Solid",
+  svelte: "Svelte",
+  "htmx-express": "HTMX + Express",
+  "alpine-express": "Alpine AJAX + Express",
+  "express-ts": "Express + TypeScript",
+  javascript: "JavaScript / Node.js",
+  typescript: "TypeScript",
+  go: "Go",
+  kotlin: "Kotlin",
+  python: "Python",
+  rust: "Rust",
+  kite: "Kite",
+  "kite-web": "Kite + Vite (web)",
+};
+
+/** Every lesson type, in picker order. */
+export const WORKSPACE_LESSON_TYPES = Object.keys(
+  WORKSPACE_LESSON_TYPE_LABELS,
+) as WorkspaceLessonType[];
+
+export function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
+  return typeof value === "string" && value in WORKSPACE_LESSON_TYPE_LABELS;
+}
+
+/**
  * Every browser-runtime lesson type is served by its own dev server inside the
  * WebContainer: the Vite-based SPAs (react, vue, solid, svelte) and html-css
  * run a Vite dev server, while htmx-express, alpine-express, and express-ts run
