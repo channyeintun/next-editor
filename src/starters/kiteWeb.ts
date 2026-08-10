@@ -37,9 +37,9 @@ export function createStarterKiteWebWorkspace(): WorkspaceProject {
     "fmt": "kitec fmt src/main.kite src/about.kite src/checkout.kite"
   },
   "devDependencies": {
-    "@kite-lang/compiler-wasm": "^0.1.7",
+    "@kite-lang/compiler-wasm": "^0.1.8",
     "vite": "^8.1.3",
-    "vite-plugin-kite": "^0.1.7"
+    "vite-plugin-kite": "^0.1.8"
   }
 }
 `,
