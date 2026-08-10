@@ -70,6 +70,7 @@ import {
 } from "../collaboration/editorViewport";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
+import { mayTakeFocus } from "./mayTakeFocus";
 
 const Preview = lazy(() => import("./Preview"));
 const Y_MONACO_BINDING_ENABLED = import.meta.env.VITE_COLLABORATION_Y_MONACO !== "false";
@@ -578,6 +579,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     const domNode = editor.getDomNode();
 
     if (domNode?.contains(domNode.ownerDocument.activeElement)) {
+      return;
+    }
+
+    if (!mayTakeFocus(domNode)) {
       return;
     }
 
