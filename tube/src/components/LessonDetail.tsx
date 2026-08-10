@@ -5,6 +5,7 @@ import { playbackSettingsStore } from "@app/stores/playbackSettingsStore";
 import type { Lesson } from "../types";
 import { usePlaylist } from "../hooks/usePlaylists";
 import Breadcrumb from "@app/components/Breadcrumb";
+import { useEmbedded } from "@app/utils/embed";
 
 interface LessonDetailLocationState {
   /** Set by the "Continue to Next" auto-advance navigation so the next lesson
@@ -18,6 +19,7 @@ export default function LessonDetail({ lesson }: { lesson: Lesson }) {
   const { data: playlist } = usePlaylist(listSlug);
   const navigate = useNavigate();
   const location = useLocation();
+  const embedded = useEmbedded();
 
   const currentIndex = playlist?.lessons.findIndex((l) => l.slug === lesson.slug) ?? -1;
   // A stale/foreign `?list=` (lesson isn't actually in the resolved playlist) is
@@ -57,7 +59,7 @@ export default function LessonDetail({ lesson }: { lesson: Lesson }) {
     <Editor
       readOnly
       recordingUrl={`/${lesson.ne}`}
-      breadcrumb={<Breadcrumb title={lesson.title} />}
+      breadcrumb={embedded ? undefined : <Breadcrumb title={lesson.title} />}
       playlistMode={playlistMode}
       onEnded={handleEnded}
       autoplayOverride={autoplayOverride}

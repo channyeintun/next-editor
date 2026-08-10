@@ -7,6 +7,7 @@ import LessonGallerySkeleton from "./components/LessonGallerySkeleton";
 import LoadingSpinner from "./components/LoadingSpinner";
 import LandingPageRoute from "./components/LandingPageRoute";
 import { lessonTitleFromSlug } from "./utils/lessonSlug";
+import { useEmbedded } from "./utils/embed";
 
 const DYNAMIC_IMPORT_RECOVERY_PARAM = "__route_reload";
 const DYNAMIC_IMPORT_ERROR_PATTERN =
@@ -177,12 +178,13 @@ function EditorRouteHydrateFallback() {
 // so the breadcrumb can name the lesson before anything has been fetched.
 function LearnSlugHydrateFallback() {
   const { slug } = useParams();
+  const embedded = useEmbedded();
 
   if (slug?.startsWith("@")) {
     return <RouteHydrateFallback />;
   }
 
-  const placeholderTitle = lessonTitleFromSlug(slug);
+  const placeholderTitle = embedded ? undefined : lessonTitleFromSlug(slug);
   return (
     <EditorShellSkeleton
       breadcrumb={placeholderTitle ? <Breadcrumb title={placeholderTitle} /> : undefined}

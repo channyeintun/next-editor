@@ -5,6 +5,7 @@ import LessonDetail from "./LessonDetail";
 import Breadcrumb from "@app/components/Breadcrumb";
 import EditorShellSkeleton from "@app/components/EditorShellSkeleton";
 import { lessonTitleFromSlug } from "@app/utils/lessonSlug";
+import { useEmbedded } from "@app/utils/embed";
 
 // Route component for /learn/:slug. Resolves the slug to a lesson (so the detail
 // view is deep-linkable with a clean URL and no query params), then renders the
@@ -13,13 +14,14 @@ import { lessonTitleFromSlug } from "@app/utils/lessonSlug";
 export default function LessonDetailRoute() {
   const { slug } = useParams();
   const { data: lesson, isPending, isError } = useLesson(slug);
+  const embedded = useEmbedded();
 
   // The editor shell rather than a lone spinner: this gate is one of several on
   // the way to a playable lesson (route chunk → this lookup → CodeEditor/Monaco),
   // and they all now paint the same layout, so the page assembles in place
   // instead of flashing between unrelated screens.
   if (isPending) {
-    const placeholderTitle = lessonTitleFromSlug(slug);
+    const placeholderTitle = embedded ? undefined : lessonTitleFromSlug(slug);
     return (
       <EditorShellSkeleton
         breadcrumb={placeholderTitle ? <Breadcrumb title={placeholderTitle} /> : undefined}
