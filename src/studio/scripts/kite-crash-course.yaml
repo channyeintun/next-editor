@@ -680,6 +680,12 @@ build:
 
 runtime:
   kind: kite-playground
+  # Nothing runs until `run-final`, the second-to-last scene, so the dock would
+  # otherwise sit open and empty over the whole lesson — 288px of editor spent
+  # on nothing, and this lesson plays inside a 16:10 iframe on kite-lang.dev
+  # where that is most of the code on screen. Shut from frame one; `runtime.run`
+  # opens it when the output lands, and `tidy-up` shuts it once that's been read.
+  dockStartsCollapsed: true
   defaultMode: fixture
   fixture:
     # 200ms run offset + 600ms latency puts the output on screen at ~0.8s, right

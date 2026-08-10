@@ -607,6 +607,14 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         );
       }
 
+      // The dock is where this output is about to land, so a run opens it — the
+      // same reflex TerminalPanel's consoleOpener has when a command writes to
+      // the terminal. That lets a script collapse the dock for the long stretch
+      // before any code runs (an empty console is 288px of editor spent on
+      // nothing) and get it back at the run, with no second action to remember.
+      // A no-op when the dock is already open, which is the default.
+      deps.runtimePanelStore.trigger.setIsCollapsed({ collapsed: false });
+
       const prepared = preparePlaygroundRun({
         runtime,
         mode: deps.runtimeMode,

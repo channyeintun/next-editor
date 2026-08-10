@@ -1,4 +1,17 @@
 {
   "version": 2,
-  "notes": []
+  "notes": [
+    {
+      "id": "register.read-aloud",
+      "severity": "note",
+      "sceneId": "modules",
+      "message": "Scene \"modules\" reads instead of talks — contract: \"what is\" → \"what's\", \"is not\" → \"isn't\" (persona guide v2)"
+    },
+    {
+      "id": "register.read-aloud",
+      "severity": "note",
+      "sceneId": "wrap",
+      "message": "Scene \"wrap\" reads instead of talks — contract: \"does not\" → \"doesn't\" (persona guide v2)"
+    }
+  ]
 }

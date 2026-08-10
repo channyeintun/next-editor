@@ -98,9 +98,11 @@ const scriptRuntimeWaitForReadySchema = scriptActionBase.extend({
   retry: studioRetryPolicySchema,
 });
 
-// Running a lesson's code opens the runner dock and nothing closes it again, so
-// it sits over the editor through the explanation that follows. This hands that
-// back to the author: collapse it once the output has been read.
+// `runtime.run` opens the runner dock and nothing closes it again, so it sits
+// over the editor through the explanation that follows. This hands that back to
+// the author: collapse it once the output has been read — or before a single
+// line has been typed, so the dock costs a tab strip instead of 288px until
+// there is finally something in it.
 const scriptRuntimeCollapseDockSchema = scriptActionBase.extend({
   type: z.literal("runtime.collapseDock"),
 });

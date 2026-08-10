@@ -312,6 +312,13 @@ export async function runStudioRender(
     previewState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
   });
   deps.whiteboardStore.trigger.setScene({ scene: EMPTY_WHITEBOARD_SCENE });
+  // The runner dock is stage furniture too. Pinning it here rather than with a
+  // scheduled action means a lesson that starts shut is already shut in frame
+  // one, instead of visibly closing a few hundred milliseconds in — and a
+  // repeat render cannot inherit the previous one's dock.
+  deps.runtimePanelStore.trigger.setIsCollapsed({
+    collapsed: plan.runtime.kind === "kite-playground" && plan.runtime.dockStartsCollapsed,
+  });
   try {
     await waitUntil(
       () => {

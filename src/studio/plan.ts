@@ -488,6 +488,14 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("kite-playground"),
+    /**
+     * The dock opens expanded, and a Kite lesson that runs nothing until its
+     * last scenes pays 288px of editor for an empty console the whole way
+     * there. Declaring it shut is pinned by the render before the recording
+     * clock starts — frame one, no visible collapse — and `runtime.run` opens
+     * it again when there is finally output to read.
+     */
+    dockStartsCollapsed: z.boolean().default(false),
     defaultMode: z.enum(["live", "fixture"]),
     fixture: kiteRunFixtureSchema,
   }),
