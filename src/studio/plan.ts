@@ -293,6 +293,15 @@ export const studioWorkspacePinSchema = z.object({
   name: z.string().min(1),
   entryFilePath: z.string().min(1),
   files: z.record(z.string().min(1), z.string()),
+  /**
+   * Open with the file explorer shut. For a lesson whose workspace is one
+   * file, the tree is a list of one taking width from the code beside it.
+   * Pinned by the render before the clock starts and carried on the
+   * recording's initial workspace snapshot, so playback opens the same way;
+   * the viewer's own toggle still works, and nothing is written to their
+   * stored preference.
+   */
+  sidebarStartsCollapsed: z.boolean().default(false),
 });
 export type StudioWorkspacePin = z.infer<typeof studioWorkspacePinSchema>;
 

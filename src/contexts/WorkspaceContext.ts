@@ -17,6 +17,12 @@ export interface WorkspaceActions {
   setSidebarScrollTop: (scrollTop: number) => void;
   setSidebarWidth: (width: number) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  /**
+   * Where a replay starts the file explorer, without touching what the viewer
+   * has stored. Their own preference is still there the next time they open
+   * the editor themselves; a lesson only gets to choose its opening frame.
+   */
+  startSidebarCollapsed: (collapsed: boolean) => void;
   createNewEditor: () => void;
   createFile: (
     path: string,
@@ -49,6 +55,7 @@ export interface WorkspaceActions {
   getCollapsedFolders: () => string[];
   getSidebarScrollTop: () => number;
   getSidebarWidth: () => number;
+  getSidebarCollapsed: () => boolean;
   getFile: (path: string) => WorkspaceFile | null;
   listFiles: () => WorkspaceFile[];
   subscribeWorkspaceSync: (listener: (mutation: WorkspaceSyncMutation) => void) => () => void;

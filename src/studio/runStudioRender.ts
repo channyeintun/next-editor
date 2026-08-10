@@ -52,7 +52,10 @@ export interface StudioRunDeps {
     | "handlePreviewEvent"
   >;
   getEditor: StudioDriverDeps["getEditor"];
-  workspace: Pick<WorkspaceActions, "getFile" | "getProject" | "setActiveFilePath" | "loadProject">;
+  workspace: Pick<
+    WorkspaceActions,
+    "getFile" | "getProject" | "setActiveFilePath" | "loadProject" | "startSidebarCollapsed"
+  >;
   runtimePanelStore: RuntimePanelStoreInstance;
   slidesStore: SlidesStoreInstance;
   whiteboardStore: WhiteboardStoreInstance;
@@ -319,6 +322,10 @@ export async function runStudioRender(
   deps.runtimePanelStore.trigger.setIsCollapsed({
     collapsed: plan.runtime.kind === "kite-playground" && plan.runtime.dockStartsCollapsed,
   });
+  // Same reasoning for the file explorer, and the same timing: set before the
+  // clock starts, so it is shut in frame one and the recording's initial
+  // workspace snapshot carries it to every viewer.
+  deps.workspace.startSidebarCollapsed(plan.workspace.sidebarStartsCollapsed);
   try {
     await waitUntil(
       () => {

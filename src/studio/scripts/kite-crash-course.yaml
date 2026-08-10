@@ -55,6 +55,10 @@ lesson:
     lessonType: kite
     name: Kite Crash Course
     entryFilePath: main.kite
+    # One file for the whole lesson, so the explorer is a list of one taking
+    # width from the code beside it — the same argument as the runner dock
+    # below, on the other axis.
+    sidebarStartsCollapsed: true
     files:
       main.kite: |
         // A crash course in Kite.

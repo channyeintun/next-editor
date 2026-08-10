@@ -227,6 +227,17 @@ export interface WorkspaceRecordingSnapshot {
   activeFilePath: string;
   collapsedFolders?: string[];
   sidebarScrollTop?: number;
+  /**
+   * File explorer shut for this lesson.
+   *
+   * Only ever set on a recording's *initial* snapshot, and only by a lesson
+   * that asks for it (a one-file lesson spends the tree's width on nothing).
+   * Absent — which is every recording made before this and every lesson that
+   * does not ask — leaves the viewer's own preference exactly as it was. The
+   * toggle keeps working mid-replay either way: this decides where playback
+   * starts, not what the viewer is allowed to do.
+   */
+  sidebarCollapsed?: boolean;
   /** File-sidebar width change since the previous recorded workspace event. */
   sidebarWidthDelta?: number;
   /** Docked-preview width change since the previous recorded workspace event. */
@@ -320,6 +331,12 @@ export function areWorkspaceProjectsEqual(
   );
 }
 
+/**
+ * `sidebarCollapsed` is deliberately not compared. It says where playback
+ * *starts* the file explorer, and only the initial snapshot is ever read for
+ * it; a viewer toggling the tree mid-recording is their business and must not
+ * become a recorded workspace event.
+ */
 export function areWorkspaceSnapshotsEqual(
   left: WorkspaceRecordingSnapshot,
   right: WorkspaceRecordingSnapshot,

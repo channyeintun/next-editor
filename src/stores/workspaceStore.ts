@@ -711,9 +711,12 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           sidebarWidth,
         });
       },
-      // Viewer-side UI preference only: the file explorer can be toggled at any
-      // time (including mid-replay) and is intentionally NOT part of the recorded
-      // workspace snapshot, so it never overrides what the viewer chooses.
+      // Viewer-side UI preference: the file explorer can be toggled at any time,
+      // including mid-replay, and only the viewer's own toggle is written back
+      // to storage. A recording may carry `sidebarCollapsed` on its initial
+      // snapshot, and a lesson may ask to open with the tree shut — a one-file
+      // lesson spends its width on nothing — but that chooses the opening frame
+      // and nothing more: it is never persisted, and the next toggle is theirs.
       setSidebarCollapsed: (context, event: { collapsed: boolean }) => {
         if (!context.isInitialized) {
           return context;

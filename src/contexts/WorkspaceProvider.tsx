@@ -116,6 +116,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     );
   };
 
+  // The same trigger with no write behind it: a lesson that opens with the
+  // explorer shut must not leave that behind in the viewer's own editor.
+  const startSidebarCollapsed = (collapsed: boolean) => {
+    workspaceStoreRef.current.trigger.setSidebarCollapsed({ collapsed });
+  };
+
   const createFile = (
     path: string,
     content: WorkspaceFileContent = "",
@@ -344,6 +350,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     return workspaceStoreRef.current.getSnapshot().context.sidebarWidth;
   };
 
+  const getSidebarCollapsed = () => {
+    return workspaceStoreRef.current.getSnapshot().context.sidebarCollapsed;
+  };
+
   const getFile = (path: string) => {
     const context = workspaceStoreRef.current.getSnapshot().context;
     if (!context.isInitialized) {
@@ -391,6 +401,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     setSidebarScrollTop,
     setSidebarWidth,
     setSidebarCollapsed,
+    startSidebarCollapsed,
     createNewEditor,
     createFile,
     createFolder,
@@ -413,6 +424,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     getCollapsedFolders,
     getSidebarScrollTop,
     getSidebarWidth,
+    getSidebarCollapsed,
     getFile,
     listFiles,
     subscribeWorkspaceSync,

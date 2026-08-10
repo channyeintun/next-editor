@@ -90,6 +90,21 @@ describe("workspace event content dedup", () => {
     }
   });
 
+  it("carries a lesson's collapsed file explorer through the stream", async () => {
+    // The one field playback reads off the *initial* snapshot to decide where
+    // the file tree starts. The dedup pass rebuilds every snapshot as it
+    // strips repeated file content, so a field it forgot to carry would leave
+    // the lesson opening with a tree it asked to have shut — and nothing else
+    // in the round trip would notice.
+    const [first, ...rest] = EVENTS;
+    const events = [{ ...first, snapshot: { ...first.snapshot, sidebarCollapsed: true } }, ...rest];
+
+    const decoded = decodeRecordingStream(await encodeRecordingToStream(makeRecording(events)));
+
+    expect(decoded.workspaceEvents?.[0].snapshot.sidebarCollapsed).toBe(true);
+    expect(decoded.workspaceEvents).toEqual(events);
+  });
+
   it("does not grow the stream per additional unchanged-content event", async () => {
     const one = await encodeRecordingToStream(makeRecording(EVENTS.slice(0, 1)));
     const five = await encodeRecordingToStream(makeRecording(EVENTS));

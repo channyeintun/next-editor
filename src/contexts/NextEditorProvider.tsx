@@ -178,8 +178,10 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     getCollapsedFolders,
     getSidebarScrollTop,
     getSidebarWidth,
+    getSidebarCollapsed,
     loadProject,
     setSidebarWidth,
+    startSidebarCollapsed,
   } = useWorkspaceActions();
   const saveRuntimeWorkspace = useWebContainerRuntimeSaveWorkspace();
   const getRuntimeRecordingSnapshot = useWebContainerRuntimeSnapshotGetter();
@@ -260,6 +262,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       const activeFilePath = getActiveFilePath();
       const collapsedFolders = getCollapsedFolders();
       const sidebarScrollTop = getSidebarScrollTop();
+      const sidebarCollapsed = getSidebarCollapsed();
       const cachedSnapshot = workspaceSnapshotRef.current;
 
       if (
@@ -267,7 +270,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         cachedSnapshot.project === project &&
         cachedSnapshot.activeFilePath === activeFilePath &&
         cachedSnapshot.collapsedFolders === collapsedFolders &&
-        (cachedSnapshot.sidebarScrollTop ?? 0) === sidebarScrollTop
+        (cachedSnapshot.sidebarScrollTop ?? 0) === sidebarScrollTop &&
+        (cachedSnapshot.sidebarCollapsed ?? false) === sidebarCollapsed
       ) {
         return cachedSnapshot;
       }
@@ -277,6 +281,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         activeFilePath,
         collapsedFolders,
         sidebarScrollTop,
+        sidebarCollapsed,
       } satisfies WorkspaceRecordingSnapshot;
 
       workspaceSnapshotRef.current = nextSnapshot;
@@ -290,6 +295,14 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
         snapshot.collapsedFolders ?? [],
         snapshot.sidebarScrollTop ?? 0,
       );
+      // Only when the recording says so. Absent — every recording made before
+      // this, and every lesson that does not ask — the viewer's own preference
+      // stands, and even when it is present this is the opening frame rather
+      // than a lock: the toggle keeps working mid-replay, and nothing is
+      // written back to their storage.
+      if (typeof snapshot.sidebarCollapsed === "boolean") {
+        startSidebarCollapsed(snapshot.sidebarCollapsed);
+      }
       if (
         typeof snapshot.sidebarWidthDelta === "number" &&
         Number.isFinite(snapshot.sidebarWidthDelta) &&
