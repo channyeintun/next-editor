@@ -22,6 +22,23 @@
 # no null — the "for does all three jobs" claim is likewise `ForHeader::{Loop,
 # In, While}` in the parser, spelled out in the AST.
 #
+# The keywords are the spine, but they are not the whole surface, so the lesson
+# also covers the parts of Kite that are not words: `@derive`, `dyn`, `..spread`,
+# `require`/`assert`, `"""` blocks, typed errors, `_ =`, and the two shapes of
+# test. Each of those scenes sits after the keyword it leans on rather than next
+# to its topic, which is why two are not where you would first look for them:
+# `decode` is separated from `derive` by the whole error section, because
+# `read_order` returns `(Order, error)` and spends a `check`, neither of which
+# the lesson has shown before `errorboard`; and `blocks` sits with `as` and
+# interpolation rather than with the later material, because its one real trap
+# is that a hole turns the dedent off.
+#
+# `run` and `wrap` are the last two scenes and must stay that way: `run` is where
+# the program is executed and the pinned output appears, so nothing may be typed
+# after it. Every scene that adds a file-scope declaration adds it *above*
+# `restocked`, because `async`'s `type-async-main` inserts the bare word `async `
+# after `restocked`'s closing brace and would otherwise prefix the wrong `fn`.
+#
 # src/studio/kiteCrashCourse.test.ts replays the typing actions below through the
 # bundled `kite-compiler.wasm` and checks the pinned fixture against what it
 # really prints, so the code and the fixture cannot drift apart.
@@ -202,7 +219,7 @@ lesson:
         width: 360,
         height: 36,
         fontSize: 28,
-        text: "language version 1",
+        text: "one version line",
         strokeColor: "#6741d9",
       }
 
@@ -672,7 +689,7 @@ runtime:
     transientErrorKinds: []
     result:
       status: success
-      stdout: "Kite & Co, visit 1\nfirst time here, open is true\ncounted 10\n(tally is done)\ntally 12\n3 names, first kite\na kite costs 40\nsquares 1 4 9 16\nevens 2\na quarter of a kite is 10.0\nand math.max_int is positive: true\nkite at 40\nkite x2\ncard ending 4242\ncredit, net 30\nloudest wind\nas expected: nothing divides by zero\nmean 4\nrestocked to 12\n"
+      stdout: "Kite & Co, visit 1\nfirst time here, open is true\ncounted 10\n(tally is done)\ntally 12\n3 names, first kite\na kite costs 40\nsquares 1 4 9 16\nevens 2\na quarter of a kite is 10.0\nand math.max_int is positive: true\nKite & Co\nthank you\n[\n        owed 45\n        ]\nkite at 40\nkite x2\nkite x2\nstarter kit, 4 parts\nkite x5, from kite x2\nOrder{ id: 7, item: \"kite\", qty: 2 }\n{\"id\":7,\"item\":\"kite\",\"qty\":2}\ncard ending 4242\ncredit, net 30\nloudest wind\nas expected: nothing divides by zero\nmean 4\nread back order 8: 5 x string\nrejected: Order.qty: expected a whole number\nlooking for anchor on the shelf\nunderneath, NotFound.is says true\nno anchor on the shelf\nnoting visit 1\n2 full rows\nrestocked to 12\n"
       stderr: ""
 
 scenes:
@@ -687,7 +704,7 @@ scenes:
       you write the parts of a page that are worth type checking in Kite, and
       leave the rest alone. [[mark:draw-why-pos]] And it's deliberately small.
       Twenty-seven keywords, no null, one formatter with no options to argue
-      about, and the language version is pinned at one, so what you learn today
+      about, and the version never leaves nought point one, so what you learn today
       keeps working. Let's look at what happens when you run it.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
@@ -874,11 +891,13 @@ scenes:
 
   - id: modules
     narration: >
-      [[mark:use]] Use imports a module. A Kite module is a directory, so the
-      files sitting beside this one are already part of the same program and
-      need no import at all — use is for reaching outside it, and here that's
-      the standard library. There's one exception: the prelude, which is in
-      scope everywhere without asking for it.
+      [[mark:use]] Use imports a module. A module is a directory, or a single
+      file — and neither one is a module until a use names it. A file sitting
+      beside this one is not already part of your program: you reach it by
+      name, exactly like the standard library. What is in scope without asking
+      is the prelude, and the handful of builtins reached by a dotted name —
+      io dot print is one, and errors dot new, which this program calls without
+      ever importing anything.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -1053,7 +1072,7 @@ scenes:
     narration: >
       [[mark:closures]] Closures are ordinary values here. The parameters go
       between pipe characters and the body is an expression. Map, filter, count
-      and about forty others live in the prelude and take them, so most of the
+      and fifty-odd others live in the prelude and take them, so most of the
       work you'd write a loop for is already a function. There's one rule worth
       knowing: a closure captures by value, so it can't capture a var. If it
       could, you'd be writing to a copy and never seeing the change, so the
@@ -1075,8 +1094,9 @@ scenes:
 
   - id: conversions
     narration: >
-      [[mark:as]] As converts a value from one type to another, and you have to
-      write it yourself. There are no implicit numeric conversions in Kite — an
+      [[mark:as]] As converts between int and float — those two and nothing
+      else — and you have to write it yourself. There are no implicit numeric
+      conversions in Kite — an
       int doesn't quietly turn into a float because the other side of the
       expression happened to be one. [[mark:module]] And there's that imported
       module finally being used, with its name in front of what you're calling.
@@ -1098,6 +1118,52 @@ scenes:
         type: editor.select
         at: { mark: module }
         target: { file: main.kite, text: "math.max_int() > 0", occurrence: 1 }
+
+  - id: blocks
+    narration: >
+      [[mark:block]] Text that runs over more than one line gets triple quotes.
+      An ordinary string can't contain a newline at all, so this is the one that
+      can. [[mark:dedent]] And it dedents. Whatever indentation the closing
+      delimiter sits at comes off every line above it — so the string can line up
+      with the code around it without dragging that indentation into the value.
+      There's no trailing newline either. What sits between the delimiters is
+      what you get. [[mark:hole]] Now the trap, and it'll cost you an afternoon
+      if nobody tells you. Put one hole anywhere in a block string and the dedent
+      switches off. [[mark:raw]] Not for that line — for the whole string. The
+      leading newline comes back, and every space, as typed, which is what those
+      brackets in the output are showing you. The reason is that the dedent only
+      runs for a block string with no interpolation in it; add a hole and the
+      string is built a different way that never reaches it. When you need both,
+      join the pieces with plus, or drop the finished block into an ordinary
+      string.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-block
+        type: editor.type
+        at: { mark: block }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"and math.max_int is positive: \\(math.max_int() > 0)\")\n\n",
+            occurrence: 1,
+          }
+        text: "    // The closing delimiter's indentation comes off every line.\n    let receipt = \"\"\"\n        Kite & Co\n        thank you\n        \"\"\"\n    io.print(receipt)\n\n"
+      - id: select-close
+        type: editor.select
+        at: { mark: dedent }
+        target: { file: main.kite, text: "        thank you\n        \"\"\"\n", occurrence: 1 }
+      - id: type-hole
+        type: editor.type
+        at: { mark: hole }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    io.print(receipt)\n\n", occurrence: 1 }
+        text: "    // One hole anywhere switches the dedent off, and the raw text survives.\n    let owed = 45\n    let holed = \"\"\"\n        owed \\(owed)\n        \"\"\"\n    io.print(\"[\\(holed)]\")\n\n"
+      - id: select-hole
+        type: editor.select
+        at: { mark: raw }
+        target: { file: main.kite, text: "        owed \\(owed)\n", occurrence: 1 }
 
   - id: structs
     narration: >
@@ -1154,12 +1220,7 @@ scenes:
         type: editor.type
         at: { mark: use-it }
         cadence: line-by-line
-        target:
-          {
-            file: main.kite,
-            after: "    io.print(\"and math.max_int is positive: \\(math.max_int() > 0)\")\n\n",
-            occurrence: 1,
-          }
+        target: { file: main.kite, after: "    io.print(\"[\\(holed)]\")\n\n", occurrence: 1 }
         text: "    // Structs are references, so `sell` is visible here afterwards.\n    var kite = Item{ name: \"kite\", price: 40, stock: 3 }\n    io.print(kite.label())\n    kite.sell(1)\n"
 
   - id: traits
@@ -1192,6 +1253,127 @@ scenes:
         target: { file: main.kite, after: "    kite.sell(1)\n", occurrence: 1 }
         text: "    io.print(kite.describe())\n\n"
 
+  - id: dynamic
+    narration: >
+      [[mark:kit]] Every call to describe so far has been static — the compiler
+      knew the type, so it knew the body. Here's a second type that makes the
+      same promise, and now there's a question worth asking: can one slice hold
+      both of them? [[mark:shelf]] Not on its own. A slice is one type, and an
+      item isn't a kit. What you can do instead is store the promise rather than
+      the type. [[mark:dyn]] That's dyn Describe. Each value goes in carrying a
+      small table of its own methods, so the loop calls describe without knowing
+      what it's holding, and the right body runs. You have to write dyn — a
+      generic is decided when you compile, this is decided when you run, and the
+      language makes you say which one you meant. What it costs is everything the
+      trait didn't mention: a dyn Describe has no label on it, even though the
+      item inside does.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-kit
+        type: editor.type
+        at: { mark: kit }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "        return \"\\(self.name) x\\(self.stock)\"\n    }\n}\n\n",
+            occurrence: 1,
+          }
+        text: "/// A second type that keeps the same promise.\nstruct Kit {\n    title: str\n    parts: int\n}\n\nimpl Describe for Kit {\n    fn describe(self) -> str {\n        return \"\\(self.title), \\(self.parts) parts\"\n    }\n}\n\n"
+      - id: type-shelf
+        type: editor.type
+        at: { mark: shelf }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    io.print(kite.describe())\n\n", occurrence: 1 }
+        text: "    // `dyn` is a vtable, so one slice can hold two different types.\n    let shelf: [dyn Describe] = [kite, Kit{ title: \"starter kit\", parts: 4 }]\n    for thing in shelf {\n        io.print(thing.describe())\n    }\n\n"
+      - id: select-dyn
+        type: editor.select
+        at: { mark: dyn }
+        target:
+          {
+            file: main.kite,
+            text: "    let shelf: [dyn Describe] = [kite, Kit{ title: \"starter kit\", parts: 4 }]\n",
+            occurrence: 1,
+          }
+
+  - id: spread
+    narration: >
+      [[mark:spread]] Building a new value out of an old one with a single field
+      changed comes up constantly, and copying every other field across by hand
+      is how you get the bug where you miss one. So there's a spread: two dots
+      and the value you're starting from, then only the fields that differ.
+      [[mark:order]] The spread comes first, before the fields — you read the
+      starting point, then the changes, in that order. Put it last and it doesn't
+      parse, which is worth knowing if you've written Rust, where it's the other
+      way round. And this is a new value, not a change to the old one: kite is
+      still exactly what it was, which is what the second half of that line
+      prints. Every field still has to end up with something, either from the
+      base or from you — there are no zero values here for a field you forgot to
+      fall back to.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-spread
+        type: editor.type
+        at: { mark: spread }
+        cadence: line-by-line
+        target:
+          { file: main.kite, after: "        io.print(thing.describe())\n    }\n\n", occurrence: 1 }
+        text: "    // `..kite` first, then the fields that differ. `kite` itself is untouched.\n    let bigger = Item{..kite, stock: 5 }\n    io.print(\"\\(bigger.describe()), from \\(kite.describe())\")\n\n"
+      - id: select-spread
+        type: editor.select
+        at: { mark: order }
+        target: { file: main.kite, text: "Item{..kite, stock: 5 }", occurrence: 1 }
+
+  - id: derive
+    narration: >
+      [[mark:derive]] Four of Kite's traits can be written for you rather than by
+      you, and this is how you ask. The attribute goes in front of the struct,
+      and before a single name in it gets resolved it expands into ordinary Kite
+      — the same bodies you'd have typed, over the same fields, in the same
+      order. Debug is
+      the field-by-field text, Hash is a number you can key a map with, Encode
+      turns one of these into JSON, and Decode is the way back, which we'll come
+      to once there's a way to say it failed. [[mark:usejson]] Which is why we go
+      back up to the top and import that module: the code the attribute writes
+      names Json, so a file that derives Encode without the import fails on a
+      name your source never wrote. [[mark:derivecalls]] What comes out is
+      ordinary methods, called the ordinary way. And Display isn't among the four, which
+      is deliberate — how a type reads to a person is a decision, so you're the
+      one who makes it.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-derive
+        type: editor.type
+        at: { mark: derive }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "        return \"\\(self.title), \\(self.parts) parts\"\n    }\n}\n\n",
+            occurrence: 1,
+          }
+        text: "/// `@derive` writes these bodies out of the fields, as ordinary Kite.\n@derive(Debug, Hash, Encode, Decode)\nstruct Order {\n    id: int\n    item: str\n    qty: int\n}\n\n"
+      - id: type-use-json
+        type: editor.type
+        at: { mark: usejson }
+        cadence: line-by-line
+        target: { file: main.kite, after: "use std/math\n", occurrence: 1 }
+        text: "use std/json\n"
+      - id: type-derive-calls
+        type: editor.type
+        at: { mark: derivecalls }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"\\(bigger.describe()), from \\(kite.describe())\")\n\n",
+            occurrence: 1,
+          }
+        text: "    // `@derive` wrote `debug` and `encode` out of the fields themselves.\n    let order = Order{ id: 7, item: \"kite\", qty: 2 }\n    io.print(order.debug())\n    io.print(json.stringify(order.encode()))\n\n"
+
   - id: enums
     narration: >
       [[mark:enum]] An enum names every shape a value is allowed to take, and a
@@ -1216,7 +1398,7 @@ scenes:
         target:
           {
             file: main.kite,
-            after: "        return \"\\(self.name) x\\(self.stock)\"\n    }\n}\n\n",
+            after: "    id: int\n    item: str\n    qty: int\n}\n\n",
             occurrence: 1,
           }
         text: "/// An enum names every shape a value is allowed to take.\nenum Payment {\n    Cash\n    Card(last4: str)\n    Credit(days: int)\n}\n\nfn describe_payment(p: Payment) -> str {\n    return match p {\n        Cash => \"cash\",\n        Card(last4) => \"card ending \\(last4)\",\n        Credit(days) => \"credit, net \\(days)\",\n    }\n}\n\n"
@@ -1228,7 +1410,12 @@ scenes:
         type: editor.type
         at: { mark: calls }
         cadence: line-by-line
-        target: { file: main.kite, after: "    io.print(kite.describe())\n\n", occurrence: 1 }
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(json.stringify(order.encode()))\n\n",
+            occurrence: 1,
+          }
         text: "    // An enum plus `match`, which the compiler checks is exhaustive.\n    io.print(describe_payment(Card(last4: \"4242\")))\n    io.print(describe_payment(Credit(days: 30)))\n\n"
 
   - id: generics
@@ -1388,6 +1575,260 @@ scenes:
           }
         text: "    // `check` hands the failure to our caller instead of handling it here.\n    let (avg, err) = mean([2, 4, 6])\n    if err != nil {\n        io.print(\"failed: \\(err.message())\")\n        return\n    }\n    io.print(\"mean \\(avg)\")\n\n"
 
+  - id: decode
+    narration: >
+      [[mark:read]] Now check is in hand, here's the other half of that derive,
+      and the two of them are the pair worth remembering. Json.parse gives you a
+      Json — a tree, whatever shape the text turned out to be. Order.decode turns
+      one of those into an Order, checking every field on the way in: there, and
+      the right shape. So it can fail, and it says so in its type.
+      [[mark:named]] It's Order.decode rather than a method on the document, and
+      it has to be: it gives back the type itself, and a trait method has no way
+      to say "the type I'm implemented for" in return position. So it's an
+      associated function, with the type named at the front. That's also why
+      there's no turbofish in this language — where a type can't be inferred,
+      it's already sitting there at the start of the call. [[mark:back]] A good
+      document comes back as an Order. You still name the error and test it; that
+      doesn't change because this one happened to work. [[mark:bad]] And this one
+      has no qty. Most languages would hand you a cast that never looks, and
+      you'd find out later, somewhere else, holding a zero. Here you're told
+      which field. [[mark:limit]] The honest limit is that the check is strict. A
+      field that's absent is only allowed if you typed it Option. A default that
+      isn't nil, or a key the server spells differently, is where you stop
+      deriving and write the reader by hand — json.field, int_or, text_or, out of
+      the same module.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+      - {
+          title: "RFC 8259 — The JavaScript Object Notation (JSON) Data Interchange Format",
+          url: "https://www.rfc-editor.org/rfc/rfc8259",
+        }
+    actions:
+      - id: type-read-order
+        type: editor.type
+        at: { mark: read }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    return avg, nil\n}\n\n", occurrence: 1 }
+        text: "/// A document in, a checked `Order` out, or the reason there is not one.\nfn read_order(text: str) -> (Order, error) {\n    let (doc, err) = json.parse(text)\n    check err\n    return Order.decode(doc)\n}\n\n"
+      - id: select-named
+        type: editor.select
+        at: { mark: named }
+        target: { file: main.kite, text: "    return Order.decode(doc)\n", occurrence: 1 }
+      - id: type-read-good
+        type: editor.type
+        at: { mark: back }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    io.print(\"mean \\(avg)\")\n\n", occurrence: 1 }
+        text: "    // Reading one back checks every field, and names the one it cannot read.\n    let (bought, rerr) = read_order(\"{\\\"id\\\": 8, \\\"item\\\": \\\"string\\\", \\\"qty\\\": 5}\")\n    if rerr != nil {\n        io.print(\"rejected: \\(rerr.message())\")\n        return\n    }\n    io.print(\"read back order \\(bought.id): \\(bought.qty) x \\(bought.item)\")\n\n"
+      - id: type-read-bad
+        type: editor.type
+        at: { mark: bad }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"read back order \\(bought.id): \\(bought.qty) x \\(bought.item)\")\n\n",
+            occurrence: 1,
+          }
+        text: "    // The same call, on a document with no `qty` in it at all.\n    let (short, serr) = read_order(\"{\\\"id\\\": 9, \\\"item\\\": \\\"wind\\\"}\")\n    if serr != nil {\n        io.print(\"rejected: \\(serr.message())\")\n    }\n\n"
+      - id: select-limit
+        type: editor.select
+        at: { mark: limit }
+        target: { file: main.kite, text: "    qty: int\n", occurrence: 1 }
+
+  - id: typed-errors
+    narration: >
+      [[mark:carry]] errors.new hands back a sentence, and a sentence is a poor
+      thing to make a decision on — matching on the text of a message is how you
+      find out, a year later, that someone reworded it. So let a type be the
+      error. Any struct with an impl of Error goes wherever an error goes, and
+      takes its type along with it. [[mark:context]] This one wraps on the way
+      out, with a note about what it was doing, so now there are two: the note on
+      the outside, and the NotFound underneath it. [[mark:ask]] Cause is how you
+      reach the one underneath. And then the type answers questions about itself
+      — is, which is yes or no, and as, which hands back an Option, because it
+      might not be that failure at all. [[mark:spelling]] Notice which end the
+      type is written at: the same end Order.decode put it, for the same reason.
+      There's no turbofish, so there's nowhere inside the call to write one. The
+      type goes first and names itself.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-notfound
+        type: editor.type
+        at: { mark: carry }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    return Order.decode(doc)\n}\n\n", occurrence: 1 }
+        text: "/// A failure that names itself, so a caller can ask which one it was.\nstruct NotFound {\n    what: str\n}\n\nimpl Error for NotFound {\n    fn message(self) -> str {\n        return \"no \\(self.what) on the shelf\"\n    }\n}\n\n/// The item, or a note about the search with a `NotFound` underneath.\nfn find_item(shelf: [Item], want: str) -> (Item, error) {\n    for it in shelf {\n        if it.name == want {\n            return it, nil\n        }\n    }\n    let missing: error = NotFound{ what: want }\n    return _, errors.because(\"looking for \\(want) on the shelf\", missing)\n}\n\n"
+      - id: select-because
+        type: editor.select
+        at: { mark: context }
+        target:
+          {
+            file: main.kite,
+            text: "    return _, errors.because(\"looking for \\(want) on the shelf\", missing)\n",
+            occurrence: 1,
+          }
+      - id: type-ask
+        type: editor.type
+        at: { mark: ask }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "        io.print(\"rejected: \\(serr.message())\")\n    }\n\n",
+            occurrence: 1,
+          }
+        text: "    // An error can carry a type, and the type names itself: no turbofish.\n    let (found, ferr) = find_item([kite], \"anchor\")\n    if ferr == nil {\n        io.print(found.label())\n    } else {\n        io.print(ferr.message())\n        let under = ferr.cause()\n        io.print(\"underneath, NotFound.is says \\(NotFound.is(under))\")\n        let miss = NotFound.as (under)\n        if miss != nil {\n            io.print(miss.message())\n        }\n    }\n\n"
+      - id: select-names-itself
+        type: editor.select
+        at: { mark: spelling }
+        target: { file: main.kite, text: "NotFound.is(under)", occurrence: 1 }
+
+  - id: discard
+    narration: >
+      [[mark:log]] One loose end. You've seen that an error can't be ignored — a
+      call left standing on its own line doesn't compile, and neither does
+      reading a value whose error you haven't tested. But sometimes you
+      genuinely don't want it. This writes the day's visit log, and today the log
+      is full, and a shop whose log is full still sells kites. [[mark:drop]] So:
+      underscore, equals, the call. [[mark:grep]] That's the whole spelling, and
+      it's the only one there is. Typing it out is the point — the failure
+      doesn't disappear quietly, it leaves a line, one a reader sees and grep
+      finds. What you'd write in most languages is a comma and an underscore
+      tucked inside a destructuring, which looks like nothing at all. Kite
+      rejects that one so it can keep this one meaning something.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-note-visit
+        type: editor.type
+        at: { mark: log }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    return _, errors.because(\"looking for \\(want) on the shelf\", missing)\n}\n\n",
+            occurrence: 1,
+          }
+        text: "/// The visit log. Best effort: a shop whose log is full still sells kites.\nfn note_visit(n: int) -> error {\n    io.print(\"noting visit \\(n)\")\n    return errors.new(\"the log is full\")\n}\n\n"
+      - id: type-discard
+        type: editor.type
+        at: { mark: drop }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "            io.print(miss.message())\n        }\n    }\n\n",
+            occurrence: 1,
+          }
+        text: "    // `_ =` is the one way to throw an error away, and it is greppable.\n    _ = note_visit(visits)\n\n"
+      - id: select-discard
+        type: editor.select
+        at: { mark: grep }
+        target: { file: main.kite, text: "    _ = note_visit(visits)\n", occurrence: 1 }
+
+  - id: asserts
+    narration: >
+      [[mark:req]] Two ways to write down something you believe is true. Both
+      take a condition and a message — both arguments, always. The message isn't
+      a nicety: a check that fires and can't tell you what it was checking has
+      wasted the trip. [[mark:release]] These are builtins rather than functions,
+      which is what makes the next part possible. Build with --release and every
+      assert is gone from the program. Every require stays. So assert is for your
+      own reasoning — the things you want caught while you're working and are
+      happy to pay nothing for afterwards. Require is for what has to hold no
+      matter who's calling, like a divisor that mustn't be zero. That difference
+      is the whole reason there are two of them. [[mark:rowscall]] And when
+      either one
+      fails it traps, and a trap isn't catchable — there's no recover in this
+      language. A broken invariant stops the program instead of becoming another
+      value somebody forgets to test.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-rows
+        type: editor.type
+        at: { mark: req }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "    return errors.new(\"the log is full\")\n}\n\n",
+            occurrence: 1,
+          }
+        text: "/// `require` guards the caller's input; `assert` checks our own arithmetic.\nfn full_rows(items: int, per_row: int) -> int {\n    require(per_row > 0, \"a row with no room in it is not a row\")\n    let rows = items / per_row\n    assert(rows * per_row <= items, \"a full row never invents stock\")\n    return rows\n}\n\n"
+      - id: select-require
+        type: editor.select
+        at: { mark: release }
+        target:
+          {
+            file: main.kite,
+            text: "    require(per_row > 0, \"a row with no room in it is not a row\")\n",
+            occurrence: 1,
+          }
+      - id: type-rows-call
+        type: editor.type
+        at: { mark: rowscall }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    _ = note_visit(visits)\n\n", occurrence: 1 }
+        text: "    // `assert` goes away under `--release`; `require` never does.\n    io.print(\"\\(full_rows(7, 3)) full rows\")\n\n"
+
+  - id: tests
+    narration: >
+      [[mark:fence]] Two ways to write a test, and kitec test runs both. Here's
+      the first: a fenced kite block inside a doc comment isn't an illustration,
+      it's compiled and run. And it's appended to its own module, so in there
+      tally is just tally — nothing to import, because the thing the comment
+      documents is already in scope. [[mark:testfn]] The other is a function
+      whose name starts with test underscore, and the assertions come from std
+      test. [[mark:claims]] Give it the fallible pair as its return type and
+      every assertion is a check on a line of its own, so a test reads as a list
+      of claims. The first one that fails ends that test and reports itself;
+      the other tests still run.
+      [[mark:testpub]] Pub is load-bearing there. A private function nothing calls
+      has already been dropped by the time the runner goes looking, and it finds
+      no tests at all. [[mark:entry]] And kitec test only reads the file you hand
+      it. A test that arrived through use is compiled under its module's name, so
+      it no longer starts with test underscore and the runner walks straight past
+      it. Keep a module's tests in the file they test.
+    sources:
+      - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
+    actions:
+      - id: type-doc-fence
+        type: editor.type
+        at: { mark: fence }
+        cadence: line-by-line
+        target:
+          {
+            file: main.kite,
+            after: "/// Skipping zeroes and stopping at the first oversized order.\n",
+            occurrence: 1,
+          }
+        text: "///\n/// ```kite\n/// io.print(\"\\(tally([2, 0, 3]))\")\n/// ```\n"
+      - id: type-use-test
+        type: editor.type
+        at: { mark: testfn }
+        cadence: line-by-line
+        target: { file: main.kite, after: "use std/math\n", occurrence: 1 }
+        text: "use std/test\n"
+      - id: type-test-fn
+        type: editor.type
+        at: { mark: claims }
+        cadence: line-by-line
+        target: { file: main.kite, after: "    return total\n}\n\n", occurrence: 1 }
+        text: "pub fn test_tally() -> (int, error) {\n    check test.equal_int(tally([5, 0, 7, 900, 1]), 12, \"zeroes skipped, 900 stops it\")\n    return 0, nil\n}\n\n"
+      - id: select-test-pub
+        type: editor.select
+        at: { mark: testpub }
+        target: { file: main.kite, text: "pub fn test_tally() -> (int, error) {\n", occurrence: 1 }
+      # The `use` the last beat is about: a test reached through one of these is
+      # compiled as `test.…` and stops looking like a test at all.
+      - id: select-use-test
+        type: editor.select
+        at: { mark: entry }
+        target: { file: main.kite, text: "use std/test\n", occurrence: 1 }
+
   - id: async
     narration: >
       [[mark:asyncfn]] Two keywords left, and they go together. An async
@@ -1406,7 +1847,9 @@ scenes:
         type: editor.type
         at: { mark: asyncfn }
         cadence: line-by-line
-        target: { file: main.kite, after: "    return avg, nil\n}\n\n", occurrence: 1 }
+        # `restocked` must land immediately above `fn main`, because
+        # `type-async-main` prefixes whatever declaration follows it.
+        target: { file: main.kite, after: "    return rows\n}\n\n", occurrence: 1 }
         text: "/// An async function answers with a Task, which `await` unwraps.\nasync fn restocked(item: Item, by: int) -> int {\n    return item.stock + by\n}\n\n"
       - id: type-async-main
         type: editor.type
@@ -1418,18 +1861,24 @@ scenes:
         type: editor.type
         at: { mark: await }
         cadence: line-by-line
-        target: { file: main.kite, after: "    io.print(\"mean \\(avg)\")\n\n", occurrence: 1 }
+        target:
+          {
+            file: main.kite,
+            after: "    io.print(\"\\(full_rows(7, 3)) full rows\")\n\n",
+            occurrence: 1,
+          }
         text: "    // `await` waits for a task and unwraps it.\n    let restock = await restocked(kite, 10)\n    io.print(\"restocked to \\(restock)\")\n"
 
   - id: run
     narration: >
       That's the whole language. [[mark:run]] Let's run it. Remember, that's the
       compiler working here in the page rather than on a server, so nothing left
-      your machine. Nineteen lines. Look for three of them in
-      particular: the deferred line printing before the tally it belongs to, the
-      division by zero coming back as a value we printed on purpose, and the
-      mean arriving through a check. Nothing crashed, and nothing was quietly
-      swallowed, because there was never a way to write the version that does.
+      your machine. Thirty-six lines. Look for four of them in particular: the
+      deferred line printing before the tally it belongs to, the division by zero
+      coming back as a value we printed on purpose, the mean arriving through a
+      check, and the order that was rejected naming the one field it couldn't
+      read. Nothing crashed, and nothing was quietly swallowed, because there was
+      never a way to write the version that does.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
     actions:
@@ -1462,39 +1911,87 @@ scenes:
         at: { afterAction: saw-3 }
         contains: "a quarter of a kite is 10.0"
         timeoutMs: 20000
+      # The dedented block string: no leading newline, no eight spaces.
       - id: saw-5
         type: expect.output
         at: { afterAction: saw-4 }
-        contains: "kite x2"
+        contains: "thank you"
         timeoutMs: 20000
       - id: saw-6
         type: expect.output
         at: { afterAction: saw-5 }
-        contains: "card ending 4242"
+        contains: "kite x2"
         timeoutMs: 20000
+      # The second element of the `dyn Describe` slice — a `Kit`, not an `Item`.
       - id: saw-7
         type: expect.output
         at: { afterAction: saw-6 }
-        contains: "loudest wind"
+        contains: "starter kit, 4 parts"
         timeoutMs: 20000
       - id: saw-8
         type: expect.output
         at: { afterAction: saw-7 }
-        contains: "as expected: nothing divides by zero"
+        contains: "kite x5, from kite x2"
         timeoutMs: 20000
       - id: saw-9
         type: expect.output
         at: { afterAction: saw-8 }
-        contains: "mean 4"
+        contains: '{"id":7,"item":"kite","qty":2}'
         timeoutMs: 20000
       - id: saw-10
         type: expect.output
         at: { afterAction: saw-9 }
+        contains: "card ending 4242"
+        timeoutMs: 20000
+      - id: saw-11
+        type: expect.output
+        at: { afterAction: saw-10 }
+        contains: "loudest wind"
+        timeoutMs: 20000
+      - id: saw-12
+        type: expect.output
+        at: { afterAction: saw-11 }
+        contains: "as expected: nothing divides by zero"
+        timeoutMs: 20000
+      - id: saw-13
+        type: expect.output
+        at: { afterAction: saw-12 }
+        contains: "mean 4"
+        timeoutMs: 20000
+      - id: saw-14
+        type: expect.output
+        at: { afterAction: saw-13 }
+        contains: "read back order 8: 5 x string"
+        timeoutMs: 20000
+      # The derived `decode` names the field it could not read, not a zero.
+      - id: saw-15
+        type: expect.output
+        at: { afterAction: saw-14 }
+        contains: "rejected: Order.qty: expected a whole number"
+        timeoutMs: 20000
+      - id: saw-16
+        type: expect.output
+        at: { afterAction: saw-15 }
+        contains: "underneath, NotFound.is says true"
+        timeoutMs: 20000
+      - id: saw-17
+        type: expect.output
+        at: { afterAction: saw-16 }
+        contains: "noting visit 1"
+        timeoutMs: 20000
+      - id: saw-18
+        type: expect.output
+        at: { afterAction: saw-17 }
+        contains: "2 full rows"
+        timeoutMs: 20000
+      - id: saw-19
+        type: expect.output
+        at: { afterAction: saw-18 }
         contains: "restocked to 12"
         timeoutMs: 20000
       - id: file-has-check
         type: expect.file
-        at: { afterAction: saw-10 }
+        at: { afterAction: saw-19 }
         path: main.kite
         contains: "check err"
 
@@ -1504,11 +2001,16 @@ scenes:
       them. For comparison, Go has twenty-five and Rust has thirty-eight. That
       number is a design position rather than a boast: one loop
       keyword, no null, one formatter with nothing to configure, and one rule
-      about failure that the compiler keeps for you. Kite targets WebAssembly
+      about failure that the compiler keeps for you. The rest of what we wrote
+      isn't keywords at all — the attribute that writes four trait bodies out of
+      your fields, the vtable you have to spell dyn before you get, the two
+      assertions that differ only in what a release build does to them, and tests
+      that live in the file they test. Kite targets WebAssembly
       first, so it's meant to sit beside HTML and CSS and take the parts of a
-      page worth type checking. And that version number is the point. Kite pins
-      its language at one, so it isn't planning to break your code later. What
-      you learned today is the language you'll come back to.
+      page worth type checking. And the version line is the point. Kite's
+      number climbs inside nought point one and is meant never to leave it —
+      a major number is a licence to break things, and this language does not
+      want one. What you learned today is the language you'll come back to.
     sources:
       - { title: "The Kite Language Specification", url: https://kite-lang.dev/read/specification }
       - { title: "The Go Programming Language Specification", url: "https://go.dev/ref/spec" }
