@@ -149,6 +149,17 @@ describe("studio lesson registry", () => {
         `${slug} closing handle`,
       ).toBeGreaterThanOrEqual(RECORDING_BUFFER_MS);
 
+      // A lesson that opens with the file explorer shut has no file rows to
+      // point at, and the render fails closed on a target it cannot resolve —
+      // so the compiler must not emit the cursor glide it normally puts in
+      // front of an openFile.
+      const cursorsAtHiddenFileRows = script.lesson.workspace.sidebarStartsCollapsed
+        ? plan.actions.filter(
+            (action) => action.type === "cursor.moveTo" && action.target.kind === "file",
+          )
+        : [];
+      expect(cursorsAtHiddenFileRows, `${slug} cursor moves to a hidden file row`).toEqual([]);
+
       const authoredSelects = script.scenes
         .flatMap((scene) => scene.actions)
         .filter((action) => action.type === "editor.select");

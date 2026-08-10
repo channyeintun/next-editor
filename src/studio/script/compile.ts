@@ -109,7 +109,14 @@ const CURSOR_DEDUPE_WINDOW_MS = 5_000;
 function cursorTargetForAction(action: ScriptAction, script: LessonScript): StudioTargetRef | null {
   switch (action.type) {
     case "workspace.openFile":
-      return { kind: "file", path: action.path };
+      // Nothing to point at when the lesson opens with the file explorer shut:
+      // the row is not rendered, and the render fails closed on a target it
+      // cannot find rather than gliding the cursor somewhere arbitrary. The
+      // action itself is unaffected — it switches the active file through the
+      // workspace store, not by clicking the tree.
+      return script.lesson.workspace.sidebarStartsCollapsed
+        ? null
+        : { kind: "file", path: action.path };
     // No attention cursor for editor edits. A select performs its own pointer
     // drag across the range, and typing is a keyboard action — a standalone
     // glide to the middle of the editor before either one reads as random mouse
