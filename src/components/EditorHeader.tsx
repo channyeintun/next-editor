@@ -239,7 +239,16 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
         posthog?.capture("recording_imported");
       }
     } catch (error) {
+      // These rejections are all descriptive and all actionable ("bad SCR3
+      // magic", "No .ne file selected", …). Logging only meant the menu closed,
+      // nothing changed, and the user concluded the button was broken and
+      // retried the same file. Cancelling the picker fires `cancel`, not
+      // `change`, so this cannot fire spuriously on cancel. Matches the zip
+      // import path in this same component.
       console.error("Import failed:", error);
+      window.alert(
+        error instanceof Error ? error.message : "That recording could not be imported.",
+      );
     }
   };
 
@@ -257,6 +266,9 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       });
     } catch (error) {
       console.error("Export failed:", error);
+      window.alert(
+        error instanceof Error ? error.message : "That recording could not be exported.",
+      );
     }
   };
 
@@ -268,6 +280,9 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       posthog?.capture("workspace_downloaded", { lesson_type: lessonType });
     } catch (error) {
       console.error("Zip download failed:", error);
+      window.alert(
+        error instanceof Error ? error.message : "That project could not be downloaded.",
+      );
     }
   };
 

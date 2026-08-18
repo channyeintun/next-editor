@@ -91,6 +91,7 @@ interface RuntimeDockTabConfig {
 interface RuntimeEventState {
   activeTab: RuntimeDockTab;
   isCollapsed: boolean;
+  isFullHeight: boolean;
   isSettingsOpen: boolean;
   status: string;
   previewUrl: string | null;
@@ -355,6 +356,10 @@ function TerminalPanel() {
   const runtimeEventState: RuntimeEventState = {
     activeTab: recordableActiveTab,
     isCollapsed,
+    // Part of the recorded snapshot and replayed on playback, so it has to be
+    // one of the fields that can trigger a RUNTIME_EVENT on its own — otherwise
+    // toggling full height alone never reaches the recorder.
+    isFullHeight,
     isSettingsOpen,
     status,
     previewUrl: previewUrl ?? null,
@@ -384,10 +389,25 @@ function TerminalPanel() {
     }
   }, [handleRuntimeEvent, isPlaybackSnapshotActive, isRecording, runtimeEventState]);
 
+  // `startTerminalSession` comes from the runtime provider's actions object,
+  // which the React Compiler cannot memoize (its try/catch shapes bail out), so
+  // its identity changes on every provider render — and the provider re-renders
+  // per stdout chunk while a command streams. Without this ref the effect
+  // re-invoked startTerminalSession on that churn, once per chunk. The ref keys
+  // the request on what actually changed rather than on function identity.
+  const requestedTerminalSessionForTabRef = useRef(false);
   useEffect(() => {
     if (isPlaybackSnapshotActive || activeTab !== "terminal" || isCreatingTerminal) {
+      if (activeTab !== "terminal") {
+        requestedTerminalSessionForTabRef.current = false;
+      }
       return;
     }
+
+    if (requestedTerminalSessionForTabRef.current) {
+      return;
+    }
+    requestedTerminalSessionForTabRef.current = true;
 
     void startTerminalSession();
   }, [activeTab, isCreatingTerminal, isPlaybackSnapshotActive, startTerminalSession]);

@@ -87,9 +87,16 @@ export default function AddToPlaylistPopover({
           setNewTitle("");
           setCreatingNew(false);
           setTogglingId(created.id);
+          // The create can succeed and the add still fail. Without this the
+          // popover just showed the new playlist unticked and said nothing —
+          // reading exactly like a playlist the user simply had not chosen yet.
           addLesson.mutate(
             { playlistId: created.id, lessonId: lesson.id },
-            { onSettled: () => setTogglingId(null) },
+            {
+              onError: () =>
+                setToggleError("Couldn't add the lesson to that playlist — try again."),
+              onSettled: () => setTogglingId(null),
+            },
           );
         },
         onError: () => setCreateError("Couldn't create the playlist — try again."),

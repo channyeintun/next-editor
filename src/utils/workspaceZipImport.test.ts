@@ -260,6 +260,24 @@ describe("importWorkspaceProjectFromZip", () => {
     );
   });
 
+  // The import budget used to be spent on the very entries the import is about
+  // to discard, so a Finder-compressed React project (node_modules and all) was
+  // rejected as "too large" even though its real source tree is a few files.
+  it("does not spend the import budget on ignored artifacts", async () => {
+    const entries = [
+      { path: "index.html", content: "<html></html>" },
+      { path: "src/App.tsx", content: "export default function App() {}" },
+    ];
+    for (let i = 0; i < 12_000; i += 1) {
+      entries.push({ path: `node_modules/pkg-${i}/index.js`, content: "x".repeat(64) });
+    }
+    entries.push({ path: ".git/objects/aa/bbbb", content: "y".repeat(1024) });
+
+    const project = await importWorkspaceProjectFromZip(createZipFile("app.zip", entries));
+
+    expect(Object.keys(project.files).sort()).toEqual(["index.html", "src/App.tsx"]);
+  });
+
   it("rejects paths that escape the workspace root", async () => {
     const paths = ["../outside.ts", "nested/../../outside.ts", "nested\\..\\..\\outside.ts"];
 

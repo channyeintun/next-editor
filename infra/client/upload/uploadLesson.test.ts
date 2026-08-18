@@ -6,7 +6,7 @@ import { formatDuration, uploadLesson } from "./uploadLesson";
 vi.mock("../apiClient", () => ({
   apiClient: {
     put: vi.fn<(url: string, body: unknown, config?: unknown) => Promise<{ data: unknown }>>(),
-    post: vi.fn<(url: string, body?: unknown) => Promise<{ data: unknown }>>(),
+    post: vi.fn<(url: string, body?: unknown, config?: unknown) => Promise<{ data: unknown }>>(),
   },
 }));
 
@@ -114,6 +114,7 @@ describe("uploadLesson", () => {
         duration: "2:30",
         ne: "lessons/lesson-1/lesson-1.ne",
       }),
+      expect.anything(),
     );
     expect(result).toEqual({ id: "lesson-1", slug: "test-lesson-1" });
     // onProgress(0) at the start, at least one more update after the upload.
@@ -167,6 +168,40 @@ describe("uploadLesson", () => {
         tags: ["intro", "basics"],
         description: "desc",
       }),
+      expect.anything(),
+    );
+  });
+
+  // "Cancel upload" used to only close the modal: React Query does not abort a
+  // mutation on unmount and nothing here took a signal, so the remaining PUTs
+  // finished and POST /lessons created the very draft the user had declined.
+  it("passes the caller's abort signal to every request it makes", async () => {
+    const controller = new AbortController();
+    mockedPut.mockImplementation((url) =>
+      Promise.resolve({
+        data: { path: `lessons/lesson-9/${(url as string).split("/").pop()}` },
+      }),
+    );
+    mockedPost.mockResolvedValue({ data: { id: "lesson-9", slug: "cancelled" } });
+
+    await uploadLesson(
+      "lesson-9",
+      {
+        recording: createRecording({ id: "recording-9" }),
+        title: "Cancelled",
+        description: "",
+        tags: [],
+        useDefaultThumbnail: false,
+      },
+      () => {},
+      controller.signal,
+    );
+
+    for (const call of mockedPut.mock.calls) {
+      expect((call[2] as { signal?: AbortSignal }).signal).toBe(controller.signal);
+    }
+    expect((mockedPost.mock.calls[0][2] as { signal?: AbortSignal }).signal).toBe(
+      controller.signal,
     );
   });
 

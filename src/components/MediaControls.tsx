@@ -184,6 +184,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const [isScreenSupported, setIsScreenSupported] = useState(false);
   const [isCameraOverlayVisible, setIsCameraOverlayVisible] = useState(readCameraOverlayVisibility);
   const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
+  const [captionImportError, setCaptionImportError] = useState<string | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement>(null);
   const captionFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -283,11 +284,28 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     const file = event.target.files?.[0];
     if (!file) return;
     event.target.value = "";
+    setCaptionImportError(null);
 
-    const { detectAndParse, inferLanguageFromFilename } = await import("../captions/parseCaptions");
-    const text = await file.text();
+    // The parser yields zero cues for any file whose timestamp lines miss its
+    // format — timestamps with no fractional part, a non-subtitle file picked
+    // past the accept filter, a UTF-16 file that decodes as mojibake. A bare
+    // return there meant "Import captions…" appeared to do nothing at all.
+    let parseCaptions: typeof import("../captions/parseCaptions");
+    let text: string;
+    try {
+      parseCaptions = await import("../captions/parseCaptions");
+      text = await file.text();
+    } catch {
+      setCaptionImportError(`Couldn't read "${file.name}" — try selecting it again.`);
+      return;
+    }
+
+    const { detectAndParse, inferLanguageFromFilename } = parseCaptions;
     const cues = detectAndParse(file.name, text);
-    if (cues.length === 0) return;
+    if (cues.length === 0) {
+      setCaptionImportError(`No captions found in "${file.name}" — expected WebVTT or SRT.`);
+      return;
+    }
 
     const language = inferLanguageFromFilename(file.name) ?? "en";
     addCaptionTrack({
@@ -405,7 +423,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         type="file"
         accept=".vtt,.srt,text/vtt,application/x-subrip"
         className="sr-only"
-        onChange={handleCaptionFileChange}
+        onChange={(event) => void handleCaptionFileChange(event)}
       />
       <div className={`flex items-center w-full ${rowSizing}`}>
         {effectiveRecordMode && (
@@ -753,6 +771,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                         <Captions size={14} aria-hidden="true" />
                         Import captions…
                       </button>
+                      {captionImportError && (
+                        <p className="px-2 pt-2 text-xs text-red-400">{captionImportError}</p>
+                      )}
                     </div>
                   </div>
                 </div>

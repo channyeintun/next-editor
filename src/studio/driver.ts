@@ -3,7 +3,7 @@ import type { WorkspaceActions } from "../contexts/WorkspaceContext";
 import { selectIsCollapsed, type RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
 import { selectPreviewState, type SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
-import { appendRunnerConsoleLines } from "../runtime/goPlayground/consoleStore";
+import { appendRunnerConsoleLines } from "../runtime/playgroundConsoleStore";
 import type { SlideEvent } from "../core/src/slides";
 import { applyWhiteboardEvent, type WhiteboardEvent } from "../core/src/whiteboard";
 import type { PreviewEvent, PreviewPanelMode, PreviewState } from "../types/slides";

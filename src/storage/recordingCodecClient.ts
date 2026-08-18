@@ -22,6 +22,13 @@ import { hydrateDecodedRecordingWorkspaceAssets } from "./recordingWorkspaceAsse
 interface RecordingCodecWorkerClient {
   api: Remote<RecordingCodecWorkerApi>;
   worker: Worker;
+  /**
+   * Rejects when the worker dies. Comlink settles a call only on a reply
+   * message, so a worker that fails after construction leaves every call
+   * pending forever — and this module has a working in-process fallback one
+   * branch away that a hang can never reach.
+   */
+  failed: Promise<never>;
 }
 
 let workerClient: RecordingCodecWorkerClient | null = null;
@@ -50,13 +57,35 @@ function getRecordingCodecWorkerClient(): RecordingCodecWorkerClient | null {
       return null;
     }
 
+    // The constructor only throws for a synchronously rejected worker; one whose
+    // module fails at runtime constructs fine and then fires `error`.
+    let failWorker: (error: Error) => void = () => {};
+    const failed = new Promise<never>((_, reject) => {
+      failWorker = reject;
+    });
+    failed.catch(() => {});
+    const onWorkerFailure = () => {
+      workerUnavailable = true;
+      workerClient = null;
+      worker.terminate();
+      failWorker(new Error("Recording codec worker failed"));
+    };
+    worker.addEventListener("error", onWorkerFailure);
+    worker.addEventListener("messageerror", onWorkerFailure);
+
     workerClient = {
       api: wrap<RecordingCodecWorkerApi>(worker),
       worker,
+      failed,
     };
   }
 
   return workerClient;
+}
+
+/** Races a worker call against the worker's own death, so callers can fall back. */
+function callCodecWorker<T>(client: RecordingCodecWorkerClient, call: Promise<T>): Promise<T> {
+  return Promise.race([call, client.failed]);
 }
 
 function transferUint8Array(data: Uint8Array): Uint8Array {
@@ -251,8 +280,13 @@ export async function decompressBinaryToRecordings(binaryData: Uint8Array): Prom
   await loadDmpCodec();
   const client = getRecordingCodecWorkerClient();
 
+  // A dead worker falls back in process rather than stranding the decode — the
+  // whole point of keeping the in-process implementation around.
   const recordings = client
-    ? await client.api.decompressBinaryToRecordings(transferUint8Array(binaryData))
+    ? await callCodecWorker(
+        client,
+        client.api.decompressBinaryToRecordings(transferUint8Array(binaryData)),
+      ).catch(() => decompressBinaryToRecordingsInProcess(binaryData))
     : await decompressBinaryToRecordingsInProcess(binaryData);
   return Promise.all(recordings.map(hydrateDecodedRecordingWorkspaceAssets));
 }
@@ -265,5 +299,7 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     return encodeRecordingToStreamInProcess(recording);
   }
 
-  return client.api.encodeRecordingToStream(recording);
+  return callCodecWorker(client, client.api.encodeRecordingToStream(recording)).catch(() =>
+    encodeRecordingToStreamInProcess(recording),
+  );
 }

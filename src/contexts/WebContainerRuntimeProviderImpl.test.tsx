@@ -241,6 +241,68 @@ describe("WebContainerRuntimeProviderImpl reverse sync", () => {
     expect(project.files["pnpm-lock.yaml"]).toBeDefined();
   });
 
+  // `hasRunInitCommandRef` only flips after the init command finishes, so it could
+  // not dedupe callers arriving during it. Five entry points call prepareRuntime
+  // and only startRuntime checks the busy status — sendTerminalInput fires once
+  // per keystroke — so clicking Terminal (or typing) during `pnpm install` used to
+  // spawn a second install against the same node_modules.
+  it("runs the init command once when several entry points race it", async () => {
+    const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
+    const { instance } = createFakeInstance(fakeFs);
+    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+
+    const spawned: string[] = [];
+    let releaseInstall: (() => void) | null = null;
+    const installStarted = new Promise<void>((resolveStarted) => {
+      vi.mocked(instance.spawn).mockImplementation((async (command: string, args: string[]) => {
+        const line = [command, ...(args ?? [])].join(" ");
+        spawned.push(line);
+        const exit =
+          spawned.filter((entry) => entry === line).length === 1 && line.includes("install")
+            ? new Promise<number>((resolveExit) => {
+                releaseInstall = () => resolveExit(0);
+                resolveStarted();
+              })
+            : Promise.resolve(0);
+        return {
+          output: new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+          input: new WritableStream(),
+          exit,
+          kill: vi.fn<() => void>(),
+          resize: vi.fn<() => void>(),
+        } as unknown as WebContainerProcess;
+      }) as never);
+    });
+
+    const { runtime } = renderProviders();
+
+    await act(async () => {
+      void runtime.startRuntime();
+      await installStarted;
+
+      // Arrives while the install is still in flight — the exact window the
+      // boolean flag could not cover. Drain microtasks and timers so it gets all
+      // the way past boot/mount/sync to the init-command check before the first
+      // install is allowed to finish; otherwise the flag wins the race by luck
+      // and the test proves nothing.
+      void runtime.startTerminalSession();
+      for (let i = 0; i < 50; i += 1) {
+        await vi.advanceTimersByTimeAsync(1);
+      }
+
+      releaseInstall?.();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    const installs = spawned.filter((line) => line.includes("install"));
+    expect(installs).toHaveLength(1);
+  });
+
   it("still fires reverse sync on terminal output (regression)", async () => {
     const fakeFs = createFakeFs({
       "index.html": "<main>Hello</main>",

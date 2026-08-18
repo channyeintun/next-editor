@@ -3,7 +3,11 @@ import { useSelector } from "@xstate/store-react";
 import { Bot, ChevronDown, ChevronUp, Hexagon, Maximize2, Minimize2 } from "lucide-react";
 import { signInUrl, useAuth } from "@next-editor/infra";
 import AgentPanel from "./agent/AgentPanel";
-import { STUDIO_TARGET_ATTRIBUTE, STUDIO_KOTLIN_DOCK_TARGET_ID } from "../studio/targets";
+import {
+  STUDIO_TARGET_ATTRIBUTE,
+  STUDIO_RUN_BUTTON_TARGET_ID,
+  STUDIO_KOTLIN_DOCK_TARGET_ID,
+} from "../studio/targets";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import {
   selectActiveTab,
@@ -23,6 +27,7 @@ import {
   kotlinRunStartedConsoleLines,
 } from "../runtime/kotlinPlayground/console";
 import { collectKotlinPlaygroundFiles } from "../runtime/kotlinPlayground/files";
+import { appendRunnerConsoleLines } from "../runtime/playgroundConsoleStore";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
@@ -40,9 +45,6 @@ import { areStructuredDataEqual } from "../utils/equality";
  */
 
 const KOTLIN_CONSOLE_SCROLL_SURFACE = "kotlin-runner";
-// Bounds the recorded console state — every runtime recording event snapshots
-// the full line array, so an unbounded log would bloat .ne recordings.
-const MAX_KOTLIN_CONSOLE_LINES = 200;
 
 const ANSI_RESET = "\u001b[0m";
 const ANSI_DIM = "\u001b[90m";
@@ -170,17 +172,7 @@ function KotlinPlaygroundRunnerPanel() {
   }, [cancel, isPlaybackSnapshotActive]);
 
   const appendConsoleLines = (lines: string[]) => {
-    if (lines.length === 0) {
-      return;
-    }
-
-    const current = runtimePanelStore.getSnapshot().context.consoleLines;
-    // Blank separator between explicit runs keeps results readable.
-    const startsOperation = lines[0].startsWith("[kotlin-run] kotlin");
-    const separator = current.length > 0 && startsOperation ? [""] : [];
-    runtimePanelStore.trigger.setConsoleLines({
-      consoleLines: [...current, ...separator, ...lines].slice(-MAX_KOTLIN_CONSOLE_LINES),
-    });
+    appendRunnerConsoleLines(runtimePanelStore, lines);
   };
 
   const updateScrollLine = (scrollLine: number) => {
@@ -366,6 +358,7 @@ function KotlinPlaygroundRunnerPanel() {
               ) : (
                 <button
                   type="button"
+                  {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_RUN_BUTTON_TARGET_ID }}
                   onClick={() => {
                     void handleRun();
                   }}

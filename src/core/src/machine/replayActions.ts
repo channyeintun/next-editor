@@ -331,15 +331,31 @@ export const applyFrameAtTime = ({
     };
   }
 
-  if (isKeyframe(targetFrame)) {
-    // Keyframe: always use directly, most efficient
-    frame = targetFrame;
-  } else if (frameIndex === lastAppliedFrameIndex + 1 && currentFrame) {
-    // Consecutive delta: apply incrementally
-    frame = applyFrameDelta(currentFrame, targetFrame, frameIndex);
-  } else {
-    // Jump into delta: full reconstruction required
-    frame = reconstructFrameAtIndex(frames, frameIndex);
+  // Reconstruction throws by design on a damaged recording
+  // (ContentEditBaseMismatchError, DmpBaseMismatchError, conflicting delta
+  // variants). This runs inside an xstate `assign`, and xstate treats an action
+  // throw as fatal: the actor stops, observers are cleared, and every later send
+  // — including recording — is a no-op, with `onError` never called. So one bad
+  // frame used to freeze the whole editor for the rest of the page session.
+  // Skipping the frame and reporting it lets playback continue past the damage.
+  try {
+    if (isKeyframe(targetFrame)) {
+      // Keyframe: always use directly, most efficient
+      frame = targetFrame;
+    } else if (frameIndex === lastAppliedFrameIndex + 1 && currentFrame) {
+      // Consecutive delta: apply incrementally
+      frame = applyFrameDelta(currentFrame, targetFrame, frameIndex);
+    } else {
+      // Jump into delta: full reconstruction required
+      frame = reconstructFrameAtIndex(frames, frameIndex);
+    }
+  } catch (error) {
+    context.onError?.(
+      error instanceof Error
+        ? error
+        : new Error(`Could not reconstruct recording frame ${frameIndex}`),
+    );
+    return { lastAppliedFrameIndex: frameIndex };
   }
 
   if (!frame || !frame.state || !isValidFrameState(frame.state)) {
@@ -637,7 +653,12 @@ export const detachPlaybackWorkspace = (): Partial<EditorMachineContext> => ({
   lastAppliedPreviewEventIndex: -1,
   lastAppliedPreviewPatchBatchIndex: -1,
   lastAppliedSlideEventIndex: -1,
-  lastAppliedWorkspaceEventIndex: -1,
+  // NOTE: `lastAppliedWorkspaceEventIndex` is intentionally NOT reset here, for
+  // the same reason it is not reset in `seekToTime`, `resetPlayback` and
+  // `invalidateAppliedPlaybackState`. This runs on every entry into
+  // `playback.paused`, so resetting it re-summed every width delta from index 0
+  // on the next PLAY and added it on top of the width already applied — the
+  // sidebar grew by the presenter's drag again on every pause/resume.
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedWhiteboardEventIndex: -1,
   lastAppliedChatEventIndex: -1,
@@ -845,11 +866,11 @@ export const applyPreviewPatchBatchesAtTime = ({
 }): Partial<EditorMachineContext> => {
   const { recording, applyPreviewPatchReplay, lastAppliedPreviewPatchBatchIndex } = context;
 
-  if (
-    !recording?.previewPatchBatches?.length ||
-    !recording.previewInitialDocuments?.length ||
-    !applyPreviewPatchReplay
-  ) {
+  // An initial document alone is a complete replayable stream (Meta +
+  // FullSnapshot), so requiring patch batches too meant a preview that was
+  // opened and never mutated replayed as an empty box. Batches without an
+  // initial document are not replayable, so that half stays required.
+  if (!recording?.previewInitialDocuments?.length || !applyPreviewPatchReplay) {
     return {};
   }
 
@@ -858,7 +879,7 @@ export const applyPreviewPatchBatchesAtTime = ({
     currentTime: resolveBoundedReplayTime(context, event),
     isSeeking: isSeekReplayEvent(event),
     initialDocuments: recording.previewInitialDocuments,
-    patchBatches: recording.previewPatchBatches,
+    patchBatches: recording.previewPatchBatches ?? [],
     lastAppliedPatchBatchIndex: lastAppliedPreviewPatchBatchIndex,
   });
 
@@ -979,11 +1000,22 @@ export const applyChatEventsAtTime = ({
     return {};
   }
 
-  const replayResult = getChatReplayResult({
-    chatEvents: recording.chatEvents,
-    currentTime: resolveBoundedReplayTime(context, event),
-    lastAppliedIndex: lastAppliedChatEventIndex,
-  });
+  // Same exposure as applyFrameAtTime: the chat fold runs applyChatDelta ->
+  // applyContentDelta, which throws on a damaged track — and a throw inside this
+  // `assign` stops the actor outright.
+  let replayResult;
+  try {
+    replayResult = getChatReplayResult({
+      chatEvents: recording.chatEvents,
+      currentTime: resolveBoundedReplayTime(context, event),
+      lastAppliedIndex: lastAppliedChatEventIndex,
+    });
+  } catch (error) {
+    context.onError?.(
+      error instanceof Error ? error : new Error("Could not replay the recorded agent chat"),
+    );
+    return { lastAppliedChatEventIndex: recording.chatEvents.length - 1 };
+  }
 
   if (replayResult.snapshotToApply) {
     applyChatSnapshot(replayResult.snapshotToApply);

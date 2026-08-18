@@ -74,6 +74,16 @@ export default ({ mode }: { mode: string }) => {
           // React Compiler (babel-plugin-react-compiler) runs through Rolldown's
           // Babel pass; default target is React 19, so no runtime shim is needed.
           // The plugin's default exclude already skips node_modules.
+          //
+          // @babel/core is pinned to 7.x in devDependencies on purpose. Under
+          // Babel 8, @babel/types dropped AssignmentPattern from its LVal alias,
+          // and the compiler's `isLVal()` guard in lowerAssignment then bails on
+          // EVERY component with a defaulted destructured prop
+          // (`({ x = true }) => …`) — silently, with no build error. That was 28
+          // functions across 15 files here, all of them running unmemoized while
+          // the codebase (and the disabled exhaustive-deps rule below) assumed
+          // otherwise. Verify after any Babel bump: compiled output must contain
+          // `const $ = _c(`.
           babel({ presets: [reactCompilerPreset()] }),
         ] as unknown as PluginOption[];
       }),
@@ -123,6 +133,9 @@ export default ({ mode }: { mode: string }) => {
         // not a browser — that side is tested against real wrangler dev + local
         // D1/R2 (see docs/progress.md), not jsdom.
         "infra/client/**/*.{test,spec}.{ts,tsx}",
+        // infra/db/** is plain SQL-building logic against the D1 interface, so it
+        // runs here rather than in the Workers-runtime suite.
+        "infra/db/**/*.{test,spec}.{ts,tsx}",
       ],
       alias: {
         // y-monaco imports Monaco's deep editor API entrypoint. Keep it inline

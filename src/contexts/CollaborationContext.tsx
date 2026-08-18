@@ -113,7 +113,7 @@ import {
 } from "../hooks/useWhiteboardController";
 import {
   restoreSlidesStore,
-  setSlidesStoreRoomScoped,
+  setSlidesStoreDeckBorrowed,
   snapshotSlidesStore,
   type SlidesStoreSnapshot,
 } from "../stores/slidesStore";
@@ -701,7 +701,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     setIsCreatingRoom(false);
     assetHydrationGenerationRef.current += 1;
     standaloneStoresRef.current = standalone;
-    setSlidesStoreRoomScoped(slidesStore, true);
+    setSlidesStoreDeckBorrowed(slidesStore, true);
     slidesStore.trigger.setSlides({ slides: [] });
     slidesStore.trigger.setPreviewState({
       previewState: {
@@ -815,7 +815,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       discardPendingWhiteboardChange(whiteboardStore);
       if (standaloneStoresRef.current === standalone) {
         restoreSlidesStore(slidesStore, standalone.slides);
-        setSlidesStoreRoomScoped(slidesStore, false);
+        setSlidesStoreDeckBorrowed(slidesStore, false);
         restoreWhiteboardStore(whiteboardStore, standalone.whiteboard);
         standaloneStoresRef.current = null;
       }

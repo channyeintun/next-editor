@@ -84,7 +84,7 @@ export default function UploadLessonModal({
   const [captionError, setCaptionError] = useState<string | null>(null);
   const captionInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { upload, progress, isUploading, error, reset } = useUploadLesson();
+  const { upload, cancel, progress, isUploading, error, reset } = useUploadLesson();
   const publish = usePublishLesson();
 
   // Revoke the preview's object URL whenever it's replaced/cleared or the modal unmounts,
@@ -135,7 +135,16 @@ export default function UploadLessonModal({
     setThumbnailError(null);
     // Downscaled/re-encoded here, before it ever touches state or an upload —
     // the raw camera-resolution file is never what gets previewed or stored.
-    const optimized = await resizeThumbnail(file);
+    // The guards above only read `type` and `size`, so a corrupt or renamed
+    // non-image reaches `createImageBitmap` and rejects; without this catch the
+    // picker just goes dead with nothing shown.
+    let optimized: File;
+    try {
+      optimized = await resizeThumbnail(file);
+    } catch {
+      setThumbnailError("Couldn't read that image — try a different file.");
+      return;
+    }
     setThumbnailFile(optimized);
     setUseDefaultThumbnail(false);
     setThumbnailPreviewUrl((previous) => {
@@ -173,8 +182,17 @@ export default function UploadLessonModal({
     input.value = "";
     if (files.length === 0) return;
 
-    const { detectAndParse, inferLanguageFromFilename } =
-      await import("@app/captions/parseCaptions");
+    // Every other failure in this handler reports through `captionError`; these
+    // two awaits did not. The lazy chunk 404s after a deploy or offline, and the
+    // blob read fails when the file moved or its volume unmounted between the
+    // picker returning and the read — either one left the picker silently dead.
+    let parseCaptions: typeof import("@app/captions/parseCaptions");
+    try {
+      parseCaptions = await import("@app/captions/parseCaptions");
+    } catch {
+      setCaptionError("Couldn't load the caption reader — check your connection and try again.");
+      return;
+    }
 
     const next = [...captionTracks];
     for (const file of files) {
@@ -182,12 +200,19 @@ export default function UploadLessonModal({
         setCaptionError(`"${file.name}" is too large — 2MB max.`);
         return;
       }
-      const cues = detectAndParse(file.name, await file.text());
+      let text: string;
+      try {
+        text = await file.text();
+      } catch {
+        setCaptionError(`Couldn't read "${file.name}" — try selecting it again.`);
+        return;
+      }
+      const cues = parseCaptions.detectAndParse(file.name, text);
       if (cues.length === 0) {
         setCaptionError(`No caption cues found in "${file.name}" — expected .vtt or .srt.`);
         return;
       }
-      const language = inferLanguageFromFilename(file.name) ?? "en";
+      const language = parseCaptions.inferLanguageFromFilename(file.name) ?? "en";
       if (next.some((track) => track.language === language)) {
         setCaptionError(
           `A "${language}" track is already attached — name files like lesson.<lang>.vtt to set their language.`,
@@ -239,6 +264,11 @@ export default function UploadLessonModal({
         recording_duration: recording.duration,
       });
     } catch (err) {
+      // The user cancelled: the modal is already closing and nothing was
+      // created, so this is not a failure to report or a state to reset into.
+      if (axios.isCancel(err)) {
+        return;
+      }
       if (axios.isAxiosError(err) && err.response?.status === 401) {
         // Session expired mid-form — unlike the initial signed-out entry
         // (which never shows a form), typed values must survive this redirect.
@@ -275,11 +305,19 @@ export default function UploadLessonModal({
   // Uploading past the halfway point (or once media, not just the tiny .ne,
   // has started) is worth confirming before throwing away; below that
   // threshold just cancel silently — not worth interrupting them to ask.
+  // "Silently" still has to mean cancelled: closing without aborting left the
+  // upload running and created the lesson anyway.
   const requestClose = () => {
     if (isUploading && progress > 0.5) {
       setCloseConfirmOpen(true);
       return;
     }
+    cancel();
+    onClose();
+  };
+
+  const confirmCancelUpload = () => {
+    cancel();
     onClose();
   };
 
@@ -312,7 +350,7 @@ export default function UploadLessonModal({
               </button>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={confirmCancelUpload}
                 className="rounded bg-rose-500 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-rose-400"
               >
                 Cancel upload

@@ -9,6 +9,7 @@ import { NextEditorActionsContext } from "./NextEditorContext";
 import { NextEditorActorContext } from "./NextEditorActorContext";
 import { usePreviewAdapterHandle } from "./PreviewAdapterHandleContext";
 import { useSlidesStore } from "./SlidesStoreContext";
+import { setSlidesStoreDeckBorrowed } from "../stores/slidesStore";
 import { useWhiteboardStore } from "./WhiteboardStoreContext";
 import { useRuntimePanelStore } from "./RuntimePanelStoreContext";
 import { selectRecordingState } from "../stores/runtimePanelStore";
@@ -256,7 +257,14 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       previewHandle.patchReplayApplier.current?.(input) ?? input.lastAppliedPatchBatchIndex,
 
     getSlides: () => slidesStore.getSnapshot().context.slides,
-    applySlides: (nextSlides) => slidesStore.trigger.setSlides({ slides: nextSlides }),
+    applySlides: (nextSlides) => {
+      // These slides come from a loaded recording, not from this user. Marking
+      // the deck borrowed keeps `subscribeSlidesPersistence` from writing the
+      // lesson's deck over the viewer's own in the shared localStorage key —
+      // which simply opening a published lesson used to do, unrecoverably.
+      setSlidesStoreDeckBorrowed(slidesStore, true);
+      slidesStore.trigger.setSlides({ slides: nextSlides });
+    },
     getWorkspaceSnapshot: () => {
       const project = getProject();
       const activeFilePath = getActiveFilePath();

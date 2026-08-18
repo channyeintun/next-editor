@@ -196,8 +196,8 @@ Query params: `plan` (registered plan or `src/studio/scripts` slug), `runtime`
 
 Key seams used (not bypassed): workspace store actions (`loadProject`,
 `setActiveFilePath`), live Monaco `executeEdits` (flows through the workspace bridge
-and exact-edit capture), the shared Go console append path
-(`src/runtime/goPlayground/consoleStore.ts`, also used by the runner panel),
+and exact-edit capture), the shared playground console append path
+(`src/runtime/playgroundConsoleStore.ts`, also used by every runner panel),
 synthetic `pointermove` events into the recorder's own mouse-tracking capture, and
 `START_RECORDING` with an external audio blob (the recording auto-finalizes when the
 narration ends, which is why every plan action must finish before

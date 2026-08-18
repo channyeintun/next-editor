@@ -3,7 +3,7 @@
 // per segment kind, so storage regressions are visible without a test suite.
 //
 // Usage: node scripts/measure-recording-size.mjs [path-to.ne ...]
-//        (defaults to public/lessons/issue-repro/recording-1783046610421.ne)
+//        (defaults to public/lessons/introduction/introduction.ne)
 //
 // Format: files may be raw binary SCR3 (first 4 bytes: 0x53 0x43 0x52 0x33 / "SCR3")
 // or legacy base64-encoded text. The script auto-detects and decodes accordingly.
@@ -25,6 +25,10 @@ function segmentHeaderSize(formatVersion) {
   return formatVersion < 2 ? LEGACY_SEGMENT_HEADER_SIZE : SEGMENT_HEADER_SIZE;
 }
 
+// Mirrors SEGMENT_KIND in src/storage/streamingRecordingCodec/format.ts, in index
+// order. This is a plain .mjs run under node (see package.json), so it cannot
+// import the .ts source — keep it in step by hand. Audio and camera are never
+// inline segments; they stay sibling files, so there is no audio kind here.
 const KIND_NAME = [
   "frames",
   "slide",
@@ -34,7 +38,10 @@ const KIND_NAME = [
   "workspace",
   "runtime",
   "cursor",
-  "audioChunk",
+  "whiteboard",
+  "chat",
+  "finalMeta",
+  "workspaceAsset",
 ];
 
 function formatBytes(bytes) {
@@ -91,21 +98,24 @@ function measure(bytes) {
     const byteLength = view.getUint32(offset + 1, true);
     const payloadEnd = offset + segHeaderSize + byteLength;
     if (payloadEnd > segmentsEnd) break;
-    // Segments are self-delimiting, so a retired/unknown future kind (e.g. the
-    // reserved cameraChunk=9) is skipped rather than aborting the whole walk.
-    if (kind < KIND_NAME.length) {
-      perKind[kind].count += 1;
-      perKind[kind].payload += byteLength;
-    }
+    // Segments are self-delimiting, so a kind newer than this table is still
+    // walked past — but it is reported in its own bucket rather than dropped.
+    // Silently discarding it is how a whole track can regress and measure as
+    // zero growth, which is the one thing this script exists to catch.
+    // `??=` rather than a length check: an out-of-range kind extends the array
+    // and leaves holes behind it, and a later kind can land in one of those.
+    perKind[kind] ??= { name: `unknown kind ${kind}`, count: 0, payload: 0 };
+    perKind[kind].count += 1;
+    perKind[kind].payload += byteLength;
     offset = payloadEnd;
   }
 
-  return { total: bytes.length, headerBytes, footerBytes, perKind };
+  return { total: bytes.length, headerBytes, footerBytes, perKind: perKind.filter(Boolean) };
 }
 
 async function main() {
   const paths = process.argv.slice(2);
-  if (paths.length === 0) paths.push("public/lessons/issue-repro/recording-1783046610421.ne");
+  if (paths.length === 0) paths.push("public/lessons/introduction/introduction.ne");
 
   for (const path of paths) {
     const buffer = await readFile(path);
@@ -118,7 +128,6 @@ async function main() {
     }
 
     const { total, headerBytes, footerBytes, perKind } = measure(bytes);
-    const audio = perKind.find((k) => k.name === "audioChunk")?.payload ?? 0;
     const segmentTotal = perKind.reduce((sum, k) => sum + k.payload, 0);
     const segmentHeaderOverhead =
       perKind.reduce((sum, k) => sum + k.count, 0) * SEGMENT_HEADER_SIZE;
@@ -129,13 +138,12 @@ async function main() {
     console.log(`  header:             ${formatBytes(headerBytes)}`);
     console.log(`  footer index:       ${formatBytes(footerBytes)}`);
     console.log(`  segment headers:    ${formatBytes(segmentHeaderOverhead)}`);
-    console.log(`  audio payload:      ${formatBytes(audio)}`);
-    console.log(`  non-audio payload:  ${formatBytes(segmentTotal - audio)}`);
+    console.log(`  segment payload:    ${formatBytes(segmentTotal)}`);
     console.log("  segments by kind:");
     for (const kind of perKind) {
       if (kind.count === 0) continue;
       console.log(
-        `    ${kind.name.padEnd(13)} ${String(kind.count).padStart(5)} seg  ${formatBytes(kind.payload)}`,
+        `    ${kind.name.padEnd(15)} ${String(kind.count).padStart(5)} seg  ${formatBytes(kind.payload)}`,
       );
     }
   }

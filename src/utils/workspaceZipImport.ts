@@ -293,6 +293,20 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
     let entryCount = 0;
     archive = unzipSync(new Uint8Array(await file.arrayBuffer()), {
       filter: (entry) => {
+        // Skip the artifacts the import throws away anyway BEFORE they are counted
+        // or inflated. Counting them first spent the whole 50 MB budget on a
+        // Finder-compressed project's node_modules and rejected an archive whose
+        // actual source tree is a few hundred KB. `originalSize` is the declared
+        // uncompressed size, so this also keeps the zip-bomb guard intact for the
+        // entries that really are imported.
+        //
+        // `shouldIgnoreImportPath` is purely segment-based, so the raw zip name is
+        // safe here; `parseWorkspacePath` is not — it throws on traversal entries,
+        // and the catch below would turn that into "not a valid zip" instead of the
+        // deliberate unsafe-path message. Traversal stays checked in the loop below.
+        if (entry.name.endsWith("/") || shouldIgnoreImportPath(entry.name)) {
+          return false;
+        }
         entryCount += 1;
         declaredBytes += entry.originalSize;
         if (

@@ -63,43 +63,63 @@ function buildIntroduction(): string {
 }
 
 function buildSupportedStack(project: WorkspaceProject): string {
-  if (executionKindForLessonType(project.lessonType) === "kotlin-playground") {
-    return (
-      "Supported stack: Kotlin only. This lesson's Kotlin files compile and run remotely " +
-      "on the Kotlin Playground (JVM target) when the user presses Run in the Kotlin " +
-      "Runner panel — you cannot execute code yourself. There is no shell, terminal, dev " +
-      "server, or preview in this workspace: work purely through the file tools and " +
-      "reason about program behavior from the source. Keep solutions within Kotlin " +
-      "Playground constraints (sandboxed execution, no network access, no stdin, only the " +
-      "Kotlin/Java standard library, limited compute time), and do not introduce other " +
-      "languages, toolchains, or runtimes."
-    );
-  }
+  // Switched on the execution kind rather than chained ifs so adding a
+  // playground language is a compile error here instead of a lesson that
+  // silently inherits the WebContainer stack and gets told its own language is
+  // off-limits.
+  switch (executionKindForLessonType(project.lessonType)) {
+    case "kotlin-playground":
+      return (
+        "Supported stack: Kotlin only. This lesson's Kotlin files compile and run remotely " +
+        "on the Kotlin Playground (JVM target) when the user presses Run in the Kotlin " +
+        "Runner panel — you cannot execute code yourself. There is no shell, terminal, dev " +
+        "server, or preview in this workspace: work purely through the file tools and " +
+        "reason about program behavior from the source. Keep solutions within Kotlin " +
+        "Playground constraints (sandboxed execution, no network access, no stdin, only the " +
+        "Kotlin/Java standard library, limited compute time), and do not introduce other " +
+        "languages, toolchains, or runtimes."
+      );
 
-  if (executionKindForLessonType(project.lessonType) === "rust-playground") {
-    return (
-      "Supported stack: Rust only. This lesson's single main.rs compiles and runs remotely " +
-      "on the Rust Playground (stable channel, 2024 edition, debug profile) when the user " +
-      "presses Run or Format in the Rust Runner panel — you cannot execute code yourself. " +
-      "There is no shell, terminal, dev server, or preview in this workspace: work purely " +
-      "through the file tools and reason about program behavior from the source. The " +
-      "whole program lives in main.rs (use inline `mod` blocks for structure), and " +
-      "solutions must stay within Rust Playground constraints (sandboxed execution, no " +
-      "network access, no stdin, standard library plus the playground's built-in crates, " +
-      "limited compute time). Do not introduce other languages, toolchains, or runtimes."
-    );
-  }
+    case "rust-playground":
+      return (
+        "Supported stack: Rust only. This lesson's single main.rs compiles and runs remotely " +
+        "on the Rust Playground (stable channel, 2024 edition, debug profile) when the user " +
+        "presses Run or Format in the Rust Runner panel — you cannot execute code yourself. " +
+        "There is no shell, terminal, dev server, or preview in this workspace: work purely " +
+        "through the file tools and reason about program behavior from the source. The " +
+        "whole program lives in main.rs (use inline `mod` blocks for structure), and " +
+        "solutions must stay within Rust Playground constraints (sandboxed execution, no " +
+        "network access, no stdin, standard library plus the playground's built-in crates, " +
+        "limited compute time). Do not introduce other languages, toolchains, or runtimes."
+      );
 
-  if (executionKindForLessonType(project.lessonType) === "go-playground") {
-    return (
-      "Supported stack: Go only. This lesson's Go files compile and run remotely on the " +
-      "Go Playground when the user presses Run or Format in the Go Runner panel — you " +
-      "cannot execute code yourself. There is no shell, terminal, dev server, or preview " +
-      "in this workspace: work purely through the file tools and reason about program " +
-      "behavior from the source. Keep solutions within Go Playground constraints " +
-      "(sandboxed execution, no network access, limited compute time), and do not " +
-      "introduce other languages, toolchains, or runtimes."
-    );
+    case "go-playground":
+      return (
+        "Supported stack: Go only. This lesson's Go files compile and run remotely on the " +
+        "Go Playground when the user presses Run or Format in the Go Runner panel — you " +
+        "cannot execute code yourself. There is no shell, terminal, dev server, or preview " +
+        "in this workspace: work purely through the file tools and reason about program " +
+        "behavior from the source. Keep solutions within Go Playground constraints " +
+        "(sandboxed execution, no network access, limited compute time), and do not " +
+        "introduce other languages, toolchains, or runtimes."
+      );
+
+    case "kite-playground":
+      return (
+        "Supported stack: Kite only. This lesson's .kite files compile and run entirely in " +
+        "this page — the Kite compiler itself is built to WebAssembly, so there is no " +
+        "service, no sign-in, and no network round trip — when the user presses Run or " +
+        "Format in the Kite Runner panel; you cannot execute code yourself. There is no " +
+        "shell, terminal, dev server, or preview in this workspace: work purely through the " +
+        "file tools and reason about program behavior from the source. A Kite module is a " +
+        "directory, so every .kite file beside the entry belongs to the same program and a " +
+        "run compiles main.kite. Kite targets WasmGC and has no package ecosystem here: " +
+        "keep solutions to the language and its std/ modules, and do not introduce other " +
+        "languages, toolchains, or runtimes."
+      );
+
+    case "webcontainer":
+      break;
   }
 
   if (project.lessonType === "python") {

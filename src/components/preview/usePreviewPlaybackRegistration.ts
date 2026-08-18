@@ -113,6 +113,13 @@ export function usePreviewPlaybackRegistration({
   // the replay container), the old Replayer's iframe is orphaned and we must rebuild
   // into the new element.
   const rrwebReplayContainerElRef = useRef<HTMLElement | null>(null);
+  // How much of the stream the current Replayer was built from. Recordings load
+  // as a streaming prefix — `appendRecordingDelta` pushes new batches onto the
+  // same array under the same recording id — so without these the Replayer built
+  // from the first playable prefix was never rebuilt, and every batch decoded
+  // afterwards was silently dropped while the cursor kept advancing.
+  const rrwebReplayBuiltInitialDocCountRef = useRef(0);
+  const rrwebReplayBuiltPatchBatchCountRef = useRef(0);
 
   useEffect(() => {
     if (hasPreviewPatchReplay && !isLiveRuntimePreviewActive) {
@@ -136,6 +143,8 @@ export function usePreviewPlaybackRegistration({
       rrwebReplayerRef.current = null;
       rrwebReplayRecordingIdRef.current = null;
       rrwebReplayContainerElRef.current = null;
+      rrwebReplayBuiltInitialDocCountRef.current = 0;
+      rrwebReplayBuiltPatchBatchCountRef.current = 0;
     },
     [],
   );
@@ -148,9 +157,18 @@ export function usePreviewPlaybackRegistration({
         return -1;
       }
 
+      // Only rebuild for growth once the current Replayer is actually ready:
+      // mid-load, the in-flight build is already picking up a longer prefix, and
+      // restarting it on every delta would never finish.
+      const streamGrew =
+        rrwebReplayLoadStateRef.current === "ready" &&
+        (input.initialDocuments.length > rrwebReplayBuiltInitialDocCountRef.current ||
+          input.patchBatches.length > rrwebReplayBuiltPatchBatchCountRef.current);
+
       const needsRebuild =
         rrwebReplayRecordingIdRef.current !== input.recordingId ||
-        rrwebReplayContainerElRef.current !== container;
+        rrwebReplayContainerElRef.current !== container ||
+        streamGrew;
 
       if (needsRebuild) {
         rrwebReplayLoadGenerationRef.current += 1;
@@ -169,6 +187,8 @@ export function usePreviewPlaybackRegistration({
       if (!rrwebReplayerRef.current && rrwebReplayLoadStateRef.current === "idle") {
         const events = buildRrwebReplayEvents(input.initialDocuments, input.patchBatches);
         const baseTime = input.initialDocuments[0]?.time ?? 0;
+        rrwebReplayBuiltInitialDocCountRef.current = input.initialDocuments.length;
+        rrwebReplayBuiltPatchBatchCountRef.current = input.patchBatches.length;
 
         // rrweb needs at least a Meta + FullSnapshot to build the document.
         if (events.length >= 2) {

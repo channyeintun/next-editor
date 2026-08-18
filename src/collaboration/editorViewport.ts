@@ -6,6 +6,7 @@ import {
   type CollaborationEditorViewport,
 } from "./protocol";
 import { getCollaborationTexts } from "./projectDocument";
+import { decodeForeignRelativePosition } from "./relativePosition";
 
 const BINARY_CHUNK_SIZE = 0x8000;
 
@@ -15,13 +16,6 @@ function encodeBinary(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + BINARY_CHUNK_SIZE));
   }
   return btoa(binary);
-}
-
-function decodeBinary(value: string): Uint8Array {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
 }
 
 function clampFinite(value: number, minimum: number, maximum: number): number {
@@ -60,10 +54,9 @@ export function resolveCollaborationEditorViewport(
   try {
     const text = getCollaborationTexts(doc).get(fileNodeId);
     if (!(text instanceof Y.Text)) return null;
-    const absolute = Y.createAbsolutePositionFromRelativePosition(
-      Y.decodeRelativePosition(decodeBinary(parsed.data.topAnchor)),
-      doc,
-    );
+    const topPosition = decodeForeignRelativePosition(parsed.data.topAnchor);
+    if (!topPosition) return null;
+    const absolute = Y.createAbsolutePositionFromRelativePosition(topPosition, doc);
     if (!absolute || absolute.type !== text) return null;
     return {
       topOffset: Math.max(0, Math.min(text.length, absolute.index)),

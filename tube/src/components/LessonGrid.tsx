@@ -105,7 +105,14 @@ export default function LessonGrid() {
     return () => io.disconnect();
   }, [canPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
 
-  if (isError) {
+  // `useInfiniteQuery` flips `status` to "error" for ANY failed fetch, including a
+  // `fetchNextPage()` that fails with earlier pages already rendered. Gating the
+  // whole component on bare `isError` therefore threw away every loaded card, the
+  // scroll position and the search bar over one paging blip — and since page 0 is
+  // served from the bundled seed and cannot reject, that was the *only* way this
+  // branch was ever reached. Full-page error is for "we have nothing to show"; a
+  // paging failure gets the inline retry row below the grid instead.
+  if (isError && lessons.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-center">
         <p className="text-red-400">
@@ -175,7 +182,22 @@ export default function LessonGrid() {
             </div>
           </div>
 
-          {canPage && <div ref={sentinelRef} className="pb-10 pt-5" />}
+          {isFetchNextPageError ? (
+            <div className="flex flex-col items-center gap-3 pb-10 pt-5 text-center">
+              <p className="text-sm text-red-400">
+                {error instanceof Error ? error.message : "Failed to load more lessons"}
+              </p>
+              <button
+                type="button"
+                onClick={() => fetchNextPage()}
+                className="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-white hover:text-slate-950"
+              >
+                Load more
+              </button>
+            </div>
+          ) : (
+            canPage && <div ref={sentinelRef} className="pb-10 pt-5" />
+          )}
         </>
       )}
     </div>

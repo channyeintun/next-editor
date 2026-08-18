@@ -152,6 +152,8 @@ export class CollaborationRoomProvider {
   private isSynchronizing = false;
   private isStarted = false;
   private isStopped = false;
+  /** Set by `fatal()`, cleared only by an explicit `retryNow()`. */
+  private isFatal = false;
   private isPublishing = false;
   private flushPromise: Promise<void> | null = null;
   private bufferedBinaryUpdates: Array<
@@ -267,6 +269,8 @@ export class CollaborationRoomProvider {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.reconnectAttempt = 0;
+    // An explicit user retry is the only way out of a fatal.
+    this.isFatal = false;
     await this.beginRetry();
   }
 
@@ -438,6 +442,15 @@ export class CollaborationRoomProvider {
     for (const pending of updates) {
       const { update } = pending;
       if (update.byteLength > MAX_YJS_UPDATE_BYTES) {
+        // `pendingUpdates` was already drained into `updates`, so returning here
+        // dropped the valid, under-limit updates batched before this one *and*
+        // everything after it — never enqueued, never re-queued, and unreachable
+        // by a later reconnect (sync only pushes our state vector; unsent local
+        // updates travel exclusively through the outbox). Flush what is already
+        // batched before failing. The oversize update itself is unsendable under
+        // any fix, so this salvages its neighbours rather than restoring
+        // convergence.
+        enqueueBatch();
         this.fatal(
           `A local collaboration change exceeded the ${MAX_YJS_UPDATE_BYTES}-byte update limit`,
         );
@@ -925,7 +938,7 @@ export class CollaborationRoomProvider {
   }
 
   private handleTransportFailure(message: string, attemptId: string): void {
-    if (this.isStopped || attemptId !== this.attemptId) return;
+    if (this.isStopped || this.isFatal || attemptId !== this.attemptId) return;
     if (this.reconnectTimer) return;
     this.closeTransport();
     this.actor.send({
@@ -961,6 +974,14 @@ export class CollaborationRoomProvider {
 
   private fatal(message: string, attemptId = this.attemptId): void {
     if (this.isStopped || attemptId !== this.attemptId) return;
+    // Closing the transport rejects every pending ack with a 503, which lands in
+    // drainOutbox's catch and calls handleTransportFailure — which used to
+    // schedule an automatic reconnect out of the failed state and null the error
+    // on the way through. For fatals with no localError counterpart (the
+    // oversize-update limit, a 4001 host-ended close, exhausted reconnects) the
+    // machine's context is the only carrier of that message, so the user was
+    // returned to an apparently healthy room with no explanation.
+    this.isFatal = true;
     this.closeTransport();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;

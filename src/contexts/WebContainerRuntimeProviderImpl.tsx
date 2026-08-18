@@ -51,6 +51,17 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const projectName = useWorkspaceProjectName();
   const fileCount = useWorkspaceFileCount();
   const hasRunInitCommandRef = useRef(false);
+  // `hasRunInitCommandRef` only flips AFTER the init command finishes, so it
+  // cannot deduplicate callers that arrive *during* it. Five entry points call
+  // prepareRuntime and only startRuntime checks the busy status — one of them,
+  // sendTerminalInput, fires per keystroke — so a Terminal click (or typing)
+  // during `pnpm install` used to spawn a second install against the same
+  // node_modules. Sharing the in-flight promise is what that flag was reaching
+  // for; it makes every entry point join the one boot/mount/install.
+  const prepareRuntimePromiseRef = useRef<{
+    generation: number;
+    promise: Promise<WebContainer | null>;
+  } | null>(null);
   const hasAutoStartedRef = useRef(false);
   const loadedProjectIdRef = useRef<string | null>(null);
   const reverseSyncTimeoutRef = useRef<number | null>(null);
@@ -220,6 +231,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   const resetRuntime = () => {
     hasRunInitCommandRef.current = false;
+    prepareRuntimePromiseRef.current = null;
     reverseSyncRequestRef.current += 1;
     if (typeof window !== "undefined" && reverseSyncTimeoutRef.current !== null) {
       window.clearTimeout(reverseSyncTimeoutRef.current);
@@ -229,9 +241,23 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     resetRuntimeSession();
   };
 
-  const prepareRuntime = async () => {
+  const prepareRuntime = (): Promise<WebContainer | null> => {
     const generation = getRuntimeGeneration();
+    const inFlight = prepareRuntimePromiseRef.current;
+    if (inFlight && inFlight.generation === generation) {
+      return inFlight.promise;
+    }
 
+    const promise = runPrepareRuntime(generation).finally(() => {
+      if (prepareRuntimePromiseRef.current?.promise === promise) {
+        prepareRuntimePromiseRef.current = null;
+      }
+    });
+    prepareRuntimePromiseRef.current = { generation, promise };
+    return promise;
+  };
+
+  const runPrepareRuntime = async (generation: number) => {
     if (!isSupported) {
       setStatus("error");
       setErrorMessage(

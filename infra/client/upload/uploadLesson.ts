@@ -63,6 +63,7 @@ async function uploadFile(
   lessonId: string,
   target: UploadTarget,
   onLoaded: (loaded: number) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   const res = await apiClient.put<{ path: string }>(
     `/uploads/${lessonId}/media/${target.filename}`,
@@ -72,6 +73,7 @@ async function uploadFile(
         "Content-Type": target.blob.type || "application/octet-stream",
       },
       onUploadProgress: (event) => onLoaded(event.loaded),
+      signal,
     },
   );
   return res.data.path;
@@ -87,6 +89,7 @@ export async function uploadLesson(
   lessonId: string,
   input: UploadLessonInput,
   onProgress: (progress: number) => void,
+  signal?: AbortSignal,
 ): Promise<UploadedLesson> {
   onProgress(0);
 
@@ -140,11 +143,16 @@ export async function uploadLesson(
 
   const pathsByFilename: Record<string, string> = {};
   for (const [index, target] of targets.entries()) {
-    pathsByFilename[target.filename] = await uploadFile(lessonId, target, (loaded) => {
-      loadedByIndex[index] = loaded;
-      const totalLoaded = loadedByIndex.reduce((sum, value) => sum + value, 0);
-      onProgress(Math.min(1, totalLoaded / totalBytes));
-    });
+    pathsByFilename[target.filename] = await uploadFile(
+      lessonId,
+      target,
+      (loaded) => {
+        loadedByIndex[index] = loaded;
+        const totalLoaded = loadedByIndex.reduce((sum, value) => sum + value, 0);
+        onProgress(Math.min(1, totalLoaded / totalBytes));
+      },
+      signal,
+    );
   }
 
   const thumbnail = thumbnailFilename
@@ -153,15 +161,22 @@ export async function uploadLesson(
       ? DEFAULT_THUMBNAIL_PATH
       : undefined;
 
-  const res = await apiClient.post<{ id: string; slug: string }>("/lessons", {
-    id: lessonId,
-    title: input.title,
-    description: input.description || undefined,
-    tags: input.tags.length > 0 ? input.tags : undefined,
-    duration: formatDuration(input.recording.duration),
-    ne: pathsByFilename[`${lessonId}.ne`],
-    thumbnail,
-  });
+  // The row is what makes an abandoned upload visible in My Library, so this is
+  // the call that most needs the signal: without it a cancelled upload still
+  // created the draft lesson the user just declined.
+  const res = await apiClient.post<{ id: string; slug: string }>(
+    "/lessons",
+    {
+      id: lessonId,
+      title: input.title,
+      description: input.description || undefined,
+      tags: input.tags.length > 0 ? input.tags : undefined,
+      duration: formatDuration(input.recording.duration),
+      ne: pathsByFilename[`${lessonId}.ne`],
+      thumbnail,
+    },
+    { signal },
+  );
 
   return { id: res.data.id, slug: res.data.slug };
 }

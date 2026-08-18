@@ -61,6 +61,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
     "@cloudflare/workers-types": "^5.20260808.1",
     "@posthog/rollup-plugin": "^1.4.7",
     "@rolldown/plugin-babel": "^0.2.3",

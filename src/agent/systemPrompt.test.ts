@@ -68,6 +68,44 @@ describe("buildSystemPrompt", () => {
     expect(prompt).not.toContain("Node.js ecosystem");
   });
 
+  // Every Playground language needs its own branch: without one the lesson
+  // falls through to the WebContainer stack and the agent is told the lesson's
+  // own language is an off-limits runtime.
+  it.each([
+    ["go", "main.go", "Supported stack: Go only"],
+    ["kotlin", "Main.kt", "Supported stack: Kotlin only"],
+    ["rust", "main.rs", "Supported stack: Rust only"],
+    ["kite", "main.kite", "Supported stack: Kite only"],
+  ] as const)(
+    "describes the %s Playground stack, never the WebContainer one",
+    (lessonType, entryFilePath, expectedStack) => {
+      const prompt = buildSystemPrompt(
+        {
+          id: `test-${lessonType}`,
+          name: `Test ${lessonType}`,
+          lessonType,
+          entryFilePath,
+          folders: [],
+          files: {
+            [entryFilePath]: {
+              path: entryFilePath,
+              name: entryFilePath,
+              language: lessonType,
+              content: "",
+            },
+          },
+        },
+        { toolNames: ["read", "edit"], hasBash: false },
+      );
+
+      expect(prompt).toContain(expectedStack);
+      expect(prompt).toContain("you cannot execute code yourself");
+      expect(prompt).toContain(`Lesson type: ${lessonType}`);
+      expect(prompt).not.toContain("WebContainer");
+      expect(prompt).not.toContain("Node.js ecosystem");
+    },
+  );
+
   it("lists the enabled tools and workspace context", () => {
     const prompt = buildSystemPrompt(makeProject(), {
       toolNames: ["read", "edit"],

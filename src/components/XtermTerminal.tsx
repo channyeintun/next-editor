@@ -185,21 +185,28 @@ function XtermTerminal({
       return;
     }
 
-    if (output.startsWith(lastOutputRef.current)) {
-      terminal.write(output.slice(lastOutputRef.current.length));
-      lastOutputRef.current = output;
-      if (scrollLine !== undefined) {
-        terminal.scrollToLine(scrollLine);
+    // `write` parses asynchronously, so scrolling on the next statement runs
+    // against the pre-write buffer: `scrollToLine` clamps to a much smaller
+    // `ybase` (often 0), which leaves the viewport "following" and pins it to the
+    // bottom once the parse flushes. `scrollLine` is only ever supplied during
+    // playback, so this silently defeated the replay fidelity it exists for.
+    // The write callback runs after the parser has updated the buffer.
+    const scrollAfterWrite = () => {
+      if (scrollLine === undefined || terminalRef.current !== terminal) {
+        return;
       }
+      terminal.scrollToLine(scrollLine);
+    };
+
+    if (output.startsWith(lastOutputRef.current)) {
+      terminal.write(output.slice(lastOutputRef.current.length), scrollAfterWrite);
+      lastOutputRef.current = output;
       return;
     }
 
     terminal.reset();
-    terminal.write(output);
+    terminal.write(output, scrollAfterWrite);
     lastOutputRef.current = output;
-    if (scrollLine !== undefined) {
-      terminal.scrollToLine(scrollLine);
-    }
   }, [output, scrollLine, sessionId]);
 
   useEffect(() => {
@@ -209,7 +216,15 @@ function XtermTerminal({
       return;
     }
 
-    terminal.scrollToLine(scrollLine);
+    // Same ordering hazard: this fires in the same commit as the output effect,
+    // i.e. still before that write has flushed. An empty write schedules the
+    // scroll behind whatever is already queued in the parser.
+    terminal.write("", () => {
+      if (terminalRef.current !== terminal) {
+        return;
+      }
+      terminal.scrollToLine(scrollLine);
+    });
   }, [scrollLine]);
 
   const terminalStyle: TerminalStyle = {

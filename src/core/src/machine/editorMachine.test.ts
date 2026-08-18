@@ -340,6 +340,33 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  // Building a content delta calls getDmpCodec(), which throws when the WASM has
+  // not loaded — inside an xstate `assign` on the capture hot path. xstate treats
+  // that as fatal: the actor stops mid-recording, later sends are no-ops, and the
+  // whole session is lost with only a console message. Refusing to start is the
+  // honest outcome, since the take would not be encodable at save time either.
+  it("refuses to start recording when the dmp codec is unavailable", async () => {
+    const dmpCodec = await import("../../../storage/dmpCodec/dmpCodec");
+    const loadedSpy = vi.spyOn(dmpCodec, "isDmpCodecLoaded").mockReturnValue(false);
+    const errors: Error[] = [];
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        onError: (error: Error) => errors.push(error),
+      },
+    }).start();
+
+    actor.send({ type: "START_RECORDING" });
+
+    expect(actor.getSnapshot().value).toBe("idle");
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toMatch(/recording codec could not be loaded/i);
+
+    loadedSpy.mockRestore();
+    actor.stop();
+  });
+
   it("stops mouse tracking on the no-audio recording path and emits callbacks", async () => {
     const events: string[] = [];
     // Held in an object so the assignment inside the callback doesn't make
@@ -738,6 +765,59 @@ describe("editorMachine actor lifecycle", () => {
     // ...and seeking forward again lands on the same absolute width, not a drift.
     actor.send({ type: "SEEK", time: 200 });
     expect(liveWidth).toBe(270);
+
+    actor.stop();
+  });
+
+  // Same invariant as the seek test above, on the pause/resume path.
+  // `detachPlaybackWorkspace` runs on every entry into `playback.paused` and used
+  // to reset `lastAppliedWorkspaceEventIndex` to -1, so the next PLAY re-summed
+  // every width delta from the start on top of the width already applied.
+  it("does not accumulate panel width deltas across pause and resume", async () => {
+    let liveWidth = 200;
+    let currentWorkspace: WorkspaceRecordingSnapshot = createWorkspaceSnapshot("outside");
+
+    const recording: Recording = {
+      ...createRecording(),
+      workspaceEvents: [
+        { timestamp: 0, snapshot: { ...createWorkspaceSnapshot("w0"), sidebarWidthDelta: 0 } },
+        { timestamp: 100, snapshot: { ...createWorkspaceSnapshot("w1"), sidebarWidthDelta: 80 } },
+      ],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        getWorkspaceSnapshot: () => currentWorkspace,
+        applyWorkspaceSnapshot: (snapshot) => {
+          if (typeof snapshot.sidebarWidthDelta === "number") {
+            liveWidth += snapshot.sidebarWidthDelta;
+          }
+          currentWorkspace = {
+            activeFilePath: snapshot.activeFilePath,
+            collapsedFolders: snapshot.collapsedFolders,
+            sidebarScrollTop: snapshot.sidebarScrollTop,
+            project: snapshot.project,
+          };
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    expect(liveWidth).toBe(200);
+
+    actor.send({ type: "SEEK", time: 150 });
+    expect(liveWidth).toBe(280); // 200 + 80
+
+    // Pause and resume repeatedly: the drag must not be re-applied each time.
+    for (let i = 0; i < 3; i += 1) {
+      actor.send({ type: "PLAY" });
+      actor.send({ type: "PAUSE" });
+      actor.send({ type: "SEEK", time: 150 });
+    }
+
+    expect(liveWidth).toBe(280);
 
     actor.stop();
   });

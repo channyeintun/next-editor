@@ -125,13 +125,25 @@ export async function createProvisioningCollaborationRoom(
     purged_at: null,
   };
 
-  await db.batch([
+  // The COUNT above is only a fast path: it and the INSERT are separate D1
+  // round-trips, so concurrent creates all read the same pre-insert count and all
+  // committed, and every room past the cap is a Durable Object with its own
+  // SQLite log. The cap therefore has to live inside the INSERT, the way
+  // registerCollaborationAsset and claimCollaborationInvitation already do it.
+  // The member row is SELECTed from the room it belongs to rather than bound
+  // directly: collaboration_members.room_id is `REFERENCES collaboration_rooms(id)`,
+  // so a plain VALUES insert would trip the foreign key and roll the batch back
+  // with an opaque D1 error (a 500) instead of the intended quota rejection.
+  const [roomInsert] = await db.batch([
     db
       .prepare(
         `INSERT INTO collaboration_rooms
            (id, owner_id, host_user_id, status, transport, persistence_version, protocol_version,
             document_schema_version, created_at, updated_at, closed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
+         WHERE
+           (SELECT COUNT(*) FROM collaboration_rooms
+            WHERE owner_id = ? AND status IN ('provisioning', 'active')) < ?`,
       )
       .bind(
         room.id,
@@ -144,15 +156,24 @@ export async function createProvisioningCollaborationRoom(
         room.document_schema_version,
         room.created_at,
         room.updated_at,
+        params.ownerId,
+        MAX_ACTIVE_ROOMS_PER_OWNER,
       ),
     db
       .prepare(
         `INSERT INTO collaboration_members
            (room_id, user_id, role, joined_at, updated_at)
-         VALUES (?, ?, 'owner', ?, ?)`,
+         SELECT id, ?, 'owner', ?, ?
+         FROM collaboration_rooms WHERE id = ?`,
       )
-      .bind(room.id, room.owner_id, now, now),
+      .bind(room.owner_id, now, now, room.id),
   ]);
+
+  // Zero rows means the guard in the INSERT rejected it — the same 409 the
+  // pre-read produces, now also correct under concurrency.
+  if ((roomInsert?.meta?.changes ?? 0) === 0) {
+    throw new CollaborationRoomQuotaError();
+  }
 
   return room;
 }

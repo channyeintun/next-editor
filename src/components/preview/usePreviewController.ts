@@ -333,21 +333,23 @@ export function usePreviewController(): PreviewController {
     isRecording,
     usesPlaybackModel,
   });
-  const hasPreviewPatchReplay = Boolean(
-    currentRecording?.previewInitialDocuments?.length &&
-    currentRecording.previewPatchBatches?.length,
+  // One predicate for both "render the replay surface" and "build a Replayer".
+  // These were an AND and an OR respectively, so a recording carrying an initial
+  // document but no patch batches — a preview that was opened and never mutated —
+  // unmounted the live iframe for a replay container that no Replayer was ever
+  // built into, and the snapshot-HTML fallback could not run either because the
+  // iframe was gone. A Meta+FullSnapshot on its own is a complete, replayable
+  // stream, so the OR is the correct semantics for both.
+  const hasPreviewPatchReplay = hasRrwebPreviewEvents(
+    currentRecording?.previewInitialDocuments,
+    currentRecording?.previewPatchBatches,
   );
   const isRuntimePlaybackPreviewActive =
     lessonRunsInWebContainer(lessonType) && isPlaybackPreviewActive;
   // The rrweb replay preview is shown ONLY while the recording is actively playing.
   // When paused/ended (or never started) — even with a recording loaded — the live
   // runtime preview is shown instead (see `isLiveRuntimePreviewActive`).
-  const isRrwebReplayActive =
-    isRuntimePlaybackPreviewActive &&
-    hasRrwebPreviewEvents(
-      currentRecording?.previewInitialDocuments,
-      currentRecording?.previewPatchBatches,
-    );
+  const isRrwebReplayActive = isRuntimePlaybackPreviewActive && hasPreviewPatchReplay;
   const recordedRuntimeSnapshot = isRuntimePlaybackPreviewActive
     ? (currentRecording?.runtimeSnapshot ?? null)
     : null;

@@ -76,7 +76,18 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
     }
 
     setThumbnailError(null);
-    const optimized = await resizeThumbnail(file);
+    // The guards above only read `type` and `size`, so a corrupt or renamed
+    // non-image still gets here and `createImageBitmap` rejects. That happens
+    // before `mutate`, so `updateThumbnail.isError` — the component's only error
+    // surface — never lights up: without this catch the pick silently does
+    // nothing and the user re-picks the same file forever.
+    let optimized: File;
+    try {
+      optimized = await resizeThumbnail(file);
+    } catch {
+      setThumbnailError("Couldn't read that image — try a different file.");
+      return;
+    }
     updateThumbnail.mutate({ lessonId: lesson.id, thumbnail: optimized });
   };
 

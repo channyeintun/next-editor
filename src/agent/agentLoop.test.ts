@@ -373,4 +373,116 @@ describe("runAgentLoop", () => {
     expect(deltas.filter((d) => d.k === "status").at(-1)).toEqual({ k: "status", status: "done" });
     expect(deltas.some((d) => d.k === "status" && d.status === "error")).toBe(false);
   });
+
+  // The SDK overwrites `finalResponse` every turn and never accumulates, so
+  // reading it once after the run reported only the last turn — the single
+  // largest summand, since the transcript grows monotonically. A tool-heavy run
+  // understated real spend by a multiple.
+  it("sums token usage across every turn of a multi-step run", async () => {
+    const { deltas, ...options } = baseOptions();
+    const usages: { inputTokens: number; outputTokens: number }[] = [];
+
+    const callModel = (() => ({
+      getFullResponsesStream: async function* () {
+        yield {
+          type: "response.completed",
+          response: { usage: { inputTokens: 100, outputTokens: 10 } },
+        };
+        yield {
+          type: "response.completed",
+          response: { usage: { inputTokens: 250, outputTokens: 20 } },
+        };
+        yield {
+          type: "response.completed",
+          response: { usage: { inputTokens: 400, outputTokens: 30 } },
+        };
+      },
+      getItemsStream: async function* () {
+        yield messageItem("m1", "done");
+      },
+      // The last turn alone, which is what the old code reported.
+      getResponse: async () => ({ usage: { inputTokens: 400, outputTokens: 30 } }),
+      cancel: async () => {},
+    })) as unknown as NonNullable<RunAgentLoopOptions["callModel"]>;
+
+    await runAgentLoop({
+      ...options,
+      prompt: "refactor",
+      callModel,
+      onDelta: (d) => deltas.push(d),
+      onUsage: (usage) => usages.push(usage),
+    });
+
+    expect(usages).toEqual([{ inputTokens: 750, outputTokens: 60 }]);
+  });
+
+  // The SDK's full-response stream is fed by the same broadcaster its tool loop
+  // completes, so awaiting it on the abort path would block until the abandoned
+  // run exhausts `stopWhen` — leaving `isRunning` true and the panel wedged.
+  it("settles immediately on abort instead of awaiting the provider-error observer", async () => {
+    const controller = new AbortController();
+    const { deltas, ...options } = baseOptions();
+    let observerReleased = false;
+
+    const callModel = (() => ({
+      // Never ends on its own — stands in for a broadcaster still feeding an
+      // abandoned tool loop.
+      getFullResponsesStream: () => ({
+        [Symbol.asyncIterator]: () => ({
+          next: () =>
+            new Promise<IteratorResult<unknown>>(() => {}).finally(() => {
+              observerReleased = true;
+            }),
+        }),
+      }),
+      getItemsStream: async function* () {
+        yield messageItem("m1", "partial");
+        controller.abort();
+        yield messageItem("m1", "partial and then some");
+      },
+      getResponse: async () => ({ usage: undefined }),
+      cancel: async () => {},
+    })) as unknown as NonNullable<RunAgentLoopOptions["callModel"]>;
+
+    await runAgentLoop({
+      ...options,
+      signal: controller.signal,
+      prompt: "stop me",
+      callModel,
+      onDelta: (d) => deltas.push(d),
+    });
+
+    expect(observerReleased).toBe(false);
+    expect(deltas.filter((d) => d.k === "status").at(-1)).toEqual({ k: "status", status: "done" });
+  });
+
+  // `cancel()` reaches only the first turn's stream; on a later turn it rejects
+  // against an already-released reader, and an unhandled rejection would surface
+  // as a spurious error long after Stop.
+  it("swallows a rejecting cancel() so abort produces no unhandled rejection", async () => {
+    const controller = new AbortController();
+    const { deltas, ...options } = baseOptions();
+
+    const callModel = (() => ({
+      getItemsStream: async function* () {
+        yield messageItem("m1", "working");
+        controller.abort();
+        yield messageItem("m1", "working still");
+      },
+      getResponse: async () => ({ usage: undefined }),
+      cancel: async () => {
+        throw new Error("Reader has been released");
+      },
+    })) as unknown as NonNullable<RunAgentLoopOptions["callModel"]>;
+
+    await expect(
+      runAgentLoop({
+        ...options,
+        signal: controller.signal,
+        prompt: "stop me",
+        callModel,
+        onDelta: (d) => deltas.push(d),
+      }),
+    ).resolves.toBeUndefined();
+  });
 });

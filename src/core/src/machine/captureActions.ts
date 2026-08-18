@@ -404,7 +404,7 @@ export const captureFrame = ({
   // SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
   // rehydration) cannot silently disable frame/cursor capture.
   const editor = context.editorRefs.editor ?? context.getEditorInstance();
-  if (!editor || !context.session) return {};
+  if (!context.session) return {};
 
   const timestamp = performance.now() - context.session.startedAtPerf;
 
@@ -416,6 +416,20 @@ export const captureFrame = ({
     event.type === "CAPTURE_FRAME" && event.isMouseMovement
       ? appendCursorEvent(context.session.cursorEvents, timestamp, mousePosition)
       : false;
+
+  // The cursor track has no dependency on Monaco — `mousePosition` arrives from
+  // mouseTrackingActor fully resolved and lives in its own track. Bailing on a
+  // null editor before this point dropped every cursor sample for as long as the
+  // active file was a binary asset (CodeEditor nulls both refs then), so the
+  // replayed pointer froze while the presenter talked over an image and then
+  // teleported when a code file reopened.
+  if (!editor) {
+    context.session.lastMousePosition = mousePosition;
+    return {
+      session: context.session,
+      sessionRevision: cursorAppended ? context.sessionRevision + 1 : context.sessionRevision,
+    };
+  }
 
   if (event.type === "CAPTURE_FRAME" && event.isMouseMovement) {
     const lastFrame = context.session.encoder.lastFullFrame;

@@ -209,6 +209,12 @@ export class IndexedDBRecordingStore {
       };
 
       request.onblocked = () => {
+        // Clear the cache before rejecting, exactly as `onerror` above and
+        // workspaceAssetStore's own openDatabase do. Without this, `getDatabase`
+        // keeps handing out this one rejected promise for the rest of the
+        // session — so every later save/load fails long after the blocking
+        // connection has gone, and only a reload recovers.
+        this.databasePromise = null;
         reject(new Error("Recording database upgrade is blocked"));
       };
     });

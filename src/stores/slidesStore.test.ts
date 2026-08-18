@@ -5,7 +5,7 @@ import {
   loadSlidesFromStorage,
   restoreSlidesStore,
   saveSlidesToStorage,
-  setSlidesStoreRoomScoped,
+  setSlidesStoreDeckBorrowed,
   snapshotSlidesStore,
   subscribeSlidesPersistence,
 } from "./slidesStore";
@@ -61,14 +61,32 @@ describe("slides storage round-trip", () => {
     store.trigger.setSlides({ slides: standalone });
     const snapshot = snapshotSlidesStore(store);
 
-    setSlidesStoreRoomScoped(store, true);
+    setSlidesStoreDeckBorrowed(store, true);
     store.trigger.setSlides({ slides: [makeHtmlSlide("room")] });
     expect(loadSlidesFromStorage()).toEqual(standalone);
 
     restoreSlidesStore(store, snapshot);
-    setSlidesStoreRoomScoped(store, false);
+    setSlidesStoreDeckBorrowed(store, false);
     expect(store.getSnapshot().context).toEqual(snapshot);
     expect(loadSlidesFromStorage()).toEqual(standalone);
+    unsubscribe();
+  });
+
+  // Replay reaches the same persistence subscriber as an edit: applying a
+  // recording's deck changed the slides identity and wrote the lesson's slides
+  // over the viewer's own — unrecoverably, just from opening a lesson.
+  it("does not let a replayed lesson deck overwrite the viewer's saved deck", () => {
+    const store = createSlidesStore();
+    const unsubscribe = subscribeSlidesPersistence(store);
+    const own = [makeHtmlSlide("my own deck")];
+    store.trigger.setSlides({ slides: own });
+    expect(loadSlidesFromStorage()).toEqual(own);
+
+    // What NextEditorProvider's applySlides does when a recording loads.
+    setSlidesStoreDeckBorrowed(store, true);
+    store.trigger.setSlides({ slides: [makeHtmlSlide("lesson deck")] });
+
+    expect(loadSlidesFromStorage()).toEqual(own);
     unsubscribe();
   });
 

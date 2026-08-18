@@ -28,7 +28,7 @@ import {
   goRunStartedConsoleLines,
 } from "../runtime/goPlayground/console";
 import { areGoPlaygroundFilesEqual, collectGoPlaygroundFiles } from "../runtime/goPlayground/files";
-import { appendGoConsoleLines } from "../runtime/goPlayground/consoleStore";
+import { appendRunnerConsoleLines } from "../runtime/playgroundConsoleStore";
 import {
   STUDIO_TARGET_ATTRIBUTE,
   STUDIO_RUN_BUTTON_TARGET_ID,
@@ -176,7 +176,7 @@ function GoPlaygroundRunnerPanel() {
   }, [cancel, isPlaybackSnapshotActive]);
 
   const appendConsoleLines = (lines: string[]) => {
-    appendGoConsoleLines(runtimePanelStore, lines);
+    appendRunnerConsoleLines(runtimePanelStore, lines);
   };
 
   const formatGoProject = async (

@@ -26,6 +26,23 @@ interface MouseTrackingInput {
   onMouseMove: (pos: MouseCursorPosition) => void;
 }
 
+/**
+ * True only when the pointer actually left the page.
+ *
+ * `mouseleave` does not bubble, but a *capture*-phase listener on `document`
+ * still sees every descendant's leave — so crossing out of any hovered element
+ * (a toolbar button, a file row, a Monaco view-line being re-rendered) used to
+ * record a `{0, 0, hidden}` cursor sample. Those bypass the movement throttle
+ * (visibility changed), force an extra frame each, and break interpolation in
+ * `getCursorPositionAtTime`, which refuses to tween across a visibility flip.
+ * Worst case the pointer is stationary when the node under it is removed, so no
+ * `pointermove` corrects it and the replayed cursor stays hidden for the rest of
+ * that stretch. Leaving the viewport for real does target the root element.
+ */
+function isPageBoundaryLeave(event: Event, doc: Document): boolean {
+  return event.target === doc.documentElement || event.target === doc.body;
+}
+
 export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(
   ({ input }) => {
     let forceRecordedCursorHidden = false;
@@ -78,7 +95,8 @@ export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingIn
       );
     };
 
-    const handleMouseLeave = () => {
+    const handleMouseLeave = (event: Event) => {
+      if (!isPageBoundaryLeave(event, document)) return;
       input.onMouseMove({ x: 0, y: 0, visible: false });
     };
 
@@ -107,7 +125,7 @@ export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingIn
       move: (e: MouseEvent) => void;
       down: (e: MouseEvent) => void;
       up: (e: MouseEvent) => void;
-      leave: () => void;
+      leave: (e: Event) => void;
     };
 
     const iframeListeners = new Map<HTMLIFrameElement, IframeMouseListeners>();
@@ -216,7 +234,11 @@ export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingIn
         );
       };
 
-      const onIframeMouseLeave = () => {
+      const onIframeMouseLeave = (event: Event) => {
+        const target = event.target;
+        const ownerDocument =
+          target instanceof Node ? (target.ownerDocument ?? (target as Document)) : null;
+        if (!ownerDocument || !isPageBoundaryLeave(event, ownerDocument)) return;
         input.onMouseMove({ x: 0, y: 0, visible: false });
       };
 

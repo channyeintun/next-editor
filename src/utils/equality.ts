@@ -143,6 +143,7 @@ export function areRuntimeRecordingSnapshotsEqual(
     left.activeTerminalSessionId === right.activeTerminalSessionId &&
     left.activeTab === right.activeTab &&
     left.isCollapsed === right.isCollapsed &&
+    left.isFullHeight === right.isFullHeight &&
     left.isSettingsOpen === right.isSettingsOpen &&
     areStringArraysEqual(left.consoleLines, right.consoleLines) &&
     areTerminalSessionSnapshotsEqual(left.terminalSessions, right.terminalSessions) &&

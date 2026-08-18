@@ -3,7 +3,11 @@ import { useSelector } from "@xstate/store-react";
 import { Bot, ChevronDown, ChevronUp, Cog, Maximize2, Minimize2 } from "lucide-react";
 import { signInUrl, useAuth } from "@next-editor/infra";
 import AgentPanel from "./agent/AgentPanel";
-import { STUDIO_TARGET_ATTRIBUTE, STUDIO_RUST_DOCK_TARGET_ID } from "../studio/targets";
+import {
+  STUDIO_TARGET_ATTRIBUTE,
+  STUDIO_RUN_BUTTON_TARGET_ID,
+  STUDIO_RUST_DOCK_TARGET_ID,
+} from "../studio/targets";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import {
   selectActiveTab,
@@ -32,6 +36,7 @@ import {
   areRustPlaygroundFilesEqual,
   collectRustPlaygroundFiles,
 } from "../runtime/rustPlayground/files";
+import { appendRunnerConsoleLines } from "../runtime/playgroundConsoleStore";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
@@ -49,9 +54,6 @@ import { areStructuredDataEqual } from "../utils/equality";
  */
 
 const RUST_CONSOLE_SCROLL_SURFACE = "rust-runner";
-// Bounds the recorded console state — every runtime recording event snapshots
-// the full line array, so an unbounded log would bloat .ne recordings.
-const MAX_RUST_CONSOLE_LINES = 200;
 
 const ANSI_RESET = "\u001b[0m";
 const ANSI_DIM = "\u001b[90m";
@@ -183,18 +185,7 @@ function RustPlaygroundRunnerPanel() {
   }, [cancel, isPlaybackSnapshotActive]);
 
   const appendConsoleLines = (lines: string[]) => {
-    if (lines.length === 0) {
-      return;
-    }
-
-    const current = runtimePanelStore.getSnapshot().context.consoleLines;
-    // Blank separator between explicit tool operations keeps results readable.
-    const startsOperation =
-      lines[0].startsWith("[rust-run] cargo run") || lines[0].startsWith("[rustfmt] rustfmt");
-    const separator = current.length > 0 && startsOperation ? [""] : [];
-    runtimePanelStore.trigger.setConsoleLines({
-      consoleLines: [...current, ...separator, ...lines].slice(-MAX_RUST_CONSOLE_LINES),
-    });
+    appendRunnerConsoleLines(runtimePanelStore, lines);
   };
 
   const formatRustProject = async (
@@ -498,6 +489,7 @@ function RustPlaygroundRunnerPanel() {
                   </button>
                   <button
                     type="button"
+                    {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_RUN_BUTTON_TARGET_ID }}
                     onClick={() => {
                       void handleRun();
                     }}

@@ -95,7 +95,12 @@ const DEFAULT_PREVIEW_STATE: SlidePreviewState = {
   indexv: 0,
 };
 
-const roomScopedStores = new WeakSet<object>();
+/**
+ * Stores whose current deck is not the user's own, so it must never be written
+ * back to the shared `next-editor-slides` key: a live collaboration room, and a
+ * loaded recording being replayed.
+ */
+const borrowedDeckStores = new WeakSet<object>();
 
 export interface SlidesStoreSnapshot {
   slides: Slide[];
@@ -133,13 +138,19 @@ export function restoreSlidesStore(
   store.trigger.setPreviewState({ previewState: structuredClone(snapshot.previewState) });
 }
 
-export function setSlidesStoreRoomScoped(store: SlidesStoreInstance, scoped: boolean): void {
-  if (scoped) roomScopedStores.add(store);
-  else roomScopedStores.delete(store);
+/**
+ * Mark the store's deck as borrowed (a room's, or a recording's) so persistence
+ * skips it. Replay hit this too: `applySlides(recording.slides)` changed the
+ * slides identity like any edit, and the subscriber below wrote the lesson's
+ * deck over the viewer's own, unrecoverably, just from opening a lesson.
+ */
+export function setSlidesStoreDeckBorrowed(store: SlidesStoreInstance, borrowed: boolean): void {
+  if (borrowed) borrowedDeckStores.add(store);
+  else borrowedDeckStores.delete(store);
 }
 
-export function isSlidesStoreRoomScoped(store: SlidesStoreInstance): boolean {
-  return roomScopedStores.has(store);
+export function isSlidesStoreDeckBorrowed(store: SlidesStoreInstance): boolean {
+  return borrowedDeckStores.has(store);
 }
 
 /** Persist only when the slides array identity changes; preview state stays ephemeral. */
@@ -148,7 +159,7 @@ export function subscribeSlidesPersistence(store: SlidesStoreInstance): () => vo
   const subscription = store.subscribe((snapshot) => {
     if (snapshot.context.slides === previousSlides) return;
     previousSlides = snapshot.context.slides;
-    if (isSlidesStoreRoomScoped(store)) return;
+    if (isSlidesStoreDeckBorrowed(store)) return;
     saveSlidesToStorage(previousSlides);
   });
   return () => subscription.unsubscribe();

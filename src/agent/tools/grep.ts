@@ -92,6 +92,7 @@ export function makeGrepTool(ctx: ToolContext) {
       const globRegex = glob ? globToRegex(glob) : null;
 
       const matchLines: string[] = [];
+      const basePath = path?.replace(/^\/+|\/+$/g, "") ?? "";
       const sortedPaths = Object.keys(project.files).sort();
 
       for (const filePath of sortedPaths) {
@@ -103,7 +104,14 @@ export function makeGrepTool(ctx: ToolContext) {
           continue;
         }
 
-        if (path && !filePath.startsWith(path + "/")) {
+        // Normalized the same way glob.ts:70 does. Used verbatim, a natural
+        // `"src/"` or `"/src"` became the prefix `"src//"` / `"/src/"`, which no
+        // workspace path can start with — so every file was skipped and the tool
+        // answered "No matches found.", indistinguishable from a real miss. Do
+        // NOT route this through parseWorkspacePath: it throws on a trailing
+        // slash, and the empty string it falls back to would silently widen the
+        // search to the whole workspace instead of scoping it.
+        if (basePath && !filePath.startsWith(basePath + "/")) {
           continue;
         }
 

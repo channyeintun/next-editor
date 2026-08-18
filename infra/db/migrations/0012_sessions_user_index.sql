@@ -1,0 +1,12 @@
+-- sessions.user_id is a REFERENCES column, and SQLite does not index those on
+-- its own. createSession sweeps the signing-in user's expired rows on every
+-- single sign-in:
+--
+--   DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?
+--
+-- With no usable index that is a full scan of a table which only ever grows —
+-- the sweep is per-user, so rows belonging to someone who never signs in again
+-- are never removed. Scan cost, sign-in latency and D1 rows-read therefore all
+-- grow with all-time sign-ups. The composite covers both predicates so the
+-- sweep seeks instead of scans.
+CREATE INDEX IF NOT EXISTS idx_sessions_user_expires ON sessions(user_id, expires_at);

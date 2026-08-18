@@ -26,6 +26,25 @@ describe("grep tool", () => {
     expect(result).toContain("Invalid pattern");
   });
 
+  // Used verbatim, "src/" became the prefix "src//" and matched nothing, so a
+  // scoped search answered "No matches found." exactly like a real miss. glob
+  // already normalizes the same argument.
+  it.each(["src", "src/", "/src", "/src/"])(
+    "scopes to a folder however the path is spelled (%s)",
+    async (path) => {
+      const store = makeStore([
+        makeFile("src/App.tsx", "needle"),
+        makeFile("other/App.tsx", "needle"),
+      ]);
+      const result = await makeGrepTool(makeCtx(store)).function.execute({
+        pattern: "needle",
+        path,
+      });
+      expect(result).toContain("src/App.tsx");
+      expect(result).not.toContain("other/App.tsx");
+    },
+  );
+
   it("reports no matches", async () => {
     const store = makeStore([makeFile("a.ts", "hello")]);
     const result = await makeGrepTool(makeCtx(store)).function.execute({ pattern: "zzz" });

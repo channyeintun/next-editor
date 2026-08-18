@@ -46,7 +46,13 @@ export function openrouterProxyPlugin(): Plugin {
               res.end();
               return;
             }
-            Readable.fromWeb(response.body as never).pipe(res);
+            // `pipe` does not forward source errors, so an upstream reset
+            // mid-SSE emits 'error' with no listener and Node turns that into an
+            // uncaught exception — killing the dev server rather than the one
+            // request. Same guard the sibling proxyPlugin already uses.
+            Readable.fromWeb(response.body as never)
+              .on("error", () => res.destroy())
+              .pipe(res);
           })
           .catch((error: unknown) => {
             res.statusCode = 500;

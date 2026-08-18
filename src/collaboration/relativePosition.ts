@@ -21,6 +21,27 @@ function decodeBinary(value: string): Uint8Array {
   return bytes;
 }
 
+/**
+ * Decode a peer-supplied relative position, refusing the one shape that can
+ * mutate our document.
+ *
+ * `Y.createAbsolutePositionFromRelativePosition` resolves a `tname` through
+ * `doc.get(tname)`, and `Y.Doc.get` *creates* the named root type when it is
+ * absent. The payload is base64 straight off the wire, so a peer could name any
+ * root it liked and permanently add it to `doc.share` on every resolve —
+ * unbounded, remotely driven growth of the shared document.
+ *
+ * Nothing legitimate is lost by refusing it: every collaboration Y.Text is
+ * nested under the "project" root, and yjs only fills `tname` for a *root* type
+ * (`createRelativePositionFromTypeIndex` sets `typeid` instead whenever
+ * `type._item !== null`). So a cursor or viewport anchor from this app always
+ * decodes with `tname === null`.
+ */
+export function decodeForeignRelativePosition(value: string): Y.RelativePosition | null {
+  const relativePosition = Y.decodeRelativePosition(decodeBinary(value));
+  return relativePosition.tname === null ? relativePosition : null;
+}
+
 export function createCollaborationCursor(
   doc: Y.Doc,
   fileNodeId: string,
@@ -48,14 +69,11 @@ export function resolveCollaborationCursor(
   try {
     const text = getCollaborationTexts(doc).get(cursor.fileNodeId);
     if (!(text instanceof Y.Text)) return null;
-    const anchor = Y.createAbsolutePositionFromRelativePosition(
-      Y.decodeRelativePosition(decodeBinary(cursor.anchor)),
-      doc,
-    );
-    const head = Y.createAbsolutePositionFromRelativePosition(
-      Y.decodeRelativePosition(decodeBinary(cursor.head)),
-      doc,
-    );
+    const anchorPosition = decodeForeignRelativePosition(cursor.anchor);
+    const headPosition = decodeForeignRelativePosition(cursor.head);
+    if (!anchorPosition || !headPosition) return null;
+    const anchor = Y.createAbsolutePositionFromRelativePosition(anchorPosition, doc);
+    const head = Y.createAbsolutePositionFromRelativePosition(headPosition, doc);
     if (!anchor || !head || anchor.type !== text || head.type !== text) return null;
     return { anchorOffset: anchor.index, headOffset: head.index };
   } catch {

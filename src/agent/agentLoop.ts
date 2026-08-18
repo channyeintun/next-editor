@@ -129,8 +129,9 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
     getPreviewInspection: options.getPreviewInspection,
     capturePreviewScreenshot: options.capturePreviewScreenshot,
   };
-  // Go Playground lessons have no in-browser runtime, so their agent runs with
-  // file tools only — no bash and no runtime/preview observation.
+  // Playground lessons (Go, Kotlin, Rust, Kite) have no in-browser runtime, so
+  // their agent runs with file tools only — no bash and no runtime/preview
+  // observation.
   const executionKind = executionKindForLessonType(project.lessonType);
   const tools = createCodingTools(toolContext, executionKind);
   const systemPrompt = buildSystemPrompt(project, {
@@ -168,12 +169,30 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
   // stream in parallel so a response.failed event's structured provider error is
   // still available if the SDK later throws only a generic message.
   let providerError: unknown = null;
+  // The SDK overwrites `finalResponse` on every turn of its tool loop and never
+  // accumulates, so the single post-run `getResponse()` read below reports only
+  // the LAST turn — and since the transcript grows monotonically, that is the
+  // single largest summand, not an average. A tool-heavy run therefore
+  // understated real spend by a multiple. Summing per-turn here also captures
+  // runs that later throw, where the post-run read is never reached at all.
+  let observedUsage: AgentUsage | null = null;
   const providerErrorObserver =
     "getFullResponsesStream" in result && typeof result.getFullResponsesStream === "function"
       ? (async () => {
           try {
             for await (const event of result.getFullResponsesStream()) {
-              if (event.type === "response.failed") {
+              if (event.type === "response.completed") {
+                const usage = (
+                  event.response as { usage?: { inputTokens?: number; outputTokens?: number } }
+                ).usage;
+                if (usage) {
+                  const running: AgentUsage = observedUsage ?? { inputTokens: 0, outputTokens: 0 };
+                  observedUsage = {
+                    inputTokens: running.inputTokens + (usage.inputTokens ?? 0),
+                    outputTokens: running.outputTokens + (usage.outputTokens ?? 0),
+                  };
+                }
+              } else if (event.type === "response.failed") {
                 const failure = {
                   error: event.response.error,
                   openrouterMetadata: event.response.openrouterMetadata,
@@ -192,7 +211,10 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
       : Promise.resolve();
 
   const onAbort = () => {
-    void result.cancel();
+    // Best-effort: `cancel()` only reaches the first turn's stream, and on a later
+    // turn it rejects against an already-released reader. The tools' own abort
+    // guard (tools/index.ts) is what actually stops a stopped run doing work.
+    void result.cancel().catch(() => {});
   };
   signal.addEventListener("abort", onAbort);
 
@@ -284,6 +306,19 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
   }
 
   signal.removeEventListener("abort", onAbort);
+
+  // Aborted between items: settle now. `providerErrorObserver` drains the same
+  // broadcaster the SDK's tool loop feeds, so awaiting it here would block until
+  // that abandoned loop exhausts `stopWhen` — leaving `isRunning` true and the
+  // panel wedged for the whole time. The `catch` branch already returns early for
+  // exactly this reason; this is the same exit for the non-throwing path. The
+  // observer's own IIFE swallows every error, so abandoning it cannot reject.
+  if (signal.aborted) {
+    balanceUnansweredCalls();
+    onDelta({ k: "status", status: "done" });
+    return;
+  }
+
   await providerErrorObserver;
   if (providerError) {
     balanceUnansweredCalls();
@@ -293,17 +328,24 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
   balanceUnansweredCalls();
 
   if (onUsage) {
-    try {
-      const response = await result.getResponse();
-      const usage = response.usage as
-        | { inputTokens?: number; outputTokens?: number }
-        | null
-        | undefined;
-      if (usage) {
-        onUsage({ inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0 });
+    if (observedUsage) {
+      onUsage(observedUsage);
+    } else {
+      // Fall back for results without a full-responses stream: a tool-less call
+      // skips the SDK's broadcaster path entirely, and the test seam exposes only
+      // `getResponse`. Single-turn either way, so the last turn IS the total.
+      try {
+        const response = await result.getResponse();
+        const usage = response.usage as
+          | { inputTokens?: number; outputTokens?: number }
+          | null
+          | undefined;
+        if (usage) {
+          onUsage({ inputTokens: usage.inputTokens ?? 0, outputTokens: usage.outputTokens ?? 0 });
+        }
+      } catch {
+        // Usage is best-effort — never fail a completed run over it.
       }
-    } catch {
-      // Usage is best-effort — never fail a completed run over it.
     }
   }
 

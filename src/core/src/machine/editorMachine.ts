@@ -1,4 +1,4 @@
-import { setup, assign, stateIn, stopChild, enqueueActions, fromPromise } from "xstate";
+import { setup, assign, not, stateIn, stopChild, enqueueActions, fromPromise } from "xstate";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
 import { createInitialContext } from "./types";
 import type { MouseCursorPosition, Recording } from "../types";
@@ -96,6 +96,7 @@ import {
   applyChatEventsAtTime,
 } from "./replayActions";
 import { normalizeTimelineDuration, normalizeTimelineTime } from "./playbackValues";
+import { isDmpCodecLoaded } from "../../../storage/dmpCodec/dmpCodec";
 
 // ============================================================================
 // Editor State Machine
@@ -138,6 +139,14 @@ export const editorMachine = setup({
     }),
   },
   guards: {
+    // Content deltas are built through the diff-match-patch WASM codec, and
+    // `getDmpCodec()` throws when it has not loaded. That throw happens inside an
+    // xstate `assign` on the capture hot path, which xstate treats as fatal: the
+    // actor is stopped mid-recording, every later `send` is a no-op, and the
+    // whole in-progress session is lost with only a console message. Refusing to
+    // start is the honest outcome — the take would not be encodable at save time
+    // either.
+    isDmpCodecReady: () => isDmpCodecLoaded(),
     canPlay: ({ context }) =>
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
     hasExternalAudioBlob: ({ event }) =>
@@ -250,6 +259,10 @@ export const editorMachine = setup({
 
     clearError: assign({ error: null }),
 
+    setDmpCodecUnavailableError: assign({
+      error: "The recording codec could not be loaded. Reload the page and try recording again.",
+    }),
+
     notifyError: ({ context }) => {
       if (context.error) {
         context.onError?.(new Error(context.error));
@@ -327,6 +340,10 @@ export const editorMachine = setup({
     idle: {
       on: {
         START_RECORDING: [
+          {
+            guard: not("isDmpCodecReady"),
+            actions: ["setDmpCodecUnavailableError", "notifyError"],
+          },
           {
             target: "recording",
             guard: "hasExternalAudioBlob",
