@@ -187,7 +187,8 @@ export async function runStudioRender(
     runtimeMode === "live" &&
     (plan.runtime.kind === "go-playground" ||
       plan.runtime.kind === "kotlin-playground" ||
-      plan.runtime.kind === "rust-playground") &&
+      plan.runtime.kind === "rust-playground" ||
+      plan.runtime.kind === "zig-playground") &&
     !deps.isSignedIn
   ) {
     return failedResult(
@@ -320,7 +321,9 @@ export async function runStudioRender(
   // one, instead of visibly closing a few hundred milliseconds in — and a
   // repeat render cannot inherit the previous one's dock.
   deps.runtimePanelStore.trigger.setIsCollapsed({
-    collapsed: plan.runtime.kind === "kite-playground" && plan.runtime.dockStartsCollapsed,
+    collapsed:
+      (plan.runtime.kind === "kite-playground" || plan.runtime.kind === "zig-playground") &&
+      plan.runtime.dockStartsCollapsed,
   });
   // Same reasoning for the file explorer, and the same timing: set before the
   // clock starts, so it is shut in frame one and the recording's initial

@@ -1,0 +1,52 @@
+{
+  "version": 2,
+  "notes": [
+    {
+      "id": "register.read-aloud",
+      "severity": "note",
+      "sceneId": "slices",
+      "message": "Scene \"slices\" reads instead of talks — contract: \"it is\" → \"it's\" (persona guide v2)"
+    },
+    {
+      "id": "register.read-aloud",
+      "severity": "note",
+      "sceneId": "shapes",
+      "message": "Scene \"shapes\" reads instead of talks — contract: \"it is\" → \"it's\" (persona guide v2)"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"values-say-stderr\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-read\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-read-room\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-read-last\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-close\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-say-unused\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-sign-off\" is never referenced by an action"
+    }
+  ]
+}

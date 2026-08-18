@@ -34,6 +34,13 @@ KOTLIN_PLAYGROUND_ENABLED = "true"
 # and format APIs. Rust editing and recorded playback work regardless of this
 # flag.
 RUST_PLAYGROUND_ENABLED = "true"
+# Kill switch for live Zig lesson execution (worker/routes/zigPlayground.ts).
+# Fails closed. Run and Format proxy to zig-play.dev's public run and fmt
+# endpoints, pinned to Zig 0.16.0. That service rate-limits at 5 requests per
+# minute per client IP, which every user of this Worker shares, so the route
+# caches deterministic outcomes and holds a lower per-user ceiling. Zig editing
+# and recorded playback work regardless of this flag.
+ZIG_PLAYGROUND_ENABLED = "true"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
 #   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml

@@ -1,11 +1,12 @@
 import { useEffect, useEffectEvent, useRef } from "react";
 import { useSelector } from "@xstate/store-react";
 import { Bot, ChevronDown, ChevronUp, Cog, Maximize2, Minimize2 } from "lucide-react";
+import { signInUrl, useAuth } from "@next-editor/infra";
 import AgentPanel from "./agent/AgentPanel";
 import {
   STUDIO_TARGET_ATTRIBUTE,
   STUDIO_RUN_BUTTON_TARGET_ID,
-  STUDIO_KITE_DOCK_TARGET_ID,
+  STUDIO_ZIG_DOCK_TARGET_ID,
 } from "../studio/targets";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import {
@@ -18,48 +19,41 @@ import {
 import XtermTerminal from "./XtermTerminal";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
-import { useKitePlaygroundRunner } from "../hooks/useKitePlaygroundRunner";
+import { useZigPlaygroundRunner } from "../hooks/useZigPlaygroundRunner";
 import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWorkspace";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { monaco, workspacePathFromMonacoModelUri } from "../monaco";
 import {
-  kiteFormatResultToConsoleLines,
-  kiteFormatServiceErrorToConsoleLines,
-  kiteFormatStaleConsoleLines,
-  kiteFormatStartedConsoleLines,
-  kiteRunResultToConsoleLines,
-  kiteRunServiceErrorToConsoleLines,
-  kiteRunStartedConsoleLines,
-} from "../runtime/kitePlayground/console";
+  zigFormatResultToConsoleLines,
+  zigFormatServiceErrorToConsoleLines,
+  zigFormatStaleConsoleLines,
+  zigFormatStartedConsoleLines,
+  zigRunResultToConsoleLines,
+  zigRunServiceErrorToConsoleLines,
+  zigRunStartedConsoleLines,
+} from "../runtime/zigPlayground/console";
 import {
-  areKitePlaygroundFilesEqual,
-  collectKitePlaygroundFiles,
-} from "../runtime/kitePlayground/files";
+  areZigPlaygroundFilesEqual,
+  collectZigPlaygroundFiles,
+} from "../runtime/zigPlayground/files";
 import { appendRunnerConsoleLines } from "../runtime/playgroundConsoleStore";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
 /**
- * Focused Run console for Kite lessons, mirroring RustPlaygroundRunnerPanel.
- *
- * The one difference is the one that matters: **there is no service**. `kitec`
- * is a Rust program, normally a native binary, and Rust builds for WebAssembly
- * too — so Run and Format instantiate a Wasm build of that same compiler in this
- * page and answer without a network round trip: no proxy, no sign-in button, no
- * rate limit, and no lesson that breaks because a public playground is down.
- * That is why this panel has no auth branch at all where the other three have
- * one.
- *
- * A Kite module is a directory, so every `.kite` file in the workspace is part
- * of the same program: Format touches all of them, and a run compiles
- * `main.kite` (the client says so plainly when several files exist and none is
- * named that). Console output lives in the shared runtime panel store's
- * consoleLines, so the existing runtime recording snapshot captures it and
- * playback replays it without any live execution. The dock also hosts the Agent
- * tab, with file tools only, as in the other Playground lessons.
+ * Focused Run console for Zig lessons — deliberately not a Terminal,
+ * mirroring GoPlaygroundRunnerPanel. Code executes remotely through the Zig
+ * Playground proxy on an explicit Run or Format action; there is no shell,
+ * preview, or WebContainer surface here. The upstream compiles one root
+ * source file from a single text body, so lessons run exactly one main.zig. Console output
+ * lives in the shared runtime panel store's consoleLines, so the existing
+ * runtime recording snapshot captures it and playback replays it without any
+ * live execution. The dock also hosts the Agent tab: the agent runs with file
+ * tools only in Zig lessons (no bash or runtime observation — see
+ * agent/tools/index.ts).
  */
 
-const KITE_CONSOLE_SCROLL_SURFACE = "kite-runner";
+const ZIG_CONSOLE_SCROLL_SURFACE = "zig-runner";
 
 const ANSI_RESET = "\u001b[0m";
 const ANSI_DIM = "\u001b[90m";
@@ -68,7 +62,7 @@ const ANSI_RED = "\u001b[91m";
 
 // Same prefix-coloring idiom as the other dock consoles: color the [tag], dim
 // the rest, leave raw program output undecorated.
-function decorateKiteConsoleLine(line: string): string {
+function decorateZigConsoleLine(line: string): string {
   const prefixMatch = line.match(/^\[[^\]]+\]/);
 
   if (!prefixMatch) {
@@ -82,12 +76,12 @@ function decorateKiteConsoleLine(line: string): string {
   return `${prefixColor}${prefix}${ANSI_RESET}${ANSI_DIM}${suffix}${ANSI_RESET}`;
 }
 
-// Kite lessons have no shell or preview, but the agent works on the workspace
+// Zig lessons have no shell or preview, but the agent works on the workspace
 // files, so the dock exposes two tabs: the Playground runner and the agent.
-const KITE_DOCK_TABS = [
+const ZIG_DOCK_TABS = [
   {
     id: "runner",
-    label: "Kite Runner",
+    label: "Zig Runner",
     icon: <Cog size={15} strokeWidth={2.25} />,
   },
   {
@@ -97,7 +91,7 @@ const KITE_DOCK_TABS = [
   },
 ] as const satisfies readonly { id: RuntimeDockTab; label: string; icon: React.ReactNode }[];
 
-interface KiteRuntimeEventState {
+interface ZigRuntimeEventState {
   activeTab: RuntimeDockTab;
   isCollapsed: boolean;
   isFullHeight: boolean;
@@ -105,7 +99,15 @@ interface KiteRuntimeEventState {
   terminalScrollLines: RuntimeTerminalScrollLines;
 }
 
-function KitePlaygroundRunnerPanel() {
+/** null when the workspace does not contain exactly one Zig file named main.zig. */
+function collectSingleZigLessonFile(
+  project: Parameters<typeof collectZigPlaygroundFiles>[0],
+): ReturnType<typeof collectZigPlaygroundFiles> | null {
+  const files = collectZigPlaygroundFiles(project);
+  return files.length === 1 && files[0].path === "main.zig" ? files : null;
+}
+
+function ZigPlaygroundRunnerPanel() {
   const { store: runtimePanelStore } = useRuntimePanelStore();
   const activeTab = useSelector(runtimePanelStore, (s) => selectActiveTab(s.context));
   const isCollapsed = useSelector(runtimePanelStore, (s) => selectIsCollapsed(s.context));
@@ -117,15 +119,16 @@ function KitePlaygroundRunnerPanel() {
   const { editorRef, handleRuntimeEvent } = useNextEditorActions();
   const { currentRecording, isRecording } = useNextEditorMetadata();
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
-  const { getProject, updateFileContent } = useWorkspaceActions();
+  const { getProject, saveProject, updateFileContent } = useWorkspaceActions();
   const projectVersion = useWorkspaceProjectVersion();
+  const { isSignedIn, isLoading: isAuthLoading } = useAuth();
   const collaboration = useOptionalCollaboration();
-  const { isRunning, isFormatting, run, format, cancel } = useKitePlaygroundRunner();
-  const previousRuntimeEventStateRef = useRef<KiteRuntimeEventState | null>(null);
+  const { isRunning, isFormatting, run, format, cancel } = useZigPlaygroundRunner();
+  const previousRuntimeEventStateRef = useRef<ZigRuntimeEventState | null>(null);
 
   // The tab state is shared with the WebContainer dock's store; anything other
   // than "agent" (including a stale "terminal"/"console" from a previous lesson)
-  // renders as the Kite Runner tab.
+  // renders as the Zig Runner tab.
   const rawActiveTab = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.activeTab ?? "runner")
     : activeTab;
@@ -153,8 +156,8 @@ function KitePlaygroundRunnerPanel() {
   useEffect(() => {
     // The runtime panel store is shared by the browser and playground
     // runners. Clear their content-specific console/scroll state at
-    // Kite/project boundaries so output cannot leak into another lesson. A
-    // project change also supersedes a Kite tool request started against the
+    // Zig/project boundaries so output cannot leak into another lesson. A
+    // project change also supersedes a Zig tool request started against the
     // previous file.
     cancel();
 
@@ -185,21 +188,25 @@ function KitePlaygroundRunnerPanel() {
     appendRunnerConsoleLines(runtimePanelStore, lines);
   };
 
-  const formatKiteProject = async (
+  const formatZigProject = async (
     activeModel: monaco.editor.ITextModel | null = null,
   ): Promise<monaco.languages.TextEdit[]> => {
-    if (isPlaybackSnapshotActive) {
+    if (isPlaybackSnapshotActive || isAuthLoading) {
       return [];
     }
     if (!canFormatWorkspace) {
-      appendConsoleLines(["[kitefmt error] This shared lesson is read-only"]);
+      appendConsoleLines(["[zig-fmt error] This shared lesson is read-only"]);
+      return [];
+    }
+    if (!isSignedIn) {
+      appendConsoleLines(zigFormatServiceErrorToConsoleLines("unauthenticated"));
       return [];
     }
 
     const project = getProject();
-    const submittedFiles = collectKitePlaygroundFiles(project);
-    if (submittedFiles.length === 0) {
-      appendConsoleLines(["[kitefmt error] Add a .kite file to format this lesson"]);
+    const submittedFiles = collectSingleZigLessonFile(project);
+    if (!submittedFiles) {
+      appendConsoleLines(["[zig-fmt error] Zig lessons format a single main.zig file"]);
       return [];
     }
 
@@ -212,57 +219,47 @@ function KitePlaygroundRunnerPanel() {
       activeModel &&
       (!submittedActiveFile || activeModel.getValue() !== submittedActiveFile.content)
     ) {
-      appendConsoleLines(kiteFormatStaleConsoleLines());
+      appendConsoleLines(zigFormatStaleConsoleLines());
       return [];
     }
 
-    appendConsoleLines(kiteFormatStartedConsoleLines());
+    appendConsoleLines(zigFormatStartedConsoleLines());
     const outcome = await format(submittedFiles);
     if (outcome.kind === "superseded") {
       return [];
     }
     if (outcome.kind === "service-error") {
-      appendConsoleLines(kiteFormatServiceErrorToConsoleLines(outcome.errorKind, outcome.message));
+      appendConsoleLines(zigFormatServiceErrorToConsoleLines(outcome.errorKind, outcome.message));
       return [];
     }
 
     const currentProject = getProject();
-    const currentFiles = collectKitePlaygroundFiles(currentProject);
+    const currentFiles = collectZigPlaygroundFiles(currentProject);
     if (
       currentProject.id !== project.id ||
-      !areKitePlaygroundFilesEqual(currentFiles, submittedFiles) ||
+      !areZigPlaygroundFilesEqual(currentFiles, submittedFiles) ||
       activeModel?.isDisposed() ||
       (activeModel && activeModel.getVersionId() !== activeModelVersion) ||
       (activeModel && activeModel.getValue() !== submittedActiveFile?.content)
     ) {
-      appendConsoleLines(kiteFormatStaleConsoleLines());
+      appendConsoleLines(zigFormatStaleConsoleLines());
       return [];
     }
 
-    // A Kite module is a directory, so a format can touch several files. Every
-    // changed file except the open one is written straight to the workspace;
-    // the open one comes back as an edit so Monaco keeps the undo stack.
-    const submittedByPath = new Map(submittedFiles.map((file) => [file.path, file.content]));
-    let changedAny = false;
-    let activeEdits: monaco.languages.TextEdit[] = [];
+    const formattedFile = outcome.result.files[0];
+    const changed = formattedFile.content !== submittedFiles[0].content;
 
-    for (const formatted of outcome.result.files) {
-      if (formatted.content === submittedByPath.get(formatted.path)) {
-        continue;
-      }
-      changedAny = true;
-      if (activeModel && formatted.path === activePath) {
-        activeEdits = [{ range: activeModel.getFullModelRange(), text: formatted.content }];
-      } else {
-        updateFileContent(formatted.path, formatted.content);
-      }
+    if (changed && (!activeModel || formattedFile.path !== activePath)) {
+      updateFileContent(formattedFile.path, formattedFile.content);
     }
+    appendConsoleLines(zigFormatResultToConsoleLines(changed));
 
-    appendConsoleLines(kiteFormatResultToConsoleLines(changedAny));
-    return activeEdits;
+    return activeModel && formattedFile.path === activePath && changed
+      ? [{ range: activeModel.getFullModelRange(), text: formattedFile.content }]
+      : [];
   };
 
-  const provideKiteFormattingEdits = useEffectEvent(
+  const provideZigFormattingEdits = useEffectEvent(
     async (
       model: monaco.editor.ITextModel,
       _options: monaco.languages.FormattingOptions,
@@ -271,31 +268,28 @@ function KitePlaygroundRunnerPanel() {
       if (token.isCancellationRequested) {
         return [];
       }
-      return formatKiteProject(model);
+      return formatZigProject(model);
     },
   );
 
   useEffect(() => {
-    // `.kite` files carry the first-party `kite` language id registered by
-    // monaco/kiteLanguage.ts. This used to register against `rust`, because
-    // that is the grammar Kite borrowed before it had one of its own.
-    const disposable = monaco.languages.registerDocumentFormattingEditProvider("kite", {
-      displayName: "kitec fmt (Kite)",
-      provideDocumentFormattingEdits: provideKiteFormattingEdits,
+    const disposable = monaco.languages.registerDocumentFormattingEditProvider("zig", {
+      displayName: "zig fmt (Zig Playground)",
+      provideDocumentFormattingEdits: provideZigFormattingEdits,
     });
     return () => disposable.dispose();
-  }, [provideKiteFormattingEdits]);
+  }, [provideZigFormattingEdits]);
 
   const handleFormat = async () => {
     const editor = editorRef.current;
-    if (editor?.getModel()?.getLanguageId() === "kite") {
+    if (editor?.getModel()?.getLanguageId() === "zig") {
       const action = editor.getAction("editor.action.formatDocument");
       if (action) {
         await action.run();
         return;
       }
     }
-    await formatKiteProject();
+    await formatZigProject();
   };
 
   const updateScrollLine = (scrollLine: number) => {
@@ -304,16 +298,16 @@ function KitePlaygroundRunnerPanel() {
     }
 
     const current = runtimePanelStore.getSnapshot().context.terminalScrollLines;
-    if (current[KITE_CONSOLE_SCROLL_SURFACE] === scrollLine) {
+    if (current[ZIG_CONSOLE_SCROLL_SURFACE] === scrollLine) {
       return;
     }
 
     runtimePanelStore.trigger.setTerminalScrollLines({
-      terminalScrollLines: { ...current, [KITE_CONSOLE_SCROLL_SURFACE]: scrollLine },
+      terminalScrollLines: { ...current, [ZIG_CONSOLE_SCROLL_SURFACE]: scrollLine },
     });
   };
 
-  const runtimeEventState: KiteRuntimeEventState = {
+  const runtimeEventState: ZigRuntimeEventState = {
     activeTab,
     isCollapsed,
     isFullHeight,
@@ -343,14 +337,17 @@ function KitePlaygroundRunnerPanel() {
       return;
     }
 
-    // Read the current Kite sources at click time — never a stale copy. Which
-    // one is the program is the client's call, so a workspace the compiler
-    // cannot resolve comes back as its own message rather than a guess here.
+    // Read the current Zig source at click time — never a stale copy.
     const project = getProject();
-    const kiteFiles = collectKitePlaygroundFiles(project);
+    const zigFiles = collectSingleZigLessonFile(project);
 
-    appendConsoleLines(kiteRunStartedConsoleLines());
-    const outcome = await run(kiteFiles);
+    if (!zigFiles) {
+      appendConsoleLines(["[zig-run error] Zig lessons run a single main.zig file"]);
+      return;
+    }
+
+    appendConsoleLines(zigRunStartedConsoleLines());
+    const outcome = await run(zigFiles);
 
     // A newer Run owns the console from here on.
     if (outcome.kind === "superseded") {
@@ -359,15 +356,23 @@ function KitePlaygroundRunnerPanel() {
 
     appendConsoleLines(
       outcome.kind === "result"
-        ? kiteRunResultToConsoleLines(outcome.result)
-        : kiteRunServiceErrorToConsoleLines(outcome.errorKind, outcome.message),
+        ? zigRunResultToConsoleLines(outcome.result)
+        : zigRunServiceErrorToConsoleLines(outcome.errorKind, outcome.message),
     );
   };
 
-  const consoleContent = effectiveConsoleLines.map(decorateKiteConsoleLine).join("\n");
+  const handleSignIn = async () => {
+    // Persist edits before the full-page OAuth navigation so Run-after-sign-in
+    // resumes with the same sources.
+    await saveProject();
+    window.location.assign(signInUrl(`${window.location.pathname}${window.location.search}`));
+  };
+
+  const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
+  const consoleContent = effectiveConsoleLines.map(decorateZigConsoleLine).join("\n");
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
-  const toolLabel = isFormatting ? "kitec fmt main.kite" : "kitec run main.kite";
+  const toolLabel = isFormatting ? "zig fmt main.zig" : "zig run main.zig";
   const isToolActive = isRunning || isFormatting;
 
   return (
@@ -376,10 +381,10 @@ function KitePlaygroundRunnerPanel() {
         displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "shrink-0"
       }`}
       data-cursor-replay-target="runtime-dock"
-      {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_KITE_DOCK_TARGET_ID }}
+      {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_ZIG_DOCK_TARGET_ID }}
     >
       <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
-        {KITE_DOCK_TABS.map((tab) => {
+        {ZIG_DOCK_TABS.map((tab) => {
           const isActive = tab.id === displayActiveTab;
 
           return (
@@ -453,45 +458,59 @@ function KitePlaygroundRunnerPanel() {
               </p>
               {isToolActive ? (
                 <span
-                  aria-label={isFormatting ? "main.kite is formatting" : "Program is running"}
+                  aria-label={isFormatting ? "main.zig is formatting" : "Program is running"}
                   className="inline-block size-2.5 shrink-0 animate-spin rounded-full border-2 border-[#d48a37] border-t-transparent"
                 />
               ) : null}
             </div>
             <div className="ml-4 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  void handleFormat();
-                }}
-                disabled={isPlaybackSnapshotActive || !canFormatWorkspace}
-                className="rounded-md bg-[#222d3b] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] hover:text-[#b5d5ff] disabled:cursor-not-allowed disabled:bg-[#1d232c] disabled:text-[#5c6a7c]"
-                title="Format main.kite with kitec fmt (Shift+Alt+F)"
-              >
-                Format
-              </button>
-              <button
-                type="button"
-                {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_RUN_BUTTON_TARGET_ID }}
-                onClick={() => {
-                  void handleRun();
-                }}
-                disabled={isPlaybackSnapshotActive}
-                className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6] disabled:cursor-not-allowed disabled:bg-[#17241e] disabled:text-[#4f8e68]"
-              >
-                Run
-              </button>
+              {showSignIn ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleSignIn();
+                  }}
+                  className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6]"
+                >
+                  Sign in for Zig tools
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleFormat();
+                    }}
+                    disabled={isPlaybackSnapshotActive || isAuthLoading || !canFormatWorkspace}
+                    className="rounded-md bg-[#222d3b] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] hover:text-[#b5d5ff] disabled:cursor-not-allowed disabled:bg-[#1d232c] disabled:text-[#5c6a7c]"
+                    title="Format main.zig with zig fmt (Shift+Alt+F)"
+                  >
+                    Format
+                  </button>
+                  <button
+                    type="button"
+                    {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_RUN_BUTTON_TARGET_ID }}
+                    onClick={() => {
+                      void handleRun();
+                    }}
+                    disabled={isPlaybackSnapshotActive || isAuthLoading}
+                    className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6] disabled:cursor-not-allowed disabled:bg-[#17241e] disabled:text-[#4f8e68]"
+                  >
+                    Run
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
             <XtermTerminal
-              sessionId={KITE_CONSOLE_SCROLL_SURFACE}
+              sessionId={ZIG_CONSOLE_SCROLL_SURFACE}
               output={consoleContent}
               interactive={false}
               scrollLine={
                 isPlaybackSnapshotActive
-                  ? effectiveScrollLines[KITE_CONSOLE_SCROLL_SURFACE]
+                  ? effectiveScrollLines[ZIG_CONSOLE_SCROLL_SURFACE]
                   : undefined
               }
               onScroll={updateScrollLine}
@@ -503,4 +522,4 @@ function KitePlaygroundRunnerPanel() {
   );
 }
 
-export default KitePlaygroundRunnerPanel;
+export default ZigPlaygroundRunnerPanel;

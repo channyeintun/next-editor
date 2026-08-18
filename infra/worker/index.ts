@@ -16,6 +16,7 @@ import { openrouterRoute } from "./routes/openrouter";
 import { goPlaygroundRoute } from "./routes/goPlayground";
 import { kotlinPlaygroundRoute } from "./routes/kotlinPlayground";
 import { rustPlaygroundRoute } from "./routes/rustPlayground";
+import { zigPlaygroundRoute } from "./routes/zigPlayground";
 import { collaborationRoute } from "./routes/collaboration";
 import { studioRoute } from "./routes/studio";
 import { renderLandingResponse } from "./ssr/landing";
@@ -81,6 +82,7 @@ app.route("/api/openrouter", openrouterRoute);
 app.route("/api/go-playground", goPlaygroundRoute);
 app.route("/api/kotlin-playground", kotlinPlaygroundRoute);
 app.route("/api/rust-playground", rustPlaygroundRoute);
+app.route("/api/zig-playground", zigPlaygroundRoute);
 app.route("/api/collaboration", collaborationRoute);
 app.route("/api/studio", studioRoute);
 // Slide-image R2 ingestion. The pre-/api/proxy-rename alias /api/slide-image

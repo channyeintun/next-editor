@@ -127,6 +127,22 @@ function minimalScriptShell(lessonType: StudioLessonType) {
           fixture: { latencyMs: 10, result: { status: "success", stdout: "", stderr: "" } },
         },
       };
+    case "zig":
+      return {
+        ...base,
+        lesson: {
+          slug: "t-zig",
+          title: "T",
+          locale: "en-US",
+          workspace: workspace({ "main.zig": "pub fn main() void {}\n" }, "main.zig"),
+        },
+        runtime: {
+          kind: "zig-playground",
+          defaultMode: "fixture",
+          // One merged stream, not stdout/stderr — see zigRunFixtureSchema.
+          fixture: { latencyMs: 10, result: { status: "success", output: "" } },
+        },
+      };
     case "kite":
       return {
         ...base,

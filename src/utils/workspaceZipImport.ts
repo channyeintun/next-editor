@@ -112,16 +112,17 @@ function htmlReferences(files: Record<string, WorkspaceFile>, needle: string): b
  * Playground lesson shapes carry no package.json manifest: their sources are
  * compiled remotely by the language's playground proxy. Ordered so the
  * canonical entry file decides first when an archive mixes languages, matching
- * the runner collectors in src/runtime/{go,rust,kotlin}Playground/files.ts.
+ * the runner collectors in src/runtime/{go,rust,kotlin,zig}Playground/files.ts.
  */
 const PLAYGROUND_LESSON_RULES: ReadonlyArray<{
-  lessonType: Extract<WorkspaceLessonType, "go" | "rust" | "kotlin">;
+  lessonType: Extract<WorkspaceLessonType, "go" | "rust" | "kotlin" | "zig">;
   entryPath: string;
   extension: string;
 }> = [
   { lessonType: "go", entryPath: "main.go", extension: ".go" },
   { lessonType: "rust", entryPath: "main.rs", extension: ".rs" },
   { lessonType: "kotlin", entryPath: "Main.kt", extension: ".kt" },
+  { lessonType: "zig", entryPath: "main.zig", extension: ".zig" },
 ];
 
 function detectPlaygroundLessonType(

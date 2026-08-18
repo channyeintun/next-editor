@@ -43,6 +43,7 @@ import TerminalPanel from "./TerminalPanel";
 import GoPlaygroundRunnerPanel from "./GoPlaygroundRunnerPanel";
 import KotlinPlaygroundRunnerPanel from "./KotlinPlaygroundRunnerPanel";
 import RustPlaygroundRunnerPanel from "./RustPlaygroundRunnerPanel";
+import ZigPlaygroundRunnerPanel from "./ZigPlaygroundRunnerPanel";
 import KitePlaygroundRunnerPanel from "./KitePlaygroundRunnerPanel";
 import {
   CollaborationCursorLabelManager,
@@ -1389,6 +1390,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               <KotlinPlaygroundRunnerPanel />
             ) : executionKindForLessonType(lessonType) === "rust-playground" ? (
               <RustPlaygroundRunnerPanel />
+            ) : executionKindForLessonType(lessonType) === "zig-playground" ? (
+              <ZigPlaygroundRunnerPanel />
             ) : executionKindForLessonType(lessonType) === "kite-playground" ? (
               <KitePlaygroundRunnerPanel />
             ) : null}

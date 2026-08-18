@@ -1,0 +1,2102 @@
+# One shape: a survey of Zig in a single file — memory, optionals, errors,
+# slices, tagged unions, allocators, and comptime — each drawn on the
+# whiteboard first, then written, then run once at the end.
+#
+# Every line of code here was compiled with Zig 0.16.0 and executed on
+# zig-play.dev; the fixture output below is that run's exact text.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/zig-crash-course.yaml
+schemaVersion: 1
+
+lesson:
+  slug: zig-crash-course
+  title: "Zig in one file: memory, errors, and comptime"
+  locale: en-US
+  workspace:
+    lessonType: zig
+    name: Zig Lesson
+    entryFilePath: main.zig
+    # One file is the whole lesson, so the tree would be a list of one.
+    sidebarStartsCollapsed: true
+    files:
+      main.zig: |
+        const std = @import("std");
+
+        pub fn main() !void {
+            std.debug.print("Zig, in one file\n", .{});
+        }
+  whiteboardAssets:
+    - id: a-title
+      kind: text
+      x: 280
+      y: 152
+      width: 780
+      height: 48
+      text: "Where values live"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: a-stack
+      kind: text
+      x: 300
+      y: 206
+      width: 200
+      height: 40
+      text: "stack"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: a-stack-line
+      kind: freedraw
+      x: 300
+      y: 214
+      width: 130
+      height: 24
+      stroke: underline
+      strokeColor: "#1971c2"
+    - id: a-main
+      kind: rectangle
+      x: 280
+      y: 252
+      width: 320
+      height: 90
+      strokeColor: "#1971c2"
+    - id: a-main-t
+      kind: text
+      x: 306
+      y: 276
+      width: 260
+      height: 40
+      text: "main"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-load
+      kind: rectangle
+      x: 280
+      y: 350
+      width: 320
+      height: 90
+      strokeColor: "#1971c2"
+    - id: a-load-t
+      kind: text
+      x: 306
+      y: 374
+      width: 260
+      height: 40
+      text: "load"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-parse
+      kind: rectangle
+      x: 280
+      y: 448
+      width: 320
+      height: 90
+      strokeColor: "#1971c2"
+    - id: a-parse-t
+      kind: text
+      x: 306
+      y: 472
+      width: 260
+      height: 40
+      text: "parse"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-heap
+      kind: text
+      x: 760
+      y: 206
+      width: 200
+      height: 40
+      text: "heap"
+      strokeColor: "#6741d9"
+      fontSize: 30
+    - id: a-heap-line
+      kind: freedraw
+      x: 760
+      y: 214
+      width: 120
+      height: 24
+      stroke: underline
+      strokeColor: "#6741d9"
+    - id: a-heap-box
+      kind: rectangle
+      x: 740
+      y: 252
+      width: 360
+      height: 286
+      strokeColor: "#6741d9"
+    - id: a-alloc-t
+      kind: text
+      x: 620
+      y: 424
+      width: 160
+      height: 40
+      text: "alloc"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-alloc-arrow
+      kind: freedraw
+      x: 612
+      y: 470
+      width: 120
+      height: 44
+      stroke: arrow-right
+      strokeColor: "#1e1e1e"
+    - id: a-block
+      kind: rectangle
+      x: 780
+      y: 430
+      width: 200
+      height: 70
+      strokeColor: "#6741d9"
+    - id: a-kill-parse
+      kind: freedraw
+      x: 280
+      y: 448
+      width: 320
+      height: 90
+      stroke: strike
+      strokeColor: "#e03131"
+    - id: a-kill-load
+      kind: freedraw
+      x: 280
+      y: 350
+      width: 320
+      height: 90
+      stroke: strike
+      strokeColor: "#e03131"
+    - id: a-note
+      kind: text
+      x: 280
+      y: 566
+      width: 800
+      height: 40
+      text: "frames go away by themselves"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: a-note2
+      kind: text
+      x: 280
+      y: 602
+      width: 800
+      height: 40
+      text: "heap blocks do not"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: g-title
+      kind: text
+      x: 280
+      y: 152
+      width: 780
+      height: 48
+      text: "One slot, two meanings"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: g-opt
+      kind: text
+      x: 330
+      y: 212
+      width: 200
+      height: 40
+      text: "?u8"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: g-opt-line
+      kind: freedraw
+      x: 330
+      y: 220
+      width: 110
+      height: 24
+      stroke: underline
+      strokeColor: "#1e1e1e"
+    - id: g-opt-yes
+      kind: rectangle
+      x: 300
+      y: 256
+      width: 340
+      height: 108
+      strokeColor: "#2f9e44"
+    - id: g-opt-yes-a
+      kind: text
+      x: 324
+      y: 272
+      width: 280
+      height: 40
+      text: "4"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: g-opt-yes-b
+      kind: text
+      x: 324
+      y: 314
+      width: 280
+      height: 40
+      text: "has a value"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: g-opt-no
+      kind: rectangle
+      x: 300
+      y: 396
+      width: 340
+      height: 108
+      strokeColor: "#e03131"
+    - id: g-opt-no-a
+      kind: text
+      x: 324
+      y: 412
+      width: 280
+      height: 40
+      text: "null"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: g-opt-no-b
+      kind: text
+      x: 324
+      y: 454
+      width: 280
+      height: 40
+      text: "no value"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: g-opt-code
+      kind: text
+      x: 300
+      y: 516
+      width: 340
+      height: 40
+      text: "if (found) |at|"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: g-err
+      kind: text
+      x: 770
+      y: 212
+      width: 200
+      height: 40
+      text: "!u32"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: g-err-line
+      kind: freedraw
+      x: 770
+      y: 220
+      width: 110
+      height: 24
+      stroke: underline
+      strokeColor: "#1e1e1e"
+    - id: g-err-yes
+      kind: rectangle
+      x: 740
+      y: 256
+      width: 340
+      height: 108
+      strokeColor: "#2f9e44"
+    - id: g-err-yes-a
+      kind: text
+      x: 764
+      y: 272
+      width: 280
+      height: 40
+      text: "42"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: g-err-yes-b
+      kind: text
+      x: 764
+      y: 314
+      width: 280
+      height: 40
+      text: "it worked"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: g-err-no
+      kind: rectangle
+      x: 740
+      y: 396
+      width: 340
+      height: 108
+      strokeColor: "#e03131"
+    - id: g-err-no-a
+      kind: text
+      x: 764
+      y: 412
+      width: 300
+      height: 40
+      text: "error.Invalid"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: g-err-no-b
+      kind: text
+      x: 764
+      y: 454
+      width: 280
+      height: 40
+      text: "it did not"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: g-err-code
+      kind: text
+      x: 740
+      y: 516
+      width: 340
+      height: 40
+      text: "try  or  catch"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: g-gate
+      kind: rectangle
+      x: 300
+      y: 562
+      width: 780
+      height: 72
+      strokeColor: "#f08c00"
+    - id: g-gate-t
+      kind: text
+      x: 324
+      y: 582
+      width: 740
+      height: 40
+      text: "the compiler makes you check first"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b-title
+      kind: text
+      x: 280
+      y: 152
+      width: 780
+      height: 48
+      text: "A slice is a pointer and a length"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: b-arr-label
+      kind: text
+      x: 280
+      y: 566
+      width: 700
+      height: 40
+      text: "[5]u8 — the length is in the type"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b-cell0
+      kind: rectangle
+      x: 300
+      y: 430
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: b-val0
+      kind: text
+      x: 324
+      y: 450
+      width: 70
+      height: 40
+      text: "10"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-cell1
+      kind: rectangle
+      x: 396
+      y: 430
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: b-val1
+      kind: text
+      x: 420
+      y: 450
+      width: 70
+      height: 40
+      text: "20"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-cell2
+      kind: rectangle
+      x: 492
+      y: 430
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: b-val2
+      kind: text
+      x: 516
+      y: 450
+      width: 70
+      height: 40
+      text: "30"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-cell3
+      kind: rectangle
+      x: 588
+      y: 430
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: b-val3
+      kind: text
+      x: 612
+      y: 450
+      width: 70
+      height: 40
+      text: "40"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-cell4
+      kind: rectangle
+      x: 684
+      y: 430
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: b-val4
+      kind: text
+      x: 708
+      y: 450
+      width: 70
+      height: 40
+      text: "50"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-head
+      kind: rectangle
+      x: 380
+      y: 252
+      width: 400
+      height: 104
+      strokeColor: "#1971c2"
+    - id: b-ptr
+      kind: rectangle
+      x: 396
+      y: 268
+      width: 180
+      height: 72
+      strokeColor: "#1971c2"
+    - id: b-ptr-t
+      kind: text
+      x: 412
+      y: 288
+      width: 150
+      height: 40
+      text: "ptr"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-len
+      kind: rectangle
+      x: 584
+      y: 268
+      width: 180
+      height: 72
+      strokeColor: "#1971c2"
+    - id: b-len-t
+      kind: text
+      x: 600
+      y: 288
+      width: 150
+      height: 40
+      text: "len"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-arrow
+      kind: freedraw
+      x: 420
+      y: 366
+      width: 40
+      height: 58
+      stroke: arrow-down
+      strokeColor: "#1e1e1e"
+    - id: b-len-v
+      kind: text
+      x: 690
+      y: 288
+      width: 80
+      height: 40
+      text: "3"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: b-span
+      kind: freedraw
+      x: 396
+      y: 508
+      width: 280
+      height: 24
+      stroke: underline
+      strokeColor: "#1e1e1e"
+    - id: b-span-t
+      kind: text
+      x: 470
+      y: 528
+      width: 300
+      height: 40
+      text: "len = 3"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-slice-label
+      kind: text
+      x: 280
+      y: 208
+      width: 700
+      height: 40
+      text: "[]u8 — the length is a value"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: c-title
+      kind: text
+      x: 280
+      y: 152
+      width: 780
+      height: 48
+      text: "Who allocates, and who gives it back"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: c-actor
+      kind: ellipse
+      x: 280
+      y: 214
+      width: 280
+      height: 96
+      strokeColor: "#6741d9"
+    - id: c-actor-t
+      kind: text
+      x: 322
+      y: 240
+      width: 220
+      height: 40
+      text: "allocator"
+      strokeColor: "#6741d9"
+      fontSize: 30
+    - id: c-main
+      kind: rectangle
+      x: 280
+      y: 430
+      width: 230
+      height: 104
+      strokeColor: "#1971c2"
+    - id: c-main-t
+      kind: text
+      x: 304
+      y: 462
+      width: 190
+      height: 40
+      text: "main"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: c-call1
+      kind: freedraw
+      x: 520
+      y: 464
+      width: 40
+      height: 36
+      stroke: arrow-right
+      strokeColor: "#1e1e1e"
+    - id: c-load
+      kind: rectangle
+      x: 570
+      y: 430
+      width: 250
+      height: 104
+      strokeColor: "#1971c2"
+    - id: c-load-t
+      kind: text
+      x: 594
+      y: 462
+      width: 210
+      height: 40
+      text: "load(gpa)"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: c-call2
+      kind: freedraw
+      x: 830
+      y: 464
+      width: 40
+      height: 36
+      stroke: arrow-right
+      strokeColor: "#1e1e1e"
+    - id: c-join
+      kind: rectangle
+      x: 880
+      y: 430
+      width: 200
+      height: 104
+      strokeColor: "#1971c2"
+    - id: c-join-t
+      kind: text
+      x: 904
+      y: 462
+      width: 170
+      height: 40
+      text: "join(gpa)"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: c-rail
+      kind: freedraw
+      x: 395
+      y: 322
+      width: 585
+      height: 24
+      stroke: underline
+      strokeColor: "#6741d9"
+    - id: c-drop1
+      kind: freedraw
+      x: 380
+      y: 352
+      width: 30
+      height: 62
+      stroke: arrow-down
+      strokeColor: "#6741d9"
+    - id: c-drop2
+      kind: freedraw
+      x: 680
+      y: 352
+      width: 30
+      height: 62
+      stroke: arrow-down
+      strokeColor: "#6741d9"
+    - id: c-drop3
+      kind: freedraw
+      x: 965
+      y: 352
+      width: 30
+      height: 62
+      stroke: arrow-down
+      strokeColor: "#6741d9"
+    - id: c-note
+      kind: text
+      x: 280
+      y: 560
+      width: 800
+      height: 40
+      text: "no global allocator, no hidden allocation"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: c-defer
+      kind: text
+      x: 280
+      y: 596
+      width: 800
+      height: 40
+      text: "defer says who gives it back"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: c-defer-ok
+      kind: freedraw
+      x: 940
+      y: 588
+      width: 56
+      height: 52
+      stroke: check
+      strokeColor: "#2f9e44"
+    - id: e-title
+      kind: text
+      x: 280
+      y: 152
+      width: 780
+      height: 48
+      text: "The list moves"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: e-h1
+      kind: rectangle
+      x: 280
+      y: 214
+      width: 340
+      height: 150
+      strokeColor: "#1971c2"
+    - id: e-h1r1
+      kind: rectangle
+      x: 296
+      y: 226
+      width: 308
+      height: 40
+      strokeColor: "#1971c2"
+    - id: e-h1t1
+      kind: text
+      x: 308
+      y: 232
+      width: 280
+      height: 36
+      text: "items.ptr"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-h1r2
+      kind: rectangle
+      x: 296
+      y: 270
+      width: 308
+      height: 40
+      strokeColor: "#1971c2"
+    - id: e-h1t2
+      kind: text
+      x: 308
+      y: 276
+      width: 280
+      height: 36
+      text: "items.len"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-h1r3
+      kind: rectangle
+      x: 296
+      y: 314
+      width: 308
+      height: 40
+      strokeColor: "#1971c2"
+    - id: e-h1t3
+      kind: text
+      x: 308
+      y: 320
+      width: 280
+      height: 36
+      text: "capacity"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-h1arrow
+      kind: freedraw
+      x: 626
+      y: 250
+      width: 100
+      height: 40
+      stroke: arrow-right
+      strokeColor: "#1e1e1e"
+    - id: e-old0
+      kind: rectangle
+      x: 740
+      y: 226
+      width: 80
+      height: 64
+      strokeColor: "#6741d9"
+    - id: e-oldv0
+      kind: text
+      x: 766
+      y: 244
+      width: 60
+      height: 36
+      text: "10"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-old1
+      kind: rectangle
+      x: 824
+      y: 226
+      width: 80
+      height: 64
+      strokeColor: "#6741d9"
+    - id: e-oldv1
+      kind: text
+      x: 850
+      y: 244
+      width: 60
+      height: 36
+      text: "20"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-time
+      kind: freedraw
+      x: 430
+      y: 376
+      width: 44
+      height: 48
+      stroke: arrow-down
+      strokeColor: "#1e1e1e"
+    - id: e-time-t
+      kind: text
+      x: 490
+      y: 384
+      width: 400
+      height: 40
+      text: "append(gpa, 30)"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: e-h2
+      kind: rectangle
+      x: 280
+      y: 440
+      width: 340
+      height: 150
+      strokeColor: "#1971c2"
+    - id: e-h2r1
+      kind: rectangle
+      x: 296
+      y: 452
+      width: 308
+      height: 40
+      strokeColor: "#1971c2"
+    - id: e-h2t1
+      kind: text
+      x: 308
+      y: 458
+      width: 280
+      height: 36
+      text: "items.ptr"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-h2r2
+      kind: rectangle
+      x: 296
+      y: 496
+      width: 308
+      height: 40
+      strokeColor: "#1971c2"
+    - id: e-h2t2
+      kind: text
+      x: 308
+      y: 502
+      width: 280
+      height: 36
+      text: "items.len"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-h2r3
+      kind: rectangle
+      x: 296
+      y: 540
+      width: 308
+      height: 40
+      strokeColor: "#1971c2"
+    - id: e-h2t3
+      kind: text
+      x: 308
+      y: 546
+      width: 280
+      height: 36
+      text: "capacity"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-h2arrow
+      kind: freedraw
+      x: 626
+      y: 470
+      width: 70
+      height: 40
+      stroke: arrow-right
+      strokeColor: "#1e1e1e"
+    - id: e-new0
+      kind: rectangle
+      x: 706
+      y: 452
+      width: 56
+      height: 56
+      strokeColor: "#6741d9"
+    - id: e-new1
+      kind: rectangle
+      x: 762
+      y: 452
+      width: 56
+      height: 56
+      strokeColor: "#6741d9"
+    - id: e-new2
+      kind: rectangle
+      x: 818
+      y: 452
+      width: 56
+      height: 56
+      strokeColor: "#6741d9"
+    - id: e-new3
+      kind: rectangle
+      x: 874
+      y: 452
+      width: 56
+      height: 56
+      strokeColor: "#6741d9"
+    - id: e-new4
+      kind: rectangle
+      x: 930
+      y: 452
+      width: 56
+      height: 56
+      strokeColor: "#6741d9"
+    - id: e-new5
+      kind: rectangle
+      x: 986
+      y: 452
+      width: 56
+      height: 56
+      strokeColor: "#6741d9"
+    - id: e-newv0
+      kind: text
+      x: 718
+      y: 466
+      width: 50
+      height: 36
+      text: "10"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-newv1
+      kind: text
+      x: 774
+      y: 466
+      width: 50
+      height: 36
+      text: "20"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-newv2
+      kind: text
+      x: 830
+      y: 466
+      width: 50
+      height: 36
+      text: "30"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-lenspan
+      kind: freedraw
+      x: 706
+      y: 516
+      width: 168
+      height: 22
+      stroke: underline
+      strokeColor: "#1e1e1e"
+    - id: e-lenspan-t
+      kind: text
+      x: 748
+      y: 534
+      width: 200
+      height: 36
+      text: "len"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-capspan
+      kind: freedraw
+      x: 706
+      y: 552
+      width: 336
+      height: 22
+      stroke: underline
+      strokeColor: "#1e1e1e"
+    - id: e-capspan-t
+      kind: text
+      x: 816
+      y: 570
+      width: 220
+      height: 36
+      text: "capacity"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: e-dead
+      kind: freedraw
+      x: 740
+      y: 226
+      width: 164
+      height: 64
+      stroke: strike
+      strokeColor: "#e03131"
+    - id: e-dead-t
+      kind: text
+      x: 700
+      y: 300
+      width: 400
+      height: 40
+      text: "the old memory is gone"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: f-title
+      kind: text
+      x: 280
+      y: 152
+      width: 780
+      height: 48
+      text: "Two different times"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: f-lane1
+      kind: rectangle
+      x: 280
+      y: 216
+      width: 800
+      height: 154
+      strokeColor: "#f08c00"
+    - id: f-lane1-t
+      kind: text
+      x: 302
+      y: 228
+      width: 400
+      height: 40
+      text: "compile time"
+      strokeColor: "#f08c00"
+      fontSize: 30
+    - id: f-c1
+      kind: rectangle
+      x: 302
+      y: 282
+      width: 230
+      height: 74
+      strokeColor: "#f08c00"
+    - id: f-c1t
+      kind: text
+      x: 318
+      y: 300
+      width: 200
+      height: 36
+      text: "types"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: f-c2
+      kind: rectangle
+      x: 562
+      y: 282
+      width: 230
+      height: 74
+      strokeColor: "#f08c00"
+    - id: f-c2t
+      kind: text
+      x: 578
+      y: 300
+      width: 210
+      height: 36
+      text: "array lengths"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: f-c3
+      kind: rectangle
+      x: 822
+      y: 282
+      width: 230
+      height: 74
+      strokeColor: "#f08c00"
+    - id: f-c3t
+      kind: text
+      x: 838
+      y: 300
+      width: 200
+      height: 36
+      text: "generic code"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: f-start
+      kind: freedraw
+      x: 340
+      y: 384
+      width: 44
+      height: 40
+      stroke: arrow-down
+      strokeColor: "#1e1e1e"
+    - id: f-start-t
+      kind: text
+      x: 404
+      y: 388
+      width: 500
+      height: 40
+      text: "your program starts"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: f-lane2
+      kind: rectangle
+      x: 280
+      y: 434
+      width: 800
+      height: 154
+      strokeColor: "#1971c2"
+    - id: f-lane2-t
+      kind: text
+      x: 302
+      y: 446
+      width: 400
+      height: 40
+      text: "run time"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: f-r1
+      kind: rectangle
+      x: 302
+      y: 500
+      width: 230
+      height: 74
+      strokeColor: "#1971c2"
+    - id: f-r1t
+      kind: text
+      x: 318
+      y: 518
+      width: 200
+      height: 36
+      text: "values"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: f-r2
+      kind: rectangle
+      x: 562
+      y: 500
+      width: 230
+      height: 74
+      strokeColor: "#1971c2"
+    - id: f-r2t
+      kind: text
+      x: 578
+      y: 518
+      width: 200
+      height: 36
+      text: "user input"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: f-r3
+      kind: rectangle
+      x: 822
+      y: 500
+      width: 230
+      height: 74
+      strokeColor: "#1971c2"
+    - id: f-r3t
+      kind: text
+      x: 838
+      y: 518
+      width: 200
+      height: 36
+      text: "output"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: f-note
+      kind: text
+      x: 280
+      y: 602
+      width: 800
+      height: 40
+      text: "nothing travels back up"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: i-title
+      kind: text
+      x: 280
+      y: 152
+      width: 780
+      height: 48
+      text: "A string is just bytes"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: i-cell0
+      kind: rectangle
+      x: 300
+      y: 340
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: i-val0
+      kind: text
+      x: 324
+      y: 360
+      width: 70
+      height: 40
+      text: "h"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: i-cell1
+      kind: rectangle
+      x: 396
+      y: 340
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: i-val1
+      kind: text
+      x: 420
+      y: 360
+      width: 70
+      height: 40
+      text: "c3"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: i-cell2
+      kind: rectangle
+      x: 492
+      y: 340
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: i-val2
+      kind: text
+      x: 516
+      y: 360
+      width: 70
+      height: 40
+      text: "a9"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: i-cell3
+      kind: rectangle
+      x: 588
+      y: 340
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: i-val3
+      kind: text
+      x: 612
+      y: 360
+      width: 70
+      height: 40
+      text: "l"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: i-cell4
+      kind: rectangle
+      x: 684
+      y: 340
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: i-val4
+      kind: text
+      x: 708
+      y: 360
+      width: 70
+      height: 40
+      text: "l"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: i-cell5
+      kind: rectangle
+      x: 780
+      y: 340
+      width: 88
+      height: 72
+      strokeColor: "#1971c2"
+    - id: i-val5
+      kind: text
+      x: 804
+      y: 360
+      width: 70
+      height: 40
+      text: "o"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: i-span
+      kind: freedraw
+      x: 396
+      y: 418
+      width: 184
+      height: 24
+      stroke: underline
+      strokeColor: "#f08c00"
+    - id: i-span-t
+      kind: text
+      x: 396
+      y: 440
+      width: 460
+      height: 40
+      text: "one letter, two bytes"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: i-type
+      kind: text
+      x: 280
+      y: 272
+      width: 700
+      height: 40
+      text: "[]const u8 — a slice of bytes"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: i-len
+      kind: text
+      x: 280
+      y: 502
+      width: 760
+      height: 40
+      text: "len counts bytes, not letters"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: i-eql
+      kind: text
+      x: 280
+      y: 546
+      width: 760
+      height: 40
+      text: "compare with std.mem.eql"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: i-noeq
+      kind: text
+      x: 280
+      y: 590
+      width: 760
+      height: 40
+      text: "there is no == for text"
+      strokeColor: "#e03131"
+      fontSize: 28
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 23
+
+runtime:
+  kind: zig-playground
+  # Nothing runs until the last scene, so the dock would otherwise hold
+  # 288px open over an empty console for the whole lesson.
+  dockStartsCollapsed: true
+  defaultMode: fixture
+  fixture:
+    latencyMs: 900
+    result:
+      status: success
+      output: "Zig, in one file\nZig 4\nfound at 4\nmissing 99\nsize 42\ncaught InvalidCharacter\nwindow { 20, 30, 40 } len 3\ntext héllo bytes 6 equal true\narea 12.57\narea 12.00\nsquares { 1, 4, 9, 16, 25 }\nlen 5 room 33\nbiggest u8 50\ntable { 0, 2, 4, 6, 8 }\nleaks: ok\n"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
+
+scenes:
+  - id: memory
+    narration: >
+      Zig gives you something that most languages hide. It gives you memory.
+      [[mark:memory-draw-stack]] When your program calls a function, that call gets a small
+      block of memory. We call it a frame. The frame holds the function's own values.
+      [[mark:memory-draw-frames]] Every new call puts another frame on top of the last one.
+      [[mark:memory-draw-heap]] There's a second place, called the heap. It's one large
+      space, and any part of the program can use it. It's where things go when you don't
+      know the size ahead of time, or when a value has to outlive the function that made
+      it. [[mark:memory-draw-alloc]] So a function can ask for a piece of the heap.
+      [[mark:memory-draw-dead]] Now let's say those two functions finish. Their frames go
+      away on their own. Nobody had to do anything, and nobody could forget.
+      [[mark:memory-draw-note]] The heap block doesn't go away. Some line of code has to
+      give it back. In Python or JavaScript a garbage collector does that for you. In Zig
+      there isn't one, so the job becomes yours, and it becomes visible in the code.
+      [[mark:memory-to-code]] That one difference shapes the whole language. Let's write
+      some.
+    sources:
+      - {
+          title: "Zig Language Reference — Memory",
+          url: "https://ziglang.org/documentation/0.16.0/#Memory",
+        }
+      - {
+          title: "Zig Language Reference — Choosing an Allocator",
+          url: "https://ziglang.org/documentation/0.16.0/#Choosing-an-Allocator",
+        }
+    actions:
+      - id: memory-open-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1700 }
+        open: true
+      - id: memory-draw-a-title
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1200 }
+        upsertIds: [a-title]
+        drawMs: 700
+      - id: memory-draw-stack
+        type: whiteboard.apply
+        at: { mark: memory-draw-stack }
+        upsertIds: [a-stack, a-stack-line, a-main, a-main-t]
+        drawMs: 900
+      - id: memory-draw-frames
+        type: whiteboard.apply
+        at: { mark: memory-draw-frames }
+        upsertIds: [a-load, a-load-t, a-parse, a-parse-t]
+        drawMs: 1100
+      - id: memory-draw-heap
+        type: whiteboard.apply
+        at: { mark: memory-draw-heap }
+        upsertIds: [a-heap, a-heap-line, a-heap-box]
+        drawMs: 900
+      - id: memory-draw-alloc
+        type: whiteboard.apply
+        at: { mark: memory-draw-alloc }
+        upsertIds: [a-alloc-t, a-alloc-arrow, a-block]
+        drawMs: 1000
+      - id: memory-draw-dead
+        type: whiteboard.apply
+        at: { mark: memory-draw-dead }
+        upsertIds: [a-kill-parse, a-kill-load]
+        drawMs: 800
+      - id: memory-draw-note
+        type: whiteboard.apply
+        at: { mark: memory-draw-note }
+        upsertIds: [a-note, a-note2]
+        drawMs: 900
+      - id: memory-close-a
+        type: whiteboard.apply
+        at: { mark: memory-to-code }
+        open: false
+  - id: values
+    narration: >
+      [[mark:values-open-main]] Here's the whole program. One file, one main function, and
+      a print. Three small things in it are worth naming now. The at sign marks a builtin,
+      so at import brings in the standard library. The exclamation mark before void says
+      main is allowed to return an error. And the dot with two braces is the list of values
+      to put into the message. It's empty here because this message has no holes in it.
+      [[mark:values-say-stderr]] One more thing about that print. It writes to the error
+      stream, not the normal output stream. This runner shows you both together, so it
+      makes no difference here. On your own computer they're two separate streams. Before
+      we add anything, one warning that will save you a lot of time. Zig is still changing,
+      and it changes in ways that break old code. This lesson is Zig zero point sixteen.
+      Older articles, and answers from chat assistants, often won't compile any more. When
+      something looks right and the compiler disagrees, check which version the example was
+      written for. [[mark:values-type-values]] Now, naming values. Zig gives you two words.
+      Const can't change after you set it. Var can. [[mark:values-select-count]] Look at
+      the type here. u eight is an unsigned number, eight bits wide. Zig wants you to say
+      how wide your numbers are. There's no plain int that quietly grows, and there's no
+      silent conversion between sizes either. It feels strict at first. The point is that
+      the cost of a value is never hidden from you.
+    sources:
+      - {
+          title: "Zig Language Reference — Variables",
+          url: "https://ziglang.org/documentation/0.16.0/#Variables",
+        }
+      - {
+          title: "Zig 0.16.0 Release Notes",
+          url: "https://ziglang.org/download/0.16.0/release-notes.html",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { mark: values-open-main }, path: main.zig }
+      - id: type-values
+        type: editor.type
+        at: { mark: values-type-values, offsetMs: -400 }
+        target:
+          {
+            file: main.zig,
+            after: "    std.debug.print(\"Zig, in one file\\n\", .{});\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    const language = \"Zig\";\n    var count: u8 = 3;\n    count += 1;\n    std.debug.print(\"{s} {d}\\n\", .{ language, count });\n"
+      - id: select-count
+        type: editor.select
+        at: { mark: values-select-count }
+        target: { file: main.zig, text: "var count: u8 = 3;", occurrence: 1 }
+  - id: optionals
+    narration: >
+      [[mark:optionals-type-indexof]] Here's a function that looks for a letter in some
+      text. Sometimes there's no such letter, so it can't always return a position.
+      [[mark:optionals-select-qmark]] The question mark in the return type says exactly
+      that. This is an optional. [[mark:optionals-draw-opt]] An optional is one slot
+      holding either a real value, or null. The important part isn't the null. It's that
+      the type says a null is possible, so you can see it before you run anything.
+      [[mark:optionals-type-optional-use]] To use it, you have to open it first.
+      [[mark:optionals-select-capture]] Read this line as: if found holds a value, name
+      that value at, and run this part. There's no way to reach the number without going
+      through that check. So the mistake where a null shows up much later, far from where
+      it started, can't happen at all. [[mark:optionals-say-orelse]] And when you'd rather
+      not branch, orelse supplies a value to use in place of null.
+    sources:
+      - {
+          title: "Zig Language Reference — Optionals",
+          url: "https://ziglang.org/documentation/0.16.0/#Optionals",
+        }
+    actions:
+      - id: type-indexof
+        type: editor.type
+        at: { mark: optionals-type-indexof, offsetMs: -400 }
+        target:
+          {
+            file: main.zig,
+            after: "    std.debug.print(\"{s} {d}\\n\", .{ language, count });\n}\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\nfn indexOf(haystack: []const u8, needle: u8) ?usize {\n    for (haystack, 0..) |c, i| {\n        if (c == needle) return i;\n    }\n    return null;\n}\n"
+      - id: select-qmark
+        type: editor.select
+        at: { mark: optionals-select-qmark }
+        target: { file: main.zig, text: "?usize", occurrence: 1 }
+      - id: optionals-open-g
+        type: whiteboard.apply
+        at: { mark: optionals-draw-opt }
+        open: true
+        clear: true
+        upsertIds: [g-title]
+        drawMs: 700
+      - id: optionals-draw-opt
+        type: whiteboard.apply
+        at: { mark: optionals-draw-opt, offsetMs: 700 }
+        upsertIds:
+          [g-opt, g-opt-line, g-opt-yes, g-opt-yes-a, g-opt-yes-b, g-opt-no, g-opt-no-a, g-opt-no-b]
+        drawMs: 1800
+      - id: optionals-close-g1
+        type: whiteboard.apply
+        at: { mark: optionals-type-optional-use, offsetMs: -1500 }
+        open: false
+      - id: type-optional-use
+        type: editor.type
+        at: { mark: optionals-type-optional-use, offsetMs: -400 }
+        target:
+          {
+            file: main.zig,
+            after: "    std.debug.print(\"{s} {d}\\n\", .{ language, count });\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    const found = indexOf(\"zig lesson\", 'l');\n    if (found) |at| std.debug.print(\"found at {d}\\n\", .{at});\n    std.debug.print(\"missing {d}\\n\", .{indexOf(\"zig lesson\", 'q') orelse 99});\n"
+      - id: select-capture
+        type: editor.select
+        at: { mark: optionals-select-capture }
+        target: { file: main.zig, text: "if (found) |at|", occurrence: 1 }
+      - id: select-orelse
+        type: editor.select
+        at: { mark: optionals-say-orelse }
+        target: { file: main.zig, text: "orelse 99", occurrence: 1 }
+  - id: errors
+    narration: >
+      [[mark:errors-type-parsesize]] Errors work the same way. This function turns text
+      into a number, and the text might not be a number at all. [[mark:errors-select-bang]]
+      The exclamation mark means it returns a number or an error. [[mark:errors-draw-err]]
+      And look at the shape. It's the same picture as the optional. One slot, two meanings.
+      Learn one and you've learned both. [[mark:errors-type-error-use]] Catch deals with
+      the error right where it happens. Here we print the name of the error and continue
+      with a default. There's also try, which means: if this failed, stop and hand the
+      error to whoever called me. [[mark:errors-draw-gate]] Zig has no exceptions and no
+      hidden jumps out of a function. An error is an ordinary value that travels back
+      through return, and the compiler won't let you quietly ignore one. One thing to know
+      early: a Zig error is only a name. It carries no message and no extra data. If you
+      need detail, you return it yourself.
+    sources:
+      - {
+          title: "Zig Language Reference — Errors",
+          url: "https://ziglang.org/documentation/0.16.0/#Errors",
+        }
+      - {
+          title: "Zig Language Reference — Error Union Type",
+          url: "https://ziglang.org/documentation/0.16.0/#Error-Union-Type",
+        }
+    actions:
+      - id: type-parsesize
+        type: editor.type
+        at: { mark: errors-type-parsesize, offsetMs: -400 }
+        target: { file: main.zig, after: "    return null;\n}\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\nfn parseSize(text: []const u8) !u32 {\n    return std.fmt.parseInt(u32, text, 10);\n}\n"
+      - id: select-bang
+        type: editor.select
+        at: { mark: errors-select-bang }
+        target: { file: main.zig, text: "!u32", occurrence: 1 }
+      - id: errors-open-g2
+        type: whiteboard.apply
+        at: { mark: errors-draw-err }
+        open: true
+        upsertIds:
+          [
+            g-err,
+            g-err-line,
+            g-err-yes,
+            g-err-yes-a,
+            g-err-yes-b,
+            g-err-no,
+            g-err-no-a,
+            g-err-no-b,
+            g-opt-code,
+            g-err-code,
+          ]
+        drawMs: 2000
+      - id: errors-close-g2
+        type: whiteboard.apply
+        at: { mark: errors-type-error-use, offsetMs: -1500 }
+        open: false
+      - id: type-error-use
+        type: editor.type
+        at: { mark: errors-type-error-use, offsetMs: -400 }
+        target:
+          {
+            file: main.zig,
+            after: "    std.debug.print(\"missing {d}\\n\", .{indexOf(\"zig lesson\", 'q') orelse 99});\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    const size = parseSize(\"42\") catch 0;\n    std.debug.print(\"size {d}\\n\", .{size});\n    _ = parseSize(\"many\") catch |err| blk: {\n        std.debug.print(\"caught {t}\\n\", .{err});\n        break :blk 0;\n    };\n"
+      - id: errors-open-g3
+        type: whiteboard.apply
+        at: { mark: errors-draw-gate }
+        open: true
+        upsertIds: [g-gate, g-gate-t]
+        drawMs: 900
+      - id: errors-close-g3
+        type: whiteboard.apply
+        at: { mark: errors-draw-gate, offsetMs: 3400 }
+        open: false
+  - id: slices
+    narration: >
+      [[mark:slices-type-slices]] Next, arrays and slices. This pair confuses more
+      newcomers than anything else in the language, and it's worth five careful minutes.
+      [[mark:slices-draw-array]] An array holds a fixed number of items, and that number is
+      part of its type. Five u eight values is a different type from six u eight values.
+      [[mark:slices-select-window]] This line takes a window over part of that array. The
+      window is called a slice. [[mark:slices-draw-header]] And a slice is only two things.
+      [[mark:slices-draw-ptr]] Where it starts. [[mark:slices-draw-len]] And how many items
+      it covers. That's the whole idea. [[mark:slices-draw-note]] It copies nothing. It
+      points at memory that belongs to somebody else. That's why passing a slice is cheap
+      no matter how much data it covers. It's also why you have to know that the memory
+      behind it is still alive, because the slice itself won't tell you.
+    sources:
+      - {
+          title: "Zig Language Reference — Slices",
+          url: "https://ziglang.org/documentation/0.16.0/#Slices",
+        }
+    actions:
+      - id: type-slices
+        type: editor.type
+        at: { mark: slices-type-slices, offsetMs: -400 }
+        target: { file: main.zig, after: "        break :blk 0;\n    };\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\n    const scores = [_]u8{ 10, 20, 30, 40, 50 };\n    const middle = scores[1..4];\n    std.debug.print(\"window {any} len {d}\\n\", .{ middle, middle.len });\n"
+      - id: slices-open-b
+        type: whiteboard.apply
+        at: { mark: slices-draw-array }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+        drawMs: 600
+      - id: slices-draw-array
+        type: whiteboard.apply
+        at: { mark: slices-draw-array, offsetMs: 600 }
+        upsertIds:
+          [
+            b-cell0,
+            b-cell1,
+            b-cell2,
+            b-cell3,
+            b-cell4,
+            b-val0,
+            b-val1,
+            b-val2,
+            b-val3,
+            b-val4,
+            b-arr-label,
+          ]
+        drawMs: 2200
+      - id: slices-close-b1
+        type: whiteboard.apply
+        at: { mark: slices-select-window, offsetMs: -300 }
+        open: false
+      - id: select-window
+        type: editor.select
+        at: { mark: slices-select-window }
+        target: { file: main.zig, text: "const middle = scores[1..4];", occurrence: 1 }
+      - id: slices-open-b2
+        type: whiteboard.apply
+        at: { mark: slices-draw-header }
+        open: true
+        upsertIds: [b-head, b-ptr, b-ptr-t, b-len, b-len-t, b-slice-label]
+        drawMs: 1600
+      - id: slices-draw-ptr
+        type: whiteboard.apply
+        at: { mark: slices-draw-ptr }
+        upsertIds: [b-arrow]
+        drawMs: 600
+      - id: slices-draw-len
+        type: whiteboard.apply
+        at: { mark: slices-draw-len }
+        upsertIds: [b-len-v, b-span, b-span-t]
+        drawMs: 1000
+      - id: slices-close-b
+        type: whiteboard.apply
+        at: { mark: slices-draw-note, offsetMs: 3800 }
+        open: false
+  - id: strings
+    narration: >
+      [[mark:strings-type-strings]] That leads straight to the question people ask first.
+      Where is the string type? There isn't one. [[mark:strings-draw-bytes]] A piece of
+      text in Zig is a slice of bytes. The type is written as a slice of const u eight.
+      Nothing more. [[mark:strings-draw-span]] Here's the part that surprises everyone.
+      This word has five letters, but the accented letter takes two bytes, so the length is
+      six. Length counts bytes, not letters. [[mark:strings-draw-eql]] And because a slice
+      is a pointer and a length, comparing two of them with the equals sign would compare
+      the pointers, not the text. So Zig doesn't offer that. You call std dot mem dot eql
+      instead, and it compares the bytes. [[mark:strings-to-shapes]] Once you accept that
+      text is just bytes, the rest follows.
+    sources:
+      - {
+          title: "Zig Language Reference — Slices",
+          url: "https://ziglang.org/documentation/0.16.0/#Slices",
+        }
+      - {
+          title: "Zig Language Reference — String Literals",
+          url: "https://ziglang.org/documentation/0.16.0/#String-Literals-and-Unicode-Code-Point-Literals",
+        }
+    actions:
+      - id: type-strings
+        type: editor.type
+        at: { mark: strings-type-strings, offsetMs: -400 }
+        target:
+          {
+            file: main.zig,
+            after: "    std.debug.print(\"window {any} len {d}\\n\", .{ middle, middle.len });\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    const greeting: []const u8 = \"héllo\";\n    std.debug.print(\"text {s} bytes {d} equal {}\\n\", .{ greeting, greeting.len, std.mem.eql(u8, greeting, \"héllo\") });\n"
+      - id: strings-open-i
+        type: whiteboard.apply
+        at: { mark: strings-draw-bytes }
+        open: true
+        clear: true
+        upsertIds: [i-title, i-type]
+        drawMs: 800
+      - id: strings-draw-bytes
+        type: whiteboard.apply
+        at: { mark: strings-draw-bytes, offsetMs: 800 }
+        upsertIds:
+          [
+            i-cell0,
+            i-val0,
+            i-cell1,
+            i-val1,
+            i-cell2,
+            i-val2,
+            i-cell3,
+            i-val3,
+            i-cell4,
+            i-val4,
+            i-cell5,
+            i-val5,
+          ]
+        drawMs: 2400
+      - id: strings-draw-span
+        type: whiteboard.apply
+        at: { mark: strings-draw-span }
+        upsertIds: [i-span, i-span-t, i-len]
+        drawMs: 1400
+      - id: strings-draw-eql
+        type: whiteboard.apply
+        at: { mark: strings-draw-eql }
+        upsertIds: [i-noeq, i-eql]
+        drawMs: 1200
+      - id: strings-close-i
+        type: whiteboard.apply
+        at: { mark: strings-to-shapes }
+        open: false
+  - id: shapes
+    narration: >
+      [[mark:shapes-type-shape]] Zig also has a type that can be one of several shapes.
+      This is a tagged union. A shape here's either a circle or a rectangle, and never both
+      at once. The value carries a tag saying which one it currently is.
+      [[mark:shapes-select-switch]] Switch asks which one it is and hands you the value
+      inside, already the right type. [[mark:shapes-type-shape-use]] And if you forget one
+      of the cases, the program doesn't compile. The compiler counts the cases for you, so
+      adding a new shape later shows you every place that has to change.
+    sources:
+      - {
+          title: "Zig Language Reference — Tagged union",
+          url: "https://ziglang.org/documentation/0.16.0/#Tagged-union",
+        }
+    actions:
+      - id: type-shape
+        type: editor.type
+        at: { mark: shapes-type-shape, offsetMs: -400 }
+        target:
+          {
+            file: main.zig,
+            after: "    return std.fmt.parseInt(u32, text, 10);\n}\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\nconst Shape = union(enum) {\n    circle: f64,\n    rect: struct { w: f64, h: f64 },\n\n    fn area(self: Shape) f64 {\n        return switch (self) {\n            .circle => |r| 3.14159 * r * r,\n            .rect => |box| box.w * box.h,\n        };\n    }\n};\n"
+      - id: select-switch
+        type: editor.select
+        at: { mark: shapes-select-switch }
+        target: { file: main.zig, text: "return switch (self) {", occurrence: 1 }
+      - id: type-shape-use
+        type: editor.type
+        at: { mark: shapes-type-shape-use, offsetMs: -400 }
+        target:
+          {
+            file: main.zig,
+            after: "    std.debug.print(\"text {s} bytes {d} equal {}\\n\", .{ greeting, greeting.len, std.mem.eql(u8, greeting, \"héllo\") });\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    const shapes = [_]Shape{ .{ .circle = 2 }, .{ .rect = .{ .w = 3, .h = 4 } } };\n    for (shapes) |shape| std.debug.print(\"area {d:.2}\\n\", .{shape.area()});\n"
+  - id: allocator
+    narration: >
+      [[mark:allocator-type-allocator]] Now back to the heap, and this is the part that
+      makes Zig different from almost everything else. [[mark:allocator-draw-actor]] An
+      allocator is just a value. It isn't a keyword, and it isn't a service running in the
+      background. [[mark:allocator-draw-chain]] If a function needs memory, you pass the
+      allocator into it, by hand, like any other argument. [[mark:allocator-draw-rail]]
+      Which means you can read a function's first line and know whether it's able to
+      allocate at all. A function without an allocator can't surprise you. That's the whole
+      trade: more typing, and no hidden allocation anywhere in your program.
+      [[mark:allocator-select-defer]] Defer says what should happen at the end of the
+      block. [[mark:allocator-draw-note]] It runs when the block ends, not when the
+      function ends, and it runs even if you return early. So you write the cleanup right
+      next to the setup, and the two stay together as the code grows. This one reports
+      whether we gave back everything we took.
+    sources:
+      - {
+          title: "Zig Language Reference — Choosing an Allocator",
+          url: "https://ziglang.org/documentation/0.16.0/#Choosing-an-Allocator",
+        }
+      - {
+          title: "Zig Language Reference — defer",
+          url: "https://ziglang.org/documentation/0.16.0/#defer",
+        }
+    actions:
+      - id: type-allocator
+        type: editor.type
+        at: { mark: allocator-type-allocator, offsetMs: -400 }
+        target:
+          {
+            file: main.zig,
+            after: "    for (shapes) |shape| std.debug.print(\"area {d:.2}\\n\", .{shape.area()});\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    var gpa: std.heap.DebugAllocator(.{}) = .init;\n    defer std.debug.print(\"leaks: {t}\\n\", .{gpa.deinit()});\n    const allocator = gpa.allocator();\n"
+      - id: allocator-open-c
+        type: whiteboard.apply
+        at: { mark: allocator-draw-actor }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+        drawMs: 600
+      - id: allocator-draw-actor
+        type: whiteboard.apply
+        at: { mark: allocator-draw-actor, offsetMs: 600 }
+        upsertIds: [c-actor, c-actor-t]
+        drawMs: 800
+      - id: allocator-draw-chain
+        type: whiteboard.apply
+        at: { mark: allocator-draw-chain }
+        upsertIds: [c-main, c-main-t, c-call1, c-load, c-load-t, c-call2, c-join, c-join-t]
+        drawMs: 2200
+      - id: allocator-draw-rail
+        type: whiteboard.apply
+        at: { mark: allocator-draw-rail }
+        upsertIds: [c-rail, c-drop1, c-drop2, c-drop3, c-note]
+        drawMs: 1600
+      - id: allocator-draw-defer-note
+        type: whiteboard.apply
+        at: { mark: allocator-draw-note, offsetMs: 1200 }
+        upsertIds: [c-defer, c-defer-ok]
+        drawMs: 900
+      - id: allocator-close-c
+        type: whiteboard.apply
+        at: { mark: allocator-select-defer, offsetMs: -300 }
+        open: false
+      - id: select-defer
+        type: editor.select
+        at: { mark: allocator-select-defer }
+        target:
+          {
+            file: main.zig,
+            text: "defer std.debug.print(\"leaks: {t}\\n\", .{gpa.deinit()});",
+            occurrence: 1,
+          }
+  - id: list
+    narration: >
+      [[mark:list-type-list]] A list that grows needs the heap, so it needs an allocator.
+      [[mark:list-select-append]] Notice we hand the allocator to append itself. The list
+      doesn't keep one inside it. That's deliberate: the list stays a plain piece of data,
+      and the caller stays in charge. [[mark:list-draw-before]] Inside, the list holds a
+      pointer, a length, and a capacity. Capacity is how much room it has. Length is how
+      much of that room it's using. [[mark:list-draw-append]] When you append and there's
+      no room left, the list doesn't stretch where it is. [[mark:list-draw-after]] It asks
+      the allocator for a bigger block, copies the items across, and gives the old block
+      back. [[mark:list-draw-dead]] And the old memory is gone. So if you kept a pointer
+      into the list, that pointer is now pointing at memory the list no longer owns. This
+      is the most common bug in Zig programs, and now you know about it before it happens
+      to you. Read the pointer again after you append.
+    sources:
+      - {
+          title: "Zig Standard Library — array_list.zig",
+          url: "https://github.com/ziglang/zig/blob/0.16.0/lib/std/array_list.zig",
+        }
+    actions:
+      - id: type-list
+        type: editor.type
+        at: { mark: list-type-list, offsetMs: -400 }
+        target: { file: main.zig, after: "    const allocator = gpa.allocator();\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\n    var squares: std.ArrayList(u32) = .empty;\n    defer squares.deinit(allocator);\n    for (1..6) |n| try squares.append(allocator, @intCast(n * n));\n    std.debug.print(\"squares {any}\\n\", .{squares.items});\n    std.debug.print(\"len {d} room {d}\\n\", .{ squares.items.len, squares.capacity });\n"
+      - id: select-append
+        type: editor.select
+        at: { mark: list-select-append }
+        target:
+          { file: main.zig, text: "squares.append(allocator, @intCast(n * n))", occurrence: 1 }
+      - id: list-open-e
+        type: whiteboard.apply
+        at: { mark: list-draw-before }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+        drawMs: 600
+      - id: list-draw-before
+        type: whiteboard.apply
+        at: { mark: list-draw-before, offsetMs: 600 }
+        upsertIds:
+          [
+            e-h1,
+            e-h1r1,
+            e-h1t1,
+            e-h1r2,
+            e-h1t2,
+            e-h1r3,
+            e-h1t3,
+            e-h1arrow,
+            e-old0,
+            e-oldv0,
+            e-old1,
+            e-oldv1,
+          ]
+        drawMs: 2600
+      - id: list-draw-append
+        type: whiteboard.apply
+        at: { mark: list-draw-append }
+        upsertIds: [e-time, e-time-t]
+        drawMs: 800
+      - id: list-draw-after
+        type: whiteboard.apply
+        at: { mark: list-draw-after }
+        upsertIds:
+          [
+            e-h2,
+            e-h2r1,
+            e-h2t1,
+            e-h2r2,
+            e-h2t2,
+            e-h2r3,
+            e-h2t3,
+            e-h2arrow,
+            e-new0,
+            e-new1,
+            e-new2,
+            e-new3,
+            e-new4,
+            e-new5,
+            e-newv0,
+            e-newv1,
+            e-newv2,
+            e-lenspan,
+            e-lenspan-t,
+            e-capspan,
+            e-capspan-t,
+          ]
+        drawMs: 3000
+      - id: list-draw-dead
+        type: whiteboard.apply
+        at: { mark: list-draw-dead }
+        upsertIds: [e-dead, e-dead-t]
+        drawMs: 900
+      - id: list-close-e
+        type: whiteboard.apply
+        at: { mark: list-draw-dead, offsetMs: 6000 }
+        open: false
+  - id: comptime
+    narration: >
+      [[mark:comptime-type-comptime]] One more idea, and it's the one people find
+      strangest. Some of your Zig code runs inside the compiler, before your program
+      starts. [[mark:comptime-select-comptime-t]] Comptime T means this argument is a type,
+      and it's settled while compiling. You write the function once and it works for any
+      type that supports the comparison. That's how Zig does generic code. There's no
+      separate generics syntax to learn, because a type is just another value the compiler
+      can pass around. [[mark:comptime-draw-lanes]] So it helps to think about two
+      different times. [[mark:comptime-draw-runtime]] Compile time settles types, array
+      lengths, and generic code. Run time deals with real values, input, and output.
+      [[mark:comptime-draw-note]] Work can move down, out of run time and into compile
+      time. It never moves back up. A value the compiler settled is already there when the
+      program starts. [[mark:comptime-type-comptime-use]] This small table is a good
+      example. The loop that fills it runs in the compiler. At run time there's no loop
+      left, only the finished numbers.
+    sources:
+      - {
+          title: "Zig Language Reference — comptime",
+          url: "https://ziglang.org/documentation/0.16.0/#comptime",
+        }
+      - {
+          title: "What is Zig's Comptime? — Loris Cro",
+          url: "https://kristoff.it/blog/what-is-zig-comptime/",
+        }
+    actions:
+      - id: type-comptime
+        type: editor.type
+        at: { mark: comptime-type-comptime, offsetMs: -400 }
+        target: { file: main.zig, after: "        };\n    }\n};\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "\nfn biggest(comptime T: type, items: []const T) T {\n    var best = items[0];\n    for (items[1..]) |item| {\n        if (item > best) best = item;\n    }\n    return best;\n}\n\nconst doubles = blk: {\n    var table: [5]u32 = undefined;\n    for (&table, 0..) |*slot, i| slot.* = @intCast(i * 2);\n    break :blk table;\n};\n"
+      - id: select-comptime-t
+        type: editor.select
+        at: { mark: comptime-select-comptime-t }
+        target: { file: main.zig, text: "comptime T: type", occurrence: 1 }
+      - id: comptime-open-f
+        type: whiteboard.apply
+        at: { mark: comptime-draw-lanes }
+        open: true
+        clear: true
+        upsertIds: [f-title]
+        drawMs: 600
+      - id: comptime-draw-lanes
+        type: whiteboard.apply
+        at: { mark: comptime-draw-lanes, offsetMs: 600 }
+        upsertIds: [f-lane1, f-lane1-t, f-c1, f-c1t, f-c2, f-c2t, f-c3, f-c3t]
+        drawMs: 2200
+      - id: comptime-draw-runtime
+        type: whiteboard.apply
+        at: { mark: comptime-draw-runtime }
+        upsertIds: [f-start, f-start-t, f-lane2, f-lane2-t, f-r1, f-r1t, f-r2, f-r2t, f-r3, f-r3t]
+        drawMs: 2800
+      - id: comptime-draw-note
+        type: whiteboard.apply
+        at: { mark: comptime-draw-note }
+        upsertIds: [f-note]
+        drawMs: 800
+      - id: comptime-close-f
+        type: whiteboard.apply
+        at: { mark: comptime-type-comptime-use, offsetMs: -1500 }
+        open: false
+      - id: type-comptime-use
+        type: editor.type
+        at: { mark: comptime-type-comptime-use, offsetMs: -400 }
+        target:
+          {
+            file: main.zig,
+            after: "    std.debug.print(\"len {d} room {d}\\n\", .{ squares.items.len, squares.capacity });\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n    std.debug.print(\"biggest u8 {d}\\n\", .{biggest(u8, &scores)});\n    std.debug.print(\"table {any}\\n\", .{doubles});\n"
+  - id: run
+    narration: >
+      [[mark:run-run]] That's the language. Let's run all of it at once. [[mark:run-read]]
+      Every line here's one of the ideas we went through. The optional that found a letter,
+      and the one that found nothing and gave us ninety nine instead. The error we caught
+      by name. The window over the array, three items long. The word that's five letters
+      and six bytes. [[mark:run-read-room]] Look at this line. Five items, and room for
+      thirty three. The list asked for far more space than it needed, so it won't have to
+      move again for a while. That's a real number from a real run, not a rule to remember.
+      [[mark:run-read-last]] And the last line is the leak check. It says ok, because defer
+      gave the memory back. It's printed last because deferred work runs at the end, in
+      reverse order. [[mark:run-close]] You now know how Zig handles values, errors,
+      memory, and time. That's enough to read most Zig code and write a little.
+      [[mark:run-say-unused]] One thing to expect when you edit it. In Zig a value you
+      declare and never use is an error, not a warning. The compiler says unused local
+      constant. So if you stop using something, delete the line, or write underscore,
+      equals, and the name, to say you meant to ignore it. [[mark:run-sign-off]] Open the
+      file, change something, and run it again.
+    sources:
+      - { title: "Zig Learn — Overview", url: "https://ziglang.org/learn/overview/" }
+    actions:
+      - { id: run-program, type: runtime.run, at: { mark: run-run }, timeoutMs: 30000 }
+      - {
+          id: expect-window,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "window { 20, 30, 40 } len 3",
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-bytes,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "text héllo bytes 6 equal true",
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-caught,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "caught InvalidCharacter",
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-room,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "len 5 room 33",
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-table,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "table { 0, 2, 4, 6, 8 }",
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-leaks,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "leaks: ok",
+          timeoutMs: 15000,
+        }

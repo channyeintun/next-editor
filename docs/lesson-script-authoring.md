@@ -120,7 +120,7 @@ lesson:
   title: "…"
   locale: en-US
   workspace: # the PINNED starter state (exact file contents)
-    lessonType: go # one of the six languages, see the matrix below
+    lessonType: go # one of the languages in the matrix below
     name: Go Lesson
     entryFilePath: main.go
     files:
@@ -154,7 +154,7 @@ opt into or out of.
 
 ### Lesson types and runtime kinds
 
-Lesson types are the six **languages** the platform teaches — not the starter
+Lesson types are the **languages** the platform teaches — not the starter
 templates (react, vue, svelte, … are just seeded workspace conveniences for
 users; the WebContainer runs any pinned JS/TS workspace). The `runtime` block
 is **required for every script**, and its kind is fixed by the lesson type —
@@ -165,6 +165,7 @@ the schema rejects an omitted block or a mismatch:
 | `go`                       | `go-playground`         | `runtime.run`, `expect.output`                                         |
 | `kotlin`                   | `kotlin-playground`     | `runtime.run`, `expect.output`                                         |
 | `rust`                     | `rust-playground`       | `runtime.run`, `expect.output`                                         |
+| `zig`                      | `zig-playground`        | `runtime.run`, `expect.output`                                         |
 | `kite`                     | `kite-playground`       | `runtime.run`, `expect.output`                                         |
 | `javascript`, `typescript` | `webcontainer`          | `runtime.start`, `runtime.waitForReady`, `preview.*`, `expect.preview` |
 | `python`                   | `webcontainer`          | `runtime.start`, `expect.output` (WASI `python3`; console, no preview) |
@@ -229,12 +230,26 @@ Per-kind fixture `result` shapes (all fields exact program truth):
 - `go-playground` — `{ status: success | compile-error | runtime-error, output, exitCode, compileErrors? }`
 - `kotlin-playground` — `{ status: success | compile-error | runtime-error, output, compileErrors?, warnings?, exception? }`
 - `rust-playground` — `{ status: success | compile-error | runtime-error, stdout, stderr, compileErrors?, exitDetail? }`
+- `zig-playground` — `{ status: success | compile-error | runtime-error, output, compileErrors?, exitDetail? }`
+  (one `output` field, not two: zig-play.dev merges the program's stdout and
+  stderr into a single stream, and `std.debug.print` — the first thing every
+  Zig program uses — writes to stderr)
 - `kite-playground` — `{ status: success | compile-error | runtime-error, stdout, stderr, compileErrors?, exitDetail? }`
 
 Language formatting rules carry over from the real editors: Go files use tabs;
-Kotlin and Rust use 4-space indentation. Rust workspaces must contain
+Kotlin, Rust, and Zig use 4-space indentation. Rust workspaces must contain
 **exactly one file, `main.rs`** (the Rust Playground executes a single crate
-root); Go and Kotlin workspaces need at least one `.go` / `.kt` file.
+root), and Zig workspaces **exactly one file, `main.zig`** (there is no
+`build.zig` and no way to import a sibling file — structure a longer program
+with structs and functions); Go and Kotlin workspaces need at least one
+`.go` / `.kt` file.
+
+Zig scripts must target **Zig 0.16** specifically, which is the version the
+playground is pinned to. Zig breaks APIs between minor releases, so code copied
+from an older tutorial usually does not compile: in 0.16 `std.ArrayList` is
+unmanaged (`.empty`, with the allocator passed to `append`/`deinit` rather than
+`init`), the general-purpose allocator is `std.heap.DebugAllocator(.{})`, and
+`std.fs.File` has moved to `std.Io.File`.
 
 ### Scenes, narration, and marks
 
@@ -295,7 +310,7 @@ Action catalog:
 | `slide.show`           | `slideId`, `maximized` (default true)                                 | `slideId` must be in `lesson.slides`. Showing a slide while another is open advances **in place** (like moving to the next slide) — do not `slide.close` between consecutive slides; close only when returning to the editor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `slide.close`          | —                                                                     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `whiteboard.apply`     | `open?`, `maximized?`, `upsertIds: []`, `clear?`, `drawMs?`           | Ids from `lesson.whiteboardAssets`. Must open, change maximize, clear, or upsert ≥1 asset. `drawMs` draws the upserts in instead of applying them at once, and `clear` wipes the board first (both under Whiteboard assets); `drawMs` must be under the action's `timeoutMs` and at most 6000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `expect.output`        | `contains`, `timeoutMs`                                               | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` line fails it. Use with Playground runtimes after `runtime.run`, or with console-only Python after `runtime.start`; it is not a JavaScript/TypeScript preview assertion.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `expect.output`        | `contains`, `timeoutMs`                                               | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` / `[zig-run error]` line fails it. Use with Playground runtimes after `runtime.run`, or with console-only Python after `runtime.start`; it is not a JavaScript/TypeScript preview assertion.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `expect.file`          | `path`, `contains`                                                    | Asserts the final workspace file contains the string.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 Every WebContainer/preview action requires an explicit bounded retry policy:
@@ -361,7 +376,7 @@ Critical `editor.type` discipline:
 
 ### The fixture must be the truth
 
-The fixture result's program output (`output` for Go/Kotlin, `stdout` for
+The fixture result's program output (`output` for Go/Kotlin/Zig, `stdout` for
 Rust) must be **exactly** what the real program prints (every line,
 `\n`-terminated). Two reasons: `expect.output` runs against it in
 fixture mode, and a later `--runtime=live` render runs the real Playground —

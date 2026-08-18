@@ -15,6 +15,7 @@ import { createStarterKotlinWorkspace } from "../starters/kotlin";
 import { createStarterPythonWorkspace } from "../starters/python";
 import { createStarterKiteWorkspace } from "../starters/kite";
 import { createStarterRustWorkspace } from "../starters/rust";
+import { createStarterZigWorkspace } from "../starters/zig";
 
 // Record keys make this exhaustive at compile time: adding a lesson type
 // without deciding its execution backend fails the typecheck, not just a test.
@@ -33,6 +34,7 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   kotlin: "kotlin-playground",
   python: "webcontainer",
   rust: "rust-playground",
+  zig: "zig-playground",
   kite: "kite-playground",
   // The web starter is a Vite project, so it builds and serves in the
   // container like any other — the compiler it installs is WebAssembly.
@@ -45,6 +47,7 @@ const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "go",
   "kotlin",
   "rust",
+  "zig",
   "kite",
 ]);
 
@@ -109,10 +112,45 @@ describe("rust workspace model", () => {
   });
 });
 
+describe("zig workspace model", () => {
+  it("maps .zig and .zon to the first-party zig language id", () => {
+    // Monaco ships no Zig grammar; monaco/zigLanguage.ts registers this id.
+    expect(inferLanguageFromPath("main.zig")).toBe("zig");
+    expect(inferLanguageFromPath("build.zig.zon")).toBe("zig");
+  });
+
+  it("round-trips a zig starter through project normalization without falling back", () => {
+    const starter = createStarterZigWorkspace();
+    const normalized = normalizeProject(starter);
+
+    expect(normalized.lessonType).toBe("zig");
+    expect(normalized.entryFilePath).toBe("main.zig");
+    expect(normalized.files["main.zig"].language).toBe("zig");
+    expect(normalized.files["main.zig"].content).toContain("pub fn main()");
+    expect(normalized.files["README.md"].language).toBe("markdown");
+  });
+
+  it("keeps the starter on the Zig 0.16 std APIs it claims to target", () => {
+    // 0.16 moved exactly these out from under older tutorials: ArrayList became
+    // unmanaged (allocator per call) and the GPA was renamed. A starter that
+    // regressed to the old spellings would not compile on the playground.
+    const source = createStarterZigWorkspace().files["main.zig"].content;
+
+    expect(source).toContain("std.heap.DebugAllocator(.{})");
+    expect(source).toContain("squares.deinit(allocator)");
+    expect(source).toContain("squares.append(allocator,");
+    expect(source).not.toContain("GeneralPurposeAllocator");
+    expect(source).not.toContain("ArrayList(u32).init(");
+  });
+});
+
 describe("kite workspace model", () => {
-  it("colours .kite with Monaco's rust grammar, which is the closest fit", () => {
-    expect(inferLanguageFromPath("main.kite")).toBe("rust");
-    expect(inferLanguageFromPath("src/checkout.kite")).toBe("rust");
+  it("maps .kite to the first-party kite language id", () => {
+    // Was Monaco's `rust` grammar, which leaves `var`, `check`, `defer` and
+    // `nil` uncoloured and swallows `\(…)` holes — monaco/kiteLanguage.ts now
+    // registers a real one.
+    expect(inferLanguageFromPath("main.kite")).toBe("kite");
+    expect(inferLanguageFromPath("src/checkout.kite")).toBe("kite");
   });
 
   it("round-trips a kite starter through project normalization without falling back", () => {

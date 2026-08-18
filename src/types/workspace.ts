@@ -87,6 +87,7 @@ export type WorkspaceLessonType =
   | "kotlin"
   | "python"
   | "rust"
+  | "zig"
   | "kite"
   | "kite-web";
 
@@ -113,6 +114,7 @@ export const WORKSPACE_LESSON_TYPE_LABELS: Record<WorkspaceLessonType, string> =
   kotlin: "Kotlin",
   python: "Python",
   rust: "Rust",
+  zig: "Zig",
   kite: "Kite",
   "kite-web": "Kite + Vite (web)",
 };
@@ -135,7 +137,7 @@ export function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonT
  * full Node runtime — they may install packages or start servers. Python also
  * runs in the WebContainer, but through its experimental WASI interpreter —
  * the runner executes the script and exits instead of keeping a server alive.
- * Go, Kotlin, and Rust are deliberately excluded because they use the
+ * Go, Kotlin, Rust, and Zig are deliberately excluded because they use the
  * selective Playground execution paths below.
  */
 const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
@@ -161,11 +163,11 @@ export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boole
 }
 
 /**
- * Which backend executes code for a lesson. `go`, `kotlin`, and `rust`
- * lessons compile through their respective playground proxies on the main
- * Worker. `kite` compiles in the browser: `kitec` is a Rust program, and the
- * Wasm build of it runs here, so it needs no proxy and no service. Everything
- * else keeps the WebContainer
+ * Which backend executes code for a lesson. `go`, `kotlin`, `rust`, and
+ * `zig` lessons compile through their respective playground proxies on the
+ * main Worker. `kite` compiles in the browser: `kitec` is a Rust program, and
+ * the Wasm build of it runs here, so it needs no proxy and no service.
+ * Everything else keeps the WebContainer
  * runtime. Derived from
  * `lessonType` — never persisted as a second field (see
  * docs/go-lessons-selective-runtime-plan.md §6).
@@ -175,6 +177,7 @@ export type WorkspaceExecutionKind =
   | "go-playground"
   | "kotlin-playground"
   | "rust-playground"
+  | "zig-playground"
   | "kite-playground";
 
 export function executionKindForLessonType(
@@ -189,6 +192,8 @@ export function executionKindForLessonType(
       return "kotlin-playground";
     case "rust":
       return "rust-playground";
+    case "zig":
+      return "zig-playground";
     default:
       return "webcontainer";
   }
@@ -595,13 +600,17 @@ export function inferLanguageFromPath(path: string): string {
     return "rust";
   }
 
-  // Monaco has no Kite grammar, and `rust` is much the closest fit — the same
-  // choice `.gitattributes` makes for GitHub. Shared outright: fn, let, match,
-  // struct, enum, trait, impl, pub, use, as, type, self, async, await, true,
-  // false. What misses is small: `var` and `check` are not Rust keywords, and
-  // `nil` is spelled `None` there.
+  // Registered by monaco/zigLanguage.ts — Monaco ships no Zig grammar.
+  if (normalizedPath.endsWith(".zig") || normalizedPath.endsWith(".zon")) {
+    return "zig";
+  }
+
+  // Registered by monaco/kiteLanguage.ts. This used to borrow Monaco's `rust`
+  // grammar, which shares most of Kite's surface but leaves `var`, `check`,
+  // `defer`, `nil` and `use` uncoloured, mis-reads `'a'` as a character
+  // literal, and swallows `\(…)` interpolation holes into the string.
   if (normalizedPath.endsWith(".kite")) {
-    return "rust";
+    return "kite";
   }
 
   if (normalizedPath.endsWith(".py")) {

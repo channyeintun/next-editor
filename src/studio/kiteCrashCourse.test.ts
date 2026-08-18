@@ -5,6 +5,7 @@ import YAML from "yaml";
 
 import { instantiateKiteCompiler, type KiteCompiler } from "../runtime/kitePlayground/compiler";
 import { parseLessonScript, type LessonScript } from "./script/schema";
+import { KITE_KEYWORDS } from "../monaco/kiteLanguage";
 
 /**
  * The Kite crash course is the one lesson whose pinned fixture can be checked
@@ -83,37 +84,10 @@ describe("kite crash course", () => {
   it("writes every one of Kite's 27 keywords", () => {
     // Appendix B of the specification. A crash course that skips one is not
     // covering the language, and the census is asserted in the compiler too.
-    const census = [
-      "async",
-      "await",
-      "as",
-      "break",
-      "continue",
-      "for",
-      "if",
-      "else",
-      "match",
-      "return",
-      "check",
-      "defer",
-      "enum",
-      "struct",
-      "trait",
-      "type",
-      "false",
-      "true",
-      "nil",
-      "fn",
-      "impl",
-      "in",
-      "let",
-      "var",
-      "pub",
-      "self",
-      "use",
-    ];
-    expect(census).toHaveLength(27);
-    const missing = census.filter(
+    // The list lives with the Monaco grammar so the editor and the lesson
+    // cannot disagree about what a keyword is.
+    expect(KITE_KEYWORDS).toHaveLength(27);
+    const missing = KITE_KEYWORDS.filter(
       (word) => !new RegExp(`(?<![A-Za-z0-9_])${word}(?![A-Za-z0-9_])`).test(program),
     );
     expect(missing).toEqual([]);

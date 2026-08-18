@@ -22,6 +22,9 @@ export interface Env {
   // Same kill-switch contract for Rust lessons via the Rust Playground proxy
   // (routes/rustPlayground.ts).
   RUST_PLAYGROUND_ENABLED?: string;
+  // Same kill-switch contract for Zig lessons via the Zig Playground proxy
+  // (routes/zigPlayground.ts).
+  ZIG_PLAYGROUND_ENABLED?: string;
   // Private Burmese Studio narration. All three values are required and the
   // requesting user must also have studio.burmese-voxcpm2 enabled in D1.
   // The browser never receives these Modal workspace credentials.

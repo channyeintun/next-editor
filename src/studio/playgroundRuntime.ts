@@ -29,14 +29,21 @@ import {
   rustRunStartedConsoleLines,
 } from "../runtime/rustPlayground/console";
 import { collectRustPlaygroundFiles } from "../runtime/rustPlayground/files";
+import { ZigPlaygroundClient, ZigPlaygroundServiceError } from "../runtime/zigPlayground/client";
+import {
+  zigRunResultToConsoleLines,
+  zigRunServiceErrorToConsoleLines,
+  zigRunStartedConsoleLines,
+} from "../runtime/zigPlayground/console";
+import { collectZigPlaygroundFiles } from "../runtime/zigPlayground/files";
 import type { WorkspaceProject } from "../types/workspace";
 import { StudioActionError, abortableSleep } from "./async";
 import type { StudioRuntime } from "./plan";
 
 /**
  * Execution-kind adapters for `runtime.run` (docs/agent-lesson-production.md
- * §2/§8), one per selective-Playground lesson type — Go, Kotlin, and Rust
- * share a protocol (collect sources → proxy run → normalized result →
+ * §2/§8), one per selective-Playground lesson type — Go, Kotlin, Rust, and
+ * Zig share a protocol (collect sources → proxy run → normalized result →
  * prefixed console lines), so one retry engine drives kind-specific configs.
  * Runs have no local side effects, making a declared-idempotent retry safe
  * for transient service failures; compile and program errors are terminal.
@@ -51,7 +58,14 @@ export const MAX_RUN_ATTEMPTS = 2;
 
 type PlaygroundRuntime = Extract<
   StudioRuntime,
-  { kind: "go-playground" | "kotlin-playground" | "rust-playground" | "kite-playground" }
+  {
+    kind:
+      | "go-playground"
+      | "kotlin-playground"
+      | "rust-playground"
+      | "zig-playground"
+      | "kite-playground";
+  }
 >;
 type FixtureOf<K extends PlaygroundRuntime["kind"]> = Extract<
   PlaygroundRuntime,
@@ -284,6 +298,52 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
         serviceErrorLines: (errorKind, message) =>
           rustRunServiceErrorToConsoleLines(
             errorKind as Parameters<typeof rustRunServiceErrorToConsoleLines>[0],
+            message,
+          ),
+      };
+    }
+
+    case "zig-playground": {
+      let client: ZigPlaygroundClient | null = null;
+      return {
+        label: "zig",
+        collectFiles: collectZigPlaygroundFiles,
+        // The upstream compiles one root source file from one text body.
+        validateFiles: (files) =>
+          files.length === 1 && files[0].path === "main.zig"
+            ? null
+            : "Zig lessons run exactly one main.zig",
+        startedLines: () => zigRunStartedConsoleLines(),
+        runLive: async (files, timeoutMs, signal) => {
+          client ??= new ZigPlaygroundClient();
+          const activeClient = client;
+          const result = await liveAttempt(
+            () => activeClient.run(files),
+            () => activeClient.abort(),
+            (error) =>
+              error instanceof ZigPlaygroundServiceError
+                ? { kind: error.kind, message: error.message }
+                : null,
+            timeoutMs,
+            signal,
+          );
+          return {
+            resultLines: zigRunResultToConsoleLines(result),
+            ok: result.status === "success",
+            status: result.status,
+          };
+        },
+        runFixtureResult: (fixture) => {
+          const result = (fixture as FixtureOf<"zig-playground">).result;
+          return {
+            resultLines: zigRunResultToConsoleLines(result),
+            ok: result.status === "success",
+            status: result.status,
+          };
+        },
+        serviceErrorLines: (errorKind, message) =>
+          zigRunServiceErrorToConsoleLines(
+            errorKind as Parameters<typeof zigRunServiceErrorToConsoleLines>[0],
             message,
           ),
       };

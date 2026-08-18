@@ -93,6 +93,23 @@ function buildSupportedStack(project: WorkspaceProject): string {
         "limited compute time). Do not introduce other languages, toolchains, or runtimes."
       );
 
+    case "zig-playground":
+      return (
+        "Supported stack: Zig only. This lesson's single main.zig compiles and runs remotely " +
+        "on the Zig Playground (Zig 0.16.0, Debug build) when the user presses Run or Format " +
+        "in the Zig Runner panel — you cannot execute code yourself. There is no shell, " +
+        "terminal, dev server, or preview in this workspace: work purely through the file " +
+        "tools and reason about program behavior from the source. The whole program lives in " +
+        "main.zig — there is no build.zig and no package manager, so structure it with " +
+        "structs and functions rather than extra files. Target Zig 0.16 exactly: `std.ArrayList` " +
+        "is unmanaged (`.empty`, and the allocator is passed to `append`/`deinit`, not to " +
+        "`init`), the general-purpose allocator is `std.heap.DebugAllocator(.{})`, and " +
+        "`std.fs.File` has moved to `std.Io.File`. Prefer `std.debug.print` for output. " +
+        "Solutions must stay within Zig Playground constraints (sandboxed execution, no " +
+        "network access, no stdin, standard library only, limited compute time). Do not " +
+        "introduce other languages, toolchains, or runtimes."
+      );
+
     case "go-playground":
       return (
         "Supported stack: Go only. This lesson's Go files compile and run remotely on the " +

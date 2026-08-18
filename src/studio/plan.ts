@@ -270,10 +270,10 @@ export type StudioPlanAction = z.infer<typeof studioPlanActionSchema>;
 export type StudioPlanActionType = StudioPlanAction["type"];
 
 /**
- * Lesson types are the six languages the platform teaches — not the starter
+ * Lesson types are the languages the platform teaches — not the starter
  * templates (react, vue, …), which are just seeded workspace conveniences.
  * javascript/typescript lessons pin arbitrary WebContainer (Node) workspaces;
- * python runs its WASI script model; go/kotlin/rust use their playgrounds.
+ * python runs its WASI script model; go/kotlin/rust/zig use their playgrounds.
  * Each value is also a valid `WorkspaceLessonType` for the pinned project.
  */
 export const studioLessonTypeSchema = z.enum([
@@ -283,6 +283,7 @@ export const studioLessonTypeSchema = z.enum([
   "go",
   "kotlin",
   "rust",
+  "zig",
   "kite",
 ]);
 export type StudioLessonType = z.infer<typeof studioLessonTypeSchema>;
@@ -421,6 +422,23 @@ export const kotlinRunFixtureSchema = z.object({
 });
 
 /** Rust Playground stand-in result — mirrors the worker-normalized contract. */
+/**
+ * Zig's fixture result shape differs from the others by one field: zig-play.dev
+ * runs the program with its streams merged and answers in text/plain, so there
+ * is no stdout/stderr split to pin. Pinning two fields where the service
+ * reports one would invite a fixture that no live run could ever reproduce.
+ */
+export const zigRunFixtureSchema = z.object({
+  latencyMs: positiveMs,
+  transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
+  result: z.object({
+    status: z.enum(["success", "compile-error", "runtime-error"]),
+    output: z.string(),
+    compileErrors: z.string().optional(),
+    exitDetail: z.string().optional(),
+  }),
+});
+
 export const rustRunFixtureSchema = z.object({
   latencyMs: positiveMs,
   transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
@@ -496,6 +514,17 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
     fixture: rustRunFixtureSchema,
   }),
   z.object({
+    kind: z.literal("zig-playground"),
+    /**
+     * Same reason as Kite: a Zig lesson that spends its first minutes on the
+     * whiteboard should not hold 288px open for an empty console until the
+     * first run.
+     */
+    dockStartsCollapsed: z.boolean().default(false),
+    defaultMode: z.enum(["live", "fixture"]),
+    fixture: zigRunFixtureSchema,
+  }),
+  z.object({
     kind: z.literal("kite-playground"),
     /**
      * The dock opens expanded, and a Kite lesson that runs nothing until its
@@ -528,6 +557,7 @@ const PLAYGROUND_RUNTIME_KINDS = new Set<string>([
   "go-playground",
   "kotlin-playground",
   "rust-playground",
+  "zig-playground",
   "kite-playground",
 ] satisfies StudioPlaygroundRuntimeKind[]);
 
@@ -578,8 +608,8 @@ export function parseRuntimeModeParam(raw: string | null): RuntimeModeParam {
 }
 
 /**
- * The one runtime kind each lesson type may declare. Go, Kotlin, and Rust
- * execute through their selective proxies, Kite on its in-page WebAssembly
+ * The one runtime kind each lesson type may declare. Go, Kotlin, Rust, and
+ * Zig execute through their selective proxies, Kite on its in-page WebAssembly
  * compiler; JavaScript, TypeScript, and
  * Python all run in the versioned WebContainer adapter. JS/TS drive a dev server
  * + preview; Python runs one-shot on the WebContainer's built-in WASI `python3`
@@ -593,6 +623,7 @@ export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind
   go: "go-playground",
   kotlin: "kotlin-playground",
   rust: "rust-playground",
+  zig: "zig-playground",
   kite: "kite-playground",
 };
 

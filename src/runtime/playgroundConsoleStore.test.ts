@@ -10,7 +10,14 @@ import {
   rustFormatStartedConsoleLines,
   rustRunStartedConsoleLines,
 } from "./rustPlayground/console";
-import { MAX_RUNNER_CONSOLE_LINES, appendRunnerConsoleLines } from "./playgroundConsoleStore";
+import { zigFormatStartedConsoleLines, zigRunStartedConsoleLines } from "./zigPlayground/console";
+import {
+  MAX_RUNNER_CONSOLE_LINES,
+  OPERATION_START_PREFIXES,
+  appendRunnerConsoleLines,
+} from "./playgroundConsoleStore";
+import { isPlaygroundRuntimeKind, studioRuntimeSchema } from "../studio/plan";
+import { runErrorPrefixFor } from "../studio/playgroundRuntime";
 
 describe("appendRunnerConsoleLines", () => {
   it("appends lines and inserts a separator before a new operation", () => {
@@ -62,6 +69,8 @@ describe("appendRunnerConsoleLines", () => {
     ["rustfmt", rustFormatStartedConsoleLines()],
     ["kitec run", kiteRunStartedConsoleLines()],
     ["kitec fmt", kiteFormatStartedConsoleLines()],
+    ["zig run", zigRunStartedConsoleLines()],
+    ["zig fmt", zigFormatStartedConsoleLines()],
   ])("separates a new %s operation", (_label, startedLines) => {
     const store = createRuntimePanelStore();
     appendRunnerConsoleLines(store, ["earlier output"]);
@@ -72,5 +81,26 @@ describe("appendRunnerConsoleLines", () => {
       "",
       ...startedLines,
     ]);
+  });
+
+  // The list above is hand-written, which is exactly how Zig shipped without
+  // a separator: its console module was added, its runner worked, and the
+  // omission was invisible until a lesson ran twice. This derives the set of
+  // playground languages from the plan schema instead, so a language added
+  // later fails here rather than losing its separator quietly.
+  it("has a start prefix for every playground runtime the schema allows", () => {
+    const kinds = studioRuntimeSchema.options
+      .map((option) => option.shape.kind.value as string)
+      .filter((kind) => isPlaygroundRuntimeKind(kind));
+
+    expect(kinds.length).toBeGreaterThan(0);
+
+    const missing = kinds.filter((kind) => {
+      // runErrorPrefixFor gives "[go-run error]"; the run prefix shares its head.
+      const head = runErrorPrefixFor(kind).replace(" error]", "]");
+      return !OPERATION_START_PREFIXES.some((prefix) => prefix.startsWith(head));
+    });
+
+    expect(missing, "playground runtimes with no console separator prefix").toEqual([]);
   });
 });

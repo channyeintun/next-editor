@@ -19,7 +19,7 @@ export const MAX_RUNNER_CONSOLE_LINES = 200;
  * `runtime/<lang>Playground/console.ts`; a prefix missing here silently drops
  * the separator for that language only.
  */
-const OPERATION_START_PREFIXES = [
+export const OPERATION_START_PREFIXES = [
   "[go-run] go run",
   "[gofmt] gofmt",
   "[kotlin-run] kotlin",
@@ -27,6 +27,8 @@ const OPERATION_START_PREFIXES = [
   "[rustfmt] rustfmt",
   "[kite-run] kitec run",
   "[kitefmt] kitec fmt",
+  "[zig-run] zig run",
+  "[zig-fmt] zig fmt",
 ];
 
 export function appendRunnerConsoleLines(store: RuntimePanelStoreInstance, lines: string[]): void {

@@ -38,6 +38,7 @@ describe("studio lesson registry", () => {
       "rust-variables",
       "rust-vectors",
       "xstate-react-tea-shop-order-mm",
+      "zig-crash-course",
     ]);
     expect(STUDIO_SOURCES[DEFAULT_STUDIO_PLAN_SLUG]?.kind).toBe("script");
   });
