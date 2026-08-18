@@ -273,7 +273,8 @@ export type StudioPlanActionType = StudioPlanAction["type"];
  * Lesson types are the languages the platform teaches — not the starter
  * templates (react, vue, …), which are just seeded workspace conveniences.
  * javascript/typescript lessons pin arbitrary WebContainer (Node) workspaces;
- * python runs its WASI script model; go/kotlin/rust/zig use their playgrounds.
+ * python runs its WASI script model; go/kotlin/rust/zig use their playgrounds;
+ * kite and asm need no service at all, compiling and running in the page.
  * Each value is also a valid `WorkspaceLessonType` for the pinned project.
  */
 export const studioLessonTypeSchema = z.enum([
@@ -285,6 +286,7 @@ export const studioLessonTypeSchema = z.enum([
   "rust",
   "zig",
   "kite",
+  "asm",
 ]);
 export type StudioLessonType = z.infer<typeof studioLessonTypeSchema>;
 
@@ -452,6 +454,46 @@ export const rustRunFixtureSchema = z.object({
 });
 
 /**
+ * Assembly stand-in result.
+ *
+ * Two transient error kinds are absent for the same reason Kite's are: the
+ * assembler and the machine are TypeScript in this page, so a lesson cannot be
+ * rate-limited or timed out by a service it never calls. What is left is the
+ * one failure a first-party engine can still have — it did not load.
+ *
+ * `registers` and `flags` are optional and unique to this kind. Every other
+ * language's fixture is what the program printed; an assembly lesson's console
+ * also carries the register file, so a fixture that omits them replays a run
+ * with no register lines, and one that includes them replays them exactly.
+ */
+export const asmRunFixtureSchema = z.object({
+  latencyMs: positiveMs,
+  transientErrorKinds: z.array(z.enum(["unavailable"])).default([]),
+  result: z.object({
+    status: z.enum(["success", "assemble-error", "runtime-error"]),
+    stdout: z.string(),
+    stderr: z.string(),
+    exitCode: z.number().int().optional(),
+    assembleErrors: z.string().optional(),
+    exitDetail: z.string().optional(),
+    instructions: z.number().int().nonnegative().optional(),
+    registers: z
+      .array(z.object({ name: z.string().min(1), value: z.string().regex(/^\d+$/) }))
+      .optional(),
+    flags: z
+      .object({
+        carry: z.boolean(),
+        zero: z.boolean(),
+        sign: z.boolean(),
+        overflow: z.boolean(),
+        parity: z.boolean(),
+        adjust: z.boolean(),
+      })
+      .optional(),
+  }),
+});
+
+/**
  * Kite stand-in result.
  *
  * The transient error kinds are two rather than three: Kite's compiler is
@@ -537,6 +579,17 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
     defaultMode: z.enum(["live", "fixture"]),
     fixture: kiteRunFixtureSchema,
   }),
+  z.object({
+    kind: z.literal("asm-playground"),
+    /**
+     * Same reason as Kite and Zig: an assembly lesson that draws the register
+     * file on the whiteboard before writing a line should not hold 288px open
+     * over an empty console to do it.
+     */
+    dockStartsCollapsed: z.boolean().default(false),
+    defaultMode: z.enum(["live", "fixture"]),
+    fixture: asmRunFixtureSchema,
+  }),
 ]);
 export type StudioRuntime = z.infer<typeof studioRuntimeSchema>;
 export type StudioRuntimeKind = StudioRuntime["kind"];
@@ -559,6 +612,7 @@ const PLAYGROUND_RUNTIME_KINDS = new Set<string>([
   "rust-playground",
   "zig-playground",
   "kite-playground",
+  "asm-playground",
 ] satisfies StudioPlaygroundRuntimeKind[]);
 
 /**
@@ -581,6 +635,20 @@ export function isPlaygroundRuntimeKind(kind: string): kind is StudioPlaygroundR
  */
 export function isPlaygroundRuntime(runtime: StudioRuntime): runtime is StudioPlaygroundRuntime {
   return isPlaygroundRuntimeKind(runtime.kind);
+}
+
+/**
+ * Whether a plan asks for the runner dock to start shut.
+ *
+ * Derived from the runtime carrying the field rather than from a list of kinds
+ * that do. A hand-written `kind === "kite-playground" || kind ===
+ * "zig-playground"` chain silently ignores any kind added later, and the
+ * failure is invisible: the lesson renders, the dock is simply open when the
+ * script said shut. That is the same shape of bug `isPlaygroundRuntimeKind`
+ * exists to prevent one layer up.
+ */
+export function runtimeDockStartsCollapsed(runtime: StudioRuntime): boolean {
+  return "dockStartsCollapsed" in runtime && runtime.dockStartsCollapsed;
 }
 
 export interface RuntimeModeParam {
@@ -625,6 +693,7 @@ export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind
   rust: "rust-playground",
   zig: "zig-playground",
   kite: "kite-playground",
+  asm: "asm-playground",
 };
 
 export const studioPlanSchema = z

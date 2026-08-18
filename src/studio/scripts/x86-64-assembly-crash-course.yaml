@@ -1,0 +1,647 @@
+# One shape: the smallest complete x86-64 program, built a piece at a time —
+# the registers, a system call, the flags, and the exit status — each drawn on
+# the whiteboard first, then written, then run once at the end.
+#
+# Every line of code here was assembled and executed by the runner in
+# src/core/x86; the fixture output below is that run's exact text, including
+# the register line. Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/x86-64-assembly-crash-course.yaml
+schemaVersion: 1
+
+lesson:
+  slug: x86-64-assembly-crash-course
+  title: "x86-64 assembly: registers, a system call, and the flags"
+  locale: en-US
+  workspace:
+    lessonType: asm
+    name: Assembly Lesson
+    entryFilePath: main.asm
+    # One file is the whole lesson, so the tree would be a list of one.
+    sidebarStartsCollapsed: true
+    files:
+      main.asm: |
+        ; A program with no C library. Nothing called it, so there is nowhere to
+        ; return to. It starts at _start, and it stops by asking the kernel to stop it.
+
+        section .data
+
+        section .text
+            global _start
+
+        _start:
+            mov     rax, 60
+            syscall
+  whiteboardAssets:
+    # --- board one: what is actually there -------------------------------
+    - id: a-title
+      kind: text
+      x: 300
+      y: 150
+      width: 760
+      height: 48
+      text: "Inside the processor"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: a-cpu
+      kind: rectangle
+      x: 290
+      y: 220
+      width: 360
+      height: 300
+      strokeColor: "#1971c2"
+    - id: a-cpu-t
+      kind: text
+      x: 312
+      y: 236
+      width: 320
+      height: 36
+      text: "registers"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: a-reg1
+      kind: text
+      x: 316
+      y: 296
+      width: 320
+      height: 36
+      text: "rax   rbx   rcx   rdx"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: a-reg2
+      kind: text
+      x: 316
+      y: 346
+      width: 320
+      height: 36
+      text: "rsi   rdi   rsp   rbp"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: a-reg3
+      kind: text
+      x: 316
+      y: 396
+      width: 320
+      height: 36
+      text: "r8 . . . r15"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: a-reg-note
+      kind: text
+      x: 316
+      y: 452
+      width: 320
+      height: 36
+      text: "16 of them, 64 bits each"
+      strokeColor: "#9c36b5"
+      fontSize: 24
+    - id: a-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 662
+      y: 350
+      width: 76
+      height: 40
+    - id: a-mem
+      kind: rectangle
+      x: 750
+      y: 220
+      width: 310
+      height: 300
+      strokeColor: "#e03131"
+    - id: a-mem-t
+      kind: text
+      x: 772
+      y: 236
+      width: 280
+      height: 36
+      text: "memory"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: a-mem-1
+      kind: text
+      x: 776
+      y: 300
+      width: 280
+      height: 36
+      text: "your bytes,"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: a-mem-2
+      kind: text
+      x: 776
+      y: 344
+      width: 280
+      height: 36
+      text: "at addresses"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: a-note
+      kind: text
+      x: 300
+      y: 552
+      width: 760
+      height: 40
+      text: "one instruction at a time, and nothing else"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    # --- board two: the system call --------------------------------------
+    - id: b-title
+      kind: text
+      x: 300
+      y: 150
+      width: 760
+      height: 48
+      text: "Asking the kernel"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: b-rax
+      kind: text
+      x: 300
+      y: 226
+      width: 560
+      height: 36
+      text: "rax    which call"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: b-rdi
+      kind: text
+      x: 300
+      y: 276
+      width: 560
+      height: 36
+      text: "rdi    first argument"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-rsi
+      kind: text
+      x: 300
+      y: 326
+      width: 560
+      height: 36
+      text: "rsi    second argument"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-rdx
+      kind: text
+      x: 300
+      y: 376
+      width: 560
+      height: 36
+      text: "rdx    third argument"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-call
+      kind: text
+      x: 300
+      y: 444
+      width: 300
+      height: 40
+      text: "syscall"
+      strokeColor: "#e03131"
+      fontSize: 30
+    - id: b-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 612
+      y: 448
+      width: 90
+      height: 36
+    - id: b-kernel
+      kind: rectangle
+      x: 718
+      y: 418
+      width: 300
+      height: 92
+      strokeColor: "#f08c00"
+    - id: b-kernel-t
+      kind: text
+      x: 748
+      y: 444
+      width: 260
+      height: 36
+      text: "the kernel"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b-back
+      kind: text
+      x: 300
+      y: 546
+      width: 760
+      height: 36
+      text: "the answer comes back in rax"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    # --- board three: the flags ------------------------------------------
+    - id: c-title
+      kind: text
+      x: 300
+      y: 150
+      width: 760
+      height: 48
+      text: "One bit decides"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: c-dec
+      kind: text
+      x: 300
+      y: 234
+      width: 560
+      height: 40
+      text: "dec rcx"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: c-count
+      kind: text
+      x: 300
+      y: 296
+      width: 700
+      height: 36
+      text: "5    4    3    2    1    0"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: c-zf
+      kind: rectangle
+      x: 300
+      y: 356
+      width: 400
+      height: 92
+      strokeColor: "#e03131"
+    - id: c-zf-t
+      kind: text
+      x: 328
+      y: 382
+      width: 360
+      height: 40
+      text: "zero flag: on"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: c-zf-ring
+      kind: freedraw
+      stroke: circle
+      x: 906
+      y: 286
+      width: 76
+      height: 56
+    - id: c-jnz
+      kind: text
+      x: 300
+      y: 486
+      width: 760
+      height: 36
+      text: "jnz jumps back while that flag is off"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 29
+
+runtime:
+  kind: asm-playground
+  # Nothing runs until the last scene, so the dock would otherwise hold 288px
+  # open over an empty console for the whole lesson.
+  dockStartsCollapsed: true
+  defaultMode: fixture
+  fixture:
+    latencyMs: 200
+    result:
+      status: success
+      stdout: "Hello, x86-64!\n"
+      stderr: ""
+      exitCode: 15
+      registers:
+        - { name: rax, value: "60" }
+        - { name: rdx, value: "15" }
+        - { name: rbx, value: "15" }
+        - { name: rsi, value: "4202496" }
+        - { name: rdi, value: "15" }
+      flags:
+        carry: false
+        zero: true
+        sign: false
+        overflow: false
+        parity: true
+        adjust: false
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
+
+scenes:
+  - id: machine
+    narration: >
+      Every language you've written so far has been standing between you and the
+      processor. Let's take it away and see what's left.
+      [[mark:machine-draw-regs]] There are sixteen places to put a value. They're
+      called registers, they're inside the processor itself, and each one holds
+      sixty-four bits. That's all the storage the processor has of its own.
+      [[mark:machine-draw-names]] They have names, and you'll use these names all
+      the time. rax, rbx, rcx, rdx, and the rest.
+      [[mark:machine-draw-mem]] Everything else lives in memory, which is outside,
+      and which you reach by address. Moving a value between the two is something
+      you ask for by name, every time.
+      [[mark:machine-draw-note]] And the processor does one instruction, then the
+      next one. There's no garbage collector waiting, no runtime starting up, and
+      nothing checking your work. What you write is what runs.
+      [[mark:machine-to-code]] So let's write one.
+    sources:
+      - {
+          title: "Intel 64 and IA-32 Architectures Software Developer Manuals",
+          url: "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html",
+        }
+      - {
+          title: "System V Application Binary Interface, AMD64 Processor Supplement",
+          url: "https://gitlab.com/x86-psABIs/x86-64-ABI",
+        }
+    actions:
+      - id: machine-open-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1700 }
+        open: true
+      - id: machine-draw-title
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1200 }
+        upsertIds: [a-title]
+        drawMs: 700
+      - id: machine-draw-regs
+        type: whiteboard.apply
+        at: { mark: machine-draw-regs }
+        upsertIds: [a-cpu, a-cpu-t, a-reg-note]
+        drawMs: 900
+      - id: machine-draw-names
+        type: whiteboard.apply
+        at: { mark: machine-draw-names }
+        upsertIds: [a-reg1, a-reg2, a-reg3]
+        drawMs: 1000
+      - id: machine-draw-mem
+        type: whiteboard.apply
+        at: { mark: machine-draw-mem }
+        upsertIds: [a-arrow, a-mem, a-mem-t, a-mem-1, a-mem-2]
+        drawMs: 1200
+      - id: machine-draw-note
+        type: whiteboard.apply
+        at: { mark: machine-draw-note }
+        upsertIds: [a-note]
+        drawMs: 800
+      - id: machine-close-board
+        type: whiteboard.apply
+        at: { mark: machine-to-code }
+        open: false
+
+  - id: skeleton
+    narration: >
+      [[mark:skeleton-open]] Here's the file we're starting from. It's already a
+      complete program, and it's almost empty, which tells you something about how
+      little a program actually needs. [[mark:skeleton-sections]] A section is a
+      region with one job. Dot text holds instructions. Dot data holds bytes you
+      wrote down yourself, and it's empty so far. The assembler keeps them apart
+      because the two get different permissions once the program is loaded: you can
+      run the first one, and you can change the second one.
+      [[mark:skeleton-start]] Then there's underscore start. That's where execution
+      begins. It isn't main, and the difference matters. Nothing called us, so
+      there's nowhere to return to. [[mark:skeleton-exit]] Which is why the file
+      ends with a request to stop. Sixty is the number for exit, and syscall is
+      how you hand the request over. Take those two lines away and the processor
+      keeps going into whatever bytes come next.
+    sources:
+      - { title: "NASM Manual", url: "https://www.nasm.us/doc/" }
+      - {
+          title: "_exit(2) — Linux manual page",
+          url: "https://man7.org/linux/man-pages/man2/_exit.2.html",
+        }
+    actions:
+      - {
+          id: skeleton-open-file,
+          type: workspace.openFile,
+          at: { mark: skeleton-open },
+          path: main.asm,
+        }
+      - id: skeleton-select-sections
+        type: editor.select
+        at: { mark: skeleton-sections, offsetMs: 900 }
+        target: { file: main.asm, text: "section .text\n", occurrence: 1 }
+      - id: skeleton-select-start
+        type: editor.select
+        at: { mark: skeleton-start, offsetMs: 400 }
+        target: { file: main.asm, text: "_start:", occurrence: 1 }
+      - id: skeleton-select-exit
+        type: editor.select
+        at: { mark: skeleton-exit, offsetMs: 500 }
+        target: { file: main.asm, text: "    mov     rax, 60\n    syscall\n", occurrence: 1 }
+
+  - id: data
+    narration: >
+      [[mark:data-type]] Let's give the program something to say. These two lines go
+      in the data section. [[mark:data-explain-db]] db means define bytes, and it
+      lays down exactly what you write, in order. The text becomes its bytes, and
+      then a ten, which is the newline character. There's no length stored anywhere,
+      and no zero at the end. It's the bytes and nothing more.
+      [[mark:data-explain-len]] The second line is worth slowing down for. The dollar
+      sign means the address right here, at this line. So dollar sign minus msg is
+      the distance from the start of the text to the end of it, which is its length.
+      The assembler works that out while it's assembling, so the number is already in
+      the program before it runs. If you edit the message later, the length follows
+      on its own.
+    sources:
+      - { title: "NASM Manual — Pseudo-Instructions", url: "https://www.nasm.us/doc/nasmdoc3.html" }
+      - { title: "NASM Manual — Expressions", url: "https://www.nasm.us/doc/nasmdoc3.html" }
+    actions:
+      - id: data-type-lines
+        type: editor.type
+        at: { mark: data-type, offsetMs: -300 }
+        target: { file: main.asm, after: "section .data\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "    msg     db  \"Hello, x86-64!\", 10\n    msglen  equ $ - msg\n"
+      - id: data-select-db
+        type: editor.select
+        at: { mark: data-explain-db, offsetMs: 200 }
+        target: { file: main.asm, text: 'db  "Hello, x86-64!", 10', occurrence: 1 }
+      - id: data-select-len
+        type: editor.select
+        at: { mark: data-explain-len, offsetMs: 700 }
+        target: { file: main.asm, text: "$ - msg", occurrence: 1 }
+
+  - id: syscall
+    narration: >
+      [[mark:syscall-board]] Now, how does a program with no library print anything?
+      It asks the operating system. And the way you ask is a rule about registers.
+      [[mark:syscall-draw-args]] You put the number of the call you want in rax.
+      Then the arguments go in rdi, rsi and rdx, in that order.
+      [[mark:syscall-draw-call]] Then you run one instruction, syscall, and the
+      processor hands control to the kernel. [[mark:syscall-draw-back]] When it comes
+      back, the answer is in rax. That's the whole interface. Every file a program
+      opens, every byte it prints, every process it starts, goes through this.
+      [[mark:syscall-to-code]] Let's write the one that prints.
+      [[mark:syscall-type]] Call number one is write. The first argument is one,
+      which is standard output. The second is where the bytes are, and the third is
+      how many. [[mark:syscall-select-syscall]] Then syscall, and the message is on
+      the screen.
+    sources:
+      - {
+          title: "syscall(2) — Linux manual page",
+          url: "https://man7.org/linux/man-pages/man2/syscall.2.html",
+        }
+      - {
+          title: "write(2) — Linux manual page",
+          url: "https://man7.org/linux/man-pages/man2/write.2.html",
+        }
+    actions:
+      - id: syscall-open-board
+        type: whiteboard.apply
+        at: { mark: syscall-board, offsetMs: -400 }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+        drawMs: 700
+      - id: syscall-draw-args
+        type: whiteboard.apply
+        at: { mark: syscall-draw-args }
+        upsertIds: [b-rax, b-rdi, b-rsi, b-rdx]
+        drawMs: 1300
+      - id: syscall-draw-call
+        type: whiteboard.apply
+        at: { mark: syscall-draw-call }
+        upsertIds: [b-call, b-arrow, b-kernel, b-kernel-t]
+        drawMs: 1100
+      - id: syscall-draw-back
+        type: whiteboard.apply
+        at: { mark: syscall-draw-back }
+        upsertIds: [b-back]
+        drawMs: 800
+      - id: syscall-close-board
+        type: whiteboard.apply
+        at: { mark: syscall-to-code }
+        open: false
+      - id: syscall-type-write
+        type: editor.type
+        at: { mark: syscall-type, offsetMs: -400 }
+        target: { file: main.asm, after: "_start:\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "    ; write(1, msg, msglen)\n    mov     rax, 1          ; 1 is write\n    mov     rdi, 1          ; 1 is standard output\n    mov     rsi, msg        ; where the bytes are\n    mov     rdx, msglen     ; how many\n\n    syscall\n\n"
+      - id: syscall-select-instruction
+        type: editor.select
+        at: { mark: syscall-select-syscall, offsetMs: 200 }
+        target: { file: main.asm, text: "    syscall\n", occurrence: 1 }
+
+  - id: flags
+    narration: >
+      [[mark:flags-board]] There's one more idea, and it's the one that gives you
+      loops and conditions. [[mark:flags-draw-dec]] Most instructions leave a note
+      about what happened. dec takes one away from a register.
+      [[mark:flags-draw-count]] Run it on a five and you get four, then three, and
+      so on. [[mark:flags-draw-zf]] And when the result reaches zero, the processor
+      turns on a single bit called the zero flag. [[mark:flags-draw-jnz]] jnz reads
+      that bit, and jumps only while it's off. So the counting and the deciding are
+      two separate instructions, and the flag is the message between them.
+      [[mark:flags-to-code]] Here's the loop.
+      [[mark:flags-type]] rcx starts at five, and rbx starts at zero, because xor of
+      a value with itself is always zero and it's the shortest way to write it. Then
+      we add, take one away, and jump back. [[mark:flags-select-dec]] That's five
+      plus four plus three plus two plus one, and no instruction here compares
+      anything. dec left the note, and jnz read it.
+    sources:
+      - {
+          title: "Intel 64 and IA-32 Architectures Software Developer Manuals",
+          url: "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html",
+        }
+      - {
+          title: "NASM Manual — Instruction Reference",
+          url: "https://www.nasm.us/doc/nasmdocb.html",
+        }
+    actions:
+      - id: flags-open-board
+        type: whiteboard.apply
+        at: { mark: flags-board, offsetMs: -400 }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+        drawMs: 700
+      - id: flags-draw-dec
+        type: whiteboard.apply
+        at: { mark: flags-draw-dec }
+        upsertIds: [c-dec]
+        drawMs: 700
+      - id: flags-draw-count
+        type: whiteboard.apply
+        at: { mark: flags-draw-count }
+        upsertIds: [c-count]
+        drawMs: 900
+      - id: flags-draw-zf
+        type: whiteboard.apply
+        at: { mark: flags-draw-zf }
+        upsertIds: [c-zf-ring, c-zf, c-zf-t]
+        drawMs: 1100
+      - id: flags-draw-jnz
+        type: whiteboard.apply
+        at: { mark: flags-draw-jnz }
+        upsertIds: [c-jnz]
+        drawMs: 800
+      - id: flags-close-board
+        type: whiteboard.apply
+        at: { mark: flags-to-code }
+        open: false
+      - id: flags-type-loop
+        type: editor.type
+        at: { mark: flags-type, offsetMs: -400 }
+        target: { file: main.asm, after: "    syscall\n\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "    ; Add 5 + 4 + 3 + 2 + 1, counting down.\n    mov     rcx, 5\n    xor     rbx, rbx\n\n.sum:\n    add     rbx, rcx\n    dec     rcx             ; dec sets the zero flag when rcx reaches zero\n    jnz     .sum            ; jnz reads that flag\n\n"
+      - id: flags-select-dec
+        type: editor.select
+        at: { mark: flags-select-dec, offsetMs: 900 }
+        target: { file: main.asm, text: "    dec     rcx", occurrence: 1 }
+
+  - id: run
+    narration: >
+      [[mark:run-type-exit]] One line left. The value a program exits with is a
+      number the operating system keeps, and it's how a shell script finds out
+      whether the program worked. We'll hand it our sum, so you can see the number
+      leave the program. [[mark:run-press]] Let's run it.
+      [[mark:run-read]] There's the message, and there's the status: fifteen, which
+      is five plus four plus three plus two plus one. [[mark:run-registers]] And
+      underneath, the registers the program changed, in hexadecimal. rax holds sixty,
+      the exit call, because that was the last number we put there. rbx and rdi both
+      hold fifteen. rsi holds an address, which is where the message sits in memory.
+      Nothing else moved, because nothing else was asked to.
+      [[mark:run-close]] That's a whole program. Sixteen registers, a way to ask the
+      kernel for something, and one bit that decides where to go next. Everything
+      else you'll ever write in assembly is built out of those three.
+    sources:
+      - {
+          title: "exit_group(2) — Linux manual page",
+          url: "https://man7.org/linux/man-pages/man2/exit_group.2.html",
+        }
+      - {
+          title: "System V Application Binary Interface, AMD64 Processor Supplement",
+          url: "https://gitlab.com/x86-psABIs/x86-64-ABI",
+        }
+    actions:
+      - id: run-type-exit
+        type: editor.type
+        at: { mark: run-type-exit, offsetMs: -300 }
+        target: { file: main.asm, after: "    mov     rax, 60\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "    mov     rdi, rbx        ; the sum becomes the exit status\n"
+      - id: run-program
+        type: runtime.run
+        at: { mark: run-press, offsetMs: -200 }
+        timeoutMs: 15000
+      - id: run-expect-message
+        type: expect.output
+        at: { afterAction: run-program }
+        contains: "Hello, x86-64!"
+        timeoutMs: 15000
+      - id: run-expect-status
+        type: expect.output
+        at: { afterAction: run-expect-message }
+        contains: "Program exited with status 15"
+        timeoutMs: 15000
+      - id: run-expect-registers
+        type: expect.output
+        at: { afterAction: run-expect-status }
+        contains: "rbx=0xf"
+        timeoutMs: 15000
+      - id: run-check-file
+        type: expect.file
+        at: { afterAction: run-expect-registers }
+        path: main.asm
+        contains: "jnz     .sum"

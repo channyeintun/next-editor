@@ -5,6 +5,7 @@ import { NEXT_EDITOR_MONACO_THEME, defineNextEditorTheme, setActiveTheme } from 
 import { configureMonacoTypeScript } from "./typescriptDefaults";
 import { registerKiteLanguage } from "./kiteLanguage";
 import { registerZigLanguage } from "./zigLanguage";
+import { registerAsmLanguage } from "./asmLanguage";
 
 // Every standalone editor feature (find, multi-cursor, bracket matching, …) but
 // no bundled languages. Importing editor.main instead would pull in all of them.
@@ -94,6 +95,7 @@ function ensureMonacoRuntimeInitialized() {
   configureMonacoTypeScript();
   registerZigLanguage();
   registerKiteLanguage();
+  registerAsmLanguage();
 }
 
 ensureMonacoRuntimeInitialized();

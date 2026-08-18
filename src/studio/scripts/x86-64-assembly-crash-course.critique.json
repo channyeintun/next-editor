@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "notes": [
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-read\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-registers\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-close\" is never referenced by an action"
+    }
+  ]
+}

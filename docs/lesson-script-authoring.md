@@ -167,6 +167,7 @@ the schema rejects an omitted block or a mismatch:
 | `rust`                     | `rust-playground`       | `runtime.run`, `expect.output`                                         |
 | `zig`                      | `zig-playground`        | `runtime.run`, `expect.output`                                         |
 | `kite`                     | `kite-playground`       | `runtime.run`, `expect.output`                                         |
+| `asm`                      | `asm-playground`        | `runtime.run`, `expect.output`                                         |
 | `javascript`, `typescript` | `webcontainer`          | `runtime.start`, `runtime.waitForReady`, `preview.*`, `expect.preview` |
 | `python`                   | `webcontainer`          | `runtime.start`, `expect.output` (WASI `python3`; console, no preview) |
 
@@ -213,8 +214,8 @@ runtime:
   environment: {}
 ```
 
-Go, Kotlin, and Rust remain limited to their Playground services.
-A `kite` lesson is the one that needs **no service at all**. `kitec` is a Rust
+Go, Kotlin, Rust and Zig remain limited to their Playground services.
+Two lesson types need **no service at all**, for two different reasons. `kitec` is a Rust
 program — normally a native binary you install — and Rust builds for WebAssembly
 too, so Run and Format instantiate a Wasm build of that same compiler in the
 page: no proxy, no sign-in, no rate limit, and no lesson that stops working
@@ -224,6 +225,25 @@ this page's build of the compiler runs as.) Its fixture `transientErrorKinds` th
 `unavailable` — a lesson cannot be throttled by something it never calls. A
 Kite module is a _directory_, so sibling `.kite` files belong to the same
 program and a run compiles `main.kite`.
+
+An `asm` lesson needs no service for a plainer reason: the assembler and the
+x86-64 machine are first-party TypeScript in `src/core/x86`, so Run assembles
+NASM-syntax source and executes it in the page. Its fixture
+`transientErrorKinds` therefore also admits only `unavailable`. There is no
+linker, so a run assembles `main.asm` alone and a workspace holds exactly that
+one file; structure a longer program with labels and `call`. The subset is the
+assembly a person writes while learning — moves, arithmetic, the flags and the
+jumps that read them, the stack, and the `read`/`write`/`brk`/`getpid`/`exit`
+system calls — so a lesson that reaches for `open` or an SSE instruction gets a
+clear error rather than an execution. Two things follow for authoring:
+
+- **The console carries the register file.** After a run the runner appends the
+  registers that hold something, four to a line
+  (`[asm-run] rax=0x3c  rdi=0x1`), because an assembly lesson is usually about
+  them. A fixture that pins `registers` replays those lines; one that omits the
+  field replays none. Pin them when the narration points at a register.
+- **The exit status is always printed** (`[asm-run] Program exited with status
+0`), because a program that exits non-zero has said something.
 
 Per-kind fixture `result` shapes (all fields exact program truth):
 
@@ -235,14 +255,20 @@ Per-kind fixture `result` shapes (all fields exact program truth):
   stderr into a single stream, and `std.debug.print` — the first thing every
   Zig program uses — writes to stderr)
 - `kite-playground` — `{ status: success | compile-error | runtime-error, stdout, stderr, compileErrors?, exitDetail? }`
+- `asm-playground` — `{ status: success | assemble-error | runtime-error, stdout, stderr, exitCode?, assembleErrors?, exitDetail?, instructions?, registers?, flags? }`
+  (`assemble-error`, not `compile-error` — nothing is compiled; `registers` is a
+  list of `{ name, value }` with `value` a **decimal string**, because a 64-bit
+  value does not survive JSON as a number)
 
 Language formatting rules carry over from the real editors: Go files use tabs;
 Kotlin, Rust, and Zig use 4-space indentation. Rust workspaces must contain
 **exactly one file, `main.rs`** (the Rust Playground executes a single crate
-root), and Zig workspaces **exactly one file, `main.zig`** (there is no
+root), Zig workspaces **exactly one file, `main.zig`** (there is no
 `build.zig` and no way to import a sibling file — structure a longer program
-with structs and functions); Go and Kotlin workspaces need at least one
-`.go` / `.kt` file.
+with structs and functions), and `asm` workspaces **exactly one file,
+`main.asm`** (there is no linker); Go and Kotlin workspaces need at least one
+`.go` / `.kt` file. Assembly uses NASM syntax, four-space indentation, and `;`
+for comments.
 
 Zig scripts must target **Zig 0.16** specifically, which is the version the
 playground is pinned to. Zig breaks APIs between minor releases, so code copied
@@ -310,7 +336,7 @@ Action catalog:
 | `slide.show`           | `slideId`, `maximized` (default true)                                 | `slideId` must be in `lesson.slides`. Showing a slide while another is open advances **in place** (like moving to the next slide) — do not `slide.close` between consecutive slides; close only when returning to the editor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `slide.close`          | —                                                                     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `whiteboard.apply`     | `open?`, `maximized?`, `upsertIds: []`, `clear?`, `drawMs?`           | Ids from `lesson.whiteboardAssets`. Must open, change maximize, clear, or upsert ≥1 asset. `drawMs` draws the upserts in instead of applying them at once, and `clear` wipes the board first (both under Whiteboard assets); `drawMs` must be under the action's `timeoutMs` and at most 6000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `expect.output`        | `contains`, `timeoutMs`                                               | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` / `[zig-run error]` line fails it. Use with Playground runtimes after `runtime.run`, or with console-only Python after `runtime.start`; it is not a JavaScript/TypeScript preview assertion.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `expect.output`        | `contains`, `timeoutMs`                                               | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` / `[zig-run error]` / `[asm-run error]` line fails it. Use with Playground runtimes after `runtime.run`, or with console-only Python after `runtime.start`; it is not a JavaScript/TypeScript preview assertion.                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `expect.file`          | `path`, `contains`                                                    | Asserts the final workspace file contains the string.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 Every WebContainer/preview action requires an explicit bounded retry policy:

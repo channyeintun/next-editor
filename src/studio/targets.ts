@@ -26,6 +26,7 @@ export const STUDIO_KOTLIN_DOCK_TARGET_ID = "kotlin-runner-dock";
 export const STUDIO_RUST_DOCK_TARGET_ID = "rust-runner-dock";
 export const STUDIO_ZIG_DOCK_TARGET_ID = "zig-runner-dock";
 export const STUDIO_KITE_DOCK_TARGET_ID = "kite-runner-dock";
+export const STUDIO_ASM_DOCK_TARGET_ID = "asm-runner-dock";
 
 /** The dock the attention cursor moves toward before `runtime.run`. */
 export function dockTargetIdForRuntime(
@@ -34,7 +35,8 @@ export function dockTargetIdForRuntime(
     | "kotlin-playground"
     | "rust-playground"
     | "zig-playground"
-    | "kite-playground",
+    | "kite-playground"
+    | "asm-playground",
 ): string {
   switch (kind) {
     case "go-playground":
@@ -47,6 +49,8 @@ export function dockTargetIdForRuntime(
       return STUDIO_ZIG_DOCK_TARGET_ID;
     case "kite-playground":
       return STUDIO_KITE_DOCK_TARGET_ID;
+    case "asm-playground":
+      return STUDIO_ASM_DOCK_TARGET_ID;
   }
 }
 

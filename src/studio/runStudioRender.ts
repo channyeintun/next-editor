@@ -15,6 +15,7 @@ import { compareRenderSemantics, extractRenderSemantics, type RenderSemantics } 
 import { StudioActionError, waitUntil } from "./async";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
 import { sha256Hex, sha256HexOfJson, hashWorkspaceFiles } from "./hash";
+import { runtimeDockStartsCollapsed } from "./plan";
 import type { StudioPlan, StudioRuntimeMode } from "./plan";
 import { performPlan } from "./performer";
 import { runArtifactChecks, finalWorkspaceHashOf } from "./qa";
@@ -321,9 +322,7 @@ export async function runStudioRender(
   // one, instead of visibly closing a few hundred milliseconds in — and a
   // repeat render cannot inherit the previous one's dock.
   deps.runtimePanelStore.trigger.setIsCollapsed({
-    collapsed:
-      (plan.runtime.kind === "kite-playground" || plan.runtime.kind === "zig-playground") &&
-      plan.runtime.dockStartsCollapsed,
+    collapsed: runtimeDockStartsCollapsed(plan.runtime),
   });
   // Same reasoning for the file explorer, and the same timing: set before the
   // clock starts, so it is shut in frame one and the recording's initial

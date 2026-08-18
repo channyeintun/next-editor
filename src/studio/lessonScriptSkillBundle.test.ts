@@ -158,6 +158,24 @@ function minimalScriptShell(lessonType: StudioLessonType) {
           fixture: { latencyMs: 10, result: { status: "success", stdout: "", stderr: "" } },
         },
       };
+    case "asm":
+      return {
+        ...base,
+        lesson: {
+          slug: "t-asm",
+          title: "T",
+          locale: "en-US",
+          workspace: workspace(
+            { "main.asm": "section .text\nglobal _start\n_start:\n    ret\n" },
+            "main.asm",
+          ),
+        },
+        runtime: {
+          kind: "asm-playground",
+          defaultMode: "fixture",
+          fixture: { latencyMs: 10, result: { status: "success", stdout: "", stderr: "" } },
+        },
+      };
     case "javascript":
       return {
         ...base,

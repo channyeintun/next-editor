@@ -89,7 +89,8 @@ export type WorkspaceLessonType =
   | "rust"
   | "zig"
   | "kite"
-  | "kite-web";
+  | "kite-web"
+  | "asm";
 
 /**
  * Display names, and the order the lesson-type picker offers them in.
@@ -117,6 +118,7 @@ export const WORKSPACE_LESSON_TYPE_LABELS: Record<WorkspaceLessonType, string> =
   zig: "Zig",
   kite: "Kite",
   "kite-web": "Kite + Vite (web)",
+  asm: "x86-64 Assembly",
 };
 
 /** Every lesson type, in picker order. */
@@ -166,8 +168,10 @@ export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boole
  * Which backend executes code for a lesson. `go`, `kotlin`, `rust`, and
  * `zig` lessons compile through their respective playground proxies on the
  * main Worker. `kite` compiles in the browser: `kitec` is a Rust program, and
- * the Wasm build of it runs here, so it needs no proxy and no service.
- * Everything else keeps the WebContainer
+ * the Wasm build of it runs here, so it needs no proxy and no service. `asm`
+ * needs no service either, for a different reason: its assembler and its
+ * x86-64 machine are first-party TypeScript in `src/core/x86`, so a run never
+ * leaves the page. Everything else keeps the WebContainer
  * runtime. Derived from
  * `lessonType` — never persisted as a second field (see
  * docs/go-lessons-selective-runtime-plan.md §6).
@@ -178,7 +182,8 @@ export type WorkspaceExecutionKind =
   | "kotlin-playground"
   | "rust-playground"
   | "zig-playground"
-  | "kite-playground";
+  | "kite-playground"
+  | "asm-playground";
 
 export function executionKindForLessonType(
   lessonType: WorkspaceLessonType,
@@ -194,6 +199,8 @@ export function executionKindForLessonType(
       return "rust-playground";
     case "zig":
       return "zig-playground";
+    case "asm":
+      return "asm-playground";
     default:
       return "webcontainer";
   }
@@ -603,6 +610,17 @@ export function inferLanguageFromPath(path: string): string {
   // Registered by monaco/zigLanguage.ts — Monaco ships no Zig grammar.
   if (normalizedPath.endsWith(".zig") || normalizedPath.endsWith(".zon")) {
     return "zig";
+  }
+
+  // Registered by monaco/asmLanguage.ts. Monaco does ship an `asm` grammar, but
+  // it is a generic one that highlights neither NASM's directives nor the
+  // registers, which are most of what an assembly lesson points at.
+  if (
+    normalizedPath.endsWith(".asm") ||
+    normalizedPath.endsWith(".s") ||
+    normalizedPath.endsWith(".nasm")
+  ) {
+    return "asm";
   }
 
   // Registered by monaco/kiteLanguage.ts. This used to borrow Monaco's `rust`

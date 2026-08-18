@@ -110,19 +110,26 @@ function htmlReferences(files: Record<string, WorkspaceFile>, needle: string): b
 
 /**
  * Playground lesson shapes carry no package.json manifest: their sources are
- * compiled remotely by the language's playground proxy. Ordered so the
- * canonical entry file decides first when an archive mixes languages, matching
- * the runner collectors in src/runtime/{go,rust,kotlin,zig}Playground/files.ts.
+ * compiled by the language's playground proxy, or — for assembly — by the
+ * first-party assembler in the page. Ordered so the canonical entry file
+ * decides first when an archive mixes languages, matching the runner
+ * collectors in src/runtime/{go,rust,kotlin,zig,asm}Playground/files.ts.
  */
 const PLAYGROUND_LESSON_RULES: ReadonlyArray<{
-  lessonType: Extract<WorkspaceLessonType, "go" | "rust" | "kotlin" | "zig">;
+  lessonType: Extract<WorkspaceLessonType, "go" | "rust" | "kotlin" | "zig" | "asm">;
   entryPath: string;
-  extension: string;
+  /**
+   * Every extension the language's runner collector accepts. Assembly has
+   * three; a single-extension probe here would fail to recognize an archive of
+   * `.s` files that the runner would then happily assemble.
+   */
+  extensions: readonly string[];
 }> = [
-  { lessonType: "go", entryPath: "main.go", extension: ".go" },
-  { lessonType: "rust", entryPath: "main.rs", extension: ".rs" },
-  { lessonType: "kotlin", entryPath: "Main.kt", extension: ".kt" },
-  { lessonType: "zig", entryPath: "main.zig", extension: ".zig" },
+  { lessonType: "go", entryPath: "main.go", extensions: [".go"] },
+  { lessonType: "rust", entryPath: "main.rs", extensions: [".rs"] },
+  { lessonType: "kotlin", entryPath: "Main.kt", extensions: [".kt"] },
+  { lessonType: "zig", entryPath: "main.zig", extensions: [".zig"] },
+  { lessonType: "asm", entryPath: "main.asm", extensions: [".asm", ".s", ".nasm"] },
 ];
 
 function detectPlaygroundLessonType(
@@ -137,7 +144,9 @@ function detectPlaygroundLessonType(
 
   for (const rule of PLAYGROUND_LESSON_RULES) {
     const hasSource = Object.values(files).some(
-      (file) => isWorkspaceTextFile(file) && file.path.endsWith(rule.extension),
+      (file) =>
+        isWorkspaceTextFile(file) &&
+        rule.extensions.some((extension) => file.path.endsWith(extension)),
     );
     if (hasSource) {
       return rule.lessonType;
@@ -223,7 +232,7 @@ function pickEntryFilePath(
     const sourcePaths = Object.values(files)
       .filter(isWorkspaceTextFile)
       .map((file) => file.path)
-      .filter((path) => path.endsWith(playgroundRule.extension))
+      .filter((path) => playgroundRule.extensions.some((extension) => path.endsWith(extension)))
       .sort((left, right) => left.localeCompare(right));
     if (sourcePaths[0]) {
       return sourcePaths[0];

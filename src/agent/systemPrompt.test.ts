@@ -76,6 +76,8 @@ describe("buildSystemPrompt", () => {
     ["kotlin", "Main.kt", "Supported stack: Kotlin only"],
     ["rust", "main.rs", "Supported stack: Rust only"],
     ["kite", "main.kite", "Supported stack: Kite only"],
+    ["zig", "main.zig", "Supported stack: Zig only"],
+    ["asm", "main.asm", "Supported stack: x86-64 assembly only"],
   ] as const)(
     "describes the %s Playground stack, never the WebContainer one",
     (lessonType, entryFilePath, expectedStack) => {

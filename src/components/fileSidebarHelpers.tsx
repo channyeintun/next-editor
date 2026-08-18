@@ -361,6 +361,10 @@ export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
     return langBadge("#F7A41D", "#1a1a1a", "ZIG");
   }
 
+  if (file.language === "asm") {
+    return langBadge("#6e7f8d", "#fff", "ASM");
+  }
+
   // Not "KT" — that is Kotlin's badge two branches up.
   if (file.language === "kite") {
     return langBadge("#2f6f4f", "#fff", "KITE");

@@ -45,6 +45,7 @@ import KotlinPlaygroundRunnerPanel from "./KotlinPlaygroundRunnerPanel";
 import RustPlaygroundRunnerPanel from "./RustPlaygroundRunnerPanel";
 import ZigPlaygroundRunnerPanel from "./ZigPlaygroundRunnerPanel";
 import KitePlaygroundRunnerPanel from "./KitePlaygroundRunnerPanel";
+import AsmPlaygroundRunnerPanel from "./AsmPlaygroundRunnerPanel";
 import {
   CollaborationCursorLabelManager,
   type CollaborationCursorLabel,
@@ -1394,6 +1395,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               <ZigPlaygroundRunnerPanel />
             ) : executionKindForLessonType(lessonType) === "kite-playground" ? (
               <KitePlaygroundRunnerPanel />
+            ) : executionKindForLessonType(lessonType) === "asm-playground" ? (
+              <AsmPlaygroundRunnerPanel />
             ) : null}
           </div>
           {/* Go, Kotlin, and Python lessons have no preview surface at all —

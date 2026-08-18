@@ -29,6 +29,7 @@ export const OPERATION_START_PREFIXES = [
   "[kitefmt] kitec fmt",
   "[zig-run] zig run",
   "[zig-fmt] zig fmt",
+  "[asm-run] nasm",
 ];
 
 export function appendRunnerConsoleLines(store: RuntimePanelStoreInstance, lines: string[]): void {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   executionKindForLessonType,
+  isWorkspaceTextFile,
   inferLanguageFromPath,
   lessonRunsInWebContainer,
   lessonSupportsCodeRun,
@@ -16,6 +17,7 @@ import { createStarterPythonWorkspace } from "../starters/python";
 import { createStarterKiteWorkspace } from "../starters/kite";
 import { createStarterRustWorkspace } from "../starters/rust";
 import { createStarterZigWorkspace } from "../starters/zig";
+import { createStarterAsmWorkspace } from "../starters/asm";
 
 // Record keys make this exhaustive at compile time: adding a lesson type
 // without deciding its execution backend fails the typecheck, not just a test.
@@ -39,16 +41,20 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   // The web starter is a Vite project, so it builds and serves in the
   // container like any other — the compiler it installs is WebAssembly.
   "kite-web": "webcontainer",
+  asm: "asm-playground",
 };
 
-// Kite joins these because it also runs code without the WebContainer — but it
-// is the only one that needs no service to do it, compiling in the page.
+// Kite and asm join these because they also run code without the WebContainer,
+// and they are the two that need no service to do it: Kite compiles in the page
+// on a Wasm build of `kitec`, and asm assembles and executes in the page on the
+// first-party machine in src/core/x86.
 const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "go",
   "kotlin",
   "rust",
   "zig",
   "kite",
+  "asm",
 ]);
 
 // WebContainer lessons whose runner is a script that exits instead of a dev
@@ -141,6 +147,39 @@ describe("zig workspace model", () => {
     expect(source).toContain("squares.append(allocator,");
     expect(source).not.toContain("GeneralPurposeAllocator");
     expect(source).not.toContain("ArrayList(u32).init(");
+  });
+});
+
+describe("assembly workspace model", () => {
+  it("maps every assembly extension to the first-party asm language id", () => {
+    // Monaco ships a generic `asm` grammar that colours neither NASM's
+    // directives nor the registers; monaco/asmLanguage.ts registers a real one.
+    expect(inferLanguageFromPath("main.asm")).toBe("asm");
+    expect(inferLanguageFromPath("boot.s")).toBe("asm");
+    expect(inferLanguageFromPath("src/vector.nasm")).toBe("asm");
+  });
+
+  it("round-trips an assembly starter through project normalization without falling back", () => {
+    const starter = createStarterAsmWorkspace();
+    const normalized = normalizeProject(starter);
+
+    expect(normalized.lessonType).toBe("asm");
+    expect(normalized.entryFilePath).toBe("main.asm");
+    expect(normalized.files["main.asm"].language).toBe("asm");
+    expect(normalized.files["main.asm"].content).toContain("global _start");
+  });
+
+  it("keeps the starter on the Linux system-call convention it teaches", () => {
+    // These four lines are the lesson: the call number in rax, the file
+    // descriptor in rdi, the buffer in rsi, the length in rdx. A starter that
+    // drifted off them would be teaching a convention that is not Linux's.
+    const file = createStarterAsmWorkspace().files["main.asm"];
+    if (!isWorkspaceTextFile(file)) throw new Error("the starter must be a text file");
+
+    expect(file.content).toContain("mov     rax, 1");
+    expect(file.content).toContain("mov     rax, 60");
+    expect(file.content).toContain("syscall");
+    expect(file.content).toContain("$ - msg");
   });
 });
 

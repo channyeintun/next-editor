@@ -36,6 +36,14 @@ import {
   zigRunStartedConsoleLines,
 } from "../runtime/zigPlayground/console";
 import { collectZigPlaygroundFiles } from "../runtime/zigPlayground/files";
+import { AsmPlaygroundClient, AsmPlaygroundServiceError } from "../runtime/asmPlayground/client";
+import {
+  asmRegisterConsoleLines,
+  asmRunResultToConsoleLines,
+  asmRunServiceErrorToConsoleLines,
+  asmRunStartedConsoleLines,
+} from "../runtime/asmPlayground/console";
+import { collectAsmPlaygroundFiles, ASM_ENTRY_PATH } from "../runtime/asmPlayground/files";
 import type { WorkspaceProject } from "../types/workspace";
 import { StudioActionError, abortableSleep } from "./async";
 import type { StudioRuntime } from "./plan";
@@ -45,6 +53,8 @@ import type { StudioRuntime } from "./plan";
  * §2/§8), one per selective-Playground lesson type — Go, Kotlin, Rust, and
  * Zig share a protocol (collect sources → proxy run → normalized result →
  * prefixed console lines), so one retry engine drives kind-specific configs.
+ * Kite and asm follow the same protocol with the network removed: their
+ * compiler and machine run in the page, so their "live" path calls nothing.
  * Runs have no local side effects, making a declared-idempotent retry safe
  * for transient service failures; compile and program errors are terminal.
  * Retries are silent in the recorded console (the receipt carries the attempt
@@ -64,7 +74,8 @@ type PlaygroundRuntime = Extract<
       | "kotlin-playground"
       | "rust-playground"
       | "zig-playground"
-      | "kite-playground";
+      | "kite-playground"
+      | "asm-playground";
   }
 >;
 type FixtureOf<K extends PlaygroundRuntime["kind"]> = Extract<
@@ -393,6 +404,61 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
         serviceErrorLines: (errorKind, message) =>
           kiteRunServiceErrorToConsoleLines(
             errorKind as Parameters<typeof kiteRunServiceErrorToConsoleLines>[0],
+            message,
+          ),
+      };
+    }
+    case "asm-playground": {
+      let client: AsmPlaygroundClient | null = null;
+      // The register lines follow the run's own output, exactly as the runner
+      // panel appends them — a recorded lesson and a live one have to produce
+      // the same console or the fixture is not the truth.
+      const lines = (result: Parameters<typeof asmRunResultToConsoleLines>[0]): string[] => [
+        ...asmRunResultToConsoleLines(result),
+        ...asmRegisterConsoleLines(result),
+      ];
+      return {
+        label: "asm",
+        collectFiles: collectAsmPlaygroundFiles,
+        // There is no linker here, so siblings are never part of the same
+        // program — a run assembles the entry, and one has to be named.
+        validateFiles: (files) =>
+          files.length === 0
+            ? `Add a ${ASM_ENTRY_PATH} file to run this lesson`
+            : files.length === 1 || files.some((file) => file.path === ASM_ENTRY_PATH)
+              ? null
+              : `Name the file this lesson runs ${ASM_ENTRY_PATH}`,
+        startedLines: () => asmRunStartedConsoleLines(),
+        runLive: async (files, timeoutMs, signal) => {
+          client ??= new AsmPlaygroundClient();
+          const activeClient = client;
+          const result = await liveAttempt(
+            () => activeClient.run({ files }),
+            () => activeClient.dispose(),
+            (error) =>
+              error instanceof AsmPlaygroundServiceError
+                ? { kind: error.kind, message: error.message }
+                : null,
+            timeoutMs,
+            signal,
+          );
+          return {
+            resultLines: lines(result),
+            ok: result.status === "success",
+            status: result.status,
+          };
+        },
+        runFixtureResult: (fixture) => {
+          const result = (fixture as FixtureOf<"asm-playground">).result;
+          return {
+            resultLines: lines(result),
+            ok: result.status === "success",
+            status: result.status,
+          };
+        },
+        serviceErrorLines: (errorKind, message) =>
+          asmRunServiceErrorToConsoleLines(
+            errorKind as Parameters<typeof asmRunServiceErrorToConsoleLines>[0],
             message,
           ),
       };

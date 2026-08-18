@@ -37,6 +37,7 @@ describe("studio lesson registry", () => {
       "rust-traits",
       "rust-variables",
       "rust-vectors",
+      "x86-64-assembly-crash-course",
       "xstate-react-tea-shop-order-mm",
       "zig-crash-course",
     ]);
