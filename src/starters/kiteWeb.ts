@@ -172,6 +172,17 @@ struct Line {
     quantity: int
 }
 
+/// VAT, in basis points: 2000 is 20%.
+///
+/// A module-level \`let\` is a **constant** — every use of the name is the
+/// value, so nothing is looked up and nothing is allocated. Before this the
+/// number was written into the call below, where it said nothing about what it
+/// was, and a shared one had to be a function that returned it.
+let VAT_BASIS_POINTS = 2000
+
+/// What the discount box starts at, matching \`value="10"\` in the markup.
+let STARTING_PERCENT = 10
+
 fn starting_lines() -> [Line] {
     return [
         Line { what: "Keyboard", price: 8999, quantity: 1 },
@@ -187,13 +198,27 @@ fn starting_lines() -> [Line] {
 /// \`std/html\` compares a description against the last one and writes only what
 /// differs, so a row that did not change is not touched — and the element
 /// keeps its focus and its scroll position.
-fn rows(lines: [Line]) -> [html.Node] {
+fn rows(view: html.Mounted, model: View) -> [html.Node] {
     var out: [html.Node] = []
-    for line in lines {
+    for line in model.lines {
         out.push(html.keyed(line.what, html.el("li", [], [
                         html.txt("span", [], "\\(line.what) × \\(line.quantity)"),
                         html.txt("output", [], checkout.money(
                                 checkout.line_total(line.price, line.quantity))),
+                        // What the press does is written **here**, on the
+                        // control, and it closes over \`line\` — the row it
+                        // belongs to. Nothing has to be encoded into a
+                        // \`data-\` attribute and read back out, and a button
+                        // cannot be drawn without its behaviour.
+                        html.txt("button", [
+                                html.class("drop"),
+                                html.attr("type", "button"),
+                                html.attr("aria-label", "Remove \\(line.what)"),
+                                html.click(|e: dom.Event| {
+                                        drop_line(model, line.what)
+                                        refresh(view, model)
+                                    }),
+                            ], "×"),
                     ])))
     }
     return out
@@ -219,8 +244,16 @@ fn write(id: str, body: str) {
 }
 
 /// Everything on the page that depends on the model.
-fn refresh(var view: html.Mounted, model: View) {
-    let err = html.update(view, rows(model.lines))
+///
+/// \`view\` is a plain parameter rather than \`var\`, because the buttons
+/// \`rows\` builds capture it and a closure may not capture a \`var\`.
+/// \`html.update\` takes it as \`var\` from here, which is the language's
+/// ordinary shape for changing something a closure holds.
+fn refresh(view: html.Mounted, model: View) {
+    // Built before the update rather than inside the call, so \`view\` is not
+    // both read and written in one expression.
+    let drawn = rows(view, model)
+    let err = html.update(view, drawn)
     if err != nil {
         io.error("could not draw: \\(err.message())")
         return
@@ -229,7 +262,7 @@ fn refresh(var view: html.Mounted, model: View) {
     let subtotal = subtotal_of(model.lines)
     let off = checkout.discount(subtotal, model.percent)
     let net = subtotal - off
-    let vat = checkout.tax(net, 2000)
+    let vat = checkout.tax(net, VAT_BASIS_POINTS)
 
     write("#subtotal", checkout.money(subtotal))
     write("#discount", "−\\(checkout.money(off))")
@@ -248,6 +281,20 @@ fn add_line(var model: View, what: str, price: int) {
     var lines = model.lines
     lines.push(Line{ what: what, price: price, quantity: 1 })
     model.lines = lines
+}
+
+/// Take a line out of the order.
+///
+/// The slice is rebuilt because a slice is a copy-on-write value: the write
+/// lands on the binding, so it is assigned back to the field the model holds.
+fn drop_line(var model: View, what: str) {
+    var kept: [Line] = []
+    for line in model.lines {
+        if line.what != what {
+            kept.push(line)
+        }
+    }
+    model.lines = kept
 }
 
 fn note(id: str, body: str, bad: bool) {
@@ -302,7 +349,7 @@ pub fn main() {
     // A \`let\` handle to a struct, which is what a closure may capture. The
     // functions that change it take it as \`var\`, so every mutation is spelled
     // out in a signature rather than implied by the capture.
-    let model = View{ lines: starting_lines(), percent: 10 }
+    let model = View{ lines: starting_lines(), percent: STARTING_PERCENT }
     refresh(mounted, model)
 
     listen("#percent", "input", |e: dom.Event| {
@@ -514,7 +561,9 @@ button, input {
 }
 button { cursor: pointer; }
 button:hover { border-color: var(--gold); }
-li { display: flex; justify-content: space-between; gap: 16px; }
+li { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+button.drop { padding: 2px 8px; line-height: 1; opacity: 0.55; }
+button.drop:hover { opacity: 1; border-color: var(--bad); color: var(--bad); }
 li small { opacity: 0.6; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .totals { display: grid; grid-template-columns: 1fr auto; gap: 4px 24px; margin: 16px 0; }
@@ -537,11 +586,18 @@ Kite's compiler is itself WebAssembly, so \`npm install\` brings it with the
 project — there is no binary to install and nothing is downloaded beyond the
 packages npm already fetched.
 
-## Two things to try
+## Three things to try
 
 **Edit \`src/checkout.kite\` and watch the preview.** The arithmetic, the tax
 and the discount are all Kite. The DOM work in \`src/main.kite\` is Kite too,
 over \`std/dom\` — there is no JavaScript in \`src/\` at all.
+
+**Press × on a row.** Its handler is written on the button itself, in
+\`rows\`, and closes over the line it belongs to — so removing a row needs no
+id encoded into the markup and read back out. Delete the \`html.click(…)\`
+attribute and the button is still drawn but does nothing, which is the shape
+that used to be easy to ship by accident: a name on a control and a name in a
+dispatcher, joined by nothing a compiler could check.
 
 **Read a value before checking its error.** In \`src/checkout.kite\`, move a
 print above its \`if err != nil\` and save. The build fails, because on a failure
@@ -552,7 +608,7 @@ point, and it is enforced at compile time rather than in a review.
 
 | | |
 |---|---|
-| \`src/main.kite\` | Reads the inputs, listens for events, draws the rows. |
+| \`src/main.kite\` | Reads the inputs, listens for events, draws the rows and their controls. |
 | \`src/checkout.kite\` | Line totals, tax, discounts, money formatting. No DOM. |
 | \`src/about.kite\` | The second page's program. Any HTML can wire any \`.kite\`. |
 | \`index.html\`, \`about.html\` | The markup, which keeps its job. |
