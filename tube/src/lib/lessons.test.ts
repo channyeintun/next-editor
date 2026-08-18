@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import axios from "axios";
-import { fetchLessonsPage, findLessonBySlug } from "./lessons";
+import { fetchLessonsPage, findLessonBySlug, flattenLessonPages } from "./lessons";
 
 vi.mock("axios", () => {
   const get =
@@ -88,5 +88,39 @@ describe("findLessonBySlug", () => {
     mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
     const lesson = await findLessonBySlug("nope");
     expect(lesson).toBeNull();
+  });
+});
+
+describe("flattenLessonPages", () => {
+  const lesson = (slug: string) => ({ slug, title: slug, description: "", thumbnail: "", ne: "" });
+  const page = (slugs: string[]) => ({ lessons: slugs.map(lesson), nextPage: null });
+
+  it("keeps the loaded order and every distinct lesson", () => {
+    const flat = flattenLessonPages([page(["a", "b"]), page(["c"])]);
+    expect(flat.map((l) => l.slug)).toEqual(["a", "b", "c"]);
+  });
+
+  it("renders a lesson once when it lands on both sides of a page boundary", () => {
+    // A publish between two page fetches shifts every later row down one, so
+    // the boundary row is genuinely returned twice. No ORDER BY can prevent
+    // that; the grid keys cards by slug, so it must not reach the render.
+    const flat = flattenLessonPages([page(["a", "b", "c"]), page(["c", "d"])]);
+    expect(flat.map((l) => l.slug)).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("keeps the first copy, so the seed catalog wins over a D1 row of the same slug", () => {
+    const seed = { ...lesson("introduction"), title: "Seed copy" };
+    const d1 = { ...lesson("introduction"), title: "D1 copy" };
+    const flat = flattenLessonPages([
+      { lessons: [seed], nextPage: "d1:0" },
+      { lessons: [d1], nextPage: null },
+    ]);
+    expect(flat).toHaveLength(1);
+    expect(flat[0].title).toBe("Seed copy");
+  });
+
+  it("handles no pages at all", () => {
+    expect(flattenLessonPages(undefined)).toEqual([]);
+    expect(flattenLessonPages([])).toEqual([]);
   });
 });

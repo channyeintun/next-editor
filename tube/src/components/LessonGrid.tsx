@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useLessonsInfinite } from "../hooks/useLessons";
+import { flattenLessonPages } from "../lib/lessons";
 import LessonCard from "./LessonCard";
 import LessonCardSkeleton from "./LessonCardSkeleton";
 import SearchBar from "./SearchBar";
@@ -61,7 +62,7 @@ export default function LessonGrid() {
   }, [query]);
   const columns = useColumns();
 
-  const lessons = data?.pages.flatMap((p) => p.lessons) ?? [];
+  const lessons = flattenLessonPages(data?.pages);
   const skeletonsToAppend = isFetchingNextPage
     ? (columns - (lessons.length % columns)) % columns || columns
     : 0;

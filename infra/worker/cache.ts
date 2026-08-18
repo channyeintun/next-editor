@@ -2,7 +2,13 @@ import type { Env } from "./env";
 
 // Bump this to invalidate every cached key at once (e.g. after changing the
 // shape of a cached value) without touching TTLs or adding individual deletes.
-const KEY_VERSION = "v1";
+//
+// v2: listPublishedLessons gained an `id` tiebreaker so its ordering is a
+// total order. Pages are cached one key each, so without this bump a page 0
+// cached under the old ordering could be paired with a page 1 computed under
+// the new one — which is the very boundary duplicate the tiebreaker fixes,
+// reintroduced for the length of the TTL after every deploy.
+const KEY_VERSION = "v2";
 
 // KV caches reads at each Cloudflare location. Keep that regional cache short
 // so writes and invalidations made elsewhere become visible quickly while hot

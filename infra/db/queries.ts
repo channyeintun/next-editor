@@ -186,7 +186,17 @@ export async function listPublishedLessons(
   const offset = page * pageSize;
   const result = await db
     .prepare(
-      "SELECT * FROM lessons WHERE status = 'published' ORDER BY published_at DESC LIMIT ? OFFSET ?",
+      // `id` is not decoration: OFFSET paging only works when the sort is a
+      // TOTAL order. `published_at` alone is not one — a backfill or a bulk
+      // publish gives several rows the same millisecond, and SQLite is then
+      // free to return tied rows in storage order, which can differ between
+      // the query for page N and the query for page N+1 (they are separate
+      // requests, and routes/lessons.ts caches each page independently). A
+      // tie straddling a page boundary then lands on both pages: the gallery
+      // shows one lesson twice and silently never shows another.
+      `SELECT * FROM lessons WHERE status = 'published'
+       ORDER BY published_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
     )
     .bind(pageSize + 1, offset)
     .all<LessonRow>();
@@ -435,7 +445,7 @@ export async function listPublishedLessonsByOwner(
 ): Promise<LessonRow[]> {
   const result = await db
     .prepare(
-      "SELECT * FROM lessons WHERE owner_id = ? AND status = 'published' ORDER BY published_at DESC",
+      "SELECT * FROM lessons WHERE owner_id = ? AND status = 'published' ORDER BY published_at DESC, id DESC",
     )
     .bind(ownerId)
     .all<LessonRow>();
@@ -470,7 +480,7 @@ export async function searchPublishedLessons(
     .prepare(
       `SELECT * FROM lessons
        WHERE status = 'published' AND (title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR tags LIKE ? ESCAPE '\\')
-       ORDER BY published_at DESC
+       ORDER BY published_at DESC, id DESC
        LIMIT ?`,
     )
     .bind(like, like, like, limit)
