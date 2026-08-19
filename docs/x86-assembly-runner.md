@@ -144,4 +144,22 @@ Two details differ from the others and both are deliberate:
 See [lesson-script-authoring.md](./lesson-script-authoring.md) — `asm` is in the
 runtime matrix, with its fixture shape and its `registers` field documented
 there. `src/studio/scripts/x86-64-assembly-crash-course.yaml` is the worked
-example.
+example: ten scenes, about fifteen minutes, aimed at someone who has never
+written assembly.
+
+It covers, in order: what a register is and what memory is; the sixteen
+registers and the **three kinds of rule** about which one to use (the processor
+enforces `rsp`, `rcx` and the `rax`/`rdx` pair; Linux asks for `rdi, rsi, rdx,
+r10, r8, r9`; everything else is yours); the four width names of a single
+register and the rule that writing `eax` clears the top half; sections and
+`_start`; `db` and `$ - msg`; the write system call; brackets as "the value at"
+against `lea` as "work out an address"; the flags and the jump that reads them;
+the stack, and `call`/`ret` as nothing more than a jump that wrote down where it
+came from; and `div` choosing `rdx:rax` for you.
+
+The lesson's first draft named the registers without saying what any of them was
+for, and a reader's reaction was that they had learned nothing about them. The
+completeness the rewrite added is now asserted rather than trusted:
+`asmCrashCourse.test.ts` checks that each of those ideas is still in the
+narration **and** still demonstrated by the program the typing builds, so a scene
+cannot be trimmed for length without the suite noticing.

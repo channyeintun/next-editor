@@ -143,9 +143,67 @@ describe("x86-64 assembly crash course", () => {
     // The lesson's whole claim is that this is the real interface: the call
     // number in rax, the arguments in rdi/rsi/rdx, and exit as call 60. A
     // well-meaning edit toward a different register would make it fiction.
-    expect(program).toContain("mov     rax, 1          ; 1 is write");
-    expect(program).toContain("mov     rdi, 1          ; 1 is standard output");
+    expect(program).toContain("mov     rax, 1              ; 1 is write");
+    expect(program).toContain("mov     rdi, 1              ; 1 is standard output");
     expect(program).toContain("mov     rax, 60");
     expect(program).toContain("$ - msg");
+  });
+
+  /**
+   * The course has to stay a course.
+   *
+   * This started as a tour that named the registers without saying what any of
+   * them was for, and a reviewer's first reaction was that they had learned
+   * nothing about them. Each item below is a thing a beginner cannot write
+   * assembly without, and each is cheap to lose by trimming a scene that felt
+   * long. Losing one would leave the lesson compiling, rendering, and no longer
+   * teaching what it claims to.
+   */
+  it("covers what a beginner cannot do without", () => {
+    const narration = script.scenes.map((scene) => scene.narration).join("\n");
+
+    // The register file: the roles, and the three kinds of rule about them.
+    expect(narration).toContain("accumulator");
+    expect(narration).toContain("stack pointer");
+    expect(narration).toMatch(/r10, not rcx/);
+    // The width names, and the rule that catches everyone.
+    expect(narration).toMatch(/eax is the low thirty-two/);
+    expect(narration).toMatch(/clears the top half/);
+    // Memory through brackets, and the instruction that computes an address.
+    expect(narration).toMatch(/value living at that address|value at/);
+    expect(narration).toContain("lea");
+    // The stack, and what a function actually is.
+    expect(narration).toMatch(/push moves rsp|push  moves rsp|push moves/);
+    expect(narration).toMatch(/call pushes/);
+    // Flags, and the division that picks its own registers.
+    expect(narration).toContain("zero flag");
+    expect(narration).toMatch(/rdx and rax together/);
+  });
+
+  it("builds a program that exercises what it taught", () => {
+    // Told and shown have to match: every idea above appears in the code the
+    // viewer ends up with, not only in the narration.
+    for (const needle of [
+      "syscall",
+      "jnz     .sum",
+      "call    print_number",
+      "push    rbx",
+      "pop     rbx",
+      "ret",
+      "lea     rsi, [digits + 19]",
+      "mov     [rsi], dl",
+      "div     rbx",
+      "xor     rdx, rdx",
+      "resb 20",
+    ]) {
+      expect(program, `the program should contain "${needle}"`).toContain(needle);
+    }
+  });
+
+  it("ends on more than one scene, each citing a source", () => {
+    expect(script.scenes.length).toBeGreaterThanOrEqual(10);
+    for (const scene of script.scenes) {
+      expect(scene.sources?.length ?? 0, `scene "${scene.id}" needs a source`).toBeGreaterThan(0);
+    }
   });
 });

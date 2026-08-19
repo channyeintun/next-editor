@@ -25,6 +25,8 @@ lesson:
 
         section .data
 
+        section .bss
+
         section .text
             global _start
 
@@ -144,7 +146,209 @@ lesson:
       text: "one instruction at a time, and nothing else"
       strokeColor: "#2f9e44"
       fontSize: 28
-    # --- board two: the system call --------------------------------------
+    # --- board two: what each register is for ----------------------------
+    - id: n-title
+      kind: text
+      x: 300
+      y: 150
+      width: 760
+      height: 48
+      text: "Sixteen registers, three kinds of rule"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: n-hw
+      kind: text
+      x: 296
+      y: 216
+      width: 520
+      height: 36
+      text: "the hardware decides"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: n-hw-line
+      kind: freedraw
+      stroke: underline
+      x: 296
+      y: 232
+      width: 286
+      height: 22
+    - id: n-rsp
+      kind: text
+      x: 312
+      y: 262
+      width: 740
+      height: 34
+      text: "rsp        push, pop, call and ret all move it"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: n-rcx-hw
+      kind: text
+      x: 312
+      y: 300
+      width: 740
+      height: 34
+      text: "rcx        the count for shifts, and for loop"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: n-raxdx
+      kind: text
+      x: 312
+      y: 338
+      width: 740
+      height: 34
+      text: "rax rdx    mul and div use both, always"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: n-conv
+      kind: text
+      x: 296
+      y: 390
+      width: 520
+      height: 36
+      text: "everyone agreed"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: n-conv-line
+      kind: freedraw
+      stroke: underline
+      x: 296
+      y: 406
+      width: 224
+      height: 22
+    - id: n-args
+      kind: text
+      x: 312
+      y: 436
+      width: 760
+      height: 34
+      text: "rdi rsi rdx r10 r8 r9    a system call's arguments"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: n-rax-call
+      kind: text
+      x: 312
+      y: 474
+      width: 740
+      height: 34
+      text: "rax        which call, then the answer"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: n-r10-ring
+      kind: freedraw
+      stroke: circle
+      x: 402
+      y: 430
+      width: 74
+      height: 44
+    - id: n-yours
+      kind: text
+      x: 296
+      y: 512
+      width: 520
+      height: 36
+      text: "yours"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: n-yours-line
+      kind: freedraw
+      stroke: underline
+      x: 296
+      y: 528
+      width: 96
+      height: 22
+    - id: n-rest
+      kind: text
+      x: 312
+      y: 558
+      width: 760
+      height: 34
+      text: "rbx rbp r12 r13 r14 r15    put anything in them"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    # --- board three: one register, four names ---------------------------
+    - id: w-title
+      kind: text
+      x: 300
+      y: 150
+      width: 760
+      height: 48
+      text: "One register, four names"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: w-lab64
+      kind: text
+      x: 302
+      y: 208
+      width: 400
+      height: 34
+      text: "rax   all 64 bits"
+      strokeColor: "#1971c2"
+      fontSize: 26
+    - id: w-box64
+      kind: rectangle
+      x: 300
+      y: 246
+      width: 720
+      height: 64
+      strokeColor: "#1971c2"
+    - id: w-lab32
+      kind: text
+      x: 662
+      y: 322
+      width: 400
+      height: 34
+      text: "eax   the low 32"
+      strokeColor: "#2f9e44"
+      fontSize: 26
+    - id: w-box32
+      kind: rectangle
+      x: 660
+      y: 360
+      width: 360
+      height: 64
+      strokeColor: "#2f9e44"
+    - id: w-lab16
+      kind: text
+      x: 842
+      y: 436
+      width: 300
+      height: 34
+      text: "ax   the low 16"
+      strokeColor: "#f08c00"
+      fontSize: 26
+    - id: w-box16
+      kind: rectangle
+      x: 840
+      y: 474
+      width: 180
+      height: 64
+      strokeColor: "#f08c00"
+    - id: w-lab8
+      kind: text
+      x: 866
+      y: 550
+      width: 300
+      height: 34
+      text: "al   the low 8"
+      strokeColor: "#e03131"
+      fontSize: 26
+    - id: w-box8
+      kind: rectangle
+      x: 930
+      y: 588
+      width: 90
+      height: 50
+      strokeColor: "#e03131"
+    - id: w-rule
+      kind: text
+      x: 300
+      y: 470
+      width: 500
+      height: 76
+      text: "writing eax clears the top half.\nax and al leave it alone."
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    # --- board four: the system call -------------------------------------
     - id: b-title
       kind: text
       x: 300
@@ -160,7 +364,7 @@ lesson:
       y: 226
       width: 560
       height: 36
-      text: "rax    which call"
+      text: "rax    1         write"
       strokeColor: "#1971c2"
       fontSize: 28
     - id: b-rdi
@@ -169,7 +373,7 @@ lesson:
       y: 276
       width: 560
       height: 36
-      text: "rdi    first argument"
+      text: "rdi    1         standard output"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: b-rsi
@@ -178,7 +382,7 @@ lesson:
       y: 326
       width: 560
       height: 36
-      text: "rsi    second argument"
+      text: "rsi    msg       where the bytes are"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: b-rdx
@@ -187,7 +391,7 @@ lesson:
       y: 376
       width: 560
       height: 36
-      text: "rdx    third argument"
+      text: "rdx    msglen    how many"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: b-call
@@ -231,7 +435,142 @@ lesson:
       text: "the answer comes back in rax"
       strokeColor: "#2f9e44"
       fontSize: 28
-    # --- board three: the flags ------------------------------------------
+    # --- board five: brackets --------------------------------------------
+    - id: m-title
+      kind: text
+      x: 300
+      y: 150
+      width: 760
+      height: 48
+      text: "Brackets mean the value at"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: m-a
+      kind: text
+      x: 300
+      y: 232
+      width: 760
+      height: 36
+      text: "mov  rsi, digits        the address itself"
+      strokeColor: "#1971c2"
+      fontSize: 27
+    - id: m-b
+      kind: text
+      x: 300
+      y: 292
+      width: 760
+      height: 36
+      text: "mov  dl, [rsi]          the byte living there"
+      strokeColor: "#e03131"
+      fontSize: 27
+    - id: m-c
+      kind: text
+      x: 300
+      y: 352
+      width: 760
+      height: 36
+      text: "mov  [rsi], dl          put a byte there"
+      strokeColor: "#e03131"
+      fontSize: 27
+    - id: m-d
+      kind: text
+      x: 300
+      y: 424
+      width: 760
+      height: 36
+      text: "lea  rsi, [digits + 19]   work out an address"
+      strokeColor: "#2f9e44"
+      fontSize: 27
+    - id: m-note
+      kind: text
+      x: 300
+      y: 486
+      width: 760
+      height: 76
+      text: "lea is the one that does the sum\nand never touches memory."
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    # --- board six: the stack ---------------------------------------------
+    - id: s-title
+      kind: text
+      x: 300
+      y: 150
+      width: 760
+      height: 48
+      text: "The stack, and how a call finds its way back"
+      strokeColor: "#1e1e1e"
+      fontSize: 34
+    - id: s-box
+      kind: rectangle
+      x: 300
+      y: 226
+      width: 330
+      height: 300
+      strokeColor: "#1971c2"
+    - id: s-top
+      kind: text
+      x: 316
+      y: 240
+      width: 300
+      height: 34
+      text: "rsp  ->  newest"
+      strokeColor: "#1971c2"
+      fontSize: 26
+    - id: s-grow
+      kind: text
+      x: 316
+      y: 470
+      width: 300
+      height: 34
+      text: "older, further down"
+      strokeColor: "#9c36b5"
+      fontSize: 24
+    - id: s-push
+      kind: text
+      x: 680
+      y: 240
+      width: 400
+      height: 34
+      text: "push  moves rsp, stores"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: s-pop
+      kind: text
+      x: 680
+      y: 292
+      width: 400
+      height: 34
+      text: "pop   loads, moves rsp back"
+      strokeColor: "#1e1e1e"
+      fontSize: 26
+    - id: s-call
+      kind: text
+      x: 680
+      y: 368
+      width: 420
+      height: 34
+      text: "call  pushes where to return"
+      strokeColor: "#e03131"
+      fontSize: 26
+    - id: s-ret
+      kind: text
+      x: 680
+      y: 420
+      width: 420
+      height: 34
+      text: "ret   pops it and goes there"
+      strokeColor: "#e03131"
+      fontSize: 26
+    - id: s-note
+      kind: text
+      x: 300
+      y: 560
+      width: 780
+      height: 36
+      text: "that is the whole of what a function is"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    # --- board seven: the flags -------------------------------------------
     - id: c-title
       kind: text
       x: 300
@@ -306,18 +645,18 @@ runtime:
     latencyMs: 200
     result:
       status: success
-      stdout: "Hello, x86-64!\n"
+      stdout: "Hello, x86-64!\n15\n"
       stderr: ""
       exitCode: 15
       registers:
         - { name: rax, value: "60" }
-        - { name: rdx, value: "15" }
+        - { name: rdx, value: "3" }
         - { name: rbx, value: "15" }
-        - { name: rsi, value: "4202496" }
+        - { name: rsi, value: "4206609" }
         - { name: rdi, value: "15" }
       flags:
         carry: false
-        zero: true
+        zero: false
         sign: false
         overflow: false
         parity: true
@@ -334,15 +673,17 @@ scenes:
       [[mark:machine-draw-regs]] There are sixteen places to put a value. They're
       called registers, they're inside the processor itself, and each one holds
       sixty-four bits. That's all the storage the processor has of its own.
-      [[mark:machine-draw-names]] They have names, and you'll use these names all
-      the time. rax, rbx, rcx, rdx, and the rest.
+      [[mark:machine-draw-names]] They have names, and the names are the whole
+      vocabulary of the language. We'll go through what each one is for in a
+      moment.
       [[mark:machine-draw-mem]] Everything else lives in memory, which is outside,
       and which you reach by address. Moving a value between the two is something
       you ask for by name, every time.
       [[mark:machine-draw-note]] And the processor does one instruction, then the
       next one. There's no garbage collector waiting, no runtime starting up, and
       nothing checking your work. What you write is what runs.
-      [[mark:machine-to-code]] So let's write one.
+      So before we write anything, let's deal with the sixteen names, because
+      that's the part that looks arbitrary and isn't.
     sources:
       - {
           title: "Intel 64 and IA-32 Architectures Software Developer Manuals",
@@ -382,9 +723,155 @@ scenes:
         at: { mark: machine-draw-note }
         upsertIds: [a-note]
         drawMs: 800
-      - id: machine-close-board
+
+  - id: names
+    narration: >
+      [[mark:names-title]] The names come from a processor much older than this
+      one, and they're abbreviations. a is for accumulator, c is for counter, d
+      is for data, b is for base. sp is the stack pointer, bp is the base
+      pointer, and si and di are source index and destination index. Then r8 up
+      to r15, which were added later and never got a story.
+      [[mark:names-hw]] Almost all of them will hold anything you put in them. But
+      there are three different kinds of rule about which one to use, and telling
+      the three apart is most of what confuses people early.
+      [[mark:names-hw-rows]] The first kind the processor enforces, and you have no
+      say in it. rsp is the stack pointer: push, pop, call and ret all change it
+      whether you name it or not. rcx is the count, so shifting by a variable
+      amount reads rcx, and so does the loop instruction. And multiply and divide
+      always work on rax and rdx together, even though neither one appears in the
+      line you write. Use those registers for something else and the next multiply
+      quietly destroys your value.
+      [[mark:names-conv]] The second kind is an agreement. Nothing inside the
+      processor says the first argument to a system call goes in rdi. Linux says
+      so, and every program on the machine follows it.
+      [[mark:names-conv-rows]] rdi, rsi, rdx, r10, r8, r9, in that order, and the
+      number of the call in rax. The answer comes back in rax too.
+      [[mark:names-r10]] One detail in that row is worth keeping. The fourth one is
+      r10, not rcx. When you call an ordinary function the fourth argument does go
+      in rcx, but the syscall instruction destroys rcx on its way into the kernel,
+      so the kernel had to be handed a different register. It's the kind of thing
+      that looks like a typo until you know why.
+      [[mark:names-yours]] The third kind is no rule at all. rbx, rbp, and r12
+      through r15 hold whatever you decide, and nothing will take them from you.
+      So when you read a line and wonder why that register and not another, the
+      answer is always one of three. The processor needs it
+      there, Linux asked for it there, or whoever wrote the line just picked one.
+      [[mark:names-to-code]] Let's go and see the first two of those in a real
+      program.
+    sources:
+      - {
+          title: "System V Application Binary Interface, AMD64 Processor Supplement",
+          url: "https://gitlab.com/x86-psABIs/x86-64-ABI",
+        }
+      - {
+          title: "syscall(2) — Linux manual page",
+          url: "https://man7.org/linux/man-pages/man2/syscall.2.html",
+        }
+    actions:
+      - id: names-open-board
         type: whiteboard.apply
-        at: { mark: machine-to-code }
+        at: { mark: names-title, offsetMs: -600 }
+        open: true
+        clear: true
+        upsertIds: [n-title]
+        drawMs: 700
+      - id: names-draw-hw
+        type: whiteboard.apply
+        at: { mark: names-hw }
+        upsertIds: [n-hw, n-hw-line]
+        drawMs: 700
+      - id: names-draw-hw-rows
+        type: whiteboard.apply
+        at: { mark: names-hw-rows }
+        upsertIds: [n-rsp, n-rcx-hw, n-raxdx]
+        drawMs: 1400
+      - id: names-draw-conv
+        type: whiteboard.apply
+        at: { mark: names-conv }
+        upsertIds: [n-conv, n-conv-line]
+        drawMs: 700
+      - id: names-draw-conv-rows
+        type: whiteboard.apply
+        at: { mark: names-conv-rows }
+        upsertIds: [n-args, n-rax-call]
+        drawMs: 1100
+      - id: names-draw-r10
+        type: whiteboard.apply
+        at: { mark: names-r10 }
+        upsertIds: [n-r10-ring]
+        drawMs: 700
+      - id: names-draw-yours
+        type: whiteboard.apply
+        at: { mark: names-yours }
+        upsertIds: [n-yours, n-yours-line, n-rest]
+        drawMs: 1000
+      - id: names-close-board
+        type: whiteboard.apply
+        at: { mark: names-to-code }
+        open: false
+
+  - id: widths
+    narration: >
+      [[mark:widths-title]] One more thing about registers, and it catches
+      everybody once. Each one has four names, and they aren't four registers.
+      They're four sizes of the same one.
+      [[mark:widths-draw64]] rax is the whole thing, all sixty-four bits.
+      [[mark:widths-draw32]] eax is the low thirty-two of that same register.
+      [[mark:widths-draw16]] ax is the low sixteen, [[mark:widths-draw8]] and al is
+      the low eight. Change al and you have changed part of rax, because there was
+      only ever one register there. Every register works this way: rcx has ecx, cx
+      and cl, and r8 has r8d, r8w and r8b.
+      [[mark:widths-rule]] There's one rule about them that will surprise you.
+      Writing to a thirty-two bit name clears the top half to zero. Writing to a
+      sixteen or eight bit name leaves the rest exactly as it was. So xor eax, eax
+      sets the whole of rax to zero, and it takes fewer bytes than saying rax,
+      which is why you'll see it everywhere.
+      [[mark:widths-to-code]] Now let's write the program.
+    sources:
+      - {
+          title: "Intel 64 and IA-32 Architectures Software Developer Manuals",
+          url: "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html",
+        }
+      - {
+          title: "System V Application Binary Interface, AMD64 Processor Supplement",
+          url: "https://gitlab.com/x86-psABIs/x86-64-ABI",
+        }
+    actions:
+      - id: widths-open-board
+        type: whiteboard.apply
+        at: { mark: widths-title, offsetMs: -600 }
+        open: true
+        clear: true
+        upsertIds: [w-title]
+        drawMs: 700
+      - id: widths-draw-64
+        type: whiteboard.apply
+        at: { mark: widths-draw64 }
+        upsertIds: [w-lab64, w-box64]
+        drawMs: 800
+      - id: widths-draw-32
+        type: whiteboard.apply
+        at: { mark: widths-draw32 }
+        upsertIds: [w-lab32, w-box32]
+        drawMs: 800
+      - id: widths-draw-16
+        type: whiteboard.apply
+        at: { mark: widths-draw16 }
+        upsertIds: [w-lab16, w-box16]
+        drawMs: 700
+      - id: widths-draw-8
+        type: whiteboard.apply
+        at: { mark: widths-draw8 }
+        upsertIds: [w-lab8, w-box8]
+        drawMs: 700
+      - id: widths-draw-rule
+        type: whiteboard.apply
+        at: { mark: widths-rule }
+        upsertIds: [w-rule]
+        drawMs: 900
+      - id: widths-close-board
+        type: whiteboard.apply
+        at: { mark: widths-to-code }
         open: false
 
   - id: skeleton
@@ -462,19 +949,24 @@ scenes:
 
   - id: syscall
     narration: >
-      [[mark:syscall-board]] Now, how does a program with no library print anything?
-      It asks the operating system. And the way you ask is a rule about registers.
-      [[mark:syscall-draw-args]] You put the number of the call you want in rax.
-      Then the arguments go in rdi, rsi and rdx, in that order.
-      [[mark:syscall-draw-call]] Then you run one instruction, syscall, and the
-      processor hands control to the kernel. [[mark:syscall-draw-back]] When it comes
-      back, the answer is in rax. That's the whole interface. Every file a program
-      opens, every byte it prints, every process it starts, goes through this.
-      [[mark:syscall-to-code]] Let's write the one that prints.
-      [[mark:syscall-type]] Call number one is write. The first argument is one,
-      which is standard output. The second is where the bytes are, and the third is
-      how many. [[mark:syscall-select-syscall]] Then syscall, and the message is on
-      the screen.
+      [[mark:syscall-board]] So how does a program with no library print anything?
+      It asks the operating system, through the agreement we just drew.
+      [[mark:syscall-draw-args]] Here's that same row, filled in for the call we
+      want. Write is call number one. Its first argument is which file to write
+      to, and standard output is file one. Its second is where the bytes are, and
+      its third is how many of them.
+      [[mark:syscall-draw-call]] Then one instruction, syscall, hands control to
+      the kernel. Your program stops where it is, the kernel does the work, and
+      your program carries on at the next line. [[mark:syscall-draw-back]] The
+      answer comes back in rax, and for write the answer is how many bytes it
+      actually took. That's the whole interface. Every file a program opens, every
+      byte it prints, every process it starts goes through those six registers and
+      this one instruction.
+      [[mark:syscall-to-code]] Let's write it.
+      [[mark:syscall-type]] One into rax, because we want write. One into rdi,
+      because that's standard output. The address of the message into rsi, and its
+      length into rdx. [[mark:syscall-select-syscall]] Then syscall, and the
+      message is on the screen.
     sources:
       - {
           title: "syscall(2) — Linux manual page",
@@ -516,7 +1008,7 @@ scenes:
         at: { mark: syscall-type, offsetMs: -400 }
         target: { file: main.asm, after: "_start:\n", occurrence: 1 }
         cadence: line-by-line
-        text: "    ; write(1, msg, msglen)\n    mov     rax, 1          ; 1 is write\n    mov     rdi, 1          ; 1 is standard output\n    mov     rsi, msg        ; where the bytes are\n    mov     rdx, msglen     ; how many\n\n    syscall\n\n"
+        text: "    ; write(1, msg, msglen)\n    mov     rax, 1              ; 1 is write\n    mov     rdi, 1              ; 1 is standard output\n    mov     rsi, msg            ; where the bytes are\n    mov     rdx, msglen         ; how many\n\n    syscall\n\n"
       - id: syscall-select-instruction
         type: editor.select
         at: { mark: syscall-select-syscall, offsetMs: 200 }
@@ -533,9 +1025,11 @@ scenes:
       that bit, and jumps only while it's off. So the counting and the deciding are
       two separate instructions, and the flag is the message between them.
       [[mark:flags-to-code]] Here's the loop.
-      [[mark:flags-type]] rcx starts at five, and rbx starts at zero, because xor of
-      a value with itself is always zero and it's the shortest way to write it. Then
-      we add, take one away, and jump back. [[mark:flags-select-dec]] That's five
+      [[mark:flags-type]] The count goes in rcx, which is the one the processor
+      reads without being told, and the running total goes in rbx, which is one of
+      the registers nobody has a claim on. rbx starts at zero, and xor of a value
+      with itself is the shortest way to write zero. Then we add, take one away,
+      and jump back. [[mark:flags-select-dec]] That's five
       plus four plus three plus two plus one, and no instruction here compares
       anything. dec left the note, and jnz read it.
     sources:
@@ -584,27 +1078,238 @@ scenes:
         at: { mark: flags-type, offsetMs: -400 }
         target: { file: main.asm, after: "    syscall\n\n", occurrence: 1 }
         cadence: line-by-line
-        text: "    ; Add 5 + 4 + 3 + 2 + 1, counting down.\n    mov     rcx, 5\n    xor     rbx, rbx\n\n.sum:\n    add     rbx, rcx\n    dec     rcx             ; dec sets the zero flag when rcx reaches zero\n    jnz     .sum            ; jnz reads that flag\n\n"
+        text: "    ; Add 5 + 4 + 3 + 2 + 1, counting down in rcx.\n    mov     rcx, 5\n    xor     rbx, rbx\n\n.sum:\n    add     rbx, rcx\n    dec     rcx                 ; dec sets the zero flag when rcx reaches zero\n    jnz     .sum                ; jnz reads that flag\n\n"
       - id: flags-select-dec
         type: editor.select
         at: { mark: flags-select-dec, offsetMs: 900 }
         target: { file: main.asm, text: "    dec     rcx", occurrence: 1 }
 
+  - id: stack
+    narration: >
+      [[mark:stack-board]] That total is fifteen. Let's print it, and to print it
+      we need a routine we can call. Which means the stack.
+      [[mark:stack-draw-box]] The stack is a region of memory, and rsp is the
+      register that points at the newest thing on it. It grows downwards, so
+      older values sit at higher addresses. That's it. There's no special stack
+      hardware, only a register and an agreement about which way it moves.
+      [[mark:stack-draw-pushpop]] push moves rsp along and stores a value there.
+      pop reads a value and moves rsp back. Two instructions, and between them
+      you have somewhere to put things you'll need later.
+      [[mark:stack-draw-callret]] And that's how a function works. call pushes the
+      address of the line after it, then jumps. ret pops that address and goes
+      back to it. [[mark:stack-note]] So a function isn't a language feature here.
+      It's a jump that wrote down where it came from.
+      [[mark:stack-to-code]] Let's call one.
+      [[mark:stack-type-call]] The number we want printed goes in rdi, because
+      that's where the agreement says a first argument goes, and then we call.
+      [[mark:stack-type-exit]] After the call we exit with rbx, and rbx is the
+      interesting part. The routine is going to need a register to work in, and
+      the agreement says rbx is one it has to give back. So the total is still
+      here when we ask for it.
+      [[mark:stack-type-shell]] Here's the routine itself, with nothing in the
+      middle yet. It borrows rbx by pushing it, and the last thing before ret
+      pops it back. [[mark:stack-select-push]] Delete those two lines and the
+      program prints the same thing and exits with the wrong number, because the
+      routine would have handed back a total it had overwritten.
+    sources:
+      - {
+          title: "System V Application Binary Interface, AMD64 Processor Supplement",
+          url: "https://gitlab.com/x86-psABIs/x86-64-ABI",
+        }
+      - {
+          title: "Intel 64 and IA-32 Architectures Software Developer Manuals",
+          url: "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html",
+        }
+    actions:
+      - id: stack-open-board
+        type: whiteboard.apply
+        at: { mark: stack-board, offsetMs: -500 }
+        open: true
+        clear: true
+        upsertIds: [s-title]
+        drawMs: 700
+      - id: stack-draw-box
+        type: whiteboard.apply
+        at: { mark: stack-draw-box }
+        upsertIds: [s-box, s-top, s-grow]
+        drawMs: 1100
+      - id: stack-draw-pushpop
+        type: whiteboard.apply
+        at: { mark: stack-draw-pushpop }
+        upsertIds: [s-push, s-pop]
+        drawMs: 900
+      - id: stack-draw-callret
+        type: whiteboard.apply
+        at: { mark: stack-draw-callret }
+        upsertIds: [s-call, s-ret]
+        drawMs: 900
+      - id: stack-draw-note
+        type: whiteboard.apply
+        at: { mark: stack-note }
+        upsertIds: [s-note]
+        drawMs: 800
+      - id: stack-close-board
+        type: whiteboard.apply
+        at: { mark: stack-to-code }
+        open: false
+      - id: stack-type-call
+        type: editor.type
+        at: { mark: stack-type-call, offsetMs: -400 }
+        target:
+          {
+            file: main.asm,
+            after: "    jnz     .sum                ; jnz reads that flag\n\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "    mov     rdi, rbx            ; the total is the argument\n    call    print_number\n\n"
+      - id: stack-type-exit
+        type: editor.type
+        at: { mark: stack-type-exit, offsetMs: -300 }
+        target: { file: main.asm, after: "    mov     rax, 60\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "    mov     rdi, rbx            ; rbx survived the call, so the total is still here\n"
+      - id: stack-type-shell
+        type: editor.type
+        at: { mark: stack-type-shell, offsetMs: -400 }
+        target:
+          {
+            file: main.asm,
+            after: "    mov     rdi, rbx            ; rbx survived the call, so the total is still here\n    syscall\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "\n; print_number - print the number in rdi as decimal digits, then a newline.\nprint_number:\n    push    rbx                 ; rbx belongs to whoever called us\n\n    pop     rbx                 ; give it back exactly as we found it\n    ret\n"
+      - id: stack-select-push
+        type: editor.select
+        at: { mark: stack-select-push, offsetMs: 400 }
+        target:
+          {
+            file: main.asm,
+            text: "    push    rbx                 ; rbx belongs to whoever called us\n",
+            occurrence: 1,
+          }
+
+  - id: digits
+    narration: >
+      [[mark:digits-board]] The routine has to turn a number into characters,
+      and that needs two ideas we haven't met. The first is what square brackets
+      mean.
+      [[mark:digits-draw-addr]] Without brackets, a name is an address — a number
+      saying where something is.
+      [[mark:digits-draw-mem]] With brackets around it, you're talking about the
+      value living at that address. One line moves a pointer, the other reaches
+      through it. Getting these two confused is the single most common mistake
+      in early assembly.
+      [[mark:digits-draw-lea]] And lea looks like it reads memory and doesn't. It
+      does the arithmetic inside the brackets and hands you the answer as a
+      number. [[mark:digits-note]] It's how you say "nineteen bytes past digits"
+      without going and looking there.
+      [[mark:digits-to-code]] The second idea is division.
+      [[mark:digits-type-bss]] First, somewhere to put the characters. The bss
+      section is space the program asks for and doesn't fill in, so it costs
+      nothing in the file itself and arrives full of zeroes.
+      [[mark:digits-type-body]] Now the routine.
+      [[mark:digits-say-div]] Division is the clearest case of the processor
+      choosing your registers for you. div takes one operand — what to divide by
+      — and everything else is fixed. It reads rdx and rax together as one very
+      wide number, it leaves the answer in rax, and it leaves the remainder in
+      rdx. [[mark:digits-select-xor]] That's why the line above it clears rdx.
+      Leave a stale value there and the division is a different sum, or the
+      program stops because the answer doesn't fit.
+      [[mark:digits-say-loop]] So each turn of the loop divides by ten and takes
+      one digit off the end, from the right. Adding the character zero turns a
+      remainder of five into the character five, and the digits get written
+      backwards into the buffer, which is exactly the order they need to be in.
+      [[mark:digits-say-write]] Then the length is worked out by subtracting where
+      we stopped from the end of the buffer, and one more write puts it on the
+      screen.
+    sources:
+      - {
+          title: "Intel 64 and IA-32 Architectures Software Developer Manuals",
+          url: "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html",
+        }
+      - { title: "NASM Manual — Effective Addresses", url: "https://www.nasm.us/doc/nasmdoc3.html" }
+    actions:
+      - id: digits-open-board
+        type: whiteboard.apply
+        at: { mark: digits-board, offsetMs: -500 }
+        open: true
+        clear: true
+        upsertIds: [m-title]
+        drawMs: 700
+      - id: digits-draw-addr
+        type: whiteboard.apply
+        at: { mark: digits-draw-addr }
+        upsertIds: [m-a]
+        drawMs: 700
+      - id: digits-draw-mem
+        type: whiteboard.apply
+        at: { mark: digits-draw-mem }
+        upsertIds: [m-b, m-c]
+        drawMs: 1000
+      - id: digits-draw-lea
+        type: whiteboard.apply
+        at: { mark: digits-draw-lea }
+        upsertIds: [m-d]
+        drawMs: 700
+      - id: digits-draw-note
+        type: whiteboard.apply
+        at: { mark: digits-note }
+        upsertIds: [m-note]
+        drawMs: 800
+      - id: digits-close-board
+        type: whiteboard.apply
+        at: { mark: digits-to-code }
+        open: false
+      - id: digits-type-bss
+        type: editor.type
+        at: { mark: digits-type-bss, offsetMs: -400 }
+        target: { file: main.asm, after: "section .bss\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "    digits  resb 20         ; room for the digits, filled with zeroes\n"
+      - id: digits-type-body
+        type: editor.type
+        at: { mark: digits-type-body, offsetMs: -400 }
+        target:
+          {
+            file: main.asm,
+            after: "    push    rbx                 ; rbx belongs to whoever called us\n\n",
+            occurrence: 1,
+          }
+        cadence: line-by-line
+        text: "    mov     rax, rdi\n    mov     rbx, 10             ; the divisor\n    lea     rsi, [digits + 19]  ; the last byte of the buffer\n    mov     byte [rsi], 10      ; put the newline there first\n\n.next:\n    dec     rsi\n    xor     rdx, rdx            ; div reads rdx:rax, so clear the high half\n    div     rbx                 ; rax = rax / 10, rdx = rax % 10\n    add     dl, '0'             ; a remainder of 7 becomes the character '7'\n    mov     [rsi], dl\n    test    rax, rax\n    jnz     .next\n\n    lea     rdx, [digits + 20]\n    sub     rdx, rsi            ; how many characters we wrote\n    mov     rax, 1\n    mov     rdi, 1\n    syscall\n\n"
+      - id: digits-select-xor
+        type: editor.select
+        at: { mark: digits-select-xor, offsetMs: 500 }
+        target:
+          {
+            file: main.asm,
+            text: "    xor     rdx, rdx            ; div reads rdx:rax, so clear the high half\n",
+            occurrence: 1,
+          }
+
   - id: run
     narration: >
-      [[mark:run-type-exit]] One line left. The value a program exits with is a
-      number the operating system keeps, and it's how a shell script finds out
-      whether the program worked. We'll hand it our sum, so you can see the number
-      leave the program. [[mark:run-press]] Let's run it.
-      [[mark:run-read]] There's the message, and there's the status: fifteen, which
-      is five plus four plus three plus two plus one. [[mark:run-registers]] And
-      underneath, the registers the program changed, in hexadecimal. rax holds sixty,
-      the exit call, because that was the last number we put there. rbx and rdi both
-      hold fifteen. rsi holds an address, which is where the message sits in memory.
-      Nothing else moved, because nothing else was asked to.
-      [[mark:run-close]] That's a whole program. Sixteen registers, a way to ask the
-      kernel for something, and one bit that decides where to go next. Everything
-      else you'll ever write in assembly is built out of those three.
+      [[mark:run-press]] That's the whole program. Let's run it.
+      [[mark:run-read]] There's the message, there's the total printed by our
+      routine, and there's the exit status: fifteen, which is five plus four plus
+      three plus two plus one. The value a program exits with is a number the
+      operating system keeps, and it's how a shell script finds out whether a
+      program worked.
+      [[mark:run-registers]] Underneath are the registers the program changed, in
+      hexadecimal, and every one of them is one of the three kinds of rule. rax
+      holds sixty, which is the exit call, and rdi holds fifteen, its argument —
+      both of those are the agreement. rdx holds three, left over from the last
+      division, because div puts the remainder there whether you want it or not.
+      rsi points into the digit buffer. And rbx holds fifteen because we chose
+      rbx, and because the routine gave it back.
+      [[mark:run-close]] So that's assembly. Sixteen registers with three kinds of
+      rule about them, memory you reach through brackets, flags that remember what
+      the last instruction did, a stack that makes functions possible, and one
+      instruction that asks the operating system for everything else. There isn't
+      a layer underneath this one. Everything you have written in every other
+      language becomes something like what's on this screen.
     sources:
       - {
           title: "exit_group(2) — Linux manual page",
@@ -615,12 +1320,6 @@ scenes:
           url: "https://gitlab.com/x86-psABIs/x86-64-ABI",
         }
     actions:
-      - id: run-type-exit
-        type: editor.type
-        at: { mark: run-type-exit, offsetMs: -300 }
-        target: { file: main.asm, after: "    mov     rax, 60\n", occurrence: 1 }
-        cadence: line-by-line
-        text: "    mov     rdi, rbx        ; the sum becomes the exit status\n"
       - id: run-program
         type: runtime.run
         at: { mark: run-press, offsetMs: -200 }
@@ -635,13 +1334,23 @@ scenes:
         at: { afterAction: run-expect-message }
         contains: "Program exited with status 15"
         timeoutMs: 15000
+      - id: run-expect-total
+        type: expect.output
+        at: { afterAction: run-expect-message }
+        contains: "15"
+        timeoutMs: 15000
       - id: run-expect-registers
         type: expect.output
         at: { afterAction: run-expect-status }
         contains: "rbx=0xf"
         timeoutMs: 15000
-      - id: run-check-file
+      - id: run-check-loop
         type: expect.file
         at: { afterAction: run-expect-registers }
         path: main.asm
         contains: "jnz     .sum"
+      - id: run-check-routine
+        type: expect.file
+        at: { afterAction: run-check-loop }
+        path: main.asm
+        contains: "call    print_number"

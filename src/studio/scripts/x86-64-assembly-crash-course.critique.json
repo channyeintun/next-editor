@@ -4,6 +4,21 @@
     {
       "id": "marker.unused",
       "severity": "note",
+      "message": "Marker \"digits-say-div\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"digits-say-loop\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"digits-say-write\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
       "message": "Marker \"run-read\" is never referenced by an action"
     },
     {
