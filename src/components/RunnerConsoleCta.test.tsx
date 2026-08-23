@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import RunnerConsoleCta, {
   isLessonPlaybackShowing,
   runCtaCopy,
@@ -17,20 +17,29 @@ const NO_PLAYBACK = {
 
 describe("runner console CTA copy", () => {
   it("names the run command in the run copy", () => {
-    expect(runCtaCopy("start go run *.go")).toEqual({
+    expect(runCtaCopy("go run *.go")).toEqual({
       headline: "You haven't run this code yet.",
-      body: "Click the Run button above to start go run *.go. The output appears here.",
+      actionLabel: "Run",
+      detail: "Runs go run *.go. The output appears here.",
+      showRunIcon: true,
     });
   });
 
-  it("says why signing in is needed", () => {
-    expect(signInCtaCopy("Haskell").body).toBe(
-      "Haskell runs on a server, not in your browser. Your code is saved before you sign in.",
-    );
+  it("says why signing in is needed, and offers it as the action", () => {
+    expect(signInCtaCopy("Haskell")).toMatchObject({
+      actionLabel: "Sign in to run Haskell",
+      detail:
+        "Haskell runs on a server, not in your browser. Your code is saved before you sign in.",
+      showRunIcon: false,
+    });
   });
 
-  it("points at runner settings when the runner is off", () => {
-    expect(runnerDisabledCtaCopy().headline).toBe("The runner is turned off for this lesson.");
+  it("offers runner settings as the action when the runner is off", () => {
+    expect(runnerDisabledCtaCopy()).toMatchObject({
+      headline: "The runner is turned off for this lesson.",
+      actionLabel: "Open runner settings",
+      showRunIcon: false,
+    });
   });
 });
 
@@ -120,25 +129,42 @@ describe("shouldShowPlaygroundRunnerCta", () => {
 });
 
 describe("RunnerConsoleCta", () => {
-  it("renders both lines, takes no pointer events, and paints above the terminal", () => {
-    const { container } = render(<RunnerConsoleCta {...runCtaCopy("start cargo run")} />);
+  it("renders the copy and runs the action when the button is pressed", () => {
+    const onAction = vi.fn<() => void>();
+    render(<RunnerConsoleCta {...runCtaCopy("cargo run")} onAction={onAction} />);
 
     expect(screen.getByText("You haven't run this code yet.")).toBeInTheDocument();
-    expect(
-      screen.getByText("Click the Run button above to start cargo run. The output appears here."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Runs cargo run. The output appears here.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels the button for the sign-in and settings actions", () => {
+    const { rerender } = render(<RunnerConsoleCta {...signInCtaCopy("Go")} onAction={() => {}} />);
+    expect(screen.getByRole("button", { name: "Sign in to run Go" })).toBeInTheDocument();
+
+    rerender(<RunnerConsoleCta {...runnerDisabledCtaCopy()} onAction={() => {}} />);
+    expect(screen.getByRole("button", { name: "Open runner settings" })).toBeInTheDocument();
+  });
+
+  it("only the button takes pointer events, and the overlay paints above the terminal", () => {
+    const { container } = render(
+      <RunnerConsoleCta {...runCtaCopy("cargo run")} onAction={() => {}} />,
+    );
 
     const overlay = container.firstElementChild;
     // The studio attention cursor and recorded mouse tracking both walk up from
-    // document.elementFromPoint; a hit-testable overlay re-anchors both.
+    // document.elementFromPoint; a full-box hit target re-anchors both.
     expect(overlay).toHaveClass("pointer-events-none");
+    expect(screen.getByRole("button")).toHaveClass("pointer-events-auto");
     // `.xterm` is position:relative with an opaque background, so an overlay
     // left at `z-index: auto` is painted underneath it.
     expect(overlay).toHaveClass("z-10");
   });
 
   it("carries no studio, tour, or cursor-replay hooks", () => {
-    const { container } = render(<RunnerConsoleCta {...signInCtaCopy("Go")} />);
+    const { container } = render(<RunnerConsoleCta {...signInCtaCopy("Go")} onAction={() => {}} />);
 
     expect(container.querySelector("[data-studio-target]")).toBeNull();
     expect(container.querySelector("[data-tour]")).toBeNull();

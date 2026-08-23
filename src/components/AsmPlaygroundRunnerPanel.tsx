@@ -371,7 +371,14 @@ function AsmPlaygroundRunnerPanel() {
               }
               onScroll={updateScrollLine}
             />
-            {showRunnerCta && <RunnerConsoleCta {...runCtaCopy("assemble and run main.asm")} />}
+            {showRunnerCta && (
+              <RunnerConsoleCta
+                {...runCtaCopy("main.asm through nasm and ld")}
+                onAction={() => {
+                  void handleRun();
+                }}
+              />
+            )}
           </div>
         </div>
       )}

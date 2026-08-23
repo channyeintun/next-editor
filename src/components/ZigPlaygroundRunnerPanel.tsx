@@ -375,6 +375,7 @@ function ZigPlaygroundRunnerPanel() {
 
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
   const consoleContent = effectiveConsoleLines.map(decorateZigConsoleLine).join("\n");
+  const runnerCtaAction = showSignIn ? handleSignIn : handleRun;
   const showRunnerCta = shouldShowPlaygroundRunnerCta({
     isPlaybackSnapshotActive,
     isPlaying,
@@ -530,7 +531,10 @@ function ZigPlaygroundRunnerPanel() {
             />
             {showRunnerCta && (
               <RunnerConsoleCta
-                {...(showSignIn ? signInCtaCopy("Zig") : runCtaCopy("start zig run main.zig"))}
+                {...(showSignIn ? signInCtaCopy("Zig") : runCtaCopy("zig run main.zig"))}
+                onAction={() => {
+                  void runnerCtaAction();
+                }}
               />
             )}
           </div>

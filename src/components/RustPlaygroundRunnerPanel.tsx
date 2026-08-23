@@ -375,6 +375,7 @@ function RustPlaygroundRunnerPanel() {
 
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
   const consoleContent = effectiveConsoleLines.map(decorateRustConsoleLine).join("\n");
+  const runnerCtaAction = showSignIn ? handleSignIn : handleRun;
   const showRunnerCta = shouldShowPlaygroundRunnerCta({
     isPlaybackSnapshotActive,
     isPlaying,
@@ -530,7 +531,10 @@ function RustPlaygroundRunnerPanel() {
             />
             {showRunnerCta && (
               <RunnerConsoleCta
-                {...(showSignIn ? signInCtaCopy("Rust") : runCtaCopy("start cargo run"))}
+                {...(showSignIn ? signInCtaCopy("Rust") : runCtaCopy("cargo run"))}
+                onAction={() => {
+                  void runnerCtaAction();
+                }}
               />
             )}
           </div>

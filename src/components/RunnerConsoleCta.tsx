@@ -1,16 +1,20 @@
+import { Play } from "lucide-react";
+
 /**
  * The empty-state call to action shared by every runner console — the seven
  * playground docks and the WebContainer runner tab. A console that has never
- * run is a black rectangle: the Run button above it is the only thing that
- * changes that, and until now nothing on screen said so.
+ * run is a black rectangle, and the Run button in the command bar above it is
+ * small, far from where the eye lands, and easy to miss. This puts the same
+ * action in the middle of the empty console, as a real button.
  *
- * Deliberately not interactive. A second control that runs (or signs in) would
- * duplicate the awaited saveProject() that has to precede the full-page OAuth
- * navigation, and `pointer-events-none` keeps the overlay out of
- * document.elementFromPoint — which both the studio attention cursor
- * (src/studio/driver.ts) and recorded mouse tracking (mouseTrackingActor) walk
- * up from to resolve a cursor target. An overlay that swallowed those hits
- * would silently re-anchor replayed cursor coordinates.
+ * The overlay itself stays `pointer-events-none` and only the button takes
+ * hits, so the console keeps its own behaviour everywhere else: the studio
+ * attention cursor (src/studio/driver.ts) and recorded mouse tracking
+ * (mouseTrackingActor) both walk up from document.elementFromPoint to resolve a
+ * cursor target, and a full-box overlay would re-anchor them. The button is
+ * inside the dock, which carries `data-cursor-replay-target="runtime-dock"` in
+ * both the record and replay phases, so a hover over it resolves to an id that
+ * exists on both sides.
  *
  * It overlays the console, never sits in flow beside it: the dock content box
  * is a fixed h-72 and XtermTerminal fits itself to its container, so stealing
@@ -20,24 +24,34 @@
  * `z-10` is load-bearing. XtermTerminal's `.xterm` child is position:relative
  * with an opaque background (src/index.css), so a positioned sibling left at
  * `z-index: auto` paints underneath it no matter where it sits in the tree.
+ *
+ * It carries no `data-studio-target`, `data-tour`, or `data-cursor-replay-target`
+ * of its own: all three resolve by first match, so a second element answering to
+ * an existing id would quietly steal the performer's click or the tour's step.
  */
 
 export interface RunnerConsoleCtaCopy {
   /** One sentence: the state a blank console cannot convey. */
   headline: string;
-  /** One sentence: the action to take, and what it produces. */
-  body: string;
+  /** The button label — what pressing it does, in the learner's words. */
+  actionLabel: string;
+  /** One sentence under the button: what the action will do. */
+  detail: string;
+  /** A Run action gets the play glyph; sign-in and settings do not. */
+  showRunIcon: boolean;
 }
 
 /**
- * `action` completes "Click the Run button above to ___", e.g. "start cargo
- * run". Always pass the run command, never a toolLabel that flips to the
- * formatter — this copy is only ever on screen before a run.
+ * `command` is the run command as the command bar spells it, e.g. "cargo run".
+ * Always pass the run command, never a toolLabel that flips to the formatter —
+ * this copy is only ever on screen before a run.
  */
-export function runCtaCopy(action: string): RunnerConsoleCtaCopy {
+export function runCtaCopy(command: string): RunnerConsoleCtaCopy {
   return {
     headline: "You haven't run this code yet.",
-    body: `Click the Run button above to ${action}. The output appears here.`,
+    actionLabel: "Run",
+    detail: `Runs ${command}. The output appears here.`,
+    showRunIcon: true,
   };
 }
 
@@ -45,14 +59,18 @@ export function runCtaCopy(action: string): RunnerConsoleCtaCopy {
 export function signInCtaCopy(language: string): RunnerConsoleCtaCopy {
   return {
     headline: "Sign in to run this code.",
-    body: `${language} runs on a server, not in your browser. Your code is saved before you sign in.`,
+    actionLabel: `Sign in to run ${language}`,
+    detail: `${language} runs on a server, not in your browser. Your code is saved before you sign in.`,
+    showRunIcon: false,
   };
 }
 
 export function runnerDisabledCtaCopy(): RunnerConsoleCtaCopy {
   return {
     headline: "The runner is turned off for this lesson.",
-    body: "Click the gear button above to open runner settings and turn it back on.",
+    actionLabel: "Open runner settings",
+    detail: "Turn it back on there to see the output here.",
+    showRunIcon: false,
   };
 }
 
@@ -87,6 +105,9 @@ export function isLessonPlaybackShowing(state: LessonPlaybackState): boolean {
  * whole replay, so a CTA keyed on the store would sit on top of replayed
  * program output. `isAuthLoading` is omitted by the two in-page runners (Kite,
  * x86-64), which run locally and have no sign-in gate.
+ *
+ * The button this gate controls is a second way to fire the command bar's Run,
+ * so it must never be live where that button is disabled.
  */
 export function shouldShowPlaygroundRunnerCta(
   options: LessonPlaybackState & {
@@ -99,11 +120,29 @@ export function shouldShowPlaygroundRunnerCta(
   );
 }
 
-function RunnerConsoleCta({ headline, body }: RunnerConsoleCtaCopy) {
+interface RunnerConsoleCtaProps extends RunnerConsoleCtaCopy {
+  onAction: () => void;
+}
+
+function RunnerConsoleCta({
+  headline,
+  actionLabel,
+  detail,
+  showRunIcon,
+  onAction,
+}: RunnerConsoleCtaProps) {
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 flex select-none flex-col items-center justify-center gap-1.5 px-6 text-center font-mono text-[13px]">
+    <div className="pointer-events-none absolute inset-0 z-10 flex select-none flex-col items-center justify-center gap-3 px-6 text-center font-mono text-[13px]">
       <p className="text-slate-300">{headline}</p>
-      <p className="max-w-md text-slate-400">{body}</p>
+      <button
+        type="button"
+        onClick={onAction}
+        className="pointer-events-auto inline-flex items-center gap-2 rounded-md bg-[#173925] px-4 py-2 text-[13px] font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#58d88d]"
+      >
+        {showRunIcon ? <Play size={14} strokeWidth={2.5} /> : null}
+        {actionLabel}
+      </button>
+      <p className="max-w-md text-slate-400">{detail}</p>
     </div>
   );
 }

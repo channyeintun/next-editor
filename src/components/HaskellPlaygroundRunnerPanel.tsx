@@ -270,6 +270,7 @@ function HaskellPlaygroundRunnerPanel() {
 
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
   const consoleContent = effectiveConsoleLines.map(decorateHaskellConsoleLine).join("\n");
+  const runnerCtaAction = showSignIn ? handleSignIn : handleRun;
   const showRunnerCta = shouldShowPlaygroundRunnerCta({
     isPlaybackSnapshotActive,
     isPlaying,
@@ -410,7 +411,10 @@ function HaskellPlaygroundRunnerPanel() {
             />
             {showRunnerCta && (
               <RunnerConsoleCta
-                {...(showSignIn ? signInCtaCopy("Haskell") : runCtaCopy("start runghc Main.hs"))}
+                {...(showSignIn ? signInCtaCopy("Haskell") : runCtaCopy("runghc Main.hs"))}
+                onAction={() => {
+                  void runnerCtaAction();
+                }}
               />
             )}
           </div>

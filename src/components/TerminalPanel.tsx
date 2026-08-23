@@ -473,7 +473,17 @@ function TerminalPanel() {
       ? runnerDisabledCtaCopy()
       : runnerStartsItself || !trimmedRunCommand
         ? null
-        : runCtaCopy(`start ${trimmedRunCommand}`);
+        : runCtaCopy(trimmedRunCommand);
+  // The CTA button fires the same handlers as the command bar above it: the
+  // command bar's RUN when there is something to run, its gear when the runner
+  // is switched off and RUN would do nothing.
+  const runnerCtaAction = runnerConfig.enabled
+    ? () => {
+        void rerunRunner();
+      }
+    : () => {
+        setIsSettingsOpen(true);
+      };
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
 
@@ -654,7 +664,9 @@ function TerminalPanel() {
                     }
                     onScroll={(scrollLine) => updateTerminalScrollLine("runner", scrollLine)}
                   />
-                  {runnerTabCta && <RunnerConsoleCta {...runnerTabCta} />}
+                  {runnerTabCta && (
+                    <RunnerConsoleCta {...runnerTabCta} onAction={runnerCtaAction} />
+                  )}
                 </div>
               </div>
             )}

@@ -504,7 +504,14 @@ function KitePlaygroundRunnerPanel() {
               }
               onScroll={updateScrollLine}
             />
-            {showRunnerCta && <RunnerConsoleCta {...runCtaCopy("start kitec run main.kite")} />}
+            {showRunnerCta && (
+              <RunnerConsoleCta
+                {...runCtaCopy("kitec run main.kite")}
+                onAction={() => {
+                  void handleRun();
+                }}
+              />
+            )}
           </div>
         </div>
       )}

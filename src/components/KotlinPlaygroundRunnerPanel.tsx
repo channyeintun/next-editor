@@ -258,6 +258,7 @@ function KotlinPlaygroundRunnerPanel() {
 
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
   const consoleContent = effectiveConsoleLines.map(decorateKotlinConsoleLine).join("\n");
+  const runnerCtaAction = showSignIn ? handleSignIn : handleRun;
   const showRunnerCta = shouldShowPlaygroundRunnerCta({
     isPlaybackSnapshotActive,
     isPlaying,
@@ -398,7 +399,10 @@ function KotlinPlaygroundRunnerPanel() {
             />
             {showRunnerCta && (
               <RunnerConsoleCta
-                {...(showSignIn ? signInCtaCopy("Kotlin") : runCtaCopy("start kotlin *.kt"))}
+                {...(showSignIn ? signInCtaCopy("Kotlin") : runCtaCopy("kotlin *.kt"))}
+                onAction={() => {
+                  void runnerCtaAction();
+                }}
               />
             )}
           </div>

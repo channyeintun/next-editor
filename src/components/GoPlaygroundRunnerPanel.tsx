@@ -375,6 +375,7 @@ function GoPlaygroundRunnerPanel() {
 
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
   const consoleContent = effectiveConsoleLines.map(decorateGoConsoleLine).join("\n");
+  const runnerCtaAction = showSignIn ? handleSignIn : handleRun;
   const showRunnerCta = shouldShowPlaygroundRunnerCta({
     isPlaybackSnapshotActive,
     isPlaying,
@@ -530,7 +531,10 @@ function GoPlaygroundRunnerPanel() {
             />
             {showRunnerCta && (
               <RunnerConsoleCta
-                {...(showSignIn ? signInCtaCopy("Go") : runCtaCopy("start go run *.go"))}
+                {...(showSignIn ? signInCtaCopy("Go") : runCtaCopy("go run *.go"))}
+                onAction={() => {
+                  void runnerCtaAction();
+                }}
               />
             )}
           </div>
