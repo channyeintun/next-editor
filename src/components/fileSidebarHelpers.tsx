@@ -112,6 +112,10 @@ export function getViewportClampedContextMenuPlacement({
 
 const FILE_TEMPLATES: Record<string, string> = {
   css: "body {\n  margin: 0;\n}\n",
+  // A signature and a definition, because an empty .hs file is a module with
+  // no `main`, and the first thing GHC would say about it is that `main` is
+  // missing rather than anything the lesson is about.
+  haskell: 'main :: IO ()\nmain = putStrLn "Hello, Haskell!"\n',
   html: '<!doctype html>\n<html lang="en">\n  <body>\n  </body>\n</html>\n',
   javascript: "export function main() {\n  return null;\n}\n",
   json: "{}\n",
@@ -359,6 +363,12 @@ export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
 
   if (file.language === "zig") {
     return langBadge("#F7A41D", "#1a1a1a", "ZIG");
+  }
+
+  // Haskell's own purple, on white — the badge is the logo's colour, and "HS"
+  // rather than "HASK" so it sits at the same weight as GO/KT/RS beside it.
+  if (file.language === "haskell") {
+    return langBadge("#5E5086", "#fff", "HS");
   }
 
   if (file.language === "asm") {

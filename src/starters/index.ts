@@ -10,8 +10,8 @@ import type { WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
  * `html-css` and `react` are also imported statically by the workspace store
  * (they are the boot default and the empty-workspace fallback), so the bundler
  * keeps them in the main bundle — only `vue`, `solid`, `svelte`, `htmx-express`,
- * `alpine-express`, `express-ts`, `go`, `kotlin`, `python`, `rust`, `zig`, `kite`, and `asm` become lazily
- * loaded chunks.
+ * `alpine-express`, `express-ts`, `go`, `kotlin`, `python`, `rust`, `zig`,
+ * `haskell`, `kite`, and `asm` become lazily loaded chunks.
  */
 const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => WorkspaceProject>> = {
   "html-css": () => import("./htmlCss").then((module) => module.createStarterHtmlCssWorkspace),
@@ -34,6 +34,7 @@ const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => Workspace
   python: () => import("./python").then((module) => module.createStarterPythonWorkspace),
   rust: () => import("./rust").then((module) => module.createStarterRustWorkspace),
   zig: () => import("./zig").then((module) => module.createStarterZigWorkspace),
+  haskell: () => import("./haskell").then((module) => module.createStarterHaskellWorkspace),
   kite: () => import("./kite").then((module) => module.createStarterKiteWorkspace),
   "kite-web": () => import("./kiteWeb").then((module) => module.createStarterKiteWebWorkspace),
   asm: () => import("./asm").then((module) => module.createStarterAsmWorkspace),

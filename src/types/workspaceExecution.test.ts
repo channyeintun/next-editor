@@ -17,6 +17,7 @@ import { createStarterPythonWorkspace } from "../starters/python";
 import { createStarterKiteWorkspace } from "../starters/kite";
 import { createStarterRustWorkspace } from "../starters/rust";
 import { createStarterZigWorkspace } from "../starters/zig";
+import { createStarterHaskellWorkspace } from "../starters/haskell";
 import { createStarterAsmWorkspace } from "../starters/asm";
 
 // Record keys make this exhaustive at compile time: adding a lesson type
@@ -37,6 +38,7 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   python: "webcontainer",
   rust: "rust-playground",
   zig: "zig-playground",
+  haskell: "haskell-playground",
   kite: "kite-playground",
   // The web starter is a Vite project, so it builds and serves in the
   // container like any other — the compiler it installs is WebAssembly.
@@ -53,6 +55,7 @@ const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "kotlin",
   "rust",
   "zig",
+  "haskell",
   "kite",
   "asm",
 ]);
@@ -147,6 +150,44 @@ describe("zig workspace model", () => {
     expect(source).toContain("squares.append(allocator,");
     expect(source).not.toContain("GeneralPurposeAllocator");
     expect(source).not.toContain("ArrayList(u32).init(");
+  });
+});
+
+describe("haskell workspace model", () => {
+  it("maps .hs to the first-party haskell language id", () => {
+    // Monaco ships no Haskell grammar; monaco/haskellLanguage.ts registers this
+    // id. `.lhs` is literate Haskell — a different format the playground does
+    // not compile — so it deliberately stays plaintext.
+    expect(inferLanguageFromPath("Main.hs")).toBe("haskell");
+    expect(inferLanguageFromPath("src/Parser.hs")).toBe("haskell");
+    expect(inferLanguageFromPath("Main.lhs")).toBe("plaintext");
+  });
+
+  it("round-trips a haskell starter through project normalization without falling back", () => {
+    const starter = createStarterHaskellWorkspace();
+    const normalized = normalizeProject(starter);
+
+    expect(normalized.lessonType).toBe("haskell");
+    // Capital M: GHC's diagnostics name Main.hs, so the editor's file must too.
+    expect(normalized.entryFilePath).toBe("Main.hs");
+    expect(normalized.files["Main.hs"].language).toBe("haskell");
+    expect(normalized.files["Main.hs"].content).toContain("main :: IO ()");
+    expect(normalized.files["README.md"].language).toBe("markdown");
+  });
+
+  it("keeps the starter on the idioms it exists to teach", () => {
+    // The starter's whole job is to show a type signature, a data type, and
+    // pattern matching before a learner writes a line. It also has to stay a
+    // single module: the playground compiles one Main.hs, so an import of a
+    // sibling file — or a Hackage package — would not resolve.
+    const source = createStarterHaskellWorkspace().files["Main.hs"].content;
+
+    expect(source).toContain("module Main where");
+    expect(source).toContain("describe :: Event -> String");
+    expect(source).toContain("data Event");
+    expect(source).toContain("deriving (Show)");
+    expect(source).toContain("failedAttempts (_ : rest)");
+    expect(source).not.toContain("\nimport ");
   });
 });
 

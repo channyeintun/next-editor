@@ -5,6 +5,7 @@ import { NEXT_EDITOR_MONACO_THEME, defineNextEditorTheme, setActiveTheme } from 
 import { configureMonacoTypeScript } from "./typescriptDefaults";
 import { registerKiteLanguage } from "./kiteLanguage";
 import { registerZigLanguage } from "./zigLanguage";
+import { registerHaskellLanguage } from "./haskellLanguage";
 import { registerAsmLanguage } from "./asmLanguage";
 
 // Every standalone editor feature (find, multi-cursor, bracket matching, …) but
@@ -36,8 +37,9 @@ import "monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js";
 // Python: grammar only, for the WebContainer python lesson type — execution
 // happens through the container's WASI interpreter, not Monaco.
 import "monaco-editor/esm/vs/basic-languages/python/python.contribution.js";
-// Zig and Kite have no Monaco grammar to import — monaco/zigLanguage.ts and
-// monaco/kiteLanguage.ts are first-party Monarch grammars, registered by
+// Zig, Haskell and Kite have no Monaco grammar to import — basic-languages/
+// carries none of the three — so monaco/zigLanguage.ts, monaco/haskellLanguage.ts
+// and monaco/kiteLanguage.ts are first-party Monarch grammars, registered by
 // ensureMonacoRuntimeInitialized below rather than by an import side effect.
 
 // Worker-backed rich services. JSON is self-contained: language/json registers
@@ -94,6 +96,7 @@ function ensureMonacoRuntimeInitialized() {
   setActiveTheme(NEXT_EDITOR_MONACO_THEME);
   configureMonacoTypeScript();
   registerZigLanguage();
+  registerHaskellLanguage();
   registerKiteLanguage();
   registerAsmLanguage();
 }

@@ -44,6 +44,7 @@ import GoPlaygroundRunnerPanel from "./GoPlaygroundRunnerPanel";
 import KotlinPlaygroundRunnerPanel from "./KotlinPlaygroundRunnerPanel";
 import RustPlaygroundRunnerPanel from "./RustPlaygroundRunnerPanel";
 import ZigPlaygroundRunnerPanel from "./ZigPlaygroundRunnerPanel";
+import HaskellPlaygroundRunnerPanel from "./HaskellPlaygroundRunnerPanel";
 import KitePlaygroundRunnerPanel from "./KitePlaygroundRunnerPanel";
 import AsmPlaygroundRunnerPanel from "./AsmPlaygroundRunnerPanel";
 import {
@@ -1393,6 +1394,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               <RustPlaygroundRunnerPanel />
             ) : executionKindForLessonType(lessonType) === "zig-playground" ? (
               <ZigPlaygroundRunnerPanel />
+            ) : executionKindForLessonType(lessonType) === "haskell-playground" ? (
+              <HaskellPlaygroundRunnerPanel />
             ) : executionKindForLessonType(lessonType) === "kite-playground" ? (
               <KitePlaygroundRunnerPanel />
             ) : executionKindForLessonType(lessonType) === "asm-playground" ? (

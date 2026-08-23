@@ -1,0 +1,950 @@
+# One shape: a survey of Haskell in a single module — purity, type
+# signatures, currying, guards, algebraic data types, Maybe, Either,
+# laziness, records, and type classes — three of them drawn on the
+# whiteboard first, each written into one growing file, and run once at
+# the end.
+#
+# Every line of code here was compiled with GHC 9.12.4 and executed on
+# play.haskell.org; the fixture stdout below is that run's exact text.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/haskell-crash-course.yaml
+schemaVersion: 1
+
+lesson:
+  slug: haskell-crash-course
+  title: "Haskell in one file: pure functions, types, and laziness"
+  locale: en-US
+  workspace:
+    lessonType: haskell
+    name: Haskell Lesson
+    entryFilePath: Main.hs
+    # One file is the whole lesson, so the tree would be a list of one.
+    sidebarStartsCollapsed: true
+    files:
+      Main.hs: |
+        module Main where
+
+        main :: IO ()
+        main = do
+          putStrLn "Haskell, in one file"
+  whiteboardAssets:
+    # Board 1 — where effects happen. A pure core with one door out.
+    - id: a-title
+      kind: text
+      x: 300
+      y: 152
+      width: 760
+      height: 50
+      text: "Where effects happen"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: a-pure-box
+      kind: rectangle
+      x: 290
+      y: 235
+      width: 380
+      height: 290
+      strokeColor: "#1971c2"
+    - id: a-pure-label
+      kind: text
+      x: 312
+      y: 246
+      width: 200
+      height: 40
+      text: "pure"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: a-fn-add
+      kind: rectangle
+      x: 320
+      y: 300
+      width: 200
+      height: 60
+      strokeColor: "#1971c2"
+    - id: a-fn-add-t
+      kind: text
+      x: 348
+      y: 316
+      width: 170
+      height: 36
+      text: "add"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-fn-area
+      kind: rectangle
+      x: 320
+      y: 380
+      width: 200
+      height: 60
+      strokeColor: "#1971c2"
+    - id: a-fn-area-t
+      kind: text
+      x: 348
+      y: 396
+      width: 170
+      height: 36
+      text: "area"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-fn-grade
+      kind: rectangle
+      x: 320
+      y: 460
+      width: 200
+      height: 60
+      strokeColor: "#1971c2"
+    - id: a-fn-grade-t
+      kind: text
+      x: 348
+      y: 476
+      width: 170
+      height: 36
+      text: "grade"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: a-pure-note
+      kind: text
+      x: 288
+      y: 545
+      width: 440
+      height: 40
+      text: "same input, same answer"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: a-arrow-out
+      kind: freedraw
+      x: 682
+      y: 330
+      width: 66
+      height: 40
+      stroke: arrow-right
+      strokeColor: "#495057"
+    - id: a-io-box
+      kind: rectangle
+      x: 758
+      y: 300
+      width: 302
+      height: 140
+      strokeColor: "#f08c00"
+    - id: a-io-t
+      kind: text
+      x: 782
+      y: 322
+      width: 274
+      height: 42
+      text: "main :: IO ()"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: a-io-sub
+      kind: text
+      x: 776
+      y: 376
+      width: 288
+      height: 40
+      text: "the only door out"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: a-arrow-down
+      kind: freedraw
+      x: 888
+      y: 448
+      width: 42
+      height: 48
+      stroke: arrow-down
+      strokeColor: "#f08c00"
+    - id: a-world
+      kind: text
+      x: 720
+      y: 506
+      width: 378
+      height: 40
+      text: "screen, files, network"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    # Board 2 — Maybe. One type, two shapes, no null.
+    - id: b-title
+      kind: text
+      x: 300
+      y: 155
+      width: 700
+      height: 50
+      text: "A value, or nothing"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: b-just-box
+      kind: rectangle
+      x: 300
+      y: 250
+      width: 280
+      height: 110
+      strokeColor: "#2f9e44"
+    - id: b-just-t
+      kind: text
+      x: 332
+      y: 284
+      width: 220
+      height: 44
+      text: "Just 8"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: b-nothing-box
+      kind: rectangle
+      x: 300
+      y: 400
+      width: 280
+      height: 110
+      strokeColor: "#e03131"
+    - id: b-nothing-t
+      kind: text
+      x: 332
+      y: 434
+      width: 220
+      height: 44
+      text: "Nothing"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: b-type-t
+      kind: text
+      x: 650
+      y: 252
+      width: 380
+      height: 44
+      text: "Maybe Int"
+      strokeColor: "#1971c2"
+      fontSize: 32
+    - id: b-type-line
+      kind: freedraw
+      x: 650
+      y: 262
+      width: 172
+      height: 34
+      stroke: underline
+      strokeColor: "#1971c2"
+    - id: b-note1
+      kind: text
+      x: 650
+      y: 322
+      width: 420
+      height: 40
+      text: "one type, two shapes"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b-note2
+      kind: text
+      x: 650
+      y: 412
+      width: 430
+      height: 40
+      text: "you have to handle both"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    # Board 3 — laziness. The list is endless; only five get computed.
+    - id: c-title
+      kind: text
+      x: 300
+      y: 155
+      width: 760
+      height: 50
+      text: "Only as far as you look"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: c-source
+      kind: text
+      x: 300
+      y: 236
+      width: 320
+      height: 44
+      text: "[1 ..]"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: c-box0
+      kind: rectangle
+      x: 300
+      y: 300
+      width: 90
+      height: 80
+      strokeColor: "#1971c2"
+    - id: c-box0-t
+      kind: text
+      x: 330
+      y: 322
+      width: 60
+      height: 40
+      text: "2"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: c-box1
+      kind: rectangle
+      x: 405
+      y: 300
+      width: 90
+      height: 80
+      strokeColor: "#1971c2"
+    - id: c-box1-t
+      kind: text
+      x: 435
+      y: 322
+      width: 60
+      height: 40
+      text: "4"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: c-box2
+      kind: rectangle
+      x: 510
+      y: 300
+      width: 90
+      height: 80
+      strokeColor: "#1971c2"
+    - id: c-box2-t
+      kind: text
+      x: 540
+      y: 322
+      width: 60
+      height: 40
+      text: "6"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: c-box3
+      kind: rectangle
+      x: 615
+      y: 300
+      width: 90
+      height: 80
+      strokeColor: "#1971c2"
+    - id: c-box3-t
+      kind: text
+      x: 645
+      y: 322
+      width: 60
+      height: 40
+      text: "8"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: c-box4
+      kind: rectangle
+      x: 720
+      y: 300
+      width: 90
+      height: 80
+      strokeColor: "#1971c2"
+    - id: c-box4-t
+      kind: text
+      x: 744
+      y: 322
+      width: 66
+      height: 40
+      text: "10"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: c-rest
+      kind: text
+      x: 840
+      y: 316
+      width: 120
+      height: 46
+      text: "..."
+      strokeColor: "#80868b"
+      fontSize: 34
+    - id: c-take-line
+      kind: freedraw
+      x: 300
+      y: 386
+      width: 510
+      height: 26
+      stroke: underline
+      strokeColor: "#2f9e44"
+    - id: c-take-t
+      kind: text
+      x: 300
+      y: 418
+      width: 250
+      height: 40
+      text: "take 5"
+      strokeColor: "#2f9e44"
+      fontSize: 30
+    - id: c-never-t
+      kind: text
+      x: 570
+      y: 420
+      width: 520
+      height: 40
+      text: "the rest is never computed"
+      strokeColor: "#f08c00"
+      fontSize: 28
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 17
+
+runtime:
+  kind: haskell-playground
+  # Nothing runs until the last scene, so the dock would otherwise hold
+  # 288px open over an empty console for the whole lesson.
+  dockStartsCollapsed: true
+  defaultMode: fixture
+  fixture:
+    latencyMs: 900
+    result:
+      status: success
+      stdout: "Haskell, in one file\n[11,12,13]\nB\n[9,10]\nJust 8\nNothing\nRight 5\nLeft \"cannot divide by zero\"\n[2,4,6,8,10]\n5050\nUser {name = \"Ada\", age = 36}\na shape of area 10\nAda, age 36\n"
+      stderr: ""
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
+
+scenes:
+  - id: purity
+    narration: >
+      Haskell asks you to arrange your program in a way most languages don't.
+      [[mark:purity-draw-pure]] Almost all of your code is pure functions. A pure
+      function takes values in and gives one value back. That's the whole job. It
+      doesn't change anything outside itself, and it doesn't read anything from
+      outside either. [[mark:purity-draw-note]] So the same input always gives you
+      the same answer, and you can read one of these functions on its own and know
+      what it does. [[mark:purity-draw-io]] But a real program has to print things,
+      and read files, and talk to the network. In Haskell all of that happens in one
+      place, and the type says so. That's what IO means in the type of main.
+      [[mark:purity-draw-world]] The effects sit at the edge, and the thinking sits
+      inside. [[mark:purity-to-code]] That one split shapes everything else. Let's
+      write some.
+    sources:
+      - { title: "Haskell Language", url: "https://www.haskell.org/" }
+      - {
+          title: "Haskell 2010 Report — Basic Input/Output",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch7.html",
+        }
+    actions:
+      - id: purity-open-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1700 }
+        open: true
+      - id: purity-draw-title
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1200 }
+        upsertIds: [a-title]
+        drawMs: 700
+      - id: purity-draw-pure
+        type: whiteboard.apply
+        at: { mark: purity-draw-pure }
+        upsertIds:
+          [
+            a-pure-box,
+            a-pure-label,
+            a-fn-add,
+            a-fn-add-t,
+            a-fn-area,
+            a-fn-area-t,
+            a-fn-grade,
+            a-fn-grade-t,
+          ]
+        drawMs: 1400
+      - id: purity-draw-note
+        type: whiteboard.apply
+        at: { mark: purity-draw-note }
+        upsertIds: [a-pure-note]
+        drawMs: 700
+      - id: purity-draw-io
+        type: whiteboard.apply
+        at: { mark: purity-draw-io }
+        upsertIds: [a-arrow-out, a-io-box, a-io-t, a-io-sub]
+        drawMs: 1200
+      - id: purity-draw-world
+        type: whiteboard.apply
+        at: { mark: purity-draw-world }
+        upsertIds: [a-arrow-down, a-world]
+        drawMs: 800
+      - id: purity-close-board
+        type: whiteboard.apply
+        at: { mark: purity-to-code }
+        open: false
+
+  - id: values
+    narration: >
+      [[mark:values-open-main]] Here's the whole program. One file, holding a module
+      called Main. [[mark:values-select-sig]] Look at these two lines. The first one
+      is a type signature, and it's a separate line above the code. It says main is
+      an IO action that hands back nothing useful. The second line is the definition.
+      You'll see that same pair for every function we write, and reading the type
+      first is how most Haskell programmers read code. [[mark:values-say-do]] The do
+      block underneath is a list of steps, carried out in order. This is the one part
+      of the program where order matters.
+    sources:
+      - {
+          title: "Haskell 2010 Report — Modules",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch5.html",
+        }
+      - {
+          title: "Haskell 2010 Report — Basic Input/Output",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch7.html",
+        }
+    actions:
+      - {
+          id: values-open-main,
+          type: workspace.openFile,
+          at: { mark: values-open-main },
+          path: Main.hs,
+        }
+      - id: values-select-sig
+        type: editor.select
+        at: { mark: values-select-sig }
+        target: { file: Main.hs, text: "main :: IO ()\nmain = do", occurrence: 1 }
+
+  - id: functions
+    narration: >
+      [[mark:fn-type-add]] Let's write a function of our own.
+      [[mark:fn-select-arrows]] Now read that type slowly. There are two arrows in
+      it, and that's not decoration. Every function in Haskell takes exactly one
+      argument. add takes an Int, and what it gives back is another function, from
+      Int to Int. [[mark:fn-type-call]] Which means you can hand it one number now
+      and the other one later. [[mark:fn-select-partial]] add ten, on its own, is a
+      function. We pass that function to map, and map runs it over every number in
+      the list. Handing a function one argument at a time is called currying, and
+      Haskell does it everywhere.
+    sources:
+      - {
+          title: "Haskell 2010 Report — Declarations and Bindings",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch4.html",
+        }
+      - {
+          title: "Prelude — map",
+          url: "https://hackage.haskell.org/package/base/docs/Prelude.html#v:map",
+        }
+    actions:
+      - id: fn-type-add
+        type: editor.type
+        at: { mark: fn-type-add, offsetMs: -400 }
+        target: { file: Main.hs, after: "module Main where\n\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "add :: Int -> Int -> Int\nadd a b = a + b\n\n"
+      - id: fn-select-arrows
+        type: editor.select
+        at: { mark: fn-select-arrows }
+        target: { file: Main.hs, text: "Int -> Int -> Int", occurrence: 1 }
+      - id: fn-type-call
+        type: editor.type
+        at: { mark: fn-type-call }
+        target: { file: Main.hs, after: "  putStrLn \"Haskell, in one file\"\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "  print (map (add 10) [1, 2, 3])\n"
+      - id: fn-select-partial
+        type: editor.select
+        at: { mark: fn-select-partial }
+        target: { file: Main.hs, text: "(add 10)", occurrence: 1 }
+
+  - id: patterns
+    narration: >
+      [[mark:pat-type-grade]] Here's how Haskell writes a branch.
+      [[mark:pat-select-guard]] Those vertical bars are guards. Each one asks a
+      question, and the first one that answers yes decides the result. otherwise is
+      the last line, and it's always true, so it handles everything else.
+      [[mark:pat-say-expr]] Notice there's no return keyword anywhere. The body of a
+      Haskell function is one expression, and the value of that expression is the
+      answer. [[mark:pat-type-call]] Let's use it on a score of eighty four.
+    sources:
+      - {
+          title: "Haskell 2010 Report — Expressions",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch3.html",
+        }
+      - {
+          title: "Haskell 2010 Report — Declarations and Bindings",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch4.html",
+        }
+    actions:
+      - id: pat-type-grade
+        type: editor.type
+        at: { mark: pat-type-grade, offsetMs: -400 }
+        target: { file: Main.hs, after: "add a b = a + b\n\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "grade :: Int -> String\ngrade score\n  | score >= 90 = \"A\"\n  | score >= 80 = \"B\"\n  | otherwise = \"C\"\n\n"
+      - id: pat-select-guard
+        type: editor.select
+        at: { mark: pat-select-guard }
+        target:
+          { file: Main.hs, text: "  | score >= 80 = \"B\"\n  | otherwise = \"C\"", occurrence: 1 }
+      - id: pat-type-call
+        type: editor.type
+        at: { mark: pat-type-call }
+        target: { file: Main.hs, after: "  print (map (add 10) [1, 2, 3])\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "  putStrLn (grade 84)\n"
+
+  - id: data
+    narration: >
+      [[mark:data-type-shape]] Now let's make a type of our own.
+      [[mark:data-select-constructors]] A Shape is either a Square, carrying one
+      number, or a Rect, carrying two. Never both at once. A type built from a list
+      of choices like this is called a sum type, and it's the main way Haskell says
+      "one of these". [[mark:data-say-deriving]] That deriving line asks the compiler
+      to write the printing code for us, so we can show a Shape without writing
+      anything by hand. [[mark:data-type-area]] And here's how you take one apart.
+      [[mark:data-select-area-cases]] One line for each choice. The pattern on the
+      left picks which case we're in and names the numbers inside at the same time.
+      If you add a third shape later and forget a line here, the compiler will point
+      at it. [[mark:data-type-call]] Let's measure two of them.
+    sources:
+      - {
+          title: "Haskell 2010 Report — Declarations and Bindings",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch4.html",
+        }
+      - {
+          title: "Haskell 2010 Report — Predefined Types and Classes",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch6.html",
+        }
+    actions:
+      - id: data-type-shape
+        type: editor.type
+        at: { mark: data-type-shape, offsetMs: -400 }
+        target: { file: Main.hs, after: "  | otherwise = \"C\"\n\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "data Shape\n  = Square Int\n  | Rect Int Int\n  deriving (Show)\n\n"
+      - id: data-select-constructors
+        type: editor.select
+        at: { mark: data-select-constructors }
+        target: { file: Main.hs, text: "  = Square Int\n  | Rect Int Int", occurrence: 1 }
+      - id: data-type-area
+        type: editor.type
+        at: { mark: data-type-area, offsetMs: -400 }
+        target: { file: Main.hs, after: "  deriving (Show)\n\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "area :: Shape -> Int\narea (Square side) = side * side\narea (Rect w h) = w * h\n\n"
+      - id: data-select-area-cases
+        type: editor.select
+        at: { mark: data-select-area-cases }
+        target:
+          {
+            file: Main.hs,
+            text: "area (Square side) = side * side\narea (Rect w h) = w * h",
+            occurrence: 1,
+          }
+      - id: data-type-call
+        type: editor.type
+        at: { mark: data-type-call }
+        target: { file: Main.hs, after: "  putStrLn (grade 84)\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "  print (map area [Square 3, Rect 2 5])\n"
+
+  - id: maybe
+    narration: >
+      [[mark:maybe-draw-board]] Haskell has no null. [[mark:maybe-draw-boxes]] When a
+      function might not have an answer for you, it says so in its type. A Maybe Int
+      is one of two things: Just, holding an Int, or Nothing, holding nothing at all.
+      [[mark:maybe-draw-note]] And because the type admits both, the compiler makes
+      you deal with both. A missing value can't reach the rest of your program by
+      accident. [[mark:maybe-type-firsteven]] Here's a function that might come back
+      empty. [[mark:maybe-select-recursion]] An empty list has no even number in it,
+      so the answer is Nothing. Otherwise look at the first item, and if that one
+      isn't even, ask the same question about the rest of the list. A function that
+      calls itself like this is how Haskell moves through a list.
+      [[mark:maybe-type-call]] Let's ask it twice: once with an even number in the
+      list, and once without.
+    sources:
+      - {
+          title: "Data.Maybe",
+          url: "https://hackage.haskell.org/package/base/docs/Data-Maybe.html",
+        }
+      - {
+          title: "Haskell 2010 Report — Predefined Types and Classes",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch6.html",
+        }
+    actions:
+      - id: maybe-draw-board
+        type: whiteboard.apply
+        at: { mark: maybe-draw-board, offsetMs: -600 }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+        drawMs: 700
+      - id: maybe-draw-boxes
+        type: whiteboard.apply
+        at: { mark: maybe-draw-boxes }
+        upsertIds: [b-just-box, b-just-t, b-nothing-box, b-nothing-t, b-type-t, b-type-line]
+        drawMs: 1500
+      - id: maybe-draw-note
+        type: whiteboard.apply
+        at: { mark: maybe-draw-note }
+        upsertIds: [b-note1, b-note2]
+        drawMs: 900
+      - id: maybe-close-board
+        type: whiteboard.apply
+        at: { mark: maybe-type-firsteven, offsetMs: -700 }
+        open: false
+      - id: maybe-type-firsteven
+        type: editor.type
+        at: { mark: maybe-type-firsteven, offsetMs: -200 }
+        target: { file: Main.hs, after: "area (Rect w h) = w * h\n\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "firstEven :: [Int] -> Maybe Int\nfirstEven [] = Nothing\nfirstEven (x:xs)\n  | even x = Just x\n  | otherwise = firstEven xs\n\n"
+      - id: maybe-select-recursion
+        type: editor.select
+        at: { mark: maybe-select-recursion }
+        target: { file: Main.hs, text: "  | otherwise = firstEven xs", occurrence: 1 }
+      - id: maybe-type-call
+        type: editor.type
+        at: { mark: maybe-type-call }
+        target: { file: Main.hs, after: "  print (map area [Square 3, Rect 2 5])\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "  print (firstEven [1, 3, 8, 5])\n  print (firstEven [1, 3, 5])\n"
+
+  - id: either
+    narration: >
+      [[mark:either-type-safediv]] Maybe tells you an answer is missing. Either tells
+      you why. [[mark:either-select-either]] Left carries a reason, and Right carries
+      a result. [[mark:either-say-values]] Look at what isn't happening here. The
+      failure isn't thrown, and it isn't hidden away in a second return channel. It's
+      an ordinary value, and it comes back along the same path a success does, so
+      whoever called this has to look at it. [[mark:either-type-call]] Let's divide
+      twice, and make the second one fail.
+    sources:
+      - {
+          title: "Data.Either",
+          url: "https://hackage.haskell.org/package/base/docs/Data-Either.html",
+        }
+      - {
+          title: "Haskell 2010 Report — Predefined Types and Classes",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch6.html",
+        }
+    actions:
+      - id: either-type-safediv
+        type: editor.type
+        at: { mark: either-type-safediv, offsetMs: -400 }
+        target: { file: Main.hs, after: "  | otherwise = firstEven xs\n\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "safeDiv :: Int -> Int -> Either String Int\nsafeDiv _ 0 = Left \"cannot divide by zero\"\nsafeDiv a b = Right (a `div` b)\n\n"
+      - id: either-select-either
+        type: editor.select
+        at: { mark: either-select-either }
+        target: { file: Main.hs, text: "Either String Int", occurrence: 1 }
+      - id: either-type-call
+        type: editor.type
+        at: { mark: either-type-call }
+        target: { file: Main.hs, after: "  print (firstEven [1, 3, 5])\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "  print (safeDiv 10 2)\n  print (safeDiv 10 0)\n"
+
+  - id: lazy
+    narration: >
+      [[mark:lazy-draw-board]] Haskell doesn't work out a value until something asks
+      for it. [[mark:lazy-draw-boxes]] So you can write down the list of every whole
+      number from one upward, with no end to it, and nothing bad happens.
+      [[mark:lazy-draw-take]] Ask for five of them, and five is what gets computed.
+      The rest of that list never comes into existence. [[mark:lazy-type-lines]]
+      Let's put that on screen. [[mark:lazy-select-infinite]] There's the endless
+      list. We keep the even numbers, take five, and stop. [[mark:lazy-say-fold]] The
+      second line does the opposite job. foldr takes an operation, a starting value,
+      and a list, and folds the whole list down into one number. Where another
+      language writes a loop, Haskell usually writes a fold.
+    sources:
+      - { title: "Haskell Wiki — Lazy evaluation", url: "https://wiki.haskell.org/Lazy_evaluation" }
+      - {
+          title: "Data.Foldable — foldr",
+          url: "https://hackage.haskell.org/package/base/docs/Data-Foldable.html#v:foldr",
+        }
+    actions:
+      - id: lazy-draw-board
+        type: whiteboard.apply
+        at: { mark: lazy-draw-board, offsetMs: -600 }
+        open: true
+        clear: true
+        upsertIds: [c-title, c-source]
+        drawMs: 900
+      - id: lazy-draw-boxes
+        type: whiteboard.apply
+        at: { mark: lazy-draw-boxes }
+        upsertIds:
+          [
+            c-box0,
+            c-box0-t,
+            c-box1,
+            c-box1-t,
+            c-box2,
+            c-box2-t,
+            c-box3,
+            c-box3-t,
+            c-box4,
+            c-box4-t,
+            c-rest,
+          ]
+        drawMs: 1800
+      - id: lazy-draw-take
+        type: whiteboard.apply
+        at: { mark: lazy-draw-take }
+        upsertIds: [c-take-line, c-take-t, c-never-t]
+        drawMs: 1100
+      - id: lazy-close-board
+        type: whiteboard.apply
+        at: { mark: lazy-type-lines, offsetMs: -700 }
+        open: false
+      - id: lazy-type-lines
+        type: editor.type
+        at: { mark: lazy-type-lines, offsetMs: -200 }
+        target: { file: Main.hs, after: "  print (safeDiv 10 0)\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "  print (take 5 (filter even [1 ..]))\n  print (foldr (+) 0 [1 .. 100 :: Int])\n"
+      - id: lazy-select-infinite
+        type: editor.select
+        at: { mark: lazy-select-infinite }
+        target: { file: Main.hs, text: "[1 ..]", occurrence: 1 }
+
+  - id: records
+    narration: >
+      [[mark:rec-type-user]] When a type holds several pieces that all belong
+      together, you can give them names. [[mark:rec-select-fields]] This is a record.
+      name and age aren't only labels on the page. Each one is also a function, and
+      calling it on a User hands you that field back. [[mark:rec-type-call]] So
+      here's a user, printed by the same deriving Show we asked for earlier.
+    sources:
+      - {
+          title: "Haskell 2010 Report — Declarations and Bindings",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch4.html",
+        }
+    actions:
+      - id: rec-type-user
+        type: editor.type
+        at: { mark: rec-type-user, offsetMs: -400 }
+        target: { file: Main.hs, after: "safeDiv a b = Right (a `div` b)\n\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "data User = User\n  { name :: String\n  , age :: Int\n  } deriving (Show)\n\n"
+      - id: rec-select-fields
+        type: editor.select
+        at: { mark: rec-select-fields }
+        target: { file: Main.hs, text: "  { name :: String\n  , age :: Int", occurrence: 1 }
+      - id: rec-type-call
+        type: editor.type
+        at: { mark: rec-type-call }
+        target: { file: Main.hs, after: "  print (foldr (+) 0 [1 .. 100 :: Int])\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "  print (User {name = \"Ada\", age = 36})\n"
+
+  - id: classes
+    narration: >
+      [[mark:cls-type-class]] One idea left, and it's the one that ties the others
+      together. [[mark:cls-select-class]] A class is a promise about behaviour. Any
+      type that joins this class has to supply a describe function.
+      [[mark:cls-select-instances]] Then you write one instance for each type that
+      joins. Same name on both, different code inside, and the type decides which one
+      runs. Show works exactly this way, and so does the plus sign on numbers.
+      [[mark:cls-type-call]] So one function name answers for a Shape and for a User.
+    sources:
+      - {
+          title: "Haskell 2010 Report — Declarations and Bindings",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch4.html",
+        }
+      - {
+          title: "Haskell 2010 Report — Predefined Types and Classes",
+          url: "https://www.haskell.org/onlinereport/haskell2010/haskellch6.html",
+        }
+    actions:
+      - id: cls-type-class
+        type: editor.type
+        at: { mark: cls-type-class, offsetMs: -400 }
+        target: { file: Main.hs, after: "  } deriving (Show)\n\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "class Describe a where\n  describe :: a -> String\n\ninstance Describe Shape where\n  describe s = \"a shape of area \" ++ show (area s)\n\ninstance Describe User where\n  describe u = name u ++ \", age \" ++ show (age u)\n\n"
+      - id: cls-select-class
+        type: editor.select
+        at: { mark: cls-select-class }
+        target:
+          {
+            file: Main.hs,
+            text: "class Describe a where\n  describe :: a -> String",
+            occurrence: 1,
+          }
+      - id: cls-select-instances
+        type: editor.select
+        at: { mark: cls-select-instances }
+        target: { file: Main.hs, text: "instance Describe Shape where", occurrence: 1 }
+      - id: cls-type-call
+        type: editor.type
+        at: { mark: cls-type-call }
+        target:
+          { file: Main.hs, after: "  print (User {name = \"Ada\", age = 36})\n", occurrence: 1 }
+        cadence: line-by-line
+        text: "  putStrLn (describe (Rect 2 5))\n  putStrLn (describe (User {name = \"Ada\", age = 36}))\n"
+
+  - id: run
+    narration: >
+      [[mark:run-run]] That's the tour. Let's run all of it at once.
+      [[mark:run-read]] Every line here's one of the ideas we went through. add,
+      given one argument, then handed to map. The grade the guards picked. Two
+      different shapes measured by a single function. [[mark:run-read-maybe]] Then
+      Just eight, and Nothing, from the same function on two different lists. Right
+      five, and Left carrying the reason the other one couldn't work.
+      [[mark:run-read-lazy]] Five even numbers taken out of a list that never ends,
+      and a hundred numbers folded down into one. [[mark:run-read-last]] Then the
+      record, and the last two lines are one function name answering for two
+      different types. [[mark:run-say-types]] One thing to expect when you edit this.
+      Haskell checks every type before it runs anything, so a mistake usually shows
+      up as a wall of compiler text instead of a wrong answer. Read the first error
+      and ignore the rest. The later ones are often knocked over by the first.
+      [[mark:run-sign-off]] That's enough Haskell to read most Haskell. Change
+      something, and run it again.
+    sources:
+      - { title: "Haskell Playground", url: "https://play.haskell.org/" }
+      - {
+          title: "GHC 9.12.4 User's Guide",
+          url: "https://downloads.haskell.org/ghc/9.12.4/docs/users_guide/",
+        }
+    actions:
+      - {
+          id: run-program,
+          type: runtime.run,
+          at: { mark: run-run, offsetMs: 200 },
+          timeoutMs: 30000,
+        }
+      - {
+          id: expect-curried,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "[11,12,13]",
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-areas,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "[9,10]",
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-just,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "Just 8",
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-left,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: 'Left "cannot divide by zero"',
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-lazy,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "[2,4,6,8,10]",
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-record,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: 'User {name = "Ada", age = 36}',
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-describe,
+          type: expect.output,
+          at: { afterAction: run-program },
+          contains: "a shape of area 10",
+          timeoutMs: 15000,
+        }
+      - {
+          id: expect-file-main,
+          type: expect.file,
+          at: { afterAction: run-program },
+          path: Main.hs,
+          contains: "instance Describe User where",
+        }

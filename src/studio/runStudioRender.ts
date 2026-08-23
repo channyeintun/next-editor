@@ -189,7 +189,8 @@ export async function runStudioRender(
     (plan.runtime.kind === "go-playground" ||
       plan.runtime.kind === "kotlin-playground" ||
       plan.runtime.kind === "rust-playground" ||
-      plan.runtime.kind === "zig-playground") &&
+      plan.runtime.kind === "zig-playground" ||
+      plan.runtime.kind === "haskell-playground") &&
     !deps.isSignedIn
   ) {
     return failedResult(

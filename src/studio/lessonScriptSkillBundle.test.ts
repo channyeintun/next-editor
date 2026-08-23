@@ -143,6 +143,23 @@ function minimalScriptShell(lessonType: StudioLessonType) {
           fixture: { latencyMs: 10, result: { status: "success", output: "" } },
         },
       };
+    case "haskell":
+      return {
+        ...base,
+        lesson: {
+          slug: "t-haskell",
+          title: "T",
+          locale: "en-US",
+          workspace: workspace({ "Main.hs": "main :: IO ()\nmain = return ()\n" }, "Main.hs"),
+        },
+        runtime: {
+          kind: "haskell-playground",
+          defaultMode: "fixture",
+          // GHC's diagnostics are a third channel, so `warnings` sits beside
+          // stdout/stderr rather than inside them — this program has none.
+          fixture: { latencyMs: 10, result: { status: "success", stdout: "", stderr: "" } },
+        },
+      };
     case "kite":
       return {
         ...base,

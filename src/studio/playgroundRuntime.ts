@@ -36,6 +36,16 @@ import {
   zigRunStartedConsoleLines,
 } from "../runtime/zigPlayground/console";
 import { collectZigPlaygroundFiles } from "../runtime/zigPlayground/files";
+import {
+  HaskellPlaygroundClient,
+  HaskellPlaygroundServiceError,
+} from "../runtime/haskellPlayground/client";
+import {
+  haskellRunResultToConsoleLines,
+  haskellRunServiceErrorToConsoleLines,
+  haskellRunStartedConsoleLines,
+} from "../runtime/haskellPlayground/console";
+import { collectHaskellPlaygroundFiles } from "../runtime/haskellPlayground/files";
 import { AsmPlaygroundClient, AsmPlaygroundServiceError } from "../runtime/asmPlayground/client";
 import {
   asmRegisterConsoleLines,
@@ -50,9 +60,10 @@ import type { StudioRuntime } from "./plan";
 
 /**
  * Execution-kind adapters for `runtime.run` (docs/agent-lesson-production.md
- * §2/§8), one per selective-Playground lesson type — Go, Kotlin, Rust, and
- * Zig share a protocol (collect sources → proxy run → normalized result →
- * prefixed console lines), so one retry engine drives kind-specific configs.
+ * §2/§8), one per selective-Playground lesson type — Go, Kotlin, Rust, Zig,
+ * and Haskell share a protocol (collect sources → proxy run → normalized
+ * result → prefixed console lines), so one retry engine drives kind-specific
+ * configs.
  * Kite and asm follow the same protocol with the network removed: their
  * compiler and machine run in the page, so their "live" path calls nothing.
  * Runs have no local side effects, making a declared-idempotent retry safe
@@ -74,6 +85,7 @@ type PlaygroundRuntime = Extract<
       | "kotlin-playground"
       | "rust-playground"
       | "zig-playground"
+      | "haskell-playground"
       | "kite-playground"
       | "asm-playground";
   }
@@ -355,6 +367,54 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
         serviceErrorLines: (errorKind, message) =>
           zigRunServiceErrorToConsoleLines(
             errorKind as Parameters<typeof zigRunServiceErrorToConsoleLines>[0],
+            message,
+          ),
+      };
+    }
+
+    case "haskell-playground": {
+      let client: HaskellPlaygroundClient | null = null;
+      return {
+        label: "haskell",
+        collectFiles: collectHaskellPlaygroundFiles,
+        // play.haskell.org compiles one module, named Main, from one source
+        // string: there is no cabal file to name a second, and no package
+        // manager behind it.
+        validateFiles: (files) =>
+          files.length === 1 && files[0].path === "Main.hs"
+            ? null
+            : "Haskell lessons run exactly one Main.hs",
+        startedLines: () => haskellRunStartedConsoleLines(),
+        runLive: async (files, timeoutMs, signal) => {
+          client ??= new HaskellPlaygroundClient();
+          const activeClient = client;
+          const result = await liveAttempt(
+            () => activeClient.run(files),
+            () => activeClient.abort(),
+            (error) =>
+              error instanceof HaskellPlaygroundServiceError
+                ? { kind: error.kind, message: error.message }
+                : null,
+            timeoutMs,
+            signal,
+          );
+          return {
+            resultLines: haskellRunResultToConsoleLines(result),
+            ok: result.status === "success",
+            status: result.status,
+          };
+        },
+        runFixtureResult: (fixture) => {
+          const result = (fixture as FixtureOf<"haskell-playground">).result;
+          return {
+            resultLines: haskellRunResultToConsoleLines(result),
+            ok: result.status === "success",
+            status: result.status,
+          };
+        },
+        serviceErrorLines: (errorKind, message) =>
+          haskellRunServiceErrorToConsoleLines(
+            errorKind as Parameters<typeof haskellRunServiceErrorToConsoleLines>[0],
             message,
           ),
       };

@@ -88,6 +88,7 @@ export type WorkspaceLessonType =
   | "python"
   | "rust"
   | "zig"
+  | "haskell"
   | "kite"
   | "kite-web"
   | "asm";
@@ -116,6 +117,7 @@ export const WORKSPACE_LESSON_TYPE_LABELS: Record<WorkspaceLessonType, string> =
   python: "Python",
   rust: "Rust",
   zig: "Zig",
+  haskell: "Haskell",
   kite: "Kite",
   "kite-web": "Kite + Vite (web)",
   asm: "x86-64 Assembly",
@@ -139,8 +141,8 @@ export function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonT
  * full Node runtime — they may install packages or start servers. Python also
  * runs in the WebContainer, but through its experimental WASI interpreter —
  * the runner executes the script and exits instead of keeping a server alive.
- * Go, Kotlin, Rust, and Zig are deliberately excluded because they use the
- * selective Playground execution paths below.
+ * Go, Kotlin, Rust, Zig, and Haskell are deliberately excluded because they
+ * use the selective Playground execution paths below.
  */
 const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
   "html-css",
@@ -165,16 +167,15 @@ export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boole
 }
 
 /**
- * Which backend executes code for a lesson. `go`, `kotlin`, `rust`, and
- * `zig` lessons compile through their respective playground proxies on the
- * main Worker. `kite` compiles in the browser: `kitec` is a Rust program, and
- * the Wasm build of it runs here, so it needs no proxy and no service. `asm`
- * needs no service either, for a different reason: its assembler and its
- * x86-64 machine are first-party TypeScript in `src/core/x86`, so a run never
- * leaves the page. Everything else keeps the WebContainer
- * runtime. Derived from
- * `lessonType` — never persisted as a second field (see
- * docs/go-lessons-selective-runtime-plan.md §6).
+ * Which backend executes code for a lesson. `go`, `kotlin`, `rust`, `zig`,
+ * and `haskell` lessons compile through their respective playground proxies
+ * on the main Worker. `kite` compiles in the browser: `kitec` is a Rust
+ * program, and the Wasm build of it runs here, so it needs no proxy and no
+ * service. `asm` needs no service either, for a different reason: its
+ * assembler and its x86-64 machine are first-party TypeScript in
+ * `src/core/x86`, so a run never leaves the page. Everything else keeps the
+ * WebContainer runtime. Derived from `lessonType` — never persisted as a
+ * second field (see docs/go-lessons-selective-runtime-plan.md §6).
  */
 export type WorkspaceExecutionKind =
   | "webcontainer"
@@ -182,6 +183,7 @@ export type WorkspaceExecutionKind =
   | "kotlin-playground"
   | "rust-playground"
   | "zig-playground"
+  | "haskell-playground"
   | "kite-playground"
   | "asm-playground";
 
@@ -199,6 +201,8 @@ export function executionKindForLessonType(
       return "rust-playground";
     case "zig":
       return "zig-playground";
+    case "haskell":
+      return "haskell-playground";
     case "asm":
       return "asm-playground";
     default:
@@ -610,6 +614,15 @@ export function inferLanguageFromPath(path: string): string {
   // Registered by monaco/zigLanguage.ts — Monaco ships no Zig grammar.
   if (normalizedPath.endsWith(".zig") || normalizedPath.endsWith(".zon")) {
     return "zig";
+  }
+
+  // Registered by monaco/haskellLanguage.ts — Monaco ships no Haskell grammar
+  // either. `.hs` only: `.lhs` is literate Haskell, a different format whose
+  // source lines are the ones prefixed with `>`, and the playground compiles
+  // plain Haskell — so treating an `.lhs` file as Haskell would colour the
+  // prose as code and promise a run that upstream rejects.
+  if (normalizedPath.endsWith(".hs")) {
+    return "haskell";
   }
 
   // Registered by monaco/asmLanguage.ts. Monaco does ship an `asm` grammar, but

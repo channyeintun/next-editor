@@ -46,6 +46,21 @@ function rustRuntime(transientErrorKinds: Transient = []): StudioRuntime {
   };
 }
 
+function haskellRuntime(transientErrorKinds: Transient = []): StudioRuntime {
+  return {
+    kind: "haskell-playground",
+    dockStartsCollapsed: false,
+    defaultMode: "fixture",
+    fixture: {
+      latencyMs: 5,
+      transientErrorKinds,
+      // GHC reports its own diagnostics on a third channel, so a clean run
+      // pins stdout/stderr and simply carries no `warnings`.
+      result: { status: "success", stdout: "hello haskell\n", stderr: "" },
+    },
+  };
+}
+
 function projectWith(...paths: string[]) {
   return {
     files: Object.fromEntries(paths.map((path) => [path, createWorkspaceFile(path, "content")])),
@@ -93,6 +108,23 @@ describe("preparePlaygroundRun", () => {
       /exactly one main.rs/,
     );
     expect(() => prepare(rustRuntime(), projectWith("other.rs"))).toThrow(/exactly one main.rs/);
+  });
+
+  it("runs a Haskell fixture and enforces the single-Main.hs shape", async () => {
+    const prepared = prepare(haskellRuntime(), projectWith("Main.hs"));
+    expect(prepared.startedLines[0]).toBe("[haskell-run] runghc Main.hs");
+    const outcome = await prepared.run();
+    expect(outcome.ok).toBe(true);
+    expect(outcome.resultLines).toEqual(["hello haskell", "[haskell-run] Program exited"]);
+
+    // One module named Main, so a sibling source and a differently named entry
+    // are both unrunnable — the playground has no cabal file to describe them.
+    expect(() => prepare(haskellRuntime(), projectWith("Main.hs", "Lib.hs"))).toThrow(
+      /exactly one Main\.hs/,
+    );
+    expect(() => prepare(haskellRuntime(), projectWith("Other.hs"))).toThrow(
+      /exactly one Main\.hs/,
+    );
   });
 
   it("rejects empty workspaces per kind", () => {
@@ -150,5 +182,6 @@ describe("runErrorPrefixFor", () => {
     expect(runErrorPrefixFor("go-playground")).toBe("[go-run error]");
     expect(runErrorPrefixFor("kotlin-playground")).toBe("[kotlin-run error]");
     expect(runErrorPrefixFor("rust-playground")).toBe("[rust-run error]");
+    expect(runErrorPrefixFor("haskell-playground")).toBe("[haskell-run error]");
   });
 });

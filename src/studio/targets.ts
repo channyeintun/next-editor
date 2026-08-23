@@ -25,6 +25,7 @@ export const STUDIO_GO_DOCK_TARGET_ID = "go-runner-dock";
 export const STUDIO_KOTLIN_DOCK_TARGET_ID = "kotlin-runner-dock";
 export const STUDIO_RUST_DOCK_TARGET_ID = "rust-runner-dock";
 export const STUDIO_ZIG_DOCK_TARGET_ID = "zig-runner-dock";
+export const STUDIO_HASKELL_DOCK_TARGET_ID = "haskell-runner-dock";
 export const STUDIO_KITE_DOCK_TARGET_ID = "kite-runner-dock";
 export const STUDIO_ASM_DOCK_TARGET_ID = "asm-runner-dock";
 
@@ -35,6 +36,7 @@ export function dockTargetIdForRuntime(
     | "kotlin-playground"
     | "rust-playground"
     | "zig-playground"
+    | "haskell-playground"
     | "kite-playground"
     | "asm-playground",
 ): string {
@@ -47,6 +49,8 @@ export function dockTargetIdForRuntime(
       return STUDIO_RUST_DOCK_TARGET_ID;
     case "zig-playground":
       return STUDIO_ZIG_DOCK_TARGET_ID;
+    case "haskell-playground":
+      return STUDIO_HASKELL_DOCK_TARGET_ID;
     case "kite-playground":
       return STUDIO_KITE_DOCK_TARGET_ID;
     case "asm-playground":

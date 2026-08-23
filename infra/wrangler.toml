@@ -24,6 +24,14 @@ VOICE_CHAT_ENABLED = "true"
 # sends authenticated users' Run requests to play.golang.org. Go editing and
 # recorded playback work regardless of this flag.
 GO_PLAYGROUND_ENABLED = "true"
+# Kill switch for live Haskell lesson execution (worker/routes/haskellPlayground.ts).
+# Fails closed. Run proxies to play.haskell.org's public submit endpoint,
+# pinned to GHC 9.12.4 — there is no formatter upstream, so this is the only
+# route. That service deadlines a running program at 5 seconds and answers 503
+# "Service busy" when its shared community worker pool saturates, so the route
+# caches deterministic outcomes and holds a modest per-user ceiling. Haskell
+# editing and recorded playback work regardless of this flag.
+HASKELL_PLAYGROUND_ENABLED = "true"
 # Kill switch for live Kotlin lesson execution (worker/routes/kotlinPlayground.ts).
 # Fails closed. Runs proxy to api.kotlinlang.org — the same public compiler
 # service JetBrains' embeddable kotlin-playground widget uses from any origin.

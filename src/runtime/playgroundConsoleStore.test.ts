@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { createRuntimePanelStore } from "../stores/runtimePanelStore";
 import { goFormatStartedConsoleLines, goRunStartedConsoleLines } from "./goPlayground/console";
+import { haskellRunStartedConsoleLines } from "./haskellPlayground/console";
 import {
   kiteFormatStartedConsoleLines,
   kiteRunStartedConsoleLines,
@@ -71,6 +72,7 @@ describe("appendRunnerConsoleLines", () => {
     ["kitec fmt", kiteFormatStartedConsoleLines()],
     ["zig run", zigRunStartedConsoleLines()],
     ["zig fmt", zigFormatStartedConsoleLines()],
+    ["runghc", haskellRunStartedConsoleLines()],
   ])("separates a new %s operation", (_label, startedLines) => {
     const store = createRuntimePanelStore();
     appendRunnerConsoleLines(store, ["earlier output"]);

@@ -20,7 +20,7 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - Two lesson surfaces:
   - Runtime lessons (React, Vue, Solid, Svelte, HTMX + Express) run inside WebContainers with preview, terminal, and runtime dock state captured into the recording timeline.
   - The HTML/CSS lesson renders a lightweight static preview from local HTML, CSS, and JavaScript files.
-- Compiled-language lessons run code without a WebContainer: Go, Kotlin, Rust, and Zig assemble their sources through playground proxies on the Worker, while Kite and x86-64 assembly need no service at all — Kite compiles on a Wasm build of `kitec` in the page, and assembly runs on a first-party NASM-syntax assembler and x86-64 Linux machine in `src/core/x86`.
+- Compiled-language lessons run code without a WebContainer: Go, Kotlin, Rust, Zig, and Haskell assemble their sources through playground proxies on the Worker, while Kite and x86-64 assembly need no service at all — Kite compiles on a Wasm build of `kitec` in the page, and assembly runs on a first-party NASM-syntax assembler and x86-64 Linux machine in `src/core/x86`.
 - Runtime preview is recorded and replayed with rrweb: the live DOM, scroll, input, and pointer all ride a single event stream, replayed by an rrweb `Replayer` driven from the recording timeline.
 - Runtime lessons also include an API client mode: a built-in HTTP client that sends requests to the running server inside the preview iframe (same-origin, no CORS) and records each request/response so they replay on the timeline.
 - Subtitles (captions) can be imported from `.vtt`/`.srt` files or shipped alongside a hosted `.ne`, and render as a time-synced overlay with per-language track selection.

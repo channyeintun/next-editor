@@ -113,10 +113,10 @@ function htmlReferences(files: Record<string, WorkspaceFile>, needle: string): b
  * compiled by the language's playground proxy, or — for assembly — by the
  * first-party assembler in the page. Ordered so the canonical entry file
  * decides first when an archive mixes languages, matching the runner
- * collectors in src/runtime/{go,rust,kotlin,zig,asm}Playground/files.ts.
+ * collectors in src/runtime/{go,rust,kotlin,zig,haskell,asm}Playground/files.ts.
  */
 const PLAYGROUND_LESSON_RULES: ReadonlyArray<{
-  lessonType: Extract<WorkspaceLessonType, "go" | "rust" | "kotlin" | "zig" | "asm">;
+  lessonType: Extract<WorkspaceLessonType, "go" | "rust" | "kotlin" | "zig" | "haskell" | "asm">;
   entryPath: string;
   /**
    * Every extension the language's runner collector accepts. Assembly has
@@ -129,6 +129,9 @@ const PLAYGROUND_LESSON_RULES: ReadonlyArray<{
   { lessonType: "rust", entryPath: "main.rs", extensions: [".rs"] },
   { lessonType: "kotlin", entryPath: "Main.kt", extensions: [".kt"] },
   { lessonType: "zig", entryPath: "main.zig", extensions: [".zig"] },
+  // `.hs` only: `.lhs` is literate Haskell, which the playground does not
+  // compile, so an archive of them must not be imported as a runnable lesson.
+  { lessonType: "haskell", entryPath: "Main.hs", extensions: [".hs"] },
   { lessonType: "asm", entryPath: "main.asm", extensions: [".asm", ".s", ".nasm"] },
 ];
 

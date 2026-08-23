@@ -1,0 +1,60 @@
+{
+  "version": 2,
+  "notes": [
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"values-say-do\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"pat-say-expr\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"data-say-deriving\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"either-say-values\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"lazy-say-fold\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-read\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-read-maybe\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-read-lazy\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-read-last\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-say-types\" is never referenced by an action"
+    },
+    {
+      "id": "marker.unused",
+      "severity": "note",
+      "message": "Marker \"run-sign-off\" is never referenced by an action"
+    }
+  ]
+}

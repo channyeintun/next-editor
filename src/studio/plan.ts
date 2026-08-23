@@ -273,8 +273,9 @@ export type StudioPlanActionType = StudioPlanAction["type"];
  * Lesson types are the languages the platform teaches — not the starter
  * templates (react, vue, …), which are just seeded workspace conveniences.
  * javascript/typescript lessons pin arbitrary WebContainer (Node) workspaces;
- * python runs its WASI script model; go/kotlin/rust/zig use their playgrounds;
- * kite and asm need no service at all, compiling and running in the page.
+ * python runs its WASI script model; go/kotlin/rust/zig/haskell use their
+ * playgrounds; kite and asm need no service at all, compiling and running in
+ * the page.
  * Each value is also a valid `WorkspaceLessonType` for the pinned project.
  */
 export const studioLessonTypeSchema = z.enum([
@@ -285,6 +286,7 @@ export const studioLessonTypeSchema = z.enum([
   "kotlin",
   "rust",
   "zig",
+  "haskell",
   "kite",
   "asm",
 ]);
@@ -454,6 +456,35 @@ export const rustRunFixtureSchema = z.object({
 });
 
 /**
+ * Haskell Playground stand-in result.
+ *
+ * Three text channels, not two: play.haskell.org answers with GHC's own
+ * diagnostics (`ghcout`) alongside the program's `sout`/`serr`, so a run that
+ * compiled with warnings and then printed something reports all three at once.
+ * `warnings` is therefore its own optional field rather than something folded
+ * into `stderr` — a successful run can carry warnings, and a fixture that
+ * merged them would replay a console no live run could reproduce. It is the
+ * mirror image of Zig, whose single `output` field exists because that service
+ * really does merge its streams.
+ *
+ * `compileErrors` and `exitDetail` are mutually exclusive by construction:
+ * GHC either rejected the module (nothing ran, so there is no exit status) or
+ * built it and the program exited non-zero.
+ */
+export const haskellRunFixtureSchema = z.object({
+  latencyMs: positiveMs,
+  transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
+  result: z.object({
+    status: z.enum(["success", "compile-error", "runtime-error"]),
+    stdout: z.string(),
+    stderr: z.string(),
+    compileErrors: z.string().optional(),
+    warnings: z.string().optional(),
+    exitDetail: z.string().optional(),
+  }),
+});
+
+/**
  * Assembly stand-in result.
  *
  * Two transient error kinds are absent for the same reason Kite's are: the
@@ -567,6 +598,17 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
     fixture: zigRunFixtureSchema,
   }),
   z.object({
+    kind: z.literal("haskell-playground"),
+    /**
+     * Same reason as Kite and Zig: a Haskell lesson usually spends its opening
+     * minutes on types and laws before it runs anything, and should not hold
+     * 288px open over an empty console to do it.
+     */
+    dockStartsCollapsed: z.boolean().default(false),
+    defaultMode: z.enum(["live", "fixture"]),
+    fixture: haskellRunFixtureSchema,
+  }),
+  z.object({
     kind: z.literal("kite-playground"),
     /**
      * The dock opens expanded, and a Kite lesson that runs nothing until its
@@ -611,6 +653,7 @@ const PLAYGROUND_RUNTIME_KINDS = new Set<string>([
   "kotlin-playground",
   "rust-playground",
   "zig-playground",
+  "haskell-playground",
   "kite-playground",
   "asm-playground",
 ] satisfies StudioPlaygroundRuntimeKind[]);
@@ -676,9 +719,9 @@ export function parseRuntimeModeParam(raw: string | null): RuntimeModeParam {
 }
 
 /**
- * The one runtime kind each lesson type may declare. Go, Kotlin, Rust, and
- * Zig execute through their selective proxies, Kite on its in-page WebAssembly
- * compiler; JavaScript, TypeScript, and
+ * The one runtime kind each lesson type may declare. Go, Kotlin, Rust, Zig,
+ * and Haskell execute through their selective proxies, Kite on its in-page
+ * WebAssembly compiler; JavaScript, TypeScript, and
  * Python all run in the versioned WebContainer adapter. JS/TS drive a dev server
  * + preview; Python runs one-shot on the WebContainer's built-in WASI `python3`
  * (no server, no preview) and gates on console `expect.output` — the per-lesson
@@ -692,6 +735,7 @@ export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind
   kotlin: "kotlin-playground",
   rust: "rust-playground",
   zig: "zig-playground",
+  haskell: "haskell-playground",
   kite: "kite-playground",
   asm: "asm-playground",
 };

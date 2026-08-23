@@ -16,6 +16,9 @@ export interface Env {
   // (routes/goPlayground.ts). Fails closed: anything but "true" disables Run
   // while Go editing and recorded playback keep working.
   GO_PLAYGROUND_ENABLED?: string;
+  // Same kill-switch contract for Haskell lessons via the Haskell Playground
+  // proxy (routes/haskellPlayground.ts).
+  HASKELL_PLAYGROUND_ENABLED?: string;
   // Same kill-switch contract for Kotlin lessons via the Kotlin Playground
   // proxy (routes/kotlinPlayground.ts).
   KOTLIN_PLAYGROUND_ENABLED?: string;
