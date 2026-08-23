@@ -12,6 +12,11 @@ import {
   selectTerminalScrollLines,
 } from "../stores/runtimePanelStore";
 import XtermTerminal from "./XtermTerminal";
+import RunnerConsoleCta, {
+  runCtaCopy,
+  shouldShowPlaygroundRunnerCta,
+  signInCtaCopy,
+} from "./RunnerConsoleCta";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import { useGoPlaygroundRunner } from "../hooks/useGoPlaygroundRunner";
@@ -109,7 +114,7 @@ function GoPlaygroundRunnerPanel() {
     selectTerminalScrollLines(s.context),
   );
   const { editorRef, handleRuntimeEvent } = useNextEditorActions();
-  const { currentRecording, isRecording } = useNextEditorMetadata();
+  const { currentRecording, isRecording, isPlaying, isPaused, hasEnded } = useNextEditorMetadata();
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
   const { getProject, saveProject, updateFileContent } = useWorkspaceActions();
   const projectVersion = useWorkspaceProjectVersion();
@@ -370,6 +375,14 @@ function GoPlaygroundRunnerPanel() {
 
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
   const consoleContent = effectiveConsoleLines.map(decorateGoConsoleLine).join("\n");
+  const showRunnerCta = shouldShowPlaygroundRunnerCta({
+    isPlaybackSnapshotActive,
+    isPlaying,
+    isPaused,
+    hasEnded,
+    isAuthLoading,
+    consoleLineCount: effectiveConsoleLines.length,
+  });
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
   const toolLabel = isFormatting ? "gofmt *.go" : "go run *.go";
@@ -503,7 +516,7 @@ function GoPlaygroundRunnerPanel() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
+          <div className="relative min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
             <XtermTerminal
               sessionId={GO_CONSOLE_SCROLL_SURFACE}
               output={consoleContent}
@@ -515,6 +528,11 @@ function GoPlaygroundRunnerPanel() {
               }
               onScroll={updateScrollLine}
             />
+            {showRunnerCta && (
+              <RunnerConsoleCta
+                {...(showSignIn ? signInCtaCopy("Go") : runCtaCopy("start go run *.go"))}
+              />
+            )}
           </div>
         </div>
       )}

@@ -17,6 +17,11 @@ import {
   selectTerminalScrollLines,
 } from "../stores/runtimePanelStore";
 import XtermTerminal from "./XtermTerminal";
+import RunnerConsoleCta, {
+  runCtaCopy,
+  shouldShowPlaygroundRunnerCta,
+  signInCtaCopy,
+} from "./RunnerConsoleCta";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import { useKotlinPlaygroundRunner } from "../hooks/useKotlinPlaygroundRunner";
@@ -106,7 +111,7 @@ function KotlinPlaygroundRunnerPanel() {
     selectTerminalScrollLines(s.context),
   );
   const { handleRuntimeEvent } = useNextEditorActions();
-  const { currentRecording, isRecording } = useNextEditorMetadata();
+  const { currentRecording, isRecording, isPlaying, isPaused, hasEnded } = useNextEditorMetadata();
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
   const { getProject, saveProject } = useWorkspaceActions();
   const projectVersion = useWorkspaceProjectVersion();
@@ -253,6 +258,14 @@ function KotlinPlaygroundRunnerPanel() {
 
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
   const consoleContent = effectiveConsoleLines.map(decorateKotlinConsoleLine).join("\n");
+  const showRunnerCta = shouldShowPlaygroundRunnerCta({
+    isPlaybackSnapshotActive,
+    isPlaying,
+    isPaused,
+    hasEnded,
+    isAuthLoading,
+    consoleLineCount: effectiveConsoleLines.length,
+  });
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
 
@@ -371,7 +384,7 @@ function KotlinPlaygroundRunnerPanel() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
+          <div className="relative min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
             <XtermTerminal
               sessionId={KOTLIN_CONSOLE_SCROLL_SURFACE}
               output={consoleContent}
@@ -383,6 +396,11 @@ function KotlinPlaygroundRunnerPanel() {
               }
               onScroll={updateScrollLine}
             />
+            {showRunnerCta && (
+              <RunnerConsoleCta
+                {...(showSignIn ? signInCtaCopy("Kotlin") : runCtaCopy("start kotlin *.kt"))}
+              />
+            )}
           </div>
         </div>
       )}

@@ -17,6 +17,11 @@ import {
   selectTerminalScrollLines,
 } from "../stores/runtimePanelStore";
 import XtermTerminal from "./XtermTerminal";
+import RunnerConsoleCta, {
+  runCtaCopy,
+  shouldShowPlaygroundRunnerCta,
+  signInCtaCopy,
+} from "./RunnerConsoleCta";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import { useRustPlaygroundRunner } from "../hooks/useRustPlaygroundRunner";
@@ -117,7 +122,7 @@ function RustPlaygroundRunnerPanel() {
     selectTerminalScrollLines(s.context),
   );
   const { editorRef, handleRuntimeEvent } = useNextEditorActions();
-  const { currentRecording, isRecording } = useNextEditorMetadata();
+  const { currentRecording, isRecording, isPlaying, isPaused, hasEnded } = useNextEditorMetadata();
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
   const { getProject, saveProject, updateFileContent } = useWorkspaceActions();
   const projectVersion = useWorkspaceProjectVersion();
@@ -370,6 +375,14 @@ function RustPlaygroundRunnerPanel() {
 
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
   const consoleContent = effectiveConsoleLines.map(decorateRustConsoleLine).join("\n");
+  const showRunnerCta = shouldShowPlaygroundRunnerCta({
+    isPlaybackSnapshotActive,
+    isPlaying,
+    isPaused,
+    hasEnded,
+    isAuthLoading,
+    consoleLineCount: effectiveConsoleLines.length,
+  });
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
   const toolLabel = isFormatting ? "rustfmt main.rs" : "cargo run";
@@ -503,7 +516,7 @@ function RustPlaygroundRunnerPanel() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
+          <div className="relative min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
             <XtermTerminal
               sessionId={RUST_CONSOLE_SCROLL_SURFACE}
               output={consoleContent}
@@ -515,6 +528,11 @@ function RustPlaygroundRunnerPanel() {
               }
               onScroll={updateScrollLine}
             />
+            {showRunnerCta && (
+              <RunnerConsoleCta
+                {...(showSignIn ? signInCtaCopy("Rust") : runCtaCopy("start cargo run"))}
+              />
+            )}
           </div>
         </div>
       )}

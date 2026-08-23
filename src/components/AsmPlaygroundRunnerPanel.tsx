@@ -16,6 +16,7 @@ import {
   selectTerminalScrollLines,
 } from "../stores/runtimePanelStore";
 import XtermTerminal from "./XtermTerminal";
+import RunnerConsoleCta, { runCtaCopy, shouldShowPlaygroundRunnerCta } from "./RunnerConsoleCta";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import { useAsmPlaygroundRunner } from "../hooks/useAsmPlaygroundRunner";
@@ -108,7 +109,7 @@ function AsmPlaygroundRunnerPanel() {
     selectTerminalScrollLines(s.context),
   );
   const { handleRuntimeEvent } = useNextEditorActions();
-  const { currentRecording, isRecording } = useNextEditorMetadata();
+  const { currentRecording, isRecording, isPlaying, isPaused, hasEnded } = useNextEditorMetadata();
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
   const { getProject } = useWorkspaceActions();
   const projectVersion = useWorkspaceProjectVersion();
@@ -245,6 +246,13 @@ function AsmPlaygroundRunnerPanel() {
   };
 
   const consoleContent = effectiveConsoleLines.map(decorateAsmConsoleLine).join("\n");
+  const showRunnerCta = shouldShowPlaygroundRunnerCta({
+    isPlaybackSnapshotActive,
+    isPlaying,
+    isPaused,
+    hasEnded,
+    consoleLineCount: effectiveConsoleLines.length,
+  });
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
 
@@ -351,7 +359,7 @@ function AsmPlaygroundRunnerPanel() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
+          <div className="relative min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
             <XtermTerminal
               sessionId={ASM_CONSOLE_SCROLL_SURFACE}
               output={consoleContent}
@@ -363,6 +371,7 @@ function AsmPlaygroundRunnerPanel() {
               }
               onScroll={updateScrollLine}
             />
+            {showRunnerCta && <RunnerConsoleCta {...runCtaCopy("assemble and run main.asm")} />}
           </div>
         </div>
       )}
