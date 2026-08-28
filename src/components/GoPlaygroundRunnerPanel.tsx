@@ -28,7 +28,7 @@ import {
   goRunStartedConsoleLines,
 } from "../runtime/goPlayground/console";
 import { areGoPlaygroundFilesEqual, collectGoPlaygroundFiles } from "../runtime/goPlayground/files";
-import { appendRunnerConsoleLines } from "../runtime/playgroundConsoleStore";
+import { appendRunnerConsoleLines, clearRunnerConsole } from "../runtime/playgroundConsoleStore";
 import {
   STUDIO_TARGET_ATTRIBUTE,
   STUDIO_RUN_BUTTON_TARGET_ID,
@@ -464,6 +464,17 @@ function GoPlaygroundRunnerPanel() {
               ) : null}
             </div>
             <div className="ml-4 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  clearRunnerConsole(runtimePanelStore, GO_CONSOLE_SCROLL_SURFACE);
+                }}
+                disabled={isPlaybackSnapshotActive || effectiveConsoleLines.length === 0}
+                className="rounded-md px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-slate-400 transition-colors hover:bg-[#222831] hover:text-white disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent disabled:hover:text-slate-600"
+                title="Clear the console"
+              >
+                Clear
+              </button>
               {showSignIn ? (
                 <button
                   type="button"

@@ -16,6 +16,7 @@ import {
   MAX_RUNNER_CONSOLE_LINES,
   OPERATION_START_PREFIXES,
   appendRunnerConsoleLines,
+  clearRunnerConsole,
 } from "./playgroundConsoleStore";
 import { isPlaygroundRuntimeKind, studioRuntimeSchema } from "../studio/plan";
 import { runErrorPrefixFor } from "../studio/playgroundRuntime";
@@ -104,5 +105,41 @@ describe("appendRunnerConsoleLines", () => {
     });
 
     expect(missing, "playground runtimes with no console separator prefix").toEqual([]);
+  });
+});
+
+describe("clearRunnerConsole", () => {
+  it("empties the console and drops that surface's recorded scroll position", () => {
+    const store = createRuntimePanelStore();
+    appendRunnerConsoleLines(store, ["[go-run] go run main.go", "hello"]);
+    store.trigger.setTerminalScrollLines({
+      terminalScrollLines: { "go-runner": 12, "rust-runner": 3 },
+    });
+
+    clearRunnerConsole(store, "go-runner");
+
+    const context = store.getSnapshot().context;
+    expect(context.consoleLines).toEqual([]);
+    // A scroll position left over from a longer console replays as a scroll
+    // into rows that no longer exist; another surface's is none of our business.
+    expect(context.terminalScrollLines).toEqual({ "rust-runner": 3 });
+  });
+
+  it("leaves the next run's output unseparated, as if the console were new", () => {
+    const store = createRuntimePanelStore();
+    appendRunnerConsoleLines(store, ["[go-run] go run main.go", "hello"]);
+    clearRunnerConsole(store, "go-runner");
+    appendRunnerConsoleLines(store, ["[go-run] go run main.go", "hello"]);
+
+    expect(store.getSnapshot().context.consoleLines).toEqual(["[go-run] go run main.go", "hello"]);
+  });
+
+  it("is a no-op on an already empty console", () => {
+    const store = createRuntimePanelStore();
+    const before = store.getSnapshot().context;
+
+    clearRunnerConsole(store, "go-runner");
+
+    expect(store.getSnapshot().context).toBe(before);
   });
 });

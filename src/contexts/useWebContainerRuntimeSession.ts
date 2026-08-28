@@ -282,6 +282,18 @@ export function useWebContainerRuntimeSession({
     }
   };
 
+  /**
+   * Empties the runner console without touching the running process, the
+   * WebContainer, or the terminal sessions — the Clear button, not a reset.
+   * The error message goes with it: it is rendered into the same console box
+   * (see TerminalPanel's rawContent), so leaving it behind would clear the
+   * output and keep a stale failure on screen.
+   */
+  const clearRunnerOutput = () => {
+    setLastOutput(null);
+    setErrorMessage(null);
+  };
+
   const resetRuntimeSession = () => {
     runtimeGenerationRef.current += 1;
     runnerStartIdRef.current += 1;
@@ -857,6 +869,7 @@ export function useWebContainerRuntimeSession({
     activeTerminalSessionId,
     bootInstance,
     closeTerminalSession,
+    clearRunnerOutput,
     createTerminalSession,
     ensureTerminalSession,
     errorMessage,

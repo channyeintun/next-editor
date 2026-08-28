@@ -51,6 +51,8 @@ export interface RuntimeLifecycleEvent {
 export interface WebContainerRuntimeActions {
   startRuntime: () => Promise<void>;
   resetRuntime: () => void;
+  /** Empties the runner console. Not a reset: the process and runtime survive. */
+  clearRunnerOutput: () => void;
   rerunRunner: () => Promise<void>;
   runCommand: (commandLine: string) => Promise<void>;
   startTerminalSession: () => Promise<void>;

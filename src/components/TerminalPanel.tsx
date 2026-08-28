@@ -187,6 +187,7 @@ function TerminalPanel() {
   const {
     closeTerminalSession,
     createTerminalSession,
+    clearRunnerOutput,
     rerunRunner,
     resizeTerminal,
     sendTerminalInput,
@@ -583,6 +584,26 @@ function TerminalPanel() {
                     ) : null}
                   </div>
                   <div className="ml-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearRunnerOutput();
+                        updateTerminalScrollLine("runner", 0);
+                        // lastOutput is recorded and replayed but is not one of
+                        // the runtimeEventState fields below, so clearing it
+                        // alone would never reach the recorder — the console
+                        // would replay still holding the cleared output.
+                        handleRuntimeEvent();
+                      }}
+                      disabled={
+                        isPlaybackSnapshotActive ||
+                        (!effectiveRunnerOutput && !effectiveErrorMessage)
+                      }
+                      className="rounded-md px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-slate-400 transition-colors hover:bg-[#222831] hover:text-white disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent disabled:hover:text-slate-600"
+                      title="Clear the console"
+                    >
+                      Clear
+                    </button>
                     <button
                       type="button"
                       onClick={() => {

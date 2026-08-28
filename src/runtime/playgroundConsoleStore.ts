@@ -33,6 +33,31 @@ export const OPERATION_START_PREFIXES = [
   "[asm-run] nasm",
 ];
 
+/**
+ * The matching clear for `appendRunnerConsoleLines`, behind the Clear button in
+ * every playground dock. It drops the console's recorded scroll position as
+ * well as its lines: `terminalScrollLines` is replayed verbatim as
+ * XtermTerminal's `scrollLine`, so a position left over from a longer console
+ * would replay as a scroll into rows that no longer exist.
+ */
+export function clearRunnerConsole(store: RuntimePanelStoreInstance, scrollSurface: string): void {
+  const context = store.getSnapshot().context;
+
+  if (context.consoleLines.length > 0) {
+    store.trigger.setConsoleLines({ consoleLines: [] });
+  }
+
+  if (scrollSurface in context.terminalScrollLines) {
+    store.trigger.setTerminalScrollLines({
+      terminalScrollLines: Object.fromEntries(
+        Object.entries(context.terminalScrollLines).filter(
+          ([surface]) => surface !== scrollSurface,
+        ),
+      ),
+    });
+  }
+}
+
 export function appendRunnerConsoleLines(store: RuntimePanelStoreInstance, lines: string[]): void {
   if (lines.length === 0) {
     return;
