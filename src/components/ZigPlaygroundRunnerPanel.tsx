@@ -17,11 +17,6 @@ import {
   selectTerminalScrollLines,
 } from "../stores/runtimePanelStore";
 import XtermTerminal from "./XtermTerminal";
-import RunnerConsoleCta, {
-  runCtaCopy,
-  shouldShowPlaygroundRunnerCta,
-  signInCtaCopy,
-} from "./RunnerConsoleCta";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import { useZigPlaygroundRunner } from "../hooks/useZigPlaygroundRunner";
@@ -122,7 +117,7 @@ function ZigPlaygroundRunnerPanel() {
     selectTerminalScrollLines(s.context),
   );
   const { editorRef, handleRuntimeEvent } = useNextEditorActions();
-  const { currentRecording, isRecording, isPlaying, isPaused, hasEnded } = useNextEditorMetadata();
+  const { currentRecording, isRecording } = useNextEditorMetadata();
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
   const { getProject, saveProject, updateFileContent } = useWorkspaceActions();
   const projectVersion = useWorkspaceProjectVersion();
@@ -375,15 +370,6 @@ function ZigPlaygroundRunnerPanel() {
 
   const showSignIn = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn;
   const consoleContent = effectiveConsoleLines.map(decorateZigConsoleLine).join("\n");
-  const runnerCtaAction = showSignIn ? handleSignIn : handleRun;
-  const showRunnerCta = shouldShowPlaygroundRunnerCta({
-    isPlaybackSnapshotActive,
-    isPlaying,
-    isPaused,
-    hasEnded,
-    isAuthLoading,
-    consoleLineCount: effectiveConsoleLines.length,
-  });
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
   const toolLabel = isFormatting ? "zig fmt main.zig" : "zig run main.zig";
@@ -517,7 +503,7 @@ function ZigPlaygroundRunnerPanel() {
             </div>
           </div>
 
-          <div className="relative min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
+          <div className="min-h-0 flex-1 overflow-hidden px-5 py-6 bg-[#15191f]">
             <XtermTerminal
               sessionId={ZIG_CONSOLE_SCROLL_SURFACE}
               output={consoleContent}
@@ -529,14 +515,6 @@ function ZigPlaygroundRunnerPanel() {
               }
               onScroll={updateScrollLine}
             />
-            {showRunnerCta && (
-              <RunnerConsoleCta
-                {...(showSignIn ? signInCtaCopy("Zig") : runCtaCopy("zig run main.zig"))}
-                onAction={() => {
-                  void runnerCtaAction();
-                }}
-              />
-            )}
           </div>
         </div>
       )}

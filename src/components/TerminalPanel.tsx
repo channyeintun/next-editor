@@ -23,11 +23,6 @@ import {
   selectTerminalScrollLines,
 } from "../stores/runtimePanelStore";
 import XtermTerminal from "./XtermTerminal";
-import RunnerConsoleCta, {
-  isLessonPlaybackShowing,
-  runCtaCopy,
-  runnerDisabledCtaCopy,
-} from "./RunnerConsoleCta";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
 import {
@@ -201,8 +196,6 @@ function TerminalPanel() {
   } = useWebContainerRuntimeActions();
   const {
     activeTerminalSessionId,
-    ambientStartEnabled,
-    isSupported,
     status,
     lastOutput,
     errorMessage,
@@ -213,7 +206,7 @@ function TerminalPanel() {
     runnerConfig,
     terminalSessions,
   } = useWebContainerRuntimeMetadata();
-  const { currentRecording, isRecording, isPlaying, isPaused, hasEnded } = useNextEditorMetadata();
+  const { currentRecording, isRecording } = useNextEditorMetadata();
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
   const displayActiveTab = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.activeTab ?? "runner")
@@ -419,13 +412,6 @@ function TerminalPanel() {
     void startTerminalSession();
   }, [activeTab, isCreatingTerminal, isPlaybackSnapshotActive, startTerminalSession]);
 
-  const showsLessonPlayback = isLessonPlaybackShowing({
-    isPlaybackSnapshotActive,
-    isPlaying,
-    isPaused,
-    hasEnded,
-  });
-
   const isBusy =
     runtimeStatus === "booting" ||
     runtimeStatus === "mounting" ||
@@ -450,40 +436,8 @@ function TerminalPanel() {
       ? ""
       : effectiveConsoleLines.map(decorateConsoleLine).join("\n");
 
-  const trimmedRunCommand = runnerConfig.runCommand.trim();
-  const runnerCommand = trimmedRunCommand || "Runner disabled";
+  const runnerCommand = runnerConfig.runCommand.trim() || "Runner disabled";
   const runnerOutput = content || "Waiting for runner output...";
-  // Unlike the playground docks this runner can start itself, so a call to
-  // action is only honest when it will not: the runner switched off in
-  // settings, "Run on startup" off, or ambient start suppressed (only /studio,
-  // where typed plan actions own the runtime). An "idle" status with no output
-  // and no error is exactly the state the passive "Waiting for runner
-  // output..." placeholder used to sit in forever.
-  const runnerStartsItself =
-    runnerConfig.enabled && runnerConfig.runOnStartup && ambientStartEnabled;
-  const isRunnerTabIdle =
-    !showsLessonPlayback &&
-    isSupported &&
-    runtimeStatus === "idle" &&
-    !effectiveRunnerOutput &&
-    !effectiveErrorMessage;
-  const runnerTabCta = !isRunnerTabIdle
-    ? null
-    : !runnerConfig.enabled
-      ? runnerDisabledCtaCopy()
-      : runnerStartsItself || !trimmedRunCommand
-        ? null
-        : runCtaCopy(trimmedRunCommand);
-  // The CTA button fires the same handlers as the command bar above it: the
-  // command bar's RUN when there is something to run, its gear when the runner
-  // is switched off and RUN would do nothing.
-  const runnerCtaAction = runnerConfig.enabled
-    ? () => {
-        void rerunRunner();
-      }
-    : () => {
-        setIsSettingsOpen(true);
-      };
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
 
@@ -652,21 +606,16 @@ function TerminalPanel() {
                   </div>
                 </div>
 
-                <div
-                  className={`relative min-h-0 flex-1 overflow-hidden px-5 py-6 ${RUNTIME_PANEL_BG}`}
-                >
+                <div className={`min-h-0 flex-1 overflow-hidden px-5 py-6 ${RUNTIME_PANEL_BG}`}>
                   <XtermTerminal
                     sessionId="runner"
-                    output={runnerTabCta ? "" : runnerOutput}
+                    output={runnerOutput}
                     interactive={false}
                     scrollLine={
                       isPlaybackSnapshotActive ? effectiveTerminalScrollLines.runner : undefined
                     }
                     onScroll={(scrollLine) => updateTerminalScrollLine("runner", scrollLine)}
                   />
-                  {runnerTabCta && (
-                    <RunnerConsoleCta {...runnerTabCta} onAction={runnerCtaAction} />
-                  )}
                 </div>
               </div>
             )}
@@ -676,6 +625,11 @@ function TerminalPanel() {
                 className={`flex ${dockContentSizeClass} flex-col px-5 py-6 ${RUNTIME_PANEL_BG}`}
               >
                 <div className="relative min-h-0 flex-1 overflow-hidden">
+                  {!effectiveActiveTerminalSessionId && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center font-mono text-[13px] text-slate-500">
+                      Open the terminal to start a shell session.
+                    </div>
+                  )}
                   <XtermTerminal
                     sessionId={effectiveActiveTerminalSessionId}
                     output={effectiveTerminalOutput || ""}
@@ -700,11 +654,6 @@ function TerminalPanel() {
                       updateTerminalScrollLine(effectiveActiveTerminalSessionId, scrollLine)
                     }
                   />
-                  {!showsLessonPlayback && !effectiveActiveTerminalSessionId && (
-                    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-6 text-center font-mono text-[13px] text-slate-400">
-                      Open the terminal to start a shell session.
-                    </div>
-                  )}
                 </div>
                 <div className="mt-3 flex justify-end">
                   <button
