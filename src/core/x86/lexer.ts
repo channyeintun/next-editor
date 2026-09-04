@@ -18,7 +18,7 @@ export type TokenKind = "word" | "number" | "string" | "punct" | "newline" | "eo
 
 export interface Token {
   kind: TokenKind;
-  /** Source text, lowercased for `word` tokens and raw for everything else. */
+  /** Source text exactly as written; symbol names are case-sensitive in NASM. */
   value: string;
   /** For `number`, the parsed value; for `string`, the decoded bytes. */
   number?: bigint;
@@ -39,7 +39,11 @@ export class AsmSyntaxError extends Error {
   }
 }
 
-const PUNCTUATION = new Set(["[", "]", "(", ")", ",", "+", "-", "*", "/", ":", "$$", "$"]);
+// `$` and `$$` are absent on purpose: they are recognised ahead of this set,
+// which is only ever consulted one character at a time.
+const PUNCTUATION = new Set(["[", "]", "(", ")", ",", "+", "-", "*", "/", ":"]);
+
+const UTF8 = new TextEncoder();
 
 function isIdentifierStart(character: string): boolean {
   return /[A-Za-z_.?@]/.test(character);
@@ -56,10 +60,9 @@ function isDigit(character: string): boolean {
 /**
  * Parse a NASM integer literal.
  *
- * NASM accepts four radix spellings and this accepts the three a lesson will
- * ever use — `0x`/`0b` prefixes, a `h`/`b` suffix, and plain decimal — plus
- * `_` as a digit separator, because `0b1010_1010` is how a bit pattern is
- * readable at all.
+ * Both spellings of every radix NASM has: the `0x`/`0b`/`0o` prefixes, the
+ * `h`/`b`/`q` suffixes, and plain decimal — plus `_` as a digit separator,
+ * because `0b1010_1010` is how a bit pattern is readable at all.
  */
 export function parseIntegerLiteral(text: string): bigint | null {
   const cleaned = text.replaceAll("_", "");
@@ -85,14 +88,18 @@ function decodeEscapes(raw: string, quote: string, line: number, column: number)
   const bytes: number[] = [];
   // Single-quoted strings are literal in NASM; only double quotes escape.
   if (quote === "'") {
-    for (const byte of new TextEncoder().encode(raw)) bytes.push(byte);
+    for (const byte of UTF8.encode(raw)) bytes.push(byte);
     return bytes;
   }
 
   for (let index = 0; index < raw.length; index += 1) {
-    const character = raw[index];
+    // By code point, not by code unit: half of a surrogate pair encoded on its
+    // own is U+FFFD, so `"😀"` would lay down replacement characters while the
+    // single-quoted spelling of the same string laid down the emoji.
+    const character = String.fromCodePoint(raw.codePointAt(index)!);
     if (character !== "\\") {
-      for (const byte of new TextEncoder().encode(character)) bytes.push(byte);
+      for (const byte of UTF8.encode(character)) bytes.push(byte);
+      index += character.length - 1;
       continue;
     }
 
@@ -231,12 +238,10 @@ export function tokenize(source: string): Token[] {
     if (isIdentifierStart(character)) {
       const startIndex = index;
       while (index < source.length && isIdentifierPart(source[index])) index += 1;
-      push("word", source.slice(startIndex, index).toLowerCase(), startIndex, {
-        // The raw spelling is kept because symbol names are case-sensitive in
-        // NASM even though mnemonics and registers are not.
-        bytes: undefined,
-      });
-      tokens[tokens.length - 1].value = source.slice(startIndex, index);
+      // The raw spelling is kept because symbol names are case-sensitive in
+      // NASM even though mnemonics and registers are not; every consumer that
+      // compares against a keyword lowercases it there.
+      push("word", source.slice(startIndex, index), startIndex);
       continue;
     }
 

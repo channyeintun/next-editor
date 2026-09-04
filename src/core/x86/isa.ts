@@ -195,13 +195,25 @@ form({
   opsize: 2,
 });
 
+// `xchg` swaps, so NASM takes its operands in either order against the one pair
+// of opcodes. The reversed forms are declared after the straight ones on
+// purpose: the encoder keeps the first of two encodings that tie on length, so
+// `xchg rax, rbx` stays the byte sequence it has always been.
 form({ mnemonic: "xchg", operands: [RM(1), R(1)], opcode: [0x86], encoding: "MR", opsize: 1 });
+form({ mnemonic: "xchg", operands: [R(1), RM(1)], opcode: [0x86], encoding: "RM", opsize: 1 });
 for (const size of WIDE) {
   form({
     mnemonic: "xchg",
     operands: [RM(size), R(size)],
     opcode: [0x87],
     encoding: "MR",
+    opsize: size,
+  });
+  form({
+    mnemonic: "xchg",
+    operands: [R(size), RM(size)],
+    opcode: [0x87],
+    encoding: "RM",
     opsize: size,
   });
 }
@@ -290,8 +302,11 @@ for (const { mnemonic, base, ext } of ALU_GROUP) {
   }
 }
 
-// `test` is `and` that keeps no result, and it has no reversed form.
+// `test` is `and` that keeps no result. Intel gives it no reversed *opcode* the
+// way the ALU group has one, but the operation is symmetric, so NASM reads both
+// orders against the same byte — same trick as `xchg` above.
 form({ mnemonic: "test", operands: [RM(1), R(1)], opcode: [0x84], encoding: "MR", opsize: 1 });
+form({ mnemonic: "test", operands: [R(1), RM(1)], opcode: [0x84], encoding: "RM", opsize: 1 });
 form({
   mnemonic: "test",
   operands: [FIXED("al"), IMM(1)],
@@ -315,6 +330,13 @@ for (const size of WIDE) {
     operands: [RM(size), R(size)],
     opcode: [0x85],
     encoding: "MR",
+    opsize: size,
+  });
+  form({
+    mnemonic: "test",
+    operands: [R(size), RM(size)],
+    opcode: [0x85],
+    encoding: "RM",
     opsize: size,
   });
   form({

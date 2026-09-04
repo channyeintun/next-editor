@@ -123,17 +123,32 @@ const UNKNOWN_SYMBOL = 0x7fff_ffffn;
 /** The longest an x86 instruction can be, used as a first-pass placeholder. */
 const MAX_INSTRUCTION_BYTES = 15;
 
+/** The largest magnitude an expression may reach; see `evaluate`. */
+const VALUE_LIMIT = 1n << 128n;
+
 class SymbolTable {
   #values = new Map<string, bigint>();
-  #known = new Set<string>();
+  /**
+   * Symbols whose value was computed from a placeholder and so is not real yet.
+   *
+   * Without this an `equ` that reads a symbol defined further down stores
+   * 0x7fffffff on the first pass and every later pass reads it back as an
+   * ordinary number, so nothing ever notices that the value never arrived.
+   */
+  #provisional = new Set<string>();
 
-  set(name: string, value: bigint): void {
+  set(name: string, value: bigint, provisional = false): void {
     this.#values.set(name, value);
-    this.#known.add(name);
+    if (provisional) this.#provisional.add(name);
+    else this.#provisional.delete(name);
   }
 
   has(name: string): boolean {
     return this.#values.has(name);
+  }
+
+  isProvisional(name: string): boolean {
+    return this.#provisional.has(name);
   }
 
   get(name: string): bigint | undefined {
@@ -174,7 +189,12 @@ function evaluate(
       return sectionStart;
     case "symbol": {
       const value = symbols.get(expression.name);
-      if (value !== undefined) return value;
+      if (value !== undefined) {
+        // A provisional value is a placeholder wearing a symbol's name, so it
+        // counts as a forward reference just as an absent one does.
+        if (unresolved && symbols.isProvisional(expression.name)) unresolved.used = true;
+        return value;
+      }
       if (declared.has(expression.name)) {
         if (unresolved) unresolved.used = true;
         return UNKNOWN_SYMBOL;
@@ -206,16 +226,52 @@ function evaluate(
       );
       switch (expression.operator) {
         case "+":
-          return left + right;
+          return bounded(left + right, at);
         case "-":
-          return left - right;
+          return bounded(left - right, at);
         case "*":
-          return left * right;
+          return bounded(left * right, at);
         case "/":
           if (right === 0n) throw new AsmError("Division by zero", at.line, at.column);
           return left / right;
       }
     }
+  }
+}
+
+/**
+ * Keep a value inside a range a machine word could ever care about.
+ *
+ * Nothing bounds how big a bigint can get, and a short chain of `equ`s that
+ * each square the one above it is re-evaluated on every relaxation pass — a
+ * dozen lines is enough to spend seconds building a number with millions of
+ * digits before the engine gives up with an error that is not a diagnostic.
+ */
+function bounded(value: bigint, at: { line: number; column: number }): bigint {
+  if (value >= VALUE_LIMIT || value <= -VALUE_LIMIT) {
+    throw new AsmError(
+      "This expression's value is far too large for any instruction to hold",
+      at.line,
+      at.column,
+    );
+  }
+  return value;
+}
+
+/** How much zero-filled space `.bss` may span in total. */
+const BSS_LIMIT = 0x100000n;
+
+/**
+ * Bound `.bss` as a whole, not one reservation at a time.
+ *
+ * Nothing stores bytes for `.bss`, but the machine maps a page of memory for
+ * every page of it before the first instruction runs, so a hundred lines that
+ * each reserve a legal 1 MiB is a hundred megabytes allocated on the page's
+ * main thread.
+ */
+function checkBssSize(cursor: bigint, sectionStart: bigint, at: Statement): void {
+  if (cursor - sectionStart > BSS_LIMIT) {
+    throw new AsmError("This runner reserves at most 1 MiB in .bss", at.line, at.column);
   }
 }
 
@@ -226,6 +282,19 @@ function declaredNames(statements: Statement[]): Set<string> {
     if (statement.kind === "label" || statement.kind === "equ") names.add(statement.name);
   }
   return names;
+}
+
+const WIDTH_NAMES: Record<number, string> = {
+  1: "a byte",
+  2: "a word",
+  4: "a dword",
+  8: "a qword",
+};
+
+function fitsWidth(value: bigint, width: number): boolean {
+  const bits = BigInt(width * 8);
+  // Either spelling is fine: `db 0xff` and `db -1` are both the same byte.
+  return value >= -(1n << (bits - 1n)) && value < 1n << bits;
 }
 
 function dataBytes(
@@ -240,18 +309,32 @@ function dataBytes(
     if (item.kind === "bytes") {
       // A string in `dw`/`dd`/`dq` is still laid down byte by byte, then padded
       // out to a whole unit — the same thing NASM does.
-      bytes.push(...item.bytes);
+      for (const byte of item.bytes) bytes.push(byte);
       while (bytes.length % statement.width !== 0) bytes.push(0);
       continue;
     }
+    // `$` is the start of the line, as in NASM — not how far into the line this
+    // item happens to sit, so `msg db 'ab', $ - msg` is 0 and not 2.
+    const unresolved = { used: false };
     const value = evaluate(
       item.value,
       symbols,
-      address + BigInt(bytes.length),
+      address,
       sectionStart,
       declared,
       statement,
+      unresolved,
     );
+    // A value built on a forward reference is not this pass's business; the
+    // check runs for real once every symbol has one, the same way the
+    // instruction path defers its own diagnostics.
+    if (!unresolved.used && !fitsWidth(value, statement.width)) {
+      throw new AsmError(
+        `${value} does not fit in ${WIDTH_NAMES[statement.width]}`,
+        statement.line,
+        statement.column,
+      );
+    }
     const masked = value & ((1n << BigInt(statement.width * 8)) - 1n);
     for (let index = 0; index < statement.width; index += 1) {
       bytes.push(Number((masked >> BigInt(index * 8)) & 0xffn));
@@ -276,18 +359,15 @@ export function assemble(source: string): AssembledProgram {
   // Assign each statement to a section, keeping source order inside it.
   const placed: Placed[] = [];
   let currentSection: SectionName = ".text";
-  const globals: string[] = [];
 
   for (const statement of statements) {
     if (statement.kind === "section") {
       currentSection = normalizeSection(statement.name, statement.line, statement.column);
       continue;
     }
-    if (statement.kind === "global") {
-      globals.push(...statement.names);
-      continue;
-    }
-    if (statement.kind === "default") continue;
+    // `global` is a linker instruction and there is no linker here; the entry
+    // point is found by name below. `default` was consumed by the parser.
+    if (statement.kind === "global" || statement.kind === "default") continue;
     if (statement.kind === "reserve" && currentSection !== ".bss") {
       throw new AsmError(
         "resb, resw, resd and resq reserve space and only belong in section .bss",
@@ -321,7 +401,6 @@ export function assemble(source: string): AssembledProgram {
   }
 
   const symbols = new SymbolTable();
-  const definedLabels = new Set<string>();
   let sectionStarts = new Map<SectionName, bigint>();
   let bssStart = 0n;
   let bssEnd = 0n;
@@ -349,14 +428,13 @@ export function assemble(source: string): AssembledProgram {
           // Only on the first pass: every later pass redefines every label by
           // design, so checking on all of them would report each one as its own
           // duplicate.
-          if (iteration === 0 && definedLabels.has(statement.name)) {
+          if (iteration === 0 && symbols.has(statement.name)) {
             throw new AsmError(
               `"${statement.name}" is defined more than once`,
               statement.line,
               statement.column,
             );
           }
-          definedLabels.add(statement.name);
           symbols.set(statement.name, cursor);
           entry.address = cursor;
           entry.bytes = [];
@@ -364,17 +442,26 @@ export function assemble(source: string): AssembledProgram {
         }
 
         if (statement.kind === "equ") {
-          if (iteration === 0 && definedLabels.has(statement.name)) {
+          if (iteration === 0 && symbols.has(statement.name)) {
             throw new AsmError(
               `"${statement.name}" is defined more than once`,
               statement.line,
               statement.column,
             );
           }
-          definedLabels.add(statement.name);
+          const unresolved = { used: false };
           symbols.set(
             statement.name,
-            evaluate(statement.value, symbols, cursor, sectionStart, declared, statement),
+            evaluate(
+              statement.value,
+              symbols,
+              cursor,
+              sectionStart,
+              declared,
+              statement,
+              unresolved,
+            ),
+            unresolved.used,
           );
           entry.address = cursor;
           entry.bytes = [];
@@ -382,6 +469,7 @@ export function assemble(source: string): AssembledProgram {
         }
 
         if (statement.kind === "align") {
+          const unresolved = { used: false };
           const boundary = evaluate(
             statement.boundary,
             symbols,
@@ -389,9 +477,28 @@ export function assemble(source: string): AssembledProgram {
             sectionStart,
             declared,
             statement,
+            unresolved,
           );
+          // Unlike an instruction, a directive that decides where the next byte
+          // lands cannot wait for a later pass — every address after it depends
+          // on the answer. NASM calls these critical expressions and rejects
+          // them the same way.
+          if (unresolved.used) {
+            throw new AsmError(
+              "align needs a boundary the assembler already knows — define it above this line",
+              statement.line,
+              statement.column,
+            );
+          }
           if (boundary <= 0n || (boundary & (boundary - 1n)) !== 0n) {
             throw new AsmError("align needs a power of two", statement.line, statement.column);
+          }
+          if (boundary > PAGE_SIZE) {
+            throw new AsmError(
+              "align boundaries above 4096 — one page — are not supported here",
+              statement.line,
+              statement.column,
+            );
           }
           const aligned = alignUp(cursor, boundary);
           entry.address = cursor;
@@ -400,6 +507,7 @@ export function assemble(source: string): AssembledProgram {
             section === ".text" ? 0x90 : 0x00,
           );
           cursor = aligned;
+          if (section === ".bss") checkBssSize(cursor, sectionStart, statement);
           continue;
         }
 
@@ -411,6 +519,7 @@ export function assemble(source: string): AssembledProgram {
         }
 
         if (statement.kind === "reserve") {
+          const unresolved = { used: false };
           const count = evaluate(
             statement.count,
             symbols,
@@ -418,7 +527,15 @@ export function assemble(source: string): AssembledProgram {
             sectionStart,
             declared,
             statement,
+            unresolved,
           );
+          if (unresolved.used) {
+            throw new AsmError(
+              "A reservation needs a count the assembler already knows — define it above this line",
+              statement.line,
+              statement.column,
+            );
+          }
           if (count < 0n) {
             throw new AsmError(
               "A reservation cannot be negative",
@@ -426,17 +543,10 @@ export function assemble(source: string): AssembledProgram {
               statement.column,
             );
           }
-          const size = count * BigInt(statement.width);
-          if (size > 0x100000n) {
-            throw new AsmError(
-              "This runner reserves at most 1 MiB in .bss",
-              statement.line,
-              statement.column,
-            );
-          }
           entry.address = cursor;
           entry.bytes = [];
-          cursor += size;
+          cursor += count * BigInt(statement.width);
+          checkBssSize(cursor, sectionStart, statement);
           continue;
         }
 
@@ -500,13 +610,20 @@ export function assemble(source: string): AssembledProgram {
             if (entry.minimumRelBytes === 1) {
               entry.minimumRelBytes = 4;
               entry.bytes = [0, 0, 0, 0, 0, 0];
-            } else if (unresolved.used) {
+            } else if (unresolved.used || iteration === 0) {
               // The instruction was built on a placeholder for a symbol defined
               // further down the file. Whether it encodes cannot be judged yet,
               // so it reserves the longest an instruction can be and is asked
               // again next pass, when every symbol has a real value. Reporting
               // it now would blame `mov al, SIZE` for a `SIZE equ 7` that is
               // three lines below it and perfectly valid.
+              //
+              // The first pass gets the same benefit of the doubt even without a
+              // placeholder, because it lays every branch out in its widest form
+              // and `loop` has only a short one: a `loop` whose body settles to
+              // 90 bytes can measure 130 on the pass that has not shrunk yet.
+              // Pass 1 is the smallest layout the program can have and later
+              // passes only widen, so a reach failure from then on is real.
               entry.bytes = Array.from({ length: MAX_INSTRUCTION_BYTES }, () => 0x90);
             } else {
               throw new AsmError(cause.message, cause.line, cause.column);
@@ -525,7 +642,14 @@ export function assemble(source: string): AssembledProgram {
       }
     }
 
-    const signature = placed.map((entry) => `${entry.address}:${entry.bytes.join(",")}`).join("|");
+    // Symbol values belong in the signature as much as the bytes do. `a equ b`
+    // above `b equ 5` resolves one link per pass, and a pass that only moved a
+    // symbol looks identical byte for byte — so without them the loop stops on
+    // the pass that finally learned the value and emits the placeholder.
+    const signature = [
+      ...placed.map((entry) => `${entry.address}:${entry.bytes.join(",")}`),
+      ...[...symbols.entries()].map(([name, value]) => `${name}=${value}`),
+    ].join("|");
     if (signature === previousSignature) {
       settled = true;
       break;
@@ -553,6 +677,18 @@ export function assemble(source: string): AssembledProgram {
     );
   }
 
+  // The layout has stopped moving, so a value still built on a placeholder is
+  // never going to arrive: the symbol is defined in terms of itself.
+  for (const entry of placed) {
+    const { statement } = entry;
+    if (statement.kind !== "equ" || !symbols.isProvisional(statement.name)) continue;
+    throw new AsmError(
+      `"${statement.name}" is defined in terms of itself`,
+      statement.line,
+      statement.column,
+    );
+  }
+
   const entrySymbol = symbols.get("_start") ?? symbols.get("main");
   if (entrySymbol === undefined) {
     throw new AsmError(
@@ -560,10 +696,6 @@ export function assemble(source: string): AssembledProgram {
       1,
       1,
     );
-  }
-  if (globals.length > 0 && !globals.includes("_start") && !globals.includes("main")) {
-    // Not fatal: `global` is a linker instruction and there is no linker here.
-    // It is only checked so a program that declares something else still runs.
   }
 
   const segments: AssembledSegment[] = [];
@@ -581,7 +713,9 @@ export function assemble(source: string): AssembledProgram {
       // between two statements; fill it so the segment stays one run of bytes.
       const offset = Number(entry.address - start);
       while (bytes.length < offset) bytes.push(0);
-      bytes.push(...entry.bytes);
+      // Pushed one at a time rather than spread: a spread passes every byte as
+      // its own argument, and a long `db` string overflows the call stack.
+      for (const byte of entry.bytes) bytes.push(byte);
       listing.push({ address: entry.address, bytes: entry.bytes, line: entry.statement.line });
       if (entry.statement.kind === "instruction") {
         lineForAddress.set(entry.address, entry.statement.line);
@@ -606,7 +740,7 @@ export function assemble(source: string): AssembledProgram {
     segments,
     bssStart,
     bssEnd,
-    breakStart: alignUp(bssEnd > 0n ? bssEnd : (sectionStarts.get(".bss") ?? TEXT_BASE), PAGE_SIZE),
+    breakStart: alignUp(bssEnd, PAGE_SIZE),
     symbols: symbols.entries(),
     listing,
     lineForAddress,

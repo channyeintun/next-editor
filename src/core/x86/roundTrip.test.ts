@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assemble } from "./assembler";
 import { decodeInstruction } from "./decoder";
-import { formsFor } from "./isa";
+import { CONDITION_CODES, formsFor } from "./isa";
 
 /**
  * Encoder and decoder, checked against each other.
@@ -58,6 +58,16 @@ const CORPUS = [
   "movsx eax, byte [rsi]",
   "movsxd rax, dword [rsi]",
   "xchg rax, rbx",
+  "xchg [rbx], rax",
+  "xchg rax, [rbx]",
+  "test rax, [rbx]",
+  // Aliases: the decoder answers with the primary name for each of these.
+  "sal rax, 1",
+  "jz _start",
+  "jnae _start",
+  "setnz al",
+  "cmovz rax, rbx",
+  "loopz _start",
   "add rax, rbx",
   "add rax, 1",
   "add rax, 100000",
@@ -142,36 +152,33 @@ describe("encode then decode", () => {
     expect(decoded.length).toBe(bytes.length);
 
     // The decoder answers with the canonical mnemonic, so an alias in the
-    // source (`sal`, `jz`, `movsx` for the widening move) is expected to come
-    // back under its primary name.
+    // source (`sal`, `jz`, `setnz`) is expected to come back under its primary
+    // name. The widening `movsx` is the one alias this lookup cannot resolve —
+    // `movsx` is a primary name too — so it has a test of its own below.
     const canonical = formsFor(source.split(/[\s,]/)[0])[0]?.mnemonic;
     expect(decoded.mnemonic).toBe(canonical);
   });
 
-  it("round-trips every conditional jump", () => {
-    for (const condition of [
-      "e",
-      "ne",
-      "l",
-      "le",
-      "g",
-      "ge",
-      "b",
-      "be",
-      "a",
-      "ae",
-      "s",
-      "ns",
-      "o",
-      "no",
-      "p",
-      "np",
-    ]) {
-      const bytes = assembleOne(`j${condition} _start`);
-      const decoded = decodeInstruction(Uint8Array.from(bytes), 0, 0x401000n);
-      expect(decoded.mnemonic).toBe(`j${condition === "z" ? "e" : condition}`);
-      expect(decoded.length).toBe(bytes.length);
+  it("round-trips every conditional jump under every spelling", () => {
+    // Driven off the table rather than a hand-written list, so the alternate
+    // spellings — `jz`, `jnae`, `jpe` — are covered alongside the primaries.
+    for (const { names } of CONDITION_CODES) {
+      for (const condition of names) {
+        const bytes = assembleOne(`j${condition} _start`);
+        const decoded = decodeInstruction(Uint8Array.from(bytes), 0, 0x401000n);
+        expect(decoded.mnemonic).toBe(`j${names[0]}`);
+        expect(decoded.length).toBe(bytes.length);
+      }
     }
+  });
+
+  it("round-trips the widening move, which the corpus lookup cannot name", () => {
+    // `movsx` is a primary mnemonic of its own, so `formsFor("movsx")[0]` is not
+    // the 0x63 form this line reaches; it needs saying outright.
+    const bytes = assembleOne("movsx rax, dword [rsi]");
+    const decoded = decodeInstruction(Uint8Array.from(bytes), 0, 0x401000n);
+    expect(decoded.mnemonic).toBe("movsxd");
+    expect(decoded.length).toBe(bytes.length);
   });
 
   it("recovers the register a jump-free opcode folded into itself", () => {

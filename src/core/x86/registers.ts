@@ -142,13 +142,9 @@ export function lookupRegister(name: string): RegisterRef | null {
   return TABLE.get(name.toLowerCase()) ?? null;
 }
 
+/** Whether a name is a register at all, without needing what it refers to. */
 export function isRegisterName(name: string): boolean {
   return TABLE.has(name.toLowerCase());
-}
-
-/** The 64-bit name of whatever register a narrower name refers to. */
-export function register64Name(index: RegisterIndex): string {
-  return REGISTERS_64[index];
 }
 
 /**

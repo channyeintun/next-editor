@@ -135,15 +135,28 @@ export type Statement =
   | DefaultStatement
   | AlignStatement;
 
-const SIZE_KEYWORDS: Record<string, OperandSize> = {
-  byte: 1,
-  word: 2,
-  dword: 4,
-  qword: 8,
-};
+// Maps rather than object literals: `keyword in SIZE_KEYWORDS` would answer
+// true for `constructor` and `__proto__`, so a label with either name parsed as
+// a size keyword and the line failed with a diagnostic about something else.
+const SIZE_KEYWORDS = new Map<string, OperandSize>([
+  ["byte", 1],
+  ["word", 2],
+  ["dword", 4],
+  ["qword", 8],
+]);
 
-const DATA_WIDTHS: Record<string, DataWidth> = { db: 1, dw: 2, dd: 4, dq: 8 };
-const RESERVE_WIDTHS: Record<string, DataWidth> = { resb: 1, resw: 2, resd: 4, resq: 8 };
+const DATA_WIDTHS = new Map<string, DataWidth>([
+  ["db", 1],
+  ["dw", 2],
+  ["dd", 4],
+  ["dq", 8],
+]);
+const RESERVE_WIDTHS = new Map<string, DataWidth>([
+  ["resb", 1],
+  ["resw", 2],
+  ["resd", 4],
+  ["resq", 8],
+]);
 
 /**
  * Words that mean "the thing before me was a label", even with no colon.
@@ -153,11 +166,7 @@ const RESERVE_WIDTHS: Record<string, DataWidth> = { resb: 1, resw: 2, resd: 4, r
  * from column position — NASM's own rule, and a bad one to depend on — a bare
  * word counts as a label only when the word after it is one of these.
  */
-const LABEL_INTRODUCERS = new Set([
-  ...Object.keys(DATA_WIDTHS),
-  ...Object.keys(RESERVE_WIDTHS),
-  "equ",
-]);
+const LABEL_INTRODUCERS = new Set([...DATA_WIDTHS.keys(), ...RESERVE_WIDTHS.keys(), "equ"]);
 
 class Parser {
   #tokens: Token[];
@@ -344,9 +353,9 @@ class Parser {
       return;
     }
 
-    if (keyword in DATA_WIDTHS) {
+    const dataWidth = DATA_WIDTHS.get(keyword);
+    if (dataWidth !== undefined) {
       this.#next();
-      const width = DATA_WIDTHS[keyword];
       const items: DataStatement["items"] = [];
       for (;;) {
         const token = this.#peek();
@@ -358,17 +367,24 @@ class Parser {
         }
         if (!this.#eatPunct(",")) break;
       }
-      statements.push({ kind: "data", width, items, line: head.line, column: head.column });
+      statements.push({
+        kind: "data",
+        width: dataWidth,
+        items,
+        line: head.line,
+        column: head.column,
+      });
       this.#endOfLine();
       return;
     }
 
-    if (keyword in RESERVE_WIDTHS) {
+    const reserveWidth = RESERVE_WIDTHS.get(keyword);
+    if (reserveWidth !== undefined) {
       this.#next();
       const count = this.#parseExpression();
       statements.push({
         kind: "reserve",
-        width: RESERVE_WIDTHS[keyword],
+        width: reserveWidth,
         count,
         line: head.line,
         column: head.column,
@@ -417,8 +433,8 @@ class Parser {
     const at: SourcePosition = { line: token.line, column: token.column };
 
     // A size keyword only ever qualifies what follows it.
-    if (token.kind === "word" && token.value.toLowerCase() in SIZE_KEYWORDS) {
-      const size = SIZE_KEYWORDS[token.value.toLowerCase()];
+    const size = token.kind === "word" ? SIZE_KEYWORDS.get(token.value.toLowerCase()) : undefined;
+    if (size !== undefined) {
       this.#next();
       const inner = this.#parseOperand();
       if (inner.kind === "memory") return { ...inner, size, ...at };
@@ -443,14 +459,17 @@ class Parser {
 
   #parseMemory(): MemoryOperand {
     const open = this.#expectPunct("[");
-    let ripRelative = this.#defaultRelative;
+    // Written `rel`/`abs` is a decision about this one address; `default rel` is
+    // only a decision about addresses that name no register, which is why the
+    // two are tracked apart until the address has been folded.
+    let explicitRelative: boolean | null = null;
 
     if (this.#peek().kind === "word" && this.#peek().value.toLowerCase() === "rel") {
       this.#next();
-      ripRelative = true;
+      explicitRelative = true;
     } else if (this.#peek().kind === "word" && this.#peek().value.toLowerCase() === "abs") {
       this.#next();
-      ripRelative = false;
+      explicitRelative = false;
     }
 
     const folded = this.#foldAddress(this.#parseAddressExpression(), 1n, open);
@@ -465,7 +484,7 @@ class Parser {
     let scale: 1 | 2 | 4 | 8 = 1;
 
     for (const term of folded.terms) {
-      if (term.scale === 1n && base === null && term.register.name !== "riz") {
+      if (term.scale === 1n && base === null) {
         base = term.register;
         continue;
       }
@@ -498,9 +517,11 @@ class Parser {
       throw this.#error("Addresses use 64-bit registers here", open);
     }
 
-    if (ripRelative && (base || index)) {
+    const usesRegister = base !== null || index !== null;
+    if (explicitRelative === true && usesRegister) {
       throw this.#error("A rip-relative address cannot also use a register", open);
     }
+    const ripRelative = explicitRelative ?? (this.#defaultRelative && !usesRegister);
 
     return {
       kind: "memory",
@@ -644,15 +665,22 @@ class Parser {
         if (scaleExpression.kind !== "number") {
           throw this.#error("A register's scale must be a plain number", at);
         }
-        return this.#foldAddress(registerSide, sign * scaleExpression.value, at);
+        // The scale multiplies everything under it, constant included: in
+        // `[(rax+8)*2]` the displacement is 16, not the 8 that was written.
+        const nested = this.#foldAddress(registerSide, sign * scaleExpression.value, at);
+        return {
+          terms: nested.terms,
+          constant: {
+            kind: "binary",
+            operator: "*",
+            left: nested.constant,
+            right: scaleExpression,
+          },
+        };
       }
       default:
         return { terms: [], constant: toExpression(expression, at) };
     }
-  }
-
-  parseExpressionPublic(): Expression {
-    return this.#parseExpression();
   }
 
   #parseExpression(): Expression {
