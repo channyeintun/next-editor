@@ -170,8 +170,8 @@ function truncateOutput(text: string): string {
     : text;
 }
 
-// GHC labels every diagnostic on its location line: "Main.hs:2:22: error:
-// [GHC-83865]" versus "Main.hs:6:10: warning: [GHC-06201]". A non-zero exit
+// GHC labels every diagnostic on its location line: "Main.hs:2:15: error:
+// [GHC-39999]" versus "Main.hs:5:1: warning: [GHC-38417]". A non-zero exit
 // code alone cannot tell the two apart, because a program that compiled with
 // warnings and then died at runtime also exits non-zero — so the presence of
 // an "error:" diagnostic is the discriminator, and the exit code only says
@@ -179,9 +179,17 @@ function truncateOutput(text: string): string {
 //
 // The tempting shortcut — "sout is empty, so nothing ran, so it must be a
 // compile error" — is wrong and was rejected against real evidence:
-// `print (head [])` compiles, exits 1, prints nothing on stdout, and leaves
+// `putStrLn (head [])` compiles, exits 1, prints nothing on stdout, and leaves
 // only a -Wx-partial WARNING in ghcout. That is a runtime error.
-const GHC_ERROR_DIAGNOSTIC = /^[^\n]*:\s*error:/m;
+//
+// Only a diagnostic HEADER counts, hence the excluded "|": GHC prints a code
+// frame under each diagnostic (`4 |   putStrLn ("status: error: none " ++ …)`)
+// that echoes the learner's own line, and a source line is free to contain the
+// substring ": error:". Header lines never contain a pipe and frame lines
+// always do, so excluding it keeps a warning's echoed source out of the test.
+// The separator is spaces/tabs rather than \s for the same reason: \s would
+// let a match run past the newline onto the following line.
+const GHC_ERROR_DIAGNOSTIC = /^[^\n|]*:[ \t]*error:/m;
 
 // No path scrubbing here, deliberately, and none should be added: the upstream
 // compiles the submitted source as "Main.hs", which is exactly the filename the
@@ -372,15 +380,14 @@ haskellPlaygroundRoute.post("/run", async (c) => {
   const { code, sourceBytes } = request;
 
   const cache = getCache(c.env);
-  const rateLimitDecision = await checkRateLimit(cache, user.id);
-  if (rateLimitDecision === "limited") {
-    return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
-  }
-  if (rateLimitDecision === "unavailable") {
-    return c.json({ error: "Haskell Playground execution policy is unavailable" }, 502);
-  }
-
   const startedAt = Date.now();
+
+  // The cache is consulted before the rate limit, deliberately. The ceiling
+  // exists to protect the upstream's small shared pool, and a cache hit never
+  // reaches that pool — a learner re-running an unchanged Main.hs while
+  // reading its output would otherwise spend the whole minute's budget on
+  // requests that cost the upstream nothing, and be refused on the first run
+  // that actually needed compiling.
   const cacheKey = await cacheKeyForSource(code);
   const cachedResult = await readCachedResult(cache, cacheKey);
   if (cachedResult) {
@@ -391,6 +398,14 @@ haskellPlaygroundRoute.post("/run", async (c) => {
       durationMs: Date.now() - startedAt,
     });
     return c.json(cachedResult);
+  }
+
+  const rateLimitDecision = await checkRateLimit(cache, user.id);
+  if (rateLimitDecision === "limited") {
+    return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
+  }
+  if (rateLimitDecision === "unavailable") {
+    return c.json({ error: "Haskell Playground execution policy is unavailable" }, 502);
   }
 
   const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);

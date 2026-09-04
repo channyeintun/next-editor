@@ -76,87 +76,154 @@ function stubUpstream(payload: unknown, status = 200) {
 }
 
 // ---------------------------------------------------------------------------
-// Verified live upstream bodies (play.haskell.org, GHC 9.12.4, opt O1,
-// 2026-08-23). Transcribed from real responses, not invented: the reason this
-// normalizer exists is that a non-zero exit code alone cannot separate "it
-// never built" from "it built, ran, and died", so the fixtures have to be the
-// real thing — in particular RUNTIME_ERROR_WITH_WARNING, which is the case the
-// naive "nothing on stdout, so it must be a compile error" rule gets wrong.
+// Upstream bodies captured verbatim from play.haskell.org (POST /submit with
+// this route's own pinned {version: "9.12.4", opt: "O1", output: "run"}) on
+// 2026-09-05. Each fixture carries the program that produced it so it can be
+// re-captured; none of it is hand-composed, because the reason this normalizer
+// exists is that a non-zero exit code alone cannot separate "it never built"
+// from "it built, ran, and died" — in particular
+// UPSTREAM_RUNTIME_ERROR_WITH_WARNINGS, the case the naive "nothing on stdout,
+// so it must be a compile error" rule gets wrong.
 // ---------------------------------------------------------------------------
 
+// main :: IO ()
+// main = putStrLn "Hello, Haskell!"
 const UPSTREAM_SUCCESS = {
   ec: 0,
   ghcout: "",
   sout: "Hello, Haskell!\n",
   serr: "",
-  timesecs: 0.834,
+  timesecs: 1.073059632,
 };
 
+// The playground does not compile with -Wall, so -Wmissing-signatures needs
+// the pragma this fixture's program carries:
+//
+//   {-# OPTIONS_GHC -Wall #-}
+//   module Main (main) where
+//
+//   greet name = "Hello, " ++ name
+//
+//   main :: IO ()
+//   main = putStrLn (greet "Ada")
 const MISSING_SIGNATURE_WARNING =
-  "Main.hs:6:10: warning: [GHC-06201] [-Wmissing-signatures]\n" +
-  "    Top-level binding with no type signature: greet :: String -> String\n" +
+  "Main.hs:5:1: warning: [GHC-38417] [-Wmissing-signatures]\n" +
+  "    Top-level binding with no type signature: greet :: [Char] -> [Char]\n" +
   "  |\n" +
-  '6 | greet name = "Hello, " ++ name\n' +
-  "  |          ^^^^^\n";
+  '5 | greet name = "Hello, " ++ name\n' +
+  "  | ^^^^^\n" +
+  "\n";
 
 const UPSTREAM_SUCCESS_WITH_WARNINGS = {
   ec: 0,
   ghcout: MISSING_SIGNATURE_WARNING,
   sout: "Hello, Ada\n",
   serr: "",
-  timesecs: 1.104,
+  timesecs: 1.045386042,
 };
 
+// main :: IO ()
+// main = print (1 + "2")
 const UPSTREAM_COMPILE_ERROR = {
   ec: 1,
   ghcout:
-    "Main.hs:2:22: error: [GHC-83865]\n" +
-    "    • Couldn't match type ‘[Char]’ with ‘Int’\n" +
-    "      Expected: Int\n" +
-    "        Actual: String\n" +
-    '    • In the second argument of ‘(+)’, namely ‘"2"’\n' +
+    "Main.hs:2:15: error: [GHC-39999]\n" +
+    "    • No instance for ‘Num String’ arising from the literal ‘1’\n" +
+    "    • In the first argument of ‘(+)’, namely ‘1’\n" +
     '      In the first argument of ‘print’, namely ‘(1 + "2")’\n' +
+    '      In the expression: print (1 + "2")\n' +
     "  |\n" +
     '2 | main = print (1 + "2")\n' +
-    "  |                      ^^^\n",
+    "  |               ^\n" +
+    "\n",
   sout: "",
   serr: "",
-  timesecs: 0.612,
+  timesecs: 0.341302556,
 };
 
+// main :: IO ()
+// main = do
+//   putStrLn "starting"
+//   error "boom"
 const UPSTREAM_RUNTIME_ERROR = {
   ec: 1,
   ghcout: "",
   sout: "starting\n",
   serr:
-    "Main: boom\n" +
-    "CallStack (from HasCallStack):\n" +
-    "  error, called at Main.hs:4:8 in main:Main\n",
-  timesecs: 0.907,
+    "Main: Uncaught exception ghc-internal:GHC.Internal.Exception.ErrorCall:\n" +
+    "\n" +
+    "boom\n" +
+    "\n" +
+    "HasCallStack backtrace:\n" +
+    "  error, called at Main.hs:4:3 in main:Main\n" +
+    "\n",
+  timesecs: 1.0389333,
 };
 
-// `print (head [])`: it COMPILES (with only a -Wx-partial warning), runs,
-// prints nothing on stdout, and exits 1. Exit-code-plus-empty-stdout would
-// call this a compile error; only the absence of an "error:" diagnostic in
-// ghcout gets it right.
+// `putStrLn (head [])`: it COMPILES (with only a -Wx-partial warning, which is
+// on by default), runs, prints nothing on stdout, and exits 1.
+// Exit-code-plus-empty-stdout would call this a compile error; only the
+// absence of an "error:" diagnostic in ghcout gets it right.
+//
+// main :: IO ()
+// main = putStrLn (head [])
 const UPSTREAM_RUNTIME_ERROR_WITH_WARNINGS = {
   ec: 1,
   ghcout:
-    "Main.hs:2:14: warning: [GHC-63394] [-Wx-partial]\n" +
+    "Main.hs:2:18: warning: [GHC-63394] [-Wx-partial]\n" +
     "    In the use of ‘head’\n" +
-    "    (imported from Prelude, but defined in GHC.List):\n" +
-    '    "This is a partial function, it throws an error on empty lists."\n' +
+    "    (imported from Prelude, but defined in GHC.Internal.List):\n" +
+    "    \"This is a partial function, it throws an error on empty lists. Use pattern matching, 'Data.List.uncons' or 'Data.Maybe.listToMaybe' instead. Consider refactoring to use \"Data.List.NonEmpty\".\"\n" +
     "  |\n" +
-    "2 | main = print (head [])\n" +
-    "  |                    ^^^^\n",
+    "2 | main = putStrLn (head [])\n" +
+    "  |                  ^^^^\n" +
+    "\n",
   sout: "",
   serr:
-    "Main: Prelude.head: empty list\n" +
-    "CallStack (from HasCallStack):\n" +
-    "  error, called at libraries/base/GHC/List.hs:1646:3 in base:GHC.List\n" +
-    "  badHead, called at libraries/base/GHC/List.hs:81:28 in base:GHC.List\n" +
-    "  head, called at Main.hs:2:14 in main:Main\n",
-  timesecs: 0.688,
+    "Main: Uncaught exception ghc-internal:GHC.Internal.Exception.ErrorCall:\n" +
+    "\n" +
+    "Prelude.head: empty list\n" +
+    "\n" +
+    "HasCallStack backtrace:\n" +
+    "  error, called at libraries/ghc-internal/src/GHC/Internal/List.hs:2036:3 in ghc-internal:GHC.Internal.List\n" +
+    "  errorEmptyList, called at libraries/ghc-internal/src/GHC/Internal/List.hs:96:11 in ghc-internal:GHC.Internal.List\n" +
+    "  badHead, called at libraries/ghc-internal/src/GHC/Internal/List.hs:90:28 in ghc-internal:GHC.Internal.List\n" +
+    "  head, called at Main.hs:2:18 in main:Main\n" +
+    "\n",
+  timesecs: 1.037593615,
+};
+
+// A warning's code frame echoes the learner's own source line, and that line
+// may contain the substring ": error:". Captured live under the same pins:
+//
+//   main :: IO ()
+//   main = do
+//     putStrLn "ready"
+//     putStrLn ("status: error: none " ++ head [])
+const UPSTREAM_RUNTIME_ERROR_WITH_ERROR_IN_CODE_FRAME = {
+  ec: 1,
+  ghcout:
+    "Main.hs:4:39: warning: [GHC-63394] [-Wx-partial]\n" +
+    "    In the use of ‘head’\n" +
+    "    (imported from Prelude, but defined in GHC.Internal.List):\n" +
+    "    \"This is a partial function, it throws an error on empty lists. Use pattern matching, 'Data.List.uncons' or 'Data.Maybe.listToMaybe' instead. Consider refactoring to use \"Data.List.NonEmpty\".\"\n" +
+    "  |\n" +
+    '4 |   putStrLn ("status: error: none " ++ head [])\n' +
+    "  |                                       ^^^^\n" +
+    "\n",
+  sout: "ready\n",
+  serr:
+    "Main: Uncaught exception ghc-internal:GHC.Internal.Exception.ErrorCall:\n" +
+    "\n" +
+    "Prelude.head: empty list\n" +
+    "\n" +
+    "HasCallStack backtrace:\n" +
+    "  error, called at libraries/ghc-internal/src/GHC/Internal/List.hs:2036:3 in ghc-internal:GHC.Internal.List\n" +
+    "  errorEmptyList, called at libraries/ghc-internal/src/GHC/Internal/List.hs:96:11 in ghc-internal:GHC.Internal.List\n" +
+    "  badHead, called at libraries/ghc-internal/src/GHC/Internal/List.hs:90:28 in ghc-internal:GHC.Internal.List\n" +
+    "  head, called at Main.hs:4:39 in main:Main\n" +
+    "\n",
+  timesecs: 1.256351167,
 };
 
 const UPSTREAM_TIMEOUT = { err: "timeout" };
@@ -201,7 +268,7 @@ describe("normalizeUpstreamRunResponse", () => {
     expect(result?.status).toBe("compile-error");
     expect(result?.stdout).toBe("");
     expect(result?.stderr).toBe("");
-    expect(result?.compileErrors).toContain("Main.hs:2:22: error: [GHC-83865]");
+    expect(result?.compileErrors).toContain("Main.hs:2:15: error: [GHC-39999]");
     // The whole of ghcout is the failure text here — no warnings channel.
     expect(result?.warnings).toBeUndefined();
     expect(result?.exitDetail).toBeUndefined();
@@ -232,6 +299,45 @@ describe("normalizeUpstreamRunResponse", () => {
     expect(result?.exitDetail).toBe("Exited with status 1");
     expect(result?.warnings).toContain("[-Wx-partial]");
     expect(result?.compileErrors).toBeUndefined();
+  });
+
+  it("does not read a warning's echoed source line as an error diagnostic", () => {
+    // The code frame under a warning quotes the learner's own line, and that
+    // line may contain ": error:". Matching it would throw away everything the
+    // program printed and call a build that succeeded a failure.
+    const normalized = normalizeUpstreamRunResponse(
+      UPSTREAM_RUNTIME_ERROR_WITH_ERROR_IN_CODE_FRAME,
+    );
+
+    expect(normalized?.kind).toBe("result");
+    const result = normalized && "result" in normalized ? normalized.result : null;
+    expect(result?.status).toBe("runtime-error");
+    expect(result?.stdout).toBe("ready\n");
+    expect(result?.warnings).toContain("[-Wx-partial]");
+    expect(result?.compileErrors).toBeUndefined();
+  });
+
+  it("still reads an error header in every shape GHC prints one", () => {
+    // Only headers carry the location; only code frames carry a pipe. Spans
+    // and the location-less form are headers too and must keep matching.
+    for (const header of [
+      "Main.hs:2:15: error: [GHC-39999]",
+      "Main.hs:2:19-21: error: [GHC-83865]",
+      "Main.hs:(2,1)-(3,10): error: [GHC-83865]",
+      "<no location info>: error:",
+    ]) {
+      const normalized = normalizeUpstreamRunResponse({
+        ec: 1,
+        ghcout: `${header}\n    something went wrong\n`,
+        sout: "",
+        serr: "",
+        timesecs: 0.3,
+      });
+      const result = normalized && "result" in normalized ? normalized.result : null;
+
+      // The header travels inside the assertion so a failure names which spelling broke.
+      expect({ header, status: result?.status }).toEqual({ header, status: "compile-error" });
+    }
   });
 
   it("does not read a warning as an error just because the exit code is non-zero", () => {
@@ -554,6 +660,77 @@ describe("haskellPlaygroundRoute", () => {
     await runRequest(env);
 
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not charge the minute window for a request the cache answers", async () => {
+    // The ceiling protects the upstream's shared pool, and a cache hit never
+    // reaches it. Re-running an unchanged Main.hs while reading its output
+    // must not use up the budget the next real edit needs.
+    const spy = stubUpstream(UPSTREAM_SUCCESS);
+    // Frozen so the loop cannot straddle a minute boundary and refill the
+    // window halfway through.
+    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
+    const env = makeEnv();
+    const statuses: number[] = [];
+
+    for (let index = 0; index < 9; index++) {
+      statuses.push((await runRequest(env)).status);
+    }
+
+    expect(statuses).toEqual(Array(9).fill(200));
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-runs the program when the cached entry no longer parses", async () => {
+    // A compile-error entry with no compileErrors is what an older contract
+    // shape would leave behind; the parser's rejection has to reach the
+    // upstream path rather than serve or throw.
+    const spy = stubUpstream(UPSTREAM_SUCCESS);
+    const staleKv = {
+      get: async (key: string) =>
+        key.startsWith("hp:rl:") ? null : { status: "compile-error", stdout: "", stderr: "" },
+      put: async () => undefined,
+    } as unknown as KVNamespace;
+
+    const response = await runRequest(makeEnv({ CACHE: staleKv }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "success",
+      stdout: "Hello, Haskell!\n",
+      stderr: "",
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs the program when the result-cache read fails", async () => {
+    // Unlike a failing rate-limit store, this is not fail-closed: the policy
+    // check still works, so a broken cache only costs an upstream run.
+    const spy = stubUpstream(UPSTREAM_SUCCESS);
+    const failingResultKv = {
+      get: async (key: string) => {
+        if (key.startsWith("hp:rl:")) return null;
+        throw new Error("KV unavailable");
+      },
+      put: async () => undefined,
+    } as unknown as KVNamespace;
+
+    const response = await runRequest(makeEnv({ CACHE: failingResultKv }));
+
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a warned-but-crashed program's output instead of calling it a build failure", async () => {
+    const spy = stubUpstream(UPSTREAM_RUNTIME_ERROR_WITH_ERROR_IN_CODE_FRAME);
+    const response = await runRequest(makeEnv());
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "runtime-error",
+      stdout: "ready\n",
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("keeps warnings on the round trip through the cache", async () => {
