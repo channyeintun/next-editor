@@ -4,6 +4,7 @@ import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
+  parseZigPlaygroundFormatResult,
   parseZigPlaygroundRunResult,
   type ZigPlaygroundFormatResult,
   type ZigPlaygroundRunResult,
@@ -22,15 +23,18 @@ import {
 //  1. The protocol is plain text, not JSON. The request body IS the source
 //     file and the response body IS the output — there are no fields to read,
 //     so the status classification has to be inferred from the text.
-//  2. HTTP 400 is overloaded. `zig run` exits non-zero both when the program
-//     fails to COMPILE and when it compiles and then PANICS, and the upstream
-//     reports both as 400. Those are completely different things to a learner,
-//     so classifyFailure below separates them by looking for the stack-trace
-//     addresses that only a running program can produce.
+//  2. HTTP 400 is overloaded. `zig run` exits non-zero when the program fails
+//     to COMPILE, when it compiles and then PANICS, and when it simply exits
+//     with a non-zero code — the upstream answers 400 for all three, and for
+//     its own service failures too. Those are completely different things to a
+//     learner, so classifyFailure below only calls a body a compile failure
+//     when it actually carries compiler diagnostics.
 //
-// The upstream also rate-limits at 5 requests per minute per client IP. Our
-// per-user limit is set below that and deterministic outcomes are cached, so
-// one lesson's repeated runs do not spend the shared budget.
+// The upstream also rate-limits at 5 requests per minute per client IP, and
+// /server/run and /server/fmt share that one counter. Runs and formats are
+// therefore charged against a single per-user window set below it, and
+// deterministic outcomes of both are cached, so one lesson's repeated work
+// does not spend the shared budget.
 //
 // Privacy invariant: user sources, program output, and diagnostics must never
 // be logged — telemetry is aggregate fields only (see logRun below). Nothing
@@ -53,19 +57,27 @@ const MAX_SOURCE_BYTES = 64 * 1024;
 // JSON escaping can expand one source byte to six bytes. Leave bounded room
 // for the file path and object syntax while allowing every valid program.
 const MAX_REQUEST_BYTES = MAX_SOURCE_BYTES * 6 + 4096;
-// Defensive bound on normalized program output; the Playground applies its
-// own output limits well below this.
+// Where a runaway program's output is cut, with a marker appended.
 const MAX_OUTPUT_CHARS = 256 * 1024;
-// The upstream answers in text/plain, so its body needs no JSON headroom —
-// but a runaway program's output still has to be bounded before it is read.
-const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS + 64 * 1024;
+// A `zig fmt` diagnostic is a few lines. A longer 400 body is the service (or
+// something in front of it) talking, not the learner's program.
+const MAX_FORMAT_ERROR_CHARS = 16 * 1024;
+// The upstream answers in text/plain, so its body needs no JSON headroom — but
+// this ceiling still has to sit well clear of MAX_OUTPUT_CHARS, because a body
+// that overflows it is discarded rather than truncated. zig-play.dev applies
+// no output limit of its own (a print loop really does return megabytes), so
+// sizing this at the output cap turned "you printed too much" into a service
+// failure; the sibling routes' headroom keeps that on the truncation path.
+const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
 const MAX_EXIT_DETAIL_CHARS = 256;
 const CACHE_TTL_SECONDS = 60 * 60;
-// Deliberately below the upstream's own 5/minute per-IP budget: every Next
-// Editor user shares this Worker's egress, so our ceiling has to leave room
-// for other users rather than spend the whole upstream window on one person.
-const RATE_LIMIT_RUNS_PER_MINUTE = 4;
-const RATE_LIMIT_FORMATS_PER_MINUTE = 8;
+// One window for runs and formats together, deliberately below the upstream's
+// own 5/minute per-IP budget, which /server/run and /server/fmt share: every
+// Next Editor user shares this Worker's egress, so our ceiling has to leave
+// room for other users rather than spend the whole upstream window on one
+// person. Cached results are served before the window is charged, so this
+// counts upstream calls rather than button presses.
+const RATE_LIMIT_UPSTREAM_CALLS_PER_MINUTE = 4;
 
 // The upstream compiles one root source file from a single text body, so
 // lessons submit exactly one file with this fixed name.
@@ -169,12 +181,15 @@ function truncateOutput(text: string): string {
     : text;
 }
 
-// A stack trace frame carries a resolved code address ("main.zig:5:23:
-// 0x11d2d2c in main"). Only a process that actually started can produce one,
-// so its presence is the reliable signal that the program compiled and then
-// failed at runtime. Compiler diagnostics point at source locations and never
-// carry an address, including in their "referenced by:" trace.
-const RUNTIME_STACK_FRAME = /:\s0x[0-9a-f]+\sin\s/;
+// A stack trace frame is a source location followed by a resolved code address
+// ("main.zig:5:23: 0x11d2d2c in main"). Only a process that actually started
+// can produce one, so its presence is the reliable signal that the program
+// compiled and then failed at runtime. Anchored to the whole frame shape at
+// the start of a line, because a diagnostic echoes the offending source line
+// verbatim and a learner's own string ("value: 0xff in hex") would otherwise
+// read as a frame. Compiler diagnostics never carry an address, including in
+// their "referenced by:" trace.
+const RUNTIME_STACK_FRAME = /^\S+:\d+:\d+: 0x[0-9a-f]+ in \S+/m;
 // Emitted by the panic handler, e.g. "thread 10 panic: integer overflow".
 const PANIC_HEADER = /^thread \d+ panic: (.+)$/m;
 // An error returned all the way out of main is reported as a bare
@@ -182,37 +197,60 @@ const PANIC_HEADER = /^thread \d+ panic: (.+)$/m;
 // contain "error:", but always prefixed by a source location, so anchoring to
 // the start of the line separates them.
 const UNHANDLED_ERROR_HEADER = /^error: ([A-Za-z_][A-Za-z0-9_]*)$/m;
+// Every compiler diagnostic carries a source location. Requiring one makes
+// "the program never built" a positive finding instead of the fallback, which
+// matters because the upstream answers 400 for ANY non-zero exit — including a
+// plain std.process.exit(2) whose body is just the program's own output — and
+// for its own service failures (a failed toolchain fetch returns a Go log
+// dump). Calling those a compile error tells learners their code does not
+// build and, because compile errors are deterministic, caches that verdict for
+// an hour. The trade-off is a build failure carrying no location (a linker
+// error) now reads as a runtime error; its text still reaches the learner, and
+// erring that way costs a label rather than a poisoned cache entry.
+const COMPILE_DIAGNOSTIC = /^\S+:\d+:\d+: error: /m;
+
+export type ZigFailureClassification =
+  | { status: "compile-error" }
+  | { status: "runtime-error"; exitDetail: string };
 
 /**
  * Split an upstream failure body into "the program never built" and "the
- * program built, ran, and then died". The upstream reports both as HTTP 400.
+ * program built, ran, and then stopped". The upstream reports both as HTTP 400.
  */
-export function classifyFailure(body: string): {
-  status: "compile-error" | "runtime-error";
-  exitDetail?: string;
-} {
-  const panic = PANIC_HEADER.exec(body);
+export function classifyFailure(body: string): ZigFailureClassification {
+  const hasDiagnostic = COMPILE_DIAGNOSTIC.test(body);
+  const hasStackFrame = RUNTIME_STACK_FRAME.test(body);
+  // Inside a compile failure, a panic or unhandled-error header is the
+  // learner's own source echoed back under a diagnostic — unless a real stack
+  // frame proves a process ran.
+  const headersAreTrustworthy = hasStackFrame || !hasDiagnostic;
+
+  const panic = headersAreTrustworthy ? PANIC_HEADER.exec(body) : null;
   if (panic) {
     return { status: "runtime-error", exitDetail: `panic: ${panic[1].trim()}` };
   }
 
-  const unhandled = UNHANDLED_ERROR_HEADER.exec(body);
+  const unhandled = headersAreTrustworthy ? UNHANDLED_ERROR_HEADER.exec(body) : null;
   if (unhandled) {
     return { status: "runtime-error", exitDetail: `unhandled error: ${unhandled[1]}` };
   }
 
-  if (RUNTIME_STACK_FRAME.test(body)) {
+  if (hasStackFrame) {
     return { status: "runtime-error", exitDetail: "Program exited with an error" };
   }
 
-  return { status: "compile-error" };
+  if (hasDiagnostic) {
+    return { status: "compile-error" };
+  }
+
+  return { status: "runtime-error", exitDetail: "Program exited with a non-zero status" };
 }
 
 /**
  * Normalize the upstream run response. The upstream speaks text/plain, so the
  * HTTP status plus the body text is the entire signal:
  *   200 -> the program compiled, ran, and exited zero
- *   400 -> it failed to compile, OR it ran and then panicked
+ *   400 -> it failed to build, OR it ran and then exited non-zero
  * Any other status is not a program outcome and returns null, which the
  * caller turns into a 502 rather than a successful empty run.
  */
@@ -230,11 +268,6 @@ export function normalizeUpstreamRunResponse(
     return null;
   }
 
-  // A 400 with nothing in it describes no outcome at all.
-  if (!scrubbed.trim()) {
-    return null;
-  }
-
   const classified = classifyFailure(scrubbed);
   if (classified.status === "compile-error") {
     return {
@@ -247,9 +280,7 @@ export function normalizeUpstreamRunResponse(
   return {
     status: "runtime-error",
     output: truncateOutput(scrubbed),
-    exitDetail:
-      (classified.exitDetail ?? "").slice(0, MAX_EXIT_DETAIL_CHARS) ||
-      "Program exited with an error",
+    exitDetail: classified.exitDetail.slice(0, MAX_EXIT_DETAIL_CHARS),
   };
 }
 
@@ -261,13 +292,19 @@ export function normalizeUpstreamRunResponse(
 export function normalizeUpstreamFormatResponse(
   httpStatus: number,
   body: string,
+  submittedSource: string,
 ):
   | { kind: "result"; result: ZigPlaygroundFormatResult }
   | { kind: "source-error"; error: string }
   | null {
   if (httpStatus === 400) {
     const scrubbed = scrubUpstreamPaths(body).replace(/^<stdin>/gm, REQUIRED_FILE_PATH);
-    return scrubbed.trim() ? { kind: "source-error", error: scrubbed } : null;
+    // Anything past the diagnostic cap is the service talking, and relaying it
+    // would show the learner a foreign page as an error in their own program.
+    if (!scrubbed.trim() || scrubbed.length > MAX_FORMAT_ERROR_CHARS) {
+      return null;
+    }
+    return { kind: "source-error", error: scrubbed };
   }
 
   if (httpStatus !== 200) {
@@ -278,43 +315,59 @@ export function normalizeUpstreamFormatResponse(
     return null;
   }
 
+  // The panel writes whatever comes back over the learner's main.zig, so a
+  // blank formatting of a non-blank program has to fail as a service error
+  // rather than silently emptying the file. (Blank source formats to blank
+  // output, which is a real result.)
+  if (!body.trim() && submittedSource.trim()) {
+    return null;
+  }
+
   return {
     kind: "result",
     result: { files: [{ path: REQUIRED_FILE_PATH, content: body }] },
   };
 }
 
-// Content-addressed cache key. The pinned compiler version is folded into the
+// Content-addressed cache keys. The pinned compiler version is folded into the
 // prefix so a version change can never serve results produced by a different
-// compiler.
-async function cacheKeyForSource(code: string): Promise<string> {
+// compiler, and runs and formats use distinct prefixes so a stored format can
+// never be read back as a run result for the same source.
+async function sourceDigest(code: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
-  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `zp:${UPSTREAM_ZIG_VERSION}:${hex}`;
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// Fixed-window per-user limit in KV. Approximate by design (KV is eventually
-// consistent), but fail closed when the policy store is missing or unavailable
-// so a configuration outage cannot turn this route into an unlimited proxy.
+async function runCacheKey(code: string): Promise<string> {
+  return `zp:${UPSTREAM_ZIG_VERSION}:${await sourceDigest(code)}`;
+}
+
+async function formatCacheKey(code: string): Promise<string> {
+  return `zp:fmt:${UPSTREAM_ZIG_VERSION}:${await sourceDigest(code)}`;
+}
+
+// Fixed-window per-user limit in KV, shared by runs and formats because the
+// upstream counts them against one per-IP budget. Approximate by design (KV is
+// eventually consistent), but fail closed when the policy store is missing or
+// unavailable so a configuration outage cannot turn this route into an
+// unlimited proxy.
 type RateLimitDecision = "allowed" | "limited" | "unavailable";
 
 async function checkRateLimit(
   cache: KVNamespace | null,
   userId: string,
-  keyPrefix: "zp:rl" | "zp:fmt:rl",
-  limit: number,
 ): Promise<RateLimitDecision> {
   if (!cache) {
     return "unavailable";
   }
-  const windowKey = `${keyPrefix}:${userId}:${Math.floor(Date.now() / 60_000)}`;
+  const windowKey = `zp:rl:${userId}:${Math.floor(Date.now() / 60_000)}`;
   try {
     const count = Number((await cache.get(windowKey)) ?? "0");
     if (!Number.isSafeInteger(count) || count < 0) {
       console.error("Zig Playground rate-limit state was invalid");
       return "unavailable";
     }
-    if (count >= limit) {
+    if (count >= RATE_LIMIT_UPSTREAM_CALLS_PER_MINUTE) {
       return "limited";
     }
     await cache.put(windowKey, String(count + 1), { expirationTtl: 120 });
@@ -325,31 +378,32 @@ async function checkRateLimit(
   }
 }
 
-async function readCachedResult(
+async function readCachedValue<T>(
   cache: KVNamespace | null,
   key: string,
-): Promise<ZigPlaygroundRunResult | null> {
+  parse: (value: unknown) => T | null,
+): Promise<T | null> {
   if (!cache) {
     return null;
   }
   try {
-    return parseZigPlaygroundRunResult(await cache.get<unknown>(key, "json"));
+    return parse(await cache.get<unknown>(key, "json"));
   } catch {
     console.error("Zig Playground cache read failed");
     return null;
   }
 }
 
-async function writeCachedResult(
+async function writeCachedValue(
   cache: KVNamespace | null,
   key: string,
-  result: ZigPlaygroundRunResult,
+  value: ZigPlaygroundRunResult | ZigPlaygroundFormatResult,
 ): Promise<void> {
   if (!cache) {
     return;
   }
   try {
-    await cache.put(key, JSON.stringify(result), { expirationTtl: CACHE_TTL_SECONDS });
+    await cache.put(key, JSON.stringify(value), { expirationTtl: CACHE_TTL_SECONDS });
   } catch {
     console.error("Zig Playground cache write failed");
   }
@@ -361,7 +415,7 @@ function logRun(entry: {
     | ZigPlaygroundRunResult["status"]
     | "upstream-error"
     | "upstream-timeout"
-    | "upstream-rate-limited";
+    | "upstream-busy";
   sourceBytes: number;
   cacheHit: boolean;
   durationMs: number;
@@ -370,13 +424,9 @@ function logRun(entry: {
 }
 
 function logFormat(entry: {
-  outcome:
-    | "success"
-    | "source-error"
-    | "upstream-error"
-    | "upstream-timeout"
-    | "upstream-rate-limited";
+  outcome: "success" | "source-error" | "upstream-error" | "upstream-timeout" | "upstream-busy";
   sourceBytes: number;
+  cacheHit: boolean;
   durationMs: number;
 }): void {
   console.log("zig-playground-format", entry);
@@ -418,22 +468,9 @@ zigPlaygroundRoute.post("/run", async (c) => {
   const { code, sourceBytes } = request;
 
   const cache = getCache(c.env);
-  const rateLimitDecision = await checkRateLimit(
-    cache,
-    user.id,
-    "zp:rl",
-    RATE_LIMIT_RUNS_PER_MINUTE,
-  );
-  if (rateLimitDecision === "limited") {
-    return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
-  }
-  if (rateLimitDecision === "unavailable") {
-    return c.json({ error: "Zig Playground execution policy is unavailable" }, 502);
-  }
-
   const startedAt = Date.now();
-  const cacheKey = await cacheKeyForSource(code);
-  const cachedResult = await readCachedResult(cache, cacheKey);
+  const cacheKey = await runCacheKey(code);
+  const cachedResult = await readCachedValue(cache, cacheKey, parseZigPlaygroundRunResult);
   if (cachedResult) {
     logRun({
       outcome: cachedResult.status,
@@ -442,6 +479,16 @@ zigPlaygroundRoute.post("/run", async (c) => {
       durationMs: Date.now() - startedAt,
     });
     return c.json(cachedResult);
+  }
+
+  // Charged only once the request is really going upstream, so re-running
+  // unchanged source never spends a slot a Format may need.
+  const rateLimitDecision = await checkRateLimit(cache, user.id);
+  if (rateLimitDecision === "limited") {
+    return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
+  }
+  if (rateLimitDecision === "unavailable") {
+    return c.json({ error: "Zig Playground execution policy is unavailable" }, 502);
   }
 
   const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
@@ -462,16 +509,19 @@ zigPlaygroundRoute.post("/run", async (c) => {
       : c.json({ error: "the Zig Playground service is unavailable" }, 502);
   }
 
-  // The upstream's own per-IP budget is shared by every Next Editor user, so
-  // surface its 429 as ours instead of as a generic failure.
+  // Backpressure: our own window sits below the upstream's per-IP budget, so
+  // reaching the upstream's limit means somebody else spent it. Reported as a
+  // 502 rather than a 429, because the client renders a 429 as "Too many runs"
+  // — which blames a learner who pressed Run once. The distinction stays
+  // visible in telemetry through the upstream-busy outcome, matching Haskell.
   if (upstreamResponse.status === 429) {
     logRun({
-      outcome: "upstream-rate-limited",
+      outcome: "upstream-busy",
       sourceBytes,
       cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
-    return c.json({ error: "the Zig Playground is busy; retry in a minute" }, 429);
+    return c.json({ error: "the Zig Playground is busy; try again shortly" }, 502);
   }
 
   const upstreamBody = await readBodyWithLimit(upstreamResponse, MAX_UPSTREAM_RESPONSE_BYTES);
@@ -503,7 +553,7 @@ zigPlaygroundRoute.post("/run", async (c) => {
   // Only deterministic outcomes are cached, mirroring the other playground
   // routes: success and compile-error re-serve; runtime errors always re-run.
   if (result.status === "success" || result.status === "compile-error") {
-    await writeCachedResult(cache, cacheKey, result);
+    await writeCachedValue(cache, cacheKey, result);
   }
 
   logRun({
@@ -533,20 +583,30 @@ zigPlaygroundRoute.post("/format", async (c) => {
   }
 
   const cache = getCache(c.env);
-  const rateLimitDecision = await checkRateLimit(
-    cache,
-    user.id,
-    "zp:fmt:rl",
-    RATE_LIMIT_FORMATS_PER_MINUTE,
-  );
+  const startedAt = Date.now();
+  // `zig fmt` is a pure function of the source, so a repeat format is as
+  // deterministic as a repeat run and must not spend the shared upstream
+  // budget again.
+  const cacheKey = await formatCacheKey(request.code);
+  const cachedFormat = await readCachedValue(cache, cacheKey, parseZigPlaygroundFormatResult);
+  if (cachedFormat) {
+    logFormat({
+      outcome: "success",
+      sourceBytes: request.sourceBytes,
+      cacheHit: true,
+      durationMs: Date.now() - startedAt,
+    });
+    return c.json(cachedFormat);
+  }
+
+  const rateLimitDecision = await checkRateLimit(cache, user.id);
   if (rateLimitDecision === "limited") {
-    return c.json({ error: "format rate limit exceeded; retry in a minute" }, 429);
+    return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
   }
   if (rateLimitDecision === "unavailable") {
     return c.json({ error: "Zig Playground formatting policy is unavailable" }, 502);
   }
 
-  const startedAt = Date.now();
   const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
   let upstreamResponse: Response;
   try {
@@ -557,6 +617,7 @@ zigPlaygroundRoute.post("/format", async (c) => {
     logFormat({
       outcome: timedOut ? "upstream-timeout" : "upstream-error",
       sourceBytes: request.sourceBytes,
+      cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
     return timedOut
@@ -564,13 +625,16 @@ zigPlaygroundRoute.post("/format", async (c) => {
       : c.json({ error: "the Zig Playground formatter is unavailable" }, 502);
   }
 
+  // Somebody else's load against the shared upstream budget — see the run
+  // handler's note on why this is not reported to the learner as a 429.
   if (upstreamResponse.status === 429) {
     logFormat({
-      outcome: "upstream-rate-limited",
+      outcome: "upstream-busy",
       sourceBytes: request.sourceBytes,
+      cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
-    return c.json({ error: "the Zig Playground is busy; retry in a minute" }, 429);
+    return c.json({ error: "the Zig Playground is busy; try again shortly" }, 502);
   }
 
   const upstreamBody = await readBodyWithLimit(upstreamResponse, MAX_UPSTREAM_RESPONSE_BYTES);
@@ -578,6 +642,7 @@ zigPlaygroundRoute.post("/format", async (c) => {
     logFormat({
       outcome: "upstream-timeout",
       sourceBytes: request.sourceBytes,
+      cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
     return c.json({ error: "formatting took too long" }, 504);
@@ -585,13 +650,14 @@ zigPlaygroundRoute.post("/format", async (c) => {
 
   const normalized =
     upstreamBody.status === "ok"
-      ? normalizeUpstreamFormatResponse(upstreamResponse.status, upstreamBody.text)
+      ? normalizeUpstreamFormatResponse(upstreamResponse.status, upstreamBody.text, request.code)
       : null;
 
   if (!normalized) {
     logFormat({
       outcome: "upstream-error",
       sourceBytes: request.sourceBytes,
+      cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
     return c.json({ error: "the Zig Playground formatter returned an unexpected response" }, 502);
@@ -601,14 +667,18 @@ zigPlaygroundRoute.post("/format", async (c) => {
     logFormat({
       outcome: "source-error",
       sourceBytes: request.sourceBytes,
+      cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
     return c.json({ error: normalized.error }, 422);
   }
 
+  await writeCachedValue(cache, cacheKey, normalized.result);
+
   logFormat({
     outcome: "success",
     sourceBytes: request.sourceBytes,
+    cacheHit: false,
     durationMs: Date.now() - startedAt,
   });
   return c.json(normalized.result);

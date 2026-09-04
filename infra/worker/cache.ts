@@ -1,7 +1,11 @@
 import type { Env } from "./env";
 
-// Bump this to invalidate every cached key at once (e.g. after changing the
-// shape of a cached value) without touching TTLs or adding individual deletes.
+// Bump this to invalidate every lesson/playlist catalog key minted below at
+// once (e.g. after changing the shape of a cached value) without touching TTLs
+// or adding individual deletes. It does not reach the playground routes: each
+// of those (go/kotlin/rust/zig/haskell) versions its own `<x>p:` prefix by the
+// upstream compiler config it pins, so a change to one of their cached result
+// shapes means bumping that route's own prefix, not this constant.
 //
 // v2: listPublishedLessons gained an `id` tiebreaker so its ordering is a
 // total order. Pages are cached one key each, so without this bump a page 0
