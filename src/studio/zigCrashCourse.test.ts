@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import YAML from "yaml";
 
+import { resolveAnchorOffset } from "./async";
 import { parseLessonScript, type LessonScript } from "./script/schema";
 
 /**
@@ -11,8 +12,9 @@ import { parseLessonScript, type LessonScript } from "./script/schema";
  * guards everything that can be established without one, which is most of the
  * ways the lesson could quietly rot:
  *
- *  - the typing anchors still resolve, and resolve uniquely, at the moment
- *    they are applied (the failure mode that aborts a render mid-performance);
+ *  - the typing anchors still resolve, through the driver's own resolver, at
+ *    the moment they are applied (the failure mode that aborts a render
+ *    mid-performance);
  *  - the assertions only claim output the pinned fixture actually contains;
  *  - the program still uses the Zig 0.16 spellings. This is the important one.
  *    0.16 removed `GeneralPurposeAllocator` outright and made `std.ArrayList`
@@ -27,20 +29,31 @@ import { parseLessonScript, type LessonScript } from "./script/schema";
 
 const scriptPath = resolve(process.cwd(), "src/studio/scripts/zig-crash-course.yaml");
 
-/** Apply the lesson's `editor.type` insertions in order, as the player does. */
+/**
+ * Apply the lesson's `editor.type` insertions in order, as the player does.
+ *
+ * Anchors go through the driver's own `resolveAnchorOffset`, so what this
+ * reconstructs is the program a render really produces — `after: ""` anchors
+ * the file start and `occurrence` picks among repeats, both of which the schema
+ * allows and a hand-rolled unique-match rule here would reject.
+ */
 function replay(script: LessonScript): string {
   let file = script.lesson.workspace.files["main.zig"] ?? "";
   for (const scene of script.scenes) {
     for (const action of scene.actions ?? []) {
       if (action.type === "editor.type") {
-        const after = action.target.after ?? "";
-        // Insert-only, and the anchor must be unambiguous at this moment —
-        // the same two rules the schema documents for authors.
-        expect(file.split(after).length - 1, `anchor for ${action.id}`).toBe(1);
-        const at = file.indexOf(after) + after.length;
+        // Insert-only, and the anchor has to resolve at this moment — this is
+        // the failure that aborts a render mid-performance.
+        const at = resolveAnchorOffset(file, action.target);
+        expect(at, `anchor for ${action.id}`).not.toBeNull();
+        if (at === null) continue;
         file = file.slice(0, at) + action.text + file.slice(at);
       } else if (action.type === "editor.select") {
-        expect(file.split(action.target.text ?? "").length - 1, `selection ${action.id}`).toBe(1);
+        const at = resolveAnchorOffset(file, {
+          after: action.target.text,
+          occurrence: action.target.occurrence,
+        });
+        expect(at, `selection ${action.id}`).not.toBeNull();
       }
     }
   }
@@ -98,12 +111,26 @@ describe("zig crash course", () => {
     expect(runtime.fixture.transientErrorKinds).toEqual([]);
   });
 
-  it("types a program that prints every line of the fixture", () => {
-    // Each fixture line has a matching print in the source, which is the
-    // cheapest available proof that the two were not edited apart.
+  it("prints the fixture's own words, one call per line bar the loop", () => {
+    // The count budget is one short on purpose, and the margin is spent: the
+    // program's 14 print calls produce the fixture's 15 lines because
+    // `for (shapes) |shape| std.debug.print("area {d:.2}\n", …)` fires twice.
+    // Drop any other print and this falls under the floor.
     expect(program).toContain("std.debug.print");
     const prints = program.split("std.debug.print").length - 1;
     expect(prints).toBeGreaterThanOrEqual(fixtureOutput.trimEnd().split("\n").length - 1);
+
+    // A count alone cannot tell whether the two were edited apart — renaming
+    // what a print says keeps it. So every format string's literal head, the
+    // text before its first placeholder, has to appear in the pinned output.
+    // The one format that opens on a placeholder has no head to check.
+    const heads = [...program.matchAll(/std\.debug\.print\("((?:[^"\\]|\\.)*)"/g)]
+      .map((match) => match[1].split("{")[0].replace(/\\n/g, "\n").replace(/\\"/g, '"'))
+      .filter((head) => head.length > 0);
+    expect(heads.length).toBeGreaterThan(0);
+    for (const head of heads) {
+      expect(fixtureOutput, `printed text ${JSON.stringify(head)}`).toContain(head);
+    }
   });
 
   it("uses the Zig 0.16 standard library, not the APIs it replaced", () => {

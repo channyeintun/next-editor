@@ -425,7 +425,6 @@ export const kotlinRunFixtureSchema = z.object({
   }),
 });
 
-/** Rust Playground stand-in result — mirrors the worker-normalized contract. */
 /**
  * Zig's fixture result shape differs from the others by one field: zig-play.dev
  * runs the program with its streams merged and answers in text/plain, so there
@@ -443,6 +442,7 @@ export const zigRunFixtureSchema = z.object({
   }),
 });
 
+/** Rust Playground stand-in result — mirrors the worker-normalized contract. */
 export const rustRunFixtureSchema = z.object({
   latencyMs: positiveMs,
   transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
@@ -573,16 +573,26 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("go-playground"),
+    /**
+     * Every Playground runtime carries this field, including the kinds whose
+     * lessons have never used it. These objects are not strict, so a kind that
+     * omitted it would have an authored `dockStartsCollapsed: true` stripped by
+     * zod and render with the dock open — no error, no diagnostic, exactly the
+     * invisible failure `runtimeDockStartsCollapsed` exists to prevent.
+     */
+    dockStartsCollapsed: z.boolean().default(false),
     defaultMode: z.enum(["live", "fixture"]),
     fixture: goRunFixtureSchema,
   }),
   z.object({
     kind: z.literal("kotlin-playground"),
+    dockStartsCollapsed: z.boolean().default(false),
     defaultMode: z.enum(["live", "fixture"]),
     fixture: kotlinRunFixtureSchema,
   }),
   z.object({
     kind: z.literal("rust-playground"),
+    dockStartsCollapsed: z.boolean().default(false),
     defaultMode: z.enum(["live", "fixture"]),
     fixture: rustRunFixtureSchema,
   }),
@@ -648,15 +658,30 @@ export type StudioRuntimeMode = "live" | "fixture";
 export type StudioPlaygroundRuntime = Extract<StudioRuntime, { fixture: unknown }>;
 export type StudioPlaygroundRuntimeKind = StudioPlaygroundRuntime["kind"];
 
-const PLAYGROUND_RUNTIME_KINDS = new Set<string>([
-  "go-playground",
-  "kotlin-playground",
-  "rust-playground",
-  "zig-playground",
-  "haskell-playground",
-  "kite-playground",
-  "asm-playground",
-] satisfies StudioPlaygroundRuntimeKind[]);
+/**
+ * Whether a Playground kind executes through a proxied `/api/<kind>` route,
+ * which a live render needs a signed-in session for. Kite and asm compile and
+ * run in the page, so they call nothing and must stay `false` — gating them
+ * would lock a lesson behind a sign-in it has no service to authenticate with.
+ *
+ * A `Record` over every kind rather than a chain or a `Set`: a Playground
+ * language added to `studioRuntimeSchema` without a decision here fails the
+ * typecheck, instead of quietly passing preflight and dying mid-performance at
+ * `runtime.run` — the same failure shape `isPlaygroundRuntimeKind` exists to
+ * prevent one layer up. It doubles as the list of Playground kinds, so there is
+ * one place a new language has to be named rather than two that can disagree.
+ */
+const PLAYGROUND_RUNTIME_NEEDS_SESSION: Record<StudioPlaygroundRuntimeKind, boolean> = {
+  "go-playground": true,
+  "kotlin-playground": true,
+  "rust-playground": true,
+  "zig-playground": true,
+  "haskell-playground": true,
+  "kite-playground": false,
+  "asm-playground": false,
+};
+
+const PLAYGROUND_RUNTIME_KINDS = new Set<string>(Object.keys(PLAYGROUND_RUNTIME_NEEDS_SESSION));
 
 /**
  * Whether a runtime kind runs code on a Playground engine.
@@ -669,6 +694,11 @@ const PLAYGROUND_RUNTIME_KINDS = new Set<string>([
  */
 export function isPlaygroundRuntimeKind(kind: string): kind is StudioPlaygroundRuntimeKind {
   return PLAYGROUND_RUNTIME_KINDS.has(kind);
+}
+
+/** Whether a live render of this runtime kind needs a signed-in session. */
+export function runtimeNeedsSession(kind: string): boolean {
+  return isPlaygroundRuntimeKind(kind) && PLAYGROUND_RUNTIME_NEEDS_SESSION[kind];
 }
 
 /**
@@ -721,7 +751,8 @@ export function parseRuntimeModeParam(raw: string | null): RuntimeModeParam {
 /**
  * The one runtime kind each lesson type may declare. Go, Kotlin, Rust, Zig,
  * and Haskell execute through their selective proxies, Kite on its in-page
- * WebAssembly compiler; JavaScript, TypeScript, and
+ * WebAssembly compiler, asm on its in-page TypeScript assembler and x86-64
+ * machine; JavaScript, TypeScript, and
  * Python all run in the versioned WebContainer adapter. JS/TS drive a dev server
  * + preview; Python runs one-shot on the WebContainer's built-in WASI `python3`
  * (no server, no preview) and gates on console `expect.output` — the per-lesson

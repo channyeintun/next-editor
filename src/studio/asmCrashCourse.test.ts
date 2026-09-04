@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import YAML from "yaml";
 
+import { resolveAnchorOffset } from "./async";
 import { parseLessonScript, type LessonScript } from "./script/schema";
 import { AsmPlaygroundClient } from "../runtime/asmPlayground/client";
 import {
@@ -34,42 +35,32 @@ import {
 const scriptPath = resolve(process.cwd(), "src/studio/scripts/x86-64-assembly-crash-course.yaml");
 
 /**
- * Where the `occurrence`-th match of `needle` ends, or -1.
+ * Apply the lesson's `editor.type` insertions in order, as the player does.
  *
- * The player resolves anchors this way, so the replay has to as well: a
- * one-based occurrence, counted in the file *as it is at that moment*. A test
- * that demanded every anchor be unique would be stricter than the contract and
- * would reject `occurrence: 1` on a string that legitimately appears twice.
+ * Anchors are resolved with the driver's own `resolveAnchorOffset` rather than
+ * a copy of it, so the reconstructed program is the one a render really
+ * produces: a one-based occurrence, counted in the file *as it is at that
+ * moment*. A replay that demanded every anchor be unique would be stricter than
+ * the contract and would reject `occurrence: 1` on a string that legitimately
+ * appears twice — which this lesson's selections do.
  */
-function endOfOccurrence(haystack: string, needle: string, occurrence: number): number {
-  if (needle === "") return 0;
-  let index = -1;
-  for (let found = 0; found < occurrence; found += 1) {
-    index = haystack.indexOf(needle, index + 1);
-    if (index === -1) return -1;
-  }
-  return index + needle.length;
-}
-
-/** Apply the lesson's `editor.type` insertions in order, as the player does. */
 function replay(script: LessonScript): string {
   let file = script.lesson.workspace.files["main.asm"] ?? "";
   for (const scene of script.scenes) {
     for (const action of scene.actions ?? []) {
       if (action.type === "editor.type") {
-        const after = action.target.after ?? "";
-        const occurrence = action.target.occurrence ?? 1;
-        const at = endOfOccurrence(file, after, occurrence);
+        const at = resolveAnchorOffset(file, action.target);
         // Insert-only, and the anchor has to resolve at this moment — this is
         // the failure that aborts a render mid-performance.
-        expect(at, `anchor for ${action.id}`).toBeGreaterThan(-1);
+        expect(at, `anchor for ${action.id}`).not.toBeNull();
+        if (at === null) continue;
         file = file.slice(0, at) + action.text + file.slice(at);
       } else if (action.type === "editor.select") {
-        const text = action.target.text ?? "";
-        const occurrence = action.target.occurrence ?? 1;
-        expect(endOfOccurrence(file, text, occurrence), `selection ${action.id}`).toBeGreaterThan(
-          -1,
-        );
+        const at = resolveAnchorOffset(file, {
+          after: action.target.text,
+          occurrence: action.target.occurrence,
+        });
+        expect(at, `selection ${action.id}`).not.toBeNull();
       }
     }
   }
@@ -134,6 +125,7 @@ describe("x86-64 assembly crash course", () => {
       .filter((action) => action.type === "expect.file")
       .map((action) => (action as { contains: string }).contains);
 
+    expect(asserted.length).toBeGreaterThan(0);
     for (const needle of asserted) {
       expect(program, `expect.file "${needle}"`).toContain(needle);
     }

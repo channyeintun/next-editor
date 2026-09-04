@@ -183,6 +183,27 @@ async function liveAttempt<TResult>(
   }
 }
 
+/**
+ * Console lines for a terminal service failure, guaranteed non-empty strings.
+ *
+ * Each language's error table is keyed by the kinds *its* client raises, but
+ * the deadline above synthesizes `"timeout"` for every kind — including the
+ * in-page runners that have no such kind, whose table then answers `undefined`.
+ * An undefined console line reaches the shared store's `lines[0].startsWith(…)`
+ * and throws a TypeError there, turning a failed run into a crashed render with
+ * no error line anywhere. Normalizing once here covers every engine, present
+ * and future, rather than depending on each table to cover a kind it does not
+ * own.
+ */
+function serviceErrorLinesFor(engine: PlaygroundEngine, kind: string, message: string): string[] {
+  const lines = engine
+    .serviceErrorLines(kind, message)
+    .filter((line): line is string => typeof line === "string" && line.length > 0);
+  return lines.length > 0
+    ? lines
+    : [`[${engine.label}-run error] The run could not be completed (${message})`];
+}
+
 /** Internal normalized service failure (any playground). */
 class ServiceFailure extends Error {
   readonly kind: string;
@@ -583,7 +604,7 @@ export function preparePlaygroundRun(input: PlaygroundRunInput): PlaygroundRunPr
           }
           throw new PlaygroundTerminalError(
             `Run failed (${error.kind}) after ${attempt} attempt(s): ${error.message}`,
-            engine.serviceErrorLines(error.kind, error.message),
+            serviceErrorLinesFor(engine, error.kind, error.message),
             attempt,
           );
         }

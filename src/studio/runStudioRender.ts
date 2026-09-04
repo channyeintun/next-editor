@@ -15,7 +15,7 @@ import { compareRenderSemantics, extractRenderSemantics, type RenderSemantics } 
 import { StudioActionError, waitUntil } from "./async";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
 import { sha256Hex, sha256HexOfJson, hashWorkspaceFiles } from "./hash";
-import { runtimeDockStartsCollapsed } from "./plan";
+import { runtimeDockStartsCollapsed, runtimeNeedsSession } from "./plan";
 import type { StudioPlan, StudioRuntimeMode } from "./plan";
 import { performPlan } from "./performer";
 import { runArtifactChecks, finalWorkspaceHashOf } from "./qa";
@@ -179,20 +179,11 @@ export async function runStudioRender(
 
   // ---- Preflight -----------------------------------------------------------
   phase("preflight");
-  // The *proxied* playgrounds, which is deliberately not every playground:
-  // `kite-playground` compiles in the page on its own WebAssembly build of
-  // `kitec`, so a live Kite render calls no `/api/…` route and needs no session.
-  // Do not add it here to "match the others" — it would lock a lesson that has
-  // no service behind a sign-in.
-  if (
-    runtimeMode === "live" &&
-    (plan.runtime.kind === "go-playground" ||
-      plan.runtime.kind === "kotlin-playground" ||
-      plan.runtime.kind === "rust-playground" ||
-      plan.runtime.kind === "zig-playground" ||
-      plan.runtime.kind === "haskell-playground") &&
-    !deps.isSignedIn
-  ) {
+  // Only the *proxied* playgrounds, which is deliberately not every playground:
+  // `runtimeNeedsSession` keeps that classification beside the runtime schema
+  // so a language added later is gated (or exempted) by one decision the
+  // typecheck forces, rather than by a chain here that would silently omit it.
+  if (runtimeMode === "live" && runtimeNeedsSession(plan.runtime.kind) && !deps.isSignedIn) {
     return failedResult(
       `Live runtime mode needs a signed-in session for /api/${plan.runtime.kind}; sign in or render with runtime=fixture`,
     );

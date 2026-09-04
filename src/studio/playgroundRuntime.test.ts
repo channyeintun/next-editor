@@ -6,13 +6,20 @@ import {
   preparePlaygroundRun,
   runErrorPrefixFor,
 } from "./playgroundRuntime";
-import type { StudioRuntime } from "./plan";
+import {
+  runtimeDockStartsCollapsed,
+  runtimeNeedsSession,
+  studioRuntimeSchema,
+  type StudioPlaygroundRuntimeKind,
+  type StudioRuntime,
+} from "./plan";
 
 type Transient = ("rate-limited" | "timeout" | "unavailable")[];
 
 function goRuntime(transientErrorKinds: Transient = []): StudioRuntime {
   return {
     kind: "go-playground",
+    dockStartsCollapsed: false,
     defaultMode: "fixture",
     fixture: {
       latencyMs: 5,
@@ -25,6 +32,7 @@ function goRuntime(transientErrorKinds: Transient = []): StudioRuntime {
 function kotlinRuntime(): StudioRuntime {
   return {
     kind: "kotlin-playground",
+    dockStartsCollapsed: false,
     defaultMode: "fixture",
     fixture: {
       latencyMs: 5,
@@ -37,11 +45,47 @@ function kotlinRuntime(): StudioRuntime {
 function rustRuntime(transientErrorKinds: Transient = []): StudioRuntime {
   return {
     kind: "rust-playground",
+    dockStartsCollapsed: false,
     defaultMode: "fixture",
     fixture: {
       latencyMs: 5,
       transientErrorKinds,
       result: { status: "success", stdout: "hello rust\n", stderr: "" },
+    },
+  };
+}
+
+function asmRuntime(): StudioRuntime {
+  return {
+    kind: "asm-playground",
+    dockStartsCollapsed: false,
+    defaultMode: "fixture",
+    fixture: {
+      latencyMs: 5,
+      transientErrorKinds: [],
+      result: {
+        status: "success",
+        stdout: "hi\n",
+        stderr: "",
+        exitCode: 0,
+        registers: [{ name: "rax", value: "1" }],
+      },
+    },
+  };
+}
+
+function kiteRuntime(transientErrorKinds: Transient = []): StudioRuntime {
+  return {
+    kind: "kite-playground",
+    dockStartsCollapsed: false,
+    defaultMode: "fixture",
+    fixture: {
+      latencyMs: 5,
+      // The kite fixture schema admits only "unavailable"; the engine can still
+      // hand this kind's error table a "timeout" it never declared, because the
+      // retry engine synthesizes that kind from its own deadline.
+      transientErrorKinds: transientErrorKinds as "unavailable"[],
+      result: { status: "success", stdout: "hello kite\n", stderr: "" },
     },
   };
 }
@@ -127,6 +171,45 @@ describe("preparePlaygroundRun", () => {
     );
   });
 
+  it("runs an asm fixture with the registers after the program's own output", async () => {
+    // The recorded console has to be the console the runner panel builds, and
+    // the panel appends the register rows after the run's output. A reordered
+    // (or dropped) register block would replay a lesson no live run produces.
+    const prepared = prepare(asmRuntime(), projectWith("main.asm"));
+    expect(prepared.startedLines[0]).toBe(
+      "[asm-run] nasm -f elf64 main.asm && ld -o main main.o && ./main",
+    );
+    const outcome = await prepared.run();
+    expect(outcome.ok).toBe(true);
+    expect(outcome.resultLines).toEqual([
+      "hi",
+      "[asm-run] Program exited with status 0",
+      "[asm-run] rax=0x1",
+    ]);
+
+    // No linker in the page, so siblings are never one program: a lone file
+    // runs, several only run when one of them is the named entry.
+    expect(() => prepare(asmRuntime(), projectWith("notes.md"))).toThrow(/Add a main\.asm file/);
+    expect(() => prepare(asmRuntime(), projectWith("only.asm"))).not.toThrow();
+    expect(() => prepare(asmRuntime(), projectWith("a.asm", "b.asm"))).toThrow(
+      /Name the file this lesson runs main\.asm/,
+    );
+  });
+
+  it("still writes an error line for a kind the language's own table lacks", async () => {
+    // The retry engine synthesizes "timeout" from its deadline for every kind,
+    // including the in-page runners whose tables have no such entry. An
+    // unguarded lookup yields `undefined`, and appendRunnerConsoleLines throws
+    // a TypeError on it — a crashed render carrying no error line at all.
+    const failure = await prepare(kiteRuntime(["timeout", "timeout"]), projectWith("main.kite"))
+      .run()
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(PlaygroundTerminalError);
+    const terminal = failure as PlaygroundTerminalError;
+    expect(terminal.consoleLines.every((line) => typeof line === "string")).toBe(true);
+    expect(terminal.consoleLines[0]).toMatch(/^\[kite-run error\]/);
+  });
+
   it("rejects empty workspaces per kind", () => {
     expect(() => prepare(goRuntime(), projectWith("notes.md"))).toThrow(/at least one .go/);
     expect(() => prepare(kotlinRuntime(), projectWith("notes.md"))).toThrow(/at least one .kt/);
@@ -183,5 +266,73 @@ describe("runErrorPrefixFor", () => {
     expect(runErrorPrefixFor("kotlin-playground")).toBe("[kotlin-run error]");
     expect(runErrorPrefixFor("rust-playground")).toBe("[rust-run error]");
     expect(runErrorPrefixFor("haskell-playground")).toBe("[haskell-run error]");
+    expect(runErrorPrefixFor("zig-playground")).toBe("[zig-run error]");
+    expect(runErrorPrefixFor("kite-playground")).toBe("[kite-run error]");
+    expect(runErrorPrefixFor("asm-playground")).toBe("[asm-run error]");
+  });
+});
+
+/** Minimal valid fixture per kind — a Record, so a new kind fails to compile. */
+const PLAYGROUND_FIXTURE_INPUTS: Record<StudioPlaygroundRuntimeKind, unknown> = {
+  "go-playground": { latencyMs: 5, result: { status: "success", output: "" } },
+  "kotlin-playground": { latencyMs: 5, result: { status: "success", output: "" } },
+  "rust-playground": { latencyMs: 5, result: { status: "success", stdout: "", stderr: "" } },
+  "zig-playground": { latencyMs: 5, result: { status: "success", output: "" } },
+  "haskell-playground": { latencyMs: 5, result: { status: "success", stdout: "", stderr: "" } },
+  "kite-playground": { latencyMs: 5, result: { status: "success", stdout: "", stderr: "" } },
+  "asm-playground": { latencyMs: 5, result: { status: "success", stdout: "", stderr: "" } },
+};
+
+describe("studioRuntimeSchema", () => {
+  it("keeps an authored dockStartsCollapsed on every Playground kind", () => {
+    // The runtime objects are not strict, so a kind that omits the field has an
+    // authored `dockStartsCollapsed: true` stripped by zod and renders with the
+    // dock open — no error, no diagnostic, nothing to notice until someone
+    // watches the recording.
+    const dropped = Object.entries(PLAYGROUND_FIXTURE_INPUTS)
+      .filter(([kind, fixture]) => {
+        const parsed = studioRuntimeSchema.parse({
+          kind,
+          dockStartsCollapsed: true,
+          defaultMode: "fixture",
+          fixture,
+        });
+        return !runtimeDockStartsCollapsed(parsed);
+      })
+      .map(([kind]) => kind);
+
+    // `dropped` names the offending kinds, so an empty-array diff identifies them.
+    expect(dropped).toEqual([]);
+  });
+});
+
+describe("runtimeNeedsSession", () => {
+  it("gates the proxied playgrounds and only those", () => {
+    // Kite and asm run in the page: gating them would lock a lesson behind a
+    // sign-in for a service it never calls.
+    const kinds = [
+      "go-playground",
+      "kotlin-playground",
+      "rust-playground",
+      "zig-playground",
+      "haskell-playground",
+      "kite-playground",
+      "asm-playground",
+      "webcontainer",
+      "none",
+    ] as const;
+
+    // One table so a wrong answer names the kind in the diff.
+    expect(Object.fromEntries(kinds.map((kind) => [kind, runtimeNeedsSession(kind)]))).toEqual({
+      "go-playground": true,
+      "kotlin-playground": true,
+      "rust-playground": true,
+      "zig-playground": true,
+      "haskell-playground": true,
+      "kite-playground": false,
+      "asm-playground": false,
+      webcontainer: false,
+      none: false,
+    });
   });
 });

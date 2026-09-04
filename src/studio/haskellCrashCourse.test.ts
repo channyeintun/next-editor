@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import YAML from "yaml";
 
+import { resolveAnchorOffset } from "./async";
 import { parseLessonScript, type LessonScript } from "./script/schema";
 
 /**
@@ -10,8 +11,9 @@ import { parseLessonScript, type LessonScript } from "./script/schema";
  * against — play.haskell.org is a remote service and CI has no GHC — so this
  * file guards everything that can be established without one:
  *
- *  - the typing anchors still resolve, and resolve uniquely, at the moment
- *    they are applied (the failure mode that aborts a render mid-performance);
+ *  - the typing anchors still resolve, through the driver's own resolver, at
+ *    the moment they are applied (the failure mode that aborts a render
+ *    mid-performance);
  *  - the assertions only claim output the pinned fixture actually contains;
  *  - the program stays inside what the playground can actually run. That is
  *    the important one here, and it is a different hazard from Zig's. Haskell's
@@ -33,20 +35,31 @@ import { parseLessonScript, type LessonScript } from "./script/schema";
 
 const scriptPath = resolve(process.cwd(), "src/studio/scripts/haskell-crash-course.yaml");
 
-/** Apply the lesson's `editor.type` insertions in order, as the player does. */
+/**
+ * Apply the lesson's `editor.type` insertions in order, as the player does.
+ *
+ * Anchors go through the driver's own `resolveAnchorOffset`, so what this
+ * reconstructs is the program a render really produces — `after: ""` anchors
+ * the file start and `occurrence` picks among repeats, both of which the schema
+ * allows and a hand-rolled unique-match rule here would reject.
+ */
 function replay(script: LessonScript): string {
   let file = script.lesson.workspace.files["Main.hs"] ?? "";
   for (const scene of script.scenes) {
     for (const action of scene.actions ?? []) {
       if (action.type === "editor.type") {
-        const after = action.target.after ?? "";
-        // Insert-only, and the anchor must be unambiguous at this moment —
-        // the same two rules the schema documents for authors.
-        expect(file.split(after).length - 1, `anchor for ${action.id}`).toBe(1);
-        const at = file.indexOf(after) + after.length;
+        // Insert-only, and the anchor has to resolve at this moment — this is
+        // the failure that aborts a render mid-performance.
+        const at = resolveAnchorOffset(file, action.target);
+        expect(at, `anchor for ${action.id}`).not.toBeNull();
+        if (at === null) continue;
         file = file.slice(0, at) + action.text + file.slice(at);
       } else if (action.type === "editor.select") {
-        expect(file.split(action.target.text ?? "").length - 1, `selection ${action.id}`).toBe(1);
+        const at = resolveAnchorOffset(file, {
+          after: action.target.text,
+          occurrence: action.target.occurrence,
+        });
+        expect(at, `selection ${action.id}`).not.toBeNull();
       }
     }
   }
@@ -99,6 +112,21 @@ describe("haskell crash course", () => {
 
   it("ends every fixture line, so a checkpoint cannot match a partial write", () => {
     expect(fixtureStdout.endsWith("\n")).toBe(true);
+  });
+
+  it("asserts a final file the typing really produces", () => {
+    // An expect.file needle the program never contains aborts the render at the
+    // very last action, after every minute of narration has been synthesized —
+    // and nothing offline catches it: the schema checks the path, not the text.
+    const asserted = script.scenes
+      .flatMap((scene) => scene.actions ?? [])
+      .filter((action) => action.type === "expect.file")
+      .map((action) => action.contains);
+
+    expect(asserted.length).toBeGreaterThan(0);
+    for (const needle of asserted) {
+      expect(program, `expect.file "${needle}"`).toContain(needle);
+    }
   });
 
   it("pins a fixture no console line of which can fail runtime.noErrors", () => {
