@@ -164,9 +164,14 @@ use checkout
 struct View {
     var lines: [Line]
     var percent: int
+    var next_id: int
 }
 
+/// \`id\` is the row's identity, and the display name is not: two rows may be
+/// called the same thing, and a name is not something to key a diff or a
+/// removal on.
 struct Line {
+    id: int
     what: str
     price: int
     quantity: int
@@ -185,9 +190,9 @@ let STARTING_PERCENT = 10
 
 fn starting_lines() -> [Line] {
     return [
-        Line { what: "Keyboard", price: 8999, quantity: 1 },
-        Line { what: "Cable", price: 450, quantity: 3 },
-        Line { what: "Stand", price: 2075, quantity: 1 },
+        Line { id: 1, what: "Keyboard", price: 8999, quantity: 1 },
+        Line { id: 2, what: "Cable", price: 450, quantity: 3 },
+        Line { id: 3, what: "Stand", price: 2075, quantity: 1 },
     ]
 }
 
@@ -201,7 +206,7 @@ fn starting_lines() -> [Line] {
 fn rows(view: html.Mounted, model: View) -> [html.Node] {
     var out: [html.Node] = []
     for line in model.lines {
-        out.push(html.keyed(line.what, html.el("li", [], [
+        out.push(html.keyed("\\(line.id)", html.el("li", [], [
                         html.txt("span", [], "\\(line.what) × \\(line.quantity)"),
                         html.txt("output", [], checkout.money(
                                 checkout.line_total(line.price, line.quantity))),
@@ -215,7 +220,7 @@ fn rows(view: html.Mounted, model: View) -> [html.Node] {
                                 html.attr("type", "button"),
                                 html.attr("aria-label", "Remove \\(line.what)"),
                                 html.click(|e: dom.Event| {
-                                        drop_line(model, line.what)
+                                        drop_line(model, line.id)
                                         refresh(view, model)
                                     }),
                             ], "×"),
@@ -279,18 +284,23 @@ fn set_percent(var model: View, text: str) {
 
 fn add_line(var model: View, what: str, price: int) {
     var lines = model.lines
-    lines.push(Line{ what: what, price: price, quantity: 1 })
+    lines.push(Line{ id: model.next_id, what: what, price: price, quantity: 1 })
     model.lines = lines
+    model.next_id = model.next_id + 1
 }
 
 /// Take a line out of the order.
 ///
 /// The slice is rebuilt because a slice is a copy-on-write value: the write
 /// lands on the binding, so it is assigned back to the field the model holds.
-fn drop_line(var model: View, what: str) {
+///
+/// The row is found by \`id\`. Filtering on the display name would take every
+/// row that happens to be called the same thing — press × on one of two
+/// \`Cable\` rows and both would go.
+fn drop_line(var model: View, id: int) {
     var kept: [Line] = []
     for line in model.lines {
-        if line.what != what {
+        if line.id != id {
             kept.push(line)
         }
     }
@@ -349,7 +359,8 @@ pub fn main() {
     // A \`let\` handle to a struct, which is what a closure may capture. The
     // functions that change it take it as \`var\`, so every mutation is spelled
     // out in a signature rather than implied by the capture.
-    let model = View{ lines: starting_lines(), percent: STARTING_PERCENT }
+    let lines = starting_lines()
+    let model = View{ lines: lines, percent: STARTING_PERCENT, next_id: lines.len() + 1 }
     refresh(mounted, model)
 
     listen("#percent", "input", |e: dom.Event| {
@@ -409,16 +420,14 @@ pub fn main() {
       `// The arithmetic a checkout must not get wrong, in Kite.
 //
 // Nothing here knows it is on a web page: no DOM, no \`std/js\`. It takes values
-// and answers with values, and \`src/main.js\` puts the answers on the screen.
-// That is the split worth having — this is the half where being wrong costs
-// money, and it is the half with a type checker over it.
+// and answers with values, and \`src/main.kite\` — which \`use\`s this module —
+// puts the answers on the screen. That is the split worth having: this is the
+// half where being wrong costs money, and it is the half with a type checker
+// over it.
 //
-// **Everything here takes and answers with \`int\`, \`float\`, \`bool\` or \`str\`,
-// and that is a real limit rather than a style.** Those four are what the
-// generated wrapper knows how to convert. A slice, an \`Option<T>\` or a
-// \`(T, error)\` pair is still exported by the module, but \`api.js\` will not
-// describe it — so the list of prices lives in JavaScript and each price
-// crosses on its own.
+// \`src/about.kite\` \`use\`s it as well, and gets the same money formatting on a
+// page that shares nothing else with the first one. A module here is a file in
+// the same directory: there is nothing to register and no wrapper to generate.
 
 /// One line of the order, in pence.
 ///
@@ -500,9 +509,10 @@ pub fn card_looks_valid(digits: str) -> bool {
 
 /// A price typed by a person, as pence, or -1 when it is not a price.
 ///
-/// -1 rather than an \`Option<int>\`, and it is the limit above showing through:
-/// an optional does not cross the wrapper yet. Inside Kite this would answer
-/// \`Option<int>\` and the caller could not forget to open it.
+/// -1 rather than an \`Option<int>\`, which is a sentinel and reads like one: the
+/// caller's guard is \`if price < 0\`, and nothing makes it check. Changing the
+/// return to \`Option<int>\` and narrowing with \`if price == nil\` at the one call
+/// site in \`src/main.kite\` is the exercise the rest of this file is arguing for.
 pub fn parse_price(text: str) -> int {
     let body = text.trim()
     if body.len() == 0 {
@@ -550,10 +560,7 @@ h2 { font-size: 1.15rem; margin: 40px 0 8px; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
 ul { list-style: none; padding: 0; margin: 0 0 12px; }
 li { padding: 8px 12px; border: 1px solid color-mix(in oklab, currentColor 15%, transparent); border-radius: 8px; margin-bottom: 6px; }
-li.dearest { border-color: var(--gold); font-weight: 600; }
-.total { font-size: 1.2rem; }
 output { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-output.failed { color: var(--bad); }
 button, input {
   font: inherit; padding: 10px 16px; min-height: 48px;
   border-radius: 8px; border: 1px solid color-mix(in oklab, currentColor 25%, transparent);
@@ -564,7 +571,6 @@ button:hover { border-color: var(--gold); }
 li { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 button.drop { padding: 2px 8px; line-height: 1; opacity: 0.55; }
 button.drop:hover { opacity: 1; border-color: var(--bad); color: var(--bad); }
-li small { opacity: 0.6; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .totals { display: grid; grid-template-columns: 1fr auto; gap: 4px 24px; margin: 16px 0; }
 .totals dt, .totals dd { margin: 0; }
@@ -572,7 +578,6 @@ li small { opacity: 0.6; }
 .totals .grand { font-weight: 700; font-size: 1.15rem; border-top: 1px solid currentColor; padding-top: 8px; margin-top: 4px; }
 .note { min-height: 1.6em; margin: 8px 0 0; }
 .note.failed { color: var(--bad); }
-.note.passes { color: #1e8449; }
 `,
     ),
     "README.md": createWorkspaceFile(

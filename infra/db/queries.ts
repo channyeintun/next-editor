@@ -184,6 +184,13 @@ export async function listPublishedLessons(
   pageSize = 12,
 ): Promise<ListPublishedLessonsResult> {
   const offset = page * pageSize;
+  // An offset past the int64 range binds as a REAL and SQLite answers
+  // "datatype mismatch", so a hand-crafted `?page=1e300` became a 500 rather
+  // than the empty page every other out-of-range page returns.
+  if (!Number.isSafeInteger(offset)) {
+    return { rows: [], nextPage: null };
+  }
+
   const result = await db
     .prepare(
       // `id` is not decoration: OFFSET paging only works when the sort is a

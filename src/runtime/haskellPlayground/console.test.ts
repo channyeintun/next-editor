@@ -106,6 +106,43 @@ describe("haskellRunResultToConsoleLines", () => {
       haskellRunResultToConsoleLines({ status: "success", stdout: "a\n\nb\n\n\n", stderr: "" }),
     ).toEqual(["a", "", "b", "[haskell-run] Program exited"]);
   });
+
+  it("keeps GHC's blank separator between two warnings unprefixed", () => {
+    // Two default-on -Wx-partial diagnostics (a `head` and a `tail` in one
+    // program) arrive as one string with a blank line between them; prefixing
+    // that blank would paint a tag with nothing after it.
+    const result: HaskellPlaygroundRunResult = {
+      status: "success",
+      stdout: "1\n",
+      stderr: "",
+      warnings:
+        "Main.hs:3:10: warning: [GHC-63394] [-Wx-partial]\n    In the use of 'head'\n\nMain.hs:4:10: warning: [GHC-63394] [-Wx-partial]\n    In the use of 'tail'\n",
+    };
+
+    expect(haskellRunResultToConsoleLines(result)).toEqual([
+      "[haskell-warn] The compiler reported warnings",
+      "[haskell-warn] Main.hs:3:10: warning: [GHC-63394] [-Wx-partial]",
+      "[haskell-warn]     In the use of 'head'",
+      "",
+      "[haskell-warn] Main.hs:4:10: warning: [GHC-63394] [-Wx-partial]",
+      "[haskell-warn]     In the use of 'tail'",
+      "1",
+      "[haskell-run] Program exited",
+    ]);
+  });
+
+  it("trims a long run of trailing newlines without stalling the tab", () => {
+    // `putStr (replicate 99999 '\n' ++ "x")` fits under the upstream 100,000
+    // byte per-stream cap. A greedy /\n+$/ takes ~14s on this shape in V8, so
+    // the default 5s test timeout is the assertion that the trim is linear.
+    const stdout = `${"\n".repeat(100_000)}x`;
+
+    expect(haskellRunResultToConsoleLines({ status: "success", stdout, stderr: "" })).toEqual([
+      ...Array.from({ length: 100_000 }, () => ""),
+      "x",
+      "[haskell-run] Program exited",
+    ]);
+  });
 });
 
 describe("haskell console labels", () => {

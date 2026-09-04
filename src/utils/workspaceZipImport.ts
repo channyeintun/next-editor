@@ -74,7 +74,12 @@ function shouldIgnoreImportPath(path: string): boolean {
     return true;
   }
 
-  return path.split("/").some((segment) => IGNORED_PATH_SEGMENTS.has(segment));
+  // Split on both separators: the zip pre-filter runs this on the raw entry
+  // name, which a non-conformant archiver may write with backslashes, while the
+  // import loop runs it on the parseWorkspacePath-normalized path. Both call
+  // sites must agree or a node_modules tree is charged against the import
+  // budget and inflated before being dropped.
+  return path.split(/[\\/]/).some((segment) => IGNORED_PATH_SEGMENTS.has(segment));
 }
 
 /**
@@ -110,13 +115,16 @@ function htmlReferences(files: Record<string, WorkspaceFile>, needle: string): b
 
 /**
  * Playground lesson shapes carry no package.json manifest: their sources are
- * compiled by the language's playground proxy, or — for assembly — by the
- * first-party assembler in the page. Ordered so the canonical entry file
- * decides first when an archive mixes languages, matching the runner
- * collectors in src/runtime/{go,rust,kotlin,zig,haskell,asm}Playground/files.ts.
+ * compiled by the language's playground proxy, or — for assembly and Kite — by
+ * the first-party assembler/compiler in the page. Ordered so the canonical
+ * entry file decides first when an archive mixes languages, matching the runner
+ * collectors in src/runtime/{go,rust,kotlin,zig,haskell,asm,kite}Playground/files.ts.
  */
 const PLAYGROUND_LESSON_RULES: ReadonlyArray<{
-  lessonType: Extract<WorkspaceLessonType, "go" | "rust" | "kotlin" | "zig" | "haskell" | "asm">;
+  lessonType: Extract<
+    WorkspaceLessonType,
+    "go" | "rust" | "kotlin" | "zig" | "haskell" | "asm" | "kite"
+  >;
   entryPath: string;
   /**
    * Every extension the language's runner collector accepts. Assembly has
@@ -133,6 +141,9 @@ const PLAYGROUND_LESSON_RULES: ReadonlyArray<{
   // compile, so an archive of them must not be imported as a runnable lesson.
   { lessonType: "haskell", entryPath: "Main.hs", extensions: [".hs"] },
   { lessonType: "asm", entryPath: "main.asm", extensions: [".asm", ".s", ".nasm"] },
+  // Last, and only reached when there is no package.json: a kite-web archive
+  // carries one and is decided by the manifest branch above.
+  { lessonType: "kite", entryPath: "main.kite", extensions: [".kite"] },
 ];
 
 function detectPlaygroundLessonType(
@@ -313,8 +324,8 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
         // uncompressed size, so this also keeps the zip-bomb guard intact for the
         // entries that really are imported.
         //
-        // `shouldIgnoreImportPath` is purely segment-based, so the raw zip name is
-        // safe here; `parseWorkspacePath` is not — it throws on traversal entries,
+        // `shouldIgnoreImportPath` is separator-agnostic and segment-based, so the
+        // raw zip name is safe here; `parseWorkspacePath` is not — it throws on traversal entries,
         // and the catch below would turn that into "not a valid zip" instead of the
         // deliberate unsafe-path message. Traversal stays checked in the loop below.
         if (entry.name.endsWith("/") || shouldIgnoreImportPath(entry.name)) {

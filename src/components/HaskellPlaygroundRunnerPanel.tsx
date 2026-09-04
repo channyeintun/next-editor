@@ -58,9 +58,11 @@ const ANSI_YELLOW = "\u001b[93m";
 // Same prefix-coloring idiom as the other dock consoles: color the [tag], dim
 // the rest, leave raw program output undecorated. GHC warns far more readily
 // than it errors, so — as in the Kotlin console — the [haskell-warn] tag gets
-// its own color rather than reading as a success line.
+// its own color rather than reading as a success line. Only this console's own
+// tags match: `print [1,2,3]` is the most ordinary line a Haskell program can
+// emit, and a bare bracket run must not be painted as if the runner said it.
 function decorateHaskellConsoleLine(line: string): string {
-  const prefixMatch = line.match(/^\[[^\]]+\]/);
+  const prefixMatch = line.match(/^\[haskell-(?:run|warn)(?: error)?\]/);
 
   if (!prefixMatch) {
     return line;

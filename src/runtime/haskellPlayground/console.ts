@@ -17,7 +17,14 @@ export function haskellRunStartedConsoleLines(): string[] {
 }
 
 function splitOutputLines(output: string): string[] {
-  const trimmed = output.replace(/\n+$/, "");
+  // Trimmed with an index walk rather than /\n+$/: an unanchored greedy run is
+  // retried from every newline in the run, so a program that prints thousands
+  // of blank lines followed by anything else freezes the tab for seconds.
+  let end = output.length;
+  while (end > 0 && output.charCodeAt(end - 1) === 10) {
+    end -= 1;
+  }
+  const trimmed = output.slice(0, end);
   return trimmed ? trimmed.split("\n") : [];
 }
 
@@ -36,7 +43,12 @@ export function haskellRunResultToConsoleLines(result: HaskellPlaygroundRunResul
   // succeeds — and a learner needs to see whose voice a line is in.
   if (result.warnings?.trim()) {
     lines.push("[haskell-warn] The compiler reported warnings");
-    lines.push(...splitOutputLines(result.warnings).map((line) => `[haskell-warn] ${line}`));
+    // GHC separates one diagnostic from the next with a blank line; prefixing
+    // that separator would turn it into a tag with nothing after it, so the
+    // blank stays blank and the warning blocks stay visually apart.
+    lines.push(
+      ...splitOutputLines(result.warnings).map((line) => (line ? `[haskell-warn] ${line}` : "")),
+    );
   }
 
   const outputLines = [...splitOutputLines(result.stdout), ...splitOutputLines(result.stderr)];

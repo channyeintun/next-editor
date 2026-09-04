@@ -57,9 +57,11 @@ const ANSI_RED = "\u001b[91m";
 const ANSI_YELLOW = "\u001b[93m";
 
 // Same prefix-coloring idiom as the WebContainer dock's console: color the
-// [tag], dim the rest, leave raw program output undecorated.
+// [tag], dim the rest, leave raw program output undecorated. Only this
+// console's own tags match: `fmt.Println` of a slice prints `[1 2 3]`, and a
+// bare bracket run must not be painted as if the runner said it.
 function decorateGoConsoleLine(line: string): string {
-  const prefixMatch = line.match(/^\[[^\]]+\]/);
+  const prefixMatch = line.match(/^\[go-(?:run|vet)(?: error)?\]/);
 
   if (!prefixMatch) {
     return line;

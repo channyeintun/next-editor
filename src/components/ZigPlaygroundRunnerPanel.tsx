@@ -61,9 +61,10 @@ const ANSI_GREEN = "\u001b[92m";
 const ANSI_RED = "\u001b[91m";
 
 // Same prefix-coloring idiom as the other dock consoles: color the [tag], dim
-// the rest, leave raw program output undecorated.
+// the rest, leave raw program output undecorated. Only this console's own tags
+// match, so a program that prints a bracketed line of its own is left alone.
 function decorateZigConsoleLine(line: string): string {
-  const prefixMatch = line.match(/^\[[^\]]+\]/);
+  const prefixMatch = line.match(/^\[zig-(?:run|fmt)(?: error)?\]/);
 
   if (!prefixMatch) {
     return line;
@@ -215,10 +216,16 @@ function ZigPlaygroundRunnerPanel() {
     const submittedActiveFile = activePath
       ? submittedFiles.find((file) => file.path === activePath)
       : null;
-    if (
-      activeModel &&
-      (!submittedActiveFile || activeModel.getValue() !== submittedActiveFile.content)
-    ) {
+    // `.zon` files are Zig-highlighted (inferLanguageFromPath maps them), so
+    // the provider fires for a build.zig.zon model that the collector never
+    // submits. That is not a concurrent edit, so it gets the single-file
+    // message rather than the stale one. The sibling Go/Rust panels need no
+    // such branch: their collectors cover their language's whole extension set.
+    if (activeModel && !submittedActiveFile) {
+      appendConsoleLines(["[zig-fmt error] Zig lessons format a single main.zig file"]);
+      return [];
+    }
+    if (activeModel && activeModel.getValue() !== submittedActiveFile?.content) {
       appendConsoleLines(zigFormatStaleConsoleLines());
       return [];
     }

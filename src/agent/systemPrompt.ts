@@ -66,7 +66,8 @@ function buildSupportedStack(project: WorkspaceProject): string {
   // Switched on the execution kind rather than chained ifs so adding a
   // playground language is a compile error here instead of a lesson that
   // silently inherits the WebContainer stack and gets told its own language is
-  // off-limits.
+  // off-limits. The switch cannot catch a *lesson type* that runs a non-JS
+  // language inside the WebContainer, so those get their own branch below.
   switch (executionKindForLessonType(project.lessonType)) {
     case "kotlin-playground":
       return (
@@ -194,6 +195,19 @@ function buildSupportedStack(project: WorkspaceProject): string {
       "preview surface — programs communicate through stdout. Keep every solution " +
       "within the Python standard library and do not introduce other languages, " +
       "package managers, or runtimes."
+    );
+  }
+
+  if (project.lessonType === "kite-web") {
+    return (
+      "Supported stack: Kite for the application code, with HTML, CSS and the Vite " +
+      "toolchain around it. This lesson is a Vite project running in the in-browser " +
+      "WebContainer: the `.kite` modules under src/ are compiled by vite-plugin-kite " +
+      "(the kitec compiler shipped as a WASM package), imported straight from the HTML " +
+      "entry points, and served by the Vite dev server with a live preview. Write new " +
+      "logic and UI in Kite modules rather than porting them to JavaScript or " +
+      "TypeScript; HTML and CSS are the glue around them. Use pnpm exclusively for " +
+      "package operations, and do not introduce other languages or runtimes."
     );
   }
 

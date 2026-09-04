@@ -3,8 +3,8 @@ import {
   executionKindForLessonType,
   isWorkspaceTextFile,
   inferLanguageFromPath,
+  isWorkspaceLessonType,
   lessonRunsInWebContainer,
-  lessonSupportsCodeRun,
   lessonSupportsPreview,
   lessonSupportsTerminal,
   type WorkspaceExecutionKind,
@@ -80,11 +80,36 @@ describe("execution selection", () => {
   });
 });
 
+describe("isWorkspaceLessonType", () => {
+  it("accepts every known lesson type", () => {
+    for (const lessonType of ALL_LESSON_TYPES) {
+      expect(isWorkspaceLessonType(lessonType)).toBe(true);
+    }
+  });
+
+  it("rejects inherited object keys, not just unknown strings", () => {
+    // The labels table is a plain object literal, so a prototype-key probe from
+    // a collaborator's client must not narrow to WorkspaceLessonType and end up
+    // indexing a Record<WorkspaceLessonType, …> table with it.
+    for (const value of [
+      "",
+      "rust-web",
+      "constructor",
+      "__proto__",
+      "toString",
+      "hasOwnProperty",
+    ]) {
+      expect(isWorkspaceLessonType(value)).toBe(false);
+    }
+    expect(isWorkspaceLessonType(7)).toBe(false);
+    expect(isWorkspaceLessonType(null)).toBe(false);
+  });
+});
+
 describe("lesson capabilities", () => {
   it.each([...PLAYGROUND_LESSON_TYPES])(
-    "gives %s lessons Run without Terminal or Preview",
+    "keeps Terminal and Preview off for %s lessons",
     (lessonType) => {
-      expect(lessonSupportsCodeRun(lessonType)).toBe(true);
       expect(lessonSupportsTerminal(lessonType)).toBe(false);
       expect(lessonSupportsPreview(lessonType)).toBe(false);
     },
@@ -94,7 +119,6 @@ describe("lesson capabilities", () => {
     for (const lessonType of ALL_LESSON_TYPES.filter(
       (type) => !PLAYGROUND_LESSON_TYPES.has(type),
     )) {
-      expect(lessonSupportsCodeRun(lessonType)).toBe(true);
       expect(lessonSupportsTerminal(lessonType)).toBe(true);
       expect(lessonSupportsPreview(lessonType)).toBe(
         !CONSOLE_ONLY_WEB_CONTAINER_LESSON_TYPES.has(lessonType),

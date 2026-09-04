@@ -7,7 +7,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const SOURCE = 'fn main() {\n    println!("hi");\n}\n';
+const SOURCE =
+  'const std = @import("std");\npub fn main() void {\n    std.debug.print("hi\\n", .{});\n}\n';
 const FILES: ZigPlaygroundFile[] = [{ path: "main.zig", content: SOURCE }];
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -57,7 +58,7 @@ describe("ZigPlaygroundClient", () => {
   });
 
   it("posts the file for formatting and returns the normalized formatted source", async () => {
-    const formattedFiles = [{ path: "main.zig", content: 'fn main() {\n    println!("hi");\n}\n' }];
+    const formattedFiles = [{ path: "main.zig", content: SOURCE }];
     const spy = vi.fn<(input: unknown, init?: RequestInit) => Promise<Response>>(async () =>
       jsonResponse({ files: formattedFiles }),
     );

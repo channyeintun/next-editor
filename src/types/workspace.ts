@@ -129,7 +129,9 @@ export const WORKSPACE_LESSON_TYPES = Object.keys(
 ) as WorkspaceLessonType[];
 
 export function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonType {
-  return typeof value === "string" && value in WORKSPACE_LESSON_TYPE_LABELS;
+  // hasOwn, not `in`: the labels table is a plain object, so `in` would narrow
+  // "constructor" and every other Object.prototype key to a lesson type.
+  return typeof value === "string" && Object.hasOwn(WORKSPACE_LESSON_TYPE_LABELS, value);
 }
 
 /**
@@ -220,13 +222,6 @@ export function lessonSupportsPreview(lessonType: WorkspaceLessonType): boolean 
   // WebContainer's WASI Python cannot bind server sockets, so a python lesson
   // never produces a previewable URL — its only output surface is the console.
   return lessonRunsInWebContainer(lessonType) && lessonType !== "python";
-}
-
-export function lessonSupportsCodeRun(lessonType: WorkspaceLessonType): boolean {
-  return (
-    executionKindForLessonType(lessonType) !== "webcontainer" ||
-    lessonRunsInWebContainer(lessonType)
-  );
 }
 
 export interface WorkspaceProject {
