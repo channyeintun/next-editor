@@ -19,6 +19,7 @@ import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWor
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { monaco, workspacePathFromMonacoModelUri } from "../monaco";
 import {
+  GO_CONSOLE_TAG_PATTERN,
   goFormatResultToConsoleLines,
   goFormatServiceErrorToConsoleLines,
   goFormatStaleConsoleLines,
@@ -28,7 +29,11 @@ import {
   goRunStartedConsoleLines,
 } from "../runtime/goPlayground/console";
 import { areGoPlaygroundFilesEqual, collectGoPlaygroundFiles } from "../runtime/goPlayground/files";
-import { appendRunnerConsoleLines, clearRunnerConsole } from "../runtime/playgroundConsoleStore";
+import {
+  appendRunnerConsoleLines,
+  clearRunnerConsole,
+  resetRunnerConsoleForProject,
+} from "../runtime/playgroundConsoleStore";
 import {
   STUDIO_TARGET_ATTRIBUTE,
   STUDIO_RUN_BUTTON_TARGET_ID,
@@ -57,11 +62,11 @@ const ANSI_RED = "\u001b[91m";
 const ANSI_YELLOW = "\u001b[93m";
 
 // Same prefix-coloring idiom as the WebContainer dock's console: color the
-// [tag], dim the rest, leave raw program output undecorated. Only this
-// console's own tags match: `fmt.Println` of a slice prints `[1 2 3]`, and a
-// bare bracket run must not be painted as if the runner said it.
+// [tag], dim the rest, leave raw program output undecorated. Only the tags the
+// Go console module emits match, so a program's own bracketed line is left
+// alone.
 function decorateGoConsoleLine(line: string): string {
-  const prefixMatch = line.match(/^\[go-(?:run|vet)(?: error)?\]/);
+  const prefixMatch = line.match(GO_CONSOLE_TAG_PATTERN);
 
   if (!prefixMatch) {
     return line;
@@ -154,21 +159,8 @@ function GoPlaygroundRunnerPanel() {
     // a Go tool request started against the previous set of files.
     cancel();
 
-    const resetConsoleSurface = () => {
-      const context = runtimePanelStore.getSnapshot().context;
-      if (context.consoleLines.length > 0) {
-        runtimePanelStore.trigger.setConsoleLines({ consoleLines: [] });
-      }
-
-      if (Object.keys(context.terminalScrollLines).length > 0) {
-        runtimePanelStore.trigger.setTerminalScrollLines({
-          terminalScrollLines: {},
-        });
-      }
-    };
-
-    resetConsoleSurface();
-    return resetConsoleSurface;
+    resetRunnerConsoleForProject(runtimePanelStore);
+    return () => resetRunnerConsoleForProject(runtimePanelStore);
   }, [cancel, projectVersion, runtimePanelStore]);
 
   useEffect(() => {

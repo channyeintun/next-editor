@@ -22,12 +22,17 @@ import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedS
 import { useHaskellPlaygroundRunner } from "../hooks/useHaskellPlaygroundRunner";
 import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWorkspace";
 import {
+  HASKELL_CONSOLE_TAG_PATTERN,
   haskellRunResultToConsoleLines,
   haskellRunServiceErrorToConsoleLines,
   haskellRunStartedConsoleLines,
 } from "../runtime/haskellPlayground/console";
 import { collectHaskellPlaygroundFiles } from "../runtime/haskellPlayground/files";
-import { appendRunnerConsoleLines, clearRunnerConsole } from "../runtime/playgroundConsoleStore";
+import {
+  appendRunnerConsoleLines,
+  clearRunnerConsole,
+  resetRunnerConsoleForProject,
+} from "../runtime/playgroundConsoleStore";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
@@ -58,11 +63,11 @@ const ANSI_YELLOW = "\u001b[93m";
 // Same prefix-coloring idiom as the other dock consoles: color the [tag], dim
 // the rest, leave raw program output undecorated. GHC warns far more readily
 // than it errors, so — as in the Kotlin console — the [haskell-warn] tag gets
-// its own color rather than reading as a success line. Only this console's own
-// tags match: `print [1,2,3]` is the most ordinary line a Haskell program can
-// emit, and a bare bracket run must not be painted as if the runner said it.
+// its own color rather than reading as a success line. Only the tags the
+// Haskell console module emits match, so a program's own bracketed line —
+// `print [1,2,3]` — is left alone.
 function decorateHaskellConsoleLine(line: string): string {
-  const prefixMatch = line.match(/^\[haskell-(?:run|warn)(?: error)?\]/);
+  const prefixMatch = line.match(HASKELL_CONSOLE_TAG_PATTERN);
 
   if (!prefixMatch) {
     return line;
@@ -162,21 +167,8 @@ function HaskellPlaygroundRunnerPanel() {
     // project change also supersedes a run started against the previous file.
     cancel();
 
-    const resetConsoleSurface = () => {
-      const context = runtimePanelStore.getSnapshot().context;
-      if (context.consoleLines.length > 0) {
-        runtimePanelStore.trigger.setConsoleLines({ consoleLines: [] });
-      }
-
-      if (Object.keys(context.terminalScrollLines).length > 0) {
-        runtimePanelStore.trigger.setTerminalScrollLines({
-          terminalScrollLines: {},
-        });
-      }
-    };
-
-    resetConsoleSurface();
-    return resetConsoleSurface;
+    resetRunnerConsoleForProject(runtimePanelStore);
+    return () => resetRunnerConsoleForProject(runtimePanelStore);
   }, [cancel, projectVersion, runtimePanelStore]);
 
   useEffect(() => {

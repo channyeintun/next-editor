@@ -21,13 +21,18 @@ import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedS
 import { useAsmPlaygroundRunner } from "../hooks/useAsmPlaygroundRunner";
 import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWorkspace";
 import {
+  ASM_CONSOLE_TAG_PATTERN,
   asmRegisterConsoleLines,
   asmRunResultToConsoleLines,
   asmRunServiceErrorToConsoleLines,
   asmRunStartedConsoleLines,
 } from "../runtime/asmPlayground/console";
 import { collectAsmPlaygroundFiles } from "../runtime/asmPlayground/files";
-import { appendRunnerConsoleLines, clearRunnerConsole } from "../runtime/playgroundConsoleStore";
+import {
+  appendRunnerConsoleLines,
+  clearRunnerConsole,
+  resetRunnerConsoleForProject,
+} from "../runtime/playgroundConsoleStore";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
@@ -60,9 +65,11 @@ const ANSI_GREEN = "\u001b[92m";
 const ANSI_RED = "\u001b[91m";
 
 // Same prefix-coloring idiom as the other dock consoles: color the [tag], dim
-// the rest, leave raw program output undecorated.
+// the rest, leave raw program output undecorated. Only the tags the assembly
+// console module emits match, so a program's own bracketed line — a memory
+// dump, say — is left alone.
 function decorateAsmConsoleLine(line: string): string {
-  const prefixMatch = line.match(/^\[[^\]]+\]/);
+  const prefixMatch = line.match(ASM_CONSOLE_TAG_PATTERN);
 
   if (!prefixMatch) {
     return line;
@@ -148,21 +155,8 @@ function AsmPlaygroundRunnerPanel() {
     // supersedes a run started against the previous file.
     cancel();
 
-    const resetConsoleSurface = () => {
-      const context = runtimePanelStore.getSnapshot().context;
-      if (context.consoleLines.length > 0) {
-        runtimePanelStore.trigger.setConsoleLines({ consoleLines: [] });
-      }
-
-      if (Object.keys(context.terminalScrollLines).length > 0) {
-        runtimePanelStore.trigger.setTerminalScrollLines({
-          terminalScrollLines: {},
-        });
-      }
-    };
-
-    resetConsoleSurface();
-    return resetConsoleSurface;
+    resetRunnerConsoleForProject(runtimePanelStore);
+    return () => resetRunnerConsoleForProject(runtimePanelStore);
   }, [cancel, projectVersion, runtimePanelStore]);
 
   useEffect(() => {

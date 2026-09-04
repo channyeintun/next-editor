@@ -14,6 +14,15 @@ function summarizeFilePaths(filePaths: readonly string[]): string {
     : `${filePaths.slice(0, 3).join(" ")} … (${filePaths.length} files)`;
 }
 
+/**
+ * The tags this module emits, as the pattern the runner panel colours by. It
+ * lives beside the builders rather than in the panel so the two are read
+ * together: a tag added here without the pattern silently loses its colour, and
+ * a pattern loose enough to match any `[...]` head paints program output as if
+ * the runner had said it — `fmt.Println` of a slice prints `[1 2 3]`.
+ */
+export const GO_CONSOLE_TAG_PATTERN = /^\[(?:go-run|go-vet|gofmt)(?: error)?\]/;
+
 export function goRunStartedConsoleLines(filePaths: readonly string[]): string[] {
   return [`[go-run] go run ${summarizeFilePaths(filePaths)}`];
 }
@@ -35,7 +44,14 @@ export function goFormatStaleConsoleLines(): string[] {
 }
 
 function splitOutputLines(output: string): string[] {
-  const trimmed = output.replace(/\n+$/, "");
+  // Trimmed with an index walk rather than /\n+$/: an unanchored greedy run is
+  // retried from every newline in the run, so a program that prints thousands
+  // of blank lines followed by anything else freezes the tab for seconds.
+  let end = output.length;
+  while (end > 0 && output.charCodeAt(end - 1) === 10) {
+    end -= 1;
+  }
+  const trimmed = output.slice(0, end);
   return trimmed ? trimmed.split("\n") : [];
 }
 

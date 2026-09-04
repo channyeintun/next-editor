@@ -14,6 +14,15 @@ import type { AsmPlaygroundServiceErrorKind } from "./client";
  * throttled by, or cut off from.
  */
 
+/**
+ * The tags this module emits, as the pattern the runner panel colours by. It
+ * lives beside the builders rather than in the panel so the two are read
+ * together: a tag added here without the pattern silently loses its colour, and
+ * a pattern loose enough to match any `[...]` head paints a program's own
+ * bracketed line — a memory dump, say — as if the runner had said it.
+ */
+export const ASM_CONSOLE_TAG_PATTERN = /^\[asm-run(?: error)?\]/;
+
 export function asmRunStartedConsoleLines(): string[] {
   return ["[asm-run] nasm -f elf64 main.asm && ld -o main main.o && ./main"];
 }

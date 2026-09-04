@@ -11,6 +11,15 @@ import type { KitePlaygroundServiceErrorKind } from "./client";
  * lesson has no service to be signed out of, throttled by, or cut off from.
  */
 
+/**
+ * The tags this module emits, as the pattern the runner panel colours by. It
+ * lives beside the builders rather than in the panel so the two are read
+ * together: a tag added here without the pattern silently loses its colour, and
+ * a pattern loose enough to match any `[...]` head paints a program's own
+ * bracketed line — a printed list, say — as if the runner had said it.
+ */
+export const KITE_CONSOLE_TAG_PATTERN = /^\[(?:kite-run|kitefmt)(?: error)?\]/;
+
 export function kiteRunStartedConsoleLines(): string[] {
   return ["[kite-run] kitec run main.kite"];
 }
@@ -28,7 +37,14 @@ export function kiteFormatStaleConsoleLines(): string[] {
 }
 
 function splitOutputLines(output: string): string[] {
-  const trimmed = output.replace(/\n+$/, "");
+  // Trimmed with an index walk rather than /\n+$/: an unanchored greedy run is
+  // retried from every newline in the run, so a program that prints thousands
+  // of blank lines followed by anything else freezes the tab for seconds.
+  let end = output.length;
+  while (end > 0 && output.charCodeAt(end - 1) === 10) {
+    end -= 1;
+  }
+  const trimmed = output.slice(0, end);
   return trimmed ? trimmed.split("\n") : [];
 }
 

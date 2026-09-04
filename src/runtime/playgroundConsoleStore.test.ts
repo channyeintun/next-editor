@@ -1,22 +1,40 @@
 import { describe, expect, it } from "vite-plus/test";
 import { createRuntimePanelStore } from "../stores/runtimePanelStore";
-import { goFormatStartedConsoleLines, goRunStartedConsoleLines } from "./goPlayground/console";
-import { haskellRunStartedConsoleLines } from "./haskellPlayground/console";
+import { ASM_CONSOLE_TAG_PATTERN } from "./asmPlayground/console";
 import {
+  GO_CONSOLE_TAG_PATTERN,
+  goFormatStartedConsoleLines,
+  goRunStartedConsoleLines,
+} from "./goPlayground/console";
+import {
+  HASKELL_CONSOLE_TAG_PATTERN,
+  haskellRunStartedConsoleLines,
+} from "./haskellPlayground/console";
+import {
+  KITE_CONSOLE_TAG_PATTERN,
   kiteFormatStartedConsoleLines,
   kiteRunStartedConsoleLines,
 } from "./kitePlayground/console";
-import { kotlinRunStartedConsoleLines } from "./kotlinPlayground/console";
 import {
+  KOTLIN_CONSOLE_TAG_PATTERN,
+  kotlinRunStartedConsoleLines,
+} from "./kotlinPlayground/console";
+import {
+  RUST_CONSOLE_TAG_PATTERN,
   rustFormatStartedConsoleLines,
   rustRunStartedConsoleLines,
 } from "./rustPlayground/console";
-import { zigFormatStartedConsoleLines, zigRunStartedConsoleLines } from "./zigPlayground/console";
+import {
+  ZIG_CONSOLE_TAG_PATTERN,
+  zigFormatStartedConsoleLines,
+  zigRunStartedConsoleLines,
+} from "./zigPlayground/console";
 import {
   MAX_RUNNER_CONSOLE_LINES,
   OPERATION_START_PREFIXES,
   appendRunnerConsoleLines,
   clearRunnerConsole,
+  resetRunnerConsoleForProject,
 } from "./playgroundConsoleStore";
 import { isPlaygroundRuntimeKind, studioRuntimeSchema } from "../studio/plan";
 import { runErrorPrefixFor } from "../studio/playgroundRuntime";
@@ -141,5 +159,68 @@ describe("clearRunnerConsole", () => {
     clearRunnerConsole(store, "go-runner");
 
     expect(store.getSnapshot().context).toBe(before);
+  });
+});
+
+describe("resetRunnerConsoleForProject", () => {
+  it("clears the console and every surface's recorded scroll position", () => {
+    const store = createRuntimePanelStore();
+    appendRunnerConsoleLines(store, ["[go-run] go run main.go", "hello"]);
+    store.trigger.setTerminalScrollLines({
+      terminalScrollLines: { "go-runner": 12, "rust-runner": 3 },
+    });
+
+    resetRunnerConsoleForProject(store);
+
+    const context = store.getSnapshot().context;
+    expect(context.consoleLines).toEqual([]);
+    // Wider than clearRunnerConsole on purpose: at a lesson boundary an entry
+    // left by another language's runner is stale too.
+    expect(context.terminalScrollLines).toEqual({});
+  });
+
+  it("is a no-op on a console that is already empty", () => {
+    const store = createRuntimePanelStore();
+    const before = store.getSnapshot().context;
+
+    resetRunnerConsoleForProject(store);
+
+    expect(store.getSnapshot().context).toBe(before);
+  });
+});
+
+// Each runner panel colours a console line by matching it against its own
+// module's tag pattern. A pattern loose enough to match any `[...]` head paints
+// the learner's own output as if the runner had said it, and a pattern that has
+// drifted from the tags its module emits silently drops their colour — Go's
+// once matched [go-run] and [go-vet] but not [gofmt].
+describe("runner console tag patterns", () => {
+  const TAG_PATTERNS = [
+    GO_CONSOLE_TAG_PATTERN,
+    KOTLIN_CONSOLE_TAG_PATTERN,
+    RUST_CONSOLE_TAG_PATTERN,
+    KITE_CONSOLE_TAG_PATTERN,
+    ZIG_CONSOLE_TAG_PATTERN,
+    HASKELL_CONSOLE_TAG_PATTERN,
+    ASM_CONSOLE_TAG_PATTERN,
+  ];
+
+  it("recognizes every operation-start line the shared store knows about", () => {
+    const unmatched = OPERATION_START_PREFIXES.filter(
+      (prefix) => !TAG_PATTERNS.some((pattern) => pattern.test(prefix)),
+    );
+
+    expect(unmatched, "operation-start prefixes no runner panel would colour").toEqual([]);
+  });
+
+  it.each([
+    ["a Go slice", "[1 2 3]"],
+    ["a Kotlin or Rust list", "[1, 2, 3]"],
+    ["a Haskell list of lists", "[[1,2],[3]]"],
+    ["a bracketed message the program printed itself", "[error: bad input]"],
+  ])("leaves %s undecorated", (_label, line) => {
+    const matched = TAG_PATTERNS.filter((pattern) => pattern.test(line));
+
+    expect(matched, "tag patterns that would colour program output").toEqual([]);
   });
 });

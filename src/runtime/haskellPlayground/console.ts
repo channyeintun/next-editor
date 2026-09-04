@@ -12,6 +12,16 @@ import type { HaskellPlaygroundServiceErrorKind } from "./client";
  * no format line to pair it with: the upstream service has no formatter.
  */
 
+/**
+ * The tags this module emits, as the pattern the runner panel colours by. It
+ * lives beside the builders rather than in the panel so the two are read
+ * together: a tag added here without the pattern silently loses its colour, and
+ * a pattern loose enough to match any `[...]` head paints program output as if
+ * the runner had said it — `print [1,2,3]` is the most ordinary line a Haskell
+ * program can emit.
+ */
+export const HASKELL_CONSOLE_TAG_PATTERN = /^\[haskell-(?:run|warn)(?: error)?\]/;
+
 export function haskellRunStartedConsoleLines(): string[] {
   return ["[haskell-run] runghc Main.hs"];
 }

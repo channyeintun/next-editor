@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  HASKELL_CONSOLE_TAG_PATTERN,
   haskellRunResultToConsoleLines,
   haskellRunServiceErrorToConsoleLines,
   haskellRunStartedConsoleLines,
@@ -178,5 +179,26 @@ describe("haskell console labels", () => {
     expect(haskellRunServiceErrorToConsoleLines("unavailable")).toEqual([
       "[haskell-run error] The Haskell Playground service is unavailable right now — your code is unchanged, try again shortly",
     ]);
+  });
+});
+
+describe("HASKELL_CONSOLE_TAG_PATTERN", () => {
+  it("matches every tag this module emits", () => {
+    for (const line of [
+      ...haskellRunStartedConsoleLines(),
+      ...haskellRunServiceErrorToConsoleLines("timeout"),
+      "[haskell-warn] The compiler reported warnings",
+      "[haskell-run] (no output)",
+    ]) {
+      expect(HASKELL_CONSOLE_TAG_PATTERN.test(line)).toBe(true);
+    }
+  });
+
+  it("leaves a printed list alone", () => {
+    // `print [1,2,3]` is the most ordinary line a Haskell program can emit, and
+    // the panel colours whatever this matches and dims the rest of the line.
+    expect(HASKELL_CONSOLE_TAG_PATTERN.test("[1,2,3]")).toBe(false);
+    expect(HASKELL_CONSOLE_TAG_PATTERN.test("[[1,2],[3]]")).toBe(false);
+    expect(HASKELL_CONSOLE_TAG_PATTERN.test("[error: bad input]")).toBe(false);
   });
 });

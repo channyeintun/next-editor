@@ -58,6 +58,27 @@ export function clearRunnerConsole(store: RuntimePanelStoreInstance, scrollSurfa
   }
 }
 
+/**
+ * The lesson-boundary reset, run by every runner panel when the project
+ * changes. Unlike `clearRunnerConsole`, which drops one named surface's scroll
+ * entry, this wipes the whole `terminalScrollLines` map: at a project boundary
+ * a leftover entry can belong to a *different* language's runner from the
+ * previous lesson, and every one of them is now stale. It lives here rather
+ * than inlined in each panel so a new thing the reset must touch is added once,
+ * for all seven languages, instead of in seven files minus the one forgotten.
+ */
+export function resetRunnerConsoleForProject(store: RuntimePanelStoreInstance): void {
+  const context = store.getSnapshot().context;
+
+  if (context.consoleLines.length > 0) {
+    store.trigger.setConsoleLines({ consoleLines: [] });
+  }
+
+  if (Object.keys(context.terminalScrollLines).length > 0) {
+    store.trigger.setTerminalScrollLines({ terminalScrollLines: {} });
+  }
+}
+
 export function appendRunnerConsoleLines(store: RuntimePanelStoreInstance, lines: string[]): void {
   if (lines.length === 0) {
     return;

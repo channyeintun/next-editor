@@ -14,12 +14,28 @@ function summarizeFilePaths(filePaths: readonly string[]): string {
     : `${filePaths.slice(0, 3).join(" ")} … (${filePaths.length} files)`;
 }
 
+/**
+ * The tags this module emits, as the pattern the runner panel colours by. It
+ * lives beside the builders rather than in the panel so the two are read
+ * together: a tag added here without the pattern silently loses its colour, and
+ * a pattern loose enough to match any `[...]` head paints program output as if
+ * the runner had said it — `println(listOf(1, 2))` prints `[1, 2]`.
+ */
+export const KOTLIN_CONSOLE_TAG_PATTERN = /^\[kotlin-(?:run|warn)(?: error)?\]/;
+
 export function kotlinRunStartedConsoleLines(filePaths: readonly string[]): string[] {
   return [`[kotlin-run] kotlin ${summarizeFilePaths(filePaths)}`];
 }
 
 function splitOutputLines(output: string): string[] {
-  const trimmed = output.replace(/\n+$/, "");
+  // Trimmed with an index walk rather than /\n+$/: an unanchored greedy run is
+  // retried from every newline in the run, so a program that prints thousands
+  // of blank lines followed by anything else freezes the tab for seconds.
+  let end = output.length;
+  while (end > 0 && output.charCodeAt(end - 1) === 10) {
+    end -= 1;
+  }
+  const trimmed = output.slice(0, end);
   return trimmed ? trimmed.split("\n") : [];
 }
 

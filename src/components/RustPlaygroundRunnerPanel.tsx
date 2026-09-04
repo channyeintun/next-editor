@@ -24,6 +24,7 @@ import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWor
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { monaco, workspacePathFromMonacoModelUri } from "../monaco";
 import {
+  RUST_CONSOLE_TAG_PATTERN,
   rustFormatResultToConsoleLines,
   rustFormatServiceErrorToConsoleLines,
   rustFormatStaleConsoleLines,
@@ -36,7 +37,11 @@ import {
   areRustPlaygroundFilesEqual,
   collectRustPlaygroundFiles,
 } from "../runtime/rustPlayground/files";
-import { appendRunnerConsoleLines, clearRunnerConsole } from "../runtime/playgroundConsoleStore";
+import {
+  appendRunnerConsoleLines,
+  clearRunnerConsole,
+  resetRunnerConsoleForProject,
+} from "../runtime/playgroundConsoleStore";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
@@ -61,9 +66,11 @@ const ANSI_GREEN = "\u001b[92m";
 const ANSI_RED = "\u001b[91m";
 
 // Same prefix-coloring idiom as the other dock consoles: color the [tag], dim
-// the rest, leave raw program output undecorated.
+// the rest, leave raw program output undecorated. Only the tags the Rust
+// console module emits match, so a program's own bracketed line — a printed
+// list, say — is left alone.
 function decorateRustConsoleLine(line: string): string {
-  const prefixMatch = line.match(/^\[[^\]]+\]/);
+  const prefixMatch = line.match(RUST_CONSOLE_TAG_PATTERN);
 
   if (!prefixMatch) {
     return line;
@@ -161,21 +168,8 @@ function RustPlaygroundRunnerPanel() {
     // previous file.
     cancel();
 
-    const resetConsoleSurface = () => {
-      const context = runtimePanelStore.getSnapshot().context;
-      if (context.consoleLines.length > 0) {
-        runtimePanelStore.trigger.setConsoleLines({ consoleLines: [] });
-      }
-
-      if (Object.keys(context.terminalScrollLines).length > 0) {
-        runtimePanelStore.trigger.setTerminalScrollLines({
-          terminalScrollLines: {},
-        });
-      }
-    };
-
-    resetConsoleSurface();
-    return resetConsoleSurface;
+    resetRunnerConsoleForProject(runtimePanelStore);
+    return () => resetRunnerConsoleForProject(runtimePanelStore);
   }, [cancel, projectVersion, runtimePanelStore]);
 
   useEffect(() => {

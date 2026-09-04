@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ASM_CONSOLE_TAG_PATTERN,
   asmRegisterConsoleLines,
   asmRunResultToConsoleLines,
   asmRunServiceErrorToConsoleLines,
@@ -139,5 +140,30 @@ describe("asm console lines", () => {
     expect(lines).toEqual([
       "[asm-run error] The run could not be completed (No response within 15000ms)",
     ]);
+  });
+});
+
+describe("ASM_CONSOLE_TAG_PATTERN", () => {
+  it("matches every tag this module emits, register rows included", () => {
+    for (const line of [
+      ...asmRunStartedConsoleLines(),
+      ...asmRunServiceErrorToConsoleLines("unavailable"),
+      ...asmRegisterConsoleLines({
+        status: "success",
+        stdout: "",
+        stderr: "",
+        registers: [{ name: "rax", value: "60" }],
+      }),
+      "[asm-run] (no output)",
+    ]) {
+      expect(ASM_CONSOLE_TAG_PATTERN.test(line)).toBe(true);
+    }
+  });
+
+  it("leaves a bracketed line the program printed itself alone", () => {
+    // The panel colours what this matches and dims the rest of the line, so a
+    // program's own output must not look like something the runner said.
+    expect(ASM_CONSOLE_TAG_PATTERN.test("[0x402000] = 7")).toBe(false);
+    expect(ASM_CONSOLE_TAG_PATTERN.test("[error: bad input]")).toBe(false);
   });
 });

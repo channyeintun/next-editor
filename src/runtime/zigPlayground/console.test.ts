@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  ZIG_CONSOLE_TAG_PATTERN,
   zigFormatResultToConsoleLines,
+  zigFormatStartedConsoleLines,
   zigRunResultToConsoleLines,
   zigRunServiceErrorToConsoleLines,
   zigRunStartedConsoleLines,
@@ -68,6 +70,21 @@ describe("zigRunResultToConsoleLines", () => {
       "[zig-run] Program exited",
     ]);
   });
+
+  it("trims a long run of trailing newlines without stalling the tab", () => {
+    // A loop that prints a blank line per iteration and then one summary line:
+    // the shape a greedy /\n+$/ retries from every newline in the run. The
+    // Worker caps a stream at 256 KiB, so this is well inside what a learner
+    // can produce, and the default 5s timeout is the assertion that the trim
+    // is linear — the old regex took ~14s on it.
+    const output = `${"\n".repeat(100_000)}done`;
+
+    expect(zigRunResultToConsoleLines({ status: "success", output })).toEqual([
+      ...Array.from({ length: 100_000 }, () => ""),
+      "done",
+      "[zig-run] Program exited",
+    ]);
+  });
 });
 
 describe("zig console labels", () => {
@@ -98,5 +115,25 @@ describe("zig console labels", () => {
     expect(zigRunServiceErrorToConsoleLines("timeout", "ignored")).toEqual([
       "[zig-run error] The program took too long to compile and run",
     ]);
+  });
+});
+
+describe("ZIG_CONSOLE_TAG_PATTERN", () => {
+  it("matches every tag this module emits", () => {
+    for (const line of [
+      ...zigRunStartedConsoleLines(),
+      ...zigFormatStartedConsoleLines(),
+      ...zigRunServiceErrorToConsoleLines("timeout"),
+      "[zig-fmt error] Files changed while formatting; no formatting was applied",
+    ]) {
+      expect(ZIG_CONSOLE_TAG_PATTERN.test(line)).toBe(true);
+    }
+  });
+
+  it("leaves a bracketed line the program printed itself alone", () => {
+    // The panel colours what this matches and dims the rest of the line, so a
+    // program's own output must not look like something the runner said.
+    expect(ZIG_CONSOLE_TAG_PATTERN.test("[1, 2, 3]")).toBe(false);
+    expect(ZIG_CONSOLE_TAG_PATTERN.test("[error: bad input]")).toBe(false);
   });
 });

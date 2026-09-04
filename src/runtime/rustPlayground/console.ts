@@ -8,6 +8,15 @@ import type { RustPlaygroundServiceErrorKind } from "./client";
  * no Playground- or Worker-specific detail leaks into the recorded lines.
  */
 
+/**
+ * The tags this module emits, as the pattern the runner panel colours by. It
+ * lives beside the builders rather than in the panel so the two are read
+ * together: a tag added here without the pattern silently loses its colour, and
+ * a pattern loose enough to match any `[...]` head paints program output as if
+ * the runner had said it — `{:?}` on a Vec prints `[1, 2, 3]`.
+ */
+export const RUST_CONSOLE_TAG_PATTERN = /^\[(?:rust-run|rustfmt)(?: error)?\]/;
+
 export function rustRunStartedConsoleLines(): string[] {
   return ["[rust-run] cargo run"];
 }
@@ -25,7 +34,14 @@ export function rustFormatStaleConsoleLines(): string[] {
 }
 
 function splitOutputLines(output: string): string[] {
-  const trimmed = output.replace(/\n+$/, "");
+  // Trimmed with an index walk rather than /\n+$/: an unanchored greedy run is
+  // retried from every newline in the run, so a program that prints thousands
+  // of blank lines followed by anything else freezes the tab for seconds.
+  let end = output.length;
+  while (end > 0 && output.charCodeAt(end - 1) === 10) {
+    end -= 1;
+  }
+  const trimmed = output.slice(0, end);
   return trimmed ? trimmed.split("\n") : [];
 }
 
