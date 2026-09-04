@@ -142,12 +142,9 @@ describe("kite monarch grammar", () => {
 
     for (const literal of ["0xFF", "0o755", "0b1010_1101", "1_000_000", "3.14", "1.5e-3"]) {
       const rule = ruleFor(body, literal);
-      expect({ literal, matched: rule !== undefined }).toEqual({ literal, matched: true });
+      expect(rule, `number literal ${literal}`).toBeDefined();
       const anchored = new RegExp(`^(?:${(rule![0] as RegExp).source})`);
-      expect({ literal, consumed: literal.match(anchored)?.[0] }).toEqual({
-        literal,
-        consumed: literal,
-      });
+      expect(literal.match(anchored)?.[0], `number literal ${literal}`).toBe(literal);
       expect(rule![1]).toBe(ruleFor(root, literal)?.[1]);
     }
   });
@@ -206,8 +203,7 @@ describe("kite monarch grammar", () => {
     );
 
     for (const keyword of present) {
-      // A missing keyword renders as a plain identifier; toContain names it in the diff.
-      expect(keywords).toContain(keyword);
+      expect(keywords, `${keyword} would render as a plain identifier`).toContain(keyword);
     }
   });
 });
