@@ -114,6 +114,25 @@ describe("listPublishedLessons", () => {
     expect(dropped, "a lesson the gallery can never reach").toEqual([]);
   });
 
+  // `?page=1e300` passes the route's integer guard but multiplies into an offset
+  // outside the int64 range, which SQLite binds as a REAL and rejects with
+  // "datatype mismatch" — a 500 where every other out-of-range page is empty.
+  it("answers an offset past the int64 range with an empty page instead of failing", async () => {
+    let prepared = 0;
+    const db = {
+      prepare() {
+        prepared += 1;
+        throw new Error("the statement must not be issued for an unbindable offset");
+      },
+    } as unknown as D1Database;
+
+    const page = await listPublishedLessons(db, 1e300, 12);
+
+    expect(page.rows).toEqual([]);
+    expect(page.nextPage).toBeNull();
+    expect(prepared, "an unbindable offset reached D1").toBe(0);
+  });
+
   it("ignores drafts and reports the last page", async () => {
     const db = asD1(
       createDb([

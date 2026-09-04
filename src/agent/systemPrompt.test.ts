@@ -109,6 +109,41 @@ describe("buildSystemPrompt", () => {
     },
   );
 
+  // kite-web runs in the WebContainer, so it never reaches a playground branch.
+  // It used to fall through to the generic stack paragraph, which calls the
+  // supported stack JS/TS "only" and never mentions the .kite sources the
+  // lesson is actually written in.
+  it("describes the Kite toolchain for kite-web lessons, keeping the WebContainer framing", () => {
+    const prompt = buildSystemPrompt(
+      {
+        id: "test-kite-web",
+        name: "Test Kite web",
+        lessonType: "kite-web",
+        entryFilePath: "src/main.kite",
+        folders: ["src"],
+        files: {
+          "src/main.kite": {
+            path: "src/main.kite",
+            name: "main.kite",
+            language: "kite",
+            content: "",
+          },
+        },
+      },
+      // No bash, so the pnpm rule can only come from the stack paragraph.
+      { toolNames: ["read", "edit"], hasBash: false },
+    );
+
+    expect(prompt).toContain("vite-plugin-kite");
+    expect(prompt).toContain(".kite");
+    expect(prompt).toContain("Use pnpm exclusively");
+    // Still a WebContainer lesson: unlike the playground branches above, the
+    // dev server and preview framing must stay.
+    expect(prompt).toContain("WebContainer");
+    expect(prompt).not.toContain("JS/TS libraries and frameworks only");
+    expect(prompt).not.toContain("Keep every solution within the web/Node.js ecosystem");
+  });
+
   it("lists the enabled tools and workspace context", () => {
     const prompt = buildSystemPrompt(makeProject(), {
       toolNames: ["read", "edit"],

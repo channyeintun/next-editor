@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ZIG_LANGUAGE_ID, zigLanguageConfiguration, zigMonarchLanguage } from "./zigLanguage";
 import { inferLanguageFromPath } from "../types/workspace";
+import type { Monaco } from "./runtime";
+import { defineNextEditorTheme } from "./theme";
+
+// theme.ts value-imports ./runtime, which boots the real Monaco entrypoints and
+// their workers. Only the theme data it hands Monaco is under test here.
+vi.mock("./runtime", () => ({ monaco: { editor: {} } }));
 
 /**
  * The grammar exists because borrowing Monaco's Rust grammar — the shortcut
@@ -47,6 +53,21 @@ function ruleFor(rules: unknown[], text: string): Rule | undefined {
   });
 }
 
+type ThemeRule = { token: string; foreground?: string };
+
+/** The rules `defineNextEditorTheme` hands Monaco, captured without a Monaco. */
+function themeRules(): ThemeRule[] {
+  const captured: ThemeRule[] = [];
+  defineNextEditorTheme({
+    editor: {
+      defineTheme(_name: string, data: { rules: ThemeRule[] }) {
+        captured.push(...data.rules);
+      },
+    },
+  } as unknown as Monaco);
+  return captured;
+}
+
 describe("zig monarch grammar", () => {
   it("registers under the id inferLanguageFromPath returns for .zig", () => {
     expect(ZIG_LANGUAGE_ID).toBe("zig");
@@ -80,6 +101,20 @@ describe("zig monarch grammar", () => {
     // `undefined` is a real value in Zig (`var buf: [8]u8 = undefined`), which
     // is exactly the kind of line a memory lesson puts on screen.
     expect(constants).toEqual(expect.arrayContaining(["true", "false", "null", "undefined"]));
+  });
+
+  it("emits a constant token the editor theme actually colours", () => {
+    // The grammar is only half of it: the theme is defined inherit:false, so a
+    // bare `constant.language` with no rule of its own resolves through
+    // Monaco's trie to the root default and `undefined` renders as plain text
+    // — the outcome the test above exists to prevent. Kite emits the same
+    // token, so one rule covers both grammars.
+    const rules = themeRules();
+    const rootDefault = rules.find((rule) => rule.token === "")?.foreground;
+    const constantRule = rules.find((rule) => rule.token === "constant.language");
+
+    expect(constantRule?.foreground).toBeTruthy();
+    expect(constantRule?.foreground).not.toBe(rootDefault);
   });
 
   it("knows the primitive types a lesson names out loud", () => {

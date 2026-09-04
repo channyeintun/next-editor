@@ -55,6 +55,11 @@ export function defineNextEditorTheme(monaco: Monaco) {
       { token: "boolean", foreground: "29a7e4" },
       { token: "unit", foreground: "ff8c8c" },
       { token: "constant.numeric", foreground: "29a7e4" },
+      // The first-party Zig and Kite grammars emit a bare `constant.language`
+      // for true/false/null/nil/undefined. This theme is inherit:false, so
+      // without this rule Monaco's trie falls back to the root default and
+      // those words render as plain text — dimmer than an identifier.
+      { token: "constant.language", foreground: "29a7e4" },
       { token: "constant.language.boolean", foreground: "29a7e4" },
       { token: "delimiter", foreground: "DCDCDC" },
       { token: "delimiter.access.imba", foreground: "DCDCDB" },

@@ -111,6 +111,24 @@ describe("detectImportedLessonType", () => {
     expect(detectImportedLessonType({ "Main.kt": textFile("Main.kt", "fun main() {}\n") })).toBe(
       "kotlin",
     );
+    expect(
+      detectImportedLessonType({ "main.zig": textFile("main.zig", "pub fn main() {}\n") }),
+    ).toBe("zig");
+    expect(detectImportedLessonType({ "Main.hs": textFile("Main.hs", "main = pure ()\n") })).toBe(
+      "haskell",
+    );
+    expect(detectImportedLessonType({ "main.asm": textFile("main.asm", "global _start\n") })).toBe(
+      "asm",
+    );
+    // Kite compiles in the page, so a Kite archive carries no manifest at all;
+    // without a rule it landed in the WebContainer as an html-css lesson and the
+    // Kite Runner panel never appeared.
+    expect(
+      detectImportedLessonType({
+        "main.kite": textFile("main.kite", "fn main() {}\n"),
+        "README.md": textFile("README.md", "# Kite"),
+      }),
+    ).toBe("kite");
   });
 
   it("detects playground lessons from sources without a canonical entry", () => {
@@ -122,6 +140,19 @@ describe("detectImportedLessonType", () => {
     ).toBe("go");
     expect(detectImportedLessonType({ "lib.rs": textFile("lib.rs", "") })).toBe("rust");
     expect(detectImportedLessonType({ "Greeting.kt": textFile("Greeting.kt", "") })).toBe("kotlin");
+    expect(detectImportedLessonType({ "util.zig": textFile("util.zig", "") })).toBe("zig");
+    expect(detectImportedLessonType({ "Lib.hs": textFile("Lib.hs", "") })).toBe("haskell");
+    expect(detectImportedLessonType({ "helpers.kite": textFile("helpers.kite", "") })).toBe("kite");
+    // The assembler accepts three extensions, so the probe has to try them all:
+    // a single-extension check would hand an archive of `.s` files to Vite.
+    expect(detectImportedLessonType({ "boot.s": textFile("boot.s", "") })).toBe("asm");
+    expect(detectImportedLessonType({ "boot.nasm": textFile("boot.nasm", "") })).toBe("asm");
+  });
+
+  it("does not treat literate Haskell as a runnable playground lesson", () => {
+    // `.lhs` is literate Haskell, which the playground does not compile, so it
+    // must stay out of the haskell rule's extension list.
+    expect(detectImportedLessonType({ "Main.lhs": textFile("Main.lhs", "") })).toBe("html-css");
   });
 
   it("lets the canonical entry decide when an archive mixes playground languages", () => {
@@ -233,6 +264,35 @@ describe("importWorkspaceProjectFromZip", () => {
     expect(kotlin.entryFilePath).toBe("Main.kt");
   });
 
+  it("imports a Kite lesson zip as a kite workspace entered at main.kite", async () => {
+    // helpers.kite comes first in the archive, so the entry file is only correct
+    // when the kite rule is consulted — the generic fallback opens the first
+    // text file, and without the rule the lesson boots Vite as html-css.
+    const project = await importWorkspaceProjectFromZip(
+      createZipFile("kite-lesson.zip", [
+        { path: "helpers.kite", content: "fn helper() {}\n" },
+        { path: "main.kite", content: "fn main() {}\n" },
+      ]),
+    );
+
+    expect(project.lessonType).toBe("kite");
+    expect(project.entryFilePath).toBe("main.kite");
+  });
+
+  it("imports an assembly zip of .s files entered at the first source", async () => {
+    // No main.asm, so the entry falls to the first sorted source across all
+    // three assembly extensions, matching collectAsmPlaygroundFiles' ordering.
+    const project = await importWorkspaceProjectFromZip(
+      createZipFile("asm-lesson.zip", [
+        { path: "start.s", content: "global _start\n" },
+        { path: "boot.s", content: "; boot\n" },
+      ]),
+    );
+
+    expect(project.lessonType).toBe("asm");
+    expect(project.entryFilePath).toBe("boot.s");
+  });
+
   it("stores binary assets behind descriptors and excludes dev artifacts", async () => {
     const pngBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
     const file = createZipFile("assets.zip", [
@@ -272,6 +332,24 @@ describe("importWorkspaceProjectFromZip", () => {
       entries.push({ path: `node_modules/pkg-${i}/index.js`, content: "x".repeat(64) });
     }
     entries.push({ path: ".git/objects/aa/bbbb", content: "y".repeat(1024) });
+
+    const project = await importWorkspaceProjectFromZip(createZipFile("app.zip", entries));
+
+    expect(Object.keys(project.files).sort()).toEqual(["index.html", "src/App.tsx"]);
+  });
+
+  // The pre-filter sees the raw zip entry name, which a non-conformant archiver
+  // may write with backslashes. While the ignore predicate split on "/" only, a
+  // node_modules tree in such an archive was counted and inflated, and the user
+  // was told a few-hundred-KB project exceeded the import limits.
+  it("ignores artifacts in backslash-separated archives too", async () => {
+    const entries = [
+      { path: "app\\index.html", content: "<html></html>" },
+      { path: "app\\src\\App.tsx", content: "export default function App() {}" },
+    ];
+    for (let i = 0; i < 12_000; i += 1) {
+      entries.push({ path: `app\\node_modules\\pkg-${i}\\index.js`, content: "x".repeat(64) });
+    }
 
     const project = await importWorkspaceProjectFromZip(createZipFile("app.zip", entries));
 
