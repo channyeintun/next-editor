@@ -21,7 +21,12 @@
  * truncated to eight bits first.
  */
 
-import { decodeInstruction, type DecodedInstruction, type DecodedOperand } from "./decoder";
+import {
+  AsmDecodeError,
+  decodeInstruction,
+  type DecodedInstruction,
+  type DecodedOperand,
+} from "./decoder";
 import { CONDITION_CODES } from "./isa";
 import { Memory, MemoryFault } from "./memory";
 import { physicalRegister, REGISTERS_64 } from "./registers";
@@ -74,6 +79,8 @@ export interface MachineOptions {
   maxInstructions?: number;
   /** Upper bound on bytes the program may print. */
   maxOutputBytes?: number;
+  /** Upper bound on how far `brk` may push the heap above where it started. */
+  maxHeapBytes?: number;
 }
 
 /**
@@ -86,6 +93,13 @@ export interface MachineOptions {
  */
 export const DEFAULT_MAX_INSTRUCTIONS = 5_000_000;
 export const DEFAULT_MAX_OUTPUT_BYTES = 256 * 1024;
+/**
+ * The same idea for the heap. A bump allocator that never stops asking is an
+ * ordinary beginner loop, and the instruction budget is no help there: the
+ * memory arrives thousands of times faster than the instructions do, so without
+ * this the tab dies before the runner ever gets to say what went wrong.
+ */
+export const DEFAULT_MAX_HEAP_BYTES = 64 * 1024 * 1024;
 
 /** Canonical condition mnemonic suffix (`e`, `ge`, …) to its 4-bit code. */
 const CONDITION_BY_NAME = new Map<string, number>();
@@ -143,14 +157,17 @@ export class Machine {
   #stdin: Uint8Array;
   #stdinPosition = 0;
   #break = 0n;
+  #heapStart = 0n;
   #instructions = 0;
   #maxInstructions: number;
   #maxOutputBytes: number;
+  #maxHeapBytes: number;
 
   constructor(options: MachineOptions = {}) {
     this.#stdin = options.stdin ?? new Uint8Array(0);
     this.#maxInstructions = options.maxInstructions ?? DEFAULT_MAX_INSTRUCTIONS;
     this.#maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+    this.#maxHeapBytes = options.maxHeapBytes ?? DEFAULT_MAX_HEAP_BYTES;
   }
 
   get instructionsExecuted(): number {
@@ -159,6 +176,7 @@ export class Machine {
 
   setBreak(address: bigint): void {
     this.#break = address;
+    this.#heapStart = address;
   }
 
   // -- register file --------------------------------------------------------
@@ -349,8 +367,12 @@ export class Machine {
         this.step();
       } catch (cause) {
         if (cause instanceof Halt) return cause.reason;
-        if (cause instanceof MemoryFault) return { kind: "fault", message: cause.message };
-        if (cause instanceof Error) return { kind: "fault", message: cause.message };
+        // Only the three ways *the program* can be wrong become a fault. An
+        // error from anywhere else is a bug in this runner, and reporting it as
+        // the learner's fault would both mislead them and hide it from us.
+        if (cause instanceof MemoryFault || cause instanceof AsmDecodeError) {
+          return { kind: "fault", message: cause.message };
+        }
         throw cause;
       }
     }
@@ -361,11 +383,29 @@ export class Machine {
   step(): DecodedInstruction {
     // 15 bytes is the architectural maximum length of an x86 instruction.
     const window = this.memory.readCode(this.rip, 15);
-    const decoded = decodeInstruction(window, 0, this.rip);
+    const decoded = this.#decode(window);
     const nextRip = (this.rip + BigInt(decoded.length)) & U64;
     this.#instructions += 1;
     this.#execute(decoded, nextRip);
     return decoded;
+  }
+
+  #decode(window: Uint8Array): DecodedInstruction {
+    try {
+      return decodeInstruction(window, 0, this.rip);
+    } catch (cause) {
+      // The window is exactly the architectural maximum, so a decoder that asks
+      // for a sixteenth byte has not run out of *code* — it is looking at bytes
+      // no processor would accept as one instruction. Its own reader says "ran
+      // off the end of the code", which describes this buffer, not the program.
+      if (cause instanceof RangeError) {
+        throw new Halt({
+          kind: "fault",
+          message: `The bytes at 0x${this.rip.toString(16)} are not an instruction — no x86 instruction is longer than the 15 bytes read here`,
+        });
+      }
+      throw cause;
+    }
   }
 
   #execute(decoded: DecodedInstruction, nextRip: bigint): void {
@@ -756,6 +796,12 @@ export class Machine {
    * A syscall this does not implement stops the program by name rather than
    * returning -ENOSYS, because a lesson is better served by "this runner has no
    * `open`" than by a program that silently takes an error path.
+   *
+   * One divergence from hardware to know about: a real `syscall` destroys `rcx`
+   * and `r11` (the return address and the flags go there, which is the whole
+   * reason the fourth argument is `r10` and not `rcx`). This one leaves them
+   * alone, so a counter kept in `rcx` across a `write` survives here and does
+   * not survive on a real Linux machine.
    */
   #syscall(): void {
     const number = this.registers[RAX];
@@ -786,9 +832,16 @@ export class Machine {
           return;
         }
         const length = Number(arg2);
-        if (length < 0) {
-          this.registers[RAX] = -22n & U64;
-          return;
+        // A single count larger than everything the runner will ever hold is
+        // not a length anyone meant to write — it is a stale pointer or a
+        // subtraction done backwards in rdx. The output limit below would call
+        // that a runaway printing loop, which sends the reader looking for a
+        // loop that is not there.
+        if (length > this.#maxOutputBytes) {
+          throw new Halt({
+            kind: "fault",
+            message: `The program asked write for ${length.toLocaleString("en-US")} bytes, which is not a length it could have meant — check what is in rdx`,
+          });
         }
         const sink = arg0 === 1n ? this.stdout : this.stderr;
         if (this.stdout.length + this.stderr.length + length > this.#maxOutputBytes) {
@@ -807,8 +860,14 @@ export class Machine {
           this.registers[RAX] = this.#break;
           return;
         }
-        const limit = this.#break + 0x40_0000n;
-        if (arg0 > limit) {
+        // Two ceilings, and the second is the one that matters: a single call
+        // may not jump more than 4 MiB, and the heap as a whole may not pass
+        // #maxHeapBytes above where it started. Without the total, a loop of
+        // individually reasonable requests grows real memory thousands of times
+        // faster than it burns the instruction budget.
+        const perCall = this.#break + 0x40_0000n;
+        const ceiling = this.#heapStart + BigInt(this.#maxHeapBytes);
+        if (arg0 > perCall || arg0 > ceiling) {
           this.registers[RAX] = this.#break;
           return;
         }

@@ -25,6 +25,9 @@ import { assembleAndRun } from "./run";
  */
 
 const wrap = (body: string) => `section .text\nglobal _start\n_start:\n${body}\n`;
+const register = (result: ReturnType<typeof assembleAndRun>, name: string) =>
+  result.registers.find((entry) => entry.name === name)?.value;
+const rdi = (result: ReturnType<typeof assembleAndRun>) => register(result, "rdi");
 const bytes = (src: string) =>
   assemble(wrap(src))
     .listing.flatMap((r) => r.bytes)
@@ -140,6 +143,84 @@ _start:
     expect(r.registers.find((x) => x.name === "rdi")?.value).toBe(0x11n);
   });
 
+  it("jl and jg read the sign against the overflow flag, not on their own", () => {
+    // -1 < 1 is the easy half. The half an emulator gets wrong is the one where
+    // the subtraction overflowed: INT_MIN - 1 leaves SF clear and OF set, and a
+    // rule that only looks at the sign answers "not less".
+    const easy = assembleAndRun(
+      wrap(" mov rax, -1\n cmp rax, 1\n setl dil\n mov rax, 60\n syscall"),
+    );
+    expect(rdi(easy)).toBe(1n);
+
+    const overflowed = assembleAndRun(
+      wrap(" mov eax, 0x80000000\n cmp eax, 1\n setl dil\n mov rax, 60\n syscall"),
+    );
+    expect(rdi(overflowed)).toBe(1n);
+
+    const greater = assembleAndRun(
+      wrap(" mov eax, 0x7fffffff\n add eax, 1\n setg dil\n mov rax, 60\n syscall"),
+    );
+    // The add overflowed to a negative bit pattern, so SF and OF agree and the
+    // signed answer is "greater" even though the bits say otherwise.
+    expect(rdi(greater)).toBe(1n);
+  });
+
+  it("the one-operand mul answers in ax for bytes and rdx:rax for the rest", () => {
+    const byte = assembleAndRun(
+      wrap(" mov al, 200\n mov bl, 2\n mul bl\n movzx edi, ax\n mov rax, 60\n syscall"),
+    );
+    // 400 does not fit in al, so the whole product lands in ax and CF is set.
+    expect(rdi(byte)).toBe(400n);
+
+    const carry = assembleAndRun(
+      wrap(" mov al, 200\n mov bl, 2\n mul bl\n setc dil\n mov rax, 60\n syscall"),
+    );
+    expect(rdi(carry)).toBe(1n);
+
+    const wide = assembleAndRun(
+      wrap(
+        " mov rax, 0x8000000000000000\n mov rbx, 2\n mul rbx\n mov rdi, rdx\n mov rax, 60\n syscall",
+      ),
+    );
+    expect(rdi(wide)).toBe(1n);
+  });
+
+  it("the one-operand imul keeps the sign", () => {
+    const result = assembleAndRun(
+      wrap(" mov al, -3\n mov bl, 5\n imul bl\n movsx rdi, ax\n mov rax, 60\n syscall"),
+    );
+    expect(rdi(result)).toBe((1n << 64n) - 15n);
+  });
+
+  it("neg sets the carry flag for everything but zero", () => {
+    const nonZero = assembleAndRun(
+      wrap(" mov rax, 3\n neg rax\n setc dil\n mov rax, 60\n syscall"),
+    );
+    expect(rdi(nonZero)).toBe(1n);
+
+    const zero = assembleAndRun(wrap(" xor rax, rax\n neg rax\n setc dil\n mov rax, 60\n syscall"));
+    expect(rdi(zero)).toBe(0n);
+  });
+
+  it("movsx sign-extends where movzx pads with zeros", () => {
+    const signed = assembleAndRun(wrap(" mov al, -1\n movsx rdi, al\n mov rax, 60\n syscall"));
+    expect(rdi(signed)).toBe((1n << 64n) - 1n);
+
+    const zeroed = assembleAndRun(wrap(" mov al, -1\n movzx rdi, al\n mov rax, 60\n syscall"));
+    expect(rdi(zeroed)).toBe(255n);
+  });
+
+  it("executes an instruction that straddles a page boundary", () => {
+    // The decoder is handed a 15-byte window, which only sometimes fits in the
+    // page the instruction starts on. 4090 one-byte nops put `mov rdi, 7`
+    // across the seam between the first and second code pages.
+    const result = assembleAndRun(
+      wrap(`${" nop\n".repeat(4090)} mov rdi, 7\n mov rax, 60\n syscall`),
+    );
+    expect(result.status).toBe("success");
+    expect(result.exitCode).toBe(7);
+  });
+
   it("a local label before any global label is rejected, not misfiled", () => {
     expect(() => assemble("section .text\n.loop:\n ret\n")).toThrow(/no label above it/);
   });
@@ -171,6 +252,53 @@ describe("regressions", () => {
     ["loopnz", "e0"],
   ])("assembles %s", (mnemonic, opcode) => {
     expect(bytes(`.again:\n ${mnemonic} .again`)).toBe(`${opcode} fe`);
+  });
+
+  it("runs loop the counted number of times and lands on zero", () => {
+    // The byte tests above prove the family assembles; nothing ran one, so the
+    // decrement, its 64-bit mask, and where it sits relative to the branch test
+    // were free to be wrong. A body that adds tells the count apart.
+    const result = assembleAndRun(
+      wrap(
+        " xor rax, rax\n mov rcx, 5\n.again:\n add rax, 2\n loop .again\n mov rdi, rax\n mov rax, 60\n syscall",
+      ),
+    );
+    expect(rdi(result)).toBe(10n);
+    expect(register(result, "rcx")).toBe(0n);
+  });
+
+  const SCAN = (mnemonic: string, needle: number) => `section .data
+    buf db 7, 7, 7, 9, 7
+section .text
+global _start
+_start:
+    mov rsi, buf
+    mov rcx, 5
+.scan:
+    mov al, [rsi]
+    inc rsi
+    cmp al, ${needle}
+    ${mnemonic} .scan
+
+    mov rdi, rsi
+    sub rdi, buf
+    mov rax, 60
+    syscall
+`;
+
+  it("loope keeps going only while the comparison keeps matching", () => {
+    // The buffer is equal until its fourth byte, so the loop walks three bytes
+    // and falls out on the mismatch with the counter still above zero — the
+    // only shape that separates loope from plain loop.
+    const result = assembleAndRun(SCAN("loope", 7));
+    expect(rdi(result)).toBe(4n);
+    expect(register(result, "rcx")).toBe(1n);
+  });
+
+  it("loopne keeps going only until the comparison matches", () => {
+    const result = assembleAndRun(SCAN("loopne", 9));
+    expect(rdi(result)).toBe(4n);
+    expect(register(result, "rcx")).toBe(1n);
   });
 
   it("takes a symbol defined further down the file as a byte-wide immediate", () => {
@@ -233,10 +361,22 @@ _start:
   });
 
   it("leaves a value alone when rotated by exactly its width", () => {
+    // The 64-bit case above never reaches this rule: 64 masks to 0 and the
+    // shared zero-count early exit takes it. Only an 8- or 16-bit operand keeps
+    // a count equal to its own width, which is the identity the rotate code
+    // special-cases rather than computes.
     const result = assembleAndRun(
-      wrap(" mov rax, 0x1234\n mov cl, 64\n rol rax, cl\n mov rdi, rax\n mov rax, 60\n syscall"),
+      wrap(" mov al, 0x5a\n mov cl, 8\n rol al, cl\n movzx edi, al\n mov rax, 60\n syscall"),
     );
-    expect(result.registers.find((entry) => entry.name === "rdi")?.value).toBe(0x1234n);
+    expect(rdi(result)).toBe(0x5an);
+  });
+
+  it("wraps a rotate count past the width instead of ignoring it", () => {
+    const result = assembleAndRun(
+      wrap(" mov rax, 0x1234\n mov cl, 65\n rol rax, cl\n mov rdi, rax\n mov rax, 60\n syscall"),
+    );
+    // 65 masks to 1, so this is a rotate by one and not a no-op.
+    expect(rdi(result)).toBe(0x2468n);
   });
 
   it("clears the upper half on a cmov the condition rejected", () => {

@@ -1,9 +1,9 @@
 /**
  * The whole toolchain in one call: source in, program output out.
  *
- * This is the layer that stands in for `nasm && ld && ./a.out`, and it is
- * deliberately the only part the rest of the app knows about. Everything below
- * it — the two-pass layout, the encoder, the decoder, the page table — is an
+ * This is the layer that stands in for `nasm && ld && ./a.out`. Together with
+ * `assemble` it is the whole surface the rest of the app uses: everything below
+ * — the two-pass layout, the encoder, the decoder, the page table — is an
  * implementation detail of "run this assembly".
  *
  * The loading it does is the part people usually never see. A Linux program
@@ -16,6 +16,7 @@
 
 import { AsmError, assemble, STACK_SIZE, STACK_TOP, type AssembledProgram } from "./assembler";
 import {
+  DEFAULT_MAX_HEAP_BYTES,
   DEFAULT_MAX_INSTRUCTIONS,
   DEFAULT_MAX_OUTPUT_BYTES,
   Machine,
@@ -51,6 +52,7 @@ export interface X86RunOptions {
   stdin?: string;
   maxInstructions?: number;
   maxOutputBytes?: number;
+  maxHeapBytes?: number;
   /** The name shown in diagnostics. */
   fileName?: string;
 }
@@ -68,19 +70,29 @@ export function formatDiagnostic(error: AsmError, source: string, fileName: stri
   const lines = source.split("\n");
   const text = lines[error.line - 1] ?? "";
   const caretColumn = Math.max(1, Math.min(error.column, text.length + 1));
+  // The pad is built from the line itself, keeping its tabs, because a column
+  // is a count of characters while a tab is a jump to the next tab stop. Padding
+  // with spaces puts the caret under the wrong thing on every tab-indented
+  // line — which is most assembly anyone pastes in from elsewhere.
+  const pad = text.slice(0, caretColumn - 1).replace(/[^\t]/g, " ");
   return [
     `${fileName}:${error.line}:${error.column}: error: ${error.message}`,
     `  ${text}`,
-    `  ${" ".repeat(caretColumn - 1)}^`,
+    `  ${pad}^`,
   ].join("\n");
 }
 
-/** Assemble and load a program without running it — used by the tests. */
+/**
+ * Load an assembled program into a fresh Machine — the segments, .bss, the
+ * initial stack, the break and rip — without running it. This is the loader the
+ * page's runner uses; `assembleAndRun` wraps it for the tests.
+ */
 export function load(program: AssembledProgram, options: X86RunOptions = {}): Machine {
   const machine = new Machine({
     stdin: options.stdin ? encoder.encode(options.stdin) : undefined,
     maxInstructions: options.maxInstructions ?? DEFAULT_MAX_INSTRUCTIONS,
     maxOutputBytes: options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
+    maxHeapBytes: options.maxHeapBytes ?? DEFAULT_MAX_HEAP_BYTES,
   });
 
   for (const segment of program.segments) {

@@ -256,6 +256,61 @@ _start:
     expect(result.registers.find((entry) => entry.name === "rsp")?.value).toBe(0x7fff_ffff_ef70n);
   });
 
+  it("grows the heap with brk and stores through the new pointer", () => {
+    const result = assembleAndRun(`section .text
+global _start
+_start:
+    mov rax, 12         ; brk(0) answers with the current break
+    xor rdi, rdi
+    syscall
+    mov rbx, rax
+
+    lea rdi, [rbx + 4096]
+    mov rax, 12
+    syscall
+
+    mov qword [rbx], 99
+    mov rdi, [rbx]
+    mov rax, 60
+    syscall
+`);
+    expect(result.status).toBe("success");
+    expect(result.exitCode).toBe(99);
+  });
+
+  it("answers getpid with the same number every time", () => {
+    const result = assembleAndRun(`section .text
+global _start
+_start:
+    mov rax, 39
+    syscall
+    mov rdi, rax
+    mov rax, 60
+    syscall
+`);
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("hands back -EBADF for a file descriptor it does not have", () => {
+    const result = assembleAndRun(`section .data
+    msg db "x", 10
+section .text
+global _start
+_start:
+    mov rax, 1
+    mov rdi, 5          ; not stdin, stdout or stderr
+    mov rsi, msg
+    mov rdx, 2
+    syscall
+    mov rdi, rax
+    mov rax, 60
+    syscall
+`);
+    // -9 truncated to the low byte of an exit status.
+    expect(result.stdout).toBe("");
+    expect(result.exitCode).toBe(247);
+  });
+
   it("reports the registers after the run", () => {
     const result = assembleAndRun(`section .text
 global _start
@@ -313,7 +368,7 @@ _start:
     expect(result.detail).toContain("divided by zero");
   });
 
-  it("stops a loop that never ends, and says which line to look at", () => {
+  it("stops a loop that never ends, and says what to check", () => {
     const result = assembleAndRun(
       `section .text
 global _start
@@ -324,6 +379,135 @@ _start:
     );
     expect(result.status).toBe("runtime-error");
     expect(result.detail).toContain("without stopping");
+  });
+
+  it("says the program ran past its last instruction when it forgets to exit", () => {
+    // The zeros padding the last code page decode as `add [rax], al`, so
+    // without an explicit end to the code this reported a bad *read* at
+    // whatever write left in rax — telling someone who forgot `exit` that they
+    // touched a bad address.
+    const result = assembleAndRun(`section .data
+    msg db "hi", 10
+section .text
+global _start
+_start:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, msg
+    mov rdx, 3
+    syscall
+`);
+    expect(result.status).toBe("runtime-error");
+    expect(result.stdout).toBe("hi\n");
+    expect(result.detail).toContain("ran past its last instruction");
+    expect(result.detail).toContain("call exit");
+  });
+
+  it("stops a program that prints more than the runner will hold", () => {
+    const result = assembleAndRun(
+      `section .data
+    msg db "ab", 10
+section .text
+global _start
+_start:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, msg
+    mov rdx, 3
+    syscall
+    jmp _start
+`,
+      { maxOutputBytes: 10 },
+    );
+    expect(result.status).toBe("runtime-error");
+    expect(result.detail).toContain("printed more than this runner will hold");
+    // The write that would cross the limit is refused whole, so what arrived is
+    // the last write that fitted, not the cap itself.
+    expect(result.stdout).toBe("ab\nab\nab\n");
+  });
+
+  it("blames rdx, not a printing loop, when write is asked for an absurd count", () => {
+    const result = assembleAndRun(`section .data
+    msg db "hi", 10
+section .text
+global _start
+_start:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, msg
+    mov rdx, -1         ; a stale pointer or a subtraction done backwards
+    syscall
+    mov rax, 60
+    xor rdi, rdi
+    syscall
+`);
+    expect(result.status).toBe("runtime-error");
+    expect(result.stdout).toBe("");
+    expect(result.detail).toContain("check what is in rdx");
+    expect(result.detail).not.toContain("printed more than");
+  });
+
+  it("caps the heap however many times brk is asked to grow it", () => {
+    // Each request is legal on its own; only the total is not. Without a total
+    // the loop allocates gigabytes long before the instruction budget ends it.
+    const before = process.memoryUsage().arrayBuffers;
+    const result = assembleAndRun(`section .text
+global _start
+_start:
+    mov rax, 12
+    xor rdi, rdi
+    syscall
+    mov r12, rax        ; where the heap started
+    mov rbx, rax
+    mov rcx, 40         ; 40 x 4 MiB asked for, well past the ceiling
+
+.grow:
+    lea rdi, [rbx + 0x400000]
+    mov rax, 12
+    syscall
+    mov rbx, rax
+    dec rcx
+    jnz .grow
+
+    mov rdi, rbx
+    sub rdi, r12
+    shr rdi, 20         ; how many MiB the heap actually grew
+    mov rax, 60
+    syscall
+`);
+    expect(result.status).toBe("success");
+    expect(result.exitCode).toBe(64);
+    // And asking for the space is not the same as using it: the loop writes
+    // nothing, so the pages it reserved should not exist as arrays yet.
+    expect(process.memoryUsage().arrayBuffers - before).toBeLessThan(16 * 1024 * 1024);
+  });
+
+  it("says an over-long run of bytes is not an instruction", () => {
+    // Fifteen prefix bytes and then an opcode is longer than any x86
+    // instruction may be. The decoder ran off its own fetch window and the raw
+    // reader error reached the learner as "Ran off the end of the code".
+    const result = assembleAndRun(`section .text
+global _start
+_start:
+    db 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66
+    db 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66
+    db 0x0f, 0x05
+    mov rax, 60
+    xor rdi, rdi
+    syscall
+`);
+    expect(result.status).toBe("runtime-error");
+    expect(result.detail).toContain("no x86 instruction is longer than the 15 bytes");
+  });
+
+  it("puts the caret under the right column on a tab-indented line", () => {
+    const result = assembleAndRun("section .text\nglobal _start\n_start:\n\tmov\trax, nowhere\n");
+    expect(result.status).toBe("assemble-error");
+    const [, echoed, caret] = result.diagnostics!.split("\n");
+    // The pad keeps the line's own tabs, so the caret lands on the same column
+    // as the token whatever tab width the console renders with.
+    expect(echoed).toBe("  \tmov\trax, nowhere");
+    expect(caret).toBe("  \t   \t     ^");
   });
 
   it("names a system call it does not have", () => {

@@ -15,6 +15,7 @@
 
 export const PAGE_BITS = 12n;
 export const PAGE_BYTES = 1 << Number(PAGE_BITS);
+const PAGE_MASK = BigInt(PAGE_BYTES - 1);
 
 export type PagePermission = "r" | "rw" | "rx";
 
@@ -31,7 +32,8 @@ export class MemoryFault extends Error {
 }
 
 interface Page {
-  data: Uint8Array;
+  /** Allocated on first touch — a reserved page nobody writes costs nothing. */
+  data: Uint8Array | null;
   permission: PagePermission;
 }
 
@@ -41,21 +43,22 @@ function formatAddress(address: bigint): string {
 
 export class Memory {
   #pages = new Map<bigint, Page>();
+  /** The half-open spans that hold real instructions, in mapping order. */
+  #code: { start: bigint; end: bigint }[] = [];
 
   /** Map a region, creating pages as needed and copying `bytes` into it. */
   map(start: bigint, length: bigint, permission: PagePermission, bytes?: Uint8Array): void {
     const first = start >> PAGE_BITS;
     const last = (start + (length > 0n ? length - 1n : 0n)) >> PAGE_BITS;
     for (let page = first; page <= last; page += 1n) {
-      if (!this.#pages.has(page)) {
-        this.#pages.set(page, { data: new Uint8Array(PAGE_BYTES), permission });
-      } else {
-        // A later mapping widens permissions rather than replacing them, so a
-        // `.data` page that shares a page with `.rodata` stays writable.
-        const existing = this.#pages.get(page)!;
-        if (existing.permission !== permission && permission === "rw") existing.permission = "rw";
-      }
+      if (!this.#pages.has(page)) this.#pages.set(page, { data: null, permission });
     }
+    // Pages are the unit of permission, but the last code page has zeros after
+    // the last instruction, and those zeros are `add [rax], al` to a decoder.
+    // Remembering where the code really ends is what lets a program that ran
+    // off the end of itself be told so, instead of being blamed for whatever
+    // address the padding happened to dereference.
+    if (permission === "rx" && length > 0n) this.#code.push({ start, end: start + length });
     if (bytes) {
       // The loader writes through the permission check, not around it: this is
       // the kernel placing the program in memory before it starts, and code
@@ -63,13 +66,25 @@ export class Memory {
       for (let offset = 0; offset < bytes.length; offset += 1) {
         const address = start + BigInt(offset);
         const page = this.#pages.get(address >> PAGE_BITS)!;
-        page.data[Number(address & BigInt(PAGE_BYTES - 1))] = bytes[offset];
+        this.#bytesOf(page)[Number(address & PAGE_MASK)] = bytes[offset];
       }
     }
   }
 
   isMapped(address: bigint): boolean {
     return this.#pages.has(address >> PAGE_BITS);
+  }
+
+  #bytesOf(page: Page): Uint8Array {
+    page.data ??= new Uint8Array(PAGE_BYTES);
+    return page.data;
+  }
+
+  #isCode(address: bigint): boolean {
+    for (const span of this.#code) {
+      if (address >= span.start && address < span.end) return true;
+    }
+    return false;
   }
 
   #page(address: bigint, access: "read" | "write" | "execute"): Page {
@@ -97,17 +112,24 @@ export class Memory {
         access,
       );
     }
+    if (access === "execute" && !this.#isCode(address)) {
+      throw new MemoryFault(
+        `The program ran past its last instruction, at ${formatAddress(address)} — nothing follows the code, so a program has to call exit itself`,
+        address,
+        access,
+      );
+    }
     return page;
   }
 
   #load(address: bigint, access: "read" | "execute" = "read"): number {
     const page = this.#page(address, access);
-    return page.data[Number(address & BigInt(PAGE_BYTES - 1))];
+    return page.data === null ? 0 : page.data[Number(address & PAGE_MASK)];
   }
 
   #store(address: bigint, value: number): void {
     const page = this.#page(address, "write");
-    page.data[Number(address & BigInt(PAGE_BYTES - 1))] = value & 0xff;
+    this.#bytesOf(page)[Number(address & PAGE_MASK)] = value & 0xff;
   }
 
   read(address: bigint, size: number): bigint {
@@ -153,13 +175,21 @@ export class Memory {
    * asks for a maximum-length window and a short instruction at the end of a
    * section would otherwise fault on bytes it never uses. Those tail bytes read
    * as zero and the decoder stops when it has enough.
+   *
+   * This runs for every instruction the machine executes, so the common case —
+   * a window that stays inside one page — resolves that page once and hands the
+   * decoder a view of it, rather than walking the page table per byte.
    */
   readCode(address: bigint, length: number): Uint8Array {
+    const page = this.#page(address, "execute");
+    const offset = Number(address & PAGE_MASK);
+    if (page.data !== null && offset + length <= PAGE_BYTES) {
+      return page.data.subarray(offset, offset + length);
+    }
     const out = new Uint8Array(length);
-    out[0] = this.#load(address, "execute");
-    for (let offset = 1; offset < length; offset += 1) {
-      const at = address + BigInt(offset);
-      out[offset] = this.isMapped(at) ? this.#load(at, "read") : 0;
+    for (let index = 0; index < length; index += 1) {
+      const at = address + BigInt(index);
+      out[index] = this.isMapped(at) ? this.#load(at, "read") : 0;
     }
     return out;
   }

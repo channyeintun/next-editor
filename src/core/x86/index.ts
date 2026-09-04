@@ -29,12 +29,10 @@
  * rather than an execution. For teaching x86-64 that is the right trade.
  */
 
-export { assemble, AsmError, TEXT_BASE, STACK_TOP } from "./assembler";
+export { assemble, AsmError } from "./assembler";
 export type { AssembledProgram, AssembledSegment, ListingRow } from "./assembler";
 export { assembleAndRun, formatDiagnostic, formatListing, load } from "./run";
 export type { X86RunResult, X86RunOptions, X86RunStatus, X86RegisterSnapshot } from "./run";
-export { Machine } from "./cpu";
-export type { Flags, StopReason } from "./cpu";
-export { decodeInstruction } from "./decoder";
-export { KNOWN_MNEMONICS } from "./isa";
-export { REGISTERS_64 } from "./registers";
+// `load` hands back a Machine and a result carries its Flags, so both are part
+// of the surface as types; nothing outside this directory drives a Machine.
+export type { Flags, Machine, StopReason } from "./cpu";
