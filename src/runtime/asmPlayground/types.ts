@@ -10,9 +10,10 @@
  *
  * What it adds is `registers` and `flags`. Every other language's result is
  * what the program printed; an assembly lesson is usually *about* the register
- * file, so the runner can show it after a run — the machine is right here, and
+ * file, so the runner can carry it after a run — the machine is right here, and
  * its state is an ordinary value rather than something behind a debugger
- * protocol.
+ * protocol. Only `registers` is rendered today (`asmRegisterConsoleLines`);
+ * `flags` is carried for lesson fixtures and has no console line yet.
  *
  * The result shape otherwise mirrors the other five deliberately, so
  * `playgroundRuntime.ts`, the runner panel and the console helpers treat every
@@ -64,7 +65,11 @@ export interface AsmPlaygroundRunResult {
   assembleErrors?: string;
   /** What stopped the program, present exactly when status is "runtime-error". */
   exitDetail?: string;
-  /** How many instructions ran, for the runner's status line. */
+  /**
+   * How many instructions ran. Carried for lesson fixtures and for anyone
+   * reading a recorded result; the console does not render it (the runaway-loop
+   * message formats its own count from the machine).
+   */
   instructions?: number;
   /**
    * The registers the program *changed*, in register-file order.

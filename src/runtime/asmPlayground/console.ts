@@ -19,7 +19,14 @@ export function asmRunStartedConsoleLines(): string[] {
 }
 
 function splitOutputLines(output: string): string[] {
-  const trimmed = output.replace(/\n+$/, "");
+  // Trimmed with a loop rather than `/\n+$/`, which backtracks quadratically
+  // over a long run of newlines that is *not* at the end of the string. The
+  // machine here is in the page with a 256 KiB output budget, so one buggy
+  // loop that prints a blank line per iteration and then a summary hands this
+  // helper a quarter of a million newlines and freezes the tab for a minute.
+  let end = output.length;
+  while (end > 0 && output[end - 1] === "\n") end -= 1;
+  const trimmed = output.slice(0, end);
   return trimmed ? trimmed.split("\n") : [];
 }
 
@@ -30,9 +37,12 @@ export function asmRunResultToConsoleLines(result: AsmPlaygroundRunResult): stri
     return ["[asm-run error] Assembly failed", ...splitOutputLines(result.assembleErrors ?? "")];
   }
 
-  const lines: string[] = [];
-  const outputLines = [...splitOutputLines(result.stdout), ...splitOutputLines(result.stderr)];
-  lines.push(...(outputLines.length > 0 ? outputLines : ["[asm-run] (no output)"]));
+  // Concatenated rather than spread into `push`: a spread call is capped at
+  // roughly 125,000 arguments, and 256 KiB of two-byte lines is more than
+  // that. The proxied runners cannot reach the cap because their services cut
+  // the output first; this machine prints straight into the page.
+  const outputLines = splitOutputLines(result.stdout).concat(splitOutputLines(result.stderr));
+  const lines: string[] = outputLines.length > 0 ? outputLines : ["[asm-run] (no output)"];
 
   if (result.status === "runtime-error") {
     lines.push(`[asm-run error] ${result.exitDetail ?? "The program stopped"}`);

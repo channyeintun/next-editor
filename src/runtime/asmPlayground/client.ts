@@ -32,11 +32,14 @@ export class AsmPlaygroundServiceError extends Error {
 /**
  * How many instructions to run before handing the browser back the thread.
  *
- * The machine runs about a million instructions a second, so this is roughly a
- * tenth of a second of work: short enough that the page stays responsive and
- * the Stop button keeps working, long enough that the yielding costs nothing
- * measurable. Running a whole program in one go would freeze the tab for as
- * long as the program took — and freeze the button that could have stopped it.
+ * The machine runs the better part of a million instructions a second, so this
+ * is roughly a tenth of a second of work: short enough that the page stays
+ * responsive, long enough that the yielding costs nothing measurable. There is
+ * no Stop control in the panel — the generation check between slices is what
+ * lets a newer Run, a lesson switch, playback or unmount take the machine away
+ * from a program that will not end. Running a whole program in one go would
+ * freeze the tab for as long as the program took, and none of those could
+ * happen until it finished.
  */
 const SLICE_INSTRUCTIONS = 100_000;
 

@@ -86,6 +86,35 @@ describe("asm console lines", () => {
     ).toEqual([]);
   });
 
+  it("renders more lines than a spread call can carry", () => {
+    // 256 KiB of two-byte lines is ~131,000 lines, past the ~125,000-argument
+    // spread-call limit — reachable from one runaway `write` loop.
+    const lines = asmRunResultToConsoleLines({
+      status: "success",
+      stdout: "7\n".repeat(130_000),
+      stderr: "",
+      exitCode: 0,
+    });
+
+    expect(lines).toHaveLength(130_001);
+    expect(lines[0]).toBe("7");
+    expect(lines[130_000]).toBe("[asm-run] Program exited with status 0");
+  });
+
+  it("trims trailing newlines without backtracking over the ones before them", () => {
+    // The blank-line-per-iteration loop followed by a summary: the shape that
+    // made the old /\n+$/ trim quadratic. Under that trim this takes over 5s.
+    const lines = asmRunResultToConsoleLines({
+      status: "success",
+      stdout: `${"\n".repeat(60_000)}done\n`,
+      stderr: "",
+      exitCode: 0,
+    });
+
+    expect(lines).toHaveLength(60_002);
+    expect(lines[60_000]).toBe("done");
+  }, 2_000);
+
   it("has no line for being signed out, throttled, or cut off", () => {
     // Two kinds, not six: there is no service to be any of those things.
     expect(asmRunServiceErrorToConsoleLines("unavailable")).toEqual([
@@ -94,6 +123,21 @@ describe("asm console lines", () => {
     expect(asmRunServiceErrorToConsoleLines("invalid-source", "Name it main.asm")).toEqual([
       "[asm-run error] This program can't run in an assembly lesson",
       "Name it main.asm",
+    ]);
+  });
+
+  it("still yields a string for a kind the studio engine can synthesize", () => {
+    // liveAttempt (src/studio/playgroundRuntime.ts:172) turns its own deadline
+    // into a "timeout" kind and casts it in, so this call really happens with a
+    // kind outside the union. Without the fallback the store would be handed
+    // `undefined` and `lines[0].startsWith(...)` would throw.
+    const lines = asmRunServiceErrorToConsoleLines(
+      "timeout" as never,
+      "No response within 15000ms",
+    );
+
+    expect(lines).toEqual([
+      "[asm-run error] The run could not be completed (No response within 15000ms)",
     ]);
   });
 });

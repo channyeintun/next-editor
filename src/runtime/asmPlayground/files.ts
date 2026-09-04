@@ -15,6 +15,10 @@ export const ASM_ENTRY_PATH = "main.asm";
  * no `%include` here and no linker, so a second file is never part of the same
  * program, and a workspace with several and none named `main.asm` is a question
  * rather than a guess.
+ *
+ * There is no companion `areAsmPlaygroundFilesEqual`: that helper exists only
+ * to catch edits that landed while a format request was in flight, and
+ * assembly has no formatter.
  */
 export function collectAsmPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
@@ -28,17 +32,4 @@ export function collectAsmPlaygroundFiles(
       return left.path.localeCompare(right.path);
     })
     .map((file) => ({ path: file.path, content: file.content }));
-}
-
-/** Exact source snapshot comparison, used to detect a stale run. */
-export function areAsmPlaygroundFilesEqual(
-  left: readonly AsmPlaygroundFile[],
-  right: readonly AsmPlaygroundFile[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (file, index) => file.path === right[index]?.path && file.content === right[index]?.content,
-    )
-  );
 }

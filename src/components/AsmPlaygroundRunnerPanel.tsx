@@ -45,7 +45,7 @@ import { areStructuredDataEqual } from "../utils/equality";
  *
  * There is no linker here, so a run assembles `main.asm` alone (the client says
  * so plainly when several files exist and none is named that). After a run the
- * console also prints the registers that hold something, because an assembly
+ * console also prints the registers the program changed, because an assembly
  * lesson is usually *about* the register file — and because those lines go
  * through the same console state as every other line, a recording captures them
  * and playback replays them with no live execution. The dock also hosts the

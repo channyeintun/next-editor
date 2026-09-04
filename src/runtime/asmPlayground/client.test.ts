@@ -18,6 +18,12 @@ _start:
     syscall
 `;
 
+const FOREVER = `section .text
+global _start
+_start:
+    jmp _start
+`;
+
 describe("AsmPlaygroundClient", () => {
   it("runs a program and reports what it printed and exited with", async () => {
     const result = await new AsmPlaygroundClient().run({
@@ -119,13 +125,21 @@ _start:
 
   it("abandons a run that a newer one supersedes", async () => {
     const client = new AsmPlaygroundClient();
-    const forever = `section .text
-global _start
-_start:
-    jmp _start
-`;
 
-    const first = client.run({ files: [{ path: "main.asm", content: forever }] });
+    // No yield between the two calls: `run()` bumps the generation before its
+    // first await, and that entry bump — not `dispose()` — is what makes a
+    // second Run take the machine away from the first.
+    const first = client.run({ files: [{ path: "main.asm", content: FOREVER }] });
+    const second = client.run({ files: [{ path: "main.asm", content: HELLO }] });
+
+    await expect(first).rejects.toMatchObject({ kind: "aborted" });
+    await expect(second).resolves.toMatchObject({ status: "success" });
+  });
+
+  it("abandons a run on dispose", async () => {
+    const client = new AsmPlaygroundClient();
+
+    const first = client.run({ files: [{ path: "main.asm", content: FOREVER }] });
     // Let the first run reach its yield, then take the machine away from it.
     await new Promise((resolve) => setTimeout(resolve, 0));
     client.dispose();
