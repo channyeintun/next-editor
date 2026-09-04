@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createStarterAsmWorkspace } from "./asm";
-import { assembleAndRun } from "../core/x86/run";
+import { assembleAndRun } from "../core/x86";
 import { isWorkspaceTextFile } from "../types/workspace";
 
 /**

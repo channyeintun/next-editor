@@ -62,6 +62,36 @@ describe("AsmPlaygroundClient", () => {
     expect(result.exitDetail).toContain("main.asm:4");
   });
 
+  // The wording lives in describeStop (core/x86/run.ts) and used to be copied
+  // here, so the page could drift from the sentence run.test.ts pins. This is
+  // the branch neither layer covered.
+  it("says what to check when the program prints more than the runner holds", async () => {
+    const result = await new AsmPlaygroundClient().run({
+      files: [
+        {
+          path: "main.asm",
+          content: `section .data
+    msg db "the same line over and over and over and over", 10
+section .text
+global _start
+_start:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, msg
+    mov rdx, 46
+    syscall
+    jmp _start
+`,
+        },
+      ],
+    });
+
+    expect(result.status).toBe("runtime-error");
+    expect(result.exitDetail).toBe(
+      "The program printed more than this runner will hold — check that the loop doing the printing can end",
+    );
+  });
+
   it("offers stdin to the program's read", async () => {
     const result = await new AsmPlaygroundClient().run({
       files: [

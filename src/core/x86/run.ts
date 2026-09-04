@@ -2,9 +2,12 @@
  * The whole toolchain in one call: source in, program output out.
  *
  * This is the layer that stands in for `nasm && ld && ./a.out`. Together with
- * `assemble` it is the whole surface the rest of the app uses: everything below
- * — the two-pass layout, the encoder, the decoder, the page table — is an
- * implementation detail of "run this assembly".
+ * `assemble` it is the whole surface for *running* assembly, and the app
+ * reaches it through `./index`, which re-exports exactly these: everything
+ * below — the two-pass layout, the encoder, the decoder, the page table — is an
+ * implementation detail of "run this assembly". (The Monaco tokenizer also
+ * borrows `KNOWN_MNEMONICS` from `./isa`, which is a word list rather than a
+ * way to run anything.)
  *
  * The loading it does is the part people usually never see. A Linux program
  * does not begin with an empty stack: the kernel puts `argc`, the argument
@@ -22,6 +25,7 @@ import {
   Machine,
   RSP,
   type Flags,
+  type StopReason,
 } from "./cpu";
 
 export type X86RunStatus = "success" | "assemble-error" | "runtime-error";
@@ -191,8 +195,15 @@ export function assembleAndRun(source: string, options: X86RunOptions = {}): X86
   return result;
 }
 
-function describeStop(
-  reason: Exclude<ReturnType<Machine["run"]>, { kind: "exited" }>,
+/**
+ * The sentence a learner reads when a program stopped without exiting.
+ *
+ * Exported because the page's runner (`runtime/asmPlayground/client.ts`) drives
+ * `load`/`runSlice` itself rather than `assembleAndRun`, and it must print the
+ * same words these tests pin — this used to be two hand-maintained copies.
+ */
+export function describeStop(
+  reason: Exclude<StopReason, { kind: "exited" }>,
   machine: Machine,
   program: AssembledProgram,
   fileName: string,

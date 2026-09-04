@@ -1,5 +1,4 @@
-import { assemble, AsmError } from "../../core/x86/assembler";
-import { formatDiagnostic, load } from "../../core/x86/run";
+import { assemble, AsmError, describeStop, formatDiagnostic, load } from "../../core/x86";
 import { ASM_ENTRY_PATH } from "./files";
 import {
   parseAsmPlaygroundRunResult,
@@ -148,12 +147,7 @@ export class AsmPlaygroundClient {
           status: "runtime-error",
           stdout,
           stderr,
-          exitDetail: describe(
-            reason,
-            machine.instructionsExecuted,
-            program.lineForAddress.get(machine.rip),
-            entry.path,
-          ),
+          exitDetail: describeStop(reason, machine, program, entry.path),
           instructions,
           registers,
           flags,
@@ -171,24 +165,6 @@ export class AsmPlaygroundClient {
       }
     }
   }
-}
-
-function describe(
-  reason:
-    | { kind: "fault"; message: string }
-    | { kind: "instruction-limit" }
-    | { kind: "output-limit" },
-  instructions: number,
-  line: number | undefined,
-  fileName: string,
-): string {
-  if (reason.kind === "instruction-limit") {
-    return `The program ran ${instructions.toLocaleString("en-US")} instructions without stopping — check that every loop can end, and that the program calls exit`;
-  }
-  if (reason.kind === "output-limit") {
-    return "The program printed more than this runner will hold — check that the loop doing the printing can end";
-  }
-  return line === undefined ? reason.message : `${reason.message} (${fileName}:${line})`;
 }
 
 function validated(result: AsmPlaygroundRunResult): AsmPlaygroundRunResult {

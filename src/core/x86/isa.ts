@@ -57,8 +57,6 @@ export interface InstructionForm {
   opsize?: OperandSize;
   /** Bytes of immediate actually emitted, when it differs from `opsize`. */
   immBytes?: 1 | 2 | 4 | 8;
-  /** Force REX.W even when `opsize` would not ask for it. */
-  rexW?: boolean;
   /** Aliases that assemble to this same form (`sal` → `shl`, `jz` → `je`). */
   aliases?: string[];
 }

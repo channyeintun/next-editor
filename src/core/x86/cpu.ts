@@ -355,8 +355,10 @@ export class Machine {
    * The runner in the page calls this in slices and yields between them. A tight
    * loop counting to ten million is a perfectly reasonable thing for a learner
    * to write, and running it straight through would freeze the tab until it
-   * finished — which also means the Stop button could never be pressed. Slicing
-   * costs nothing and makes cancelling real.
+   * finished. There is no Stop control in the panel; what slicing buys is that
+   * the page keeps painting and stays clickable, so a newer Run, a lesson
+   * switch, playback or unmount can take the machine away from a program that
+   * will not end — with the instruction budget as the backstop.
    */
   runSlice(budget: number): StopReason | null {
     for (let executed = 0; executed < budget; executed += 1) {
