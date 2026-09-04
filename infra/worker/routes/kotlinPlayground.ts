@@ -4,6 +4,13 @@ import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
+  checkPlaygroundRateLimit,
+  contentCacheKey,
+  readCachedValue,
+  truncateOutput,
+  writeCachedValue,
+} from "../playgroundProxy";
+import {
   parseKotlinPlaygroundRunResult,
   type KotlinPlaygroundFile,
   type KotlinPlaygroundRunResult,
@@ -394,10 +401,7 @@ export function normalizeUpstreamRunResponse(payload: unknown): KotlinPlayground
     }
   }
 
-  let output = segments.map((segment) => segment.text).join("");
-  if (output.length > MAX_OUTPUT_CHARS) {
-    output = `${output.slice(0, MAX_OUTPUT_CHARS)}\n[output truncated]`;
-  }
+  const output = truncateOutput(segments.map((segment) => segment.text).join(""), MAX_OUTPUT_CHARS);
 
   const result: KotlinPlaygroundRunResult = diagnostics.compileErrors
     ? { status: "compile-error", output, compileErrors: diagnostics.compileErrors }
@@ -414,72 +418,19 @@ export function normalizeUpstreamRunResponse(payload: unknown): KotlinPlayground
 
 // Content-addressed cache key. The pinned compiler version and conf type are
 // folded into the prefix so an upstream retarget can never serve results
-// produced under a different compiler.
-async function cacheKeyForFiles(files: readonly KotlinPlaygroundFile[]): Promise<string> {
-  const serialized = JSON.stringify(files.map((file) => [file.path, file.content]));
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(serialized));
-  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `kp:${UPSTREAM_API_VERSION}:${UPSTREAM_CONF_TYPE}:${hex}`;
-}
+// produced under a different compiler. Unlike the single-file routes, the
+// digest covers the whole ordered file list, so adding or renaming a sibling
+// file is a different key.
+const CACHE_KEY_PREFIX = `kp:${UPSTREAM_API_VERSION}:${UPSTREAM_CONF_TYPE}`;
+// Named once so the rate-limit and cache diagnostics this route emits stay
+// distinguishable from the sibling routes' in the Worker log.
+const LOG_LABEL = "Kotlin Playground";
 
-// Fixed-window per-user limit in KV. Approximate by design (KV is eventually
-// consistent), but fail closed when the policy store is missing or unavailable
-// so a configuration outage cannot turn this route into an unlimited proxy.
-type RateLimitDecision = "allowed" | "limited" | "unavailable";
-
-async function checkRateLimit(
-  cache: KVNamespace | null,
-  userId: string,
-): Promise<RateLimitDecision> {
-  if (!cache) {
-    return "unavailable";
-  }
-  const windowKey = `kp:rl:${userId}:${Math.floor(Date.now() / 60_000)}`;
-  try {
-    const count = Number((await cache.get(windowKey)) ?? "0");
-    if (!Number.isSafeInteger(count) || count < 0) {
-      console.error("Kotlin Playground rate-limit state was invalid");
-      return "unavailable";
-    }
-    if (count >= RATE_LIMIT_RUNS_PER_MINUTE) {
-      return "limited";
-    }
-    await cache.put(windowKey, String(count + 1), { expirationTtl: 120 });
-    return "allowed";
-  } catch {
-    console.error("Kotlin Playground rate-limit check failed");
-    return "unavailable";
-  }
-}
-
-async function readCachedResult(
-  cache: KVNamespace | null,
-  key: string,
-): Promise<KotlinPlaygroundRunResult | null> {
-  if (!cache) {
-    return null;
-  }
-  try {
-    return parseKotlinPlaygroundRunResult(await cache.get<unknown>(key, "json"));
-  } catch {
-    console.error("Kotlin Playground cache read failed");
-    return null;
-  }
-}
-
-async function writeCachedResult(
-  cache: KVNamespace | null,
-  key: string,
-  result: KotlinPlaygroundRunResult,
-): Promise<void> {
-  if (!cache) {
-    return;
-  }
-  try {
-    await cache.put(key, JSON.stringify(result), { expirationTtl: CACHE_TTL_SECONDS });
-  } catch {
-    console.error("Kotlin Playground cache write failed");
-  }
+function cacheKeyForFiles(files: readonly KotlinPlaygroundFile[]): Promise<string> {
+  return contentCacheKey(
+    CACHE_KEY_PREFIX,
+    JSON.stringify(files.map((file) => [file.path, file.content])),
+  );
 }
 
 // Aggregate telemetry only — never sources, filenames, output, or diagnostics text.
@@ -515,17 +466,20 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
   const { files, sourceBytes } = request;
 
   const cache = getCache(c.env);
-  const rateLimitDecision = await checkRateLimit(cache, user.id);
-  if (rateLimitDecision === "limited") {
-    return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
-  }
-  if (rateLimitDecision === "unavailable") {
-    return c.json({ error: "Kotlin Playground execution policy is unavailable" }, 502);
-  }
-
   const startedAt = Date.now();
+
+  // The cache is consulted before the rate limit, deliberately. The ceiling
+  // exists to protect the upstream, and a cache hit never reaches it — a
+  // learner re-running unchanged sources while reading the output would
+  // otherwise spend the whole minute's budget on requests that cost the
+  // upstream nothing, and be refused on the first run that needed compiling.
   const cacheKey = await cacheKeyForFiles(files);
-  const cachedResult = await readCachedResult(cache, cacheKey);
+  const cachedResult = await readCachedValue(
+    cache,
+    cacheKey,
+    parseKotlinPlaygroundRunResult,
+    LOG_LABEL,
+  );
   if (cachedResult) {
     logRun({
       outcome: cachedResult.status,
@@ -534,6 +488,19 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
       durationMs: Date.now() - startedAt,
     });
     return c.json(cachedResult);
+  }
+
+  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+    userId: user.id,
+    keyPrefix: "kp:rl",
+    limit: RATE_LIMIT_RUNS_PER_MINUTE,
+    label: LOG_LABEL,
+  });
+  if (rateLimitDecision === "limited") {
+    return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
+  }
+  if (rateLimitDecision === "unavailable") {
+    return c.json({ error: "Kotlin Playground execution policy is unavailable" }, 502);
   }
 
   const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
@@ -600,7 +567,7 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
   // Only deterministic outcomes are cached, mirroring the Go route: success
   // and compile-error re-serve; runtime errors always re-run.
   if (result.status === "success" || result.status === "compile-error") {
-    await writeCachedResult(cache, cacheKey, result);
+    await writeCachedValue(cache, cacheKey, result, CACHE_TTL_SECONDS, LOG_LABEL);
   }
 
   logRun({

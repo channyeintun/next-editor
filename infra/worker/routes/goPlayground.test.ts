@@ -259,6 +259,10 @@ describe("goPlaygroundRoute", () => {
 
   it("returns 429 once the per-user minute window is exhausted", async () => {
     const spy = stubUpstream({});
+    // Freeze the clock: the seeded key and the route's own key are computed at
+    // different moments, and a minute boundary between them would leave the
+    // seeded count invisible and let the request through.
+    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
     const windowKey = `gp:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
     const response = await runRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "10" }) }));
 
@@ -418,6 +422,24 @@ describe("goPlaygroundRoute", () => {
     expect(await second.json()).toEqual(await first.json());
   });
 
+  it("does not spend the window on a run served from the cache", async () => {
+    // Frozen so the loop cannot straddle a minute boundary and reset the
+    // fixed window halfway through.
+    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
+    const spy = stubUpstream({ Events: [{ Message: "hi\n", Kind: "stdout" }], Status: 0 });
+    const env = makeEnv();
+    const statuses: number[] = [];
+
+    // Same source every time, so only the first run reaches the upstream and
+    // the 10/minute ceiling never applies to the other eleven.
+    for (let index = 0; index < 12; index++) {
+      statuses.push((await runRequest(env)).status);
+    }
+
+    expect(statuses.every((status) => status === 200)).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
   it("does not cache runtime errors", async () => {
     const spy = stubUpstream({ Events: [{ Message: "panic\n", Kind: "stderr" }], Status: 2 });
     const env = makeEnv();
@@ -498,6 +520,7 @@ describe("goPlaygroundRoute", () => {
 
   it("rate-limits formatting independently from Run", async () => {
     const spy = stubUpstream({ Body: TXTAR_SOURCE, Error: "" });
+    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
     const windowKey = `gp:fmt:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
 
     const response = await formatRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "20" }) }));

@@ -191,6 +191,10 @@ describe("kotlinPlaygroundRoute", () => {
 
   it("returns 429 once the per-user minute window is exhausted", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
+    // Freeze the clock: the seeded key and the route's own key are computed at
+    // different moments, and a minute boundary between them would leave the
+    // seeded count invisible and let the request through.
+    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
     const windowKey = `kp:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
     const response = await runRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "10" }) }));
 
@@ -414,6 +418,24 @@ describe("kotlinPlaygroundRoute", () => {
 
     expect(spy).toHaveBeenCalledTimes(1);
     expect(await second.json()).toEqual(await first.json());
+  });
+
+  it("does not spend the window on a run served from the cache", async () => {
+    // Frozen so the loop cannot straddle a minute boundary and reset the
+    // fixed window halfway through.
+    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
+    const spy = stubUpstream(UPSTREAM_SUCCESS);
+    const env = makeEnv();
+    const statuses: number[] = [];
+
+    // Same sources every time, so only the first run reaches the upstream and
+    // the 10/minute ceiling never applies to the other eleven.
+    for (let index = 0; index < 12; index++) {
+      statuses.push((await runRequest(env)).status);
+    }
+
+    expect(statuses.every((status) => status === 200)).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("does not cache runtime errors", async () => {

@@ -4,6 +4,14 @@ import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
+  checkPlaygroundRateLimit,
+  contentCacheKey,
+  readCachedValue,
+  truncateOutput,
+  validateSingleFileLessonRequest,
+  writeCachedValue,
+} from "../playgroundProxy";
+import {
   parseZigPlaygroundFormatResult,
   parseZigPlaygroundRunResult,
   type ZigPlaygroundFormatResult,
@@ -76,87 +84,14 @@ const CACHE_TTL_SECONDS = 60 * 60;
 // Next Editor user shares this Worker's egress, so our ceiling has to leave
 // room for other users rather than spend the whole upstream window on one
 // person. Cached results are served before the window is charged, so this
-// counts upstream calls rather than button presses.
+// counts upstream calls rather than button presses. Both handlers therefore
+// pass the one "zp:rl" prefix, where the Go and Rust routes give /run and
+// /format a bucket each.
 const RATE_LIMIT_UPSTREAM_CALLS_PER_MINUTE = 4;
 
 // The upstream compiles one root source file from a single text body, so
 // lessons submit exactly one file with this fixed name.
 const REQUIRED_FILE_PATH = "main.zig";
-
-type ZigLessonRequestValidation =
-  | {
-      ok: true;
-      code: string;
-      sourceBytes: number;
-    }
-  | { ok: false; status: 400 | 413; error: string };
-
-async function validateZigLessonRequest(request: Request): Promise<ZigLessonRequestValidation> {
-  const requestBody = await readBodyWithLimit(request, MAX_REQUEST_BYTES);
-  if (requestBody.status === "too-large") {
-    return { ok: false, status: 413, error: `request body exceeds ${MAX_REQUEST_BYTES} bytes` };
-  }
-  if (requestBody.status === "read-error") {
-    return { ok: false, status: 400, error: "request body could not be read" };
-  }
-
-  let body: unknown;
-  try {
-    body = JSON.parse(requestBody.text);
-  } catch {
-    return { ok: false, status: 400, error: "invalid JSON body" };
-  }
-
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return { ok: false, status: 400, error: "JSON body must be an object" };
-  }
-
-  const bodyKeys = Object.keys(body);
-  if (bodyKeys.length !== 1 || bodyKeys[0] !== "files") {
-    return { ok: false, status: 400, error: "'files' is the only supported field" };
-  }
-
-  const rawFiles = (body as Record<string, unknown>).files;
-  if (!Array.isArray(rawFiles) || rawFiles.length !== 1) {
-    return {
-      ok: false,
-      status: 400,
-      error: "Zig lessons run exactly one main.zig file",
-    };
-  }
-
-  const rawFile = rawFiles[0];
-  if (typeof rawFile !== "object" || rawFile === null || Array.isArray(rawFile)) {
-    return { ok: false, status: 400, error: "files[0] must be an object" };
-  }
-
-  const fileRecord = rawFile as Record<string, unknown>;
-  const fileKeys = Object.keys(fileRecord);
-  if (fileKeys.length !== 2 || !fileKeys.includes("path") || !fileKeys.includes("content")) {
-    return {
-      ok: false,
-      status: 400,
-      error: "files[0] must contain only 'path' and 'content'",
-    };
-  }
-  if (fileRecord.path !== REQUIRED_FILE_PATH) {
-    return { ok: false, status: 400, error: "Zig lessons run exactly one main.zig file" };
-  }
-  if (typeof fileRecord.content !== "string") {
-    return { ok: false, status: 400, error: "files[0].content must be a string" };
-  }
-
-  const sourceBytes = new TextEncoder().encode(fileRecord.content).byteLength;
-  if (sourceBytes > MAX_SOURCE_BYTES) {
-    return {
-      ok: false,
-      status: 413,
-      error: `Zig program exceeds ${MAX_SOURCE_BYTES} bytes`,
-    };
-  }
-
-  return { ok: true, code: fileRecord.content, sourceBytes };
-}
 
 // The sandbox compiles the submitted source at a scratch path and resolves
 // the standard library out of a version-pinned toolchain directory. Both leak
@@ -173,12 +108,6 @@ export function scrubUpstreamPaths(text: string): string {
     .replace(UPSTREAM_SOURCE_PATH, REQUIRED_FILE_PATH)
     .replace(UPSTREAM_STDLIB_PATH, "std/")
     .replace(UPSTREAM_MODULE_NAME, `(${REQUIRED_FILE_PATH})`);
-}
-
-function truncateOutput(text: string): string {
-  return text.length > MAX_OUTPUT_CHARS
-    ? `${text.slice(0, MAX_OUTPUT_CHARS)}\n[output truncated]`
-    : text;
 }
 
 // A stack trace frame is a source location followed by a resolved code address
@@ -261,7 +190,7 @@ export function normalizeUpstreamRunResponse(
   const scrubbed = scrubUpstreamPaths(body);
 
   if (httpStatus === 200) {
-    return { status: "success", output: truncateOutput(scrubbed) };
+    return { status: "success", output: truncateOutput(scrubbed, MAX_OUTPUT_CHARS) };
   }
 
   if (httpStatus !== 400) {
@@ -273,13 +202,13 @@ export function normalizeUpstreamRunResponse(
     return {
       status: "compile-error",
       output: "",
-      compileErrors: truncateOutput(scrubbed),
+      compileErrors: truncateOutput(scrubbed, MAX_OUTPUT_CHARS),
     };
   }
 
   return {
     status: "runtime-error",
-    output: truncateOutput(scrubbed),
+    output: truncateOutput(scrubbed, MAX_OUTPUT_CHARS),
     exitDetail: classified.exitDetail.slice(0, MAX_EXIT_DETAIL_CHARS),
   };
 }
@@ -333,81 +262,11 @@ export function normalizeUpstreamFormatResponse(
 // prefix so a version change can never serve results produced by a different
 // compiler, and runs and formats use distinct prefixes so a stored format can
 // never be read back as a run result for the same source.
-async function sourceDigest(code: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function runCacheKey(code: string): Promise<string> {
-  return `zp:${UPSTREAM_ZIG_VERSION}:${await sourceDigest(code)}`;
-}
-
-async function formatCacheKey(code: string): Promise<string> {
-  return `zp:fmt:${UPSTREAM_ZIG_VERSION}:${await sourceDigest(code)}`;
-}
-
-// Fixed-window per-user limit in KV, shared by runs and formats because the
-// upstream counts them against one per-IP budget. Approximate by design (KV is
-// eventually consistent), but fail closed when the policy store is missing or
-// unavailable so a configuration outage cannot turn this route into an
-// unlimited proxy.
-type RateLimitDecision = "allowed" | "limited" | "unavailable";
-
-async function checkRateLimit(
-  cache: KVNamespace | null,
-  userId: string,
-): Promise<RateLimitDecision> {
-  if (!cache) {
-    return "unavailable";
-  }
-  const windowKey = `zp:rl:${userId}:${Math.floor(Date.now() / 60_000)}`;
-  try {
-    const count = Number((await cache.get(windowKey)) ?? "0");
-    if (!Number.isSafeInteger(count) || count < 0) {
-      console.error("Zig Playground rate-limit state was invalid");
-      return "unavailable";
-    }
-    if (count >= RATE_LIMIT_UPSTREAM_CALLS_PER_MINUTE) {
-      return "limited";
-    }
-    await cache.put(windowKey, String(count + 1), { expirationTtl: 120 });
-    return "allowed";
-  } catch {
-    console.error("Zig Playground rate-limit check failed");
-    return "unavailable";
-  }
-}
-
-async function readCachedValue<T>(
-  cache: KVNamespace | null,
-  key: string,
-  parse: (value: unknown) => T | null,
-): Promise<T | null> {
-  if (!cache) {
-    return null;
-  }
-  try {
-    return parse(await cache.get<unknown>(key, "json"));
-  } catch {
-    console.error("Zig Playground cache read failed");
-    return null;
-  }
-}
-
-async function writeCachedValue(
-  cache: KVNamespace | null,
-  key: string,
-  value: ZigPlaygroundRunResult | ZigPlaygroundFormatResult,
-): Promise<void> {
-  if (!cache) {
-    return;
-  }
-  try {
-    await cache.put(key, JSON.stringify(value), { expirationTtl: CACHE_TTL_SECONDS });
-  } catch {
-    console.error("Zig Playground cache write failed");
-  }
-}
+const RUN_CACHE_KEY_PREFIX = `zp:${UPSTREAM_ZIG_VERSION}`;
+const FORMAT_CACHE_KEY_PREFIX = `zp:fmt:${UPSTREAM_ZIG_VERSION}`;
+// Named once so the rate-limit and cache diagnostics this route emits stay
+// distinguishable from the sibling routes' in the Worker log.
+const LOG_LABEL = "Zig Playground";
 
 // Aggregate telemetry only — never sources, output, or diagnostics text.
 function logRun(entry: {
@@ -459,7 +318,12 @@ zigPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "not signed in" }, 401);
   }
 
-  const request = await validateZigLessonRequest(c.req.raw);
+  const request = await validateSingleFileLessonRequest(c.req.raw, {
+    requiredPath: REQUIRED_FILE_PATH,
+    language: "Zig",
+    maxSourceBytes: MAX_SOURCE_BYTES,
+    maxRequestBytes: MAX_REQUEST_BYTES,
+  });
   if (!request.ok) {
     return request.status === 413
       ? c.json({ error: request.error }, 413)
@@ -469,8 +333,13 @@ zigPlaygroundRoute.post("/run", async (c) => {
 
   const cache = getCache(c.env);
   const startedAt = Date.now();
-  const cacheKey = await runCacheKey(code);
-  const cachedResult = await readCachedValue(cache, cacheKey, parseZigPlaygroundRunResult);
+  const cacheKey = await contentCacheKey(RUN_CACHE_KEY_PREFIX, code);
+  const cachedResult = await readCachedValue(
+    cache,
+    cacheKey,
+    parseZigPlaygroundRunResult,
+    LOG_LABEL,
+  );
   if (cachedResult) {
     logRun({
       outcome: cachedResult.status,
@@ -483,7 +352,12 @@ zigPlaygroundRoute.post("/run", async (c) => {
 
   // Charged only once the request is really going upstream, so re-running
   // unchanged source never spends a slot a Format may need.
-  const rateLimitDecision = await checkRateLimit(cache, user.id);
+  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+    userId: user.id,
+    keyPrefix: "zp:rl",
+    limit: RATE_LIMIT_UPSTREAM_CALLS_PER_MINUTE,
+    label: LOG_LABEL,
+  });
   if (rateLimitDecision === "limited") {
     return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
   }
@@ -553,7 +427,7 @@ zigPlaygroundRoute.post("/run", async (c) => {
   // Only deterministic outcomes are cached, mirroring the other playground
   // routes: success and compile-error re-serve; runtime errors always re-run.
   if (result.status === "success" || result.status === "compile-error") {
-    await writeCachedValue(cache, cacheKey, result);
+    await writeCachedValue(cache, cacheKey, result, CACHE_TTL_SECONDS, LOG_LABEL);
   }
 
   logRun({
@@ -575,7 +449,12 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: "not signed in" }, 401);
   }
 
-  const request = await validateZigLessonRequest(c.req.raw);
+  const request = await validateSingleFileLessonRequest(c.req.raw, {
+    requiredPath: REQUIRED_FILE_PATH,
+    language: "Zig",
+    maxSourceBytes: MAX_SOURCE_BYTES,
+    maxRequestBytes: MAX_REQUEST_BYTES,
+  });
   if (!request.ok) {
     return request.status === 413
       ? c.json({ error: request.error }, 413)
@@ -587,8 +466,13 @@ zigPlaygroundRoute.post("/format", async (c) => {
   // `zig fmt` is a pure function of the source, so a repeat format is as
   // deterministic as a repeat run and must not spend the shared upstream
   // budget again.
-  const cacheKey = await formatCacheKey(request.code);
-  const cachedFormat = await readCachedValue(cache, cacheKey, parseZigPlaygroundFormatResult);
+  const cacheKey = await contentCacheKey(FORMAT_CACHE_KEY_PREFIX, request.code);
+  const cachedFormat = await readCachedValue(
+    cache,
+    cacheKey,
+    parseZigPlaygroundFormatResult,
+    LOG_LABEL,
+  );
   if (cachedFormat) {
     logFormat({
       outcome: "success",
@@ -599,7 +483,12 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json(cachedFormat);
   }
 
-  const rateLimitDecision = await checkRateLimit(cache, user.id);
+  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+    userId: user.id,
+    keyPrefix: "zp:rl",
+    limit: RATE_LIMIT_UPSTREAM_CALLS_PER_MINUTE,
+    label: LOG_LABEL,
+  });
   if (rateLimitDecision === "limited") {
     return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
   }
@@ -673,7 +562,7 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: normalized.error }, 422);
   }
 
-  await writeCachedValue(cache, cacheKey, normalized.result);
+  await writeCachedValue(cache, cacheKey, normalized.result, CACHE_TTL_SECONDS, LOG_LABEL);
 
   logFormat({
     outcome: "success",

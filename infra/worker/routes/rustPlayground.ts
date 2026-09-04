@@ -4,6 +4,14 @@ import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
+  checkPlaygroundRateLimit,
+  contentCacheKey,
+  readCachedValue,
+  truncateOutput,
+  validateSingleFileLessonRequest,
+  writeCachedValue,
+} from "../playgroundProxy";
+import {
   parseRustPlaygroundRunResult,
   type RustPlaygroundFormatResult,
   type RustPlaygroundRunResult,
@@ -56,81 +64,6 @@ const RATE_LIMIT_FORMATS_PER_MINUTE = 20;
 // submit exactly one file with this fixed name.
 const REQUIRED_FILE_PATH = "main.rs";
 
-type RustLessonRequestValidation =
-  | {
-      ok: true;
-      code: string;
-      sourceBytes: number;
-    }
-  | { ok: false; status: 400 | 413; error: string };
-
-async function validateRustLessonRequest(request: Request): Promise<RustLessonRequestValidation> {
-  const requestBody = await readBodyWithLimit(request, MAX_REQUEST_BYTES);
-  if (requestBody.status === "too-large") {
-    return { ok: false, status: 413, error: `request body exceeds ${MAX_REQUEST_BYTES} bytes` };
-  }
-  if (requestBody.status === "read-error") {
-    return { ok: false, status: 400, error: "request body could not be read" };
-  }
-
-  let body: unknown;
-  try {
-    body = JSON.parse(requestBody.text);
-  } catch {
-    return { ok: false, status: 400, error: "invalid JSON body" };
-  }
-
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return { ok: false, status: 400, error: "JSON body must be an object" };
-  }
-
-  const bodyKeys = Object.keys(body);
-  if (bodyKeys.length !== 1 || bodyKeys[0] !== "files") {
-    return { ok: false, status: 400, error: "'files' is the only supported field" };
-  }
-
-  const rawFiles = (body as Record<string, unknown>).files;
-  if (!Array.isArray(rawFiles) || rawFiles.length !== 1) {
-    return {
-      ok: false,
-      status: 400,
-      error: "Rust lessons run exactly one main.rs file",
-    };
-  }
-
-  const rawFile = rawFiles[0];
-  if (typeof rawFile !== "object" || rawFile === null || Array.isArray(rawFile)) {
-    return { ok: false, status: 400, error: "files[0] must be an object" };
-  }
-
-  const fileRecord = rawFile as Record<string, unknown>;
-  const fileKeys = Object.keys(fileRecord);
-  if (fileKeys.length !== 2 || !fileKeys.includes("path") || !fileKeys.includes("content")) {
-    return {
-      ok: false,
-      status: 400,
-      error: "files[0] must contain only 'path' and 'content'",
-    };
-  }
-  if (fileRecord.path !== REQUIRED_FILE_PATH) {
-    return { ok: false, status: 400, error: "Rust lessons run exactly one main.rs file" };
-  }
-  if (typeof fileRecord.content !== "string") {
-    return { ok: false, status: 400, error: "files[0].content must be a string" };
-  }
-
-  const sourceBytes = new TextEncoder().encode(fileRecord.content).byteLength;
-  if (sourceBytes > MAX_SOURCE_BYTES) {
-    return {
-      ok: false,
-      status: 413,
-      error: `Rust program exceeds ${MAX_SOURCE_BYTES} bytes`,
-    };
-  }
-
-  return { ok: true, code: fileRecord.content, sourceBytes };
-}
-
 // Cargo's build-status lines share stderr with rustc diagnostics and the
 // program's own stderr. Strip exactly the status lines; warnings, errors, and
 // program output keep flowing through.
@@ -145,12 +78,6 @@ function stripCargoStatusLines(stderr: string): string {
     .filter((line) => !CARGO_STATUS_LINE.test(line))
     .join("\n")
     .replace(/^\n+/, "");
-}
-
-function truncateOutput(text: string): string {
-  return text.length > MAX_OUTPUT_CHARS
-    ? `${text.slice(0, MAX_OUTPUT_CHARS)}\n[output truncated]`
-    : text;
 }
 
 /**
@@ -178,8 +105,8 @@ export function normalizeUpstreamExecuteResponse(payload: unknown): RustPlaygrou
     return null;
   }
 
-  const cleanedStderr = truncateOutput(stripCargoStatusLines(body.stderr));
-  const stdout = truncateOutput(body.stdout);
+  const cleanedStderr = truncateOutput(stripCargoStatusLines(body.stderr), MAX_OUTPUT_CHARS);
+  const stdout = truncateOutput(body.stdout, MAX_OUTPUT_CHARS);
 
   if (body.success) {
     return { status: "success", stdout, stderr: cleanedStderr };
@@ -237,73 +164,10 @@ export function normalizeUpstreamFormatResponse(
 // Content-addressed cache key. The pinned channel/mode/edition are folded
 // into the prefix so a config change can never serve results produced under
 // different flags.
-async function cacheKeyForSource(code: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
-  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `rp:${UPSTREAM_CHANNEL}-${UPSTREAM_MODE}-${UPSTREAM_EDITION}:${hex}`;
-}
-
-// Fixed-window per-user limit in KV. Approximate by design (KV is eventually
-// consistent), but fail closed when the policy store is missing or unavailable
-// so a configuration outage cannot turn this route into an unlimited proxy.
-type RateLimitDecision = "allowed" | "limited" | "unavailable";
-
-async function checkRateLimit(
-  cache: KVNamespace | null,
-  userId: string,
-  keyPrefix: "rp:rl" | "rp:fmt:rl",
-  limit: number,
-): Promise<RateLimitDecision> {
-  if (!cache) {
-    return "unavailable";
-  }
-  const windowKey = `${keyPrefix}:${userId}:${Math.floor(Date.now() / 60_000)}`;
-  try {
-    const count = Number((await cache.get(windowKey)) ?? "0");
-    if (!Number.isSafeInteger(count) || count < 0) {
-      console.error("Rust Playground rate-limit state was invalid");
-      return "unavailable";
-    }
-    if (count >= limit) {
-      return "limited";
-    }
-    await cache.put(windowKey, String(count + 1), { expirationTtl: 120 });
-    return "allowed";
-  } catch {
-    console.error("Rust Playground rate-limit check failed");
-    return "unavailable";
-  }
-}
-
-async function readCachedResult(
-  cache: KVNamespace | null,
-  key: string,
-): Promise<RustPlaygroundRunResult | null> {
-  if (!cache) {
-    return null;
-  }
-  try {
-    return parseRustPlaygroundRunResult(await cache.get<unknown>(key, "json"));
-  } catch {
-    console.error("Rust Playground cache read failed");
-    return null;
-  }
-}
-
-async function writeCachedResult(
-  cache: KVNamespace | null,
-  key: string,
-  result: RustPlaygroundRunResult,
-): Promise<void> {
-  if (!cache) {
-    return;
-  }
-  try {
-    await cache.put(key, JSON.stringify(result), { expirationTtl: CACHE_TTL_SECONDS });
-  } catch {
-    console.error("Rust Playground cache write failed");
-  }
-}
+const CACHE_KEY_PREFIX = `rp:${UPSTREAM_CHANNEL}-${UPSTREAM_MODE}-${UPSTREAM_EDITION}`;
+// Named once so the rate-limit and cache diagnostics this route emits stay
+// distinguishable from the sibling routes' in the Worker log.
+const LOG_LABEL = "Rust Playground";
 
 // Aggregate telemetry only — never sources, output, or diagnostics text.
 function logRun(entry: {
@@ -356,7 +220,12 @@ rustPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "not signed in" }, 401);
   }
 
-  const request = await validateRustLessonRequest(c.req.raw);
+  const request = await validateSingleFileLessonRequest(c.req.raw, {
+    requiredPath: REQUIRED_FILE_PATH,
+    language: "Rust",
+    maxSourceBytes: MAX_SOURCE_BYTES,
+    maxRequestBytes: MAX_REQUEST_BYTES,
+  });
   if (!request.ok) {
     return request.status === 413
       ? c.json({ error: request.error }, 413)
@@ -365,22 +234,20 @@ rustPlaygroundRoute.post("/run", async (c) => {
   const { code, sourceBytes } = request;
 
   const cache = getCache(c.env);
-  const rateLimitDecision = await checkRateLimit(
-    cache,
-    user.id,
-    "rp:rl",
-    RATE_LIMIT_RUNS_PER_MINUTE,
-  );
-  if (rateLimitDecision === "limited") {
-    return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
-  }
-  if (rateLimitDecision === "unavailable") {
-    return c.json({ error: "Rust Playground execution policy is unavailable" }, 502);
-  }
-
   const startedAt = Date.now();
-  const cacheKey = await cacheKeyForSource(code);
-  const cachedResult = await readCachedResult(cache, cacheKey);
+
+  // The cache is consulted before the rate limit, deliberately. The ceiling
+  // exists to protect the upstream, and a cache hit never reaches it — a
+  // learner re-running an unchanged main.rs while reading its output would
+  // otherwise spend the whole minute's budget on requests that cost the
+  // upstream nothing, and be refused on the first run that needed compiling.
+  const cacheKey = await contentCacheKey(CACHE_KEY_PREFIX, code);
+  const cachedResult = await readCachedValue(
+    cache,
+    cacheKey,
+    parseRustPlaygroundRunResult,
+    LOG_LABEL,
+  );
   if (cachedResult) {
     logRun({
       outcome: cachedResult.status,
@@ -389,6 +256,19 @@ rustPlaygroundRoute.post("/run", async (c) => {
       durationMs: Date.now() - startedAt,
     });
     return c.json(cachedResult);
+  }
+
+  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+    userId: user.id,
+    keyPrefix: "rp:rl",
+    limit: RATE_LIMIT_RUNS_PER_MINUTE,
+    label: LOG_LABEL,
+  });
+  if (rateLimitDecision === "limited") {
+    return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
+  }
+  if (rateLimitDecision === "unavailable") {
+    return c.json({ error: "Rust Playground execution policy is unavailable" }, 502);
   }
 
   const upstreamSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
@@ -467,7 +347,7 @@ rustPlaygroundRoute.post("/run", async (c) => {
   // Only deterministic outcomes are cached, mirroring the other playground
   // routes: success and compile-error re-serve; runtime errors always re-run.
   if (result.status === "success" || result.status === "compile-error") {
-    await writeCachedResult(cache, cacheKey, result);
+    await writeCachedValue(cache, cacheKey, result, CACHE_TTL_SECONDS, LOG_LABEL);
   }
 
   logRun({
@@ -489,7 +369,12 @@ rustPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: "not signed in" }, 401);
   }
 
-  const request = await validateRustLessonRequest(c.req.raw);
+  const request = await validateSingleFileLessonRequest(c.req.raw, {
+    requiredPath: REQUIRED_FILE_PATH,
+    language: "Rust",
+    maxSourceBytes: MAX_SOURCE_BYTES,
+    maxRequestBytes: MAX_REQUEST_BYTES,
+  });
   if (!request.ok) {
     return request.status === 413
       ? c.json({ error: request.error }, 413)
@@ -497,12 +382,12 @@ rustPlaygroundRoute.post("/format", async (c) => {
   }
 
   const cache = getCache(c.env);
-  const rateLimitDecision = await checkRateLimit(
-    cache,
-    user.id,
-    "rp:fmt:rl",
-    RATE_LIMIT_FORMATS_PER_MINUTE,
-  );
+  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+    userId: user.id,
+    keyPrefix: "rp:fmt:rl",
+    limit: RATE_LIMIT_FORMATS_PER_MINUTE,
+    label: LOG_LABEL,
+  });
   if (rateLimitDecision === "limited") {
     return c.json({ error: "format rate limit exceeded; retry in a minute" }, 429);
   }
