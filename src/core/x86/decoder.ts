@@ -9,9 +9,10 @@
  * through both directions is what makes that class of bug impossible to ship
  * quietly (see `roundTrip.test.ts`).
  *
- * It also means the runner can disassemble the image it produced, which is the
- * view that teaches encoding at all: `48 83 c0 01` and `add rax, 1` shown as
- * the same four bytes.
+ * The bytes-beside-source view that teaches encoding at all — `48 83 c0 01`
+ * shown as the same four bytes as `add rax, 1` — is built by `formatListing` in
+ * `run.ts` from the assembler's own listing, so what comes back from here is
+ * only what executing the bytes needs.
  *
  * The decode table is derived from the same `isa.ts` entries the encoder uses.
  * Nothing here is a second copy of the instruction set; it is an index into the
@@ -19,7 +20,7 @@
  */
 
 import { INSTRUCTION_FORMS, type Encoding, type InstructionForm } from "./isa";
-import type { OperandSize } from "./registers";
+import { lookupRegister, type OperandSize } from "./registers";
 
 export type DecodedOperand =
   | { kind: "register"; index: number; size: OperandSize; high8: boolean }
@@ -38,8 +39,6 @@ export type DecodedOperand =
 
 export interface DecodedInstruction {
   mnemonic: string;
-  encoding: Encoding;
-  form: InstructionForm;
   /** Total bytes consumed, prefixes included. */
   length: number;
   /** The width this instruction operates at. */
@@ -57,8 +56,30 @@ export class AsmDecodeError extends Error {
   }
 }
 
-function opcodeKey(opcode: readonly number[]): string {
-  return opcode.map((byte) => byte.toString(16).padStart(2, "0")).join(" ");
+/**
+ * The table key for an opcode, as a number. This runs once per executed
+ * instruction, so the one or two opcode bytes are folded into an integer rather
+ * than a string that has to be built and hashed every time. The `/digit`
+ * extension — what tells `0x83 /0` (`add`) from `0x83 /5` (`sub`) — rides in the
+ * low bits, with -1 meaning "the form has none".
+ */
+function opcodeKey(opcode: readonly number[], ext = -1): number {
+  let key = 0;
+  for (const byte of opcode) key = key * 256 + byte;
+  return key * 16 + (ext + 1);
+}
+
+function describeOpcode(opcode: readonly number[]): string {
+  return opcode.map((byte) => `0x${byte.toString(16)}`).join(" ");
+}
+
+/**
+ * Whether a one-byte register encoding names `ah`/`ch`/`dh`/`bh`. Encodings 4-7
+ * are the high-byte names only when no REX prefix is present; with REX they are
+ * `spl`/`bpl`/`sil`/`dil`.
+ */
+function isHighByteEncoding(size: OperandSize, index: number, sawRex: boolean): boolean {
+  return size === 1 && !sawRex && index >= 4 && index <= 7;
 }
 
 interface TableEntry {
@@ -67,9 +88,9 @@ interface TableEntry {
   registerInOpcode: boolean;
 }
 
-const TABLE = new Map<string, TableEntry[]>();
+const TABLE = new Map<number, TableEntry[]>();
 
-function add(key: string, entry: TableEntry): void {
+function add(key: number, entry: TableEntry): void {
   const bucket = TABLE.get(key);
   if (bucket) bucket.push(entry);
   else TABLE.set(key, [entry]);
@@ -87,9 +108,7 @@ for (const form of INSTRUCTION_FORMS) {
     }
     continue;
   }
-  const key =
-    form.ext === undefined ? opcodeKey(form.opcode) : `${opcodeKey(form.opcode)}/${form.ext}`;
-  add(key, { form, registerInOpcode: false });
+  add(opcodeKey(form.opcode, form.ext ?? -1), { form, registerInOpcode: false });
 }
 
 const USES_MODRM: ReadonlySet<Encoding> = new Set<Encoding>(["MR", "RM", "MI", "M", "RMI"]);
@@ -199,22 +218,33 @@ export function decodeInstruction(
     const peeked = reader.peek();
     if (peeked !== undefined) {
       const ext = (peeked >> 3) & 7;
-      candidates = TABLE.get(`${opcodeKey(opcodeBytes)}/${ext}`) ?? [];
+      candidates = TABLE.get(opcodeKey(opcodeBytes, ext)) ?? [];
     }
   }
 
   if (candidates.length === 0) {
     throw new AsmDecodeError(
-      `The byte ${opcodeBytes.map((b) => `0x${b.toString(16)}`).join(" ")} is not an instruction this runner knows`,
+      `The byte ${describeOpcode(opcodeBytes)} is not an instruction this runner knows`,
       address,
     );
   }
 
+  // The prefixes name a width; a bucket that has no form at that width is not
+  // this instruction. Falling back to whichever form came first would execute a
+  // different instruction than the bytes encode, silently — `63 d8` without
+  // REX.W is `movsxd ebx, eax` on real hardware, and this table only has the
+  // 64-bit form.
   const matched =
     candidates.find((entry) => entry.form.opsize === wideSize) ??
     candidates.find((entry) => entry.form.opsize === 1) ??
-    candidates.find((entry) => entry.form.opsize === undefined) ??
-    candidates[0];
+    candidates.find((entry) => entry.form.opsize === undefined);
+
+  if (matched === undefined) {
+    throw new AsmDecodeError(
+      `This runner has no ${wideSize}-byte form of ${describeOpcode(opcodeBytes)}`,
+      address,
+    );
+  }
 
   const form = matched.form;
   const operandSize: OperandSize = form.opsize ?? 8;
@@ -236,9 +266,7 @@ export function decodeInstruction(
     kind: "register",
     index,
     size,
-    // A one-byte register numbered 4-7 means `ah`/`ch`/`dh`/`bh` only when no
-    // REX prefix is present; with REX it is `spl`/`bpl`/`sil`/`dil`.
-    high8: size === 1 && !sawRex && index >= 4 && index <= 7,
+    high8: isHighByteEncoding(size, index, sawRex),
   });
 
   const immediateWidth = form.immBytes ?? (operandSize === 8 ? 4 : operandSize);
@@ -257,31 +285,27 @@ export function decodeInstruction(
       case "mem":
         operands.push(modrm!.rm);
         break;
-      case "imm": {
-        const signed = pattern.signExtended || immediateWidth < 8;
+      case "imm":
+        // Any field narrower than the operand is sign-extended by the hardware,
+        // so the width decides this and not the form's `signExtended`, which is
+        // an encode-side rule about which values a form will accept.
         operands.push({
           kind: "immediate",
           value:
-            signed && immediateWidth < 8
-              ? reader.signed(immediateWidth)
-              : reader.unsigned(immediateWidth),
+            immediateWidth < 8 ? reader.signed(immediateWidth) : reader.unsigned(immediateWidth),
         });
         break;
-      }
       case "rel":
         operands.push({ kind: "relative", offset: reader.signed(pattern.size) });
         break;
       case "fixed": {
-        const fixedIndex = { al: 0, ax: 0, eax: 0, rax: 0, cl: 1 }[pattern.name] ?? 0;
-        const size: OperandSize =
-          pattern.name === "al" || pattern.name === "cl"
-            ? 1
-            : pattern.name === "ax"
-              ? 2
-              : pattern.name === "eax"
-                ? 4
-                : 8;
-        operands.push(registerOperand(fixedIndex, size));
+        // The implicit register is named, not encoded, so the register file is
+        // the one place that knows which index and width the name stands for.
+        const fixed = lookupRegister(pattern.name);
+        if (fixed === null) {
+          throw new AsmDecodeError(`Internal: ${pattern.name} is not a register name`, address);
+        }
+        operands.push(registerOperand(fixed.index, fixed.size));
         break;
       }
       case "one":
@@ -292,8 +316,6 @@ export function decodeInstruction(
 
   return {
     mnemonic: form.mnemonic,
-    encoding: form.encoding,
-    form,
     length: reader.consumed,
     operandSize,
     operands,
@@ -326,9 +348,7 @@ function readModRm(
         kind: "register",
         index,
         size: memorySize,
-        // Same rule as the reg field: encodings 4-7 of a one-byte register are
-        // the high-byte names only when no REX prefix redefined them.
-        high8: memorySize === 1 && !sawRex && index >= 4 && index <= 7,
+        high8: isHighByteEncoding(memorySize, index, sawRex),
       },
     };
   }

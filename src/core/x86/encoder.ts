@@ -5,9 +5,12 @@
  * The encoder never chooses arbitrarily. When several forms in `isa.ts` could
  * express the same instruction it assembles all of them and keeps the
  * shortest, which is what NASM does and why `add rax, 1` is three bytes rather
- * than seven. That rule is also what makes the output stable: the shortest
- * encoding of a given instruction is unique here, so the same source always
- * produces the same bytes and a recorded lesson stays byte-identical.
+ * than seven. The shortest form is often not unique — `mov rax, rbx` is three
+ * bytes as either `48 89 d8` or `48 8b c3` — so a tie goes to whichever form
+ * `isa.ts` declares first, which is the one NASM emits. `formsFor` preserves
+ * declaration order and the sort below is stable, and that pair is what keeps
+ * the output stable: the same source always produces the same bytes and a
+ * recorded lesson stays byte-identical.
  *
  * Two constraints in the instruction format cause almost every real bug in an
  * encoder, so both are enforced rather than assumed:
@@ -17,8 +20,12 @@
  *     `spl`, `bpl`, `sil` and `dil`. Writing `mov ah, r8b` is not a long
  *     instruction — it is not an instruction.
  *   * `rsp` can never be a scaled index, because the index field's value 4
- *     means "no index". The parser folds an address into base and index; this
- *     is where the folding is checked against what SIB can actually say.
+ *     means "no index". The parser owns that rule: it folds an address into
+ *     base and index and either swaps `rsp` into the base slot or rejects it.
+ *     The check here re-asserts the invariant for a caller that hands
+ *     `encodeInstruction` a `MemoryOperand` it built itself, and catches the
+ *     one shape the parser's swap cannot fix — `[rsp+rsp]`, where both slots
+ *     hold `rsp` and swapping them changes nothing.
  */
 
 import type { InstructionStatement, MemoryOperand, Operand } from "./parser";
@@ -29,7 +36,7 @@ import {
   type InstructionForm,
   type OperandPattern,
 } from "./isa";
-import { forbidsRex, lookupRegister, requiresRex } from "./registers";
+import { forbidsRex, requiresRex, type OperandSize } from "./registers";
 
 export class AsmEncodeError extends Error {
   readonly line: number;
@@ -59,18 +66,17 @@ export interface EncodeRequest {
   address: bigint;
   resolved: ResolvedOperands;
   /**
-   * Minimum branch-displacement width to consider, in bytes. Branch relaxation
-   * raises this when a short jump turned out not to reach; it never lowers it,
-   * which is what makes the layout loop terminate.
+   * Minimum branch-displacement width to consider, in bytes. The first layout
+   * pass runs with this at 4 so the widest form is assumed and later passes can
+   * only shrink; the assembler drops it to 1 after that pass, and raises it back
+   * to 4 for an instruction whose short form turned out not to reach. See
+   * `assembler.ts`'s header for why the layout loop terminates.
    */
   minimumRelBytes: 1 | 4;
 }
 
 export interface EncodedInstruction {
   bytes: number[];
-  form: InstructionForm;
-  /** True when the chosen form used a 1-byte branch displacement. */
-  usedShortBranch: boolean;
 }
 
 function fitsSigned(value: bigint, bytes: number): boolean {
@@ -195,9 +201,12 @@ function encodeModRm(
   }
 
   // No registers at all: a bare absolute address, which needs the SIB escape.
+  // The disp32 it carries is *sign-extended* to 64 bits by the machine, so
+  // 0x80000000 would address 0xffffffff80000000 — a different address than the
+  // one written. Only the signed range can be said here.
   if (!base && !index) {
-    if (!fitsSigned(displacement, 4) && !fitsUnsigned(displacement, 4)) {
-      throw error("An absolute address has to fit in 32 bits");
+    if (!fitsSigned(displacement, 4)) {
+      throw error("An absolute address has to fit in a signed 32-bit displacement");
     }
     return {
       bytes: [
@@ -217,7 +226,11 @@ function encodeModRm(
   let mod: number;
   let displacementBytes: number[];
   if (base === null) {
-    // Index with no base is always mod=00 with a disp32 in the SIB form.
+    // Index with no base is always mod=00 with a disp32 in the SIB form, and
+    // that disp32 is sign-extended like every other one.
+    if (!fitsSigned(displacement, 4)) {
+      throw error("A displacement has to fit in a signed 32-bit field");
+    }
     mod = 0;
     displacementBytes = encodeLittleEndian(displacement, 4);
   } else if (displacement === 0n && !baseIsRbpLike) {
@@ -230,7 +243,7 @@ function encodeModRm(
     mod = 2;
     displacementBytes = encodeLittleEndian(displacement, 4);
   } else {
-    throw error("A displacement has to fit in 32 bits");
+    throw error("A displacement has to fit in a signed 32-bit field");
   }
 
   if (!needsSib) {
@@ -258,6 +271,72 @@ function encodeModRm(
   };
 }
 
+/**
+ * Edit distance that counts a swap of two adjacent characters as one edit.
+ *
+ * The typo a learner actually makes is `mvo` for `mov`, and plain Levenshtein
+ * scores that transposition the same as two unrelated substitutions — far
+ * enough away to lose to nothing at all.
+ */
+function editDistance(typed: string, name: string): number {
+  const rows = typed.length + 1;
+  const columns = name.length + 1;
+  const grid: number[][] = Array.from({ length: rows }, () =>
+    Array.from<number>({ length: columns }, () => 0),
+  );
+  for (let row = 0; row < rows; row += 1) grid[row][0] = row;
+  for (let column = 0; column < columns; column += 1) grid[0][column] = column;
+  for (let row = 1; row < rows; row += 1) {
+    for (let column = 1; column < columns; column += 1) {
+      const substitution = typed[row - 1] === name[column - 1] ? 0 : 1;
+      let best = Math.min(
+        grid[row - 1][column] + 1,
+        grid[row][column - 1] + 1,
+        grid[row - 1][column - 1] + substitution,
+      );
+      if (
+        row > 1 &&
+        column > 1 &&
+        typed[row - 1] === name[column - 2] &&
+        typed[row - 2] === name[column - 1]
+      ) {
+        best = Math.min(best, grid[row - 2][column - 2] + 1);
+      }
+      grid[row][column] = best;
+    }
+  }
+  return grid[rows - 1][columns - 1];
+}
+
+/**
+ * The mnemonic a misspelling most likely meant, or null when nothing is close.
+ *
+ * Naming the nearest mnemonic is only help if it is actually the nearest one: a
+ * prefix scan answers `seta` for `see` when `sete` is the word, which sends the
+ * learner to a different instruction than the one they were writing.
+ */
+function suggestMnemonic(typed: string): string | null {
+  // Three characters is short enough that two edits reach unrelated names —
+  // `rte` is within two of `jae` — so the budget grows with the word.
+  const limit = typed.length <= 3 ? 1 : 2;
+  let best: string | null = null;
+  let bestDistance = limit + 1;
+  for (const name of KNOWN_MNEMONICS) {
+    const distance = editDistance(typed, name);
+    if (distance > limit) continue;
+    // A tie goes to the candidate that starts the way the learner typed:
+    // `lae` is `lea`, not `jae`.
+    const wins =
+      distance < bestDistance ||
+      (distance === bestDistance && best !== null && name[0] === typed[0] && best[0] !== typed[0]);
+    if (wins) {
+      best = name;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 function registersOf(operands: Operand[]) {
   const list = [];
   for (const operand of operands) {
@@ -279,19 +358,38 @@ export function encodeInstruction(request: EncodeRequest): EncodedInstruction {
     new AsmEncodeError(message, statement.line, statement.column);
 
   if (!isKnownMnemonic(statement.mnemonic)) {
-    const suggestion = KNOWN_MNEMONICS.find(
-      (name) =>
-        name.startsWith(statement.mnemonic.slice(0, 2)) &&
-        name.length <= statement.mnemonic.length + 2,
-    );
+    const suggestion = suggestMnemonic(statement.mnemonic.toLowerCase());
     throw error(
       `"${statement.mnemonic}" is not an instruction this runner knows` +
         (suggestion ? ` — did you mean ${suggestion}?` : ""),
     );
   }
 
-  const candidates = formsFor(statement.mnemonic).filter(
-    (form) => form.operands.length === statement.operands.length,
+  // NASM lets the width be written on either side of the comma: `mov [rax],
+  // byte 1` is the same store as `mov byte [rax], 1`. The parser records the
+  // keyword on whichever operand carried it, so a memory operand that has none
+  // adopts the width a sibling immediate declared, before any form is matched.
+  let declaredSize: OperandSize | null = null;
+  for (const operand of statement.operands) {
+    if (operand.kind === "immediate" && operand.size !== null) {
+      declaredSize = operand.size;
+      break;
+    }
+  }
+  const sized: InstructionStatement =
+    declaredSize === null
+      ? statement
+      : {
+          ...statement,
+          operands: statement.operands.map((operand) =>
+            operand.kind === "memory" && operand.size === null
+              ? { ...operand, size: declaredSize }
+              : operand,
+          ),
+        };
+
+  const candidates = formsFor(sized.mnemonic).filter(
+    (form) => form.operands.length === sized.operands.length,
   );
 
   if (candidates.length === 0) {
@@ -304,7 +402,7 @@ export function encodeInstruction(request: EncodeRequest): EncodedInstruction {
 
   const matching = candidates.filter((form) =>
     form.operands.every((pattern, position) =>
-      patternMatches(pattern, statement.operands[position], resolved, position),
+      patternMatches(pattern, sized.operands[position], resolved, position),
     ),
   );
 
@@ -320,7 +418,7 @@ export function encodeInstruction(request: EncodeRequest): EncodedInstruction {
   // disagree about the width of *this* access. `mov [rax], bl` is unambiguous
   // even though its memory operand carries no size keyword, because only the
   // one-byte form can also accept `bl`.
-  statement.operands.forEach((operand, position) => {
+  sized.operands.forEach((operand, position) => {
     if (operand.kind !== "memory" || operand.size !== null) return;
     const widths = new Set<number>();
     for (const form of matching) {
@@ -338,7 +436,7 @@ export function encodeInstruction(request: EncodeRequest): EncodedInstruction {
   const failures: AsmEncodeError[] = [];
   for (const form of matching) {
     try {
-      encodings.push(encodeWithForm(form, statement, address, resolved, minimumRelBytes, error));
+      encodings.push(encodeWithForm(form, sized, address, resolved, minimumRelBytes, error));
     } catch (cause) {
       if (cause instanceof AsmEncodeError) {
         failures.push(cause);
@@ -380,20 +478,18 @@ function encodeWithForm(
   const prefixes: number[] = [];
   if (opsize === 2) prefixes.push(0x66);
 
-  let rexW = form.rexW ? 1 : opsize === 8 ? 1 : 0;
   // `push`/`pop`/`jmp` are 64-bit by default in long mode and must not carry
   // REX.W, which is why their forms declare no `opsize` at all.
-  if (form.opsize === undefined) rexW = form.rexW ? 1 : 0;
+  const rexW = opsize === 8 ? 1 : 0;
 
   let rexR = 0;
   let rexX = 0;
   let rexB = 0;
-  let forceRex = usedRegisters.some(requiresRex);
+  const forceRex = usedRegisters.some(requiresRex);
   const hasHighByte = usedRegisters.some(forbidsRex);
 
   let body: number[] = [];
   const opcode = [...form.opcode];
-  let usedShortBranch = false;
 
   const immediatePositions = form.operands
     .map((pattern, position) => ({ pattern, position }))
@@ -448,7 +544,6 @@ function encodeWithForm(
         throw error("This jump does not reach — it needs a longer form");
       }
       body = encodeLittleEndian(relative, relPattern.size);
-      usedShortBranch = relPattern.size === 1;
       break;
     }
 
@@ -458,7 +553,6 @@ function encodeWithForm(
       if (first.kind !== "register") throw error("This form needs a register");
       opcode[opcode.length - 1] += first.register.index & 7;
       rexB = (first.register.index >> 3) & 1;
-      if (requiresRex(first.register)) forceRex = true;
       body = form.encoding === "OI" ? immediateBytes() : [];
       break;
     }
@@ -481,7 +575,6 @@ function encodeWithForm(
           throw error("This form needs a register operand");
         }
         regField = registerOperand.register.index;
-        if (requiresRex(registerOperand.register)) forceRex = true;
       }
 
       const rmOperand = operands[rmOperandIndex];
@@ -525,13 +618,5 @@ function encodeWithForm(
   // decision is final rather than guessing.
   const rexBytes = needsRex ? [0x40 | (rexW << 3) | (rexR << 2) | (rexX << 1) | rexB] : [];
   const bytes = [...prefixes, ...rexBytes, ...opcode, ...body];
-  return { bytes, form, usedShortBranch };
+  return { bytes };
 }
-
-/** Exposed for the round-trip tests, which need the same helpers. */
-export const encoderInternals = {
-  encodeLittleEndian,
-  fitsSigned,
-  fitsUnsigned,
-  lookupRegister,
-};
