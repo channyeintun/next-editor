@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import YAML from "yaml";
 
 import { instantiateKiteCompiler, type KiteCompiler } from "../runtime/kitePlayground/compiler";
+import { replayTypedFile } from "./crashCourseTestUtils";
 import { parseLessonScript, type LessonScript } from "./script/schema";
 import { KITE_KEYWORDS } from "../monaco/kiteLanguage";
 
@@ -22,26 +23,6 @@ import { KITE_KEYWORDS } from "../monaco/kiteLanguage";
 const scriptPath = resolve(process.cwd(), "src/studio/scripts/kite-crash-course.yaml");
 const wasmPath = resolve(process.cwd(), "src/core/kite/build/kite-compiler.wasm");
 
-/** Apply the lesson's `editor.type` insertions in order, as the player does. */
-function replay(script: LessonScript): string {
-  let file = script.lesson.workspace.files["main.kite"] ?? "";
-  for (const scene of script.scenes) {
-    for (const action of scene.actions ?? []) {
-      if (action.type === "editor.type") {
-        const after = action.target.after ?? "";
-        // Insert-only, and the anchor must be unambiguous at this moment —
-        // the same two rules the schema documents for authors.
-        expect(file.split(after).length - 1, `anchor for ${action.id}`).toBe(1);
-        const at = file.indexOf(after) + after.length;
-        file = file.slice(0, at) + action.text + file.slice(at);
-      } else if (action.type === "editor.select") {
-        expect(file.split(action.target.text ?? "").length - 1, `selection ${action.id}`).toBe(1);
-      }
-    }
-  }
-  return file;
-}
-
 describe("kite crash course", () => {
   let kite: KiteCompiler;
   let script: LessonScript;
@@ -50,7 +31,7 @@ describe("kite crash course", () => {
   beforeAll(async () => {
     kite = await instantiateKiteCompiler(readFileSync(wasmPath));
     script = parseLessonScript(YAML.parse(readFileSync(scriptPath, "utf8")));
-    program = replay(script);
+    program = replayTypedFile(script, "main.kite");
   });
 
   it("types a program the bundled compiler accepts", () => {

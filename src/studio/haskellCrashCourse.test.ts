@@ -3,7 +3,11 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import YAML from "yaml";
 
-import { resolveAnchorOffset } from "./async";
+import {
+  whiteboardAssetProblems,
+  whiteboardLabelProblems,
+  replayTypedFile,
+} from "./crashCourseTestUtils";
 import { parseLessonScript, type LessonScript } from "./script/schema";
 
 /**
@@ -35,37 +39,6 @@ import { parseLessonScript, type LessonScript } from "./script/schema";
 
 const scriptPath = resolve(process.cwd(), "src/studio/scripts/haskell-crash-course.yaml");
 
-/**
- * Apply the lesson's `editor.type` insertions in order, as the player does.
- *
- * Anchors go through the driver's own `resolveAnchorOffset`, so what this
- * reconstructs is the program a render really produces — `after: ""` anchors
- * the file start and `occurrence` picks among repeats, both of which the schema
- * allows and a hand-rolled unique-match rule here would reject.
- */
-function replay(script: LessonScript): string {
-  let file = script.lesson.workspace.files["Main.hs"] ?? "";
-  for (const scene of script.scenes) {
-    for (const action of scene.actions ?? []) {
-      if (action.type === "editor.type") {
-        // Insert-only, and the anchor has to resolve at this moment — this is
-        // the failure that aborts a render mid-performance.
-        const at = resolveAnchorOffset(file, action.target);
-        expect(at, `anchor for ${action.id}`).not.toBeNull();
-        if (at === null) continue;
-        file = file.slice(0, at) + action.text + file.slice(at);
-      } else if (action.type === "editor.select") {
-        const at = resolveAnchorOffset(file, {
-          after: action.target.text,
-          occurrence: action.target.occurrence,
-        });
-        expect(at, `selection ${action.id}`).not.toBeNull();
-      }
-    }
-  }
-  return file;
-}
-
 /** The statements of `main`'s do block — one per line the program prints. */
 function mainDoStatements(program: string): string[] {
   const start = program.indexOf("main = do\n");
@@ -83,7 +56,7 @@ describe("haskell crash course", () => {
 
   beforeAll(() => {
     script = parseLessonScript(YAML.parse(readFileSync(scriptPath, "utf8")));
-    program = replay(script);
+    program = replayTypedFile(script, "Main.hs");
     const runtime = script.runtime;
     if (runtime.kind !== "haskell-playground") {
       throw new Error("expected a haskell-playground runtime");
@@ -214,56 +187,14 @@ describe("haskell crash course", () => {
   });
 
   it("draws every whiteboard asset it references, and no orphans", () => {
-    const declared = new Set(script.lesson.whiteboardAssets?.map((asset) => asset.id) ?? []);
-    const used = new Set<string>();
-    const undeclared: string[] = [];
-    for (const scene of script.scenes) {
-      for (const action of scene.actions ?? []) {
-        if (action.type !== "whiteboard.apply") continue;
-        for (const id of action.upsertIds ?? []) {
-          used.add(id);
-          if (!declared.has(id)) undeclared.push(`${action.id} -> ${id}`);
-        }
-      }
-    }
-
-    expect(undeclared, "whiteboard.apply references an asset that is not declared").toEqual([]);
-    expect(
-      [...declared].filter((id) => !used.has(id)),
-      "declared assets never drawn",
-    ).toEqual([]);
+    expect(whiteboardAssetProblems(script)).toEqual({ undeclared: [], neverDrawn: [] });
   });
 
   it("keeps every whiteboard label readable and on the canvas", () => {
-    // The visuals carry this lesson, and neither the compile step nor the
-    // render gates check legibility or overflow. Collected rather than
-    // asserted per asset so a layout regression reports every offender at once.
-    const tooSmall = (script.lesson.whiteboardAssets ?? [])
-      .filter((asset) => asset.kind === "text" && asset.fontSize < 28)
-      .map((asset) => `${asset.id} @ ${asset.fontSize}px`);
-    const offCanvas = (script.lesson.whiteboardAssets ?? [])
-      .filter(
-        (asset) =>
-          asset.x < 250 ||
-          asset.y < 150 ||
-          asset.x + asset.width > 1100 ||
-          asset.y + asset.height > 650,
-      )
-      .map((asset) => asset.id);
-
-    // Excalidraw's hand-drawn font runs about 0.55em per character, and no
-    // gate anywhere catches a label running out of its box.
-    const overflowing = (script.lesson.whiteboardAssets ?? [])
-      .filter(
-        (asset) =>
-          asset.kind === "text" &&
-          asset.text !== undefined &&
-          asset.text.length * asset.fontSize * 0.55 > asset.width,
-      )
-      .map((asset) => `${asset.id}: "${asset.text}"`);
-
-    expect(tooSmall, "labels below the 28px floor").toEqual([]);
-    expect(overflowing, "labels wider than their box").toEqual([]);
-    expect(offCanvas, "assets outside the visible canvas").toEqual([]);
+    expect(whiteboardLabelProblems(script)).toEqual({
+      tooSmall: [],
+      overflowing: [],
+      offCanvas: [],
+    });
   });
 });

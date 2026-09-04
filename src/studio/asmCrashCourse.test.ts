@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import YAML from "yaml";
 
-import { resolveAnchorOffset } from "./async";
+import { replayTypedFile } from "./crashCourseTestUtils";
 import { parseLessonScript, type LessonScript } from "./script/schema";
 import { AsmPlaygroundClient } from "../runtime/asmPlayground/client";
 import {
@@ -34,39 +34,6 @@ import {
 
 const scriptPath = resolve(process.cwd(), "src/studio/scripts/x86-64-assembly-crash-course.yaml");
 
-/**
- * Apply the lesson's `editor.type` insertions in order, as the player does.
- *
- * Anchors are resolved with the driver's own `resolveAnchorOffset` rather than
- * a copy of it, so the reconstructed program is the one a render really
- * produces: a one-based occurrence, counted in the file *as it is at that
- * moment*. A replay that demanded every anchor be unique would be stricter than
- * the contract and would reject `occurrence: 1` on a string that legitimately
- * appears twice — which this lesson's selections do.
- */
-function replay(script: LessonScript): string {
-  let file = script.lesson.workspace.files["main.asm"] ?? "";
-  for (const scene of script.scenes) {
-    for (const action of scene.actions ?? []) {
-      if (action.type === "editor.type") {
-        const at = resolveAnchorOffset(file, action.target);
-        // Insert-only, and the anchor has to resolve at this moment — this is
-        // the failure that aborts a render mid-performance.
-        expect(at, `anchor for ${action.id}`).not.toBeNull();
-        if (at === null) continue;
-        file = file.slice(0, at) + action.text + file.slice(at);
-      } else if (action.type === "editor.select") {
-        const at = resolveAnchorOffset(file, {
-          after: action.target.text,
-          occurrence: action.target.occurrence,
-        });
-        expect(at, `selection ${action.id}`).not.toBeNull();
-      }
-    }
-  }
-  return file;
-}
-
 describe("x86-64 assembly crash course", () => {
   let script: LessonScript;
   let program: string;
@@ -76,7 +43,7 @@ describe("x86-64 assembly crash course", () => {
 
   beforeAll(async () => {
     script = parseLessonScript(YAML.parse(readFileSync(scriptPath, "utf8")));
-    program = replay(script);
+    program = replayTypedFile(script, "main.asm");
 
     const runtime = script.runtime;
     if (runtime.kind !== "asm-playground") throw new Error("expected an asm-playground runtime");
