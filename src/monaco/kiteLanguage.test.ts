@@ -6,6 +6,7 @@ import {
   kiteMonarchLanguage,
 } from "./kiteLanguage";
 import { createStarterKiteWorkspace } from "../starters/kite";
+import { inferLanguageFromPath } from "../types/workspace";
 
 /**
  * Kite files were coloured with Monaco's Rust grammar, which is close enough
@@ -44,6 +45,7 @@ function ruleFor(rules: unknown[], text: string): Rule | undefined {
 describe("kite monarch grammar", () => {
   it("registers under the id inferLanguageFromPath returns for .kite", () => {
     expect(KITE_LANGUAGE_ID).toBe("kite");
+    expect(inferLanguageFromPath("main.kite")).toBe(KITE_LANGUAGE_ID);
   });
 
   it("lists exactly the 27 reserved keywords the language has", () => {
@@ -132,6 +134,36 @@ describe("kite monarch grammar", () => {
     expect(kiteMonarchLanguage.tokenizer.interpolationBody).toBeDefined();
   });
 
+  it("reads a literal inside a hole exactly as it reads one outside", () => {
+    // A hole holds an ordinary expression, so `"\(0xFF)"` has to tokenize the
+    // way `0xFF` does one line up. With only a decimal rule in the hole it
+    // split into the number `0` and an identifier called `xFF`.
+    const body = kiteMonarchLanguage.tokenizer.interpolationBody as unknown[];
+
+    for (const literal of ["0xFF", "0o755", "0b1010_1101", "1_000_000", "3.14", "1.5e-3"]) {
+      const rule = ruleFor(body, literal);
+      expect({ literal, matched: rule !== undefined }).toEqual({ literal, matched: true });
+      const anchored = new RegExp(`^(?:${(rule![0] as RegExp).source})`);
+      expect({ literal, consumed: literal.match(anchored)?.[0] }).toEqual({
+        literal,
+        consumed: literal,
+      });
+      expect(rule![1]).toBe(ruleFor(root, literal)?.[1]);
+    }
+  });
+
+  it("ends an unterminated string at the line, instead of leaking the state", () => {
+    // A `"` string may not span lines — that is E0001 — so without a guard,
+    // deleting the closing quote colours `fn`, `let` and `check` on every line
+    // below as string, and flips the colouring again at the next quote.
+    expect(ruleFor(root, '"hello')?.[1]).toBe("string.invalid");
+    expect(ruleFor(root, '"visit \\(name')?.[1]).toBe("string.invalid");
+    // A closed literal still opens the string state, and a block string — the
+    // form that may span lines — still opens its own.
+    expect(ruleFor(root, '"hello")')?.[1]).toMatchObject({ next: "@string" });
+    expect(ruleFor(root, '"""')?.[1]).toMatchObject({ next: "@blockString" });
+  });
+
   it("matches every number form the lexer accepts, and no suffix", () => {
     for (const literal of ["0xFF", "0o755", "0b1010_1101", "1_000_000", "3.14", "1.5e-3"]) {
       expect(ruleFor(root, literal), `number literal ${literal}`).toBeDefined();
@@ -174,7 +206,8 @@ describe("kite monarch grammar", () => {
     );
 
     for (const keyword of present) {
-      expect(keywords, `${keyword} would render as a plain identifier`).toContain(keyword);
+      // A missing keyword renders as a plain identifier; toContain names it in the diff.
+      expect(keywords).toContain(keyword);
     }
   });
 });

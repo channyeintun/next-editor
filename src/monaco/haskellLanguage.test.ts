@@ -28,6 +28,30 @@ function whitespacePatternFor(token: string): RegExp {
   return rule![0];
 }
 
+/**
+ * The first rule of a state whose pattern matches `text` from the cursor —
+ * which is the only thing that decides a token, since Monarch is first-match
+ * wins. Monarch compiles a leading `^` into "only try this at column 0", so
+ * `atLineStart` is what tells a gap continuation apart from mid-line text.
+ */
+function ruleFor(
+  rules: unknown[],
+  text: string,
+  atLineStart = false,
+): [RegExp, unknown] | undefined {
+  return rules.find((rule): rule is [RegExp, unknown] => {
+    if (!Array.isArray(rule)) return false;
+    const pattern = rule[0];
+    if (!(pattern instanceof RegExp)) return false;
+    if (pattern.source.startsWith("^") && !atLineStart) return false;
+    const expanded = pattern.source.replace(/@(\w+)/g, (whole, attribute: string) => {
+      const value = (haskellMonarchLanguage as Record<string, unknown>)[attribute];
+      return value instanceof RegExp ? `(?:${value.source})` : whole;
+    });
+    return new RegExp(`^(?:${expanded})`).test(text);
+  });
+}
+
 /** The first rule in `root` whose action is exactly this token, as a string. */
 function rootPatternFor(token: string): RegExp {
   const rule = rootRules.find((entry) => Array.isArray(entry) && entry[1] === token) as
@@ -193,23 +217,41 @@ describe("haskell monarch grammar", () => {
     expect(float.test("1.")).toBe(false);
   });
 
-  it("spans a string gap on both of its lines", () => {
+  it("spans a string gap on both of its lines, indented or not", () => {
     // A gap splices one literal across lines with a trailing backslash and a
-    // leading one: `"abc\` … `  \def"`. Both halves need a rule, and both need
-    // to sit ahead of the invalid-escape fallback — with only the opener, the
-    // backslash that resumes the literal is coloured as a bad escape over
-    // perfectly legal code.
-    const stringRules = haskellMonarchLanguage.tokenizer.string as [RegExp, unknown][];
-    const indexOfPattern = (pattern: RegExp) =>
-      stringRules.findIndex(([rule]) => String(rule) === String(pattern));
+    // leading one: `"abc\` … `  \def"`. Both halves need a rule, and the
+    // resuming half has to beat the `[^\\"]+` catch-all: it is `^`-anchored, so
+    // once the catch-all has taken the continuation line's indentation the
+    // cursor is off column 0 and the rule can never run — the backslash then
+    // renders as a bad escape over perfectly legal code, which is exactly what
+    // the rule exists to prevent. Asserting rule order alone missed that.
+    const stringRules = haskellMonarchLanguage.tokenizer.string as unknown[];
 
-    const opener = indexOfPattern(/\\[ \t]*$/);
-    const closer = indexOfPattern(/^[ \t]*\\/);
-    const invalidEscape = indexOfPattern(/\\./);
+    expect(ruleFor(stringRules, '  \\def"', true)?.[1]).toBe("string.escape");
+    expect(ruleFor(stringRules, '\\def"', true)?.[1]).toBe("string.escape");
+    // The opening half, at the end of the line that starts the gap.
+    expect(ruleFor(stringRules, "\\   ")?.[1]).toBe("string.escape");
+    // Mid-line a backslash is still an escape, good or bad.
+    expect(ruleFor(stringRules, "\\n rest")?.[1]).toBe("string.escape");
+    expect(ruleFor(stringRules, "\\q rest")?.[1]).toBe("string.escape.invalid");
+  });
 
-    expect(opener, "trailing backslash that opens a gap").toBeGreaterThanOrEqual(0);
-    expect(closer, "leading backslash that resumes the literal").toBeGreaterThanOrEqual(0);
-    expect(invalidEscape).toBeGreaterThan(opener);
-    expect(invalidEscape).toBeGreaterThan(closer);
+  it("ends an unterminated string at the line, without breaking a gap", () => {
+    // Delete a closing quote and, with no guard, the string state carries onto
+    // every following line: the type signatures and the data declaration below
+    // it all render as one literal until another quote turns up.
+    expect(ruleFor(rootRules, '"Sign-in log')?.[1]).toBe("string.invalid");
+    expect(ruleFor(rootRules, '"a\\n b')?.[1]).toBe("string.invalid");
+
+    // But a gap opener is a string that legitimately continues on the next
+    // line, so it must still reach the rule that enters @string — including
+    // the spelling with blanks after the backslash, which is legal too.
+    for (const line of ['"hello \\', '"hello \\   ', '"hello \\\t', '"closed"']) {
+      // The line travels inside the assertion so a failure names which spelling broke.
+      expect({ line, action: ruleFor(rootRules, line)?.[1] }).toMatchObject({
+        line,
+        action: { next: "@string" },
+      });
+    }
   });
 });

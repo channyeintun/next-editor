@@ -215,6 +215,11 @@ export const kiteMonarchLanguage: monaco.languages.IMonarchLanguage = {
 
       // Block strings first: `"""` would otherwise read as an empty string.
       [/"""/, { token: "string.quote", bracket: "@open", next: "@blockString" }],
+      // A `"` with no partner before the end of the line. A `"` string may not
+      // span lines — that is E0001, and `"""` is the form that may — so without
+      // this the string state carries onward and the rest of the file loses its
+      // colouring, inverting again at every later quote.
+      [/"(?:[^"\\]|\\.)*$/, "string.invalid"],
       [/"/, { token: "string.quote", bracket: "@open", next: "@string" }],
     ],
 
@@ -283,7 +288,15 @@ export const kiteMonarchLanguage: monaco.languages.IMonarchLanguage = {
           },
         },
       ],
-      [/[0-9][0-9_]*(?:\.[0-9][0-9_]*)?/, "number"],
+      // The same six forms `root` has. A hole holds an ordinary expression, so
+      // `"\(0xFF)"` has to read as one hex literal rather than `0` followed by
+      // an identifier named `xFF`.
+      [/0[xX][0-9a-fA-F_]+/, "number.hex"],
+      [/0[oO][0-7_]+/, "number.octal"],
+      [/0[bB][01_]+/, "number.binary"],
+      [/[0-9][0-9_]*\.[0-9][0-9_]*(?:[eE][+-]?[0-9_]+)?/, "number.float"],
+      [/[0-9][0-9_]*[eE][+-]?[0-9_]+/, "number.float"],
+      [/[0-9][0-9_]*/, "number"],
       [/[[\]{}]/, "@brackets"],
       [
         /@symbols/,

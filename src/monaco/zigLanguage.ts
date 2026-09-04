@@ -137,6 +137,11 @@ export const zigMonarchLanguage: monaco.languages.IMonarchLanguage = {
   constants: CONSTANTS,
   typeKeywords: TYPES,
 
+  // Whole-match membership: `symbols` matches a run greedily and the case
+  // guard tests the entire run, so every compound assignment has to be listed
+  // in its own right — `+=` is never split into `+` and `=`. Word operators
+  // (`and`, `or`) do not belong here at all: `symbols` has no letters in it,
+  // so they are coloured by the keyword list instead.
   operators: [
     "=",
     "==",
@@ -163,8 +168,24 @@ export const zigMonarchLanguage: monaco.languages.IMonarchLanguage = {
     "<<",
     ">>",
     "<<|",
-    "and",
-    "or",
+    "||",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "&=",
+    "|=",
+    "^=",
+    "<<=",
+    ">>=",
+    "<<|=",
+    "+%=",
+    "-%=",
+    "*%=",
+    "+|=",
+    "-|=",
+    "*|=",
     "!",
     "?",
     ".?",
@@ -226,8 +247,16 @@ export const zigMonarchLanguage: monaco.languages.IMonarchLanguage = {
 
       [/[;,]/, "delimiter"],
 
+      // A `"` with no partner before the end of the line. Zig strings are
+      // single-line (`\\` is the multiline form), so without this the string
+      // state carries onto the next line and colours the rest of the file as a
+      // literal while the closing quote is still missing.
+      [/"(?:[^"\\]|\\.)*$/, "string.invalid"],
       [/"/, { token: "string.quote", bracket: "@open", next: "@string" }],
-      [/'(?:[^'\\]|\\.)'/, "string"],
+
+      // `@escapes` rather than `\\.`: `'\x41'` and `'\u{1F600}'` are ordinary
+      // char literals, and a one-character escape leaves both unmatched.
+      [/'(?:[^'\\]|@escapes)'/, "string"],
     ],
 
     // Zig multiline strings are line-oriented: every line starts with `\\`

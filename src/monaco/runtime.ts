@@ -37,10 +37,12 @@ import "monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js";
 // Python: grammar only, for the WebContainer python lesson type — execution
 // happens through the container's WASI interpreter, not Monaco.
 import "monaco-editor/esm/vs/basic-languages/python/python.contribution.js";
-// Zig, Haskell and Kite have no Monaco grammar to import — basic-languages/
-// carries none of the three — so monaco/zigLanguage.ts, monaco/haskellLanguage.ts
-// and monaco/kiteLanguage.ts are first-party Monarch grammars, registered by
-// ensureMonacoRuntimeInitialized below rather than by an import side effect.
+// Zig, Haskell, Kite and x86-64 assembly have no Monaco grammar to import —
+// basic-languages/ carries none of the four, and its only assembly mode is
+// `mips` — so monaco/zigLanguage.ts, monaco/haskellLanguage.ts,
+// monaco/kiteLanguage.ts and monaco/asmLanguage.ts are first-party Monarch
+// grammars, registered by ensureMonacoRuntimeInitialized below rather than by
+// an import side effect.
 
 // Worker-backed rich services. JSON is self-contained: language/json registers
 // its own id and tokenizes via its worker, so it needs no basic grammar.

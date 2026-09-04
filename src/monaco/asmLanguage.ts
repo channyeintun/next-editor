@@ -1,14 +1,15 @@
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
+import { KNOWN_MNEMONICS } from "../core/x86/isa";
 
 /**
  * First-party NASM-syntax x86-64 support for Monaco.
  *
- * Monaco does ship a grammar called `asm`, and it is not usable here: it is a
- * generic assembly mode that knows neither NASM's directives nor the register
- * names, so `section .data`, `resb` and `rdi` all render as plain identifiers.
- * In a lesson those are exactly the words the eye needs to find — the register
- * being written, the directive that reserves the buffer — so the grammar is
- * first-party, like Zig's and Kite's.
+ * Monaco ships no x86 or NASM grammar at all — `mips` is the only assembly
+ * mode under `basic-languages/`, and it claims `.s` but knows neither NASM's
+ * directives nor the x86 register names, so `section .data`, `resb` and `rdi`
+ * would all render as plain identifiers. In a lesson those are exactly the
+ * words the eye needs to find — the register being written, the directive that
+ * reserves the buffer — so the grammar is first-party, like Zig's and Kite's.
  *
  * Three choices in the tokenizer are worth naming, because they are what make
  * assembly read correctly rather than merely colour:
@@ -28,99 +29,12 @@ import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 
 export const ASM_LANGUAGE_ID = "asm";
 
-/** The instruction names the runner's assembler accepts, plus their aliases. */
-const INSTRUCTIONS = [
-  "adc",
-  "add",
-  "and",
-  "call",
-  "cbw",
-  "cdq",
-  "cdqe",
-  "cmp",
-  "cqo",
-  "cwd",
-  "cwde",
-  "dec",
-  "div",
-  "hlt",
-  "idiv",
-  "imul",
-  "inc",
-  "int3",
-  "lea",
-  "leave",
-  "loop",
-  "loope",
-  "loopne",
-  "loopnz",
-  "loopz",
-  "mov",
-  "movsx",
-  "movsxd",
-  "movzx",
-  "mul",
-  "neg",
-  "nop",
-  "not",
-  "or",
-  "pop",
-  "push",
-  "ret",
-  "rol",
-  "ror",
-  "sal",
-  "sar",
-  "sbb",
-  "shl",
-  "shr",
-  "sub",
-  "syscall",
-  "test",
-  "xchg",
-  "xor",
-];
-
-const CONDITIONS = [
-  "a",
-  "ae",
-  "b",
-  "be",
-  "c",
-  "e",
-  "g",
-  "ge",
-  "l",
-  "le",
-  "na",
-  "nae",
-  "nb",
-  "nbe",
-  "nc",
-  "ne",
-  "ng",
-  "nge",
-  "nl",
-  "nle",
-  "no",
-  "np",
-  "ns",
-  "nz",
-  "o",
-  "p",
-  "pe",
-  "po",
-  "s",
-  "z",
-];
-
-/** `je`, `setg`, `cmovae`, … — generated rather than typed out three times. */
-const CONDITIONAL_INSTRUCTIONS = CONDITIONS.flatMap((condition) => [
-  `j${condition}`,
-  `set${condition}`,
-  `cmov${condition}`,
-]);
-
+/**
+ * Only the directives and operand keywords the runner's parser actually
+ * accepts. NASM's `times` is deliberately absent: this assembler has no repeat
+ * count, so colouring it like `db` would promise a directive that then fails
+ * with an error pointing at its operand.
+ */
 const DIRECTIVES = [
   "section",
   "segment",
@@ -138,7 +52,6 @@ const DIRECTIVES = [
   "resw",
   "resd",
   "resq",
-  "times",
   "byte",
   "word",
   "dword",
@@ -216,6 +129,10 @@ const REGISTERS = [
   "r13b",
   "r14b",
   "r15b",
+  // `rip` is a real register the CPU steps, but not one an operand may name
+  // here — rip-relative addressing is written `[rel msg]`. It stays in the
+  // list because reading `rip` as anything but a register would be a lie
+  // about x86-64, and the assembler's own error says the rest.
   "rip",
 ];
 
@@ -246,7 +163,11 @@ export const asmMonarchLanguage: monaco.languages.IMonarchLanguage = {
   ignoreCase: true,
   tokenPostfix: ".asm",
 
-  instructions: [...INSTRUCTIONS, ...CONDITIONAL_INSTRUCTIONS, "jmp"],
+  // Read straight off the assembler's own table — including every `jcc`,
+  // `setcc` and `cmovcc` spelling and the aliases — so a mnemonic added to
+  // the ISA is highlighted the day it starts assembling, with no second list
+  // to remember. The runner already pulls this module into the same bundle.
+  instructions: KNOWN_MNEMONICS,
   directives: DIRECTIVES,
   registers: REGISTERS,
 
@@ -279,10 +200,23 @@ export const asmMonarchLanguage: monaco.languages.IMonarchLanguage = {
         },
       ],
 
+      // Every spelling parseIntegerLiteral accepts, prefix and suffix forms
+      // alike. The suffix rules have to precede the plain-decimal one, which
+      // would otherwise take the digits and leave `b`/`q` to the identifier
+      // rule — so `1010b` would read as a number next to a variable name.
       [/0[xX][0-9a-fA-F_]+/, "number.hex"],
       [/0[bB][01_]+/, "number.binary"],
+      [/0[oO][0-7_]+/, "number.octal"],
+      [/[01][01_]*[bB]\b/, "number.binary"],
+      [/[0-7][0-7_]*[qQ]\b/, "number.octal"],
       [/[0-9][0-9a-fA-F_]*[hH]\b/, "number.hex"],
       [/\d[\d_]*/, "number"],
+
+      // A quote with no partner before the end of the line. Without these the
+      // string state carries onto the next line and colours the rest of the
+      // file as a literal while the missing quote is being typed.
+      [/"(?:[^"\\]|\\.)*$/, "string.invalid"],
+      [/'[^']*$/, "string.invalid"],
 
       [/"/, { token: "string.quote", bracket: "@open", next: "@stringDouble" }],
       [/'/, { token: "string.quote", bracket: "@open", next: "@stringSingle" }],
@@ -311,22 +245,17 @@ let registered = false;
 
 /** Idempotent: the Monaco runtime module may be imported from several entries. */
 export function registerAsmLanguage(): void {
-  if (registered) {
+  if (registered || monaco.languages.getLanguages().some((lang) => lang.id === ASM_LANGUAGE_ID)) {
+    registered = true;
     return;
   }
   registered = true;
 
-  // Unlike Zig and Kite, this id may already exist: some Monaco builds bundle a
-  // generic `asm` grammar. Registering over it is deliberate — the point of
-  // this file is that the generic one highlights neither NASM's directives nor
-  // the registers — so the configuration and tokenizer are set either way.
-  if (!monaco.languages.getLanguages().some((language) => language.id === ASM_LANGUAGE_ID)) {
-    monaco.languages.register({
-      id: ASM_LANGUAGE_ID,
-      extensions: [".asm", ".s", ".nasm"],
-      aliases: ["Assembly", "x86-64 Assembly", "nasm"],
-    });
-  }
+  monaco.languages.register({
+    id: ASM_LANGUAGE_ID,
+    extensions: [".asm", ".s", ".nasm"],
+    aliases: ["Assembly", "x86-64 Assembly", "nasm"],
+  });
   monaco.languages.setLanguageConfiguration(ASM_LANGUAGE_ID, asmLanguageConfiguration);
   monaco.languages.setMonarchTokensProvider(ASM_LANGUAGE_ID, asmMonarchLanguage);
 }

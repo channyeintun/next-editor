@@ -229,6 +229,13 @@ export const haskellMonarchLanguage: monaco.languages.IMonarchLanguage = {
 
       [/[;,]/, "delimiter"],
 
+      // A `"` with no partner before the end of the line. Without this the
+      // string state carries onto the next line and the rest of the module
+      // renders as one literal while the closing quote is missing. The
+      // lookahead is what keeps a string gap working: a backslash with only
+      // blanks after it opens a gap that legitimately spans lines, so the
+      // alternation refuses to consume it and this rule declines the line.
+      [/"(?:[^"\\]|\\(?![ \t]*$).)*$/, "string.invalid"],
       [/"/, { token: "string.quote", bracket: "@open", next: "@string" }],
       [/'[^\\']'/, "string"],
       [/(')(@escapes)(')/, ["string", "string.escape", "string"]],
@@ -277,15 +284,22 @@ export const haskellMonarchLanguage: monaco.languages.IMonarchLanguage = {
     ],
 
     string: [
-      [/[^\\"]+/, "string"],
-      [/@escapes/, "string.escape"],
       // A string gap: a backslash at the end of a line, whitespace, then a
       // backslash on the next, splices one literal across lines. Both halves
       // need a rule — without the second, the backslash that resumes the
       // literal is read as a bad escape and the next character is coloured
       // as invalid.
-      [/\\[ \t]*$/, "string.escape"],
+      //
+      // The resuming half has to come FIRST. Monarch compiles a leading `^`
+      // into "only try this at column 0" and then matches rules in order, so
+      // behind the catch-all below it never runs: the catch-all takes the
+      // continuation line's indentation, and by the time the backslash is
+      // reached the cursor is no longer at column 0. Every gap written the
+      // ordinary way — indented under the line it continues — depends on this.
       [/^[ \t]*\\/, "string.escape"],
+      [/[^\\"]+/, "string"],
+      [/@escapes/, "string.escape"],
+      [/\\[ \t]*$/, "string.escape"],
       [/\\./, "string.escape.invalid"],
       [/"/, { token: "string.quote", bracket: "@close", next: "@pop" }],
     ],
