@@ -282,7 +282,7 @@ function editDistance(typed: string, name: string): number {
   const rows = typed.length + 1;
   const columns = name.length + 1;
   const grid: number[][] = Array.from({ length: rows }, () =>
-    Array.from<number>({ length: columns }, () => 0),
+    Array.from({ length: columns }, () => 0),
   );
   for (let row = 0; row < rows; row += 1) grid[row][0] = row;
   for (let column = 0; column < columns; column += 1) grid[0][column] = column;
