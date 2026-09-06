@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    // `bun run typecheck` builds this as a second root project, so keep its
+    // incremental artifact out of the tree, beside the root project's.
+    "tsBuildInfoFile": "../../node_modules/.tmp/worker.tsbuildinfo",
     "target": "ES2022",
     "lib": ["ES2023"],
     "module": "ESNext",

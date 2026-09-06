@@ -35,7 +35,11 @@ export interface VerifyGoogleIdTokenOptions {
   now?: number;
 }
 
-function base64UrlDecodeToBytes(value: string): Uint8Array {
+// Returns a view over a plain ArrayBuffer, not the default ArrayBufferLike:
+// crypto.subtle.verify takes a BufferSource, which excludes SharedArrayBuffer
+// views. Uint8Array.from always allocates a fresh non-shared buffer, so the
+// narrower type is exact rather than an assertion.
+function base64UrlDecodeToBytes(value: string): Uint8Array<ArrayBuffer> {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/");
   const padLength = (4 - (padded.length % 4)) % 4;
   const binary = atob(padded + "=".repeat(padLength));

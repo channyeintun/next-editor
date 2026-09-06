@@ -148,10 +148,13 @@ describe("rustPlaygroundRoute", () => {
   });
 
   it.each([
-    [],
-    [...FILES, { path: "extra.rs", content: "fn extra() {}\n" }],
-    [{ path: "lib.rs", content: "fn main() {}\n" }],
-  ])("requires exactly one main.rs (case %#)", async (files) => {
+    { label: "no files at all", files: [] },
+    {
+      label: "a second file",
+      files: [...FILES, { path: "extra.rs", content: "fn extra() {}\n" }],
+    },
+    { label: "a lone lib.rs", files: [{ path: "lib.rs", content: "fn main() {}\n" }] },
+  ])("rejects $label instead of exactly one main.rs", async ({ files }) => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
     const response = await runRequest(makeEnv(), JSON.stringify({ files }));
 

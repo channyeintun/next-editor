@@ -44,5 +44,11 @@
   },
   // The diff-match-patch codec lives in src/core/dmp as a Rust crate (no .ts),
   // so tsc ignores it; no exclude needed.
+  //
+  // infra/worker is deliberately NOT in this project — it compiles against
+  // @cloudflare/workers-types with no DOM lib, so it cannot share these
+  // compilerOptions. It is a second root project of `bun run typecheck`
+  // (`tsc -b tsconfig.json infra/worker/tsconfig.json`) rather than a
+  // reference, since neither project is composite and neither emits.
   "include": ["src", "vite.config.ts", "tube/src", "infra/client", "api"]
 }
