@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { useSelector } from "@xstate/store-react";
 import { MonacoBinding } from "y-monaco";
 import * as Y from "yjs";
@@ -24,6 +24,7 @@ import {
   isWorkspaceTextFile,
   lessonSupportsPreview,
   lessonSupportsTerminal,
+  type WorkspaceExecutionKind,
 } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
 import {
@@ -46,7 +47,6 @@ import RustPlaygroundRunnerPanel from "./RustPlaygroundRunnerPanel";
 import ZigPlaygroundRunnerPanel from "./ZigPlaygroundRunnerPanel";
 import HaskellPlaygroundRunnerPanel from "./HaskellPlaygroundRunnerPanel";
 import KitePlaygroundRunnerPanel from "./KitePlaygroundRunnerPanel";
-import AsmPlaygroundRunnerPanel from "./AsmPlaygroundRunnerPanel";
 import {
   CollaborationCursorLabelManager,
   type CollaborationCursorLabel,
@@ -76,6 +76,24 @@ import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { mayTakeFocus } from "./mayTakeFocus";
 
 const Preview = lazy(() => import("./Preview"));
+// The other runner panels are thin clients in front of a Worker proxy, but this
+// one reaches the whole first-party x86-64 assembler and CPU in `src/core/x86`,
+// which only an `asm` lesson can ever run. Splitting it out keeps that code from
+// being fetched and parsed on every editor load, the way `Preview` already is.
+const AsmPlaygroundRunnerPanel = lazy(() => import("./AsmPlaygroundRunnerPanel"));
+
+// One entry per non-webcontainer execution kind. The `Record` is what makes a new
+// playground kind a compile error here rather than a lesson that renders an editor
+// with no dock at all — no Run button, no console, and nothing to point at.
+const RUNNER_PANELS: Record<Exclude<WorkspaceExecutionKind, "webcontainer">, ComponentType> = {
+  "go-playground": GoPlaygroundRunnerPanel,
+  "kotlin-playground": KotlinPlaygroundRunnerPanel,
+  "rust-playground": RustPlaygroundRunnerPanel,
+  "zig-playground": ZigPlaygroundRunnerPanel,
+  "haskell-playground": HaskellPlaygroundRunnerPanel,
+  "kite-playground": KitePlaygroundRunnerPanel,
+  "asm-playground": AsmPlaygroundRunnerPanel,
+};
 const Y_MONACO_BINDING_ENABLED = import.meta.env.VITE_COLLABORATION_Y_MONACO !== "false";
 const COLLABORATION_CURSOR_COLORS = [
   "#38bdf8",
@@ -1343,6 +1361,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     publishCollaborationViewport(editor);
   };
 
+  const executionKind = executionKindForLessonType(lessonType);
+  const RunnerPanel = executionKind === "webcontainer" ? null : RUNNER_PANELS[executionKind];
+
   return (
     <div className="h-full flex flex-col" data-cursor-replay-target="workspace">
       <WorkspaceEventRecorder
@@ -1386,20 +1407,12 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             </div>
             {lessonSupportsTerminal(lessonType) ? (
               <TerminalPanel />
-            ) : executionKindForLessonType(lessonType) === "go-playground" ? (
-              <GoPlaygroundRunnerPanel />
-            ) : executionKindForLessonType(lessonType) === "kotlin-playground" ? (
-              <KotlinPlaygroundRunnerPanel />
-            ) : executionKindForLessonType(lessonType) === "rust-playground" ? (
-              <RustPlaygroundRunnerPanel />
-            ) : executionKindForLessonType(lessonType) === "zig-playground" ? (
-              <ZigPlaygroundRunnerPanel />
-            ) : executionKindForLessonType(lessonType) === "haskell-playground" ? (
-              <HaskellPlaygroundRunnerPanel />
-            ) : executionKindForLessonType(lessonType) === "kite-playground" ? (
-              <KitePlaygroundRunnerPanel />
-            ) : executionKindForLessonType(lessonType) === "asm-playground" ? (
-              <AsmPlaygroundRunnerPanel />
+            ) : RunnerPanel ? (
+              // Only the asm panel is lazy; the rest resolve synchronously and
+              // never suspend, so this Suspense is inert for them.
+              <Suspense fallback={null}>
+                <RunnerPanel />
+              </Suspense>
             ) : null}
           </div>
           {/* Go, Kotlin, and Python lessons have no preview surface at all —
