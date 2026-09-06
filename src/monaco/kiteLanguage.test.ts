@@ -29,6 +29,18 @@ const constants = kiteMonarchLanguage.constants as string[];
 const typeKeywords = kiteMonarchLanguage.typeKeywords as string[];
 
 /**
+ * Monarch substitutes an `@name` reference with that attribute's source before
+ * compiling, so a rule written against `@identifier` only matches once the
+ * macro is expanded the same way.
+ */
+function expand(source: string): string {
+  return source.replace(/@(\w+)/g, (whole, attribute: string) => {
+    const value = (kiteMonarchLanguage as Record<string, unknown>)[attribute];
+    return value instanceof RegExp ? `(?:${value.source})` : whole;
+  });
+}
+
+/**
  * The first rule whose pattern matches `text` from the start. A state's array
  * also holds `{ include: … }` entries, which are not rules and are skipped.
  */
@@ -37,9 +49,15 @@ function ruleFor(rules: unknown[], text: string): Rule | undefined {
     if (!Array.isArray(rule)) return false;
     const pattern = rule[0];
     if (!(pattern instanceof RegExp)) return false;
-    const anchored = new RegExp(`^(?:${pattern.source})`, pattern.flags.replace("g", ""));
+    const anchored = new RegExp(`^(?:${expand(pattern.source)})`, pattern.flags.replace("g", ""));
     return anchored.test(text);
   });
+}
+
+/** The `cases` map of the identifier rule `text` reaches, or `{}` if none does. */
+function casesFor(rules: unknown[], text: string): Record<string, string> {
+  const action = ruleFor(rules, text)?.[1] as { cases?: Record<string, string> } | undefined;
+  return action?.cases ?? {};
 }
 
 describe("kite monarch grammar", () => {
@@ -204,6 +222,46 @@ describe("kite monarch grammar", () => {
 
     for (const keyword of present) {
       expect(keywords, `${keyword} would render as a plain identifier`).toContain(keyword);
+      // Membership is only half of it: the list is inert until the identifier
+      // rule consults it, and that rule is what routes the word to a colour.
+      expect(
+        casesFor(root, keyword)["@keywords"],
+        `${keyword} is not routed to a keyword token`,
+      ).toBe("keyword");
+    }
+  });
+
+  it("routes each class of word to its own token, in root and inside a hole", () => {
+    // The lists above prove membership; this is the rule that turns membership
+    // into colour. Dropping `@keywords` here leaves every reserved word
+    // rendering as a plain identifier with all the list assertions still green.
+    const body = kiteMonarchLanguage.tokenizer.interpolationBody as unknown[];
+    const routing = {
+      "@constants": "constant.language",
+      "@keywords": "keyword",
+      "@typeKeywords": "keyword.type",
+      "@builtins": "keyword.builtin",
+      "@default": "identifier",
+    };
+
+    expect(casesFor(root, "let")).toEqual(routing);
+    // A hole holds an ordinary expression, so it classifies words the same way.
+    expect(casesFor(body, "let")).toEqual(routing);
+  });
+
+  it("classifies a dotted head the way it classifies the bare word", () => {
+    // `io.print` needs `io` read as a builtin path, and that rule is tried
+    // first — so any class it leaves out changes colour the moment a `.`
+    // follows. `Option` was a type alone and a plain identifier in
+    // `Option.some`, inside one file.
+    for (const rules of [root, kiteMonarchLanguage.tokenizer.interpolationBody as unknown[]]) {
+      const dotted = casesFor(rules, "io.print");
+      const plain = casesFor(rules, "let");
+
+      expect(dotted["@builtinPaths"]).toBe("variable.predefined");
+      for (const [name, token] of Object.entries(plain)) {
+        expect(dotted[name], `the dotted head rule drops ${name}`).toBe(token);
+      }
     }
   });
 });

@@ -84,6 +84,29 @@ const BUILTINS = ["assert", "require", "extern"];
  */
 const BUILTIN_PATHS = ["io", "errors", "time", "text", "js", "math", "task", "draw", "ptr"];
 
+/**
+ * Every identifier position routes the same way, so root and the interpolation
+ * hole read one map instead of hand-copied ones that drift apart.
+ */
+const IDENTIFIER_CASES = {
+  "@constants": "constant.language",
+  "@keywords": "keyword",
+  "@typeKeywords": "keyword.type",
+  "@builtins": "keyword.builtin",
+  "@default": "identifier",
+};
+
+/**
+ * A head with a dot after it adds the builtin paths in front and otherwise
+ * classifies exactly as the bare word does — a word that only changed colour
+ * because a `.` followed it (`Option` alone against `Option.some`) reads as
+ * two different things inside one file.
+ */
+const DOTTED_IDENTIFIER_CASES = {
+  "@builtinPaths": "variable.predefined",
+  ...IDENTIFIER_CASES,
+};
+
 export const kiteLanguageConfiguration: monaco.languages.LanguageConfiguration = {
   // Three line forms — `//`, `///`, `//!` — and no block comment at all;
   // writing one is E0005. Declaring a blockComment here would make Monaco's
@@ -168,29 +191,9 @@ export const kiteMonarchLanguage: monaco.languages.IMonarchLanguage = {
       [/@[A-Za-z_]\w*/, "annotation"],
 
       // A builtin head is only a builtin when a dot follows it.
-      [
-        /@identifier(?=\s*\.)/,
-        {
-          cases: {
-            "@builtinPaths": "variable.predefined",
-            "@keywords": "keyword",
-            "@default": "identifier",
-          },
-        },
-      ],
+      [/@identifier(?=\s*\.)/, { cases: DOTTED_IDENTIFIER_CASES }],
 
-      [
-        /@identifier/,
-        {
-          cases: {
-            "@constants": "constant.language",
-            "@keywords": "keyword",
-            "@typeKeywords": "keyword.type",
-            "@builtins": "keyword.builtin",
-            "@default": "identifier",
-          },
-        },
-      ],
+      [/@identifier/, { cases: IDENTIFIER_CASES }],
 
       [/[{}()[\]]/, "@brackets"],
       [
@@ -266,28 +269,8 @@ export const kiteMonarchLanguage: monaco.languages.IMonarchLanguage = {
       [/[ \t]+/, ""],
       [/"""/, { token: "string.quote", bracket: "@open", next: "@blockString" }],
       [/"/, { token: "string.quote", bracket: "@open", next: "@string" }],
-      [
-        /@identifier(?=\s*\.)/,
-        {
-          cases: {
-            "@builtinPaths": "variable.predefined",
-            "@keywords": "keyword",
-            "@default": "identifier",
-          },
-        },
-      ],
-      [
-        /@identifier/,
-        {
-          cases: {
-            "@constants": "constant.language",
-            "@keywords": "keyword",
-            "@typeKeywords": "keyword.type",
-            "@builtins": "keyword.builtin",
-            "@default": "identifier",
-          },
-        },
-      ],
+      [/@identifier(?=\s*\.)/, { cases: DOTTED_IDENTIFIER_CASES }],
+      [/@identifier/, { cases: IDENTIFIER_CASES }],
       // The same six forms `root` has. A hole holds an ordinary expression, so
       // `"\(0xFF)"` has to read as one hex literal rather than `0` followed by
       // an identifier named `xFF`.

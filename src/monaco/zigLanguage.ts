@@ -209,7 +209,10 @@ export const zigMonarchLanguage: monaco.languages.IMonarchLanguage = {
       // Builtin functions are always @-prefixed (@import, @sizeOf, @TypeOf).
       [/@[a-zA-Z_]\w*/, "keyword.builtin"],
 
-      // An identifier may be quoted to escape keywords: @"my var".
+      // An identifier may be quoted to escape keywords: @"my var". It is a
+      // string literal, so it ends at the line too — the same guard as `"`,
+      // or an unclosed one carries the identifier state down the file.
+      [/@"(?:[^"\\]|\\.)*$/, "identifier.invalid"],
       [/@"/, { token: "identifier", next: "@quotedIdentifier" }],
 
       // A capitalized identifier before a call is conventionally a type in
@@ -277,6 +280,11 @@ export const zigMonarchLanguage: monaco.languages.IMonarchLanguage = {
 
     quotedIdentifier: [
       [/[^\\"]+/, "identifier"],
+      // `@"..."` takes string escapes, so `@"say \"hi\""` is one name. Without
+      // a rule for the backslash the escaped quote closes the identifier and
+      // the rest of the name is read as code.
+      [/@escapes/, "identifier"],
+      [/\\./, "identifier"],
       [/"/, { token: "identifier", next: "@pop" }],
     ],
   },

@@ -220,4 +220,26 @@ describe("zig monarch grammar", () => {
     // A closed literal still opens the string state as before.
     expect(ruleFor(root, '"closed");')?.[1]).toMatchObject({ next: "@string" });
   });
+
+  it('ends an unterminated @"…" identifier at the line as well', () => {
+    // `@"` enters a state of its own, so the guard on `"` does not cover it:
+    // an unclosed quoted identifier left every following line coloured as one
+    // name until the closing quote was typed.
+    expect(ruleFor(root, '@"still open')?.[1]).toBe("identifier.invalid");
+    // A closed one still opens the quoted-identifier state.
+    expect(ruleFor(root, '@"my var" = 1;')?.[1]).toMatchObject({ next: "@quotedIdentifier" });
+  });
+
+  it('keeps an escaped quote inside @"…" part of the identifier', () => {
+    // `const @"say \"hi\"" = 1;` is legal Zig — the quoted form uses string
+    // escape rules. With no backslash rule the escaped quote pops the state
+    // and the rest of the name is tokenized as code, opening a string on the
+    // way out.
+    const quoted = zigMonarchLanguage.tokenizer.quotedIdentifier as unknown[];
+
+    expect(ruleFor(quoted, '\\"hi\\""')?.[1]).toBe("identifier");
+    expect(ruleFor(quoted, "\\n")?.[1]).toBe("identifier");
+    // The unescaped quote still closes the name.
+    expect(ruleFor(quoted, '" = 1;')?.[1]).toMatchObject({ next: "@pop" });
+  });
 });
