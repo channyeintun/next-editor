@@ -373,9 +373,13 @@ describe("zigPlaygroundRoute", () => {
     expect(url).toBe("https://zig-play.dev/server/run");
     // The upstream protocol is the raw source as a text body, not JSON.
     expect(init?.body).toBe(SOURCE);
-    const headers = init?.headers as Record<string, string>;
-    expect(headers["Content-Type"]).toBe("text/plain");
-    expect(headers["X-Zig-Version"]).toBe("0.16.0");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("Content-Type")).toBe("text/plain");
+    expect(headers.get("X-Zig-Version")).toBe("0.16.0");
+    // zig-play.dev is a small community service with a 5/min per-IP budget, so
+    // identifying our traffic is part of the deal; the sibling route tests pin
+    // their own agent the same way.
+    expect(headers.get("User-Agent")).toContain("NextEditor-ZigPlayground");
   });
 
   it("rejects an invalid JSON body", async () => {

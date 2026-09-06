@@ -33,8 +33,13 @@ export function playlistSlugKey(slug: string): string {
 }
 
 // The checked-in Wrangler config provides this binding, but keeping it
-// optional lets self-hosted/test environments omit the cache without changing
-// application behavior.
+// optional lets self-hosted/test environments omit it. What that costs depends
+// on the caller: `cached()` below degrades to its loader, so the lesson and
+// playlist reads only lose their cache. The playground routes
+// (routes/{go,kotlin,rust,zig,haskell}Playground.ts) also use this binding as
+// their rate-limit policy store, and that one fails closed — without CACHE
+// every run answers 502 rather than running uncached, because a route that
+// cannot count calls must not proxy to a third-party service at all.
 export function getCache(env: Env): KVNamespace | null {
   return env.CACHE ?? null;
 }
