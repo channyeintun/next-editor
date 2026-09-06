@@ -46,6 +46,13 @@ export interface DecodedInstruction {
   operands: DecodedOperand[];
 }
 
+/**
+ * Deliberately outside the `errors.ts` family. Those describe a place in the
+ * source and are formatted with a caret under the offending column; this one
+ * happens while the program is already running, where the only coordinate left
+ * is an address. `cpu.ts` catches it beside `MemoryFault` and turns it into a
+ * fault, which is a different report entirely.
+ */
 export class AsmDecodeError extends Error {
   readonly address: bigint;
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assemble, AsmError } from "./assembler";
+import { assemble } from "./assembler";
+import { AsmError } from "./errors";
 import { parseIntegerLiteral, tokenize } from "./lexer";
 import { formatListing } from "./run";
 
@@ -412,11 +413,18 @@ describe("integer literals", () => {
 });
 
 describe("assembler diagnostics", () => {
+  // Every case below reaches `assemble` through a different phase — the lexer,
+  // the parser, the encoder, the assembler itself — and each of those raises
+  // its own class. Asserting the type here rather than casting to it is what
+  // holds the boundary contract: whichever phase failed, an `AsmError` is the
+  // only thing that comes back out, which is what lets `run.ts` and the
+  // playground client test for one class and print a caret diagnostic.
   const failing = (source: string): AsmError => {
     try {
       assemble(source);
     } catch (cause) {
-      return cause as AsmError;
+      if (cause instanceof AsmError) return cause;
+      throw cause;
     }
     throw new Error("expected the assembler to reject this");
   };
@@ -501,5 +509,16 @@ describe("assembler diagnostics", () => {
     expect(failing(inProgram("here:\n ret\nhere:\n ret")).message).toContain(
       "is defined more than once",
     );
+  });
+
+  // The lexer raises `AsmSyntaxError` and `assemble` re-raises it as the base
+  // class on the way out. That hand-off copies the position across by hand, so
+  // it is the one place a caret could quietly drift a column without any
+  // message changing — worth pinning to the exact numbers.
+  it("keeps a lexer error's position when it is re-raised as an AsmError", () => {
+    const error = failing('section .data\n x db "abc\nsection .text\n_start:\n ret\n');
+    expect(error.message).toBe("String literal is not closed");
+    expect(error.line).toBe(2);
+    expect(error.column).toBe(7);
   });
 });

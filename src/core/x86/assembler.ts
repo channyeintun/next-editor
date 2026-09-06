@@ -31,8 +31,8 @@
  * thing.
  */
 
-import { AsmSyntaxError } from "./lexer";
-import { AsmEncodeError, encodeInstruction, type ResolvedOperands } from "./encoder";
+import { AsmEncodeError, AsmError, AsmSyntaxError } from "./errors";
+import { encodeInstruction, type ResolvedOperands } from "./encoder";
 import { parse, type Expression, type Statement } from "./parser";
 
 export const TEXT_BASE = 0x401000n;
@@ -70,17 +70,11 @@ export interface AssembledProgram {
   lineForAddress: Map<bigint, number>;
 }
 
-export class AsmError extends Error {
-  readonly line: number;
-  readonly column: number;
-
-  constructor(message: string, line: number, column: number) {
-    super(message);
-    this.name = "AsmError";
-    this.line = line;
-    this.column = column;
-  }
-}
+// `AsmError` and the two phase errors below it live in `errors.ts`, which is
+// also where the reason for the split is written down. What this file owns is
+// the contract behind the base class: `assemble` re-raises the lexer's and the
+// encoder's errors as `AsmError`, so an `AsmError` is the only thing a caller
+// of this module ever has to catch.
 
 const SECTION_ORDER = [".text", ".rodata", ".data", ".bss"] as const;
 type SectionName = (typeof SECTION_ORDER)[number];

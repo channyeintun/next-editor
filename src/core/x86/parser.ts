@@ -15,8 +15,9 @@
  * and which NASM accepts.
  */
 
+import { AsmSyntaxError } from "./errors";
 import { isKnownMnemonic } from "./isa";
-import { AsmSyntaxError, type Token, tokenize } from "./lexer";
+import { type Token, tokenize } from "./lexer";
 import { lookupRegister, type OperandSize, type RegisterRef } from "./registers";
 
 export type Expression =

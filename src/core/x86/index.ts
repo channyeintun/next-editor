@@ -29,7 +29,8 @@
  * rather than an execution. For teaching x86-64 that is the right trade.
  */
 
-export { assemble, AsmError } from "./assembler";
+export { assemble } from "./assembler";
+export { AsmError } from "./errors";
 export type { AssembledProgram, AssembledSegment, ListingRow } from "./assembler";
 export { assembleAndRun, describeStop, formatDiagnostic, formatListing, load } from "./run";
 export type { X86RunResult, X86RunOptions, X86RunStatus, X86RegisterSnapshot } from "./run";

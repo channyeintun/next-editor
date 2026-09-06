@@ -17,7 +17,8 @@
  * own stack finds what it expects.
  */
 
-import { AsmError, assemble, STACK_SIZE, STACK_TOP, type AssembledProgram } from "./assembler";
+import { assemble, STACK_SIZE, STACK_TOP, type AssembledProgram } from "./assembler";
+import { AsmError } from "./errors";
 import {
   DEFAULT_MAX_HEAP_BYTES,
   DEFAULT_MAX_INSTRUCTIONS,

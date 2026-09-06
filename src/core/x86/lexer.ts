@@ -14,6 +14,8 @@
  * defined, which every forward jump needs.
  */
 
+import { AsmSyntaxError } from "./errors";
+
 export type TokenKind = "word" | "number" | "string" | "punct" | "newline" | "eof";
 
 export interface Token {
@@ -25,18 +27,6 @@ export interface Token {
   bytes?: number[];
   line: number;
   column: number;
-}
-
-export class AsmSyntaxError extends Error {
-  readonly line: number;
-  readonly column: number;
-
-  constructor(message: string, line: number, column: number) {
-    super(message);
-    this.name = "AsmSyntaxError";
-    this.line = line;
-    this.column = column;
-  }
 }
 
 // `$` and `$$` are absent on purpose: they are recognised ahead of this set,

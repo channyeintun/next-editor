@@ -28,6 +28,7 @@
  *     hold `rsp` and swapping them changes nothing.
  */
 
+import { AsmEncodeError } from "./errors";
 import type { InstructionStatement, MemoryOperand, Operand } from "./parser";
 import {
   formsFor,
@@ -37,18 +38,6 @@ import {
   type OperandPattern,
 } from "./isa";
 import { forbidsRex, requiresRex, type OperandSize } from "./registers";
-
-export class AsmEncodeError extends Error {
-  readonly line: number;
-  readonly column: number;
-
-  constructor(message: string, line: number, column: number) {
-    super(message);
-    this.name = "AsmEncodeError";
-    this.line = line;
-    this.column = column;
-  }
-}
 
 /** Resolved operand values, supplied by the assembler once symbols are known. */
 export interface ResolvedOperands {
