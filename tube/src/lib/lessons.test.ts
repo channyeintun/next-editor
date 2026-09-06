@@ -4,7 +4,12 @@ import { fetchLessonsPage, findLessonBySlug, flattenLessonPages } from "./lesson
 
 vi.mock("axios", () => {
   const get =
-    vi.fn<(url: string) => Promise<{ data: unknown; headers: Record<string, unknown> }>>();
+    vi.fn<
+      (
+        url: string,
+        config?: { timeout?: number },
+      ) => Promise<{ data: unknown; headers: Record<string, unknown> }>
+    >();
   return {
     default: {
       get,
@@ -46,8 +51,18 @@ describe("fetchLessonsPage", () => {
       jsonResponse({ lessons: [{ slug: "user-lesson" }], nextPage: 2 }),
     );
     const page = await fetchLessonsPage("d1:1");
-    expect(mockedGet).toHaveBeenCalledWith("/api/lessons?page=1");
+    expect(mockedGet).toHaveBeenCalledWith("/api/lessons?page=1", { timeout: 15_000 });
     expect(page.nextPage).toBe("d1:2");
+  });
+
+  // Without a timeout a stalled-but-accepted request never settles, so Query's
+  // retry never fires and the grid sits in isFetchingNextPage showing skeletons
+  // with no error row to recover from.
+  it("bounds the page request with a timeout so a stalled fetch reaches the retry UI", async () => {
+    mockedGet.mockResolvedValueOnce(jsonResponse({ lessons: [], nextPage: null }));
+    await fetchLessonsPage("d1:0");
+    const config = mockedGet.mock.calls[0][1];
+    expect(config?.timeout, "page fetch must carry an explicit timeout").toBeGreaterThan(0);
   });
 
   it("terminates once d1 reports nextPage null", async () => {
@@ -74,8 +89,15 @@ describe("findLessonBySlug", () => {
   it("falls through to D1 when the local JSON does not match", async () => {
     mockedGet.mockResolvedValueOnce(jsonResponse({ slug: "user-lesson" }));
     const lesson = await findLessonBySlug("user-lesson");
-    expect(mockedGet).toHaveBeenCalledWith("/api/lessons/user-lesson");
+    expect(mockedGet).toHaveBeenCalledWith("/api/lessons/user-lesson", { timeout: 15_000 });
     expect(lesson?.slug).toBe("user-lesson");
+  });
+
+  it("bounds the slug lookup with a timeout too", async () => {
+    mockedGet.mockResolvedValueOnce(jsonResponse({ slug: "user-lesson" }));
+    await findLessonBySlug("user-lesson");
+    const config = mockedGet.mock.calls[0][1];
+    expect(config?.timeout, "slug lookup must carry an explicit timeout").toBeGreaterThan(0);
   });
 
   it("returns null when neither local JSON nor D1 has the slug", async () => {

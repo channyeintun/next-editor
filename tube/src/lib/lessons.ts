@@ -24,6 +24,16 @@ function is404(err: unknown): boolean {
   return axios.isAxiosError(err) && err.response?.status === 404;
 }
 
+// axios has no timeout by default and nothing in tube configures one, so a
+// request that is accepted and then never answered (a stalled mobile
+// connection, a proxy holding the socket) never settles: Query's retry never
+// fires and the grid sits in isFetchingNextPage forever, showing a trailing
+// row of skeletons with no "Load more" and no error row to retry from. Failing
+// after a bounded wait puts the stall back into the retry/error UI that
+// already exists. Generous, since these are cache-backed JSON reads and a slow
+// answer is still better than a spurious failure.
+const REQUEST_TIMEOUT_MS = 15_000;
+
 // The Worker's SPA fallback (not_found_handling = "single-page-application",
 // see infra/wrangler.toml) means an unmatched path is NEVER a real 404 — it's
 // always a 200 carrying index.html. A seed shard that doesn't exist (any slug
@@ -48,7 +58,9 @@ function parseCursor(cursor: string): { source: "seed" | "d1"; index: number } {
 // path guards against above — same isHtmlFallback check, for symmetry and
 // dev robustness.
 async function fetchD1Page(index: number): Promise<RawLessonsPage> {
-  const res = await axios.get<RawLessonsPage>(`/api/lessons?page=${index}`);
+  const res = await axios.get<RawLessonsPage>(`/api/lessons?page=${index}`, {
+    timeout: REQUEST_TIMEOUT_MS,
+  });
   if (isHtmlFallback(res)) return { lessons: [], nextPage: null };
   return res.data;
 }
@@ -118,7 +130,9 @@ export async function findLessonBySlug(slug: string): Promise<Lesson | null> {
   }
 
   try {
-    const res = await axios.get<Lesson>(`/api/lessons/${encodeURIComponent(slug)}`);
+    const res = await axios.get<Lesson>(`/api/lessons/${encodeURIComponent(slug)}`, {
+      timeout: REQUEST_TIMEOUT_MS,
+    });
     // Same dev-without-worker fallback as fetchD1Page above: no real match.
     if (isHtmlFallback(res)) return null;
     return res.data;
