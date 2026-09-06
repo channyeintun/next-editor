@@ -391,6 +391,35 @@ describe("importWorkspaceProjectFromZip", () => {
     );
   });
 
+  // A zip name may be 65,535 bytes long and costs only its own length in the
+  // archive, so `a1/a2/.../a16000/f` passed every byte and entry cap with no
+  // content at all. The parent-path scan is quadratic in depth, so that single
+  // entry blocked the main thread for ~1.5 s with no way to cancel the import.
+  it("rejects an over-deep or over-long entry path instead of freezing on it", async () => {
+    const deepPath = `${Array.from({ length: 200 }, (_, index) => `a${index}`).join("/")}/f.ts`;
+    const deep = createZipFile("deep.zip", [{ path: deepPath, content: "x" }]);
+    await expect(importWorkspaceProjectFromZip(deep)).rejects.toThrow(
+      /too long or too deeply nested/i,
+    );
+
+    const long = createZipFile("long.zip", [{ path: `${"a".repeat(5_000)}.ts`, content: "x" }]);
+    await expect(importWorkspaceProjectFromZip(long)).rejects.toThrow(
+      /too long or too deeply nested/i,
+    );
+  });
+
+  it("still imports a deeply — but plausibly — nested project", async () => {
+    const path = `${Array.from({ length: 40 }, (_, index) => `dir${index}`).join("/")}/index.ts`;
+    const project = await importWorkspaceProjectFromZip(
+      createZipFile("nested.zip", [
+        { path, content: "export const nested = true" },
+        { path: "index.html", content: "<html></html>" },
+      ]),
+    );
+
+    expect(Object.keys(project.files)).toContain(path);
+  });
+
   it("rejects a file that is not a valid zip", async () => {
     const file = new File([new Uint8Array([1, 2, 3, 4])], "broken.zip", {
       type: "application/zip",

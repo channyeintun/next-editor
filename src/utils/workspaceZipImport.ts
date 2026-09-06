@@ -29,6 +29,18 @@ export const MAX_IMPORTED_PROJECT_ENTRIES = 10_000;
 export const MAX_IMPORTED_ARCHIVE_BYTES = 100 * 1024 * 1024;
 
 /**
+ * Upper bounds on a single entry's name. Zip names may be 65,535 bytes long and
+ * cost only their own length in the archive, so an entry like `a1/a2/…/a16000/f`
+ * slips past every byte and count limit above with no content at all. The
+ * file-vs-directory scan below then rebuilds each parent prefix, which is
+ * quadratic in depth: one such entry blocks the main thread for ~1.5 s, and a
+ * few hundred KB of zip freezes the tab with no cancel path. No real project
+ * comes anywhere near either bound (Windows' own MAX_PATH is 260).
+ */
+export const MAX_IMPORTED_PATH_CHARS = 4096;
+export const MAX_IMPORTED_PATH_DEPTH = 64;
+
+/**
  * Development artifacts that should never travel into the workspace: they are
  * either reconstructable (`node_modules` is rebuilt by `npm install`), VCS
  * metadata, or OS/editor junk. Stripping them keeps the import small and the
@@ -362,6 +374,18 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
   for (const [name, bytes] of Object.entries(archive)) {
     if (name.endsWith("/")) {
       continue;
+    }
+
+    // Checked on the raw name, before it is normalized or quoted back to the
+    // user: normalization only drops segments, so the raw name bounds both, and
+    // an over-long name must not end up inside an error message either.
+    if (
+      name.length > MAX_IMPORTED_PATH_CHARS ||
+      name.split(/[\\/]/).length > MAX_IMPORTED_PATH_DEPTH
+    ) {
+      throw new WorkspaceZipImportError(
+        `The zip contains a path that is too long or too deeply nested: "${name.slice(0, 80)}…".`,
+      );
     }
 
     let normalizedPath: string;

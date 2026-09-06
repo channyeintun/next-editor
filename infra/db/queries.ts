@@ -24,13 +24,20 @@ function slugifyUsername(base: string): string {
   return slug || "user";
 }
 
+// Bounds the probe loop, as MAX_SLUG_SUFFIX_PROBES does in slug.ts: every name
+// with no ASCII alphanumerics (a display name written entirely in Burmese,
+// Chinese, Cyrillic, Arabic…) slugifies to the same "user" base, so without a
+// ceiling each new member of that cohort walks the whole series one sequential
+// D1 round-trip at a time inside a single OAuth-callback invocation.
+const MAX_USERNAME_SUFFIX_PROBES = 50;
+
 // Generates a username unique against the DB by appending -2, -3, ... on
 // collision. Only called once per user, at creation — see updateUsername
 // below for renames (which also has to keep the lesson author_url cascade
 // in sync, unlike this initial assignment).
 async function generateUniqueUsername(db: D1Database, base: string): Promise<string> {
   const slug = slugifyUsername(base);
-  for (let suffix = 0; ; suffix++) {
+  for (let suffix = 0; suffix <= MAX_USERNAME_SUFFIX_PROBES; suffix++) {
     const candidate = suffix === 0 ? slug : `${slug}-${suffix}`;
     const existing = await db
       .prepare("SELECT 1 FROM users WHERE username = ?")
@@ -38,6 +45,9 @@ async function generateUniqueUsername(db: D1Database, base: string): Promise<str
       .first();
     if (!existing) return candidate;
   }
+  // Past the ceiling, stop probing and take a random suffix. The caller's
+  // INSERT retry still covers the (vanishingly unlikely) collision.
+  return `${slug}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
 // SQLite's own message format ("UNIQUE constraint failed: <table>.<column>"),

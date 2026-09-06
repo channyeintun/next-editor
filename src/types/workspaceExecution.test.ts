@@ -46,20 +46,6 @@ const EXPECTED_EXECUTION_KIND: Record<WorkspaceLessonType, WorkspaceExecutionKin
   asm: "asm-playground",
 };
 
-// Kite and asm join these because they also run code without the WebContainer,
-// and they are the two that need no service to do it: Kite compiles in the page
-// on a Wasm build of `kitec`, and asm assembles and executes in the page on the
-// first-party machine in src/core/x86.
-const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
-  "go",
-  "kotlin",
-  "rust",
-  "zig",
-  "haskell",
-  "kite",
-  "asm",
-]);
-
 // WebContainer lessons whose runner is a script that exits instead of a dev
 // server — they keep Run and Terminal but have no preview surface.
 const CONSOLE_ONLY_WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
@@ -67,6 +53,16 @@ const CONSOLE_ONLY_WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> 
 ]);
 
 const ALL_LESSON_TYPES = Object.keys(EXPECTED_EXECUTION_KIND) as WorkspaceLessonType[];
+
+// Derived from the record above rather than listed again: "runs its code
+// outside the WebContainer" is exactly what a non-webcontainer execution kind
+// means, so a new playground type is classified once. Kite and asm belong here
+// like the rest, and are the two that need no service to do it: Kite compiles
+// in the page on a Wasm build of `kitec`, and asm assembles and executes in the
+// page on the first-party machine in src/core/x86.
+const PLAYGROUND_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set(
+  ALL_LESSON_TYPES.filter((lessonType) => EXPECTED_EXECUTION_KIND[lessonType] !== "webcontainer"),
+);
 
 describe("execution selection", () => {
   it.each(ALL_LESSON_TYPES)("selects the right backend for %s", (lessonType) => {

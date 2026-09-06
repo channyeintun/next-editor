@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { listPublishedLessons } from "./queries";
+import { listPublishedLessons, upsertUserByGoogleSub } from "./queries";
 
 /**
  * The gallery's paging, exercised against real SQLite rather than a stub, so
@@ -146,5 +146,74 @@ describe("listPublishedLessons", () => {
 
     expect(page.rows.map((row) => row.slug)).toEqual(["slug-p1", "slug-p2"]);
     expect(page.nextPage).toBeNull();
+  });
+});
+
+/**
+ * D1 stand-in for the first-sign-in path: `taken` are the usernames already in
+ * the users table, and every candidate the loop probes is recorded.
+ */
+function makeUserDb(taken: string[]) {
+  const takenSet = new Set(taken);
+  const probed: string[] = [];
+  const db = {
+    prepare(sql: string) {
+      return {
+        bind(...args: unknown[]) {
+          return {
+            async first() {
+              if (sql.includes("SELECT * FROM users WHERE google_sub")) {
+                return null;
+              }
+              if (sql.includes("SELECT 1 FROM users WHERE username")) {
+                const candidate = args[0] as string;
+                probed.push(candidate);
+                return takenSet.has(candidate) ? { 1: 1 } : null;
+              }
+              if (sql.includes("INSERT INTO users")) {
+                return { id: args[0], username: args[5] };
+              }
+              throw new Error(`unexpected statement: ${sql}`);
+            },
+          };
+        },
+      };
+    },
+  };
+  return { db: db as unknown as D1Database, probed };
+}
+
+describe("upsertUserByGoogleSub", () => {
+  it("prefers the bare slug and only suffixes on a real collision", async () => {
+    const { db } = makeUserDb(["ada-lovelace"]);
+
+    const row = await upsertUserByGoogleSub(db, {
+      googleSub: "sub-ada",
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+      avatarUrl: null,
+    });
+
+    expect(row.username).toBe("ada-lovelace-1");
+  });
+
+  // slugifyUsername strips everything outside [a-z0-9], so every display name
+  // written entirely in a non-Latin script falls back to the same "user" base
+  // and that whole cohort competes for one series. Unbounded, the Nth such
+  // sign-in walked all N candidates, one sequential D1 round-trip at a time,
+  // inside a single OAuth-callback invocation.
+  it("stops probing usernames and takes a random suffix on a long collision run", async () => {
+    const taken = ["user", ...Array.from({ length: 60 }, (_, index) => `user-${index + 1}`)];
+    const { db, probed } = makeUserDb(taken);
+
+    const row = await upsertUserByGoogleSub(db, {
+      googleSub: "sub-1",
+      email: "someone@example.com",
+      name: "မောင်မောင်",
+      avatarUrl: null,
+    });
+
+    expect(row.username).toMatch(/^user-[0-9a-f]{8}$/);
+    expect(probed.length, "unbounded username probing").toBeLessThanOrEqual(51);
   });
 });
