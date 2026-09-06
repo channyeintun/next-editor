@@ -1,4 +1,4 @@
-import type { StudioTargetRef } from "./plan";
+import type { StudioPlaygroundRuntimeKind, StudioTargetRef } from "./plan";
 
 /**
  * Durable UI target resolution for the Performer's attention cursor. Product
@@ -30,16 +30,7 @@ export const STUDIO_KITE_DOCK_TARGET_ID = "kite-runner-dock";
 export const STUDIO_ASM_DOCK_TARGET_ID = "asm-runner-dock";
 
 /** The dock the attention cursor moves toward before `runtime.run`. */
-export function dockTargetIdForRuntime(
-  kind:
-    | "go-playground"
-    | "kotlin-playground"
-    | "rust-playground"
-    | "zig-playground"
-    | "haskell-playground"
-    | "kite-playground"
-    | "asm-playground",
-): string {
+export function dockTargetIdForRuntime(kind: StudioPlaygroundRuntimeKind): string {
   switch (kind) {
     case "go-playground":
       return STUDIO_GO_DOCK_TARGET_ID;

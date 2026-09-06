@@ -272,9 +272,14 @@ describe("runErrorPrefixFor", () => {
   });
 });
 
-/** Minimal valid fixture per kind — a Record, so a new kind fails to compile. */
+/**
+ * Minimal valid fixture per kind — a Record, so a new kind fails to compile.
+ * "Valid" is the runner contract's answer, not just the field types: Go reports
+ * `exitCode: 0` on every success, so a fixture without one is a result no live
+ * run returns.
+ */
 const PLAYGROUND_FIXTURE_INPUTS: Record<StudioPlaygroundRuntimeKind, unknown> = {
-  "go-playground": { latencyMs: 5, result: { status: "success", output: "" } },
+  "go-playground": { latencyMs: 5, result: { status: "success", output: "", exitCode: 0 } },
   "kotlin-playground": { latencyMs: 5, result: { status: "success", output: "" } },
   "rust-playground": { latencyMs: 5, result: { status: "success", stdout: "", stderr: "" } },
   "zig-playground": { latencyMs: 5, result: { status: "success", output: "" } },
@@ -303,6 +308,65 @@ describe("studioRuntimeSchema", () => {
 
     // `dropped` names the offending kinds, so an empty-array diff identifies them.
     expect(dropped).toEqual([]);
+  });
+});
+
+/**
+ * A success carrying compile diagnostics, per kind: the shape every client's
+ * `parse*RunResult` rejects, so no live run can produce it.
+ */
+const IMPOSSIBLE_FIXTURE_RESULTS: Record<StudioPlaygroundRuntimeKind, unknown> = {
+  "go-playground": { status: "success", output: "", exitCode: 0, compileErrors: "boom" },
+  "kotlin-playground": { status: "success", output: "", compileErrors: "boom" },
+  "rust-playground": { status: "success", stdout: "", stderr: "", compileErrors: "boom" },
+  "zig-playground": { status: "success", output: "", compileErrors: "boom" },
+  "haskell-playground": { status: "success", stdout: "", stderr: "", compileErrors: "boom" },
+  "kite-playground": { status: "success", stdout: "", stderr: "", compileErrors: "boom" },
+  "asm-playground": { status: "success", stdout: "", stderr: "", assembleErrors: "boom" },
+};
+
+describe("run fixture schemas", () => {
+  it("rejects a pinned result the live client would refuse", () => {
+    // The fixture path hands `fixture.result` straight to the console
+    // formatter, never through the client, so a result that breaks the runner
+    // contract would render a green lesson replaying a console no live run can
+    // produce.
+    const accepted = Object.entries(IMPOSSIBLE_FIXTURE_RESULTS)
+      .filter(
+        ([kind, result]) =>
+          studioRuntimeSchema.safeParse({
+            kind,
+            defaultMode: "fixture",
+            fixture: { latencyMs: 5, result },
+          }).success,
+      )
+      .map(([kind]) => kind);
+
+    // `accepted` names the kinds that let it through, so the diff identifies them.
+    expect(accepted).toEqual([]);
+  });
+
+  it("rejects an assemble-error asm fixture with no diagnostics to show", () => {
+    // `asmRunResultToConsoleLines` would print a bare "Assembly failed" here;
+    // `parseAsmPlaygroundRunResult` refuses the same value from a live run.
+    const parsed = studioRuntimeSchema.safeParse({
+      kind: "asm-playground",
+      defaultMode: "fixture",
+      fixture: { latencyMs: 5, result: { status: "assemble-error", stdout: "", stderr: "" } },
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("keeps accepting every minimal valid fixture", () => {
+    const rejected = Object.entries(PLAYGROUND_FIXTURE_INPUTS)
+      .filter(
+        ([kind, fixture]) =>
+          !studioRuntimeSchema.safeParse({ kind, defaultMode: "fixture", fixture }).success,
+      )
+      .map(([kind]) => kind);
+
+    expect(rejected).toEqual([]);
   });
 });
 

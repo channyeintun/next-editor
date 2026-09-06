@@ -1,5 +1,12 @@
 import { z } from "zod";
 import type { CaptionTrack } from "../core/src/types";
+import { parseAsmPlaygroundRunResult } from "../runtime/asmPlayground/types";
+import { parseGoPlaygroundRunResult } from "../runtime/goPlayground/types";
+import { parseHaskellPlaygroundRunResult } from "../runtime/haskellPlayground/types";
+import { parseKitePlaygroundRunResult } from "../runtime/kitePlayground/types";
+import { parseKotlinPlaygroundRunResult } from "../runtime/kotlinPlayground/types";
+import { parseRustPlaygroundRunResult } from "../runtime/rustPlayground/types";
+import { parseZigPlaygroundRunResult } from "../runtime/zigPlayground/types";
 import { whiteboardDrawDurationMs } from "./whiteboardAssets";
 
 /**
@@ -392,6 +399,36 @@ export const studioNarrationSchema = z.object({
 });
 
 /**
+ * A pinned result has to be one the live runner could actually return.
+ *
+ * Each `*RunFixtureSchema` below restates its language's result shape in zod,
+ * which checks field types but not the cross-field invariants the runtime
+ * contract enforces — that an assemble/compile error carries its diagnostics,
+ * that a success carries none, that a program which never built has no exit
+ * status. Every client already refuses a result that breaks them, through the
+ * `parse*RunResult` its response goes through; the studio's fixture path skips
+ * the client entirely and hands `fixture.result` straight to the console
+ * formatter, so without this the plan would validate a pinned console no live
+ * run can produce — the exact thing pinning a fixture exists to prevent.
+ *
+ * Calling the runtime module's own parser keeps one validator for both paths,
+ * rather than a second copy of the rules here that can drift from it.
+ */
+function runnerContract(
+  parse: (value: unknown) => unknown,
+  label: string,
+): (result: unknown, ctx: z.RefinementCtx) => void {
+  return (result, ctx) => {
+    if (parse(result) === null) {
+      ctx.addIssue({
+        code: "custom",
+        message: `${label} fixture result does not match the runner contract`,
+      });
+    }
+  };
+}
+
+/**
  * Deterministic stand-in for a live run: the exact normalized result the
  * Playground would return for the pinned sources. Fixture renders replay it
  * through the same console formatting path after `latencyMs`.
@@ -403,26 +440,30 @@ export const goRunFixtureSchema = z.object({
    * — exercises the driver's declared-idempotent retry path deterministically.
    */
   transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
-  result: z.object({
-    status: z.enum(["success", "compile-error", "vet-error", "runtime-error"]),
-    output: z.string(),
-    compileErrors: z.string().optional(),
-    vetErrors: z.string().optional(),
-    exitCode: z.number().int().optional(),
-  }),
+  result: z
+    .object({
+      status: z.enum(["success", "compile-error", "vet-error", "runtime-error"]),
+      output: z.string(),
+      compileErrors: z.string().optional(),
+      vetErrors: z.string().optional(),
+      exitCode: z.number().int().optional(),
+    })
+    .superRefine(runnerContract(parseGoPlaygroundRunResult, "Go")),
 });
 
 /** Kotlin Playground stand-in result — mirrors the worker-normalized contract. */
 export const kotlinRunFixtureSchema = z.object({
   latencyMs: positiveMs,
   transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
-  result: z.object({
-    status: z.enum(["success", "compile-error", "runtime-error"]),
-    output: z.string(),
-    compileErrors: z.string().optional(),
-    warnings: z.string().optional(),
-    exception: z.string().optional(),
-  }),
+  result: z
+    .object({
+      status: z.enum(["success", "compile-error", "runtime-error"]),
+      output: z.string(),
+      compileErrors: z.string().optional(),
+      warnings: z.string().optional(),
+      exception: z.string().optional(),
+    })
+    .superRefine(runnerContract(parseKotlinPlaygroundRunResult, "Kotlin")),
 });
 
 /**
@@ -434,25 +475,29 @@ export const kotlinRunFixtureSchema = z.object({
 export const zigRunFixtureSchema = z.object({
   latencyMs: positiveMs,
   transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
-  result: z.object({
-    status: z.enum(["success", "compile-error", "runtime-error"]),
-    output: z.string(),
-    compileErrors: z.string().optional(),
-    exitDetail: z.string().optional(),
-  }),
+  result: z
+    .object({
+      status: z.enum(["success", "compile-error", "runtime-error"]),
+      output: z.string(),
+      compileErrors: z.string().optional(),
+      exitDetail: z.string().optional(),
+    })
+    .superRefine(runnerContract(parseZigPlaygroundRunResult, "Zig")),
 });
 
 /** Rust Playground stand-in result — mirrors the worker-normalized contract. */
 export const rustRunFixtureSchema = z.object({
   latencyMs: positiveMs,
   transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
-  result: z.object({
-    status: z.enum(["success", "compile-error", "runtime-error"]),
-    stdout: z.string(),
-    stderr: z.string(),
-    compileErrors: z.string().optional(),
-    exitDetail: z.string().optional(),
-  }),
+  result: z
+    .object({
+      status: z.enum(["success", "compile-error", "runtime-error"]),
+      stdout: z.string(),
+      stderr: z.string(),
+      compileErrors: z.string().optional(),
+      exitDetail: z.string().optional(),
+    })
+    .superRefine(runnerContract(parseRustPlaygroundRunResult, "Rust")),
 });
 
 /**
@@ -474,14 +519,16 @@ export const rustRunFixtureSchema = z.object({
 export const haskellRunFixtureSchema = z.object({
   latencyMs: positiveMs,
   transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
-  result: z.object({
-    status: z.enum(["success", "compile-error", "runtime-error"]),
-    stdout: z.string(),
-    stderr: z.string(),
-    compileErrors: z.string().optional(),
-    warnings: z.string().optional(),
-    exitDetail: z.string().optional(),
-  }),
+  result: z
+    .object({
+      status: z.enum(["success", "compile-error", "runtime-error"]),
+      stdout: z.string(),
+      stderr: z.string(),
+      compileErrors: z.string().optional(),
+      warnings: z.string().optional(),
+      exitDetail: z.string().optional(),
+    })
+    .superRefine(runnerContract(parseHaskellPlaygroundRunResult, "Haskell")),
 });
 
 /**
@@ -494,34 +541,40 @@ export const haskellRunFixtureSchema = z.object({
  *
  * `registers` and `flags` are optional and unique to this kind. Every other
  * language's fixture is what the program printed; an assembly lesson's console
- * also carries the register file, so a fixture that omits them replays a run
- * with no register lines, and one that includes them replays them exactly.
+ * also carries the register file, so a fixture that omits `registers` replays a
+ * run with no register lines, and one that includes them replays them exactly.
+ * `flags` and `instructions` are pinned but not rendered: only `registers` has
+ * a console line today (`asmRegisterConsoleLines`), and the runner panel
+ * carries the other two for the same reason this schema does — so a fixture
+ * that grows a flag line later already holds the values it needs.
  */
 export const asmRunFixtureSchema = z.object({
   latencyMs: positiveMs,
   transientErrorKinds: z.array(z.enum(["unavailable"])).default([]),
-  result: z.object({
-    status: z.enum(["success", "assemble-error", "runtime-error"]),
-    stdout: z.string(),
-    stderr: z.string(),
-    exitCode: z.number().int().optional(),
-    assembleErrors: z.string().optional(),
-    exitDetail: z.string().optional(),
-    instructions: z.number().int().nonnegative().optional(),
-    registers: z
-      .array(z.object({ name: z.string().min(1), value: z.string().regex(/^\d+$/) }))
-      .optional(),
-    flags: z
-      .object({
-        carry: z.boolean(),
-        zero: z.boolean(),
-        sign: z.boolean(),
-        overflow: z.boolean(),
-        parity: z.boolean(),
-        adjust: z.boolean(),
-      })
-      .optional(),
-  }),
+  result: z
+    .object({
+      status: z.enum(["success", "assemble-error", "runtime-error"]),
+      stdout: z.string(),
+      stderr: z.string(),
+      exitCode: z.number().int().optional(),
+      assembleErrors: z.string().optional(),
+      exitDetail: z.string().optional(),
+      instructions: z.number().int().nonnegative().optional(),
+      registers: z
+        .array(z.object({ name: z.string().min(1), value: z.string().regex(/^\d+$/) }))
+        .optional(),
+      flags: z
+        .object({
+          carry: z.boolean(),
+          zero: z.boolean(),
+          sign: z.boolean(),
+          overflow: z.boolean(),
+          parity: z.boolean(),
+          adjust: z.boolean(),
+        })
+        .optional(),
+    })
+    .superRefine(runnerContract(parseAsmPlaygroundRunResult, "Assembly")),
 });
 
 /**
@@ -534,13 +587,15 @@ export const asmRunFixtureSchema = z.object({
 export const kiteRunFixtureSchema = z.object({
   latencyMs: positiveMs,
   transientErrorKinds: z.array(z.enum(["unavailable"])).default([]),
-  result: z.object({
-    status: z.enum(["success", "compile-error", "runtime-error"]),
-    stdout: z.string(),
-    stderr: z.string(),
-    compileErrors: z.string().optional(),
-    exitDetail: z.string().optional(),
-  }),
+  result: z
+    .object({
+      status: z.enum(["success", "compile-error", "runtime-error"]),
+      stdout: z.string(),
+      stderr: z.string(),
+      compileErrors: z.string().optional(),
+      exitDetail: z.string().optional(),
+    })
+    .superRefine(runnerContract(parseKitePlaygroundRunResult, "Kite")),
 });
 
 /**
