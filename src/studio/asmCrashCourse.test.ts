@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import YAML from "yaml";
 
-import { replayTypedFile } from "./crashCourseTestUtils";
+import { replayTypedFile, whiteboardAssetProblems } from "./crashCourseTestUtils";
 import { parseLessonScript, type LessonScript } from "./script/schema";
 import { AsmPlaygroundClient } from "../runtime/asmPlayground/client";
 import {
@@ -57,6 +57,16 @@ describe("x86-64 assembly crash course", () => {
     consoleLines = [...asmRunResultToConsoleLines(result), ...asmRegisterConsoleLines(result)];
   });
 
+  it("runs in the page with one main.asm", () => {
+    // `replayTypedFile` reconstructs one file, so a second source in the
+    // workspace would have its typing spliced into main.asm and this file
+    // would prove the fixture against a program the viewer never gets.
+    expect(script.lesson.workspace.lessonType).toBe("asm");
+    expect(script.runtime.kind).toBe("asm-playground");
+    expect(Object.keys(script.lesson.workspace.files)).toEqual(["main.asm"]);
+    expect(script.lesson.workspace.entryFilePath).toBe("main.asm");
+  });
+
   it("assembles and runs the program the lesson actually builds", () => {
     expect(result.status).toBe("success");
   });
@@ -65,6 +75,13 @@ describe("x86-64 assembly crash course", () => {
     expect(result.stdout).toBe(fixture.result.stdout);
     expect(result.stderr).toBe(fixture.result.stderr);
     expect(result.exitCode).toBe(fixture.result.exitCode);
+    // The status and the transient kinds are what the fixture path *does*, not
+    // what it prints: `preparePlaygroundRun` returns `ok: false` for anything
+    // but "success", so `runtime.run` throws "The program did not run cleanly"
+    // and the render dies at the run — with stdout, registers and flags all
+    // still matching the real run, so nothing above would notice.
+    expect(fixture.result.status).toBe("success");
+    expect(fixture.transientErrorKinds).toEqual([]);
   });
 
   it("pins the registers the run really leaves behind", () => {
@@ -82,7 +99,12 @@ describe("x86-64 assembly crash course", () => {
 
     expect(asserted.length).toBeGreaterThan(0);
     for (const needle of asserted) {
-      expect(consoleLines.join("\n"), `expect.output "${needle}"`).toContain(needle);
+      // Per line, because that is how the render matches: `waitForOutput` does
+      // `lines.find((line) => line.includes(contains))`. A needle spanning two
+      // console lines is in the joined string and in no line, so joining here
+      // would pass a wait that can only end in its 15s timeout.
+      const matched = consoleLines.some((line) => line.includes(needle));
+      expect(matched, `expect.output "${needle}"`).toBe(true);
     }
   });
 
@@ -157,6 +179,13 @@ describe("x86-64 assembly crash course", () => {
     ]) {
       expect(program, `the program should contain "${needle}"`).toContain(needle);
     }
+  });
+
+  it("draws every whiteboard asset it references, and no orphans", () => {
+    // 69 assets across six boards, and an id that no declaration matches aborts
+    // the render at that apply ("Whiteboard asset … is not pinned in the plan").
+    // Nothing else offline checks the two lists against each other.
+    expect(whiteboardAssetProblems(script)).toEqual({ undeclared: [], neverDrawn: [] });
   });
 
   it("ends on more than one scene, each citing a source", () => {

@@ -43,10 +43,17 @@ const scriptPath = resolve(process.cwd(), "src/studio/scripts/haskell-crash-cour
 function mainDoStatements(program: string): string[] {
   const start = program.indexOf("main = do\n");
   if (start < 0) throw new Error("expected a `main = do` block");
-  return program
-    .slice(start + "main = do\n".length)
-    .split("\n")
-    .filter((line) => line.startsWith("  ") && line.trim().length > 0);
+  const statements: string[] = [];
+  // The block ends at the first line that is not indented, rather than at the
+  // end of the file: `main` is the last definition today, but a helper typed
+  // after it would otherwise have every indented line of its body counted as a
+  // statement of `main` — and the count mismatch would blame the fixture.
+  for (const line of program.slice(start + "main = do\n".length).split("\n")) {
+    if (line.trim().length === 0) continue;
+    if (!line.startsWith("  ")) break;
+    statements.push(line);
+  }
+  return statements;
 }
 
 describe("haskell crash course", () => {
@@ -134,6 +141,15 @@ describe("haskell crash course", () => {
     for (const statement of statements) {
       expect(statement, "every do-block statement prints").toMatch(/^ {2}(putStrLn|print) /);
     }
+  });
+
+  it("reads main's do block only, whatever is defined after it", () => {
+    // A definition typed after `main` is a plausible edit, and the helper has
+    // to stop at it or the count above fails with the wrong explanation.
+    const statements = mainDoStatements(
+      'main = do\n  putStrLn "one"\n\ndescribe :: Int -> String\ndescribe n =\n  show n\n',
+    );
+    expect(statements).toEqual(['  putStrLn "one"']);
   });
 
   it("stays inside what the playground can run: one module, no imports, no stdin", () => {
