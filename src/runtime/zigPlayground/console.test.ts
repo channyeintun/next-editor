@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ZIG_CONSOLE_TAG_PATTERN,
   zigFormatResultToConsoleLines,
+  zigFormatServiceErrorToConsoleLines,
+  zigFormatStaleConsoleLines,
   zigFormatStartedConsoleLines,
   zigRunResultToConsoleLines,
   zigRunServiceErrorToConsoleLines,
@@ -116,6 +118,44 @@ describe("zig console labels", () => {
       "[zig-run error] The program took too long to compile and run",
     ]);
   });
+
+  it("names the format command a learner would run themselves", () => {
+    expect(zigFormatStartedConsoleLines()).toEqual(["[zig-fmt] zig fmt main.zig"]);
+  });
+
+  it("says a stale format applied nothing", () => {
+    expect(zigFormatStaleConsoleLines()[0]).toContain("no formatting was applied");
+  });
+
+  // The format table is a second, independent copy of the run table, so a
+  // run-side string pasted into it — the plausible slip when the two are
+  // edited together — would otherwise reach the console unnoticed.
+  it("tags every format failure as zig-fmt, never zig-run", () => {
+    for (const kind of [
+      "unauthenticated",
+      "disabled",
+      "rate-limited",
+      "timeout",
+      "invalid-source",
+      "unavailable",
+    ] as const) {
+      expect(zigFormatServiceErrorToConsoleLines(kind)[0].startsWith("[zig-fmt error] ")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("attaches the fmt diagnostic only for an invalid-source failure", () => {
+    expect(
+      zigFormatServiceErrorToConsoleLines("invalid-source", "main.zig:2:1: error: expected ')'"),
+    ).toEqual([
+      "[zig-fmt error] zig fmt could not format this program",
+      "main.zig:2:1: error: expected ')'",
+    ]);
+    expect(zigFormatServiceErrorToConsoleLines("unauthenticated", "ignored")).toEqual([
+      "[zig-fmt error] Sign in to format Zig code. Your edits are kept",
+    ]);
+  });
 });
 
 describe("ZIG_CONSOLE_TAG_PATTERN", () => {
@@ -124,7 +164,8 @@ describe("ZIG_CONSOLE_TAG_PATTERN", () => {
       ...zigRunStartedConsoleLines(),
       ...zigFormatStartedConsoleLines(),
       ...zigRunServiceErrorToConsoleLines("timeout"),
-      "[zig-fmt error] Files changed while formatting; no formatting was applied",
+      ...zigFormatServiceErrorToConsoleLines("timeout"),
+      ...zigFormatStaleConsoleLines(),
     ]) {
       expect(ZIG_CONSOLE_TAG_PATTERN.test(line)).toBe(true);
     }

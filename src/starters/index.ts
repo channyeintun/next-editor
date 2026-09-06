@@ -9,9 +9,10 @@ import type { WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
  *
  * `html-css` and `react` are also imported statically by the workspace store
  * (they are the boot default and the empty-workspace fallback), so the bundler
- * keeps them in the main bundle — only `vue`, `solid`, `svelte`, `htmx-express`,
- * `alpine-express`, `express-ts`, `go`, `kotlin`, `python`, `rust`, `zig`,
- * `haskell`, `kite`, and `asm` become lazily loaded chunks.
+ * keeps those two in the main bundle; every other lesson type below becomes its
+ * own lazily loaded chunk. The rule is spelled out rather than the list, which
+ * drifted twice: it silently omitted `javascript`, `typescript`, and
+ * `kite-web` while being extended for each new language.
  */
 const STARTER_LOADERS: Record<WorkspaceLessonType, () => Promise<() => WorkspaceProject>> = {
   "html-css": () => import("./htmlCss").then((module) => module.createStarterHtmlCssWorkspace),

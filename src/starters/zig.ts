@@ -10,12 +10,12 @@ import { createWorkspaceFile } from "./shared";
  * from structs and functions instead. No package.json, dev server, or
  * WebContainer boot — the workspace stays local until Run.
  *
- * The program below is verified against Zig 0.16.0: it compiles, it is
- * already `zig fmt` clean (so the starter never opens with a Format diff
- * waiting), and it prints the output quoted in its own comments. That matters
- * more for Zig than for the other starters, because 0.16 moved the APIs a
- * beginner reaches for first — `std.ArrayList` is unmanaged now, taking the
- * allocator per call, and `std.fs.File` became `std.Io.File`.
+ * The program below is verified against Zig 0.16.0: it compiles and is
+ * already `zig fmt` clean, so the starter never opens with a Format diff
+ * waiting. Verifying against a real toolchain matters more for Zig than for
+ * the other starters, because 0.16 moved the APIs a beginner reaches for
+ * first — `std.ArrayList` is unmanaged now, taking the allocator per call,
+ * and `std.fs.File` became `std.Io.File`.
  */
 export function createStarterZigWorkspace(): WorkspaceProject {
   const files = {
