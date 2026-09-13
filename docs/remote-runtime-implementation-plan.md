@@ -77,7 +77,9 @@ Repo conventions that override generic habits:
    [remote-runtime-cloudflare-setup.md](./remote-runtime-cloudflare-setup.md) — check it is
    done (or flag it to the user) before starting 4.x tasks; in particular the preview
    hostname scheme chosen there (Option A/B/C) determines the ingress host-parsing in 4.4.
-7. **xstate is pinned to 5.32.2** (tsgo bug). Don't bump it while touching runtime code.
+7. **xstate is pinned to an exact version** (5.33.0). The tsgo crash that froze it at
+   5.32.2 is fixed as of TypeScript 7.0.2 — `tsc -b` is clean on 5.33.0. Keep the exact
+   pin, but a bump is no longer forbidden; verify with a full typecheck + test run.
 8. **Don't use the in-app preview browser to verify** — typecheck + tests; the user eyeballs UI.
 9. **Deploy** (when asked): `bun run build` then `wrangler deploy` from `infra/`; remote D1
    migrations and container image pushes are separate, explicitly-authorized steps.
