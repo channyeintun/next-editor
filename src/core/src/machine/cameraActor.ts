@@ -64,6 +64,7 @@ export const cameraRecordingActor = fromCallback<
       if (!mimeType) {
         cleanupStream();
         if (!disposed) {
+          failed = true;
           sendBack({ type: "CAMERA_ERROR", error: "No supported video MIME type found" });
         }
         return;
@@ -125,6 +126,7 @@ export const cameraRecordingActor = fromCallback<
     } catch (error) {
       cleanupStream();
       if (!disposed && !stopRequested) {
+        failed = true;
         sendBack({
           type: "CAMERA_ERROR",
           error: error instanceof Error ? error.message : "Failed to start camera recording",
@@ -137,8 +139,18 @@ export const cameraRecordingActor = fromCallback<
 
   const stopRecording = () => {
     stopRequested = true;
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
+    if (mediaRecorder) {
+      if (mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      return;
+    }
+    // STOP while getUserMedia is still pending (warm-up or an open permission prompt): no
+    // recorder will ever fire onstop, so report once now or stoppingRecording waits out its 2s
+    // watchdog. A stream that resolves later is released by startRecording's stopRequested check.
+    if (!failed && !disposed) {
+      failed = true;
+      sendBack({ type: "CAMERA_ERROR", error: "Camera stopped before recording started" });
     }
   };
 

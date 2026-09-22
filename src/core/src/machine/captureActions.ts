@@ -59,8 +59,11 @@ export const setCameraRecordingEnabled = ({
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   if (event.type !== "START_RECORDING") return {};
+  // The choice is per take. Falling back to the previous take's value let one manual
+  // camera take turn the camera on for every later start that does not say, such as a
+  // studio render on the same page.
   return {
-    enableCameraRecording: event.enableCamera ?? context.enableCameraRecording,
+    enableCameraRecording: event.enableCamera ?? context.defaultEnableCameraRecording,
   };
 };
 

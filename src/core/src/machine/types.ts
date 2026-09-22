@@ -298,6 +298,11 @@ export interface EditorMachineContext {
   enableAudioRecording: boolean;
   /** Whether camera recording is enabled */
   enableCameraRecording: boolean;
+  /**
+   * Configured camera default (machine input). A START_RECORDING without `enableCamera` falls
+   * back to this, never to a previous take's choice.
+   */
+  defaultEnableCameraRecording: boolean;
   /** Whether to pause on user interaction */
   pauseOnUserInteraction: boolean;
   /** Animation frame ID for playback loop */
@@ -812,6 +817,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   getEditorInstance: () => input.editorRef.current,
   enableAudioRecording: input.enableAudioRecording ?? false,
   enableCameraRecording: input.enableCameraRecording ?? false,
+  defaultEnableCameraRecording: input.enableCameraRecording ?? false,
   pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
   animationFrameId: null,
   error: null,

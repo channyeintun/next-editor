@@ -1709,11 +1709,20 @@ describe("editorMachine stoppingRecording join", () => {
     },
   });
 
-  function startTake(takeMachine: typeof machine = machine) {
+  function startTake({
+    takeMachine = machine,
+    enableCameraRecording,
+  }: { takeMachine?: typeof machine; enableCameraRecording?: boolean } = {}) {
     const onRecordingStop = vi.fn<(recording: Recording) => void>();
     const onError = vi.fn<(error: Error) => void>();
     const actor = createActor(takeMachine, {
-      input: { editorRef: { current: null }, enableAudioRecording: true, onRecordingStop, onError },
+      input: {
+        editorRef: { current: null },
+        enableAudioRecording: true,
+        enableCameraRecording,
+        onRecordingStop,
+        onError,
+      },
     }).start();
     return { actor, onRecordingStop, onError };
   }
@@ -1832,8 +1841,8 @@ describe("editorMachine stoppingRecording join", () => {
       vi.advanceTimersByTime(ms);
     };
     let endNarration = () => {};
-    const take = startTake(
-      machine.provide({
+    const take = startTake({
+      takeMachine: machine.provide({
         actors: {
           audioPlayback: fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
             ({ receive, sendBack }) => {
@@ -1847,7 +1856,7 @@ describe("editorMachine stoppingRecording join", () => {
           ),
         },
       }),
-    );
+    });
     actors.push(take);
 
     take.actor.send({
@@ -1891,6 +1900,34 @@ describe("editorMachine stoppingRecording join", () => {
 
     const recording = await expectFinalizedOnce(take);
     expect(recording.duration).toBe(5000);
+  });
+
+  // A take's camera choice used to become the default for the next one, so a single
+  // manual camera take turned the camera on for a later start that makes no choice,
+  // such as a studio render on the same page.
+  it("does not carry a take's camera choice into a start that makes none", async () => {
+    const take = await recordAndStop({ enableCamera: true });
+    mic.emitStopped(micBlob);
+    camera.emitStopped(cameraBlob);
+    await expectFinalizedOnce(take);
+    take.actor.send({ type: "UNLOAD" });
+
+    take.actor.send({ type: "START_RECORDING" });
+    await waitFor(take.actor, (snapshot) => snapshot.value === "recording");
+
+    expect(take.actor.getSnapshot().context.enableCameraRecording).toBe(false);
+    expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
+  });
+
+  it("starts the camera from the configured default when a start makes no choice", async () => {
+    const take = startTake({ enableCameraRecording: true });
+    actors.push(take);
+
+    take.actor.send({ type: "START_RECORDING" });
+    await waitFor(take.actor, (snapshot) => snapshot.value === "recording");
+
+    expect(take.actor.getSnapshot().context.enableCameraRecording).toBe(true);
+    expect(take.actor.getSnapshot().children.cameraRecorder).toBeDefined();
   });
 
   it("finalizes on the microphone after the camera fails while stopping", async () => {

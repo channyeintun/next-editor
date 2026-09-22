@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { createActor, waitFor } from "xstate";
 import { editorMachine } from "./editorMachine";
 
@@ -107,5 +107,39 @@ describe("camera recorder integration", () => {
     expect(actor.getSnapshot().children.cameraRecorder).toBeUndefined();
     expect(actor.getSnapshot().context.camera.isRecording).toBe(false);
     expect(track.stopped).toBe(true);
+  });
+
+  // With getUserMedia still pending (an open permission prompt, a camera warming up) there
+  // was no recorder to stop, the camera reported nothing, and the take waited out the 2s
+  // stoppingRecording watchdog.
+  it("finalizes at once when stopped before the camera starts recording", async () => {
+    let grantCamera!: (stream: MediaStream) => void;
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: () =>
+          new Promise<MediaStream>((resolve) => {
+            grantCamera = resolve;
+          }),
+      },
+    });
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null }, enableCameraRecording: true },
+    }).start();
+    actors.push(actor);
+
+    actor.send({ type: "START_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    actor.send({ type: "STOP_RECORDING" });
+
+    expect(actor.getSnapshot().value).toBe("loading");
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    expect(actor.getSnapshot().children.cameraRecorder).toBeUndefined();
+    expect(actor.getSnapshot().context.recording!.cameraBlob).toBeUndefined();
+
+    // The prompt resolves after the take ended: the camera is released unused.
+    grantCamera(new FakeCameraStream(track) as unknown as MediaStream);
+    await vi.waitFor(() => expect(track.stopped).toBe(true));
+    expect(FakeCameraMediaRecorder.instances).toHaveLength(0);
   });
 });
