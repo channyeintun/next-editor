@@ -129,16 +129,39 @@ function findClosestReplayTarget(element: Element | null): Element | null {
   return null;
 }
 
-function findReplayTargetById(id: string, ownerDocument: Document): Element | null {
-  const targets = ownerDocument.querySelectorAll(`[${CURSOR_REPLAY_TARGET_ATTRIBUTE}]`);
-
-  for (const target of targets) {
-    if (getTargetId(target) === id) {
-      return target;
+/**
+ * `value` as a quoted CSS string: backslash and double quote are escaped, and
+ * control characters, which would end or break the string, become hex escapes.
+ * (jsdom has no `CSS.escape`.)
+ */
+function toCssString(value: string): string {
+  let escaped = "";
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if (char === "\\" || char === '"') {
+      escaped += `\\${char}`;
+    } else if (code < 0x20 || code === 0x7f) {
+      escaped += `\\${code.toString(16)} `;
+    } else {
+      escaped += char;
     }
   }
+  return `"${escaped}"`;
+}
 
-  return null;
+/**
+ * The replay cursor resolves both tween endpoints on every animation frame,
+ * so this is a single exact-match lookup rather than a scan of every target.
+ * Every id in the DOM is an unpadded literal and recorded ids are trimmed at
+ * capture. Recorded ids come from loaded files, so a malformed one resolves to
+ * no target instead of throwing inside that frame.
+ */
+function findReplayTargetById(id: string, ownerDocument: Document): Element | null {
+  try {
+    return ownerDocument.querySelector(`[${CURSOR_REPLAY_TARGET_ATTRIBUTE}=${toCssString(id)}]`);
+  } catch {
+    return null;
+  }
 }
 
 function findRootReplayTarget(ownerDocument: Document | null): Element | null {

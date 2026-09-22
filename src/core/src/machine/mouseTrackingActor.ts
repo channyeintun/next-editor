@@ -48,17 +48,14 @@ export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingIn
     let forceRecordedCursorHidden = false;
     const supportsPointerEvents = typeof window !== "undefined" && "PointerEvent" in window;
 
+    // Each handler looks the root up once and passes it on as `rootElement`.
+    // Without it createCursorPositionFromClientPoint finds the root again by
+    // itself, and this runs on every pointer event, ahead of the machine's frame
+    // throttle.
     const getRootElement = (): Element | null =>
       document.querySelector(
         `[${CURSOR_REPLAY_TARGET_ATTRIBUTE}="${CURSOR_REPLAY_ROOT_TARGET_ID}"]`,
       );
-
-    const shouldCaptureTarget = (target: EventTarget | null): boolean => {
-      const rootElement = getRootElement();
-      if (!rootElement || !(target instanceof Node)) return true;
-
-      return rootElement.contains(target);
-    };
 
     const getPointerFlags = (event: MouseEvent): number =>
       Number.isFinite(event.buttons) ? event.buttons : 0;
@@ -78,7 +75,8 @@ export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingIn
     };
 
     const handlePointerEvent = (e: MouseEvent) => {
-      if (!shouldCaptureTarget(e.target)) {
+      const rootElement = getRootElement();
+      if (rootElement && e.target instanceof Node && !rootElement.contains(e.target)) {
         return;
       }
 
@@ -91,6 +89,7 @@ export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingIn
           angle: getPointerAngle(e),
           pressure: getPointerPressure(e),
           eventTarget: e.target,
+          rootElement,
         }),
       );
     };
@@ -115,6 +114,7 @@ export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingIn
             typeof document.elementFromPoint === "function"
               ? document.elementFromPoint(event.detail.x, event.detail.y)
               : null,
+          rootElement: getRootElement(),
         }),
       );
     };
@@ -230,6 +230,7 @@ export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingIn
             angle: getPointerAngle(e),
             pressure: getPointerPressure(e),
             targetElement: iframe,
+            rootElement: getRootElement(),
           }),
         );
       };
@@ -360,6 +361,7 @@ export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingIn
           visible: !forceRecordedCursorHidden,
           flags: typeof payload.data.buttons === "number" ? payload.data.buttons : 0,
           targetElement: iframe,
+          rootElement: getRootElement(),
         }),
       );
     };

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   createCursorPositionFromClientPoint,
   resolveCursorViewportPosition,
@@ -24,6 +24,7 @@ function mockRect(
 describe("cursorCoordinates", () => {
   afterEach(() => {
     document.body.innerHTML = "";
+    vi.restoreAllMocks();
   });
 
   it("records points relative to the closest cursor replay target", () => {
@@ -140,5 +141,51 @@ describe("cursorCoordinates", () => {
         rect: { left: 100, top: 50, width: 400, height: 300 },
       },
     });
+  });
+
+  // Replay resolves a recorded point against the element that now carries its
+  // target id, on every animation frame.
+  const recordedPointOn = (id: string) =>
+    resolveCursorViewportPosition({
+      x: 30,
+      y: 40,
+      visible: true,
+      coordinateSpace: "viewport",
+      target: { id, x: 30, y: 40, rect: { left: 0, top: 0, width: 400, height: 300 } },
+    });
+
+  const addTarget = (id: string, rect: { left: number; top: number }) => {
+    const target = document.createElement("div");
+    target.setAttribute("data-cursor-replay-target", id);
+    document.body.appendChild(target);
+    mockRect(target, { ...rect, width: 400, height: 300 });
+    return target;
+  };
+
+  it("resolves a recorded target by its exact id without scanning every target", () => {
+    addTarget("terminal-ab", { left: 500, top: 500 });
+    addTarget("terminal-a", { left: 100, top: 50 });
+    const querySelectorAll = vi.spyOn(document, "querySelectorAll");
+
+    expect(recordedPointOn("terminal-a")).toEqual({ x: 130, y: 90 });
+    expect(querySelectorAll).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a double quote", 'term"inal'],
+    ["a backslash", "term\\inal"],
+    ["a newline", "term\ninal"],
+    ["a closing bracket", "term]inal"],
+  ])("matches a recorded id containing %s", (_label, id) => {
+    addTarget("terminal", { left: 500, top: 500 });
+    addTarget(id, { left: 100, top: 50 });
+
+    expect(recordedPointOn(id)).toEqual({ x: 130, y: 90 });
+  });
+
+  it("falls back to the recorded point when no element carries the id", () => {
+    addTarget("terminal", { left: 100, top: 50 });
+
+    expect(recordedPointOn('missing"]\n[x')).toEqual({ x: 30, y: 40 });
   });
 });
