@@ -187,6 +187,34 @@ describe("audioRecordingActor lifecycle", () => {
     expect(track.stopped).toBe(true);
   });
 
+  // The machine passed its own constraints, and the actor kept a different default, with
+  // mono and 16kHz hints, that no take ever reached. The actor's default is now the one set.
+  it("asks for the microphone with the constraints every take records with", async () => {
+    const requests: MediaStreamConstraints[] = [];
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: (constraints: MediaStreamConstraints) => {
+          requests.push(constraints);
+          return Promise.resolve(
+            new FakeAudioStream(new FakeAudioTrack()) as unknown as MediaStream,
+          );
+        },
+      },
+    });
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null }, enableAudioRecording: true },
+    }).start();
+    actors.push(actor);
+
+    actor.send({ type: "START_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+
+    expect(requests).toEqual([
+      { audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true } },
+    ]);
+  });
+
   describe("in the editor machine, past the finalize watchdog", () => {
     const narration = new Blob(["narration"], { type: "audio/webm" });
 

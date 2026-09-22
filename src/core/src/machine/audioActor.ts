@@ -29,12 +29,23 @@ const AUDIO_EXACT_SYNC_EPSILON_MS = 50;
  */
 const AUDIO_TIMESLICE_MS = 1000;
 
+/**
+ * The microphone constraints every take records with. The machine spawns the
+ * recorder without its own, so this is the one place they are set. Requesting
+ * mono or a lower sample rate would be a separate product decision.
+ */
+const DEFAULT_MIC_CONSTRAINTS: MediaTrackConstraints = {
+  autoGainControl: true,
+  echoCancellation: true,
+  noiseSuppression: true,
+};
+
 // ============================================================================
 // Audio Actor Types
 // ============================================================================
 
 export interface AudioRecordingInput {
-  /** Audio constraints */
+  /** Audio constraints; DEFAULT_MIC_CONSTRAINTS when absent */
   constraints?: MediaTrackConstraints;
 }
 
@@ -132,16 +143,7 @@ export const audioRecordingActor = fromCallback<
 
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: input.constraints ?? {
-          autoGainControl: true,
-          echoCancellation: true,
-          noiseSuppression: true,
-          // Use `ideal` (not exact) values so Brave's fingerprint shield and
-          // other strict browsers can relax the constraint instead of rejecting
-          // the request with OverconstrainedError / NotSupportedError.
-          channelCount: { ideal: 1 },
-          sampleRate: { ideal: 16000 },
-        },
+        audio: input.constraints ?? DEFAULT_MIC_CONSTRAINTS,
       });
 
       if (disposed || stopRequested) {

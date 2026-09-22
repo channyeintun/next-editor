@@ -415,13 +415,7 @@ export const editorMachine = setup({
           // AUDIO_RECORDING_STOPPED event arrives after leaving this state.
           enqueue.spawnChild("audioRecording", {
             id: "audioRecorder",
-            input: {
-              constraints: {
-                autoGainControl: true,
-                echoCancellation: true,
-                noiseSuppression: true,
-              },
-            },
+            input: {},
           });
           enqueue.sendTo("audioRecorder", { type: "START" });
           enqueue.assign({

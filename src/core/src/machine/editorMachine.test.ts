@@ -2174,6 +2174,7 @@ class FakeScreenMediaRecorder {
   }
 
   state: "inactive" | "recording" = "inactive";
+  stream: FakeScreenStream;
   mimeType: string;
   ondataavailable: ((event: { data: Blob }) => void) | null = null;
   onstop: (() => void) | null = null;
@@ -2181,7 +2182,8 @@ class FakeScreenMediaRecorder {
   onerror: ((event: Event) => void) | null = null;
   private stopPending = false;
 
-  constructor(_stream: unknown, options?: { mimeType?: string }) {
+  constructor(stream: FakeScreenStream, options?: { mimeType?: string }) {
+    this.stream = stream;
     this.mimeType = options?.mimeType ?? "";
     FakeScreenMediaRecorder.instances.push(this);
   }
@@ -2206,6 +2208,24 @@ class FakeScreenMediaRecorder {
     this.stopPending = false;
     this.ondataavailable?.({ data: new Blob(["v"], { type: this.mimeType }) });
     this.onstop?.();
+  }
+}
+
+// Mixes the microphone into the screen recording; jsdom has no Web Audio.
+class FakeScreenAudioContext {
+  state: "running" | "closed" = "running";
+
+  createMediaStreamDestination() {
+    return { stream: new FakeScreenStream([new FakeScreenTrack("audio")]) };
+  }
+
+  createMediaStreamSource(_stream: unknown) {
+    return { connect() {} };
+  }
+
+  close() {
+    this.state = "closed";
+    return Promise.resolve();
   }
 }
 
@@ -2237,6 +2257,7 @@ describe("editorMachine local screen recording", () => {
   afterEach(() => {
     for (const actor of actors) actor.stop();
     actors = [];
+    vi.unstubAllGlobals();
     if (originalMediaStream) {
       Object.defineProperty(globalThis, "MediaStream", originalMediaStream);
     } else {
@@ -2338,6 +2359,36 @@ describe("editorMachine local screen recording", () => {
     expect(ready).toHaveLength(1);
     expect(actor.getSnapshot().value).toBe("recording"); // session unaffected
     expect(actor.getSnapshot().children[screenActorId]).toBeUndefined();
+  });
+
+  // The screen recorder stops the mic track it is given when it tears down. Handed the
+  // session's own track instead of a clone, ending the share would cut off the narration.
+  it("gives the screen recorder a clone of the microphone track", async () => {
+    vi.stubGlobal("AudioContext", FakeScreenAudioContext);
+    const micTrack = new FakeScreenTrack("audio");
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: () =>
+          Promise.resolve(new FakeScreenStream([micTrack]) as unknown as MediaStream),
+      },
+    });
+    const display = new FakeScreenStream([new FakeScreenTrack("video")]);
+    const videoTrack = display.getVideoTracks()[0] as unknown as FakeScreenTrack;
+    const actor = start({ enableAudioRecording: true });
+
+    actor.send({ type: "START_RECORDING", screenStream: display as unknown as MediaStream });
+    await waitFor(actor, (s) => s.value === "recording");
+    // The microphone is the only audio source, so this shows it reached the mix.
+    expect(actor.getSnapshot().context.screen.hasAudio).toBe(true);
+
+    // The user ends the share early; the screen recorder tears down and stops its tracks.
+    videoTrack.dispatch("ended");
+    await waitFor(actor, (s) => s.context.screen.isRecording === false);
+
+    expect(micTrack.stopped).toBe(false);
+    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().children.audioRecorder).toBeDefined();
   });
 
   it("releases a pending display stream when microphone arming fails", async () => {
