@@ -861,6 +861,123 @@ describe("editorMachine actor lifecycle", () => {
     });
   });
 
+  // Every replayed workspace snapshot used to reset the slide cursor too, so the tick
+  // that applied it re-applied every slide event from the start of the recording.
+  it("applies each slide event once while workspace snapshots replay", async () => {
+    const slideIds: Array<string | null | undefined> = [];
+    let workspaceApplies = 0;
+    let currentWorkspace = createTwoFileWorkspaceSnapshot("a.ts", "a", "b");
+
+    const slideEvents = Array.from({ length: 20 }, (_, index) => ({
+      type: "slide_change" as const,
+      timestamp: 25 + index * 50,
+      slideId: index % 2 === 0 ? "s1" : "s2",
+      indexv: 0,
+    }));
+    const recording: Recording = {
+      ...createRecording(),
+      slides: [
+        { id: "s1", order: 0, content: "one", contentType: "html" },
+        { id: "s2", order: 1, content: "two", contentType: "html" },
+      ],
+      slideEvents,
+      // A file switch every 100ms, so each one is a snapshot the replay must apply.
+      workspaceEvents: Array.from({ length: 10 }, (_, index) => ({
+        timestamp: index * 100,
+        snapshot: createTwoFileWorkspaceSnapshot(index % 2 === 0 ? "a.ts" : "b.ts", "a", "b"),
+      })),
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        getWorkspaceSnapshot: () => currentWorkspace,
+        applyWorkspaceSnapshot: (snapshot) => {
+          currentWorkspace = snapshot;
+          workspaceApplies += 1;
+        },
+        applySlideState: (state) => {
+          slideIds.push(state.currentSlideId);
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    actor.send({ type: "PLAY" });
+    slideIds.length = 0;
+    workspaceApplies = 0;
+
+    for (let time = 16; time <= 1000; time += 16) {
+      actor.send({ type: "TICK", timestamp: time, currentTime: time });
+    }
+
+    expect(workspaceApplies).toBe(9);
+    expect(slideIds).toEqual(slideEvents.map((event) => event.slideId));
+
+    actor.stop();
+  });
+
+  it("replays from the end by applying each track once", async () => {
+    const applied: string[] = [];
+    const playbackUpdates: number[] = [];
+
+    const recording: Recording = {
+      ...createRecording(),
+      runtimeEvents: [
+        {
+          timestamp: 0,
+          snapshot: { mode: "webcontainer", status: "starting", previewUrl: null },
+        },
+      ],
+      whiteboardEvents: [
+        {
+          timestamp: 0,
+          upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }],
+          isOpen: true,
+        },
+      ],
+      chatEvents: [
+        { timestamp: 0, event: { k: "checkpoint", state: { items: [], status: "idle" } } },
+      ],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        applyRuntimeSnapshot: () => {
+          applied.push("runtime");
+        },
+        applyWhiteboardState: () => {
+          applied.push("whiteboard");
+        },
+        applyChatSnapshot: () => {
+          applied.push("chat");
+        },
+        onPlaybackUpdate: (currentTime) => {
+          playbackUpdates.push(currentTime);
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "FINISHED" });
+    expect(actor.getSnapshot().matches({ playback: "ended" })).toBe(true);
+    applied.length = 0;
+    playbackUpdates.length = 0;
+
+    actor.send({ type: "PLAY" });
+
+    expect(actor.getSnapshot().matches({ playback: "playing" })).toBe(true);
+    expect(actor.getSnapshot().context.timeline.currentTime).toBe(0);
+    expect(applied).toEqual(["runtime", "whiteboard", "chat"]);
+    expect(playbackUpdates).toEqual([0]);
+
+    actor.stop();
+  });
+
   it("applies workspace, runtime, then preview snapshots during replay sync", async () => {
     const calls: string[] = [];
     const firstWorkspace = createWorkspaceSnapshot("first", 0);

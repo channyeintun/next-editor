@@ -1090,18 +1090,10 @@ export const editorMachine = setup({
                 guard: ({ context }) =>
                   context.timeline.currentTime >=
                   context.timeline.duration - PLAYBACK_END_EPSILON_MS, // Fuzzy end check
-                actions: [
-                  "reattachPlaybackWorkspace",
-                  "resetPlayback",
-                  ...APPLY_REPLAY_STATE_ACTIONS,
-                  "notifyPlaybackUpdate",
-                  enqueueActions(({ context, enqueue }) => {
-                    enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
-                    if (hasSpawnedPlaybackAudio(context)) {
-                      enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: 0 });
-                    }
-                  }),
-                ],
+                // Only rewind here. Playing's entry invalidates and re-applies every
+                // track at currentTime (now 0), seeks the timeline and audio there and
+                // notifies, so doing any of that here too ran every track twice.
+                actions: ["reattachPlaybackWorkspace", "resetPlayback"],
               },
               {
                 target: "playing",

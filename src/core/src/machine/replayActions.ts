@@ -940,6 +940,9 @@ export const applyWorkspaceEventsAtTime = ({
       Boolean(snapshot) && snapshot?.activeFilePath !== replayResult.snapshotToApply.activeFilePath;
 
     applyWorkspaceSnapshot(replayResult.snapshotToApply);
+    // Only the Monaco-rendered frame depends on the workspace. The slide, preview and
+    // other track cursors stay put, so a replayed file switch does not replay their
+    // whole history (see invalidateRenderedPlaybackState).
     return {
       lastAppliedWorkspaceEventIndex: replayResult.nextIndex,
       // File switches change the Monaco model path on the React side.
@@ -947,7 +950,6 @@ export const applyWorkspaceEventsAtTime = ({
       pendingPlaybackEditorSync: activeFileChanged || context.pendingPlaybackEditorSync,
       currentFrame: null,
       lastAppliedFrameIndex: -1,
-      lastAppliedSlideEventIndex: -1,
     };
   }
 
