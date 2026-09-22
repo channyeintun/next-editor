@@ -334,6 +334,11 @@ type EditorMachineEvent =
   | { type: "SCREEN_ERROR"; actorId: string; error: string };
 ```
 
+The `AUDIO_*`, `CAMERA_*` and `SCREEN_*` members are not declared in `types.ts`. `EditorMachineEvent`
+includes each actor's own union (`AudioRecordingEmit`, `AudioPlaybackEmit`, `CameraRecordingEmit`,
+`ScreenRecordingEmit`), and the actors are built with `fromTypedCallback`, which checks every
+`sendBack` call against that union. xstate's own `fromCallback` leaves `sendBack` untyped.
+
 ## Guards
 
 Defined in the machine's `setup({ guards: { ... } })` block:

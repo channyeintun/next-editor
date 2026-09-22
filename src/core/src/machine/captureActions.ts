@@ -35,6 +35,7 @@ import {
   type CapturedViewStateRef,
 } from "./editorMachineHelpers";
 import { normalizeNonNegativeTime } from "./playbackValues";
+import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 
 const SCREEN_RECORDER_ID_PREFIX = "screenRecorder-";
 
@@ -101,18 +102,9 @@ export const prepareExternalAudioRecording = ({
 export interface RecordingAudioPlayerEnqueue {
   spawnChild: (
     src: "audioPlayback",
-    options: {
-      id: "recordingAudioPlayer";
-      input: {
-        blob: Blob;
-        audioUrl?: string;
-        volume: number;
-        playbackRate: number;
-        startPositionMs: number;
-      };
-    },
+    options: { id: "recordingAudioPlayer"; input: AudioPlaybackInput },
   ) => void;
-  sendTo: (actor: "recordingAudioPlayer", event: { type: "PLAY" }) => void;
+  sendTo: (actor: "recordingAudioPlayer", event: AudioPlaybackEvent) => void;
 }
 
 export const startExternalAudioPlayback = ({

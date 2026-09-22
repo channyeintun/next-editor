@@ -30,9 +30,12 @@ import type { FrameStreamEncoderState } from "../utils/frameStreamEncoder";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
-import type { ChatCheckpoint, ChatDelta, ChatRecordingEvent } from "../../../types/chat";
+import type { ChatCheckpoint, ChatRecordingEvent } from "../../../types/chat";
 import type { TextEditEvent } from "../../../types/textEdit";
 import type { CapturedViewStateRef } from "./editorMachineHelpers";
+import type { AudioPlaybackEmit, AudioRecordingEmit } from "./audioActor";
+import type { CameraRecordingEmit } from "./cameraActor";
+import type { ScreenRecordingEmit } from "./screenActor";
 import { normalizePlaybackSpeed } from "./playbackValues";
 
 // ============================================================================
@@ -493,39 +496,6 @@ export type TickEvent = {
 /** Playback reached the end */
 export type FinishedEvent = { type: "FINISHED" };
 
-/** Microphone recording actor stopped event */
-export type AudioRecordingStoppedEvent = {
-  type: "AUDIO_RECORDING_STOPPED";
-  blob: Blob;
-};
-
-/** Audio playback actor loaded metadata */
-export type AudioPlaybackReadyEvent = {
-  type: "AUDIO_PLAYBACK_READY";
-  duration: number;
-};
-
-/** Microphone recording actor started event */
-export type AudioRecordingStartedEvent = {
-  type: "AUDIO_RECORDING_STARTED";
-  mediaRecorder: MediaRecorder;
-  mimeType: string;
-  startedAtMs: number;
-  startedAtPerf: number;
-};
-
-/** Microphone recording actor error event */
-export type AudioRecordingErrorEvent = {
-  type: "AUDIO_RECORDING_ERROR";
-  error: string;
-};
-
-/** Selected-file/lesson audio playback reached the end of its media. */
-export type AudioPlaybackFinishedEvent = { type: "AUDIO_PLAYBACK_FINISHED" };
-
-/** Selected-file/lesson audio playback failed. */
-export type AudioPlaybackErrorEvent = { type: "AUDIO_PLAYBACK_ERROR"; error: string };
-
 /** User interaction during playback */
 export type UserInteractionEvent = { type: "USER_INTERACTION" };
 
@@ -586,63 +556,8 @@ export type WhiteboardEventOccurred = {
 /** Coding-agent chat delta or checkpoint occurred */
 export type ChatEventOccurred = {
   type: "CHAT_EVENT";
-  event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint };
+  event: ChatRecordingEvent["event"];
 };
-
-/** Audio chunk received */
-export type AudioRecordingChunkEvent = {
-  type: "AUDIO_RECORDING_CHUNK";
-  chunk: Blob;
-  startTimeMs: number;
-  endTimeMs: number;
-};
-
-/** Camera actor started event */
-export type CameraActorStartedEvent = {
-  type: "CAMERA_STARTED";
-  mimeType: string;
-  startedAtMs: number;
-  startedAtPerf: number;
-};
-
-/** Camera chunk received */
-export type CameraChunkEvent = {
-  type: "CAMERA_CHUNK";
-  chunk: Blob;
-  startTimeMs: number;
-  endTimeMs: number;
-};
-
-/** Camera actor stopped event */
-export type CameraActorStoppedEvent = { type: "CAMERA_STOPPED"; blob: Blob };
-
-/** Camera actor error event */
-export type CameraActorErrorEvent = { type: "CAMERA_ERROR"; error: string };
-
-/** Screen actor started event */
-export type ScreenActorStartedEvent = {
-  type: "SCREEN_STARTED";
-  actorId: string;
-  mimeType: string;
-  /** Whether the capture graph produced an audio track (false = silent video). */
-  hasAudio: boolean;
-  startedAtMs: number;
-  startedAtPerf: number;
-};
-
-/** Screen actor stopped event (blob exits via onScreenRecordingReady, never persisted). */
-export type ScreenActorStoppedEvent = {
-  type: "SCREEN_STOPPED";
-  actorId: string;
-  blob: Blob;
-  mimeType: string;
-  /** Whether the saved video carries an audio track (false = silent video). */
-  hasAudio: boolean;
-  startOffsetMs: number;
-};
-
-/** Screen actor error event */
-export type ScreenActorErrorEvent = { type: "SCREEN_ERROR"; actorId: string; error: string };
 
 /** Add or replace a caption track on the loaded recording */
 export type AddCaptionTrackEvent = {
@@ -686,22 +601,14 @@ export type EditorMachineEvent =
   | RuntimeEventOccurred
   | WhiteboardEventOccurred
   | ChatEventOccurred
-  | AudioRecordingChunkEvent
-  | CameraActorStartedEvent
-  | CameraChunkEvent
-  | CameraActorStoppedEvent
-  | CameraActorErrorEvent
-  | ScreenActorStartedEvent
-  | ScreenActorStoppedEvent
-  | ScreenActorErrorEvent
   | AddCaptionTrackEvent
   | RemoveCaptionTrackEvent
-  | AudioPlaybackReadyEvent
-  | AudioPlaybackFinishedEvent
-  | AudioPlaybackErrorEvent
-  | AudioRecordingStoppedEvent
-  | AudioRecordingStartedEvent
-  | AudioRecordingErrorEvent
+  // What the child actors send back. Each actor owns its union, and fromTypedCallback
+  // checks its sendBack calls against it.
+  | AudioRecordingEmit
+  | AudioPlaybackEmit
+  | CameraRecordingEmit
+  | ScreenRecordingEmit
   | StartEvent
   | StopEventSignal;
 

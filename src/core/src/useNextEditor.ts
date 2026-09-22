@@ -20,7 +20,7 @@ import type {
   SlideEvent,
 } from "./slides";
 import type { WhiteboardEvent } from "./whiteboard";
-import type { ChatCheckpoint, ChatDelta } from "../../types/chat";
+import type { ChatRecordingEvent } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";
 import { findFrameIndexAtTime, reconstructFrameAtIndex } from "./utils/frameDelta";
 import { PLAYBACK_END_EPSILON_MS } from "./machine/editorMachineHelpers";
@@ -222,7 +222,7 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     actorRef.send({ type: "WHITEBOARD_EVENT", event });
   };
 
-  const handleChatEvent = (event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint }) => {
+  const handleChatEvent = (event: ChatRecordingEvent["event"]) => {
     actorRef.send({ type: "CHAT_EVENT", event });
   };
 

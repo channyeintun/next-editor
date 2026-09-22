@@ -6,7 +6,7 @@ import type {
 } from "../slides";
 import type { WhiteboardEvent } from "../whiteboard";
 import type { RuntimeRecordingSnapshot } from "../../../types/runtime";
-import type { ChatCheckpoint, ChatDelta } from "../../../types/chat";
+import type { ChatRecordingEvent } from "../../../types/chat";
 import {
   areWorkspaceSnapshotsEqual,
   toWorkspaceDeltaSnapshot,
@@ -149,7 +149,7 @@ export function appendRuntimeRecordingEvent(
  */
 export function appendChatDelta(
   session: RecordingSession,
-  event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint },
+  event: ChatRecordingEvent["event"],
 ): boolean {
   const previousEvent = session.chatEvents[session.chatEvents.length - 1]?.event;
 
