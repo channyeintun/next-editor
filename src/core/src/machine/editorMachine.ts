@@ -58,6 +58,7 @@ import {
   clearScreenRecording,
   handleScreenError,
   releaseScreenStream,
+  releaseUnacceptedScreenStream,
 } from "./captureActions";
 import {
   setRecording,
@@ -213,6 +214,7 @@ export const editorMachine = setup({
     clearScreenRecording: assign(clearScreenRecording),
     handleScreenError: assign(handleScreenError),
     releaseScreenStream: assign(releaseScreenStream),
+    releaseUnacceptedScreenStream,
 
     // Playback (replay-side) actions — bodies live in replayActions.ts, wrapped
     // here so `setup()` can infer this machine's exact context/event/actor types.
@@ -290,6 +292,12 @@ export const editorMachine = setup({
     AUDIO_RECORDING_STOPPED: {
       actions: ["attachLateAudioBlob", stopChild("audioRecorder")],
     },
+    // Only idle accepts START_RECORDING (its last branch has no guard, so it never bubbles up
+    // from there). Anywhere else the event would be dropped along with the display stream the
+    // host already acquired and handed over, so release that stream here.
+    START_RECORDING: {
+      actions: "releaseUnacceptedScreenStream",
+    },
     ADD_CAPTION_TRACK: {
       actions: "addCaptionTrack",
     },
@@ -345,7 +353,11 @@ export const editorMachine = setup({
         START_RECORDING: [
           {
             guard: not("isDmpCodecReady"),
-            actions: ["setDmpCodecUnavailableError", "notifyError"],
+            actions: [
+              "releaseUnacceptedScreenStream",
+              "setDmpCodecUnavailableError",
+              "notifyError",
+            ],
           },
           {
             target: "recording",

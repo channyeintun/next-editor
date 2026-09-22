@@ -1170,3 +1170,23 @@ export const releaseScreenStream = ({
     },
   };
 };
+
+/**
+ * Stop the display stream of a START_RECORDING that no state accepted: the codec refusal in idle,
+ * or any state other than idle (the record button stays live while the mic prompt is open and
+ * during the stop window). The host ran getDisplayMedia at click time and handed the stream over,
+ * so nothing else will ever stop those tracks. Plain side effect: it must not touch the screen
+ * context of a capture that is still running or finishing.
+ */
+export const releaseUnacceptedScreenStream = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): void => {
+  if (event.type !== "START_RECORDING" || !event.screenStream) return;
+  // A host re-sending the stream the machine already owns must not kill the live capture.
+  if (event.screenStream === context.screenStream) return;
+  event.screenStream.getTracks().forEach((track) => track.stop());
+};

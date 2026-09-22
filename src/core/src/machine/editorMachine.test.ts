@@ -1945,6 +1945,74 @@ describe("editorMachine local screen recording", () => {
     expect(actor.getSnapshot().context.screenStream).toBeNull();
   });
 
+  // The host acquires the display stream at click time and hands it over with START_RECORDING.
+  // A start the machine does not take must stop it, or the browser keeps sharing the tab.
+  it("releases the display stream of a start refused for an unloaded codec", async () => {
+    const dmpCodec = await import("../../../storage/dmpCodec/dmpCodec");
+    const loadedSpy = vi.spyOn(dmpCodec, "isDmpCodecLoaded").mockReturnValue(false);
+    const display = new FakeScreenStream([new FakeScreenTrack("video")]);
+    const videoTrack = display.getVideoTracks()[0] as unknown as FakeScreenTrack;
+    const actor = start();
+
+    try {
+      actor.send({ type: "START_RECORDING", screenStream: display as unknown as MediaStream });
+    } finally {
+      loadedSpy.mockRestore();
+    }
+
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("idle");
+    expect(snapshot.context.error).toMatch(/recording codec could not be loaded/i);
+    expect(snapshot.context.screenStream).toBeNull();
+    expect(videoTrack.stopped).toBe(true);
+  });
+
+  it("releases the display stream of a second start while the microphone is arming", () => {
+    const machine = editorMachine.provide({
+      actors: {
+        // Never reports STARTED, so the machine stays in `startingRecording`.
+        audioRecording: fromCallback<AudioRecordingEvent, AudioRecordingInput, AudioRecordingEmit>(
+          () => () => {},
+        ),
+      },
+    });
+    const actor = createActor(machine, {
+      input: { editorRef: { current: null }, enableAudioRecording: true },
+    }).start();
+    actors.push(actor);
+    const first = new FakeScreenStream([new FakeScreenTrack("video")]);
+    const firstTrack = first.getVideoTracks()[0] as unknown as FakeScreenTrack;
+    const second = new FakeScreenStream([new FakeScreenTrack("video")]);
+    const secondTrack = second.getVideoTracks()[0] as unknown as FakeScreenTrack;
+
+    actor.send({ type: "START_RECORDING", screenStream: first as unknown as MediaStream });
+    expect(actor.getSnapshot().value).toBe("startingRecording");
+    actor.send({ type: "START_RECORDING", screenStream: second as unknown as MediaStream });
+    // Re-sending the stream the pending take already owns must leave it alone.
+    actor.send({ type: "START_RECORDING", screenStream: first as unknown as MediaStream });
+
+    expect(actor.getSnapshot().value).toBe("startingRecording");
+    expect(secondTrack.stopped).toBe(true);
+    expect(firstTrack.stopped).toBe(false);
+    expect(actor.getSnapshot().context.screenStream).toBe(first);
+  });
+
+  it("releases the display stream of a start sent during playback", async () => {
+    const actor = start();
+    actor.send({ type: "START_RECORDING" });
+    await waitFor(actor, (s) => s.value === "recording");
+    actor.send({ type: "STOP_RECORDING" });
+    await waitFor(actor, (s) => s.matches({ playback: "ready" }));
+    const display = new FakeScreenStream([new FakeScreenTrack("video")]);
+    const videoTrack = display.getVideoTracks()[0] as unknown as FakeScreenTrack;
+
+    actor.send({ type: "START_RECORDING", screenStream: display as unknown as MediaStream });
+
+    expect(actor.getSnapshot().matches({ playback: "ready" })).toBe(true);
+    expect(actor.getSnapshot().context.screenStream).toBeNull();
+    expect(videoTrack.stopped).toBe(true);
+  });
+
   it("aborts cleanly when stopped while the microphone is still arming", async () => {
     let grantMicrophone!: (stream: MediaStream) => void;
     Object.defineProperty(navigator, "mediaDevices", {
