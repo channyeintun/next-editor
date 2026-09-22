@@ -7,6 +7,9 @@ import {
   type AudioPlaybackEmit,
   type AudioPlaybackEvent,
   type AudioPlaybackInput,
+  type AudioRecordingEmit,
+  type AudioRecordingEvent,
+  type AudioRecordingInput,
 } from "./audioActor";
 import type {
   CameraRecordingEmit,
@@ -1308,6 +1311,279 @@ describe("getPlaybackAudioState", () => {
 });
 
 // ===========================================================================
+// stoppingRecording: the finalize join between the microphone and camera
+// ===========================================================================
+
+interface FakeRecorderControls {
+  stopRequests: number;
+  disposals: number;
+  emitStopped: (blob: Blob) => void;
+  emitError: (error: string) => void;
+}
+
+const createFakeRecorderControls = (): FakeRecorderControls => ({
+  stopRequests: 0,
+  disposals: 0,
+  emitStopped: () => {},
+  emitError: () => {},
+});
+
+describe("editorMachine stoppingRecording join", () => {
+  // Empty, so `loading` does not try to decode it for an exact duration (jsdom has no
+  // AudioContext). The join only cares which blob ends up where.
+  const micBlob = new Blob([], { type: "audio/webm" });
+  const cameraBlob = new Blob(["video"], { type: "video/webm" });
+
+  let mic = createFakeRecorderControls();
+  let camera = createFakeRecorderControls();
+  let actors: Array<ReturnType<typeof startTake>> = [];
+
+  // Each fake reports STARTED on START and otherwise does only what the test tells it
+  // to, so every test picks the order in which the recorders report.
+  const machine = editorMachine.provide({
+    actors: {
+      audioRecording: fromCallback<AudioRecordingEvent, AudioRecordingInput, AudioRecordingEmit>(
+        ({ receive, sendBack }) => {
+          mic.emitStopped = (blob) => sendBack({ type: "AUDIO_RECORDING_STOPPED", blob });
+          mic.emitError = (error) => sendBack({ type: "AUDIO_RECORDING_ERROR", error });
+          receive((event) => {
+            if (event.type === "STOP") {
+              mic.stopRequests += 1;
+              return;
+            }
+            sendBack({
+              type: "AUDIO_RECORDING_STARTED",
+              mediaRecorder: {} as MediaRecorder,
+              mimeType: "audio/webm",
+              startedAtMs: Date.now(),
+              startedAtPerf: performance.now(),
+            });
+          });
+          return () => {
+            mic.disposals += 1;
+          };
+        },
+      ),
+      cameraRecording: fromCallback<
+        CameraRecordingEvent,
+        CameraRecordingInput,
+        CameraRecordingEmit
+      >(({ receive, sendBack }) => {
+        camera.emitStopped = (blob) => sendBack({ type: "CAMERA_STOPPED", blob });
+        camera.emitError = (error) => sendBack({ type: "CAMERA_ERROR", error });
+        receive((event) => {
+          if (event.type === "STOP") {
+            camera.stopRequests += 1;
+            return;
+          }
+          sendBack({
+            type: "CAMERA_STARTED",
+            mimeType: "video/webm",
+            startedAtMs: Date.now(),
+            startedAtPerf: performance.now(),
+          });
+        });
+        return () => {
+          camera.disposals += 1;
+        };
+      }),
+      // Selected-file audio, and playback of a take that has it, spawn an HTMLAudioElement.
+      audioPlayback: fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
+        () => {},
+      ),
+    },
+  });
+
+  function startTake() {
+    const onRecordingStop = vi.fn<(recording: Recording) => void>();
+    const onError = vi.fn<(error: Error) => void>();
+    const actor = createActor(machine, {
+      input: { editorRef: { current: null }, enableAudioRecording: true, onRecordingStop, onError },
+    }).start();
+    return { actor, onRecordingStop, onError };
+  }
+
+  // Records a take and stops it, leaving the machine in `stoppingRecording`.
+  const recordAndStop = async (
+    event: { audioBlob?: Blob; enableCamera?: boolean } = {},
+  ): Promise<ReturnType<typeof startTake>> => {
+    const take = startTake();
+    actors.push(take);
+    take.actor.send({ type: "START_RECORDING", enableCamera: true, ...event });
+    await waitFor(take.actor, (snapshot) => snapshot.value === "recording");
+    take.actor.send({ type: "STOP_RECORDING" });
+    expect(take.actor.getSnapshot().value).toBe("stoppingRecording");
+    return take;
+  };
+
+  const expectFinalizedOnce = async ({ actor, onRecordingStop }: ReturnType<typeof startTake>) => {
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    expect(onRecordingStop).toHaveBeenCalledTimes(1);
+    return actor.getSnapshot().context.recording!;
+  };
+
+  beforeEach(() => {
+    mic = createFakeRecorderControls();
+    camera = createFakeRecorderControls();
+  });
+
+  afterEach(() => {
+    for (const { actor } of actors) actor.stop();
+    actors = [];
+    vi.useRealTimers();
+  });
+
+  it("finalizes a microphone-only take when its blob arrives", async () => {
+    const take = await recordAndStop({ enableCamera: false });
+    expect(mic.stopRequests).toBe(1);
+
+    mic.emitStopped(micBlob);
+    expect(take.actor.getSnapshot().value).toBe("loading");
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.audioBlob).toBe(micBlob);
+    expect(recording.audioSource).toBe("microphone");
+    expect(recording.cameraBlob).toBeUndefined();
+    expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
+    expect(mic.disposals).toBe(1);
+  });
+
+  it("waits for the camera when the microphone stops first", async () => {
+    const take = await recordAndStop();
+    expect(mic.stopRequests).toBe(1);
+    expect(camera.stopRequests).toBe(1);
+
+    mic.emitStopped(micBlob);
+    expect(take.actor.getSnapshot().value).toBe("stoppingRecording");
+    expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
+    expect(take.onRecordingStop).not.toHaveBeenCalled();
+
+    camera.emitStopped(cameraBlob);
+    expect(take.actor.getSnapshot().value).toBe("loading");
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.audioBlob).toBe(micBlob);
+    expect(recording.audioSource).toBe("microphone");
+    expect(recording.cameraBlob).toBe(cameraBlob);
+    expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
+    expect(mic.disposals).toBe(1);
+    expect(camera.disposals).toBe(1);
+  });
+
+  it("waits for the microphone when the camera stops first", async () => {
+    const take = await recordAndStop();
+
+    camera.emitStopped(cameraBlob);
+    expect(take.actor.getSnapshot().value).toBe("stoppingRecording");
+    expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
+    expect(take.onRecordingStop).not.toHaveBeenCalled();
+
+    mic.emitStopped(micBlob);
+    expect(take.actor.getSnapshot().value).toBe("loading");
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.audioBlob).toBe(micBlob);
+    expect(recording.cameraBlob).toBe(cameraBlob);
+    expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
+    expect(mic.disposals).toBe(1);
+    expect(camera.disposals).toBe(1);
+  });
+
+  it("finalizes selected-file audio once the camera stops", async () => {
+    const selectedAudio = new Blob(["audio"], { type: "audio/webm" });
+    const take = await recordAndStop({ audioBlob: selectedAudio });
+    expect(mic.stopRequests).toBe(0);
+    expect(camera.stopRequests).toBe(1);
+
+    camera.emitStopped(cameraBlob);
+    expect(take.actor.getSnapshot().value).toBe("loading");
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.audioBlob).toBe(selectedAudio);
+    expect(recording.audioSource).toBe("external");
+    expect(recording.cameraBlob).toBe(cameraBlob);
+    expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
+  });
+
+  it("finalizes on the microphone after the camera fails while stopping", async () => {
+    const take = await recordAndStop();
+
+    camera.emitError("camera failed");
+    expect(take.actor.getSnapshot().value).toBe("stoppingRecording");
+    expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
+
+    mic.emitStopped(micBlob);
+    expect(take.actor.getSnapshot().value).toBe("loading");
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.audioBlob).toBe(micBlob);
+    expect(recording.cameraBlob).toBeUndefined();
+    expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
+  });
+
+  it("finalizes on a camera failure once the microphone has stopped", async () => {
+    const take = await recordAndStop();
+
+    mic.emitStopped(micBlob);
+    camera.emitError("camera failed");
+    expect(take.actor.getSnapshot().value).toBe("loading");
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.audioBlob).toBe(micBlob);
+    expect(recording.cameraBlob).toBeUndefined();
+    expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
+    expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
+  });
+
+  it("finalizes through the watchdog when the camera never reports", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const take = await recordAndStop();
+
+    mic.emitStopped(micBlob);
+    vi.advanceTimersByTime(1999);
+    expect(take.actor.getSnapshot().value).toBe("stoppingRecording");
+    vi.advanceTimersByTime(1);
+    expect(take.actor.getSnapshot().value).toBe("loading");
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.audioBlob).toBe(micBlob);
+    expect(recording.cameraBlob).toBeUndefined();
+    expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
+    expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
+    expect(camera.disposals).toBe(1);
+  });
+
+  it("finalizes through the watchdog after the microphone fails while stopping", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const take = await recordAndStop();
+
+    mic.emitError("microphone failed");
+    expect(take.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "microphone failed" }),
+    );
+    // The failed recorder never cleared `audio.isRecording`, so the camera cannot finalize.
+    camera.emitStopped(cameraBlob);
+    expect(take.actor.getSnapshot().value).toBe("stoppingRecording");
+    expect(take.onRecordingStop).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(2000);
+    expect(take.actor.getSnapshot().value).toBe("loading");
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.audioBlob).toBeUndefined();
+    expect(recording.cameraBlob).toBe(cameraBlob);
+    expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
+
+    // Like any recorder the watchdog overtook, it may still flush a blob, so it stays
+    // until its take is left.
+    expect(take.actor.getSnapshot().children.audioRecorder).toBeDefined();
+    take.actor.send({ type: "UNLOAD" });
+    expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
+    expect(mic.disposals).toBe(1);
+  });
+});
+
+// ===========================================================================
 // Local screen recording (opt-in, saved locally only)
 // ===========================================================================
 
@@ -1548,6 +1824,49 @@ describe("editorMachine local screen recording", () => {
 
     expect(videoTrack.stopped).toBe(true);
     expect(actor.getSnapshot().context.screenStream).toBeNull();
+  });
+
+  it("aborts cleanly when stopped while the microphone is still arming", async () => {
+    let grantMicrophone!: (stream: MediaStream) => void;
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: () =>
+          new Promise<MediaStream>((resolve) => {
+            grantMicrophone = resolve;
+          }),
+      },
+    });
+    const onRecordingStart = vi.fn<() => void>();
+    const onRecordingStop = vi.fn<(recording: Recording) => void>();
+    const display = new FakeScreenStream([new FakeScreenTrack("video")]);
+    const videoTrack = display.getVideoTracks()[0] as unknown as FakeScreenTrack;
+    const actor = start({ enableAudioRecording: true, onRecordingStart, onRecordingStop });
+
+    actor.send({ type: "START_RECORDING", screenStream: display as unknown as MediaStream });
+    expect(actor.getSnapshot().value).toBe("startingRecording");
+    const armingRecorder = actor.getSnapshot().children.audioRecorder;
+    expect(armingRecorder).toBeDefined();
+
+    actor.send({ type: "STOP_RECORDING" });
+
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("idle");
+    expect(snapshot.children.audioRecorder).toBeUndefined();
+    expect(armingRecorder!.getSnapshot().status).toBe("stopped");
+    expect(videoTrack.stopped).toBe(true);
+    expect(snapshot.context.screenStream).toBeNull();
+    expect(snapshot.context.audio.isRecording).toBe(false);
+    expect(snapshot.context.session).toBeNull();
+
+    // The permission prompt resolves after the user gave up: the mic is released unused.
+    const micTrack = new FakeScreenTrack("audio");
+    grantMicrophone(new FakeScreenStream([micTrack]) as unknown as MediaStream);
+    await vi.waitFor(() => expect(micTrack.stopped).toBe(true));
+
+    expect(FakeScreenMediaRecorder.instances).toHaveLength(0);
+    expect(onRecordingStart).not.toHaveBeenCalled();
+    expect(onRecordingStop).not.toHaveBeenCalled();
   });
 
   it("treats a screen MIME failure as non-fatal and keeps the session recording", async () => {
