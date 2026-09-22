@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   applyContentDelta,
-  compressFrames,
   createContentDelta,
   findCommonPrefixLength,
   findCommonSuffixLength,
   findFrameIndexAtTime,
   reconstructFrameAtIndex,
 } from "../frameDelta";
+import { compressFrames } from "../frameStreamEncoder";
 import { isKeyframe, isDelta } from "../deltaTypes";
 import type { EditorFrame } from "../../types";
 

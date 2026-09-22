@@ -97,7 +97,7 @@ flowchart LR
   F120[Full frame 120] --> K120[Keyframe]
 ```
 
-- Keyframes are emitted at most every 120 frames.
+- Every 120th stored frame is a keyframe. The cadence counts stored frames, not captures, so captures that change nothing never push a keyframe back.
 - Intermediate frames store only changed content and state.
 - Playback reconstructs a target frame by starting from the nearest prior keyframe and replaying forward (`reconstructFrameAtIndex` in `src/core/src/utils/frameDelta.ts`).
 
@@ -127,19 +127,19 @@ The main extension hooks in `UseNextEditorConfig` are:
 
 ## Utility Modules (`src/core/src/utils`)
 
-| File                                   | Purpose                                                                                                        |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `frameDelta.ts`                        | `compressFrames`, `reconstructFrameAtIndex`, `createContentDelta`, `applyContentDelta`, `findFrameIndexAtTime` |
-| `editorDiff.ts`                        | `applyContentDiff`, `applyPositionDiff`, `applySelectionDiff` — apply a diff to a live Monaco editor           |
-| `validation.ts`                        | `isValidFrameState`, `isValidEditorState`, `isEditorReady`                                                     |
-| `deltaTypes.ts`                        | `DeltaFrame` and related delta wire types                                                                      |
-| `frameStreamEncoder.ts`                | Incremental keyframe/delta encoder state used during live capture                                              |
-| `editorState.ts`                       | Reads/builds `EditorState` snapshots from a Monaco editor instance                                             |
-| `cursorCoordinates.ts`                 | Maps recorded cursor samples onto the current UI layout (viewport/root coordinate spaces)                      |
-| `cursorReplay.ts`                      | Fake-cursor tween/replay logic driven by `cursorEvents`                                                        |
-| `audioContext.ts` / `audioDuration.ts` | Shared `AudioContext` helpers and exact-duration calculation for audio blobs                                   |
-| `stringAffix.ts`                       | Small string prefix/suffix helpers used by content diffing                                                     |
-| `timedIndex.ts`                        | `findTimedEventIndexAtOrBefore` — timestamp-to-index lookup shared by frames and every replay track            |
+| File                                   | Purpose                                                                                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `frameDelta.ts`                        | `reconstructFrameAtIndex`, `createContentDelta`, `applyContentDelta`, `findFrameIndexAtTime`                  |
+| `editorDiff.ts`                        | `applyContentDiff`, `applyPositionDiff`, `applySelectionDiff` — apply a diff to a live Monaco editor          |
+| `validation.ts`                        | `isValidFrameState`, `isValidEditorState`, `isEditorReady`                                                    |
+| `deltaTypes.ts`                        | `DeltaFrame` and related delta wire types                                                                     |
+| `frameStreamEncoder.ts`                | `pushFrame` (incremental keyframe/delta encoder used during live capture) and its batch fold `compressFrames` |
+| `editorState.ts`                       | Reads/builds `EditorState` snapshots from a Monaco editor instance                                            |
+| `cursorCoordinates.ts`                 | Maps recorded cursor samples onto the current UI layout (viewport/root coordinate spaces)                     |
+| `cursorReplay.ts`                      | Fake-cursor tween/replay logic driven by `cursorEvents`                                                       |
+| `audioContext.ts` / `audioDuration.ts` | Shared `AudioContext` helpers and exact-duration calculation for audio blobs                                  |
+| `stringAffix.ts`                       | Small string prefix/suffix helpers used by content diffing                                                    |
+| `timedIndex.ts`                        | `findTimedEventIndexAtOrBefore` — timestamp-to-index lookup shared by frames and every replay track           |
 
 ### dmpCodec (WASM diffing)
 

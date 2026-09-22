@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { EditorFrame, Recording } from "../types";
-import { compressFrames } from "./frameDelta";
+import { compressFrames } from "./frameStreamEncoder";
 import { getCursorPositionAtTime, getCursorReplaySamples } from "./cursorReplay";
 
 const createFrame = (

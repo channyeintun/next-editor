@@ -8,7 +8,6 @@ import {
   ContentEditBaseMismatchError,
   applyContentDelta,
   applyFrameDelta,
-  compressFrames,
   createAppendContentDelta,
   createContentDelta,
   createContentEditDelta,
@@ -16,6 +15,7 @@ import {
   findNearestKeyframeIndex,
   reconstructFrameAtIndex,
 } from "./frameDelta";
+import { compressFrames } from "./frameStreamEncoder";
 import {
   DmpBaseMismatchError,
   installDmpCodec,

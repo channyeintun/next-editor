@@ -22,11 +22,11 @@ import type { PreviewEvent } from "../slides";
 import type { WhiteboardSceneState } from "../whiteboard";
 import {
   ContentEditBaseMismatchError,
-  compressFrames,
   createContentDelta,
   createContentEditDelta,
   reconstructFrameAtIndex,
 } from "../utils/frameDelta";
+import { compressFrames } from "../utils/frameStreamEncoder";
 import {
   DmpBaseMismatchError,
   getDmpCodec,

@@ -9,7 +9,7 @@ import type {
   Keyframe,
   DeltaFrame,
 } from "./deltaTypes";
-import { DELTA_CONFIG, isKeyframe, isDelta } from "./deltaTypes";
+import { isKeyframe, isDelta } from "./deltaTypes";
 export { isKeyframe, isDelta };
 import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
 import { getDmpCodec } from "../../../storage/dmpCodec/dmpCodec";
@@ -449,13 +449,6 @@ export function createKeyframe(frame: EditorFrame): Keyframe {
 }
 
 /**
- * Checks if a frame index should be a keyframe.
- */
-export function shouldBeKeyframe(index: number): boolean {
-  return index === 0 || index % DELTA_CONFIG.KEYFRAME_INTERVAL === 0;
-}
-
-/**
  * Helper to check if mouse cursor changed.
  */
 function mouseCursorChanged(
@@ -808,51 +801,6 @@ export function reconstructFrameAtIndex(
   }
 
   return current;
-}
-
-/**
- * Converts an array of full frames to delta frames.
- * Skips frames with no changes to reduce storage.
- * First frame is always stored as keyframe.
- * Subsequent keyframe slots only stored if there are changes.
- */
-export function compressFrames(fullFrames: EditorFrame[]): DeltaFrame[] {
-  if (fullFrames.length === 0) return [];
-
-  const frames: DeltaFrame[] = [];
-  let lastStoredFrame: EditorFrame | null = null;
-
-  for (let i = 0; i < fullFrames.length; i++) {
-    const currentFrame = fullFrames[i];
-
-    if (i === 0) {
-      // First frame is always stored as keyframe
-      frames.push(createKeyframe(currentFrame));
-      lastStoredFrame = currentFrame;
-    } else if (shouldBeKeyframe(i)) {
-      // Keyframe slot - but only store if there are changes
-      if (lastStoredFrame) {
-        const delta = createFrameDelta(lastStoredFrame, currentFrame);
-        if (hasChanges(delta)) {
-          // Store as keyframe for efficient seeking
-          frames.push(createKeyframe(currentFrame));
-          lastStoredFrame = currentFrame;
-        }
-        // If no changes, skip - previous frame state persists
-      }
-    } else {
-      // Delta slot - only store if there are changes
-      if (lastStoredFrame) {
-        const delta = createFrameDelta(lastStoredFrame, currentFrame);
-        if (hasChanges(delta)) {
-          frames.push(delta);
-          lastStoredFrame = currentFrame;
-        }
-      }
-    }
-  }
-
-  return frames;
 }
 
 /**
