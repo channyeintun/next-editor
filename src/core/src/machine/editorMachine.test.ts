@@ -3766,3 +3766,102 @@ describe("editorMachine local screen recording", () => {
     expect(screenKeys).toEqual([]);
   });
 });
+
+describe("editorMachine pointer captures while recording", () => {
+  // The Monaco surface createFrame reads during a take.
+  class RecordingEditor {
+    content = "const a = 1;";
+    versionId = 1;
+    readonly model = {
+      uri: { toString: () => "file:///main.ts" },
+      getVersionId: () => this.versionId,
+    };
+
+    getModel() {
+      return this.model as unknown as monaco.editor.ITextModel;
+    }
+
+    getValue() {
+      return this.content;
+    }
+
+    type(text: string) {
+      this.content += text;
+      this.versionId += 1;
+    }
+
+    getPosition() {
+      return { lineNumber: 1, column: 1 };
+    }
+
+    getSelection() {
+      return selection as monaco.Selection;
+    }
+
+    getScrollTop() {
+      return 0;
+    }
+
+    getScrollLeft() {
+      return 0;
+    }
+
+    saveViewState() {
+      return null;
+    }
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("keeps pointer moves in the cursor track and out of the frame track", () => {
+    const clock = pinPerformanceClock();
+    const editor = new RecordingEditor();
+    const actor = createActor(
+      editorMachine.provide({ actors: { mouseTracking: fromCallback(() => {}) } }),
+      {
+        input: {
+          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
+        },
+      },
+    ).start();
+    actor.send({ type: "START_RECORDING" });
+    expect(actor.getSnapshot().value).toBe("recording");
+    const session = () => actor.getSnapshot().context.session!;
+    expect(session().frames).toHaveLength(1);
+
+    // Each move is past the 50ms frame throttle, so each one samples a full frame.
+    for (const x of [100, 140]) {
+      clock.now += 60;
+      actor.send({
+        type: "CAPTURE_FRAME",
+        isMouseMovement: true,
+        mousePosition: { x, y: 20, visible: true },
+      });
+    }
+
+    expect(session().frames).toHaveLength(1);
+    expect(session().cursorEvents.map(({ x, visible }) => ({ x, visible }))).toEqual([
+      { x: 0, visible: false },
+      { x: 100, visible: true },
+      { x: 140, visible: true },
+    ]);
+    expect(actor.getSnapshot().context.currentFrame?.state.mouseCursor).toEqual({
+      x: 140,
+      y: 20,
+      visible: true,
+    });
+
+    clock.now += 60;
+    editor.type("!");
+    actor.send({ type: "CAPTURE_FRAME" });
+
+    expect(session().frames).toHaveLength(2);
+    expect(session().frames[1]).toMatchObject({
+      isKeyframe: false,
+      mouseCursor: { x: 140, y: 20, visible: true },
+    });
+    actor.stop();
+  });
+});

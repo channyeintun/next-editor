@@ -143,6 +143,8 @@ interface CursorRecordingEvent extends MouseCursorPosition {
 
 That lets playback (`src/core/src/utils/cursorCoordinates.ts`, `cursorReplay.ts`) remap a recorded cursor onto the current UI layout more reliably.
 
+`cursorEvents` is the pointer's only full-rate record. A frame's `mouseCursor` is a legacy copy: playback derives cursor samples from frames only for older recordings that have no `cursorEvents`. A capture triggered by a pointer move gives the frame encoder the last stored pointer, so it stores a frame only when it also changed something the frame track owns, such as scroll or preview state. The next capture that is not a pointer move stores the pointer's current position.
+
 ## Preview Replay Data
 
 Preview playback is rrweb-based. Both structures carry rrweb events verbatim as

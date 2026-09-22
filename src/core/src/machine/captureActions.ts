@@ -501,7 +501,22 @@ export const captureFrame = ({
     event.type === "CAPTURE_FRAME" ? event.selection : undefined,
   );
 
-  const { state: encoder, emitted } = pushFrame(context.session.encoder, frame, contentEditDelta);
+  // The cursor track above already holds every pointer sample, and replay
+  // reads frame pointers only for recordings that have no cursor track. A
+  // pointer capture therefore gives the encoder the last stored pointer, so
+  // it stores a frame only when the capture also sampled something the frame
+  // track owns (scroll, preview). currentFrame and lastMousePosition keep the
+  // live pointer, which the next capture that is not a pointer move stores.
+  const lastStoredFrame = context.session.encoder.lastStoredFrame;
+  const encoderFrame =
+    event.type === "CAPTURE_FRAME" && event.isMouseMovement && lastStoredFrame
+      ? { ...frame, state: { ...frame.state, mouseCursor: lastStoredFrame.state.mouseCursor } }
+      : frame;
+  const { state: encoder, emitted } = pushFrame(
+    context.session.encoder,
+    encoderFrame,
+    contentEditDelta,
+  );
 
   if (emitted) {
     context.session.frames.push(emitted);
