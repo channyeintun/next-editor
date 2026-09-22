@@ -358,6 +358,23 @@ export const audioPlaybackActor = fromCallback<
     sendBack({ type: "AUDIO_PLAYBACK_ERROR", error: "Audio playback error" });
   };
 
+  // An autoplay block rejects `play()` without raising a media error, so `onerror` never
+  // sees it. Swallowing it let a selected-file take record against silent narration that
+  // never ends. Report it once: SYNC keeps retrying `play()` while playback is requested.
+  // AbortError (a pause() or src change interrupting play) is routine and stays ignored.
+  let blockedReported = false;
+  const playAudio = () => {
+    audio.play().catch((error: unknown) => {
+      if (disposed || blockedReported) return;
+      if ((error as { name?: unknown } | null)?.name !== "NotAllowedError") return;
+      blockedReported = true;
+      sendBack({
+        type: "AUDIO_PLAYBACK_ERROR",
+        error: "Audio playback was blocked by the browser's autoplay policy",
+      });
+    });
+  };
+
   receive((event) => {
     if (disposed) return;
 
@@ -368,7 +385,7 @@ export const audioPlaybackActor = fromCallback<
         // hundred ms off the timeline, and letting that ride under the SYNC
         // dead zone would accumulate more lag with every play/pause cycle.
         applyTargetTime(AUDIO_EXACT_SYNC_EPSILON_MS);
-        audio.play().catch(() => {});
+        playAudio();
         break;
       case "PAUSE":
         // Freeze extrapolation at the current target before clearing the flag.
@@ -385,7 +402,7 @@ export const audioPlaybackActor = fromCallback<
         setKnownTimelineTime(event.timeMs);
         applyTargetTime(AUDIO_SYNC_DRIFT_THRESHOLD_MS);
         if (requestedPlay && audio.paused) {
-          audio.play().catch(() => {});
+          playAudio();
         }
         break;
       case "SET_VOLUME":

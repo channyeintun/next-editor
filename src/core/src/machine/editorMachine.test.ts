@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { createActor, fromCallback, waitFor } from "xstate";
+import { createActor, fromCallback, setup, waitFor } from "xstate";
 import type * as monaco from "monaco-editor";
 import { editorMachine } from "./editorMachine";
 import {
@@ -999,6 +999,8 @@ describe("audioPlaybackActor", () => {
   // calls and lets tests trigger events imperatively.
   class MockAudio {
     static instances: MockAudio[] = [];
+    /** When set, `play()` rejects with it and the element stays paused, like a blocked play. */
+    static playRejection: unknown = null;
     src = "";
     volume = 1;
     playbackRate = 1;
@@ -1018,6 +1020,7 @@ describe("audioPlaybackActor", () => {
 
     play() {
       this.playCalls++;
+      if (MockAudio.playRejection) return Promise.reject(MockAudio.playRejection);
       this.paused = false;
       return Promise.resolve();
     }
@@ -1039,6 +1042,7 @@ describe("audioPlaybackActor", () => {
 
   beforeEach(() => {
     MockAudio.instances = [];
+    MockAudio.playRejection = null;
     Object.defineProperty(globalThis, "Audio", { configurable: true, value: MockAudio });
     URL.createObjectURL = () => "blob:mock";
     URL.revokeObjectURL = () => {};
@@ -1071,6 +1075,36 @@ describe("audioPlaybackActor", () => {
     spawnedActors.push(actor);
     return actor;
   };
+
+  // The actor reports through sendBack, so it needs a parent to report to.
+  const observePlayback = () => {
+    const reported: AudioPlaybackEmit[] = [];
+    const parent = createActor(
+      setup({
+        types: { events: {} as AudioPlaybackEmit },
+        actors: { player: audioPlaybackActor },
+      }).createMachine({
+        invoke: {
+          id: "player",
+          src: "player",
+          input: {
+            blob: new Blob(["audio"], { type: "audio/webm" }),
+            volume: 1,
+            playbackRate: 1,
+            startPositionMs: 0,
+          },
+        },
+        on: {
+          AUDIO_PLAYBACK_ERROR: { actions: ({ event }) => reported.push(event) },
+        },
+      }),
+    ).start();
+    spawnedActors.push(parent);
+    return { player: parent.getSnapshot().children.player!, reported };
+  };
+
+  // A rejected play() settles in a microtask; let every pending one run.
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   it("creates an HTMLAudioElement with preservesPitch=true on spawn", () => {
     createPlayback(1);
@@ -1177,6 +1211,74 @@ describe("audioPlaybackActor", () => {
     // After onended fires the actor should still be alive (it's fromCallback —
     // only the parent machine acts on AUDIO_PLAYBACK_FINISHED). Just confirm no throw occurred.
     expect(actor.getSnapshot().status).toBe("active");
+  });
+
+  it("reports an autoplay block once while SYNC keeps retrying play()", async () => {
+    MockAudio.playRejection = new DOMException("play() not allowed", "NotAllowedError");
+    const { player, reported } = observePlayback();
+
+    player.send({ type: "PLAY" });
+    player.send({ type: "SYNC", timeMs: 250 });
+    await settle();
+    player.send({ type: "SYNC", timeMs: 500 });
+    await settle();
+
+    expect(MockAudio.instances[0]!.playCalls).toBe(3);
+    expect(reported).toEqual([
+      {
+        type: "AUDIO_PLAYBACK_ERROR",
+        error: "Audio playback was blocked by the browser's autoplay policy",
+      },
+    ]);
+  });
+
+  it("ignores a play() that a pause interrupts", async () => {
+    MockAudio.playRejection = new DOMException("interrupted by pause()", "AbortError");
+    const { player, reported } = observePlayback();
+
+    player.send({ type: "PLAY" });
+    player.send({ type: "SYNC", timeMs: 250 });
+    await settle();
+
+    expect(MockAudio.instances[0]!.playCalls).toBe(2);
+    expect(reported).toEqual([]);
+  });
+
+  // Recording against a blocked narration used to run silently to the finalize timeout:
+  // the element never plays, so it never ends.
+  it("aborts a selected-file take whose narration the browser blocks", async () => {
+    MockAudio.playRejection = new DOMException("play() not allowed", "NotAllowedError");
+    const onError = vi.fn<(error: Error) => void>();
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null }, onError },
+    }).start();
+    spawnedActors.push(actor);
+
+    actor.send({
+      type: "START_RECORDING",
+      audioBlob: new Blob(["audio"], { type: "audio/webm" }),
+    });
+    expect(actor.getSnapshot().value).toBe("recording");
+    await settle();
+
+    const aborted = actor.getSnapshot();
+    expect(aborted.value).toBe("idle");
+    expect(aborted.context.error).toMatch(/autoplay policy/);
+    expect(aborted.context.session).toBeNull();
+    expect(aborted.children.recordingAudioPlayer).toBeUndefined();
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    // Started again from a click, the take records and no longer reports the block.
+    MockAudio.playRejection = null;
+    actor.send({
+      type: "START_RECORDING",
+      audioBlob: new Blob(["audio"], { type: "audio/webm" }),
+    });
+    await settle();
+
+    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().context.error).toBeNull();
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 
   it("does not let an early audio end finish timeline-controlled lesson playback", async () => {
