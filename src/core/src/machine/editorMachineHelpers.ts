@@ -14,6 +14,7 @@ import type {
   EditorMachineContext,
   EditorMachineInput,
   RecordingSessionMediaFragment,
+  TimelineState,
 } from "./types";
 import {
   applyContentDiff,
@@ -522,7 +523,15 @@ export const MOUSE_FRAME_INTERVAL_MS = 50;
  * durations can disagree by a few milliseconds, so end-of-playback checks compare
  * against `duration - PLAYBACK_END_EPSILON_MS` rather than the exact duration.
  */
-export const PLAYBACK_END_EPSILON_MS = 100;
+const PLAYBACK_END_EPSILON_MS = 100;
+
+/**
+ * The one end-of-playback test: `ended.PLAY` restarts from 0 only when it holds, and
+ * the paused/ended selectors must agree with it about what "at the end" means.
+ */
+export const isAtPlaybackEnd = (
+  timeline: Pick<TimelineState, "currentTime" | "duration">,
+): boolean => timeline.currentTime >= timeline.duration - PLAYBACK_END_EPSILON_MS;
 
 const didCursorPositionChange = (
   previous: MouseCursorPosition | undefined,

@@ -13,7 +13,7 @@ import {
   APPLY_REPLAY_STATE_ACTIONS,
   getPlaybackAudioState,
   hasSpawnedPlaybackAudio,
-  PLAYBACK_END_EPSILON_MS,
+  isAtPlaybackEnd,
   reportMachineError,
   RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
   SET_EDITOR_REF_ACTIONS,
@@ -243,6 +243,10 @@ export const editorMachine = setup({
     handleScreenError: assign(handleScreenError),
     releaseScreenStream: assign(releaseScreenStream),
     releaseUnacceptedScreenStream,
+    // Every SCREEN_* event names the recorder that sent it, which may belong to an earlier capture.
+    stopScreenRecorderFromEvent: stopChild(({ event }) =>
+      event.type === "SCREEN_STOPPED" || event.type === "SCREEN_ERROR" ? event.actorId : "",
+    ),
 
     // Playback (replay-side) actions — bodies live in replayActions.ts, wrapped
     // here so `setup()` can infer this machine's exact context/event/actor types.
@@ -292,6 +296,14 @@ export const editorMachine = setup({
         syncVolume: true,
         play: check(stateIn({ playback: "playing" })),
       });
+    }),
+    // Moves the timeline and the narration to the playhead that seekToTime or resetPlayback
+    // just stored, so both follow the one clamped value instead of re-deriving it.
+    seekPlaybackActors: enqueueActions(({ context, enqueue }) => {
+      enqueue.sendTo("timelineActor", { type: "SEEK", time: context.timeline.currentTime });
+      if (hasSpawnedPlaybackAudio(context)) {
+        enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: context.timeline.currentTime });
+      }
     }),
 
     // Shared/general — neither pure capture nor pure replay
@@ -358,27 +370,21 @@ export const editorMachine = setup({
         guard: "isCurrentScreenRecorderEvent",
         actions: [
           "notifyScreenRecordingReady",
-          stopChild(({ event }) => (event.type === "SCREEN_STOPPED" ? event.actorId : "")),
+          "stopScreenRecorderFromEvent",
           "clearScreenRecording",
         ],
       },
       {
-        actions: [
-          "notifyScreenRecordingReady",
-          stopChild(({ event }) => (event.type === "SCREEN_STOPPED" ? event.actorId : "")),
-        ],
+        actions: ["notifyScreenRecordingReady", "stopScreenRecorderFromEvent"],
       },
     ],
     SCREEN_ERROR: [
       {
         guard: "isCurrentScreenRecorderEvent",
-        actions: [
-          "handleScreenError",
-          stopChild(({ event }) => (event.type === "SCREEN_ERROR" ? event.actorId : "")),
-        ],
+        actions: ["handleScreenError", "stopScreenRecorderFromEvent"],
       },
       {
-        actions: stopChild(({ event }) => (event.type === "SCREEN_ERROR" ? event.actorId : "")),
+        actions: "stopScreenRecorderFromEvent",
       },
     ],
   },
@@ -928,23 +934,7 @@ export const editorMachine = setup({
             ...APPLY_REPLAY_STATE_ACTIONS,
             "notifySeek",
             "notifyPlaybackUpdate",
-            enqueueActions(({ context, event, enqueue }) => {
-              const time =
-                event.type === "SEEK"
-                  ? normalizeTimelineTime(
-                      event.time,
-                      context.timeline.duration,
-                      context.timeline.currentTime,
-                    )
-                  : context.timeline.currentTime;
-              enqueue.sendTo("timelineActor", { type: "SEEK", time });
-              if (hasSpawnedPlaybackAudio(context)) {
-                enqueue.sendTo("audioPlayer", {
-                  type: "SEEK",
-                  timeMs: time,
-                });
-              }
-            }),
+            "seekPlaybackActors",
           ],
         },
         SET_SPEED: {
@@ -980,12 +970,7 @@ export const editorMachine = setup({
           actions: [
             ...RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
             "notifyPlaybackUpdate",
-            enqueueActions(({ context, enqueue }) => {
-              enqueue.sendTo("timelineActor", { type: "SEEK", time: 0 });
-              if (hasSpawnedPlaybackAudio(context)) {
-                enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: 0 });
-              }
-            }),
+            "seekPlaybackActors",
           ],
         },
         // A mic recorder still waiting on its blob after the finalize watchdog belongs to
@@ -1099,23 +1084,7 @@ export const editorMachine = setup({
                 ...SYNC_PAUSED_WORKSPACE_ACTIONS,
                 "notifySeek",
                 "notifyPlaybackUpdate",
-                enqueueActions(({ context, event, enqueue }) => {
-                  const time =
-                    event.type === "SEEK"
-                      ? normalizeTimelineTime(
-                          event.time,
-                          context.timeline.duration,
-                          context.timeline.currentTime,
-                        )
-                      : context.timeline.currentTime;
-                  enqueue.sendTo("timelineActor", { type: "SEEK", time });
-                  if (hasSpawnedPlaybackAudio(context)) {
-                    enqueue.sendTo("audioPlayer", {
-                      type: "SEEK",
-                      timeMs: time,
-                    });
-                  }
-                }),
+                "seekPlaybackActors",
               ],
             },
             PLAY: {
@@ -1130,9 +1099,7 @@ export const editorMachine = setup({
             PLAY: [
               {
                 target: "playing",
-                guard: ({ context }) =>
-                  context.timeline.currentTime >=
-                  context.timeline.duration - PLAYBACK_END_EPSILON_MS, // Fuzzy end check
+                guard: ({ context }) => isAtPlaybackEnd(context.timeline),
                 // Only rewind here. Playing's entry invalidates and re-applies every
                 // track at currentTime (now 0), seeks the timeline and audio there and
                 // notifies, so doing any of that here too ran every track twice.

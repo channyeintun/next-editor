@@ -23,7 +23,7 @@ import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";
 import { findFrameIndexAtTime, reconstructFrameAtIndex } from "./utils/frameDelta";
-import { PLAYBACK_END_EPSILON_MS } from "./machine/editorMachineHelpers";
+import { isAtPlaybackEnd } from "./machine/editorMachineHelpers";
 import type { SnapshotFrom } from "xstate";
 
 // ============================================================================
@@ -86,14 +86,11 @@ export const selectIsPaused = (state: EditorMachineSnapshot) => {
   const playbackState = getPlaybackState(state);
   return (
     playbackState === "paused" ||
-    (playbackState === "ended" &&
-      state.context.timeline.currentTime <
-        state.context.timeline.duration - PLAYBACK_END_EPSILON_MS)
+    (playbackState === "ended" && !isAtPlaybackEnd(state.context.timeline))
   );
 };
 export const selectHasEnded = (state: EditorMachineSnapshot) =>
-  state.matches({ playback: "ended" }) &&
-  state.context.timeline.currentTime >= state.context.timeline.duration - PLAYBACK_END_EPSILON_MS;
+  state.matches({ playback: "ended" }) && isAtPlaybackEnd(state.context.timeline);
 export const selectUsesPlaybackModel = (state: EditorMachineSnapshot) =>
   !state.context.hasManualWorkspaceOverride && getPlaybackState(state) !== null;
 

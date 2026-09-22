@@ -790,10 +790,10 @@ export const notifySeek = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): void => {
+  // Runs after seekToTime, which stored the clamped target (or kept the old time for a
+  // non-finite one), so the host hears the position playback actually moved to.
   if (event.type === "SEEK") {
-    context.onSeek?.(
-      normalizeTimelineTime(event.time, context.timeline.duration, context.timeline.currentTime),
-    );
+    context.onSeek?.(context.timeline.currentTime);
   }
 };
 

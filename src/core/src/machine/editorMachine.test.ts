@@ -2792,6 +2792,42 @@ describe("audioPlaybackActor", () => {
     expect(audio.playbackRate).toBe(0.5);
     expect(onSeek).toHaveBeenCalledWith(400);
   });
+
+  it("moves the timeline and the narration to the stored playhead on SEEK and STOP", async () => {
+    const onSeek = vi.fn<(time: number) => void>();
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null }, onSeek },
+    }).start();
+    spawnedActors.push(actor);
+    const audioBlob = new Blob(["audio"], { type: "audio/webm" });
+
+    actor.send({
+      type: "LOAD_RECORDING",
+      recording: { ...createRecording(audioBlob), audioSource: "external" },
+    });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    const audio = MockAudio.instances[0]!;
+    const timelineTime = () =>
+      actor.getSnapshot().children.timelineActor!.getSnapshot().context.currentTime;
+
+    actor.send({ type: "SEEK", time: 400 });
+    expect(timelineTime()).toBe(400);
+    expect(audio.currentTime).toBe(0.4);
+
+    // Paused, and past the 1s recording: every consumer gets the clamped end.
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "PAUSE" });
+    actor.send({ type: "SEEK", time: 5_000 });
+    expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+    expect(actor.getSnapshot().context.timeline.currentTime).toBe(1_000);
+    expect(timelineTime()).toBe(1_000);
+    expect(audio.currentTime).toBe(1);
+    expect(onSeek).toHaveBeenLastCalledWith(1_000);
+
+    actor.send({ type: "STOP" });
+    expect(timelineTime()).toBe(0);
+    expect(audio.currentTime).toBe(0);
+  });
 });
 
 describe("getPlaybackAudioState", () => {
