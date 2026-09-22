@@ -1,9 +1,12 @@
 import type { SlideEvent, PreviewEvent } from "../slides";
-import type {
-  EditorMachineContext,
-  EditorMachineEvent,
-  RecordingSession,
-  RecordingSessionMediaFragment,
+import {
+  createIdleAudioState,
+  createIdleCameraState,
+  createIdleScreenState,
+  type EditorMachineContext,
+  type EditorMachineEvent,
+  type RecordingSession,
+  type RecordingSessionMediaFragment,
 } from "./types";
 import type { EditorFrame, MouseCursorPosition, Recording } from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
@@ -12,6 +15,7 @@ import {
   toSidebarWidthDeltaSnapshot,
   type WorkspaceRecordingEvent,
 } from "../../../types/workspace";
+import { DELTA_CONFIG } from "../utils/deltaTypes";
 import { createContentEditDelta, type CreatedContentEditDelta } from "../utils/frameDelta";
 import { createFrameStreamEncoder, pushFrame } from "../utils/frameStreamEncoder";
 import {
@@ -775,12 +779,12 @@ export const finalizeRecording = ({
   );
 
   const recording: Recording = {
-    version: 4,
+    version: DELTA_CONFIG.VERSION,
     id: Date.now().toString(),
     name: `Recording ${Date.now()}`,
     createdAt: Date.now(),
     frames,
-    keyframeInterval: 120,
+    keyframeInterval: DELTA_CONFIG.KEYFRAME_INTERVAL,
     slideEvents: context.session.slideEvents,
     previewEvents: context.session.previewEvents,
     previewInitialDocuments: context.session.previewInitialDocuments,
@@ -814,25 +818,8 @@ export const finalizeRecording = ({
     // the blob here would pin the narration after UNLOAD and hand it to the next take that
     // records without audio. A mic blob that arrives after this point is re-added by
     // `attachLateAudioBlob`.
-    audio: {
-      url: null,
-      blob: null,
-      element: null,
-      isRecording: false,
-      mediaRecorder: null,
-      chunks: [],
-      mimeType: "",
-      source: null,
-      startOffsetMs: 0,
-      externalDurationMs: null,
-    },
-    camera: {
-      blob: null,
-      isRecording: false,
-      mimeType: "",
-      source: null,
-      startOffsetMs: 0,
-    },
+    audio: createIdleAudioState(),
+    camera: createIdleCameraState(),
     timeline: {
       ...context.timeline,
       duration,
@@ -864,16 +851,10 @@ export const storeAudioBlob = ({
   if (event.type !== "AUDIO_RECORDING_STOPPED") return {};
   return {
     audio: {
-      url: null,
+      ...createIdleAudioState(),
       blob: event.blob,
-      element: null,
-      isRecording: false,
-      mediaRecorder: null,
-      chunks: [],
       mimeType: event.blob.type,
       source: "microphone" as const,
-      startOffsetMs: 0,
-      externalDurationMs: null,
     },
   };
 };
@@ -1011,6 +992,10 @@ export const storeCameraStarted = ({
   };
 };
 
+export const clearCameraRecording = (): Partial<EditorMachineContext> => ({
+  camera: createIdleCameraState(),
+});
+
 export const handleCameraError = ({
   event,
 }: {
@@ -1019,26 +1004,8 @@ export const handleCameraError = ({
 }): Partial<EditorMachineContext> => {
   if (event.type !== "CAMERA_ERROR") return {};
   console.warn("Camera recording disabled:", event.error);
-  return {
-    camera: {
-      blob: null,
-      isRecording: false,
-      mimeType: "",
-      source: null,
-      startOffsetMs: 0,
-    },
-  };
+  return clearCameraRecording();
 };
-
-export const clearCameraRecording = (): Partial<EditorMachineContext> => ({
-  camera: {
-    blob: null,
-    isRecording: false,
-    mimeType: "",
-    source: null,
-    startOffsetMs: 0,
-  },
-});
 
 export const handleAudioRecordingError = ({
   event,
@@ -1077,19 +1044,10 @@ export const setScreenStream = ({
     screenRecorderGeneration,
     screen: screenStream
       ? {
+          ...createIdleScreenState(),
           actorId: `${SCREEN_RECORDER_ID_PREFIX}${screenRecorderGeneration}`,
-          isRecording: false,
-          mimeType: "",
-          hasAudio: false,
-          startOffsetMs: 0,
         }
-      : {
-          actorId: null,
-          isRecording: false,
-          mimeType: "",
-          hasAudio: false,
-          startOffsetMs: 0,
-        },
+      : createIdleScreenState(),
   };
 };
 
@@ -1135,13 +1093,7 @@ export const notifyScreenRecordingReady = ({
 
 /** Reset screen slices after the blob has exited. The actor releases tracks before emitting it. */
 export const clearScreenRecording = (): Partial<EditorMachineContext> => ({
-  screen: {
-    actorId: null,
-    isRecording: false,
-    mimeType: "",
-    hasAudio: false,
-    startOffsetMs: 0,
-  },
+  screen: createIdleScreenState(),
   screenStream: null,
 });
 
@@ -1153,16 +1105,7 @@ export const handleScreenError = ({
 }): Partial<EditorMachineContext> => {
   if (event.type !== "SCREEN_ERROR") return {};
   console.warn("Screen recording disabled:", event.error);
-  return {
-    screen: {
-      actorId: null,
-      isRecording: false,
-      mimeType: "",
-      hasAudio: false,
-      startOffsetMs: 0,
-    },
-    screenStream: null,
-  };
+  return clearScreenRecording();
 };
 
 /**
@@ -1178,16 +1121,7 @@ export const releaseScreenStream = ({
 }): Partial<EditorMachineContext> => {
   if (!context.screenStream) return {};
   context.screenStream.getTracks().forEach((track) => track.stop());
-  return {
-    screenStream: null,
-    screen: {
-      actorId: null,
-      isRecording: false,
-      mimeType: "",
-      hasAudio: false,
-      startOffsetMs: 0,
-    },
-  };
+  return clearScreenRecording();
 };
 
 /**

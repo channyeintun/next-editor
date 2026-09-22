@@ -669,6 +669,38 @@ export interface EditorMachineInput {
 
 export type { EditorSelection, EditorPosition };
 
+// Idle media slices. Factories rather than shared constants: each call returns a new
+// object (and a new `chunks` array), so no two contexts or takes alias one slice.
+
+export const createIdleAudioState = (): AudioState => ({
+  url: null,
+  blob: null,
+  element: null,
+  isRecording: false,
+  mediaRecorder: null,
+  chunks: [],
+  mimeType: "",
+  source: null,
+  startOffsetMs: 0,
+  externalDurationMs: null,
+});
+
+export const createIdleCameraState = (): CameraState => ({
+  blob: null,
+  isRecording: false,
+  mimeType: "",
+  source: null,
+  startOffsetMs: 0,
+});
+
+export const createIdleScreenState = (): ScreenState => ({
+  actorId: null,
+  isRecording: false,
+  mimeType: "",
+  hasAudio: false,
+  startOffsetMs: 0,
+});
+
 /**
  * Initial context factory
  */
@@ -687,32 +719,9 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   recording: null,
   recordingStreamCursor: 0,
   currentFrame: null,
-  audio: {
-    url: null,
-    blob: null,
-    element: null,
-    isRecording: false,
-    mediaRecorder: null,
-    chunks: [],
-    mimeType: "",
-    source: null,
-    startOffsetMs: 0,
-    externalDurationMs: null,
-  },
-  camera: {
-    blob: null,
-    isRecording: false,
-    mimeType: "",
-    source: null,
-    startOffsetMs: 0,
-  },
-  screen: {
-    actorId: null,
-    isRecording: false,
-    mimeType: "",
-    hasAudio: false,
-    startOffsetMs: 0,
-  },
+  audio: createIdleAudioState(),
+  camera: createIdleCameraState(),
+  screen: createIdleScreenState(),
   screenRecorderGeneration: 0,
   screenStream: null,
   editorRefs: {

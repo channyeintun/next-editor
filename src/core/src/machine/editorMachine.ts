@@ -1,6 +1,6 @@
 import { setup, assign, and, not, stateIn, stopChild, enqueueActions, fromPromise } from "xstate";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
-import { createInitialContext } from "./types";
+import { createIdleAudioState, createInitialContext } from "./types";
 import type { MouseCursorPosition, Recording } from "../types";
 import { timelineMachine } from "./timelineMachine";
 import { audioRecordingActor, audioPlaybackActor } from "./audioActor";
@@ -636,18 +636,7 @@ export const editorMachine = setup({
                 event.type === "AUDIO_PLAYBACK_ERROR"
                   ? event.error
                   : "Failed to play external audio",
-              audio: () => ({
-                url: null,
-                blob: null,
-                element: null,
-                isRecording: false,
-                mediaRecorder: null,
-                chunks: [],
-                mimeType: "",
-                source: null,
-                startOffsetMs: 0,
-                externalDurationMs: null,
-              }),
+              audio: () => createIdleAudioState(),
               session: null,
               sessionRevision: 0,
             }),
