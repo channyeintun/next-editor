@@ -24,7 +24,7 @@ import {
   arePositionsEqual,
 } from "../utils/editorDiff";
 import {
-  normalizeEditorFrame,
+  cloneStructuredData,
   normalizeEditorPosition,
   normalizeEditorSelection,
   normalizeEditorViewState,
@@ -231,31 +231,33 @@ export const applyFrameState = (
   if (!frame.state || !isEditorReady(editor)) return decorationsCollection;
 
   let collection = decorationsCollection;
-  const normalizedFrame = normalizeEditorFrame(frame);
+  // Replay frames are already normalized: recording keyframes by the load and the
+  // codec, delta results by applyFrameDelta. A keyframe is the recording's own
+  // object, though, so Monaco gets a copy of its view state.
+  const { state } = frame;
 
   try {
     // Apply content changes
-    if (!previousFrame || previousFrame.state.content !== normalizedFrame.state.content) {
-      applyContentDiff(editor, normalizedFrame.state.content, previousFrame?.state.content);
+    if (!previousFrame || previousFrame.state.content !== state.content) {
+      applyContentDiff(editor, state.content, previousFrame?.state.content);
     }
 
     const viewStateChanged =
-      !!normalizedFrame.state.viewState &&
-      (!previousFrame ||
-        !areStructuredDataEqual(normalizedFrame.state.viewState, previousFrame.state.viewState));
+      !!state.viewState &&
+      (!previousFrame || !areStructuredDataEqual(state.viewState, previousFrame.state.viewState));
 
     // Restore scroll/layout first, then explicitly reapply selection so
     // Monaco cursorState inside viewState cannot override the recorded caret.
     if (viewStateChanged) {
       try {
-        editor.restoreViewState(normalizedFrame.state.viewState);
+        editor.restoreViewState(cloneStructuredData(state.viewState));
       } catch (err) {
         console.error("Failed to restore view state:", err);
       }
     }
 
-    applyPositionDiff(editor, normalizedFrame.state.position, editor.getPosition());
-    applySelectionDiff(editor, normalizedFrame.state.selection, editor.getSelection());
+    applyPositionDiff(editor, state.position, editor.getPosition());
+    applySelectionDiff(editor, state.selection, editor.getSelection());
 
     // Add cursor decorations during playback only when Monaco's own caret is
     // not visible. This avoids duplicate carets and preserves native

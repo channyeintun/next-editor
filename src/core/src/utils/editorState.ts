@@ -11,7 +11,7 @@ function toFiniteInteger(value: unknown, fallback: number): number {
   return Math.trunc(value);
 }
 
-function cloneStructuredData<T>(value: T): T {
+export function cloneStructuredData<T>(value: T): T {
   if (value == null) {
     return value;
   }

@@ -1,11 +1,13 @@
 import type { EditorMachineContext, EditorMachineEvent } from "./types";
 import type { EditorFrame } from "../types";
+import type { FrameDelta } from "../utils/deltaTypes";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import { areWorkspaceSnapshotsEqual, isWorkspaceTextFile } from "../../../types/workspace";
 import {
   reconstructFrameAtIndex,
-  applyFrameDelta,
+  applyFrameDeltaToNormalized,
   findFrameIndexAtTime,
+  findNearestKeyframeIndex,
   isKeyframe,
 } from "../utils/frameDelta";
 import { normalizeRecordingData } from "../utils/editorState";
@@ -369,11 +371,25 @@ export const applyFrameAtTime = ({
     if (isKeyframe(targetFrame)) {
       // Keyframe: always use directly, most efficient
       frame = targetFrame;
-    } else if (frameIndex === lastAppliedFrameIndex + 1 && currentFrame) {
-      // Consecutive delta: apply incrementally
-      frame = applyFrameDelta(currentFrame, targetFrame, frameIndex);
+    } else if (
+      currentFrame &&
+      lastAppliedFrameIndex >= 0 &&
+      frameIndex > lastAppliedFrameIndex &&
+      findNearestKeyframeIndex(frames, frameIndex) <= lastAppliedFrameIndex
+    ) {
+      // Forward within the applied frame's keyframe span: apply only the crossed
+      // deltas. A tick often crosses several frames (mouse frames and
+      // content-plus-cursor pairs a few ms apart, more at 2x), and rebuilding from
+      // the keyframe re-applied up to ~120 deltas each time. currentFrame is the
+      // normalized fold at lastAppliedFrameIndex, so the result equals
+      // reconstruction. Past a keyframe, reconstructing from it is the shorter walk.
+      let next = currentFrame;
+      for (let index = lastAppliedFrameIndex + 1; index <= frameIndex; index++) {
+        next = applyFrameDeltaToNormalized(next, frames[index] as FrameDelta, index);
+      }
+      frame = next;
     } else {
-      // Jump into delta: full reconstruction required
+      // Backward, or past a keyframe: rebuild from the nearest keyframe
       frame = reconstructFrameAtIndex(frames, frameIndex);
     }
   } catch (error) {

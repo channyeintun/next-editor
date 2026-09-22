@@ -17,15 +17,22 @@ import type {
   CameraRecordingInput,
 } from "./cameraActor";
 import { getPlaybackAudioState } from "./editorMachineHelpers";
-import type { CaptionTrack, Recording, RecordingStreamDelta } from "../types";
+import type { CaptionTrack, EditorFrame, Recording, RecordingStreamDelta } from "../types";
 import type { PreviewEvent } from "../slides";
 import type { WhiteboardSceneState } from "../whiteboard";
 import {
   ContentEditBaseMismatchError,
+  compressFrames,
   createContentDelta,
   createContentEditDelta,
+  reconstructFrameAtIndex,
 } from "../utils/frameDelta";
-import { DmpBaseMismatchError } from "../../../storage/dmpCodec/dmpCodec";
+import {
+  DmpBaseMismatchError,
+  getDmpCodec,
+  installDmpCodec,
+  type DmpCodec,
+} from "../../../storage/dmpCodec/dmpCodec";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
 const selection = {
@@ -141,6 +148,10 @@ class MockTextModel {
     return this.content.length;
   }
 
+  getLineLength(lineNumber: number) {
+    return this.content.split("\n")[lineNumber - 1]?.length ?? 0;
+  }
+
   setValue(content: string) {
     this.content = content;
   }
@@ -194,7 +205,10 @@ class MockEditor {
     return null;
   }
 
-  restoreViewState() {
+  restoredViewStates: unknown[] = [];
+
+  restoreViewState(viewState: unknown) {
+    this.restoredViewStates.push(viewState);
     return undefined;
   }
 
@@ -1738,6 +1752,108 @@ describe("editorMachine actor lifecycle", () => {
       expect(onError).toHaveBeenCalledTimes(1);
       actor.stop();
     });
+  });
+
+  // A tick often crosses more than one frame: a mouse frame and a content frame are
+  // recorded a few ms apart, and 2x playback halves the gap. Such a tick used to rebuild
+  // its target from the keyframe, re-applying every content delta since it.
+  describe("a tick that crosses several frames", () => {
+    const typedFrame = (timestamp: number, content: string): EditorFrame => {
+      const column = content.length + 1;
+      return {
+        timestamp,
+        state: {
+          content,
+          selection: {
+            ...selection,
+            startColumn: column,
+            endColumn: column,
+            selectionStartColumn: column,
+            positionColumn: column,
+          },
+          position: { lineNumber: 1, column },
+          viewState: null,
+          mouseCursor: { x: 0, y: 0, visible: false },
+        },
+      };
+    };
+
+    let realCodec: DmpCodec;
+    let contentDeltaApplies = 0;
+
+    beforeEach(() => {
+      realCodec = getDmpCodec();
+      contentDeltaApplies = 0;
+      installDmpCodec({
+        diffDelta: (a, b) => realCodec.diffDelta(a, b),
+        applyDelta: (a, delta) => {
+          contentDeltaApplies += 1;
+          return realCodec.applyDelta(a, delta);
+        },
+      });
+    });
+
+    afterEach(() => {
+      installDmpCodec(realCodec);
+    });
+
+    it("applies only the crossed deltas and lands on the reconstructed frame", async () => {
+      const frames = compressFrames(
+        ["c", "co", "con", "cons", "const", "const ", "const x"].map((content, index) =>
+          typedFrame(index * 5, content),
+        ),
+      );
+      const editor = new MockEditor(new MockTextModel(""));
+      const actor = createActor(editorMachine, {
+        input: { editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor } },
+      }).start();
+      actor.send({ type: "LOAD_RECORDING", recording: { ...createRecording(), frames } });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+      actor.send({ type: "TICK", timestamp: 0, currentTime: 12 });
+      expect(actor.getSnapshot().context.lastAppliedFrameIndex).toBe(2);
+
+      contentDeltaApplies = 0;
+      actor.send({ type: "TICK", timestamp: 0, currentTime: 30 });
+
+      expect(actor.getSnapshot().context.lastAppliedFrameIndex).toBe(6);
+      expect(contentDeltaApplies).toBe(4);
+      const expected = reconstructFrameAtIndex(frames, 6);
+      expect(editor.getValue()).toBe("const x");
+      expect(editor.getValue()).toBe(expected?.state.content);
+      expect(editor.getSelection()).toEqual(expected?.state.selection);
+      expect(actor.getSnapshot().context.currentFrame).toEqual(expected);
+      actor.stop();
+    });
+  });
+
+  // Replay frames arrive normalized, so applying one no longer deep-copies it first. A
+  // keyframe is the recording's own object, and Monaco must not hold its view state.
+  it("hands Monaco a copy of a keyframe's view state", async () => {
+    const viewState = {
+      cursorState: [],
+      viewState: {
+        scrollLeft: 0,
+        firstPosition: { lineNumber: 1, column: 1 },
+        firstPositionDeltaTop: 40,
+      },
+      contributionsState: {},
+    } as unknown as monaco.editor.ICodeEditorViewState;
+    const recording = createRecording();
+    const [keyframe] = recording.frames as EditorFrame[];
+    keyframe.state.viewState = viewState;
+    const editor = new MockEditor(new MockTextModel(""));
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor } },
+    }).start();
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    const [loadedKeyframe] = (actor.getSnapshot().context.recording?.frames ?? []) as EditorFrame[];
+    expect(editor.restoredViewStates).toHaveLength(1);
+    expect(editor.restoredViewStates[0]).toEqual(loadedKeyframe.state.viewState);
+    expect(editor.restoredViewStates[0]).not.toBe(loadedKeyframe.state.viewState);
+    actor.stop();
   });
 
   // The chat fold applies content deltas too, and throws on a damaged track just like

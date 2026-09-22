@@ -18,7 +18,6 @@ import {
   normalizeEditorFrame,
   normalizeEditorPosition,
   normalizeEditorSelection,
-  normalizeEditorViewState,
 } from "./editorState";
 import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
 import { findTimedEventIndexAtOrBefore } from "./timedIndex";
@@ -650,7 +649,22 @@ export function applyFrameDelta(
   delta: FrameDelta,
   frameIndex?: number,
 ): EditorFrame {
-  const normalizedBase = normalizeEditorFrame(base);
+  return applyFrameDeltaToNormalized(normalizeEditorFrame(base), delta, frameIndex);
+}
+
+/**
+ * {@link applyFrameDelta} for a base that is already normalized: a keyframe that
+ * went through `normalizeEditorFrame`, or an earlier result of this function.
+ * Replay folds deltas onto such bases on every tick and seek, and normalizing
+ * one again is a pure cost: it deep-clones the view state twice and changes
+ * nothing. The result is still normalized (and so never shares a view state
+ * with the base or the delta), which keeps the next fold's base valid.
+ */
+export function applyFrameDeltaToNormalized(
+  base: EditorFrame,
+  delta: FrameDelta,
+  frameIndex?: number,
+): EditorFrame {
   if (delta.contentDelta && delta.contentEditDelta) {
     throw new Error(
       frameIndex === undefined
@@ -659,48 +673,44 @@ export function applyFrameDelta(
     );
   }
   const newContent = delta.contentEditDelta
-    ? applyContentEditDeltaAt(normalizedBase.state.content, delta.contentEditDelta, frameIndex)
+    ? applyContentEditDeltaAt(base.state.content, delta.contentEditDelta, frameIndex)
     : delta.contentDelta
-      ? applyContentDeltaAt(normalizedBase.state.content, delta.contentDelta, frameIndex)
-      : normalizedBase.state.content;
+      ? applyContentDeltaAt(base.state.content, delta.contentDelta, frameIndex)
+      : base.state.content;
 
   const newPosition = delta.positionDelta
-    ? applyPositionDelta(normalizedBase.state.position, delta.positionDelta)
-    : normalizedBase.state.position;
+    ? applyPositionDelta(base.state.position, delta.positionDelta)
+    : base.state.position;
 
   const newSelection = delta.selectionDelta
-    ? applySelectionDelta(normalizedBase.state.selection, delta.selectionDelta)
-    : normalizedBase.state.selection;
+    ? applySelectionDelta(base.state.selection, delta.selectionDelta)
+    : base.state.selection;
 
   const normalizedPosition = normalizeEditorPosition(newPosition);
   const normalizedSelection = normalizeEditorSelection(
     newSelection,
-    normalizedBase.state.selection,
+    base.state.selection,
     normalizedPosition,
   );
 
+  // The final normalizeEditorFrame normalizes (and clones) the view state
+  // against this same selection and position, so it is passed through raw.
   return normalizeEditorFrame({
     timestamp: delta.timestamp,
     state: {
       content: newContent,
       position: normalizedPosition,
       selection: normalizedSelection,
-      viewState: normalizeEditorViewState(
-        delta.viewState !== undefined ? delta.viewState : normalizedBase.state.viewState,
-        normalizedSelection,
-        normalizedPosition,
-      ),
-      mouseCursor:
-        delta.mouseCursor !== undefined ? delta.mouseCursor : normalizedBase.state.mouseCursor,
-      slideState:
-        delta.slideState !== undefined ? delta.slideState : normalizedBase.state.slideState,
+      viewState: delta.viewState !== undefined ? delta.viewState : base.state.viewState,
+      mouseCursor: delta.mouseCursor !== undefined ? delta.mouseCursor : base.state.mouseCursor,
+      slideState: delta.slideState !== undefined ? delta.slideState : base.state.slideState,
       currentSlideIndex:
         delta.currentSlideIndex !== undefined
           ? delta.currentSlideIndex
-          : normalizedBase.state.currentSlideIndex,
+          : base.state.currentSlideIndex,
       previewState: resolvePreviewStateDelta(
         delta.previewState,
-        normalizedBase.state.previewState,
+        base.state.previewState,
         frameIndex,
       ),
     },
@@ -782,17 +792,18 @@ export function reconstructFrameAtIndex(
     return null;
   }
 
-  // Start with keyframe state
-  let current: EditorFrame = keyframe;
+  // Normalize only the keyframes the walk starts from or re-bases on; every
+  // delta result is already normalized.
+  let current: EditorFrame = normalizeEditorFrame(keyframe);
 
   // Apply deltas from keyframe+1 to target
   for (let i = keyframeIndex + 1; i <= targetIndex; i++) {
     const frame = frames[i];
     if (isKeyframe(frame)) {
       // Another keyframe - use it as new base
-      current = frame;
+      current = normalizeEditorFrame(frame);
     } else {
-      current = applyFrameDelta(current, frame, i);
+      current = applyFrameDeltaToNormalized(current, frame, i);
     }
   }
 
