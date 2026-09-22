@@ -1523,6 +1523,154 @@ function pinPerformanceClock() {
   return clock;
 }
 
+// Playback driven by the real timeline child: its ticker runs one frame per advance(),
+// against the pinned clock, so positions come out exact.
+describe("editorMachine playback lifecycle", () => {
+  let clock: { now: number };
+  let frames: Map<number, FrameRequestCallback>;
+
+  beforeEach(() => {
+    clock = pinPerformanceClock();
+    frames = new Map();
+    let nextFrameId = 1;
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn<(callback: FrameRequestCallback) => number>((callback) => {
+        const id = nextFrameId++;
+        frames.set(id, callback);
+        return id;
+      }),
+    );
+    vi.stubGlobal(
+      "cancelAnimationFrame",
+      vi.fn<(id: number) => void>((id) => {
+        frames.delete(id);
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const advance = (ms: number) => {
+    clock.now += ms;
+    const [frameId, callback] = [...frames.entries()][0]!;
+    frames.delete(frameId);
+    callback(clock.now);
+  };
+
+  const startPlayback = async (options: { pauseOnUserInteraction?: boolean } = {}) => {
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null }, ...options },
+    }).start();
+    actor.send({ type: "LOAD_RECORDING", recording: createRecording() });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    actor.send({ type: "PLAY" });
+    expect(actor.getSnapshot().matches({ playback: "playing" })).toBe(true);
+    return actor;
+  };
+
+  const currentTime = (actor: Awaited<ReturnType<typeof startPlayback>>) =>
+    actor.getSnapshot().context.timeline.currentTime;
+
+  it("continues from a seek made while playing", async () => {
+    const actor = await startPlayback();
+
+    advance(100);
+    expect(currentTime(actor)).toBe(100);
+
+    actor.send({ type: "SEEK", time: 600 });
+    advance(50);
+    expect(currentTime(actor)).toBe(650);
+
+    actor.stop();
+  });
+
+  it("ends at the duration and restarts from the start on PLAY", async () => {
+    const actor = await startPlayback();
+
+    advance(1_200);
+    expect(actor.getSnapshot().matches({ playback: "ended" })).toBe(true);
+    expect(currentTime(actor)).toBe(1_000);
+
+    actor.send({ type: "PLAY" });
+    expect(actor.getSnapshot().matches({ playback: "playing" })).toBe(true);
+    expect(currentTime(actor)).toBe(0);
+
+    advance(50);
+    expect(currentTime(actor)).toBe(50);
+
+    actor.stop();
+  });
+
+  it("resumes from a seek made after the end instead of restarting", async () => {
+    const actor = await startPlayback();
+    advance(1_200);
+
+    actor.send({ type: "SEEK", time: 300 });
+    actor.send({ type: "PLAY" });
+    expect(actor.getSnapshot().matches({ playback: "playing" })).toBe(true);
+    expect(currentTime(actor)).toBe(300);
+
+    advance(100);
+    expect(currentTime(actor)).toBe(400);
+
+    actor.stop();
+  });
+
+  it("pauses when the viewer interacts", async () => {
+    const actor = await startPlayback();
+
+    actor.send({ type: "USER_INTERACTION" });
+
+    expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+    expect(frames.size).toBe(0);
+    actor.stop();
+  });
+
+  it("keeps playing through interaction when the host opts out of pausing", async () => {
+    const actor = await startPlayback({ pauseOnUserInteraction: false });
+
+    actor.send({ type: "USER_INTERACTION" });
+    advance(100);
+
+    expect(actor.getSnapshot().matches({ playback: "playing" })).toBe(true);
+    expect(currentTime(actor)).toBe(100);
+    actor.stop();
+  });
+
+  it("pauses and hands the workspace to the viewer when they change it", async () => {
+    const actor = await startPlayback();
+    advance(100);
+
+    actor.send({ type: "WORKSPACE_EVENT" });
+
+    expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+    expect(actor.getSnapshot().context.hasManualWorkspaceOverride).toBe(true);
+    expect(currentTime(actor)).toBe(100);
+    expect(frames.size).toBe(0);
+    actor.stop();
+  });
+
+  it("stops back to the start", async () => {
+    const actor = await startPlayback();
+    advance(400);
+
+    actor.send({ type: "STOP" });
+    expect(actor.getSnapshot().matches({ playback: "ready" })).toBe(true);
+    expect(currentTime(actor)).toBe(0);
+    expect(frames.size).toBe(0);
+
+    actor.send({ type: "PLAY" });
+    advance(50);
+    expect(currentTime(actor)).toBe(50);
+
+    actor.stop();
+  });
+});
+
 describe("audioPlaybackActor", () => {
   // Mock HTMLAudioElement — jsdom provides a stub but play()/pause() are not
   // fully functional. We replace it with a minimal manual mock that tracks
