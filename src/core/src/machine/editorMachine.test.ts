@@ -1111,6 +1111,14 @@ describe("editorMachine actor lifecycle", () => {
   });
 });
 
+// Finalize measures a take on performance.now(). Pinning it lets a test assert a take's
+// length exactly; vi.restoreAllMocks() in afterEach releases it.
+function pinPerformanceClock() {
+  const clock = { now: 1_000 };
+  vi.spyOn(performance, "now").mockImplementation(() => clock.now);
+  return clock;
+}
+
 describe("audioPlaybackActor", () => {
   // Mock HTMLAudioElement — jsdom provides a stub but play()/pause() are not
   // fully functional. We replace it with a minimal manual mock that tracks
@@ -1125,8 +1133,11 @@ describe("audioPlaybackActor", () => {
     preservesPitch = true;
     crossOrigin: string | null = null;
     currentTime = 0;
+    /** Seconds; NaN until metadata, Infinity for a MediaRecorder WebM whose end is not yet read. */
+    duration = Number.NaN;
     paused = true;
     oncanplay: (() => void) | null = null;
+    ondurationchange: (() => void) | null = null;
     onended: (() => void) | null = null;
     onerror: (() => void) | null = null;
     playCalls = 0;
@@ -1171,6 +1182,7 @@ describe("audioPlaybackActor", () => {
       actor.stop();
     }
     spawnedActors = [];
+    vi.restoreAllMocks();
     if (originalAudio) {
       Object.defineProperty(globalThis, "Audio", originalAudio);
     } else {
@@ -1213,6 +1225,7 @@ describe("audioPlaybackActor", () => {
           },
         },
         on: {
+          AUDIO_PLAYBACK_READY: { actions: ({ event }) => reported.push(event) },
           AUDIO_PLAYBACK_ERROR: { actions: ({ event }) => reported.push(event) },
         },
       }),
@@ -1331,6 +1344,24 @@ describe("audioPlaybackActor", () => {
     expect(actor.getSnapshot().status).toBe("active");
   });
 
+  it("reports the narration length once it is known, and again only when it changes", () => {
+    const { reported } = observePlayback();
+    const audio = MockAudio.instances[0]!;
+
+    // MediaRecorder WebM does not know its length until the demuxer reaches the end.
+    audio.duration = Number.POSITIVE_INFINITY;
+    audio.oncanplay?.();
+    expect(reported).toEqual([]);
+
+    audio.duration = 12.5;
+    audio.ondurationchange?.();
+    expect(reported).toEqual([{ type: "AUDIO_PLAYBACK_READY", duration: 12_500 }]);
+
+    // canplay fires again after every stall or seek.
+    audio.oncanplay?.();
+    expect(reported).toHaveLength(1);
+  });
+
   it("reports an autoplay block once while SYNC keeps retrying play()", async () => {
     MockAudio.playRejection = new DOMException("play() not allowed", "NotAllowedError");
     const { player, reported } = observePlayback();
@@ -1421,6 +1452,7 @@ describe("audioPlaybackActor", () => {
   });
 
   it("uses audio completion to finalize selected-file recording", async () => {
+    const clock = pinPerformanceClock();
     const actor = createActor(editorMachine, {
       input: { editorRef: { current: null } },
     }).start();
@@ -1431,10 +1463,56 @@ describe("audioPlaybackActor", () => {
       audioBlob: new Blob(["audio"], { type: "audio/webm" }),
     });
     await waitFor(actor, (snapshot) => snapshot.value === "recording");
-    MockAudio.instances[0]!.onended?.();
+    const audio = MockAudio.instances[0]!;
+    audio.duration = 3.2;
+    audio.oncanplay?.();
+
+    // The studio reads this length to reject stale narration.
+    const recordingContext = actor.getSnapshot().context;
+    expect(recordingContext.audio.externalDurationMs).toBe(3200);
+    expect(recordingContext.session!.audioFragments[0]!.endTimeMs).toBe(3200);
+
+    // The element ends after its length plus the time play() took to start.
+    clock.now += 3250;
+    audio.onended?.();
     await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
 
-    expect(actor.getSnapshot().context.recording).not.toBeNull();
+    const recording = actor.getSnapshot().context.recording!;
+    expect(recording.duration).toBe(3200);
+    expect(recording.mediaFragments).toEqual([
+      expect.objectContaining({ trackId: "audio", startTimeMs: 0, endTimeMs: 3200 }),
+    ]);
+  });
+
+  // Chrome reports Infinity for a MediaRecorder WebM, our own .weba narration included.
+  // That went out as a 0ms length, and the take finalized at 1ms.
+  it("measures a selected-file take by the wall clock while its length is unknown", async () => {
+    const clock = pinPerformanceClock();
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null } },
+    }).start();
+    spawnedActors.push(actor);
+
+    actor.send({
+      type: "START_RECORDING",
+      audioBlob: new Blob(["audio"], { type: "audio/webm" }),
+    });
+    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    const audio = MockAudio.instances[0]!;
+    const sessionRevision = actor.getSnapshot().context.sessionRevision;
+    audio.duration = Number.POSITIVE_INFINITY;
+    audio.oncanplay?.();
+    audio.oncanplay?.();
+
+    expect(actor.getSnapshot().context.audio.externalDurationMs).toBeNull();
+    expect(actor.getSnapshot().context.sessionRevision).toBe(sessionRevision);
+
+    clock.now += 300;
+    audio.onended?.();
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    expect(actor.getSnapshot().context.recording!.duration).toBe(300);
+    expect(actor.getSnapshot().context.timeline.duration).toBe(300);
   });
 
   // finalizeRecording used to keep the audio slice's blob. It stayed pinned after UNLOAD,
@@ -1631,10 +1709,10 @@ describe("editorMachine stoppingRecording join", () => {
     },
   });
 
-  function startTake() {
+  function startTake(takeMachine: typeof machine = machine) {
     const onRecordingStop = vi.fn<(recording: Recording) => void>();
     const onError = vi.fn<(error: Error) => void>();
-    const actor = createActor(machine, {
+    const actor = createActor(takeMachine, {
       input: { editorRef: { current: null }, enableAudioRecording: true, onRecordingStop, onError },
     }).start();
     return { actor, onRecordingStop, onError };
@@ -1668,6 +1746,7 @@ describe("editorMachine stoppingRecording join", () => {
     for (const { actor } of actors) actor.stop();
     actors = [];
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("finalizes a microphone-only take when its blob arrives", async () => {
@@ -1740,6 +1819,78 @@ describe("editorMachine stoppingRecording join", () => {
     expect(recording.audioSource).toBe("external");
     expect(recording.cameraBlob).toBe(cameraBlob);
     expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
+  });
+
+  // Records a selected-file take whose 5s narration ends after 5150ms of wall time, the
+  // extra 150ms being play()'s startup latency. `advance` moves the finalize clock and the
+  // watchdog's timer together.
+  const recordNarration = (enableCamera: boolean) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const clock = pinPerformanceClock();
+    const advance = (ms: number) => {
+      clock.now += ms;
+      vi.advanceTimersByTime(ms);
+    };
+    let endNarration = () => {};
+    const take = startTake(
+      machine.provide({
+        actors: {
+          audioPlayback: fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
+            ({ receive, sendBack }) => {
+              endNarration = () => sendBack({ type: "AUDIO_PLAYBACK_FINISHED" });
+              receive((event) => {
+                if (event.type === "PLAY") {
+                  sendBack({ type: "AUDIO_PLAYBACK_READY", duration: 5000 });
+                }
+              });
+            },
+          ),
+        },
+      }),
+    );
+    actors.push(take);
+
+    take.actor.send({
+      type: "START_RECORDING",
+      audioBlob: new Blob(["audio"], { type: "audio/webm" }),
+      enableCamera,
+    });
+    expect(take.actor.getSnapshot().context.audio.externalDurationMs).toBe(5000);
+    advance(5150);
+    endNarration();
+    return { take, advance };
+  };
+
+  // With the camera on, the narration's end goes through stoppingRecording, and the take
+  // was measured when the camera answered. Its stop latency, or the whole 2s watchdog,
+  // became a silent tail that loading never trims for selected-file audio.
+  it("measures selected-file audio by its narration when it ends the take", async () => {
+    const { take } = recordNarration(false);
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.duration).toBe(5000);
+  });
+
+  it("measures selected-file audio by its narration when the camera stops later", async () => {
+    const { take, advance } = recordNarration(true);
+    expect(take.actor.getSnapshot().value).toBe("stoppingRecording");
+
+    advance(300);
+    camera.emitStopped(cameraBlob);
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.cameraBlob).toBe(cameraBlob);
+    expect(recording.duration).toBe(5000);
+  });
+
+  it("measures selected-file audio by its narration when the watchdog finalizes", async () => {
+    const { take, advance } = recordNarration(true);
+    expect(take.actor.getSnapshot().value).toBe("stoppingRecording");
+
+    advance(2000);
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.duration).toBe(5000);
   });
 
   it("finalizes on the microphone after the camera fails while stopping", async () => {

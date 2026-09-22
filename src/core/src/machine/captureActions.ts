@@ -152,10 +152,13 @@ export const storeExternalAudioDuration = ({
     return {};
   }
 
+  // A zero or unknown length says nothing about the narration. Storing it would let it
+  // overwrite a real length reported earlier, and finalize would measure the take by it.
   const externalDurationMs =
-    Number.isFinite(event.duration) && event.duration >= 0 ? event.duration : null;
+    Number.isFinite(event.duration) && event.duration > 0 ? event.duration : null;
+  if (externalDurationMs === null) return {};
 
-  if (context.session && externalDurationMs !== null && context.session.audioFragments.length > 0) {
+  if (context.session && context.session.audioFragments.length > 0) {
     // In-place update of a constant-size element (index 0 always exists here), not a
     // spread-append — consistent with the mutable-session invariant.
     context.session.audioFragments[0] = {
@@ -703,21 +706,27 @@ export const captureWhiteboardEvent = ({
 
 export const finalizeRecording = ({
   context,
-  event,
 }: {
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   if (!context.session) return { recording: null };
 
-  // Base duration from session timing
+  const elapsedMs = Math.max(performance.now() - context.session.startedAtPerf, 1);
+  const externalDurationMs = context.audio.externalDurationMs;
+  // A selected-file take never outlives its narration: AUDIO_PLAYBACK_FINISHED ends it,
+  // directly or through stoppingRecording when the camera is on. On that second path the
+  // finalizing event is CAMERA_STOPPED, CAMERA_ERROR or the 2s watchdog, so clamp to the
+  // narration length whatever event lands here. Otherwise camera-stop latency becomes a
+  // silent tail that `loadRecording` never trims, because it does not re-measure external
+  // audio. An unknown length (none reported yet) leaves the wall clock in charge.
   const duration =
-    event.type === "AUDIO_PLAYBACK_FINISHED" &&
     context.audio.source === "external" &&
-    typeof context.audio.externalDurationMs === "number" &&
-    Number.isFinite(context.audio.externalDurationMs)
-      ? Math.max(context.audio.externalDurationMs, 1)
-      : Math.max(performance.now() - context.session.startedAtPerf, 1);
+    typeof externalDurationMs === "number" &&
+    Number.isFinite(externalDurationMs) &&
+    externalDurationMs > 0
+      ? Math.max(Math.min(elapsedMs, externalDurationMs), 1)
+      : elapsedMs;
   const slides = context.getSlides?.();
   const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() || undefined;
   const workspaceSnapshot = currentWorkspaceSnapshot

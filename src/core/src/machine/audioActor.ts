@@ -341,12 +341,23 @@ export const audioPlaybackActor = fromCallback<
     applyTargetTime(AUDIO_EXACT_SYNC_EPSILON_MS);
   };
 
-  audio.oncanplay = () => {
+  // MediaRecorder WebM, our own exported `.weba` narration included, reports
+  // duration = Infinity at loadedmetadata and canplay (crbug 642012). Chrome
+  // fires durationchange with the real length once the demuxer reaches the end.
+  // An unknown length used to go out as 0, which finalized the take at 1ms, and
+  // canplay refires after every stall or seek. Report only known, changed values.
+  let lastReportedDurationMs = -1;
+  const reportDuration = () => {
     if (disposed) return;
-    const durationMs =
-      Number.isFinite(audio.duration) && !isNaN(audio.duration) ? audio.duration * 1000 : 0;
+    const seconds = audio.duration;
+    if (!Number.isFinite(seconds) || seconds <= 0) return;
+    const durationMs = seconds * 1000;
+    if (durationMs === lastReportedDurationMs) return;
+    lastReportedDurationMs = durationMs;
     sendBack({ type: "AUDIO_PLAYBACK_READY", duration: durationMs });
   };
+  audio.oncanplay = reportDuration;
+  audio.ondurationchange = reportDuration;
 
   audio.onended = () => {
     if (disposed) return;
