@@ -135,12 +135,9 @@ export const prepareExternalAudioRecording = ({
   return {
     audio: {
       ...context.audio,
-      url: null,
       blob: audioBlob,
-      element: null,
       isRecording: true,
       mediaRecorder: null,
-      chunks: [],
       mimeType: audioBlob.type || "audio/webm",
       source: "external" as const,
       externalDurationMs: null,
@@ -857,7 +854,6 @@ export const attachLateAudioBlob = ({
     blob: event.blob,
     isRecording: false,
     mediaRecorder: null,
-    chunks: [],
     mimeType: event.blob.type,
     source: "microphone" as const,
   };

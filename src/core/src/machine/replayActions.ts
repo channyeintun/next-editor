@@ -204,9 +204,6 @@ export const setRecording = (
       // so the carried values reach it.
       speed: context.timeline.speed,
       volume: context.timeline.volume,
-      startedAt: 0,
-      pausedDuration: 0,
-      pausedAt: 0,
     },
     currentFrame: null,
     lastCallbackFrameTimestamp: undefined,
@@ -601,9 +598,6 @@ export const resetPlayback = ({
   timeline: {
     ...context.timeline,
     currentTime: 0,
-    startedAt: 0,
-    pausedDuration: 0,
-    pausedAt: 0,
   },
   currentFrame: null,
   lastCallbackFrameTimestamp: undefined,

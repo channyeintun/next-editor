@@ -1,4 +1,4 @@
-import { fromCallback } from "xstate";
+import { fromCallback, type EventObject } from "xstate";
 import type { MouseCursorPosition } from "../types";
 import {
   CURSOR_REPLAY_ROOT_TARGET_ID,
@@ -43,7 +43,11 @@ function isPageBoundaryLeave(event: Event, doc: Document): boolean {
   return event.target === doc.documentElement || event.target === doc.body;
 }
 
-export const mouseTrackingActor = fromCallback<{ type: "STOP" }, MouseTrackingInput>(
+// Nothing is sent to it: leaving `recording` stops it, which runs the cleanup. `never`
+// would say so more precisely but does not satisfy xstate's actor-logic constraint.
+type MouseTrackingEvent = EventObject;
+
+export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTrackingInput>(
   ({ input }) => {
     let forceRecordedCursorHidden = false;
     const supportsPointerEvents = typeof window !== "undefined" && "PointerEvent" in window;

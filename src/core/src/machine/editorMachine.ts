@@ -463,7 +463,6 @@ export const editorMachine = setup({
               ...context.audio,
               blob: null,
               isRecording: true,
-              chunks: [],
               mimeType: "",
               source: "microphone" as const,
               startOffsetMs: 0,

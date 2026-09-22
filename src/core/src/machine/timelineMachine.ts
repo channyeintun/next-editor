@@ -17,7 +17,6 @@ export type TimelineEvent =
   | { type: "START" }
   | { type: "STOP" }
   | { type: "PAUSE" }
-  | { type: "TICK"; currentTime: number }
   | { type: "SEEK"; time: number }
   | { type: "SET_DURATION"; duration: number }
   | { type: "SET_SPEED"; speed: number };
@@ -57,7 +56,6 @@ export const timelineMachine = setup({
   actions: {
     emitTick: sendParent(({ context }) => ({
       type: "TICK",
-      timestamp: performance.now(),
       currentTime: context.currentTime,
     })),
     emitFinished: sendParent({ type: "FINISHED" }),

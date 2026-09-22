@@ -575,7 +575,6 @@ interface PlaybackAudioState {
    * Takes precedence over blob when available.
    */
   audioUrl?: string;
-  loadedUntilMs: number;
   startOffsetMs: number;
   finalized: boolean;
 }
@@ -597,7 +596,6 @@ export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudi
   return {
     blob: audioBlob,
     audioUrl,
-    loadedUntilMs: recording.duration,
     startOffsetMs,
     finalized: recording.streamFinalized ?? true,
   };

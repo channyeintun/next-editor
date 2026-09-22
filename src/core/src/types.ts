@@ -328,7 +328,6 @@ export interface UseNextEditorConfig {
   onFrame?: (frame: EditorFrame) => void;
   onStateChange?: (state: EditorState) => void;
   onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
-  onSlideEvent?: (event: SlideEvent) => void;
   getSlideState?: () => {
     previewState: SlidePreviewState;
     currentSlideIndex: number;
@@ -336,7 +335,6 @@ export interface UseNextEditorConfig {
   applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
 
   // Preview state callbacks
-  onPreviewEvent?: (event: PreviewEvent) => void;
   getPreviewState?: () => PreviewState | null;
   applyPreviewState?: (previewState: PreviewState) => void;
   applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;

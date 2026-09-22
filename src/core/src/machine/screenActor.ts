@@ -37,7 +37,6 @@ export type ScreenRecordingEmit =
       mimeType: string;
       /** Whether the capture graph supplied an audio track. */
       hasAudio: boolean;
-      startedAtMs: number;
       startedAtPerf: number;
     }
   | {
@@ -129,7 +128,6 @@ export const screenRecordingActor = fromTypedCallback<
   let disposed = false;
   let started = false;
   let failed = false;
-  let startedAtMs = 0;
   let startedAtPerfMs = 0;
 
   const stopTrack = (track: MediaStreamTrack) => {
@@ -249,14 +247,12 @@ export const screenRecordingActor = fromTypedCallback<
 
       mediaRecorder.onstart = () => {
         if (!disposed && !failed) {
-          startedAtMs = Date.now();
           startedAtPerfMs = performance.now();
           sendBack({
             type: "SCREEN_STARTED",
             actorId: self.id,
             mimeType,
             hasAudio,
-            startedAtMs,
             startedAtPerf: startedAtPerfMs,
           });
         }

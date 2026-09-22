@@ -845,7 +845,6 @@ describe("editorMachine actor lifecycle", () => {
               sendBack({
                 type: "CAMERA_STARTED",
                 mimeType: "video/webm",
-                startedAtMs: Date.now(),
                 startedAtPerf: performance.now(),
               });
             }
@@ -1156,8 +1155,8 @@ describe("editorMachine actor lifecycle", () => {
     expect(takeApplied()).toEqual({ deckOpen: [false], transcriptLengths: [0] });
 
     // Ticks that have not reached the first events leave the stores alone.
-    actor.send({ type: "TICK", timestamp: 50, currentTime: 50 });
-    actor.send({ type: "TICK", timestamp: 80, currentTime: 80 });
+    actor.send({ type: "TICK", currentTime: 50 });
+    actor.send({ type: "TICK", currentTime: 80 });
     expect(takeApplied()).toEqual({ deckOpen: [], transcriptLengths: [] });
 
     actor.stop();
@@ -1227,7 +1226,7 @@ describe("editorMachine actor lifecycle", () => {
 
       actor.send({ type: "PLAY" });
       takeApplied();
-      actor.send({ type: "TICK", timestamp: 5000, currentTime: 5000 });
+      actor.send({ type: "TICK", currentTime: 5000 });
       expect(takeApplied()).toEqual({ previewClicks: ["/a", "/b", "/c"], slideIds: ["s2"] });
 
       actor.send({ type: "PAUSE" });
@@ -1312,7 +1311,7 @@ describe("editorMachine actor lifecycle", () => {
     workspaceApplies = 0;
 
     for (let time = 16; time <= 1000; time += 16) {
-      actor.send({ type: "TICK", timestamp: time, currentTime: time });
+      actor.send({ type: "TICK", currentTime: time });
     }
 
     expect(workspaceApplies).toBe(9);
@@ -1646,7 +1645,7 @@ describe("editorMachine actor lifecycle", () => {
 
     expect(editor.getValue()).toBe("before");
 
-    actor.send({ type: "TICK", timestamp: 150, currentTime: 150 });
+    actor.send({ type: "TICK", currentTime: 150 });
 
     expect(currentWorkspace.project.files["index.html"].content).toBe("after");
     expect(editor.getValue()).toBe("after");
@@ -1811,11 +1810,11 @@ describe("editorMachine actor lifecycle", () => {
       actor.send({ type: "LOAD_RECORDING", recording: { ...createRecording(), frames } });
       await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
 
-      actor.send({ type: "TICK", timestamp: 0, currentTime: 12 });
+      actor.send({ type: "TICK", currentTime: 12 });
       expect(actor.getSnapshot().context.lastAppliedFrameIndex).toBe(2);
 
       contentDeltaApplies = 0;
-      actor.send({ type: "TICK", timestamp: 0, currentTime: 30 });
+      actor.send({ type: "TICK", currentTime: 30 });
 
       expect(actor.getSnapshot().context.lastAppliedFrameIndex).toBe(6);
       expect(contentDeltaApplies).toBe(4);
@@ -2023,7 +2022,7 @@ describe("editorMachine actor lifecycle", () => {
       actor.send({ type: "LOAD_RECORDING", recording });
       await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
       actor.send({ type: "PLAY" });
-      actor.send({ type: "TICK", timestamp: 50, currentTime: 50 });
+      actor.send({ type: "TICK", currentTime: 50 });
       actor.send({ type: "PAUSE" });
       expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
 
@@ -2953,7 +2952,6 @@ describe("editorMachine stoppingRecording join", () => {
           sendBack({
             type: "CAMERA_STARTED",
             mimeType: "video/webm",
-            startedAtMs: Date.now(),
             startedAtPerf: performance.now(),
           });
         });

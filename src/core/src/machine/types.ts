@@ -19,9 +19,6 @@ import type {
   EditorPosition,
   RecordingAudioSource,
   RecordingCameraSource,
-  RecordingClusterMeta,
-  RecordingMediaFragment,
-  RecordingTrackMeta,
   PreviewPatchReplayInput,
   ScreenRecordingReadyPayload,
 } from "../types";
@@ -73,12 +70,6 @@ export interface TimelineState {
   speed: number;
   /** Volume level (0.0 - 1.0) */
   volume: number;
-  /** Time when playback started (performance.now()) */
-  startedAt: number;
-  /** Accumulated paused duration in milliseconds */
-  pausedDuration: number;
-  /** Time when paused (performance.now()), 0 if not paused */
-  pausedAt: number;
 }
 
 /**
@@ -165,18 +156,12 @@ export interface RecordingSession {
  * Audio state for recording and playback
  */
 export interface AudioState {
-  /** External audio url if provided */
-  url: string | null;
   /** Audio blob from recording */
   blob: Blob | null;
-  /** Audio element for playback */
-  element: HTMLAudioElement | null;
   /** Whether audio recording is active */
   isRecording: boolean;
   /** MediaRecorder instance */
   mediaRecorder: MediaRecorder | null;
-  /** Accumulated audio chunks */
-  chunks: Blob[];
   /** Detected MIME type */
   mimeType: string;
   /** Source used for the active or finalized recording audio */
@@ -266,12 +251,6 @@ export interface EditorMachineContext {
   recording: Recording | null;
   /** Last append-only SCR delta cursor accepted for the loaded recording. */
   recordingStreamCursor: number;
-  /** Stream-oriented track metadata for the finalized recording facade. */
-  tracks?: RecordingTrackMeta[];
-  /** Stream-oriented cluster metadata for the finalized recording facade. */
-  clusters?: RecordingClusterMeta[];
-  /** Stream-oriented media fragment metadata for the finalized recording facade. */
-  mediaFragments?: RecordingMediaFragment[];
   /** Current frame being displayed */
   currentFrame: EditorFrame | null;
   /** Audio state */
@@ -304,8 +283,6 @@ export interface EditorMachineContext {
   defaultEnableCameraRecording: boolean;
   /** Whether to pause on user interaction */
   pauseOnUserInteraction: boolean;
-  /** Animation frame ID for playback loop */
-  animationFrameId: number | null;
   /** Error message if any */
   error: string | null;
   /** Callback to apply slide state during playback */
@@ -445,13 +422,6 @@ export type AppendRecordingDeltaEvent = {
   delta: RecordingStreamDelta;
 };
 
-/** Recording loaded successfully */
-export type RecordingLoadedEvent = {
-  type: "RECORDING_LOADED";
-  recording: Recording;
-  duration: number;
-};
-
 /** Unload current recording */
 export type UnloadEvent = { type: "UNLOAD" };
 
@@ -485,7 +455,6 @@ export type SetVolumeEvent = {
 /** Playback tick event (from animation frame) */
 export type TickEvent = {
   type: "TICK";
-  timestamp: number;
   currentTime: number;
 };
 
@@ -494,12 +463,6 @@ export type FinishedEvent = { type: "FINISHED" };
 
 /** User interaction during playback */
 export type UserInteractionEvent = { type: "USER_INTERACTION" };
-
-/** Start signal for actors */
-export type StartEvent = { type: "START" };
-
-/** Stop signal for actors */
-export type StopEventSignal = { type: "STOP" };
 
 /** Update editor reference */
 export type SetEditorRefEvent = {
@@ -577,7 +540,6 @@ export type EditorMachineEvent =
   | LoadRecordingEvent
   | ExtendRecordingEvent
   | AppendRecordingDeltaEvent
-  | RecordingLoadedEvent
   | UnloadEvent
   | PlayEvent
   | PauseEvent
@@ -604,9 +566,7 @@ export type EditorMachineEvent =
   | AudioRecordingEmit
   | AudioPlaybackEmit
   | CameraRecordingEmit
-  | ScreenRecordingEmit
-  | StartEvent
-  | StopEventSignal;
+  | ScreenRecordingEmit;
 
 // ============================================================================
 // Machine Input (Configuration)
@@ -638,7 +598,6 @@ export interface EditorMachineInput {
   onStateChange?: (state: EditorFrame["state"]) => void;
   onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
   onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
-  onSlideEvent?: (event: SlideEvent) => void;
   getSlideState?: () => {
     previewState: SlidePreviewState;
     currentSlideIndex: number;
@@ -646,7 +605,6 @@ export interface EditorMachineInput {
   applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
   getSlides?: () => Slide[];
   applySlides?: (slides: Slide[]) => void;
-  onPreviewEvent?: (event: PreviewEvent) => void;
   getPreviewState?: () => PreviewState | null;
   applyPreviewState?: (previewState: PreviewState) => void;
   applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
@@ -666,15 +624,12 @@ export interface EditorMachineInput {
 export type { EditorSelection, EditorPosition };
 
 // Idle media slices. Factories rather than shared constants: each call returns a new
-// object (and a new `chunks` array), so no two contexts or takes alias one slice.
+// object, so no two contexts or takes alias one slice.
 
 export const createIdleAudioState = (): AudioState => ({
-  url: null,
   blob: null,
-  element: null,
   isRecording: false,
   mediaRecorder: null,
-  chunks: [],
   mimeType: "",
   source: null,
   startOffsetMs: 0,
@@ -706,9 +661,6 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     duration: 0,
     speed: normalizePlaybackSpeed(input.defaultPlaybackSpeed ?? 1),
     volume: 1,
-    startedAt: 0,
-    pausedDuration: 0,
-    pausedAt: 0,
   },
   session: null,
   sessionRevision: 0,
@@ -729,7 +681,6 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   enableCameraRecording: input.enableCameraRecording ?? false,
   defaultEnableCameraRecording: input.enableCameraRecording ?? false,
   pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
-  animationFrameId: null,
   error: null,
   hasManualWorkspaceOverride: false,
   pendingPlaybackEditorSync: false,

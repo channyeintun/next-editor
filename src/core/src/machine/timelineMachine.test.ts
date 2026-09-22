@@ -5,7 +5,7 @@ import { timelineMachine } from "./timelineMachine";
 const timelineParentMachine = setup({
   types: {
     context: {} as Record<string, never>,
-    events: {} as { type: "TICK"; timestamp: number; currentTime: number } | { type: "FINISHED" },
+    events: {} as { type: "TICK"; currentTime: number } | { type: "FINISHED" },
   },
   actors: { timeline: timelineMachine },
 }).createMachine({
@@ -22,7 +22,7 @@ const timelineParentMachine = setup({
 const countingTimelineParentMachine = setup({
   types: {
     context: {} as { ticks: number[]; finished: number },
-    events: {} as { type: "TICK"; timestamp: number; currentTime: number } | { type: "FINISHED" },
+    events: {} as { type: "TICK"; currentTime: number } | { type: "FINISHED" },
   },
   actors: { timeline: timelineMachine },
 }).createMachine({

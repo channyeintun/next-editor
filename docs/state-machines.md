@@ -284,7 +284,7 @@ type EditorMachineEvent =
   | { type: "SEEK"; time: number }
   | { type: "SET_SPEED"; speed: number }
   | { type: "SET_VOLUME"; volume: number }
-  | { type: "TICK"; timestamp: number; currentTime: number }
+  | { type: "TICK"; currentTime: number }
   | { type: "FINISHED" }
   | { type: "USER_INTERACTION" }
   | { type: "SET_EDITOR_REF"; editor: monaco.editor.IStandaloneCodeEditor | null }
@@ -314,14 +314,14 @@ type EditorMachineEvent =
   | { type: "AUDIO_PLAYBACK_READY"; duration: number }
   | { type: "AUDIO_PLAYBACK_FINISHED" }
   | { type: "AUDIO_PLAYBACK_ERROR"; error: string }
-  | { type: "CAMERA_STARTED"; mimeType: string; startedAtMs: number; startedAtPerf: number }
+  | { type: "CAMERA_STARTED"; mimeType: string; startedAtPerf: number }
   | { type: "CAMERA_STOPPED"; blob: Blob }
   | { type: "CAMERA_ERROR"; error: string }
   | {
       type: "SCREEN_STARTED";
       actorId: string;
       mimeType: string;
-      startedAtMs: number;
+      hasAudio: boolean;
       startedAtPerf: number;
     }
   | {

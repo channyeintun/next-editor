@@ -369,9 +369,6 @@ interface EditorMachineContext {
   session: RecordingSession | null;
   sessionRevision: number; // bumped on every in-place session mutation
   recording: Recording | null;
-  tracks?: RecordingTrackMeta[];
-  clusters?: RecordingClusterMeta[];
-  mediaFragments?: RecordingMediaFragment[];
   currentFrame: EditorFrame | null;
   audio: AudioState;
   camera: CameraState;
@@ -380,7 +377,6 @@ interface EditorMachineContext {
   enableAudioRecording: boolean;
   enableCameraRecording: boolean;
   pauseOnUserInteraction: boolean;
-  animationFrameId: number | null;
   error: string | null;
 
   // Replay cursors — one per append-only event stream
@@ -434,9 +430,6 @@ interface TimelineState {
   duration: number; // Total duration in ms
   speed: number; // Playback multiplier
   volume: number; // 0.0 - 1.0
-  startedAt: number; // performance.now() when playback started
-  pausedDuration: number; // Accumulated pause time
-  pausedAt: number; // Pause timestamp, 0 if not paused
 }
 ```
 
