@@ -19,8 +19,6 @@ import type { ChatRecordingEvent } from "../types/chat";
 import type { TextEditEvent } from "../types/textEdit";
 import type * as monaco from "monaco-editor";
 
-export type { TimelineActorRef, EditorActorRef };
-
 // 1. Actions Context: Stable functions, refs, and storage methods
 export interface NextEditorActions {
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;

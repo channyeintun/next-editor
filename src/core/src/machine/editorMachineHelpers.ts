@@ -601,9 +601,6 @@ export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudi
   };
 };
 
-export const hasPlaybackAudio = (context: EditorMachineContext): boolean =>
-  getPlaybackAudioState(context.recording) !== null;
-
 export const hasSpawnedPlaybackAudio = (context: EditorMachineContext): boolean =>
   context.playbackAudioSpawned;
 

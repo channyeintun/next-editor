@@ -16,7 +16,6 @@ import type {
   Recording,
   RecordingStreamDelta,
   EditorSelection,
-  EditorPosition,
   RecordingAudioSource,
   RecordingCameraSource,
   PreviewPatchReplayInput,
@@ -34,25 +33,6 @@ import type { AudioPlaybackEmit, AudioRecordingEmit } from "./audioActor";
 import type { CameraRecordingEmit } from "./cameraActor";
 import type { ScreenRecordingEmit } from "./screenActor";
 import { normalizePlaybackSpeed } from "./playbackValues";
-
-// ============================================================================
-// Machine Status Types
-// ============================================================================
-
-/**
- * All possible states the editor machine can be in
- */
-export type EditorMachineStatus =
-  | "idle"
-  | "startingRecording"
-  | "recording"
-  | "loading"
-  | "playback"
-  | "playback.ready"
-  | "playback.playing"
-  | "playback.paused"
-  | "playback.ended"
-  | "stoppingRecording";
 
 // ============================================================================
 // Machine Context
@@ -618,10 +598,8 @@ export interface EditorMachineInput {
 }
 
 // ============================================================================
-// Helper Types
+// Context Factories
 // ============================================================================
-
-export type { EditorSelection, EditorPosition };
 
 // Idle media slices. Factories rather than shared constants: each call returns a new
 // object, so no two contexts or takes alias one slice.

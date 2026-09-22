@@ -370,11 +370,7 @@ export const captureInitialFrame = ({
   const session = context.session;
   if (!session) return {};
 
-  const lastMousePosition = session.lastMousePosition || {
-    x: 0,
-    y: 0,
-    visible: false,
-  };
+  const lastMousePosition = session.lastMousePosition;
 
   // Use createFrame for the initial frame to ensure it has all metadata
   const editor = getCaptureEditor(context);

@@ -53,12 +53,12 @@ interface FrameDelta {
 }
 ```
 
-### Delta Recording
+### Recording
 
-The top-level storage format.
+The top-level storage format (`Recording` in `src/core/src/types.ts`).
 
 ```typescript
-interface DeltaRecording {
+interface Recording {
   version: 4;
   frames: (Keyframe | FrameDelta)[];
   keyframeInterval: 120;

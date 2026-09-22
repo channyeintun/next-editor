@@ -40,8 +40,9 @@ export type ChatItem =
 /**
  * Same dmp (Myers diff) patch primitive as `ContentDelta` in
  * core/src/utils/deltaTypes.ts — duplicated here (not imported) because that file
- * pulls in `ChatRecordingEvent` for `DeltaRecording.chatEvents`, and importing back
- * from here would cycle. Both wrap the same `getDmpCodec()`-produced bytes.
+ * imports core/src/types.ts, which pulls in `ChatRecordingEvent` from here, so
+ * importing that file here would cycle. Both wrap the same `getDmpCodec()`-produced
+ * bytes.
  */
 export interface ChatContentDelta {
   delta: Uint8Array;

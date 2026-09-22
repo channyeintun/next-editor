@@ -36,18 +36,3 @@ export const getSupportedAudioMimeType = (): string => {
 
   return "";
 };
-
-/**
- * Returns true if audio recording is supported in the current browser.
- *
- * Checks:
- *  - `MediaRecorder` API is present (absent on iOS WebKit < 14.3 and some
- *    non-Chromium environments)
- *  - At least one audio MIME type is accepted by `MediaRecorder.isTypeSupported`
- *
- * Use this guard before attempting to call `getUserMedia` so that unsupported
- * environments receive a clear, early error instead of a silent failure.
- */
-export const isAudioRecordingSupported = (): boolean => {
-  return getSupportedAudioMimeType() !== "";
-};

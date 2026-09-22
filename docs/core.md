@@ -50,7 +50,7 @@ Key exports:
 - `NextEditorProvider`
 - `useNextEditorActions`, `useNextEditorMetadata`, `useNextEditorPlayback`
 - `editorMachine`, `timelineMachine`, `EditorActorRef`, `TimelineActorRef`
-- `EditorMachineStatus`, `EditorMachineContext`, `EditorMachineEvent`
+- `EditorMachineContext`, `EditorMachineEvent`
 - `Recording`, `EditorFrame`, `EditorState`
 - `RecordingStreamSink`, `UseNextEditorConfig`, `UseNextEditorReturn`
 - Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewState`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`

@@ -51,11 +51,7 @@ export { editorMachine } from "./machine/editorMachine";
 export type { EditorActorRef } from "./useNextEditor";
 export { timelineMachine } from "./machine/timelineMachine";
 export type { TimelineActorRef } from "./machine/timelineMachine";
-export type {
-  EditorMachineStatus,
-  EditorMachineContext,
-  EditorMachineEvent,
-} from "./machine/types";
+export type { EditorMachineContext, EditorMachineEvent } from "./machine/types";
 
 // Slide type exports
 export type {
