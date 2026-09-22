@@ -281,7 +281,15 @@ export const extendRecording = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  if (event.type !== "EXTEND_RECORDING" || !context.recording) return {};
+  // The transition is guarded by `isSameRecordingStream` too; this keeps the action itself
+  // from ever swapping another lesson in, like `appendRecordingDelta`'s id check.
+  if (
+    event.type !== "EXTEND_RECORDING" ||
+    !context.recording ||
+    event.recording.id !== context.recording.id
+  ) {
+    return {};
+  }
   // Extended recordings come from the codec (streaming reader / decoder), which
   // already normalized every frame. Re-normalizing here deep-cloned the entire
   // growing frame array on each progressive-decode interval — O(n²) over a

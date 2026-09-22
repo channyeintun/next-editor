@@ -345,6 +345,103 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  it("extends the loaded recording with a longer prefix of its own stream", async () => {
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null } },
+    }).start();
+
+    const recording = createRecording();
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    actor.send({
+      type: "EXTEND_RECORDING",
+      recording: { ...recording, duration: 3000, cameraUrl: "https://example.com/camera.webm" },
+    });
+
+    const { context } = actor.getSnapshot();
+    expect(context.recording!.cameraUrl).toBe("https://example.com/camera.webm");
+    expect(context.timeline.duration).toBe(3000);
+
+    actor.stop();
+  });
+
+  // Each useUrlLoader instance guards staleness only against its own fetches. A lesson opened
+  // through the header import or drag-and-drop leaves the previous lesson's audio download
+  // and stream running, and their late extends used to swap that lesson back in.
+  it("ignores stream growth and late media from a lesson that is no longer open", async () => {
+    const audioPlayerEvents: AudioPlaybackEvent["type"][] = [];
+    const machine = editorMachine.provide({
+      actors: {
+        audioPlayback: fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
+          ({ receive }) => {
+            receive((event) => {
+              audioPlayerEvents.push(event.type);
+            });
+          },
+        ),
+      },
+    });
+    const actor = createActor(machine, {
+      input: { editorRef: { current: null } },
+    }).start();
+
+    const lessonA: Recording = { ...createRecording(), id: "lesson-A", duration: 90_000 };
+    actor.send({ type: "LOAD_RECORDING", recording: lessonA });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    const lessonB: Recording = {
+      ...createRecording(),
+      id: "lesson-B",
+      duration: 2_000,
+      audioBlob: new Blob(["lesson B narration"], { type: "audio/webm" }),
+      audioSource: "external",
+    };
+    actor.send({ type: "LOAD_RECORDING", recording: lessonB });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    const lessonBFrames = actor.getSnapshot().context.recording!.frames;
+    expect(actor.getSnapshot().children.audioPlayer).toBeDefined();
+    audioPlayerEvents.length = 0;
+
+    actor.send({
+      type: "EXTEND_RECORDING",
+      recording: {
+        ...lessonA,
+        audioBlob: new Blob(["lesson A narration"], { type: "audio/webm" }),
+        audioSource: "external",
+      },
+    });
+    actor.send({
+      type: "APPEND_RECORDING_DELTA",
+      delta: {
+        cursor: 1,
+        recordingId: "lesson-A",
+        duration: 90_000,
+        streamFinalized: false,
+        newFrames: [{ ...lessonA.frames[0]!, timestamp: 500 }],
+        newSlideEvents: [],
+        newPreviewEvents: [],
+        newPreviewInitialDocuments: [],
+        newPreviewPatchBatches: [],
+        newWorkspaceEvents: [],
+        newRuntimeEvents: [],
+        newCursorEvents: [],
+        newWhiteboardEvents: [],
+        newChatEvents: [],
+      },
+    });
+
+    const { context } = actor.getSnapshot();
+    expect(context.recording!.id).toBe("lesson-B");
+    expect(context.recording!.frames).toBe(lessonBFrames);
+    expect(context.recording!.frames).toHaveLength(1);
+    expect(context.timeline.duration).toBe(2_000);
+    // Lesson A's growth must not seek, retune or restart lesson B's narration either.
+    expect(audioPlayerEvents).toEqual([]);
+
+    actor.stop();
+  });
+
   // Building a content delta calls getDmpCodec(), which throws when the WASM has
   // not loaded — inside an xstate `assign` on the capture hot path. xstate treats
   // that as fatal: the actor stops mid-recording, later sends are no-ops, and the

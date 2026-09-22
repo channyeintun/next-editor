@@ -270,6 +270,11 @@ effective duration in your UI.
 `EXTEND_RECORDING` is handled at the `playback` parent state in
 [editorMachine.ts](../src/core/src/machine/editorMachine.ts):
 
+- Both `EXTEND_RECORDING` and `APPEND_RECORDING_DELTA` are guarded by `isSameRecordingStream`:
+  the extended recording (or the delta's `recordingId`) must have the loaded recording's `id`.
+  Growth from a lesson that is no longer open — a late sibling-audio download after another
+  file was imported, for example — is ignored whole, including its audio seek.
+
 - `extendRecording` (action) replaces `context.recording` with the larger prefix. Since it is an
   append-only superset, `lastAppliedFrameIndex` and the other replay cursors remain valid, and
   `timeline.currentTime` is untouched.

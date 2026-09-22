@@ -177,6 +177,18 @@ export const editorMachine = setup({
         event.type === "SCREEN_STOPPED" ||
         event.type === "SCREEN_ERROR") &&
       context.screen.actorId === event.actorId,
+    // Streamed prefixes and late out-of-band media (external audio/camera) must only extend
+    // the recording they were decoded from. Each useUrlLoader instance guards staleness only
+    // against its own fetches, so a lesson opened another way (header import, drag-and-drop)
+    // could otherwise be replaced mid-playback by the previous lesson's late download.
+    isSameRecordingStream: ({ context, event }) => {
+      if (!context.recording) return false;
+      if (event.type === "EXTEND_RECORDING") return event.recording.id === context.recording.id;
+      if (event.type === "APPEND_RECORDING_DELTA") {
+        return event.delta.recordingId === context.recording.id;
+      }
+      return false;
+    },
   },
   actions: {
     // Recording (capture-side) actions — bodies live in captureActions.ts, wrapped
@@ -798,6 +810,7 @@ export const editorMachine = setup({
           actions: ["detachPlaybackWorkspace"],
         },
         EXTEND_RECORDING: {
+          guard: "isSameRecordingStream",
           actions: [
             "extendRecording",
             ...APPLY_REPLAY_STATE_ACTIONS,
@@ -822,6 +835,7 @@ export const editorMachine = setup({
           ],
         },
         APPEND_RECORDING_DELTA: {
+          guard: "isSameRecordingStream",
           actions: [
             "appendRecordingDelta",
             ...APPLY_REPLAY_STATE_ACTIONS,
