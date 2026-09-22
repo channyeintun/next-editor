@@ -420,9 +420,13 @@ export const createFrame = (
     : normalizeEditorViewState(editor.saveViewState(), selection, position);
 
   // normalizeEditorFrame treats Monaco's primary cursorState as authoritative.
-  // Replace that primary cursor in the cloned view state so a collaborative
-  // selection survives frame normalization without moving the host's editor.
-  if (selectionOverride && viewState) {
+  // Replace that primary cursor in a freshly normalized (cloned) view state so a
+  // collaborative selection survives frame normalization without moving the
+  // host's editor. A reused view state already matches: the reuse gate compared
+  // the same selection and position, and Monaco derives cursorState[0] from the
+  // primary selection alone. It is also the previous frame's object, so writing
+  // into it would change a frame that is already recorded.
+  if (selectionOverride && viewState && !canReuseViewState) {
     const mutableViewState = viewState as unknown as {
       cursorState?: Array<Record<string, unknown>>;
     };

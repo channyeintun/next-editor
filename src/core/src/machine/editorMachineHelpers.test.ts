@@ -185,4 +185,73 @@ describe("createFrame capture gating", () => {
     expect(fake.state.position).toEqual({ lineNumber: 1, column: 1 });
     expect(fake.state.selection).toEqual(localSelection);
   });
+
+  it("does not rewrite the previous frame's view state when a remote selection repeats", () => {
+    const remoteSelection: EditorSelection = {
+      startLineNumber: 1,
+      startColumn: 2,
+      endLineNumber: 1,
+      endColumn: 4,
+      selectionStartLineNumber: 1,
+      selectionStartColumn: 2,
+      positionLineNumber: 1,
+      positionColumn: 4,
+    };
+    const fake = makeEditor({
+      uri: "file:///a.ts",
+      versionId: 3,
+      value: "abcdef",
+      scrollTop: 0,
+      position: { lineNumber: 1, column: 1 },
+      viewState: {
+        cursorState: [
+          {
+            inSelectionMode: false,
+            selectionStart: { lineNumber: 1, column: 1 },
+            position: { lineNumber: 1, column: 1 },
+          },
+        ],
+        viewState: {
+          scrollTop: 0,
+          scrollTopWithoutViewZones: 0,
+          scrollLeft: 0,
+          firstPosition: { lineNumber: 1, column: 1 },
+          firstPositionDeltaTop: 0,
+        },
+        contributionsState: {},
+      },
+    });
+    const cursorStateOf = (viewState: unknown) =>
+      (viewState as { cursorState: Array<Record<string, unknown>> }).cursorState;
+
+    const first = createFrame(
+      fake.editor,
+      0,
+      mouse,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      remoteSelection,
+    );
+    const recordedCursor = cursorStateOf(first.frame.state.viewState)[0];
+    const recordedCursorJson = JSON.stringify(recordedCursor);
+
+    const second = createFrame(
+      fake.editor,
+      50,
+      mouse,
+      undefined,
+      undefined,
+      undefined,
+      first.viewStateRef,
+      remoteSelection,
+    );
+
+    // The unchanged selection reuses the recorded view state, which must stay as recorded.
+    expect(second.frame.state.viewState).toBe(first.frame.state.viewState);
+    expect(cursorStateOf(first.frame.state.viewState)[0]).toBe(recordedCursor);
+    expect(JSON.stringify(recordedCursor)).toBe(recordedCursorJson);
+    expect(recordedCursor).toMatchObject({ inSelectionMode: true, selection: remoteSelection });
+  });
 });
