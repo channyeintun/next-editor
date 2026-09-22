@@ -281,7 +281,11 @@ effective duration in your UI.
   `captions`: once the loaded recording has caption tracks (sibling `.vtt` files and viewer
   imports arrive through `ADD_CAPTION_TRACK`, outside the stream), that list is kept.
 - The replay actions (`applyFrameAtTime`, `applyPreviewEventsAtTime`, …) then run so any
-  newly-available frames/events at the current time are applied immediately.
+  newly-available frames/events at the current time are applied immediately — but only while the
+  replay owns the workspace. Once the viewer has taken it over (`hasManualWorkspaceOverride`:
+  always in `paused`, and in `ready`/`ended` after a `WORKSPACE_EVENT`), the detach has reset the
+  replay cursors, so growth only updates the recording, the duration and the audio. The next
+  `PLAY` or `SEEK` reattaches and applies the new data.
 - `EXTEND_RECORDING` also updates media playback. The machine spawns `audioPlayer` when the first
   usable audio prefix appears, and later `EXTEND_RECORDING` events append larger blob snapshots to
   the same actor while preserving time/rate/volume.

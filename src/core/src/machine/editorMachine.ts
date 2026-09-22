@@ -1,4 +1,4 @@
-import { setup, assign, not, stateIn, stopChild, enqueueActions, fromPromise } from "xstate";
+import { setup, assign, and, not, stateIn, stopChild, enqueueActions, fromPromise } from "xstate";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
 import { createInitialContext } from "./types";
 import type { MouseCursorPosition, Recording } from "../types";
@@ -189,6 +189,7 @@ export const editorMachine = setup({
       }
       return false;
     },
+    isPlaybackWorkspaceDetached: ({ context }) => context.hasManualWorkspaceOverride,
   },
   actions: {
     // Recording (capture-side) actions — bodies live in captureActions.ts, wrapped
@@ -266,6 +267,21 @@ export const editorMachine = setup({
     applySlideEventsAtTime: assign(applySlideEventsAtTime),
     applyWhiteboardEventsAtTime: assign(applyWhiteboardEventsAtTime),
     applyChatEventsAtTime: assign(applyChatEventsAtTime),
+    // A longer stream or late media changes the duration, and may be the first usable
+    // narration (spawned lazily here), whether or not the replay applied the new records.
+    syncStreamedRecordingGrowth: enqueueActions(({ context, enqueue, check }) => {
+      enqueue.sendTo("timelineActor", {
+        type: "SET_DURATION",
+        duration: context.timeline.duration,
+      });
+      syncPlaybackAudio(context, enqueue, {
+        spawnIfMissing: true,
+        seek: true,
+        syncRate: true,
+        syncVolume: true,
+        play: check(stateIn({ playback: "playing" })),
+      });
+    }),
 
     // Shared/general — neither pure capture nor pure replay
     clearError: assign({ error: null }),
@@ -809,56 +825,38 @@ export const editorMachine = setup({
         WORKSPACE_EVENT: {
           actions: ["detachPlaybackWorkspace"],
         },
-        EXTEND_RECORDING: {
-          guard: "isSameRecordingStream",
-          actions: [
-            "extendRecording",
-            ...APPLY_REPLAY_STATE_ACTIONS,
-            enqueueActions(({ context, event, enqueue, check }) => {
-              if (event.type !== "EXTEND_RECORDING") {
-                return;
-              }
-
-              enqueue.sendTo("timelineActor", {
-                type: "SET_DURATION",
-                duration: context.timeline.duration,
-              });
-
-              syncPlaybackAudio(context, enqueue, {
-                spawnIfMissing: true,
-                seek: true,
-                syncRate: true,
-                syncVolume: true,
-                play: check(stateIn({ playback: "playing" })),
-              });
-            }),
-          ],
-        },
-        APPEND_RECORDING_DELTA: {
-          guard: "isSameRecordingStream",
-          actions: [
-            "appendRecordingDelta",
-            ...APPLY_REPLAY_STATE_ACTIONS,
-            enqueueActions(({ context, event, enqueue, check }) => {
-              if (event.type !== "APPEND_RECORDING_DELTA") {
-                return;
-              }
-
-              enqueue.sendTo("timelineActor", {
-                type: "SET_DURATION",
-                duration: context.timeline.duration,
-              });
-
-              syncPlaybackAudio(context, enqueue, {
-                spawnIfMissing: true,
-                seek: true,
-                syncRate: true,
-                syncVolume: true,
-                play: check(stateIn({ playback: "playing" })),
-              });
-            }),
-          ],
-        },
+        // Streamed growth catches the replay up only while it owns the workspace. Once the
+        // viewer has taken over (paused always detaches; ready/ended detach on WORKSPACE_EVENT),
+        // detachPlaybackWorkspace has reset the replay cursors, so re-applying would rebuild the
+        // recording on top of the viewer's edits. PLAY/SEEK reattach and pick up the new data.
+        EXTEND_RECORDING: [
+          {
+            guard: and(["isSameRecordingStream", "isPlaybackWorkspaceDetached"]),
+            actions: ["extendRecording", "syncStreamedRecordingGrowth"],
+          },
+          {
+            guard: "isSameRecordingStream",
+            actions: [
+              "extendRecording",
+              ...APPLY_REPLAY_STATE_ACTIONS,
+              "syncStreamedRecordingGrowth",
+            ],
+          },
+        ],
+        APPEND_RECORDING_DELTA: [
+          {
+            guard: and(["isSameRecordingStream", "isPlaybackWorkspaceDetached"]),
+            actions: ["appendRecordingDelta", "syncStreamedRecordingGrowth"],
+          },
+          {
+            guard: "isSameRecordingStream",
+            actions: [
+              "appendRecordingDelta",
+              ...APPLY_REPLAY_STATE_ACTIONS,
+              "syncStreamedRecordingGrowth",
+            ],
+          },
+        ],
         TICK: {
           actions: [
             assign(({ context, event }) => {

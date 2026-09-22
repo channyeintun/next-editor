@@ -19,6 +19,7 @@ import type {
 import { getPlaybackAudioState } from "./editorMachineHelpers";
 import type { CaptionTrack, Recording, RecordingStreamDelta } from "../types";
 import type { PreviewEvent } from "../slides";
+import type { WhiteboardSceneState } from "../whiteboard";
 import { ContentEditBaseMismatchError, createContentEditDelta } from "../utils/frameDelta";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
@@ -489,6 +490,132 @@ describe("editorMachine actor lifecycle", () => {
     it("keeps both the stream's captions and an added sibling track", async () => {
       const actor = await loadAndExtend([captionTrack("emb")], [captionTrack("en-sibling")]);
       expect(captionIds(actor)).toEqual(["emb", "en-sibling"]);
+      actor.stop();
+    });
+  });
+
+  // useUrlLoader keeps appending decoded chunks, and extends the recording once the sibling
+  // audio lands, often after the viewer has paused and started editing. Detaching resets the
+  // replay cursors, so that growth used to rebuild every track on top of the viewer's work.
+  describe("stream growth after the viewer takes over the workspace", () => {
+    const withFrame = (recording: Recording, timestamp: number, content: string) => {
+      const first = recording.frames[0];
+      if (!first?.isKeyframe) throw new Error("Expected an initial keyframe");
+      return { ...first, timestamp, state: { ...first.state, content } };
+    };
+
+    const growthDelta = (
+      cursor: number,
+      duration: number,
+      newFrames: Recording["frames"] = [],
+    ): RecordingStreamDelta => ({
+      cursor,
+      recordingId: "recording-1",
+      duration,
+      streamFinalized: false,
+      newFrames,
+      newSlideEvents: [],
+      newPreviewEvents: [],
+      newPreviewInitialDocuments: [],
+      newPreviewPatchBatches: [],
+      newWorkspaceEvents: [],
+      newRuntimeEvents: [],
+      newCursorEvents: [],
+      newWhiteboardEvents: [],
+      newChatEvents: [],
+    });
+
+    const recordedLesson = (): Recording => {
+      const recording = createRecording();
+      return {
+        ...recording,
+        frames: [recording.frames[0]!, withFrame(recording, 100, "recorded")],
+        whiteboardEvents: [
+          {
+            timestamp: 0,
+            upserts: [{ id: "a", version: 1, versionNonce: 1, isDeleted: false }],
+            isOpen: true,
+          },
+        ],
+      };
+    };
+
+    const start = async (recording: Recording) => {
+      const model = new MockTextModel("hello");
+      const editor = new MockEditor(model);
+      const applyWhiteboardState = vi.fn<(state: WhiteboardSceneState) => void>();
+      const actor = createActor(editorMachine, {
+        input: {
+          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
+          applyWhiteboardState,
+        },
+      }).start();
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      return { actor, model, applyWhiteboardState };
+    };
+
+    const growStream = (actor: Awaited<ReturnType<typeof start>>["actor"]) => {
+      actor.send({ type: "APPEND_RECORDING_DELTA", delta: growthDelta(1, 2000) });
+      actor.send({
+        type: "EXTEND_RECORDING",
+        recording: { ...actor.getSnapshot().context.recording!, duration: 2500 },
+      });
+    };
+
+    it("leaves a paused viewer's edits alone and catches up on PLAY", async () => {
+      const { actor, model, applyWhiteboardState } = await start(recordedLesson());
+      actor.send({ type: "SEEK", time: 150 });
+      actor.send({ type: "PLAY" });
+      actor.send({ type: "PAUSE" });
+      expect(model.getValue()).toBe("recorded");
+
+      model.setValue("my own edit");
+      actor.send({ type: "WORKSPACE_EVENT" });
+      applyWhiteboardState.mockClear();
+
+      growStream(actor);
+
+      expect(model.getValue()).toBe("my own edit");
+      expect(applyWhiteboardState).not.toHaveBeenCalled();
+      // The growth itself is kept: the timeline knows the longer lesson.
+      expect(actor.getSnapshot().context.timeline.duration).toBe(2500);
+
+      actor.send({ type: "PLAY" });
+      expect(actor.getSnapshot().context.pendingPlaybackEditorSync).toBe(true);
+      expect(applyWhiteboardState).toHaveBeenCalled();
+
+      actor.stop();
+    });
+
+    it("leaves a workspace the viewer changed before playing alone", async () => {
+      const { actor, model, applyWhiteboardState } = await start(recordedLesson());
+      model.setValue("my own edit");
+      actor.send({ type: "WORKSPACE_EVENT" });
+      applyWhiteboardState.mockClear();
+
+      growStream(actor);
+
+      expect(actor.getSnapshot().matches({ playback: "ready" })).toBe(true);
+      expect(model.getValue()).toBe("my own edit");
+      expect(applyWhiteboardState).not.toHaveBeenCalled();
+
+      actor.stop();
+    });
+
+    it("still applies newly streamed frames while the replay owns the workspace", async () => {
+      const recording = createRecording();
+      const { actor, model } = await start(recording);
+      actor.send({ type: "SEEK", time: 150 });
+      expect(model.getValue()).toBe("hello");
+
+      actor.send({
+        type: "APPEND_RECORDING_DELTA",
+        delta: growthDelta(1, 2000, [withFrame(recording, 100, "streamed")]),
+      });
+
+      expect(model.getValue()).toBe("streamed");
+
       actor.stop();
     });
   });
