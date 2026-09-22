@@ -21,7 +21,11 @@ import {
   isSeekReplayEvent,
   resolveReplayTime,
 } from "./replayState";
-import { applyFrameState, getLoadedRecordingPayload } from "./editorMachineHelpers";
+import {
+  applyFrameState,
+  getLoadedRecordingPayload,
+  reportMachineError,
+} from "./editorMachineHelpers";
 import {
   normalizePlaybackSpeed,
   normalizePlaybackVolume,
@@ -357,7 +361,8 @@ export const applyFrameAtTime = ({
       frame = reconstructFrameAtIndex(frames, frameIndex);
     }
   } catch (error) {
-    context.onError?.(
+    reportMachineError(
+      context,
       error instanceof Error
         ? error
         : new Error(`Could not reconstruct recording frame ${frameIndex}`),
@@ -1018,7 +1023,8 @@ export const applyChatEventsAtTime = ({
       lastAppliedIndex: lastAppliedChatEventIndex,
     });
   } catch (error) {
-    context.onError?.(
+    reportMachineError(
+      context,
       error instanceof Error ? error : new Error("Could not replay the recorded agent chat"),
     );
     return { lastAppliedChatEventIndex: recording.chatEvents.length - 1 };

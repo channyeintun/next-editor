@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { createActor, fromCallback, setup, waitFor } from "xstate";
+import { assign, createActor, fromCallback, setup, waitFor } from "xstate";
 import type * as monaco from "monaco-editor";
 import { editorMachine } from "./editorMachine";
 import {
@@ -18,6 +18,7 @@ import type {
 } from "./cameraActor";
 import { getPlaybackAudioState } from "./editorMachineHelpers";
 import type { Recording, RecordingStreamDelta } from "../types";
+import { ContentEditBaseMismatchError, createContentEditDelta } from "../utils/frameDelta";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
 const selection = {
@@ -375,6 +376,57 @@ describe("editorMachine actor lifecycle", () => {
     expect(actor.getSnapshot().matches("recording")).toBe(true);
     expect(actor.getSnapshot().context.error).toBeNull();
     expect(errors).toHaveLength(1);
+    actor.stop();
+  });
+
+  // The app's provider passes no onError, so a refused start used to leave no trace at all.
+  it("logs a machine error to the console when the host supplies no onError", async () => {
+    const dmpCodec = await import("../../../storage/dmpCodec/dmpCodec");
+    const loadedSpy = vi.spyOn(dmpCodec, "isDmpCodecLoaded").mockReturnValue(false);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null } },
+    }).start();
+
+    try {
+      actor.send({ type: "START_RECORDING" });
+
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError).toHaveBeenCalledWith(
+        "[editorMachine]",
+        expect.objectContaining({ message: expect.stringMatching(/recording codec/i) }),
+      );
+    } finally {
+      loadedSpy.mockRestore();
+      consoleError.mockRestore();
+      actor.stop();
+    }
+  });
+
+  // xstate treats a throwing invoke `input` as fatal: the actor stops in place, onError
+  // never runs, and every later send is a no-op. The load must fail through onError instead.
+  it("reports a finalized take with nothing to load and keeps the actor alive", async () => {
+    const onError = vi.fn<(error: Error) => void>();
+    const machine = editorMachine.provide({
+      actions: { finalizeRecording: assign({ recording: null }) },
+    });
+    const actor = createActor(machine, {
+      input: { editorRef: { current: null }, onError },
+    }).start();
+
+    actor.send({ type: "START_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    actor.send({ type: "STOP_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.value === "idle");
+
+    expect(actor.getSnapshot().status).toBe("active");
+    expect(actor.getSnapshot().context.error).toBe("No recording found to load");
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "No recording found to load" }),
+    );
+
+    actor.send({ type: "START_RECORDING" });
+    expect(actor.getSnapshot().value).toBe("recording");
     actor.stop();
   });
 
@@ -912,6 +964,72 @@ describe("editorMachine actor lifecycle", () => {
     expect(editor.getValue()).toBe("after");
 
     actor.stop();
+  });
+
+  describe("a damaged frame skipped during replay", () => {
+    // An edit recorded against other base text: replaying it on "hello" is a base mismatch.
+    const createDamagedRecording = (): Recording => {
+      const edit = createContentEditDelta("HELLO", {
+        fileId: "recording",
+        path: "recording",
+        beforeVersion: 0,
+        afterVersion: 1,
+        beforeLength: 5,
+        afterLength: 6,
+        changes: [{ offset: 5, deleteLength: 0, text: "!" }],
+      });
+      if (!edit) throw new Error("Expected an exact content edit delta");
+      const recording = createRecording();
+      recording.frames.push({ timestamp: 500, isKeyframe: false, contentEditDelta: edit.delta });
+      return recording;
+    };
+
+    const seekIntoDamage = async (onError?: (error: Error) => void) => {
+      const editor = new MockEditor(new MockTextModel(""));
+      const actor = createActor(editorMachine, {
+        input: {
+          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
+          onError,
+        },
+      }).start();
+      actor.send({ type: "LOAD_RECORDING", recording: createDamagedRecording() });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      expect(editor.getValue()).toBe("hello");
+
+      actor.send({ type: "SEEK", time: 600 });
+
+      expect(actor.getSnapshot().status).toBe("active");
+      expect(actor.getSnapshot().context.lastAppliedFrameIndex).toBe(1);
+      actor.stop();
+    };
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    // The app's provider passes no onError, so the skip used to leave no trace at all.
+    it("logs the error when the host supplies no onError", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await seekIntoDamage();
+
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError).toHaveBeenCalledWith(
+        "[editorMachine]",
+        expect.any(ContentEditBaseMismatchError),
+      );
+    });
+
+    it("reports only to the host's onError when one is supplied", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      const onError = vi.fn<(error: Error) => void>();
+
+      await seekIntoDamage(onError);
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(expect.any(ContentEditBaseMismatchError));
+      expect(consoleError).not.toHaveBeenCalled();
+    });
   });
 
   it("waits for Monaco model sync before applying frames after replayed file switches", async () => {
@@ -1670,6 +1788,33 @@ describe("editorMachine stoppingRecording join", () => {
     expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
     expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
     expect(camera.disposals).toBe(1);
+  });
+
+  // With no loaded take to splice a late blob into, it would sit in idle's audio slice and
+  // ride into the next take.
+  it("stops a recorder the watchdog overtook when its take fails to load", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const onError = vi.fn<(error: Error) => void>();
+    const actor = createActor(
+      machine.provide({ actions: { finalizeRecording: assign({ recording: null }) } }),
+      { input: { editorRef: { current: null }, enableAudioRecording: true, onError } },
+    ).start();
+
+    try {
+      actor.send({ type: "START_RECORDING" });
+      await waitFor(actor, (snapshot) => snapshot.value === "recording");
+      actor.send({ type: "STOP_RECORDING" });
+      vi.advanceTimersByTime(2000);
+      await waitFor(actor, (snapshot) => snapshot.value === "idle");
+
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "No recording found to load" }),
+      );
+      expect(actor.getSnapshot().children.audioRecorder).toBeUndefined();
+      expect(mic.disposals).toBe(1);
+    } finally {
+      actor.stop();
+    }
   });
 
   it("finalizes through the watchdog after the microphone fails while stopping", async () => {

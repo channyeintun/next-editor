@@ -15,6 +15,7 @@ import {
   getPlaybackAudioState,
   hasSpawnedPlaybackAudio,
   PLAYBACK_END_EPSILON_MS,
+  reportMachineError,
   RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
   SET_EDITOR_REF_ACTIONS,
   shouldRecordCamera,
@@ -118,15 +119,19 @@ export const editorMachine = setup({
     mouseTracking: mouseTrackingActor,
     loadRecording: fromPromise<
       { recording: Recording; duration: number },
-      { recording: Recording }
+      { recording: Recording | null }
     >(async ({ input }) => {
-      let duration = normalizeTimelineDuration(input.recording.duration);
+      // Thrown here, not in the invoke's `input`: xstate treats a throwing input as fatal to
+      // the whole editor actor, while a rejection reaches `loading.onError`.
+      const recording = input.recording;
+      if (!recording) throw new Error("No recording found to load");
+      let duration = normalizeTimelineDuration(recording.duration);
 
-      const playbackAudioState = getPlaybackAudioState(input.recording);
-      if (playbackAudioState?.finalized && input.recording.audioSource !== "external") {
+      const playbackAudioState = getPlaybackAudioState(recording);
+      if (playbackAudioState?.finalized && recording.audioSource !== "external") {
         try {
-          if (input.recording.audioBlob instanceof Blob) {
-            const exactDuration = await calculateDurationFromFileReader(input.recording.audioBlob);
+          if (recording.audioBlob instanceof Blob) {
+            const exactDuration = await calculateDurationFromFileReader(recording.audioBlob);
             // Use audio duration as the source of truth if it exists
             // This prevents trailing silence from wall-clock overhead
             duration = normalizeTimelineDuration(exactDuration * 1000, duration);
@@ -136,7 +141,7 @@ export const editorMachine = setup({
         }
       }
 
-      return { recording: { ...input.recording, duration }, duration };
+      return { recording: { ...recording, duration }, duration };
     }),
   },
   guards: {
@@ -262,7 +267,7 @@ export const editorMachine = setup({
 
     notifyError: ({ context }) => {
       if (context.error) {
-        context.onError?.(new Error(context.error));
+        reportMachineError(context, new Error(context.error));
       }
     },
   },
@@ -745,11 +750,9 @@ export const editorMachine = setup({
     loading: {
       invoke: {
         src: "loadRecording",
-        input: ({ context, event }) => {
-          if (event.type === "LOAD_RECORDING") return { recording: event.recording };
-          if (context.recording) return { recording: context.recording };
-          throw new Error("No recording found to load");
-        },
+        input: ({ context, event }) => ({
+          recording: event.type === "LOAD_RECORDING" ? event.recording : context.recording,
+        }),
         onDone: {
           target: "playback.ready",
           actions: ["setRecording"],
@@ -757,6 +760,10 @@ export const editorMachine = setup({
         onError: {
           target: "idle",
           actions: [
+            // A mic recorder the finalize watchdog overtook may still be waiting on its blob.
+            // With no loaded take to splice it into, it would land in idle's audio slice and
+            // ride into the next take, so stop it with the take that failed to load.
+            stopChild("audioRecorder"),
             assign({
               error: ({ event }) =>
                 event.error instanceof Error ? event.error.message : "Failed to load recording",
