@@ -37,6 +37,9 @@ interface ChatFoldCache {
  */
 const chatFoldCache = new WeakMap<ChatRecordingEvent[], ChatFoldCache>();
 
+/** The transcript before the first chat event: the baseline `setRecording` applies at load. */
+const EMPTY_CHAT_CHECKPOINT: ChatCheckpoint = { items: [], status: "idle" };
+
 function isCheckpointEvent(
   event: ChatRecordingEvent["event"],
 ): event is { k: "checkpoint"; state: ChatCheckpoint } {
@@ -101,16 +104,27 @@ export function getChatReplayResult({
   chatEvents,
   currentTime,
   lastAppliedIndex,
+  isResync = false,
 }: {
   chatEvents: ChatRecordingEvent[];
   currentTime: number;
   lastAppliedIndex: number;
+  /** See `isReplayResync`: the apply re-asserts the transcript at `currentTime`. */
+  isResync?: boolean;
 }): ChatReplayResult {
   const replayCursor = advanceReplayCursor({
     events: chatEvents,
     currentTime,
     lastAppliedIndex,
   });
+
+  // Before the first chat event the transcript is empty. Applying nothing there left
+  // a later transcript on screen after a backward seek, STOP or restart. A tick applies
+  // the baseline only when it rewinds the cursor past that event, so ticks that have
+  // not reached it yet never rewrite the store.
+  if (replayCursor.nextIndex < 0 && (isResync || lastAppliedIndex >= 0)) {
+    return { nextIndex: -1, snapshotToApply: EMPTY_CHAT_CHECKPOINT };
+  }
 
   if (!replayCursor.latestEvent || replayCursor.nextIndex === lastAppliedIndex) {
     return { nextIndex: replayCursor.nextIndex };

@@ -27,6 +27,16 @@ const SLIDE_STRUCTURAL_EVENT_TYPES = new Set<SlideEvent["type"]>([
 ]);
 
 /**
+ * The deck before the first slide event. No visibility event yet means closed (see
+ * `buildSlideStateAtEvent`), and the recorder writes a t=0 `slide_open` only when
+ * the deck was already open when recording started.
+ */
+const CLOSED_SLIDE_APPLICATION: SlideReplayApplication = {
+  slideIndex: -1,
+  slideState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
+};
+
+/**
  * The most recent matching event at or before `eventIndex`. Scanning backwards
  * in place (rather than reversing a copy of the prefix) keeps state reconstruction
  * allocation-free and lets each query stop at its first hit — which for these
@@ -114,18 +124,24 @@ export function getSlideReplayResult({
   slides,
   currentTime,
   lastAppliedIndex,
-  isSeeking,
+  isResync,
 }: {
   slideEvents: SlideEvent[];
   slides?: Slide[];
   currentTime: number;
   lastAppliedIndex: number;
-  isSeeking: boolean;
+  /** See `isReplayResync`: apply the one state at `currentTime` instead of replaying history. */
+  isResync: boolean;
 }): SlideReplayResult {
-  if (isSeeking) {
+  if (isResync) {
     const nextIndex = findTimedEventIndexAtOrBefore(slideEvents, currentTime, -1);
+    // Before the first slide event the deck is closed. Applying nothing there left a
+    // deck opened later in the recording on screen after a backward seek, STOP or
+    // restart.
     const application =
-      nextIndex >= 0 ? createSlideReplayApplication(slideEvents, slides, nextIndex) : null;
+      nextIndex >= 0
+        ? createSlideReplayApplication(slideEvents, slides, nextIndex)
+        : CLOSED_SLIDE_APPLICATION;
 
     return {
       applications: application ? [application] : [],
@@ -160,6 +176,12 @@ export function getSlideReplayResult({
     }
 
     nextIndex = index;
+  }
+
+  // A tick that rewound the cursor to before the first event closes the deck once.
+  // The cursor is -1 afterwards, so later ticks before that event apply nothing.
+  if (nextIndex < 0 && lastAppliedIndex >= 0) {
+    applications.push(CLOSED_SLIDE_APPLICATION);
   }
 
   return {

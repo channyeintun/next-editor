@@ -163,3 +163,39 @@ describe("getChatReplayResult", () => {
     expect(second.snapshotToApply).toBeUndefined();
   });
 });
+
+describe("getChatReplayResult before the first chat event", () => {
+  // The agent panel was first used 500ms in, so the transcript was empty before that.
+  const chatEvents: ChatRecordingEvent[] = [
+    {
+      timestamp: 500,
+      event: {
+        k: "checkpoint",
+        state: {
+          items: [{ kind: "message", id: "msg-1", role: "user", text: "fix the bug" }],
+          status: "done",
+        },
+      },
+    },
+  ];
+  const emptyTranscript = { items: [], status: "idle" };
+
+  it("applies the empty transcript on a resync", () => {
+    expect(
+      getChatReplayResult({ chatEvents, currentTime: 100, lastAppliedIndex: -1, isResync: true }),
+    ).toEqual({ nextIndex: -1, snapshotToApply: emptyTranscript });
+  });
+
+  it("applies nothing on a tick that has not reached the first event", () => {
+    expect(getChatReplayResult({ chatEvents, currentTime: 100, lastAppliedIndex: -1 })).toEqual({
+      nextIndex: -1,
+    });
+  });
+
+  it("applies the empty transcript once when a tick rewinds to before the first event", () => {
+    expect(getChatReplayResult({ chatEvents, currentTime: 100, lastAppliedIndex: 0 })).toEqual({
+      nextIndex: -1,
+      snapshotToApply: emptyTranscript,
+    });
+  });
+});

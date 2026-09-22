@@ -5,8 +5,9 @@ import { findTimedEventIndexAtOrBefore } from "./cursor";
 // Preview track replay.
 //
 // Rebuilds the preview iframe's state (open/mode/size/route/scroll/refresh) for a
-// given time. During seeks the per-event "retained" states are precomputed and
-// cached so jumping to any point is O(1) without replaying transient interactions.
+// given time. For seeks and other resyncs the per-event "retained" states are
+// precomputed and cached so jumping to any point is O(1) without replaying
+// transient interactions.
 // ============================================================================
 
 interface PreviewReplayIndex {
@@ -157,15 +158,16 @@ export function getPreviewReplayResult({
   currentTime,
   lastAppliedIndex,
   lastAppliedState,
-  isSeeking,
+  isResync,
 }: {
   previewEvents: PreviewEvent[];
   currentTime: number;
   lastAppliedIndex: number;
   lastAppliedState?: PreviewState;
-  isSeeking: boolean;
+  /** See `isReplayResync`: resolve the retained state instead of replaying history. */
+  isResync: boolean;
 }): PreviewReplayResult {
-  if (isSeeking) {
+  if (isResync) {
     const nextIndex = findTimedEventIndexAtOrBefore(previewEvents, currentTime, -1);
 
     if (nextIndex < 0) {

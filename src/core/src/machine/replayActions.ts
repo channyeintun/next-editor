@@ -18,6 +18,7 @@ import {
   getSlideReplayResult,
   getWhiteboardReplayResult,
   getWorkspaceReplayResult,
+  isReplayResync,
   isSeekReplayEvent,
   resolveReplayTime,
 } from "./replayState";
@@ -838,7 +839,7 @@ export const applyPreviewEventsAtTime = ({
     currentTime: resolveBoundedReplayTime(context, event),
     lastAppliedIndex: lastAppliedPreviewEventIndex,
     lastAppliedState: context.lastAppliedPreviewState,
-    isSeeking: isSeekReplayEvent(event),
+    isResync: isReplayResync(event, lastAppliedPreviewEventIndex),
   });
 
   replayResult.appliedStates.forEach((previewState) => {
@@ -1010,6 +1011,7 @@ export const applyChatEventsAtTime = ({
       chatEvents: recording.chatEvents,
       currentTime: resolveBoundedReplayTime(context, event),
       lastAppliedIndex: lastAppliedChatEventIndex,
+      isResync: isReplayResync(event, lastAppliedChatEventIndex),
     });
   } catch (error) {
     reportMachineError(
@@ -1079,7 +1081,7 @@ export const applySlideEventsAtTime = ({
     slides: recording.slides,
     currentTime: resolveBoundedReplayTime(context, event),
     lastAppliedIndex: lastAppliedSlideEventIndex,
-    isSeeking: isSeekReplayEvent(event),
+    isResync: isReplayResync(event, lastAppliedSlideEventIndex),
   });
 
   replayResult.applications.forEach((application) => {

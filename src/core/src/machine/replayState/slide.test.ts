@@ -13,7 +13,7 @@ function replay(slideEvents: SlideEvent[]) {
     slides,
     currentTime: 1_000,
     lastAppliedIndex: -1,
-    isSeeking: true,
+    isResync: true,
   }).applications[0]?.slideState;
 }
 
@@ -65,5 +65,52 @@ describe("slide replay visibility", () => {
       isMaximized: true,
       currentSlideId: "two",
     });
+  });
+});
+
+describe("slide replay before the first event", () => {
+  // The deck was opened mid-recording, so it did not exist before 500ms.
+  const slideEvents: SlideEvent[] = [
+    { type: "slide_open", timestamp: 500, slideId: "one", indexv: 0 },
+  ];
+  const closedDeck = {
+    slideIndex: -1,
+    slideState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
+  };
+
+  it("closes the deck when a resync lands before it was opened", () => {
+    expect(
+      getSlideReplayResult({
+        slideEvents,
+        slides,
+        currentTime: 100,
+        lastAppliedIndex: -1,
+        isResync: true,
+      }),
+    ).toEqual({ applications: [closedDeck], nextIndex: -1 });
+  });
+
+  it("applies nothing on a tick that has not reached the first event", () => {
+    expect(
+      getSlideReplayResult({
+        slideEvents,
+        slides,
+        currentTime: 100,
+        lastAppliedIndex: -1,
+        isResync: false,
+      }),
+    ).toEqual({ applications: [], nextIndex: -1 });
+  });
+
+  it("closes the deck once when a tick rewinds to before the first event", () => {
+    expect(
+      getSlideReplayResult({
+        slideEvents,
+        slides,
+        currentTime: 100,
+        lastAppliedIndex: 0,
+        isResync: false,
+      }),
+    ).toEqual({ applications: [closedDeck], nextIndex: -1 });
   });
 });

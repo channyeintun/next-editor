@@ -18,6 +18,7 @@ import type {
 } from "./cameraActor";
 import { getPlaybackAudioState } from "./editorMachineHelpers";
 import type { Recording, RecordingStreamDelta } from "../types";
+import type { PreviewEvent } from "../slides";
 import { ContentEditBaseMismatchError, createContentEditDelta } from "../utils/frameDelta";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
@@ -691,6 +692,173 @@ describe("editorMachine actor lifecycle", () => {
     expect(applied).toEqual([{ elementIds: [], isOpen: false }]);
 
     actor.stop();
+  });
+
+  // Same rule as the whiteboard above. The deck is recorded as open at t=0 only when it
+  // was open when recording started, and the chat track starts at the panel's first use.
+  it("closes the deck and empties the transcript before their first events", async () => {
+    const deckOpen: boolean[] = [];
+    const transcriptLengths: number[] = [];
+
+    const recording: Recording = {
+      ...createRecording(),
+      slides: [{ id: "s1", order: 0, content: "one", contentType: "html" }],
+      slideEvents: [{ type: "slide_open", timestamp: 500, slideId: "s1", indexv: 0 }],
+      chatEvents: [
+        {
+          timestamp: 500,
+          event: {
+            k: "checkpoint",
+            state: {
+              items: [{ kind: "message", id: "msg-1", role: "user", text: "hi" }],
+              status: "done",
+            },
+          },
+        },
+      ],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        applySlideState: (state) => {
+          deckOpen.push(state.isOpen);
+        },
+        applyChatSnapshot: (snapshot) => {
+          transcriptLengths.push(snapshot.items.length);
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    const takeApplied = () => {
+      const applied = { deckOpen: [...deckOpen], transcriptLengths: [...transcriptLengths] };
+      deckOpen.length = 0;
+      transcriptLengths.length = 0;
+      return applied;
+    };
+    takeApplied();
+
+    actor.send({ type: "SEEK", time: 600 });
+    expect(takeApplied()).toEqual({ deckOpen: [true], transcriptLengths: [1] });
+
+    actor.send({ type: "SEEK", time: 100 });
+    expect(takeApplied()).toEqual({ deckOpen: [false], transcriptLengths: [0] });
+
+    actor.send({ type: "SEEK", time: 600 });
+    takeApplied();
+    actor.send({ type: "STOP" });
+    expect(takeApplied()).toEqual({ deckOpen: [false], transcriptLengths: [0] });
+
+    // Ticks that have not reached the first events leave the stores alone.
+    actor.send({ type: "TICK", timestamp: 50, currentTime: 50 });
+    actor.send({ type: "TICK", timestamp: 80, currentTime: 80 });
+    expect(takeApplied()).toEqual({ deckOpen: [], transcriptLengths: [] });
+
+    actor.stop();
+  });
+
+  // Pausing and seeking invalidate the preview and slide cursors. The PLAY that follows
+  // used to advance from index 0, so every recorded click, focus and slide hop up to the
+  // playhead fired again before playback resumed.
+  describe("resuming replay after the cursors were invalidated", () => {
+    const click = (timestamp: number, xpath: string): PreviewEvent => ({
+      type: "preview_interaction",
+      timestamp,
+      size: "small",
+      interaction: { type: "click", timestamp, target: { tagName: "button", xpath } },
+    });
+
+    const startReplay = async () => {
+      const previewClicks: Array<string | undefined> = [];
+      const slideIds: Array<string | null | undefined> = [];
+      const recording: Recording = {
+        ...createRecording(),
+        duration: 6000,
+        previewEvents: [
+          { type: "preview_open", timestamp: 0, size: "small", content: "<p>page</p>" },
+          click(1000, "/a"),
+          click(2000, "/b"),
+          click(3000, "/c"),
+        ],
+        slides: [
+          { id: "s1", order: 0, content: "one", contentType: "html" },
+          { id: "s2", order: 1, content: "two", contentType: "html" },
+        ],
+        slideEvents: [
+          { type: "slide_open", timestamp: 0, slideId: "s1", indexv: 0 },
+          { type: "slide_change", timestamp: 1500, slideId: "s2", indexv: 0 },
+        ],
+      };
+
+      const actor = createActor(editorMachine, {
+        input: {
+          editorRef: { current: null },
+          applyPreviewState: (state) => {
+            previewClicks.push(state.currentInteraction?.target.xpath);
+          },
+          applySlideState: (state) => {
+            slideIds.push(state.currentSlideId);
+          },
+        },
+      }).start();
+
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+      const takeApplied = () => {
+        const applied = { previewClicks: [...previewClicks], slideIds: [...slideIds] };
+        previewClicks.length = 0;
+        slideIds.length = 0;
+        return applied;
+      };
+      takeApplied();
+
+      return { actor, takeApplied };
+    };
+
+    it("replays crossed clicks during playback but not again on resume", async () => {
+      const { actor, takeApplied } = await startReplay();
+
+      actor.send({ type: "PLAY" });
+      takeApplied();
+      actor.send({ type: "TICK", timestamp: 5000, currentTime: 5000 });
+      expect(takeApplied()).toEqual({ previewClicks: ["/a", "/b", "/c"], slideIds: ["s2"] });
+
+      actor.send({ type: "PAUSE" });
+      actor.send({ type: "PLAY" });
+      expect(takeApplied()).toEqual({ previewClicks: [undefined], slideIds: ["s2"] });
+
+      actor.stop();
+    });
+
+    it("resumes from a paused seek with only the state at the target", async () => {
+      const { actor, takeApplied } = await startReplay();
+
+      actor.send({ type: "PLAY" });
+      actor.send({ type: "PAUSE" });
+      actor.send({ type: "SEEK", time: 2500 });
+      takeApplied();
+
+      actor.send({ type: "PLAY" });
+      expect(takeApplied()).toEqual({ previewClicks: [undefined], slideIds: ["s2"] });
+
+      actor.stop();
+    });
+
+    it("starts from a seek made before the first PLAY with only the state at the target", async () => {
+      const { actor, takeApplied } = await startReplay();
+
+      actor.send({ type: "SEEK", time: 3500 });
+      takeApplied();
+
+      actor.send({ type: "PLAY" });
+      expect(takeApplied()).toEqual({ previewClicks: [undefined], slideIds: ["s2"] });
+
+      actor.stop();
+    });
   });
 
   it("applies workspace, runtime, then preview snapshots during replay sync", async () => {

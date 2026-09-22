@@ -9,6 +9,7 @@ import {
   getSlideReplayResult,
   getWhiteboardReplayResult,
   getWorkspaceReplayResult,
+  isReplayResync,
 } from "./replayState";
 
 function createWorkspaceSnapshot(
@@ -91,7 +92,7 @@ describe("replayState", () => {
       currentTime: 250,
       lastAppliedIndex: 3,
       lastAppliedState: undefined,
-      isSeeking: true,
+      isResync: true,
     });
 
     expect(seekToInteraction.appliedStates).toHaveLength(1);
@@ -111,7 +112,7 @@ describe("replayState", () => {
       currentTime: 350,
       lastAppliedIndex: 3,
       lastAppliedState: seekToInteraction.retainedState,
-      isSeeking: true,
+      isResync: true,
     });
 
     expect(seekToRefresh.appliedStates).toHaveLength(1);
@@ -125,6 +126,17 @@ describe("replayState", () => {
       refreshKey: 300,
       currentInteraction: undefined,
     });
+  });
+
+  it("advances on playback ticks and resyncs on a seek or an invalidated cursor", () => {
+    expect(isReplayResync({ type: "TICK", currentTime: 100 }, -1)).toBe(false);
+    expect(isReplayResync({ type: "TICK", currentTime: 100 }, 3)).toBe(false);
+    expect(isReplayResync({ type: "SEEK", time: 100 }, 3)).toBe(true);
+    // PLAY after a pause, STOP and the load all run with every cursor invalidated.
+    expect(isReplayResync({ type: "PLAY" }, -1)).toBe(true);
+    expect(isReplayResync({ type: "STOP" }, -1)).toBe(true);
+    // A streamed delta or an editor re-sync keeps a live cursor, so it advances.
+    expect(isReplayResync({ type: "APPEND_RECORDING_DELTA" }, 3)).toBe(false);
   });
 
   it("carries API client request/response state through replay and seeking", () => {
@@ -158,7 +170,7 @@ describe("replayState", () => {
       currentTime: 150,
       lastAppliedIndex: -1,
       lastAppliedState: undefined,
-      isSeeking: true,
+      isResync: true,
     });
     expect(mid.appliedStates[0].activeMode).toBe("api");
     expect(mid.appliedStates[0].apiClientState).toEqual({
@@ -174,7 +186,7 @@ describe("replayState", () => {
       currentTime: 350,
       lastAppliedIndex: -1,
       lastAppliedState: undefined,
-      isSeeking: true,
+      isResync: true,
     });
     const result = {
       ok: true as const,
@@ -211,7 +223,7 @@ describe("replayState", () => {
       currentTime: 250,
       lastAppliedIndex: -1,
       lastAppliedState: undefined,
-      isSeeking: true,
+      isResync: true,
     });
     // Carried across the unrelated scroll event.
     expect(onBody.appliedStates[0].requestTab).toBe("body");
@@ -221,7 +233,7 @@ describe("replayState", () => {
       currentTime: 350,
       lastAppliedIndex: -1,
       lastAppliedState: undefined,
-      isSeeking: true,
+      isResync: true,
     });
     expect(backToHeaders.appliedStates[0].requestTab).toBe("headers");
   });
@@ -288,7 +300,7 @@ describe("replayState", () => {
       currentTime: 250,
       lastAppliedIndex: -1,
       lastAppliedState: undefined,
-      isSeeking: true,
+      isResync: true,
     });
 
     const api = afterInspect.appliedStates[0].apiClientState;
@@ -316,7 +328,7 @@ describe("replayState", () => {
       currentTime: 50,
       lastAppliedIndex: -1,
       lastAppliedState: undefined,
-      isSeeking: true,
+      isResync: true,
     });
 
     expect(result.appliedStates[0].activeMode).toBe("api");
@@ -352,7 +364,7 @@ describe("replayState", () => {
       currentTime: 150,
       lastAppliedIndex: -1,
       lastAppliedState: undefined,
-      isSeeking: true,
+      isResync: true,
     });
 
     // Like the live store, history/result survive a mode switch (the panel is just
@@ -657,7 +669,7 @@ describe("replayState", () => {
       slides,
       currentTime: 150,
       lastAppliedIndex: -1,
-      isSeeking: true,
+      isResync: true,
     });
 
     expect(result.nextIndex).toBe(1);
@@ -1134,7 +1146,7 @@ describe("replayState", () => {
         previewEvents,
         currentTime: 0,
         lastAppliedIndex: -1,
-        isSeeking: true,
+        isResync: true,
       });
 
       previewEvents.push({
@@ -1147,7 +1159,7 @@ describe("replayState", () => {
         previewEvents,
         currentTime: 1000,
         lastAppliedIndex: -1,
-        isSeeking: true,
+        isResync: true,
       });
       expect(streamed.nextIndex).toBe(1);
       // Carried forward from the first event, not lost to an empty state.

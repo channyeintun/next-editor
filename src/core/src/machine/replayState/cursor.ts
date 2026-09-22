@@ -40,6 +40,20 @@ export function isSeekReplayEvent(event: ReplayTriggerEvent): boolean {
   return event.type === "SEEK";
 }
 
+/**
+ * Whether an apply must re-assert a track's absolute state at the target time
+ * instead of advancing from the track's cursor. Only a playback TICK advances. A
+ * SEEK always resyncs, and any other apply (PLAY after a pause or seek, STOP, the
+ * load, a streamed delta, an editor re-sync) resyncs once the cursor has been
+ * invalidated. Advancing from an invalidated cursor replays every event from index
+ * 0, which re-fires stale transient interactions (clicks, focus, slide hops) as
+ * if they were live. Tracks with a baseline (a closed deck, an empty transcript)
+ * also apply it on a resync that lands before their first event.
+ */
+export function isReplayResync(event: ReplayTriggerEvent, lastAppliedIndex: number): boolean {
+  return isSeekReplayEvent(event) || (event.type !== "TICK" && lastAppliedIndex < 0);
+}
+
 export function advanceReplayCursor<T extends TimedReplayEvent>({
   events,
   currentTime,
