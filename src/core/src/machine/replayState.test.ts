@@ -493,6 +493,35 @@ describe("replayState", () => {
     });
   });
 
+  it("sums equal consecutive sidebar resize deltas as separate moves", () => {
+    const workspaceEvents: WorkspaceRecordingEvent[] = [
+      { timestamp: 0, snapshot: createWorkspaceSnapshot("same", 0, 0) },
+      { timestamp: 100, snapshot: createWorkspaceSnapshot("same", 0, 16) },
+      { timestamp: 200, snapshot: createWorkspaceSnapshot("same", 0, 16) },
+      { timestamp: 300, snapshot: createWorkspaceSnapshot("same", 0, 16) },
+    ];
+
+    const forwardSeek = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 300,
+      getCurrentSnapshot: () => createWorkspaceSnapshot("same", 0),
+      lastAppliedIndex: 0,
+    });
+
+    expect(forwardSeek.nextIndex).toBe(3);
+    expect(forwardSeek.snapshotToApply).toMatchObject({ sidebarWidthDelta: 48 });
+
+    const backwardSeek = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 0,
+      getCurrentSnapshot: () => createWorkspaceSnapshot("same", 0),
+      lastAppliedIndex: 3,
+    });
+
+    expect(backwardSeek.nextIndex).toBe(0);
+    expect(backwardSeek.snapshotToApply).toMatchObject({ sidebarWidthDelta: -48 });
+  });
+
   it("replays docked-preview resize deltas against the current local width", () => {
     const firstSnapshot = createWorkspaceSnapshot("same", 0, 0, 0);
     const resizedSnapshot = createWorkspaceSnapshot("same", 0, undefined, 64);

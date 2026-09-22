@@ -896,9 +896,50 @@ describe("editorMachine actor lifecycle", () => {
     currentWorkspace = createWorkspaceSnapshot("same", 0);
     actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: -15 });
 
+    // Equal consecutive deltas are separate moves (keyboard steps, a steady drag):
+    // replay sums them, so dropping one as a duplicate under-applies the resize.
+    for (let step = 0; step < 3; step += 1) {
+      currentWorkspace = createWorkspaceSnapshot("same", 0);
+      actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: 16 });
+    }
+
     const workspaceEvents = actor.getSnapshot().context.session?.workspaceEvents ?? [];
 
-    expect(workspaceEvents.map((event) => event.snapshot.sidebarWidthDelta)).toEqual([0, 40, -15]);
+    expect(workspaceEvents.map((event) => event.snapshot.sidebarWidthDelta)).toEqual([
+      0, 40, -15, 16, 16, 16,
+    ]);
+
+    actor.stop();
+  });
+
+  it("records repeated equal preview dock resizes but still dedupes delta-free repeats", async () => {
+    const currentWorkspace = createWorkspaceSnapshot("same", 0);
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        getWorkspaceSnapshot: () => currentWorkspace,
+      },
+    }).start();
+
+    actor.send({ type: "START_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+
+    const workspaceEvents = () => actor.getSnapshot().context.session?.workspaceEvents ?? [];
+    expect(workspaceEvents()).toHaveLength(1);
+
+    // An unchanged workspace with a zero delta is a true duplicate.
+    actor.send({ type: "WORKSPACE_EVENT" });
+    actor.send({ type: "WORKSPACE_EVENT", sidebarWidthDelta: 0 });
+    expect(workspaceEvents()).toHaveLength(1);
+
+    actor.send({ type: "WORKSPACE_EVENT", previewDockWidthDelta: 50 });
+    actor.send({ type: "WORKSPACE_EVENT", previewDockWidthDelta: 50 });
+
+    expect(workspaceEvents().map((event) => event.snapshot.previewDockWidthDelta)).toEqual([
+      undefined,
+      50,
+      50,
+    ]);
 
     actor.stop();
   });

@@ -82,10 +82,15 @@ export function appendPreviewPatchBatch(
   return session;
 }
 
+function isNonZeroWidthDelta(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value !== 0;
+}
+
 /**
  * Returns `false` when the snapshot deduplicates against the last recorded event (no
- * push happened) so callers know whether to bump `sessionRevision`. `session` itself
- * is always the same reference — array identity never changes.
+ * push happened) so callers know whether to bump `sessionRevision`. A snapshot that
+ * carries a non-zero panel width delta is always recorded. `session` itself is always
+ * the same reference — array identity never changes.
  */
 export function appendWorkspaceRecordingEvent(
   session: RecordingSession,
@@ -94,8 +99,18 @@ export function appendWorkspaceRecordingEvent(
 ): boolean {
   const recordingSnapshot = deltas ? toWorkspaceDeltaSnapshot(snapshot, deltas) : snapshot;
   const previousEvent = session.workspaceEvents[session.workspaceEvents.length - 1];
+  // Width fields are relative offsets that replay sums, so two equal consecutive
+  // resizes (a steady drag, repeated keyboard steps) are two real moves, not a
+  // duplicate. Only delta-free repeats dedupe.
+  const carriesWidthDelta =
+    isNonZeroWidthDelta(recordingSnapshot.sidebarWidthDelta) ||
+    isNonZeroWidthDelta(recordingSnapshot.previewDockWidthDelta);
 
-  if (previousEvent && areWorkspaceSnapshotsEqual(previousEvent.snapshot, recordingSnapshot)) {
+  if (
+    !carriesWidthDelta &&
+    previousEvent &&
+    areWorkspaceSnapshotsEqual(previousEvent.snapshot, recordingSnapshot)
+  ) {
     return false;
   }
 
