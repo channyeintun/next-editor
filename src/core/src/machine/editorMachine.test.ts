@@ -3815,8 +3815,10 @@ describe("editorMachine pointer captures while recording", () => {
   class RecordingEditor {
     content = "const a = 1;";
     versionId = 1;
+    uri = "file:///main.ts";
+    getValueCalls = 0;
     readonly model = {
-      uri: { toString: () => "file:///main.ts" },
+      uri: { toString: () => this.uri },
       getVersionId: () => this.versionId,
     };
 
@@ -3825,12 +3827,20 @@ describe("editorMachine pointer captures while recording", () => {
     }
 
     getValue() {
+      this.getValueCalls += 1;
       return this.content;
     }
 
     type(text: string) {
       this.content += text;
       this.versionId += 1;
+    }
+
+    /** Switch files. Each model counts versions on its own, so the id starts over. */
+    open(uri: string, content: string) {
+      this.uri = uri;
+      this.content = content;
+      this.versionId = 1;
     }
 
     getPosition() {
@@ -3905,6 +3915,53 @@ describe("editorMachine pointer captures while recording", () => {
       isKeyframe: false,
       mouseCursor: { x: 140, y: 20, visible: true },
     });
+    actor.stop();
+  });
+
+  const startTake = (editor: RecordingEditor) => {
+    const actor = createActor(
+      editorMachine.provide({ actors: { mouseTracking: fromCallback(() => {}) } }),
+      {
+        input: {
+          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
+        },
+      },
+    ).start();
+    actor.send({ type: "START_RECORDING" });
+    expect(actor.getSnapshot().value).toBe("recording");
+    return actor;
+  };
+
+  it("reuses the captured content until the model changes", () => {
+    const clock = pinPerformanceClock();
+    const editor = new RecordingEditor();
+    const actor = startTake(editor);
+    const reads = editor.getValueCalls;
+
+    clock.now += 60;
+    actor.send({ type: "CAPTURE_FRAME" });
+    expect(editor.getValueCalls).toBe(reads);
+    expect(actor.getSnapshot().context.currentFrame?.state.content).toBe("const a = 1;");
+
+    clock.now += 60;
+    editor.type("!");
+    actor.send({ type: "CAPTURE_FRAME" });
+    expect(editor.getValueCalls).toBe(reads + 1);
+    expect(actor.getSnapshot().context.currentFrame?.state.content).toBe("const a = 1;!");
+    actor.stop();
+  });
+
+  it("reads the new file after a switch that lands on the same version id", () => {
+    const clock = pinPerformanceClock();
+    const editor = new RecordingEditor();
+    const actor = startTake(editor);
+
+    clock.now += 60;
+    editor.open("file:///other.ts", "let b = 2;");
+    actor.send({ type: "CAPTURE_FRAME" });
+
+    expect(actor.getSnapshot().context.currentFrame?.state.content).toBe("let b = 2;");
+    expect(actor.getSnapshot().context.session!.frames).toHaveLength(2);
     actor.stop();
   });
 });

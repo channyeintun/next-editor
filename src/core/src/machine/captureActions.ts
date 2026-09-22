@@ -36,6 +36,7 @@ import {
   buildTrackMetadata,
   createFrame,
   MOUSE_FRAME_INTERVAL_MS,
+  type CapturedContentRef,
   type CapturedViewStateRef,
 } from "./editorMachineHelpers";
 import { normalizeNonNegativeTime } from "./playbackValues";
@@ -55,6 +56,55 @@ const SCREEN_RECORDER_ID_PREFIX = "screenRecorder-";
 // isn't independently nameable outside `setup()`. Extracted purely so the
 // machine file reads as wiring; zero behavior change.
 // ============================================================================
+
+/**
+ * A selected narration file rides in on START_RECORDING. An empty file counts as none, so
+ * that take records from the microphone (or silently) like a start without one.
+ */
+export const getExternalAudioBlob = (event: EditorMachineEvent): Blob | null =>
+  event.type === "START_RECORDING" && event.audioBlob instanceof Blob && event.audioBlob.size > 0
+    ? event.audioBlob
+    : null;
+
+// Capture reads the live editor: fall back to the input ref getter so a
+// SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
+// rehydration) cannot silently disable frame/cursor capture.
+const getCaptureEditor = (context: EditorMachineContext) =>
+  context.editorRefs.editor ?? context.getEditorInstance();
+
+/**
+ * The last captured content string paired with the model identity it was read at, for
+ * `createFrame` to reuse by reference. `lastCapturedViewStateRef` holds that identity: it
+ * comes from the same `createFrame` call that produced `currentFrame`.
+ */
+const getPreviousCapturedContent = (
+  session: RecordingSession,
+  currentFrame: EditorFrame | null,
+): CapturedContentRef | undefined => {
+  const viewStateRef = session.lastCapturedViewStateRef;
+  return currentFrame && viewStateRef
+    ? {
+        value: currentFrame.state.content,
+        versionId: viewStateRef.versionId,
+        modelUri: viewStateRef.modelUri,
+      }
+    : undefined;
+};
+
+/** Encode a captured frame into the session (in place) and keep its view state for reuse. */
+const commitCapturedFrame = (
+  session: RecordingSession,
+  frame: EditorFrame,
+  viewStateRef: CapturedViewStateRef | undefined,
+  contentEditDelta?: CreatedContentEditDelta,
+): void => {
+  const { state: encoder, emitted } = pushFrame(session.encoder, frame, contentEditDelta);
+  if (emitted) {
+    session.frames.push(emitted);
+  }
+  session.encoder = encoder;
+  session.lastCapturedViewStateRef = viewStateRef;
+};
 
 export const setCameraRecordingEnabled = ({
   context,
@@ -79,24 +129,19 @@ export const prepareExternalAudioRecording = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  if (
-    event.type !== "START_RECORDING" ||
-    !(event.audioBlob instanceof Blob) ||
-    event.audioBlob.size === 0
-  ) {
-    return {};
-  }
+  const audioBlob = getExternalAudioBlob(event);
+  if (!audioBlob) return {};
 
   return {
     audio: {
       ...context.audio,
       url: null,
-      blob: event.audioBlob,
+      blob: audioBlob,
       element: null,
       isRecording: true,
       mediaRecorder: null,
       chunks: [],
-      mimeType: event.audioBlob.type || "audio/webm",
+      mimeType: audioBlob.type || "audio/webm",
       source: "external" as const,
       externalDurationMs: null,
     },
@@ -120,18 +165,13 @@ export const startExternalAudioPlayback = ({
   event: EditorMachineEvent;
   enqueue: RecordingAudioPlayerEnqueue;
 }): void => {
-  if (
-    event.type !== "START_RECORDING" ||
-    !(event.audioBlob instanceof Blob) ||
-    event.audioBlob.size === 0
-  ) {
-    return;
-  }
+  const audioBlob = getExternalAudioBlob(event);
+  if (!audioBlob) return;
 
   enqueue.spawnChild("audioPlayback", {
     id: "recordingAudioPlayer",
     input: {
-      blob: event.audioBlob,
+      blob: audioBlob,
       volume: context.timeline.volume,
       playbackRate: 1,
       startPositionMs: 0,
@@ -340,22 +380,18 @@ export const captureInitialFrame = ({
   };
 
   // Use createFrame for the initial frame to ensure it has all metadata
-  // Capture reads the live editor: fall back to the input ref getter so a
-  // SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
-  // rehydration) cannot silently disable frame/cursor capture.
-  const editor = context.editorRefs.editor ?? context.getEditorInstance();
+  const editor = getCaptureEditor(context);
   let initialFrame: EditorFrame;
-  let contentVersionId: number | undefined;
-  let modelUri: string | undefined;
   let viewStateRef: CapturedViewStateRef | undefined;
 
   if (editor) {
-    ({
-      frame: initialFrame,
-      contentVersionId,
-      modelUri,
-      viewStateRef,
-    } = createFrame(editor, 0, lastMousePosition, context.getSlideState, context.getPreviewState));
+    ({ frame: initialFrame, viewStateRef } = createFrame(
+      editor,
+      0,
+      lastMousePosition,
+      context.getSlideState,
+      context.getPreviewState,
+    ));
   } else {
     initialFrame = {
       timestamp: 0,
@@ -378,15 +414,7 @@ export const captureInitialFrame = ({
     };
   }
 
-  const { state: encoder, emitted } = pushFrame(session.encoder, initialFrame);
-
-  if (emitted) {
-    session.frames.push(emitted);
-  }
-  session.encoder = encoder;
-  session.lastCapturedContentVersionId = contentVersionId;
-  session.lastCapturedContentModelUri = modelUri;
-  session.lastCapturedViewStateRef = viewStateRef;
+  commitCapturedFrame(session, initialFrame, viewStateRef);
 
   return {
     session,
@@ -402,10 +430,7 @@ export const captureFrame = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  // Capture reads the live editor: fall back to the input ref getter so a
-  // SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
-  // rehydration) cannot silently disable frame/cursor capture.
-  const editor = context.editorRefs.editor ?? context.getEditorInstance();
+  const editor = getCaptureEditor(context);
   if (!context.session) return {};
 
   const timestamp = performance.now() - context.session.startedAtPerf;
@@ -451,16 +476,7 @@ export const captureFrame = ({
     }
   }
 
-  const previousContent =
-    context.currentFrame &&
-    context.session.lastCapturedContentVersionId !== undefined &&
-    context.session.lastCapturedContentModelUri !== undefined
-      ? {
-          value: context.currentFrame.state.content,
-          versionId: context.session.lastCapturedContentVersionId,
-          modelUri: context.session.lastCapturedContentModelUri,
-        }
-      : undefined;
+  const previousContent = getPreviousCapturedContent(context.session, context.currentFrame);
 
   let capturedContent = previousContent;
   let contentEditDelta: CreatedContentEditDelta | undefined;
@@ -486,7 +502,7 @@ export const captureFrame = ({
     }
   }
 
-  const { frame, contentVersionId, modelUri, viewStateRef } = createFrame(
+  const { frame, viewStateRef } = createFrame(
     editor,
     timestamp,
     mousePosition,
@@ -508,20 +524,8 @@ export const captureFrame = ({
     event.type === "CAPTURE_FRAME" && event.isMouseMovement && lastStoredFrame
       ? { ...frame, state: { ...frame.state, mouseCursor: lastStoredFrame.state.mouseCursor } }
       : frame;
-  const { state: encoder, emitted } = pushFrame(
-    context.session.encoder,
-    encoderFrame,
-    contentEditDelta,
-  );
-
-  if (emitted) {
-    context.session.frames.push(emitted);
-  }
-  context.session.encoder = encoder;
+  commitCapturedFrame(context.session, encoderFrame, viewStateRef, contentEditDelta);
   context.session.lastMousePosition = mousePosition;
-  context.session.lastCapturedContentVersionId = contentVersionId;
-  context.session.lastCapturedContentModelUri = modelUri;
-  context.session.lastCapturedViewStateRef = viewStateRef;
 
   return {
     session: context.session,
@@ -541,33 +545,19 @@ export const capturePreviewRefreshFrame = ({
     return {};
   }
 
-  // Capture reads the live editor: fall back to the input ref getter so a
-  // SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
-  // rehydration) cannot silently disable frame/cursor capture.
-  const editor = context.editorRefs.editor ?? context.getEditorInstance();
+  const editor = getCaptureEditor(context);
   if (!editor || !context.session) {
     return {};
   }
 
   const timestamp = performance.now() - context.session.startedAtPerf;
-  const previousContent =
-    context.currentFrame &&
-    context.session.lastCapturedContentVersionId !== undefined &&
-    context.session.lastCapturedContentModelUri !== undefined
-      ? {
-          value: context.currentFrame.state.content,
-          versionId: context.session.lastCapturedContentVersionId,
-          modelUri: context.session.lastCapturedContentModelUri,
-        }
-      : undefined;
-
-  const { frame, contentVersionId, modelUri, viewStateRef } = createFrame(
+  const { frame, viewStateRef } = createFrame(
     editor,
     timestamp,
     context.session.lastMousePosition,
     context.getSlideState,
     context.getPreviewState,
-    previousContent,
+    getPreviousCapturedContent(context.session, context.currentFrame),
     context.session.lastCapturedViewStateRef,
   );
 
@@ -578,15 +568,7 @@ export const capturePreviewRefreshFrame = ({
     };
   }
 
-  const { state: encoder, emitted } = pushFrame(context.session.encoder, frame);
-
-  if (emitted) {
-    context.session.frames.push(emitted);
-  }
-  context.session.encoder = encoder;
-  context.session.lastCapturedContentVersionId = contentVersionId;
-  context.session.lastCapturedContentModelUri = modelUri;
-  context.session.lastCapturedViewStateRef = viewStateRef;
+  commitCapturedFrame(context.session, frame, viewStateRef);
 
   return {
     session: context.session,
@@ -617,10 +599,7 @@ export const captureSlideEvent = ({
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   if (event.type !== "SLIDE_EVENT") return {};
-  return appendToSession(context, (session) => {
-    appendSlideRecordingEvent(session, event.event);
-    return true;
-  });
+  return appendToSession(context, (session) => appendSlideRecordingEvent(session, event.event));
 };
 
 export const capturePreviewEvent = ({
@@ -631,10 +610,7 @@ export const capturePreviewEvent = ({
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   if (event.type !== "PREVIEW_EVENT") return {};
-  return appendToSession(context, (session) => {
-    appendPreviewRecordingEvent(session, event.event);
-    return true;
-  });
+  return appendToSession(context, (session) => appendPreviewRecordingEvent(session, event.event));
 };
 
 export const capturePreviewInitialDocument = ({
@@ -645,10 +621,9 @@ export const capturePreviewInitialDocument = ({
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   if (event.type !== "PREVIEW_INITIAL_DOCUMENT") return {};
-  return appendToSession(context, (session) => {
-    appendPreviewInitialDocument(session, event.document);
-    return true;
-  });
+  return appendToSession(context, (session) =>
+    appendPreviewInitialDocument(session, event.document),
+  );
 };
 
 export const capturePreviewPatchBatch = ({
@@ -659,10 +634,7 @@ export const capturePreviewPatchBatch = ({
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   if (event.type !== "PREVIEW_PATCH_BATCH") return {};
-  return appendToSession(context, (session) => {
-    appendPreviewPatchBatch(session, event.batch);
-    return true;
-  });
+  return appendToSession(context, (session) => appendPreviewPatchBatch(session, event.batch));
 };
 
 export const captureWorkspaceEvent = ({
@@ -712,10 +684,9 @@ export const captureWhiteboardEvent = ({
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   if (event.type !== "WHITEBOARD_EVENT") return {};
-  return appendToSession(context, (session) => {
-    appendWhiteboardRecordingEvent(session, event.event);
-    return true;
-  });
+  return appendToSession(context, (session) =>
+    appendWhiteboardRecordingEvent(session, event.event),
+  );
 };
 
 export const finalizeRecording = ({

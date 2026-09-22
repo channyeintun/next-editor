@@ -21,65 +21,62 @@ function getRecordingTimestamp(session: RecordingSession): number {
 }
 
 /**
- * All appenders below mutate `session`'s arrays in place and return the same session
- * reference — see the invariant documented on {@link RecordingSession}. Callers bump
- * `sessionRevision` themselves so the mutation is still visible to reference-equality
- * selectors.
+ * All appenders below mutate `session`'s arrays in place — see the invariant documented
+ * on {@link RecordingSession} — and return whether they appended anything. Callers bump
+ * `sessionRevision` only then, so the mutation is still visible to reference-equality
+ * selectors. The appenders without a dedupe always append and always return `true`.
  */
 
-export function appendSlideRecordingEvent(
-  session: RecordingSession,
-  event: SlideEvent,
-): RecordingSession {
+export function appendSlideRecordingEvent(session: RecordingSession, event: SlideEvent): boolean {
   session.slideEvents.push({
     ...event,
     timestamp: getRecordingTimestamp(session),
   });
-  return session;
+  return true;
 }
 
 export function appendWhiteboardRecordingEvent(
   session: RecordingSession,
   event: WhiteboardEvent,
-): RecordingSession {
+): boolean {
   session.whiteboardEvents.push({
     ...event,
     timestamp: getRecordingTimestamp(session),
   });
-  return session;
+  return true;
 }
 
 export function appendPreviewRecordingEvent(
   session: RecordingSession,
   event: PreviewEvent,
-): RecordingSession {
+): boolean {
   session.previewEvents.push({
     ...event,
     timestamp: getRecordingTimestamp(session),
   });
-  return session;
+  return true;
 }
 
 export function appendPreviewInitialDocument(
   session: RecordingSession,
   document: PreviewInitialDocument,
-): RecordingSession {
+): boolean {
   session.previewInitialDocuments.push({
     ...document,
     time: getRecordingTimestamp(session),
   });
-  return session;
+  return true;
 }
 
 export function appendPreviewPatchBatch(
   session: RecordingSession,
   batch: PreviewDomPatchBatch,
-): RecordingSession {
+): boolean {
   session.previewPatchBatches.push({
     ...batch,
     time: getRecordingTimestamp(session),
   });
-  return session;
+  return true;
 }
 
 function isNonZeroWidthDelta(value: unknown): boolean {

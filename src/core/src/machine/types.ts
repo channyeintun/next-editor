@@ -144,23 +144,19 @@ export interface RecordingSession {
   /** Last known mouse position */
   lastMousePosition: MouseCursorPosition;
   /**
-   * Model `getVersionId()` at the last captured frame, paired with that frame's
-   * `state.content` (see `currentFrame` on the machine context). When a new
-   * capture's version id AND model URI both match, the content string is reused
-   * by reference instead of re-reading `editor.getValue()`. Version ids are a
-   * per-model counter, so the URI must match too — otherwise a file switch
-   * between captures (same numeric version id, different model) would silently
-   * reuse the previous file's content.
-   */
-  lastCapturedContentVersionId?: number;
-  /** Model URI paired with `lastCapturedContentVersionId`, see above. */
-  lastCapturedContentModelUri?: string;
-  /**
    * `saveViewState()` result from the last captured frame plus the scalars it was
    * derived from (content version, model, scroll, selection, position). When a
    * new capture's scalars all match, `createFrame` reuses the `viewState` object
    * by reference instead of calling `editor.saveViewState()` again — see
    * `CapturedViewStateRef` in `editorMachineHelpers.ts`.
+   *
+   * Its `versionId` and `modelUri` also identify the model that last captured frame's
+   * `state.content` was read from (see `currentFrame` on the machine context). When a
+   * new capture's version id AND model URI both match, the content string is reused
+   * by reference instead of re-reading `editor.getValue()`. Version ids are a
+   * per-model counter, so the URI must match too — otherwise a file switch
+   * between captures (same numeric version id, different model) would silently
+   * reuse the previous file's content.
    */
   lastCapturedViewStateRef?: CapturedViewStateRef;
 }

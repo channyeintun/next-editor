@@ -459,9 +459,7 @@ interface RecordingSession {
   cursorEvents: CursorRecordingEvent[]; // High-cadence fake cursor samples
   audioFragments: RecordingSessionMediaFragment[]; // Timeline-aware audio fragments
   lastMousePosition: MouseCursorPosition;
-  lastCapturedContentVersionId?: number; // Perf: reuse content string by reference when unchanged
-  lastCapturedContentModelUri?: string;
-  lastCapturedViewStateRef?: CapturedViewStateRef; // Perf: reuse saveViewState() result when unchanged
+  lastCapturedViewStateRef?: CapturedViewStateRef; // Perf: reuse saveViewState() result and, by its versionId + modelUri, the content string when unchanged
 }
 ```
 

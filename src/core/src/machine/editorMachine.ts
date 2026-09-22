@@ -22,6 +22,7 @@ import {
   SYNC_PAUSED_WORKSPACE_ACTIONS,
 } from "./editorMachineHelpers";
 import {
+  getExternalAudioBlob,
   setCameraRecordingEnabled,
   prepareExternalAudioRecording,
   startExternalAudioPlayback,
@@ -165,10 +166,7 @@ export const editorMachine = setup({
     isDmpCodecReady: () => isDmpCodecLoaded(),
     canPlay: ({ context }) =>
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
-    hasExternalAudioBlob: ({ event }) =>
-      event.type === "START_RECORDING" &&
-      event.audioBlob instanceof Blob &&
-      event.audioBlob.size > 0,
+    hasExternalAudioBlob: ({ event }) => getExternalAudioBlob(event) !== null,
     isMicrophoneAudioRecording: ({ context }) =>
       context.enableAudioRecording &&
       context.audio.isRecording &&
