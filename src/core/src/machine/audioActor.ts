@@ -396,7 +396,12 @@ export const audioPlaybackActor = fromCallback<
         // hundred ms off the timeline, and letting that ride under the SYNC
         // dead zone would accumulate more lag with every play/pause cycle.
         applyTargetTime(AUDIO_EXACT_SYNC_EPSILON_MS);
-        playAudio();
+        // Per the HTML spec, play() on an ended element seeks to 0 first. The audio can end
+        // just before the timeline does (it runs slightly ahead, or is slightly shorter), and
+        // a resume then would replay the lesson's opening. Any real reposition (a backward
+        // SEEK, or a seek above the dead zone) clears `ended` synchronously, and a play()
+        // the autoplay policy blocked leaves it false, so those resumes still happen.
+        if (!audio.ended) playAudio();
         break;
       case "PAUSE":
         // Freeze extrapolation at the current target before clearing the flag.
@@ -412,7 +417,8 @@ export const audioPlaybackActor = fromCallback<
       case "SYNC":
         setKnownTimelineTime(event.timeMs);
         applyTargetTime(AUDIO_SYNC_DRIFT_THRESHOLD_MS);
-        if (requestedPlay && audio.paused) {
+        // Not once the audio has ended: see PLAY.
+        if (requestedPlay && audio.paused && !audio.ended) {
           playAudio();
         }
         break;

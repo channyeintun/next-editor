@@ -1130,7 +1130,8 @@ describe("audioPlaybackActor", () => {
     src = "";
     volume = 1;
     playbackRate = 1;
-    preservesPitch = true;
+    // Starts false, unlike a real element, so the spawn test sees the actor set it.
+    preservesPitch = false;
     crossOrigin: string | null = null;
     currentTime = 0;
     /** Seconds; NaN until metadata, Infinity for a MediaRecorder WebM whose end is not yet read. */
@@ -1138,6 +1139,7 @@ describe("audioPlaybackActor", () => {
     paused = true;
     oncanplay: (() => void) | null = null;
     ondurationchange: (() => void) | null = null;
+    onplaying: (() => void) | null = null;
     onended: (() => void) | null = null;
     onerror: (() => void) | null = null;
     playCalls = 0;
@@ -1147,9 +1149,15 @@ describe("audioPlaybackActor", () => {
       MockAudio.instances.push(this);
     }
 
+    get ended() {
+      return Number.isFinite(this.duration) && this.currentTime >= this.duration;
+    }
+
     play() {
       this.playCalls++;
       if (MockAudio.playRejection) return Promise.reject(MockAudio.playRejection);
+      // Like a real element, play() on an ended one starts over from 0.
+      if (this.ended) this.currentTime = 0;
       this.paused = false;
       return Promise.resolve();
     }
@@ -1285,6 +1293,22 @@ describe("audioPlaybackActor", () => {
     expect(audio.currentTime).toBe(13.1);
   });
 
+  // play() starts some time after the timeline does. Re-anchoring to where the timeline
+  // was when the PLAY or SYNC arrived would leave that startup lag in place for good.
+  it("re-anchors to the extrapolated timeline once sound starts flowing", () => {
+    const clock = pinPerformanceClock();
+    const actor = createPlayback(2);
+    const audio = MockAudio.instances[0]!;
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "SYNC", timeMs: 0 });
+
+    clock.now += 1000;
+    audio.onplaying?.();
+
+    // One second of wall time at 2x.
+    expect(audio.currentTime).toBe(2);
+  });
+
   it("updates volume and playback rate", () => {
     const actor = createPlayback(1);
     const audio = MockAudio.instances[0]!;
@@ -1326,6 +1350,57 @@ describe("audioPlaybackActor", () => {
     const audio = MockAudio.instances[0]!;
     // URL.createObjectURL is mocked to return "blob:mock" in beforeEach
     expect(audio.src).toBe("blob:mock");
+  });
+
+  // The audioUrl comes out of the .ne header without runtime validation.
+  it("falls back to the blob URL when the audioUrl has a rejected scheme", () => {
+    const actor = createActor(audioPlaybackActor, {
+      input: {
+        blob: new Blob(["audio"], { type: "audio/webm" }),
+        audioUrl: "javascript:alert(1)",
+        volume: 1,
+        playbackRate: 1,
+        startPositionMs: 0,
+      },
+    }).start();
+    spawnedActors.push(actor);
+
+    expect(MockAudio.instances[0]!.src).toBe("blob:mock");
+  });
+
+  // The audio can end a moment before the timeline does, and a resume then restarted it
+  // from 0: a blip of the lesson's opening on every SYNC until the timeline finished.
+  it("does not restart narration that ended just before the timeline", () => {
+    const actor = createPlayback(1, 59_000);
+    const audio = MockAudio.instances[0]!;
+    audio.duration = 60;
+    actor.send({ type: "PLAY" });
+    expect(audio.playCalls).toBe(1);
+
+    audio.currentTime = 60;
+    audio.paused = true;
+    actor.send({ type: "SYNC", timeMs: 59_800 });
+    expect(audio.playCalls).toBe(1);
+    expect(audio.currentTime).toBe(60);
+
+    // Seeking back clears `ended`, so the next SYNC resumes there.
+    actor.send({ type: "SEEK", timeMs: 10_000 });
+    actor.send({ type: "SYNC", timeMs: 10_000 });
+    expect(audio.playCalls).toBe(2);
+    expect(audio.paused).toBe(false);
+    expect(audio.currentTime).toBeCloseTo(10, 1);
+  });
+
+  it("does not restart narration that has ended when PLAY lands on its end", () => {
+    const actor = createPlayback(1);
+    const audio = MockAudio.instances[0]!;
+    audio.duration = 60;
+    actor.send({ type: "SEEK", timeMs: 60_000 });
+
+    actor.send({ type: "PLAY" });
+
+    expect(audio.playCalls).toBe(0);
+    expect(audio.currentTime).toBe(60);
   });
 
   it("emits its namespaced completion event when the audio element ends", () => {
