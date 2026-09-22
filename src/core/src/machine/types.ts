@@ -360,8 +360,6 @@ export interface EditorMachineContext {
   lastAppliedPreviewState?: PreviewState;
   /** Last time (performance.now()) audio was synced */
   lastSyncTime?: number;
-  /** Recorded frame state at the moment of pause - used to restore on resume */
-  recordedFrameAtPause?: EditorFrame | null;
   /** Whether manual workspace changes should suppress recorded workspace replay */
   hasManualWorkspaceOverride: boolean;
   /** Whether the next editor mount should resync playback state */

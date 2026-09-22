@@ -1109,6 +1109,125 @@ describe("editorMachine actor lifecycle", () => {
 
     actor.stop();
   });
+
+  // A paused SEEK reattaches the recorded workspace for that one transition and detaches
+  // again, so no model swap (and no SET_EDITOR_REF) ever follows it. The pending editor
+  // sync that reattaching sets used to make every paused scrub skip its target frame.
+  describe("seeking while paused", () => {
+    const keyframe = (timestamp: number, content: string): Recording["frames"][number] => ({
+      timestamp,
+      isKeyframe: true,
+      state: {
+        content,
+        selection,
+        position: { lineNumber: 1, column: 1 },
+        viewState: null,
+        mouseCursor: { x: 0, y: 0, visible: false },
+      },
+    });
+
+    const startPausedAt50 = async (recording: Recording) => {
+      const editor = new MockEditor(new MockTextModel("outside"));
+      const workspace = {
+        current: createTwoFileWorkspaceSnapshot("a.ts", "outside-a", "outside-b"),
+      };
+      const actor = createActor(editorMachine, {
+        input: {
+          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
+          getWorkspaceSnapshot: () => workspace.current,
+          applyWorkspaceSnapshot: (snapshot) => {
+            workspace.current = snapshot;
+          },
+        },
+      }).start();
+
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      actor.send({ type: "PLAY" });
+      actor.send({ type: "TICK", timestamp: 50, currentTime: 50 });
+      actor.send({ type: "PAUSE" });
+      expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+
+      return { actor, editor, workspace };
+    };
+
+    const recordingOnOneFile = (): Recording => ({
+      ...createRecording(),
+      frames: [keyframe(0, "a"), keyframe(100, "ab"), keyframe(200, "abc")],
+      workspaceEvents: [
+        { timestamp: 0, snapshot: createTwoFileWorkspaceSnapshot("a.ts", "a", "b") },
+      ],
+    });
+
+    it("applies the target frame to the editor and adopts it into the workspace", async () => {
+      const { actor, editor, workspace } = await startPausedAt50(recordingOnOneFile());
+      expect(editor.getValue()).toBe("a");
+
+      actor.send({ type: "SEEK", time: 250 });
+      expect(editor.getValue()).toBe("abc");
+      expect(workspace.current.project.files["a.ts"].content).toBe("abc");
+
+      actor.send({ type: "SEEK", time: 150 });
+      expect(editor.getValue()).toBe("ab");
+      expect(workspace.current.project.files["a.ts"].content).toBe("ab");
+
+      // Still paused and detached: the viewer can keep editing what they scrubbed to.
+      const { context } = actor.getSnapshot();
+      expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+      expect(context.hasManualWorkspaceOverride).toBe(true);
+      expect(context.pendingPlaybackEditorSync).toBe(false);
+
+      actor.stop();
+    });
+
+    it("still waits for the model swap when the seek replays a file switch", async () => {
+      const { actor, editor, workspace } = await startPausedAt50({
+        ...createRecording(),
+        frames: [keyframe(0, "a-frame"), keyframe(100, "b-frame")],
+        workspaceEvents: [
+          {
+            timestamp: 0,
+            snapshot: createTwoFileWorkspaceSnapshot("a.ts", "a-snapshot", "b-before-open"),
+          },
+          {
+            timestamp: 100,
+            snapshot: createTwoFileWorkspaceSnapshot("b.ts", "a-snapshot", "b-snapshot"),
+          },
+        ],
+      });
+
+      actor.send({ type: "SEEK", time: 150 });
+
+      // b.ts's frame must not land in the a.ts model that is still bound.
+      expect(workspace.current.activeFilePath).toBe("b.ts");
+      expect(editor.getValue()).toBe("a-frame");
+      expect(workspace.current.project.files["b.ts"].content).toBe("b-snapshot");
+
+      actor.stop();
+    });
+
+    it("leaves a file the viewer opened while paused untouched", async () => {
+      const { actor, editor, workspace } = await startPausedAt50(recordingOnOneFile());
+
+      const viewerModel = new MockTextModel("b-user");
+      editor.setModel(viewerModel as unknown as monaco.editor.ITextModel);
+      workspace.current = createTwoFileWorkspaceSnapshot("b.ts", "a", "b-user");
+      actor.send({ type: "WORKSPACE_EVENT" });
+      actor.send({
+        type: "SET_EDITOR_REF",
+        editor: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+      });
+
+      // Same workspace interval as the pause, so no recorded snapshot re-opens a.ts.
+      actor.send({ type: "SEEK", time: 250 });
+
+      expect(viewerModel.getValue()).toBe("b-user");
+      expect(workspace.current.activeFilePath).toBe("b.ts");
+      expect(workspace.current.project.files["b.ts"].content).toBe("b-user");
+
+      actor.stop();
+    });
+  });
 });
 
 // Finalize measures a take on performance.now(). Pinning it lets a test assert a take's

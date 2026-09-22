@@ -11,7 +11,6 @@ import { calculateDurationFromFileReader } from "../utils/audioDuration";
 import {
   APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS,
   APPLY_REPLAY_STATE_ACTIONS,
-  APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS,
   getPlaybackAudioState,
   hasSpawnedPlaybackAudio,
   PLAYBACK_END_EPSILON_MS,
@@ -72,14 +71,13 @@ import {
   setPlaybackSpeed,
   setVolume,
   clearCursorDecorations,
-  storeRecordedFrameAtPause,
   adoptPlaybackWorkspaceAtPause,
-  restoreRecordedFrameFromPause,
   resetPlayback,
   invalidateAppliedPlaybackState,
   detachPlaybackWorkspace,
   reattachPlaybackWorkspace,
   clearPendingPlaybackEditorSync,
+  clearPendingEditorSyncForPausedSeek,
   invalidateRenderedPlaybackState,
   clearRecording,
   notifyPlaybackStart,
@@ -233,14 +231,13 @@ export const editorMachine = setup({
     setPlaybackSpeed: assign(setPlaybackSpeed),
     setVolume: assign(setVolume),
     clearCursorDecorations: assign(clearCursorDecorations),
-    storeRecordedFrameAtPause: assign(storeRecordedFrameAtPause),
     adoptPlaybackWorkspaceAtPause,
-    restoreRecordedFrameFromPause,
     resetPlayback: assign(resetPlayback),
     invalidateAppliedPlaybackState: assign(invalidateAppliedPlaybackState),
     detachPlaybackWorkspace: assign(detachPlaybackWorkspace),
     reattachPlaybackWorkspace: assign(reattachPlaybackWorkspace),
     clearPendingPlaybackEditorSync: assign(clearPendingPlaybackEditorSync),
+    clearPendingEditorSyncForPausedSeek: assign(clearPendingEditorSyncForPausedSeek),
     invalidateRenderedPlaybackState: assign(invalidateRenderedPlaybackState),
     clearRecording: assign(clearRecording),
     notifyPlaybackStart,
@@ -1045,12 +1042,15 @@ export const editorMachine = setup({
         paused: {
           entry: [...SYNC_PAUSED_WORKSPACE_ACTIONS],
           on: {
+            // The timeline is paused, so no TICK is expected here. Handling one keeps a
+            // stray tick from bubbling up to playback.TICK, which would move the playhead.
             TICK: {
-              actions: [...APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS],
+              actions: [...APPLY_REPLAY_STATE_ACTIONS],
             },
             SEEK: {
               actions: [
                 "reattachPlaybackWorkspace",
+                "clearPendingEditorSyncForPausedSeek",
                 "seekToTime",
                 ...APPLY_REPLAY_STATE_ACTIONS,
                 ...SYNC_PAUSED_WORKSPACE_ACTIONS,
@@ -1077,7 +1077,7 @@ export const editorMachine = setup({
             },
             PLAY: {
               target: "playing",
-              actions: ["restoreRecordedFrameFromPause", "reattachPlaybackWorkspace"],
+              actions: ["reattachPlaybackWorkspace"],
             },
           },
         },

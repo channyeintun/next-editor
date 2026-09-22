@@ -8,7 +8,7 @@ import {
   findFrameIndexAtTime,
   isKeyframe,
 } from "../utils/frameDelta";
-import { normalizeEditorFrame, normalizeRecordingData } from "../utils/editorState";
+import { normalizeRecordingData } from "../utils/editorState";
 import { isValidFrameState } from "../utils/validation";
 import { arePreviewSizesEqual } from "../../../utils/equality";
 import {
@@ -530,16 +530,6 @@ export const clearCursorDecorations = ({
   };
 };
 
-export const storeRecordedFrameAtPause = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => {
-  return {
-    recordedFrameAtPause: context.currentFrame,
-  };
-};
-
 export const adoptPlaybackWorkspaceAtPause = ({
   context,
 }: {
@@ -578,38 +568,6 @@ export const adoptPlaybackWorkspaceAtPause = ({
       },
     },
   });
-};
-
-export const restoreRecordedFrameFromPause = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): void => {
-  const { editorRefs, hasManualWorkspaceOverride, recordedFrameAtPause } = context;
-  if (
-    hasManualWorkspaceOverride ||
-    !editorRefs.editor ||
-    !recordedFrameAtPause ||
-    !recordedFrameAtPause.state
-  ) {
-    return;
-  }
-
-  // Force restore the exact recorded frame by setting all state directly
-  try {
-    const normalizedFrame = normalizeEditorFrame(recordedFrameAtPause);
-    const model = editorRefs.editor.getModel();
-    if (model) {
-      model.setValue(normalizedFrame.state.content);
-    }
-    if (normalizedFrame.state.viewState) {
-      editorRefs.editor.restoreViewState(normalizedFrame.state.viewState);
-    }
-    editorRefs.editor.setPosition(normalizedFrame.state.position);
-    editorRefs.editor.setSelection(normalizedFrame.state.selection);
-  } catch (error) {
-    console.error("Error restoring recorded frame from pause:", error);
-  }
 };
 
 export const resetPlayback = ({
@@ -689,6 +647,37 @@ export const reattachPlaybackWorkspace = ({
 export const clearPendingPlaybackEditorSync = (): Partial<EditorMachineContext> => ({
   pendingPlaybackEditorSync: false,
 });
+
+/**
+ * A paused SEEK reattaches for that one transition only: SYNC_PAUSED_WORKSPACE_ACTIONS
+ * detaches again before anything observes the snapshot, so the playback model never
+ * swaps in and no SET_EDITOR_REF arrives to clear the pending sync that
+ * `reattachPlaybackWorkspace` just set. Left set, it made `applyFrameAtTime` skip the
+ * target frame, so scrubbing a paused lesson moved neither the code nor the caret
+ * until PLAY.
+ *
+ * Clear it only while the viewer is still on the file the recording had open. Frames
+ * carry no file path, and the workspace cursor is deliberately not reset on seek
+ * (panel-width deltas), so a scrub inside one workspace interval would otherwise write
+ * the recorded file's content into a file the viewer opened while paused. A replayed
+ * file switch still re-sets the flag in `applyWorkspaceEventsAtTime`.
+ */
+export const clearPendingEditorSyncForPausedSeek = ({
+  context,
+}: {
+  context: EditorMachineContext;
+}): Partial<EditorMachineContext> => {
+  const recordedActiveFilePath =
+    context.recording?.workspaceEvents?.[context.lastAppliedWorkspaceEventIndex]?.snapshot
+      .activeFilePath;
+  if (
+    recordedActiveFilePath === undefined ||
+    context.getWorkspaceSnapshot?.()?.activeFilePath !== recordedActiveFilePath
+  ) {
+    return {};
+  }
+  return { pendingPlaybackEditorSync: false };
+};
 
 // Editor/model swaps only invalidate Monaco-rendered frame state. Keep the
 // dedicated preview/slide replay cursors stable so file switches do not

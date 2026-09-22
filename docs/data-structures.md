@@ -392,7 +392,6 @@ interface EditorMachineContext {
 
   // Playback bookkeeping
   lastSyncTime?: number;
-  recordedFrameAtPause?: EditorFrame | null;
   hasManualWorkspaceOverride: boolean;
   pendingPlaybackEditorSync: boolean;
   playbackAudioSpawned: boolean;

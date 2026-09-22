@@ -511,13 +511,7 @@ export const APPLY_REPLAY_STATE_ACTIONS = [
   "applyChatEventsAtTime",
 ] as const;
 
-export const APPLY_REPLAY_STATE_AND_STORE_PAUSE_ACTIONS = [
-  ...APPLY_REPLAY_STATE_ACTIONS,
-  "storeRecordedFrameAtPause",
-] as const;
-
 export const SYNC_PAUSED_WORKSPACE_ACTIONS = [
-  "storeRecordedFrameAtPause",
   "adoptPlaybackWorkspaceAtPause",
   "detachPlaybackWorkspace",
 ] as const;
