@@ -55,6 +55,28 @@ const resolveBoundedReplayTime = (
     context.timeline.currentTime,
   );
 
+/**
+ * The replay cursors a seek, rewind, resume or workspace detach resets together, so the
+ * next apply re-derives each track at the new time. A new track's cursor belongs here.
+ *
+ * `lastAppliedWorkspaceEventIndex` is deliberately left out. Panel widths (sidebar/preview
+ * dock) replay as relative deltas folded into the *live* width, so the net delta is
+ * computed between the last applied index and the target. Resetting it to -1 re-summed
+ * every delta from the start on top of the width already applied, so repeated seeks, and
+ * every pause/resume (detachPlaybackWorkspace runs on each entry into `paused`), made the
+ * panels grow or shrink without bound. Keeping the true index lets the replay reverse or
+ * advance the exact net delta. Only loading or clearing a recording resets it.
+ */
+const REPLAY_CURSORS_RESET = {
+  lastAppliedFrameIndex: -1,
+  lastAppliedPreviewEventIndex: -1,
+  lastAppliedPreviewPatchBatchIndex: -1,
+  lastAppliedSlideEventIndex: -1,
+  lastAppliedRuntimeEventIndex: -1,
+  lastAppliedWhiteboardEventIndex: -1,
+  lastAppliedChatEventIndex: -1,
+} as const satisfies Partial<EditorMachineContext>;
+
 const editorModelBoundaryTimeCache = new WeakMap<readonly WorkspaceRecordingEvent[], number[]>();
 
 /**
@@ -188,15 +210,13 @@ export const setRecording = (
     },
     currentFrame: null,
     lastCallbackFrameTimestamp: undefined,
-    lastAppliedFrameIndex: -1,
-    lastAppliedPreviewEventIndex: -1,
-    lastAppliedPreviewPatchBatchIndex: -1,
-    lastAppliedSlideEventIndex: -1,
+    // Every cursor starts before its track's first event (chat folds from the empty
+    // transcript applied above), except workspace and runtime, whose first snapshot was
+    // applied above. Their overrides follow the spread: the other order would reset them,
+    // and the playback entry would apply those snapshots a second time.
+    ...REPLAY_CURSORS_RESET,
     lastAppliedWorkspaceEventIndex: initialWorkspaceEvent ? 0 : -1,
     lastAppliedRuntimeEventIndex: initialRuntimeEvent ? 0 : -1,
-    lastAppliedWhiteboardEventIndex: -1,
-    // The chat track folds from empty until its first delta/checkpoint is reached.
-    lastAppliedChatEventIndex: -1,
     lastAppliedPreviewState: undefined,
   };
 };
@@ -313,16 +333,7 @@ export const applyFrameAtTime = ({
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
   const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
-  const currentTime =
-    event.type === "TICK"
-      ? normalizeTimelineTime(
-          event.currentTime,
-          context.timeline.duration,
-          context.timeline.currentTime,
-        )
-      : event.type === "SEEK"
-        ? normalizeTimelineTime(event.time, context.timeline.duration, context.timeline.currentTime)
-        : context.timeline.currentTime;
+  const currentTime = resolveBoundedReplayTime(context, event);
 
   if (!recording || !editorRefs.editor || context.pendingPlaybackEditorSync) {
     return {};
@@ -487,20 +498,7 @@ export const seekToTime = ({
       ...context.timeline,
       currentTime: clampedTime,
     },
-    lastAppliedFrameIndex: -1,
-    lastAppliedSlideEventIndex: -1,
-    lastAppliedPreviewEventIndex: -1,
-    lastAppliedPreviewPatchBatchIndex: -1,
-    lastAppliedWhiteboardEventIndex: -1,
-    // NOTE: `lastAppliedWorkspaceEventIndex` is intentionally NOT reset here.
-    // Panel widths (sidebar/preview dock) replay as relative deltas folded
-    // into the *live* width, so the net delta is computed between the last
-    // applied index and the seek target. Resetting to -1 would re-sum every
-    // delta from the start and add it on top of the already-applied width,
-    // so repeated seeks make the panels grow/shrink without bound. Keeping
-    // the true index lets the replay reverse/advance the exact net delta.
-    lastAppliedRuntimeEventIndex: -1,
-    lastAppliedChatEventIndex: -1,
+    ...REPLAY_CURSORS_RESET,
   };
 };
 
@@ -609,32 +607,14 @@ export const resetPlayback = ({
   },
   currentFrame: null,
   lastCallbackFrameTimestamp: undefined,
-  lastAppliedFrameIndex: -1,
-  lastAppliedPreviewEventIndex: -1,
-  lastAppliedPreviewPatchBatchIndex: -1,
-  lastAppliedSlideEventIndex: -1,
-  // `lastAppliedWorkspaceEventIndex` is deliberately omitted here (kept as-is): the
-  // relative panel-width deltas rewind from the current index back to the start
-  // instead of re-summing from scratch onto the live width. See `seekToTime`.
-  lastAppliedRuntimeEventIndex: -1,
-  lastAppliedWhiteboardEventIndex: -1,
-  lastAppliedChatEventIndex: -1,
+  ...REPLAY_CURSORS_RESET,
   lastAppliedPreviewState: undefined,
 });
 
 export const invalidateAppliedPlaybackState = (): Partial<EditorMachineContext> => ({
   currentFrame: null,
   lastCallbackFrameTimestamp: undefined,
-  lastAppliedFrameIndex: -1,
-  lastAppliedPreviewEventIndex: -1,
-  lastAppliedPreviewPatchBatchIndex: -1,
-  lastAppliedSlideEventIndex: -1,
-  // `lastAppliedWorkspaceEventIndex` is deliberately omitted here (kept as-is) so
-  // resuming/replaying does not re-apply the panel-width deltas on top of the
-  // already-applied width. See `seekToTime`.
-  lastAppliedRuntimeEventIndex: -1,
-  lastAppliedWhiteboardEventIndex: -1,
-  lastAppliedChatEventIndex: -1,
+  ...REPLAY_CURSORS_RESET,
   lastAppliedPreviewState: undefined,
 });
 
@@ -642,19 +622,7 @@ export const detachPlaybackWorkspace = (): Partial<EditorMachineContext> => ({
   hasManualWorkspaceOverride: true,
   pendingPlaybackEditorSync: false,
   currentFrame: null,
-  lastAppliedFrameIndex: -1,
-  lastAppliedPreviewEventIndex: -1,
-  lastAppliedPreviewPatchBatchIndex: -1,
-  lastAppliedSlideEventIndex: -1,
-  // NOTE: `lastAppliedWorkspaceEventIndex` is intentionally NOT reset here, for
-  // the same reason it is not reset in `seekToTime`, `resetPlayback` and
-  // `invalidateAppliedPlaybackState`. This runs on every entry into
-  // `playback.paused`, so resetting it re-summed every width delta from index 0
-  // on the next PLAY and added it on top of the width already applied — the
-  // sidebar grew by the presenter's drag again on every pause/resume.
-  lastAppliedRuntimeEventIndex: -1,
-  lastAppliedWhiteboardEventIndex: -1,
-  lastAppliedChatEventIndex: -1,
+  ...REPLAY_CURSORS_RESET,
   lastAppliedPreviewState: undefined,
 });
 
@@ -720,14 +688,9 @@ export const clearRecording = {
   recording: null,
   currentFrame: null,
   lastCallbackFrameTimestamp: undefined,
-  lastAppliedFrameIndex: -1,
-  lastAppliedPreviewEventIndex: -1,
-  lastAppliedPreviewPatchBatchIndex: -1,
-  lastAppliedSlideEventIndex: -1,
+  ...REPLAY_CURSORS_RESET,
+  // No recording is left for a width delta to be relative to.
   lastAppliedWorkspaceEventIndex: -1,
-  lastAppliedRuntimeEventIndex: -1,
-  lastAppliedWhiteboardEventIndex: -1,
-  lastAppliedChatEventIndex: -1,
   lastAppliedPreviewState: undefined,
   timeline: ({ context }: { context: EditorMachineContext }) => ({
     ...context.timeline,
