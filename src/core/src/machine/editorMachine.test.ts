@@ -365,8 +365,16 @@ describe("editorMachine actor lifecycle", () => {
     expect(actor.getSnapshot().value).toBe("idle");
     expect(errors).toHaveLength(1);
     expect(errors[0].message).toMatch(/recording codec could not be loaded/i);
+    expect(actor.getSnapshot().context.error).toMatch(/recording codec could not be loaded/i);
 
+    // Once the codec is back, a retry must not still carry the refusal: the studio
+    // reads `context.error` right after starting and would abort a live take.
     loadedSpy.mockRestore();
+    actor.send({ type: "START_RECORDING" });
+
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
+    expect(actor.getSnapshot().context.error).toBeNull();
+    expect(errors).toHaveLength(1);
     actor.stop();
   });
 
@@ -458,7 +466,16 @@ describe("editorMachine actor lifecycle", () => {
     expect(snapshot.context.audio.blob).toBeNull();
     expect(snapshot.context.audio.source).toBeNull();
     expect(snapshot.context.session).toBeNull();
+    expect(snapshot.context.error).toBe("selected audio failed");
     expect(disposeCamera).toHaveBeenCalledTimes(1);
+
+    // The next take starts clean rather than reporting the aborted one's failure.
+    actor.send({
+      type: "START_RECORDING",
+      audioBlob: new Blob(["audio"], { type: "audio/webm" }),
+    });
+    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().context.error).toBeNull();
     actor.stop();
   });
 

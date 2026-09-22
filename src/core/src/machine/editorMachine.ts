@@ -252,11 +252,6 @@ export const editorMachine = setup({
     applyChatEventsAtTime: assign(applyChatEventsAtTime),
 
     // Shared/general — neither pure capture nor pure replay
-    setError: assign(({ event }) => {
-      if (event.type !== "LOAD_FAILED") return {};
-      return { error: event.error };
-    }),
-
     clearError: assign({ error: null }),
 
     setDmpCodecUnavailableError: assign({
@@ -340,6 +335,12 @@ export const editorMachine = setup({
   },
   states: {
     idle: {
+      // `error` describes the attempt that failed and sent us back here. It would otherwise
+      // outlive every later take, and a host that checks it right after starting one (the
+      // studio does) would report that stale failure while the new take is running. Every
+      // accepted START_RECORDING and LOAD_RECORDING leaves idle, and a failure of the new
+      // attempt is assigned after this exit. The codec refusal stays in idle and keeps its error.
+      exit: "clearError",
       on: {
         START_RECORDING: [
           {

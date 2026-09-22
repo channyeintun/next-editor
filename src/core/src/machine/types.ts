@@ -450,12 +450,6 @@ export type RecordingLoadedEvent = {
   duration: number;
 };
 
-/** Recording load failed */
-export type LoadFailedEvent = {
-  type: "LOAD_FAILED";
-  error: string;
-};
-
 /** Unload current recording */
 export type UnloadEvent = { type: "UNLOAD" };
 
@@ -670,7 +664,6 @@ export type EditorMachineEvent =
   | ExtendRecordingEvent
   | AppendRecordingDeltaEvent
   | RecordingLoadedEvent
-  | LoadFailedEvent
   | UnloadEvent
   | PlayEvent
   | PauseEvent
