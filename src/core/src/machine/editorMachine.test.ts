@@ -1197,6 +1197,34 @@ describe("audioPlaybackActor", () => {
     expect(actor.getSnapshot().context.recording).not.toBeNull();
   });
 
+  // finalizeRecording used to keep the audio slice's blob. It stayed pinned after UNLOAD,
+  // and the next take recorded without audio finalized with it as its narration.
+  it("does not carry a finalized take's narration into the next silent take", async () => {
+    const actor = createActor(editorMachine, {
+      input: { editorRef: { current: null } },
+    }).start();
+    spawnedActors.push(actor);
+    const narration = new Blob(["audio"], { type: "audio/webm" });
+
+    actor.send({ type: "START_RECORDING", audioBlob: narration });
+    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    actor.send({ type: "STOP_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    expect(actor.getSnapshot().context.recording!.audioBlob).toBe(narration);
+
+    actor.send({ type: "UNLOAD" });
+    expect(actor.getSnapshot().context.audio.blob).toBeNull();
+
+    actor.send({ type: "START_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    actor.send({ type: "STOP_RECORDING" });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    const silentTake = actor.getSnapshot().context.recording!;
+    expect(silentTake.audioBlob).toBeUndefined();
+    expect(silentTake.tracks?.some((track) => track.kind === "audio")).toBe(false);
+  });
+
   it("normalizes playback controls before storing, forwarding, and notifying", async () => {
     const onSeek = vi.fn<(time: number) => void>();
     const actor = createActor(editorMachine, {

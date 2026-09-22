@@ -791,10 +791,18 @@ export const finalizeRecording = ({
     recording,
     session: null,
     sessionRevision: 0,
+    // The recording above already holds everything it needs from the audio slice. Keeping
+    // the blob here would pin the narration after UNLOAD and hand it to the next take that
+    // records without audio. A mic blob that arrives after this point is re-added by
+    // `attachLateAudioBlob`.
     audio: {
-      ...context.audio,
+      url: null,
+      blob: null,
+      element: null,
       isRecording: false,
       mediaRecorder: null,
+      chunks: [],
+      mimeType: "",
       source: null,
       startOffsetMs: 0,
       externalDurationMs: null,
