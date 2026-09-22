@@ -93,6 +93,8 @@ stateDiagram-v2
 
     loading --> playback.ready : onDone
     loading --> idle : onError
+    loading --> idle : UNLOAD
+    loading --> loading : LOAD_RECORDING (re-enter)
 
     state playback {
         [*] --> ready
@@ -160,6 +162,13 @@ An invoked `loadRecording` actor (a promise actor, not a spawned child) normaliz
 - computes exact duration from the audio blob via `calculateDurationFromFileReader` when finalized non-external audio is present (avoids trailing silence from wall-clock overhead)
 - `onDone` calls `setRecording` and transitions to `playback.ready`
 - `onError` records the error and returns to `idle`
+- `LOAD_RECORDING` re-enters `loading`, restarting the invoke with the newer recording; the
+  replaced promise actor is stopped and never delivers its result
+- `UNLOAD` clears the recording and returns to `idle`
+
+The decode above can take seconds for a long microphone take, which is why a discard or a newer
+import sent in that window is handled here instead of being dropped. Both also stop a microphone
+recorder the finalize watchdog overtook, as `playback`'s `UNLOAD` and `LOAD_RECORDING` do.
 
 ### `playback`
 

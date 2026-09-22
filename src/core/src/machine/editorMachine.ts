@@ -791,6 +791,23 @@ export const editorMachine = setup({
           ],
         },
       },
+      // loadRecording decodes the whole narration of a finalized mic take (every STOP, and
+      // imports with sibling mic audio), so this state can last seconds. A discard (UNLOAD) or
+      // a newer import (LOAD_RECORDING) in that window must not be dropped. Re-entering
+      // restarts the invoke with the new event's recording, and the stopped promise actor
+      // never delivers its stale result. A recorder the finalize watchdog overtook belongs to
+      // the take being left, as in playback's UNLOAD and LOAD_RECORDING.
+      on: {
+        LOAD_RECORDING: {
+          target: "loading",
+          reenter: true,
+          actions: stopChild("audioRecorder"),
+        },
+        UNLOAD: {
+          target: "idle",
+          actions: [stopChild("audioRecorder"), "clearRecording"],
+        },
+      },
     },
 
     playback: {

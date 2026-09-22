@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { assign, createActor, fromCallback, setup, waitFor } from "xstate";
+import { assign, createActor, fromCallback, fromPromise, setup, waitFor } from "xstate";
 import type * as monaco from "monaco-editor";
 import { editorMachine } from "./editorMachine";
 import {
@@ -615,6 +615,73 @@ describe("editorMachine actor lifecycle", () => {
       });
 
       expect(model.getValue()).toBe("streamed");
+
+      actor.stop();
+    });
+  });
+
+  // Loading a finalized microphone take decodes its whole narration first, which can take
+  // seconds. A discard or another import sent in that window used to be dropped: the
+  // discarded take opened anyway, and the newer import was lost.
+  describe("events sent while a recording loads", () => {
+    const startWithDeferredLoads = () => {
+      const pendingLoads = new Map<string, () => void>();
+      const machine = editorMachine.provide({
+        actors: {
+          loadRecording: fromPromise<
+            { recording: Recording; duration: number },
+            { recording: Recording | null }
+          >(
+            ({ input }) =>
+              new Promise((resolve) => {
+                const recording = input.recording!;
+                pendingLoads.set(recording.id, () =>
+                  resolve({ recording, duration: recording.duration }),
+                );
+              }),
+          ),
+        },
+      });
+      const actor = createActor(machine, {
+        input: { editorRef: { current: null } },
+      }).start();
+      const finishLoad = async (id: string) => {
+        pendingLoads.get(id)!();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      };
+      return { actor, finishLoad };
+    };
+
+    const lesson = (id: string): Recording => ({ ...createRecording(), id });
+
+    it.each([
+      ["in order", ["lesson-A", "lesson-B"]],
+      ["out of order", ["lesson-B", "lesson-A"]],
+    ])("opens the newer import when both loads finish %s", async (_order, finishOrder) => {
+      const { actor, finishLoad } = startWithDeferredLoads();
+      actor.send({ type: "LOAD_RECORDING", recording: lesson("lesson-A") });
+      actor.send({ type: "LOAD_RECORDING", recording: lesson("lesson-B") });
+
+      for (const id of finishOrder) await finishLoad(id);
+
+      expect(actor.getSnapshot().matches({ playback: "ready" })).toBe(true);
+      expect(actor.getSnapshot().context.recording!.id).toBe("lesson-B");
+
+      actor.stop();
+    });
+
+    it("discards a recording unloaded before it finished loading", async () => {
+      const { actor, finishLoad } = startWithDeferredLoads();
+      actor.send({ type: "LOAD_RECORDING", recording: lesson("lesson-A") });
+      actor.send({ type: "UNLOAD" });
+
+      expect(actor.getSnapshot().value).toBe("idle");
+      expect(actor.getSnapshot().context.recording).toBeNull();
+
+      await finishLoad("lesson-A");
+
+      expect(actor.getSnapshot().value).toBe("idle");
+      expect(actor.getSnapshot().context.recording).toBeNull();
 
       actor.stop();
     });
@@ -2905,6 +2972,44 @@ describe("editorMachine stoppingRecording join", () => {
     } finally {
       actor.stop();
     }
+  });
+
+  // Moves a take into `loading` with the finalize watchdog having overtaken a recorder that
+  // has not delivered its blob yet. A take without its blob loads within a few microtasks,
+  // so the caller must send its event before awaiting anything.
+  const finalizeThroughWatchdog = ({ actor }: ReturnType<typeof startTake>) => {
+    vi.advanceTimersByTime(2000);
+    expect(actor.getSnapshot().value).toBe("loading");
+    expect(actor.getSnapshot().children.audioRecorder).toBeDefined();
+  };
+
+  it("stops a recorder the watchdog overtook when its take is discarded while loading", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const take = await recordAndStop({ enableCamera: false });
+    finalizeThroughWatchdog(take);
+
+    take.actor.send({ type: "UNLOAD" });
+
+    expect(take.actor.getSnapshot().value).toBe("idle");
+    expect(take.actor.getSnapshot().context.recording).toBeNull();
+    expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
+    expect(mic.disposals).toBe(1);
+  });
+
+  it("does not splice a take's late narration into a recording imported while it loads", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const take = await recordAndStop({ enableCamera: false });
+    const imported: Recording = { ...createRecording(), id: "imported" };
+    finalizeThroughWatchdog(take);
+
+    take.actor.send({ type: "LOAD_RECORDING", recording: imported });
+    await waitFor(take.actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    mic.emitStopped(new Blob(["late narration"], { type: "audio/webm" }));
+
+    const recording = take.actor.getSnapshot().context.recording!;
+    expect(recording.id).toBe("imported");
+    expect(recording.audioBlob).toBeUndefined();
+    expect(mic.disposals).toBe(1);
   });
 
   it("finalizes through the watchdog after the microphone fails while stopping", async () => {
