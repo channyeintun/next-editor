@@ -24,7 +24,6 @@ import type { ChatCheckpoint, ChatDelta } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";
 import { findFrameIndexAtTime, reconstructFrameAtIndex } from "./utils/frameDelta";
 import { PLAYBACK_END_EPSILON_MS } from "./machine/editorMachineHelpers";
-import type { TimelineActorRef } from "./machine/timelineMachine";
 import type { SnapshotFrom } from "xstate";
 
 // ============================================================================
@@ -107,8 +106,7 @@ export const selectLiveTime = (state: EditorMachineSnapshot) => state.context.ti
 // Data selectors
 export const selectRecording = (state: EditorMachineSnapshot) => state.context.recording;
 export const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
-export const selectTimelineActor = (state: EditorMachineSnapshot) =>
-  state.children.timelineActor as TimelineActorRef | undefined;
+export const selectTimelineActor = (state: EditorMachineSnapshot) => state.children.timelineActor;
 export const selectLiveCursor = (state: EditorMachineSnapshot) =>
   state.context.currentFrame?.state?.mouseCursor || null;
 

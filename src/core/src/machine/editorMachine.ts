@@ -107,6 +107,18 @@ export const editorMachine = setup({
     context: {} as EditorMachineContext,
     events: {} as EditorMachineEvent,
     input: {} as EditorMachineInput,
+    // Child id -> actor src. Without it, xstate infers ids only from root-level invokes, so
+    // `snapshot.children.timelineActor` (invoked under `playback`) is untyped and a spawn id
+    // typo compiles. The screen recorders (dynamic `screenRecorder-N` ids) and the unnamed
+    // loadRecording invoke are left out, which keeps their ids plain strings.
+    children: {} as {
+      timelineActor: "timeline";
+      audioPlayer: "audioPlayback";
+      recordingAudioPlayer: "audioPlayback";
+      audioRecorder: "audioRecording";
+      cameraRecorder: "cameraRecording";
+      mouseTracker: "mouseTracking";
+    },
   },
   actors: {
     timeline: timelineMachine,
