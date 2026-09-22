@@ -116,8 +116,15 @@ export const setRecording = ({
   // MediaRecorder.stop() misses the snapshot the actor was handed. `finalizeRecording`
   // clears `audio.source`, so a source still set to "microphone" here means exactly
   // that: the root AUDIO_RECORDING_STOPPED handler ran after finalize. Reattach
-  // rather than lose the narration.
-  if (!recording.audioBlob && context.audio.blob && context.audio.source === "microphone") {
+  // rather than lose the narration — but only onto the take it was recorded for.
+  // That flag outlives the take, so an unrelated recording loaded later would
+  // otherwise inherit the previous narration.
+  if (
+    !recording.audioBlob &&
+    context.audio.blob &&
+    context.audio.source === "microphone" &&
+    context.recording?.id === recording.id
+  ) {
     recording.audioBlob = context.audio.blob;
     recording.audioSource = "microphone";
     recording.audioStartOffsetMs = recording.audioStartOffsetMs ?? context.audio.startOffsetMs;

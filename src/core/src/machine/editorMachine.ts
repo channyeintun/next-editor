@@ -289,9 +289,11 @@ export const editorMachine = setup({
     // `loading`/`playback`, where the capture-side handlers are gone. That blob is
     // the whole narration — accept it wherever it lands and splice it into the
     // finalized recording. `recording`/`stoppingRecording` keep their own, more
-    // specific handlers and take precedence there.
+    // specific handlers and take precedence there. The recorder is kept alive past
+    // the watchdog precisely so this can happen, so it is stopped here, once its
+    // blob is in.
     AUDIO_RECORDING_STOPPED: {
-      actions: "attachLateAudioBlob",
+      actions: ["attachLateAudioBlob", stopChild("audioRecorder")],
     },
     ADD_CAPTION_TRACK: {
       actions: "addCaptionTrack",
@@ -375,13 +377,22 @@ export const editorMachine = setup({
             ],
           },
         ],
-        LOAD_RECORDING: "loading",
+        // A previous take's recorder may still be waiting on its blob; it must not
+        // splice that narration into the recording about to load.
+        LOAD_RECORDING: {
+          target: "loading",
+          actions: stopChild("audioRecorder"),
+        },
       },
     },
 
     startingRecording: {
       entry: [
         enqueueActions(({ context, enqueue }) => {
+          // A previous take's recorder can outlive its session while it waits on a
+          // late blob. Spawning under the same id would only replace the reference
+          // and leave the old actor running, so stop it first.
+          enqueue.stopChild("audioRecorder");
           // Spawn, not invoke: must survive into recording/stoppingRecording — its
           // AUDIO_RECORDING_STOPPED event arrives after leaving this state.
           enqueue.spawnChild("audioRecording", {
@@ -543,8 +554,10 @@ export const editorMachine = setup({
         AUDIO_PLAYBACK_READY: {
           actions: "storeExternalAudioDuration",
         },
+        // The recorder ended by itself (device unplugged, permission revoked). STOP_RECORDING
+        // will then skip `stoppingRecording`, so this is the last place its actor is stopped.
         AUDIO_RECORDING_STOPPED: {
-          actions: "storeAudioBlob",
+          actions: ["storeAudioBlob", stopChild("audioRecorder")],
         },
         AUDIO_PLAYBACK_FINISHED: [
           {
@@ -650,7 +663,11 @@ export const editorMachine = setup({
           }
         }),
       ],
-      exit: [stopChild("audioRecorder"), stopChild("cameraRecorder")],
+      // The mic recorder is deliberately not stopped on exit. When the watchdog wins, its
+      // blob is still on the way, and a stopped actor can no longer deliver it to the root
+      // late-blob handler. It is stopped where its blob is consumed instead, or when the
+      // take is unloaded or replaced.
+      exit: [stopChild("cameraRecorder")],
       on: {
         AUDIO_RECORDING_CHUNK: {
           actions: "captureAudioChunk",
@@ -658,11 +675,16 @@ export const editorMachine = setup({
         AUDIO_RECORDING_STOPPED: [
           {
             guard: "isCameraRecording",
-            actions: "storeAudioBlob",
+            actions: ["storeAudioBlob", stopChild("audioRecorder")],
           },
           {
             target: "loading",
-            actions: ["storeAudioBlob", "finalizeRecording", "notifyRecordingStop"],
+            actions: [
+              "storeAudioBlob",
+              stopChild("audioRecorder"),
+              "finalizeRecording",
+              "notifyRecordingStop",
+            ],
           },
         ],
         CAMERA_STOPPED: [
@@ -912,15 +934,19 @@ export const editorMachine = setup({
             }),
           ],
         },
+        // A mic recorder still waiting on its blob after the finalize watchdog belongs to
+        // the take being left. Stop it, or its straggler blob would land on whatever
+        // comes next.
         UNLOAD: {
           target: "idle",
-          actions: "clearRecording",
+          actions: [stopChild("audioRecorder"), "clearRecording"],
         },
         // Replace the loaded recording with a newly provided one (file import while a
         // recording is open, or the URL loader's whole-file fallback after a mid-stream
         // reader failure). Exiting `playback` stops the timeline/audio children first.
         LOAD_RECORDING: {
           target: "loading",
+          actions: stopChild("audioRecorder"),
         },
       },
       states: {
