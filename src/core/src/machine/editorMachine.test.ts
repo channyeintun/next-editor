@@ -17,7 +17,7 @@ import type {
   CameraRecordingInput,
 } from "./cameraActor";
 import { getPlaybackAudioState } from "./editorMachineHelpers";
-import type { Recording, RecordingStreamDelta } from "../types";
+import type { CaptionTrack, Recording, RecordingStreamDelta } from "../types";
 import type { PreviewEvent } from "../slides";
 import { ContentEditBaseMismatchError, createContentEditDelta } from "../utils/frameDelta";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
@@ -440,6 +440,57 @@ describe("editorMachine actor lifecycle", () => {
     expect(audioPlayerEvents).toEqual([]);
 
     actor.stop();
+  });
+
+  // Published lessons keep their captions as sibling .vtt files that useUrlLoader adds
+  // through ADD_CAPTION_TRACK. That small fetch usually beats the sibling audio download,
+  // whose EXTEND_RECORDING carries only the stream's own captions and used to drop the rest.
+  describe("caption tracks across EXTEND_RECORDING", () => {
+    const captionTrack = (id: string): CaptionTrack => ({
+      id,
+      language: "en",
+      cues: [{ start: 0, end: 1000, text: id }],
+    });
+
+    const captionIds = (actor: ReturnType<typeof createActor<typeof editorMachine>>) =>
+      actor.getSnapshot().context.recording!.captions?.map((track) => track.id);
+
+    const loadAndExtend = async (embedded: CaptionTrack[] | undefined, added: CaptionTrack[]) => {
+      const actor = createActor(editorMachine, {
+        input: { editorRef: { current: null } },
+      }).start();
+      const recording: Recording = { ...createRecording(), captions: embedded };
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      for (const track of added) actor.send({ type: "ADD_CAPTION_TRACK", track });
+
+      actor.send({
+        type: "EXTEND_RECORDING",
+        recording: { ...recording, cameraUrl: "https://example.com/camera.webm" },
+      });
+      expect(actor.getSnapshot().context.recording!.cameraUrl).toBe(
+        "https://example.com/camera.webm",
+      );
+      return actor;
+    };
+
+    it("keeps a sibling track added after load", async () => {
+      const actor = await loadAndExtend(undefined, [captionTrack("en-sibling")]);
+      expect(captionIds(actor)).toEqual(["en-sibling"]);
+      actor.stop();
+    });
+
+    it("keeps the stream's own captions when nothing was added", async () => {
+      const actor = await loadAndExtend([captionTrack("emb")], []);
+      expect(captionIds(actor)).toEqual(["emb"]);
+      actor.stop();
+    });
+
+    it("keeps both the stream's captions and an added sibling track", async () => {
+      const actor = await loadAndExtend([captionTrack("emb")], [captionTrack("en-sibling")]);
+      expect(captionIds(actor)).toEqual(["emb", "en-sibling"]);
+      actor.stop();
+    });
   });
 
   // Building a content delta calls getDmpCodec(), which throws when the WASM has

@@ -277,7 +277,9 @@ effective duration in your UI.
 
 - `extendRecording` (action) replaces `context.recording` with the larger prefix. Since it is an
   append-only superset, `lastAppliedFrameIndex` and the other replay cursors remain valid, and
-  `timeline.currentTime` is untouched.
+  `timeline.currentTime` is untouched. The one field it does not take from the new recording is
+  `captions`: once the loaded recording has caption tracks (sibling `.vtt` files and viewer
+  imports arrive through `ADD_CAPTION_TRACK`, outside the stream), that list is kept.
 - The replay actions (`applyFrameAtTime`, `applyPreviewEventsAtTime`, …) then run so any
   newly-available frames/events at the current time are applied immediately.
 - `EXTEND_RECORDING` also updates media playback. The machine spawns `audioPlayer` when the first

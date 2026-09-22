@@ -294,7 +294,14 @@ export const extendRecording = ({
   // already normalized every frame. Re-normalizing here deep-cloned the entire
   // growing frame array on each progressive-decode interval — O(n²) over a
   // long download — for no behavioral difference.
-  const recording = event.recording;
+  //
+  // Caption tracks are machine-owned after load: sibling VTTs (useUrlLoader) and viewer
+  // imports arrive through ADD_CAPTION_TRACK and are not part of the SCR stream. The small
+  // .vtt fetch usually lands before the audio download's extend, which carries only the
+  // stream's own captions, so taking its list wholesale dropped the lesson's subtitles.
+  const captions = context.recording.captions ?? event.recording.captions;
+  const recording =
+    captions === event.recording.captions ? event.recording : { ...event.recording, captions };
   const duration = normalizeTimelineDuration(recording.duration, context.timeline.duration);
   return {
     recording,

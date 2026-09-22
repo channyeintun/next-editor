@@ -253,7 +253,9 @@ its `api_client_mode`, `api_client_request`, `api_client_response`, `api_client_
 and `api_client_inspect_history` variants are applied through the same preview replay cursor
 as DOM snapshots. Caption tracks are managed out of band — `ADD_CAPTION_TRACK` /
 `REMOVE_CAPTION_TRACK` mutate the loaded recording's `captions` directly (e.g. from a
-`.vtt`/`.srt` import or sibling-file load) rather than riding the timeline.
+`.vtt`/`.srt` import or sibling-file load) rather than riding the timeline. Once a recording
+has captions, `EXTEND_RECORDING` keeps its list instead of taking the extended recording's, so a
+late audio or stream extend does not drop tracks added after load.
 
 ## Key Events
 
