@@ -148,6 +148,50 @@ describe("getChatReplayResult", () => {
     }
   });
 
+  // A forward seek from an early retained fold used to replay every delta up to a
+  // checkpoint in the range and then discard the result. The delta here was recorded
+  // against other text, so applying it throws: the seek must never touch it.
+  it("a forward seek from a retained fold restarts at the checkpoint it passes", () => {
+    const events: ChatRecordingEvent[] = [
+      { timestamp: 0, event: { k: "message_start", id: "msg-1", role: "user" } },
+      { timestamp: 10, event: { k: "content", delta: insertDelta("other text", "other text!") } },
+      {
+        timestamp: 20,
+        event: {
+          k: "checkpoint",
+          state: {
+            items: [{ kind: "message", id: "msg-1", role: "user", text: "fix the bug" }],
+            status: "streaming",
+          },
+        },
+      },
+      { timestamp: 30, event: { k: "status", status: "done" } },
+    ];
+
+    expect(
+      getChatReplayResult({ chatEvents: events, currentTime: 0, lastAppliedIndex: -1 }).nextIndex,
+    ).toBe(0);
+
+    const seeked = getChatReplayResult({
+      chatEvents: events,
+      currentTime: 30,
+      lastAppliedIndex: 0,
+      isResync: true,
+    });
+    const cold = getChatReplayResult({
+      chatEvents: [...events],
+      currentTime: 30,
+      lastAppliedIndex: -1,
+    });
+
+    expect(seeked.snapshotToApply).toEqual(cold.snapshotToApply);
+    expect(seeked.snapshotToApply).toEqual({
+      items: [{ kind: "message", id: "msg-1", role: "user", text: "fix the bug" }],
+      status: "done",
+      draft: "",
+    });
+  });
+
   it("returns no snapshot when the cursor index hasn't changed", () => {
     const first = getChatReplayResult({
       chatEvents: CHAT_EVENTS,

@@ -60,9 +60,20 @@ function foldChatEventsUpTo(chatEvents: ChatRecordingEvent[], targetIndex: numbe
   let foldStart: number;
 
   if (cached && cached.index <= targetIndex) {
-    // Advancing: continue from where the last fold stopped.
+    // Advancing: continue from where the last fold stopped, unless a checkpoint lies
+    // in between. A forward seek from an early fold would otherwise run every content
+    // delta before that checkpoint only to throw the result away. A playback tick
+    // advances one event, so this scans one event.
     state = cached.state;
     foldStart = cached.index + 1;
+    for (let index = targetIndex; index > cached.index; index -= 1) {
+      const event = chatEvents[index].event;
+      if (isCheckpointEvent(event)) {
+        state = checkpointFoldState(event.state);
+        foldStart = index + 1;
+        break;
+      }
+    }
   } else {
     // First fold, or a backward seek — deltas are not invertible, so restart from
     // the nearest checkpoint at or before the target.
@@ -88,9 +99,9 @@ function foldChatEventsUpTo(chatEvents: ChatRecordingEvent[], targetIndex: numbe
 
   for (let index = foldStart; index <= targetIndex; index += 1) {
     const event = chatEvents[index].event;
-    // A checkpoint *is* the folded state at that point, so adopting it is exactly
-    // equivalent to having replayed everything before it. The restart branch above
-    // can never see one in its range; the incremental branch can.
+    // Both branches above start after the last checkpoint at or before the target,
+    // so only deltas are met here. The checkpoint case narrows the event type, and
+    // would still be exact: a checkpoint *is* the folded state at that point.
     state = isCheckpointEvent(event)
       ? checkpointFoldState(event.state)
       : applyChatDelta(state, event);
