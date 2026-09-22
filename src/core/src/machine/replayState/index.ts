@@ -10,12 +10,7 @@
 //
 // Re-exported here so callers keep importing from "replayState" unchanged.
 
-export {
-  resolveReplayTime,
-  isSeekReplayEvent,
-  isReplayResync,
-  advanceReplayCursor,
-} from "./cursor";
+export { resolveReplayTime, isSeekReplayEvent, isReplayResync } from "./cursor";
 
 export { getPreviewReplayResult } from "./preview";
 export type { PreviewReplayResult } from "./preview";

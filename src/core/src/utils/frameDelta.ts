@@ -21,13 +21,12 @@ import {
   normalizeEditorViewState,
 } from "./editorState";
 import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
+import { findTimedEventIndexAtOrBefore } from "./timedIndex";
 import {
   applyTextEditEvent,
   type TextEditChange,
   type TextEditEvent,
 } from "../../../types/textEdit";
-
-const LINEAR_SCAN_LIMIT = 128;
 
 interface KeyframeIndex {
   /** Ascending frame indices that are keyframes. */
@@ -846,63 +845,13 @@ export function compressFrames(fullFrames: EditorFrame[]): DeltaFrame[] {
 }
 
 /**
- * Find the appropriate frame index for a given timestamp (optimized)
+ * Index of the frame on screen at `time`: the last frame at or before it, or the
+ * first frame when `time` precedes them all. -1 only for an empty array.
  */
 export function findFrameIndexAtTime(
   frames: Array<{ timestamp: number }>,
   time: number,
   startIndex: number = 0,
 ): number {
-  if (!frames.length) return -1;
-
-  const lastIndex = frames.length - 1;
-  const hasValidStartIndex = startIndex >= 0 && startIndex <= lastIndex;
-
-  if (!hasValidStartIndex) {
-    return findFrameIndexAtTimeBinary(frames, time, 0, lastIndex);
-  }
-
-  if (frames[startIndex].timestamp > time) {
-    return findFrameIndexAtTimeBinary(frames, time, 0, startIndex);
-  }
-
-  if (startIndex === lastIndex || frames[startIndex + 1].timestamp > time) {
-    return startIndex;
-  }
-
-  const scanEnd = Math.min(lastIndex, startIndex + LINEAR_SCAN_LIMIT);
-
-  for (let index = startIndex + 1; index <= scanEnd; index++) {
-    if (frames[index].timestamp > time) {
-      return index - 1;
-    }
-  }
-
-  if (scanEnd === lastIndex) {
-    return lastIndex;
-  }
-
-  return findFrameIndexAtTimeBinary(frames, time, scanEnd, lastIndex);
-}
-
-function findFrameIndexAtTimeBinary(
-  frames: Array<{ timestamp: number }>,
-  time: number,
-  low: number,
-  high: number,
-): number {
-  let nearestIndex = low > 0 ? low - 1 : 0;
-
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-
-    if (frames[mid].timestamp <= time) {
-      nearestIndex = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-
-  return nearestIndex;
+  return frames.length ? Math.max(0, findTimedEventIndexAtOrBefore(frames, time, startIndex)) : -1;
 }

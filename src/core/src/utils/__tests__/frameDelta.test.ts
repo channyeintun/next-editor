@@ -120,6 +120,17 @@ describe("Delta Compression Optimization", () => {
     expect(findFrameIndexAtTime(frames, 77_770, 10)).toBe(7_777);
   });
 
+  // Unlike the replay tracks' lookup, an editor always shows a frame: a time before the
+  // first one resolves to it, from a cold search and from a forward cursor alike.
+  it("should resolve a time before the first frame to the first frame", () => {
+    const frames = [createMockFrame("a", 100), createMockFrame("ab", 200)];
+
+    expect(findFrameIndexAtTime(frames, 50, -1)).toBe(0);
+    expect(findFrameIndexAtTime(frames, 50, 1)).toBe(0);
+    expect(findFrameIndexAtTime(frames, 50)).toBe(0);
+    expect(findFrameIndexAtTime([], 50)).toBe(-1);
+  });
+
   it("should not treat a shared UTF-8 lead byte as a shared character prefix", () => {
     expect(findCommonPrefixLength("éx", "èy")).toBe(0);
   });

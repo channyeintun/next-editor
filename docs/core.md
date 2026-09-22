@@ -139,6 +139,7 @@ The main extension hooks in `UseNextEditorConfig` are:
 | `cursorReplay.ts`                      | Fake-cursor tween/replay logic driven by `cursorEvents`                                                        |
 | `audioContext.ts` / `audioDuration.ts` | Shared `AudioContext` helpers and exact-duration calculation for audio blobs                                   |
 | `stringAffix.ts`                       | Small string prefix/suffix helpers used by content diffing                                                     |
+| `timedIndex.ts`                        | `findTimedEventIndexAtOrBefore` — timestamp-to-index lookup shared by frames and every replay track            |
 
 ### dmpCodec (WASM diffing)
 
