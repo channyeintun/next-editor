@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { fixWebmDuration } from "./webmDuration";
 
 // ---------------------------------------------------------------------------
@@ -61,7 +61,18 @@ interface WebmFixtureOptions {
   existingDuration?: { widthBytes: 4 | 8; value: number };
   withEbmlHeader?: boolean;
   definiteSegment?: boolean;
+  /** Cluster payload length; the default is a 7-byte cluster. */
+  clusterBytes?: number;
+  /** Length of the filler child that keeps Info non-empty. */
+  infoFillerBytes?: number;
 }
+
+/** Deterministic, non-repeating-looking media bytes. */
+const mediaBytes = (length: number) => {
+  const out = new Uint8Array(length);
+  for (let i = 0; i < length; i += 1) out[i] = (i * 31 + (i >> 8)) & 0xff;
+  return out;
+};
 
 const durationElement = (widthBytes: 4 | 8, value: number) => {
   const content = new Uint8Array(widthBytes);
@@ -77,7 +88,14 @@ const buildWebm = (options: WebmFixtureOptions = {}) => {
     infoChildren.push(el(TIMECODE_SCALE_ID, uintBytes(options.timecodeScale)));
   }
   // A non-Duration child so Info is never empty (MuxingApp-shaped filler).
-  infoChildren.push(el([0x4d, 0x80], bytes(0x54, 0x65, 0x73, 0x74)));
+  infoChildren.push(
+    el(
+      [0x4d, 0x80],
+      options.infoFillerBytes === undefined
+        ? bytes(0x54, 0x65, 0x73, 0x74)
+        : mediaBytes(options.infoFillerBytes),
+    ),
+  );
   if (options.existingDuration) {
     infoChildren.push(
       durationElement(options.existingDuration.widthBytes, options.existingDuration.value),
@@ -85,7 +103,12 @@ const buildWebm = (options: WebmFixtureOptions = {}) => {
   }
 
   const info = el(INFO_ID, concat(...infoChildren));
-  const cluster = el(CLUSTER_ID, bytes(0xe7, 0x81, 0x00, 0xa3, 0x82, 0x00, 0x01));
+  const cluster = el(
+    CLUSTER_ID,
+    options.clusterBytes === undefined
+      ? bytes(0xe7, 0x81, 0x00, 0xa3, 0x82, 0x00, 0x01)
+      : mediaBytes(options.clusterBytes),
+  );
   const segmentContent = concat(info, cluster);
 
   const segment = options.definiteSegment
@@ -111,6 +134,13 @@ const readInjectedDuration = (buf: Uint8Array): number | null => {
 
 const toBytes = async (blob: Blob) => new Uint8Array(await blob.arrayBuffer());
 
+/** Index of the first differing byte, or -1 when the arrays are identical. */
+const firstDifference = (left: Uint8Array, right: Uint8Array): number => {
+  const length = Math.min(left.length, right.length);
+  for (let i = 0; i < length; i += 1) if (left[i] !== right[i]) return i;
+  return left.length === right.length ? -1 : length;
+};
+
 const indexOfSubarray = (haystack: Uint8Array, needle: Uint8Array): number => {
   outer: for (let i = 0; i + needle.length <= haystack.length; i += 1) {
     for (let j = 0; j < needle.length; j += 1) {
@@ -122,6 +152,10 @@ const indexOfSubarray = (haystack: Uint8Array, needle: Uint8Array): number => {
 };
 
 describe("fixWebmDuration", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("returns the original blob for non-WebM / garbage input", async () => {
     const original = new Blob([bytes(0x76, 0x76, 0x76)], { type: "video/webm" });
     const result = await fixWebmDuration(original, 5000);
@@ -194,5 +228,49 @@ describe("fixWebmDuration", () => {
     }
     const contentStart = segIdIndex + SEGMENT_ID.length + sizeLen;
     expect(contentStart + declared).toBe(after.length);
+  });
+
+  // MediaRecorder never writes a Duration, so the fixed file is the same
+  // recording with a Duration appended to Info, built here from scratch.
+  it.each([
+    ["unknown", false],
+    ["definite", true],
+  ] as const)(
+    "rewrites only the header of a multi-megabyte file with an %s-size Segment",
+    async (_size, definiteSegment) => {
+      const clusterBytes = 3 * 1024 * 1024;
+      const fixture = { timecodeScale: 1_000_000, withEbmlHeader: true, clusterBytes };
+      const { blob } = buildWebm({ ...fixture, definiteSegment });
+      const { blob: expected } = buildWebm({
+        ...fixture,
+        definiteSegment,
+        existingDuration: { widthBytes: 8, value: 90_000 },
+      });
+
+      const result = await fixWebmDuration(blob, 90_000);
+
+      expect(result.type).toBe(blob.type);
+      const [actualBytes, expectedBytes] = await Promise.all([toBytes(result), toBytes(expected)]);
+      expect(actualBytes.length).toBe(expectedBytes.length);
+      expect(firstDifference(actualBytes, expectedBytes)).toBe(-1);
+    },
+  );
+
+  it("reads no more than the 64KiB header window of a large file", async () => {
+    const { blob } = buildWebm({ timecodeScale: 1_000_000, clusterBytes: 1024 * 1024 });
+    const arrayBuffer = vi.spyOn(Blob.prototype, "arrayBuffer");
+
+    const result = await fixWebmDuration(blob, 5_000);
+
+    expect(result).not.toBe(blob);
+    expect(arrayBuffer).toHaveBeenCalled();
+    for (const readBlob of arrayBuffer.mock.contexts) {
+      expect((readBlob as Blob).size).toBeLessThanOrEqual(64 * 1024);
+    }
+  });
+
+  it("returns the original blob when Info ends past the header window", async () => {
+    const { blob } = buildWebm({ timecodeScale: 1_000_000, infoFillerBytes: 70 * 1024 });
+    expect(await fixWebmDuration(blob, 5_000)).toBe(blob);
   });
 });

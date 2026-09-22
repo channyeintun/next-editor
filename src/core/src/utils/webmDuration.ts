@@ -12,6 +12,11 @@
  * error) makes it return the ORIGINAL blob untouched: the guarantee is "never corrupt the file", since
  * this is the user's keep-forever artifact. MP4 output already carries a duration, so callers skip it.
  *
+ * A screen recording runs to about a gigabyte an hour, and every byte it rewrites sits in the first
+ * few hundred, so it reads only a 64KiB header window and builds the result as a Blob of the patched
+ * header plus a slice of the untouched remainder, never copying the media. If Info does not end inside
+ * that window it returns the original blob.
+ *
  * EBML primer (see https://www.matroska.org/technical/elements.html):
  *  - Every element is `[ID][size][data]`. The ID's byte length is signalled by the position of the
  *    first set bit in its first byte; the size is a variable-length integer (vint) whose first byte's
@@ -26,6 +31,9 @@ const DURATION_ID = [0x44, 0x89];
 const TIMECODE_SCALE_ID = [0x2a, 0xd7, 0xb1];
 
 const DEFAULT_TIMECODE_SCALE_NS = 1_000_000; // 1ms per timecode unit — MediaRecorder's default.
+
+// MediaRecorder writes Info (about 100 bytes) right after the Segment header.
+const HEADER_WINDOW_BYTES = 64 * 1024;
 
 // Return the precise `ArrayBuffer`-backed type (not the bare `Uint8Array`, which
 // widens the buffer to `ArrayBufferLike` and so no longer satisfies `BlobPart`) —
@@ -174,15 +182,20 @@ export const fixWebmDuration = async (blob: Blob, durationMs: number): Promise<B
   try {
     if (!(durationMs > 0)) return blob;
 
-    const buf = new Uint8Array(await blob.arrayBuffer());
-    const total = buf.length;
+    const buf = new Uint8Array(await blob.slice(0, HEADER_WINDOW_BYTES).arrayBuffer());
 
-    const segment = findChild(buf, 0, total, SEGMENT_ID);
+    // A definite Segment's size can reach past the window; Info must not.
+    const segment = findChild(buf, 0, buf.length, SEGMENT_ID);
     if (!segment) return blob;
 
-    const info = findChild(buf, segment.contentStart, segment.contentEnd, INFO_ID);
+    const info = findChild(
+      buf,
+      segment.contentStart,
+      Math.min(segment.contentEnd, buf.length),
+      INFO_ID,
+    );
     // A definite Info size is required — its size field is what we rewrite.
-    if (!info || info.size === null) return blob;
+    if (!info || info.size === null || info.contentEnd > buf.length) return blob;
 
     let timecodeScale = DEFAULT_TIMECODE_SCALE_NS;
     const timecodeScaleEl = findChild(buf, info.contentStart, info.contentEnd, TIMECODE_SCALE_ID);
@@ -207,24 +220,20 @@ export const fixWebmDuration = async (blob: Blob, durationMs: number): Promise<B
     if (!newInfoSize) return blob;
     const newInfoElement = concat(Uint8Array.from(INFO_ID), newInfoSize, newInfoContent);
 
-    let out = concat(
-      buf.subarray(0, info.idStart),
-      newInfoElement,
-      buf.subarray(info.contentEnd, total),
-    );
+    const head = concat(buf.subarray(0, info.idStart), newInfoElement);
 
     // If the Segment size is definite (rare for MediaRecorder — it streams an unknown-size Segment),
     // widen it by the same delta, preserving its original vint byte length. Bail if it won't fit.
+    // Its size field precedes Info, so it lies inside `head`.
     if (segment.size !== null) {
-      const delta = out.length - total;
+      const delta = newInfoElement.length - (info.contentEnd - info.idStart);
       const segSizeStart = segment.contentStart - segment.sizeLength;
       const reencoded = encodeVintSize(segment.size + delta, segment.sizeLength);
       if (!reencoded) return blob;
-      out = out.slice();
-      out.set(reencoded, segSizeStart);
+      head.set(reencoded, segSizeStart);
     }
 
-    return new Blob([out], { type: blob.type });
+    return new Blob([head, blob.slice(info.contentEnd)], { type: blob.type });
   } catch {
     // Never throw and never emit a corrupted file — fall back to the untouched blob.
     return blob;
