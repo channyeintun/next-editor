@@ -1,4 +1,4 @@
-import { fromCallback } from "xstate";
+import { fromTypedCallback } from "./fromTypedCallback";
 import { getSupportedVideoMimeType, CAMERA_VIDEO_MIME_TYPES } from "../utils/videoMimeType";
 
 const CAMERA_TIMESLICE_MS = 1000;
@@ -14,7 +14,7 @@ export type CameraRecordingEmit =
   | { type: "CAMERA_STOPPED"; blob: Blob }
   | { type: "CAMERA_ERROR"; error: string };
 
-export const cameraRecordingActor = fromCallback<
+export const cameraRecordingActor = fromTypedCallback<
   CameraRecordingEvent,
   CameraRecordingInput,
   CameraRecordingEmit

@@ -1,4 +1,4 @@
-import { fromCallback } from "xstate";
+import { fromTypedCallback } from "./fromTypedCallback";
 import { getSupportedVideoMimeType, SCREEN_VIDEO_MIME_TYPES } from "../utils/videoMimeType";
 import { fixWebmDuration } from "../utils/webmDuration";
 
@@ -116,7 +116,7 @@ export const buildScreenCaptureStream = (
  * The blob is emitted via `SCREEN_STOPPED` and saved to disk by the app layer — it is never
  * folded into the `Recording`, so nothing in the machine's finalize join waits on it.
  */
-export const screenRecordingActor = fromCallback<
+export const screenRecordingActor = fromTypedCallback<
   ScreenRecordingEvent,
   ScreenRecordingInput,
   ScreenRecordingEmit

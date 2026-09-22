@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { createActor, fromCallback, waitFor } from "xstate";
+import { createActor, waitFor } from "xstate";
 import {
   audioRecordingActor,
   type AudioPlaybackEmit,
@@ -7,6 +7,7 @@ import {
   type AudioPlaybackInput,
 } from "./audioActor";
 import { editorMachine } from "./editorMachine";
+import { fromTypedCallback } from "./fromTypedCallback";
 import { getPlaybackAudioState } from "./editorMachineHelpers";
 import type { Recording } from "../types";
 
@@ -221,7 +222,7 @@ describe("audioRecordingActor lifecycle", () => {
     // Playback of a take with narration spawns an audio player, which jsdom cannot run.
     const recorderMachine = editorMachine.provide({
       actors: {
-        audioPlayback: fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
+        audioPlayback: fromTypedCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
           () => {},
         ),
       },

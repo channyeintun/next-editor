@@ -1,4 +1,4 @@
-import { fromCallback } from "xstate";
+import { fromTypedCallback } from "./fromTypedCallback";
 import { getSupportedAudioMimeType } from "../utils/audioMimeType";
 import { isAllowedRecordingMediaUrl } from "../utils/mediaUrl";
 import {
@@ -111,7 +111,7 @@ export type AudioPlaybackEmit =
 /**
  * Audio recording actor - manages MediaRecorder lifecycle
  */
-export const audioRecordingActor = fromCallback<
+export const audioRecordingActor = fromTypedCallback<
   AudioRecordingEvent,
   AudioRecordingInput,
   AudioRecordingEmit
@@ -280,7 +280,7 @@ export const audioRecordingActor = fromCallback<
  * `play()`'s real startup latency — can seek to where the timeline actually is
  * by then, instead of freezing in the startup lag forever.
  */
-export const audioPlaybackActor = fromCallback<
+export const audioPlaybackActor = fromTypedCallback<
   AudioPlaybackEvent,
   AudioPlaybackInput,
   AudioPlaybackEmit

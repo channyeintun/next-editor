@@ -17,6 +17,7 @@ import type {
   CameraRecordingInput,
 } from "./cameraActor";
 import { getPlaybackAudioState } from "./editorMachineHelpers";
+import { fromTypedCallback } from "./fromTypedCallback";
 import type { CaptionTrack, EditorFrame, Recording, RecordingStreamDelta } from "../types";
 import type { PreviewEvent } from "../slides";
 import type { WhiteboardSceneState } from "../whiteboard";
@@ -393,7 +394,7 @@ describe("editorMachine actor lifecycle", () => {
     const audioPlayerEvents: AudioPlaybackEvent["type"][] = [];
     const machine = editorMachine.provide({
       actors: {
-        audioPlayback: fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
+        audioPlayback: fromTypedCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
           ({ receive }) => {
             receive((event) => {
               audioPlayerEvents.push(event.type);
@@ -828,13 +829,13 @@ describe("editorMachine actor lifecycle", () => {
     const disposeCamera = vi.fn<() => void>();
     const machine = editorMachine.provide({
       actors: {
-        audioPlayback: fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
+        audioPlayback: fromTypedCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
           ({ sendBack }) => {
             failAudio = () =>
               sendBack({ type: "AUDIO_PLAYBACK_ERROR", error: "selected audio failed" });
           },
         ),
-        cameraRecording: fromCallback<
+        cameraRecording: fromTypedCallback<
           CameraRecordingEvent,
           CameraRecordingInput,
           CameraRecordingEmit
@@ -2877,29 +2878,31 @@ describe("editorMachine stoppingRecording join", () => {
   // to, so every test picks the order in which the recorders report.
   const machine = editorMachine.provide({
     actors: {
-      audioRecording: fromCallback<AudioRecordingEvent, AudioRecordingInput, AudioRecordingEmit>(
-        ({ receive, sendBack }) => {
-          mic.emitStopped = (blob) => sendBack({ type: "AUDIO_RECORDING_STOPPED", blob });
-          mic.emitError = (error) => sendBack({ type: "AUDIO_RECORDING_ERROR", error });
-          receive((event) => {
-            if (event.type === "STOP") {
-              mic.stopRequests += 1;
-              return;
-            }
-            sendBack({
-              type: "AUDIO_RECORDING_STARTED",
-              mediaRecorder: {} as MediaRecorder,
-              mimeType: "audio/webm",
-              startedAtMs: Date.now(),
-              startedAtPerf: performance.now(),
-            });
+      audioRecording: fromTypedCallback<
+        AudioRecordingEvent,
+        AudioRecordingInput,
+        AudioRecordingEmit
+      >(({ receive, sendBack }) => {
+        mic.emitStopped = (blob) => sendBack({ type: "AUDIO_RECORDING_STOPPED", blob });
+        mic.emitError = (error) => sendBack({ type: "AUDIO_RECORDING_ERROR", error });
+        receive((event) => {
+          if (event.type === "STOP") {
+            mic.stopRequests += 1;
+            return;
+          }
+          sendBack({
+            type: "AUDIO_RECORDING_STARTED",
+            mediaRecorder: {} as MediaRecorder,
+            mimeType: "audio/webm",
+            startedAtMs: Date.now(),
+            startedAtPerf: performance.now(),
           });
-          return () => {
-            mic.disposals += 1;
-          };
-        },
-      ),
-      cameraRecording: fromCallback<
+        });
+        return () => {
+          mic.disposals += 1;
+        };
+      }),
+      cameraRecording: fromTypedCallback<
         CameraRecordingEvent,
         CameraRecordingInput,
         CameraRecordingEmit
@@ -2923,7 +2926,7 @@ describe("editorMachine stoppingRecording join", () => {
         };
       }),
       // Selected-file audio, and playback of a take that has it, spawn an HTMLAudioElement.
-      audioPlayback: fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
+      audioPlayback: fromTypedCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
         () => {},
       ),
     },
@@ -3064,16 +3067,18 @@ describe("editorMachine stoppingRecording join", () => {
     const take = startTake({
       takeMachine: machine.provide({
         actors: {
-          audioPlayback: fromCallback<AudioPlaybackEvent, AudioPlaybackInput, AudioPlaybackEmit>(
-            ({ receive, sendBack }) => {
-              endNarration = () => sendBack({ type: "AUDIO_PLAYBACK_FINISHED" });
-              receive((event) => {
-                if (event.type === "PLAY") {
-                  sendBack({ type: "AUDIO_PLAYBACK_READY", duration: 5000 });
-                }
-              });
-            },
-          ),
+          audioPlayback: fromTypedCallback<
+            AudioPlaybackEvent,
+            AudioPlaybackInput,
+            AudioPlaybackEmit
+          >(({ receive, sendBack }) => {
+            endNarration = () => sendBack({ type: "AUDIO_PLAYBACK_FINISHED" });
+            receive((event) => {
+              if (event.type === "PLAY") {
+                sendBack({ type: "AUDIO_PLAYBACK_READY", duration: 5000 });
+              }
+            });
+          }),
         },
       }),
     });
@@ -3613,9 +3618,11 @@ describe("editorMachine local screen recording", () => {
     const machine = editorMachine.provide({
       actors: {
         // Never reports STARTED, so the machine stays in `startingRecording`.
-        audioRecording: fromCallback<AudioRecordingEvent, AudioRecordingInput, AudioRecordingEmit>(
-          () => () => {},
-        ),
+        audioRecording: fromTypedCallback<
+          AudioRecordingEvent,
+          AudioRecordingInput,
+          AudioRecordingEmit
+        >(() => () => {}),
       },
     });
     const actor = createActor(machine, {
