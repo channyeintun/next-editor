@@ -35,7 +35,7 @@
         "react-dom": "^19.2.8",
         "react-router": "^8.3.0",
         "rxjs": "7.8.2",
-        "xstate": "5.33.0",
+        "xstate": "5.33.2",
         "y-monaco": "0.1.6",
         "y-protocols": "1.0.7",
         "yaml": "^2.9.0",
@@ -1580,7 +1580,7 @@
 
     "xmlchars": ["xmlchars@2.2.0", "", {}, "sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw=="],
 
-    "xstate": ["xstate@5.33.0", "", {}, "sha512-C58ZnDXlP5WNiiGVMxHTlKpUBtC46HN+H4o2po9Lvglt2pmPzqaqunXRmrvU4NIDvMbjVvaqqL4pGbgFSiYhgw=="],
+    "xstate": ["xstate@5.33.2", "", {}, "sha512-8tC7yXgeCvpT8gKEeEje6ikJJG1wpnoLiXe+HfECW8m10ubMd3QxKOwWA8KxPJVBcLwfdRoMKYxIBGYKmo37/A=="],
 
     "y-monaco": ["y-monaco@0.1.6", "", { "dependencies": { "lib0": "^0.2.43" }, "peerDependencies": { "monaco-editor": ">=0.20.0", "yjs": "^13.3.1" } }, "sha512-sYRywMmcylt+Nupl+11AvizD2am06ST8lkVbUXuaEmrtV6Tf+TD4rsEm6u9YGGowYue+Vfg1IJ97SUP2J+PVXg=="],
 
