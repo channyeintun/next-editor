@@ -39,16 +39,16 @@ interface KeyframeIndex {
 const keyframeIndexCache = new WeakMap<DeltaFrame[], KeyframeIndex>();
 
 /**
- * Finds the length of the common prefix between two strings, in code units,
- * without cutting in the middle of a multi-byte UTF-8 character.
+ * Finds the length of the common prefix between two strings, in UTF-16 code
+ * units, without splitting a surrogate pair.
  */
 export function findCommonPrefixLength(str1: string, str2: string): number {
   return findCommonPrefixJS(str1, str2);
 }
 
 /**
- * Finds the length of the common suffix between two strings, in code units,
- * without cutting in the middle of a multi-byte UTF-8 character.
+ * Finds the length of the common suffix between two strings, in UTF-16 code
+ * units, without splitting a surrogate pair.
  */
 export function findCommonSuffixLength(str1: string, str2: string): number {
   return findCommonSuffixJS(str1, str2);
