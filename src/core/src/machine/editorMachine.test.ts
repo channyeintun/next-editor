@@ -20,7 +20,12 @@ import { getPlaybackAudioState } from "./editorMachineHelpers";
 import type { CaptionTrack, Recording, RecordingStreamDelta } from "../types";
 import type { PreviewEvent } from "../slides";
 import type { WhiteboardSceneState } from "../whiteboard";
-import { ContentEditBaseMismatchError, createContentEditDelta } from "../utils/frameDelta";
+import {
+  ContentEditBaseMismatchError,
+  createContentDelta,
+  createContentEditDelta,
+} from "../utils/frameDelta";
+import { DmpBaseMismatchError } from "../../../storage/dmpCodec/dmpCodec";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 
 const selection = {
@@ -1697,6 +1702,95 @@ describe("editorMachine actor lifecycle", () => {
       expect(onError).toHaveBeenCalledTimes(1);
       expect(onError).toHaveBeenCalledWith(expect.any(ContentEditBaseMismatchError));
       expect(consoleError).not.toHaveBeenCalled();
+    });
+
+    // Skipping is only useful if replay carries on: the next keyframe re-bases the editor.
+    it("still applies the keyframe after the damaged frame", async () => {
+      const onError = vi.fn<(error: Error) => void>();
+      const recording = createDamagedRecording();
+      recording.frames.push({
+        timestamp: 700,
+        isKeyframe: true,
+        state: {
+          content: "recovered",
+          selection,
+          position: { lineNumber: 1, column: 1 },
+          viewState: null,
+          mouseCursor: { x: 0, y: 0, visible: false },
+        },
+      });
+      const editor = new MockEditor(new MockTextModel(""));
+      const actor = createActor(editorMachine, {
+        input: {
+          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
+          onError,
+        },
+      }).start();
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+      actor.send({ type: "SEEK", time: 600 });
+      actor.send({ type: "SEEK", time: 800 });
+
+      expect(actor.getSnapshot().status).toBe("active");
+      expect(actor.getSnapshot().context.lastAppliedFrameIndex).toBe(2);
+      expect(editor.getValue()).toBe("recovered");
+      expect(onError).toHaveBeenCalledTimes(1);
+      actor.stop();
+    });
+  });
+
+  // The chat fold applies content deltas too, and throws on a damaged track just like
+  // frame reconstruction. The throw runs inside the same `assign`, so it would stop the
+  // actor for good if it escaped.
+  describe("a damaged chat delta skipped during replay", () => {
+    // The content delta was recorded against "hello", but the message it lands on is empty.
+    const createDamagedChatRecording = (): Recording => {
+      const delta = createContentDelta("hello", "hello world");
+      if (!delta) throw new Error("Expected a content delta");
+      return {
+        ...createRecording(),
+        chatEvents: [
+          { timestamp: 100, event: { k: "message_start", id: "msg-1", role: "assistant" } },
+          { timestamp: 200, event: { k: "content", delta } },
+          { timestamp: 300, event: { k: "status", status: "done" } },
+        ],
+      };
+    };
+
+    it("reports the error and keeps the actor running", async () => {
+      const onError = vi.fn<(error: Error) => void>();
+      const applied: number[] = [];
+      const recording = createDamagedChatRecording();
+      const actor = createActor(editorMachine, {
+        input: {
+          editorRef: { current: null },
+          onError,
+          applyChatSnapshot: (snapshot) => {
+            applied.push(snapshot.items.length);
+          },
+        },
+      }).start();
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      applied.length = 0;
+
+      actor.send({ type: "SEEK", time: 400 });
+
+      expect(actor.getSnapshot().status).toBe("active");
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(expect.any(DmpBaseMismatchError));
+      expect(actor.getSnapshot().context.lastAppliedChatEventIndex).toBe(
+        (recording.chatEvents?.length ?? 0) - 1,
+      );
+      expect(applied).toEqual([]);
+
+      // A later seek to before the damage folds the transcript again.
+      actor.send({ type: "SEEK", time: 150 });
+
+      expect(applied).toEqual([1]);
+      expect(onError).toHaveBeenCalledTimes(1);
+      actor.stop();
     });
   });
 
