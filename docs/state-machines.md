@@ -160,7 +160,7 @@ This ordering matters because the live stream sink must preserve append-only SCR
 An invoked `loadRecording` actor (a promise actor, not a spawned child) normalizes the recording:
 
 - computes exact duration from the audio blob via `calculateDurationFromFileReader` when finalized non-external audio is present (avoids trailing silence from wall-clock overhead)
-- `onDone` calls `setRecording` and transitions to `playback.ready`
+- `onDone` passes the actor's typed output to `setRecording` and transitions to `playback.ready`
 - `onError` records the error and returns to `idle`
 - `LOAD_RECORDING` re-enters `loading`, restarting the invoke with the newer recording; the
   replaced promise actor is stopped and never delivers its result
@@ -411,7 +411,7 @@ Action bodies are split by concern: capture-side actions live in `captureActions
 
 | Action                                                                                                                      | Description                                                                                    |
 | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `setRecording`                                                                                                              | Install a freshly loaded `Recording` and reset replay cursors                                  |
+| `setRecording`                                                                                                              | Install the `loadRecording` output and reset replay cursors (an inline `assign` in `onDone`)   |
 | `extendRecording`                                                                                                           | Replace `context.recording` with a longer append-only prefix                                   |
 | `applyFrameAtTime`                                                                                                          | Apply the frame at current time to the editor                                                  |
 | `applyPreviewEventsAtTime`                                                                                                  | Apply preview events up to current time (advances its cursor)                                  |

@@ -1,5 +1,5 @@
 import type { EditorMachineContext, EditorMachineEvent } from "./types";
-import type { EditorFrame } from "../types";
+import type { EditorFrame, Recording } from "../types";
 import type { FrameDelta } from "../utils/deltaTypes";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import { areWorkspaceSnapshotsEqual, isWorkspaceTextFile } from "../../../types/workspace";
@@ -24,11 +24,7 @@ import {
   isSeekReplayEvent,
   resolveReplayTime,
 } from "./replayState";
-import {
-  applyFrameState,
-  getLoadedRecordingPayload,
-  reportMachineError,
-} from "./editorMachineHelpers";
+import { applyFrameState, reportMachineError } from "./editorMachineHelpers";
 import {
   normalizePlaybackSpeed,
   normalizePlaybackVolume,
@@ -105,16 +101,11 @@ function latestEditorModelBoundaryTime(
   return boundaryTimes[boundedIndex] ?? null;
 }
 
-export const setRecording = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
-  const loaded = getLoadedRecordingPayload(context, event);
-  if (!loaded) return {};
-
+/** `loaded` is the `loadRecording` actor's output, passed in by `loading`'s onDone. */
+export const setRecording = (
+  { context }: { context: EditorMachineContext },
+  loaded: { recording: Recording; duration: number },
+): Partial<EditorMachineContext> => {
   const recording = normalizeRecordingData(loaded.recording);
   const duration = normalizeTimelineDuration(loaded.duration);
 

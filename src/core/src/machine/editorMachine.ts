@@ -234,7 +234,6 @@ export const editorMachine = setup({
 
     // Playback (replay-side) actions — bodies live in replayActions.ts, wrapped
     // here so `setup()` can infer this machine's exact context/event/actor types.
-    setRecording: assign(setRecording),
     extendRecording: assign(extendRecording),
     appendRecordingDelta: assign(appendRecordingDelta),
     addCaptionTrack: assign(addCaptionTrack),
@@ -774,7 +773,10 @@ export const editorMachine = setup({
         }),
         onDone: {
           target: "playback.ready",
-          actions: ["setRecording"],
+          // Inline, not a named setup action: only here is `event` typed as this invoke's
+          // done event. Typed params on a named action break the inference of setup's
+          // enqueueActions (their action union is inferred with unknown params).
+          actions: assign(({ context, event }) => setRecording({ context }, event.output)),
         },
         onError: {
           target: "idle",

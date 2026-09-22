@@ -12,7 +12,6 @@ import type {
 } from "../types";
 import type {
   EditorMachineContext,
-  EditorMachineEvent,
   EditorMachineInput,
   RecordingSessionMediaFragment,
 } from "./types";
@@ -479,31 +478,6 @@ export const createFrame = (
       position,
     },
   };
-};
-
-export const getLoadedRecordingPayload = (
-  context: EditorMachineContext,
-  event: EditorMachineEvent | { output?: unknown },
-): { recording: Recording; duration: number } | null => {
-  if (
-    "output" in event &&
-    event.output &&
-    typeof event.output === "object" &&
-    "recording" in event.output &&
-    "duration" in event.output
-  ) {
-    const output = event.output as { recording: Recording; duration: number };
-    return output;
-  }
-
-  if (context.recording) {
-    return {
-      recording: context.recording,
-      duration: Math.max(context.recording.duration, 1),
-    };
-  }
-
-  return null;
 };
 
 export const APPLY_REPLAY_STATE_ACTIONS = [
