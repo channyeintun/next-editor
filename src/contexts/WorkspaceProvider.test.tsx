@@ -186,6 +186,52 @@ describe("WorkspaceProvider durable asset saves", () => {
     expect(persisted.assetGeneration).toBeUndefined();
     expect(persisted.project.files[entryPath].content).toBe("second");
   });
+
+  // A save captures the project it was called for and finishes after its asset
+  // writes; a recording load (applyWorkspaceSnapshot -> loadProject) can land
+  // in between and must not inherit the old project as its saved baseline.
+  it("ignores a save that finishes after another project was loaded", async () => {
+    const write = deferred();
+    const queuedWrite = deferred();
+    assets.persist
+      .mockImplementationOnce(() => write.promise)
+      .mockImplementationOnce(() => queuedWrite.promise);
+    const harness = renderWorkspaceProvider();
+    const lesson: WorkspaceProject = {
+      id: "lesson-2",
+      name: "Lesson 2",
+      lessonType: "html-css",
+      entryFilePath: "main.html",
+      folders: [],
+      files: {
+        "main.html": { path: "main.html", name: "main.html", language: "html", content: "2" },
+      },
+    };
+
+    let save!: Promise<void>;
+    let queuedSave!: Promise<void>;
+    act(() => {
+      save = harness.current.actions.saveProject();
+      queuedSave = harness.current.actions.saveProject();
+    });
+    await waitFor(() => expect(assets.persist).toHaveBeenCalledTimes(1));
+    act(() => harness.current.actions.loadProject(lesson, "main.html"));
+    expect(harness.current.dirty.hasUnsavedChanges).toBe(false);
+
+    await act(async () => {
+      write.resolve();
+      await save;
+    });
+    await waitFor(() => expect(assets.persist).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      queuedWrite.resolve();
+      await queuedSave;
+    });
+
+    expect(harness.current.actions.getProject().id).toBe("lesson-2");
+    expect(harness.current.dirty.hasUnsavedChanges).toBe(false);
+    expect(harness.current.save).toEqual({ isSaving: false, errorMessage: null });
+  });
 });
 
 describe("WorkspaceProvider initial state", () => {

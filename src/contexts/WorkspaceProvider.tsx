@@ -51,9 +51,9 @@ interface WorkspaceProviderProps {
  */
 async function persistWorkspace(
   workspaceStore: WorkspaceStoreInstance,
-  { activeFilePath, project, savedSnapshot }: InitializedWorkspaceState,
+  { activeFilePath, project, savedSnapshot, workspaceLoadVersion }: InitializedWorkspaceState,
 ): Promise<void> {
-  workspaceStore.trigger.beginSave();
+  workspaceStore.trigger.beginSave({ workspaceLoadVersion });
 
   try {
     const migratedDescriptors = await migrateLegacyWorkspaceAssets(
@@ -91,14 +91,17 @@ async function persistWorkspace(
       WORKSPACE_STORAGE_KEY,
       JSON.stringify(toPersistedSnapshot(storedSnapshot)),
     );
-    workspaceStore.trigger.markSaved({ snapshot: cloneWorkspaceSnapshot(storedSnapshot) });
+    workspaceStore.trigger.markSaved({
+      snapshot: cloneWorkspaceSnapshot(storedSnapshot),
+      workspaceLoadVersion,
+    });
 
     void pruneLegacyWorkspaceAssetKeys().catch((error) => {
       console.warn("Failed to prune old workspace assets:", error);
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The workspace could not be saved";
-    workspaceStore.trigger.saveFailed({ message });
+    workspaceStore.trigger.saveFailed({ message, workspaceLoadVersion });
     console.warn("Failed to save workspace snapshot:", error);
   }
 }
@@ -138,6 +141,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
               error instanceof Error
                 ? error.message
                 : "The saved binary workspace assets could not be loaded",
+            workspaceLoadVersion: context.workspaceLoadVersion,
           });
         }
         console.warn("Failed to load workspace assets:", error);

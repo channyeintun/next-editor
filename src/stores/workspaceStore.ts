@@ -1193,8 +1193,15 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           }),
         );
       },
-      beginSave: (context) => {
-        if (!context.isInitialized || (context.isSaving && context.saveError === null)) {
+      // The save events carry the workspaceLoadVersion the save started under. A
+      // save finishes after its asset writes, and a loadProject in between has
+      // replaced the project it saved: its outcome no longer describes this one.
+      beginSave: (context, event: { workspaceLoadVersion: number }) => {
+        if (
+          !context.isInitialized ||
+          event.workspaceLoadVersion !== context.workspaceLoadVersion ||
+          (context.isSaving && context.saveError === null)
+        ) {
           return context;
         }
         return {
@@ -1203,8 +1210,8 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           saveError: null,
         };
       },
-      saveFailed: (context, event: { message: string }) => {
-        if (!context.isInitialized) {
+      saveFailed: (context, event: { message: string; workspaceLoadVersion: number }) => {
+        if (!context.isInitialized || event.workspaceLoadVersion !== context.workspaceLoadVersion) {
           return context;
         }
         return {
@@ -1217,9 +1224,10 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         context,
         event: {
           snapshot: StoredWorkspaceSnapshot;
+          workspaceLoadVersion: number;
         },
       ) => {
-        if (!context.isInitialized) {
+        if (!context.isInitialized || event.workspaceLoadVersion !== context.workspaceLoadVersion) {
           return context;
         }
         return withDirtyState({
