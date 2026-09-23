@@ -37,15 +37,18 @@ function createRecording(overrides: Partial<Recording> = {}): Recording {
   };
 }
 
+const downloads = vi.hoisted(() => ({ saved: [] as Array<{ filename: string; blob: Blob }> }));
+
+vi.mock("../utils/downloadBlob", () => ({
+  downloadBlob: (blob: Blob, filename: string) => {
+    downloads.saved.push({ filename, blob });
+  },
+}));
+
 async function exportAndDecode(recording: Recording, filename?: string): Promise<Recording> {
   const storage = new RecordingStorage();
-  const downloaded: Array<{ filename: string; blob: Blob }> = [];
-  vi.spyOn(
-    storage as unknown as { downloadBlob: (blob: Blob, name: string) => void },
-    "downloadBlob",
-  ).mockImplementation((blob: Blob, name: string) => {
-    downloaded.push({ filename: name, blob });
-  });
+  const downloaded = downloads.saved;
+  downloaded.length = 0;
 
   await storage.exportAsFile(recording, filename);
 

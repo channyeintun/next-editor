@@ -16,6 +16,7 @@ import {
 } from "./streamingRecordingCodec/format";
 import { createStreamingRecordingReader } from "./streamingRecordingCodec";
 import { createImportedCameraObjectUrl } from "./cameraVideoUrl";
+import { downloadBlob } from "../utils/downloadBlob";
 import {
   hydrateDecodedRecordingWorkspaceAssets,
   persistDecodedWorkspaceAssets,
@@ -319,35 +320,23 @@ export class RecordingStorage {
       const baseFilename = filename?.replace(/\.(json|ne)$/, "") || `recording-${recording.id}`;
       const files = await buildRecordingFiles(recording, baseFilename);
 
-      this.downloadBlob(files.ne, `${baseFilename}.ne`);
+      downloadBlob(files.ne, `${baseFilename}.ne`);
 
       if (files.camera) {
         // Small gap so the browser doesn't collapse consecutive programmatic downloads into one.
         await new Promise((resolve) => setTimeout(resolve, 150));
-        this.downloadBlob(files.camera.blob, files.camera.name);
+        downloadBlob(files.camera.blob, files.camera.name);
       }
 
       if (files.audio) {
         await new Promise((resolve) => setTimeout(resolve, 150));
-        this.downloadBlob(files.audio.blob, files.audio.name);
+        downloadBlob(files.audio.blob, files.audio.name);
       }
     } catch (error) {
       throw new Error(
         `Failed to export recording: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
-  }
-
-  /** Trigger a browser download for a blob under the given filename. */
-  private downloadBlob(blob: Blob, filename: string): void {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   }
 
   /**

@@ -12,6 +12,7 @@
  */
 
 import { cameraExtensionFromMime } from "./streamingRecordingCodec/format";
+import { downloadBlob } from "../utils/downloadBlob";
 
 /**
  * Generate a screen-recording filename using local time.
@@ -45,7 +46,8 @@ export function screenRecordingFilename(
 
 /**
  * Save a screen-recording video blob locally as a browser download.
- * The blob is not retained in memory, storage, or any recording metadata.
+ * The blob is not kept in storage or in any recording metadata; its object URL is
+ * released a few seconds after the download starts.
  *
  * @param options Object containing:
  *   - blob: The video Blob to download
@@ -67,13 +69,5 @@ export function saveScreenRecordingLocally({
         'To include narration, share a browser tab with "share tab audio" enabled.',
     );
   }
-  const filename = screenRecordingFilename(mimeType, new Date(), hasAudio);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, screenRecordingFilename(mimeType, new Date(), hasAudio));
 }
