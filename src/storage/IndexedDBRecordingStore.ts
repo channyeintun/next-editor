@@ -9,8 +9,8 @@ import {
 
 const RECORDING_DATABASE_NAME = "next-editor-recordings-db";
 // v5: recording schema renumbered to 4 (binary-only .ne, mandatory dmp check ops).
-// v6: persist each recording's next segment sequence instead of counting its full
-// segment range on every append.
+// v6: added the recording-stream-state store. Nothing reads it and nothing adds
+// rows to it any more (see the upgrade).
 // v7: record payload size/location so large streams can move to OPFS.
 // Pre-v5 recordings remain unsupported.
 const RECORDING_DATABASE_VERSION = 7;
@@ -28,18 +28,6 @@ interface StoredRecordingSegment {
   recordingId: string;
   seq: number;
   bytes: ArrayBuffer;
-}
-
-/**
- * Written with every save, read by nothing: it served incremental appends while
- * recording, which are gone. The store stays in the v7 schema until a version
- * bump drops it.
- */
-interface StoredRecordingStreamState {
-  recordingId: string;
-  nextSeq: number;
-  payloadSize: number;
-  payloadStorage: RecordingPayloadStorage;
 }
 
 interface StoredCameraVideo {
@@ -153,43 +141,16 @@ export class IndexedDBRecordingStore {
           });
         }
 
-        const indexExistingSegments = (stateStore: IDBObjectStore): void => {
-          if (upgradeTransaction && !discardUnsupportedRecordings) {
-            const segmentsStore = upgradeTransaction.objectStore(RECORDING_SEGMENTS_STORE);
-            const cursorRequest = segmentsStore.openCursor();
-            let currentRecordingId: string | null = null;
-            let currentPayloadSize = 0;
-            cursorRequest.onsuccess = () => {
-              const cursor = cursorRequest.result;
-              if (!cursor) return;
-              const segment = cursor.value as StoredRecordingSegment;
-              if (segment.recordingId !== currentRecordingId) {
-                currentRecordingId = segment.recordingId;
-                currentPayloadSize = 0;
-              }
-              currentPayloadSize += segment.bytes.byteLength;
-              stateStore.put({
-                recordingId: segment.recordingId,
-                nextSeq: segment.seq + 1,
-                payloadSize: currentPayloadSize,
-                payloadStorage: "indexeddb",
-              } satisfies StoredRecordingStreamState);
-              cursor.continue();
-            };
-          }
-        };
-
+        // Held per-recording state for incremental appends while recording, which
+        // are gone. Nothing reads it and nothing adds rows; delete() only clears
+        // rows earlier builds left. It stays in the v7 schema only because every
+        // earlier build names it in its save and delete transactions, and would
+        // fail both if a rollback met a database without it. Drop it in the next
+        // version bump that has a reason of its own.
         if (!database.objectStoreNames.contains(RECORDING_STREAM_STATE_STORE)) {
-          const stateStore = database.createObjectStore(RECORDING_STREAM_STATE_STORE, {
+          database.createObjectStore(RECORDING_STREAM_STATE_STORE, {
             keyPath: "recordingId",
           });
-          indexExistingSegments(stateStore);
-        } else if (upgradeTransaction && oldVersion < 7) {
-          // v6 state records tracked only `nextSeq`; rebuild them with byte totals
-          // and the explicit IndexedDB location required by the OPFS threshold.
-          const stateStore = upgradeTransaction.objectStore(RECORDING_STREAM_STATE_STORE);
-          stateStore.clear();
-          indexExistingSegments(stateStore);
         }
       };
 
@@ -334,7 +295,7 @@ export class IndexedDBRecordingStore {
     }
   }
 
-  /** Writes the entry's metadata, payload location, segment and media rows in one transaction. */
+  /** Writes the entry's metadata, segment and media rows in one transaction. */
   private async commitEntry(
     entry: StoredRecordingEntry,
     binaryData: Uint8Array,
@@ -346,7 +307,6 @@ export class IndexedDBRecordingStore {
       [
         RECORDING_METADATA_STORE,
         RECORDING_SEGMENTS_STORE,
-        RECORDING_STREAM_STATE_STORE,
         RECORDING_CAMERA_STORE,
         RECORDING_AUDIO_STORE,
       ],
@@ -370,12 +330,6 @@ export class IndexedDBRecordingStore {
         bytes: toArrayBuffer(binaryData),
       } satisfies StoredRecordingSegment);
     }
-    transaction.objectStore(RECORDING_STREAM_STATE_STORE).put({
-      recordingId,
-      nextSeq: payloadStorage === "indexeddb" ? 1 : 0,
-      payloadSize: binaryData.byteLength,
-      payloadStorage,
-    } satisfies StoredRecordingStreamState);
     // Media lives in its own stores; replace or clear each to match the entry.
     if (entry.cameraBlob) {
       cameraStore.put({ recordingId, blob: entry.cameraBlob } satisfies StoredCameraVideo);
@@ -405,6 +359,7 @@ export class IndexedDBRecordingStore {
     );
     transaction.objectStore(RECORDING_METADATA_STORE).delete(id);
     transaction.objectStore(RECORDING_SEGMENTS_STORE).delete(this.segmentRange(id));
+    // Earlier builds wrote a stream-state row with every save.
     transaction.objectStore(RECORDING_STREAM_STATE_STORE).delete(id);
     transaction.objectStore(RECORDING_CAMERA_STORE).delete(id);
     transaction.objectStore(RECORDING_AUDIO_STORE).delete(id);

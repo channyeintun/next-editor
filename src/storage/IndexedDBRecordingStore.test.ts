@@ -195,7 +195,6 @@ describe("IndexedDBRecordingStore", () => {
     for (const storeName of [
       "recording-metadata",
       "recording-segments",
-      "recording-stream-state",
       "recording-camera",
       "recording-audio",
     ]) {
@@ -206,6 +205,71 @@ describe("IndexedDBRecordingStore", () => {
       expect(rows.some((row) => (row.id ?? row.recordingId) === "take-1")).toBe(false);
     }
     expect(opfs.deleteRecordingOpfs).toHaveBeenCalledWith("take-1");
+  });
+
+  it("writes no stream-state row when it saves a take", async () => {
+    const store = new IndexedDBRecordingStore();
+
+    await store.put(entry("take-1", new Uint8Array([1])));
+
+    expect(await fake.read(DATABASE, "recording-stream-state")).toEqual([]);
+  });
+
+  it("keeps the stream-state store that earlier builds' transactions name, at v7", async () => {
+    const store = new IndexedDBRecordingStore();
+    await store.put(entry("take-1", new Uint8Array([1])));
+
+    // A rolled-back build opens this database at v7 and names all five stores.
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = fake.indexedDB.open(DATABASE, 7);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      expect(database.version).toBe(7);
+      const transaction = database.transaction(
+        [
+          "recording-metadata",
+          "recording-segments",
+          "recording-stream-state",
+          "recording-camera",
+          "recording-audio",
+        ],
+        "readwrite",
+      );
+      transaction.objectStore("recording-stream-state").put({ recordingId: "take-1", nextSeq: 1 });
+      const committed = new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onabort = () => reject(transaction.error);
+      });
+
+      await expect(committed).resolves.toBeUndefined();
+    } finally {
+      database.close();
+    }
+  });
+
+  it("deletes the stream-state row an earlier build saved with a take", async () => {
+    await fake.seed(DATABASE, 7, {
+      "recording-metadata": { keyPath: "id", records: [{ id: "take-1", name: "Take" }] },
+      "recording-segments": {
+        keyPath: ["recordingId", "seq"],
+        records: [{ recordingId: "take-1", seq: 0, bytes: new Uint8Array([1]).buffer }],
+      },
+      "recording-stream-state": {
+        keyPath: "recordingId",
+        records: [
+          { recordingId: "take-1", nextSeq: 1, payloadSize: 1, payloadStorage: "indexeddb" },
+        ],
+      },
+      "recording-camera": { keyPath: "recordingId", records: [] },
+      "recording-audio": { keyPath: "recordingId", records: [] },
+    });
+    const store = new IndexedDBRecordingStore();
+
+    await store.delete("take-1");
+
+    expect(await fake.read(DATABASE, "recording-stream-state")).toEqual([]);
   });
 
   it("drops every row of a pre-v5 database, camera and audio included", async () => {
