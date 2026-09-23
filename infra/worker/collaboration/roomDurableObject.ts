@@ -417,7 +417,11 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         this.rejectSocket(socket, "invalid-message", "Awareness message is too large", true, 1009);
         return;
       }
-      this.acceptBinaryAwareness(socket, attachment, frame.update);
+      // A member who only watches sends no document frames but renews
+      // awareness every 15 s, so this is where a missed revocation surfaces.
+      const refreshed = await this.refreshAccess(socket, attachment);
+      if (!refreshed) return;
+      this.acceptBinaryAwareness(socket, refreshed, frame.update);
       return;
     }
     if (frame.kind === "sync") {

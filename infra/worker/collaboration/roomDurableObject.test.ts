@@ -424,6 +424,31 @@ describe("CollaborationRoomDurableObject access revalidation", () => {
     expect(await persistedText()).toBe("seed");
   });
 
+  it("relays awareness from a socket whose access check is still fresh", async () => {
+    const { room, connect } = await createRoom();
+    const member = connect(MEMBER_ID, "viewer");
+    const peer = connect(PEER_ID, "viewer");
+
+    await room.webSocketMessage(member as never, awarenessFrame(member, 7, 1));
+
+    expect(getCollaborationRoomAccess).not.toHaveBeenCalled();
+    expect(peer.frames().map((frame) => frame.kind)).toEqual(["awareness"]);
+  });
+
+  // A member who only watches sends no document frames, but renews awareness
+  // every 15 s; that is the frame that notices a revocation /control missed.
+  it("closes a socket whose member was removed when its awareness is revalidated", async () => {
+    const { room, connect } = await createRoom();
+    const member = connect(MEMBER_ID, "viewer", { accessCheckedAt: 0 });
+    const peer = connect(PEER_ID, "viewer");
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(null);
+
+    await room.webSocketMessage(member as never, awarenessFrame(member, 7, 1));
+
+    expect(member.closeCode).toBe(4003);
+    expect(peer.sent).toEqual([]);
+  });
+
   // D1 is not Durable Object storage, so the input gate stays open while it
   // answers and /control or other frames from the same socket run meanwhile.
   it("keeps a demotion that lands while the D1 read is in flight", async () => {
@@ -465,7 +490,10 @@ describe("CollaborationRoomDurableObject access revalidation", () => {
     const member = connect(MEMBER_ID, "editor", { accessCheckedAt: 0 });
     const peer = connect(PEER_ID, "viewer");
     const read = deferred<CollaborationRoomAccess | null>();
-    vi.mocked(getCollaborationRoomAccess).mockReturnValueOnce(read.promise);
+    // The update's read stays pending; the awareness frame's own read answers.
+    vi.mocked(getCollaborationRoomAccess)
+      .mockResolvedValue(roomAccess("editor", 1))
+      .mockReturnValueOnce(read.promise);
 
     const inFlight = room.webSocketMessage(member as never, edit("+typing"));
     await room.webSocketMessage(member as never, awarenessFrame(member, 7, 1));

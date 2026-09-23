@@ -196,7 +196,9 @@ private content-addressed assets.
 The room object stores the authoritative effective role in the WebSocket attachment. A D1 role
 mutation is not complete until the Worker also calls the room object to update or disconnect that
 member's live sessions. Every document frame is checked against the attachment; a viewer cannot
-write by modifying the browser.
+write by modifying the browser. Sync, update and awareness frames also recheck D1 membership once
+the socket's last check is more than five seconds old, so a socket whose revocation never reached
+the room is still closed the next time it speaks (a watching member renews awareness every 15 s).
 
 ### Leaving and reconnecting
 
