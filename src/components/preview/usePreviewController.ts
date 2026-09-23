@@ -103,7 +103,6 @@ export interface PreviewController {
   handleDock: () => void;
   handleBack: () => void;
   handleForward: () => void;
-  handleRefresh: () => void;
   handleReload: () => void;
   handleOpenConsole: () => void;
   handleResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -757,11 +756,15 @@ export function usePreviewController(): PreviewController {
     }
   };
 
-  const forceRefreshPreview = (options?: {
-    content?: string;
-    emitEvent?: boolean;
-    showSpinner?: boolean;
-    reloadRuntime?: boolean;
+  // Refreshes the preview and records a preview_refresh, carrying the runtime
+  // page's HTML when there is one. With `reloadRuntime` the live runtime frame is
+  // reloaded first; otherwise its current page is only captured again.
+  const forceRefreshPreview = ({
+    showSpinner,
+    reloadRuntime,
+  }: {
+    showSpinner: boolean;
+    reloadRuntime: boolean;
   }) => {
     const iframe = iframeRef.current;
 
@@ -769,38 +772,19 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    if (options?.showSpinner) {
+    if (showSpinner) {
       setIsRefreshing(true);
     }
 
     const finishRefresh = () => {
-      if (!options?.showSpinner) {
+      if (!showSpinner) {
         return;
       }
 
       setTimeout(() => setIsRefreshing(false), 600);
     };
 
-    if (options?.content !== undefined) {
-      lastContentRef.current = "";
-      updateIframeContent(options.content, { force: true });
-
-      if (options.emitEvent) {
-        emitPreviewEvent("preview_refresh", { content: options.content });
-      }
-
-      finishRefresh();
-      return;
-    }
-
     if (isRuntimePreviewActive && effectiveRuntimePreviewUrl) {
-      const shouldReloadRuntime = options?.reloadRuntime ?? !options?.emitEvent;
-
-      if (!options?.emitEvent && shouldReloadRuntime) {
-        void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).finally(finishRefresh);
-        return;
-      }
-
       let didFinalize = false;
       let runtimeSnapshotFallbackTimeout: number | null = null;
       const initialRuntimeSnapshot = lastRuntimeSnapshotRef.current || "";
@@ -843,7 +827,7 @@ export function usePreviewController(): PreviewController {
         captureRefreshSnapshot();
       };
 
-      if (!shouldReloadRuntime) {
+      if (!reloadRuntime) {
         captureRefreshSnapshot();
         return;
       }
@@ -856,9 +840,9 @@ export function usePreviewController(): PreviewController {
         1_500,
       );
 
-      void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl).catch(() =>
-        finalizeRuntimeRefresh(initialRuntimeSnapshot || undefined),
-      );
+      // Never rejects (it falls back to assigning `src`); the timeout above
+      // finalizes a reload whose `load` never comes.
+      void refreshRuntimePreview(iframe, effectiveRuntimePreviewUrl);
       return;
     }
 
@@ -866,11 +850,7 @@ export function usePreviewController(): PreviewController {
       lastContentRef.current = "";
       iframe.removeAttribute("src");
       iframe.srcdoc = runtimePreviewPlaceholder;
-
-      if (options?.emitEvent) {
-        emitPreviewEvent("preview_refresh");
-      }
-
+      emitPreviewEvent("preview_refresh");
       finishRefresh();
       return;
     }
@@ -1054,10 +1034,7 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    forceRefreshPreview({
-      emitEvent: true,
-      reloadRuntime: false,
-    });
+    forceRefreshPreview({ showSpinner: false, reloadRuntime: false });
   }, [
     forceRefreshPreview,
     isPlaybackPreviewActive,
@@ -1143,14 +1120,14 @@ export function usePreviewController(): PreviewController {
   };
 
   const handleRefresh = () => {
-    forceRefreshPreview({ emitEvent: true, showSpinner: true });
+    forceRefreshPreview({ showSpinner: true, reloadRuntime: false });
   };
 
   // User-initiated reload from the preview URL bar. Unlike `handleRefresh`
   // (which captures a baseline at recording start without touching the live
   // frame), this actually reloads the runtime preview iframe.
   const handleReload = () => {
-    forceRefreshPreview({ emitEvent: true, showSpinner: true, reloadRuntime: true });
+    forceRefreshPreview({ showSpinner: true, reloadRuntime: true });
   };
 
   const handleBack = () => {
@@ -1400,7 +1377,6 @@ export function usePreviewController(): PreviewController {
     handleDock,
     handleBack,
     handleForward,
-    handleRefresh,
     handleReload,
     handleOpenConsole,
     handleResizeStart,

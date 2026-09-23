@@ -35,7 +35,6 @@ vi.mock("./preview/usePreviewController", () => ({
       handleDock: noop,
       handleBack: noop,
       handleForward: noop,
-      handleRefresh: noop,
       handleReload: noop,
       handleOpenConsole: noop,
       handleResizeStart: noop,
