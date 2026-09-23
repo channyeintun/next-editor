@@ -437,17 +437,22 @@ async function ensureDirectory(
   onWrite?: (path: string) => void,
 ): Promise<void> {
   const segments = directoryPath.split("/").filter(Boolean);
-  let currentPath = "";
 
-  for (const segment of segments) {
-    currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-    onWrite?.(currentPath);
+  if (segments.length === 0) {
+    return;
+  }
 
-    try {
-      await instance.fs.mkdir(currentPath);
-    } catch {
-      // Ignore directories that already exist.
-    }
+  // fs.watch reports every level this may create, so each one is reported.
+  for (let depth = 1; depth <= segments.length; depth += 1) {
+    onWrite?.(segments.slice(0, depth).join("/"));
+  }
+
+  try {
+    await instance.fs.mkdir(segments.join("/"), { recursive: true });
+  } catch {
+    // A file this sync has yet to delete can still hold the path (folders are
+    // created before deleted files are removed); the write that needs the
+    // folder calls this again after the removal.
   }
 }
 

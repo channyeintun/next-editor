@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { WebContainer } from "@webcontainer/api";
 import type { WorkspaceProject } from "../types/workspace";
 import {
   createRuntimePreviewScript,
   createWorkspaceTree,
   isWebContainerRuntimeSupported,
   parseCommand,
+  syncWorkspaceProject,
 } from "./webContainerRuntimeSupport";
 
 function nodeProject(htmlContent: string): WorkspaceProject {
@@ -192,5 +194,35 @@ describe("parseCommand", () => {
     for (const command of commands) {
       expect(parseCommand(command)).toEqual({ command: "sh", args: ["-lc", command] });
     }
+  });
+});
+
+describe("syncWorkspaceProject", () => {
+  it("creates a new file's folders with one recursive mkdir and reports every level", async () => {
+    const mkdir = vi.fn<(path: string, options?: { recursive?: boolean }) => Promise<void>>(
+      async () => {},
+    );
+    const writeFile = vi.fn<(path: string, content: string | Uint8Array) => Promise<void>>(
+      async () => {},
+    );
+    const instance = {
+      fs: { mkdir, writeFile, rm: vi.fn<(path: string) => Promise<void>>() },
+    } as unknown as WebContainer;
+    const previous = nodeProject("root");
+    const next = nodeProject("root");
+    next.files["src/components/Button.tsx"] = {
+      path: "src/components/Button.tsx",
+      name: "Button.tsx",
+      language: "typescript",
+      content: "button",
+    };
+    const written: string[] = [];
+
+    await syncWorkspaceProject(instance, previous, next, (path) => written.push(path));
+
+    expect(mkdir.mock.calls).toEqual([["src/components", { recursive: true }]]);
+    expect(writeFile).toHaveBeenCalledWith("src/components/Button.tsx", "button");
+    // Each level is reported so its fs.watch event is recognized as our own write.
+    expect(written).toEqual(["src", "src/components", "src/components/Button.tsx"]);
   });
 });
