@@ -13,6 +13,7 @@ const controls = vi.hoisted(() => ({
     emitAwareness: (event: Record<string, unknown>) => void;
     setConnectionState: (state: string) => void;
     hasDivergedDocument: boolean;
+    hasPendingUpdates: boolean;
     retries: number;
     stopped: boolean;
   }>,
@@ -99,9 +100,7 @@ vi.mock("../collaboration/roomProvider", async () => {
       return this.state;
     }
 
-    get hasPendingUpdates() {
-      return false;
-    }
+    hasPendingUpdates = false;
 
     subscribe(listener: () => void) {
       this.listeners.add(listener);
@@ -494,4 +493,44 @@ describe("CollaborationContext retry", () => {
     expect(collaboration!.provider).toBe(controls.providers[1]);
     view.unmount();
   });
+});
+
+describe("CollaborationContext leaving a failed room", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  // In `failed` the provider no longer drains its outbox (e.g. the host ended
+  // the room while an update waited for its ack), so waiting for it would trap
+  // the participant in the room.
+  for (const action of ["leaveRoom", "closeRoom"] as const) {
+    it(`lets ${action} finish with edits the room can no longer accept`, async () => {
+      let collaboration: ReturnType<typeof useCollaboration> | null = null;
+      function Probe() {
+        collaboration = useCollaboration();
+        return null;
+      }
+      const view = render(
+        <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+          <Providers>
+            <Probe />
+          </Providers>
+        </MemoryRouter>,
+      );
+      await waitFor(() => expect(controls.providers).toHaveLength(1));
+      const provider = controls.providers[0]!;
+      provider.hasPendingUpdates = true;
+      act(() => provider.setConnectionState("failed"));
+
+      await act(async () => {
+        await collaboration![action]();
+      });
+
+      expect(provider.stopped).toBe(true);
+      await waitFor(() => expect(collaboration!.provider).toBeNull());
+      view.unmount();
+    });
+  }
 });

@@ -1252,6 +1252,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   }, [publishTeachingInitialization]);
 
   const flushCurrentEdits = useCallback(async (current: CollaborationRoomProvider) => {
+    // A failed provider never drains its outbox again (the room closed, access
+    // was revoked, or reconnects ran out until an explicit retry), so waiting
+    // for it would block leaving, closing and exporting indefinitely.
+    if (current.connectionState === "failed") return;
     await current.flushNow();
     if (!current.hasPendingUpdates) return;
     const message = "Wait for offline collaboration changes to synchronize before continuing.";
