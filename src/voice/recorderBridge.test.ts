@@ -6,8 +6,11 @@ import {
   setVoiceJoinedForRecording,
 } from "./recorderBridge";
 
+// Mirrors MediaStreamTrack: stop() ends the track without firing "ended";
+// only the source ending (e.g. the user stops sharing) fires it.
 class FakeTrack {
   kind: string;
+  readyState: MediaStreamTrackState = "live";
   stopped = false;
   private endedListeners: Array<() => void> = [];
 
@@ -17,6 +20,11 @@ class FakeTrack {
 
   stop(): void {
     this.stopped = true;
+    this.readyState = "ended";
+  }
+
+  endSource(): void {
+    this.readyState = "ended";
     for (const listener of this.endedListeners) listener();
     this.endedListeners = [];
   }
@@ -92,15 +100,26 @@ describe("voice recorder bridge", () => {
     expect(stream.tracks).toEqual([video]);
   });
 
-  it("forgets ended tracks so leaving voice cannot resurrect stale state", () => {
+  it("forgets a track whose share the user ended", () => {
     const audio = new FakeTrack("audio");
-    const stream = new FakeStream([audio]);
-    applyVoiceRecordingPolicy(asStream(stream));
-    // The recorder stopped the capture normally (share ended).
-    audio.stop();
-    audio.stopped = false;
+    applyVoiceRecordingPolicy(asStream(new FakeStream([audio])));
+    audio.endSource();
     // A later voice join must not re-stop an unregistered track.
     setVoiceJoinedForRecording(true);
+    expect(audio.stopped).toBe(false);
+  });
+
+  // The recorder ends a take with track.stop(), which fires no "ended" event,
+  // so the bridge must not rely on the event alone to release the track.
+  it("forgets a track the recorder stopped", () => {
+    const audio = new FakeTrack("audio");
+    applyVoiceRecordingPolicy(asStream(new FakeStream([audio])));
+    audio.stop();
+    audio.stopped = false;
+
+    applyVoiceRecordingPolicy(asStream(new FakeStream([new FakeTrack("audio")])));
+    setVoiceJoinedForRecording(true);
+
     expect(audio.stopped).toBe(false);
   });
 

@@ -8,6 +8,14 @@
 let voiceJoined = false;
 const liveDisplayAudioTracks = new Set<MediaStreamTrack>();
 
+// The recorder ends a take with track.stop(), which never fires "ended" on that
+// track, so ended tracks are also dropped whenever the registry is used.
+function forgetEndedTracks(): void {
+  for (const track of liveDisplayAudioTracks) {
+    if (track.readyState === "ended") liveDisplayAudioTracks.delete(track);
+  }
+}
+
 function stopTrack(track: MediaStreamTrack): void {
   try {
     track.stop();
@@ -21,6 +29,7 @@ function stopTrack(track: MediaStreamTrack): void {
 // the recording itself (video + microphone narration) continues.
 export function setVoiceJoinedForRecording(joined: boolean): void {
   voiceJoined = joined;
+  forgetEndedTracks();
   if (!joined) return;
   for (const track of liveDisplayAudioTracks) stopTrack(track);
   liveDisplayAudioTracks.clear();
@@ -35,6 +44,7 @@ export function isVoiceJoinedForRecording(): boolean {
 // joined (covers the picker race after the audio:false request) and
 // registers remaining audio tracks so a later voice join can stop them.
 export function applyVoiceRecordingPolicy(stream: MediaStream): MediaStream {
+  forgetEndedTracks();
   for (const track of stream.getAudioTracks()) {
     if (voiceJoined) {
       stopTrack(track);
