@@ -50,6 +50,69 @@ describe("mediaRoute", () => {
     expect(response.headers.get("content-disposition")).toBe("attachment");
   });
 
+  // The route sends `must-revalidate` with an ETag, so every reuse of a cached
+  // recording or thumbnail revalidates. R2 evaluates the preconditions when
+  // given the request headers and returns the object without a body when the
+  // client's copy is current.
+  describe("conditional requests", () => {
+    const ETAG = '"recording-v1"';
+
+    function conditionalBucket() {
+      return {
+        get: vi.fn<(key: string, options?: R2GetOptions) => Promise<unknown>>(
+          async (_key, options) => {
+            const conditions = options?.onlyIf as Headers | undefined;
+            const metadata = {
+              size: 11,
+              httpEtag: ETAG,
+              writeHttpMetadata(headers: Headers) {
+                headers.set("content-type", "application/octet-stream");
+              },
+            };
+            const ifMatch = conditions?.get("if-match");
+            const preconditionFailed =
+              conditions?.get("if-none-match") === ETAG ||
+              (ifMatch !== null && ifMatch !== undefined && ifMatch !== ETAG);
+            return preconditionFailed
+              ? metadata
+              : { ...metadata, body: new Response("recording").body! };
+          },
+        ),
+      } as unknown as R2Bucket;
+    }
+
+    function getRecording(headers: HeadersInit) {
+      return mediaRoute.request(
+        "https://nexteditor.dev/lessons/abc/abc.ne",
+        { headers },
+        {
+          BUCKET: conditionalBucket(),
+        },
+      );
+    }
+
+    it("answers a current If-None-Match with 304 and no body", async () => {
+      const response = await getRecording({ "if-none-match": ETAG });
+
+      expect(response.status).toBe(304);
+      expect(response.headers.get("etag")).toBe(ETAG);
+      expect(await response.text()).toBe("");
+    });
+
+    it("answers a failed If-Match with 412", async () => {
+      const response = await getRecording({ "if-match": '"recording-v0"' });
+
+      expect(response.status).toBe(412);
+    });
+
+    it("sends the object when the client's copy is stale", async () => {
+      const response = await getRecording({ "if-none-match": '"recording-v0"' });
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("recording");
+    });
+  });
+
   it("refuses keys outside the public prefixes", async () => {
     // Collaboration room assets share this bucket but have their own
     // membership-checked route; this wildcard must not be a way around it.

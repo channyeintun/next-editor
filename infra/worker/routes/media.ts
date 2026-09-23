@@ -60,7 +60,13 @@ mediaRoute.get("/:key{.+}", async (c) => {
     return c.json({ error: "not found" }, 404);
   }
 
-  const object = await c.env.BUCKET.get(key, { range: c.req.raw.headers });
+  // Handing R2 the request headers as `onlyIf` lets it evaluate the client's
+  // validators (If-None-Match against the ETag set below); a failed precondition
+  // comes back as the object without a body.
+  const object = await c.env.BUCKET.get(key, {
+    onlyIf: c.req.raw.headers,
+    range: c.req.raw.headers,
+  });
   if (!object) {
     return c.json({ error: "not found" }, 404);
   }
@@ -97,9 +103,19 @@ mediaRoute.get("/:key{.+}", async (c) => {
   // available for validators, but require clients/CDNs to revalidate rather
   // than serving an obsolete recording, thumbnail, or companion track for a
   // year. Content-Length is left to the runtime, which infers it correctly
-  // from the streamed body in both branches below (verified against local
-  // Miniflare).
+  // from the streamed body in the 200 and 206 branches below (verified against
+  // local Miniflare).
   headers.set("cache-control", "public, max-age=0, must-revalidate");
+
+  if (!("body" in object)) {
+    // A revalidation (If-None-Match / If-Modified-Since) that failed means the
+    // client's copy is current; a failed If-Match / If-Unmodified-Since means
+    // the object is not the one the client asked for.
+    const revalidating =
+      c.req.header("if-none-match") !== undefined ||
+      c.req.header("if-modified-since") !== undefined;
+    return new Response(null, { status: revalidating ? 304 : 412, headers });
+  }
 
   // R2 resolves `object.range` to the whole object (e.g. {offset: 0, length:
   // <full size>}) even for a plain request with no Range header, when `range`
