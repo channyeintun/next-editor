@@ -53,7 +53,6 @@ import {
   applyEncodedYjsUpdate,
   decodeYjsSnapshot,
   decodeYjsUpdate,
-  encodeYjsSnapshotUpdate,
   encodeYjsUpdate,
 } from "../../../src/collaboration/yjsUpdates";
 import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
@@ -467,7 +466,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     this.broadcastLeave(socket);
   }
 
-  alarm(): void {
+  async alarm(): Promise<void> {
     this.sqliteCompactionScheduled = false;
     const startedAt = performance.now();
     try {
@@ -477,6 +476,8 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         ...result,
         durationMs: performance.now() - startedAt,
       });
+      // A pass folds at most one batch; run the next one right away.
+      if (result.hasMore) await this.ctx.storage.setAlarm(Date.now());
     } catch (error) {
       console.error("collaboration_sqlite_compaction_failed", {
         roomId: this.ctx.id.name ?? null,
@@ -1097,7 +1098,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       // interleaved workspace update that is absent from the snapshot.
       const latest = this.getBinaryDocument();
       const finalCandidate = new Y.Doc();
-      let snapshot: string | null = null;
+      let snapshot: Uint8Array | null = null;
       try {
         const latestProject = projectCollaborationDocument(latest).project;
         Y.applyUpdate(
@@ -1126,7 +1127,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
             { status: 413 },
           );
         }
-        snapshot = encodeYjsSnapshotUpdate(snapshotUpdate);
+        snapshot = snapshotUpdate;
       } finally {
         finalCandidate.destroy();
       }

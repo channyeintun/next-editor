@@ -24,10 +24,48 @@ afterEach(() => {
   for (const storage of openDatabases.splice(0)) storage.close();
 });
 
-function createStore(): { storage: SqliteTestStorage; store: RoomSqliteDocumentStore } {
+function createStore(options: { compactionBatchSize?: number } = {}): {
+  storage: SqliteTestStorage;
+  store: RoomSqliteDocumentStore;
+} {
   const storage = new SqliteTestStorage();
   openDatabases.push(storage);
-  return { storage, store: new RoomSqliteDocumentStore(storage) };
+  return { storage, store: new RoomSqliteDocumentStore(storage, options) };
+}
+
+let nextUpdate = 100;
+
+/** Appends `text` to `source` and stores that change as the next update. */
+function appendEdit(store: RoomSqliteDocumentStore, source: Y.Doc, text: string): void {
+  const before = Y.encodeStateVector(source);
+  source.getText("content").insert(source.getText("content").length, text);
+  const updateId = `40000000-0000-4000-8000-${String(nextUpdate++).padStart(12, "0")}`;
+  store.append(updateEvent(Y.encodeStateAsUpdate(source, before), updateId), 200);
+}
+
+function snapshotText(snapshot: string): string {
+  const doc = new Y.Doc();
+  applyEncodedYjsSnapshot(doc, snapshot, "test");
+  const text = doc.getText("content").toString();
+  doc.destroy();
+  return text;
+}
+
+function materializedText(store: RoomSqliteDocumentStore): string {
+  const doc = store.createDocument();
+  const text = doc.getText("content").toString();
+  doc.destroy();
+  return text;
+}
+
+/** Deterministic text Yjs cannot shrink, about one byte per character. */
+function filler(length: number): string {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let block = "";
+  for (let index = 0; index < 4096; index += 1) {
+    block += alphabet[(index * 7919 + (index >> 5)) % alphabet.length];
+  }
+  return block.repeat(Math.ceil(length / block.length)).slice(0, length);
 }
 
 function updateEvent(update: Uint8Array, updateId = UPDATE_ID): CollaborationDocumentUpdateEvent {
@@ -86,6 +124,7 @@ describe("RoomSqliteDocumentStore", () => {
       generation: 2,
       streamCutoff: "1-0",
       appliedUpdates: 1,
+      hasMore: false,
     });
     const bootstrap = store.bootstrap("0-0");
     expect(bootstrap.snapshot).toMatchObject({ generation: 2, streamCutoff: "1-0" });
@@ -139,7 +178,7 @@ describe("RoomSqliteDocumentStore", () => {
 
     const replacement = store.createDocument();
     replacement.getMap("project").set("teachingInitialized", true);
-    const result = store.replaceSnapshot(encodeYjsDocument(replacement), 128, 300);
+    const result = store.replaceSnapshot(Y.encodeStateAsUpdate(replacement), 128, 300);
 
     expect(result).toEqual({ generation: 2, streamId: "1-1" });
     expect(store.bootstrap()).toMatchObject({
@@ -158,6 +197,136 @@ describe("RoomSqliteDocumentStore", () => {
 
     restored.destroy();
     replacement.destroy();
+    source.destroy();
+  });
+});
+
+describe("RoomSqliteDocumentStore snapshot chunks", () => {
+  // Durable Object SQLite refuses any one value over 2 MB (SqliteTestStorage
+  // enforces it). 1.7 MB of text encodes to about 2.3 MB of base64, over that
+  // limit and within the 4 MiB create limit. Megabytes of Yjs and base64 work
+  // are slow when the whole suite shares the CPU, hence the timeout.
+  it("stores and compacts a snapshot larger than one SQLite value", { timeout: 30_000 }, () => {
+    const { storage, store } = createStore();
+    const source = new Y.Doc();
+    source.getText("content").insert(0, filler(1_700_000));
+    store.initialize(encodeYjsDocument(source), 100);
+    appendEdit(store, source, "-edited");
+
+    expect(store.compact(300)).toMatchObject({ compacted: true, generation: 2, hasMore: false });
+    expect(materializedText(store)).toBe(source.getText("content").toString());
+    expect(snapshotText(store.exportDocument(400).snapshot.update)).toBe(
+      source.getText("content").toString(),
+    );
+    const [row] = storage.sql
+      .exec<{ snapshot: string }>("SELECT snapshot FROM collaboration_document")
+      .toArray();
+    expect(row?.snapshot).toBe("");
+    source.destroy();
+  });
+
+  it("keeps the single snapshot column readable for a rollback while it fits", () => {
+    const { storage, store } = createStore();
+    const source = new Y.Doc();
+    source.getText("content").insert(0, "before");
+    store.initialize(encodeYjsDocument(source), 100);
+    appendEdit(store, source, "-after");
+    store.compact(300);
+
+    const [row] = storage.sql
+      .exec<{ snapshot: string }>("SELECT snapshot FROM collaboration_document")
+      .toArray();
+    expect(snapshotText(row?.snapshot ?? "")).toBe("before-after");
+    source.destroy();
+  });
+});
+
+describe("RoomSqliteDocumentStore rooms saved before snapshot chunks", () => {
+  /** A room as earlier revisions stored it: the snapshot only in the TEXT column. */
+  function createLegacyRoom(text: string) {
+    const created = createStore();
+    const source = new Y.Doc();
+    source.getText("content").insert(0, text);
+    created.storage.sql.exec(
+      `INSERT INTO collaboration_document
+        (singleton, protocol_version, document_schema_version, generation,
+         stream_cutoff, snapshot, accepted_bytes, update_count, tail_count,
+         initialized_at, updated_at)
+       VALUES (1, ?, ?, 1, 0, ?, 0, 0, 0, 100, 100)`,
+      COLLABORATION_PROTOCOL_VERSION,
+      COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+      encodeYjsDocument(source),
+    );
+    return { ...created, source };
+  }
+
+  function chunkGenerations(storage: SqliteTestStorage): number[] {
+    return storage.sql
+      .exec<{ generation: number }>(
+        "SELECT DISTINCT generation FROM collaboration_snapshot_chunks ORDER BY generation",
+      )
+      .toArray()
+      .map((row) => row.generation);
+  }
+
+  it("loads a single-column room and moves it to chunks when it is compacted", () => {
+    const { storage, store, source } = createLegacyRoom("before");
+    appendEdit(store, source, "-after");
+
+    expect(materializedText(store)).toBe("before-after");
+    expect(chunkGenerations(storage)).toEqual([]);
+
+    expect(store.compact(300)).toMatchObject({ compacted: true, generation: 2 });
+    expect(chunkGenerations(storage)).toEqual([2]);
+    expect(materializedText(store)).toBe("before-after");
+    appendEdit(store, source, "-again");
+    expect(snapshotText(store.exportDocument(400).snapshot.update)).toBe("before-after-again");
+    source.destroy();
+  });
+
+  it("reads the single column when an earlier revision saved a newer generation", () => {
+    const { storage, store, source } = createLegacyRoom("before");
+    appendEdit(store, source, "-after");
+    store.compact(300);
+    // After a rollback, an earlier revision compacts again: it writes only the
+    // column and leaves this revision's generation-2 chunks behind.
+    source.getText("content").insert(source.getText("content").length, "-rolled-back");
+    storage.sql.exec(
+      "UPDATE collaboration_document SET generation = 3, snapshot = ? WHERE singleton = 1",
+      encodeYjsDocument(source),
+    );
+
+    expect(materializedText(store)).toBe("before-after-rolled-back");
+    source.destroy();
+  });
+});
+
+describe("RoomSqliteDocumentStore compaction batches", () => {
+  it("folds a tail longer than one batch in several passes", () => {
+    const { store } = createStore({ compactionBatchSize: 3 });
+    const source = new Y.Doc();
+    source.getText("content").insert(0, "0");
+    store.initialize(encodeYjsDocument(source), 100);
+    for (let index = 1; index <= 7; index += 1) appendEdit(store, source, String(index));
+
+    expect(materializedText(store)).toBe("01234567");
+    expect(store.compact(300)).toMatchObject({ appliedUpdates: 3, hasMore: true });
+    expect(store.compact(300)).toMatchObject({ appliedUpdates: 3, hasMore: true });
+    expect(store.compact(300)).toMatchObject({ appliedUpdates: 1, hasMore: false });
+    expect(materializedText(store)).toBe("01234567");
+    source.destroy();
+  });
+
+  it("exports the whole tail when it spans several batches", () => {
+    const { store } = createStore({ compactionBatchSize: 2 });
+    const source = new Y.Doc();
+    source.getText("content").insert(0, "0");
+    store.initialize(encodeYjsDocument(source), 100);
+    for (let index = 1; index <= 5; index += 1) appendEdit(store, source, String(index));
+
+    const exported = store.exportDocument(300);
+    expect(snapshotText(exported.snapshot.update)).toBe("012345");
+    expect(exported.updates).toEqual([]);
     source.destroy();
   });
 });

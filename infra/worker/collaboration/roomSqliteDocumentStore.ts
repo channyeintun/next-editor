@@ -3,19 +3,29 @@ import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
   collaborationDocumentUpdateEventSchema,
-  encodedYjsSnapshotSchema,
   type CollaborationBootstrapResponse,
   type CollaborationDocumentUpdateEvent,
 } from "../../../src/collaboration/protocol";
 import {
-  applyEncodedYjsSnapshot,
   applyEncodedYjsUpdate,
+  decodeYjsSnapshot,
   decodeYjsUpdate,
-  encodeYjsDocument,
 } from "../../../src/collaboration/yjsUpdates";
 
 const BOOTSTRAP_PAGE_SIZE = 100;
+// Updates folded into the snapshot per compaction pass; the room's alarm runs
+// another pass while more remain, so a long tail shrinks in bounded steps.
 const MAX_COMPACTION_UPDATES = 10_000;
+// Tail rows read per query, so materializing never holds the whole tail's
+// JSON in memory at once.
+const TAIL_PAGE_SIZE = 256;
+// SQLite-backed Durable Objects refuse any single string or BLOB over 2 MB,
+// so a snapshot is stored as BLOB chunks of at most this size.
+const SNAPSHOT_CHUNK_BYTES = 1024 * 1024;
+// Revisions before chunked snapshots read only collaboration_document.snapshot
+// (base64). It is still filled whenever the base64 fits in one value, so a
+// rollback can open every room those revisions could have stored.
+const LEGACY_SNAPSHOT_MAX_LENGTH = 1_900_000;
 const COMPACTION_EVERY_UPDATES = 200;
 const DEDUPLICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_COLLABORATION_ROOM_ACCEPTED_BYTES = 64 * 1024 * 1024;
@@ -69,6 +79,8 @@ export interface CompactRoomSqliteDocumentResult {
   generation: number;
   streamCutoff: string;
   appliedUpdates: number;
+  /** More tail updates remain past this pass's batch. */
+  hasMore: boolean;
 }
 
 export interface ReplaceRoomSqliteSnapshotResult {
@@ -83,9 +95,26 @@ export class CollaborationRoomSqliteQuotaError extends Error {
   }
 }
 
-function decodedBase64ByteLength(value: string): number {
-  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
-  return (value.length / 4) * 3 - padding;
+const BASE64_CHUNK_BYTES = 0x8000;
+
+// Not yjsUpdates' snapshot encoder: that one enforces the 4 MiB limit on
+// snapshots clients send, and a stored room may grow past it.
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK_BYTES) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + BASE64_CHUNK_BYTES));
+  }
+  return btoa(binary);
+}
+
+function legacySnapshotColumn(snapshot: Uint8Array): string {
+  return 4 * Math.ceil(snapshot.byteLength / 3) <= LEGACY_SNAPSHOT_MAX_LENGTH
+    ? encodeBase64(snapshot)
+    : "";
+}
+
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 function streamId(sequence: number): string {
@@ -120,9 +149,16 @@ function parseEvent(eventJson: string): CollaborationDocumentUpdateEvent {
 
 export class RoomSqliteDocumentStore {
   private readonly storage: RoomSqliteStorage;
+  private readonly compactionBatchSize: number;
 
-  constructor(storage: RoomSqliteStorage) {
+  /** `compactionBatchSize` defaults to MAX_COMPACTION_UPDATES; tests shrink it. */
+  constructor(storage: RoomSqliteStorage, options: { compactionBatchSize?: number } = {}) {
     this.storage = storage;
+    this.compactionBatchSize = options.compactionBatchSize ?? MAX_COMPACTION_UPDATES;
+    // collaboration_document.snapshot is the snapshot's base64 when it fits one
+    // value (see LEGACY_SNAPSHOT_MAX_LENGTH) and '' otherwise; the snapshot
+    // itself lives in collaboration_snapshot_chunks under its generation.
+    // Rooms written before chunks existed have only the column.
     this.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS collaboration_document (
         singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -144,6 +180,12 @@ export class RoomSqliteDocumentStore {
         byte_length INTEGER NOT NULL,
         received_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS collaboration_snapshot_chunks (
+        generation INTEGER NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        bytes BLOB NOT NULL,
+        PRIMARY KEY (generation, chunk_index)
+      );
       CREATE TABLE IF NOT EXISTS collaboration_update_deduplication (
         update_id TEXT PRIMARY KEY,
         stream_id TEXT NOT NULL,
@@ -157,9 +199,8 @@ export class RoomSqliteDocumentStore {
   }
 
   initialize(snapshot: string, now = Date.now()): void {
-    encodedYjsSnapshotSchema.parse(snapshot);
-    const snapshotBytes = decodedBase64ByteLength(snapshot);
-    if (snapshotBytes > MAX_COLLABORATION_ROOM_ACCEPTED_BYTES) {
+    const snapshotBytes = decodeYjsSnapshot(snapshot);
+    if (snapshotBytes.byteLength > MAX_COLLABORATION_ROOM_ACCEPTED_BYTES) {
       throw new CollaborationRoomSqliteQuotaError();
     }
 
@@ -178,11 +219,12 @@ export class RoomSqliteDocumentStore {
          VALUES (1, ?, ?, 1, 0, ?, ?, 0, 0, ?, ?)`,
         COLLABORATION_PROTOCOL_VERSION,
         COLLABORATION_DOCUMENT_SCHEMA_VERSION,
-        snapshot,
-        snapshotBytes,
+        legacySnapshotColumn(snapshotBytes),
+        snapshotBytes.byteLength,
         now,
         now,
       );
+      this.writeSnapshotChunks(1, snapshotBytes);
     });
   }
 
@@ -277,11 +319,10 @@ export class RoomSqliteDocumentStore {
   }
 
   replaceSnapshot(
-    snapshot: string,
+    snapshot: Uint8Array,
     acceptedUpdateBytes: number,
     now = Date.now(),
   ): ReplaceRoomSqliteSnapshotResult {
-    encodedYjsSnapshotSchema.parse(snapshot);
     if (!Number.isSafeInteger(acceptedUpdateBytes) || acceptedUpdateBytes < 0) {
       throw new Error("collaboration snapshot update length is invalid");
     }
@@ -304,10 +345,11 @@ export class RoomSqliteDocumentStore {
          WHERE singleton = 1`,
         generation,
         cutoff,
-        snapshot,
+        legacySnapshotColumn(snapshot),
         acceptedUpdateBytes,
         now,
       );
+      this.writeSnapshotChunks(generation, snapshot);
       this.storage.sql.exec("DELETE FROM collaboration_updates WHERE sequence <= ?", cutoff);
       return { generation, streamId: `${cutoff}-1` };
     });
@@ -337,7 +379,7 @@ export class RoomSqliteDocumentStore {
       snapshot: {
         generation: metadata.generation,
         streamCutoff: streamId(metadata.stream_cutoff),
-        update: metadata.snapshot,
+        update: encodeBase64(this.readSnapshot(metadata)),
       },
       updates,
       nextCursor: streamId(nextCursor),
@@ -347,18 +389,7 @@ export class RoomSqliteDocumentStore {
 
   compact(now = Date.now()): CompactRoomSqliteDocumentResult {
     const metadata = this.metadata();
-    const rows = this.storage.sql
-      .exec<UpdateRow>(
-        `SELECT sequence, event_json FROM collaboration_updates
-         WHERE sequence > ? ORDER BY sequence ASC LIMIT ?`,
-        metadata.stream_cutoff,
-        MAX_COMPACTION_UPDATES + 1,
-      )
-      .toArray();
-    if (rows.length > MAX_COMPACTION_UPDATES) {
-      throw new Error("collaboration SQLite compaction update limit exceeded");
-    }
-    if (rows.length === 0) {
+    if (!this.hasTailAfter(metadata.stream_cutoff)) {
       this.storage.sql.exec(
         "DELETE FROM collaboration_update_deduplication WHERE expires_at <= ?",
         now,
@@ -368,17 +399,20 @@ export class RoomSqliteDocumentStore {
         generation: metadata.generation,
         streamCutoff: streamId(metadata.stream_cutoff),
         appliedUpdates: 0,
+        hasMore: false,
       };
     }
 
     const doc = new Y.Doc();
     try {
-      applyEncodedYjsSnapshot(doc, metadata.snapshot, "sqlite-snapshot-compaction");
-      for (const row of rows) {
-        applyEncodedYjsUpdate(doc, parseEvent(row.event_json).update, "sqlite-update-compaction");
-      }
-      const snapshot = encodeYjsDocument(doc);
-      const cutoff = rows.at(-1)?.sequence ?? metadata.stream_cutoff;
+      Y.applyUpdate(doc, this.readSnapshot(metadata), "sqlite-snapshot-compaction");
+      const { lastSequence: cutoff, applied } = this.applyTail(
+        doc,
+        metadata.stream_cutoff,
+        this.compactionBatchSize,
+        "sqlite-update-compaction",
+      );
+      const snapshot = Y.encodeStateAsUpdate(doc);
       const generation = metadata.generation + 1;
       this.storage.transactionSync(() => {
         const current = this.metadata();
@@ -390,13 +424,16 @@ export class RoomSqliteDocumentStore {
         }
         this.storage.sql.exec(
           `UPDATE collaboration_document
-           SET generation = ?, stream_cutoff = ?, snapshot = ?, tail_count = 0, updated_at = ?
+           SET generation = ?, stream_cutoff = ?, snapshot = ?,
+               tail_count = MAX(tail_count - ?, 0), updated_at = ?
            WHERE singleton = 1`,
           generation,
           cutoff,
-          snapshot,
+          legacySnapshotColumn(snapshot),
+          applied,
           now,
         );
+        this.writeSnapshotChunks(generation, snapshot);
         this.storage.sql.exec("DELETE FROM collaboration_updates WHERE sequence <= ?", cutoff);
         this.storage.sql.exec(
           "DELETE FROM collaboration_update_deduplication WHERE expires_at <= ?",
@@ -407,7 +444,8 @@ export class RoomSqliteDocumentStore {
         compacted: true,
         generation,
         streamCutoff: streamId(cutoff),
-        appliedUpdates: rows.length,
+        appliedUpdates: applied,
+        hasMore: this.hasTailAfter(cutoff),
       };
     } finally {
       doc.destroy();
@@ -415,38 +453,107 @@ export class RoomSqliteDocumentStore {
   }
 
   exportDocument(now = Date.now()): CollaborationBootstrapResponse {
-    this.compact(now);
+    // Fold the whole tail into the snapshot, however many passes it takes.
+    let result: CompactRoomSqliteDocumentResult;
+    do {
+      result = this.compact(now);
+    } while (result.hasMore);
     return this.bootstrap();
   }
 
   createDocument(): Y.Doc {
     const metadata = this.metadata();
-    const rows = this.storage.sql
-      .exec<UpdateRow>(
-        `SELECT sequence, event_json FROM collaboration_updates
-         WHERE sequence > ? ORDER BY sequence ASC LIMIT ?`,
-        metadata.stream_cutoff,
-        MAX_COMPACTION_UPDATES + 1,
-      )
-      .toArray();
-    if (rows.length > MAX_COMPACTION_UPDATES) {
-      throw new Error("collaboration SQLite document materialization limit exceeded");
-    }
     const doc = new Y.Doc();
     try {
-      applyEncodedYjsSnapshot(doc, metadata.snapshot, "sqlite-document-materialization");
-      for (const row of rows) {
-        applyEncodedYjsUpdate(
-          doc,
-          parseEvent(row.event_json).update,
-          "sqlite-document-materialization",
-        );
-      }
+      Y.applyUpdate(doc, this.readSnapshot(metadata), "sqlite-document-materialization");
+      this.applyTail(
+        doc,
+        metadata.stream_cutoff,
+        Number.POSITIVE_INFINITY,
+        "sqlite-document-materialization",
+      );
       return doc;
     } catch (error) {
       doc.destroy();
       throw error;
     }
+  }
+
+  /** The snapshot of `metadata.generation`, from its chunks or the single column. */
+  private readSnapshot(metadata: MetadataRow): Uint8Array {
+    const chunks = this.storage.sql
+      .exec<{ bytes: ArrayBuffer }>(
+        `SELECT bytes FROM collaboration_snapshot_chunks
+         WHERE generation = ? ORDER BY chunk_index ASC`,
+        metadata.generation,
+      )
+      .toArray();
+    // No chunks for this generation: a revision from before chunked snapshots
+    // wrote it, either before this one first ran or after a rollback.
+    if (chunks.length === 0) return decodeYjsSnapshot(metadata.snapshot);
+    const snapshot = new Uint8Array(
+      chunks.reduce((total, { bytes }) => total + bytes.byteLength, 0),
+    );
+    let offset = 0;
+    for (const { bytes } of chunks) {
+      snapshot.set(new Uint8Array(bytes), offset);
+      offset += bytes.byteLength;
+    }
+    return snapshot;
+  }
+
+  /** Stores `snapshot` as `generation`'s chunks and drops every other generation's. */
+  private writeSnapshotChunks(generation: number, snapshot: Uint8Array): void {
+    for (let index = 0; index * SNAPSHOT_CHUNK_BYTES < snapshot.byteLength; index += 1) {
+      const offset = index * SNAPSHOT_CHUNK_BYTES;
+      this.storage.sql.exec(
+        `INSERT INTO collaboration_snapshot_chunks (generation, chunk_index, bytes)
+         VALUES (?, ?, ?)`,
+        generation,
+        index,
+        exactArrayBuffer(snapshot.subarray(offset, offset + SNAPSHOT_CHUNK_BYTES)),
+      );
+    }
+    this.storage.sql.exec(
+      "DELETE FROM collaboration_snapshot_chunks WHERE generation <> ?",
+      generation,
+    );
+  }
+
+  private hasTailAfter(sequence: number): boolean {
+    return (
+      this.storage.sql
+        .exec("SELECT 1 FROM collaboration_updates WHERE sequence > ? LIMIT 1", sequence)
+        .toArray().length > 0
+    );
+  }
+
+  /** Applies up to `limit` tail updates after `afterSequence`, a page at a time. */
+  private applyTail(
+    doc: Y.Doc,
+    afterSequence: number,
+    limit: number,
+    origin: string,
+  ): { lastSequence: number; applied: number } {
+    let lastSequence = afterSequence;
+    let applied = 0;
+    while (applied < limit) {
+      const page = this.storage.sql
+        .exec<UpdateRow>(
+          `SELECT sequence, event_json FROM collaboration_updates
+           WHERE sequence > ? ORDER BY sequence ASC LIMIT ?`,
+          lastSequence,
+          Math.min(TAIL_PAGE_SIZE, limit - applied),
+        )
+        .toArray();
+      for (const row of page) {
+        applyEncodedYjsUpdate(doc, parseEvent(row.event_json).update, origin);
+        lastSequence = row.sequence;
+      }
+      applied += page.length;
+      if (page.length < TAIL_PAGE_SIZE) break;
+    }
+    return { lastSequence, applied };
   }
 
   private metadata(): MetadataRow {

@@ -324,6 +324,15 @@ snapshots into deterministic chunks or store an immutable snapshot object in R2 
 size, generation, and update cutoff in SQLite. Individual client updates should be capped far
 below the platform limit.
 
+The room implements the chunked form: each snapshot generation is stored as 1 MiB BLOB rows in
+`collaboration_snapshot_chunks`, keyed by generation and chunk index, written in the same
+transaction that moves `collaboration_document` to that generation. The older single
+`collaboration_document.snapshot` column still holds the snapshot's base64 while it fits one
+value, so a rollback to a revision that reads only that column keeps working for every room that
+revision could store. A generation with no chunk rows is read from the column: that covers rooms
+saved before chunks existed, which move to chunks at their next compaction or teaching
+initialization, and generations an earlier revision wrote after a rollback.
+
 Each paid-plan SQLite Durable Object can store up to 10 GB. The application should impose a much
 smaller project/document quota and compact well before approaching that platform ceiling.
 
@@ -366,6 +375,10 @@ The alarm should:
 5. Delete only update rows through `C`.
 6. Remove older snapshot generations after the new generation is readable and hashed correctly.
 7. Reschedule itself when more work remains.
+
+The room's alarm follows these steps with the chunked snapshot above. One pass folds at most
+10,000 tail updates, reading them in pages, and sets the alarm again while more remain; an export
+runs passes until the tail is empty.
 
 Deletes count as SQLite row writes, so client-side update batching materially affects both
 storage volume and cost. Compaction thresholds should be based on bytes as well as row count.
