@@ -12,14 +12,15 @@ describe("transactionToPromise", () => {
   it("rejects with the error of the request that failed the transaction", async () => {
     const fake = new FakeIndexedDB();
     const database = await openItems(fake);
-    const refused = new DOMException("Key already exists", "ConstraintError");
-    fake.failNext({ store: "items", method: "put", error: refused });
     const transaction = database.transaction("items", "readwrite");
     const done = transactionToPromise(transaction);
+    const store = transaction.objectStore("items");
 
-    transaction.objectStore("items").put({ id: 1 });
+    store.add({ id: 1 });
+    // A second add of the same key fails with ConstraintError and aborts the transaction.
+    store.add({ id: 1 });
 
-    await expect(done).rejects.toBe(refused);
+    await expect(done).rejects.toMatchObject({ name: "ConstraintError" });
   });
 
   it("rejects with the abort's error when the commit itself fails", async () => {

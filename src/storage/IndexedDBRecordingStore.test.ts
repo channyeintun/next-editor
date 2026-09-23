@@ -1,3 +1,6 @@
+// @vitest-environment node
+// (fake-indexeddb stores Blobs with the global structuredClone, which under jsdom
+// cannot clone jsdom's Blob; see src/test/fakeIndexedDB.ts.)
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeIndexedDB } from "../test/fakeIndexedDB";
 import {
@@ -74,8 +77,11 @@ describe("IndexedDBRecordingStore", () => {
     });
     expect(Array.from(stored?.binaryData ?? [])).toEqual([1, 2, 3]);
     expect(stored?.binaryStream).toBeUndefined();
-    expect(stored?.cameraBlob).toBe(camera);
-    expect(stored?.audioBlob).toBe(audio);
+    // IndexedDB hands back a copy of each Blob, not the object that was stored.
+    expect(await stored?.cameraBlob?.text()).toBe("camera");
+    expect(stored?.cameraBlob?.type).toBe(camera.type);
+    expect(await stored?.audioBlob?.text()).toBe("audio");
+    expect(stored?.audioBlob?.type).toBe(audio.type);
     // A stale OPFS copy from an earlier, larger save of the same id is removed.
     expect(opfs.deleteRecordingOpfs).toHaveBeenCalledWith("take-1");
   });
@@ -98,7 +104,7 @@ describe("IndexedDBRecordingStore", () => {
 
     expect(Array.from(stored?.binaryData ?? [])).toEqual([9]);
     expect(stored?.cameraBlob).toBeUndefined();
-    expect(fake.read(DATABASE, "recording-segments")).toHaveLength(1);
+    expect(await fake.read(DATABASE, "recording-segments")).toHaveLength(1);
   });
 
   it("stores a payload at the OPFS threshold in OPFS and streams it back", async () => {
@@ -121,7 +127,7 @@ describe("IndexedDBRecordingStore", () => {
     });
     expect(stored?.binaryData).toBeUndefined();
     expect(stored?.binaryStream).toBe(stream);
-    expect(fake.read(DATABASE, "recording-segments")).toEqual([]);
+    expect(await fake.read(DATABASE, "recording-segments")).toEqual([]);
     expect(opfs.deleteRecordingOpfs).not.toHaveBeenCalled();
   });
 
@@ -168,7 +174,7 @@ describe("IndexedDBRecordingStore", () => {
     await expect(store.put(unfinished)).rejects.toThrow(/no finalized binary payload/);
 
     expect(opfs.replaceRecordingOpfs).not.toHaveBeenCalled();
-    expect(fake.read(DATABASE, "recording-metadata")).toEqual([]);
+    expect(await fake.read(DATABASE, "recording-metadata")).toEqual([]);
   });
 
   it("deletes every row of a take and its OPFS file", async () => {
@@ -193,14 +199,17 @@ describe("IndexedDBRecordingStore", () => {
       "recording-camera",
       "recording-audio",
     ]) {
-      const rows = fake.read(DATABASE, storeName) as Array<{ id?: string; recordingId?: string }>;
+      const rows = (await fake.read(DATABASE, storeName)) as Array<{
+        id?: string;
+        recordingId?: string;
+      }>;
       expect(rows.some((row) => (row.id ?? row.recordingId) === "take-1")).toBe(false);
     }
     expect(opfs.deleteRecordingOpfs).toHaveBeenCalledWith("take-1");
   });
 
   it("drops every row of a pre-v5 database, camera and audio included", async () => {
-    fake.seed(DATABASE, 4, {
+    await fake.seed(DATABASE, 4, {
       "recording-metadata": { keyPath: "id", records: [{ id: "v4-take", name: "Old" }] },
       "recording-segments": {
         keyPath: ["recordingId", "seq"],
@@ -225,12 +234,12 @@ describe("IndexedDBRecordingStore", () => {
       "recording-camera",
       "recording-audio",
     ]) {
-      expect(fake.read(DATABASE, storeName)).toEqual([]);
+      expect(await fake.read(DATABASE, storeName)).toEqual([]);
     }
   });
 
   it("keeps recordings written by a v6 build, reading their segments in order", async () => {
-    fake.seed(DATABASE, 6, {
+    await fake.seed(DATABASE, 6, {
       "recording-metadata": {
         keyPath: "id",
         records: [

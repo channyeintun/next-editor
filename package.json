@@ -75,6 +75,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "babel-plugin-react-compiler": "^1.0.0",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^27.4.0",
     "monaco-editor": "^0.55.1",
     "onnxruntime-web": "1.20.1",

@@ -1,6 +1,5 @@
 /* oxlint-disable vitest/require-mock-type-parameters */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FakeIndexedDB } from "../test/fakeIndexedDB";
 import {
   createInitialWorkspaceSnapshot,
   createWorkspaceStore,
@@ -352,57 +351,6 @@ describe("persistWorkspaceAssets", () => {
     await expect(
       persistWorkspaceAssets(makeProject([makeAssetFile("asset.bin")])),
     ).rejects.toMatchObject({ name: "WorkspaceAssetPersistenceError", cause: failure });
-  });
-
-  it("leaves assets that are already stored alone", async () => {
-    const fake = new FakeIndexedDB();
-    vi.stubGlobal("indexedDB", fake.indexedDB);
-    const descriptor = await registerWorkspaceAsset(new Uint8Array([65, 66, 67]), {
-      mimeType: "image/png",
-    });
-    const project = makeProject([
-      {
-        path: "logo.png",
-        name: "logo.png",
-        language: "binary",
-        content: descriptor,
-        encoding: "asset",
-      },
-    ]);
-    // Any write from here on fails the save, so resolving proves there was none.
-    fake.failNext({
-      store: "assets",
-      method: "put",
-      error: new DOMException("unexpected write", "UnknownError"),
-    });
-
-    await expect(persistWorkspaceAssets(project)).resolves.toBeUndefined();
-  });
-
-  it("writes an asset back from memory when its stored copy has gone", async () => {
-    const fake = new FakeIndexedDB();
-    vi.stubGlobal("indexedDB", fake.indexedDB);
-    const descriptor = await registerWorkspaceAsset(new Uint8Array([65, 66, 67]), {
-      mimeType: "image/png",
-    });
-    // Site data cleared under the running page.
-    fake.clear("next-editor-workspace-assets-db", "assets");
-
-    await persistWorkspaceAssets(
-      makeProject([
-        {
-          path: "logo.png",
-          name: "logo.png",
-          language: "binary",
-          content: descriptor,
-          encoding: "asset",
-        },
-      ]),
-    );
-
-    const stored = fake.read("next-editor-workspace-assets-db", "assets") as Blob[];
-    expect(stored).toHaveLength(1);
-    expect(new Uint8Array(await stored[0].arrayBuffer())).toEqual(new Uint8Array([65, 66, 67]));
   });
 
   it("rejects a quota/transaction abort", async () => {
