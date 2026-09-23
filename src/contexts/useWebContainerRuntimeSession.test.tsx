@@ -38,7 +38,7 @@ function createFakeInstance() {
   return { instance, listeners };
 }
 
-function renderRuntimeSessionHook(options: { onServerReady: () => void }) {
+function renderRuntimeSessionHook(options: { onServerReady?: () => void } = {}) {
   const captured: {
     hook: ReturnType<typeof useWebContainerRuntimeSession> | null;
   } = { hook: null };
@@ -105,5 +105,36 @@ describe("useWebContainerRuntimeSession", () => {
     });
 
     expect(onServerReady).not.toHaveBeenCalled();
+  });
+
+  // The shell fallback exists for a shell missing from the container image. A
+  // terminal the user closed while its shell spawned is a cancellation: no
+  // other shell should start, and nothing should be reported as an error.
+  it("stops starting a terminal the user closed while its shell spawned", async () => {
+    const { instance } = createFakeInstance();
+    const spawned: string[] = [];
+    let finishFirstSpawn: () => void = () => {};
+    vi.mocked(instance.spawn).mockImplementation((async (command: string) => {
+      spawned.push(command);
+      if (spawned.length === 1) {
+        await new Promise<void>((resolve) => {
+          finishFirstSpawn = resolve;
+        });
+      }
+      return createFakeProcess();
+    }) as never);
+    const hook = renderRuntimeSessionHook();
+
+    let started: Promise<void> | undefined;
+    await act(async () => {
+      started = hook.createTerminalSession(instance);
+      await Promise.resolve();
+      hook.closeTerminalSession("terminal-1");
+      finishFirstSpawn();
+      await started.catch(() => undefined);
+    });
+
+    await expect(started).resolves.toBeUndefined();
+    expect(spawned).toEqual(["jsh"]);
   });
 });

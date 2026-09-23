@@ -32,7 +32,8 @@ const TERMINAL_OUTPUT_LIMIT = 50000;
 interface TerminalSessionHandle extends RuntimeTerminalSessionSnapshot {
   inputWriter: WritableStreamDefaultWriter<string> | null;
   process: WebContainerProcess | null;
-  startPromise: Promise<TerminalSessionHandle> | null;
+  /** Resolves to null when the session was closed or reset while its shell spawned. */
+  startPromise: Promise<TerminalSessionHandle | null> | null;
 }
 
 function safelyReleaseWriter(writer: WritableStreamDefaultWriter<string> | null): void {
@@ -642,7 +643,10 @@ export function useWebContainerRuntimeSession({
     }
   };
 
-  const ensureTerminalProcess = async (instance: WebContainer, sessionId: string) => {
+  const ensureTerminalProcess = async (
+    instance: WebContainer,
+    sessionId: string,
+  ): Promise<TerminalSessionHandle | null> => {
     const session = terminalSessionsRef.current.find((entry) => entry.id === sessionId);
 
     if (!session) {
@@ -662,102 +666,100 @@ export function useWebContainerRuntimeSession({
       let lastError: unknown = null;
 
       for (const candidate of TERMINAL_SHELL_CANDIDATES) {
-        let process: WebContainerProcess | null = null;
+        let process: WebContainerProcess;
 
         try {
           process = await instance.spawn(candidate.command, [...candidate.args], {
             env: environmentVariables,
             terminal: terminalSizeRef.current,
           });
-
-          const currentSession = terminalSessionsRef.current.find(
-            (entry) => entry.id === sessionId,
-          );
-
-          if (currentSession !== session || !isRuntimeGenerationActive(generation)) {
-            safelyKillProcess(process);
-            throw new Error("Terminal session was closed before it started.");
-          }
-
-          const inputWriter = process.input.getWriter();
-          session.process = process;
-          session.inputWriter = inputWriter;
-
-          void process.output
-            .pipeTo(
-              new WritableStream({
-                write(chunk) {
-                  const activeSession = terminalSessionsRef.current.find(
-                    (entry) => entry.id === sessionId,
-                  );
-
-                  if (activeSession?.process === process && isRuntimeGenerationActive(generation)) {
-                    appendTerminalOutput(sessionId, chunk);
-                  }
-                },
-              }),
-              // Closing a terminal kills its process. Do not also have
-              // pipeTo cancel the WebContainer stream during that teardown.
-              { preventCancel: true },
-            )
-            .catch((error) => {
-              const activeSession = terminalSessionsRef.current.find(
-                (entry) => entry.id === sessionId,
-              );
-
-              if (activeSession?.process !== process || !isRuntimeGenerationActive(generation)) {
-                return;
-              }
-
-              appendTerminalOutput(sessionId, `\n${getRuntimeErrorMessage(error)}\n`);
-            });
-
-          void process.exit
-            .then((exitCode) => {
-              const currentSession = terminalSessionsRef.current.find(
-                (entry) => entry.id === sessionId,
-              );
-
-              if (
-                !currentSession ||
-                currentSession.process !== process ||
-                !isRuntimeGenerationActive(generation)
-              ) {
-                return;
-              }
-
-              safelyReleaseWriter(currentSession.inputWriter);
-              currentSession.inputWriter = null;
-              currentSession.process = null;
-              appendTerminalOutput(sessionId, `\nTerminal exited with code ${exitCode}\n`);
-            })
-            .catch((error) => {
-              const currentSession = terminalSessionsRef.current.find(
-                (entry) => entry.id === sessionId,
-              );
-
-              if (
-                !currentSession ||
-                currentSession.process !== process ||
-                !isRuntimeGenerationActive(generation)
-              ) {
-                return;
-              }
-
-              safelyReleaseWriter(currentSession.inputWriter);
-              currentSession.inputWriter = null;
-              currentSession.process = null;
-              appendTerminalOutput(sessionId, `\n${getRuntimeErrorMessage(error)}\n`);
-            });
-
-          return session;
         } catch (error) {
-          if (process && session.process !== process) {
-            safelyKillProcess(process);
-          }
-
+          // This shell is not in the container image; try the next one.
           lastError = error;
+          continue;
         }
+
+        const currentSession = terminalSessionsRef.current.find((entry) => entry.id === sessionId);
+
+        if (currentSession !== session || !isRuntimeGenerationActive(generation)) {
+          // Closed or reset while the shell spawned: a cancellation, not a
+          // failure, so no other shell and nothing to report.
+          safelyKillProcess(process);
+          return null;
+        }
+
+        const inputWriter = process.input.getWriter();
+        session.process = process;
+        session.inputWriter = inputWriter;
+
+        void process.output
+          .pipeTo(
+            new WritableStream({
+              write(chunk) {
+                const activeSession = terminalSessionsRef.current.find(
+                  (entry) => entry.id === sessionId,
+                );
+
+                if (activeSession?.process === process && isRuntimeGenerationActive(generation)) {
+                  appendTerminalOutput(sessionId, chunk);
+                }
+              },
+            }),
+            // Closing a terminal kills its process. Do not also have
+            // pipeTo cancel the WebContainer stream during that teardown.
+            { preventCancel: true },
+          )
+          .catch((error) => {
+            const activeSession = terminalSessionsRef.current.find(
+              (entry) => entry.id === sessionId,
+            );
+
+            if (activeSession?.process !== process || !isRuntimeGenerationActive(generation)) {
+              return;
+            }
+
+            appendTerminalOutput(sessionId, `\n${getRuntimeErrorMessage(error)}\n`);
+          });
+
+        void process.exit
+          .then((exitCode) => {
+            const currentSession = terminalSessionsRef.current.find(
+              (entry) => entry.id === sessionId,
+            );
+
+            if (
+              !currentSession ||
+              currentSession.process !== process ||
+              !isRuntimeGenerationActive(generation)
+            ) {
+              return;
+            }
+
+            safelyReleaseWriter(currentSession.inputWriter);
+            currentSession.inputWriter = null;
+            currentSession.process = null;
+            appendTerminalOutput(sessionId, `\nTerminal exited with code ${exitCode}\n`);
+          })
+          .catch((error) => {
+            const currentSession = terminalSessionsRef.current.find(
+              (entry) => entry.id === sessionId,
+            );
+
+            if (
+              !currentSession ||
+              currentSession.process !== process ||
+              !isRuntimeGenerationActive(generation)
+            ) {
+              return;
+            }
+
+            safelyReleaseWriter(currentSession.inputWriter);
+            currentSession.inputWriter = null;
+            currentSession.process = null;
+            appendTerminalOutput(sessionId, `\n${getRuntimeErrorMessage(error)}\n`);
+          });
+
+        return session;
       }
 
       throw lastError ?? new Error("Unable to start the workspace shell.");
