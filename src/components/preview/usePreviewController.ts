@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   type RefObject,
   useRef,
@@ -988,12 +989,18 @@ export function usePreviewController(): PreviewController {
   // fallback for recordings rrweb cannot replay. While recording, refresh it
   // after each workspace edit; outside a recording nothing reads it, and a
   // whole-page snapshot per keystroke would be pure cost.
-  useEffect(() => {
+  const refreshRecordedRuntimeSnapshot = useEffectEvent(() => {
     if (!isRecordingRef.current || !isLiveRuntimePreviewActive) {
       return;
     }
 
     void requestRuntimePreviewSnapshot("edit");
+  });
+
+  // previewVersion changes with every workspace edit; the edit is the trigger,
+  // so it is the only dependency.
+  useEffect(() => {
+    refreshRecordedRuntimeSnapshot();
   }, [previewVersion]);
 
   useEffect(() => {
