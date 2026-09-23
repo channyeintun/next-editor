@@ -107,10 +107,8 @@ export function useWebContainerRuntimeSession({
   const terminalSessionCounterRef = useRef(0);
   const terminalSizeRef = useRef({ cols: 96, rows: 18 });
   const runtimeGenerationRef = useRef(0);
-  const devServerListenerCleanupRef = useRef<(() => void) | null>(null);
-  const portListenerCleanupRef = useRef<(() => void) | null>(null);
-  const runtimeErrorListenerCleanupRef = useRef<(() => void) | null>(null);
-  const previewMessageListenerCleanupRef = useRef<(() => void) | null>(null);
+  // Unsubscribers for the listeners bootInstance adds to the current instance.
+  const instanceListenersRef = useRef<Array<() => void>>([]);
   const lifecycleEventIdRef = useRef(0);
   const previewMessageIdRef = useRef(0);
   const isMountedRef = useRef(true);
@@ -334,14 +332,7 @@ export function useWebContainerRuntimeSession({
     void stopRunnerProcess();
     stopTerminalProcess();
     terminalSessionsRef.current = [];
-    devServerListenerCleanupRef.current?.();
-    devServerListenerCleanupRef.current = null;
-    portListenerCleanupRef.current?.();
-    portListenerCleanupRef.current = null;
-    runtimeErrorListenerCleanupRef.current?.();
-    runtimeErrorListenerCleanupRef.current = null;
-    previewMessageListenerCleanupRef.current?.();
-    previewMessageListenerCleanupRef.current = null;
+    removeInstanceListeners();
     teardownSharedWebContainer(instanceRef.current);
     instanceRef.current = null;
     activeTerminalSessionIdRef.current = null;
@@ -357,6 +348,12 @@ export function useWebContainerRuntimeSession({
     setActiveCommand(null);
   };
 
+  const removeInstanceListeners = () => {
+    for (const unsubscribe of instanceListenersRef.current.splice(0)) {
+      unsubscribe();
+    }
+  };
+
   const bootInstance = async () => {
     if (instanceRef.current) {
       return instanceRef.current;
@@ -370,9 +367,9 @@ export function useWebContainerRuntimeSession({
     }
 
     instanceRef.current = instance;
+    removeInstanceListeners();
 
-    devServerListenerCleanupRef.current?.();
-    devServerListenerCleanupRef.current = instance.on("server-ready", (port, url) => {
+    const onServerReady = instance.on("server-ready", (port, url) => {
       if (!isRuntimeGenerationActive(generation) || instanceRef.current !== instance) {
         return;
       }
@@ -387,8 +384,7 @@ export function useWebContainerRuntimeSession({
       onServerReadyRef.current?.();
     });
 
-    portListenerCleanupRef.current?.();
-    portListenerCleanupRef.current = instance.on("port", (port, type, url) => {
+    const onPort = instance.on("port", (port, type, url) => {
       if (!isRuntimeGenerationActive(generation) || instanceRef.current !== instance) {
         return;
       }
@@ -401,8 +397,7 @@ export function useWebContainerRuntimeSession({
       });
     });
 
-    runtimeErrorListenerCleanupRef.current?.();
-    runtimeErrorListenerCleanupRef.current = instance.on("error", (error) => {
+    const onError = instance.on("error", (error) => {
       if (!isRuntimeGenerationActive(generation) || instanceRef.current !== instance) {
         return;
       }
@@ -421,8 +416,7 @@ export function useWebContainerRuntimeSession({
       });
     });
 
-    previewMessageListenerCleanupRef.current?.();
-    previewMessageListenerCleanupRef.current = instance.on("preview-message", (message) => {
+    const onPreviewMessage = instance.on("preview-message", (message) => {
       if (!isRuntimeGenerationActive(generation) || instanceRef.current !== instance) {
         return;
       }
@@ -433,6 +427,7 @@ export function useWebContainerRuntimeSession({
       });
     });
 
+    instanceListenersRef.current = [onServerReady, onPort, onError, onPreviewMessage];
     return instance;
   };
 
@@ -473,7 +468,7 @@ export function useWebContainerRuntimeSession({
       }
 
       foregroundProcessesRef.current.add(spawned);
-      const outputPipe = spawned.output
+      void spawned.output
         .pipeTo(
           new WritableStream({
             write(chunk) {
@@ -497,10 +492,11 @@ export function useWebContainerRuntimeSession({
             appendOutput(`\n${getRuntimeErrorMessage(error)}\n`);
           }
         });
-      void outputPipe;
 
       const exitCode = await spawned.exit;
 
+      // Removed here, not only in the cleanup, so a late output-stream error
+      // is not printed after "Command exited".
       foregroundProcessesRef.current.delete(spawned);
 
       if (!isRuntimeGenerationActive(generation)) {
