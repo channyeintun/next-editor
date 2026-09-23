@@ -8,6 +8,7 @@ import {
   useWorkspaceActions,
   useWorkspaceEditorState,
   useWorkspaceLessonType,
+  useWorkspaceTreeVersion,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
@@ -54,6 +55,7 @@ import {
 import {
   acknowledgeWorkspaceModelContent,
   disposePlaybackModels,
+  disposeRemovedWorkspaceModels,
   getEditorOptions,
   isPlaybackModelUri,
   MonacoEditor,
@@ -218,10 +220,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   "use no memo";
   const { syncEditorRef, handleEditorChange, handleWorkspaceEvent, editorRef } =
     useNextEditorActions();
-  const { applyFileTextEdits, saveProject, updateFileContent } = useWorkspaceActions();
+  const { applyFileTextEdits, getProject, saveProject, updateFileContent } = useWorkspaceActions();
   const saveWorkspace = useWebContainerRuntimeSaveWorkspace();
   const { activeFile } = useWorkspaceEditorState();
   const lessonType = useWorkspaceLessonType();
+  const treeVersion = useWorkspaceTreeVersion();
   const { store: runtimePanelStore } = useRuntimePanelStore();
   const isCollapsed = useSelector(runtimePanelStore, (s) => selectIsCollapsed(s.context));
   const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
@@ -689,6 +692,19 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   useEffect(() => {
     disposePlaybackModelsIfIdle(editorRef.current?.getModel()?.uri ?? null);
   }, [editorModelPath, editorRef, usesPlaybackModel]);
+
+  // A file leaves the project only through a topology change (delete, rename, a
+  // different project), which bumps treeVersion. Release its model then; the
+  // one the editor shows and the one the collaboration binding holds are kept.
+  useEffect(() => {
+    const disposedUris = disposeRemovedWorkspaceModels(monaco, getProject().files, [
+      yMonacoBindingRef.current?.model,
+    ]);
+    for (const uri of disposedUris) {
+      viewStatesRef.current.delete(uri);
+      modelVersionByUriRef.current.delete(uri);
+    }
+  }, [treeVersion]);
 
   useLayoutEffect(() => {
     const monaco = monacoRef.current;

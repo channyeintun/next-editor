@@ -15,6 +15,7 @@ export {
 export {
   acknowledgeWorkspaceModelContent,
   disposePlaybackModels,
+  disposeRemovedWorkspaceModels,
   isPlaybackModelUri,
   syncPlaybackModel,
   syncWorkspaceModel,

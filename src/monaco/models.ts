@@ -96,6 +96,39 @@ export function syncWorkspaceModel(
   return model;
 }
 
+/**
+ * Dispose the workspace models whose file has left the project (deleted, renamed,
+ * or a different project loaded) and return their URIs. Nothing else releases
+ * them, and Monaco keeps every model alive, in the TypeScript worker's program
+ * too, until it is disposed. A model an editor still shows, or one listed in
+ * `inUse` (the collaboration binding's), is kept whatever its path.
+ */
+export function disposeRemovedWorkspaceModels(
+  monaco: Monaco,
+  projectFiles: Readonly<Record<string, unknown>>,
+  inUse: readonly (TextModel | null | undefined)[] = [],
+): string[] {
+  const disposedUris: string[] = [];
+
+  for (const model of monaco.editor.getModels()) {
+    const path = workspacePathFromMonacoModelUri(model.uri);
+
+    if (
+      path === null ||
+      Object.hasOwn(projectFiles, path) ||
+      model.isAttachedToEditor() ||
+      inUse.includes(model)
+    ) {
+      continue;
+    }
+
+    disposedUris.push(model.uri.toString());
+    model.dispose();
+  }
+
+  return disposedUris;
+}
+
 export function workspacePathFromMonacoModelUri(uri: { toString(): string }) {
   const modelUri = uri.toString();
 

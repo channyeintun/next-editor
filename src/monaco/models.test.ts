@@ -8,6 +8,7 @@ import type { Monaco } from "./runtime";
 import {
   acknowledgeWorkspaceModelContent,
   disposePlaybackModels,
+  disposeRemovedWorkspaceModels,
   isPlaybackModelUri,
   syncPlaybackModel,
   syncWorkspaceModel,
@@ -28,7 +29,9 @@ interface FakeModel {
   getValueCalls: number;
   setValueCalls: number;
   disposed: boolean;
+  attachedToEditor: boolean;
   dispose(): void;
+  isAttachedToEditor(): boolean;
   getLanguageId(): string;
   getValue(): string;
   setValue(content: string): void;
@@ -52,6 +55,8 @@ function createFakeMonaco(
           getValueCalls: 0,
           setValueCalls: 0,
           disposed: false,
+          attachedToEditor: false,
+          isAttachedToEditor: () => model.attachedToEditor,
           dispose: () => {
             model.disposed = true;
             models.delete(uri.toString());
@@ -152,5 +157,46 @@ describe("workspace model URIs", () => {
     expect(
       monaco.editor.getModel(URI.parse(toInternalModelUri("api-client/request-body.json"))),
     ).toBeNull();
+  });
+});
+
+describe("disposeRemovedWorkspaceModels", () => {
+  it("disposes only detached workspace models whose file left the project", () => {
+    const { monaco } = createFakeMonaco((value): FakeUri => URI.parse(value));
+    const create = (path: string) =>
+      syncWorkspaceModel(monaco, path, "", "typescript") as unknown as FakeModel;
+    const kept = create("src/kept.ts");
+    const removed = create("src/removed.ts");
+    const shown = create("src/shown-but-deleted.ts");
+    shown.attachedToEditor = true;
+    const bound = create("src/bound-but-deleted.ts");
+    const playback = syncPlaybackModel(
+      monaco,
+      "src/removed.ts",
+      "",
+      "typescript",
+    ) as unknown as FakeModel;
+    const apiBody = monaco.editor.createModel(
+      "{}",
+      "json",
+      URI.parse(toInternalModelUri("api-client/request-body.json")),
+    ) as unknown as FakeModel;
+
+    const disposed = disposeRemovedWorkspaceModels(monaco, { "src/kept.ts": {} }, [
+      bound as never,
+      null,
+    ]);
+
+    expect(disposed).toEqual([removed.uri.toString()]);
+    expect(removed.disposed).toBe(true);
+    // The file is still in the project.
+    expect(kept.disposed).toBe(false);
+    // An editor still shows it (CodeEditor keeps the active file's model attached).
+    expect(shown.disposed).toBe(false);
+    // The collaboration binding still holds it.
+    expect(bound.disposed).toBe(false);
+    // Not workspace models at all.
+    expect(playback.disposed).toBe(false);
+    expect(apiBody.disposed).toBe(false);
   });
 });
