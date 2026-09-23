@@ -510,6 +510,11 @@ export async function claimCollaborationInvitation(
   invitation: CollaborationInvitationRow,
   userId: string,
 ): Promise<CollaborationRoomAccess | null> {
+  // An existing member is left as they are: no claim, no use spent, no
+  // role_version bump. This check is only a fast path. It and the batch are
+  // separate D1 round-trips, so the batch applies the same rule to a member a
+  // concurrent claim admits in between, as createProvisioningCollaborationRoom
+  // does with its quota pre-read.
   const existing = await getCollaborationRoomAccess(db, invitation.room_id, userId);
   if (existing) return existing;
 
@@ -529,25 +534,26 @@ export async function claimCollaborationInvitation(
            AND rooms.status = 'active'
            AND (SELECT COUNT(*) FROM collaboration_members WHERE room_id = rooms.id)
                < rooms.max_members
+           AND NOT EXISTS (
+             SELECT 1 FROM collaboration_members WHERE room_id = rooms.id AND user_id = ?
+           )
          ON CONFLICT (invitation_id, user_id) DO NOTHING`,
       )
-      .bind(userId, now, invitation.id, invitation.token_hash, now),
+      .bind(userId, now, invitation.id, invitation.token_hash, now, userId),
+    // An invitation admits new members only; role changes go through
+    // updateCollaborationMemberRole. joined_at = now marks a row this call
+    // admitted, which the role_version bump below reads. An existing member
+    // keeps their earlier joined_at.
     db
       .prepare(
         `INSERT INTO collaboration_members (room_id, user_id, role, joined_at, updated_at)
-         SELECT invitations.room_id, claims.user_id, invitations.role, claims.claimed_at, ?
+         SELECT invitations.room_id, claims.user_id, invitations.role, ?, ?
          FROM collaboration_invitation_claims AS claims
          JOIN collaboration_invitations AS invitations ON invitations.id = claims.invitation_id
          WHERE claims.invitation_id = ? AND claims.user_id = ?
-         ON CONFLICT (room_id, user_id) DO UPDATE SET
-           role = CASE
-             WHEN collaboration_members.role = 'owner' THEN 'owner'
-             WHEN excluded.role = 'editor' THEN 'editor'
-             ELSE collaboration_members.role
-           END,
-           updated_at = excluded.updated_at`,
+         ON CONFLICT (room_id, user_id) DO NOTHING`,
       )
-      .bind(now, invitation.id, userId),
+      .bind(now, now, invitation.id, userId),
     db
       .prepare(
         `UPDATE collaboration_invitations
@@ -564,10 +570,11 @@ export async function claimCollaborationInvitation(
         `UPDATE collaboration_rooms
          SET role_version = role_version + 1, updated_at = ?
          WHERE id = ? AND EXISTS (
-           SELECT 1 FROM collaboration_members WHERE room_id = ? AND user_id = ?
+           SELECT 1 FROM collaboration_members
+           WHERE room_id = ? AND user_id = ? AND joined_at = ?
          )`,
       )
-      .bind(now, invitation.room_id, invitation.room_id, userId),
+      .bind(now, invitation.room_id, invitation.room_id, userId, now),
   ]);
   return getCollaborationRoomAccess(db, invitation.room_id, userId);
 }
