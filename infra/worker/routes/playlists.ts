@@ -5,7 +5,6 @@ import {
   deletePlaylist,
   getOwnedPlaylistById,
   getOwnedPlaylistLessons,
-  getPlaylistById,
   getPlaylistBySlug,
   insertPlaylist,
   listOwnedPlaylists,
@@ -182,16 +181,12 @@ playlistsRoute.delete("/:id", async (c) => {
     return c.json({ error: "not signed in" }, 401);
   }
 
-  const id = c.req.param("id");
-  const existing = await getPlaylistById(c.env.DB, id);
-  const deleted = await deletePlaylist(c.env.DB, id, user.id);
-  if (!deleted) {
+  const deletedSlug = await deletePlaylist(c.env.DB, c.req.param("id"), user.id);
+  if (deletedSlug === null) {
     return c.json({ error: "not found" }, 404);
   }
 
-  if (existing) {
-    await invalidateCache(getCache(c.env), playlistSlugKey(existing.slug));
-  }
+  await invalidateCache(getCache(c.env), playlistSlugKey(deletedSlug));
   return c.json({ success: true });
 });
 
@@ -210,22 +205,18 @@ playlistsRoute.post("/:id/lessons", async (c) => {
     return c.json({ error: "lessonId is required" }, 400);
   }
 
-  const id = c.req.param("id");
-  const result = await addLessonToPlaylist(c.env.DB, id, user.id, body.lessonId);
-  if (result === "not_found") {
+  const result = await addLessonToPlaylist(c.env.DB, c.req.param("id"), user.id, body.lessonId);
+  if (result.status === "not_found") {
     return c.json({ error: "not found" }, 404);
   }
-  if (result === "lesson_not_eligible") {
+  if (result.status === "lesson_not_eligible") {
     return c.json({ error: "lesson must be one of your own published lessons" }, 400);
   }
-  if (result === "already_added") {
+  if (result.status === "already_added") {
     return c.json({ error: "lesson is already in this playlist" }, 409);
   }
 
-  const playlist = await getPlaylistById(c.env.DB, id);
-  if (playlist) {
-    await invalidateCache(getCache(c.env), playlistSlugKey(playlist.slug));
-  }
+  await invalidateCache(getCache(c.env), playlistSlugKey(result.slug));
   return c.json({ success: true }, 201);
 });
 
@@ -235,17 +226,13 @@ playlistsRoute.delete("/:id/lessons/:lessonId", async (c) => {
     return c.json({ error: "not signed in" }, 401);
   }
 
-  const id = c.req.param("id");
-  const lessonId = c.req.param("lessonId");
-  const removed = await removeLessonFromPlaylist(c.env.DB, id, user.id, lessonId);
-  if (!removed) {
+  const { id, lessonId } = c.req.param();
+  const slug = await removeLessonFromPlaylist(c.env.DB, id, user.id, lessonId);
+  if (slug === null) {
     return c.json({ error: "not found" }, 404);
   }
 
-  const playlist = await getPlaylistById(c.env.DB, id);
-  if (playlist) {
-    await invalidateCache(getCache(c.env), playlistSlugKey(playlist.slug));
-  }
+  await invalidateCache(getCache(c.env), playlistSlugKey(slug));
   return c.json({ success: true });
 });
 
@@ -268,16 +255,17 @@ playlistsRoute.post("/:id/reorder", async (c) => {
     return c.json({ error: "lessonIds must be an array of strings" }, 400);
   }
 
-  const id = c.req.param("id");
-  const reordered = await reorderPlaylistLessons(c.env.DB, id, user.id, body.lessonIds as string[]);
-  if (!reordered) {
+  const slug = await reorderPlaylistLessons(
+    c.env.DB,
+    c.req.param("id"),
+    user.id,
+    body.lessonIds as string[],
+  );
+  if (slug === null) {
     return c.json({ error: "not found" }, 404);
   }
 
-  const playlist = await getPlaylistById(c.env.DB, id);
-  if (playlist) {
-    await invalidateCache(getCache(c.env), playlistSlugKey(playlist.slug));
-  }
+  await invalidateCache(getCache(c.env), playlistSlugKey(slug));
   return c.json({ success: true });
 });
 

@@ -45,14 +45,6 @@ export async function insertPlaylist(
   return row;
 }
 
-export async function getPlaylistById(db: D1Database, id: string): Promise<PlaylistRow | null> {
-  const row = await db
-    .prepare("SELECT * FROM playlists WHERE id = ?")
-    .bind(id)
-    .first<PlaylistRow>();
-  return row ?? null;
-}
-
 export interface PlaylistWithLessons {
   playlist: PlaylistRow;
   lessons: LessonRow[];
@@ -245,8 +237,8 @@ export async function updatePlaylist(
     values.push(params.description);
   }
   if (sets.length === 0) {
-    // Owner-scoped, matching the UPDATE below. The unscoped getPlaylistById
-    // here let `PATCH /api/playlists/:id` with an empty body read back another
+    // Owner-scoped, matching the UPDATE below. An unscoped read by id here
+    // once let `PATCH /api/playlists/:id` with an empty body read back another
     // user's row and — worse — made the route invalidate that playlist's cache
     // key (routes/playlists.ts), an unauthenticated-cost KV eviction primitive.
     const row = await db
@@ -265,19 +257,27 @@ export async function updatePlaylist(
   return row ?? null;
 }
 
+// The mutations below answer with the playlist's slug on success, the key the
+// route must invalidate, so it never has to read the row again to learn it.
+
+/** The deleted playlist's slug, or null when no playlist `id` is owned by `ownerId`. */
 export async function deletePlaylist(
   db: D1Database,
   id: string,
   ownerId: string,
-): Promise<boolean> {
-  const result = await db
-    .prepare("DELETE FROM playlists WHERE id = ? AND owner_id = ?")
+): Promise<string | null> {
+  const row = await db
+    .prepare("DELETE FROM playlists WHERE id = ? AND owner_id = ? RETURNING slug")
     .bind(id, ownerId)
-    .run();
-  return (result.meta.changes ?? 0) > 0;
+    .first<{ slug: string }>();
+  return row?.slug ?? null;
 }
 
-export type AddLessonResult = "ok" | "not_found" | "lesson_not_eligible" | "already_added";
+export type AddLessonResult =
+  | { status: "ok"; slug: string }
+  | { status: "not_found" }
+  | { status: "lesson_not_eligible" }
+  | { status: "already_added" };
 
 // Validates ownership of both the playlist and the lesson (and that the
 // lesson is published) before inserting the membership row — only the
@@ -289,17 +289,14 @@ export async function addLessonToPlaylist(
   ownerId: string,
   lessonId: string,
 ): Promise<AddLessonResult> {
-  const playlist = await db
-    .prepare("SELECT id FROM playlists WHERE id = ? AND owner_id = ?")
-    .bind(playlistId, ownerId)
-    .first();
-  if (!playlist) return "not_found";
+  const playlist = await selectOwnedPlaylistSlug(db, playlistId, ownerId);
+  if (!playlist) return { status: "not_found" };
 
   const lesson = await db
     .prepare("SELECT id FROM lessons WHERE id = ? AND owner_id = ? AND status = 'published'")
     .bind(lessonId, ownerId)
     .first();
-  if (!lesson) return "lesson_not_eligible";
+  if (!lesson) return { status: "lesson_not_eligible" };
 
   const now = Date.now();
   try {
@@ -313,24 +310,22 @@ export async function addLessonToPlaylist(
       db.prepare("UPDATE playlists SET updated_at = ? WHERE id = ?").bind(now, playlistId),
     ]);
   } catch (error) {
-    if (String(error).includes("UNIQUE constraint failed")) return "already_added";
+    if (String(error).includes("UNIQUE constraint failed")) return { status: "already_added" };
     throw error;
   }
 
-  return "ok";
+  return { status: "ok", slug: playlist.slug };
 }
 
+/** Removes the membership; the playlist's slug when a row was removed, else null. */
 export async function removeLessonFromPlaylist(
   db: D1Database,
   playlistId: string,
   ownerId: string,
   lessonId: string,
-): Promise<boolean> {
-  const playlist = await db
-    .prepare("SELECT id FROM playlists WHERE id = ? AND owner_id = ?")
-    .bind(playlistId, ownerId)
-    .first();
-  if (!playlist) return false;
+): Promise<string | null> {
+  const playlist = await selectOwnedPlaylistSlug(db, playlistId, ownerId);
+  if (!playlist) return null;
 
   // One atomic batch so a failure can't leave updated_at out of sync with the
   // membership row. The UPDATE runs first, gated on the membership existing —
@@ -348,7 +343,7 @@ export async function removeLessonFromPlaylist(
       .prepare("DELETE FROM playlist_lessons WHERE playlist_id = ? AND lesson_id = ?")
       .bind(playlistId, lessonId),
   ]);
-  return (results[1].meta.changes ?? 0) > 0;
+  return (results[1].meta.changes ?? 0) > 0 ? playlist.slug : null;
 }
 
 // Rewrites every membership row's position atomically (db.batch(), same
@@ -358,18 +353,16 @@ export async function removeLessonFromPlaylist(
 // mention — e.g. rows a stale client never saw — are appended in their
 // current relative order. Positions therefore always come out dense over the
 // full membership; trusting the submitted list verbatim could leave the
-// untouched rows colliding with the rewritten 0..n-1 range.
+// untouched rows colliding with the rewritten 0..n-1 range. Answers with the
+// playlist's slug, or null when the playlist is not the owner's.
 export async function reorderPlaylistLessons(
   db: D1Database,
   playlistId: string,
   ownerId: string,
   orderedLessonIds: string[],
-): Promise<boolean> {
-  const playlist = await db
-    .prepare("SELECT id FROM playlists WHERE id = ? AND owner_id = ?")
-    .bind(playlistId, ownerId)
-    .first();
-  if (!playlist) return false;
+): Promise<string | null> {
+  const playlist = await selectOwnedPlaylistSlug(db, playlistId, ownerId);
+  if (!playlist) return null;
 
   const membersResult = await db
     .prepare("SELECT lesson_id FROM playlist_lessons WHERE playlist_id = ? ORDER BY position ASC")
@@ -399,5 +392,17 @@ export async function reorderPlaylistLessons(
     ),
     db.prepare("UPDATE playlists SET updated_at = ? WHERE id = ?").bind(now, playlistId),
   ]);
-  return true;
+  return playlist.slug;
+}
+
+/** The playlist's slug when `ownerId` owns it: the ownership check every mutation starts with. */
+function selectOwnedPlaylistSlug(
+  db: D1Database,
+  playlistId: string,
+  ownerId: string,
+): Promise<{ slug: string } | null> {
+  return db
+    .prepare("SELECT slug FROM playlists WHERE id = ? AND owner_id = ?")
+    .bind(playlistId, ownerId)
+    .first<{ slug: string }>();
 }
