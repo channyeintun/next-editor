@@ -122,3 +122,62 @@ describe("workspace tree topology", () => {
     expect(context.dirtyState.hasUnsavedChanges).toBe(false);
   });
 });
+
+function goLesson(): WorkspaceProject {
+  return {
+    id: "my-go-lesson",
+    name: "Goroutines 101",
+    lessonType: "go",
+    entryFilePath: "cmd/main.go",
+    folders: ["cmd"],
+    files: {
+      "cmd/main.go": {
+        path: "cmd/main.go",
+        name: "main.go",
+        language: "go",
+        content: "package main\n",
+      },
+    },
+  };
+}
+
+describe("a project always keeps one file", () => {
+  it("refuses to delete the only file", () => {
+    const store = createWorkspaceStore({ activeFilePath: "cmd/main.go", project: goLesson() });
+    const before = initialized(store);
+
+    store.trigger.deleteFile({ path: "cmd/main.go" });
+    const after = initialized(store);
+    expect(after.project).toBe(before.project);
+    expect(after.syncVersion).toBe(before.syncVersion);
+    expect(after.treeVersion).toBe(before.treeVersion);
+  });
+
+  it("refuses to delete a folder that holds every file", () => {
+    const store = createWorkspaceStore({ activeFilePath: "cmd/main.go", project: goLesson() });
+    const before = initialized(store);
+
+    store.trigger.deleteFolder({ path: "cmd" });
+    const after = initialized(store);
+    expect(after.project).toBe(before.project);
+    expect(after.syncVersion).toBe(before.syncVersion);
+    expect(after.treeVersion).toBe(before.treeVersion);
+  });
+
+  it("still deletes when another file remains", () => {
+    const lesson = goLesson();
+    lesson.files["go.mod"] = {
+      path: "go.mod",
+      name: "go.mod",
+      language: "plaintext",
+      content: "module example.com/goroutines\n",
+    };
+    const store = createWorkspaceStore({ activeFilePath: "cmd/main.go", project: lesson });
+
+    store.trigger.deleteFolder({ path: "cmd" });
+    const after = initialized(store);
+    expect(Object.keys(after.project.files)).toEqual(["go.mod"]);
+    expect(after.project.lessonType).toBe("go");
+    expect(after.activeFilePath).toBe("go.mod");
+  });
+});

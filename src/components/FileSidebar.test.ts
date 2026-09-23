@@ -7,7 +7,8 @@ import {
   readStoredFileSidebarCollapsed,
   writeStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
-import { getViewportClampedContextMenuPlacement } from "./fileSidebarHelpers";
+import type { WorkspaceTreeFile } from "../types/workspace";
+import { deletesEveryFile, getViewportClampedContextMenuPlacement } from "./fileSidebarHelpers";
 
 describe("getViewportClampedContextMenuPlacement", () => {
   it("keeps a menu opened near the bottom fully inside the viewport", () => {
@@ -51,6 +52,28 @@ describe("getViewportClampedContextMenuPlacement", () => {
 
     expect(placement.top).toBe(8);
     expect(placement.maxHeight).toBe(784);
+  });
+});
+
+describe("deletesEveryFile", () => {
+  function treeFile(path: string): WorkspaceTreeFile {
+    return { path, name: path.split("/").at(-1) ?? path, language: "typescript" };
+  }
+
+  it("is true for the only file", () => {
+    expect(deletesEveryFile([treeFile("main.ts")], "main.ts")).toBe(true);
+  });
+
+  it("is true for a folder that holds every file", () => {
+    expect(deletesEveryFile([treeFile("src/a.ts"), treeFile("src/lib/b.ts")], "src")).toBe(true);
+  });
+
+  it("is false when another folder only shares the folder's name as a prefix", () => {
+    expect(deletesEveryFile([treeFile("src/a.ts"), treeFile("src2/x.ts")], "src")).toBe(false);
+  });
+
+  it("is false for one of two files", () => {
+    expect(deletesEveryFile([treeFile("a.ts"), treeFile("b.ts")], "a.ts")).toBe(false);
   });
 });
 

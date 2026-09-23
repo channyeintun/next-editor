@@ -6,6 +6,7 @@ import {
   inferLanguageFromPath,
   type WorkspaceTreeFile,
 } from "../types/workspace";
+import { isPathWithinFolder } from "../stores/workspaceProjectSupport";
 
 // ============================================================================
 // FileSidebar helpers
@@ -139,6 +140,15 @@ export function removeFolderFromCollapsedState(
   const next = new Set(current);
   next.delete(folderPath);
   return next;
+}
+
+/**
+ * Whether deleting the entry at `path` (a file, or a folder with everything in
+ * it) would remove every file. The sidebar disables that delete, and the local
+ * workspace store also refuses it: a project always keeps at least one file.
+ */
+export function deletesEveryFile(files: readonly WorkspaceTreeFile[], path: string): boolean {
+  return files.every((file) => isPathWithinFolder(file.path, path));
 }
 
 function langBadge(bg: string, fg: string, label: string): ReactElement {

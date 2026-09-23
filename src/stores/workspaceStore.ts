@@ -21,7 +21,6 @@ import {
   type WorkspaceProject,
   type WorkspaceTreeFile,
 } from "../types/workspace";
-import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { createStarterWorkspaceProject } from "../starters/react";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,
@@ -890,18 +889,11 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         const nextFiles = { ...context.project.files };
         delete nextFiles[normalizedPath];
 
+        // A project always keeps at least one file: the editor always has one
+        // open, and "New Editor" is how a lesson starts over. The sidebar
+        // disables this delete (deletesEveryFile).
         if (Object.keys(nextFiles).length === 0) {
-          const fallbackProject = createStarterHtmlCssWorkspace();
-
-          return withDirtyState(
-            withRefreshedWorkspaceSlices({
-              ...context,
-              project: fallbackProject,
-              activeFilePath: fallbackProject.entryFilePath,
-              treeVersion: context.treeVersion + 1,
-              syncVersion: context.syncVersion + 1,
-            }),
-          );
+          return context;
         }
 
         const nextProject = {
@@ -941,18 +933,11 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             .map((file) => [file.path, file]),
         ) as Record<string, WorkspaceFile>;
 
+        // A project always keeps at least one file: the editor always has one
+        // open, and "New Editor" is how a lesson starts over. The sidebar
+        // disables this delete (deletesEveryFile).
         if (Object.keys(nextFiles).length === 0) {
-          const fallbackProject = createStarterHtmlCssWorkspace();
-
-          return withDirtyState(
-            withRefreshedWorkspaceSlices({
-              ...context,
-              project: fallbackProject,
-              activeFilePath: fallbackProject.entryFilePath,
-              treeVersion: context.treeVersion + 1,
-              syncVersion: context.syncVersion + 1,
-            }),
-          );
+          return context;
         }
 
         const nextEntryFilePath = isPathWithinFolder(context.project.entryFilePath, normalizedPath)

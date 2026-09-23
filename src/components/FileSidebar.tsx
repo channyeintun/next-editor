@@ -30,6 +30,7 @@ import {
   CONTEXT_MENU_FALLBACK_HEIGHT,
   CONTEXT_MENU_FALLBACK_WIDTH,
   copyTextToClipboard,
+  deletesEveryFile,
   getDefaultFileContent,
   getEditableSelectionEnd,
   getFileIcon,
@@ -119,6 +120,7 @@ function FileSidebarPanel() {
     contextMenu && contextMenu.kind === "file"
       ? (files.find((file) => file.path === contextMenu.path) ?? null)
       : null;
+  const isDeleteRefused = contextMenu !== null && deletesEveryFile(files, contextMenu.path);
   const canOpenContextFileInPreview =
     lessonType !== "react" && contextMenuFile?.language === "html";
   const isContextFileInPreview = contextMenu?.path === previewFilePath;
@@ -854,8 +856,10 @@ function FileSidebarPanel() {
             </button>
             <button
               type="button"
+              disabled={isDeleteRefused}
+              title={isDeleteRefused ? "A project needs at least one file" : undefined}
               onClick={() => handleDeleteEntry(contextMenu.kind, contextMenu.path)}
-              className="flex w-full items-center px-4 py-2 text-sm text-rose-200 transition-colors hover:bg-rose-500/10"
+              className="flex w-full items-center px-4 py-2 text-sm text-rose-200 transition-colors hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:text-slate-500 disabled:hover:bg-transparent"
             >
               {contextMenu.kind === "folder" ? "Delete Folder" : "Delete File"}
             </button>
