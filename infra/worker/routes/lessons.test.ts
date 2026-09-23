@@ -202,3 +202,54 @@ describe("lessonsRoute delete", () => {
     expect(bucket.delete).not.toHaveBeenCalled();
   });
 });
+
+describe("lessonsRoute text limits", () => {
+  // Lesson text is served in every gallery page, search result and author
+  // profile, and the edge render copies the title seven times and the
+  // description five times into each page, so none of it may be unbounded.
+  it.each([
+    ["title", { title: "t".repeat(201) }],
+    ["description", { description: "d".repeat(10_001) }],
+    ["tag count", { tags: Array.from({ length: 31 }, (_, index) => `tag-${index}`) }],
+    ["tag length", { tags: ["t".repeat(51)] }],
+    ["duration", { duration: "9".repeat(33) }],
+  ])("refuses a lesson whose %s is over its limit", async (_field, overLimit) => {
+    const response = await createLesson({
+      id: LESSON_ID,
+      title: "A lesson",
+      ne: `lessons/${LESSON_ID}/${LESSON_ID}.ne`,
+      ...overLimit,
+    });
+
+    expect(response.status).toBe(400);
+    expect(insertDraftLesson).not.toHaveBeenCalled();
+  });
+
+  it("accepts text at the limits", async () => {
+    const response = await createLesson({
+      id: LESSON_ID,
+      title: "t".repeat(200),
+      description: "d".repeat(10_000),
+      tags: Array.from({ length: 30 }, () => "t".repeat(50)),
+      duration: "9".repeat(32),
+      ne: `lessons/${LESSON_ID}/${LESSON_ID}.ne`,
+    });
+
+    expect(response.status).toBe(201);
+  });
+
+  it("refuses an edit that would put the description over its limit", async () => {
+    const response = await lessonsRoute.request(
+      `https://nexteditor.dev/${LESSON_ID}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ description: "d".repeat(10_001) }),
+        headers: { "content-type": "application/json" },
+      },
+      env,
+    );
+
+    expect(response.status).toBe(400);
+    expect(updateLesson).not.toHaveBeenCalled();
+  });
+});

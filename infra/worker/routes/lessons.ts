@@ -15,6 +15,7 @@ import { generateUniqueSlug, isSlugUniqueViolation, MAX_SLUG_INSERT_ATTEMPTS } f
 import { lessonRowToLesson, lessonRowToOwnedLesson } from "../../db/types";
 import { getCurrentUser } from "../auth/session";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
+import { metadataTextError } from "../../lessons/metadataLimits";
 import { cached, getCache, invalidateCache, lessonListKey, lessonSlugKey } from "../cache";
 import { findPublishedLessonBySlug } from "../lessonCatalog";
 import { isLessonId, LESSON_ID_PATTERN } from "../lessonIds";
@@ -143,6 +144,13 @@ lessonsRoute.post("/", async (c) => {
   ) {
     return c.json({ error: "thumbnail must be a media path uploaded for this lesson" }, 400);
   }
+  const description = typeof body.description === "string" ? body.description : null;
+  const duration = typeof body.duration === "string" ? body.duration : null;
+  const tags = asStringArray(body.tags);
+  const textError = metadataTextError({ title, description, tags, duration });
+  if (textError) {
+    return c.json({ error: textError }, 400);
+  }
 
   for (let attempt = 1; ; attempt++) {
     const slug = await generateUniqueSlug(c.env.DB, "lessons", slugify(title));
@@ -152,12 +160,12 @@ lessonsRoute.post("/", async (c) => {
         slug,
         ownerId: user.id,
         title,
-        description: typeof body.description === "string" ? body.description : null,
+        description,
         thumbnail:
           typeof body.thumbnail === "string" ? toStoredThumbnailPath(body.thumbnail) : null,
         ne: toMediaPath(body.ne),
-        duration: typeof body.duration === "string" ? body.duration : null,
-        tags: asStringArray(body.tags),
+        duration,
+        tags,
         author: user.name,
         authorUrl: `/learn/@${user.username}`,
       });
@@ -214,6 +222,10 @@ lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
       return c.json({ error: "thumbnail must be a media path uploaded for this lesson" }, 400);
     }
     updateParams.thumbnail = toStoredThumbnailPath(body.thumbnail);
+  }
+  const textError = metadataTextError(updateParams);
+  if (textError) {
+    return c.json({ error: textError }, 400);
   }
 
   // Grabbed before the write because updateLesson's RETURNING reflects the

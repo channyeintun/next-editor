@@ -23,6 +23,7 @@ import {
 } from "../../db/types";
 import { generateUniqueSlug, isSlugUniqueViolation, MAX_SLUG_INSERT_ATTEMPTS } from "../../db/slug";
 import { getCurrentUser } from "../auth/session";
+import { metadataTextError } from "../../lessons/metadataLimits";
 import { cached, getCache, invalidateCache, playlistSlugKey } from "../cache";
 
 // Shorter than the lesson-slug 300s tier: a playlist's cache can also go
@@ -63,6 +64,11 @@ playlistsRoute.post("/", async (c) => {
   if (!title) {
     return c.json({ error: "title is required" }, 400);
   }
+  const description = typeof body?.description === "string" ? body.description : null;
+  const textError = metadataTextError({ title, description });
+  if (textError) {
+    return c.json({ error: textError }, 400);
+  }
 
   const id = crypto.randomUUID();
   for (let attempt = 1; ; attempt++) {
@@ -73,7 +79,7 @@ playlistsRoute.post("/", async (c) => {
         slug,
         ownerId: user.id,
         title,
-        description: typeof body?.description === "string" ? body.description : null,
+        description,
       });
       return c.json(
         playlistRowToOwnedPlaylist({ ...row, lesson_count: 0, first_lesson_thumbnail: null }),
@@ -149,6 +155,10 @@ playlistsRoute.patch("/:id", async (c) => {
   }
   if (typeof body.description === "string") {
     updateParams.description = body.description;
+  }
+  const textError = metadataTextError(updateParams);
+  if (textError) {
+    return c.json({ error: textError }, 400);
   }
 
   const id = c.req.param("id");
