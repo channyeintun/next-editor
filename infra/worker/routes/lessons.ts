@@ -328,8 +328,8 @@ lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
 });
 
 // All of the signed-in owner's lessons (draft + published) — backs "My
-// Library". Must be registered before the catch-all "/:slug" GET below, for
-// the same literal-vs-param ordering reason described on that route.
+// Library". Must be registered before the catch-all "/:slug" GET below (see
+// the comment there).
 lessonsRoute.get("/mine", async (c) => {
   const user = await getCurrentUser(c);
   if (!user) {
@@ -340,10 +340,9 @@ lessonsRoute.get("/mine", async (c) => {
   return c.json({ lessons: rows.map(lessonRowToOwnedLesson) });
 });
 
-// Registered last: a bare "/:slug" GET would otherwise shadow more specific
-// routes above if Hono's router ever preferred registration order over route
-// specificity for a literal-vs-param conflict (it currently doesn't, but this
-// ordering keeps the file correct even if that assumption changes).
+// Registered last: Hono dispatches in registration order, so a "/:slug" GET
+// above "/mine" would answer /api/lessons/mine itself. (db/slug.ts never gives
+// a row the slug "mine" for the same reason.)
 lessonsRoute.get("/:slug", async (c) => {
   const lesson = await findPublishedLessonBySlug(c.env, c.req.param("slug"));
   if (!lesson) {

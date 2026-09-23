@@ -253,3 +253,14 @@ describe("lessonsRoute text limits", () => {
     expect(updateLesson).not.toHaveBeenCalled();
   });
 });
+
+describe("lessonsRoute route order", () => {
+  // "/mine" and "/:slug" both match /mine; Hono picks the one registered first.
+  it("routes /mine to the owner's library, not the slug lookup", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null);
+
+    const response = await lessonsRoute.request("https://nexteditor.dev/mine", undefined, env);
+
+    expect(response.status).toBe(401);
+  });
+});

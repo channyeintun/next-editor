@@ -281,8 +281,8 @@ playlistsRoute.post("/:id/reorder", async (c) => {
   return c.json({ success: true });
 });
 
-// Registered last: a bare "/:slug" GET would otherwise shadow the more
-// specific routes above (see lessons.ts's identical comment).
+// Registered last: Hono dispatches in registration order, so a "/:slug" GET
+// above "/mine" would answer /api/playlists/mine itself (as in lessons.ts).
 playlistsRoute.get("/:slug", async (c) => {
   const slug = c.req.param("slug");
   const playlist = await cached(
