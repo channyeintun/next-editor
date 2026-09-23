@@ -630,6 +630,33 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     provider.stop();
   });
 
+  it("reconnects when the socket stops answering its heartbeat", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance", "Date"] });
+    const { sockets, factory } = socketRecorder();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      random: () => 0,
+      webSocketFactory: factory,
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+
+    // A healthy room answers every ping.
+    for (let beat = 0; beat < 3; beat += 1) {
+      vi.advanceTimersByTime(20_000);
+      expect(sockets[0]!.sent.at(-1)).toBe("ping");
+      sockets[0]!.message("pong");
+    }
+    expect(provider.connectionState).toBe("live");
+
+    // A half-open socket delivers nothing; the browser may not close it for minutes.
+    vi.advanceTimersByTime(60_000);
+    expect(provider.connectionState).toBe("reconnecting");
+    provider.stop();
+  });
+
   it("reports offline edits it can no longer send after a downgrade while offline", async () => {
     const { sockets, factory } = socketRecorder();
     const api = new FakeApi();

@@ -42,6 +42,9 @@ const DEFAULT_MAX_RECONNECT_ATTEMPTS = 5;
 const MAX_SEEN_STREAM_IDS = 2_000;
 const WEBSOCKET_ACK_TIMEOUT_MS = 15_000;
 const WEBSOCKET_HEARTBEAT_MS = 20_000;
+// The room answers every "ping" with "pong" (a Durable Object auto-response), so
+// this much silence means a dead path the browser has not noticed yet.
+const WEBSOCKET_SILENCE_TIMEOUT_MS = 2 * WEBSOCKET_HEARTBEAT_MS + 5_000;
 const WEBSOCKET_OPEN = 1;
 
 export interface CollaborationRoomApi {
@@ -533,16 +536,24 @@ export class CollaborationRoomProvider {
     const socket = this.webSocketFactory(url.toString());
     socket.binaryType = "arraybuffer";
     this.socket = socket;
+    let lastReceivedAt = 0;
     socket.onopen = () => {
       if (this.isStopped || attemptId !== this.attemptId || socket !== this.socket) return;
       this.actor.send({ type: "PROVIDER_OPEN", sessionId: this.sessionId, attemptId });
+      lastReceivedAt = monotonicNow();
       this.heartbeatTimer = setInterval(() => {
-        if (socket === this.socket && socket.readyState === WEBSOCKET_OPEN) socket.send("ping");
+        if (socket !== this.socket || socket.readyState !== WEBSOCKET_OPEN) return;
+        if (monotonicNow() - lastReceivedAt > WEBSOCKET_SILENCE_TIMEOUT_MS) {
+          this.handleTransportFailure("Collaboration WebSocket stopped responding", attemptId);
+          return;
+        }
+        socket.send("ping");
       }, WEBSOCKET_HEARTBEAT_MS);
       void this.synchronizeBinary(attemptId);
     };
     socket.onmessage = (event) => {
       if (this.isStopped || attemptId !== this.attemptId || socket !== this.socket) return;
+      lastReceivedAt = monotonicNow();
       if (event.data === "pong") return;
       this.handleWebSocketMessage(event.data, attemptId);
     };

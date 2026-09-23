@@ -205,6 +205,9 @@ the room is still closed the next time it speaks (a watching member renews aware
 - A clean close removes awareness immediately.
 - A broken network connection is removed by WebSocket close/error handling and awareness TTL
   rules.
+- The browser sends `ping` every 20 seconds and the room auto-responds `pong`; a socket that has
+  delivered nothing for 45 seconds is treated as broken and reconnected, since a half-open
+  connection may not close for minutes.
 - Reconnect receives a new attempt ID and room token.
 - Offline Yjs updates remain client-side until the server's state vector has been applied.
 - Late events from an earlier provider attempt are ignored by `collaborationMachine`.
