@@ -35,23 +35,27 @@
 
 const OPENROUTER_RESPONSES_URL = "https://openrouter.ai/api/v1/responses";
 
-// Hop-by-hop / connection-specific headers that must not be copied through to
-// the upstream request, plus headers that only make sense on the original
-// browser->this-origin hop.
-const STRIPPED_REQUEST_HEADERS = new Set([
-  "host",
-  "origin",
-  "referer",
-  "content-length",
-  "connection",
-  "cookie",
-  "cf-connecting-ip",
-  "cf-ray",
-  "cf-visitor",
-  "x-forwarded-for",
-  "x-forwarded-host",
-  "x-forwarded-proto",
+// The request headers OpenRouter's Responses API reads, as @openrouter/sdk
+// sends them: the user's key, the body and stream negotiation, app attribution
+// (HTTP-Referer) and OpenRouter's own X-OpenRouter-* headers (title,
+// categories, metadata, and the x-openrouter-callmodel marker this proxy exists
+// for). Everything else stays on the browser->this-origin hop. The request is
+// same-origin, so it also carries what the app stamps on its own traffic:
+// cookies, Cloudflare's client metadata, and PostHog's X-POSTHOG-* tracing
+// headers, whose distinct id is the signed-in user's id. A denylist let those
+// through to openrouter.ai; an allow-list cannot leak a header added later.
+const FORWARDED_REQUEST_HEADERS = new Set([
+  "authorization",
+  "content-type",
+  "accept",
+  "http-referer",
 ]);
+const FORWARDED_REQUEST_HEADER_PREFIX = "x-openrouter-";
+
+function isForwardedRequestHeader(name: string): boolean {
+  const key = name.toLowerCase();
+  return FORWARDED_REQUEST_HEADERS.has(key) || key.startsWith(FORWARDED_REQUEST_HEADER_PREFIX);
+}
 
 // Headers from the upstream response that must not be copied back verbatim:
 // hop-by-hop headers, and OpenRouter's own CORS headers (irrelevant here
@@ -76,7 +80,7 @@ const STRIPPED_RESPONSE_HEADERS = new Set([
 export async function proxyOpenRouterResponses(request: Request): Promise<Response> {
   const headers = new Headers();
   for (const [key, value] of request.headers) {
-    if (!STRIPPED_REQUEST_HEADERS.has(key.toLowerCase())) {
+    if (isForwardedRequestHeader(key)) {
       headers.set(key, value);
     }
   }
