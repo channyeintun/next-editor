@@ -34,107 +34,17 @@ export function areSelectionsEqual(
 }
 
 /**
- * Applies cursor position only if it has changed
- */
-export const applyPositionDiff = (
-  editor: monaco.editor.IStandaloneCodeEditor,
-  targetPosition: EditorPosition,
-  knownCurrentPosition?: EditorPosition | null,
-): boolean => {
-  const actualCurrentPosition = editor.getPosition();
-  const currentPosition =
-    knownCurrentPosition !== undefined &&
-    arePositionsEqual(actualCurrentPosition, knownCurrentPosition)
-      ? knownCurrentPosition
-      : actualCurrentPosition;
-
-  if (arePositionsEqual(currentPosition, targetPosition)) {
-    return true; // No change needed
-  }
-
-  try {
-    const model = editor.getModel();
-    if (!model) return false;
-
-    // Validate and clamp the position
-    const lineCount = model.getLineCount();
-    const safeLineNumber = Math.min(Math.max(targetPosition.lineNumber, 1), lineCount);
-    const lineLength = model.getLineLength(safeLineNumber);
-    const maxColumn = Math.max(1, lineLength + 1);
-    const validPosition = {
-      lineNumber: safeLineNumber,
-      column: Math.min(Math.max(targetPosition.column, 1), maxColumn),
-    };
-
-    editor.setPosition(validPosition);
-    return true;
-  } catch (error) {
-    console.warn("Error applying position diff:", error);
-    return false;
-  }
-};
-
-/**
- * Applies selection only if it has changed
+ * Moves the caret and selection to `targetSelection` unless the primary selection is
+ * already there. A Monaco selection carries the caret (`positionLineNumber` and
+ * `positionColumn`), so this is the only cursor write replay needs, and
+ * `setSelection` validates an out-of-range target against the model itself.
  */
 export const applySelectionDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
   targetSelection: EditorSelection,
-  knownCurrentSelection?: EditorSelection | null,
-): boolean => {
-  const actualCurrentSelection = editor.getSelection();
-  const currentSelection =
-    knownCurrentSelection !== undefined &&
-    areSelectionsEqual(actualCurrentSelection, knownCurrentSelection)
-      ? knownCurrentSelection
-      : actualCurrentSelection;
-
-  if (areSelectionsEqual(currentSelection, targetSelection)) {
-    return true; // No change needed
-  }
-
-  try {
-    const model = editor.getModel();
-    if (!model) return false;
-
-    // Validate the selection bounds
-    const lineCount = model.getLineCount();
-
-    const validatePosition = (lineNumber: number, column: number) => {
-      const safeLineNumber = Math.min(Math.max(lineNumber, 1), lineCount);
-      const lineLength = model.getLineLength(safeLineNumber);
-      const maxColumn = Math.max(1, lineLength + 1);
-      return {
-        lineNumber: safeLineNumber,
-        column: Math.min(Math.max(column, 1), maxColumn),
-      };
-    };
-
-    const validSelectionStart = validatePosition(
-      targetSelection.selectionStartLineNumber,
-      targetSelection.selectionStartColumn,
-    );
-    const validPosition = validatePosition(
-      targetSelection.positionLineNumber,
-      targetSelection.positionColumn,
-    );
-
-    const validSelection = {
-      startLineNumber: validSelectionStart.lineNumber,
-      startColumn: validSelectionStart.column,
-      endLineNumber: validPosition.lineNumber,
-      endColumn: validPosition.column,
-      selectionStartLineNumber: validSelectionStart.lineNumber,
-      selectionStartColumn: validSelectionStart.column,
-      positionLineNumber: validPosition.lineNumber,
-      positionColumn: validPosition.column,
-    } as monaco.IRange & monaco.ISelection;
-
-    editor.setSelection(validSelection);
-    return true;
-  } catch (error) {
-    console.warn("Error applying selection diff:", error);
-    return false;
+): void => {
+  if (!areSelectionsEqual(editor.getSelection(), targetSelection)) {
+    editor.setSelection(targetSelection);
   }
 };
 

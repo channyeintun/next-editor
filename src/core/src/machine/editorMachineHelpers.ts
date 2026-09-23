@@ -18,7 +18,6 @@ import type {
 } from "./types";
 import {
   applyContentDiff,
-  applyPositionDiff,
   applySelectionDiff,
   areSelectionsEqual,
   arePositionsEqual,
@@ -198,8 +197,7 @@ export const applyFrameState = (
       }
     }
 
-    applyPositionDiff(editor, state.position, editor.getPosition());
-    applySelectionDiff(editor, state.selection, editor.getSelection());
+    applySelectionDiff(editor, state.selection);
 
     // Add cursor decorations during playback only when Monaco's own caret is
     // not visible. This avoids duplicate carets and preserves native
