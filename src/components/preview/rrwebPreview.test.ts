@@ -165,9 +165,10 @@ describe("createRrwebPreviewRecorderScript", () => {
 });
 
 // Executes the full injected script (UMD bundle + wiring) in the test DOM and
-// drives the host protocol over real postMessage, verifying the recording-start
-// snapshot handshake end to end. Runs last in this file: the wiring exposes no
-// stop handle, so its recorder stays attached to the document afterwards.
+// drives the host protocol with message events, verifying the recording-start
+// snapshot handshake end to end. The finally block stops the recorder through the
+// handle the wiring parks on its setup marker; the wiring's message listener
+// stays, which is harmless (a stopped recorder refuses takeFullSnapshot).
 describe("recorder wiring snapshot handshake", () => {
   function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
