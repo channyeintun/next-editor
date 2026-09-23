@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { listPublishedLessons, upsertUserByGoogleSub } from "./queries";
