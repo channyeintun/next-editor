@@ -184,3 +184,54 @@ describe("usePreviewController API client replay", () => {
     expect(stringify).not.toHaveBeenCalledWith(recordedState);
   });
 });
+
+describe("usePreviewController rrweb replay surface", () => {
+  afterEach(() => {
+    editor.metadata = {
+      currentRecording: null,
+      isPlaying: false,
+      isRecording: false,
+      usesPlaybackModel: false,
+    };
+  });
+
+  function playRecording(recording: Record<string, unknown>) {
+    editor.metadata = {
+      currentRecording: { id: "recording-1", ...recording },
+      isPlaying: true,
+      isRecording: false,
+      usesPlaybackModel: true,
+    };
+    return renderController();
+  }
+
+  const rrwebEvent = (type: number, timestamp: number) => ({ type, timestamp, data: {} });
+
+  it("replaces the iframe with the rrweb replay when the recording has a seed", () => {
+    const { result } = playRecording({
+      previewInitialDocuments: [
+        { version: 2, time: 0, documentId: "doc-1", events: [rrwebEvent(4, 0), rrwebEvent(2, 0)] },
+      ],
+      previewPatchBatches: [],
+    });
+
+    expect(result.current.isRrwebReplayActive).toBe(true);
+  });
+
+  it("keeps the iframe for batches with no seed, which rrweb cannot replay", () => {
+    const { result } = playRecording({
+      previewInitialDocuments: [],
+      previewPatchBatches: [
+        {
+          version: 2,
+          time: 0,
+          source: "runtime-preview",
+          documentId: "doc-1",
+          events: [rrwebEvent(3, 0)],
+        },
+      ],
+    });
+
+    expect(result.current.isRrwebReplayActive).toBe(false);
+  });
+});

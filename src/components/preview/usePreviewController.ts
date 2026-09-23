@@ -58,7 +58,7 @@ import {
   type ApiClientHistoryEntry,
   type HttpMethod,
 } from "../../stores/apiClientStore";
-import { hasRrwebPreviewEvents, RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
+import { hasRrwebPreviewSeed, RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
 import { useApiClient } from "./useApiClient";
 import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
 import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
@@ -334,17 +334,11 @@ export function usePreviewController(): PreviewController {
     isRecording,
     usesPlaybackModel,
   });
-  // One predicate for both "render the replay surface" and "build a Replayer".
-  // These were an AND and an OR respectively, so a recording carrying an initial
-  // document but no patch batches — a preview that was opened and never mutated —
-  // unmounted the live iframe for a replay container that no Replayer was ever
-  // built into, and the snapshot-HTML fallback could not run either because the
-  // iframe was gone. A Meta+FullSnapshot on its own is a complete, replayable
-  // stream, so the OR is the correct semantics for both.
-  const hasPreviewPatchReplay = hasRrwebPreviewEvents(
-    currentRecording?.previewInitialDocuments,
-    currentRecording?.previewPatchBatches,
-  );
+  // One predicate for both "render the replay surface" and "build a Replayer":
+  // the recording has an rrweb seed. A seed alone (a preview that was opened and
+  // never mutated) is a complete stream; patch batches without one cannot be
+  // replayed, so such a recording keeps the iframe and its snapshot-HTML fallback.
+  const hasPreviewPatchReplay = hasRrwebPreviewSeed(currentRecording?.previewInitialDocuments);
   const isRuntimePlaybackPreviewActive =
     lessonRunsInWebContainer(lessonType) && isPlaybackPreviewActive;
   // The rrweb replay preview is shown ONLY while the recording is actively playing.

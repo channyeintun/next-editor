@@ -15,7 +15,7 @@ import type {
 import { arePreviewSizesEqual } from "../../utils/equality";
 import { getElementByXPath, type PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
-import { buildRrwebReplayEvents, hasRrwebPreviewEvents } from "./rrwebPreview";
+import { buildRrwebReplayEvents, hasRrwebPreviewSeed } from "./rrwebPreview";
 import { createRrwebPreviewReplayer, type RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 interface UsePreviewPlaybackRegistrationOptions {
@@ -237,7 +237,7 @@ export function usePreviewPlaybackRegistration({
         return input.lastAppliedPatchBatchIndex;
       }
 
-      if (hasRrwebPreviewEvents(input.initialDocuments, input.patchBatches)) {
+      if (hasRrwebPreviewSeed(input.initialDocuments)) {
         return applyRrwebReplay(input);
       }
 

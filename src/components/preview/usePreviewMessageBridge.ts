@@ -104,11 +104,8 @@ function isPreviewRecordedEventArray(value: unknown): value is PreviewRecordedEv
  */
 type BridgedInitialDocument = PreviewInitialDocument & { refresh?: boolean };
 
-function createValidatedInitialDocument(
-  payload: unknown,
-  effectiveRuntimePreviewUrl: string | null,
-): BridgedInitialDocument | null {
-  if (!isRecord(payload) || !effectiveRuntimePreviewUrl) {
+function createValidatedInitialDocument(payload: unknown): BridgedInitialDocument | null {
+  if (!isRecord(payload)) {
     return null;
   }
 
@@ -206,7 +203,7 @@ export function usePreviewMessageBridge({
       }
 
       if (type === RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE) {
-        const initialDocument = createValidatedInitialDocument(payload, effectiveRuntimePreviewUrl);
+        const initialDocument = createValidatedInitialDocument(payload);
         if (!initialDocument) {
           return;
         }

@@ -12,7 +12,7 @@ import type {
 import {
   buildRrwebReplayEvents,
   createRrwebPreviewRecorderScript,
-  hasRrwebPreviewEvents,
+  hasRrwebPreviewSeed,
   PREVIEW_RRWEB_FORMAT_VERSION,
   RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
   RUNTIME_PATCH_BATCH_MESSAGE_TYPE,
@@ -121,10 +121,9 @@ describe("buildRrwebReplayEvents", () => {
   });
 });
 
-describe("hasRrwebPreviewEvents", () => {
-  it("detects rrweb-format records", () => {
-    expect(hasRrwebPreviewEvents([initialDocument([event(2, 0)])], [])).toBe(true);
-    expect(hasRrwebPreviewEvents([], [patchBatch([event(3, 0)])])).toBe(true);
+describe("hasRrwebPreviewSeed", () => {
+  it("detects a recording whose rrweb stream has a seed", () => {
+    expect(hasRrwebPreviewSeed([initialDocument([event(4, 0), event(2, 0)])])).toBe(true);
   });
 
   it("returns false for legacy records and empty input", () => {
@@ -134,8 +133,9 @@ describe("hasRrwebPreviewEvents", () => {
       documentId: "doc-1",
     };
 
-    expect(hasRrwebPreviewEvents([legacy], [])).toBe(false);
-    expect(hasRrwebPreviewEvents(undefined, undefined)).toBe(false);
+    expect(hasRrwebPreviewSeed([legacy])).toBe(false);
+    expect(hasRrwebPreviewSeed([])).toBe(false);
+    expect(hasRrwebPreviewSeed(undefined)).toBe(false);
   });
 });
 
