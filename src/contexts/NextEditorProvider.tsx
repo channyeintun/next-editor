@@ -36,6 +36,23 @@ interface NextEditorProviderContentProps {
   suppressWorkspaceEventsRef: { current: boolean };
 }
 
+/**
+ * Lets the preview flush its last batch into the take, then stops the recording
+ * even if that flush failed (the failure still reaches the caller). Module-level
+ * because a try/finally with no catch inside a component makes the React Compiler
+ * skip the whole component.
+ */
+async function prepareThenStopRecording(
+  prepare: (() => Promise<void>) | null,
+  stop: () => void,
+): Promise<void> {
+  try {
+    await prepare?.();
+  } finally {
+    stop();
+  }
+}
+
 const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   children,
   config,
@@ -43,8 +60,10 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   suppressWorkspaceEventsRef,
 }) => {
   const actorRef = NextEditorActorContext.useActorRef();
-  // Subscription-free senders + side effects only: the provider dispatches events but
-  // never reads machine state, so it must not re-render on state transitions.
+  // Subscription-free senders: the actions context must not change on state
+  // transitions. (useNextEditorInteractionEffects below does subscribe to
+  // isPlaying and the editor, so this component re-renders on those; the
+  // compiler keeps actionsValue stable across them.)
   const {
     clearRecording,
     startRecording,
@@ -75,24 +94,17 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   const previewHandle = usePreviewAdapterHandle();
   const stopRecordingPromiseRef = useRef<Promise<void> | null>(null);
 
+  // Every stop control can fire at once; they share the one in-flight stop.
   const stopRecording = () => {
-    if (stopRecordingPromiseRef.current) {
-      return stopRecordingPromiseRef.current;
+    if (!stopRecordingPromiseRef.current) {
+      stopRecordingPromiseRef.current = prepareThenStopRecording(
+        previewHandle.recordingStopPreparer.current,
+        stopRecordingImmediately,
+      ).finally(() => {
+        stopRecordingPromiseRef.current = null;
+      });
     }
-
-    const request = (async () => {
-      try {
-        await previewHandle.recordingStopPreparer.current?.();
-      } finally {
-        try {
-          stopRecordingImmediately();
-        } finally {
-          stopRecordingPromiseRef.current = null;
-        }
-      }
-    })();
-    stopRecordingPromiseRef.current = request;
-    return request;
+    return stopRecordingPromiseRef.current;
   };
 
   // Opt-in: forward the live SCR3 recording stream to a configured sink (inert if absent).
