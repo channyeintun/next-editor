@@ -19,6 +19,7 @@ import {
 } from "../../contexts/WebContainerRuntimeContext";
 import type { PreviewAdapterHandle } from "../../stores/previewAdapterHandle";
 import type { ApiClientReplayState } from "../../types/slides";
+import { RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE } from "./previewIframeUtils";
 import { usePreviewController } from "./usePreviewController";
 
 const editor = vi.hoisted(() => ({
@@ -40,13 +41,15 @@ vi.mock("../../hooks/useNextEditorContext", () => ({
   useNextEditorMetadata: () => editor.metadata,
 }));
 
+const workspace = vi.hoisted(() => ({ previewVersion: 0 }));
+
 vi.mock("../../hooks/useWorkspace", () => ({
   useWorkspaceLessonType: () => "react",
-  useWorkspacePreviewVersion: () => 0,
+  useWorkspacePreviewVersion: () => workspace.previewVersion,
   useWorkspaceSaveVersion: () => 0,
 }));
 
-const runtimeMetadata = {
+const idleRuntimeMetadata = {
   status: "idle",
   previewUrl: null,
   previewPort: null,
@@ -61,6 +64,7 @@ const runtimeMetadata = {
   },
   ambientStartEnabled: false,
 } as unknown as WebContainerRuntimeMetadata;
+let runtimeMetadata = idleRuntimeMetadata;
 
 const runtimeActions = {
   startRuntime: vi.fn<() => Promise<void>>(async () => undefined),
@@ -100,6 +104,15 @@ function mouseDown(clientX: number, clientY: number) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  workspace.previewVersion = 0;
+  runtimeMetadata = idleRuntimeMetadata;
+  editor.metadata = {
+    currentRecording: null,
+    isPlaying: false,
+    isRecording: false,
+    usesPlaybackModel: false,
+  };
   document.body.replaceChildren();
 });
 
@@ -233,5 +246,80 @@ describe("usePreviewController rrweb replay surface", () => {
     });
 
     expect(result.current.isRrwebReplayActive).toBe(false);
+  });
+});
+
+describe("usePreviewController runtime snapshots", () => {
+  const RUNTIME_URL = "https://abc--3000--xyz.local-corp.webcontainer-api.io";
+
+  // A cross-origin runtime frame: the parent cannot read its document, so a
+  // snapshot has to be requested over postMessage.
+  function mountRuntimeFrame(controller: ReturnType<typeof usePreviewController>) {
+    const postMessage = vi.fn<(message: { type?: string; payload?: unknown }) => void>();
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", RUNTIME_URL);
+    Object.defineProperty(iframe, "contentDocument", { value: null });
+    Object.defineProperty(iframe, "contentWindow", {
+      value: {
+        postMessage,
+        get document(): Document {
+          throw new DOMException("Blocked a cross-origin frame.", "SecurityError");
+        },
+      },
+    });
+    document.body.append(iframe);
+    controller.iframeRef.current = iframe;
+    return postMessage;
+  }
+
+  function snapshotRequestReasons(postMessage: ReturnType<typeof mountRuntimeFrame>) {
+    return postMessage.mock.calls
+      .map(([message]) => message)
+      .filter((message) => message.type === RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE)
+      .map((message) => (message.payload as { reason: string }).reason);
+  }
+
+  function renderWithOpenRuntime(isRecording: boolean) {
+    vi.useFakeTimers();
+    runtimeMetadata = { ...idleRuntimeMetadata, status: "ready", previewUrl: RUNTIME_URL };
+    editor.metadata = { ...editor.metadata, isRecording };
+    const view = renderController();
+    const postMessage = mountRuntimeFrame(view.result.current);
+    act(() => {
+      view.result.current.handleFloat();
+    });
+    // Let whatever the open requested time out, so a later request is not
+    // folded into a pending one.
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+    postMessage.mockClear();
+
+    const editWorkspace = () => {
+      workspace.previewVersion += 1;
+      view.rerender();
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+    };
+
+    return { editWorkspace, postMessage };
+  }
+
+  it("does not snapshot the live runtime on every edit while not recording", () => {
+    const { editWorkspace, postMessage } = renderWithOpenRuntime(false);
+
+    editWorkspace();
+    editWorkspace();
+
+    expect(snapshotRequestReasons(postMessage)).toEqual([]);
+  });
+
+  it("refreshes the fallback snapshot after an edit while recording", () => {
+    const { editWorkspace, postMessage } = renderWithOpenRuntime(true);
+
+    editWorkspace();
+
+    expect(snapshotRequestReasons(postMessage)).toEqual(["edit"]);
   });
 });

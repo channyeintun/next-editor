@@ -118,6 +118,7 @@ export interface PreviewController {
 }
 
 type RuntimeSnapshotRequestReason =
+  | "edit"
   | "inspection"
   | "load"
   | "recording-finalize"
@@ -981,10 +982,8 @@ export function usePreviewController(): PreviewController {
     isRuntimeManagedPreview,
     lessonType,
     panelMode,
-    previewVersion,
     runtimePreviewPlaceholder,
     runtimePreviewUrl,
-    updateIframeContent,
     requestRuntimePreviewSnapshot,
     // Changing the sandbox mode remounts the frame (RuntimePreviewRenderer keys
     // on it, because a sandbox change does not apply to an already-loaded
@@ -1000,6 +999,18 @@ export function usePreviewController(): PreviewController {
   useEffect(() => {
     lastContentRef.current = "";
   }, [allowSameOriginPreview]);
+
+  // Frames recorded from a live runtime carry its last HTML snapshot, the
+  // fallback for recordings rrweb cannot replay. While recording, refresh it
+  // after each workspace edit; outside a recording nothing reads it, and a
+  // whole-page snapshot per keystroke would be pure cost.
+  useEffect(() => {
+    if (!isRecordingRef.current || !isLiveRuntimePreviewActive) {
+      return;
+    }
+
+    void requestRuntimePreviewSnapshot("edit");
+  }, [previewVersion]);
 
   useEffect(() => {
     if (isPlaybackPreviewActive) {
