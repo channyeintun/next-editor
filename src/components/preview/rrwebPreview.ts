@@ -367,57 +367,41 @@ export function createRrwebPreviewRecorderScript({
 // from the recorded segments.
 //
 // Each rrweb event carries the preview iframe's raw `Date.now()` timestamp, but
-// the playback timeline runs on the recording clock (`Date.now() - startedAt`,
-// where `startedAt` is the audio-anchored origin — typically ~seconds after the
-// preview snapshot, due to mic warmup). Replaying on the raw clock makes preview
-// content lag the audio/editor by that fixed offset.
+// the playback timeline runs on the recording clock (`performance.now() -
+// startedAtPerf`, whose origin is anchored to the audio start — typically
+// seconds after the preview snapshot, due to mic warmup). Replaying on the raw
+// clock makes preview content lag the audio/editor by that fixed offset.
 //
-// Rebase all events from one global rrweb timestamp origin instead of anchoring
-// each batch independently. Batch `time` is when the host flushed the frame, which
-// can be a little after the DOM event itself; preserving the raw rrweb deltas keeps
-// replay aligned to when the preview actually changed.
+// A segment's `time` is when the host received it, on the recording clock, so
+// `events[0].timestamp - time` is the preview clock's lead over the recording
+// clock minus that segment's delivery delay. The largest lead belongs to the
+// segment that reached the host fastest; rebasing every event by it keeps each
+// one at (never after) its true recording time and preserves the raw rrweb
+// deltas between events, so replay follows when the preview actually changed.
 export function buildRrwebReplayEvents(
   initialDocuments: PreviewInitialDocument[],
   patchBatches: PreviewDomPatchBatch[],
 ): eventWithTime[] {
-  const segments = [...initialDocuments, ...patchBatches];
-  const originSegment = segments.find((segment) => segment.events?.length);
-  const originEvent = originSegment?.events?.[0];
-
-  if (!originSegment || !originEvent) {
+  const segments = [...initialDocuments, ...patchBatches].filter(
+    (segment) => segment.events?.length,
+  );
+  if (segments.length === 0) {
     return [];
   }
 
-  let maxOffset = -Infinity;
+  let lead = -Infinity;
   for (const segment of segments) {
-    if (!segment.events?.length) {
-      continue;
-    }
-    const offset = segment.events[0].timestamp - segment.time;
-    if (offset > maxOffset) {
-      maxOffset = offset;
-    }
+    lead = Math.max(lead, segment.events![0].timestamp - segment.time);
   }
 
-  // Fallback if no valid events found
-  if (maxOffset === -Infinity) {
-    return [];
-  }
-
-  const events: PreviewRecordedEvent[] = [];
-
-  for (const segment of segments) {
-    if (!segment.events?.length) {
-      continue;
-    }
-    for (const event of segment.events) {
-      events.push({
-        ...event,
-        timestamp: Math.max(0, event.timestamp - maxOffset),
-      });
-    }
-  }
-
+  // Copies: rrweb's Replayer writes `delay` onto the events it is given, and
+  // these belong to the loaded recording.
+  const events: PreviewRecordedEvent[] = segments.flatMap((segment) =>
+    segment.events!.map((event) => ({
+      ...event,
+      timestamp: Math.max(0, event.timestamp - lead),
+    })),
+  );
   events.sort((left, right) => left.timestamp - right.timestamp);
 
   return events as unknown as eventWithTime[];
