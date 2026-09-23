@@ -1,9 +1,10 @@
 export type SlideContentType = "html" | "markdown" | "google-svg";
 
 /**
- * Structural copies of the Google Slides build-step types. The canonical
- * definitions live in src/googleSlides/types.ts; they are duplicated here so
- * the core package's slide model does not depend on app-level modules.
+ * Google Slides build steps, produced by parsePublishedDeck (src/googleSlides) and
+ * carried on imported slides. Defined here, with the rest of the slide model the
+ * recording stores, so core depends on no app module; src/googleSlides re-exports
+ * them.
  */
 export interface DeckStepTrackOpacity {
   kind: "opacity";
@@ -43,6 +44,7 @@ export interface Slide {
   contentType: SlideContentType;
   name?: string;
   order: number;
+  background?: string; // preset id or custom image data URL (src/config/slideBackgrounds.ts)
   title?: string; // google-svg: slide title from the deck
   steps?: DeckStep[]; // google-svg: build steps
   sourceUrl?: string; // google-svg: published deck URL (same on every deck slide)
@@ -99,24 +101,29 @@ export interface IframeInteractionTarget {
   id?: string;
   testId?: string;
   className?: string;
-  xpath: string;
+  xpath: string; // For precise element targeting during playback
 }
 
 /**
  * Data payload for different interaction types
  */
 export interface IframeInteractionData {
+  // Click/mouse data
   clientX?: number;
   clientY?: number;
   button?: number;
   buttons?: number;
   windowWidth?: number;
   windowHeight?: number;
+  // Key data
   key?: string;
   code?: string;
+  // Scroll data
   scrollTop?: number;
   scrollLeft?: number;
+  // Input data
   value?: string;
+  // Flag for document-level scroll
   isDocument?: boolean;
 }
 

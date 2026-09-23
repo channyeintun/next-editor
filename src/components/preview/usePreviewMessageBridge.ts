@@ -96,10 +96,18 @@ function isPreviewRecordedEventArray(value: unknown): value is PreviewRecordedEv
   return Array.isArray(value) && value.every(isPreviewRecordedEvent);
 }
 
+/**
+ * An initial document as the bridge receives it. `refresh` marks the recorder's
+ * answer to the host's recording-start snapshot request (a re-serialization of the
+ * live document, not the page-load snapshot); it routes the document here and is
+ * stripped before recording, so stored recordings never carry it.
+ */
+type BridgedInitialDocument = PreviewInitialDocument & { refresh?: boolean };
+
 function createValidatedInitialDocument(
   payload: unknown,
   effectiveRuntimePreviewUrl: string | null,
-): PreviewInitialDocument | null {
+): BridgedInitialDocument | null {
   if (!isRecord(payload) || !effectiveRuntimePreviewUrl) {
     return null;
   }

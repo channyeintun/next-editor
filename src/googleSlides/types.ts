@@ -2,37 +2,17 @@
 // to web. Produced by parsePublishedDeck (see parse.ts); consumed by the
 // slide model, renderer, and import UX in later phases.
 
-export interface DeckStepTrackOpacity {
-  kind: "opacity";
-  from: number;
-  to: number;
-}
+import type { DeckStep } from "../core/src/slides";
 
-export interface DeckStepTrackScale {
-  kind: "scale";
-  from: number;
-  to: number;
-}
-
-export interface DeckStepTrackTranslate {
-  kind: "translate";
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
-}
-
-export type DeckStepTrack = DeckStepTrackOpacity | DeckStepTrackScale | DeckStepTrackTranslate;
-
-export interface DeckStepEntry {
-  elementId: string;
-  durationMs: number;
-  delayMs: number;
-  tracks: DeckStepTrack[];
-}
-
-/** One step = entries animated together. */
-export type DeckStep = DeckStepEntry[];
+// The build-step types live with the slide model the recording stores.
+export type {
+  DeckStep,
+  DeckStepEntry,
+  DeckStepTrack,
+  DeckStepTrackOpacity,
+  DeckStepTrackScale,
+  DeckStepTrackTranslate,
+} from "../core/src/slides";
 
 export interface ParsedDeckSlide {
   pageId: string;
