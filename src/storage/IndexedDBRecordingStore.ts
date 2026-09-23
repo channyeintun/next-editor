@@ -297,55 +297,63 @@ export class IndexedDBRecordingStore {
   }
 
   async put(entry: StoredRecordingEntry): Promise<void> {
-    await this.putMany([entry]);
+    const { binaryData } = entry;
+    const recordingId = entry.metadata.id;
+    if (!binaryData) {
+      throw new Error(`Recording ${recordingId} has no finalized binary payload`);
+    }
+
+    await (this.appendQueues.get(recordingId) ?? Promise.resolve()).catch(() => {});
+
+    const payloadStorage = await this.storeLargePayloadInOpfs(recordingId, binaryData);
+    try {
+      await this.commitEntry(entry, binaryData, payloadStorage);
+    } catch (error) {
+      // No metadata row points at the file just written, and nothing else would
+      // ever remove it: take it back out rather than leak it for good.
+      if (payloadStorage === "opfs") await deleteRecordingOpfs(recordingId).catch(() => {});
+      throw error;
+    }
+
+    if (payloadStorage === "indexeddb") {
+      // An earlier, larger save of this id may have left its payload in OPFS.
+      await deleteRecordingOpfs(recordingId).catch(() => {});
+    }
   }
 
-  async putMany(entries: StoredRecordingEntry[]): Promise<void> {
-    if (entries.length === 0) {
-      return;
+  /**
+   * Writes a payload at or above the OPFS threshold to OPFS and reports where the
+   * payload lives. Smaller payloads, and any OPFS failure, stay in IndexedDB.
+   */
+  private async storeLargePayloadInOpfs(
+    recordingId: string,
+    binaryData: Uint8Array,
+  ): Promise<RecordingPayloadStorage> {
+    if (
+      binaryData.byteLength < RECORDING_OPFS_THRESHOLD_BYTES ||
+      !(await isRecordingOpfsAvailable())
+    ) {
+      return "indexeddb";
     }
-
-    for (const entry of entries) {
-      await (this.appendQueues.get(entry.metadata.id) ?? Promise.resolve()).catch(() => {});
-    }
-
-    const canUseOpfs =
-      entries.some(
-        (entry) => (entry.binaryData?.byteLength ?? 0) >= RECORDING_OPFS_THRESHOLD_BYTES,
-      ) && (await isRecordingOpfsAvailable());
-    const prepared: Array<{
-      entry: StoredRecordingEntry & { binaryData: Uint8Array };
-      metadata: StoredRecordingMetadata;
-      payloadStorage: RecordingPayloadStorage;
-    }> = [];
-
-    for (const entry of entries) {
-      if (!entry.binaryData) {
-        throw new Error(`Recording ${entry.metadata.id} has no finalized binary payload`);
+    try {
+      const storedSize = await replaceRecordingOpfs(recordingId, binaryData);
+      if (storedSize !== binaryData.byteLength) {
+        throw new Error(`OPFS stored ${storedSize} of ${binaryData.byteLength} bytes`);
       }
-      let payloadStorage: RecordingPayloadStorage = "indexeddb";
-      if (canUseOpfs && entry.binaryData.byteLength >= RECORDING_OPFS_THRESHOLD_BYTES) {
-        try {
-          const storedSize = await replaceRecordingOpfs(entry.metadata.id, entry.binaryData);
-          if (storedSize !== entry.binaryData.byteLength) {
-            throw new Error(`OPFS stored ${storedSize} of ${entry.binaryData.byteLength} bytes`);
-          }
-          payloadStorage = "opfs";
-        } catch {
-          // Quota, permissions, or a terminated worker fall back to IndexedDB.
-        }
-      }
-      prepared.push({
-        entry: entry as StoredRecordingEntry & { binaryData: Uint8Array },
-        metadata: {
-          ...entry.metadata,
-          payloadSize: entry.binaryData.byteLength,
-          payloadStorage,
-        },
-        payloadStorage,
-      });
+      return "opfs";
+    } catch {
+      // Quota, permissions, or a terminated worker fall back to IndexedDB.
+      return "indexeddb";
     }
+  }
 
+  /** Writes the entry's metadata, payload location, segment and media rows in one transaction. */
+  private async commitEntry(
+    entry: StoredRecordingEntry,
+    binaryData: Uint8Array,
+    payloadStorage: RecordingPayloadStorage,
+  ): Promise<void> {
+    const recordingId = entry.metadata.id;
     const database = await this.getDatabase();
     const transaction = database.transaction(
       [
@@ -357,55 +365,43 @@ export class IndexedDBRecordingStore {
       ],
       "readwrite",
     );
-    const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
     const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
-    const streamStateStore = transaction.objectStore(RECORDING_STREAM_STATE_STORE);
     const cameraStore = transaction.objectStore(RECORDING_CAMERA_STORE);
     const audioStore = transaction.objectStore(RECORDING_AUDIO_STORE);
 
-    for (const { entry, metadata, payloadStorage } of prepared) {
-      metadataStore.put(metadata);
-      // Finalized stream replaces any segments previously written for this id.
-      segmentsStore.delete(this.segmentRange(metadata.id));
-      if (payloadStorage === "indexeddb") {
-        segmentsStore.put({
-          recordingId: metadata.id,
-          seq: 0,
-          bytes: toArrayBuffer(entry.binaryData),
-        } satisfies StoredRecordingSegment);
-      }
-      streamStateStore.put({
-        recordingId: metadata.id,
-        nextSeq: payloadStorage === "indexeddb" ? 1 : 0,
-        payloadSize: entry.binaryData.byteLength,
-        payloadStorage,
-      } satisfies StoredRecordingStreamState);
-      // Media lives in its own stores; replace or clear each to match the entry.
-      if (entry.cameraBlob) {
-        cameraStore.put({
-          recordingId: entry.metadata.id,
-          blob: entry.cameraBlob,
-        } satisfies StoredCameraVideo);
-      } else {
-        cameraStore.delete(metadata.id);
-      }
-      if (entry.audioBlob) {
-        audioStore.put({
-          recordingId: entry.metadata.id,
-          blob: entry.audioBlob,
-        } satisfies StoredAudio);
-      } else {
-        audioStore.delete(metadata.id);
-      }
+    transaction.objectStore(RECORDING_METADATA_STORE).put({
+      ...entry.metadata,
+      payloadSize: binaryData.byteLength,
+      payloadStorage,
+    } satisfies StoredRecordingMetadata);
+    // Finalized stream replaces any segments previously written for this id.
+    segmentsStore.delete(this.segmentRange(recordingId));
+    if (payloadStorage === "indexeddb") {
+      segmentsStore.put({
+        recordingId,
+        seq: 0,
+        bytes: toArrayBuffer(binaryData),
+      } satisfies StoredRecordingSegment);
+    }
+    transaction.objectStore(RECORDING_STREAM_STATE_STORE).put({
+      recordingId,
+      nextSeq: payloadStorage === "indexeddb" ? 1 : 0,
+      payloadSize: binaryData.byteLength,
+      payloadStorage,
+    } satisfies StoredRecordingStreamState);
+    // Media lives in its own stores; replace or clear each to match the entry.
+    if (entry.cameraBlob) {
+      cameraStore.put({ recordingId, blob: entry.cameraBlob } satisfies StoredCameraVideo);
+    } else {
+      cameraStore.delete(recordingId);
+    }
+    if (entry.audioBlob) {
+      audioStore.put({ recordingId, blob: entry.audioBlob } satisfies StoredAudio);
+    } else {
+      audioStore.delete(recordingId);
     }
 
     await transactionToPromise(transaction);
-
-    for (const { metadata, payloadStorage } of prepared) {
-      if (payloadStorage === "indexeddb") {
-        await deleteRecordingOpfs(metadata.id).catch(() => {});
-      }
-    }
   }
 
   /**

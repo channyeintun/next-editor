@@ -299,6 +299,13 @@ class FakeTransaction {
   }
 
   private commit(): void {
+    const commitFault = this.mode === "readwrite" ? this.db.owner.takeCommitFault() : undefined;
+    if (commitFault) {
+      // What a browser does when the disk write fails, e.g. over quota: every
+      // request succeeded, and the transaction aborts instead of completing.
+      this.abort(commitFault);
+      return;
+    }
     this.finished = true;
     this.oncomplete?.(createEvent("complete", this));
   }
@@ -517,6 +524,7 @@ export class FakeIndexedDB {
   readonly databases = new Map<string, DatabaseData>();
   readonly connections = new Set<FakeDatabase>();
   private readonly faults: FakeIndexedDBFault[] = [];
+  private readonly commitFaults: DOMException[] = [];
 
   /** Pass to `vi.stubGlobal("indexedDB", ...)`. */
   readonly indexedDB = { open: (name: string, version?: number) => this.open(name, version) };
@@ -527,6 +535,15 @@ export class FakeIndexedDB {
   /** Makes the next request matching `fault.store` and `fault.method` fail. */
   failNext(fault: FakeIndexedDBFault): void {
     this.faults.push(fault);
+  }
+
+  /** Makes the next readwrite transaction abort with `error` when it would commit. */
+  failNextCommit(error: DOMException): void {
+    this.commitFaults.push(error);
+  }
+
+  takeCommitFault(): DOMException | undefined {
+    return this.commitFaults.shift();
   }
 
   throwInjectedFault(store: string, method: FakeIndexedDBFault["method"]): void {

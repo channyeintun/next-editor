@@ -143,6 +143,36 @@ describe("IndexedDBRecordingStore", () => {
     expect(opfs.deleteRecordingOpfs).toHaveBeenCalledWith("large");
   });
 
+  it("removes the OPFS copy of a save whose transaction fails", async () => {
+    opfs.isRecordingOpfsAvailable.mockResolvedValue(true);
+    fake.failNextCommit(new DOMException("The quota has been exceeded", "QuotaExceededError"));
+    const store = new IndexedDBRecordingStore();
+
+    await expect(
+      store.put(
+        entry("large", new Uint8Array(RECORDING_OPFS_THRESHOLD_BYTES), {
+          cameraBlob: new Blob(["camera"]),
+        }),
+      ),
+    ).rejects.toThrow("The quota has been exceeded");
+
+    expect(opfs.replaceRecordingOpfs).toHaveBeenCalledTimes(1);
+    // No metadata row points at the file, so it must not outlive the failed save.
+    expect(opfs.deleteRecordingOpfs).toHaveBeenCalledWith("large");
+    expect(await store.getEntry("large")).toBeNull();
+  });
+
+  it("writes nothing for an entry without a finalized payload", async () => {
+    opfs.isRecordingOpfsAvailable.mockResolvedValue(true);
+    const store = new IndexedDBRecordingStore();
+    const unfinished = { ...entry("take-1", new Uint8Array([1])), binaryData: undefined };
+
+    await expect(store.put(unfinished)).rejects.toThrow(/no finalized binary payload/);
+
+    expect(opfs.replaceRecordingOpfs).not.toHaveBeenCalled();
+    expect(fake.read(DATABASE, "recording-metadata")).toEqual([]);
+  });
+
   it("deletes every row of a take and its OPFS file", async () => {
     const store = new IndexedDBRecordingStore();
     await store.put(
