@@ -14,6 +14,7 @@ import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
   MAX_YJS_UPDATE_BYTES,
+  canPublishCollaborationUpdate,
   collaborationAwarenessClientStateSchema,
   collaborationAwarenessServerStateSchema,
   collaborationWebSocketServerMessageSchema,
@@ -23,7 +24,7 @@ import {
   type CollaborationRoomSession,
   type CollaborationWebSocketServerMessage,
 } from "./protocol";
-import { COLLABORATION_ORIGIN, canWriteCollaborationDocument } from "./projectDocument";
+import { COLLABORATION_ORIGIN } from "./projectDocument";
 import {
   collaborationConnectionState,
   collaborationMachine,
@@ -215,7 +216,7 @@ export class CollaborationRoomProvider {
 
   get canWrite(): boolean {
     return Boolean(
-      this.roomSession && canWriteCollaborationDocument(this.roomSession.membership.role),
+      this.roomSession && canPublishCollaborationUpdate(this.roomSession.membership.role),
     );
   }
 

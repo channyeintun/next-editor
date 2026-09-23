@@ -7,16 +7,7 @@ import {
 } from "./protocol";
 import { getCollaborationTexts } from "./projectDocument";
 import { decodeForeignRelativePosition } from "./relativePosition";
-
-const BINARY_CHUNK_SIZE = 0x8000;
-
-function encodeBinary(bytes: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += BINARY_CHUNK_SIZE) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + BINARY_CHUNK_SIZE));
-  }
-  return btoa(binary);
-}
+import { bytesToBase64 } from "./base64";
 
 function clampFinite(value: number, minimum: number, maximum: number): number {
   if (!Number.isFinite(value)) return minimum;
@@ -34,7 +25,7 @@ export function createCollaborationEditorViewport(
   if (!(text instanceof Y.Text)) return null;
   const offset = clampFinite(Math.trunc(topOffset), 0, text.length);
   const viewport = {
-    topAnchor: encodeBinary(
+    topAnchor: bytesToBase64(
       Y.encodeRelativePosition(Y.createRelativePositionFromTypeIndex(text, offset)),
     ),
     topDeltaPx: clampFinite(topDeltaPx, 0, MAX_COLLABORATION_EDITOR_TOP_DELTA_PX),

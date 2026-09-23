@@ -45,10 +45,10 @@ import {
   COLLABORATION_AWARENESS_TTL_MS,
   MAX_COLLABORATION_ROOM_ASSETS,
   MAX_COLLABORATION_ROOM_ASSET_BYTES,
+  canPublishCollaborationUpdate,
 } from "../collaboration/protocol";
 import {
   CollaborationProjectController,
-  canWriteCollaborationDocument,
   projectCollaborationDocument,
   seedCollaborationProject,
   type CollaborationProjectProjection,
@@ -976,7 +976,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const canWrite = Boolean(
     provider &&
     role &&
-    canWriteCollaborationDocument(role) &&
+    canPublishCollaborationUpdate(role) &&
     isConnectionWritable &&
     !usesPlaybackModel,
   );

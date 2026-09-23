@@ -9,50 +9,26 @@ import {
   type CollaborationCreateRoomInput,
   type CollaborationTeachingInitializationInput,
 } from "./protocol";
-
-const BINARY_CHUNK_SIZE = 0x8000;
+import { base64ToBytes, bytesToBase64 } from "./base64";
 
 export function encodeYjsUpdate(update: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < update.length; offset += BINARY_CHUNK_SIZE) {
-    binary += String.fromCharCode(...update.subarray(offset, offset + BINARY_CHUNK_SIZE));
-  }
-  return encodedYjsUpdateSchema.parse(btoa(binary));
+  return encodedYjsUpdateSchema.parse(bytesToBase64(update));
 }
 
 export function decodeYjsUpdate(encoded: string): Uint8Array {
-  const binary = atob(encodedYjsUpdateSchema.parse(encoded));
-  const update = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    update[index] = binary.charCodeAt(index);
-  }
-  return update;
+  return base64ToBytes(encodedYjsUpdateSchema.parse(encoded));
 }
 
 export function decodeYjsSnapshot(encoded: string): Uint8Array {
-  const binary = atob(encodedYjsSnapshotSchema.parse(encoded));
-  const update = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    update[index] = binary.charCodeAt(index);
-  }
-  return update;
-}
-
-export function encodeYjsDocument(doc: Doc): string {
-  const update = encodeStateAsUpdate(doc);
-  let binary = "";
-  for (let offset = 0; offset < update.length; offset += BINARY_CHUNK_SIZE) {
-    binary += String.fromCharCode(...update.subarray(offset, offset + BINARY_CHUNK_SIZE));
-  }
-  return encodedYjsSnapshotSchema.parse(btoa(binary));
+  return base64ToBytes(encodedYjsSnapshotSchema.parse(encoded));
 }
 
 export function encodeYjsSnapshotUpdate(update: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < update.length; offset += BINARY_CHUNK_SIZE) {
-    binary += String.fromCharCode(...update.subarray(offset, offset + BINARY_CHUNK_SIZE));
-  }
-  return encodedYjsSnapshotSchema.parse(btoa(binary));
+  return encodedYjsSnapshotSchema.parse(bytesToBase64(update));
+}
+
+export function encodeYjsDocument(doc: Doc): string {
+  return encodeYjsSnapshotUpdate(encodeStateAsUpdate(doc));
 }
 
 export function applyEncodedYjsUpdate(doc: Doc, encoded: string, origin?: unknown): void {

@@ -1,45 +1,32 @@
 import * as Y from "yjs";
 import { getCollaborationTexts } from "./projectDocument";
 import type { CollaborationAwarenessEvent, CollaborationCursor } from "./protocol";
-
-const BINARY_CHUNK_SIZE = 0x8000;
-
-function encodeBinary(bytes: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += BINARY_CHUNK_SIZE) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + BINARY_CHUNK_SIZE));
-  }
-  return btoa(binary);
-}
-
-function decodeBinary(value: string): Uint8Array {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
-}
+import { base64ToBytes, bytesToBase64 } from "./base64";
 
 /**
- * Decode a peer-supplied relative position, refusing the one shape that can
- * mutate our document.
+ * False for the one relative-position shape that can mutate our document.
  *
  * `Y.createAbsolutePositionFromRelativePosition` resolves a `tname` through
  * `doc.get(tname)`, and `Y.Doc.get` *creates* the named root type when it is
- * absent. The payload is base64 straight off the wire, so a peer could name any
- * root it liked and permanently add it to `doc.share` on every resolve —
- * unbounded, remotely driven growth of the shared document.
+ * absent. Positions come straight off the wire (awareness cursors, viewport
+ * anchors, y-monaco selections), so a peer could name any root it liked and
+ * permanently add it to `doc.share` on every resolve — unbounded, remotely
+ * driven growth of the shared document.
  *
  * Nothing legitimate is lost by refusing it: every collaboration Y.Text is
  * nested under the "project" root, and yjs only fills `tname` for a *root* type
  * (`createRelativePositionFromTypeIndex` sets `typeid` instead whenever
- * `type._item !== null`). So a cursor or viewport anchor from this app always
- * decodes with `tname === null`.
+ * `type._item !== null`). So a position from this app always has
+ * `tname === null`.
  */
+export function isSafeForeignRelativePosition(position: { tname?: unknown }): boolean {
+  return position.tname == null;
+}
+
+/** Decodes a peer-supplied base64 relative position, or null when it is unsafe. */
 export function decodeForeignRelativePosition(value: string): Y.RelativePosition | null {
-  const relativePosition = Y.decodeRelativePosition(decodeBinary(value));
-  return relativePosition.tname === null ? relativePosition : null;
+  const relativePosition = Y.decodeRelativePosition(base64ToBytes(value));
+  return isSafeForeignRelativePosition(relativePosition) ? relativePosition : null;
 }
 
 export function createCollaborationCursor(
@@ -53,10 +40,10 @@ export function createCollaborationCursor(
   const clamp = (offset: number) => Math.max(0, Math.min(text.length, Math.trunc(offset)));
   return {
     fileNodeId,
-    anchor: encodeBinary(
+    anchor: bytesToBase64(
       Y.encodeRelativePosition(Y.createRelativePositionFromTypeIndex(text, clamp(anchorOffset))),
     ),
-    head: encodeBinary(
+    head: bytesToBase64(
       Y.encodeRelativePosition(Y.createRelativePositionFromTypeIndex(text, clamp(headOffset))),
     ),
   };

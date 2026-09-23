@@ -28,10 +28,8 @@ import {
   type WorkspaceExecutionKind,
 } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
-import {
-  canWriteCollaborationDocument,
-  getCollaborationTexts,
-} from "../collaboration/projectDocument";
+import { getCollaborationTexts } from "../collaboration/projectDocument";
+import { canPublishCollaborationUpdate } from "../collaboration/protocol";
 import { resolveMonacoAwarenessSelections } from "../collaboration/monacoAwareness";
 import {
   collaborationParticipantColorIndex,
@@ -1111,7 +1109,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         anchorOffset: number,
         headOffset: number,
       ) => {
-        if (!canWriteCollaborationDocument(participant.role)) return;
+        if (!canPublishCollaborationUpdate(participant.role)) return;
         const key = `${participant.actorId}:${participant.sessionId}`;
         const signature = `${anchorOffset}:${headOffset}`;
         currentSignatures.set(key, signature);

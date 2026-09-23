@@ -13,6 +13,8 @@ import {
 import {
   COLLABORATION_ORIGIN,
   COLLABORATION_PROJECT_ROOT,
+  getCollaborationProjectRoot,
+  getOrCreateChildMap,
   type CollaborationTransactionOrigin,
 } from "./projectDocument";
 
@@ -270,12 +272,8 @@ export class CollaborationTeachingError extends Error {
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 
-function projectRoot(doc: Y.Doc): Y.Map<unknown> {
-  return doc.getMap(COLLABORATION_PROJECT_ROOT);
-}
-
 function optionalTeachingRoot(doc: Y.Doc): Y.Map<unknown> | null {
-  const teaching = projectRoot(doc).get(COLLABORATION_TEACHING_ROOT);
+  const teaching = getCollaborationProjectRoot(doc).get(COLLABORATION_TEACHING_ROOT);
   return teaching instanceof Y.Map ? teaching : null;
 }
 
@@ -296,7 +294,7 @@ export function collaborationTransactionTouchesTeaching(
   if (sharedRoot && transaction.changed.get(sharedRoot)?.has(COLLABORATION_TEACHING_ROOT)) {
     return true;
   }
-  const root = projectRoot(doc);
+  const root = getCollaborationProjectRoot(doc);
   if (transaction.changed.get(asTransactionChangedType(root))?.has(COLLABORATION_TEACHING_ROOT)) {
     return true;
   }
@@ -310,7 +308,7 @@ export function collaborationTransactionTouchesOnlyTeaching(
 ): boolean {
   const sharedRoot = doc.share.get(COLLABORATION_PROJECT_ROOT);
   if (!collaborationTransactionTouchesTeaching(doc, transaction)) return false;
-  const root = projectRoot(doc);
+  const root = getCollaborationProjectRoot(doc);
   const teaching = optionalTeachingRoot(doc);
   if (!teaching) return false;
   const changedRoot = asTransactionChangedType(root);
@@ -334,14 +332,6 @@ export function collaborationTransactionTouchesOnlyTeaching(
   return true;
 }
 
-function childMap<T>(root: Y.Map<unknown>, key: string): Y.Map<T> {
-  const current = root.get(key);
-  if (current instanceof Y.Map) return current as Y.Map<T>;
-  const next = new Y.Map<T>();
-  root.set(key, next);
-  return next;
-}
-
 function childArray<T>(root: Y.Map<unknown>, key: string): Y.Array<T> {
   const current = root.get(key);
   if (current instanceof Y.Array) return current as Y.Array<T>;
@@ -351,12 +341,7 @@ function childArray<T>(root: Y.Map<unknown>, key: string): Y.Array<T> {
 }
 
 export function getCollaborationTeachingRoot(doc: Y.Doc): Y.Map<unknown> {
-  const root = projectRoot(doc);
-  const current = root.get(COLLABORATION_TEACHING_ROOT);
-  if (current instanceof Y.Map) return current;
-  const teaching = new Y.Map<unknown>();
-  root.set(COLLABORATION_TEACHING_ROOT, teaching);
-  return teaching;
+  return getOrCreateChildMap(getCollaborationProjectRoot(doc), COLLABORATION_TEACHING_ROOT);
 }
 
 export function isCollaborationTeachingInitialized(doc: Y.Doc): boolean {
@@ -571,6 +556,16 @@ function serializedElement(element: WhiteboardElementJSON): string {
 
 function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Scene order: Excalidraw's fractional `index`, then the element ID for ties. */
+function compareWhiteboardElementOrder(
+  left: WhiteboardElementJSON,
+  right: WhiteboardElementJSON,
+): number {
+  const leftIndex = typeof left.index === "string" ? left.index : "";
+  const rightIndex = typeof right.index === "string" ? right.index : "";
+  return compareCodeUnits(leftIndex, rightIndex) || compareCodeUnits(left.id, right.id);
 }
 
 function compareProgressiveWhiteboardStroke(
@@ -807,11 +802,7 @@ export function applyCollaborationWhiteboardEvent(
       byId.set(element.id, element);
     }
   }
-  return Array.from(byId.values()).sort((left, right) => {
-    const leftIndex = typeof left.index === "string" ? left.index : "";
-    const rightIndex = typeof right.index === "string" ? right.index : "";
-    return compareCodeUnits(leftIndex, rightIndex) || compareCodeUnits(left.id, right.id);
-  });
+  return Array.from(byId.values()).sort(compareWhiteboardElementOrder);
 }
 
 function assertWhiteboardSceneBounds(elements: readonly WhiteboardElementJSON[]): void {
@@ -885,9 +876,15 @@ export function seedCollaborationTeachingDocument(
       throw new CollaborationTeachingError("The room teaching surfaces are already initialized");
     }
     const order = childArray<string>(teaching, COLLABORATION_TEACHING_SLIDE_ORDER);
-    const slides = childMap<Y.Map<unknown>>(teaching, COLLABORATION_TEACHING_SLIDES);
-    const presentation = childMap<unknown>(teaching, COLLABORATION_TEACHING_PRESENTATION);
-    const whiteboard = childMap<Y.Array<string>>(teaching, COLLABORATION_TEACHING_WHITEBOARD);
+    const slides = getOrCreateChildMap<Y.Map<unknown>>(teaching, COLLABORATION_TEACHING_SLIDES);
+    const presentation = getOrCreateChildMap<unknown>(
+      teaching,
+      COLLABORATION_TEACHING_PRESENTATION,
+    );
+    const whiteboard = getOrCreateChildMap<Y.Array<string>>(
+      teaching,
+      COLLABORATION_TEACHING_WHITEBOARD,
+    );
     if (order.length) order.delete(0, order.length);
     if (normalizedSlides.length)
       order.insert(
@@ -979,7 +976,7 @@ function assertExactKeys(map: Y.Map<unknown>, expected: readonly string[], label
 }
 
 export function validateCollaborationTeachingDocument(doc: Y.Doc): CollaborationTeachingIntegrity {
-  const rawTeaching = projectRoot(doc).get(COLLABORATION_TEACHING_ROOT);
+  const rawTeaching = getCollaborationProjectRoot(doc).get(COLLABORATION_TEACHING_ROOT);
   const teaching = optionalTeachingRoot(doc);
   const projection = projectCollaborationTeachingDocument(doc);
   if (rawTeaching !== undefined && !teaching) {
@@ -1119,7 +1116,7 @@ export function setCollaborationCurrentSlide(
   assertTeachingUpdateFitsSnapshot(doc, 2_048);
   const nextRevision = projection.presentationRevision + 1;
   doc.transact(() => {
-    const presentation = childMap<unknown>(
+    const presentation = getOrCreateChildMap<unknown>(
       getCollaborationTeachingRoot(doc),
       COLLABORATION_TEACHING_PRESENTATION,
     );
@@ -1138,7 +1135,7 @@ export function applyCollaborationWhiteboardDelta(
   if (!projection.initialized) {
     throw new CollaborationTeachingError("The room teaching surfaces are not initialized");
   }
-  const whiteboard = childMap<Y.Array<string>>(
+  const whiteboard = getOrCreateChildMap<Y.Array<string>>(
     getCollaborationTeachingRoot(doc),
     COLLABORATION_TEACHING_WHITEBOARD,
   );
@@ -1171,11 +1168,7 @@ export function applyCollaborationWhiteboardDelta(
   }
   const next = Array.from(winners.values())
     .flatMap(({ candidate }) => (candidate.kind === "element" ? [candidate.element] : []))
-    .sort((left, right) => {
-      const leftIndex = typeof left.index === "string" ? left.index : "";
-      const rightIndex = typeof right.index === "string" ? right.index : "";
-      return compareCodeUnits(leftIndex, rightIndex) || compareCodeUnits(left.id, right.id);
-    });
+    .sort(compareWhiteboardElementOrder);
   assertWhiteboardSceneBounds(next);
 
   let additionalBytes = 0;

@@ -4,6 +4,7 @@ import {
   collaborationAwarenessServerStateSchema,
   type CollaborationAwarenessEvent,
 } from "./protocol";
+import { isSafeForeignRelativePosition } from "./relativePosition";
 
 type CollaborationPresence = Extract<CollaborationAwarenessEvent, { kind: "state" }>;
 
@@ -12,15 +13,6 @@ export interface ResolvedMonacoAwarenessSelection {
   participant: CollaborationPresence;
   anchorOffset: number;
   headOffset: number;
-}
-
-/**
- * True when a relative position identifies its target only by root-type name.
- * Yjs resolves that shape through `Y.Doc.get(tname)`, which permanently creates
- * the root type when it does not already exist.
- */
-function namesAnUnknownRootType(position: { item?: unknown; tname?: unknown } | null): boolean {
-  return Boolean(position && position.item == null && position.tname != null);
 }
 
 /** Resolve standard y-monaco awareness selections that belong to one shared text. */
@@ -38,21 +30,20 @@ export function resolveMonacoAwarenessSelections(
     if (!state.success || state.data.collaboration.kind !== "state" || !state.data.selection) {
       continue;
     }
-    // A relative position with no item and no type resolves by *name*, and
-    // Y.Doc.get() creates a root type for any name it has not seen — so a peer
-    // could grow this document's root map without bound by cycling `tname`.
-    // Collaboration texts are nested types, never roots, so a legitimate
-    // selection here always carries an item; anything else is dropped before it
-    // reaches Yjs.
-    if (namesAnUnknownRootType(state.data.selection.anchor)) continue;
-    if (namesAnUnknownRootType(state.data.selection.head)) continue;
+    const { anchor: anchorPosition, head: headPosition } = state.data.selection;
+    if (
+      !isSafeForeignRelativePosition(anchorPosition) ||
+      !isSafeForeignRelativePosition(headPosition)
+    ) {
+      continue;
+    }
     try {
       const anchor = Y.createAbsolutePositionFromRelativePosition(
-        Y.createRelativePositionFromJSON(state.data.selection.anchor),
+        Y.createRelativePositionFromJSON(anchorPosition),
         doc,
       );
       const head = Y.createAbsolutePositionFromRelativePosition(
-        Y.createRelativePositionFromJSON(state.data.selection.head),
+        Y.createRelativePositionFromJSON(headPosition),
         doc,
       );
       if (!anchor || !head || anchor.type !== text || head.type !== text) continue;

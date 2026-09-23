@@ -3,7 +3,6 @@ import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   collaborationAssetDescriptorSchema,
   type CollaborationAssetDescriptor,
-  type CollaborationRole,
 } from "./protocol";
 import {
   DEFAULT_WORKSPACE_ENTRY_PATH,
@@ -74,11 +73,12 @@ export class CollaborationProjectError extends Error {
   }
 }
 
-function projectRoot(doc: Y.Doc): Y.Map<unknown> {
+export function getCollaborationProjectRoot(doc: Y.Doc): Y.Map<unknown> {
   return doc.getMap(COLLABORATION_PROJECT_ROOT);
 }
 
-function childMap<T>(root: Y.Map<unknown>, key: string): Y.Map<T> {
+/** The map at `root[key]`, created (a document write) when it is missing. */
+export function getOrCreateChildMap<T>(root: Y.Map<unknown>, key: string): Y.Map<T> {
   const value = root.get(key);
   if (value instanceof Y.Map) return value as Y.Map<T>;
 
@@ -88,15 +88,15 @@ function childMap<T>(root: Y.Map<unknown>, key: string): Y.Map<T> {
 }
 
 export function getCollaborationMetadata(doc: Y.Doc): Y.Map<unknown> {
-  return childMap(projectRoot(doc), COLLABORATION_PROJECT_METADATA);
+  return getOrCreateChildMap(getCollaborationProjectRoot(doc), COLLABORATION_PROJECT_METADATA);
 }
 
 export function getCollaborationNodes(doc: Y.Doc): Y.Map<Y.Map<unknown>> {
-  return childMap(projectRoot(doc), COLLABORATION_PROJECT_NODES);
+  return getOrCreateChildMap(getCollaborationProjectRoot(doc), COLLABORATION_PROJECT_NODES);
 }
 
 export function getCollaborationTexts(doc: Y.Doc): Y.Map<Y.Text> {
-  return childMap(projectRoot(doc), COLLABORATION_PROJECT_TEXTS);
+  return getOrCreateChildMap(getCollaborationProjectRoot(doc), COLLABORATION_PROJECT_TEXTS);
 }
 
 function splitPath(path: string): { parentPath: string; name: string } {
@@ -159,7 +159,7 @@ export function seedCollaborationProject(
   project: WorkspaceProject,
   options: SeedCollaborationProjectOptions = {},
 ): void {
-  const root = projectRoot(doc);
+  const root = getCollaborationProjectRoot(doc);
   const nodes = getCollaborationNodes(doc);
   if (nodes.size > 0 || root.get("schemaVersion") !== undefined) {
     throw new CollaborationProjectError("The collaboration document has already been seeded");
@@ -415,14 +415,14 @@ function namesByNode(
  *   later join is broken too and nothing in the UI can reset it — the room is
  *   unrecoverable and the only remedy is to abandon it.
  * - Replacing `nodes`/`texts`/`metadata` with a non-map is worse than it looks:
- *   `childMap` silently *overwrites* a non-map with a fresh empty one, so the
+ *   `getOrCreateChildMap` silently *overwrites* a non-map with a fresh empty one, so the
  *   next read would discard every file and its contents.
  *
  * Neither is something a legitimate client ever does — the schema version is
  * written once at seed time and the child maps are only ever created as maps.
  */
 export function assertCollaborationProjectStructure(doc: Y.Doc): void {
-  const root = projectRoot(doc);
+  const root = getCollaborationProjectRoot(doc);
 
   // Absent is fine: the document has not been seeded yet, and the seeding
   // update itself sets the correct value before this runs on its result.
@@ -444,7 +444,7 @@ export function assertCollaborationProjectStructure(doc: Y.Doc): void {
 }
 
 export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectProjection {
-  const root = projectRoot(doc);
+  const root = getCollaborationProjectRoot(doc);
   if (root.get("schemaVersion") !== COLLABORATION_DOCUMENT_SCHEMA_VERSION) {
     throw new CollaborationProjectError("Unsupported collaboration document schema version");
   }
@@ -579,10 +579,6 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
     assetsByNodeId,
     issues,
   };
-}
-
-export function canWriteCollaborationDocument(role: CollaborationRole): boolean {
-  return role === "owner" || role === "editor";
 }
 
 export interface CollaborationProjectControllerOptions {
