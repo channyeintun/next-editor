@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../env";
 import {
   COLLABORATION_CLEANUP_DELAY,
+  COLLABORATION_ROOM_RETENTION_MS,
   publishCollaborationMaintenanceJob,
   verifyQStashSignature,
 } from "./qstash";
@@ -171,6 +172,8 @@ describe("QStash collaboration job verification", () => {
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(headers.get("Upstash-Deduplication-Id")).toBe(`collab-cleanup-${roomId}-${closedAt}`);
     expect(headers.get("Upstash-Delay")).toBe("7d");
+    // The receiver purges only once this much time has passed since the close.
+    expect(COLLABORATION_ROOM_RETENTION_MS).toBe(7 * 24 * 60 * 60 * 1000);
     expect(headers.get("Upstash-Retries")).toBe("3");
     expect(headers.get("Upstash-Timeout")).toBe("30s");
     expect(headers.get("Upstash-Redact-Fields")).toBe("body");

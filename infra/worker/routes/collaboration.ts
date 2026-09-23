@@ -47,6 +47,7 @@ import {
 import { getCurrentUser } from "../auth/session";
 import {
   COLLABORATION_CLEANUP_DELAY,
+  COLLABORATION_ROOM_RETENTION_MS,
   collaborationMaintenanceDestination,
   collaborationMaintenanceJobSchema,
   publishCollaborationMaintenanceJob,
@@ -86,7 +87,6 @@ import {
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
 const MAX_TEACHING_INITIALIZATION_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
 const MAX_MAINTENANCE_REQUEST_BYTES = 2 * 1024;
-const CLOSED_ROOM_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 type CollaborationContext = Context<{ Bindings: Env }>;
 
@@ -335,7 +335,7 @@ collaborationRoute.post("/jobs/maintenance", async (c) => {
   if (
     room.status !== "closed" ||
     room.closed_at !== job.data.closedAt ||
-    Date.now() < job.data.closedAt + CLOSED_ROOM_RETENTION_MS
+    Date.now() < job.data.closedAt + COLLABORATION_ROOM_RETENTION_MS
   ) {
     return c.body(null, 204);
   }

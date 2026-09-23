@@ -13,10 +13,16 @@ const QSTASH_ENVIRONMENT_KEYS = [
 ] as const;
 
 type QStashDelay = NonNullable<PublishRequest["delay"]>;
-export type CollaborationQStashEnvironmentKey = (typeof QSTASH_ENVIRONMENT_KEYS)[number];
+type CollaborationQStashEnvironmentKey = (typeof QSTASH_ENVIRONMENT_KEYS)[number];
 
-// Seven days is both the room-retention period and QStash Free's maximum delay.
-export const COLLABORATION_CLEANUP_DELAY = "7d" as const satisfies QStashDelay;
+// How long a closed room's document and assets are kept. The purge job is
+// published with exactly this delay (seven days is also QStash Free's longest),
+// and the receiver refuses to purge a room closed more recently than this.
+const COLLABORATION_ROOM_RETENTION_DAYS = 7;
+export const COLLABORATION_ROOM_RETENTION_MS =
+  COLLABORATION_ROOM_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+export const COLLABORATION_CLEANUP_DELAY =
+  `${COLLABORATION_ROOM_RETENTION_DAYS}d` as const satisfies QStashDelay;
 
 export const collaborationMaintenanceJobSchema = z
   .object({
@@ -28,7 +34,7 @@ export const collaborationMaintenanceJobSchema = z
 
 export type CollaborationMaintenanceJob = z.infer<typeof collaborationMaintenanceJobSchema>;
 
-export type CollaborationMaintenancePublishResult =
+type CollaborationMaintenancePublishResult =
   | {
       queued: false;
       missing: CollaborationQStashEnvironmentKey[];
@@ -39,9 +45,7 @@ export type CollaborationMaintenancePublishResult =
       deduplicated: boolean;
     };
 
-export function missingCollaborationQStashConfiguration(
-  env: Env,
-): CollaborationQStashEnvironmentKey[] {
+function missingCollaborationQStashConfiguration(env: Env): CollaborationQStashEnvironmentKey[] {
   return QSTASH_ENVIRONMENT_KEYS.filter((key) => {
     const value = env[key];
     return typeof value !== "string" || value.trim().length === 0;
@@ -75,7 +79,7 @@ export async function verifyQStashSignature(input: {
   }
 }
 
-function maintenanceDestination(env: Env): string {
+export function collaborationMaintenanceDestination(env: Env): string {
   return new URL("/api/collaboration/jobs/maintenance", env.PUBLIC_URL).toString();
 }
 
@@ -91,9 +95,7 @@ export async function publishCollaborationMaintenanceJob(
   const missing = missingCollaborationQStashConfiguration(env);
   if (missing.length > 0) return { queued: false, missing };
 
-  // The configuration check above narrows these values at runtime. Keep the
-  // explicit guard so an incomplete deployment can never enqueue messages to
-  // a receiver that cannot authenticate them.
+  // Already checked above; this only narrows the type for the compiler.
   const token = env.QSTASH_TOKEN;
   if (!token) return { queued: false, missing: ["QSTASH_TOKEN"] };
 
@@ -105,7 +107,7 @@ export async function publishCollaborationMaintenanceJob(
     retry: { retries: 3 },
   });
   const result = await client.publishJSON({
-    url: maintenanceDestination(env),
+    url: collaborationMaintenanceDestination(env),
     body: parsed,
     deduplicationId: deduplicationId(parsed),
     retries: QSTASH_DELIVERY_RETRIES,
@@ -120,8 +122,4 @@ export async function publishCollaborationMaintenanceJob(
     messageId: result.messageId,
     deduplicated: result.deduplicated ?? false,
   };
-}
-
-export function collaborationMaintenanceDestination(env: Env): string {
-  return maintenanceDestination(env);
 }
