@@ -6,7 +6,8 @@
 
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const JWKS_CACHE_TTL_MS = 60 * 60 * 1000;
-// Tolerated clock skew when checking exp/iat, per common JWT practice.
+// Tolerated clock skew when checking exp (the only time claim checked), per
+// common JWT practice.
 const CLOCK_SKEW_MS = 60 * 1000;
 
 interface GoogleJwk {

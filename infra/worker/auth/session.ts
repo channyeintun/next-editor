@@ -33,8 +33,8 @@ export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, { path: "/" });
 }
 
-// Resolves the signed-in user for the current request, or null. Shared by
-// GET /api/auth/me here and (Phase 3) ownership checks on lesson mutations.
+// Resolves the signed-in user for the current request, or null. Every
+// authenticated route in the Worker calls this.
 export async function getCurrentUser(c: Context<{ Bindings: Env }>) {
   const sessionId = getCookie(c, SESSION_COOKIE);
   if (!sessionId) return null;
