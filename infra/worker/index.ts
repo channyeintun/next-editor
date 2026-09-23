@@ -68,13 +68,14 @@ const requestLog: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
 app.use("/api/*", requestLog);
 app.use("/media/*", requestLog);
 
-// The API authenticates by cookie, and SameSite=Lax still sends that cookie on a
-// top-level cross-site form POST and stores any cookie the response sets. So a
-// state-changing request with a form-submittable body (urlencoded, multipart,
-// text/plain or none) must come from this origin. Without this, another site
-// could auto-submit a text/plain form whose body parses as JSON to
-// /api/auth/google/onetap and sign the visitor into the attacker's account. The
-// SPA's own requests are same-origin, and QStash's maintenance callback is JSON.
+// SameSite=Lax keeps the session cookie off cross-site POSTs, but the response to
+// a cross-site top-level form POST can still set one. So a state-changing request
+// with a form-submittable body (urlencoded, multipart, text/plain or none) must
+// come from this origin: otherwise another site could auto-submit a text/plain
+// form whose body parses as JSON to /api/auth/google/onetap and sign the visitor
+// into the attacker's account (login CSRF). For the cookie-authenticated routes
+// the guard also backs up SameSite. The SPA's own requests are same-origin, and
+// QStash's maintenance callback is JSON.
 app.use("/api/*", csrf());
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
