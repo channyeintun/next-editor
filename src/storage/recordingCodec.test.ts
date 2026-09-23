@@ -448,6 +448,25 @@ describe("recordingCodec", () => {
     expect(early?.clusters?.[0].endTimeMs).toBe(100);
   });
 
+  it("decodes a segment holding more records than fit in one call's arguments", async () => {
+    // A stretch with no editor change is one cluster, so all of its cursor samples
+    // (one per pointer event) share a segment: 200,000 is about 28 minutes at 120 Hz.
+    const cursorEvents = Array.from({ length: 200_000 }, (_, index) => ({
+      timestamp: index,
+      x: index % 800,
+      y: index % 600,
+      visible: true,
+    }));
+    const bytes = await encodeRecordingToStream(
+      createRecording({ duration: 200_000, frames: [makeKeyframe(0, "a\n")], cursorEvents }),
+    );
+
+    expect(decodeRecordingStream(bytes).cursorEvents).toHaveLength(200_000);
+    const reader = createStreamingRecordingReader();
+    reader.push(bytes);
+    expect(reader.getRecording()?.cursorEvents).toHaveLength(200_000);
+  });
+
   it("decodes a replayable prefix before the footer arrives, then finalizes", async () => {
     const recording = createRecording({
       duration: 800,

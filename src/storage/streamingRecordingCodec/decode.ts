@@ -235,7 +235,7 @@ function decodeSegment(stream: DecodedStream, kind: number, payload: Uint8Array)
         normalizeDeltaFrame,
       );
       assertFrameFormatCompatibility(frames, stream.formatVersion);
-      return { recordCount: frames.length, commit: () => records.frames.push(...frames) };
+      return { recordCount: frames.length, commit: () => appendAll(records.frames, frames) };
     }
     case SEGMENT_KIND.slide:
       return appendTo(records.slideEvents, decodeRecords<SlideEvent>(payload, budget));
@@ -252,7 +252,7 @@ function decodeSegment(stream: DecodedStream, kind: number, payload: Uint8Array)
       return {
         recordCount: batches.length,
         commit: () =>
-          records.previewPatchBatches.push(...stream.hydratePreviewPatchBatches(batches)),
+          appendAll(records.previewPatchBatches, stream.hydratePreviewPatchBatches(batches)),
       };
     }
     case SEGMENT_KIND.workspace: {
@@ -260,7 +260,7 @@ function decodeSegment(stream: DecodedStream, kind: number, payload: Uint8Array)
       // Hydration advances the carried file contents, so it runs at commit.
       return {
         recordCount: events.length,
-        commit: () => records.workspaceEvents.push(...stream.hydrateWorkspaceEvents(events)),
+        commit: () => appendAll(records.workspaceEvents, stream.hydrateWorkspaceEvents(events)),
       };
     }
     case SEGMENT_KIND.workspaceAsset: {
@@ -300,7 +300,17 @@ function decodeSegment(stream: DecodedStream, kind: number, payload: Uint8Array)
 }
 
 function appendTo<T>(target: T[], decoded: T[]): PendingSegment {
-  return { recordCount: decoded.length, commit: () => target.push(...decoded) };
+  return { recordCount: decoded.length, commit: () => appendAll(target, decoded) };
+}
+
+/**
+ * Appends item by item. `target.push(...items)` passes every record as a call
+ * argument, and V8 overflows the stack somewhere past 125k of them, while one
+ * segment may legitimately hold more: a long stretch without editor changes is a
+ * single cluster, and its cursor samples all land in one segment.
+ */
+function appendAll<T>(target: T[], items: readonly T[]): void {
+  for (const item of items) target.push(item);
 }
 
 /** Decodes one segment and, only if that succeeds, folds it into the stream. */
