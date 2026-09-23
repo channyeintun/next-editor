@@ -24,7 +24,11 @@ const TAIL_PAGE_SIZE = 256;
 const SNAPSHOT_CHUNK_BYTES = 1024 * 1024;
 // Revisions before chunked snapshots read only collaboration_document.snapshot
 // (base64). It is still filled whenever the base64 fits in one value, so a
-// rollback can open every room those revisions could have stored.
+// rollback can open every room those revisions could have stored. Stop filling
+// it only once no such revision can be rolled back to. Even then, keep the
+// column and readSnapshot's fallback to it until every room has been compacted
+// into chunks: a room whose snapshot was last written before chunks existed
+// has only the column.
 const LEGACY_SNAPSHOT_MAX_LENGTH = 1_900_000;
 const COMPACTION_EVERY_UPDATES = 200;
 const DEDUPLICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
