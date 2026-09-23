@@ -21,7 +21,7 @@ import {
   playlistRowToPlaylist,
 } from "../../db/types";
 import { generateUniqueSlug, isSlugUniqueViolation, MAX_SLUG_INSERT_ATTEMPTS } from "../../db/slug";
-import { getCurrentUser } from "../auth/session";
+import { requireUser } from "../auth/requireUser";
 import { metadataTextError } from "../../lessons/metadataLimits";
 import { cached, getCache, invalidateCache, playlistSlugKey } from "../cache";
 
@@ -52,11 +52,8 @@ interface CreatePlaylistBody {
   description?: unknown;
 }
 
-playlistsRoute.post("/", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+playlistsRoute.post("/", requireUser, async (c) => {
+  const user = c.get("user");
 
   const body = await c.req.json<CreatePlaylistBody>().catch(() => null);
   const title = typeof body?.title === "string" ? body.title.trim() : "";
@@ -100,11 +97,8 @@ playlistsRoute.post("/", async (c) => {
 // reason as GET /mine in lessons.ts. The optional ?lessonId= backs the "Add
 // to playlist" popover (MyLessonCard) — every owned playlist, each flagged
 // with whether that lesson is already a member, in one request.
-playlistsRoute.get("/mine", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+playlistsRoute.get("/mine", requireUser, async (c) => {
+  const user = c.get("user");
 
   const lessonId = c.req.query("lessonId");
   if (lessonId) {
@@ -120,11 +114,8 @@ playlistsRoute.get("/mine", async (c) => {
 // currently-unpublished ones (the public GET /:slug below filters those out,
 // which would leave an unpublished member invisible and unremovable). Two
 // path segments, so the single-segment "/:slug" catch-all can't shadow it.
-playlistsRoute.get("/:id/lessons", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+playlistsRoute.get("/:id/lessons", requireUser, async (c) => {
+  const user = c.get("user");
 
   const rows = await getOwnedPlaylistLessons(c.env.DB, c.req.param("id"), user.id);
   if (!rows) {
@@ -133,11 +124,8 @@ playlistsRoute.get("/:id/lessons", async (c) => {
   return c.json({ lessons: rows.map(lessonRowToOwnedLesson) });
 });
 
-playlistsRoute.patch("/:id", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+playlistsRoute.patch("/:id", requireUser, async (c) => {
+  const user = c.get("user");
 
   const body = await c.req.json<CreatePlaylistBody>().catch(() => null);
   if (!body) {
@@ -175,11 +163,8 @@ playlistsRoute.patch("/:id", async (c) => {
   );
 });
 
-playlistsRoute.delete("/:id", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+playlistsRoute.delete("/:id", requireUser, async (c) => {
+  const user = c.get("user");
 
   const deletedSlug = await deletePlaylist(c.env.DB, c.req.param("id"), user.id);
   if (deletedSlug === null) {
@@ -194,11 +179,8 @@ interface AddLessonBody {
   lessonId?: unknown;
 }
 
-playlistsRoute.post("/:id/lessons", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+playlistsRoute.post("/:id/lessons", requireUser, async (c) => {
+  const user = c.get("user");
 
   const body = await c.req.json<AddLessonBody>().catch(() => null);
   if (!body || typeof body.lessonId !== "string" || !body.lessonId) {
@@ -220,11 +202,8 @@ playlistsRoute.post("/:id/lessons", async (c) => {
   return c.json({ success: true }, 201);
 });
 
-playlistsRoute.delete("/:id/lessons/:lessonId", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+playlistsRoute.delete("/:id/lessons/:lessonId", requireUser, async (c) => {
+  const user = c.get("user");
 
   const { id, lessonId } = c.req.param();
   const slug = await removeLessonFromPlaylist(c.env.DB, id, user.id, lessonId);
@@ -240,11 +219,8 @@ interface ReorderBody {
   lessonIds?: unknown;
 }
 
-playlistsRoute.post("/:id/reorder", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+playlistsRoute.post("/:id/reorder", requireUser, async (c) => {
+  const user = c.get("user");
 
   const body = await c.req.json<ReorderBody>().catch(() => null);
   if (

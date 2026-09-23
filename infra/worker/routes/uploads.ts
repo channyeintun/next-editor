@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Env } from "../env";
 import { getLessonById } from "../../db/queries";
-import { getCurrentUser } from "../auth/session";
+import { requireUser, type SignedInEnv } from "../auth/requireUser";
 import { LESSON_ID_PATTERN } from "../lessonIds";
 import { MAX_THUMBNAIL_BYTES } from "../../client/upload/thumbnailConstraints";
 import { MAX_CAPTION_BYTES } from "../../client/upload/captionConstraints";
@@ -66,11 +66,8 @@ function storedContentTypeFor(filename: string): string {
 // origin on direct navigation.
 // :id is interpolated into the R2 key, so it is held to LESSON_ID_PATTERN
 // (see lessonIds.ts), the same charset POST /api/lessons accepts.
-const handleMediaUpload = async (c: Context<{ Bindings: Env }>) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+const handleMediaUpload = async (c: Context<SignedInEnv>) => {
+  const user = c.get("user");
 
   const { id, filename } = c.req.param();
 
@@ -117,6 +114,7 @@ const handleMediaUpload = async (c: Context<{ Bindings: Env }>) => {
 
 uploadsRoute.put(
   `/:id{${LESSON_ID_PATTERN}}/media/:filename{[\\w-]+\\.(ne|ogg|weba|webm|mp4|mov|m4a|mp3|wav|png|jpg|jpeg)}`,
+  requireUser,
   handleMediaUpload,
 );
 
@@ -127,5 +125,6 @@ uploadsRoute.put(
 // extension, and `.vtt` is served back as inert text (nosniff, see routes/media.ts).
 uploadsRoute.put(
   `/:id{${LESSON_ID_PATTERN}}/media/:filename{[\\w-]+(?:\\.[a-z0-9-]+)?\\.vtt}`,
+  requireUser,
   handleMediaUpload,
 );

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
-import { getCurrentUser } from "../auth/session";
+import { requireUser } from "../auth/requireUser";
 import { proxyUrl, readProxyBody } from "../../../src/shared/proxy";
 import { isGoogleImageUrl } from "../../../src/shared/googleImageHosts";
 
@@ -84,12 +84,7 @@ async function ingestImage(bucket: R2Bucket, url: string): Promise<IngestResult>
   return { url, path: key };
 }
 
-slideImagesRoute.post("/", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
-
+slideImagesRoute.post("/", requireUser, async (c) => {
   let body: unknown;
   try {
     body = await c.req.json();

@@ -22,7 +22,8 @@ import {
   updatePasskeyCredentialAfterAuth,
 } from "../../db/passkeyQueries";
 import { passkeyRowToSummary, userRowToAuthUser } from "../../db/types";
-import { getCurrentUser, setSessionCookie } from "./session";
+import { requireUser } from "./requireUser";
+import { setSessionCookie } from "./session";
 
 const RP_NAME = "Next Editor";
 
@@ -53,7 +54,9 @@ interface ChallengePayload {
 // a forged "Origin: http://localhost" merely selects rpID "localhost", and
 // assertions are still signature-checked against that rpID and a
 // server-issued challenge, so it buys an attacker nothing.
-function relyingParty(c: Context<{ Bindings: Env }>): { rpID: string; expectedOrigin: string } {
+function relyingParty<E extends { Bindings: Env }>(
+  c: Context<E>,
+): { rpID: string; expectedOrigin: string } {
   const requestOrigin = c.req.header("Origin");
   if (requestOrigin && /^http:\/\/localhost(:\d+)?$/.test(requestOrigin)) {
     return { rpID: "localhost", expectedOrigin: requestOrigin };
@@ -62,8 +65,8 @@ function relyingParty(c: Context<{ Bindings: Env }>): { rpID: string; expectedOr
   return { rpID: publicUrl.hostname, expectedOrigin: publicUrl.origin };
 }
 
-async function setChallengeCookie(
-  c: Context<{ Bindings: Env }>,
+async function setChallengeCookie<E extends { Bindings: Env }>(
+  c: Context<E>,
   challenge: Omit<ChallengePayload, "expiresAt">,
 ): Promise<void> {
   const payload: ChallengePayload = {
@@ -82,8 +85,8 @@ async function setChallengeCookie(
 // Reads the challenge cookie and has the browser drop it, so one ceremony gets
 // one verify attempt. Returns null for a missing, forged, expired or
 // other-purpose challenge.
-async function takeChallengeCookie(
-  c: Context<{ Bindings: Env }>,
+async function takeChallengeCookie<E extends { Bindings: Env }>(
+  c: Context<E>,
   purpose: ChallengePayload["purpose"],
 ): Promise<ChallengePayload | null> {
   const raw = await getSignedCookie(c, c.env.SESSION_SECRET, CHALLENGE_COOKIE);
@@ -113,22 +116,16 @@ export const passkeyRoute = new Hono<{ Bindings: Env }>();
 // The signed-in user's registered passkeys — lets the account menu show
 // whether the account already has one (the WebAuthn ceremony itself can't
 // tell the page "you already registered here"; it just fails).
-passkeyRoute.get("/credentials", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+passkeyRoute.get("/credentials", requireUser, async (c) => {
+  const user = c.get("user");
   const credentials = await listPasskeyCredentials(c.env.DB, user.id);
   return c.json({ passkeys: credentials.map(passkeyRowToSummary) });
 });
 
 // Registration is adding a passkey to the signed-in account, so both
 // register endpoints require a session.
-passkeyRoute.post("/register/options", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+passkeyRoute.post("/register/options", requireUser, async (c) => {
+  const user = c.get("user");
 
   const { rpID } = relyingParty(c);
   const existing = await listPasskeyCredentials(c.env.DB, user.id);
@@ -162,11 +159,8 @@ passkeyRoute.post("/register/options", async (c) => {
   return c.json(options);
 });
 
-passkeyRoute.post("/register/verify", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+passkeyRoute.post("/register/verify", requireUser, async (c) => {
+  const user = c.get("user");
 
   const challenge = await takeChallengeCookie(c, "register");
   // The userId check pins the challenge to the session that requested it —

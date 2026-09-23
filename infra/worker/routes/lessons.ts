@@ -13,7 +13,7 @@ import {
 } from "../../db/queries";
 import { generateUniqueSlug, isSlugUniqueViolation, MAX_SLUG_INSERT_ATTEMPTS } from "../../db/slug";
 import { lessonRowToLesson, lessonRowToOwnedLesson } from "../../db/types";
-import { getCurrentUser } from "../auth/session";
+import { requireUser } from "../auth/requireUser";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 import { metadataTextError } from "../../lessons/metadataLimits";
 import { cached, getCache, invalidateCache, lessonListKey, lessonSlugKey } from "../cache";
@@ -82,7 +82,7 @@ function isOwnUploadPath(value: string, lessonId: string): boolean {
 // Mounted at /api/lessons in worker/index.ts. GET routes are public and
 // published-only — draft rows never reach the public gallery (see
 // docs/cloudflare-architecture.md). Everything else requires the signed-in
-// owner (getCurrentUser + an owner_id match enforced in the query itself).
+// owner (requireUser + an owner_id match enforced in the query itself).
 export const lessonsRoute = new Hono<{ Bindings: Env }>();
 
 lessonsRoute.get("/", async (c) => {
@@ -117,11 +117,8 @@ interface CreateLessonBody {
   thumbnail?: unknown;
 }
 
-lessonsRoute.post("/", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+lessonsRoute.post("/", requireUser, async (c) => {
+  const user = c.get("user");
 
   const body = await c.req.json<CreateLessonBody>().catch(() => null);
   if (!body || !isLessonId(body.id)) {
@@ -190,11 +187,8 @@ lessonsRoute.post("/", async (c) => {
   }
 });
 
-lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
+  const user = c.get("user");
 
   const body = await c.req.json<CreateLessonBody>().catch(() => null);
   if (!body) {
@@ -265,11 +259,8 @@ lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
   return c.json(lessonRowToOwnedLesson(row));
 });
 
-lessonsRoute.post(`/:id{${LESSON_ID_PATTERN}}/publish`, async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+lessonsRoute.post(`/:id{${LESSON_ID_PATTERN}}/publish`, requireUser, async (c) => {
+  const user = c.get("user");
 
   const row = await publishLesson(c.env.DB, c.req.param("id"), user.id);
   if (!row) {
@@ -282,11 +273,8 @@ lessonsRoute.post(`/:id{${LESSON_ID_PATTERN}}/publish`, async (c) => {
   return c.json(lessonRowToOwnedLesson(row));
 });
 
-lessonsRoute.post(`/:id{${LESSON_ID_PATTERN}}/unpublish`, async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+lessonsRoute.post(`/:id{${LESSON_ID_PATTERN}}/unpublish`, requireUser, async (c) => {
+  const user = c.get("user");
 
   const row = await unpublishLesson(c.env.DB, c.req.param("id"), user.id);
   if (!row) {
@@ -298,11 +286,8 @@ lessonsRoute.post(`/:id{${LESSON_ID_PATTERN}}/unpublish`, async (c) => {
   return c.json(lessonRowToOwnedLesson(row));
 });
 
-lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
+  const user = c.get("user");
 
   const id = c.req.param("id");
   const existing = await getOwnedLessonById(c.env.DB, id, user.id);
@@ -332,11 +317,8 @@ lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
 // All of the signed-in owner's lessons (draft + published) — backs "My
 // Library". Must be registered before the catch-all "/:slug" GET below (see
 // the comment there).
-lessonsRoute.get("/mine", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
+lessonsRoute.get("/mine", requireUser, async (c) => {
+  const user = c.get("user");
 
   const rows = await listOwnedLessons(c.env.DB, user.id);
   return c.json({ lessons: rows.map(lessonRowToOwnedLesson) });

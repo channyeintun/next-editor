@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getCurrentUser } from "../auth/session";
+import { requireUser } from "../auth/requireUser";
 import type { Env } from "../env";
 import { readBodyWithLimit } from "../httpBody";
 import { isUserFeatureEnabled, STUDIO_BURMESE_VOXCPM2_FEATURE } from "../../db/featureFlags";
@@ -199,9 +199,8 @@ async function validateSynthesisRequest(request: Request): Promise<SynthesisRequ
   };
 }
 
-studioRoute.get("/capabilities", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+studioRoute.get("/capabilities", requireUser, async (c) => {
+  const user = c.get("user");
 
   const enabled = await hasBurmeseTtsAccess(c.env, user.id);
   return c.json({
@@ -209,9 +208,8 @@ studioRoute.get("/capabilities", async (c) => {
   });
 });
 
-studioRoute.post("/tts/voxcpm2", async (c) => {
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+studioRoute.post("/tts/voxcpm2", requireUser, async (c) => {
+  const user = c.get("user");
 
   if (!(await hasBurmeseTtsAccess(c.env, user.id))) {
     return c.json({ error: "Burmese Modal narration is not enabled for this user" }, 403);

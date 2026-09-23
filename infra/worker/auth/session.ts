@@ -35,7 +35,7 @@ export function clearSessionCookie(c: Context): void {
 
 // Resolves the signed-in user for the current request, or null. Every
 // authenticated route in the Worker calls this.
-export async function getCurrentUser(c: Context<{ Bindings: Env }>) {
+export async function getCurrentUser<E extends { Bindings: Env }>(c: Context<E>) {
   const sessionId = getCookie(c, SESSION_COOKIE);
   if (!sessionId) return null;
   return getSessionUser(c.env.DB, sessionId);
