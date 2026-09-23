@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { runtimePreviewSrcNeedsReset } from "./runtimePreview";
+import {
+  createRuntimePreviewLocationFromUrl,
+  normalizePreviewRoute,
+  runtimePreviewSrcNeedsReset,
+} from "./runtimePreview";
 
 // The WebContainer server-ready URL is origin-only (no trailing slash). The
 // `iframe.src` PROPERTY reflects the parsed/re-serialized URL — which gains a
@@ -48,5 +52,31 @@ describe("runtimePreviewSrcNeedsReset", () => {
         "https://other--3000--xyz.local-corp.webcontainer-api.io",
       ),
     ).toBe(true);
+  });
+});
+
+describe("normalizePreviewRoute", () => {
+  it("keeps absolute paths and roots everything else", () => {
+    expect(normalizePreviewRoute("  /todos?done=1#top  ")).toBe("/todos?done=1#top");
+    expect(normalizePreviewRoute("todos")).toBe("/todos");
+    expect(normalizePreviewRoute("?q=1")).toBe("/?q=1");
+    expect(normalizePreviewRoute("#section")).toBe("/#section");
+    expect(normalizePreviewRoute("   ")).toBe("/");
+  });
+
+  it("takes the path, query and hash of a full URL", () => {
+    expect(normalizePreviewRoute(`${RUNTIME_URL}/todos?done=1#top`)).toBe("/todos?done=1#top");
+    expect(normalizePreviewRoute(RUNTIME_URL)).toBe("/");
+    // A non-special scheme can have an empty pathname.
+    expect(normalizePreviewRoute("foo://host")).toBe("/");
+  });
+});
+
+describe("createRuntimePreviewLocationFromUrl", () => {
+  it("derives the route from the preview URL", () => {
+    expect(createRuntimePreviewLocationFromUrl(RUNTIME_URL, 3000)?.route).toBe("/");
+    expect(createRuntimePreviewLocationFromUrl(`${RUNTIME_URL}/a?b=1#c`, null)?.route).toBe(
+      "/a?b=1#c",
+    );
   });
 });

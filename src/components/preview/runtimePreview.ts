@@ -30,10 +30,10 @@ function isHttpUrl(url: URL): boolean {
 }
 
 function formatPreviewRoute(pathname: string, search: string, hash: string): string {
-  const normalizedPathname = pathname.startsWith("/") ? pathname : `/${pathname || ""}`;
-  const route = `${normalizedPathname || "/"}${search}${hash}`;
+  // A non-special URL scheme can have an empty or relative pathname.
+  const rootedPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
 
-  return route || "/";
+  return `${rootedPathname}${search}${hash}`;
 }
 
 export function normalizePreviewRoute(route: string): string {
@@ -46,21 +46,13 @@ export function normalizePreviewRoute(route: string): string {
   try {
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmedRoute)) {
       const parsedUrl = new URL(trimmedRoute);
-      return formatPreviewRoute(parsedUrl.pathname || "/", parsedUrl.search, parsedUrl.hash);
+      return formatPreviewRoute(parsedUrl.pathname, parsedUrl.search, parsedUrl.hash);
     }
   } catch {
     // Treat malformed values as relative routes.
   }
 
-  if (trimmedRoute.startsWith("/")) {
-    return trimmedRoute;
-  }
-
-  if (trimmedRoute.startsWith("?") || trimmedRoute.startsWith("#")) {
-    return `/${trimmedRoute}`;
-  }
-
-  return `/${trimmedRoute}`;
+  return trimmedRoute.startsWith("/") ? trimmedRoute : `/${trimmedRoute}`;
 }
 
 export function createRuntimePreviewLocationFromUrl(
@@ -81,7 +73,7 @@ export function createRuntimePreviewLocationFromUrl(
     return {
       href: parsedUrl.href,
       port: fallbackPort ?? getUrlPort(parsedUrl),
-      route: formatPreviewRoute(parsedUrl.pathname || "/", parsedUrl.search, parsedUrl.hash),
+      route: formatPreviewRoute(parsedUrl.pathname, parsedUrl.search, parsedUrl.hash),
     };
   } catch {
     return {
