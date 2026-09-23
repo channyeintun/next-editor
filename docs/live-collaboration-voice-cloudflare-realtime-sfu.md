@@ -1003,11 +1003,14 @@ reads fail closed.
 - Full-repository `tsc -b tsconfig.json`, full `vp test`, full build, and `wrangler deploy`
   dry-run: prohibited memory-heavy operations here; run in CI before merge/deploy.
 - Voice Durable Object runtime tests (hibernation attachment restoration, duplicate-generation
-  replacement, socket lifecycle): the DO imports `cloudflare:workers` and needs a workerd-based
-  test pool that this repository does not currently include. The pure authorization matrix is
-  covered by `realtimeSfuGateway.test.ts`; the DO behaviors must be exercised by the staging
-  smoke test in `deployment-operations-collaboration.md` (and a `@cloudflare/vitest-pool-workers`
-  suite is a good CI follow-up).
+  replacement, socket lifecycle): at the time the DO's `cloudflare:workers` import had no test
+  stand-in. `infra/worker/vitest.config.ts` now aliases it to `infra/worker/testing/`, and
+  `roomDurableObject.test.ts` drives the room Durable Object with fake sockets that way; the
+  voice DO has no such suite yet. The pure authorization matrix is covered by
+  `realtimeSfuGateway.test.ts`; behaviors that need workerd itself (real hibernation, the 101
+  upgrade) must still be exercised by the staging smoke test in
+  `deployment-operations-collaboration.md` (and a `@cloudflare/vitest-pool-workers` suite is a
+  good CI follow-up).
 - The entire section 15.2 manual browser/device/network matrix, including the
   recording-contains-no-remote-voice release gate and mute source-release verification on real
   devices.

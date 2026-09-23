@@ -1,4 +1,3 @@
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import * as Y from "yjs";
 import {
@@ -11,55 +10,22 @@ import {
   encodeYjsDocument,
   encodeYjsUpdate,
 } from "../../../src/collaboration/yjsUpdates";
-import { RoomSqliteDocumentStore, type RoomSqliteStorage } from "./roomSqliteDocumentStore";
+import { SqliteTestStorage } from "../testing/sqliteStorage";
+import { RoomSqliteDocumentStore } from "./roomSqliteDocumentStore";
 
 const ROOM_ID = "10000000-0000-4000-8000-000000000001";
 const ACTOR_ID = "20000000-0000-4000-8000-000000000002";
 const CLIENT_ID = "30000000-0000-4000-8000-000000000003";
 const UPDATE_ID = "40000000-0000-4000-8000-000000000004";
 
-class TestSqliteStorage implements RoomSqliteStorage {
-  readonly database = new DatabaseSync(":memory:");
-  readonly sql = {
-    exec: <Row = Record<string, unknown>>(
-      query: string,
-      ...bindings: unknown[]
-    ): { toArray(): Row[] } => {
-      if (bindings.length === 0 && query.trimStart().startsWith("CREATE TABLE")) {
-        this.database.exec(query);
-        return { toArray: () => [] };
-      }
-      const statement = this.database.prepare(query);
-      if (statement.columns().length === 0) {
-        statement.run(...(bindings as SQLInputValue[]));
-        return { toArray: () => [] };
-      }
-      const rows = statement.all(...(bindings as SQLInputValue[])) as Row[];
-      return { toArray: () => rows };
-    },
-  };
-
-  transactionSync<T>(callback: () => T): T {
-    this.database.exec("BEGIN IMMEDIATE");
-    try {
-      const result = callback();
-      this.database.exec("COMMIT");
-      return result;
-    } catch (error) {
-      this.database.exec("ROLLBACK");
-      throw error;
-    }
-  }
-}
-
-const openDatabases: TestSqliteStorage[] = [];
+const openDatabases: SqliteTestStorage[] = [];
 
 afterEach(() => {
-  for (const storage of openDatabases.splice(0)) storage.database.close();
+  for (const storage of openDatabases.splice(0)) storage.close();
 });
 
-function createStore(): { storage: TestSqliteStorage; store: RoomSqliteDocumentStore } {
-  const storage = new TestSqliteStorage();
+function createStore(): { storage: SqliteTestStorage; store: RoomSqliteDocumentStore } {
+  const storage = new SqliteTestStorage();
   openDatabases.push(storage);
   return { storage, store: new RoomSqliteDocumentStore(storage) };
 }

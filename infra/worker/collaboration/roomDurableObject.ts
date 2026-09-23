@@ -570,6 +570,14 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       attachment.roomId,
       attachment.userId,
     );
+    // D1 is not this object's storage, so other events ran while it answered:
+    // /control may have changed the role or closed the socket, and awareness
+    // frames may have updated the attachment. Build on what is stored now.
+    const latest = attachmentFor(socket);
+    if (!latest || !isOpen(socket)) return null;
+    // A control command that landed during the read is newer than this row;
+    // keep it and let a later frame revalidate.
+    if (latest.roleVersion !== attachment.roleVersion) return latest;
     if (
       !access ||
       access.transport !== "cloudflare-websocket" ||
@@ -586,20 +594,20 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       socket.close(4001, "room closed");
       return null;
     }
-    if (access.member_role !== attachment.role || access.role_version !== attachment.roleVersion) {
+    if (access.member_role !== latest.role || access.role_version !== latest.roleVersion) {
       const next = this.withRole(
-        { ...attachment, accessCheckedAt: Date.now() },
+        { ...latest, accessCheckedAt: Date.now() },
         access.member_role,
         access.role_version,
       );
       socket.serializeAttachment(next);
       sendMessage(socket, {
         type: "control.room",
-        data: controlEvent(access.id, access.role_version, "membership-changed", attachment.userId),
+        data: controlEvent(access.id, access.role_version, "membership-changed", latest.userId),
       });
       return next;
     }
-    const checkedAttachment = { ...attachment, accessCheckedAt: Date.now() };
+    const checkedAttachment = { ...latest, accessCheckedAt: Date.now() };
     socket.serializeAttachment(checkedAttachment);
     return checkedAttachment;
   }
