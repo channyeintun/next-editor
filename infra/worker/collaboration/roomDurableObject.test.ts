@@ -315,6 +315,30 @@ describe("CollaborationRoomDurableObject document updates", () => {
 
     expect(member.closeCode).toBe(4003);
   });
+
+  // Each membership route POSTs /control from its own Worker invocation, so
+  // two quick changes can arrive in the opposite order to their D1 commits.
+  it("ignores a role command older than the one already applied", async () => {
+    const { room, connect, edit, control, persistedText } = await createRoom();
+    const member = connect(MEMBER_ID, "editor");
+
+    await control(3, MEMBER_ID, "viewer");
+    await control(2, MEMBER_ID, "editor");
+    await room.webSocketMessage(member as never, edit("+nope"));
+
+    expect(errors(member)).toEqual([expect.objectContaining({ code: "read-only" })]);
+    expect(await persistedText()).toBe("seed");
+  });
+
+  it("keeps a member who rejoined at a newer version when an older removal arrives", async () => {
+    const { connect, control } = await createRoom();
+    const member = connect(MEMBER_ID, "editor", { roleVersion: 6 });
+
+    await control(5, MEMBER_ID, null);
+
+    expect(member.closeCode).toBeNull();
+    expect(member.messages()).toEqual([]);
+  });
 });
 
 describe("CollaborationRoomDurableObject access revalidation", () => {

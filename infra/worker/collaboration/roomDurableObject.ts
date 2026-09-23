@@ -1203,6 +1203,10 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = attachmentFor(socket);
       if (!attachment || attachment.roomId !== event.roomId) continue;
+      // D1's role version is room-wide and monotonic, and each route POSTs
+      // /control on its own, so commands can arrive out of order. An older one
+      // must not restore a replaced role or remove a member who rejoined.
+      if (event.roleVersion <= attachment.roleVersion) continue;
       if (event.targetUserId && attachment.userId === event.targetUserId) {
         if (command.targetRole === null || command.targetRole === undefined) {
           sendMessage(socket, { type: "control.room", data: event });
@@ -1211,7 +1215,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         }
         const next = this.withRole(attachment, command.targetRole, event.roleVersion);
         socket.serializeAttachment(next);
-      } else if (attachment.roleVersion < event.roleVersion) {
+      } else {
         socket.serializeAttachment({ ...attachment, roleVersion: event.roleVersion });
       }
       sendMessage(socket, { type: "control.room", data: event });
