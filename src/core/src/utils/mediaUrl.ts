@@ -1,17 +1,17 @@
 /**
- * Scheme guard for media URLs that arrive inside a recording.
+ * Scheme guard for the media URLs a recording carries into element `src`
+ * attributes: the audio player's `audio.src` (audioActor) and the camera
+ * overlay's `<video src>` (CameraOverlay).
  *
- * `audioUrl`, `cameraUrl` and `captionFiles` come out of the `.ne` header,
- * which is decoded with a bare type assertion — no runtime validation — and a
- * recording can be handed to a viewer through `?url=`, a drag-and-drop, or the
- * public lesson library. Those values are then assigned straight to
- * `audio.src`, a `<video src>`, and `fetch()`.
- *
- * Restricting them to real network schemes keeps a hostile recording from
- * turning a viewer's browser into a request source for an arbitrary target, and
- * keeps non-network schemes out of element `src` attributes entirely. `blob:`
- * stays allowed because the same fields carry locally-created object URLs
- * during live recording and playback of an in-memory session.
+ * `audioUrl` and `cameraUrl` come out of the `.ne` header, which is decoded with
+ * a bare type assertion — no runtime validation — and a recording can be handed
+ * to a viewer through `?url=`, a drag-and-drop, or the public lesson library.
+ * This keeps non-network schemes (`javascript:`, `data:`, `file:`, …) out of
+ * those attributes. It does not restrict the host: any `http:`/`https:` URL
+ * passes. `blob:` stays allowed because the same fields carry locally-created
+ * object URLs during live recording and playback of an in-memory session.
+ * Caption files follow a stricter rule, same origin and directory as the `.ne`
+ * (`resolveSiblingCaptionUrl` in src/hooks/useUrlLoader.ts).
  */
 const ALLOWED_MEDIA_PROTOCOLS = new Set(["http:", "https:", "blob:"]);
 
