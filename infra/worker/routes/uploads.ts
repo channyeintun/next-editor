@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import type { Env } from "../env";
 import { getLessonById } from "../../db/queries";
 import { getCurrentUser } from "../auth/session";
+import { LESSON_ID_PATTERN } from "../lessonIds";
 import { MAX_THUMBNAIL_BYTES } from "../../client/upload/thumbnailConstraints";
 import { MAX_CAPTION_BYTES } from "../../client/upload/captionConstraints";
 import { MAX_MEDIA_BYTES } from "../../client/upload/mediaConstraints";
@@ -63,8 +64,8 @@ function storedContentTypeFor(filename: string): string {
 // <script>, and R2 objects are later served back same-origin at /media/<key>
 // (see routes/media.ts), which would let a script execute in the app's own
 // origin on direct navigation.
-// :id is interpolated into the R2 key, so it gets the same safe-charset
-// constraint as filename (lesson ids are client-generated UUIDs).
+// :id is interpolated into the R2 key, so it is held to LESSON_ID_PATTERN
+// (see lessonIds.ts), the same charset POST /api/lessons accepts.
 const handleMediaUpload = async (c: Context<{ Bindings: Env }>) => {
   const user = await getCurrentUser(c);
   if (!user) {
@@ -115,7 +116,7 @@ const handleMediaUpload = async (c: Context<{ Bindings: Env }>) => {
 };
 
 uploadsRoute.put(
-  "/:id{[\\w-]+}/media/:filename{[\\w-]+\\.(ne|ogg|weba|webm|mp4|mov|m4a|mp3|wav|png|jpg|jpeg)}",
+  `/:id{${LESSON_ID_PATTERN}}/media/:filename{[\\w-]+\\.(ne|ogg|weba|webm|mp4|mov|m4a|mp3|wav|png|jpg|jpeg)}`,
   handleMediaUpload,
 );
 
@@ -125,6 +126,6 @@ uploadsRoute.put(
 // lowercase language tag; the charset still can't encode `/`, `..`, or a second
 // extension, and `.vtt` is served back as inert text (nosniff, see routes/media.ts).
 uploadsRoute.put(
-  "/:id{[\\w-]+}/media/:filename{[\\w-]+(?:\\.[a-z0-9-]+)?\\.vtt}",
+  `/:id{${LESSON_ID_PATTERN}}/media/:filename{[\\w-]+(?:\\.[a-z0-9-]+)?\\.vtt}`,
   handleMediaUpload,
 );

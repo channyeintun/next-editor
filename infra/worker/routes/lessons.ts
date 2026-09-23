@@ -17,6 +17,7 @@ import { getCurrentUser } from "../auth/session";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 import { cached, getCache, invalidateCache, lessonListKey, lessonSlugKey } from "../cache";
 import { findPublishedLessonBySlug } from "../lessonCatalog";
+import { isLessonId, LESSON_ID_PATTERN } from "../lessonIds";
 
 const DEFAULT_PAGE_SIZE = 12;
 // Short TTL: a newly published/edited lesson should show up in the public
@@ -119,8 +120,8 @@ lessonsRoute.post("/", async (c) => {
   }
 
   const body = await c.req.json<CreateLessonBody>().catch(() => null);
-  if (!body || typeof body.id !== "string" || !body.id) {
-    return c.json({ error: "id is required" }, 400);
+  if (!body || !isLessonId(body.id)) {
+    return c.json({ error: "a lesson id is required" }, 400);
   }
   const title = typeof body.title === "string" ? body.title.trim() : "";
   if (!title) {
@@ -178,7 +179,7 @@ lessonsRoute.post("/", async (c) => {
   }
 });
 
-lessonsRoute.patch("/:id", async (c) => {
+lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
   const user = await getCurrentUser(c);
   if (!user) {
     return c.json({ error: "not signed in" }, 401);
@@ -247,7 +248,7 @@ lessonsRoute.patch("/:id", async (c) => {
   return c.json(lessonRowToOwnedLesson(row));
 });
 
-lessonsRoute.post("/:id/publish", async (c) => {
+lessonsRoute.post(`/:id{${LESSON_ID_PATTERN}}/publish`, async (c) => {
   const user = await getCurrentUser(c);
   if (!user) {
     return c.json({ error: "not signed in" }, 401);
@@ -264,7 +265,7 @@ lessonsRoute.post("/:id/publish", async (c) => {
   return c.json(lessonRowToOwnedLesson(row));
 });
 
-lessonsRoute.post("/:id/unpublish", async (c) => {
+lessonsRoute.post(`/:id{${LESSON_ID_PATTERN}}/unpublish`, async (c) => {
   const user = await getCurrentUser(c);
   if (!user) {
     return c.json({ error: "not signed in" }, 401);
@@ -280,7 +281,7 @@ lessonsRoute.post("/:id/unpublish", async (c) => {
   return c.json(lessonRowToOwnedLesson(row));
 });
 
-lessonsRoute.delete("/:id", async (c) => {
+lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
   const user = await getCurrentUser(c);
   if (!user) {
     return c.json({ error: "not signed in" }, 401);
