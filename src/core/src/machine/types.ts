@@ -539,7 +539,8 @@ export type EditorMachineEvent =
 // ============================================================================
 
 /**
- * Input provided when creating the machine
+ * Input provided when creating the machine. NextEditorProvider supplies it as part of
+ * UseNextEditorConfig (src/core/src/types.ts).
  */
 export interface EditorMachineInput {
   /** Monaco editor ref */
@@ -557,6 +558,11 @@ export interface EditorMachineInput {
   onRecordingStop?: (recording: Recording) => void;
   onSeek?: (time: number) => void;
   onError?: (error: Error) => void;
+  /**
+   * Invoked once a local screen recording (opt-in, captured in parallel with the session)
+   * finishes assembling. The blob is saved to the user's disk only and never enters the
+   * `Recording`, `.ne` codec, storage, or any upload path — see `saveScreenRecordingLocally`.
+   */
   onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
   getSlideState?: () => {
     previewState: SlidePreviewState;
@@ -572,6 +578,10 @@ export interface EditorMachineInput {
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
   applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
+  /**
+   * Chat (coding-agent) replay: folded from the nearest checkpoint, not a "latest
+   * snapshot" like runtime/workspace; see replayState/chat.ts.
+   */
   applyChatSnapshot?: (snapshot: ChatCheckpoint) => void;
   getWhiteboardState?: () => WhiteboardSceneState | null;
   applyWhiteboardState?: (state: WhiteboardSceneState) => void;

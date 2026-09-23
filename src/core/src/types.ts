@@ -14,8 +14,9 @@ import type {
   WorkspaceRecordingEvent,
   WorkspaceRecordingSnapshot,
 } from "../../types/workspace";
-import type { WhiteboardEvent, WhiteboardSceneState } from "./whiteboard";
-import type { ChatCheckpoint, ChatRecordingEvent } from "../../types/chat";
+import type { WhiteboardEvent } from "./whiteboard";
+import type { ChatRecordingEvent } from "../../types/chat";
+import type { EditorMachineInput } from "./machine/types";
 
 /**
  * Audio storage placeholder for serialization
@@ -173,16 +174,7 @@ export interface CursorRecordingEvent extends MouseCursorPosition {
  */
 export interface EditorFrame {
   timestamp: number;
-  state: {
-    content: string;
-    selection: EditorSelection;
-    position: EditorPosition; // Text caret position
-    viewState: monaco.editor.ICodeEditorViewState | null;
-    mouseCursor?: MouseCursorPosition; // Mouse cursor position
-    slideState?: SlidePreviewState; // Slide preview state
-    currentSlideIndex?: number; // Current slide index
-    previewState?: PreviewState; // Code preview panel state
-  };
+  state: EditorState;
 }
 
 /**
@@ -291,68 +283,16 @@ export interface RecordingStreamSink {
 }
 
 /**
- * Configuration options for the editor machine (passed as NextEditorProvider's actor input)
+ * What NextEditorProvider configures the editor with: the machine's input, which it
+ * passes as the actor's `input`, plus the options the provider handles itself.
  */
-export interface UseNextEditorConfig {
-  // Required
-  editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
-
-  // Recording Options
-  enableAudioRecording?: boolean;
-  enableCameraRecording?: boolean;
-
+export interface UseNextEditorConfig extends EditorMachineInput {
   /**
    * Optional sink for live, stream-compatible recording. When provided, the SCR3 byte
    * stream produced while recording is forwarded here as it is captured, so a remote
    * consumer can tail and replay it with `decodeRecordingStream`. Inert when omitted.
    */
   recordingStreamSink?: RecordingStreamSink;
-
-  // Playback Options
-  pauseOnUserInteraction?: boolean;
-  defaultPlaybackSpeed?: number;
-
-  // Callbacks
-  onRecordingStart?: () => void;
-  onRecordingStop?: (recording: Recording) => void;
-  onSeek?: (time: number) => void;
-  onError?: (error: Error) => void;
-
-  getSlideState?: () => {
-    previewState: SlidePreviewState;
-    currentSlideIndex: number;
-  } | null;
-  applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
-
-  // Preview state callbacks
-  getPreviewState?: () => PreviewState | null;
-  applyPreviewState?: (previewState: PreviewState) => void;
-  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
-
-  // Slides data callbacks
-  getSlides?: () => Slide[];
-  applySlides?: (slides: Slide[]) => void;
-
-  // Workspace and runtime snapshots
-  getWorkspaceSnapshot?: () => WorkspaceRecordingSnapshot | null;
-  applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
-  getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
-  applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
-
-  // Chat (coding-agent) replay — folded from the nearest checkpoint, not a
-  // "latest snapshot" like runtime/workspace; see replayState/chat.ts.
-  applyChatSnapshot?: (snapshot: ChatCheckpoint) => void;
-
-  // Whiteboard state callbacks
-  getWhiteboardState?: () => WhiteboardSceneState | null;
-  applyWhiteboardState?: (state: WhiteboardSceneState) => void;
-
-  /**
-   * Invoked once a local screen recording (opt-in, captured in parallel with the session)
-   * finishes assembling. The blob is saved to the user's disk only and never enters the
-   * `Recording`, `.ne` codec, storage, or any upload path — see `saveScreenRecordingLocally`.
-   */
-  onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
 }
 
 /**
@@ -382,15 +322,15 @@ export interface PreviewPatchReplayInput {
 }
 
 /**
- * Editor state for external manipulation
+ * Everything an editor frame records at one moment, and what replay restores.
  */
 export interface EditorState {
   content: string;
   selection: EditorSelection;
-  position: EditorPosition;
+  position: EditorPosition; // Text caret position
   viewState: monaco.editor.ICodeEditorViewState | null;
-  mouseCursor?: MouseCursorPosition;
-  slideState?: SlidePreviewState;
-  currentSlideIndex?: number;
-  previewState?: PreviewState;
+  mouseCursor?: MouseCursorPosition; // Mouse cursor position
+  slideState?: SlidePreviewState; // Slide preview state
+  currentSlideIndex?: number; // Current slide index
+  previewState?: PreviewState; // Code preview panel state
 }
