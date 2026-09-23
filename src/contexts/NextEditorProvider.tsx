@@ -110,7 +110,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   // Opt-in: forward the live SCR3 recording stream to a configured sink (inert if absent).
   useRecordingStreamSink(actorRef, config.recordingStreamSink);
 
-  // Stabilize storage and registration methods
   const exportAsFile = (recording: Recording, filename?: string) =>
     recordingStorage.current.exportAsFile(recording, filename);
   const importFromFile = () => recordingStorage.current.importFromFile();
