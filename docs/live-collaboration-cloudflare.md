@@ -206,8 +206,9 @@ the room is still closed the next time it speaks (a watching member renews aware
 - A broken network connection is removed by WebSocket close/error handling and awareness TTL
   rules.
 - The browser sends `ping` every 20 seconds and the room auto-responds `pong`; a socket that has
-  delivered nothing for 45 seconds is treated as broken and reconnected, since a half-open
-  connection may not close for minutes.
+  delivered nothing by the next heartbeat is treated as broken and reconnected, since a half-open
+  connection may not close for minutes. Heartbeats are counted rather than timed, because Chrome
+  runs a hidden tab's timers as rarely as once a minute.
 - Reconnect receives a new attempt ID and room token.
 - Offline Yjs updates remain client-side until the server's state vector has been applied.
 - Late events from an earlier provider attempt are ignored by `collaborationMachine`.

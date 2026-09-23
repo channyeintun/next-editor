@@ -444,6 +444,7 @@ async function nextClientUpdate(socket: FakeWebSocket) {
 describe("CollaborationRoomProvider connection lifecycle", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     resetPerformanceMetricsForTests();
   });
 
@@ -656,6 +657,34 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     // A half-open socket delivers nothing; the browser may not close it for minutes.
     vi.advanceTimersByTime(60_000);
     expect(provider.connectionState).toBe("reconnecting");
+    provider.stop();
+  });
+
+  it("keeps a hidden tab's socket whose heartbeat the browser throttles", async () => {
+    // Chrome runs a hidden tab's interval as rarely as once a minute; each ping
+    // is still answered long before the next heartbeat.
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const { sockets, factory } = socketRecorder();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      random: () => 0,
+      webSocketFactory: factory,
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+
+    for (let beat = 0; beat < 3; beat += 1) {
+      now += 60_000;
+      vi.advanceTimersByTime(20_000);
+      expect(sockets[0]!.sent.at(-1)).toBe("ping");
+      sockets[0]!.message("pong");
+    }
+    expect(provider.connectionState).toBe("live");
+    expect(sockets).toHaveLength(1);
     provider.stop();
   });
 
