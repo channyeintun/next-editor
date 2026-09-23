@@ -932,3 +932,44 @@ describe("CollaborationContext connection lifetime", () => {
     }
   });
 });
+
+describe("CollaborationContext room switch", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  it("starts the next room without the previous room's presence or follow target", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const remote = participant({
+      actorId: "50000000-0000-4000-8000-000000000001",
+      sessionId: "60000000-0000-4000-8000-000000000001",
+    });
+    act(() => controls.providers[0]!.emitAwareness(remote));
+    act(() => collaboration!.followParticipant(remote.sessionId));
+    expect(collaboration!.followedSessionId).toBe(remote.sessionId);
+
+    act(() => collaboration!.joinRoom("40000000-0000-4000-8000-000000000002"));
+    await waitFor(() => expect(controls.providers).toHaveLength(2));
+
+    expect(controls.providers[0]!.stopped).toBe(true);
+    expect(collaboration!.provider).toBe(controls.providers[1]);
+    expect(collaboration!.followedSessionId).toBeNull();
+    expect(collaboration!.participants.map((entry) => entry.sessionId)).not.toContain(
+      remote.sessionId,
+    );
+  });
+});

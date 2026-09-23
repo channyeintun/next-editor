@@ -673,35 +673,43 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     );
   }, [setSearchParams]);
 
+  // Clears everything that belongs to one room. The room effect runs it on
+  // every switch, into a room or out of one; the previous provider itself is
+  // stopped by that effect's cleanup.
+  const resetRoomScopedState = useCallback(() => {
+    if (applyingFollowReleaseTimerRef.current) {
+      clearTimeout(applyingFollowReleaseTimerRef.current);
+      applyingFollowReleaseTimerRef.current = null;
+    }
+    applyingFollowDepthRef.current = 0;
+    setIsApplyingFollow(false);
+    stopFollowing("room-changed");
+    setParticipantsBySession(new Map());
+    setMembers([]);
+    setInvitations([]);
+    awarenessCursorRef.current = null;
+    awarenessSurfaceRef.current = { kind: "editor", fileNodeId: null, viewport: null };
+    awarenessRevisionRef.current = 0;
+    projectionRef.current = null;
+    pendingLocalTextEditRef.current = null;
+    assetHydrationGenerationRef.current += 1;
+    assetFetchesRef.current.clear();
+    teachingProjectionRef.current = null;
+    localWhiteboardProjectionFingerprintRef.current = null;
+    appliedPresentationRevisionRef.current = null;
+    teachingHydrationGenerationRef.current += 1;
+    teachingHydrationKeyRef.current = null;
+    teachingSlideCacheRef.current.clear();
+    setTeaching(EMPTY_TEACHING_PROJECTION);
+    setTeachingSlides(null);
+    setRetryableAssetError(null);
+  }, [stopFollowing]);
+
   useEffect(() => {
     if (!roomId || inviteToken) {
       providerGenerationRef.current += 1;
-      stopFollowing("room-changed");
-      if (applyingFollowReleaseTimerRef.current) {
-        clearTimeout(applyingFollowReleaseTimerRef.current);
-        applyingFollowReleaseTimerRef.current = null;
-      }
-      applyingFollowDepthRef.current = 0;
-      setIsApplyingFollow(false);
-      setParticipantsBySession(new Map());
-      setMembers([]);
-      setInvitations([]);
-      if (providerRef.current) stopProviderAfterBestEffortFlush(providerRef.current);
-      providerRef.current = null;
-      projectionRef.current = null;
-      pendingLocalTextEditRef.current = null;
-      assetHydrationGenerationRef.current += 1;
-      assetFetchesRef.current.clear();
-      teachingProjectionRef.current = null;
-      localWhiteboardProjectionFingerprintRef.current = null;
-      appliedPresentationRevisionRef.current = null;
-      teachingHydrationGenerationRef.current += 1;
-      teachingHydrationKeyRef.current = null;
-      teachingSlideCacheRef.current.clear();
-      setTeaching(EMPTY_TEACHING_PROJECTION);
-      setTeachingSlides(null);
+      resetRoomScopedState();
       setIsTeachingLoading(false);
-      setRetryableAssetError(null);
       setProvider(null);
       return;
     }
@@ -713,7 +721,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       whiteboard: snapshotWhiteboardStore(whiteboardStore),
     };
     setIsCreatingRoom(false);
-    assetHydrationGenerationRef.current += 1;
     standaloneStoresRef.current = standalone;
     setSlidesStoreDeckBorrowed(slidesStore, true);
     slidesStore.trigger.setSlides({ slides: [] });
@@ -814,34 +821,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         if (providerGenerationRef.current === providerGeneration) setLocalError(message);
       },
     });
-    if (providerRef.current) stopProviderAfterBestEffortFlush(providerRef.current);
+    resetRoomScopedState();
     providerRef.current = nextProvider;
-    projectionRef.current = null;
-    pendingLocalTextEditRef.current = null;
-    assetFetchesRef.current.clear();
-    awarenessCursorRef.current = null;
-    awarenessSurfaceRef.current = { kind: "editor", fileNodeId: null, viewport: null };
-    awarenessRevisionRef.current = 0;
-    setMembers([]);
-    setInvitations([]);
-    setParticipantsBySession(new Map());
-    stopFollowing("room-changed");
-    setIsApplyingFollow(false);
-    applyingFollowDepthRef.current = 0;
-    if (applyingFollowReleaseTimerRef.current) {
-      clearTimeout(applyingFollowReleaseTimerRef.current);
-      applyingFollowReleaseTimerRef.current = null;
-    }
-    teachingProjectionRef.current = null;
-    localWhiteboardProjectionFingerprintRef.current = null;
-    appliedPresentationRevisionRef.current = null;
-    teachingHydrationGenerationRef.current += 1;
-    teachingHydrationKeyRef.current = null;
-    teachingSlideCacheRef.current.clear();
-    setTeaching(EMPTY_TEACHING_PROJECTION);
-    setTeachingSlides(null);
     setIsTeachingLoading(true);
-    setRetryableAssetError(null);
     setProvider(nextProvider);
     setLocalError(null);
     const subscription = nextProvider.subscribe(() => {
@@ -871,9 +853,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     inviteToken,
     providerEpoch,
     refreshRoomDataFor,
+    resetRoomScopedState,
     roomId,
     slidesStore,
-    stopFollowing,
     whiteboardStore,
   ]);
 
