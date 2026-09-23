@@ -41,6 +41,18 @@ describe("generateUniqueSlug", () => {
     expect(probed).not.toContain("introduction");
   });
 
+  // GET /api/lessons/mine and GET /api/playlists/mine are registered before the
+  // "/:slug" route and Hono dispatches in registration order, so a row whose slug
+  // is "mine" could never be fetched through its own public URL.
+  it.each(["lessons", "playlists"] as const)(
+    "never hands a %s row the slug the owner-library route answers for",
+    async (table) => {
+      const { db, probed } = makeDb([]);
+      await expect(generateUniqueSlug(db, table, "mine")).resolves.toBe("mine-1");
+      expect(probed).not.toContain("mine");
+    },
+  );
+
   it("does not reserve lesson slugs for playlists", async () => {
     const { db } = makeDb([]);
     await expect(generateUniqueSlug(db, "playlists", "introduction")).resolves.toBe("introduction");

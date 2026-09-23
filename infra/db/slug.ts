@@ -21,8 +21,20 @@ const RESERVED_LESSON_SLUGS: ReadonlySet<string> = new Set(
   seedManifest.lessons.map((lesson) => lesson.slug),
 );
 
+/**
+ * Slugs that name a route rather than a row. Both routers register
+ * `GET /mine` (the owner's library) before `GET /:slug`, and Hono dispatches in
+ * registration order, so `/api/lessons/mine` and `/api/playlists/mine` can never
+ * reach a row whose slug is "mine": viewers would get a 401 or their own
+ * library instead of it.
+ */
+const ROUTE_SEGMENT_SLUGS: ReadonlySet<string> = new Set(["mine"]);
+
 function isReservedSlug(table: SluggedTable, candidate: string): boolean {
-  return table === "lessons" && RESERVED_LESSON_SLUGS.has(candidate);
+  return (
+    ROUTE_SEGMENT_SLUGS.has(candidate) ||
+    (table === "lessons" && RESERVED_LESSON_SLUGS.has(candidate))
+  );
 }
 
 // Bounds the probe loop: the caller's title is attacker-controlled, so without a
