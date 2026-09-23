@@ -9,14 +9,17 @@ export interface ChatFoldState {
 
 export const INITIAL_CHAT_FOLD_STATE: ChatFoldState = { items: [], status: "idle", draft: "" };
 
-/** Index of the active message item: the last `message` in the list, or -1. */
-function lastMessageIndex(items: ChatItem[]): number {
+type ChatMessageItem = Extract<ChatItem, { kind: "message" }>;
+
+/** The active message item (the last `message` in the list) and its index, or null. */
+function findActiveMessage(items: ChatItem[]): { index: number; message: ChatMessageItem } | null {
   for (let index = items.length - 1; index >= 0; index -= 1) {
-    if (items[index].kind === "message") {
-      return index;
+    const item = items[index];
+    if (item.kind === "message") {
+      return { index, message: item };
     }
   }
-  return -1;
+  return null;
 }
 
 /**
@@ -53,17 +56,15 @@ export function applyChatDelta(state: ChatFoldState, delta: ChatDelta): ChatFold
       };
 
     case "content": {
-      const index = lastMessageIndex(state.items);
-      if (index === -1) {
+      const active = findActiveMessage(state.items);
+      if (!active) {
         return state;
       }
-      const message = state.items[index];
-      if (message.kind !== "message") {
-        return state;
-      }
-      const nextText = applyContentDelta(message.text, delta.delta);
       const items = state.items.slice();
-      items[index] = { ...message, text: nextText };
+      items[active.index] = {
+        ...active.message,
+        text: applyContentDelta(active.message.text, delta.delta),
+      };
       return { ...state, items };
     }
 

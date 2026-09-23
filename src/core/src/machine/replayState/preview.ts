@@ -108,14 +108,13 @@ function mergePreviewEventState(
 
   return {
     appliedState,
+    // What a seek lands on: the applied state with the scroll a mode change did not
+    // re-assert carried through, and no transient interaction to re-fire.
     retainedState: {
       ...appliedState,
       scrollTop: carriedScrollTop,
       scrollLeft: carriedScrollLeft,
       currentInteraction: undefined,
-      activeMode: resolvedActiveMode,
-      requestTab: nextRequestTab,
-      apiClientState: nextApiClientState,
     },
   };
 }
