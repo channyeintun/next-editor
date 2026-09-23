@@ -461,6 +461,10 @@ export const useUrlLoader = () => {
       }
 
       await applyStreamed(true);
+    } catch (error) {
+      // Stop the download rather than leave it stalled and open until garbage collection.
+      await reader.cancel(error).catch(() => {});
+      throw error;
     } finally {
       reader.releaseLock();
     }
@@ -597,14 +601,17 @@ export const useUrlLoader = () => {
       // Stream + progressively decode straight from the response body. Cloning the
       // response here would tee the stream and buffer the *entire* file in the unread
       // branch — defeating streaming — so the body is consumed directly. The reader
-      // only returns `false` before touching the body (not a readable stream); any
-      // failure after it starts reading throws, in which case the body is already
-      // drained and the whole-file fallback re-fetches the URL.
+      // only returns null before touching the body (not a readable stream), and the
+      // body is then read whole. Once it has started reading, only a broken download
+      // (a network TypeError) is retried by fetching the whole file again; a decode
+      // error is final, since the whole-file decoder would reject the same bytes.
       let loaded: Recording | null = null;
       let bodyConsumed = false;
       try {
         loaded = await streamRecordingFromResponse(response, url, isStale);
-      } catch {
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+        console.warn("Streaming the recording failed, fetching it whole:", error);
         bodyConsumed = true;
       }
 

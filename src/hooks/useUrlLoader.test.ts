@@ -116,19 +116,31 @@ function vttBody(): Uint8Array {
 
 /**
  * A response whose body arrives in `chunkSize` pieces, one per read, the way a slow download
- * does. `pulledBytes()` reports how much of it the loader has read so far.
+ * does. `pulledBytes()` reports how much of it the loader has read so far, `cancelled()` whether
+ * the loader cancelled the rest, and `failAfter` makes the download break after that many bytes.
  */
-function streamingResponse(bytes: Uint8Array, chunkSize = 16 * 1024) {
+function streamingResponse(
+  bytes: Uint8Array,
+  { chunkSize = 16 * 1024, failAfter = Infinity }: { chunkSize?: number; failAfter?: number } = {},
+) {
   let offset = 0;
+  let cancelled = false;
   const body = new ReadableStream<Uint8Array>(
     {
       pull(controller) {
+        if (offset >= failAfter) {
+          controller.error(new TypeError("network error"));
+          return;
+        }
         if (offset >= bytes.length) {
           controller.close();
           return;
         }
         controller.enqueue(bytes.slice(offset, offset + chunkSize));
         offset += chunkSize;
+      },
+      cancel() {
+        cancelled = true;
       },
     },
     { highWaterMark: 0 },
@@ -140,7 +152,11 @@ function streamingResponse(bytes: Uint8Array, chunkSize = 16 * 1024) {
     body,
     headers: { get: () => "application/octet-stream" },
   } as unknown as Response;
-  return { response, pulledBytes: () => Math.min(offset, bytes.length) };
+  return {
+    response,
+    pulledBytes: () => Math.min(offset, bytes.length),
+    cancelled: () => cancelled,
+  };
 }
 
 /** Incompressible text, so an encoded recording is as large as its content. */
@@ -785,5 +801,52 @@ describe("useUrlLoader", () => {
     // installed whole.
     const [extended] = vi.mocked(actions.extendRecording).mock.calls.at(-1) ?? [];
     expect(extended?.frames).toHaveLength(300);
+  });
+
+  describe("when streaming fails", () => {
+    it("reports a body that is not a .ne without downloading it again", async () => {
+      const notARecording = new Uint8Array(256 * 1024).fill(0xff);
+      const stream = streamingResponse(notARecording);
+      const fetchMock = vi.fn<() => Promise<Response>>();
+      fetchMock
+        .mockResolvedValueOnce(stream.response)
+        .mockResolvedValueOnce(
+          fakeResponse(notARecording, { ok: true, contentType: "application/octet-stream" }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      const actions = makeActionsMock();
+      const { result } = renderLoader(actions);
+
+      await expect(result.current.fetchNextEditorFile("https://example.com/a.ne")).rejects.toThrow(
+        "bad magic number",
+      );
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(stream.cancelled()).toBe(true);
+      expect(stream.pulledBytes()).toBeLessThan(notARecording.length);
+      await waitFor(() => {
+        expect(result.current.error).toMatch(/bad magic number/);
+      });
+    });
+
+    it("fetches the whole file again when the download breaks", async () => {
+      const bytes = await encodeRecordingToStream(largeRecording(40, 4000, { id: "lesson" }));
+      const broken = streamingResponse(bytes, { failAfter: 32 * 1024 });
+      const fetchMock = vi.fn<() => Promise<Response>>();
+      fetchMock
+        .mockResolvedValueOnce(broken.response)
+        .mockResolvedValueOnce(
+          fakeResponse(bytes, { ok: true, contentType: "application/octet-stream" }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      const actions = makeActionsMock();
+      const { result } = renderLoader(actions);
+
+      await result.current.fetchNextEditorFile("https://example.com/a.ne");
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const [reloaded] = vi.mocked(actions.loadRecording).mock.calls.at(-1) ?? [];
+      expect(reloaded?.frames).toHaveLength(40);
+    });
   });
 });
