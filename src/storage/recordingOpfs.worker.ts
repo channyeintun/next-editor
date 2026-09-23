@@ -73,11 +73,16 @@ async function writeWithAsyncHandle(
   bytes: Uint8Array,
 ): Promise<number> {
   const writable = await fileHandle.createWritable();
+  // Writes land in a swap file: close() commits it over the old contents, abort()
+  // throws it away. A failed write (quota) must abort, or it would replace the file
+  // with a truncated one.
   try {
     if (bytes.byteLength > 0) await writable.write(exactArrayBuffer(bytes));
-  } finally {
-    await writable.close();
+  } catch (error) {
+    await writable.abort().catch(() => {});
+    throw error;
   }
+  await writable.close();
   return bytes.byteLength;
 }
 
