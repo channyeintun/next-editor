@@ -3,6 +3,7 @@ import { uploadsRoute } from "./uploads";
 import { getCurrentUser } from "../auth/session";
 import { getLessonById } from "../../db/queries";
 import { MAX_CAPTION_BYTES } from "../../client/upload/captionConstraints";
+import { LESSON_MEDIA_EXTENSIONS } from "../lessonMediaFiles";
 
 vi.mock("../auth/session", () => ({
   getCurrentUser: vi.fn<() => Promise<{ id: string } | null>>(async () => ({ id: "user-1" })),
@@ -90,6 +91,32 @@ describe("uploadsRoute caption filenames", () => {
     const response = await uploadsRoute.request(...putRequest("/l1/media/l1.en.vtt"), env);
 
     expect(response.status).toBe(401);
+    expect(put).not.toHaveBeenCalled();
+  });
+});
+
+describe("uploadsRoute media filenames", () => {
+  // The route pattern is built from the same list lessons.ts checks a row's
+  // `ne`/`thumbnail` against, so every extension a row may point at uploads.
+  it.each(LESSON_MEDIA_EXTENSIONS)("accepts a .%s file", async (extension) => {
+    const { env, put } = createEnv();
+
+    const response = await uploadsRoute.request(...putRequest(`/l1/media/l1.${extension}`), env);
+
+    expect(response.status).toBe(200);
+    expect(put).toHaveBeenCalledWith(
+      `lessons/l1/l1.${extension}`,
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it.each(["l1.svg", "l1.html", "l1.ne.html"])("refuses %s", async (filename) => {
+    const { env, put } = createEnv();
+
+    const response = await uploadsRoute.request(...putRequest(`/l1/media/${filename}`), env);
+
+    expect(response.status).toBe(404);
     expect(put).not.toHaveBeenCalled();
   });
 });

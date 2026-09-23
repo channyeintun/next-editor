@@ -19,6 +19,7 @@ import { metadataTextError } from "../../lessons/metadataLimits";
 import { cached, getCache, invalidateCache, lessonListKey, lessonSlugKey } from "../cache";
 import { findPublishedLessonBySlug } from "../lessonCatalog";
 import { isLessonId, LESSON_ID_PATTERN } from "../lessonIds";
+import { isLessonMediaFilename } from "../lessonMediaFiles";
 
 const DEFAULT_PAGE_SIZE = 12;
 // Short TTL: a newly published/edited lesson should show up in the public
@@ -65,10 +66,6 @@ function toStoredThumbnailPath(rawThumbnail: string): string {
     : toMediaPath(rawThumbnail);
 }
 
-// Mirrors the filename charset + extension allow-list that
-// PUT /api/uploads/:id/media/:filename enforces (routes/uploads.ts).
-const UPLOADED_FILENAME_RE = /^[\w-]+\.(?:ne|ogg|weba|webm|mp4|mov|m4a|mp3|wav|png|jpg|jpeg)$/;
-
 // The upload route enforces ownership when the bytes are written, but nothing
 // used to link the `ne`/`thumbnail` value stored on the lesson row back to
 // that check — a signed-in user could point their lesson at another lesson's
@@ -76,7 +73,7 @@ const UPLOADED_FILENAME_RE = /^[\w-]+\.(?:ne|ogg|weba|webm|mp4|mov|m4a|mp3|wav|p
 // prefix with an uploadable filename.
 function isOwnUploadPath(value: string, lessonId: string): boolean {
   const prefix = `lessons/${lessonId}/`;
-  return value.startsWith(prefix) && UPLOADED_FILENAME_RE.test(value.slice(prefix.length));
+  return value.startsWith(prefix) && isLessonMediaFilename(value.slice(prefix.length));
 }
 
 // Mounted at /api/lessons in worker/index.ts. GET routes are public and

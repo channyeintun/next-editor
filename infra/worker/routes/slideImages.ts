@@ -21,7 +21,7 @@ import { isGoogleImageUrl } from "../../../src/shared/googleImageHosts";
 // URLs on Google's image hosts (this is slide-image ingestion, not a general
 // "mirror any URL into our bucket" service), and only stores raster image
 // content types. svg is deliberately excluded for the same reason as in
-// routes/uploads.ts: R2 objects are served back same-origin at /media/<key>,
+// lessonMediaFiles.ts: R2 objects are served back same-origin at /media/<key>,
 // and an SVG can carry an inline <script>. The upstream fetch itself reuses
 // proxyUrl (src/shared/proxy.ts) for its SSRF/redirect validation.
 export const slideImagesRoute = new Hono<{ Bindings: Env }>();

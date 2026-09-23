@@ -4,6 +4,7 @@ import type { Env } from "../env";
 import { getLessonById } from "../../db/queries";
 import { requireUser, type SignedInEnv } from "../auth/requireUser";
 import { LESSON_ID_PATTERN } from "../lessonIds";
+import { LESSON_MEDIA_FILENAME_PATTERN, type LessonMediaExtension } from "../lessonMediaFiles";
 import { MAX_THUMBNAIL_BYTES } from "../../client/upload/thumbnailConstraints";
 import { MAX_CAPTION_BYTES } from "../../client/upload/captionConstraints";
 import { MAX_MEDIA_BYTES } from "../../client/upload/mediaConstraints";
@@ -26,8 +27,9 @@ const CAPTION_FILENAME_RE = /\.vtt$/i;
 // declared text/html is still parsed as a document. The route's extension
 // allow-list constrains the URL, not the type the browser acts on — so the
 // type has to come from the extension. Mirrors the ALLOWED_CONTENT_TYPES
-// approach already used by routes/slideImages.ts.
-const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+// approach already used by routes/slideImages.ts. `satisfies` makes the
+// compiler refuse an uploadable extension (lessonMediaFiles.ts) with no type.
+const CONTENT_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
   ne: "application/octet-stream",
   ogg: "audio/ogg",
   weba: "audio/webm",
@@ -41,7 +43,7 @@ const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   vtt: "text/vtt",
-};
+} satisfies Record<LessonMediaExtension | "vtt", string>;
 
 function storedContentTypeFor(filename: string): string {
   const extension = filename.slice(filename.lastIndexOf(".") + 1).toLowerCase();
@@ -51,21 +53,7 @@ function storedContentTypeFor(filename: string): string {
     ? CONTENT_TYPE_BY_EXTENSION[extension]
     : "application/octet-stream";
 }
-// Recordings (audio/video/.ne) are legitimately much larger than a thumbnail
-// image, so they get the platform ceiling rather than a tuned product limit.
-// It deliberately matches Cloudflare's own request-body cap: a higher number
-// here would be unreachable — the edge already rejected the request — and would
-// only mean oversized uploads fail as an opaque 413 instead of the JSON below.
 
-// filename must be exactly what buildRecordingFiles (src/storage/RecordingStorage.ts)
-// already computed client-side (e.g. "recording-1.ogg", "<id>.ne") — constrained to a
-// safe charset + a known extension allow-list, not an arbitrary path. svg is
-// deliberately excluded (unlike the other image types): it can carry an inline
-// <script>, and R2 objects are later served back same-origin at /media/<key>
-// (see routes/media.ts), which would let a script execute in the app's own
-// origin on direct navigation.
-// :id is interpolated into the R2 key, so it is held to LESSON_ID_PATTERN
-// (see lessonIds.ts), the same charset POST /api/lessons accepts.
 const handleMediaUpload = async (c: Context<SignedInEnv>) => {
   const user = c.get("user");
 
@@ -112,8 +100,11 @@ const handleMediaUpload = async (c: Context<SignedInEnv>) => {
   return c.json({ path: key });
 };
 
+// Both params become the R2 key `lessons/<id>/<filename>`: :id is held to
+// LESSON_ID_PATTERN (lessonIds.ts), the charset POST /api/lessons accepts, and
+// :filename to the lesson media files a row may point at (lessonMediaFiles.ts).
 uploadsRoute.put(
-  `/:id{${LESSON_ID_PATTERN}}/media/:filename{[\\w-]+\\.(ne|ogg|weba|webm|mp4|mov|m4a|mp3|wav|png|jpg|jpeg)}`,
+  `/:id{${LESSON_ID_PATTERN}}/media/:filename{${LESSON_MEDIA_FILENAME_PATTERN}}`,
   requireUser,
   handleMediaUpload,
 );

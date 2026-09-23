@@ -45,7 +45,7 @@ const THUMBNAIL_EXTENSIONS = ["png", "jpg", "jpeg"] as const;
 // The upload route's filename allow-list only recognizes these extensions, so a name-derived
 // guess (e.g. a phone photo like "IMG_1234.JPG") must be normalized against it — falling back
 // to a mime-type guess, then "png", rather than ever forwarding an extension the route rejects.
-// svg is deliberately not one of them — see worker/routes/uploads.ts.
+// svg is deliberately not one of them — see worker/lessonMediaFiles.ts.
 export function thumbnailExtension(file: File): string {
   const fromName = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase();
   if (fromName && (THUMBNAIL_EXTENSIONS as readonly string[]).includes(fromName)) {
