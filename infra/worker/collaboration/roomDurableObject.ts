@@ -65,6 +65,7 @@ import {
   type StoredAppendRoomSqliteUpdateResult,
 } from "./roomSqliteDocumentStore";
 import { collaborationAssetKey } from "./assetStore";
+import { AwarenessClientOwners } from "./awarenessClientOwners";
 import { exactArrayBuffer } from "./bytes";
 import type { CollaborationRoomLocationHint } from "./roomLocation";
 import {
@@ -283,6 +284,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private readonly connectionQuota = new ConnectionQuota(MAX_USER_CONNECTIONS_PER_MINUTE);
   private sqliteCompactionScheduled = false;
   private readonly sqliteDocument: RoomSqliteDocumentStore;
+  private readonly awarenessClientOwners: AwarenessClientOwners;
   private binaryDocument: Y.Doc | null = null;
   private binaryTeachingIntegrity: CollaborationTeachingIntegrity | null = null;
   private teachingInitializationTail: Promise<void> = Promise.resolve();
@@ -290,6 +292,9 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.sqliteDocument = new RoomSqliteDocumentStore(ctx.storage as unknown as RoomSqliteStorage);
+    this.awarenessClientOwners = new AwarenessClientOwners(
+      ctx.storage as unknown as RoomSqliteStorage,
+    );
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
@@ -650,6 +655,21 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         this.awarenessClientIdInUse(entry.clientId, socket))
     ) {
       this.rejectSocket(socket, "invalid-session", "Awareness client identity changed", true, 1008);
+      return;
+    }
+    // The socket's first frame binds its client ID, which stays its member's
+    // after the socket closes (see AwarenessClientOwners).
+    if (
+      attachment.awarenessClientId === undefined &&
+      !this.awarenessClientOwners.claim(entry.clientId, attachment.userId)
+    ) {
+      this.rejectSocket(
+        socket,
+        "invalid-session",
+        "Awareness client ID belongs to another member",
+        true,
+        1008,
+      );
       return;
     }
     if (attachment.awarenessClock !== undefined && entry.clock <= attachment.awarenessClock) return;

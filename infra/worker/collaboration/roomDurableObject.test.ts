@@ -199,6 +199,14 @@ async function createRoom(
     room.webSocketClose(socket as never);
   }
 
+  /** A fresh instance of this room's object over the same storage, as after an eviction. */
+  function restart(): CollaborationRoomDurableObject {
+    return new CollaborationRoomDurableObject(
+      ctx as unknown as DurableObjectState,
+      { DB: {} } as Env,
+    );
+  }
+
   /** Appends `text` to the shared document and returns it as a client-update frame. */
   function edit(text: string, updateId = uuid()): ArrayBuffer {
     const before = Y.encodeStateVector(doc);
@@ -247,7 +255,7 @@ async function createRoom(
     );
   }
 
-  return { room, doc, connect, upgrade, disconnect, edit, persistedText, control };
+  return { room, doc, connect, upgrade, disconnect, restart, edit, persistedText, control };
 }
 
 /** The session the Worker hands the room when a member opens a socket. */
@@ -646,6 +654,40 @@ describe("CollaborationRoomDurableObject awareness", () => {
     deliverToPeer();
     expect(peerAwareness.getStates().has(7)).toBe(true);
     peerAwareness.destroy();
+  });
+
+  // y-protocols keeps one state per client ID, so the room lets only one open
+  // socket publish each ID; without an owner, a disconnected member's ID
+  // would go to whoever published it next.
+  it("refuses an awareness client ID another member published first, even after they disconnected", async () => {
+    const { room, connect, disconnect } = await createRoom();
+    const first = connect(MEMBER_ID, "editor");
+    await room.webSocketMessage(first as never, awarenessFrame(first, 7, 1));
+    disconnect(first);
+
+    const peer = connect(PEER_ID, "editor");
+    await room.webSocketMessage(peer as never, awarenessFrame(peer, 7, 1));
+    const second = connect(MEMBER_ID, "editor");
+    await room.webSocketMessage(second as never, awarenessFrame(second, 7, 2));
+
+    expect(errors(peer)).toEqual([expect.objectContaining({ code: "invalid-session" })]);
+    expect(peer.closeCode).toBe(1008);
+    expect(errors(second)).toEqual([]);
+    expect(second.closeCode).toBeNull();
+  });
+
+  it("remembers awareness client owners across a restart", async () => {
+    const { room, connect, disconnect, restart } = await createRoom();
+    const member = connect(MEMBER_ID, "editor");
+    await room.webSocketMessage(member as never, awarenessFrame(member, 7, 1));
+    disconnect(member);
+
+    const restarted = restart();
+    const peer = connect(PEER_ID, "editor");
+    await restarted.webSocketMessage(peer as never, awarenessFrame(peer, 7, 1));
+
+    expect(errors(peer)).toEqual([expect.objectContaining({ code: "invalid-session" })]);
+    expect(peer.closeCode).toBe(1008);
   });
 });
 
