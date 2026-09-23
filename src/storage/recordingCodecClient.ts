@@ -31,6 +31,9 @@ interface RecordingCodecWorkerClient {
   failed: Promise<never>;
 }
 
+/** The codec worker itself died, so the call it was running can be retried in process. */
+class CodecWorkerFailedError extends Error {}
+
 let workerClient: RecordingCodecWorkerClient | null = null;
 let workerUnavailable = false;
 let liveStreamId = 0;
@@ -68,7 +71,7 @@ function getRecordingCodecWorkerClient(): RecordingCodecWorkerClient | null {
       workerUnavailable = true;
       workerClient = null;
       worker.terminate();
-      failWorker(new Error("Recording codec worker failed"));
+      failWorker(new CodecWorkerFailedError("Recording codec worker failed"));
     };
     worker.addEventListener("error", onWorkerFailure);
     worker.addEventListener("messageerror", onWorkerFailure);
@@ -281,12 +284,18 @@ export async function decompressBinaryToRecordings(binaryData: Uint8Array): Prom
   const client = getRecordingCodecWorkerClient();
 
   // A dead worker falls back in process rather than stranding the decode — the
-  // whole point of keeping the in-process implementation around.
+  // whole point of keeping the in-process implementation around. The bytes are
+  // copied to the worker, not transferred, so that fallback still has them. A
+  // decode error is the file's, not the worker's, and is reported as it is.
   const recordings = client
-    ? await callCodecWorker(
-        client,
-        client.api.decompressBinaryToRecordings(transferUint8Array(binaryData)),
-      ).catch(() => decompressBinaryToRecordingsInProcess(binaryData))
+    ? await callCodecWorker(client, client.api.decompressBinaryToRecordings(binaryData)).catch(
+        (error: unknown) => {
+          if (error instanceof CodecWorkerFailedError) {
+            return decompressBinaryToRecordingsInProcess(binaryData);
+          }
+          throw error;
+        },
+      )
     : await decompressBinaryToRecordingsInProcess(binaryData);
   return Promise.all(recordings.map(hydrateDecodedRecordingWorkspaceAssets));
 }
