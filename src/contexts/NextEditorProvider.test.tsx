@@ -9,7 +9,7 @@ import {
 } from "./PreviewAdapterHandleContext";
 import { RuntimePanelStoreProvider } from "./RuntimePanelStoreContext";
 import { SlidesStoreProvider } from "./SlidesStoreContext";
-import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
+import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProviderImpl";
 import { WhiteboardStoreProvider } from "./WhiteboardStoreContext";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";

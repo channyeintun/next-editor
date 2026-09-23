@@ -24,7 +24,7 @@ import { WhiteboardStoreProvider } from "../contexts/WhiteboardStoreContext";
 import { RuntimePanelStoreProvider } from "../contexts/RuntimePanelStoreContext";
 import { SlidesProvider } from "../contexts/SlidesContext";
 import { WhiteboardProvider } from "../contexts/WhiteboardContext";
-import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProvider";
+import { WebContainerRuntimeProvider } from "../contexts/WebContainerRuntimeProviderImpl";
 import { WorkspaceProvider } from "../contexts/WorkspaceProvider";
 import { CollaborationProvider, useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { CollaborationVoiceProvider } from "../contexts/CollaborationVoiceContext";
