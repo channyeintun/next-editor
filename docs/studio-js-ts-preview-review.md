@@ -57,7 +57,7 @@ may be cross-origin.
 [Editor.tsx](../src/components/Editor.tsx#L331-L363)). Loading a JS/TS workspace can therefore trigger
 the normal auto-start path. Its default configuration enables startup and file-save reruns and uses
 `pnpm install` plus `pnpm dev` ([webContainerRuntimeSupport.ts](../src/contexts/webContainerRuntimeSupport.ts#L34-L40),
-[WebContainerRuntimeProviderImpl.tsx](../src/contexts/WebContainerRuntimeProviderImpl.tsx#L531-L558)).
+[WebContainerRuntimeProvider.tsx](../src/contexts/WebContainerRuntimeProvider.tsx)).
 
 The Studio preflight waits only for the project and Monaco entry model before starting the external
 audio recording. It does not wait for runtime readiness, a server-ready URL, preview iframe load, or

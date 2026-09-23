@@ -2,7 +2,7 @@ import { act, render } from "@testing-library/react";
 import { useContext } from "react";
 import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProviderImpl";
+import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import {
   useWebContainerRuntimeActions,
@@ -169,7 +169,7 @@ function renderProviders(allowAmbientStart = true) {
   };
 }
 
-describe("WebContainerRuntimeProviderImpl reverse sync", () => {
+describe("WebContainerRuntimeProvider reverse sync", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     // isWebContainerRuntimeSupported() gates the runtime on cross-origin isolation.
@@ -497,7 +497,7 @@ describe("WebContainerRuntimeProviderImpl reverse sync", () => {
   });
 });
 
-describe("WebContainerRuntimeProviderImpl runner control", () => {
+describe("WebContainerRuntimeProvider runner control", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal("crossOriginIsolated", true);
@@ -561,7 +561,7 @@ describe("WebContainerRuntimeProviderImpl runner control", () => {
   });
 });
 
-describe("WebContainerRuntimeProviderImpl subscriptions", () => {
+describe("WebContainerRuntimeProvider subscriptions", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -611,7 +611,7 @@ describe("WebContainerRuntimeProviderImpl subscriptions", () => {
   });
 });
 
-describe("WebContainerRuntimeProviderImpl saveWorkspace", () => {
+describe("WebContainerRuntimeProvider saveWorkspace", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal("crossOriginIsolated", true);

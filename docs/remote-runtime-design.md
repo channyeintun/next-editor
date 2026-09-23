@@ -83,7 +83,7 @@ src/contexts/webContainerRuntimeSupport.ts   boot singleton, fs helpers, FileSys
 src/contexts/useWebContainerRuntimeSession.ts  spawn (commands / runner / terminal shells),
                                                process wiring, event subscriptions
 src/contexts/useWebContainerWorkspaceSync.ts   mount(), fs.watch()
-src/contexts/WebContainerRuntimeProviderImpl.tsx  React provider orchestration
+src/contexts/WebContainerRuntimeProvider.tsx      React provider orchestration
 src/components/preview/runtimePreview.ts     preview URL normalization, reloadPreview()
 src/components/XtermTerminal.tsx             xterm.js ↔ process input/output/resize
 src/hooks/usePreviewController.ts            iframe.src ← previewUrl
