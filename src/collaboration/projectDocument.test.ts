@@ -233,6 +233,30 @@ describe("collaboration project document", () => {
     expect(getProjection).toHaveBeenCalledTimes(2);
   });
 
+  // Yjs cannot split a stored string inside a surrogate pair: ContentString.splice
+  // replaces both halves with U+FFFD. The narrowed replacement must therefore start
+  // and end on code point boundaries.
+  it("replaces file content without splitting a surrogate pair", () => {
+    const cases = [
+      // 😀 and 😃 share their high surrogate.
+      { before: "a😀b", after: "a😃b" },
+      // 😀 (U+1F600) and U+1FA00 share their low surrogate.
+      { before: "x😀", after: "x\u{1FA00}" },
+    ];
+    for (const { before, after } of cases) {
+      const project = createStarterHtmlCssWorkspace();
+      const path = project.entryFilePath;
+      project.files[path] = { path, name: path, language: "html", content: before };
+      const doc = new Y.Doc();
+      seedCollaborationProject(doc, project, { idFactory: idFactory() });
+      const controller = new CollaborationProjectController(doc, { canWrite: () => true });
+
+      controller.replaceFileContent(path, after);
+
+      expect(projectCollaborationDocument(doc).project.files[path].content).toBe(after);
+    }
+  });
+
   it("keeps binary bytes outside Yjs and projects content-addressed asset descriptors", () => {
     const project = createStarterHtmlCssWorkspace();
     project.files["logo.png"] = {
