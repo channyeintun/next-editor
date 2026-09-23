@@ -1,10 +1,12 @@
 import { act, render } from "@testing-library/react";
+import { useContext } from "react";
 import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProviderImpl";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions, useWorkspaceDirtyState } from "../hooks/useWorkspace";
+import { WorkspaceStoreContext } from "../stores/workspaceStore";
 import { isWorkspaceTextFile } from "../types/workspace";
 import type { WorkspaceActions, WorkspaceDirtyState } from "./WorkspaceContext";
 import type { WebContainerRuntimeActions } from "./WebContainerRuntimeContext";
@@ -488,5 +490,55 @@ describe("WebContainerRuntimeProviderImpl reverse sync", () => {
     expect(await instance.fs.readFile("gen.ts", "utf-8")).toBe("v2");
     const genFile = workspace.getProject().files["gen.ts"];
     expect(isWorkspaceTextFile(genFile) ? genFile.content : null).toBe("v2");
+  });
+});
+
+describe("WebContainerRuntimeProviderImpl subscriptions", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  // The provider re-renders on every runner output chunk. Its workspace
+  // subscription and window listeners are made once per mount, not per render.
+  it("keeps one workspace subscription and one set of window listeners across renders", () => {
+    vi.stubGlobal("crossOriginIsolated", true);
+    const addEventListener = vi.spyOn(window, "addEventListener");
+    const captured: { runtime: WebContainerRuntimeActions | null; subscribes: number } = {
+      runtime: null,
+      subscribes: 0,
+    };
+
+    function Capture() {
+      const store = useContext(WorkspaceStoreContext);
+      if (store && captured.subscribes === 0) {
+        const subscribe = store.subscribe.bind(store);
+        store.subscribe = ((...args: Parameters<typeof store.subscribe>) => {
+          captured.subscribes += 1;
+          return subscribe(...args);
+        }) as typeof store.subscribe;
+      }
+      captured.runtime = useWebContainerRuntimeActions();
+      return null;
+    }
+
+    render(
+      <WorkspaceProvider>
+        <WebContainerRuntimeProvider allowAmbientStart={false}>
+          <Capture />
+        </WebContainerRuntimeProvider>
+      </WorkspaceProvider>,
+    );
+    const blurListeners = () =>
+      addEventListener.mock.calls.filter(([type]) => type === "blur").length;
+    const blurBefore = blurListeners();
+    const subscribesBefore = captured.subscribes;
+
+    for (const runCommand of ["pnpm dev --a", "pnpm dev --b", "pnpm dev --c"]) {
+      act(() => captured.runtime?.updateRunnerConfig({ runCommand }));
+    }
+
+    expect(blurListeners()).toBe(blurBefore);
+    expect(captured.subscribes).toBe(subscribesBefore);
   });
 });

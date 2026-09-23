@@ -618,9 +618,11 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     });
   });
 
+  // Effect Events are not reactive and get a new identity every render; listing
+  // one as a dependency would resubscribe on every runner output chunk.
   useEffect(() => {
-    return subscribeWorkspaceSync(onWorkspaceSyncMutation);
-  }, [onWorkspaceSyncMutation, subscribeWorkspaceSync]);
+    return subscribeWorkspaceSync((mutation) => onWorkspaceSyncMutation(mutation));
+  }, [subscribeWorkspaceSync]);
 
   const onWorkspaceLifecycleBoundary = useEffectEvent(() => {
     const instance = instanceRef.current;
@@ -632,13 +634,14 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.addEventListener("blur", onWorkspaceLifecycleBoundary);
-    window.addEventListener("pagehide", onWorkspaceLifecycleBoundary);
+    const flushAtBoundary = () => onWorkspaceLifecycleBoundary();
+    window.addEventListener("blur", flushAtBoundary);
+    window.addEventListener("pagehide", flushAtBoundary);
     return () => {
-      window.removeEventListener("blur", onWorkspaceLifecycleBoundary);
-      window.removeEventListener("pagehide", onWorkspaceLifecycleBoundary);
+      window.removeEventListener("blur", flushAtBoundary);
+      window.removeEventListener("pagehide", flushAtBoundary);
     };
-  }, [onWorkspaceLifecycleBoundary]);
+  }, []);
 
   useEffect(() => {
     return () => {
