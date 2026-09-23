@@ -154,6 +154,7 @@ export class CollaborationRoomProvider {
   private isStopped = false;
   /** Set by `fatal()`, cleared only by an explicit `retryNow()`. */
   private isFatal = false;
+  private hasDroppedLocalChanges = false;
   private isPublishing = false;
   private flushPromise: Promise<void> | null = null;
   private bufferedBinaryUpdates: Array<
@@ -221,6 +222,15 @@ export class CollaborationRoomProvider {
 
   get hasPendingUpdates(): boolean {
     return this.pendingUpdates.length > 0 || this.outbox.length > 0 || this.isPublishing;
+  }
+
+  /**
+   * True once the room refused local edits. They stay integrated in `doc`, and
+   * reconnect sync only pulls the room's state, so this document can never match
+   * the room again: a retry has to start from a fresh provider, not `retryNow()`.
+   */
+  get hasDivergedDocument(): boolean {
+    return this.hasDroppedLocalChanges;
   }
 
   subscribe(listener: () => void): Subscription {
@@ -747,8 +757,7 @@ export class CollaborationRoomProvider {
     const couldWrite = this.canWrite;
     this.roomSession = roomSession;
     if (!couldWrite || this.canWrite || !this.hasPendingUpdates) return true;
-    this.pendingUpdates = [];
-    this.outbox = [];
+    this.dropLocalChanges();
     const message =
       "Your role changed before local edits were accepted. Copy any local work before rejoining.";
     this.onRejectedLocalChanges?.(message);
@@ -944,11 +953,18 @@ export class CollaborationRoomProvider {
     } catch {
       // The original permission response remains the actionable failure.
     }
-    this.outbox = [];
+    this.dropLocalChanges();
     const message =
       "Your role changed before offline edits were accepted. Copy any local work before rejoining.";
     this.onRejectedLocalChanges?.(message);
     this.fatal(errorMessage(error, message));
+  }
+
+  /** Discards every unacknowledged local edit, including ones still batching. */
+  private dropLocalChanges(): void {
+    this.pendingUpdates = [];
+    this.outbox = [];
+    this.hasDroppedLocalChanges = true;
   }
 
   private handleTransportFailure(message: string, attemptId: string): void {

@@ -12,6 +12,9 @@ const controls = vi.hoisted(() => ({
     emitDocumentChange: () => void;
     emitAwareness: (event: Record<string, unknown>) => void;
     setConnectionState: (state: string) => void;
+    hasDivergedDocument: boolean;
+    retries: number;
+    stopped: boolean;
   }>,
 }));
 
@@ -105,10 +108,18 @@ vi.mock("../collaboration/roomProvider", async () => {
       return { unsubscribe: () => this.listeners.delete(listener) };
     }
 
+    hasDivergedDocument = false;
+    retries = 0;
+    stopped = false;
+
     async start() {}
-    stop() {}
+    stop() {
+      this.stopped = true;
+    }
     async flushNow() {}
-    async retryNow() {}
+    async retryNow() {
+      this.retries += 1;
+    }
     async publishAwareness() {}
     setAwarenessPublicationSuppressed() {}
 
@@ -437,6 +448,50 @@ describe("CollaborationContext follow lifecycle", () => {
     await waitFor(() => expect(collaboration!.provider).toBeNull());
     expect(slidesStore!.getSnapshot().context).toEqual(standaloneSlides);
     expect(whiteboardStore!.getSnapshot().context.scene).toEqual(standaloneWhiteboard);
+    view.unmount();
+  });
+});
+
+describe("CollaborationContext retry", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  it("resumes a failed room, but rebuilds it once the room has refused local edits", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const first = controls.providers[0]!;
+    act(() => first.setConnectionState("failed"));
+
+    await act(async () => {
+      await collaboration!.retry();
+    });
+    expect(first.retries).toBe(1);
+    expect(controls.providers).toHaveLength(1);
+
+    // The refused edits are still in this document; resuming it would keep
+    // showing text the room never accepted.
+    first.hasDivergedDocument = true;
+    act(() => {
+      void collaboration!.retry();
+    });
+    await waitFor(() => expect(controls.providers).toHaveLength(2));
+    expect(first.retries).toBe(1);
+    expect(first.stopped).toBe(true);
+    expect(collaboration!.provider).toBe(controls.providers[1]);
     view.unmount();
   });
 });

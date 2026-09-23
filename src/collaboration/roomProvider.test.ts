@@ -479,6 +479,8 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     expect(provider.actor.getSnapshot().context.error).toBe(
       "Collaboration reconnect attempts were exhausted",
     );
+    // Nothing was refused, so retrying may resume this document.
+    expect(provider.hasDivergedDocument).toBe(false);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(sockets).toHaveLength(3);
     provider.stop();
@@ -593,6 +595,7 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     expect(rejected).toHaveLength(1);
     expect(provider.connectionState).toBe("failed");
     expect(provider.hasPendingUpdates).toBe(false);
+    expect(provider.hasDivergedDocument).toBe(true);
     expect(sockets).toHaveLength(1);
     provider.stop();
   });
@@ -605,7 +608,7 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
       roomId: ROOM_ID,
       api,
       clientId: CLIENT_ID,
-      batchWindowMs: 0,
+      batchWindowMs: 60_000,
       webSocketFactory: factory,
       onRejectedLocalChanges: (message) => rejected.push(message),
     });
@@ -613,7 +616,10 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     await openAndSync(provider, sockets[0]!, new Y.Doc());
 
     provider.doc.getText("source").insert(0, "mine");
+    void provider.flushNow();
     const update = await nextClientUpdate(sockets[0]!);
+    // Typed while the rejected update waits for its ack; it builds on "mine".
+    provider.doc.getText("source").insert(4, " and more");
     api.session = { ...roomSession("viewer"), room: { ...roomSession().room, roleVersion: 2 } };
     sockets[0]!.message({
       type: "error",
@@ -627,6 +633,8 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     expect(rejected).toHaveLength(1);
     expect(provider.hasPendingUpdates).toBe(false);
     expect(provider.canWrite).toBe(false);
+    // "mine" is still in this document and the room will never have it.
+    expect(provider.hasDivergedDocument).toBe(true);
     provider.stop();
   });
 });

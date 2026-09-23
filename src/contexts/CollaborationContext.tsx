@@ -334,6 +334,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const assetHydrationGenerationRef = useRef(0);
   const undoManagerRef = useRef<Y.UndoManager | null>(null);
   const [runtimeVersion, setRuntimeVersion] = useState(0);
+  // Bumped by `retry` to rebuild the room's provider and document from scratch.
+  const [providerEpoch, setProviderEpoch] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
   const [isAcceptingInvitation, setIsAcceptingInvitation] = useState(false);
@@ -824,6 +826,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     hydrateProjectionAssets,
     inviteToken,
     projectTeachingState,
+    providerEpoch,
     refreshRoomDataFor,
     roomId,
     slidesStore,
@@ -1277,7 +1280,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
   const retry = useCallback(async () => {
     setLocalError(null);
-    await providerRef.current?.retryNow();
+    const current = providerRef.current;
+    if (!current) return;
+    // Edits the room refused are still in this document and a reconnect would
+    // keep showing them, so rebuild the provider and sync a fresh document.
+    if (current.hasDivergedDocument) {
+      setProviderEpoch((epoch) => epoch + 1);
+      return;
+    }
+    await current.retryNow();
   }, []);
 
   const retryAssets = useCallback(() => {
