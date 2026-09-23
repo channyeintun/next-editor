@@ -185,6 +185,9 @@ export class RoomSqliteDocumentStore {
     // decodeYjsSnapshot enforces the 4 MiB create limit, far below the room's
     // accepted-bytes quota, so a new room always fits it.
     const snapshotBytes = decodeYjsSnapshot(snapshot);
+    // Like append: refuse bytes Yjs cannot read before they become the room's
+    // durable snapshot, which every later materialization would then fail on.
+    Y.decodeUpdate(snapshotBytes);
     this.storage.transactionSync(() => {
       const existing = this.storage.sql
         .exec<{ singleton: number }>(
