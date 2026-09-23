@@ -4,7 +4,11 @@ import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProviderImpl";
 import { WorkspaceProvider } from "./WorkspaceProvider";
-import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
+import {
+  useWebContainerRuntimeActions,
+  useWebContainerRuntimeMetadata,
+  useWebContainerRuntimeSaveWorkspace,
+} from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions, useWorkspaceDirtyState } from "../hooks/useWorkspace";
 import { WorkspaceStoreContext } from "../stores/workspaceStore";
 import { isWorkspaceTextFile } from "../types/workspace";
@@ -540,5 +544,120 @@ describe("WebContainerRuntimeProviderImpl subscriptions", () => {
 
     expect(blurListeners()).toBe(blurBefore);
     expect(captured.subscribes).toBe(subscribesBefore);
+  });
+});
+
+describe("WebContainerRuntimeProviderImpl saveWorkspace", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("crossOriginIsolated", true);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  async function startWithFailingWrites() {
+    const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
+    const { instance } = createFakeInstance(fakeFs);
+    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const boot = vi.mocked(getOrBootSharedWebContainer);
+    boot.mockReset();
+    boot.mockResolvedValue(instance);
+
+    const captured: {
+      runtime: WebContainerRuntimeActions | null;
+      workspace: WorkspaceActions | null;
+      save: (() => Promise<void>) | null;
+      errorMessage: string | null;
+    } = { runtime: null, workspace: null, save: null, errorMessage: null };
+    function Capture() {
+      captured.runtime = useWebContainerRuntimeActions();
+      captured.workspace = useWorkspaceActions();
+      captured.save = useWebContainerRuntimeSaveWorkspace();
+      captured.errorMessage = useWebContainerRuntimeMetadata().errorMessage;
+      return null;
+    }
+    render(
+      <WorkspaceProvider>
+        <WebContainerRuntimeProvider allowAmbientStart={false}>
+          <Capture />
+        </WebContainerRuntimeProvider>
+      </WorkspaceProvider>,
+    );
+    await act(async () => {
+      await captured.runtime?.startRuntime();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    boot.mockClear();
+
+    // Writes hang until the test fails them, so a reset can land mid-write.
+    const pendingWrites: Array<(error: Error) => void> = [];
+    vi.mocked(instance.fs.writeFile).mockImplementation(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          pendingWrites.push(reject);
+        }),
+    );
+    const failWrites = async (error: Error) => {
+      for (let round = 0; round < 5; round += 1) {
+        for (const reject of pendingWrites.splice(0)) reject(error);
+        await vi.advanceTimersByTimeAsync(0);
+      }
+    };
+    // A project-level change, so there is a file for the sync to write.
+    act(() => captured.workspace?.createFile("notes.txt", "draft"));
+    return { captured, failWrites, boot };
+  }
+
+  // Both callers (CodeEditor's Ctrl+S and replayed workspace snapshots) fire
+  // and forget; the failure is reported in the runner console instead.
+  it("reports a failed sync without rejecting", async () => {
+    const { captured, failWrites } = await startWithFailingWrites();
+
+    let saved: Promise<void> | undefined;
+    await act(async () => {
+      saved = captured.save?.();
+      await failWrites(new Error("disk full"));
+    });
+
+    await expect(saved).resolves.toBeUndefined();
+    expect(captured.errorMessage).toBe("disk full");
+  });
+
+  it("does not report a sync that a runtime reset abandoned", async () => {
+    const { captured, failWrites } = await startWithFailingWrites();
+    act(() => captured.runtime?.updateRunnerConfig({ runOnFileSave: false }));
+
+    let saved: Promise<void> | undefined;
+    await act(async () => {
+      saved = captured.save?.();
+      await vi.advanceTimersByTimeAsync(0);
+      captured.runtime?.resetRuntime();
+      await failWrites(new Error("container torn down"));
+    });
+
+    await expect(saved).resolves.toBeUndefined();
+    expect(captured.errorMessage).toBeNull();
+  });
+
+  // runOnFileSave reruns the runner after a save; a save that straddled a
+  // reset must not boot the runtime the reset just stopped.
+  it("does not restart a runtime that was reset while the save synced", async () => {
+    const { captured, failWrites, boot } = await startWithFailingWrites();
+
+    let saved: Promise<void> | undefined;
+    await act(async () => {
+      saved = captured.save?.();
+      await vi.advanceTimersByTimeAsync(0);
+      captured.runtime?.resetRuntime();
+      await failWrites(new Error("container torn down"));
+    });
+
+    await expect(saved).resolves.toBeUndefined();
+    expect(boot).not.toHaveBeenCalled();
   });
 });

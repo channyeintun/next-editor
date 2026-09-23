@@ -483,6 +483,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       return;
     }
 
+    const generation = getRuntimeGeneration();
     const instance = instanceRef.current;
 
     if (instance) {
@@ -491,9 +492,19 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
         // covers mutations that landed during an effect subscription handoff.
         await queueProjectSync({ instance, project: getProject() });
       } catch (error) {
-        setErrorMessage(getRuntimeErrorMessage(error));
-        throw error;
+        // Both callers fire and forget, so the runner console is where a
+        // failed save is reported.
+        if (isRuntimeGenerationActive(generation)) {
+          setErrorMessage(getRuntimeErrorMessage(error));
+        }
+        return;
       }
+    }
+
+    // A reset during the sync abandoned this save; rerunning would boot the
+    // runtime the reset just stopped.
+    if (!isRuntimeGenerationActive(generation)) {
+      return;
     }
 
     const currentRunnerConfig = runnerConfigRef.current;
@@ -609,12 +620,15 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       return;
     }
 
+    const generation = getRuntimeGeneration();
     const queuedSync =
       mutation.kind === "file"
         ? queueFileSync({ instance, file: mutation.file })
         : queueProjectSync({ instance, project: mutation.project });
     void queuedSync.catch((error) => {
-      setErrorMessage(getRuntimeErrorMessage(error));
+      if (isRuntimeGenerationActive(generation)) {
+        setErrorMessage(getRuntimeErrorMessage(error));
+      }
     });
   });
 
@@ -627,8 +641,11 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const onWorkspaceLifecycleBoundary = useEffectEvent(() => {
     const instance = instanceRef.current;
     if (!instance || !hasMountedProjectRef.current) return;
+    const generation = getRuntimeGeneration();
     void flushWorkspaceSync({ instance }).catch((error) => {
-      setErrorMessage(getRuntimeErrorMessage(error));
+      if (isRuntimeGenerationActive(generation)) {
+        setErrorMessage(getRuntimeErrorMessage(error));
+      }
     });
   });
 
