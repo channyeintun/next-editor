@@ -44,6 +44,8 @@ import {
 } from "../contexts/CollaborationVoiceContext";
 import { applyVoiceRecordingPolicy, isVoiceJoinedForRecording } from "../voice/recorderBridge";
 import { canRecordInLiveRoom } from "../collaboration/recordingPolicy";
+import { formatPlaybackTime } from "../utils/formatPlaybackTime";
+import LearnerVersionsMenu from "./LearnerVersionsMenu";
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -62,13 +64,6 @@ interface MediaControlsProps {
 }
 
 type RecordingAudioSourceOption = "microphone" | "external";
-
-const formatTime = (milliseconds: number): string => {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-};
 
 const readCameraOverlayVisibility = (): boolean => {
   if (typeof window === "undefined") return true;
@@ -130,7 +125,7 @@ const PlaybackTimer = ({
     <span
       className={`text-slate-400 font-mono pointer-events-auto ${large ? "text-4xl" : "text-sm"}`}
     >
-      {isRecording ? formatTime(displayTime) : `-${formatTime(displayTime)}`}
+      {isRecording ? formatPlaybackTime(displayTime) : `-${formatPlaybackTime(displayTime)}`}
     </span>
   );
 };
@@ -609,6 +604,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 )}
               </button>
             ) : null}
+
+            <LearnerVersionsMenu
+              recordingId={currentRecording.id}
+              iconSize={controlIconSize}
+              buttonClassName={transportButtonWidth}
+            />
 
             {hasCaptionTracks ? (
               <div className="relative pointer-events-auto">

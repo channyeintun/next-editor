@@ -15,6 +15,7 @@ import type {
 import type { WhiteboardEvent } from "../core/src/whiteboard";
 import type { ChatRecordingEvent } from "../types/chat";
 import type { TextEditEvent } from "../types/textEdit";
+import type { WorkspaceRecordingSnapshot } from "../types/workspace";
 import type * as monaco from "monaco-editor";
 
 // 1. Actions Context: Stable functions, refs, and storage methods
@@ -31,6 +32,10 @@ export interface NextEditorActions {
   pause: () => void;
   stop: () => void;
   seekTo: (time: number) => void;
+  /** Pause and bring back the viewer's saved edits where they were made. */
+  restoreLearnerWorkspace: (recordingTime: number, snapshot: WorkspaceRecordingSnapshot) => void;
+  /** Save the viewer's edits now, if they have any. */
+  preserveLearnerWorkspace: () => void;
   setPlaybackSpeed: (speed: number) => void;
   setVolume: (volume: number) => void;
   loadRecording: (recording: Recording) => void;

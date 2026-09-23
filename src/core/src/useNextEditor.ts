@@ -14,6 +14,7 @@ import type {
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";
+import type { WorkspaceRecordingSnapshot } from "../../types/workspace";
 import { isAtPlaybackEnd } from "./machine/editorMachineHelpers";
 import type { SnapshotFrom } from "xstate";
 
@@ -130,6 +131,14 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     actorRef.send({ type: "SEEK", time });
   };
 
+  const restoreLearnerWorkspace = (recordingTime: number, snapshot: WorkspaceRecordingSnapshot) => {
+    actorRef.send({ type: "RESTORE_LEARNER_WORKSPACE", recordingTime, snapshot });
+  };
+
+  const preserveLearnerWorkspace = () => {
+    actorRef.send({ type: "PRESERVE_LEARNER_WORKSPACE" });
+  };
+
   const setPlaybackSpeed = (speed: number) => {
     actorRef.send({ type: "SET_SPEED", speed });
   };
@@ -213,6 +222,8 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     pause,
     stop,
     seekTo,
+    restoreLearnerWorkspace,
+    preserveLearnerWorkspace,
     setPlaybackSpeed,
     setVolume,
     loadRecording,

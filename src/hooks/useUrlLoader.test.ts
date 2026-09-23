@@ -52,6 +52,8 @@ function makeActionsMock(): NextEditorActions {
     pause: vi.fn(),
     stop: vi.fn(),
     seekTo: vi.fn(),
+    restoreLearnerWorkspace: vi.fn(),
+    preserveLearnerWorkspace: vi.fn(),
     setPlaybackSpeed: vi.fn(),
     setVolume: vi.fn(),
     loadRecording: vi.fn(),

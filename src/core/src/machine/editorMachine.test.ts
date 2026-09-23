@@ -35,6 +35,7 @@ import {
   type DmpCodec,
 } from "../../../storage/dmpCodec/dmpCodec";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { LearnerWorkspaceSave } from "./types";
 
 const selection = {
   startLineNumber: 1,
@@ -4048,6 +4049,176 @@ describe("editorMachine pointer captures while recording", () => {
 
     expect(actor.getSnapshot().context.currentFrame?.state.content).toBe("let b = 2;");
     expect(actor.getSnapshot().context.session!.frames).toHaveLength(2);
+    actor.stop();
+  });
+});
+
+describe("editorMachine learner workspace", () => {
+  // The viewer's workspace, as NextEditorProvider exposes it: the replay writes it
+  // through applyWorkspaceSnapshot, and the viewer edits it directly.
+  const setup = async () => {
+    let workspace = createWorkspaceSnapshot("outside");
+    const saves: LearnerWorkspaceSave[] = [];
+    const recording: Recording = {
+      ...createRecording(),
+      workspaceEvents: [
+        { timestamp: 0, snapshot: createWorkspaceSnapshot("recorded-0") },
+        { timestamp: 500, snapshot: createWorkspaceSnapshot("recorded-500") },
+      ],
+    };
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        getWorkspaceSnapshot: () => workspace,
+        applyWorkspaceSnapshot: (snapshot) => {
+          workspace = snapshot;
+        },
+        onLearnerWorkspaceSaved: (save) => {
+          saves.push(save);
+        },
+      },
+    }).start();
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    return {
+      actor,
+      saves,
+      content: () => workspace.project.files["index.html"].content,
+      edit: (content: string) => {
+        workspace = createWorkspaceSnapshot(content, workspace.sidebarScrollTop);
+      },
+      look: () => {
+        // Scrolling the file tree is not an edit.
+        workspace = { ...workspace, sidebarScrollTop: (workspace.sidebarScrollTop ?? 0) + 40 };
+      },
+    };
+  };
+
+  it("keeps the viewer's edits before resuming hands the workspace back", async () => {
+    const { actor, saves, content, edit } = await setup();
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "TICK", currentTime: 600 });
+    actor.send({ type: "PAUSE" });
+    edit("my version");
+
+    actor.send({ type: "PLAY" });
+
+    expect(saves).toEqual([
+      {
+        recordingId: "recording-1",
+        recordingTime: 600,
+        snapshot: createWorkspaceSnapshot("my version"),
+      },
+    ]);
+    expect(actor.getSnapshot().context.hasManualWorkspaceOverride).toBe(false);
+    expect(actor.getSnapshot().context.learnerWorkspaceBaseline).toBeNull();
+    // The recording owns the workspace again.
+    actor.send({ type: "SEEK", time: 0 });
+    expect(content()).toBe("recorded-0");
+    actor.stop();
+  });
+
+  it("saves nothing when the viewer only looked around", async () => {
+    const { actor, saves, look } = await setup();
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "PAUSE" });
+    look();
+
+    actor.send({ type: "PLAY" });
+
+    expect(saves).toEqual([]);
+    actor.stop();
+  });
+
+  it("keeps edits before a paused scrub replaces them", async () => {
+    const { actor, saves, content, edit } = await setup();
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "PAUSE" });
+    edit("before scrub");
+
+    actor.send({ type: "SEEK", time: 600 });
+
+    expect(saves.map((save) => save.snapshot.project.files["index.html"].content)).toEqual([
+      "before scrub",
+    ]);
+    expect(content()).toBe("recorded-500");
+    // The scrub handed over a fresh baseline: scrubbing again saves nothing new.
+    actor.send({ type: "SEEK", time: 0 });
+    expect(saves).toHaveLength(1);
+    actor.stop();
+  });
+
+  it("hands the workspace over at the end and keeps edits made there on replay", async () => {
+    const { actor, saves, edit } = await setup();
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "FINISHED" });
+    expect(actor.getSnapshot().context.hasManualWorkspaceOverride).toBe(true);
+    edit("after the end");
+
+    actor.send({ type: "PLAY" });
+
+    expect(saves.map((save) => save.snapshot.project.files["index.html"].content)).toEqual([
+      "after the end",
+    ]);
+    expect(actor.getSnapshot().matches({ playback: "playing" })).toBe(true);
+    actor.stop();
+  });
+
+  it("saves on request without leaving the pause, and only once per change", async () => {
+    const { actor, saves, edit } = await setup();
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "PAUSE" });
+    edit("draft");
+
+    actor.send({ type: "PRESERVE_LEARNER_WORKSPACE" });
+    actor.send({ type: "PRESERVE_LEARNER_WORKSPACE" });
+
+    expect(saves).toHaveLength(1);
+    expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+    // Saving leaves the edits in place, and PLAY does not save them a second time.
+    actor.send({ type: "PLAY" });
+    expect(saves).toHaveLength(1);
+    actor.stop();
+  });
+
+  it("restores saved edits at the point they were made, keeping unsaved ones first", async () => {
+    const { actor, saves, content, edit } = await setup();
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "PAUSE" });
+    edit("unsaved");
+
+    actor.send({
+      type: "RESTORE_LEARNER_WORKSPACE",
+      recordingTime: 600,
+      snapshot: createWorkspaceSnapshot("saved earlier"),
+    });
+
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.matches({ playback: "paused" })).toBe(true);
+    expect(snapshot.context.timeline.currentTime).toBe(600);
+    expect(content()).toBe("saved earlier");
+    expect(saves.map((save) => save.snapshot.project.files["index.html"].content)).toEqual([
+      "unsaved",
+    ]);
+    // The restored version is the viewer's again, so resuming keeps it.
+    actor.send({ type: "PLAY" });
+    expect(saves.at(-1)?.snapshot.project.files["index.html"].content).toBe("saved earlier");
+    actor.stop();
+  });
+
+  it("restores from playback by pausing first", async () => {
+    const { actor, content } = await setup();
+    actor.send({ type: "PLAY" });
+
+    actor.send({
+      type: "RESTORE_LEARNER_WORKSPACE",
+      recordingTime: 100,
+      snapshot: createWorkspaceSnapshot("saved earlier"),
+    });
+
+    expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+    expect(actor.getSnapshot().context.timeline.currentTime).toBe(100);
+    expect(content()).toBe("saved earlier");
     actor.stop();
   });
 });

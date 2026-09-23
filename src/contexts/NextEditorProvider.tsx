@@ -23,6 +23,7 @@ import { saveScreenRecordingLocally } from "../storage/screenRecordingSave";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import type { WorkspaceRecordingSnapshot } from "../types/workspace";
 import { getAgentStore } from "../agent/agentStore";
+import { keepLearnerWorkspace } from "../stores/learnerVersionsStore";
 
 interface NextEditorProviderProps {
   children: React.ReactNode;
@@ -71,6 +72,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     pause,
     stop,
     seekTo,
+    restoreLearnerWorkspace,
+    preserveLearnerWorkspace,
     setPlaybackSpeed,
     setVolume,
     loadRecording,
@@ -89,6 +92,23 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handleChatEvent,
   } = useNextEditorActorActions(actorRef);
   useNextEditorInteractionEffects(actorRef, config);
+
+  // Leaving the page (closing the tab, navigating, a phone backgrounding it) is the
+  // one hand-back that sends the machine nothing, so ask it to keep the viewer's
+  // edits while there is still time. `pagehide` covers bfcache navigations that never
+  // fire `unload`; a hidden tab may be killed without either.
+  useEffect(() => {
+    const preserve = () => actorRef.send({ type: "PRESERVE_LEARNER_WORKSPACE" });
+    const preserveWhenHidden = () => {
+      if (document.visibilityState === "hidden") preserve();
+    };
+    window.addEventListener("pagehide", preserve);
+    document.addEventListener("visibilitychange", preserveWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", preserve);
+      document.removeEventListener("visibilitychange", preserveWhenHidden);
+    };
+  }, [actorRef]);
   const previewHandle = usePreviewAdapterHandle();
   const stopRecordingPromiseRef = useRef<Promise<void> | null>(null);
 
@@ -129,6 +149,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     pause,
     stop,
     seekTo,
+    restoreLearnerWorkspace,
+    preserveLearnerWorkspace,
     setPlaybackSpeed,
     setVolume,
     loadRecording,
@@ -354,6 +376,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     // the Recording, the .ne codec, IndexedDB, or any upload path. `saveScreenRecordingLocally` is
     // the blob's sole exit.
     onScreenRecordingReady: (payload) => saveScreenRecordingLocally(payload),
+    // Local-only too: the viewer's own edits to a lesson stay in this browser's IndexedDB.
+    onLearnerWorkspaceSaved: (save) => void keepLearnerWorkspace(save),
   };
 
   return (

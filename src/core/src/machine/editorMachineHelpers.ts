@@ -409,6 +409,7 @@ export const APPLY_REPLAY_STATE_ACTIONS = [
 export const SYNC_PAUSED_WORKSPACE_ACTIONS = [
   "adoptPlaybackWorkspaceAtPause",
   "detachPlaybackWorkspace",
+  "captureLearnerWorkspaceBaseline",
 ] as const;
 
 export const APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS = [

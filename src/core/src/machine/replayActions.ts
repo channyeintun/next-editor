@@ -1,8 +1,12 @@
-import type { EditorMachineContext, EditorMachineEvent } from "./types";
+import type { EditorMachineContext, EditorMachineEvent, LearnerWorkspaceSave } from "./types";
 import type { EditorFrame, Recording } from "../types";
 import type { FrameDelta } from "../utils/deltaTypes";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
-import { areWorkspaceSnapshotsEqual, isWorkspaceTextFile } from "../../../types/workspace";
+import {
+  areWorkspaceProjectsEqual,
+  areWorkspaceSnapshotsEqual,
+  isWorkspaceTextFile,
+} from "../../../types/workspace";
 import {
   reconstructFrameAtIndex,
   applyFrameDeltaToNormalized,
@@ -194,6 +198,7 @@ export const setRecording = (
     recording,
     recordingStreamCursor: 0,
     hasManualWorkspaceOverride: false,
+    learnerWorkspaceBaseline: null,
     pendingPlaybackEditorSync: false,
     playbackAudioSpawned: false,
     timeline: {
@@ -589,12 +594,56 @@ export const adoptPlaybackWorkspaceAtPause = ({
   });
 };
 
+/**
+ * Hands the workspace to the viewer (pause, end): remembers it as the recording left
+ * it, so `getLearnerWorkspaceSave` can tell the viewer's own edits from the lesson's.
+ */
+export const captureLearnerWorkspaceBaseline = ({
+  context,
+}: {
+  context: EditorMachineContext;
+}): Partial<EditorMachineContext> => ({
+  learnerWorkspaceBaseline: context.getWorkspaceSnapshot?.() ?? null,
+});
+
+/**
+ * The viewer's edits, if the workspace differs from the baseline it was handed, or
+ * null. Only the file and folder tree and file contents count: opening a file,
+ * collapsing a folder or scrolling is looking around the lesson, not changing it.
+ */
+export const getLearnerWorkspaceSave = (
+  context: EditorMachineContext,
+): LearnerWorkspaceSave | null => {
+  const baseline = context.learnerWorkspaceBaseline;
+  if (!baseline || !context.recording) return null;
+  const current = context.getWorkspaceSnapshot?.();
+  if (!current || areWorkspaceProjectsEqual(baseline.project, current.project)) return null;
+  return {
+    recordingId: context.recording.id,
+    recordingTime: context.timeline.currentTime,
+    snapshot: current,
+  };
+};
+
+/** Second step of a restore: the paused seek has landed, so lay the saved edits over it. */
+export const applyLearnerWorkspace = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): void => {
+  if (event.type !== "APPLY_LEARNER_WORKSPACE") return;
+  context.applyWorkspaceSnapshot?.(event.snapshot);
+};
+
 export const resetPlayback = ({
   context,
 }: {
   context: EditorMachineContext;
 }): Partial<EditorMachineContext> => ({
   hasManualWorkspaceOverride: false,
+  learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: false,
   timeline: {
     ...context.timeline,
@@ -625,6 +674,7 @@ export const reattachPlaybackWorkspace = ({
   context: EditorMachineContext;
 }): Partial<EditorMachineContext> => ({
   hasManualWorkspaceOverride: false,
+  learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: context.hasManualWorkspaceOverride,
 });
 
@@ -677,6 +727,7 @@ export const invalidateRenderedPlaybackState = (): Partial<EditorMachineContext>
  */
 export const clearRecording = {
   hasManualWorkspaceOverride: false,
+  learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: false,
   recording: null,
   currentFrame: null,

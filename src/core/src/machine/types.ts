@@ -308,6 +308,13 @@ export interface EditorMachineContext {
   lastSyncTime?: number;
   /** Whether manual workspace changes should suppress recorded workspace replay */
   hasManualWorkspaceOverride: boolean;
+  /**
+   * The recorded workspace as it was handed to the viewer — on load, on pause, at the
+   * end — or as they had it when their edits were last saved. Anything the viewer
+   * changes after that is theirs, and is saved through `onLearnerWorkspaceSaved`
+   * before the recording takes the workspace back. Null while the recording owns it.
+   */
+  learnerWorkspaceBaseline: WorkspaceRecordingSnapshot | null;
   /** Whether the next editor mount should resync playback state */
   pendingPlaybackEditorSync: boolean;
   /** Whether the playback audio element has been spawned for the loaded recording */
@@ -318,6 +325,8 @@ export interface EditorMachineContext {
   onRecordingStop?: (recording: Recording) => void;
   /** Callback invoked after seeking */
   onSeek?: (time: number) => void;
+  /** Callback invoked when the viewer's own edits are about to be replaced by the recording */
+  onLearnerWorkspaceSaved?: (save: LearnerWorkspaceSave) => void;
   /** Callback invoked after machine errors */
   onError?: (error: Error) => void;
   /** Callback invoked once a local screen recording finishes assembling (local-save only). */
@@ -420,6 +429,33 @@ export type FinishedEvent = { type: "FINISHED" };
 /** User interaction during playback */
 export type UserInteractionEvent = { type: "USER_INTERACTION" };
 
+/**
+ * The viewer's edits to a lesson, saved before the recording took the workspace back
+ * (resume, seek, stop, leaving the page). `recordingTime` is where in the lesson they
+ * were made.
+ */
+export interface LearnerWorkspaceSave {
+  recordingId: string;
+  recordingTime: number;
+  snapshot: WorkspaceRecordingSnapshot;
+}
+
+/** Save the viewer's edits now, if they have any (e.g. the page is being hidden). */
+export type PreserveLearnerWorkspaceEvent = { type: "PRESERVE_LEARNER_WORKSPACE" };
+
+/** Bring back a saved version of the viewer's edits, at the point in the lesson it was made. */
+export type RestoreLearnerWorkspaceEvent = {
+  type: "RESTORE_LEARNER_WORKSPACE";
+  recordingTime: number;
+  snapshot: WorkspaceRecordingSnapshot;
+};
+
+/** Internal second step of RESTORE_LEARNER_WORKSPACE, once the paused seek has landed. */
+export type ApplyLearnerWorkspaceEvent = {
+  type: "APPLY_LEARNER_WORKSPACE";
+  snapshot: WorkspaceRecordingSnapshot;
+};
+
 /** Update editor reference */
 export type SetEditorRefEvent = {
   type: "SET_EDITOR_REF";
@@ -504,6 +540,9 @@ export type EditorMachineEvent =
   | TickEvent
   | FinishedEvent
   | UserInteractionEvent
+  | PreserveLearnerWorkspaceEvent
+  | RestoreLearnerWorkspaceEvent
+  | ApplyLearnerWorkspaceEvent
   | SetEditorRefEvent
   | SlideEventOccurred
   | PreviewEventOccurred
@@ -544,6 +583,11 @@ export interface EditorMachineInput {
   onRecordingStart?: () => void;
   onRecordingStop?: (recording: Recording) => void;
   onSeek?: (time: number) => void;
+  /**
+   * Invoked with the viewer's own edits just before the recording replaces them, so
+   * the app can keep them (see LearnerWorkspaceSave).
+   */
+  onLearnerWorkspaceSaved?: (save: LearnerWorkspaceSave) => void;
   onError?: (error: Error) => void;
   /**
    * Invoked once a local screen recording (opt-in, captured in parallel with the session)
@@ -638,6 +682,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
   error: null,
   hasManualWorkspaceOverride: false,
+  learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: false,
   playbackAudioSpawned: false,
   lastAppliedFrameIndex: -1,
@@ -665,6 +710,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   onRecordingStart: input.onRecordingStart,
   onRecordingStop: input.onRecordingStop,
   onSeek: input.onSeek,
+  onLearnerWorkspaceSaved: input.onLearnerWorkspaceSaved,
   onError: input.onError,
   onScreenRecordingReady: input.onScreenRecordingReady,
 });

@@ -1,4 +1,14 @@
-import { setup, assign, and, not, stateIn, stopChild, enqueueActions, fromPromise } from "xstate";
+import {
+  setup,
+  assign,
+  and,
+  not,
+  raise,
+  stateIn,
+  stopChild,
+  enqueueActions,
+  fromPromise,
+} from "xstate";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
 import { createIdleAudioState, createInitialContext } from "./types";
 import type { MouseCursorPosition, Recording } from "../types";
@@ -71,6 +81,9 @@ import {
   setVolume,
   clearCursorDecorations,
   adoptPlaybackWorkspaceAtPause,
+  captureLearnerWorkspaceBaseline,
+  getLearnerWorkspaceSave,
+  applyLearnerWorkspace,
   resetPlayback,
   invalidateAppliedPlaybackState,
   detachPlaybackWorkspace,
@@ -251,6 +264,17 @@ export const editorMachine = setup({
     setVolume: assign(setVolume),
     clearCursorDecorations: assign(clearCursorDecorations),
     adoptPlaybackWorkspaceAtPause,
+    captureLearnerWorkspaceBaseline: assign(captureLearnerWorkspaceBaseline),
+    // Before the recording takes the workspace back, hand the viewer's own edits (if
+    // any) to the app to keep, and treat what was saved as the new baseline so the
+    // same edits are not saved twice.
+    preserveLearnerWorkspace: enqueueActions(({ context, enqueue }) => {
+      const save = getLearnerWorkspaceSave(context);
+      if (!save) return;
+      enqueue(() => context.onLearnerWorkspaceSaved?.(save));
+      enqueue.assign({ learnerWorkspaceBaseline: save.snapshot });
+    }),
+    applyLearnerWorkspace,
     resetPlayback: assign(resetPlayback),
     invalidateAppliedPlaybackState: assign(invalidateAppliedPlaybackState),
     detachPlaybackWorkspace: assign(detachPlaybackWorkspace),
@@ -928,21 +952,42 @@ export const editorMachine = setup({
         },
         STOP: {
           target: ".ready",
-          actions: [...RESET_AND_REATTACH_REPLAY_STATE_ACTIONS, "seekPlaybackActors"],
+          actions: [
+            "preserveLearnerWorkspace",
+            ...RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
+            "seekPlaybackActors",
+          ],
         },
         // A mic recorder still waiting on its blob after the finalize watchdog belongs to
         // the take being left. Stop it, or its straggler blob would land on whatever
         // comes next.
         UNLOAD: {
           target: "idle",
-          actions: [stopChild("audioRecorder"), "clearRecording"],
+          actions: ["preserveLearnerWorkspace", stopChild("audioRecorder"), "clearRecording"],
+        },
+        PRESERVE_LEARNER_WORKSPACE: {
+          actions: "preserveLearnerWorkspace",
+        },
+        // Pause (keeping any unsaved edits first), move to where the saved edits were
+        // made, then lay them over the recording there. Both steps are raised so they
+        // run inside `paused`, after its entry has handed the workspace to the viewer.
+        RESTORE_LEARNER_WORKSPACE: {
+          target: ".paused",
+          actions: [
+            "preserveLearnerWorkspace",
+            raise(({ event }) => ({ type: "SEEK" as const, time: event.recordingTime })),
+            raise(({ event }) => ({
+              type: "APPLY_LEARNER_WORKSPACE" as const,
+              snapshot: event.snapshot,
+            })),
+          ],
         },
         // Replace the loaded recording with a newly provided one (file import while a
         // recording is open, or the URL loader's whole-file fallback after a mid-stream
         // reader failure). Exiting `playback` stops the timeline/audio children first.
         LOAD_RECORDING: {
           target: "loading",
-          actions: stopChild("audioRecorder"),
+          actions: ["preserveLearnerWorkspace", stopChild("audioRecorder")],
         },
       },
       states: {
@@ -1028,6 +1073,7 @@ export const editorMachine = setup({
             },
             SEEK: {
               actions: [
+                "preserveLearnerWorkspace",
                 "reattachPlaybackWorkspace",
                 "clearPendingEditorSyncForPausedSeek",
                 "seekToTime",
@@ -1039,12 +1085,19 @@ export const editorMachine = setup({
             },
             PLAY: {
               target: "playing",
-              actions: ["reattachPlaybackWorkspace"],
+              actions: ["preserveLearnerWorkspace", "reattachPlaybackWorkspace"],
+            },
+            APPLY_LEARNER_WORKSPACE: {
+              actions: "applyLearnerWorkspace",
             },
           },
         },
 
+        // Like a pause, the end hands the workspace to the viewer: without this the
+        // editor stayed on the read-through playback model, so anything typed after the
+        // lesson finished never reached the workspace and could be neither run nor kept.
         ended: {
+          entry: [...SYNC_PAUSED_WORKSPACE_ACTIONS],
           on: {
             PLAY: [
               {
@@ -1053,11 +1106,11 @@ export const editorMachine = setup({
                 // Only rewind here. Playing's entry invalidates and re-applies every
                 // track at currentTime (now 0), seeks the timeline and audio there and
                 // notifies, so doing any of that here too ran every track twice.
-                actions: ["reattachPlaybackWorkspace", "resetPlayback"],
+                actions: ["preserveLearnerWorkspace", "reattachPlaybackWorkspace", "resetPlayback"],
               },
               {
                 target: "playing",
-                actions: ["reattachPlaybackWorkspace"],
+                actions: ["preserveLearnerWorkspace", "reattachPlaybackWorkspace"],
               },
             ],
           },
