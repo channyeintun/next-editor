@@ -467,6 +467,33 @@ describe("recordingCodec", () => {
     expect(reader.getRecording()?.cursorEvents).toHaveLength(200_000);
   });
 
+  it("round trips a preview snapshot of a deeply nested page", async () => {
+    // rrweb serializes the DOM as nested childNodes, two MessagePack levels per DOM
+    // level, so a page 60 elements deep sits well past msgpack's default depth of 100.
+    let nextId = 1;
+    const element = (depth: number): Record<string, unknown> => ({
+      type: 2,
+      tagName: "div",
+      attributes: { class: "wrapper" },
+      childNodes: depth > 1 ? [element(depth - 1)] : [{ type: 3, textContent: "leaf", id: 0 }],
+      id: nextId++,
+    });
+    const recording = createRecording({
+      previewInitialDocuments: [
+        {
+          version: 1,
+          time: 0,
+          documentId: "deep",
+          events: [{ type: 2, timestamp: 0, data: { node: element(60) } }],
+        },
+      ],
+    });
+
+    const decoded = decodeRecordingStream(await encodeRecordingToStream(recording));
+
+    expect(decoded.previewInitialDocuments).toEqual(recording.previewInitialDocuments);
+  });
+
   it("decodes a replayable prefix before the footer arrives, then finalizes", async () => {
     const recording = createRecording({
       duration: 800,

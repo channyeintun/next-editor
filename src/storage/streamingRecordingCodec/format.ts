@@ -200,10 +200,19 @@ export function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return buffer;
 }
 
+/**
+ * rrweb stores a page as nested `childNodes`, two MessagePack levels per DOM level, so
+ * msgpack's default maxDepth of 100 rejected any preview more than ~45 elements deep and
+ * the take could not be saved. Browsers' HTML parsers stop nesting at 512 levels; this
+ * covers that plus the record wrapper, and stays well below the few thousand levels at
+ * which the recursive encoder would exhaust the call stack. The decoder has no depth limit.
+ */
+const MSGPACK_ENCODE_OPTIONS = { ignoreUndefined: true, maxDepth: 1_100 } as const;
+
 export function encodeRecords(records: ReadonlyArray<unknown>): Uint8Array {
   const endEncodeSpan = startPerformanceSpan("recording.segment_encode");
   try {
-    const compressed = zlibSync(msgpackEncode(records, { ignoreUndefined: true }));
+    const compressed = zlibSync(msgpackEncode(records, MSGPACK_ENCODE_OPTIONS));
     recordPerformanceMetric("recording.segment_compressed", compressed.byteLength, "bytes");
     return compressed;
   } finally {
@@ -380,7 +389,7 @@ export function readLastRecordTimestamp(records: ReadonlyArray<unknown>): number
 // ----------------------------------------------------------------------------
 
 export function buildHeaderChunk(meta: RecordingStreamMeta, flags: number): Uint8Array {
-  const metaBytes = zlibSync(msgpackEncode(meta, { ignoreUndefined: true }));
+  const metaBytes = zlibSync(msgpackEncode(meta, MSGPACK_ENCODE_OPTIONS));
   const chunk = new Uint8Array(HEADER_PREFIX_SIZE + metaBytes.length);
   const view = new DataView(chunk.buffer);
   chunk.set(STREAM_MAGIC_BYTES, 0);
