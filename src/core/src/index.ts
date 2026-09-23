@@ -37,7 +37,6 @@ export type {
   Recording,
   RecordingStreamDelta,
   RecordingCameraSource,
-  CameraPlaceholder,
   RecordingStreamSink,
   UseNextEditorConfig,
   EditorState,

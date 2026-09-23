@@ -18,15 +18,6 @@ import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
 import type { EditorMachineInput } from "./machine/types";
 
-/**
- * Audio storage placeholder for serialization
- */
-export interface AudioPlaceholder {
-  __audio_offset: number;
-  __audio_size: number;
-  __audio_type: string;
-}
-
 export type RecordingAudioSource = "microphone" | "external";
 export type RecordingCameraSource = "camera";
 
@@ -89,12 +80,6 @@ export interface RecordingMediaFragment {
   byteLength?: number;
   isInit?: boolean;
   isKeyframe?: boolean;
-}
-
-export interface CameraPlaceholder {
-  __camera_offset: number;
-  __camera_size: number;
-  __camera_type: string;
 }
 
 /**
@@ -191,7 +176,10 @@ export interface Recording {
   name: string;
   /** Delta compressed frames (keyframes + deltas) */
   frames: import("./utils/deltaTypes").DeltaFrame[];
-  /** Keyframe interval for reconstruction */
+  /**
+   * Keyframe cadence the recorder used, carried as header metadata. Reconstruction
+   * does not read it: it finds keyframes by scanning (`findNearestKeyframeIndex`).
+   */
   keyframeInterval: number;
   slideEvents?: SlideEvent[];
   previewEvents?: PreviewEvent[];
@@ -209,7 +197,7 @@ export interface Recording {
   tracks?: RecordingTrackMeta[];
   clusters?: RecordingClusterMeta[];
   mediaFragments?: RecordingMediaFragment[];
-  audioBlob?: Blob | AudioPlaceholder;
+  audioBlob?: Blob;
   audioSource?: RecordingAudioSource;
   /** Audio start offset (ms) between the recording origin and the first decodable audio byte. */
   audioStartOffsetMs?: number;
@@ -223,7 +211,7 @@ export interface Recording {
    * imported file. Playback fetches the audio from here when no `audioBlob` is attached.
    */
   audioUrl?: string;
-  cameraBlob?: Blob | CameraPlaceholder;
+  cameraBlob?: Blob;
   cameraSource?: RecordingCameraSource;
   /** Camera warmup offset (ms) between the recording origin and the first camera frame. */
   cameraStartOffsetMs?: number;

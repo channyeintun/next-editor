@@ -25,12 +25,12 @@ classDiagram
         +tracks?: RecordingTrackMeta[]
         +clusters?: RecordingClusterMeta[]
         +mediaFragments?: RecordingMediaFragment[]
-        +audioBlob?: Blob | AudioPlaceholder
+        +audioBlob?: Blob
         +audioSource?: RecordingAudioSource
         +audioStartOffsetMs?: number
         +audioFile?: string
         +audioUrl?: string
-        +cameraBlob?: Blob | CameraPlaceholder
+        +cameraBlob?: Blob
         +cameraSource?: RecordingCameraSource
         +cameraStartOffsetMs?: number
         +cameraFile?: string
@@ -70,12 +70,12 @@ interface Recording {
   tracks?: RecordingTrackMeta[];
   clusters?: RecordingClusterMeta[];
   mediaFragments?: RecordingMediaFragment[];
-  audioBlob?: Blob | AudioPlaceholder;
+  audioBlob?: Blob;
   audioSource?: RecordingAudioSource; // "microphone" | "external"
   audioStartOffsetMs?: number;
   audioFile?: string; // sibling audio filename when audio is stored outside the .ne
   audioUrl?: string; // resolved URL for external audio (hosted or imported object URL)
-  cameraBlob?: Blob | CameraPlaceholder;
+  cameraBlob?: Blob;
   cameraSource?: RecordingCameraSource; // "camera"
   cameraStartOffsetMs?: number;
   cameraFile?: string; // sibling video filename when camera is stored outside the .ne
@@ -278,32 +278,6 @@ type RecordingCameraSource = "camera";
   carries audio bytes. The take's audio is the recorder's finalized blob, stored and exported as
   a sibling file. Camera is captured as one finalized blob when the camera recorder stops (no
   per-chunk streaming, so camera is not crash-resilient mid-recording).
-
-### AudioPlaceholder
-
-A shape the type of `Recording.audioBlob` still admits. Nothing in the app creates or reads one;
-the SCR3 codec never did, since audio is a sibling file:
-
-```typescript
-interface AudioPlaceholder {
-  __audio_offset: number; // Byte offset in binary data
-  __audio_size: number; // Size in bytes
-  __audio_type: string; // MIME type
-}
-```
-
-### CameraPlaceholder
-
-A shape the type of `Recording.cameraBlob` still admits. Nothing in the app creates or reads one;
-the SCR3 codec never did, since camera is a sibling file:
-
-```typescript
-interface CameraPlaceholder {
-  __camera_offset: number; // Byte offset in binary data
-  __camera_size: number; // Size in bytes
-  __camera_type: string; // MIME type
-}
-```
 
 ## Provider Context Shapes
 
