@@ -254,6 +254,25 @@ async function fetchNextEditorUrl(url: string, init?: RequestInit): Promise<Resp
 }
 
 /**
+ * Why a `.ne` request failed, for the error panel. `statusText` is empty over HTTP/2 and HTTP/3,
+ * so the status code is what is left; a proxied request that failed upstream comes back as a 502
+ * whose JSON `error` says what the upstream answered, which is the more useful reason.
+ */
+async function describeFailedResponse(response: Response): Promise<string> {
+  try {
+    const body: unknown = await response.json();
+    const reason =
+      typeof body === "object" && body !== null && "error" in body ? body.error : undefined;
+    if (typeof reason === "string" && reason) {
+      return `Failed to fetch file: ${reason}`;
+    }
+  } catch {
+    // Not a JSON body (a plain 404 page, say): fall back to the status code.
+  }
+  return `Failed to fetch file (HTTP ${response.status})`;
+}
+
+/**
  * Checks whether a media URL is reachable and not an HTML fallback page, without downloading
  * the body — used to verify a camera `<video src>` candidate before assigning it (playback
  * would otherwise fail silently inside the `<video>` element). Tries `HEAD` first since it's
@@ -597,7 +616,7 @@ export const useUrlLoader = () => {
       const response = await fetchNextEditorUrl(url, { signal });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch file: ${response.statusText}`);
+        throw new Error(await describeFailedResponse(response));
       }
 
       if (isStale()) return;

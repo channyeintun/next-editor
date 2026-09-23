@@ -891,4 +891,49 @@ describe("useUrlLoader", () => {
     expect(withAudio?.audioBlob).toBeInstanceOf(Blob);
     expect(withAudio?.frames).toHaveLength((firstLoad?.frames.length ?? 0) + appendedFrames);
   });
+
+  // Browsers get no reason phrase over HTTP/2 or HTTP/3, so `statusText` is always "".
+  describe("a failed .ne fetch", () => {
+    const failedResponse = (status: number, body?: unknown) =>
+      ({
+        ok: false,
+        status,
+        statusText: "",
+        body: null,
+        headers: { get: () => (body === undefined ? null : "application/json") },
+        json: async () => {
+          if (body === undefined) throw new SyntaxError("Unexpected end of JSON input");
+          return body;
+        },
+      }) as unknown as Response;
+
+    it("names the HTTP status", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<() => Promise<Response>>(async () => failedResponse(404)),
+      );
+      const { result } = renderLoader(makeActionsMock());
+
+      await expect(
+        result.current.fetchNextEditorFile("https://example.com/typo.ne"),
+      ).rejects.toThrow("HTTP 404");
+      await waitFor(() => {
+        expect(result.current.error).toMatch(/HTTP 404/);
+      });
+    });
+
+    it("shows the reason the same-origin proxy gives", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<() => Promise<Response>>(async () =>
+          failedResponse(502, { error: "Upstream responded with HTTP 404." }),
+        ),
+      );
+      const { result } = renderLoader(makeActionsMock());
+
+      await expect(
+        result.current.fetchNextEditorFile("https://example.com/typo.ne"),
+      ).rejects.toThrow("Upstream responded with HTTP 404.");
+    });
+  });
 });
