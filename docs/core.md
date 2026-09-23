@@ -132,7 +132,7 @@ The main extension hooks in `UseNextEditorConfig` are:
 | `validation.ts`                        | `isValidEditorState`, `isEditorReady`                                                                         |
 | `deltaTypes.ts`                        | `DeltaFrame` and related delta wire types                                                                     |
 | `frameStreamEncoder.ts`                | `pushFrame` (incremental keyframe/delta encoder used during live capture) and its batch fold `compressFrames` |
-| `editorState.ts`                       | Reads/builds `EditorState` snapshots from a Monaco editor instance                                            |
+| `editorState.ts`                       | Normalizes recorded frames, positions, selections and view states (`normalizeEditorFrame`)                    |
 | `cursorCoordinates.ts`                 | Maps recorded cursor samples onto the current UI layout (viewport/root coordinate spaces)                     |
 | `cursorReplay.ts`                      | Fake-cursor tween/replay logic driven by `cursorEvents`                                                       |
 | `audioContext.ts` / `audioDuration.ts` | Shared `AudioContext` helpers and exact-duration calculation for audio blobs                                  |

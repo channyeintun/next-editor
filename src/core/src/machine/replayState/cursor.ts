@@ -3,13 +3,13 @@
 //
 // Shared, track-agnostic helpers for turning "what time are we at?" into "which
 // event index applies now". Each per-track replay module (preview/workspace/
-// runtime/slide) builds on these. The index lookup itself lives in
-// utils/timedIndex, which editor frames share.
+// runtime/slide/whiteboard/chat) builds on these. The index lookup itself lives
+// in utils/timedIndex, which editor frames share.
 // ============================================================================
 
 import { findTimedEventIndexAtOrBefore, type TimedReplayEvent } from "../../utils/timedIndex";
 
-export { findTimedEventIndexAtOrBefore, type TimedReplayEvent };
+export { findTimedEventIndexAtOrBefore };
 
 export type ReplayTriggerEvent = {
   type: string;

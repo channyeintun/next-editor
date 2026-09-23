@@ -95,7 +95,7 @@ Since cursors mostly move short distances:
 
 To render a specific frame at `index`:
 
-1.  **Find Base**: Locate the nearest Keyframe at `floor(index / interval) * interval`.
+1.  **Find Base**: Locate the nearest Keyframe at or before `index` (`findNearestKeyframeIndex` scans the frames for keyframes; the stored `keyframeInterval` is not used).
 2.  **Hydrate**: Start with the Keyframe's full state.
 3.  **Roll Forward**: Iterate from `keyframeIndex + 1` to `index`.
     - Apply `applyFrameDelta(currentState, deltaFrame)` for each step.

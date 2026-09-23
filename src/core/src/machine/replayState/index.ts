@@ -7,6 +7,7 @@
 //   * runtime.ts   — runtime snapshot
 //   * slide.ts     — slide deck state
 //   * whiteboard.ts — whiteboard scene state
+//   * chat.ts      — coding-agent chat transcript
 //
 // Re-exported here so callers keep importing from "replayState" unchanged.
 

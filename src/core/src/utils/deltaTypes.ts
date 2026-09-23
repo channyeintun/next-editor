@@ -129,7 +129,10 @@ export type DeltaFrame = Keyframe | FrameDelta;
  * Configuration for delta compression
  */
 export const DELTA_CONFIG = {
-  /** Number of frames between keyframes (at 60fps, 120 = 2 seconds) */
+  /**
+   * Stored frames between keyframes. Capture is event-driven, so this is a frame
+   * count, not a time span; frames that change nothing are not stored or counted.
+   */
   KEYFRAME_INTERVAL: 120,
   /** Format version identifier */
   VERSION: 4 as const,
