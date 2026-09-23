@@ -231,7 +231,8 @@ export class CollaborationRoomProvider {
   }
 
   /**
-   * True once the room refused local edits. They stay integrated in `doc`, and
+   * True once local edits were dropped, because the room refused them or because
+   * one change was too large to send. They stay integrated in `doc`, and
    * reconnect sync only pulls the room's state, so this document can never match
    * the room again: a retry has to start from a fresh provider, not `retryNow()`.
    */
@@ -442,18 +443,18 @@ export class CollaborationRoomProvider {
     for (const pending of updates) {
       const { update } = pending;
       if (update.byteLength > MAX_YJS_UPDATE_BYTES) {
-        // `pendingUpdates` was already drained into `updates`, so returning here
-        // dropped the valid, under-limit updates batched before this one *and*
-        // everything after it — never enqueued, never re-queued, and unreachable
-        // by a later reconnect (sync only pushes our state vector; unsent local
-        // updates travel exclusively through the outbox). Flush what is already
-        // batched before failing. The oversize update itself is unsendable under
-        // any fix, so this salvages its neighbours rather than restoring
-        // convergence.
-        enqueueBatch();
-        this.fatal(
-          `A local collaboration change exceeded the ${MAX_YJS_UPDATE_BYTES}-byte update limit`,
-        );
+        // The room refuses an update this large, and nothing here can split one:
+        // y-monaco writes a whole Monaco change event (a large paste) in one
+        // transaction, and Y.UndoManager restores a large delete in one. The
+        // change is already in `doc` and every later local edit builds on it, so
+        // this document can never match the room again. Drop every local edit
+        // the room has not acknowledged, including ones queued before this change
+        // that a resume could still deliver, and fail, so a retry rebuilds from
+        // the room. This is the same trade as a role change (applyRoomSession).
+        this.dropLocalChanges();
+        const message = `A change was larger than a live room accepts (${MAX_YJS_UPDATE_BYTES / 1024} KiB). Copy any local work before rejoining.`;
+        this.onRejectedLocalChanges?.(message);
+        this.fatal(message);
         return;
       }
       if (
@@ -996,10 +997,10 @@ export class CollaborationRoomProvider {
     // Closing the transport rejects every pending ack with a 503, which lands in
     // drainOutbox's catch and calls handleTransportFailure — which used to
     // schedule an automatic reconnect out of the failed state and null the error
-    // on the way through. For fatals with no localError counterpart (the
-    // oversize-update limit, a 4001 host-ended close, exhausted reconnects) the
-    // machine's context is the only carrier of that message, so the user was
-    // returned to an apparently healthy room with no explanation.
+    // on the way through. For fatals with no localError counterpart (a 4001
+    // host-ended close, exhausted reconnects) the machine's context is the only
+    // carrier of that message, so the user was returned to an apparently healthy
+    // room with no explanation.
     this.isFatal = true;
     this.closeTransport();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);

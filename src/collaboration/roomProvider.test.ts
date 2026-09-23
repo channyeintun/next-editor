@@ -791,4 +791,34 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     expect(provider.hasDivergedDocument).toBe(true);
     provider.stop();
   });
+
+  it("drops every unsent local edit when one change is too large to send, reports it and fails", async () => {
+    const { sockets, factory } = socketRecorder();
+    const rejected: string[] = [];
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      batchWindowMs: 60_000,
+      random: () => 0,
+      webSocketFactory: factory,
+      onRejectedLocalChanges: (message) => rejected.push(message),
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+
+    // Queued before the oversize change and sendable on its own, but dropped on
+    // purpose: the document can never match the room again, so a retry rebuilds
+    // from the room rather than resuming with it.
+    provider.doc.getText("source").insert(0, "a");
+    provider.doc.getText("source").insert(1, "x".repeat(70_000));
+    await provider.flushNow();
+
+    expect(provider.connectionState).toBe("failed");
+    expect(rejected).toHaveLength(1);
+    expect(provider.hasPendingUpdates).toBe(false);
+    expect(provider.hasDivergedDocument).toBe(true);
+    expect(sentFrames(sockets[0]!).some((frame) => frame.kind === "client-update")).toBe(false);
+    provider.stop();
+  });
 });

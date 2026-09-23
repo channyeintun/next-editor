@@ -293,6 +293,10 @@ Required lifecycle behavior:
 - Role downgrade immediately disables all local collaborative write commands.
 - `LEAVE`, unmount, and room changes destroy observers, awareness, sockets, and retry timers.
 - Fatal authentication, schema, and permission errors do not retry automatically.
+- A single local change larger than 64 KiB (for example a very large paste through the editor
+  binding, or undoing a large delete) cannot be sent. The provider then drops every local edit the
+  room has not acknowledged, including edits queued before that change, reports it and fails.
+  Retry rebuilds the document from the room, and those edits disappear from this workspace as well.
 - Provider events carry a session/attempt ID so late events from an older socket cannot mutate a
   replacement session.
 
