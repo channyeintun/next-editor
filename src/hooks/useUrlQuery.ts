@@ -1,26 +1,7 @@
 import { useEffect } from "react";
 import { useSearchParams } from "react-router";
 import type { UrlLoader } from "./useUrlLoader";
-
-/**
- * The absolute http(s) URL of the requested recording. `url` arrives already percent-decoded
- * (URLSearchParams.get decodes the param), so it is used as is; decoding it again would turn an
- * escaped `%23` into a fragment or `%2B` into a space. A relative path is relative to the site
- * root.
- */
-function resolveRecordingUrl(url: string | null): string | null {
-  if (!url) {
-    return null;
-  }
-  try {
-    const resolved = new URL(url, `${window.location.origin}/`);
-    return resolved.protocol === "http:" || resolved.protocol === "https:"
-      ? resolved.toString()
-      : null;
-  } catch {
-    return null;
-  }
-}
+import { resolveRecordingUrl } from "../utils/recordingUrl";
 
 /** Loads the lesson named by the `overrideUrl` prop or the `?url=` query param with the given loader. */
 export const useUrlQuery = ({ fetchNextEditorFile }: UrlLoader, overrideUrl?: string) => {

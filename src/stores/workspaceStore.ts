@@ -29,6 +29,7 @@ import {
   readStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
 import { startPerformanceSpan } from "../utils/performanceMetrics";
+import { resolveRecordingUrl } from "../utils/recordingUrl";
 import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import {
   areWorkspaceFilesEqual,
@@ -215,24 +216,14 @@ function loadStoredWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
   }
 }
 
+/** Whether `?url=` names a `.ne`, read exactly as useUrlQuery reads it before loading it. */
 function hasPendingRecordingUrl(): boolean {
   if (typeof window === "undefined") {
     return false;
   }
 
-  const raw = new URLSearchParams(window.location.search).get("url");
-
-  if (!raw) {
-    return false;
-  }
-
-  try {
-    const decoded = decodeURIComponent(raw);
-    const pathname = decoded.split(/[?#]/)[0].toLowerCase();
-    return pathname.endsWith(".ne");
-  } catch {
-    return false;
-  }
+  const url = resolveRecordingUrl(new URLSearchParams(window.location.search).get("url"));
+  return url !== null && new URL(url).pathname.toLowerCase().endsWith(".ne");
 }
 
 /**

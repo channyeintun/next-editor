@@ -451,6 +451,18 @@ describe("createInitialWorkspaceSnapshot", () => {
     expect(createInitialWorkspaceSnapshot()).toBeNull();
   });
 
+  // `url` is read the way useUrlQuery reads it: URLSearchParams.get has already
+  // decoded it once, so a second decode would turn the file's `%23` into a fragment.
+  it.each([
+    ["an encoded # in its name", encodeURIComponent("https://example.com/lesson%20%231.ne")],
+    ["a raw % in its name", "https://example.com/50%off.ne"],
+  ])("starts empty for a .ne with %s", (_case, param) => {
+    storeWorkspace("previous.html", "<p>previous session</p>");
+    window.history.replaceState(null, "", `/code?url=${param}`);
+
+    expect(createInitialWorkspaceSnapshot()).toBeNull();
+  });
+
   it("restores the persisted workspace when no recording is pending", () => {
     storeWorkspace("index.html", "<p>mine</p>");
 
