@@ -3,7 +3,9 @@
 // edge render (infra/worker/ssr/lessonDetail.ts) copies a title seven times and
 // a description five times into each page, so the Worker refuses anything
 // longer. Generous on purpose: no real title or description comes near them.
-// Lives beside defaultThumbnail.ts so a client form can share the numbers.
+// UploadLessonModal checks a lesson's text with metadataTextError before it
+// uploads anything, and the lesson and playlist title and description inputs
+// take their maxLength from these constants.
 
 export const MAX_TITLE_CHARS = 200;
 export const MAX_DESCRIPTION_CHARS = 10_000;

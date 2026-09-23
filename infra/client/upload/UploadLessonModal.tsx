@@ -10,6 +10,11 @@ import { saveResumeIntent, type ResumeIntent } from "./resumeIntent";
 import { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./thumbnailConstraints";
 import { CAPTION_ACCEPT, MAX_CAPTION_BYTES } from "./captionConstraints";
 import { resizeThumbnail } from "./resizeThumbnail";
+import {
+  MAX_DESCRIPTION_CHARS,
+  MAX_TITLE_CHARS,
+  metadataTextError,
+} from "../../lessons/metadataLimits";
 import GoogleIcon from "@app/components/icon/Google";
 import { usePostHog } from "@posthog/react";
 
@@ -69,6 +74,7 @@ export default function UploadLessonModal({
   const [description, setDescription] = useState(initialDescription ?? "");
   const [tagsInput, setTagsInput] = useState(initialTags ?? "");
   const [titleError, setTitleError] = useState<string | null>(null);
+  const [limitError, setLimitError] = useState<string | null>(null);
   const [lessonId] = useState(() => crypto.randomUUID());
   const [uploadResult, setUploadResult] = useState<{
     id: string;
@@ -255,6 +261,17 @@ export default function UploadLessonModal({
     setTitleError(null);
     setSignInError(null);
 
+    // maxLength only stops typing: a studio plan title or a draft restored after
+    // sign-in can arrive longer. Refuse here rather than upload the whole
+    // recording for a POST the Worker would refuse.
+    const tags = parseTags(tagsInput);
+    const overLimit = metadataTextError({ title: trimmedTitle, description, tags });
+    if (overLimit) {
+      setLimitError(overLimit);
+      return;
+    }
+    setLimitError(null);
+
     try {
       const result = await upload({
         lessonId,
@@ -262,7 +279,7 @@ export default function UploadLessonModal({
           recording,
           title: trimmedTitle,
           description,
-          tags: parseTags(tagsInput),
+          tags,
           thumbnail: thumbnailFile ?? undefined,
           useDefaultThumbnail,
           captions:
@@ -275,7 +292,7 @@ export default function UploadLessonModal({
       posthog?.capture("lesson_uploaded", {
         has_thumbnail: !!(thumbnailFile || useDefaultThumbnail),
         has_description: !!description.trim(),
-        tag_count: parseTags(tagsInput).length,
+        tag_count: tags.length,
         caption_count: captionTracks.length,
         recording_duration: recording.duration,
       });
@@ -433,7 +450,9 @@ export default function UploadLessonModal({
                 onChange={(event) => {
                   setTitle(event.target.value);
                   if (titleError) setTitleError(null);
+                  setLimitError(null);
                 }}
+                maxLength={MAX_TITLE_CHARS}
                 disabled={isUploading}
                 autoFocus={!!titleError}
                 className="w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:opacity-60"
@@ -445,7 +464,11 @@ export default function UploadLessonModal({
               <span className="text-xs font-medium text-slate-400">Description (optional)</span>
               <textarea
                 value={description}
-                onChange={(event) => setDescription(event.target.value)}
+                onChange={(event) => {
+                  setDescription(event.target.value);
+                  setLimitError(null);
+                }}
+                maxLength={MAX_DESCRIPTION_CHARS}
                 disabled={isUploading}
                 rows={3}
                 className="w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:opacity-60"
@@ -459,7 +482,10 @@ export default function UploadLessonModal({
               <input
                 type="text"
                 value={tagsInput}
-                onChange={(event) => setTagsInput(event.target.value)}
+                onChange={(event) => {
+                  setTagsInput(event.target.value);
+                  setLimitError(null);
+                }}
                 disabled={isUploading}
                 placeholder="intro, basics"
                 className="w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:opacity-60"
@@ -571,7 +597,9 @@ export default function UploadLessonModal({
               />
             </div>
 
-            {signInError ? (
+            {limitError ? (
+              <p className="text-sm text-rose-300">{limitError}</p>
+            ) : signInError ? (
               <p className="text-sm text-rose-300">{signInError}</p>
             ) : error ? (
               <p className="text-sm text-rose-300">
