@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -578,6 +579,12 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     },
     [handleSlideEvent, handleWhiteboardEvent],
   );
+  // The provider's callbacks and the projection effect below read the latest
+  // projector through an Effect Event, so a new recorder callback identity does
+  // not re-run the effect that owns the room's WebSocket.
+  const projectTeachingStateFromEffect = useEffectEvent((doc: Y.Doc, targetRoomId: string) =>
+    projectTeachingState(doc, targetRoomId),
+  );
 
   const applyAwarenessEvent = useCallback((event: CollaborationAwarenessEvent) => {
     setParticipantsBySession((current) => applyCollaborationParticipantEvent(current, event));
@@ -729,7 +736,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         isTeachingProjectionScheduled = false;
         if (providerGenerationRef.current !== providerGeneration || playbackRef.current) return;
         try {
-          projectTeachingState(doc, roomId);
+          projectTeachingStateFromEffect(doc, roomId);
         } catch (error) {
           setLocalError(
             messageFromError(error, "The shared teaching surfaces could not be projected."),
@@ -858,7 +865,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     applyAwarenessEvent,
     hydrateProjectionAssets,
     inviteToken,
-    projectTeachingState,
     providerEpoch,
     refreshRoomDataFor,
     roomId,
@@ -897,12 +903,12 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       const projection = reprojectCollaborationWorkspace(provider.doc, baseActionsRef.current);
       projectionRef.current = projection;
       if (roomId) hydrateProjectionAssets(projection, roomId);
-      if (roomId) projectTeachingState(provider.doc, roomId);
+      if (roomId) projectTeachingStateFromEffect(provider.doc, roomId);
     } catch {
       // The initial snapshot may not have arrived yet; its transaction callback
       // performs this projection after synchronization.
     }
-  }, [hydrateProjectionAssets, projectTeachingState, provider, roomId, usesPlaybackModel]);
+  }, [hydrateProjectionAssets, provider, roomId, usesPlaybackModel]);
 
   useEffect(() => {
     if (!provider || usesPlaybackModel || !teaching.initialized) return;

@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const controls = vi.hoisted(() => ({
-  handleSlideEvent: vi.fn(),
+  handleSlideEvent: vi.fn() as (...args: unknown[]) => void,
   handleWhiteboardEvent: vi.fn(),
   // One object, like react-query's structurally shared `useAuth().user`.
   auth: {
@@ -852,5 +852,39 @@ describe("CollaborationContext participant expiry", () => {
 
     expect(collaboration!.participants.map((entry) => entry.sessionId)).toContain(remote.sessionId);
     expect(collaboration!.followedSessionId).toBe(remote.sessionId);
+  });
+});
+
+describe("CollaborationContext connection lifetime", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  // The room effect owns the WebSocket; a new recorder callback is no reason to
+  // stop the provider and resync the room.
+  it("keeps the provider when the recorder's callbacks change identity", async () => {
+    const tree = () => (
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <div />
+        </Providers>
+      </MemoryRouter>
+    );
+    const view = render(tree());
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const original = controls.handleSlideEvent;
+    try {
+      controls.handleSlideEvent = vi.fn();
+      view.rerender(tree());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(controls.providers).toHaveLength(1);
+      expect(controls.providers[0]!.stopped).toBe(false);
+    } finally {
+      controls.handleSlideEvent = original;
+      view.unmount();
+    }
   });
 });
