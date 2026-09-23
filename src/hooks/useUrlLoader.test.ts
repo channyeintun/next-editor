@@ -936,4 +936,22 @@ describe("useUrlLoader", () => {
       ).rejects.toThrow("Upstream responded with HTTP 404.");
     });
   });
+
+  it("reports a URL that is not a .ne instead of leaving the editor blank", async () => {
+    const fetchMock = vi.fn<() => Promise<Response>>();
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderLoader(makeActionsMock());
+
+    await expect(
+      result.current.fetchNextEditorFile("https://example.com/lessons/intro/"),
+    ).rejects.toThrow("URL does not point to a supported file (.ne)");
+
+    await waitFor(() => {
+      expect(result.current.error).toMatch(/supported file/);
+    });
+    expect(result.current.isLoading).toBe(false);
+    // Fetching the same URL again cannot help.
+    expect(result.current.retry).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

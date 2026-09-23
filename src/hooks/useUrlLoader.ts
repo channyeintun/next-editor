@@ -606,11 +606,16 @@ export const useUrlLoader = () => {
   };
 
   const fetchNextEditorFile = async (url: string) => {
-    if (!isNextEditorUrl(url)) {
-      throw new Error("URL does not point to a supported file (.ne)");
-    }
-
     const { signal, isStale } = beginLoad();
+
+    if (!isNextEditorUrl(url)) {
+      // Reported like any other failure: a `?url=` that is not a lesson must not leave a blank
+      // editor. Retry is not offered, since fetching the same URL again cannot help.
+      const message = "URL does not point to a supported file (.ne)";
+      setFailure({ message: `Failed to load tutorial: ${message}`, url: null });
+      setIsLoading(false);
+      throw new Error(message);
+    }
 
     try {
       const response = await fetchNextEditorUrl(url, { signal });
