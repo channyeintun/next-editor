@@ -196,7 +196,21 @@ export function validateGoLessonSource(source: string): string | null {
   return null;
 }
 
-const TXTAR_MARKER_LINE = /^-- [^\r\n]+ --[ \t]*\r?$/m;
+/**
+ * Whether `content` holds a line txtar would read as a file marker, which would
+ * split one submitted file into two upstream. Mirrors txtar's isMarker: lines
+ * end at "\n" only, so a "\r" inside a line is part of the file name (a regex
+ * with the `m` flag breaks lines at "\r" too and never sees such a marker), and
+ * "-- NAME --" is a marker whatever the non-blank NAME contains. Trailing
+ * whitespace is ignored too, which rejects a little more than txtar does.
+ */
+function containsTxtarMarkerLine(content: string): boolean {
+  return content.split("\n").some((line) => {
+    const text = line.trimEnd();
+    return text.startsWith("-- ") && text.endsWith(" --") && text.slice(3, -3).trim() !== "";
+  });
+}
+
 const GO_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*\.go$/;
 
 function validateGoLessonFilePath(filePath: string): string | null {
@@ -305,7 +319,7 @@ async function validateGoLessonRequest(request: Request): Promise<GoLessonReques
     if (seenPaths.has(fileRecord.path)) {
       return { ok: false, status: 400, error: "Go lesson file paths must be unique" };
     }
-    if (TXTAR_MARKER_LINE.test(fileRecord.content)) {
+    if (containsTxtarMarkerLine(fileRecord.content)) {
       return {
         ok: false,
         status: 400,
@@ -373,7 +387,7 @@ function parseFormattedGoLessonFiles(
   const files: GoPlaygroundFile[] = [];
   for (const [index, header] of headers.entries()) {
     const content = source.slice(header.contentStart, headers[index + 1]?.index ?? source.length);
-    if (TXTAR_MARKER_LINE.test(content) || validateGoLessonSource(content) !== null) {
+    if (containsTxtarMarkerLine(content) || validateGoLessonSource(content) !== null) {
       return null;
     }
     files.push({ path: header.path, content });

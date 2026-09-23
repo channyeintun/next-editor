@@ -257,6 +257,31 @@ describe("goPlaygroundRoute", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  // txtar splits lines on "\n" only, so a "\r" inside a marker line is part of
+  // the file name to the Playground. A guard that also broke lines at "\r"
+  // never saw these markers, so everything after one reached the upstream as a
+  // second file under a name no path or test-file check had looked at.
+  it.each(["-- evil\r.go --", "-- evil.go\r --"])(
+    "rejects a txtar marker line whose name carries a carriage return (%j)",
+    async (marker) => {
+      const spy = stubUpstream({});
+      const response = await runRequest(
+        makeEnv(),
+        JSON.stringify({
+          files: [
+            {
+              path: "main.go",
+              content: `${SOURCE}${marker}\npackage main\n\nfunc smuggled() {}\n`,
+            },
+          ],
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(spy).not.toHaveBeenCalled();
+    },
+  );
+
   it("returns 429 once the per-user minute window is exhausted", async () => {
     const spy = stubUpstream({});
     // Freeze the clock: the seeded key and the route's own key are computed at
