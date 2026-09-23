@@ -114,6 +114,66 @@ function vttBody(): Uint8Array {
   return new TextEncoder().encode("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n");
 }
 
+/**
+ * A response whose body arrives in `chunkSize` pieces, one per read, the way a slow download
+ * does. `pulledBytes()` reports how much of it the loader has read so far.
+ */
+function streamingResponse(bytes: Uint8Array, chunkSize = 16 * 1024) {
+  let offset = 0;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (offset >= bytes.length) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(bytes.slice(offset, offset + chunkSize));
+        offset += chunkSize;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const response = {
+    ok: true,
+    status: 200,
+    statusText: "",
+    body,
+    headers: { get: () => "application/octet-stream" },
+  } as unknown as Response;
+  return { response, pulledBytes: () => Math.min(offset, bytes.length) };
+}
+
+/** Incompressible text, so an encoded recording is as large as its content. */
+function noiseText(seed: number, length: number): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let state = seed;
+  let text = "";
+  for (let i = 0; i < length; i++) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    text += alphabet[(state >>> 0) % 64];
+  }
+  return text;
+}
+
+/** A recording of `frameCount` keyframes of `contentLength` random characters each. */
+function largeRecording(
+  frameCount: number,
+  contentLength: number,
+  overrides: Partial<Recording> = {},
+) {
+  const base = createRecording(overrides);
+  const [first] = base.frames;
+  if (!first?.isKeyframe) throw new Error("Expected an initial keyframe");
+  const frames = Array.from({ length: frameCount }, (_, index) => ({
+    ...first,
+    timestamp: index * 100,
+    state: { ...first.state, content: noiseText(index + 1, contentLength) },
+  }));
+  return { ...base, frames, duration: frameCount * 100 };
+}
+
 /** A promise the test settles by hand, to hold a request open while something else happens. */
 function gate() {
   let open!: () => void;
@@ -699,5 +759,31 @@ describe("useUrlLoader", () => {
     await waitFor(() => {
       expect(actions.addCaptionTrack).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("loads the first playable prefix without waiting for 512 KB", async () => {
+    // ~1 MB of keyframes: the first one is decodable after the first 16 KB chunk.
+    const bytes = await encodeRecordingToStream(largeRecording(300, 4000));
+    const stream = streamingResponse(bytes);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<() => Promise<Response>>(async () => stream.response),
+    );
+    const actions = makeActionsMock();
+    let pulledAtLoad = -1;
+    vi.mocked(actions.loadRecording).mockImplementation(() => {
+      pulledAtLoad = stream.pulledBytes();
+    });
+    const { result } = renderLoader(actions);
+
+    await result.current.fetchNextEditorFile("https://example.com/big.ne");
+
+    expect(actions.loadRecording).toHaveBeenCalledTimes(1);
+    expect(pulledAtLoad).toBeGreaterThan(0);
+    expect(pulledAtLoad).toBeLessThanOrEqual(64 * 1024);
+    // Everything decoded after that first load still arrives, and the finalized stream is
+    // installed whole.
+    const [extended] = vi.mocked(actions.extendRecording).mock.calls.at(-1) ?? [];
+    expect(extended?.frames).toHaveLength(300);
   });
 });

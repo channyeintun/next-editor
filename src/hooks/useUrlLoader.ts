@@ -20,8 +20,8 @@ import type { CaptionTrack, Recording } from "../core/src";
 const SAME_ORIGIN_PROXY_PATH = "/api/proxy";
 const MISSING_PROXY_STATUS_CODES = new Set([404, 405, 501]);
 
-// Decode the accumulated stream into a (partial) recording roughly every this many bytes of
-// downloaded bytes, so playback can start before the whole `.ne` file has arrived.
+// Once the first playable prefix has loaded (tried on every chunk until then), hand newly
+// decoded records to the player roughly every this many downloaded bytes.
 const STREAM_DECODE_INTERVAL_BYTES = 512 * 1024;
 
 /** Extension (no dot) of a filename, or undefined if it has none. */
@@ -403,10 +403,12 @@ export const useUrlLoader = () => {
       return resolved;
     };
 
-    const applyStreamed = async () => {
+    const applyStreamed = async (endOfStream: boolean) => {
       if (!loadedOnce) {
         const decoded = streamReader.getRecording();
-        const hydrated = decoded ? await hydrateDecodedRecordingWorkspaceAssets(decoded) : null;
+        // Mid-stream, wait for a prefix with a frame to show; at the end, load whatever decoded.
+        if (!decoded || (!endOfStream && decoded.frames.length === 0)) return;
+        const hydrated = await hydrateDecodedRecordingWorkspaceAssets(decoded);
         // A newer load may have started during the IndexedDB round trip.
         if (isStale()) return;
         const resolved = resolveRecording(hydrated);
@@ -452,13 +454,13 @@ export const useUrlLoader = () => {
         streamReader.push(value);
 
         const downloaded = streamReader.byteLength();
-        if (downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
+        if (!loadedOnce || downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
           lastDecodeLength = downloaded;
-          await applyStreamed();
+          await applyStreamed(false);
         }
       }
 
-      await applyStreamed();
+      await applyStreamed(true);
     } finally {
       reader.releaseLock();
     }

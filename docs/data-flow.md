@@ -105,9 +105,12 @@ sequenceDiagram
     Machine->>Timeline: spawn
 
     alt Progressive download / live stream
-        Loader->>Provider: extendRecording(longerPrefix)
+        Loader->>Provider: appendRecordingDelta(newRecords)
+        Provider->>Machine: APPEND_RECORDING_DELTA
+        Machine->>Machine: append records without resetting current time
+        Loader->>Provider: extendRecording(finalRecording)
         Provider->>Machine: EXTEND_RECORDING
-        Machine->>Machine: replace recording without resetting current time
+        Machine->>Machine: install the complete recording in place
     end
 
     UI->>Provider: play()
@@ -123,7 +126,7 @@ sequenceDiagram
 
 Current playback behavior:
 
-- The machine keeps a replay cursor for each append-only event stream (frames, preview events, preview patch batches, slides, workspace, runtime) so `extendRecording` can continue from the current point efficiently.
+- The machine keeps a replay cursor for each append-only event stream (frames, preview events, preview patch batches, slides, workspace, runtime) so streamed growth (`appendRecordingDelta`, `extendRecording`) can continue from the current point efficiently.
 - Audio playback is lazy when a progressive load first gains usable audio, then stays in sync by updating the same `HTMLAudioElement` with larger contiguous blob snapshots as more fragments arrive; the machine throttles resyncs to roughly every 250ms during a `TICK`.
 - Camera playback is rendered by `CameraOverlay`, which derives the correct video time from timeline time minus `cameraStartOffsetMs`.
 
@@ -171,10 +174,10 @@ The shipped URL loader supports both same-origin and cross-origin recording URLs
 - Same-origin files are fetched directly.
 - Cross-origin URLs try `/api/proxy?url=...` first and fall back to direct fetch if the proxy is missing.
 - When the response body is streamable, the loader feeds raw SCR3 bytes to an incremental
-  `StreamingRecordingReader`, persists any raw asset handoffs, loads the first playable prefix,
-  appends later `readDelta()` deliveries, and constructs another complete immutable recording only
-  at finalization.
-- After the recording loads, the loader resolves any `captionFiles` the recording declares relative to the `.ne` URL, fetches and parses each one, and adds it via `addCaptionTrack`. Captions are never inferred from sibling filenames — HTTP exposes no directory listing.
+  `StreamingRecordingReader`, persists any raw asset handoffs, loads the first playable prefix as
+  soon as one has decoded, appends later `readDelta()` deliveries about every 512 KiB, and
+  constructs another complete immutable recording only at finalization.
+- After the recording loads, the loader resolves any `captionFiles` the recording declares relative to the `.ne` URL, fetches and parses each one, and adds it via `addCaptionTrack`. A recording that declares no captions gets none (HTTP exposes no directory listing); when every declared file fails, the `.ne` basename with `.vtt` is tried once, for a lesson renamed together with its captions.
 
 ## API Client Transport
 

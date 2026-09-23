@@ -6,9 +6,10 @@ finalized `.ne` while it downloads, or tailing a still-being-recorded broadcast.
 This is one-way _playback_ streaming (one producer → many viewers, watch-as-it-arrives). It is
 **not** collaborative editing / real-time screen sharing.
 
-> The bundled **`introduction.ne`** demo already uses this: opening `/code?url=/introduction.ne`
-> streams the file and starts showing the recording at ~10% downloaded instead of waiting for
-> the whole ~2.4 MB. See [useUrlLoader.ts](../src/hooks/useUrlLoader.ts).
+> The bundled **`introduction.ne`** demo already uses this: opening
+> `/code?url=/lessons/introduction/introduction.ne` streams the file and starts showing the
+> recording once its first frames have arrived (about 50 KB of the 432 KB) instead of waiting for
+> the whole file. See [useUrlLoader.ts](../src/hooks/useUrlLoader.ts).
 
 ---
 
@@ -246,8 +247,9 @@ effective duration in your UI.
 
 - **Deliver deltas, not snapshots.** `push()` decodes newly arrived complete segments and
   `readDelta()` slices only records not yet delivered. Call `getRecording()` for the first playable
-  prefix, finalization, or another explicit immutable snapshot request (the shipped loader polls
-  deltas at roughly 512 KiB).
+  prefix, finalization, or another explicit immutable snapshot request (the shipped loader tries
+  for the first playable prefix on every chunk until one loads, then polls deltas at roughly
+  512 KiB).
 - **Persist asset handoffs before playback.** Raw `workspaceAssets`/`newWorkspaceAssets` are
   verified and moved to content-addressed asset storage, then stripped so decoded byte buffers do
   not accumulate in playback state.
