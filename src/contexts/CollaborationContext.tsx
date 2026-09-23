@@ -59,6 +59,7 @@ import {
 } from "../collaboration/yjsUpdates";
 import {
   CollaborationRoomProvider,
+  requestErrorStatus,
   type CollaborationRoomApi,
 } from "../collaboration/roomProvider";
 import {
@@ -224,11 +225,8 @@ function messageFromError(error: unknown, fallback: string): string {
 }
 
 function isRetryableTeachingInitializationError(error: unknown): boolean {
-  const status =
-    typeof error === "object" && error !== null
-      ? (error as { response?: { status?: unknown } }).response?.status
-      : undefined;
-  return status === undefined || status === 429 || (typeof status === "number" && status >= 500);
+  const status = requestErrorStatus(error);
+  return status === null || status === 429 || status >= 500;
 }
 
 interface CollaborationTeachingAssetPlan {
@@ -291,6 +289,17 @@ function areCollaborationSurfacesEqual(
     );
   }
   return false;
+}
+
+type EditorSurface = Extract<CollaborationSurface, { kind: "editor" }>;
+
+/** The editor surface on `fileNodeId`, keeping `previous`'s viewport only for the same file. */
+function editorSurfaceOn(previous: EditorSurface, fileNodeId: string | null): EditorSurface {
+  return {
+    kind: "editor",
+    fileNodeId,
+    viewport: previous.fileNodeId === fileNodeId ? previous.viewport : null,
+  };
 }
 
 function stopProviderAfterBestEffortFlush(provider: CollaborationRoomProvider): void {
@@ -1374,14 +1383,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!current || !currentSession || current.connectionState !== "live") return;
     const activeFileNodeId = getNodeIdForPath(activeFilePathRef.current);
     const currentSurface = awarenessSurfaceRef.current;
-    const surface: CollaborationSurface =
+    const surface =
       currentSurface.kind === "editor"
-        ? {
-            kind: "editor",
-            fileNodeId: activeFileNodeId,
-            viewport:
-              currentSurface.fileNodeId === activeFileNodeId ? currentSurface.viewport : null,
-          }
+        ? editorSurfaceOn(currentSurface, activeFileNodeId)
         : currentSurface;
     awarenessSurfaceRef.current = surface;
     if (surface.kind !== "editor" || awarenessCursorRef.current?.fileNodeId !== activeFileNodeId) {
@@ -1439,12 +1443,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         return;
       }
       const previous = awarenessSurfaceRef.current;
+      // An editor surface reported without a viewport keeps the one already
+      // published for the same file.
       const nextSurface =
-        surface.kind === "editor" &&
-        !surface.viewport &&
-        previous.kind === "editor" &&
-        previous.fileNodeId === surface.fileNodeId
-          ? { ...surface, viewport: previous.viewport }
+        surface.kind === "editor" && !surface.viewport && previous.kind === "editor"
+          ? editorSurfaceOn(previous, surface.fileNodeId)
           : surface;
       if (areCollaborationSurfacesEqual(previous, nextSurface)) return;
       awarenessSurfaceRef.current = nextSurface;
@@ -1595,11 +1598,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     const participant = participants.find((candidate) => candidate.sessionId === followedSessionId);
     if (!participant) return null;
     if (participant.expiresAt > Date.now()) return participant;
-    return connectionState === "reconnecting" ||
-      connectionState === "connecting" ||
-      connectionState === "syncing"
-      ? participant
-      : null;
+    return isCollaborationFollowSuspendedConnectionState(connectionState) ? participant : null;
   }, [connectionState, followedSessionId, participants]);
   const followAvailability = useMemo(
     () =>
@@ -1721,14 +1720,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         ? createCollaborationCursor(current.doc, fileNodeId, anchorOffset, headOffset)
         : null;
       if (awarenessSurfaceRef.current.kind === "editor") {
-        awarenessSurfaceRef.current = {
-          ...awarenessSurfaceRef.current,
-          fileNodeId,
-          viewport:
-            awarenessSurfaceRef.current.fileNodeId === fileNodeId
-              ? awarenessSurfaceRef.current.viewport
-              : null,
-        };
+        awarenessSurfaceRef.current = editorSurfaceOn(awarenessSurfaceRef.current, fileNodeId);
       }
       scheduleAwarenessPublish();
     },

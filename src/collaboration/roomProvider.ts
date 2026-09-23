@@ -96,7 +96,8 @@ function monotonicNow(): number {
   return globalThis.performance?.now() ?? Date.now();
 }
 
-function errorStatus(error: unknown): number | null {
+/** The HTTP status of a failed room request (an axios-style `response.status`). */
+export function requestErrorStatus(error: unknown): number | null {
   if (typeof error !== "object" || error === null) return null;
   const response = (error as { response?: { status?: unknown } }).response;
   return typeof response?.status === "number" ? response.status : null;
@@ -108,7 +109,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 function isFatalRequestError(error: unknown): boolean {
-  const status = errorStatus(error);
+  const status = requestErrorStatus(error);
   return status === 400 || status === 401 || status === 403 || status === 404 || status === 409;
 }
 
@@ -872,7 +873,7 @@ export class CollaborationRoomProvider {
             "ms",
             { outcome: "failure", transport },
           );
-          if (errorStatus(error) === 403) {
+          if (requestErrorStatus(error) === 403) {
             await this.handleWriteRejection(error);
           } else if (isFatalRequestError(error)) {
             this.fatal(errorMessage(error, "A collaboration update was rejected"));
