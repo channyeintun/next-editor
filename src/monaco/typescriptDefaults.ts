@@ -97,6 +97,15 @@ export function configureMonacoTypeScript() {
   defaults.forEach((currentDefaults) => {
     currentDefaults.setEagerModelSync(true);
     currentDefaults.setCompilerOptions(compilerOptions);
+    // The code editor never paints validation (`renderValidationDecorations: "off"`
+    // in theme.ts) and nothing reads markers, so don't have the worker type-check
+    // every model after each edit for them. Completions, go-to-definition and
+    // formatting are separate requests and keep working.
+    currentDefaults.setDiagnosticsOptions({
+      noSemanticValidation: true,
+      noSyntaxValidation: true,
+      noSuggestionDiagnostics: true,
+    });
 
     MONACO_EXTRA_LIBS.forEach(({ content, filePath }) => {
       currentDefaults.addExtraLib(content, filePath);

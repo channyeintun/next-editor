@@ -47,7 +47,7 @@ import "monaco-editor/esm/vs/basic-languages/python/python.contribution.js";
 // Worker-backed rich services. JSON is self-contained: language/json registers
 // its own id and tokenizes via its worker, so it needs no basic grammar.
 import "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
-import "monaco-editor/esm/vs/language/css/monaco.contribution.js";
+import * as monacoCssModule from "monaco-editor/esm/vs/language/css/monaco.contribution.js";
 import "monaco-editor/esm/vs/language/html/monaco.contribution.js";
 import "monaco-editor/esm/vs/language/json/monaco.contribution.js";
 
@@ -81,6 +81,8 @@ const monacoEnvironment: monaco.Environment = {
   },
 };
 
+const monacoCss = monacoCssModule as unknown as typeof import("monaco-editor").css;
+
 const globalScope = self as typeof self & {
   __nextEditorMonacoRuntimeInitialized?: boolean;
 };
@@ -97,6 +99,8 @@ function ensureMonacoRuntimeInitialized() {
   // theme. Routed through setActiveTheme to keep it the only setTheme caller.
   setActiveTheme(NEXT_EDITOR_MONACO_THEME);
   configureMonacoTypeScript();
+  // CSS lint markers are never painted either (see configureMonacoTypeScript).
+  monacoCss.cssDefaults.setOptions({ ...monacoCss.cssDefaults.options, validate: false });
   registerZigLanguage();
   registerHaskellLanguage();
   registerKiteLanguage();
