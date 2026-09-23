@@ -12,7 +12,8 @@ import { describe, expect, it } from "vitest";
  * so no render test notices when a provider's context value goes back to being a
  * new object on every render. This runs the same plugin, with the options
  * vite.config.ts's reactCompilerPreset() passes (none), over the context
- * providers and fails on every function it would skip.
+ * providers and the hooks their context values are built from, and fails on
+ * every function it would skip.
  */
 const PROVIDER_FILES = [
   "src/contexts/ApiClientStoreContext.tsx",
@@ -26,6 +27,7 @@ const PROVIDER_FILES = [
   "src/contexts/WhiteboardContext.tsx",
   "src/contexts/WhiteboardStoreContext.tsx",
   "src/contexts/WorkspaceProvider.tsx",
+  "src/contexts/useWebContainerWorkspaceSync.ts",
 ];
 
 // @babel/core ships no type declarations; this is the one call the test makes.

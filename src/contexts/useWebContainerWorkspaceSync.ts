@@ -62,6 +62,52 @@ interface WorkspaceSyncOptions {
   onExternalFileChange?: (instance: WebContainer) => void;
 }
 
+// The try blocks live in these module-level helpers rather than in the hook: the
+// React Compiler skips a function containing a try/finally, and a hook it skips
+// hands its callers new functions on every render.
+
+type SyncOutcome = "success" | "failure";
+
+/** Runs a sync step, reports whether it succeeded, and rethrows its failure. */
+async function withSyncOutcome<T>(
+  task: () => Promise<T>,
+  report: (outcome: SyncOutcome) => void,
+): Promise<T> {
+  let outcome: SyncOutcome = "success";
+  try {
+    return await task();
+  } catch (error) {
+    outcome = "failure";
+    throw error;
+  } finally {
+    report(outcome);
+  }
+}
+
+function closeWatcher(watcher: IFSWatcher | null): void {
+  try {
+    watcher?.close();
+  } catch {
+    // The container may already be torn down; there is nothing left to close.
+  }
+}
+
+/**
+ * Watches the container's workdir recursively, or returns null where this
+ * container build has no fs.watch; callers then fall back to the terminal-output
+ * reverse-sync heuristic (see isFsWatchActive).
+ */
+function watchWorkdir(
+  instance: WebContainer,
+  onChange: (filename: string | Uint8Array) => void,
+): IFSWatcher | null {
+  try {
+    return instance.fs.watch(".", { recursive: true }, (_event, filename) => onChange(filename));
+  } catch {
+    return null;
+  }
+}
+
 export function useWebContainerWorkspaceSync({ onExternalFileChange }: WorkspaceSyncOptions = {}) {
   const hasMountedProjectRef = useRef(false);
   const mountedInstanceRef = useRef<WebContainer | null>(null);
@@ -82,8 +128,8 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     files: { ...project.files },
   });
 
-  // Synced via a layout effect (not during render) so the React Compiler can
-  // memoize callers; the only reader is the async fs.watch listener.
+  // Synced in a layout effect, not during render, so the React Compiler can
+  // compile this hook; the only reader is the async fs.watch listener.
   useLayoutEffect(() => {
     onExternalFileChangeRef.current = onExternalFileChange;
   });
@@ -125,12 +171,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
   const stopFsWatch = () => {
     const watcher = fsWatcherRef.current;
     fsWatcherRef.current = null;
-
-    try {
-      watcher?.close();
-    } catch {
-      // The container may already be torn down; there is nothing left to close.
-    }
+    closeWatcher(watcher);
   };
 
   const startFsWatch = (instance: WebContainer) => {
@@ -138,31 +179,25 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
 
     const generation = syncGenerationRef.current;
 
-    try {
-      fsWatcherRef.current = instance.fs.watch(".", { recursive: true }, (_event, filename) => {
-        if (syncGenerationRef.current !== generation) {
-          return;
-        }
+    fsWatcherRef.current = watchWorkdir(instance, (filename) => {
+      if (syncGenerationRef.current !== generation) {
+        return;
+      }
 
-        const rawPath =
-          typeof filename === "string" ? filename : watchFilenameDecoder.decode(filename);
-        const normalizedPath = normalizeWorkspacePath(rawPath);
+      const rawPath =
+        typeof filename === "string" ? filename : watchFilenameDecoder.decode(filename);
+      const normalizedPath = normalizeWorkspacePath(rawPath);
 
-        if (!normalizedPath || shouldIgnoreRuntimeImportPath(normalizedPath)) {
-          return;
-        }
+      if (!normalizedPath || shouldIgnoreRuntimeImportPath(normalizedPath)) {
+        return;
+      }
 
-        if (isForwardSyncEcho(normalizedPath)) {
-          return;
-        }
+      if (isForwardSyncEcho(normalizedPath)) {
+        return;
+      }
 
-        onExternalFileChangeRef.current?.(instance);
-      });
-    } catch {
-      // fs.watch is unavailable on this container build; callers fall back to
-      // the terminal-output reverse-sync heuristic (see isFsWatchActive).
-      fsWatcherRef.current = null;
-    }
+      onExternalFileChangeRef.current?.(instance);
+    });
   };
 
   const isFsWatchActive = () => fsWatcherRef.current !== null;
@@ -189,17 +224,13 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
 
     onMountStart?.();
     const endMountSpan = startPerformanceSpan("webcontainer.initial_mount");
-    let mountOutcome = "success";
-    try {
-      await runSerializedWebContainerTask(instance, async () =>
-        instance.mount(await createWorkspaceTree(project)),
-      );
-    } catch (error) {
-      mountOutcome = "failure";
-      throw error;
-    } finally {
-      endMountSpan({ outcome: mountOutcome });
-    }
+    await withSyncOutcome(
+      () =>
+        runSerializedWebContainerTask(instance, async () =>
+          instance.mount(await createWorkspaceTree(project)),
+        ),
+      (outcome) => endMountSpan({ outcome }),
+    );
 
     if (syncGenerationRef.current !== generation) {
       return;
@@ -243,25 +274,23 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
         path_count: files.length,
       });
       let mutationCount = 0;
-      let syncOutcome = "success";
-      try {
-        await runSerializedWebContainerTask(instance, async () => {
-          for (const file of files) {
-            recordForwardSyncWrite(file.path);
-            await instance.fs.writeFile(file.path, await getWorkspaceRuntimeFileContents(file));
-            mutationCount += 1;
-          }
-        });
-      } catch (error) {
-        syncOutcome = "failure";
-        throw error;
-      } finally {
-        endSyncSpan({ outcome: syncOutcome });
-        incrementPerformanceCounter("webcontainer.fs_mutations", mutationCount, {
-          outcome: syncOutcome,
-          source: "file_queue",
-        });
-      }
+      await withSyncOutcome(
+        () =>
+          runSerializedWebContainerTask(instance, async () => {
+            for (const file of files) {
+              recordForwardSyncWrite(file.path);
+              await instance.fs.writeFile(file.path, await getWorkspaceRuntimeFileContents(file));
+              mutationCount += 1;
+            }
+          }),
+        (outcome) => {
+          endSyncSpan({ outcome });
+          incrementPerformanceCounter("webcontainer.fs_mutations", mutationCount, {
+            outcome,
+            source: "file_queue",
+          });
+        },
+      );
 
       if (syncGenerationRef.current !== generation) return;
       const lastSyncedProject = lastSyncedProjectRef.current;
@@ -332,23 +361,19 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
 
         const endSyncSpan = startPerformanceSpan("webcontainer.project_sync");
         let mutationCount = 0;
-        let syncOutcome = "success";
-        try {
-          await runSerializedWebContainerTask(instance, () =>
-            syncWorkspaceProject(instance, lastSyncedProjectRef.current, nextProject, (path) => {
-              mutationCount += 1;
-              recordForwardSyncWrite(path);
-            }),
-          );
-        } catch (error) {
-          syncOutcome = "failure";
-          throw error;
-        } finally {
-          endSyncSpan({ outcome: syncOutcome });
-          incrementPerformanceCounter("webcontainer.fs_mutations", mutationCount, {
-            outcome: syncOutcome,
-          });
-        }
+        await withSyncOutcome(
+          () =>
+            runSerializedWebContainerTask(instance, () =>
+              syncWorkspaceProject(instance, lastSyncedProjectRef.current, nextProject, (path) => {
+                mutationCount += 1;
+                recordForwardSyncWrite(path);
+              }),
+            ),
+          (outcome) => {
+            endSyncSpan({ outcome });
+            incrementPerformanceCounter("webcontainer.fs_mutations", mutationCount, { outcome });
+          },
+        );
 
         if (syncGenerationRef.current !== generation) {
           return;
