@@ -639,7 +639,8 @@ describe("useUrlLoader", () => {
 
       await result.current.fetchNextEditorFile("https://example.com/a.ne");
       await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith("https://example.com/a.en.vtt");
+        const requested = fetchMock.mock.calls.map(([input]) => targetUrl(String(input)));
+        expect(requested).toContain("https://example.com/a.en.vtt");
       });
       await result.current.importNextEditorFile(new File([droppedBytes as BlobPart], "dropped.ne"));
       captionDownload.open();
@@ -669,6 +670,35 @@ describe("useUrlLoader", () => {
       expect(result.current.error).toMatch(/Failed to import file/);
       // A dropped file cannot be fetched again.
       expect(result.current.retry).toBeUndefined();
+    });
+  });
+
+  it("fetches sibling captions through the proxy, like the lesson and its audio", async () => {
+    // A host without CORS headers: the page can only reach it through /api/proxy.
+    const recording = createRecording({ captionFiles: ["intro.en.vtt"] });
+    const neBytes = await encodeRecordingToStream(recording);
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+      const requested = new URL(String(input), window.location.href);
+      if (requested.origin !== window.location.origin) {
+        throw new TypeError("Failed to fetch");
+      }
+      const url = targetUrl(requested.toString());
+      if (url.endsWith("/intro.ne")) {
+        return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+      }
+      if (url.endsWith("/intro.en.vtt")) {
+        return fakeResponse(vttBody(), { ok: true, contentType: "text/vtt" });
+      }
+      return fakeResponse(null, { ok: false, status: 502 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const actions = makeActionsMock();
+    const { result } = renderLoader(actions);
+
+    await result.current.fetchNextEditorFile("https://cdn.example.org/intro.ne");
+
+    await waitFor(() => {
+      expect(actions.addCaptionTrack).toHaveBeenCalledTimes(1);
     });
   });
 });

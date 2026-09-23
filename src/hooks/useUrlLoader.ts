@@ -121,7 +121,8 @@ function withResolvedMediaUrls(recording: Recording, baseUrl: string | undefined
 
 async function fetchVttFile(url: string): Promise<CaptionTrack | null> {
   try {
-    const res = await fetch(url);
+    // Same route as the `.ne` and its media: a host without CORS is reachable only via the proxy.
+    const res = await fetchNextEditorUrl(url);
     if (!res.ok) return null;
     const text = await res.text();
     if (!text.trim().startsWith("WEBVTT")) return null;
