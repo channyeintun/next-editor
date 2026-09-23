@@ -103,6 +103,7 @@ import {
   projectCollaborationTeachingDocument,
   seedCollaborationTeachingDocument,
   setCollaborationCurrentSlide,
+  validateCollaborationWhiteboardElement,
   type CollaborationTeachingProjection,
 } from "../collaboration/teachingDocument";
 import { useSlidesStore } from "./SlidesStoreContext";
@@ -1740,10 +1741,16 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         // local canvas echo look like a remote scene update.
         localWhiteboardProjectionFingerprintRef.current = JSON.stringify(next);
         const nextById = new Map(next.map((element) => [element.id, element] as const));
+        // `next` holds validated elements, whose keys come out in schema order,
+        // so compare with the validated form of each request, not the raw one.
         const matchesRequestedDelta =
           (event.upserts ?? []).every((element) => {
             const projected = nextById.get(element.id);
-            return projected !== undefined && JSON.stringify(projected) === JSON.stringify(element);
+            return (
+              projected !== undefined &&
+              JSON.stringify(projected) ===
+                JSON.stringify(validateCollaborationWhiteboardElement(element))
+            );
           }) && (event.removedIds ?? []).every((id) => !nextById.has(id));
         setLocalError(null);
         return matchesRequestedDelta;

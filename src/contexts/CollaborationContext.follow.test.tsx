@@ -629,4 +629,36 @@ describe("CollaborationContext teaching projection", () => {
     expect(projectCollaborationTeachingDocument).toHaveBeenCalledTimes(1);
     view.unmount();
   });
+
+  // Validation re-emits an element's keys in schema order; Excalidraw's order
+  // differs, so the acceptance check must not compare raw serializations.
+  it("reports an applied whiteboard delta as accepted", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    act(() => {
+      seedCollaborationProject(provider.doc, createStarterHtmlCssWorkspace());
+      seedCollaborationTeachingDocument(provider.doc, { slides: [], whiteboardElements: [] });
+    });
+    await waitFor(() => expect(collaboration!.teaching.initialized).toBe(true));
+
+    let accepted: boolean | null = null;
+    act(() => {
+      accepted = collaboration!.publishWhiteboardDelta({ upserts: [rectangle("e0", "a0")] });
+    });
+
+    expect(accepted).toBe(true);
+    view.unmount();
+  });
 });
