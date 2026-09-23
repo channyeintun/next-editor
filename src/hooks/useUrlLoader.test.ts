@@ -997,4 +997,33 @@ describe("useUrlLoader", () => {
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
+
+  it("adds every declared caption file, even two without a language tag", async () => {
+    const recording = createRecording({ captionFiles: ["captions.vtt", "transcript.vtt"] });
+    const neBytes = await encodeRecordingToStream(recording);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+        const url = targetUrl(typeof input === "string" ? input : input.toString());
+        if (url.endsWith(".ne")) {
+          return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+        }
+        if (url.endsWith("/captions.vtt") || url.endsWith("/transcript.vtt")) {
+          return fakeResponse(vttBody(), { ok: true, contentType: "text/vtt" });
+        }
+        return fakeResponse(null, { ok: false, status: 404 });
+      }),
+    );
+    const actions = makeActionsMock();
+    const { result } = renderLoader(actions);
+
+    await result.current.fetchNextEditorFile("https://example.com/lesson.ne");
+    await waitFor(() => {
+      expect(actions.addCaptionTrack).toHaveBeenCalledTimes(2);
+    });
+
+    // ADD_CAPTION_TRACK replaces a track with the same id, so the ids must differ.
+    const ids = vi.mocked(actions.addCaptionTrack).mock.calls.map(([track]) => track.id);
+    expect(new Set(ids).size).toBe(2);
+  });
 });
