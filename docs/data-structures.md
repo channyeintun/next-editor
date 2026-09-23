@@ -120,7 +120,7 @@ classDiagram
     }
 ```
 
-`Recording.frames` is an array of delta-compressed `DeltaFrame` entries (`src/core/src/utils/deltaTypes.ts`), not raw `EditorFrame`s. Playback reconstructs the full `EditorFrame` from the nearest earlier keyframe plus subsequent deltas via `reconstructFrameAtIndex` (`src/core/src/utils/frameDelta.ts`). SCR3 format v3 introduced bounded, versioned Monaco edit batches for ordinary local changes, with base/result integrity hashes; format v4 adds raw workspace-asset segments. Bulk replacement, imported or remote state, preview HTML, and other non-local changes retain the verified DMP delta. Existing SCR3 v2 and v3 recordings remain readable.
+`Recording.frames` is an array of delta-compressed `DeltaFrame` entries (`src/core/src/utils/deltaTypes.ts`), not raw `EditorFrame`s. Playback reconstructs the full `EditorFrame` from the nearest earlier keyframe plus subsequent deltas via `reconstructFrameAtIndex` (`src/core/src/utils/frameDelta.ts`). SCR3 format v3 introduced bounded, versioned Monaco edit batches for ordinary local changes, with base/result integrity hashes; format v4 adds raw workspace-asset segments; format v5 stores runtime terminal output as deltas between checkpoints and dedups workspace file content against the header snapshot. Bulk replacement, imported or remote state, preview HTML, and other non-local changes retain the verified DMP delta. Existing SCR3 v2–v4 recordings remain readable.
 
 ## Cursor Data
 
@@ -411,7 +411,9 @@ interface RecordingSession {
   previewInitialDocuments: PreviewInitialDocument[];
   previewPatchBatches: PreviewDomPatchBatch[];
   workspaceEvents: WorkspaceRecordingEvent[];
-  runtimeEvents: RuntimeRecordingEvent[];
+  runtimeEvents: RuntimeRecordingEvent[]; // Full-snapshot checkpoints + terminal-output deltas
+  lastRuntimeSnapshot?: RuntimeRecordingSnapshot; // Resolved state of the last runtime event (diff base)
+  runtimeCheckpointProgress?: RuntimeCheckpointProgress; // Places the next checkpoint
   cursorEvents: CursorRecordingEvent[]; // High-cadence fake cursor samples
   lastMousePosition: MouseCursorPosition;
   lastCapturedViewStateRef?: CapturedViewStateRef; // Perf: reuse saveViewState() result and, by its versionId + modelUri, the content string when unchanged

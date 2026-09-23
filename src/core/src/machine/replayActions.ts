@@ -11,6 +11,7 @@ import {
   isKeyframe,
 } from "../utils/frameDelta";
 import { normalizeRecordingData } from "../utils/editorState";
+import { resolveRuntimeSnapshotAt } from "../runtimeTrack";
 import { isValidEditorState } from "../utils/validation";
 import { arePreviewSizesEqual } from "../../../utils/equality";
 import {
@@ -149,7 +150,6 @@ export const setRecording = (
   }
 
   const initialWorkspaceEvent = recording.workspaceEvents?.[0];
-  const initialRuntimeEvent = recording.runtimeEvents?.[0];
 
   if (recording.slides && context.applySlides) {
     context.applySlides(recording.slides);
@@ -173,8 +173,12 @@ export const setRecording = (
     context.applyWorkspaceSnapshot(recording.workspaceSnapshot);
   }
 
-  if (initialRuntimeEvent && context.applyRuntimeSnapshot) {
-    context.applyRuntimeSnapshot(initialRuntimeEvent.snapshot);
+  const initialRuntimeSnapshot = recording.runtimeEvents
+    ? resolveRuntimeSnapshotAt(recording.runtimeEvents, 0)
+    : null;
+
+  if (initialRuntimeSnapshot && context.applyRuntimeSnapshot) {
+    context.applyRuntimeSnapshot(initialRuntimeSnapshot);
   } else if (recording.runtimeSnapshot && context.applyRuntimeSnapshot) {
     context.applyRuntimeSnapshot(recording.runtimeSnapshot);
   }
@@ -210,7 +214,7 @@ export const setRecording = (
     // and the playback entry would apply those snapshots a second time.
     ...REPLAY_CURSORS_RESET,
     lastAppliedWorkspaceEventIndex: initialWorkspaceEvent ? 0 : -1,
-    lastAppliedRuntimeEventIndex: initialRuntimeEvent ? 0 : -1,
+    lastAppliedRuntimeEventIndex: initialRuntimeSnapshot ? 0 : -1,
     lastAppliedPreviewState: undefined,
   };
 };

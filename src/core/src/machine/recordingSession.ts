@@ -14,6 +14,11 @@ import {
   type WorkspaceWidthDeltas,
 } from "../../../types/workspace";
 import { areRuntimeRecordingSnapshotsEqual } from "../../../utils/equality";
+import {
+  createRuntimeRecordingEvent,
+  resolveLatestRuntimeSnapshot,
+  RUNTIME_CHECKPOINT_RESET,
+} from "../runtimeTrack";
 import type { RecordingSession } from "./types";
 
 function getRecordingTimestamp(session: RecordingSession): number {
@@ -119,23 +124,30 @@ export function appendWorkspaceRecordingEvent(
 }
 
 /**
- * Returns `false` when the snapshot deduplicates against the last recorded event (no
+ * Records terminal output as a delta against the previous event (see runtimeTrack.ts).
+ * Returns `false` when the snapshot deduplicates against the last recorded state (no
  * push happened) so callers know whether to bump `sessionRevision`.
  */
 export function appendRuntimeRecordingEvent(
   session: RecordingSession,
   snapshot: RuntimeRecordingSnapshot,
 ): boolean {
-  const previousEvent = session.runtimeEvents[session.runtimeEvents.length - 1];
+  const previousSnapshot =
+    session.lastRuntimeSnapshot ?? resolveLatestRuntimeSnapshot(session.runtimeEvents);
 
-  if (previousEvent && areRuntimeRecordingSnapshotsEqual(previousEvent.snapshot, snapshot)) {
+  if (previousSnapshot && areRuntimeRecordingSnapshotsEqual(previousSnapshot, snapshot)) {
     return false;
   }
 
-  session.runtimeEvents.push({
-    timestamp: getRecordingTimestamp(session),
+  const { event, progress } = createRuntimeRecordingEvent(
+    getRecordingTimestamp(session),
+    previousSnapshot,
     snapshot,
-  });
+    session.runtimeCheckpointProgress ?? RUNTIME_CHECKPOINT_RESET,
+  );
+  session.runtimeEvents.push(event);
+  session.lastRuntimeSnapshot = snapshot;
+  session.runtimeCheckpointProgress = progress;
   return true;
 }
 

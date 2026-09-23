@@ -32,10 +32,14 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 //
 // Three independent "version" numbers exist; do not conflate them:
 //   * the magic "SCR3"          — container family marker (STREAM_MAGIC_BYTES).
-//   * STREAM_FORMAT_VERSION (4) — on-wire record capabilities. Version 3 added
-//                                 exact Monaco content-edit deltas; version 4 adds
-//                                 raw workspace-asset segments. Versions 2 and 3
-//                                 remain readable for existing SCR3 files.
+//   * STREAM_FORMAT_VERSION (5) — on-wire record capabilities. Version 3 added
+//                                 exact Monaco content-edit deltas; version 4 added
+//                                 raw workspace-asset segments; version 5 records
+//                                 runtime terminal output as deltas between
+//                                 checkpoints (runtimeTrack.ts), and seeds the
+//                                 workspace dedup from the header snapshot and
+//                                 splices changed files (workspaceEventDedup.ts).
+//                                 Versions 2–4 remain readable for existing files.
 //   * meta.version (4)          — the Recording *schema* version carried inside
 //                                 the metadata, unrelated to the byte layout.
 //
@@ -57,13 +61,17 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 // ============================================================================
 
 const STREAM_MAGIC_BYTES = new Uint8Array([0x53, 0x43, 0x52, 0x33]);
-export const STREAM_FORMAT_VERSION = 4;
+export const STREAM_FORMAT_VERSION = 5;
+/** First version whose workspace dedup is seeded from the header snapshot. */
+export const SEEDED_WORKSPACE_DEDUP_FORMAT_VERSION = 5;
+export const WORKSPACE_ASSET_FORMAT_VERSION = 4;
 export const PREVIOUS_STREAM_FORMAT_VERSION = 3;
 export const LEGACY_STREAM_FORMAT_VERSION = 2;
 
 function isSupportedStreamFormatVersion(version: number): boolean {
   return (
     version === STREAM_FORMAT_VERSION ||
+    version === WORKSPACE_ASSET_FORMAT_VERSION ||
     version === PREVIOUS_STREAM_FORMAT_VERSION ||
     version === LEGACY_STREAM_FORMAT_VERSION
   );

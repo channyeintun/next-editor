@@ -2,6 +2,7 @@ import { useSelector } from "@xstate/store-react";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { selectPlaybackSnapshot } from "../stores/runtimePanelStore";
 import { useNextEditorMetadata } from "./useNextEditorContext";
+import { resolveRuntimeSnapshotAt } from "../core/src/runtimeTrack";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 
 export interface RuntimeDockRecordedSnapshotResult {
@@ -24,7 +25,9 @@ export function useRuntimeDockRecordedSnapshot(): RuntimeDockRecordedSnapshotRes
   const recordedRuntimeSnapshot =
     isPlaying && !isRecording
       ? (playbackRuntimeSnapshot ??
-        currentRecording?.runtimeEvents?.[0]?.snapshot ??
+        (currentRecording?.runtimeEvents
+          ? resolveRuntimeSnapshotAt(currentRecording.runtimeEvents, 0)
+          : null) ??
         currentRecording?.runtimeSnapshot ??
         null)
       : null;

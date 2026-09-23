@@ -24,8 +24,10 @@ import {
   parseHeader,
   readFooterSegmentOffset,
   readSegmentHeader,
+  SEEDED_WORKSPACE_DEDUP_FORMAT_VERSION,
   SEGMENT_HEADER_SIZE,
   SEGMENT_KIND,
+  WORKSPACE_ASSET_FORMAT_VERSION,
   MAX_COMPRESSED_META_BYTES,
   MAX_DECODED_RECORDS,
   MAX_STREAM_BYTES,
@@ -59,7 +61,7 @@ function assertFrameFormatCompatibility(
 }
 
 function assertWorkspaceAssetFormatCompatibility(formatVersion: number): void {
-  if (formatVersion >= 4) return;
+  if (formatVersion >= WORKSPACE_ASSET_FORMAT_VERSION) return;
   throw new Error("Invalid SCR3 stream: workspace assets require format version 4");
 }
 
@@ -146,7 +148,9 @@ function createDecodedStream(meta: RecordingStreamMeta, formatVersion: number): 
     workspaceAssets: [],
     workspaceAssetIds: new Set(),
     clusterSummaries: new Map(),
-    hydrateWorkspaceEvents: createWorkspaceEventContentHydrator(),
+    hydrateWorkspaceEvents: createWorkspaceEventContentHydrator(
+      formatVersion >= SEEDED_WORKSPACE_DEDUP_FORMAT_VERSION ? meta.workspaceSnapshot : undefined,
+    ),
     hydratePreviewPatchBatches: createPreviewAddNodeHydrator(),
     segmentCount: 0,
     recordCount: 0,

@@ -25,6 +25,7 @@ import {
   LEGACY_STREAM_FORMAT_VERSION,
   PREVIOUS_STREAM_FORMAT_VERSION,
   STREAM_FORMAT_VERSION,
+  WORKSPACE_ASSET_FORMAT_VERSION,
 } from "./streamingRecordingCodec/format";
 import {
   flushPerformanceMetrics,
@@ -107,13 +108,17 @@ describe("recordingCodec", () => {
     expect(decoded.frames).toEqual(recording.frames);
   });
 
-  it("writes SCR format v4 and remains compatible with v2/v3 recordings", async () => {
+  it("writes SCR format v5 and remains compatible with v2–v4 recordings", async () => {
     const recording = createRecording();
     const encoded = await encodeRecordingToStream(recording);
     const view = new DataView(encoded.buffer, encoded.byteOffset, encoded.byteLength);
     expect(view.getUint16(4, true)).toBe(STREAM_FORMAT_VERSION);
 
-    for (const version of [PREVIOUS_STREAM_FORMAT_VERSION, LEGACY_STREAM_FORMAT_VERSION]) {
+    for (const version of [
+      WORKSPACE_ASSET_FORMAT_VERSION,
+      PREVIOUS_STREAM_FORMAT_VERSION,
+      LEGACY_STREAM_FORMAT_VERSION,
+    ]) {
       const legacy = encoded.slice();
       new DataView(legacy.buffer).setUint16(4, version, true);
       expect(decodeRecordingStream(legacy).frames).toEqual(recording.frames);

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Recording } from "../core/src";
 import { decompressBinaryToRecording as decodeInProcess } from "./recordingCodec";
 import { encodeRecordingToStream } from "./streamingRecordingCodec";
+import { STREAM_FORMAT_VERSION } from "./streamingRecordingCodec/format";
 
 // The real worker needs the wasm diff codec, which Vitest cannot import; the
 // client only awaits it, so a resolved stand-in is enough here.
@@ -95,10 +96,10 @@ describe("decompressBinaryToRecording through the codec worker", () => {
     installWorker("decode");
     const { decompressBinaryToRecording } = await importClient();
     const bytes = await encodeRecordingToStream(recording);
-    new DataView(bytes.buffer, bytes.byteOffset).setUint16(4, 5, true); // a newer format
+    new DataView(bytes.buffer, bytes.byteOffset).setUint16(4, STREAM_FORMAT_VERSION + 1, true); // a newer format
 
     await expect(decompressBinaryToRecording(bytes)).rejects.toThrow(
-      "Unsupported SCR3 format version: 5",
+      `Unsupported SCR3 format version: ${STREAM_FORMAT_VERSION + 1}`,
     );
   });
 });

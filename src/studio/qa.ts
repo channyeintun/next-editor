@@ -1,4 +1,5 @@
 import type { Recording, RecordingTrackKind } from "../core/src";
+import { resolveLatestRuntimeSnapshot } from "../core/src/runtimeTrack";
 import { decompressBinaryToRecording } from "../storage/recordingCodec";
 import { isWorkspaceTextFile } from "../types/workspace";
 import type { StudioPlan, StudioPlanAction } from "./plan";
@@ -460,8 +461,7 @@ export async function runArtifactChecks({
   // runtime.noErrors + expect.output re-checked against the *encoded* console
   const lastRuntimeSnapshot =
     artifactRecording.runtimeSnapshot ??
-    (artifactRecording.runtimeEvents ?? []).at(-1)?.snapshot ??
-    null;
+    resolveLatestRuntimeSnapshot(artifactRecording.runtimeEvents);
   const consoleLines = lastRuntimeSnapshot?.consoleLines ?? [];
   const previewErrorLines = consoleLines.filter((line) => /^\[preview:error\]/i.test(line));
   const previewRuntimeError = lastRuntimeSnapshot?.latestPreviewMessage;

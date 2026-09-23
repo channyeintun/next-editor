@@ -1,4 +1,5 @@
 import type { Recording } from "../core/src";
+import { resolveLatestRuntimeSnapshot } from "../core/src/runtimeTrack";
 import type { ActionReceipt, StudioCheckResult } from "./report";
 import { workspaceTextFilesOf } from "./qa";
 import { hashWorkspaceFiles, sha256Hex } from "./hash";
@@ -128,7 +129,7 @@ export async function extractRenderSemantics(
   planSha256: string,
 ): Promise<RenderSemantics> {
   const lastRuntimeSnapshot =
-    recording.runtimeSnapshot ?? (recording.runtimeEvents ?? []).at(-1)?.snapshot ?? null;
+    recording.runtimeSnapshot ?? resolveLatestRuntimeSnapshot(recording.runtimeEvents);
 
   return {
     planSha256,

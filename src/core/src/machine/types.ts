@@ -26,6 +26,7 @@ import type { FrameStreamEncoderState } from "../utils/frameStreamEncoder";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
+import type { RuntimeCheckpointProgress } from "../runtimeTrack";
 import type { ChatCheckpoint, ChatRecordingEvent } from "../../../types/chat";
 import type { TextEditEvent } from "../../../types/textEdit";
 import type { CapturedViewStateRef } from "./editorMachineHelpers";
@@ -87,8 +88,16 @@ export interface RecordingSession {
   previewPatchBatches: PreviewDomPatchBatch[];
   /** Collected workspace events during recording */
   workspaceEvents: WorkspaceRecordingEvent[];
-  /** Collected runtime events during recording */
+  /** Collected runtime events during recording (checkpoints + terminal-output deltas) */
   runtimeEvents: RuntimeRecordingEvent[];
+  /**
+   * Resolved state of the last runtime event, so the next one can be diffed and
+   * deduped without folding the track. Absent when the session began with no
+   * runtime snapshot; `appendRuntimeRecordingEvent` then resolves it from the track.
+   */
+  lastRuntimeSnapshot?: RuntimeRecordingSnapshot;
+  /** Where the runtime track stands against its next checkpoint (see runtimeTrack.ts). */
+  runtimeCheckpointProgress?: RuntimeCheckpointProgress;
   /** High-cadence fake cursor samples during recording */
   cursorEvents: CursorRecordingEvent[];
   /** Collected whiteboard change events during recording */

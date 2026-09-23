@@ -100,8 +100,9 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   let nextFrameClusterIndex = 0;
   let headerMeta: RecordingStreamMeta | null = null;
   // Workspace events each embed the project graph. Repeated text is stripped to
-  // a marker; binary bytes live in separate raw workspace-asset segments.
-  const stripWorkspaceEvents = createWorkspaceEventContentStripper();
+  // a marker; binary bytes live in separate raw workspace-asset segments. The
+  // carry is seeded from the header's snapshot, so it is created in writeHeader.
+  let stripWorkspaceEvents = createWorkspaceEventContentStripper();
   // rrweb mutation adds re-serialize identical node payloads on content churn
   // (virtualized lists remounting rows); repeats are stripped to a template
   // marker here and rebuilt on decode — see previewPatchDedup.ts.
@@ -185,6 +186,7 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
       const flags = (meta.audioType ? FLAG_HAS_AUDIO : 0) | (meta.cameraType ? FLAG_HAS_CAMERA : 0);
       pushChunk(buildHeaderChunk(meta, flags));
       headerMeta = meta;
+      stripWorkspaceEvents = createWorkspaceEventContentStripper(meta.workspaceSnapshot);
       headerWritten = true;
     },
     appendFrameSegment(frames, options) {

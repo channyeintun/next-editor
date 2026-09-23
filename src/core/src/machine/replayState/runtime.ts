@@ -1,11 +1,14 @@
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../../types/runtime";
+import { resolveRuntimeSnapshotAt } from "../../runtimeTrack";
 import { advanceReplayCursor } from "./cursor";
 
 // ============================================================================
 // Runtime track replay.
 //
-// Each runtime event carries a full snapshot, so replay is simply: find the
-// latest event at or before the current time and apply its snapshot.
+// Find the latest event at or before the current time and apply the state it
+// resolves to. Terminal output is stored as deltas between sparse checkpoints,
+// so the state comes from resolveRuntimeSnapshotAt, which folds forward from
+// the last resolved index during playback and from a checkpoint on a seek.
 // ============================================================================
 
 export interface RuntimeReplayResult {
@@ -31,7 +34,7 @@ export function getRuntimeReplayResult({
   if (replayCursor.latestEvent && replayCursor.nextIndex !== lastAppliedIndex) {
     return {
       nextIndex: replayCursor.nextIndex,
-      snapshotToApply: replayCursor.latestEvent.snapshot,
+      snapshotToApply: resolveRuntimeSnapshotAt(runtimeEvents, replayCursor.nextIndex) ?? undefined,
     };
   }
 

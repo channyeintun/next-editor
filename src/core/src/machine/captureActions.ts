@@ -318,6 +318,7 @@ export const initRecordingSession = ({
       previewPatchBatches: [],
       workspaceEvents,
       runtimeEvents,
+      lastRuntimeSnapshot: initialRuntimeSnapshot ?? undefined,
       whiteboardEvents,
       chatEvents: [],
       cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
