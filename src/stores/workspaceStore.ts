@@ -1380,8 +1380,6 @@ export const selectWorkspaceDirtyState = (context: WorkspaceState): WorkspaceDir
 
 export const selectWorkspaceSaveVersion = (context: WorkspaceState): number => context.saveVersion;
 
-export const selectWorkspaceSyncVersion = (context: WorkspaceState): number => context.syncVersion;
-
 export const selectWorkspaceIsSaving = (context: WorkspaceState): boolean => context.isSaving;
 
 export const selectWorkspaceSaveError = (context: WorkspaceState): string | null =>

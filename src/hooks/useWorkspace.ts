@@ -27,7 +27,6 @@ import {
   selectWorkspaceSidebarCollapsed,
   selectWorkspaceSidebarState,
   selectWorkspaceSidebarWidth,
-  selectWorkspaceSyncVersion,
   selectWorkspaceTreeVersion,
 } from "../stores/workspaceStore";
 import type { WorkspaceLessonType } from "../types/workspace";
@@ -126,8 +125,4 @@ export const useWorkspaceSaveStatus = (): WorkspaceSaveStatus => {
   const errorMessage = useWorkspaceSelector("useWorkspaceSaveStatus", selectWorkspaceSaveError);
 
   return useMemo(() => ({ isSaving, errorMessage }), [errorMessage, isSaving]);
-};
-
-export const useWorkspaceSyncVersion = (): number => {
-  return useWorkspaceSelector("useWorkspaceSyncVersion", selectWorkspaceSyncVersion);
 };
