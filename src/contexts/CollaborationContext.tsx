@@ -1553,11 +1553,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       if (!(event.upserts?.length || event.removedIds?.length)) return true;
       try {
         const next = applyCollaborationWhiteboardDelta(current.doc, event);
-        // The teaching projection of these transactions runs in a microtask and
-        // React applies it to the stores in an effect, both after this callback.
-        // Tag that exact authoritative result so normalization cannot make this
-        // local canvas echo look like a remote scene update.
-        localWhiteboardProjectionFingerprintRef.current = JSON.stringify(next);
         const nextById = new Map(next.map((element) => [element.id, element] as const));
         // `next` holds validated elements, whose keys come out in schema order,
         // so compare with the validated form of each request, not the raw one.
@@ -1570,6 +1565,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
                 JSON.stringify(validateCollaborationWhiteboardElement(element))
             );
           }) && (event.removedIds ?? []).every((id) => !nextById.has(id));
+        // The teaching projection of these transactions runs in a microtask and
+        // React applies it to the stores in an effect, both after this callback.
+        // Tag that exact authoritative result so normalization cannot make this
+        // local canvas echo look like a remote scene update. Only an accepted
+        // delta is an echo: when another client's version won, the canvas does
+        // not show the result and the projection must reach it.
+        if (matchesRequestedDelta) {
+          localWhiteboardProjectionFingerprintRef.current = JSON.stringify(next);
+        }
         setLocalError(null);
         return matchesRequestedDelta;
       } catch (error) {

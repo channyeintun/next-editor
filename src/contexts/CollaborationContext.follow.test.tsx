@@ -723,6 +723,68 @@ describe("CollaborationContext teaching projection", () => {
     expect(accepted).toBe(true);
     view.unmount();
   });
+
+  // WhiteboardPanel pushes only "external" scenes into the canvas. The projection of a local
+  // delta the room kept is the canvas's own echo; one where another client's version won is
+  // not, and the canvas must receive it.
+  describe("the whiteboard scene a published delta projects", () => {
+    async function renderRoom(whiteboardElements: WhiteboardElementJSON[]) {
+      let collaboration: ReturnType<typeof useCollaboration> | null = null;
+      let whiteboardStore: WhiteboardStoreInstance | null = null;
+      function Probe() {
+        collaboration = useCollaboration();
+        whiteboardStore = useWhiteboardStore().store;
+        return null;
+      }
+      const view = render(
+        <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+          <Providers>
+            <Probe />
+          </Providers>
+        </MemoryRouter>,
+      );
+      await waitFor(() => expect(controls.providers).toHaveLength(1));
+      const provider = controls.providers[0]!;
+      act(() => {
+        seedCollaborationProject(provider.doc, createStarterHtmlCssWorkspace());
+        seedCollaborationTeachingDocument(provider.doc, { slides: [], whiteboardElements });
+      });
+      await waitFor(() => expect(collaboration!.teaching.initialized).toBe(true));
+      return {
+        view,
+        publish: (upserts: WhiteboardElementJSON[]) => {
+          let accepted: boolean | null = null;
+          act(() => {
+            accepted = collaboration!.publishWhiteboardDelta({ upserts });
+          });
+          return accepted;
+        },
+        scene: () => whiteboardStore!.getSnapshot().context,
+      };
+    }
+
+    it("is the canvas's own echo when the room kept the delta", async () => {
+      const room = await renderRoom([]);
+
+      expect(room.publish([rectangle("e0", "a0")])).toBe(true);
+
+      await waitFor(() => expect(room.scene().scene.elements).toHaveLength(1));
+      expect(room.scene().sceneUpdateSource).toBe("canvas");
+      room.view.unmount();
+    });
+
+    it("reaches the canvas when another client's newer version won", async () => {
+      const newer = { ...rectangle("e0", "a0"), version: 5, versionNonce: 50 };
+      const room = await renderRoom([newer]);
+
+      expect(room.publish([rectangle("e0", "a0"), rectangle("e1", "a1")])).toBe(false);
+
+      await waitFor(() => expect(room.scene().scene.elements).toHaveLength(2));
+      expect(room.scene().scene.elements.find((element) => element.id === "e0")?.version).toBe(5);
+      expect(room.scene().sceneUpdateSource).toBe("external");
+      room.view.unmount();
+    });
+  });
 });
 
 describe("CollaborationContext presence", () => {

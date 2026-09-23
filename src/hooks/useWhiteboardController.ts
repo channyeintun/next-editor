@@ -116,17 +116,26 @@ export const useWhiteboardController = ({
       ...(snapshot?.removedIds.length ? { removedIds: snapshot.removedIds } : {}),
       ...(viewChanged ? { view } : {}),
     };
-    const accepted = onWhiteboardEventRef.current?.(event) !== false;
+    const nextView = viewChanged && view ? view : current.view;
+    if (onWhiteboardEventRef.current?.(event) === false) {
+      // The room refused the content change, so the canvas is showing elements the store and
+      // the room do not have. Keep the store's elements and mark the scene external, which is
+      // what makes WhiteboardPanel push it back into Excalidraw; the local pan/zoom stays.
+      store.trigger.setScene({ scene: { ...current, view: nextView }, source: "external" });
+      return;
+    }
+
+    let nextElements = current.elements;
+    if (snapshot) {
+      nextElements =
+        baseElements === current.elements
+          ? snapshot.nextElements
+          : rebaseWhiteboardDelta(current.elements, snapshot);
+    }
     store.trigger.setScene({
       scene: {
-        elements: accepted
-          ? snapshot
-            ? baseElements === current.elements
-              ? snapshot.nextElements
-              : rebaseWhiteboardDelta(current.elements, snapshot)
-            : current.elements
-          : structuredClone(current.elements),
-        view: viewChanged && view ? view : current.view,
+        elements: nextElements,
+        view: nextView,
         isOpen: current.isOpen,
         isMaximized: current.isMaximized,
       },

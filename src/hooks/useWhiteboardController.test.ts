@@ -205,4 +205,31 @@ describe("useWhiteboardController", () => {
 
     expect(store.getSnapshot().context.scene.elements).toEqual([element("shared")]);
   });
+
+  // WhiteboardPanel pushes only "external" scenes into Excalidraw; a "canvas" scene is the
+  // gesture already on screen. A refused change is not on screen as far as the room goes.
+  it("hands a rejected delta's rollback to the canvas and keeps the local pan and zoom", () => {
+    vi.useFakeTimers();
+    const store = createWhiteboardStore();
+    store.trigger.setScene({
+      scene: { ...store.getSnapshot().context.scene, elements: [element("shared")] },
+    });
+    const { result } = renderHook(() =>
+      useWhiteboardController({ store, onWhiteboardEvent: () => false }),
+    );
+
+    act(() => {
+      result.current.handleExcalidrawChange(
+        [element("shared"), element("refused-stroke")],
+        { scrollX: 40, scrollY: 0, zoom: 1.5 },
+        false,
+      );
+      vi.advanceTimersByTime(100);
+    });
+
+    const { scene, sceneUpdateSource } = store.getSnapshot().context;
+    expect(scene.elements).toEqual([element("shared")]);
+    expect(scene.view).toEqual({ scrollX: 40, scrollY: 0, zoom: 1.5 });
+    expect(sceneUpdateSource).toBe("external");
+  });
 });
