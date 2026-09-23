@@ -133,7 +133,6 @@ describe("hydrateAssetDescriptors", () => {
     expect(context.project.files["public/logo.png"].encoding).toBe("asset");
     expect(context.dirtyState.hasUnsavedChanges).toBe(false);
     expect(context.syncVersion).toBe(1);
-    expect(context.previewVersion).toBe(1);
   });
 
   it("does not overwrite an existing descriptor", () => {

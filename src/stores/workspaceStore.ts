@@ -67,7 +67,6 @@ export type WorkspaceState =
       projectVersion: number;
       externalProjectVersion: number;
       treeVersion: number;
-      previewVersion: number;
       saveVersion: number;
       syncVersion: number;
       lastFileSync: { path: string; revision: number } | null;
@@ -87,7 +86,6 @@ export type WorkspaceState =
       projectVersion: number;
       externalProjectVersion: number;
       treeVersion: number;
-      previewVersion: number;
       saveVersion: number;
       syncVersion: number;
       lastFileSync: { path: string; revision: number } | null;
@@ -536,7 +534,6 @@ function withUpdatedFileContent(
       context.activeFilePath === path
         ? { activeFile: nextFile, projectVersion: context.editorState.projectVersion }
         : context.editorState,
-    previewVersion: context.previewVersion + 1,
     syncVersion: context.syncVersion + 1,
     lastFileSync: { path, revision: context.syncVersion + 1 },
   };
@@ -554,7 +551,6 @@ function createUninitializedWorkspaceState(): WorkspaceState {
     projectVersion: 0,
     externalProjectVersion: 0,
     treeVersion: 0,
-    previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
     lastFileSync: null,
@@ -595,7 +591,6 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
     projectVersion: 0,
     externalProjectVersion: 0,
     treeVersion: 0,
-    previewVersion: 0,
     saveVersion: 0,
     syncVersion: 0,
     lastFileSync: null,
@@ -658,7 +653,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               ...context.project,
               entryFilePath: normalizedPath,
             },
-            previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
         );
@@ -754,7 +748,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             },
             activeFilePath: normalizedPath,
             treeVersion: context.treeVersion + 1,
-            previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
         );
@@ -784,7 +777,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               ]),
             },
             treeVersion: context.treeVersion + 1,
-            previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
         );
@@ -840,7 +832,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
                 ? normalizedNextPath
                 : context.activeFilePath,
             treeVersion: context.treeVersion + 1,
-            previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
         );
@@ -920,7 +911,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               normalizedNextPath,
             ),
             treeVersion: context.treeVersion + 1,
-            previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
         );
@@ -947,7 +937,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               project: fallbackProject,
               activeFilePath: fallbackProject.entryFilePath,
               treeVersion: context.treeVersion + 1,
-              previewVersion: context.previewVersion + 1,
               syncVersion: context.syncVersion + 1,
             }),
           );
@@ -970,7 +959,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               ? context.activeFilePath
               : nextProject.entryFilePath,
             treeVersion: context.treeVersion + 1,
-            previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
         );
@@ -1000,7 +988,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               project: fallbackProject,
               activeFilePath: fallbackProject.entryFilePath,
               treeVersion: context.treeVersion + 1,
-              previewVersion: context.previewVersion + 1,
               syncVersion: context.syncVersion + 1,
             }),
           );
@@ -1030,7 +1017,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
                 ? nextEntryFilePath
                 : context.activeFilePath,
             treeVersion: context.treeVersion + 1,
-            previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
         );
@@ -1106,7 +1092,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               ...context.project,
               lessonType: event.lessonType,
             },
-            previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
         );
@@ -1143,7 +1128,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             workspaceLoadVersion: baseContext.workspaceLoadVersion + 1,
             projectVersion: baseContext.projectVersion + 1,
             treeVersion,
-            previewVersion: baseContext.previewVersion + 1,
             saveVersion: baseContext.saveVersion + 1,
             syncVersion: baseContext.syncVersion + 1,
             isSaving: false,
@@ -1179,7 +1163,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             // a local user action, so playback UIs can tell the two apart.
             externalProjectVersion: context.externalProjectVersion + 1,
             treeVersion,
-            previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
         );
@@ -1272,7 +1255,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               ...context.savedSnapshot,
               project: { ...context.savedSnapshot.project, files: nextSavedFiles },
             },
-            previewVersion: context.previewVersion + 1,
             syncVersion: context.syncVersion + 1,
           }),
         );
@@ -1288,7 +1270,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         }
         return {
           ...context,
-          previewVersion: context.previewVersion + 1,
           syncVersion: context.syncVersion + 1,
           lastFileSync: null,
         };
@@ -1371,8 +1352,9 @@ export const selectWorkspaceTreeVersion = (context: WorkspaceState): number => c
 export const selectWorkspaceFileCount = (context: WorkspaceState): number =>
   context.isInitialized ? context.fileCount : 0;
 
+/** The preview refreshes on the same revisions the WebContainer syncs on. */
 export const selectWorkspacePreviewVersion = (context: WorkspaceState): number =>
-  context.previewVersion;
+  context.syncVersion;
 
 export const selectWorkspaceDirtyState = (context: WorkspaceState): WorkspaceDirtyState =>
   context.isInitialized ? context.dirtyState : emptyDirtyState;

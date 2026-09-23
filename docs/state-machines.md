@@ -55,8 +55,9 @@ gated for that tick so playback writes are not recaptured as new edits.
 Two corollaries that should stay true as the code evolves:
 
 - The machine never persists workspace state. Persistence (localStorage snapshot +
-  IndexedDB assets) is the store's concern, triggered by its `saveVersion` /
-  `previewVersion` counters.
+  IndexedDB assets) is the store's concern: `saveProject`, which the UI calls
+  explicitly (Ctrl+S, the sidebar, a runner's save-before-run), writes it, and
+  the store's `saveVersion` counts completed saves.
 - The store never advances the timeline. Clock progression belongs to the
   `timelineMachine` child actor.
 
@@ -64,7 +65,7 @@ Two corollaries that should stay true as the code evolves:
 flowchart LR
     User[User / UI edits] -->|write| Store[(workspaceStore)]
     Store -->|syncVersion| Container[WebContainer FS mirror]
-    Store -->|saveVersion| Persist[localStorage + IndexedDB]
+    Store -->|saveProject| Persist[localStorage + IndexedDB]
     Store -->|snapshots + WORKSPACE_EVENT| Machine[editorMachine]
     Machine -->|playback: applyWorkspaceSnapshot / loadProject| Store
     Machine -.suppressWorkspaceEvents gates feedback.-> Store
