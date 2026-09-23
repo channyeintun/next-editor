@@ -1,7 +1,12 @@
 // @vitest-environment node
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { listPublishedLessons, upsertUserByGoogleSub, USERNAME_PATTERN } from "./queries";
+import {
+  getUserByUsername,
+  listPublishedLessons,
+  upsertUserByGoogleSub,
+  USERNAME_PATTERN,
+} from "./queries";
 
 /**
  * The gallery's paging, exercised against real SQLite rather than a stub, so
@@ -49,6 +54,9 @@ function asD1(db: DatabaseSync): D1Database {
         },
         async all<T>() {
           return { results: db.prepare(sql).all(...(bound as never[])) as T[] };
+        },
+        async first<T>() {
+          return (db.prepare(sql).get(...(bound as never[])) as T | undefined) ?? null;
         },
       };
       return statement;
@@ -237,5 +245,26 @@ describe("upsertUserByGoogleSub", () => {
     expect(row.username).toMatch(/^user-[0-9a-f]{8}$/);
     expect(row.username).toMatch(USERNAME_PATTERN);
     expect(probed.length, "unbounded username probing").toBeLessThanOrEqual(51);
+  });
+});
+
+describe("getUserByUsername", () => {
+  // Older accounts keep names outside USERNAME_PATTERN on purpose (see its
+  // doc). Lookups must stay exact matches: validating the pattern here would
+  // break every profile and author link those names already have.
+  it("still resolves usernames issued before the rename rule", async () => {
+    const legacy = ["jo", "maximilian-alexander-von-habsburg-lothringen", "100%-sure-66666666"];
+    const sqlite = new DatabaseSync(":memory:");
+    sqlite.exec("CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT UNIQUE)");
+    const insert = sqlite.prepare("INSERT INTO users (id, username) VALUES (?, ?)");
+    for (const [index, username] of legacy.entries()) {
+      insert.run(`user-${index}`, username);
+    }
+    const db = asD1(sqlite);
+
+    for (const [index, username] of legacy.entries()) {
+      expect(username).not.toMatch(USERNAME_PATTERN);
+      expect(await getUserByUsername(db, username)).toEqual({ id: `user-${index}`, username });
+    }
   });
 });

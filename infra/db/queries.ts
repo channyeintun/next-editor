@@ -16,9 +16,19 @@ export interface UpsertUserParams {
 }
 
 /**
- * The one shape a username may have: 3-32 characters, lowercase alphanumeric
- * and hyphens, no leading or trailing hyphen. PATCH /api/auth/username enforces
- * it on renames, and generateUniqueUsername below only ever produces it.
+ * The shape of every username issued or chosen today: 3-32 characters of
+ * lowercase letters, digits and hyphens, with no hyphen at either end.
+ * generateUniqueUsername below only produces it, and PATCH /api/auth/username
+ * only accepts it.
+ *
+ * Accounts from before 2026-09-23 may hold a name outside it: shorter or longer
+ * (the generator had no length bound, and renames once allowed one character),
+ * or, from 0002's backfill, other characters of the Google display name. They
+ * are kept on purpose. Lookups are exact matches, so those profiles and author
+ * links work, and renaming them would break links people have shared; their
+ * owners can rename into this shape from their profile. Backfilled names
+ * holding '/', '\', '?', '#' or an ASCII percent-escape, which broke their
+ * /learn/@ URL, were rewritten by migration 0014_reachable_usernames.sql.
  */
 export const USERNAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/;
 
