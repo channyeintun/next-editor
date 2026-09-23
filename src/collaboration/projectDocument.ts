@@ -594,10 +594,22 @@ export interface CollaborationProjectControllerOptions {
   getProjection?: () => CollaborationProjectProjection | null;
 }
 
+// At most three UTF-8 bytes per UTF-16 unit keeps one chunk's update well under
+// MAX_YJS_UPDATE_BYTES.
 const COLLABORATION_TEXT_INSERT_CHUNK_CHARS = 12 * 1024;
 
 function isHighSurrogate(charCode: number): boolean {
   return charCode >= 0xd800 && charCode <= 0xdbff;
+}
+
+/**
+ * End of the insert chunk that starts at `offset`. Each chunk becomes its own
+ * update, and lib0 encodes a lone surrogate as U+FFFD, so a chunk never ends
+ * between the halves of a pair.
+ */
+function textChunkEnd(content: string, offset: number): number {
+  const end = Math.min(offset + COLLABORATION_TEXT_INSERT_CHUNK_CHARS, content.length);
+  return end < content.length && isHighSurrogate(content.charCodeAt(end - 1)) ? end - 1 : end;
 }
 
 function sharedTextReplacement(text: Y.Text, nextContent: string) {
@@ -675,15 +687,32 @@ export class CollaborationProjectController {
         COLLABORATION_ORIGIN.localEditor,
       );
     }
-    const { insertion } = replacement;
-    for (let offset = 0; offset < insertion.length;) {
-      // Each chunk becomes its own update, and lib0 encodes a lone surrogate as
-      // U+FFFD, so a chunk must not end between the halves of a pair.
-      let end = Math.min(offset + COLLABORATION_TEXT_INSERT_CHUNK_CHARS, insertion.length);
-      if (end < insertion.length && isHighSurrogate(insertion.charCodeAt(end - 1))) end -= 1;
-      const chunk = insertion.slice(offset, end);
-      const index = replacement.prefixLength + offset;
-      this.doc.transact(() => text.insert(index, chunk), COLLABORATION_ORIGIN.localEditor);
+    this.insertTextInChunks(
+      text,
+      replacement.prefixLength,
+      replacement.insertion,
+      0,
+      COLLABORATION_ORIGIN.localEditor,
+    );
+  }
+
+  /**
+   * Inserts `content` from `from` onwards at `index + from`, one transaction per
+   * chunk. The provider cannot split a local update and fails the whole room
+   * session on one larger than MAX_YJS_UPDATE_BYTES.
+   */
+  private insertTextInChunks(
+    text: Y.Text,
+    index: number,
+    content: string,
+    from: number,
+    origin: CollaborationTransactionOrigin,
+  ): void {
+    for (let offset = from; offset < content.length;) {
+      const end = textChunkEnd(content, offset);
+      const chunk = content.slice(offset, end);
+      const at = index + offset;
+      this.doc.transact(() => text.insert(at, chunk), origin);
       offset = end;
     }
   }
@@ -700,6 +729,14 @@ export class CollaborationProjectController {
     }
     const prepared = prepareTextEditEvent(event, text.length);
     if (!prepared) return false;
+    // One Monaco event is one transaction, so an insert too large for one update
+    // (a big paste) is left to the caller's whole-file fallback,
+    // replaceFileContent, which sends it in chunks.
+    const insertedLength = prepared.changes.reduce(
+      (total, change) => total + change.text.length,
+      0,
+    );
+    if (insertedLength > COLLABORATION_TEXT_INSERT_CHUNK_CHARS) return false;
 
     this.doc.transact(() => {
       for (const change of prepared.changes) {
@@ -741,6 +778,8 @@ export class CollaborationProjectController {
     const { parentPath, name } = splitPath(normalized);
     const parentId = this.parentIdForPath(parentPath);
     const id = this.idFactory();
+    const text = kind === "file" && encoding === "utf-8" ? new Y.Text() : null;
+    const firstChunkEnd = textChunkEnd(content, 0);
     this.doc.transact(() => {
       getCollaborationNodes(this.doc).set(
         id,
@@ -755,12 +794,20 @@ export class CollaborationProjectController {
           asset,
         }),
       );
-      if (kind === "file" && encoding === "utf-8") {
-        const text = new Y.Text();
-        if (content) text.insert(0, content);
+      if (text) {
+        if (firstChunkEnd > 0) text.insert(0, content.slice(0, firstChunkEnd));
         getCollaborationTexts(this.doc).set(id, text);
       }
     }, COLLABORATION_ORIGIN.localTreeCommand);
+    if (text) {
+      this.insertTextInChunks(
+        text,
+        0,
+        content,
+        firstChunkEnd,
+        COLLABORATION_ORIGIN.localTreeCommand,
+      );
+    }
   }
 
   renameFile(currentPath: string, nextPath: string): void {

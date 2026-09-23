@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { isWorkspaceTextFile } from "../types/workspace";
+import { MAX_YJS_UPDATE_BYTES } from "./protocol";
 import {
   assertCollaborationProjectStructure,
   COLLABORATION_ORIGIN,
@@ -277,6 +278,50 @@ describe("collaboration project document", () => {
 
     expect(projectCollaborationDocument(local).project.files[path].content).toBe(next);
     expect(projectCollaborationDocument(peer).project.files[path].content).toBe(next);
+  });
+
+  // The provider cannot split one update, and fails the whole room session on
+  // one larger than MAX_YJS_UPDATE_BYTES.
+  it("creates a large text file in updates the room accepts", () => {
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, createStarterHtmlCssWorkspace(), { idFactory: idFactory() });
+    const updateSizes: number[] = [];
+    doc.on("update", (update: Uint8Array) => updateSizes.push(update.byteLength));
+    const content = "x".repeat(70_000);
+
+    new CollaborationProjectController(doc, { canWrite: () => true }).createFile(
+      "data.json",
+      content,
+    );
+
+    expect(projectCollaborationDocument(doc).project.files["data.json"].content).toBe(content);
+    expect(Math.max(...updateSizes)).toBeLessThanOrEqual(MAX_YJS_UPDATE_BYTES);
+  });
+
+  it("leaves a Monaco edit too large for one update to the chunked whole-file path", () => {
+    const project = createStarterHtmlCssWorkspace();
+    const path = project.entryFilePath;
+    project.files[path] = { path, name: path, language: "html", content: "" };
+    const doc = new Y.Doc();
+    seedCollaborationProject(doc, project, { idFactory: idFactory() });
+    const updates: Uint8Array[] = [];
+    doc.on("update", (update: Uint8Array) => updates.push(update));
+    const paste = "y".repeat(70_000);
+
+    const applied = new CollaborationProjectController(doc, {
+      canWrite: () => true,
+    }).applyFileTextEdits({
+      fileId: path,
+      path,
+      beforeVersion: 1,
+      afterVersion: 2,
+      beforeLength: 0,
+      afterLength: paste.length,
+      changes: [{ offset: 0, deleteLength: 0, text: paste }],
+    });
+
+    expect(applied).toBe(false);
+    expect(updates).toHaveLength(0);
   });
 
   it("keeps binary bytes outside Yjs and projects content-addressed asset descriptors", () => {
