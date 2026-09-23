@@ -857,6 +857,7 @@ export function usePreviewController(): PreviewController {
     isRuntimePreviewActive,
     isLiveRuntimePreviewActive,
     hasPreviewPatchReplay,
+    isRrwebReplayActive,
     pendingInteractionRef,
     lastRuntimeSnapshotRef,
     lastContentRef,

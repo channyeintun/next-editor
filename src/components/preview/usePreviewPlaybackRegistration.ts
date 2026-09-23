@@ -22,6 +22,8 @@ interface UsePreviewPlaybackRegistrationOptions {
   isRuntimePreviewActive: boolean;
   isLiveRuntimePreviewActive: boolean;
   hasPreviewPatchReplay: boolean;
+  /** True while the rrweb replay container (instead of the iframe) is mounted. */
+  isRrwebReplayActive: boolean;
   pendingInteractionRef: RefObject<IframeInteractionEvent | null>;
   lastRuntimeSnapshotRef: RefObject<string>;
   lastContentRef: RefObject<string>;
@@ -47,6 +49,7 @@ export function usePreviewPlaybackRegistration({
   isRuntimePreviewActive,
   isLiveRuntimePreviewActive,
   hasPreviewPatchReplay,
+  isRrwebReplayActive,
   pendingInteractionRef,
   lastRuntimeSnapshotRef,
   lastContentRef,
@@ -80,37 +83,25 @@ export function usePreviewPlaybackRegistration({
   // as a streaming prefix — `appendRecordingDelta` pushes new batches onto the
   // same array under the same recording id — so without these the Replayer built
   // from the first playable prefix was never rebuilt, and every batch decoded
-  // afterwards was silently dropped while the cursor kept advancing.
+  // afterwards was silently dropped while playback moved on.
   const rrwebReplayBuiltInitialDocCountRef = useRef(0);
   const rrwebReplayBuiltPatchBatchCountRef = useRef(0);
 
-  useEffect(() => {
-    if (hasPreviewPatchReplay && !isLiveRuntimePreviewActive) {
-      return;
-    }
-
+  // Destroys the current Replayer and invalidates a build still loading, so the
+  // next apply builds afresh.
+  const disposeRrwebReplay = () => {
     rrwebReplayLoadGenerationRef.current += 1;
     rrwebReplayLoadStateRef.current = "idle";
     rrwebReplayerRef.current?.destroy();
     rrwebReplayerRef.current = null;
     rrwebReplayRecordingIdRef.current = null;
     rrwebReplayContainerElRef.current = null;
-  }, [hasPreviewPatchReplay, isLiveRuntimePreviewActive]);
+  };
 
-  // Tear down the rrweb Replayer when the preview unmounts.
-  useEffect(
-    () => () => {
-      rrwebReplayLoadGenerationRef.current += 1;
-      rrwebReplayLoadStateRef.current = "idle";
-      rrwebReplayerRef.current?.destroy();
-      rrwebReplayerRef.current = null;
-      rrwebReplayRecordingIdRef.current = null;
-      rrwebReplayContainerElRef.current = null;
-      rrwebReplayBuiltInitialDocCountRef.current = 0;
-      rrwebReplayBuiltPatchBatchCountRef.current = 0;
-    },
-    [],
-  );
+  // A Replayer lives exactly as long as the replay container it is mounted in.
+  // Pausing, reaching the end, the recording losing rrweb data, the live runtime
+  // taking over and unmounting the preview all unmount that container.
+  useEffect(() => (isRrwebReplayActive ? disposeRrwebReplay : undefined), [isRrwebReplayActive]);
 
   useEffect(() => {
     const applyRrwebReplay = (input: PreviewPatchReplayInput) => {
@@ -134,10 +125,7 @@ export function usePreviewPlaybackRegistration({
         streamGrew;
 
       if (needsRebuild) {
-        rrwebReplayLoadGenerationRef.current += 1;
-        rrwebReplayLoadStateRef.current = "idle";
-        rrwebReplayerRef.current?.destroy();
-        rrwebReplayerRef.current = null;
+        disposeRrwebReplay();
         rrwebReplayRecordingIdRef.current = input.recordingId;
         rrwebReplayContainerElRef.current = container;
         // Drop any orphaned wrapper (e.g. from a Replayer whose ref was lost) so a
