@@ -7,6 +7,7 @@ import {
   checkPlaygroundRateLimit,
   contentCacheKey,
   readCachedValue,
+  readMultiFileLessonRequest,
   truncateOutput,
   writeCachedValue,
 } from "../playgroundProxy";
@@ -99,81 +100,27 @@ type KotlinLessonRequestValidation =
 async function validateKotlinLessonRequest(
   request: Request,
 ): Promise<KotlinLessonRequestValidation> {
-  const requestBody = await readBodyWithLimit(request, MAX_REQUEST_BYTES);
-  if (requestBody.status === "too-large") {
-    return { ok: false, status: 413, error: `request body exceeds ${MAX_REQUEST_BYTES} bytes` };
-  }
-  if (requestBody.status === "read-error") {
-    return { ok: false, status: 400, error: "request body could not be read" };
-  }
+  const parsed = await readMultiFileLessonRequest(request, {
+    language: "Kotlin",
+    maxFiles: MAX_KT_FILES,
+    maxRequestBytes: MAX_REQUEST_BYTES,
+  });
+  if (!parsed.ok) return parsed;
+  const { files } = parsed;
 
-  let body: unknown;
-  try {
-    body = JSON.parse(requestBody.text);
-  } catch {
-    return { ok: false, status: 400, error: "invalid JSON body" };
-  }
-
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return { ok: false, status: 400, error: "JSON body must be an object" };
-  }
-
-  const bodyKeys = Object.keys(body);
-  if (bodyKeys.length !== 1 || bodyKeys[0] !== "files") {
-    return { ok: false, status: 400, error: "'files' is the only supported field" };
-  }
-
-  const rawFiles = (body as Record<string, unknown>).files;
-  if (!Array.isArray(rawFiles) || rawFiles.length === 0) {
-    return {
-      ok: false,
-      status: 400,
-      error: "'files' must contain at least one Kotlin source file",
-    };
-  }
-  if (rawFiles.length > MAX_KT_FILES) {
-    return {
-      ok: false,
-      status: 400,
-      error: `Kotlin lessons support at most ${MAX_KT_FILES} files`,
-    };
-  }
-
-  const files: KotlinPlaygroundFile[] = [];
   const seenPaths = new Set<string>();
   let sourceBytes = 0;
-  for (const [index, rawFile] of rawFiles.entries()) {
-    if (typeof rawFile !== "object" || rawFile === null || Array.isArray(rawFile)) {
-      return { ok: false, status: 400, error: `files[${index}] must be an object` };
-    }
-
-    const fileRecord = rawFile as Record<string, unknown>;
-    const fileKeys = Object.keys(fileRecord);
-    if (fileKeys.length !== 2 || !fileKeys.includes("path") || !fileKeys.includes("content")) {
-      return {
-        ok: false,
-        status: 400,
-        error: `files[${index}] must contain only 'path' and 'content'`,
-      };
-    }
-    if (typeof fileRecord.path !== "string") {
-      return { ok: false, status: 400, error: `files[${index}].path must be a string` };
-    }
-    if (typeof fileRecord.content !== "string") {
-      return { ok: false, status: 400, error: `files[${index}].content must be a string` };
-    }
-
-    const pathError = validateKotlinLessonFilePath(fileRecord.path);
+  for (const file of files) {
+    const pathError = validateKotlinLessonFilePath(file.path);
     if (pathError) {
       return { ok: false, status: 400, error: pathError };
     }
-    if (seenPaths.has(fileRecord.path)) {
+    if (seenPaths.has(file.path)) {
       return { ok: false, status: 400, error: "Kotlin lesson file paths must be unique" };
     }
 
-    sourceBytes += new TextEncoder().encode(fileRecord.content).byteLength;
-    seenPaths.add(fileRecord.path);
-    files.push({ path: fileRecord.path, content: fileRecord.content });
+    sourceBytes += new TextEncoder().encode(file.content).byteLength;
+    seenPaths.add(file.path);
   }
 
   if (sourceBytes > MAX_SOURCE_BYTES) {

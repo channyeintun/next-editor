@@ -5,11 +5,13 @@ import { readBodyWithLimit } from "./httpBody";
 //
 // Only the parts that are genuinely identical across upstreams live here: the
 // fixed-window rate limiter, the content-addressed cache key, the KV result
-// cache, the output bound, and the single-file request validator. Everything
-// that encodes a particular service's behaviour — its request encoding, its
-// non-ok status policy, its response normalization, its telemetry channel —
-// stays in the route, because those are the parts that differ and the reasons
-// they differ are documented there.
+// cache, the output bound, and reading the `{ files: [...] }` request body
+// (whole for single-file upstreams, up to the per-language policy for Go and
+// Kotlin). Everything that encodes a particular service's behaviour — its file
+// path and source policy, its request encoding, its non-ok status policy, its
+// response normalization, its telemetry channel — stays in the route, because
+// those are the parts that differ and the reasons they differ are documented
+// there.
 
 /**
  * Bound normalized program output. The upstreams apply their own limits well
@@ -132,32 +134,24 @@ export async function writeCachedValue(
   }
 }
 
-export type SingleFileLessonRequestValidation =
-  | { ok: true; code: string; sourceBytes: number }
-  | { ok: false; status: 400 | 413; error: string };
+/** A lesson request refused before it reaches the upstream. */
+export type LessonRequestRejection = { ok: false; status: 400 | 413; error: string };
+
+/** One `{ path, content }` entry of a lesson request, both strings. */
+export interface LessonFile {
+  path: string;
+  content: string;
+}
 
 /**
- * Validate a lesson request for an upstream that compiles exactly one source
- * file under a fixed name (Rust, Zig, Haskell). The body shape is the same
- * `{ files: [{ path, content }] }` the multi-file routes accept, so a lesson
- * runner does not need to know which kind of upstream it is talking to.
- *
- * Go and Kotlin deliberately do NOT use this: they accept several files with
- * per-language path, uniqueness and import policy, which is real behaviour
- * rather than a parameter.
+ * Read a lesson request's `{ files: [...] }` body as far as its `files` value:
+ * the byte ceiling, JSON, and `files` as the only field. Every playground route
+ * starts here, so a malformed request gets the same answer from each of them.
  */
-export async function validateSingleFileLessonRequest(
+async function readLessonFilesField(
   request: Request,
-  options: {
-    requiredPath: string;
-    language: string;
-    maxSourceBytes: number;
-    maxRequestBytes: number;
-  },
-): Promise<SingleFileLessonRequestValidation> {
-  const { requiredPath, language, maxSourceBytes, maxRequestBytes } = options;
-  const oneFileError = `${language} lessons run exactly one ${requiredPath} file`;
-
+  maxRequestBytes: number,
+): Promise<{ ok: true; rawFiles: unknown } | LessonRequestRejection> {
   const requestBody = await readBodyWithLimit(request, maxRequestBytes);
   if (requestBody.status === "too-large") {
     return { ok: false, status: 413, error: `request body exceeds ${maxRequestBytes} bytes` };
@@ -182,33 +176,117 @@ export async function validateSingleFileLessonRequest(
     return { ok: false, status: 400, error: "'files' is the only supported field" };
   }
 
-  const rawFiles = (body as Record<string, unknown>).files;
+  return { ok: true, rawFiles: (body as Record<string, unknown>).files };
+}
+
+/** `files[index]` as a record holding exactly `path` and `content`, or why it is not one. */
+function lessonFileRecord(
+  rawFile: unknown,
+  index: number,
+): { ok: true; record: Record<string, unknown> } | LessonRequestRejection {
+  if (typeof rawFile !== "object" || rawFile === null || Array.isArray(rawFile)) {
+    return { ok: false, status: 400, error: `files[${index}] must be an object` };
+  }
+  const record = rawFile as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length !== 2 || !keys.includes("path") || !keys.includes("content")) {
+    return {
+      ok: false,
+      status: 400,
+      error: `files[${index}] must contain only 'path' and 'content'`,
+    };
+  }
+  return { ok: true, record };
+}
+
+/**
+ * Read a request for an upstream that compiles several files (Go, Kotlin):
+ * 1 to `maxFiles` `{ path, content }` string pairs, naming the first malformed
+ * entry. Path, uniqueness and source policy are the route's own, applied to
+ * the files this returns.
+ */
+export async function readMultiFileLessonRequest(
+  request: Request,
+  options: { language: string; maxFiles: number; maxRequestBytes: number },
+): Promise<{ ok: true; files: LessonFile[] } | LessonRequestRejection> {
+  const { language, maxFiles, maxRequestBytes } = options;
+  const field = await readLessonFilesField(request, maxRequestBytes);
+  if (!field.ok) return field;
+
+  const { rawFiles } = field;
+  if (!Array.isArray(rawFiles) || rawFiles.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: `'files' must contain at least one ${language} source file`,
+    };
+  }
+  if (rawFiles.length > maxFiles) {
+    return {
+      ok: false,
+      status: 400,
+      error: `${language} lessons support at most ${maxFiles} files`,
+    };
+  }
+
+  const files: LessonFile[] = [];
+  for (const [index, rawFile] of rawFiles.entries()) {
+    const entry = lessonFileRecord(rawFile, index);
+    if (!entry.ok) return entry;
+    const { path, content } = entry.record;
+    if (typeof path !== "string") {
+      return { ok: false, status: 400, error: `files[${index}].path must be a string` };
+    }
+    if (typeof content !== "string") {
+      return { ok: false, status: 400, error: `files[${index}].content must be a string` };
+    }
+    files.push({ path, content });
+  }
+  return { ok: true, files };
+}
+
+export type SingleFileLessonRequestValidation =
+  | { ok: true; code: string; sourceBytes: number }
+  | LessonRequestRejection;
+
+/**
+ * Validate a lesson request for an upstream that compiles exactly one source
+ * file under a fixed name (Rust, Zig, Haskell). The body shape is the same
+ * `{ files: [{ path, content }] }` the multi-file routes accept (see
+ * readMultiFileLessonRequest), so a lesson runner does not need to know which
+ * kind of upstream it is talking to.
+ */
+export async function validateSingleFileLessonRequest(
+  request: Request,
+  options: {
+    requiredPath: string;
+    language: string;
+    maxSourceBytes: number;
+    maxRequestBytes: number;
+  },
+): Promise<SingleFileLessonRequestValidation> {
+  const { requiredPath, language, maxSourceBytes, maxRequestBytes } = options;
+  const oneFileError = `${language} lessons run exactly one ${requiredPath} file`;
+
+  const field = await readLessonFilesField(request, maxRequestBytes);
+  if (!field.ok) return field;
+
+  const { rawFiles } = field;
   if (!Array.isArray(rawFiles) || rawFiles.length !== 1) {
     return { ok: false, status: 400, error: oneFileError };
   }
 
-  const rawFile = rawFiles[0];
-  if (typeof rawFile !== "object" || rawFile === null || Array.isArray(rawFile)) {
-    return { ok: false, status: 400, error: "files[0] must be an object" };
-  }
-
-  const fileRecord = rawFile as Record<string, unknown>;
-  const fileKeys = Object.keys(fileRecord);
-  if (fileKeys.length !== 2 || !fileKeys.includes("path") || !fileKeys.includes("content")) {
-    return {
-      ok: false,
-      status: 400,
-      error: "files[0] must contain only 'path' and 'content'",
-    };
-  }
-  if (fileRecord.path !== requiredPath) {
+  const entry = lessonFileRecord(rawFiles[0], 0);
+  if (!entry.ok) return entry;
+  const { path, content } = entry.record;
+  if (path !== requiredPath) {
     return { ok: false, status: 400, error: oneFileError };
   }
-  if (typeof fileRecord.content !== "string") {
+  if (typeof content !== "string") {
     return { ok: false, status: 400, error: "files[0].content must be a string" };
   }
 
-  const sourceBytes = new TextEncoder().encode(fileRecord.content).byteLength;
+  const sourceBytes = new TextEncoder().encode(content).byteLength;
   if (sourceBytes > maxSourceBytes) {
     return {
       ok: false,
@@ -217,5 +295,5 @@ export async function validateSingleFileLessonRequest(
     };
   }
 
-  return { ok: true, code: fileRecord.content, sourceBytes };
+  return { ok: true, code: content, sourceBytes };
 }
