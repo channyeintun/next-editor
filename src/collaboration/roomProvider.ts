@@ -483,7 +483,7 @@ export class CollaborationRoomProvider {
         this.fatal("This collaboration room is no longer active", attemptId);
         return;
       }
-      this.roomSession = roomSession;
+      if (!this.applyRoomSession(roomSession, attemptId)) return;
       if (roomSession.room.roleVersion >= this.pendingControlRoleVersion) {
         this.pendingControlRoleVersion = 0;
       }
@@ -695,28 +695,19 @@ export class CollaborationRoomProvider {
       ) {
         const requestedRoleVersion = this.pendingControlRoleVersion;
         const previousRoleVersion = this.roomSession?.room.roleVersion ?? 0;
-        const previousCanWrite = this.canWrite;
         const roomSession = await this.api.getRoom(this.roomId);
         if (this.isStopped) return;
         if (roomSession.room.status !== "active") {
           this.fatal("The host ended this live collaboration room");
           return;
         }
-        this.roomSession = roomSession;
+        const accepted = this.applyRoomSession(roomSession);
         this.actor.send({
           type: "ROLE_CHANGED",
           role: roomSession.membership.role,
           roleVersion: roomSession.room.roleVersion,
         });
-        if (previousCanWrite && !this.canWrite && this.hasPendingUpdates) {
-          this.pendingUpdates = [];
-          this.outbox = [];
-          const message =
-            "Your role changed before local edits were accepted. Copy any local work before rejoining.";
-          this.onRejectedLocalChanges?.(message);
-          this.fatal(message);
-          return;
-        }
+        if (!accepted) return;
         if (
           roomSession.room.roleVersion < requestedRoleVersion &&
           roomSession.room.roleVersion <= previousRoleVersion
@@ -740,6 +731,29 @@ export class CollaborationRoomProvider {
       }
       this.isRefreshingControl = false;
     }
+  }
+
+  /**
+   * Stores a refreshed room session. Edits made as a writer that the room has
+   * not acknowledged can no longer be sent once the role stops allowing writes,
+   * wherever the new role was learned (a control event, or the room request of
+   * a reconnect after a downgrade while offline): drop them, tell the user and
+   * fail, rather than leaving them in the outbox with nothing reporting them.
+   */
+  private applyRoomSession(
+    roomSession: CollaborationRoomSession,
+    attemptId = this.attemptId,
+  ): boolean {
+    const couldWrite = this.canWrite;
+    this.roomSession = roomSession;
+    if (!couldWrite || this.canWrite || !this.hasPendingUpdates) return true;
+    this.pendingUpdates = [];
+    this.outbox = [];
+    const message =
+      "Your role changed before local edits were accepted. Copy any local work before rejoining.";
+    this.onRejectedLocalChanges?.(message);
+    this.fatal(message, attemptId);
+    return false;
   }
 
   private async synchronizeBinary(attemptId: string): Promise<void> {

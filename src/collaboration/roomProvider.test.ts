@@ -568,6 +568,35 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     provider.stop();
   });
 
+  it("reports offline edits it can no longer send after a downgrade while offline", async () => {
+    const { sockets, factory } = socketRecorder();
+    const api = new FakeApi();
+    const rejected: string[] = [];
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      clientId: CLIENT_ID,
+      batchWindowMs: 0,
+      random: () => 0,
+      webSocketFactory: factory,
+      onRejectedLocalChanges: (message) => rejected.push(message),
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+
+    sockets[0]!.close(1006, "network");
+    provider.doc.getText("source").insert(0, "offline work");
+    await waitUntil(() => provider.hasPendingUpdates);
+    api.session = { ...roomSession("viewer"), room: { ...roomSession().room, roleVersion: 2 } };
+    await provider.retryNow();
+
+    expect(rejected).toHaveLength(1);
+    expect(provider.connectionState).toBe("failed");
+    expect(provider.hasPendingUpdates).toBe(false);
+    expect(sockets).toHaveLength(1);
+    provider.stop();
+  });
+
   it("drops edits the server rejects as read-only, reports them and fails", async () => {
     const { sockets, factory } = socketRecorder();
     const api = new FakeApi();
