@@ -687,6 +687,42 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     provider.stop();
   });
 
+  it("drops write access as soon as a control event reports a downgrade", async () => {
+    const { sockets, factory } = socketRecorder();
+    const api = new FakeApi();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      clientId: CLIENT_ID,
+      webSocketFactory: factory,
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+    let notifications = 0;
+    provider.subscribe(() => {
+      notifications += 1;
+    });
+
+    api.session = { ...roomSession("viewer"), room: { ...roomSession().room, roleVersion: 2 } };
+    sockets[0]!.message({
+      type: "control.room",
+      data: {
+        kind: "membership-changed",
+        roomId: ROOM_ID,
+        roleVersion: 2,
+        targetUserId: ACTOR_ID,
+        occurredAt: 1,
+      },
+    });
+    await waitUntil(() => !provider.canWrite);
+
+    expect(provider.session?.membership.role).toBe("viewer");
+    expect(provider.connectionState).toBe("live");
+    // Subscribers (the React context) are told to re-read the session.
+    expect(notifications).toBeGreaterThan(0);
+    provider.stop();
+  });
+
   it("drops edits the server rejects as read-only, reports them and fails", async () => {
     const { sockets, factory } = socketRecorder();
     const api = new FakeApi();

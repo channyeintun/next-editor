@@ -1,9 +1,4 @@
 import { assign, setup } from "xstate";
-import type {
-  CollaborationRole,
-  CollaborationRoomDescriptor,
-  CollaborationRoomSession,
-} from "./protocol";
 
 export type CollaborationConnectionState =
   | "disconnected"
@@ -13,13 +8,14 @@ export type CollaborationConnectionState =
   | "reconnecting"
   | "failed";
 
+/**
+ * Connection lifecycle only. The room session (room descriptor, role, host)
+ * lives on CollaborationRoomProvider, which drives this machine; the machine
+ * keeps what its guards and the connection UI need.
+ */
 export interface CollaborationMachineContext {
-  roomId: string | null;
   sessionId: string | null;
   attemptId: string | null;
-  attempt: number;
-  room: CollaborationRoomDescriptor | null;
-  role: CollaborationRole | null;
   hasOfflineChanges: boolean;
   error: string | null;
 }
@@ -27,13 +23,15 @@ export interface CollaborationMachineContext {
 type AttemptEvent = { sessionId: string; attemptId: string };
 
 export type CollaborationMachineEvent =
-  | { type: "CONNECT"; roomId: string; sessionId: string; attemptId: string }
+  | ({ type: "CONNECT" } & AttemptEvent)
   | ({ type: "PROVIDER_OPEN" } & AttemptEvent)
-  | ({ type: "SYNCED"; roomSession: CollaborationRoomSession } & AttemptEvent)
+  | ({ type: "SYNCED" } & AttemptEvent)
   | ({ type: "DISCONNECTED"; message?: string } & AttemptEvent)
   | ({ type: "FATAL_ERROR"; message: string } & AttemptEvent)
-  | { type: "RETRY"; sessionId: string; attemptId: string; attempt: number }
-  | { type: "ROLE_CHANGED"; role: CollaborationRole; roleVersion: number }
+  | ({ type: "RETRY" } & AttemptEvent)
+  // The provider stored a refreshed room session (e.g. a role change). The
+  // machine keeps no copy; the event exists so subscribers re-read the provider.
+  | { type: "SESSION_REFRESHED" }
   | { type: "OFFLINE_CHANGES" }
   | { type: "CHANGES_FLUSHED" }
   | { type: "LEAVE" };
@@ -51,12 +49,8 @@ function isCurrentAttempt(
 }
 
 const initialContext: CollaborationMachineContext = {
-  roomId: null,
   sessionId: null,
   attemptId: null,
-  attempt: 0,
-  room: null,
-  role: null,
   hasOfflineChanges: false,
   error: null,
 };
@@ -75,41 +69,23 @@ export const collaborationMachine = setup({
     beginSession: assign(({ event }) => {
       if (event.type !== "CONNECT") return {};
       return {
-        roomId: event.roomId,
         sessionId: event.sessionId,
         attemptId: event.attemptId,
-        attempt: 0,
-        room: null,
-        role: null,
         hasOfflineChanges: false,
         error: null,
       };
     }),
     beginRetry: assign(({ event }) => {
       if (event.type !== "RETRY") return {};
-      return { attemptId: event.attemptId, attempt: event.attempt, error: null };
+      return { attemptId: event.attemptId, error: null };
     }),
-    acceptSession: assign(({ event }) => {
-      if (event.type !== "SYNCED") return {};
-      return {
-        room: event.roomSession.room,
-        role: event.roomSession.membership.role,
-        error: null,
-      };
-    }),
+    clearError: assign({ error: null }),
     markDisconnected: assign(({ event }) => ({
       error: event.type === "DISCONNECTED" ? (event.message ?? null) : null,
     })),
     markFatal: assign(({ event }) => ({
       error: event.type === "FATAL_ERROR" ? event.message : "Collaboration failed",
     })),
-    updateRole: assign(({ context, event }) => {
-      if (event.type !== "ROLE_CHANGED" || !context.room) return {};
-      return {
-        role: event.role,
-        room: { ...context.room, roleVersion: event.roleVersion },
-      };
-    }),
     markOfflineChanges: assign({ hasOfflineChanges: true }),
     clearOfflineChanges: assign({ hasOfflineChanges: false }),
     reset: assign(() => initialContext),
@@ -120,7 +96,7 @@ export const collaborationMachine = setup({
   context: initialContext,
   on: {
     LEAVE: { target: ".disconnected", actions: "reset" },
-    ROLE_CHANGED: { actions: "updateRole" },
+    SESSION_REFRESHED: {},
     OFFLINE_CHANGES: { actions: "markOfflineChanges" },
     CHANGES_FLUSHED: { actions: "clearOfflineChanges" },
   },
@@ -153,7 +129,7 @@ export const collaborationMachine = setup({
         SYNCED: {
           guard: "isCurrentAttempt",
           target: "live",
-          actions: "acceptSession",
+          actions: "clearError",
         },
         DISCONNECTED: {
           guard: "isCurrentAttempt",

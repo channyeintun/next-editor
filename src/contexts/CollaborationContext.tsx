@@ -978,7 +978,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     ? collaborationConnectionState(machineSnapshot.value)
     : "disconnected";
   const session = provider?.session ?? null;
-  const role = session?.membership.role ?? machineSnapshot?.context.role ?? null;
+  const role = session?.membership.role ?? null;
   // Once synced, the provider queues local edits in every reconnect state
   // (reconnecting → connecting → syncing); before the first sync the workspace
   // still shows the pre-room project.

@@ -257,7 +257,6 @@ export class CollaborationRoomProvider {
     this.doc.on("afterTransaction", this.handleAfterTransaction);
     this.actor.send({
       type: "CONNECT",
-      roomId: this.roomId,
       sessionId: this.sessionId,
       attemptId: this.attemptId,
     });
@@ -712,11 +711,7 @@ export class CollaborationRoomProvider {
           return;
         }
         const accepted = this.applyRoomSession(roomSession);
-        this.actor.send({
-          type: "ROLE_CHANGED",
-          role: roomSession.membership.role,
-          roleVersion: roomSession.room.roleVersion,
-        });
+        this.actor.send({ type: "SESSION_REFRESHED" });
         if (!accepted) return;
         if (
           roomSession.room.roleVersion < requestedRoleVersion &&
@@ -804,14 +799,8 @@ export class CollaborationRoomProvider {
       this.bufferedBinaryUpdates = [];
       this.isSynchronizing = false;
       for (const frame of buffered) this.applyBinaryServerUpdate(frame);
-      if (!this.roomSession) throw new Error("Collaboration room session is missing");
       this.hasCompletedSync = true;
-      this.actor.send({
-        type: "SYNCED",
-        sessionId: this.sessionId,
-        attemptId,
-        roomSession: this.roomSession,
-      });
+      this.actor.send({ type: "SYNCED", sessionId: this.sessionId, attemptId });
       this.reconnectAttempt = 0;
       await this.flushOutbox();
     } catch (error) {
@@ -953,11 +942,7 @@ export class CollaborationRoomProvider {
     try {
       const roomSession = await this.api.getRoom(this.roomId);
       this.roomSession = roomSession;
-      this.actor.send({
-        type: "ROLE_CHANGED",
-        role: roomSession.membership.role,
-        roleVersion: roomSession.room.roleVersion,
-      });
+      this.actor.send({ type: "SESSION_REFRESHED" });
     } catch {
       // The original permission response remains the actionable failure.
     }
@@ -1006,7 +991,6 @@ export class CollaborationRoomProvider {
       type: "RETRY",
       sessionId: this.sessionId,
       attemptId: this.attemptId,
-      attempt: this.reconnectAttempt,
     });
     await this.connectAttempt(this.attemptId);
   }
