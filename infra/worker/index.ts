@@ -143,13 +143,13 @@ app.get("/learn/:slug", async (c) => {
   }
 });
 
-// Workers Static Assets already tried to match the request against dist/ and
-// missed before this Worker ran (exact-match static files — JS chunks, the
-// seed /lessons/*.json shards, images — are served without ever reaching
-// here). Anything left is an SPA route (/code, /learn, /learn/:slug) or an
-// unimplemented API path. `not_found_handling = "single-page-application"`
-// in wrangler.toml makes this ASSETS.fetch return index.html (200) for the
-// requested path directly — no redirect.
+// `run_worker_first = true` (wrangler.toml) sends every request through this
+// Worker, so this catch-all serves all the static files too — JS chunks, the
+// seed /lessons/*.json shards, images — and the "*" middleware above stamps
+// COEP/COOP on them. For a path with no file (an SPA route such as /code or
+// /learn/:slug, or an unimplemented API path), `not_found_handling =
+// "single-page-application"` makes ASSETS.fetch return index.html (200)
+// directly, with no redirect.
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default app;

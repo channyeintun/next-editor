@@ -151,10 +151,9 @@ zod = "zod"
 "lib0/time" = "lib0/time"
 "lib0/webcrypto" = "lib0/webcrypto"
 
-# The SPA build output (bun run build, from the repo root). Static Assets are
-# matched first and served directly (no Worker invocation, no CPU billed);
-# anything that doesn't match a file in here falls through to the Worker
-# (worker/index.ts), which handles /api/*, /media/*, and the SPA fallback.
+# The SPA build output (bun run build, from the repo root). Served through the
+# Worker (see run_worker_first below): its catch-all (worker/index.ts) hands
+# every path it does not route itself to this binding.
 [assets]
 directory = "../dist"
 binding = "ASSETS"
