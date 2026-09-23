@@ -33,6 +33,7 @@
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
     "@tanstack/react-query": "^5.101.4",
+    "@tanstack/react-virtual": "^3.14.13",
     "@upstash/qstash": "^2.11.3",
     "@webcontainer/api": "^1.6.4",
     "@xstate/react": "^6.1.0",
