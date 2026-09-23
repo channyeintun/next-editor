@@ -357,18 +357,12 @@ export default function SlidesManager({
     const newIndex = direction === "up" ? slideIndex - 1 : slideIndex + 1;
     if (newIndex < 0 || newIndex >= slides.length) return;
 
-    const updatedSlides = [...slides];
-    [updatedSlides[slideIndex], updatedSlides[newIndex]] = [
-      updatedSlides[newIndex],
-      updatedSlides[slideIndex],
-    ];
+    const reordered = [...slides];
+    [reordered[slideIndex], reordered[newIndex]] = [reordered[newIndex], reordered[slideIndex]];
 
-    // Update order numbers
-    updatedSlides.forEach((slide, index) => {
-      slide.order = index;
-    });
-
-    onSlidesChange(updatedSlides);
+    // New objects, like removeSlide: the slides handed in may be the ones a
+    // finished take or a loaded lesson still holds.
+    onSlidesChange(reordered.map((slide, index) => ({ ...slide, order: index })));
   };
 
   const startEditing = (slide: Slide) => {
