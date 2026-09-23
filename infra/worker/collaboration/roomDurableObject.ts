@@ -1309,12 +1309,11 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     if (!attachment?.awareness || attachment.awareness.kind !== "state") return;
     if (attachment.awarenessClientId === undefined || attachment.awarenessClock === undefined)
       return;
+    // y-protocols removes a state on a null update at the same clock. The
+    // next clock belongs to the client, which republishes with it after a
+    // reconnect; spending it here would make peers ignore that republish.
     this.broadcastAwareness(
-      {
-        clientId: attachment.awarenessClientId,
-        clock: Math.min(attachment.awarenessClock + 1, Number.MAX_SAFE_INTEGER),
-        state: null,
-      },
+      { clientId: attachment.awarenessClientId, clock: attachment.awarenessClock, state: null },
       socket,
     );
   }

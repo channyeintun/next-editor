@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as awarenessProtocol from "y-protocols/awareness";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
 import {
@@ -408,6 +409,38 @@ describe("CollaborationRoomDurableObject update rate limits", () => {
     expect(editors.flatMap(errors)).toEqual(
       Array.from({ length: 5 }, () => expect.objectContaining({ code: "rate-limited" })),
     );
+  });
+});
+
+describe("CollaborationRoomDurableObject awareness", () => {
+  it("shows a participant again as soon as they republish after a reconnect", async () => {
+    const { room, connect } = await createRoom();
+    const first = connect(MEMBER_ID, "editor");
+    const peer = connect(PEER_ID, "viewer");
+    const peerAwareness = new awarenessProtocol.Awareness(new Y.Doc());
+    const deliverToPeer = () => {
+      for (const frame of peer.frames()) {
+        if (frame.kind !== "awareness") continue;
+        awarenessProtocol.applyAwarenessUpdate(peerAwareness, frame.update, "room");
+      }
+      peer.sent.length = 0;
+    };
+
+    await room.webSocketMessage(first as never, awarenessFrame(first, 7, 1));
+    deliverToPeer();
+    expect(peerAwareness.getStates().has(7)).toBe(true);
+
+    first.close(1006);
+    room.webSocketClose(first as never);
+    deliverToPeer();
+    expect(peerAwareness.getStates().has(7)).toBe(false);
+
+    // The provider keeps its Awareness across reconnects, so its next clock is 2.
+    const second = connect(MEMBER_ID, "editor");
+    await room.webSocketMessage(second as never, awarenessFrame(second, 7, 2));
+    deliverToPeer();
+    expect(peerAwareness.getStates().has(7)).toBe(true);
+    peerAwareness.destroy();
   });
 });
 
