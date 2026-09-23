@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { EditorFrame } from "../types";
+import type { EditorFrame, EditorSelection } from "../types";
 import type { PreviewState } from "../slides";
 import type { Keyframe } from "./deltaTypes";
 import {
   ContentEditBaseMismatchError,
   applyContentDelta,
   applyFrameDelta,
+  applySelectionDelta,
   createAppendContentDelta,
   createContentDelta,
   createContentEditDelta,
   createFrameDelta,
+  createSelectionDelta,
   findNearestKeyframeIndex,
   reconstructFrameAtIndex,
 } from "./frameDelta";
@@ -273,5 +275,98 @@ describe("keyframe index cache", () => {
     expect(findNearestKeyframeIndex(frames, 3)).toBe(2);
     expect(findNearestKeyframeIndex(frames, 2)).toBe(2);
     expect(findNearestKeyframeIndex(frames, 1)).toBe(0);
+  });
+});
+
+// The selection delta leaves out every field that did not move, so replay must
+// read a missing anchor or caret field as "stayed put", not borrow the start or
+// end delta in its place: on a backward selection start is the caret, not the
+// anchor.
+describe("selection deltas", () => {
+  type Point = readonly [lineNumber: number, column: number];
+
+  // A Monaco selection from its anchor and caret; start and end are the same
+  // two points in document order.
+  const selectionFrom = (anchor: Point, caret: Point): EditorSelection => {
+    const anchorFirst = anchor[0] < caret[0] || (anchor[0] === caret[0] && anchor[1] <= caret[1]);
+    const [start, end] = anchorFirst ? [anchor, caret] : [caret, anchor];
+    return {
+      startLineNumber: start[0],
+      startColumn: start[1],
+      endLineNumber: end[0],
+      endColumn: end[1],
+      selectionStartLineNumber: anchor[0],
+      selectionStartColumn: anchor[1],
+      positionLineNumber: caret[0],
+      positionColumn: caret[1],
+    };
+  };
+
+  const roundTrip = (prev: EditorSelection, next: EditorSelection): EditorSelection =>
+    applySelectionDelta(prev, createSelectionDelta(prev, next) ?? {});
+
+  it("keeps the anchor when a backward selection grows from it", () => {
+    const collapsed = selectionFrom([2, 5], [2, 5]);
+    const shiftUp = selectionFrom([2, 5], [1, 5]);
+
+    expect(roundTrip(collapsed, shiftUp)).toEqual(shiftUp);
+  });
+
+  it("keeps the caret when only the anchor end moves", () => {
+    const prev = selectionFrom([2, 5], [1, 1]);
+    const next = selectionFrom([3, 1], [1, 1]);
+
+    expect(roundTrip(prev, next)).toEqual(next);
+  });
+
+  it("round-trips every anchor/caret pair", () => {
+    const points: Point[] = [];
+    for (let line = 1; line <= 3; line += 1) {
+      for (let column = 1; column <= 3; column += 1) points.push([line, column]);
+    }
+    const selections = points.flatMap((anchor) =>
+      points.map((caret) => selectionFrom(anchor, caret)),
+    );
+
+    for (const prev of selections) {
+      for (const next of selections) {
+        expect(roundTrip(prev, next)).toEqual(next);
+      }
+    }
+  });
+
+  it("reconstructs a selection-only frame without a view state", () => {
+    // frameAt records no view state, so replay has only the selection delta to
+    // go on; a recorded view state would supply the selection itself.
+    const frameWith = (timestamp: number, selection: EditorSelection): EditorFrame => {
+      const frame = frameAt(timestamp, "hello\nworld\n");
+      const position = {
+        lineNumber: selection.positionLineNumber,
+        column: selection.positionColumn,
+      };
+      return { ...frame, state: { ...frame.state, selection, position } };
+    };
+    const frames = [
+      frameWith(0, selectionFrom([2, 5], [2, 5])),
+      frameWith(100, selectionFrom([2, 5], [1, 5])), // shift+up
+      frameWith(200, selectionFrom([2, 5], [1, 4])), // shift+left
+    ];
+
+    const compressed = compressFrames(frames);
+
+    expect(compressed).toHaveLength(frames.length);
+    frames.forEach((frame, index) => {
+      expect(reconstructFrameAtIndex(compressed, index)?.state.selection).toEqual(
+        frame.state.selection,
+      );
+    });
+  });
+
+  it("reads a start/end-only delta the old way", () => {
+    const forward = selectionFrom([2, 3], [3, 4]);
+
+    expect(applySelectionDelta(forward, { startLineDelta: -1, endColumnDelta: 2 })).toEqual(
+      selectionFrom([1, 3], [3, 6]),
+    );
   });
 });

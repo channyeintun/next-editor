@@ -88,6 +88,7 @@ Since cursors mostly move short distances:
 
 - We store relative offsets (`lineDelta`, `columnDelta`) instead of absolute coordinates.
 - If a value is `0` (no movement), it is omitted entirely.
+- A selection delta with none of the anchor (`selectionStart*`) or caret (`position*`) fields is read as the start/end-only shape: the anchor follows start and the caret follows end. The writer never emits that shape for a real change, because start and end are the anchor and caret in document order.
 
 ---
 

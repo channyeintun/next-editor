@@ -418,22 +418,36 @@ export function createSelectionDelta(
 
 /**
  * Applies a selection delta to a base selection.
+ *
+ * `createSelectionDelta` omits every field that did not move, so a missing
+ * field reads as zero. The one exception is a delta with none of the anchor
+ * (`selectionStart*`) or caret (`position*`) fields. The writer cannot emit
+ * that for a real change, because start and end are the anchor and caret in
+ * document order: if neither of those moved, neither did start or end. Such a
+ * delta is the start/end-only shape, and it is read as it always was: the
+ * anchor follows start and the caret follows end, which is exact for forward
+ * selections.
  */
 export function applySelectionDelta(base: EditorSelection, delta: SelectionDelta): EditorSelection {
-  const selectionStartLineDelta = delta.selectionStartLineDelta ?? delta.startLineDelta ?? 0;
-  const selectionStartColumnDelta = delta.selectionStartColumnDelta ?? delta.startColumnDelta ?? 0;
-  const positionLineDelta = delta.positionLineDelta ?? delta.endLineDelta ?? 0;
-  const positionColumnDelta = delta.positionColumnDelta ?? delta.endColumnDelta ?? 0;
+  const startEndOnly =
+    delta.selectionStartLineDelta === undefined &&
+    delta.selectionStartColumnDelta === undefined &&
+    delta.positionLineDelta === undefined &&
+    delta.positionColumnDelta === undefined;
+  const anchorLineDelta = startEndOnly ? delta.startLineDelta : delta.selectionStartLineDelta;
+  const anchorColumnDelta = startEndOnly ? delta.startColumnDelta : delta.selectionStartColumnDelta;
+  const caretLineDelta = startEndOnly ? delta.endLineDelta : delta.positionLineDelta;
+  const caretColumnDelta = startEndOnly ? delta.endColumnDelta : delta.positionColumnDelta;
 
   return {
-    startLineNumber: base.startLineNumber + (delta.startLineDelta || 0),
-    startColumn: base.startColumn + (delta.startColumnDelta || 0),
-    endLineNumber: base.endLineNumber + (delta.endLineDelta || 0),
-    endColumn: base.endColumn + (delta.endColumnDelta || 0),
-    selectionStartLineNumber: base.selectionStartLineNumber + selectionStartLineDelta,
-    selectionStartColumn: base.selectionStartColumn + selectionStartColumnDelta,
-    positionLineNumber: base.positionLineNumber + positionLineDelta,
-    positionColumn: base.positionColumn + positionColumnDelta,
+    startLineNumber: base.startLineNumber + (delta.startLineDelta ?? 0),
+    startColumn: base.startColumn + (delta.startColumnDelta ?? 0),
+    endLineNumber: base.endLineNumber + (delta.endLineDelta ?? 0),
+    endColumn: base.endColumn + (delta.endColumnDelta ?? 0),
+    selectionStartLineNumber: base.selectionStartLineNumber + (anchorLineDelta ?? 0),
+    selectionStartColumn: base.selectionStartColumn + (anchorColumnDelta ?? 0),
+    positionLineNumber: base.positionLineNumber + (caretLineDelta ?? 0),
+    positionColumn: base.positionColumn + (caretColumnDelta ?? 0),
   };
 }
 
