@@ -30,7 +30,7 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 // finalized file is seekable via its footer index.
 //
 // Three independent "version" numbers exist; do not conflate them:
-//   * STREAM_MAGIC ("SCR3")     — container family marker (the file magic).
+//   * the magic "SCR3"          — container family marker (STREAM_MAGIC_BYTES).
 //   * STREAM_FORMAT_VERSION (4) — on-wire record capabilities. Version 3 added
 //                                 exact Monaco content-edit deltas; version 4 adds
 //                                 raw workspace-asset segments. Versions 2 and 3
@@ -43,7 +43,9 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 //            (meta bytes = deflate(msgpack(RecordingStreamMeta)))
 //   Segment: kind u8 | byteLength u32 | startTimeMs u32 | endTimeMs u32 |
 //            firstFrameIndex i32 | clusterIndex u32 | flags u8 | payload
-//            (payload = deflate(msgpack(records[])); workspace assets are raw bytes)
+//            (payload = deflate(msgpack(records[])); workspace assets are raw bytes;
+//            flags bit 0 = contains a keyframe, bit 1 = the retired inline-media
+//            init flag, never written now and ignored on read)
 //   Footer:  segmentCount u32 | index[count] | footerLen u32 | "SCR3"
 //            (index entry = kind u8 | byteOffset u32 | firstTs u32 | firstIdx i32)
 //
@@ -53,13 +55,12 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 // O(n) progressive playback rather than re-decoding the whole prefix each tick.
 // ============================================================================
 
-export const STREAM_MAGIC = "SCR3";
 const STREAM_MAGIC_BYTES = new Uint8Array([0x53, 0x43, 0x52, 0x33]);
 export const STREAM_FORMAT_VERSION = 4;
 export const PREVIOUS_STREAM_FORMAT_VERSION = 3;
 export const LEGACY_STREAM_FORMAT_VERSION = 2;
 
-export function isSupportedStreamFormatVersion(version: number): boolean {
+function isSupportedStreamFormatVersion(version: number): boolean {
   return (
     version === STREAM_FORMAT_VERSION ||
     version === PREVIOUS_STREAM_FORMAT_VERSION ||
@@ -70,7 +71,6 @@ export function isSupportedStreamFormatVersion(version: number): boolean {
 export const FLAG_HAS_AUDIO = 1 << 0;
 export const FLAG_HAS_CAMERA = 1 << 1;
 const SEGMENT_FLAG_CONTAINS_KEYFRAME = 1 << 0;
-const SEGMENT_FLAG_IS_INIT = 1 << 1;
 
 export const HEADER_PREFIX_SIZE = 12;
 export const SEGMENT_HEADER_SIZE = 22;
@@ -81,10 +81,10 @@ export const DEFAULT_AUDIO_TRACK_ID = "audio";
 export const DEFAULT_CAMERA_TRACK_ID = "camera";
 export const MAX_STREAM_BYTES = 256 * 1024 * 1024;
 export const MAX_COMPRESSED_META_BYTES = 4 * 1024 * 1024;
-export const MAX_INFLATED_META_BYTES = 8 * 1024 * 1024;
-export const MAX_COMPRESSED_SEGMENT_BYTES = 32 * 1024 * 1024;
-export const MAX_INFLATED_SEGMENT_BYTES = 64 * 1024 * 1024;
-export const MAX_WORKSPACE_ASSET_PAYLOAD_BYTES = 50 * 1024 * 1024 + 64 * 1024;
+const MAX_INFLATED_META_BYTES = 8 * 1024 * 1024;
+const MAX_COMPRESSED_SEGMENT_BYTES = 32 * 1024 * 1024;
+const MAX_INFLATED_SEGMENT_BYTES = 64 * 1024 * 1024;
+const MAX_WORKSPACE_ASSET_PAYLOAD_BYTES = 50 * 1024 * 1024 + 64 * 1024;
 export const MAX_DECODED_RECORDS = 1_000_000;
 
 export const SEGMENT_KIND = {
@@ -171,7 +171,6 @@ export interface SegmentHeaderFields {
   firstFrameIndex: number;
   clusterIndex: number;
   containsKeyframe: boolean;
-  isInit: boolean;
 }
 
 // ----------------------------------------------------------------------------
@@ -192,12 +191,6 @@ export function concatChunks(parts: Uint8Array[], totalLength?: number): Uint8Ar
     offset += part.length;
   }
   return out;
-}
-
-export function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const buffer = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(buffer).set(bytes);
-  return buffer;
 }
 
 /**
@@ -222,7 +215,7 @@ export function formatMiB(bytes: number): string {
   return `${bytes / (1024 * 1024)} MiB`;
 }
 
-export interface EncodedRecords {
+interface EncodedRecords {
   /** deflate(msgpack(records)), the segment payload. */
   payload: Uint8Array;
   /** What the payload inflates back to; readers charge it to the stream's budget. */
@@ -448,7 +441,6 @@ export function buildSegmentChunk(
   firstFrameIndex: number,
   clusterIndex: number,
   containsKeyframe: boolean,
-  isInit: boolean,
 ): Uint8Array {
   const chunk = new Uint8Array(SEGMENT_HEADER_SIZE + payload.length);
   const view = new DataView(chunk.buffer);
@@ -458,10 +450,7 @@ export function buildSegmentChunk(
   view.setUint32(9, clampU32(Math.max(startTimeMs, endTimeMs)), true);
   view.setInt32(13, firstFrameIndex, true);
   view.setUint32(17, clampU32(clusterIndex), true);
-  view.setUint8(
-    21,
-    (containsKeyframe ? SEGMENT_FLAG_CONTAINS_KEYFRAME : 0) | (isInit ? SEGMENT_FLAG_IS_INIT : 0),
-  );
+  view.setUint8(21, containsKeyframe ? SEGMENT_FLAG_CONTAINS_KEYFRAME : 0);
   chunk.set(payload, SEGMENT_HEADER_SIZE);
   return chunk;
 }
@@ -613,7 +602,6 @@ export function readSegmentHeader(view: DataView, offset: number): SegmentHeader
     firstFrameIndex,
     clusterIndex,
     containsKeyframe: Boolean(flags & SEGMENT_FLAG_CONTAINS_KEYFRAME),
-    isInit: Boolean(flags & SEGMENT_FLAG_IS_INIT),
   };
 }
 

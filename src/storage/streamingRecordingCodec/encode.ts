@@ -56,7 +56,6 @@ export interface StreamingSegmentAppendOptions {
   clusterIndex?: number;
   firstFrameIndex?: number;
   containsKeyframe?: boolean;
-  isInit?: boolean;
 }
 
 export interface StreamingRecordingWriter {
@@ -170,7 +169,6 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
         firstFrameIndex,
         clusterIndex,
         containsKeyframe,
-        Boolean(options.isInit),
       ),
     );
 
@@ -205,7 +203,6 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
         firstFrameIndex: options?.firstFrameIndex ?? frameCount,
         clusterIndex: options?.clusterIndex,
         containsKeyframe: options?.containsKeyframe ?? frames.some(isKeyframe),
-        isInit: options?.isInit,
       });
       frameCount += frames.length;
     },
@@ -226,7 +223,6 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
         firstFrameIndex: options?.firstFrameIndex ?? -1,
         clusterIndex: options?.clusterIndex,
         containsKeyframe: options?.containsKeyframe,
-        isInit: options?.isInit,
       });
     },
     appendWorkspaceAssetSegment(asset, options) {
