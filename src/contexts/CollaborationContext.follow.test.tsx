@@ -7,8 +7,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const controls = vi.hoisted(() => ({
   handleSlideEvent: vi.fn(),
   handleWhiteboardEvent: vi.fn(),
+  // One object, like react-query's structurally shared `useAuth().user`.
+  auth: {
+    user: {
+      id: "10000000-0000-4000-8000-000000000001",
+      username: "self",
+      name: "Self",
+      avatarUrl: null,
+    },
+    isSignedIn: true,
+    isLoading: false,
+  },
   providers: [] as Array<{
     doc: import("yjs").Doc;
+    session: { room: { roleVersion: number } };
+    awarenessPublications: Array<{ kind: string }>;
     awarenessSessionId: string;
     emitDocumentChange: () => void;
     emitAwareness: (event: Record<string, unknown>) => void;
@@ -37,16 +50,7 @@ vi.mock("@next-editor/infra", () => ({
   revokeCollaborationInvitation: vi.fn(),
   updateCollaborationMemberRole: vi.fn(),
   uploadCollaborationAsset: vi.fn(),
-  useAuth: () => ({
-    user: {
-      id: "10000000-0000-4000-8000-000000000001",
-      username: "self",
-      name: "Self",
-      avatarUrl: null,
-    },
-    isSignedIn: true,
-    isLoading: false,
-  }),
+  useAuth: () => controls.auth,
 }));
 
 vi.mock("../collaboration/roomProvider", async () => {
@@ -55,7 +59,7 @@ vi.mock("../collaboration/roomProvider", async () => {
     readonly doc = new Y.Doc();
     readonly clientId = "20000000-0000-4000-8000-000000000001";
     readonly awarenessSessionId = "30000000-0000-4000-8000-000000000001";
-    readonly session = {
+    session = {
       room: {
         id: "40000000-0000-4000-8000-000000000001",
         ownerId: "10000000-0000-4000-8000-000000000001",
@@ -123,7 +127,11 @@ vi.mock("../collaboration/roomProvider", async () => {
     async retryNow() {
       this.retries += 1;
     }
-    async publishAwareness() {}
+    readonly awarenessPublications: Array<{ kind: string }> = [];
+
+    async publishAwareness(input: { kind: string }) {
+      this.awarenessPublications.push(input);
+    }
     setAwarenessPublicationSuppressed() {}
 
     emitAwareness(event: Record<string, unknown>) {
@@ -660,5 +668,48 @@ describe("CollaborationContext teaching projection", () => {
 
     expect(accepted).toBe(true);
     view.unmount();
+  });
+});
+
+describe("CollaborationContext presence", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  // The room broadcasts a membership change to every socket (an invitation
+  // claimed, a role changed, a member removed) and each provider then stores a
+  // fresh session object. A leave here reaches every peer, which drops this
+  // participant and stops anyone following it.
+  it("stays present when a membership change refreshes the room session", async () => {
+    render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <div />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    await waitFor(() =>
+      expect(provider.awarenessPublications).toContainEqual(
+        expect.objectContaining({ kind: "state" }),
+      ),
+    );
+    provider.awarenessPublications.length = 0;
+
+    act(() => {
+      provider.session = {
+        ...provider.session,
+        room: { ...provider.session.room, roleVersion: 2 },
+      };
+      provider.setConnectionState("live");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(provider.awarenessPublications).not.toContainEqual(
+      expect.objectContaining({ kind: "leave" }),
+    );
   });
 });

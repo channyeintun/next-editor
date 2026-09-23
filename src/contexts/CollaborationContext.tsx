@@ -1500,11 +1500,18 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Keyed on the live room's id, not the session object: every membership change
+  // in the room (an invitation claimed, a role changed, a member removed) makes
+  // the provider store a fresh session, and re-running this effect would
+  // broadcast a leave that drops this participant for everyone and stops anyone
+  // following it.
+  const liveRoomId = provider && connectionState === "live" ? (session?.room.id ?? null) : null;
   useEffect(() => {
-    if (!provider || connectionState !== "live" || !session) return;
+    if (!provider || !liveRoomId) return;
     let cancelled = false;
     const providerGeneration = providerGenerationRef.current;
-    void refreshRoomDataFor(session.room.id, role === "owner", providerGeneration)
+    const isOwner = provider.session?.membership.role === "owner";
+    void refreshRoomDataFor(liveRoomId, isOwner, providerGeneration)
       .then(() => {
         if (cancelled) return;
         void publishAwarenessState().catch(() => {});
@@ -1530,11 +1537,13 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         })
         .catch(() => {});
     };
-  }, [connectionState, provider, publishAwarenessState, refreshRoomDataFor, role, session]);
+  }, [liveRoomId, provider, publishAwarenessState, refreshRoomDataFor]);
 
+  // A new active file changes the published surface; a new role changes this
+  // member's own participant entry.
   useEffect(() => {
     scheduleAwarenessPublish();
-  }, [activeFilePath, scheduleAwarenessPublish]);
+  }, [activeFilePath, role, scheduleAwarenessPublish]);
 
   useEffect(() => {
     const interval = setInterval(() => {
