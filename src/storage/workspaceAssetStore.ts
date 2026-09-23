@@ -95,17 +95,13 @@ export function subscribeWorkspaceAssetAvailability(
   return () => assetListeners.delete(listener);
 }
 
-function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-}
-
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
+async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   if (typeof crypto === "undefined" || !crypto.subtle) {
     throw new WorkspaceAssetPersistenceError(
       "This browser cannot create content-addressed workspace assets",
     );
   }
-  const digest = await crypto.subtle.digest("SHA-256", exactArrayBuffer(bytes));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -147,7 +143,11 @@ export async function registerWorkspaceAsset(
   bytes: Uint8Array,
   options: RegisterWorkspaceAssetOptions,
 ): Promise<WorkspaceAssetDescriptor> {
-  const assetId = await sha256Hex(bytes);
+  // One standalone copy serves both the digest and the Blob. Both take a BufferSource,
+  // which excludes views on a SharedArrayBuffer (available here: the app is
+  // cross-origin isolated), so neither may be handed the caller's view as is.
+  const buffer = toArrayBuffer(bytes);
+  const assetId = await sha256Hex(buffer);
   if (options.expectedAssetId && options.expectedAssetId !== assetId) {
     throw new WorkspaceAssetPersistenceError(
       "The workspace asset failed its content-integrity check",
@@ -162,7 +162,7 @@ export async function registerWorkspaceAsset(
     size: bytes.byteLength,
   };
   const cached = blobCache.get(assetId);
-  const blob = cached ?? new Blob([exactArrayBuffer(bytes)], { type: mimeType });
+  const blob = cached ?? new Blob([buffer], { type: mimeType });
   blobCache.set(assetId, blob);
   await writeAssetBlob(assetId, blob);
   notifyAssetAvailable(assetId);
