@@ -1207,20 +1207,16 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
-    setIsResizing(true);
-
-    const { x: startX, y: startY } = getPointerCoords(event);
-    if (!iframeRef.current) {
-      return;
-    }
-
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) {
       return;
     }
 
+    event.preventDefault();
+    event.stopPropagation();
+    setIsResizing(true);
+
+    const { x: startX, y: startY } = getPointerCoords(event);
     const startWidth = rect.width;
     const startHeight = rect.height;
 
@@ -1277,18 +1273,16 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
     setIsResizing(true);
 
     const { x: startX } = getPointerCoords(event);
-    const rect = containerRef.current?.getBoundingClientRect();
-
-    if (!rect) {
-      setIsResizing(false);
-      return;
-    }
-
     const startWidth = rect.width;
     let lastWidth = startWidth;
 
