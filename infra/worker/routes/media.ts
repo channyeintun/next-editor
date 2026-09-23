@@ -4,9 +4,9 @@ import type { Env } from "../env";
 // Mounted at /media in worker/index.ts. Serves R2 objects directly — the R2
 // key is exactly the wildcard tail (e.g. request "/media/lessons/l1/l1.ne" ->
 // key "lessons/l1/l1.ne"), matching the layout in
-// docs/cloudflare-architecture.md and the paths stored in the lessons table
-// (D1 stores "lessons/l1/l1.ne" without a leading slash; the client always
-// prepends "/media/" itself — see infra/db/types.ts's lessonRowToLesson).
+// docs/cloudflare-architecture.md. The lessons table stores the path with this
+// route's prefix and no leading slash ("media/lessons/l1/l1.ne", see toMediaPath
+// in routes/lessons.ts), and the client requests `/${lesson.ne}`.
 //
 // No ownership/published check here — a draft's media is only as private as
 // its unguessable UUID-based key, same as a published lesson's (which is

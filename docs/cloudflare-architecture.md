@@ -114,7 +114,7 @@ next-editor-tube-media/
       <lesson-id>.ogg|.weba   # externalized audio  (sibling of the .ne)
       <lesson-id>.webm        # externalized camera (optional)
       <lesson-id>.en.vtt      # captions (optional)
-      thumbnail.png|svg
+      <lesson-id>-thumbnail-<timestamp>.png|jpg  # a new key per replacement
   slide-images/
     <sha256-of-source-url>    # Google Slides deck images copied at import time
                               # (POST /api/slide-images); keyed by source URL so
@@ -124,14 +124,17 @@ next-editor-tube-media/
 ```
 
 Bytes are served **through the Worker** at `/media/lessons/<id>/<file>` from the
-R2 binding (`env.BUCKET.get(key)`), with `Content-Type`, long-lived
-`Cache-Control: public, max-age=31536000, immutable`, and `Range` support for
-audio/video streaming. Serving through the Worker (rather than a public bucket
-domain) keeps media same-origin → COEP-clean and cache-friendly.
+R2 binding (`env.BUCKET.get(key)`), with `Content-Type`, an ETag with
+`Cache-Control: public, max-age=0, must-revalidate` (an upload retry or an edit
+may replace a key, so a cached copy is revalidated, and a current one is answered
+with 304), and `Range` support for audio/video streaming. Serving through the
+Worker (rather than a public bucket domain) keeps media same-origin →
+COEP-clean and cache-friendly.
 
-D1 stores the **path** (`/media/lessons/<id>/<id>.ne`), not the raw R2 key, so
-the value drops straight into `lesson.ne` and the player's existing sibling
-resolution finds the audio/captions with zero special-casing.
+D1 stores the **path** (`media/lessons/<id>/<id>.ne`, no leading slash), not the
+raw R2 key, so the value drops straight into `lesson.ne` (the client requests
+`/${lesson.ne}`) and the player's existing sibling resolution finds the
+audio/captions with zero special-casing.
 
 ## Catalog resolution — seed stays static, D1 layered on top
 
@@ -267,6 +270,8 @@ deletes the stored copy along with the intent.
 | Method & path                                                      | Auth                | Current responsibility                                                                                                |
 | ------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `GET /api/auth/google/login`, `/callback`                          | —                   | OAuth PKCE handshake and first-party session creation                                                                 |
+| `POST /api/auth/google/onetap`                                     | —                   | Google One Tap sign-in with a JWKS-verified credential                                                                |
+| `/api/auth/passkey/*`                                              | cookie / —          | Passkey registration (signed in) and discoverable-credential sign-in                                                  |
 | `GET /api/auth/me`, `PATCH /username`, `POST /logout`              | cookie              | Session and profile lifecycle                                                                                         |
 | `GET /api/lessons`, `GET /api/lessons/:slug`                       | —                   | Published lesson reads through Workers KV, then D1                                                                    |
 | `/api/lessons/mine`, create/update/publish/unpublish/delete routes | owner               | Draft and published lesson lifecycle                                                                                  |
@@ -276,9 +281,11 @@ deletes the stored copy along with the intent.
 | `/api/collaboration/rooms/*`, `/invitations/*`                     | member/role         | D1 control plane, private R2 assets, binary WebSockets, and room-local SQLite                                         |
 | `/api/collaboration/rooms/:id/voice/*`                             | member + capability | Voice availability probe, JSON coordination WebSocket, and the authorized SFU gateway (feature-flagged, fails closed) |
 | `POST /api/collaboration/jobs/maintenance`                         | QStash signature    | Delayed closed-room cleanup                                                                                           |
-| `GET /media/*`                                                     | —                   | Stream R2 objects with Range and immutable-cache support                                                              |
+| `GET /media/*`                                                     | —                   | Stream public R2 objects (`lessons/`, `slide-images/`) with Range and ETag revalidation                               |
 | `POST /api/slide-images`                                           | cookie              | Ingest Google Slides images into content-addressed R2 keys                                                            |
 | `GET /api/proxy?url=`, `POST /api/openrouter/responses`            | route-specific      | Guarded same-origin external-service proxies                                                                          |
+| `POST /api/<language>-playground/run`, `/format`                   | cookie              | Kill-switched, rate-limited, cached proxies for Go, Kotlin, Rust, Zig and Haskell (`/format`: Go, Rust, Zig)          |
+| `GET /api/studio/capabilities`, `POST /api/studio/tts/voxcpm2`     | cookie + D1 flag    | Studio capability discovery and private Burmese narration                                                             |
 
 ## Upload & publish sequence
 
@@ -303,8 +310,9 @@ gallery shows it (once published) alongside the static seed
 
 `.ne` files are small; audio/camera can be tens of MB. The implemented route
 streams each request body into `env.BUCKET.put()` without buffering the whole
-file in Worker memory. Lesson media has a 200 MB application limit; thumbnails
-use their smaller shared client/server constraint.
+file in Worker memory. Lesson media has a 100 MB limit, Cloudflare's own
+request-body cap (`MAX_MEDIA_BYTES`, infra/client/upload/mediaConstraints.ts);
+thumbnails and captions use their smaller shared client/server constraints.
 
 ## Security notes
 

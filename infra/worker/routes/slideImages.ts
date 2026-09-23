@@ -7,15 +7,14 @@ import { isGoogleImageUrl } from "../../../src/shared/googleImageHosts";
 // Mounted at /api/slide-images in worker/index.ts. Called once per Google
 // Slides deck import
 // (src/googleSlides/storeImageHrefs.ts): copies each Google-hosted slide
-// image into R2 so the persisted SVG can reference /media/<key> — served
-// straight from R2 with immutable caching — instead of an /api/proxy href
-// that re-fetches from Google on every render.
+// image into R2 so the persisted SVG can reference /media/<key>, served from
+// R2 by routes/media.ts, instead of an /api/proxy href that re-fetches from
+// Google on every render.
 //
 // Keys are content-addressed by source URL (slide-images/<sha256(url)>), so
 // the same image imported into any number of decks/lessons is stored once,
-// and re-importing a deck ("Update") is a cheap head() per image. Objects are
-// never mutated or deleted — same immutability assumption /media relies on
-// for its cache-control (see routes/media.ts).
+// and re-importing a deck ("Update") is a cheap head() per image: a key that
+// already exists is reused, never rewritten.
 //
 // Abuse guards: requires a signed-in user (same bar as /api/uploads — a
 // signed-out import falls back to proxy hrefs client-side), only accepts
