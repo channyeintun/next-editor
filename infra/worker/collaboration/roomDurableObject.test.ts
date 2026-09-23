@@ -20,8 +20,13 @@ import {
 } from "../../../src/collaboration/protocol";
 import { seedCollaborationProject } from "../../../src/collaboration/projectDocument";
 import {
+  isCollaborationTeachingInitialized,
+  seedCollaborationTeachingDocument,
+} from "../../../src/collaboration/teachingDocument";
+import {
   applyEncodedYjsSnapshot,
   encodeYjsDocument,
+  encodeYjsSnapshotUpdate,
   encodeYjsUpdate,
 } from "../../../src/collaboration/yjsUpdates";
 import { createStarterHtmlCssWorkspace } from "../../../src/starters/htmlCss";
@@ -442,6 +447,30 @@ describe("CollaborationRoomDurableObject teaching initialization", () => {
 
   const seedProject = (doc: Y.Doc) =>
     seedCollaborationProject(doc, createStarterHtmlCssWorkspace());
+
+  it("stores and broadcasts a teaching-only initialization", async () => {
+    const { room, doc, connect } = await createRoom(seedProject);
+    const peer = connect(PEER_ID, "viewer");
+    const before = Y.encodeStateVector(doc);
+    seedCollaborationTeachingDocument(doc, { slides: [], whiteboardElements: [] });
+
+    const response = await initializeTeaching(
+      room,
+      encodeYjsSnapshotUpdate(Y.encodeStateAsUpdate(doc, before)),
+    );
+
+    expect(response.status).toBe(200);
+    expect(peer.frames().map((frame) => frame.kind)).toEqual(["server-update"]);
+    const joining = connect(MEMBER_ID, "viewer");
+    const fresh = new Y.Doc();
+    await room.webSocketMessage(
+      joining as never,
+      toArrayBuffer(encodeCollaborationSyncStep1(fresh)),
+    );
+    const reply = joining.frames().find((frame) => frame.kind === "sync");
+    Y.applyUpdate(fresh, (reply as { payload: Uint8Array }).payload);
+    expect(isCollaborationTeachingInitialized(fresh)).toBe(true);
+  });
 
   it("answers bytes that are not a Yjs update without Yjs's own error text", async () => {
     const { room } = await createRoom(seedProject);

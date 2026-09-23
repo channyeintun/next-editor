@@ -64,6 +64,7 @@ import {
   type RoomSqliteStorage,
   type StoredAppendRoomSqliteUpdateResult,
 } from "./roomSqliteDocumentStore";
+import { exactArrayBuffer } from "./assetStore";
 import type { CollaborationRoomLocationHint } from "./roomLocation";
 import type { Env } from "../env";
 
@@ -141,10 +142,6 @@ function isOpen(socket: WebSocket): boolean {
 function sendMessage(socket: WebSocket, message: CollaborationWebSocketServerMessage): void {
   if (!isOpen(socket)) return;
   socket.send(JSON.stringify(collaborationWebSocketServerMessageSchema.parse(message)));
-}
-
-function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
@@ -301,12 +298,10 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private readonly sqliteDocument: RoomSqliteDocumentStore;
   private binaryDocument: Y.Doc | null = null;
   private binaryTeachingIntegrity: CollaborationTeachingIntegrity | null = null;
-  private readonly bindings: Env;
   private teachingInitializationTail: Promise<void> = Promise.resolve();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.bindings = env;
     this.sqliteDocument = new RoomSqliteDocumentStore(ctx.storage as unknown as RoomSqliteStorage);
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
@@ -479,10 +474,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private acceptConnection(request: Request): Response {
     const session = decodeCanonicalSession(request);
     if (!session) return new Response("invalid collaboration session", { status: 403 });
-    if (
-      !this.isCurrentRoom(session.roomId) ||
-      request.headers.get("Upgrade")?.toLowerCase() !== "websocket"
-    ) {
+    if (!this.isCurrentRoom(session.roomId)) {
       return new Response("invalid collaboration room", { status: 403 });
     }
     if (!this.consumeConnectionQuota(session.userId)) {
@@ -1047,12 +1039,8 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       try {
         for (const manifest of teaching.slides.values()) {
           const assetKey = `collaboration/rooms/${input.roomId}/assets/${manifest.asset.id}`;
-          const asset = await getCollaborationAsset(
-            this.bindings.DB,
-            input.roomId,
-            manifest.asset.id,
-          );
-          const object = await this.bindings.BUCKET.head(assetKey);
+          const asset = await getCollaborationAsset(this.env.DB, input.roomId, manifest.asset.id);
+          const object = await this.env.BUCKET.head(assetKey);
           if (
             !asset ||
             asset.mime_type !== manifest.asset.mimeType ||
@@ -1081,42 +1069,12 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       // the latest durable shadow immediately before the synchronous snapshot
       // replacement; this prevents the replacement cutoff from swallowing an
       // interleaved workspace update that is absent from the snapshot.
-      const latest = this.getBinaryDocument();
-      const finalCandidate = new Y.Doc();
-      let snapshot: Uint8Array | null = null;
-      try {
-        const latestProject = projectCollaborationDocument(latest).project;
-        Y.applyUpdate(
-          finalCandidate,
-          Y.encodeStateAsUpdate(latest),
-          "teaching-initialization-rebase",
-        );
-        Y.applyUpdate(finalCandidate, initializationUpdate, "teaching-initialization-final");
-        const finalProject = projectCollaborationDocument(finalCandidate).project;
-        const finalTeaching = validateCollaborationTeachingDocument(finalCandidate);
-        if (
-          JSON.stringify(latestProject) !== JSON.stringify(finalProject) ||
-          !finalTeaching.projection.initialized ||
-          finalTeaching.immutableFingerprint !== afterTeaching.immutableFingerprint ||
-          finalTeaching.mutableFingerprint !== afterTeaching.mutableFingerprint
-        ) {
-          return Response.json(
-            { error: "teaching initialization conflicted with the shared room" },
-            { status: 409 },
-          );
-        }
-        const snapshotUpdate = Y.encodeStateAsUpdate(finalCandidate);
-        if (snapshotUpdate.byteLength > MAX_YJS_SNAPSHOT_BYTES) {
-          return Response.json(
-            { error: "the room teaching state exceeds the snapshot limit" },
-            { status: 413 },
-          );
-        }
-        snapshot = snapshotUpdate;
-      } finally {
-        finalCandidate.destroy();
-      }
-      if (!snapshot) throw new Error("teaching initialization snapshot is unavailable");
+      const snapshot = this.rebaseTeachingInitialization(
+        this.getBinaryDocument(),
+        initializationUpdate,
+        afterTeaching,
+      );
+      if (snapshot instanceof Response) return snapshot;
       try {
         const result = this.sqliteDocument.replaceSnapshot(
           snapshot,
@@ -1147,6 +1105,51 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return Response.json({ error: reason }, { status: 400 });
     } finally {
       candidate.destroy();
+    }
+  }
+
+  /**
+   * The snapshot to store: `latest` plus the teaching initialization, which
+   * must still leave the shared workspace alone and produce the teaching state
+   * validated before the asset checks. A Response is the refusal to send.
+   */
+  private rebaseTeachingInitialization(
+    latest: Y.Doc,
+    initializationUpdate: Uint8Array,
+    expected: CollaborationTeachingIntegrity,
+  ): Uint8Array | Response {
+    const finalCandidate = new Y.Doc();
+    try {
+      const latestProject = projectCollaborationDocument(latest).project;
+      Y.applyUpdate(
+        finalCandidate,
+        Y.encodeStateAsUpdate(latest),
+        "teaching-initialization-rebase",
+      );
+      Y.applyUpdate(finalCandidate, initializationUpdate, "teaching-initialization-final");
+      const finalProject = projectCollaborationDocument(finalCandidate).project;
+      const finalTeaching = validateCollaborationTeachingDocument(finalCandidate);
+      if (
+        JSON.stringify(latestProject) !== JSON.stringify(finalProject) ||
+        !finalTeaching.projection.initialized ||
+        finalTeaching.immutableFingerprint !== expected.immutableFingerprint ||
+        finalTeaching.mutableFingerprint !== expected.mutableFingerprint
+      ) {
+        return Response.json(
+          { error: "teaching initialization conflicted with the shared room" },
+          { status: 409 },
+        );
+      }
+      const snapshot = Y.encodeStateAsUpdate(finalCandidate);
+      if (snapshot.byteLength > MAX_YJS_SNAPSHOT_BYTES) {
+        return Response.json(
+          { error: "the room teaching state exceeds the snapshot limit" },
+          { status: 413 },
+        );
+      }
+      return snapshot;
+    } finally {
+      finalCandidate.destroy();
     }
   }
 
