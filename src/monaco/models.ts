@@ -30,7 +30,9 @@ export function disposePlaybackModels(
   monaco: Monaco,
   preservedUri: { toString(): string } | null = null,
 ) {
-  const preservedModelUri = preservedUri?.toString();
+  // Compare in Monaco's own serialisation: a path from toPlaybackModelPath keeps
+  // `$`, `+`, `@`, … raw where `model.uri.toString()` percent-encodes them.
+  const preservedModelUri = preservedUri && monaco.Uri.parse(preservedUri.toString()).toString();
 
   monaco.editor.getModels().forEach((model) => {
     const modelUri = model.uri.toString();
@@ -94,5 +96,7 @@ export function workspacePathFromMonacoModelUri(uri: { toString(): string }) {
     return null;
   }
 
-  return normalizeWorkspacePath(decodeURI(modelUri.slice(FILE_URI_PREFIX.length)));
+  // decodeURIComponent, not decodeURI: Monaco's serialisation percent-encodes
+  // `$ + @ & = , ;` in paths, and decodeURI leaves those escapes in place.
+  return normalizeWorkspacePath(decodeURIComponent(modelUri.slice(FILE_URI_PREFIX.length)));
 }
