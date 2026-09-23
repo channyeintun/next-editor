@@ -1,5 +1,6 @@
 import { dehydrate, QueryClient } from "@tanstack/react-query";
 import type { Lesson } from "../../../tube/src/types";
+import { rewriteHtmlAsset } from "./rewriteHtmlAsset";
 
 // Data-only SSR. The lesson *page* is the editor — Monaco, WebContainers, the
 // whole provider stack — and none of that renders on a Worker, so #root is
@@ -234,28 +235,11 @@ export function injectLessonDocument(
   );
 }
 
-export async function renderLessonDetailResponse(
+export function renderLessonDetailResponse(
   assetResponse: Response,
   context: LessonDocumentContext,
 ): Promise<Response> {
-  const contentType = assetResponse.headers.get("content-type");
-  if (!assetResponse.ok || !contentType?.includes("text/html")) {
-    return assetResponse;
-  }
-
-  const headers = new Headers(assetResponse.headers);
-  // The body differs from the static asset, so representation-specific headers
-  // from ASSETS.fetch must not describe the rendered document.
-  headers.delete("content-length");
-  headers.delete("content-encoding");
-  headers.delete("etag");
-  headers.delete("last-modified");
-
-  return new Response(injectLessonDocument(await assetResponse.text(), context), {
-    status: assetResponse.status,
-    statusText: assetResponse.statusText,
-    headers,
-  });
+  return rewriteHtmlAsset(assetResponse, (document) => injectLessonDocument(document, context));
 }
 
 /**
@@ -266,24 +250,17 @@ export async function renderLessonDetailResponse(
  * can render that verdict immediately instead of spinning through a lookup the
  * edge already did.
  */
-export async function renderMissingLessonResponse(
+export function renderMissingLessonResponse(
   assetResponse: Response,
   slug: string,
 ): Promise<Response> {
-  const contentType = assetResponse.headers.get("content-type");
-  if (!assetResponse.ok || !contentType?.includes("text/html")) {
-    return assetResponse;
-  }
-
-  const headers = new Headers(assetResponse.headers);
-  headers.delete("content-length");
-  headers.delete("content-encoding");
-  headers.delete("etag");
-  headers.delete("last-modified");
-
-  const document = appendToHead(
-    setMeta(await assetResponse.text(), "name", "robots", "noindex,follow"),
-    queryStateScript(slug, null),
+  return rewriteHtmlAsset(
+    assetResponse,
+    (document) =>
+      appendToHead(
+        setMeta(document, "name", "robots", "noindex,follow"),
+        queryStateScript(slug, null),
+      ),
+    { status: 404, statusText: "Not Found" },
   );
-  return new Response(document, { status: 404, statusText: "Not Found", headers });
 }
