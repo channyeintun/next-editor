@@ -20,6 +20,7 @@ import {
 import type { PreviewAdapterHandle } from "../../stores/previewAdapterHandle";
 import type { ApiClientReplayState } from "../../types/slides";
 import { RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE } from "./previewIframeUtils";
+import { RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
 import { usePreviewController } from "./usePreviewController";
 
 const editor = vi.hoisted(() => ({
@@ -303,6 +304,7 @@ describe("usePreviewController rrweb replay surface", () => {
 });
 
 describe("usePreviewController runtime snapshots", () => {
+  let lastView: ReturnType<typeof renderController> | undefined;
   const RUNTIME_URL = "https://abc--3000--xyz.local-corp.webcontainer-api.io";
 
   // A cross-origin runtime frame: the parent cannot read its document, so a
@@ -337,6 +339,7 @@ describe("usePreviewController runtime snapshots", () => {
     runtimeMetadata = { ...idleRuntimeMetadata, status: "ready", previewUrl: RUNTIME_URL };
     editor.metadata = { ...editor.metadata, isRecording };
     const view = renderController();
+    lastView = view;
     const postMessage = mountRuntimeFrame(view.result.current);
     act(() => {
       view.result.current.handleFloat();
@@ -366,6 +369,17 @@ describe("usePreviewController runtime snapshots", () => {
     editWorkspace();
 
     expect(snapshotRequestReasons(postMessage)).toEqual([]);
+  });
+
+  it("seeds both replay tracks once when a recording starts", () => {
+    const { postMessage } = renderWithOpenRuntime(false);
+    // renderWithOpenRuntime keeps the controller; start recording on it.
+    editor.metadata = { ...editor.metadata, isRecording: true };
+    lastView?.rerender();
+
+    const types = postMessage.mock.calls.map(([message]) => message.type);
+    expect(types.filter((type) => type === RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE)).toHaveLength(1);
+    expect(snapshotRequestReasons(postMessage)).toHaveLength(1);
   });
 
   it("refreshes the fallback snapshot after an edit while recording", () => {

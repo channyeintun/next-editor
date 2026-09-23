@@ -120,7 +120,6 @@ type RuntimeSnapshotRequestReason =
   | "inspection"
   | "load"
   | "recording-finalize"
-  | "recording-start"
   | "refresh"
   | "route-change"
   | "runtime-ready";
@@ -655,26 +654,6 @@ export function usePreviewController(): PreviewController {
     };
   }, [effectiveRuntimePreviewUrl, previewHandle, requestRuntimePreviewSnapshot]);
 
-  useEffect(() => {
-    if (!isRecording) {
-      recordedPreviewInitialDocumentIdRef.current = null;
-      return;
-    }
-
-    // Capture both replay formats at the explicit recording-start checkpoint.
-    // rrweb provides ordered DOM mutations; the HTML snapshot remains the
-    // bounded fallback used by recordings that cannot initialize rrweb replay.
-    void requestRuntimePreviewSnapshot("recording-start");
-    try {
-      iframeRef.current?.contentWindow?.postMessage(
-        { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
-        "*",
-      );
-    } catch {
-      // Cross-origin/postMessage failures behave like an unanswered request.
-    }
-  }, [isRecording]);
-
   const handleRuntimeRouteChange = useCallback(
     (route: string) => {
       applyPreviewRoute(route);
@@ -1179,19 +1158,33 @@ export function usePreviewController(): PreviewController {
     };
   }, []);
 
+  // Recording start: capture the preview's starting point in both replay formats.
   useEffect(() => {
     const wasRecording = previousIsRecordingRef.current;
     previousIsRecordingRef.current = isRecording;
 
-    if (isPlaying || !isRecording || wasRecording) {
+    if (!isRecording) {
+      recordedPreviewInitialDocumentIdRef.current = null;
       return;
     }
 
-    // Capture the active frame at recording start so replay opens in the right
-    // mode even when the user was already in the API frame before pressing record.
+    if (wasRecording) {
+      return;
+    }
+
+    // rrweb: the recorder answers with a FullSnapshot of the live document, which
+    // seeds the recording (see RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE).
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
+      "*",
+    );
+    // The active frame, so replay opens in the right mode even when the user was
+    // already in the API frame before pressing record.
     emitPreviewEvent("api_client_mode", { activeMode });
+    // The HTML fallback for recordings rrweb cannot replay: a preview_refresh
+    // carrying the runtime page's snapshot.
     handleRefresh();
-  }, [activeMode, emitPreviewEvent, handleRefresh, isPlaying, isRecording]);
+  }, [isRecording]);
 
   // Stops the window listeners of a resize drag still in progress; the unmount
   // cleanup below calls it so a drag cannot outlive the preview.
