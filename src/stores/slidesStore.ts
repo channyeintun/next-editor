@@ -1,6 +1,7 @@
 import { createStore } from "@xstate/store-react";
 import { deflateSync, inflateSync, strFromU8, strToU8 } from "fflate";
 import type { Slide, SlidePreviewState } from "../types/slides";
+import { base64ToBytes, bytesToBase64 } from "../types/workspace";
 
 const SLIDES_STORAGE_KEY = "next-editor-slides";
 
@@ -9,24 +10,6 @@ const SLIDES_STORAGE_KEY = "next-editor-slides";
 // existing storage remains readable and debuggable.
 const COMPRESSED_PREFIX = "NEZ1:";
 const COMPRESSION_THRESHOLD = 200_000;
-
-const bytesToBase64 = (bytes: Uint8Array): string => {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-};
-
-const base64ToBytes = (base64: string): Uint8Array => {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-};
 
 export const isSlide = (item: unknown): item is Slide => {
   if (typeof item !== "object" || item === null) return false;
