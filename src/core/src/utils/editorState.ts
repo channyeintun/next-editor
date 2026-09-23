@@ -226,17 +226,19 @@ export function normalizeEditorFrame(frame: EditorFrame): EditorFrame {
     undefined,
     initialPosition,
   );
-  const initialViewState = normalizeEditorViewState(
+  // One pass fills every cursor's selection and position, so the primary cursor
+  // read back below already agrees with this view state: it needs no second pass.
+  const viewState = normalizeEditorViewState(
     frame.state.viewState,
     initialSelection,
     initialPosition,
   );
   const position = normalizeEditorPosition(
-    getPrimaryCursorPosition(initialViewState) ?? frame.state.position,
+    getPrimaryCursorPosition(viewState) ?? frame.state.position,
     initialPosition,
   );
   const selection = normalizeEditorSelection(
-    getPrimaryCursorSelection(initialViewState) ?? frame.state.selection,
+    getPrimaryCursorSelection(viewState) ?? frame.state.selection,
     initialSelection,
     position,
   );
@@ -251,7 +253,7 @@ export function normalizeEditorFrame(frame: EditorFrame): EditorFrame {
           : String(frame.state.content ?? ""),
       position,
       selection,
-      viewState: normalizeEditorViewState(initialViewState, selection, position),
+      viewState,
     },
   };
 }

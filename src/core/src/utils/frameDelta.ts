@@ -649,9 +649,9 @@ export function applyFrameDelta(
  * {@link applyFrameDelta} for a base that is already normalized: a keyframe that
  * went through `normalizeEditorFrame`, or an earlier result of this function.
  * Replay folds deltas onto such bases on every tick and seek, and normalizing
- * one again is a pure cost: it deep-clones the view state twice and changes
- * nothing. The result is still normalized (and so never shares a view state
- * with the base or the delta), which keeps the next fold's base valid.
+ * one again is a pure cost: it deep-clones the view state and changes nothing.
+ * The result is still normalized (and so never shares a view state with the
+ * base or the delta), which keeps the next fold's base valid.
  */
 export function applyFrameDeltaToNormalized(
   base: EditorFrame,
