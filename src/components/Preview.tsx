@@ -1,4 +1,4 @@
-import { lazy, useEffect } from "react";
+import { lazy } from "react";
 import { PreviewChrome } from "./preview/PreviewChrome";
 import { RuntimePreviewRenderer } from "./preview/RuntimePreviewRenderer";
 import { usePreviewController } from "./preview/usePreviewController";
@@ -19,17 +19,6 @@ function Preview() {
   const dockSlide = useCollapseTransition(!controller.isOpen, {
     enabled: isDocked && !isPlaying,
   });
-
-  // While the preview's resize handle is dragged, suspend the runtime dock's
-  // left/right transition so it tracks the drag live instead of lagging behind.
-  useEffect(() => {
-    if (!controller.isResizing) {
-      return;
-    }
-
-    document.body.classList.add("is-resizing-panel");
-    return () => document.body.classList.remove("is-resizing-panel");
-  }, [controller.isResizing]);
 
   const isApiMode = controller.activeMode === "api";
 

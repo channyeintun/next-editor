@@ -90,7 +90,6 @@ export interface PreviewController {
   panelMode: PreviewPanelMode;
   dockWidth: number;
   isRefreshing: boolean;
-  isResizing: boolean;
   isTransitioning: boolean;
   disablePointerEvents: boolean;
   previewAddressLabel: string;
@@ -1357,7 +1356,6 @@ export function usePreviewController(): PreviewController {
     panelMode,
     dockWidth,
     isRefreshing,
-    isResizing,
     isTransitioning,
     disablePointerEvents: isTransitioning || isResizing,
     previewAddressLabel: previewAddress.label,

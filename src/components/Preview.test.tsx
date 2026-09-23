@@ -22,7 +22,6 @@ vi.mock("./preview/usePreviewController", () => ({
       panelMode: "docked",
       dockWidth: 432,
       isRefreshing: false,
-      isResizing: false,
       isTransitioning: false,
       disablePointerEvents: false,
       previewAddressLabel: "localhost",

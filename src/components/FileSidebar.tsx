@@ -199,8 +199,6 @@ function FileSidebarPanel() {
 
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
-    // Suspend the runtime dock's left/right transition so it tracks the drag live.
-    document.body.classList.add("is-resizing-panel");
 
     const handlePointerMove = (event: PointerEvent) => {
       const dragOffset = event.clientX - sidebarResizeStartRef.current.x;
@@ -229,7 +227,6 @@ function FileSidebarPanel() {
     return () => {
       document.body.style.cursor = previousCursor;
       document.body.style.userSelect = previousUserSelect;
-      document.body.classList.remove("is-resizing-panel");
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", stopResizing);
       window.removeEventListener("pointercancel", stopResizing);

@@ -148,7 +148,6 @@ describe("usePreviewController resize", () => {
       firePointer("pointerup");
     });
 
-    expect(result.current.isResizing).toBe(false);
     expect(result.current.disablePointerEvents).toBe(false);
   });
 
@@ -161,7 +160,7 @@ describe("usePreviewController resize", () => {
     act(() => {
       result.current.handleResizeStart(pointerDown(100, 100));
     });
-    expect(result.current.isResizing).toBe(true);
+    expect(result.current.disablePointerEvents).toBe(true);
     const sizeAtStart = result.current.size;
 
     // A system gesture or palm rejection cancels the pointer mid-drag.
@@ -172,7 +171,7 @@ describe("usePreviewController resize", () => {
       firePointer("pointermove", 20, 400);
     });
 
-    expect(result.current.isResizing).toBe(false);
+    expect(result.current.disablePointerEvents).toBe(false);
     expect(result.current.size).toEqual(sizeAtStart);
   });
 
