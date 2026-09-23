@@ -27,6 +27,7 @@ const PROVIDER_FILES = [
   "src/contexts/WhiteboardContext.tsx",
   "src/contexts/WhiteboardStoreContext.tsx",
   "src/contexts/WorkspaceProvider.tsx",
+  "src/contexts/useWebContainerRuntimeSession.ts",
   "src/contexts/useWebContainerWorkspaceSync.ts",
 ];
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
 import type {
   EnvironmentVariables,
@@ -60,6 +60,41 @@ function safelyKillProcess(process: WebContainerProcess | null): void {
   }
 }
 
+function safelyResizeProcess(
+  process: WebContainerProcess | null,
+  size: { cols: number; rows: number },
+): void {
+  if (!process) {
+    return;
+  }
+
+  try {
+    process.resize(size);
+  } catch {
+    // Ignore resize calls racing with process shutdown.
+  }
+}
+
+/**
+ * Awaits `task`, turns a failure into `onError`'s result, and always runs
+ * `cleanup`. The try blocks live in module-level helpers like this one because
+ * the React Compiler skips a hook containing a try/finally, and a hook it skips
+ * hands the runtime provider new functions on every render.
+ */
+async function settleWithCleanup<T>(
+  task: () => Promise<T>,
+  onError: (error: unknown) => T,
+  cleanup: () => void,
+): Promise<T> {
+  try {
+    return await task();
+  } catch (error) {
+    return onError(error);
+  } finally {
+    cleanup();
+  }
+}
+
 export function useWebContainerRuntimeSession({
   environmentVariables,
   onTerminalOutput,
@@ -105,15 +140,14 @@ export function useWebContainerRuntimeSession({
   const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<string | null>(null);
   const [activeCommand, setActiveCommandState] = useState<string | null>(null);
 
-  previewUrlRef.current = previewUrl;
-  previewPortRef.current = previewPort;
-  errorMessageRef.current = errorMessage;
-  lastOutputRef.current = lastOutput;
-  activeTerminalSessionIdRef.current = activeTerminalSessionId;
-  activeCommandRef.current = activeCommand;
-  onTerminalOutputRef.current = onTerminalOutput;
-  onServerReadyRef.current = onServerReady;
-  statusRef.current = status;
+  // Each state ref above is written by its setter (setStatus and friends) at the
+  // moment of the change, so getRecordingSnapshot and the provider's busy checks
+  // see it before React renders. The callbacks are read only from async process
+  // and container events, so a layout effect keeps them current.
+  useLayoutEffect(() => {
+    onTerminalOutputRef.current = onTerminalOutput;
+    onServerReadyRef.current = onServerReady;
+  });
 
   const isRuntimeGenerationActive = (generation: number) =>
     isMountedRef.current && runtimeGenerationRef.current === generation;
@@ -438,20 +472,21 @@ export function useWebContainerRuntimeSession({
     const generation = runtimeGenerationRef.current;
     let process: WebContainerProcess | null = null;
 
-    try {
-      process = await instance.spawn(
+    const runToExit = async () => {
+      const spawned = await instance.spawn(
         parsedCommand.command,
         parsedCommand.args,
         Object.keys(environmentVariables).length > 0 ? { env: environmentVariables } : undefined,
       );
+      process = spawned;
 
       if (!isRuntimeGenerationActive(generation)) {
-        safelyKillProcess(process);
+        safelyKillProcess(spawned);
         return 0;
       }
 
-      foregroundProcessesRef.current.add(process);
-      const outputPipe = process.output
+      foregroundProcessesRef.current.add(spawned);
+      const outputPipe = spawned.output
         .pipeTo(
           new WritableStream({
             write(chunk) {
@@ -469,7 +504,7 @@ export function useWebContainerRuntimeSession({
         .catch((error) => {
           if (
             isRuntimeGenerationActive(generation) &&
-            foregroundProcessesRef.current.has(process!)
+            foregroundProcessesRef.current.has(spawned)
           ) {
             console.error("[runner] Command output stream error", error);
             appendOutput(`\n${getRuntimeErrorMessage(error)}\n`, {
@@ -479,9 +514,9 @@ export function useWebContainerRuntimeSession({
         });
       void outputPipe;
 
-      const exitCode = await process.exit;
+      const exitCode = await spawned.exit;
 
-      foregroundProcessesRef.current.delete(process);
+      foregroundProcessesRef.current.delete(spawned);
 
       if (!isRuntimeGenerationActive(generation)) {
         return 0;
@@ -496,25 +531,29 @@ export function useWebContainerRuntimeSession({
       }
 
       return exitCode;
-    } catch (error) {
-      if (isRuntimeGenerationActive(generation)) {
-        console.log("[runner]", getRuntimeErrorMessage(error), error);
-        appendOutput(`\n${getRuntimeErrorMessage(error)}\n`, {
-          logToConsole: true,
-        });
-      }
-      return -1;
-    } finally {
-      if (process) {
-        foregroundProcessesRef.current.delete(process);
-      }
+    };
 
-      if (options.trackAsActiveCommand) {
+    return settleWithCleanup(
+      runToExit,
+      (error) => {
         if (isRuntimeGenerationActive(generation)) {
+          console.log("[runner]", getRuntimeErrorMessage(error), error);
+          appendOutput(`\n${getRuntimeErrorMessage(error)}\n`, {
+            logToConsole: true,
+          });
+        }
+        return -1;
+      },
+      () => {
+        if (process) {
+          foregroundProcessesRef.current.delete(process);
+        }
+
+        if (options.trackAsActiveCommand && isRuntimeGenerationActive(generation)) {
           setActiveCommand(null);
         }
-      }
-    }
+      },
+    );
   };
 
   const startRunnerProcess = async (instance: WebContainer, commandLine: string) => {
@@ -540,98 +579,12 @@ export function useWebContainerRuntimeSession({
     setStatus("starting");
     appendOutput(`$ ${commandLine}\n`, { logToConsole: true });
 
+    const spawnOptions =
+      Object.keys(environmentVariables).length > 0 ? { env: environmentVariables } : undefined;
+    let process: WebContainerProcess;
+
     try {
-      const process = await instance.spawn(
-        parsedCommand.command,
-        parsedCommand.args,
-        Object.keys(environmentVariables).length > 0 ? { env: environmentVariables } : undefined,
-      );
-
-      if (startId !== runnerStartIdRef.current || !isRuntimeGenerationActive(generation)) {
-        safelyKillProcess(process);
-        return;
-      }
-
-      runnerProcessRef.current = process;
-
-      void process.output
-        .pipeTo(
-          new WritableStream({
-            write(chunk) {
-              if (
-                runnerProcessRef.current === process &&
-                startId === runnerStartIdRef.current &&
-                isRuntimeGenerationActive(generation)
-              ) {
-                appendOutput(chunk, { logToConsole: true });
-              }
-            },
-          }),
-          // process.kill(), not this consumer, owns the output stream's
-          // cancellation; see the matching foreground-command pipe above.
-          { preventCancel: true },
-        )
-        .catch((error) => {
-          if (
-            runnerProcessRef.current !== process ||
-            startId !== runnerStartIdRef.current ||
-            !isRuntimeGenerationActive(generation)
-          ) {
-            return;
-          }
-
-          console.error("[runner] Runner output stream error", error);
-          runnerProcessRef.current = null;
-          setPreviewUrl(null);
-          setPreviewPort(null);
-          setStatus("error");
-          setErrorMessage(getRuntimeErrorMessage(error));
-        });
-
-      void process.exit
-        .then((exitCode) => {
-          if (
-            runnerProcessRef.current !== process ||
-            startId !== runnerStartIdRef.current ||
-            !isRuntimeGenerationActive(generation)
-          ) {
-            return;
-          }
-
-          runnerProcessRef.current = null;
-          setPreviewUrl(null);
-          setPreviewPort(null);
-          appendOutput(`\nRunner exited with code ${exitCode}\n`, {
-            logToConsole: true,
-          });
-
-          if (exitCode !== 0) {
-            console.error("[runner]", formatCommandError(commandLine));
-            setStatus("error");
-            setErrorMessage(formatCommandError(commandLine));
-          } else {
-            // Script-style runners (e.g. python lessons) exit cleanly instead
-            // of keeping a server alive, so no `server-ready` event will ever
-            // move the status off "starting" — settle it here.
-            setStatus("ready");
-          }
-        })
-        .catch((error) => {
-          if (
-            runnerProcessRef.current !== process ||
-            startId !== runnerStartIdRef.current ||
-            !isRuntimeGenerationActive(generation)
-          ) {
-            return;
-          }
-
-          runnerProcessRef.current = null;
-          setPreviewUrl(null);
-          setPreviewPort(null);
-          console.error("[runner] Runner process error", error);
-          setStatus("error");
-          setErrorMessage(getRuntimeErrorMessage(error));
-        });
+      process = await instance.spawn(parsedCommand.command, parsedCommand.args, spawnOptions);
     } catch (error) {
       if (startId !== runnerStartIdRef.current || !isRuntimeGenerationActive(generation)) {
         return;
@@ -640,7 +593,94 @@ export function useWebContainerRuntimeSession({
       console.error("[runner] Failed to start runner process", error);
       setStatus("error");
       setErrorMessage(getRuntimeErrorMessage(error));
+      return;
     }
+
+    if (startId !== runnerStartIdRef.current || !isRuntimeGenerationActive(generation)) {
+      safelyKillProcess(process);
+      return;
+    }
+
+    runnerProcessRef.current = process;
+
+    void process.output
+      .pipeTo(
+        new WritableStream({
+          write(chunk) {
+            if (
+              runnerProcessRef.current === process &&
+              startId === runnerStartIdRef.current &&
+              isRuntimeGenerationActive(generation)
+            ) {
+              appendOutput(chunk, { logToConsole: true });
+            }
+          },
+        }),
+        // process.kill(), not this consumer, owns the output stream's
+        // cancellation; see the matching foreground-command pipe above.
+        { preventCancel: true },
+      )
+      .catch((error) => {
+        if (
+          runnerProcessRef.current !== process ||
+          startId !== runnerStartIdRef.current ||
+          !isRuntimeGenerationActive(generation)
+        ) {
+          return;
+        }
+
+        console.error("[runner] Runner output stream error", error);
+        runnerProcessRef.current = null;
+        setPreviewUrl(null);
+        setPreviewPort(null);
+        setStatus("error");
+        setErrorMessage(getRuntimeErrorMessage(error));
+      });
+
+    void process.exit
+      .then((exitCode) => {
+        if (
+          runnerProcessRef.current !== process ||
+          startId !== runnerStartIdRef.current ||
+          !isRuntimeGenerationActive(generation)
+        ) {
+          return;
+        }
+
+        runnerProcessRef.current = null;
+        setPreviewUrl(null);
+        setPreviewPort(null);
+        appendOutput(`\nRunner exited with code ${exitCode}\n`, {
+          logToConsole: true,
+        });
+
+        if (exitCode !== 0) {
+          console.error("[runner]", formatCommandError(commandLine));
+          setStatus("error");
+          setErrorMessage(formatCommandError(commandLine));
+        } else {
+          // Script-style runners (e.g. python lessons) exit cleanly instead
+          // of keeping a server alive, so no `server-ready` event will ever
+          // move the status off "starting" — settle it here.
+          setStatus("ready");
+        }
+      })
+      .catch((error) => {
+        if (
+          runnerProcessRef.current !== process ||
+          startId !== runnerStartIdRef.current ||
+          !isRuntimeGenerationActive(generation)
+        ) {
+          return;
+        }
+
+        runnerProcessRef.current = null;
+        setPreviewUrl(null);
+        setPreviewPort(null);
+        console.error("[runner] Runner process error", error);
+        setStatus("error");
+        setErrorMessage(getRuntimeErrorMessage(error));
+      });
   };
 
   const ensureTerminalProcess = async (
@@ -662,7 +702,7 @@ export function useWebContainerRuntimeSession({
     }
 
     const generation = runtimeGenerationRef.current;
-    const startPromise = (async () => {
+    const startShell = async () => {
       let lastError: unknown = null;
 
       for (const candidate of TERMINAL_SHELL_CANDIDATES) {
@@ -763,17 +803,15 @@ export function useWebContainerRuntimeSession({
       }
 
       throw lastError ?? new Error("Unable to start the workspace shell.");
-    })();
+    };
 
-    session.startPromise = startPromise;
-
-    try {
-      return await startPromise;
-    } finally {
+    const startPromise: Promise<TerminalSessionHandle | null> = startShell().finally(() => {
       if (session.startPromise === startPromise) {
         session.startPromise = null;
       }
-    }
+    });
+    session.startPromise = startPromise;
+    return startPromise;
   };
 
   const ensureTerminalSession = async (instance: WebContainer) => {
@@ -831,11 +869,7 @@ export function useWebContainerRuntimeSession({
     terminalSizeRef.current = size;
 
     for (const session of terminalSessionsRef.current) {
-      try {
-        session.process?.resize(size);
-      } catch {
-        // Ignore resize calls racing with process shutdown.
-      }
+      safelyResizeProcess(session.process, size);
     }
   };
 
