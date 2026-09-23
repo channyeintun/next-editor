@@ -17,7 +17,7 @@ export {
   disposePlaybackModels,
   disposeRemovedWorkspaceModels,
   isPlaybackModelUri,
-  syncPlaybackModel,
+  getOrCreatePlaybackModel,
   syncWorkspaceModel,
   toInternalModelUri,
   toMonacoModelPath,

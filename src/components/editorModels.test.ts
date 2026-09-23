@@ -3,7 +3,7 @@ import type { Monaco } from "../monaco/runtime";
 import {
   disposePlaybackModels,
   isPlaybackModelUri,
-  syncPlaybackModel,
+  getOrCreatePlaybackModel,
   syncWorkspaceModel,
   toMonacoModelPath,
   toPlaybackModelPath,
@@ -90,7 +90,7 @@ describe("editor model helpers", () => {
   it("creates playback models with the replayed workspace snapshot content", () => {
     const { models, monaco } = createFakeMonaco();
 
-    const model = syncPlaybackModel(
+    const model = getOrCreatePlaybackModel(
       monaco,
       "src/App.tsx",
       "export default function App() {}",
@@ -124,12 +124,17 @@ describe("editor model helpers", () => {
     expect(models.size).toBe(1);
   });
 
-  it("reconciles existing playback models to the active replay snapshot", () => {
+  it("leaves an existing playback model's replayed content alone", () => {
     const { models, monaco } = createFakeMonaco();
 
-    const firstModel = syncPlaybackModel(monaco, "src/App.tsx", "future content", "javascript");
+    const firstModel = getOrCreatePlaybackModel(
+      monaco,
+      "src/App.tsx",
+      "replayed content",
+      "javascript",
+    );
 
-    const secondModel = syncPlaybackModel(
+    const secondModel = getOrCreatePlaybackModel(
       monaco,
       "src/App.tsx",
       "snapshot content",
@@ -137,7 +142,7 @@ describe("editor model helpers", () => {
     ) as unknown as FakeModel;
 
     expect(secondModel).toBe(firstModel);
-    expect(secondModel.getValue()).toBe("snapshot content");
+    expect(secondModel.getValue()).toBe("replayed content");
     expect(secondModel.language).toBe("typescript");
     expect(models.size).toBe(1);
   });
@@ -184,13 +189,13 @@ describe("editor model helpers", () => {
       "typescript",
       normalUri,
     ) as unknown as FakeModel;
-    const activePlaybackModel = syncPlaybackModel(
+    const activePlaybackModel = getOrCreatePlaybackModel(
       monaco,
       "src/App.tsx",
       "active replay content",
       "typescript",
     ) as unknown as FakeModel;
-    const stalePlaybackModel = syncPlaybackModel(
+    const stalePlaybackModel = getOrCreatePlaybackModel(
       monaco,
       "src/Old.tsx",
       "stale replay content",

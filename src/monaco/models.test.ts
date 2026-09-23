@@ -10,7 +10,7 @@ import {
   disposePlaybackModels,
   disposeRemovedWorkspaceModels,
   isPlaybackModelUri,
-  syncPlaybackModel,
+  getOrCreatePlaybackModel,
   syncWorkspaceModel,
   toInternalModelUri,
   toMonacoModelPath,
@@ -126,8 +126,8 @@ describe("workspace model URIs", () => {
   it("keeps the active playback model when named by its playback path", () => {
     const { monaco } = createFakeMonaco((value): FakeUri => URI.parse(value));
     const path = "src/routes/posts/$postId.tsx";
-    const active = syncPlaybackModel(monaco, path, "", "typescript") as unknown as FakeModel;
-    const idle = syncPlaybackModel(
+    const active = getOrCreatePlaybackModel(monaco, path, "", "typescript") as unknown as FakeModel;
+    const idle = getOrCreatePlaybackModel(
       monaco,
       "src/other.ts",
       "",
@@ -170,7 +170,7 @@ describe("disposeRemovedWorkspaceModels", () => {
     const shown = create("src/shown-but-deleted.ts");
     shown.attachedToEditor = true;
     const bound = create("src/bound-but-deleted.ts");
-    const playback = syncPlaybackModel(
+    const playback = getOrCreatePlaybackModel(
       monaco,
       "src/removed.ts",
       "",

@@ -50,25 +50,27 @@ export function disposePlaybackModels(
   });
 }
 
-export function syncPlaybackModel(
+/**
+ * The playback model for `workspacePath`: created with `initialContent`, then
+ * owned by replay, which writes the recorded edits into it itself. An existing
+ * model therefore keeps its content; only its language follows the file.
+ */
+export function getOrCreatePlaybackModel(
   monaco: Monaco,
   workspacePath: string,
-  content: string,
+  initialContent: string,
   language: string,
-  options: { preserveExistingContent?: boolean } = {},
 ) {
   const uri = monaco.Uri.parse(toPlaybackModelPath(workspacePath));
   const model = monaco.editor.getModel(uri);
 
   if (!model) {
-    return monaco.editor.createModel(content, language, uri);
+    return monaco.editor.createModel(initialContent, language, uri);
   }
 
-  if (!options.preserveExistingContent && model.getValue() !== content) {
-    model.setValue(content);
+  if (model.getLanguageId() !== language) {
+    monaco.editor.setModelLanguage(model, language);
   }
-
-  monaco.editor.setModelLanguage(model, language);
   return model;
 }
 

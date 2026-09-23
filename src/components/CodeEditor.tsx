@@ -59,7 +59,7 @@ import {
   MonacoEditor,
   monaco,
   setActiveTheme,
-  syncPlaybackModel,
+  getOrCreatePlaybackModel,
   syncWorkspaceModel,
   toMonacoModelPath,
   toPlaybackModelPath,
@@ -211,7 +211,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 }) => {
   // Opt out of the React Compiler. Monaco is a heavily imperative integration:
   // the active model is reconciled during render (syncWorkspaceModel /
-  // syncPlaybackModel below) and the editor is wired through the
+  // getOrCreatePlaybackModel below) and the editor is wired through the
   // onMount/useEffectEvent callbacks. The compiler's auto-memoization has
   // disrupted that flow before (broken syntax highlighting), so this
   // component stays uncompiled. See [[react-compiler-babel-preset]].
@@ -272,9 +272,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     }
 
     if (usesPlaybackModel) {
-      return syncPlaybackModel(monaco, activeFile.path, activeTextContent, selectedLanguage, {
-        preserveExistingContent: true,
-      });
+      return getOrCreatePlaybackModel(monaco, activeFile.path, activeTextContent, selectedLanguage);
     }
 
     isApplyingExternalModelValueRef.current = true;
@@ -298,9 +296,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       return null;
     }
 
-    return syncPlaybackModel(monaco, activeFile.path, activeTextContent, selectedLanguage, {
-      preserveExistingContent: true,
-    });
+    return getOrCreatePlaybackModel(monaco, activeFile.path, activeTextContent, selectedLanguage);
   });
 
   const syncPlaybackEditorModel = useEffectEvent((editor: StandaloneEditor | null) => {
