@@ -975,16 +975,14 @@ collaborationRoute.get("/rooms/:roomId/voice/websocket", async (c) => {
 // Durable Object then verifies the connection capability and the full
 // session/track/mid ownership matrix before proxying upstream.
 collaborationRoute.all("/rooms/:roomId/voice/sfu/*", async (c) => {
-  if (c.req.method !== "GET" && c.req.method !== "POST" && c.req.method !== "PUT") {
+  if (c.req.method !== "POST" && c.req.method !== "PUT") {
     return c.json({ error: "unsupported operation" }, 403, { "Cache-Control": "no-store" });
   }
-  if (c.req.method !== "GET") {
-    const contentType = c.req.header("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-    if (contentType !== "application/json") {
-      return c.json({ error: "unsupported content type" }, 415, {
-        "Cache-Control": "no-store",
-      });
-    }
+  const contentType = c.req.header("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (contentType !== "application/json") {
+    return c.json({ error: "unsupported content type" }, 415, {
+      "Cache-Control": "no-store",
+    });
   }
   // A declared Content-Length is REQUIRED, not defaulted to 0: a default let a
   // chunked request (no Content-Length) straight past this check. The header is

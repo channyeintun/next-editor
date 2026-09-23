@@ -116,17 +116,17 @@ export const upstreamRenegotiateResponseSchema = z.object({
 
 // The SFU operations this gateway understands. Everything else — including
 // tracks/update (simulcast) and session-state reads — fails closed until an
-// explicit use case and ownership rule exist.
+// explicit use case and ownership rule exist. generate-ice-servers fails
+// closed too: the client always takes its ICE servers from voice.ready, so
+// PartyTracks never requests them here.
 export type VoiceSfuOperation =
   | { kind: "create-session" }
-  | { kind: "ice-servers" }
   | { kind: "push-tracks"; sessionId: string }
   | { kind: "pull-tracks"; sessionId: string }
   | { kind: "renegotiate"; sessionId: string }
   | { kind: "close-tracks"; sessionId: string };
 
 export function parseVoiceSfuOperation(method: string, subpath: string): VoiceSfuOperation | null {
-  if (method === "GET" && subpath === "/generate-ice-servers") return { kind: "ice-servers" };
   if (method === "POST" && subpath === "/sessions/new") return { kind: "create-session" };
   const sessionMatch = /^\/sessions\/([A-Za-z0-9_-]{1,64})(\/.*)$/.exec(subpath);
   if (!sessionMatch) return null;

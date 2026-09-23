@@ -187,7 +187,7 @@ export async function forwardCollaborationVoiceSfuRequest(
   return stub.fetch(`${VOICE_ORIGIN}/sfu${input.subpath}`, {
     method: request.method,
     headers,
-    body: request.method === "GET" ? null : request.body,
+    body: request.body,
   });
 }
 
@@ -828,29 +828,23 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       const operation = parseVoiceSfuOperation(request.method, subpath);
       if (!operation) return noStoreJson({ error: "unsupported operation" }, 403);
 
-      if (operation.kind === "ice-servers") {
-        return noStoreJson({ iceServers: [...VOICE_STUN_ICE_SERVERS] });
+      // Bounded while streaming, not after: `await request.text()` would
+      // buffer a chunked request whole before any length check and could
+      // exhaust this Durable Object's memory, killing voice for every
+      // participant in the room.
+      const raw = await readBodyWithLimit(request, MAX_VOICE_SFU_REQUEST_BYTES);
+      if (raw.status === "too-large") {
+        return noStoreJson({ error: "payload too large" }, 413);
       }
-
+      if (raw.status === "read-error") {
+        return noStoreJson({ error: "invalid request" }, 400);
+      }
       let body: unknown = null;
-      if (request.method !== "GET") {
-        // Bounded while streaming, not after: `await request.text()` would
-        // buffer a chunked request whole before any length check and could
-        // exhaust this Durable Object's memory, killing voice for every
-        // participant in the room.
-        const raw = await readBodyWithLimit(request, MAX_VOICE_SFU_REQUEST_BYTES);
-        if (raw.status === "too-large") {
-          return noStoreJson({ error: "payload too large" }, 413);
-        }
-        if (raw.status === "read-error") {
+      if (raw.text.length > 0) {
+        try {
+          body = JSON.parse(raw.text) as unknown;
+        } catch {
           return noStoreJson({ error: "invalid request" }, 400);
-        }
-        if (raw.text.length > 0) {
-          try {
-            body = JSON.parse(raw.text) as unknown;
-          } catch {
-            return noStoreJson({ error: "invalid request" }, 400);
-          }
         }
       }
 

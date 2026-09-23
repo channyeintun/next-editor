@@ -179,7 +179,7 @@ Do not mount `routePartyTracksRequest` directly on a public route. Wrap it with 
 | SFU operation           | Required authorization and state update                                                                                                                                                                                    |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Create session          | Caller has a live room-scoped voice socket and valid capability. Allow only the expected current/recovery generation. Register the returned SFU session ID as owned by that voice connection.                              |
-| Generate ICE servers    | Caller has a live voice socket. Return STUN-only configuration in the initial rollout; return only short-lived TURN credentials if TURN is later enabled.                                                                  |
+| Generate ICE servers    | Not served: the client always sets `PartyTracksConfig.iceServers` from the `voice.ready` limits, so PartyTracks never requests it. Fail closed. If TURN is enabled later, send short-lived credentials in `voice.ready`.   |
 | Add local track         | Path session belongs to caller. Allow audio only, one live published microphone track per connection, bounded SDP/body size, and a bounded track batch. Register the returned track name and owner before broadcasting it. |
 | Pull remote track       | Path session belongs to caller. Every requested remote `{sessionId, trackName}` exactly matches an active published track in the same Voice Durable Object. Register returned receiving mids as caller-owned.              |
 | Renegotiate             | Path session belongs to caller and the SDP/body is bounded and structurally valid.                                                                                                                                         |
@@ -613,8 +613,8 @@ Recorded deviations:
   serialized authority. `partytracks/server` is not imported by the Worker.
 - The client always receives its ICE configuration from the server-owned
   `voice.ready` limits payload wired into `PartyTracksConfig.iceServers`
-  (STUN-only initially), so `generate-ice-servers` is answered with the same
-  STUN-only configuration and never proxied upstream.
+  (STUN-only initially), so PartyTracks never calls `generate-ice-servers`;
+  the gateway does not serve it and answers 403.
 - Cloudflare Realtime application credentials for development/staging must be
   created outside source control by the operator; no credential or
   application ID is committed.

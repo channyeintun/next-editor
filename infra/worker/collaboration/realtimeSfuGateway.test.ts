@@ -53,7 +53,6 @@ const publications: ActivePublication[] = [
 describe("SFU operation parsing", () => {
   it("recognizes only the supported operations", () => {
     expect(parseVoiceSfuOperation("POST", "/sessions/new")).toEqual({ kind: "create-session" });
-    expect(parseVoiceSfuOperation("GET", "/generate-ice-servers")).toEqual({ kind: "ice-servers" });
     expect(parseVoiceSfuOperation("POST", "/sessions/abc/tracks/new")).toEqual({
       kind: "push-tracks",
       sessionId: "abc",
@@ -69,6 +68,7 @@ describe("SFU operation parsing", () => {
   });
 
   it("fails closed for session reads, track updates, and unknown paths", () => {
+    expect(parseVoiceSfuOperation("GET", "/generate-ice-servers")).toBeNull();
     expect(parseVoiceSfuOperation("GET", "/sessions/abc")).toBeNull();
     expect(parseVoiceSfuOperation("PUT", "/sessions/abc/tracks/update")).toBeNull();
     expect(parseVoiceSfuOperation("DELETE", "/sessions/abc/tracks/close")).toBeNull();

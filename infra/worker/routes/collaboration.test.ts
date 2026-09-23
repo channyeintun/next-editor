@@ -175,3 +175,27 @@ describe("small JSON bodies", () => {
     expect(response.status).toBe(400);
   });
 });
+
+describe("voice SFU gateway", () => {
+  it("fails a GET closed as an unsupported operation", async () => {
+    const response = await collaborationRoute.request(
+      `https://nexteditor.dev/rooms/${ROOM_ID}/voice/sfu/generate-ice-servers`,
+      { method: "GET" },
+      { DB: {} } as Env,
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "unsupported operation" });
+  });
+
+  it("refuses a request that is not JSON", async () => {
+    const response = await collaborationRoute.request(
+      `https://nexteditor.dev/rooms/${ROOM_ID}/voice/sfu/sessions/new`,
+      { method: "POST" },
+      { DB: {} } as Env,
+    );
+
+    expect(response.status).toBe(415);
+    expect(await response.json()).toEqual({ error: "unsupported content type" });
+  });
+});
