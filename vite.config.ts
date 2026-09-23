@@ -83,7 +83,8 @@ export default ({ mode }: { mode: string }) => {
           // functions across 15 files here, all of them running unmemoized while
           // the codebase (and the disabled exhaustive-deps rule below) assumed
           // otherwise. Verify after any Babel bump: compiled output must contain
-          // `const $ = _c(`.
+          // `const $ = _c(`. Vitest does not run this plugin; for the context
+          // providers, src/contexts/reactCompilerCoverage.test.ts does.
           babel({ presets: [reactCompilerPreset()] }),
         ] as unknown as PluginOption[];
       }),
