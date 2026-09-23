@@ -614,14 +614,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     };
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (typeof window !== "undefined" && reverseSyncTimeoutRef.current !== null) {
-        window.clearTimeout(reverseSyncTimeoutRef.current);
-      }
-    };
-  }, []);
-
+  // resetRuntime also clears the pending reverse-sync timer.
   const onUnmount = useEffectEvent(() => {
     resetRuntime();
   });
