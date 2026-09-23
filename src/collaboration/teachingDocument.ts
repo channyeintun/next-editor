@@ -1119,7 +1119,9 @@ export function setCollaborationCurrentSlide(
 ): number {
   const projection = projectCollaborationTeachingDocument(doc);
   const { slideId: id } = collaborationCurrentSlideCommandSchema.parse({ slideId });
-  if (!projection.initialized || !projection.slides.has(id)) {
+  // slideOrder, not slides: the projection only reports a current slide that is
+  // in the order, so this is what makes a successful call show `id`.
+  if (!projection.initialized || !projection.slideOrder.includes(id)) {
     throw new CollaborationTeachingError("The requested slide is not in the room presentation");
   }
   if (projection.currentSlideId === id) return projection.presentationRevision;

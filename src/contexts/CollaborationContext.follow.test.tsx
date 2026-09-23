@@ -650,6 +650,50 @@ describe("CollaborationContext teaching projection", () => {
 
   // Validation re-emits an element's keys in schema order; Excalidraw's order
   // differs, so the acceptance check must not compare raw serializations.
+  it("changes the shared slide without extra teaching projections", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    const slide = (id: string, order: number) => ({
+      slide: { id, order, content: id, contentType: "html" as const },
+      asset: {
+        id: String(order).repeat(64),
+        mimeType: "application/vnd.next-editor.slide+json",
+        size: 32,
+      },
+    });
+    act(() => {
+      seedCollaborationProject(provider.doc, createStarterHtmlCssWorkspace());
+      seedCollaborationTeachingDocument(provider.doc, {
+        slides: [slide("one", 0), slide("two", 1)],
+        whiteboardElements: [],
+      });
+    });
+    await waitFor(() => expect(collaboration!.teaching.currentSlideId).toBe("one"));
+    vi.mocked(projectCollaborationTeachingDocument).mockClear();
+
+    let accepted = false;
+    act(() => {
+      accepted = collaboration!.publishCurrentSlide("two");
+    });
+
+    expect(accepted).toBe(true);
+    await waitFor(() => expect(collaboration!.teaching.currentSlideId).toBe("two"));
+    // Only the room projection that every teaching change gets.
+    expect(projectCollaborationTeachingDocument).toHaveBeenCalledTimes(1);
+  });
+
   it("reports an applied whiteboard delta as accepted", async () => {
     let collaboration: ReturnType<typeof useCollaboration> | null = null;
     function Probe() {

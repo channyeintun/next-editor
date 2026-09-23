@@ -1754,9 +1754,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     const current = providerRef.current;
     if (!current || !canWriteRef.current || playbackRef.current) return false;
     try {
+      // Throws unless the slide is in the room presentation, so returning means
+      // the shared current slide is now `slideId`.
       setCollaborationCurrentSlide(current.doc, slideId);
       setLocalError(null);
-      return projectCollaborationTeachingDocument(current.doc).currentSlideId === slideId;
+      return true;
     } catch (error) {
       setLocalError(messageFromError(error, "The shared slide could not be changed."));
       return false;
