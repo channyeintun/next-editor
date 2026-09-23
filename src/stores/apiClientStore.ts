@@ -35,7 +35,6 @@ export function toRetainedApiClientResult(result: ApiClientResult): ApiClientRes
     return result;
   }
 
-  const fullBody = truncateUtf8(result.response.body, Number.MAX_SAFE_INTEGER);
   const body = truncateUtf8(result.response.body, MAX_API_CLIENT_RETAINED_BODY_BYTES);
   if (!body.truncated) {
     return result;
@@ -46,7 +45,10 @@ export function toRetainedApiClientResult(result: ApiClientResult): ApiClientRes
     response: {
       ...result.response,
       body: body.value,
-      bodyBytes: result.response.bodyBytes ?? fullBody.byteLength,
+      // Live responses always carry their byte count (normalizeApiClientResultPayload);
+      // measure the whole body only for a result that lacks it.
+      bodyBytes:
+        result.response.bodyBytes ?? new TextEncoder().encode(result.response.body).byteLength,
       truncated: true,
     },
   };

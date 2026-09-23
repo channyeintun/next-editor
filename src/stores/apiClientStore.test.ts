@@ -300,4 +300,30 @@ describe("apiClientStore", () => {
     expect(retained.ok && retained.response.truncated).toBe(true);
     expect(toRetainedApiClientResult(result)).toEqual(retained);
   });
+
+  it("keeps the byte count a live response already carries", () => {
+    const body = "é".repeat(MAX_API_CLIENT_RETAINED_BODY_BYTES);
+    const result = {
+      ok: true as const,
+      response: {
+        status: 200,
+        statusText: "OK",
+        headers: [] as [string, string][],
+        body,
+        durationMs: 1,
+        bodyBytes: 2_000_000,
+      },
+    };
+
+    const retained = toRetainedApiClientResult(result);
+
+    expect(retained.ok && retained.response.bodyBytes).toBe(2_000_000);
+    expect(retained.ok && retained.response.truncated).toBe(true);
+    // Without one, the byte count is the body's UTF-8 length (2 bytes per "é").
+    const measured = toRetainedApiClientResult({
+      ...result,
+      response: { ...result.response, bodyBytes: undefined },
+    });
+    expect(measured.ok && measured.response.bodyBytes).toBe(2 * MAX_API_CLIENT_RETAINED_BODY_BYTES);
+  });
 });
