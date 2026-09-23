@@ -295,16 +295,8 @@ export const kiteMonarchLanguage: monaco.languages.IMonarchLanguage = {
   },
 };
 
-let registered = false;
-
-/** Idempotent: the Monaco runtime module may be imported from several entries. */
+/** Called once, by the Monaco runtime's initialization. */
 export function registerKiteLanguage(): void {
-  if (registered || monaco.languages.getLanguages().some((lang) => lang.id === KITE_LANGUAGE_ID)) {
-    registered = true;
-    return;
-  }
-  registered = true;
-
   monaco.languages.register({
     id: KITE_LANGUAGE_ID,
     extensions: [".kite"],

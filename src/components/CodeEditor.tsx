@@ -58,7 +58,6 @@ import {
   isPlaybackModelUri,
   MonacoEditor,
   monaco,
-  setActiveTheme,
   getOrCreatePlaybackModel,
   syncWorkspaceModel,
   toMonacoModelPath,
@@ -118,7 +117,6 @@ const COLLABORATION_SELECTION_COLORS = [
 
 interface CodeEditorProps {
   language?: string;
-  theme?: string;
   showImportExport?: boolean;
   breadcrumb?: ReactNode;
 }
@@ -205,7 +203,6 @@ function escapeMarkdown(value: string): string {
 
 const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   language,
-  theme = "next-editor-dark",
   showImportExport = false,
   breadcrumb,
 }) => {
@@ -718,10 +715,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     syncEditorRef,
     usesPlaybackModel,
   ]);
-
-  useLayoutEffect(() => {
-    setActiveTheme(theme);
-  }, [theme]);
 
   useLayoutEffect(() => {
     if (!pendingExternalModelCaptureRef.current) return;

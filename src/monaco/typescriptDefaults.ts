@@ -3,11 +3,9 @@ import * as monacoTypeScriptModule from "monaco-editor/esm/vs/language/typescrip
 const monacoTypeScript =
   monacoTypeScriptModule as unknown as typeof import("monaco-editor").typescript;
 
-let hasConfiguredMonacoTypeScript = false;
+const MONACO_BUNDLER_MODULE_RESOLUTION = 100;
 
-export const MONACO_BUNDLER_MODULE_RESOLUTION = 100;
-
-export const MONACO_EXTRA_LIBS = [
+const MONACO_EXTRA_LIBS = [
   {
     filePath: "file:///node_modules/@types/react/index.d.ts",
     content: `declare module "react" {
@@ -68,7 +66,7 @@ declare module "*.svg" {
   },
 ] as const;
 
-export function getMonacoCompilerOptions() {
+function getMonacoCompilerOptions() {
   return {
     allowImportingTsExtensions: true,
     allowJs: true,
@@ -86,11 +84,8 @@ export function getMonacoCompilerOptions() {
   };
 }
 
+/** Called once, by the Monaco runtime's initialization. */
 export function configureMonacoTypeScript() {
-  if (hasConfiguredMonacoTypeScript) {
-    return;
-  }
-
   const compilerOptions = getMonacoCompilerOptions();
   const defaults = [monacoTypeScript.typescriptDefaults, monacoTypeScript.javascriptDefaults];
 
@@ -111,6 +106,4 @@ export function configureMonacoTypeScript() {
       currentDefaults.addExtraLib(content, filePath);
     });
   });
-
-  hasConfiguredMonacoTypeScript = true;
 }

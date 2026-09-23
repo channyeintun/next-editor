@@ -306,19 +306,8 @@ export const haskellMonarchLanguage: monaco.languages.IMonarchLanguage = {
   },
 };
 
-let registered = false;
-
-/** Idempotent: the Monaco runtime module may be imported from several entries. */
+/** Called once, by the Monaco runtime's initialization. */
 export function registerHaskellLanguage(): void {
-  if (
-    registered ||
-    monaco.languages.getLanguages().some((lang) => lang.id === HASKELL_LANGUAGE_ID)
-  ) {
-    registered = true;
-    return;
-  }
-  registered = true;
-
   monaco.languages.register({
     id: HASKELL_LANGUAGE_ID,
     // `.hs` only. `.lhs` is literate Haskell, where the code is the lines

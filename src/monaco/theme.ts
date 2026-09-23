@@ -1,4 +1,4 @@
-import { monaco, type Monaco } from "./runtime";
+import type { Monaco } from "./runtime";
 
 export const NEXT_EDITOR_MONACO_THEME = "next-editor-dark";
 
@@ -146,20 +146,14 @@ export function defineNextEditorTheme(monaco: Monaco) {
   });
 }
 
-export function setActiveTheme(theme: string) {
-  monaco.editor.setTheme(theme);
-}
-
-export const EDITOR_OPTIONS = {
+const EDITOR_OPTIONS = {
   minimap: { enabled: false },
   fontSize: 14,
   lineNumbers: "on" as const,
   roundedSelection: false,
   scrollBeyondLastLine: true,
-  readOnly: false, // Keep editor writable to allow cursor blinking
   cursorStyle: "line" as const,
   renderValidationDecorations: "off" as const,
-  automaticLayout: true,
   quickSuggestions: false,
   suggestOnTriggerCharacters: false,
   acceptSuggestionOnEnter: "off" as const,

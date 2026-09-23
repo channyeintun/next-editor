@@ -51,9 +51,6 @@ export function MonacoEditor({
 }: MonacoEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const disposablesRef = useRef<{ dispose(): void }[]>([]);
-  const mountCleanupRef = useRef<(() => void) | null>(null);
   const onChangeRef = useRef(onChange);
   const onBeforeModelChangeRef = useRef(onBeforeModelChange);
   const onAfterModelChangeRef = useRef(onAfterModelChange);
@@ -69,7 +66,7 @@ export function MonacoEditor({
   useLayoutEffect(() => {
     const container = containerRef.current;
 
-    if (!container || editorRef.current) {
+    if (!container) {
       return;
     }
 
@@ -79,32 +76,26 @@ export function MonacoEditor({
     );
     editorRef.current = editor;
 
-    disposablesRef.current = [
-      editor.onDidChangeModelContent(() => {
-        onChangeRef.current?.(editor.getValue(), editor);
-      }),
-    ];
+    const contentListener = editor.onDidChangeModelContent(() => {
+      onChangeRef.current?.(editor.getValue(), editor);
+    });
 
+    let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
-      const resizeObserver = new ResizeObserver(() => {
+      resizeObserver = new ResizeObserver(() => {
         editor.layout();
       });
       resizeObserver.observe(container);
-      resizeObserverRef.current = resizeObserver;
     }
 
     editor.layout();
     const mountCleanup = onMount?.(editor, monaco);
-    mountCleanupRef.current = typeof mountCleanup === "function" ? mountCleanup : null;
 
     return () => {
       onWillDisposeRef.current?.(editor, editor.getModel());
-      mountCleanupRef.current?.();
-      mountCleanupRef.current = null;
-      resizeObserverRef.current?.disconnect();
-      resizeObserverRef.current = null;
-      disposablesRef.current.forEach((disposable) => disposable.dispose());
-      disposablesRef.current = [];
+      if (typeof mountCleanup === "function") mountCleanup();
+      resizeObserver?.disconnect();
+      contentListener.dispose();
       editor.dispose();
       editorRef.current = null;
     };

@@ -1,7 +1,7 @@
 // Self-hosted, trimmed Monaco. Importing this module configures the workers,
 // theme, and TypeScript defaults before any raw editor instance is created.
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
-import { NEXT_EDITOR_MONACO_THEME, defineNextEditorTheme, setActiveTheme } from "./theme";
+import { NEXT_EDITOR_MONACO_THEME, defineNextEditorTheme } from "./theme";
 import { configureMonacoTypeScript } from "./typescriptDefaults";
 import { registerKiteLanguage } from "./kiteLanguage";
 import { registerZigLanguage } from "./zigLanguage";
@@ -65,12 +65,8 @@ const monacoEnvironment: monaco.Environment = {
       case "json":
         return new JsonWorker();
       case "css":
-      case "scss":
-      case "less":
         return new CssWorker();
       case "html":
-      case "handlebars":
-      case "razor":
         return new HtmlWorker();
       case "typescript":
       case "javascript":
@@ -95,9 +91,8 @@ function ensureMonacoRuntimeInitialized() {
   globalScope.__nextEditorMonacoRuntimeInitialized = true;
   self.MonacoEnvironment = monacoEnvironment;
   defineNextEditorTheme(monaco);
-  // Activate immediately so the first editor never paints Monaco's default
-  // theme. Routed through setActiveTheme to keep it the only setTheme caller.
-  setActiveTheme(NEXT_EDITOR_MONACO_THEME);
+  // Activate immediately so the first editor never paints Monaco's default theme.
+  monaco.editor.setTheme(NEXT_EDITOR_MONACO_THEME);
   configureMonacoTypeScript();
   // CSS lint markers are never painted either (see configureMonacoTypeScript).
   monacoCss.cssDefaults.setOptions({ ...monacoCss.cssDefaults.options, validate: false });

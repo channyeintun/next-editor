@@ -290,16 +290,8 @@ export const zigMonarchLanguage: monaco.languages.IMonarchLanguage = {
   },
 };
 
-let registered = false;
-
-/** Idempotent: the Monaco runtime module may be imported from several entries. */
+/** Called once, by the Monaco runtime's initialization. */
 export function registerZigLanguage(): void {
-  if (registered || monaco.languages.getLanguages().some((lang) => lang.id === ZIG_LANGUAGE_ID)) {
-    registered = true;
-    return;
-  }
-  registered = true;
-
   monaco.languages.register({
     id: ZIG_LANGUAGE_ID,
     extensions: [".zig", ".zon"],

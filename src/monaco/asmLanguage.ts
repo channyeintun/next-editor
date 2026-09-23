@@ -241,16 +241,8 @@ export const asmMonarchLanguage: monaco.languages.IMonarchLanguage = {
   },
 };
 
-let registered = false;
-
-/** Idempotent: the Monaco runtime module may be imported from several entries. */
+/** Called once, by the Monaco runtime's initialization. */
 export function registerAsmLanguage(): void {
-  if (registered || monaco.languages.getLanguages().some((lang) => lang.id === ASM_LANGUAGE_ID)) {
-    registered = true;
-    return;
-  }
-  registered = true;
-
   monaco.languages.register({
     id: ASM_LANGUAGE_ID,
     extensions: [".asm", ".s", ".nasm"],
