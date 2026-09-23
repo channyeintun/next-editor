@@ -409,6 +409,18 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     return result;
   };
 
+  /**
+   * A reverse sync has just read `project` out of the container, so the
+   * container already holds it. Forward syncs diff against the last project the
+   * container holds; without this they would write the container's own files
+   * back into it, over anything a process wrote there since the read.
+   */
+  const recordContainerProject = (instance: WebContainer, project: WorkspaceProject) => {
+    if (mountedInstanceRef.current === instance) {
+      lastSyncedProjectRef.current = cloneProjectForSync(project);
+    }
+  };
+
   const resetWorkspaceSync = () => {
     syncGenerationRef.current += 1;
     stopFsWatch();
@@ -434,6 +446,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     isFsWatchActive,
     queueFileSync,
     queueProjectSync,
+    recordContainerProject,
     runSerializedRuntimeTask,
     resetWorkspaceSync,
   };

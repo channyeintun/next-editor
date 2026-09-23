@@ -430,4 +430,63 @@ describe("WebContainerRuntimeProviderImpl reverse sync", () => {
     expect(harness.dirty.hasUnsavedChanges).toBe(true);
     expect(harness.dirty.modifiedFilePaths).toEqual([entryPath]);
   });
+
+  // A reverse sync reads what the container already holds. Writing that back
+  // is wasted work at best; when a container tool rewrites the file between our
+  // read and the write-back, it replaces the tool's newer output.
+  it("does not write a reverse-synced file back over a newer container write", async () => {
+    const fakeFs = createFakeFs({});
+    const { instance } = createFakeInstance(fakeFs);
+    type WatchListener = (event: "rename" | "change", filename: string | Uint8Array) => void;
+    const capturedWatch: { listener: WatchListener | null } = { listener: null };
+    Object.assign(instance.fs, {
+      watch: vi.fn<
+        (path: string, options: unknown, listener: WatchListener) => { close: () => void }
+      >((_path, _options, listener) => {
+        capturedWatch.listener = listener;
+        return { close: vi.fn<() => void>() };
+      }),
+    });
+    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+
+    const { runtime, workspace } = renderProviders();
+    // The fake mount writes nothing, so seed the container with the mounted project.
+    for (const [path, file] of Object.entries(workspace.getProject().files)) {
+      if (isWorkspaceTextFile(file)) fakeFs.addFile(path, file.content);
+    }
+
+    await act(async () => {
+      await runtime.startRuntime();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    const fireWatch = capturedWatch.listener;
+    if (!fireWatch) throw new Error("Expected the provider to register an fs.watch listener");
+    const writeFile = vi.mocked(instance.fs.writeFile);
+    writeFile.mockClear();
+
+    // A generator writes gen.ts, then rewrites it while the reverse sync is
+    // reading it; the rewrite's watch event arrives a tick later.
+    fakeFs.addFile("gen.ts", "v1");
+    const readFile = vi.mocked(instance.fs.readFile);
+    const readFromFakeFs = readFile.getMockImplementation()!;
+    readFile.mockImplementation(async (path, encoding) => {
+      const content = await readFromFakeFs(path, encoding);
+      if (path === "gen.ts" && content === "v1") {
+        fakeFs.addFile("gen.ts", "v2");
+        setTimeout(() => fireWatch("change", "gen.ts"), 0);
+      }
+      return content;
+    });
+    fireWatch("rename", "gen.ts");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(writeFile.mock.calls.map(([path]) => path)).not.toContain("gen.ts");
+    expect(await instance.fs.readFile("gen.ts", "utf-8")).toBe("v2");
+    const genFile = workspace.getProject().files["gen.ts"];
+    expect(isWorkspaceTextFile(genFile) ? genFile.content : null).toBe("v2");
+  });
 });

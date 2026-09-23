@@ -79,6 +79,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     isFsWatchActive,
     queueFileSync,
     queueProjectSync,
+    recordContainerProject,
     runSerializedRuntimeTask,
     resetWorkspaceSync,
   } = useWebContainerWorkspaceSync({
@@ -139,6 +140,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
               return;
             }
 
+            // The container holds nextProject, so the forward sync that the
+            // reconcile below triggers must not write it back.
+            recordContainerProject(instance, nextProject);
             if (!areWorkspaceProjectsEqual(currentProject, nextProject)) {
               reconcileExternalProject(nextProject);
             }

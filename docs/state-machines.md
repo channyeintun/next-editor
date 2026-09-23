@@ -30,9 +30,12 @@ This is the field pair most likely to look "shared." It is not — ownership mov
 with the mode:
 
 - **Authoring / idle / runtime:** `workspaceStore` is the sole owner. The
-  WebContainer filesystem is a one-way _mirror_, synced store → container by
-  `useWebContainerWorkspaceSync` (driven by the store's `syncVersion`). The
-  container FS is never read back as truth.
+  WebContainer filesystem is a _mirror_, synced store → container by
+  `useWebContainerWorkspaceSync` (driven by the store's `syncVersion`). Files a
+  container process writes (a lockfile, generated code) come back through the
+  runtime provider's reverse sync, which reads the container tree and hands it
+  to the store's `reconcileExternalProject`; the store stays the owner and the
+  read becomes the forward sync's new baseline, so it is not written back.
 - **Recording:** the machine only _reads_ the workspace — it pulls immutable
   snapshots and timed `WORKSPACE_EVENT`s from the store (via
   `getWorkspaceSnapshot` / `handleWorkspaceEvent` in `NextEditorProvider`). The
