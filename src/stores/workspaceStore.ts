@@ -1292,10 +1292,6 @@ export const selectWorkspaceTreeVersion = (context: WorkspaceState): number => c
 export const selectWorkspaceFileCount = (context: WorkspaceState): number =>
   context.isInitialized ? context.fileCount : 0;
 
-/** The preview refreshes on the same revisions the WebContainer syncs on. */
-export const selectWorkspacePreviewVersion = (context: WorkspaceState): number =>
-  context.syncVersion;
-
 export const selectWorkspaceDirtyState = (context: WorkspaceState): WorkspaceDirtyState =>
   context.isInitialized ? context.dirtyState : emptyDirtyState;
 

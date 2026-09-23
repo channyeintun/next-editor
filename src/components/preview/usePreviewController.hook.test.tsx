@@ -17,8 +17,12 @@ import {
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
 } from "../../contexts/WebContainerRuntimeContext";
+import type { WorkspaceActions } from "../../contexts/WorkspaceContext";
+import { WorkspaceProvider } from "../../contexts/WorkspaceProvider";
+import { useWorkspaceActions } from "../../hooks/useWorkspace";
 import type { PreviewAdapterHandle } from "../../stores/previewAdapterHandle";
 import type { ApiClientReplayState } from "../../types/slides";
+import { isWorkspaceTextFile } from "../../types/workspace";
 import { RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE } from "./previewIframeUtils";
 import { RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
 import { usePreviewController } from "./usePreviewController";
@@ -42,14 +46,6 @@ vi.mock("../../hooks/useNextEditorContext", () => ({
   useNextEditorMetadata: () => editor.metadata,
 }));
 
-const workspace = vi.hoisted(() => ({ previewVersion: 0 }));
-
-vi.mock("../../hooks/useWorkspace", () => ({
-  useWorkspaceLessonType: () => "react",
-  useWorkspacePreviewVersion: () => workspace.previewVersion,
-  useWorkspaceSaveVersion: () => 0,
-}));
-
 const idleRuntimeMetadata = {
   status: "idle",
   previewUrl: null,
@@ -71,26 +67,48 @@ const runtimeActions = {
   startRuntime: vi.fn<() => Promise<void>>(async () => undefined),
 } as unknown as WebContainerRuntimeActions;
 
+// The real workspace boots the react starter, so edits go through the same
+// store transitions the editor drives.
 function Providers({ children }: PropsWithChildren) {
   return (
-    <PreviewAdapterHandleProvider>
-      <PreviewPanelProvider>
-        <RuntimePanelStoreProvider>
-          <ApiClientStoreProvider>
-            <WebContainerRuntimeActionsContext value={runtimeActions}>
-              <WebContainerRuntimeMetadataContext value={runtimeMetadata}>
-                {children}
-              </WebContainerRuntimeMetadataContext>
-            </WebContainerRuntimeActionsContext>
-          </ApiClientStoreProvider>
-        </RuntimePanelStoreProvider>
-      </PreviewPanelProvider>
-    </PreviewAdapterHandleProvider>
+    <WorkspaceProvider>
+      <PreviewAdapterHandleProvider>
+        <PreviewPanelProvider>
+          <RuntimePanelStoreProvider>
+            <ApiClientStoreProvider>
+              <WebContainerRuntimeActionsContext value={runtimeActions}>
+                <WebContainerRuntimeMetadataContext value={runtimeMetadata}>
+                  {children}
+                </WebContainerRuntimeMetadataContext>
+              </WebContainerRuntimeActionsContext>
+            </ApiClientStoreProvider>
+          </RuntimePanelStoreProvider>
+        </PreviewPanelProvider>
+      </PreviewAdapterHandleProvider>
+    </WorkspaceProvider>
   );
 }
 
+let controllerRenders = 0;
+
 function renderController() {
-  return renderHook(() => usePreviewController(), { wrapper: Providers });
+  return renderHook(
+    () => {
+      controllerRenders += 1;
+      return { ...usePreviewController(), workspaceActions: useWorkspaceActions() };
+    },
+    { wrapper: Providers },
+  );
+}
+
+// One keystroke in the editor: append a character to the active file.
+function typeInActiveFile(actions: WorkspaceActions) {
+  const path = actions.getActiveFilePath();
+  const file = actions.getFile(path);
+  const content = file && isWorkspaceTextFile(file) ? file.content : "";
+  act(() => {
+    actions.updateFileContent(path, `${content}x`);
+  });
 }
 
 const POINTER_ID = 7;
@@ -119,7 +137,7 @@ function firePointer(type: string, clientX = 0, clientY = 0) {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
-  workspace.previewVersion = 0;
+  controllerRenders = 0;
   runtimeMetadata = idleRuntimeMetadata;
   editor.metadata = {
     currentRecording: null,
@@ -302,6 +320,18 @@ describe("usePreviewController rrweb replay surface", () => {
   });
 });
 
+describe("usePreviewController workspace edits", () => {
+  it("does not re-render the controller when the workspace is edited", () => {
+    const { result } = renderController();
+    const rendersBeforeEdits = controllerRenders;
+
+    typeInActiveFile(result.current.workspaceActions);
+    typeInActiveFile(result.current.workspaceActions);
+
+    expect(controllerRenders).toBe(rendersBeforeEdits);
+  });
+});
+
 describe("usePreviewController runtime snapshots", () => {
   let lastView: ReturnType<typeof renderController> | undefined;
   const RUNTIME_URL = "https://abc--3000--xyz.local-corp.webcontainer-api.io";
@@ -351,8 +381,7 @@ describe("usePreviewController runtime snapshots", () => {
     postMessage.mockClear();
 
     const editWorkspace = () => {
-      workspace.previewVersion += 1;
-      view.rerender();
+      typeInActiveFile(view.result.current.workspaceActions);
       act(() => {
         vi.advanceTimersByTime(2_000);
       });

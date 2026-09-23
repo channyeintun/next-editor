@@ -13,8 +13,8 @@ import { usePreviewAdapterHandle } from "../../contexts/PreviewAdapterHandleCont
 import { useRuntimePanelStore } from "../../contexts/RuntimePanelStoreContext";
 import { clampPreviewDockWidth, usePreviewPanel } from "../../contexts/PreviewPanelContext";
 import {
+  useWorkspaceActions,
   useWorkspaceLessonType,
-  useWorkspacePreviewVersion,
   useWorkspaceSaveVersion,
 } from "../../hooks/useWorkspace";
 import {
@@ -320,8 +320,8 @@ export function usePreviewController(): PreviewController {
     applyPreviewPanelState,
   } = usePreviewPanel();
   const { startRuntime } = useWebContainerRuntimeActions();
+  const { subscribeWorkspaceSync } = useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
-  const previewVersion = useWorkspacePreviewVersion();
   const saveVersion = useWorkspaceSaveVersion();
   const {
     previewUrl: runtimePreviewUrl,
@@ -997,11 +997,12 @@ export function usePreviewController(): PreviewController {
     void requestRuntimePreviewSnapshot("edit");
   });
 
-  // previewVersion changes with every workspace edit; the edit is the trigger,
-  // so it is the only dependency.
+  // Refresh on each workspace sync revision: an edit, a loaded project, or an
+  // asset becoming available. Subscribing, instead of reading the revision in
+  // render, keeps typing from re-rendering the preview.
   useEffect(() => {
-    refreshRecordedRuntimeSnapshot();
-  }, [previewVersion]);
+    return subscribeWorkspaceSync(() => refreshRecordedRuntimeSnapshot());
+  }, [subscribeWorkspaceSync]);
 
   useEffect(() => {
     if (isPlaybackPreviewActive) {
