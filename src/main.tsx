@@ -7,7 +7,7 @@ import { loadDmpCodec } from "./storage/dmpCodec/dmpCodec";
 import posthog from "posthog-js";
 import { PostHogProvider } from "@posthog/react";
 import {
-  POSTHOG_SENSITIVE_SURFACE_SELECTOR,
+  POSTHOG_REPLAY_PRIVACY_OPTIONS,
   sanitizePostHogEvent,
 } from "./utils/posthogExceptionFilter";
 import { installPerformanceMetricsReporter } from "./utils/performanceMetrics";
@@ -20,14 +20,8 @@ posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN, {
   // only sees render-path failures.
   capture_exceptions: true,
   before_send: (event) => sanitizePostHogEvent(event),
-  session_recording: {
-    // Workspace source, filenames, previews, runtime/agent/API output, slides,
-    // recordings, and drawings must not land in third-party replays. The editor
-    // root blocks the complete surface; the narrow selectors cover legacy embeds.
-    // See docs/observability-privacy.md for the data-classification contract.
-    maskAllInputs: true,
-    blockSelector: POSTHOG_SENSITIVE_SURFACE_SELECTOR,
-  },
+  // Replay blocking and console capture; see docs/observability-privacy.md.
+  ...POSTHOG_REPLAY_PRIVACY_OPTIONS,
 });
 
 installPerformanceMetricsReporter((metrics) => {

@@ -1,9 +1,26 @@
+import type { PostHogConfig } from "posthog-js";
+
 const WEBCONTAINER_PREVIEW_ORIGIN_PATTERN =
   /(?:https?:\/\/|blob:https?:\/\/)[^\s/]*(?:webcontainer-api\.io|webcontainer\.io)(?=[:/\s]|$)/i;
 
 /** Blocks the complete editor subtree; the narrower selectors cover legacy embeds. */
 export const POSTHOG_SENSITIVE_ROOT_CLASS = "ph-no-capture";
 export const POSTHOG_SENSITIVE_SURFACE_SELECTOR = `.${POSTHOG_SENSITIVE_ROOT_CLASS}, .monaco-editor, .excalidraw`;
+
+/**
+ * The session-replay half of docs/observability-privacy.md, spread into `posthog.init`.
+ * Workspace source, filenames, previews, runtime/agent/API output, slides, recordings and
+ * drawings must not land in third-party replays: the editor root is blocked and inputs are
+ * masked. Console capture is pinned off because the WebContainer runtime mirrors runner
+ * output to the console, and left undefined PostHog follows the project's remote setting.
+ */
+export const POSTHOG_REPLAY_PRIVACY_OPTIONS = {
+  enable_recording_console_log: false,
+  session_recording: {
+    maskAllInputs: true,
+    blockSelector: POSTHOG_SENSITIVE_SURFACE_SELECTOR,
+  },
+} satisfies Partial<PostHogConfig>;
 
 export type PostHogEvent = {
   event?: string;

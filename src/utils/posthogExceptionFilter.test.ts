@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { record } from "@rrweb/record";
 import {
+  POSTHOG_REPLAY_PRIVACY_OPTIONS,
   POSTHOG_SENSITIVE_SURFACE_SELECTOR,
   sanitizePostHogEvent,
   shouldSendPostHogEvent,
@@ -38,6 +39,17 @@ describe("shouldSendPostHogEvent", () => {
       stop?.();
       document.body.innerHTML = "";
     }
+  });
+
+  // The runtime mirrors every runner output chunk to console.log. Left undefined,
+  // replay console capture follows the PostHog project's remote setting, which
+  // no DOM block selector can override.
+  it("pins session-replay console capture off and blocks the editor surface", () => {
+    expect(POSTHOG_REPLAY_PRIVACY_OPTIONS.enable_recording_console_log).toBe(false);
+    expect(POSTHOG_REPLAY_PRIVACY_OPTIONS.session_recording).toEqual({
+      maskAllInputs: true,
+      blockSelector: POSTHOG_SENSITIVE_SURFACE_SELECTOR,
+    });
   });
 
   it("allows an empty event through the PostHog pipeline", () => {

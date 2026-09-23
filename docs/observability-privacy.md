@@ -25,6 +25,10 @@ and exception capture is filtered separately because DOM replay selectors do not
   remain as defense-in-depth coverage for legacy embeds.
 - All inputs are masked globally. This does not replace the blocked root because rendered text is
   not an input.
+- Replay console capture is pinned off (`enable_recording_console_log: false` in
+  `POSTHOG_REPLAY_PRIVACY_OPTIONS`). The WebContainer runtime mirrors runner output to the
+  browser console, and a DOM block selector does not cover console events; left unset, PostHog
+  would follow the project's remote "capture console logs" setting.
 - WebContainer preview exceptions are dropped. Other application exceptions retain only an error
   type plus URL-without-query stack locations; messages, source context, breadcrumbs, commands,
   and request/response payloads are removed.
