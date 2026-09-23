@@ -35,8 +35,9 @@ export const useNextEditorMetadata = (): NextEditorMetadata =>
   NextEditorActorContext.useSelector(selectNextEditorMetadata, shallowEqual);
 
 /**
- * Hook to access high-frequency playback state refs (volume, duration).
- * Component using this will NOT re-render on machine ticks.
+ * Hook to access the editor actor and the playback settings (speed, volume, timeline length).
+ * These change on user action or as a stream grows, so a component using this does NOT
+ * re-render on machine ticks; the playhead is `useLiveTime`.
  */
 export const useNextEditorPlayback = (): NextEditorPlayback => {
   const actorRef = NextEditorActorContext.useActorRef();
@@ -48,7 +49,7 @@ export const useNextEditorPlayback = (): NextEditorPlayback => {
     editorActor: actorRef,
     playbackSpeed,
     volume,
-    duration: duration / 1000,
+    durationMs: duration,
   };
 };
 

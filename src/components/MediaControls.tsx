@@ -166,7 +166,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     collaboration?.isHost ?? false,
   );
 
-  const { playbackSpeed, volume, duration: actualDuration } = useNextEditorPlayback();
+  const { playbackSpeed, volume, durationMs: timelineDurationMs } = useNextEditorPlayback();
 
   const { enabled: captionsEnabled, language: captionLanguage } = useCaptionStore();
   const captionTrigger = useCaptionStoreTrigger();
@@ -382,7 +382,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   };
 
   const duration = currentRecording?.duration || 0;
-  const progressDuration = actualDuration > 0 ? actualDuration * 1000 : duration;
+  const progressDuration = timelineDurationMs > 0 ? timelineDurationMs : duration;
   const showAudioSourceControls =
     effectiveRecordMode && !isRecording && !currentRecording && !isPlaying;
   // Camera may be an in-memory blob (just recorded / IndexedDB-restored) or an external video URL

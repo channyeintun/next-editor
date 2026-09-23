@@ -67,10 +67,11 @@ export interface NextEditorMetadata {
   recordingStartTime: number | null;
 }
 
-// 3. Playback Context: High-frequency state (ticks)
+// 3. Playback settings: change on user action or as a stream grows, not on ticks
 export interface NextEditorPlayback {
   editorActor: EditorActorRef;
   playbackSpeed: number;
   volume: number;
-  duration: number; // actualDuration
+  /** The timeline's length in ms (it grows as a streamed recording arrives). */
+  durationMs: number;
 }
