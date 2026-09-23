@@ -843,7 +843,11 @@ collaborationRoute.post("/rooms/:roomId/close", async (c) => {
   if (!access || access.member_role !== "owner") return c.json({ error: "not found" }, 404);
   if (access.status === "closed") {
     // A previous close may have committed D1 before coordinator delivery
-    // failed. Repeating the close must retry both document and voice teardown.
+    // failed. Repeating the close must retry both document and voice teardown,
+    // and the purge job, whose deduplication ID makes a repeat harmless.
+    if (access.closed_at !== null && access.purged_at === null) {
+      scheduleClosedRoomCleanup(c, access.id, access.closed_at);
+    }
     await dispatchControlEvent(c, {
       kind: "room-closed",
       roomId: access.id,
@@ -854,18 +858,20 @@ collaborationRoute.post("/rooms/:roomId/close", async (c) => {
   }
   const room = await setCollaborationRoomStatus(c.env.DB, access.id, "closed");
   if (!room) return c.json({ error: "not found" }, 404);
-  await dispatchControlEvent(c, {
-    kind: "room-closed",
-    roomId: room.id,
-    roleVersion: room.role_version,
-    targetUserId: null,
-  });
+  // The room is closed from here on, so record it and schedule its purge
+  // before the coordinators are told, which can fail and fail the request.
   scheduleAuditEvent(c, {
     roomId: room.id,
     actorUserId: user.id,
     action: "room.closed",
   });
   if (room.closed_at !== null) scheduleClosedRoomCleanup(c, room.id, room.closed_at);
+  await dispatchControlEvent(c, {
+    kind: "room-closed",
+    roomId: room.id,
+    roleVersion: room.role_version,
+    targetUserId: null,
+  });
   return c.json(roomResponse(room, "owner"));
 });
 
