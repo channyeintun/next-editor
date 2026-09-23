@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext } from "react";
+import React, { createContext, useContext } from "react";
 import { useSlidesController } from "../hooks/useSlidesController";
 import { useSlidesStore } from "./SlidesStoreContext";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
@@ -16,22 +16,19 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
   const { store } = useSlidesStore();
   const collaboration = useOptionalCollaboration();
 
-  const handleEvent = useCallback(
-    (event: SlideEvent) => {
-      if (
-        collaboration?.provider &&
-        collaboration.teaching.initialized &&
-        event.type === "slide_change" &&
-        event.slideId &&
-        event.slideId !== collaboration.teaching.currentSlideId
-      ) {
-        return collaboration.publishCurrentSlide(event.slideId);
-      }
-      handleSlideEvent(event);
-      return true;
-    },
-    [collaboration, handleSlideEvent],
-  );
+  const handleEvent = (event: SlideEvent) => {
+    if (
+      collaboration?.provider &&
+      collaboration.teaching.initialized &&
+      event.type === "slide_change" &&
+      event.slideId &&
+      event.slideId !== collaboration.teaching.currentSlideId
+    ) {
+      return collaboration.publishCurrentSlide(event.slideId);
+    }
+    handleSlideEvent(event);
+    return true;
+  };
 
   const slidesData = useSlidesController({
     store,

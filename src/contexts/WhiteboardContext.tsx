@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext } from "react";
+import React, { createContext, useContext } from "react";
 import { useWhiteboardController } from "../hooks/useWhiteboardController";
 import { useWhiteboardStore } from "./WhiteboardStoreContext";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -17,29 +17,26 @@ export const WhiteboardProvider: React.FC<WhiteboardProviderProps> = ({ children
   const { store } = useWhiteboardStore();
   const collaboration = useOptionalCollaboration();
 
-  const handleEvent = useCallback(
-    (event: WhiteboardEvent) => {
-      const hasSharedDelta = Boolean(event.upserts?.length || event.removedIds?.length);
-      if (collaboration?.provider && collaboration.teaching.initialized && hasSharedDelta) {
-        const accepted = collaboration.publishWhiteboardDelta({
-          ...(event.upserts?.length ? { upserts: event.upserts } : {}),
-          ...(event.removedIds?.length ? { removedIds: event.removedIds } : {}),
+  const handleEvent = (event: WhiteboardEvent) => {
+    const hasSharedDelta = Boolean(event.upserts?.length || event.removedIds?.length);
+    if (collaboration?.provider && collaboration.teaching.initialized && hasSharedDelta) {
+      const accepted = collaboration.publishWhiteboardDelta({
+        ...(event.upserts?.length ? { upserts: event.upserts } : {}),
+        ...(event.removedIds?.length ? { removedIds: event.removedIds } : {}),
+      });
+      if (event.view || event.isOpen !== undefined || event.isMaximized !== undefined) {
+        handleWhiteboardEvent({
+          timestamp: event.timestamp,
+          ...(event.view ? { view: event.view } : {}),
+          ...(event.isOpen === undefined ? {} : { isOpen: event.isOpen }),
+          ...(event.isMaximized === undefined ? {} : { isMaximized: event.isMaximized }),
         });
-        if (event.view || event.isOpen !== undefined || event.isMaximized !== undefined) {
-          handleWhiteboardEvent({
-            timestamp: event.timestamp,
-            ...(event.view ? { view: event.view } : {}),
-            ...(event.isOpen === undefined ? {} : { isOpen: event.isOpen }),
-            ...(event.isMaximized === undefined ? {} : { isMaximized: event.isMaximized }),
-          });
-        }
-        return accepted;
       }
-      handleWhiteboardEvent(event);
-      return true;
-    },
-    [collaboration, handleWhiteboardEvent],
-  );
+      return accepted;
+    }
+    handleWhiteboardEvent(event);
+    return true;
+  };
 
   const whiteboardData = useWhiteboardController({
     store,
