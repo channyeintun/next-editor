@@ -14,6 +14,7 @@ import {
   DEFAULT_RUNNER_CONFIG,
   formatCommandError,
   getRuntimeErrorMessage,
+  holdSharedWebContainer,
   resolveRuntimeRunCommand,
   isRuntimeBusy,
   isWebContainerRuntimeSupported,
@@ -628,9 +629,16 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     resetRuntime();
   });
 
+  // The editor holds the shared container while it is mounted. On unmount,
+  // resetRuntime stops our processes and tears down the instance our session
+  // claimed; the release then tears down whatever is left, such as a container
+  // the agent booted or a boot still in flight once it lands, unless another
+  // editor holds the container by then.
   useEffect(() => {
+    const releaseSharedWebContainer = holdSharedWebContainer();
     return () => {
       onUnmount();
+      releaseSharedWebContainer();
     };
   }, []);
 

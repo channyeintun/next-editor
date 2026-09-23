@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebContainer } from "@webcontainer/api";
 import type { WorkspaceProject } from "../types/workspace";
 import {
@@ -8,6 +8,11 @@ import {
   parseCommand,
   syncWorkspaceProject,
 } from "./webContainerRuntimeSupport";
+
+// Stands in for WebContainer.boot, which getOrBootSharedWebContainer imports lazily.
+const bootWebContainer = vi.hoisted(() => vi.fn<() => Promise<WebContainer>>());
+
+vi.mock("@webcontainer/api", () => ({ WebContainer: { boot: bootWebContainer } }));
 
 function nodeProject(htmlContent: string): WorkspaceProject {
   return {
@@ -224,5 +229,92 @@ describe("syncWorkspaceProject", () => {
     expect(writeFile).toHaveBeenCalledWith("src/components/Button.tsx", "button");
     // Each level is reported so its fs.watch event is recognized as our own write.
     expect(written).toEqual(["src", "src/components", "src/components/Button.tsx"]);
+  });
+});
+
+describe("shared WebContainer lifetime", () => {
+  // A fresh module per test, so each one starts with no container, boot or holder.
+  let support: typeof import("./webContainerRuntimeSupport");
+
+  beforeEach(async () => {
+    bootWebContainer.mockReset();
+    vi.resetModules();
+    support = await import("./webContainerRuntimeSupport");
+  });
+
+  function createStandInWebContainer() {
+    return {
+      setPreviewScript: vi.fn<(script: string) => Promise<void>>(async () => {}),
+      teardown: vi.fn<() => void>(),
+    };
+  }
+
+  type StandInWebContainer = ReturnType<typeof createStandInWebContainer>;
+
+  function bootsInto(instance: StandInWebContainer) {
+    bootWebContainer.mockResolvedValueOnce(instance as unknown as WebContainer);
+  }
+
+  /** Holds the next boot open; the returned function lands it with an instance. */
+  function deferNextBoot(): (instance: StandInWebContainer) => void {
+    let land: ((instance: WebContainer) => void) | null = null;
+    bootWebContainer.mockReturnValueOnce(
+      new Promise((resolve) => {
+        land = resolve;
+      }),
+    );
+    return (instance) => land?.(instance as unknown as WebContainer);
+  }
+
+  it("tears down a boot that lands after the last holder let go", async () => {
+    const landBoot = deferNextBoot();
+    const release = support.holdSharedWebContainer();
+    const booting = support.getOrBootSharedWebContainer();
+    release();
+
+    const orphan = createStandInWebContainer();
+    landBoot(orphan);
+    await booting;
+
+    expect(orphan.teardown).toHaveBeenCalledOnce();
+
+    // Nothing hands the torn-down container out again: the next caller boots anew.
+    const next = createStandInWebContainer();
+    bootsInto(next);
+    await expect(support.getOrBootSharedWebContainer()).resolves.toBe(next);
+    expect(bootWebContainer).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a boot that lands while another editor holds the container", async () => {
+    const landBoot = deferNextBoot();
+    const releaseFirst = support.holdSharedWebContainer();
+    const booting = support.getOrBootSharedWebContainer();
+    releaseFirst();
+    const releaseSecond = support.holdSharedWebContainer();
+
+    const instance = createStandInWebContainer();
+    landBoot(instance);
+    await expect(booting).resolves.toBe(instance);
+
+    expect(instance.teardown).not.toHaveBeenCalled();
+
+    releaseSecond();
+    expect(instance.teardown).toHaveBeenCalledOnce();
+  });
+
+  it("counts a holder's repeated release once", async () => {
+    const instance = createStandInWebContainer();
+    bootsInto(instance);
+    const releaseFirst = support.holdSharedWebContainer();
+    const releaseSecond = support.holdSharedWebContainer();
+    await support.getOrBootSharedWebContainer();
+
+    // A second release by the same holder must not let go on the other's behalf.
+    releaseFirst();
+    releaseFirst();
+    expect(instance.teardown).not.toHaveBeenCalled();
+
+    releaseSecond();
+    expect(instance.teardown).toHaveBeenCalledOnce();
   });
 });

@@ -37,8 +37,14 @@ const inputSchema = z.object({
 
 // The bash tool reuses the same shared WebContainer singleton the Runtime panel
 // mounts (getOrBootSharedWebContainer), so a command sees the files the user is
-// actually looking at. This module-level state lets repeated bash calls in one
-// agent turn skip re-mounting when nothing changed.
+// actually looking at. It does not hold the container (holdSharedWebContainer):
+// the agent panel renders only inside an editor, which holds it while mounted, so
+// repeated bash calls keep reusing it, and a command still running when the
+// editor unmounts goes down with the container. A call made after that boots or
+// joins a container nobody holds, which lives at most until the next editor
+// mounts and unmounts.
+// This module-level state lets repeated bash calls in one agent turn skip
+// re-mounting when nothing changed.
 let mountedInstance: WebContainer | null = null;
 let syncedProject: WorkspaceProject | null = null;
 

@@ -62,9 +62,11 @@ const RUNTIME_IMPORT_IGNORED_ROOTS = new Set([".git", "node_modules"]);
 const sharedWebContainerState: {
   instance: WebContainer | null;
   bootPromise: Promise<WebContainer> | null;
+  holders: number;
 } = {
   instance: null,
   bootPromise: null,
+  holders: 0,
 };
 
 const webContainerTaskQueues = new WeakMap<WebContainer, Promise<void>>();
@@ -675,4 +677,47 @@ export function teardownSharedWebContainer(instance: WebContainer | null): void 
   webContainerTaskQueues.delete(instance);
   sharedWebContainerState.instance = null;
   sharedWebContainerState.bootPromise = null;
+}
+
+/**
+ * Holds the shared WebContainer until the returned release is called. An editor
+ * holds it while mounted; the agent's bash tool lives inside one and reuses the
+ * container between commands without holding it. The last release tears the
+ * container down, or tears down a boot still in flight once it lands, unless
+ * someone holds the container by then. A reset (a project or lesson-type change)
+ * still tears the instance down directly, for a clean reinstall.
+ */
+export function holdSharedWebContainer(): () => void {
+  sharedWebContainerState.holders += 1;
+  let released = false;
+
+  return () => {
+    if (released) {
+      return;
+    }
+
+    released = true;
+    sharedWebContainerState.holders -= 1;
+
+    if (sharedWebContainerState.holders > 0) {
+      return;
+    }
+
+    if (sharedWebContainerState.instance) {
+      teardownSharedWebContainer(sharedWebContainerState.instance);
+      return;
+    }
+
+    if (sharedWebContainerState.bootPromise) {
+      void sharedWebContainerState.bootPromise.then(
+        (instance) => {
+          if (sharedWebContainerState.holders === 0) {
+            teardownSharedWebContainer(instance);
+          }
+        },
+        // A failed boot leaves nothing to tear down; its callers report the error.
+        () => {},
+      );
+    }
+  };
 }
