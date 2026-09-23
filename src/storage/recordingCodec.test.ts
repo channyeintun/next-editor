@@ -545,6 +545,50 @@ describe("recordingCodec", () => {
     expect(reader.getRecording()?.streamFinalized).toBe(true);
   });
 
+  it("decodes every prefix of a stream in one shot, including one cut inside the footer", async () => {
+    const recording = createRecording({
+      duration: 800,
+      frames: [makeKeyframe(0, "a\n"), makeKeyframe(500, "ab\n")],
+      cursorEvents: [
+        { timestamp: 10, x: 1, y: 2, visible: true },
+        { timestamp: 600, x: 3, y: 4, visible: true },
+      ],
+    });
+    const bytes = await encodeRecordingToStream(recording);
+    const complete = decodeRecordingStream(bytes);
+    const headerEnd = 12 + new DataView(bytes.buffer, bytes.byteOffset).getUint32(8, true);
+
+    // The footer opens with the segment count and the first index entry, which read as a
+    // segment header of a known kind; a prefix ending inside it must still decode.
+    for (let length = headerEnd; length < bytes.length; length += 1) {
+      const prefix = decodeRecordingStream(bytes.subarray(0, length));
+      expect(prefix.streamFinalized).toBe(false);
+      expect(complete.frames.slice(0, prefix.frames.length)).toEqual(prefix.frames);
+    }
+    expect(complete.streamFinalized).toBe(true);
+  });
+
+  it("rejects a finalized stream whose segments do not end at the footer", async () => {
+    const recording = createRecording({
+      duration: 800,
+      frames: [makeKeyframe(0, "a\n"), makeKeyframe(500, "ab\n")],
+      cursorEvents: [
+        { timestamp: 10, x: 1, y: 2, visible: true },
+        { timestamp: 600, x: 3, y: 4, visible: true },
+      ],
+    });
+    const bytes = await encodeRecordingToStream(recording);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    // Corrupt the second segment's u32 byteLength so it runs past the footer.
+    const firstSegment = 12 + view.getUint32(8, true);
+    const secondSegment = firstSegment + 22 + view.getUint32(firstSegment + 1, true);
+    view.setUint32(secondSegment + 1, 100_000, true);
+
+    expect(() => decodeRecordingStream(bytes)).toThrow(/malformed segment tail before footer/);
+    const reader = createStreamingRecordingReader();
+    expect(() => reader.push(bytes)).toThrow(/malformed segment tail before footer/);
+  });
+
   it("rejects bytes that are not an SCR3 stream", async () => {
     await expect(decompressBinaryToRecordings(new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow(
       /SCR3/,

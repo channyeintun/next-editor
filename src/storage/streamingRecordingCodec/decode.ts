@@ -47,16 +47,10 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 //
 // `decodeRecordingStream` decodes a whole buffer in one shot.
 // `createStreamingRecordingReader` decodes incrementally as bytes arrive, decoding
-// only newly-completed segments per push. Both decode every segment through
-// `ingestSegment` and build the result with `assembleRecording`, so a
+// only newly-completed segments per push. Both walk their bytes with
+// `ingestSegmentRegion` and build the result with `assembleRecording`, so a
 // progressively-decoded prefix and a one-shot decode of the same bytes match.
 // ============================================================================
-
-/** One complete segment inside a byte range: its header fields plus a view of its payload. */
-interface WalkedSegment {
-  header: SegmentHeaderFields;
-  payload: Uint8Array;
-}
 
 function assertFrameFormatCompatibility(
   frames: ReadonlyArray<DeltaFrame>,
@@ -71,29 +65,6 @@ function assertFrameFormatCompatibility(
 function assertWorkspaceAssetFormatCompatibility(formatVersion: number): void {
   if (formatVersion >= 4) return;
   throw new Error("Invalid SCR3 stream: workspace assets require format version 4");
-}
-
-/**
- * Yields every complete segment of a known kind in `[start, end)`. Unknown (future)
- * kinds are self-delimiting, so they are skipped rather than aborting the walk and
- * silently dropping every later segment plus the footer. A segment that runs past
- * `end` is a truncated tail, and the walk stops there.
- */
-function* walkSegments(bytes: Uint8Array, start: number, end: number): Generator<WalkedSegment> {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let offset = start;
-
-  while (offset + SEGMENT_HEADER_SIZE <= end) {
-    const header = readSegmentHeader(view, offset);
-    const payloadStart = offset + SEGMENT_HEADER_SIZE;
-    const payloadEnd = payloadStart + header.byteLength;
-    if (payloadEnd > end) return;
-
-    if (isKnownSegmentKind(header.kind)) {
-      yield { header, payload: bytes.subarray(payloadStart, payloadEnd) };
-    }
-    offset = payloadEnd;
-  }
 }
 
 /** Decoded records per track, each in stream (timeline) order. */
@@ -314,7 +285,11 @@ function appendAll<T>(target: T[], items: readonly T[]): void {
 }
 
 /** Decodes one segment and, only if that succeeds, folds it into the stream. */
-function ingestSegment(stream: DecodedStream, { header, payload }: WalkedSegment): void {
+function ingestSegment(
+  stream: DecodedStream,
+  header: SegmentHeaderFields,
+  payload: Uint8Array,
+): void {
   const segment = decodeSegment(stream, header.kind, payload);
   if (stream.recordCount + segment.recordCount > MAX_DECODED_RECORDS) {
     throw new Error("Invalid SCR3 stream: recording contains too many records");
@@ -330,6 +305,60 @@ function ingestSegment(stream: DecodedStream, { header, payload }: WalkedSegment
     header.containsKeyframe,
   );
   segment.commit();
+}
+
+/**
+ * Ingests the segments in `bytes` from `start` and returns the offset of the first byte
+ * it did not consume. `footerStart` is where a complete footer begins, or null while none
+ * has arrived; both decoders call this, so they draw the same line between a prefix and
+ * a damaged file.
+ *
+ * With a footer the segment region is final: a segment of an unknown (future) kind is
+ * skipped and counted, a segment that fails to decode is corruption and throws, and the
+ * walk must end exactly at the footer, whose segment count must match. Without one, the
+ * bytes after the last segment may be the start of the footer, whose segment count and
+ * first index entry read as a segment header of a known kind, so the walk stops, without
+ * throwing, at the first unknown kind or undecodable segment and waits for more bytes.
+ */
+function ingestSegmentRegion(
+  stream: DecodedStream,
+  bytes: Uint8Array,
+  start: number,
+  footerStart: number | null,
+): number {
+  const end = footerStart ?? bytes.length;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let cursor = start;
+
+  while (cursor + SEGMENT_HEADER_SIZE <= end) {
+    const header = readSegmentHeader(view, cursor);
+    const payloadStart = cursor + SEGMENT_HEADER_SIZE;
+    const payloadEnd = payloadStart + header.byteLength;
+    if (payloadEnd > end) break; // a truncated tail, or a length that overruns the footer
+
+    if (!isKnownSegmentKind(header.kind)) {
+      if (footerStart === null) break;
+      stream.segmentCount += 1;
+    } else {
+      try {
+        ingestSegment(stream, header, bytes.subarray(payloadStart, payloadEnd));
+      } catch (error) {
+        if (footerStart !== null) throw error;
+        break;
+      }
+    }
+    cursor = payloadEnd;
+  }
+
+  if (footerStart !== null) {
+    if (cursor !== footerStart) {
+      throw new Error("Invalid SCR3 stream: malformed segment tail before footer");
+    }
+    if (view.getUint32(footerStart, true) !== stream.segmentCount) {
+      throw new Error("Invalid SCR3 stream: footer segment count does not match the stream");
+    }
+  }
+  return cursor;
 }
 
 /**
@@ -423,10 +452,7 @@ export function decodeRecordingStream(bytes: Uint8Array): Recording {
   const { meta, headerEnd, formatVersion } = parseHeader(bytes);
   const stream = createDecodedStream(meta, formatVersion);
   const footerStart = findFooterStart(bytes, headerEnd);
-
-  for (const segment of walkSegments(bytes, headerEnd, footerStart ?? bytes.length)) {
-    ingestSegment(stream, segment);
-  }
+  ingestSegmentRegion(stream, bytes, headerEnd, footerStart);
 
   // A whole buffer may come from any writer, so order each track by time here. Array
   // sort is stable, so records already in timeline order keep their stream order.
@@ -580,54 +606,13 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
 
     const retained = buffer.subarray(0, retainedLength);
     const footerStart = findFooterStart(retained, 0);
-    const segmentsEnd = footerStart ?? retainedLength;
-    const view = new DataView(buffer.buffer, buffer.byteOffset, retainedLength);
-    let cursor = 0;
-
-    while (cursor + SEGMENT_HEADER_SIZE <= segmentsEnd) {
-      const header = readSegmentHeader(view, cursor);
-      const payloadStart = cursor + SEGMENT_HEADER_SIZE;
-      const payloadEnd = payloadStart + header.byteLength;
-
-      if (payloadEnd > segmentsEnd) {
-        break; // segment not fully downloaded yet
-      }
-      if (!isKnownSegmentKind(header.kind)) {
-        // Until the footer is confirmed these bytes might be a partial footer rather
-        // than a real segment, so wait. Once the footer is visible, an unknown kind
-        // inside its segment region is a genuine future segment that is safe to skip.
-        if (footerStart === null) break;
-        cursor = payloadEnd;
-        stream.segmentCount += 1;
-        continue;
-      }
-
-      try {
-        ingestSegment(stream, { header, payload: buffer.subarray(payloadStart, payloadEnd) });
-      } catch (error) {
-        // Inside the segment region (footer already seen) this is real corruption.
-        // Otherwise these are most likely partial-footer bytes that happen to read as
-        // a known kind — leave the cursor put and wait for the footer to complete.
-        if (footerStart !== null) throw error;
-        break;
-      }
-      cursor = payloadEnd;
-    }
-
+    const consumed = ingestSegmentRegion(stream, retained, 0, footerStart);
     if (footerStart !== null) {
-      if (cursor !== footerStart) {
-        throw new Error("Invalid SCR3 stream: malformed segment tail before footer");
-      }
-      const footerSegmentCount = view.getUint32(footerStart, true);
-      if (footerSegmentCount !== stream.segmentCount) {
-        throw new Error("Invalid SCR3 stream: footer segment count does not match the stream");
-      }
       finalized = true;
       discardPrefix(retainedLength);
       return;
     }
-
-    discardPrefix(cursor);
+    discardPrefix(consumed);
   };
 
   return {
