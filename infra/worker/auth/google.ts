@@ -3,7 +3,7 @@ import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
 import type { Env } from "../env";
 import { upsertUserByGoogleSub, createSession } from "../../db/queries";
 import { userRowToAuthUser } from "../../db/types";
-import { setSessionCookie } from "./session";
+import { isHttps, setSessionCookie } from "./session";
 import { verifyGoogleIdToken, type VerifiedGoogleIdToken } from "./googleIdToken";
 
 const HANDSHAKE_COOKIE = "ne_oauth";
@@ -120,7 +120,7 @@ googleAuthRoute.post("/onetap", async (c) => {
     avatarUrl: identity.picture ?? null,
   });
   const session = await createSession(c.env.DB, user.id);
-  setSessionCookie(c, session.id);
+  setSessionCookie(c, session);
   return c.json({ user: userRowToAuthUser(user) });
 });
 
@@ -133,7 +133,7 @@ googleAuthRoute.get("/login", async (c) => {
   const payload: HandshakePayload = { state, codeVerifier, returnTo };
   await setSignedCookie(c, HANDSHAKE_COOKIE, JSON.stringify(payload), c.env.SESSION_SECRET, {
     httpOnly: true,
-    secure: new URL(c.req.url).protocol === "https:",
+    secure: isHttps(c),
     sameSite: "Lax",
     path: "/api/auth/google",
     maxAge: HANDSHAKE_MAX_AGE_SECONDS,
@@ -212,7 +212,7 @@ googleAuthRoute.get("/callback", async (c) => {
   });
 
   const session = await createSession(c.env.DB, user.id);
-  setSessionCookie(c, session.id);
+  setSessionCookie(c, session);
 
   // Re-sanitized rather than trusted from the handshake cookie: this is the
   // value that actually reaches the browser as a Location header, so it is the

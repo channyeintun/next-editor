@@ -3,13 +3,16 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { Env } from "../env";
 import { deleteSession, getSessionUser, updateUsername, USERNAME_PATTERN } from "../../db/queries";
-import { userRowToAuthUser } from "../../db/types";
+import { type SessionRow, userRowToAuthUser } from "../../db/types";
 
 export const SESSION_COOKIE = "ne_session";
-// Matches createSession's TTL in db/queries.ts.
-const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
-function isHttps(c: Context): boolean {
+/**
+ * Whether this request arrived over https, for a cookie's `secure` flag: derived
+ * from the request's own scheme rather than hardcoded, so local http dev and
+ * https production both work without extra config.
+ */
+export function isHttps(c: Context): boolean {
   return new URL(c.req.url).protocol === "https:";
 }
 
@@ -17,15 +20,14 @@ function isHttps(c: Context): boolean {
 // every request, so a tampered value just fails the DB lookup; signing would
 // add no security here (unlike the transient OAuth handshake cookie in
 // google.ts, which has no DB backing and so needs tamper protection itself).
-// `secure` is derived from the request's own scheme rather than hardcoded, so
-// local http dev and https production both work without extra config.
-export function setSessionCookie(c: Context, sessionId: string): void {
-  setCookie(c, SESSION_COOKIE, sessionId, {
+// The cookie lives exactly as long as the row createSession wrote.
+export function setSessionCookie(c: Context, session: SessionRow): void {
+  setCookie(c, SESSION_COOKIE, session.id, {
     httpOnly: true,
     secure: isHttps(c),
     sameSite: "Lax",
     path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS,
+    maxAge: Math.floor((session.expires_at - session.created_at) / 1000),
   });
 }
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { passkeyRoute } from "./passkey";
 import { verifyAuthenticationResponse } from "@simplewebauthn/server";
+import type { SessionRow } from "../../db/types";
 
 vi.mock("@simplewebauthn/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@simplewebauthn/server")>()),
@@ -18,7 +19,12 @@ vi.mock("../../db/passkeyQueries", () => ({
 }));
 
 vi.mock("../../db/queries", () => ({
-  createSession: vi.fn<() => Promise<{ id: string }>>(async () => ({ id: "session-1" })),
+  createSession: vi.fn<() => Promise<SessionRow>>(async () => ({
+    id: "session-1",
+    user_id: "user-1",
+    created_at: 1_000,
+    expires_at: 1_000 + 30 * 24 * 60 * 60 * 1000,
+  })),
 }));
 
 const env = {
@@ -71,6 +77,8 @@ describe("passkey sign-in challenge", () => {
     const response = await verifyLogin(cookie);
 
     expect(response.status).toBe(200);
+    // The session cookie lives exactly as long as the session row.
+    expect(response.headers.get("set-cookie")).toContain("ne_session=session-1; Max-Age=2592000;");
   });
 
   it("refuses a challenge once it has expired, even though its signature is valid", async () => {

@@ -23,7 +23,7 @@ import {
 } from "../../db/passkeyQueries";
 import { passkeyRowToSummary, userRowToAuthUser } from "../../db/types";
 import { requireUser } from "./requireUser";
-import { setSessionCookie } from "./session";
+import { isHttps, setSessionCookie } from "./session";
 
 const RP_NAME = "Next Editor";
 
@@ -75,7 +75,7 @@ async function setChallengeCookie<E extends { Bindings: Env }>(
   };
   await setSignedCookie(c, CHALLENGE_COOKIE, JSON.stringify(payload), c.env.SESSION_SECRET, {
     httpOnly: true,
-    secure: new URL(c.req.url).protocol === "https:",
+    secure: isHttps(c),
     sameSite: "Lax",
     path: "/api/auth/passkey",
     maxAge: CHALLENGE_MAX_AGE_SECONDS,
@@ -266,6 +266,6 @@ passkeyRoute.post("/login/verify", async (c) => {
   );
 
   const session = await createSession(c.env.DB, match.user.id);
-  setSessionCookie(c, session.id);
+  setSessionCookie(c, session);
   return c.json({ user: userRowToAuthUser(match.user) });
 });
