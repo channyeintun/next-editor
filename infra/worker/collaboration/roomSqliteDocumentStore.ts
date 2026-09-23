@@ -191,8 +191,9 @@ export class RoomSqliteDocumentStore {
         stream_id TEXT NOT NULL,
         expires_at INTEGER NOT NULL
       );
-      CREATE INDEX IF NOT EXISTS idx_collaboration_update_received
-        ON collaboration_updates(received_at);
+      -- Every tail query goes by sequence; this index only cost a billed row
+      -- write per insert and delete.
+      DROP INDEX IF EXISTS idx_collaboration_update_received;
       CREATE INDEX IF NOT EXISTS idx_collaboration_deduplication_expiry
         ON collaboration_update_deduplication(expires_at);
     `);

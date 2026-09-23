@@ -330,3 +330,23 @@ describe("RoomSqliteDocumentStore compaction batches", () => {
     source.destroy();
   });
 });
+
+describe("RoomSqliteDocumentStore schema", () => {
+  it("drops the update index on received_at, which no query uses", () => {
+    const { storage } = createStore();
+    // Rooms created by earlier revisions carry it.
+    storage.sql.exec(
+      "CREATE INDEX idx_collaboration_update_received ON collaboration_updates(received_at)",
+    );
+
+    new RoomSqliteDocumentStore(storage);
+
+    const indexes = storage.sql
+      .exec<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'collaboration_updates'",
+      )
+      .toArray()
+      .map((row) => row.name);
+    expect(indexes).not.toContain("idx_collaboration_update_received");
+  });
+});
