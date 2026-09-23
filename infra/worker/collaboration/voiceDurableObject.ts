@@ -46,6 +46,7 @@ import {
 } from "./realtimeSfuGateway";
 import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
 import type { Env } from "../env";
+import { readBodyWithLimit } from "../httpBody";
 
 const VOICE_ORIGIN = "https://collaboration-voice.internal";
 export const VOICE_SESSION_HEADER = "X-Collaboration-Voice-Session";
@@ -130,38 +131,6 @@ function attachmentFor(socket: WebSocket): VoiceSocketAttachment | null {
 
 function isOpen(socket: WebSocket): boolean {
   return socket.readyState === 1;
-}
-
-/**
- * Reads a request body as text, aborting as soon as it exceeds `maxBytes`
- * rather than buffering the whole thing and measuring afterwards. Returns null
- * when the limit is exceeded, so an oversized body costs at most one chunk past
- * the cap instead of however much the client chose to send.
- */
-async function readBoundedRequestText(request: Request, maxBytes: number): Promise<string | null> {
-  const reader = request.body?.getReader();
-  if (!reader) {
-    return "";
-  }
-
-  const decoder = new TextDecoder();
-  let received = 0;
-  let text = "";
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      received += value.byteLength;
-      if (received > maxBytes) {
-        await reader.cancel();
-        return null;
-      }
-      text += decoder.decode(value, { stream: true });
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  return text + decoder.decode();
 }
 
 function encodeCanonicalVoiceSession(session: CanonicalVoiceSession): string {
@@ -907,18 +876,20 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
 
       let body: unknown = null;
       if (request.method !== "GET") {
-        // Bounded while streaming, not after. `await request.text()` buffered
-        // the entire body first and only then compared its length, so a chunked
-        // request could exhaust this Durable Object's memory before the check
-        // ever ran — killing voice for every participant in the room. Every
-        // other body reader in this component already bounds as it reads.
-        const raw = await readBoundedRequestText(request, MAX_VOICE_SFU_REQUEST_BYTES);
-        if (raw === null) {
+        // Bounded while streaming, not after: `await request.text()` would
+        // buffer a chunked request whole before any length check and could
+        // exhaust this Durable Object's memory, killing voice for every
+        // participant in the room.
+        const raw = await readBodyWithLimit(request, MAX_VOICE_SFU_REQUEST_BYTES);
+        if (raw.status === "too-large") {
           return noStoreJson({ error: "payload too large" }, 413);
         }
-        if (raw.length > 0) {
+        if (raw.status === "read-error") {
+          return noStoreJson({ error: "invalid request" }, 400);
+        }
+        if (raw.text.length > 0) {
           try {
-            body = JSON.parse(raw) as unknown;
+            body = JSON.parse(raw.text) as unknown;
           } catch {
             return noStoreJson({ error: "invalid request" }, 400);
           }

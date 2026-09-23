@@ -1,3 +1,8 @@
+export type LimitedBytes =
+  | { status: "ok"; bytes: Uint8Array }
+  | { status: "too-large" }
+  | { status: "read-error" };
+
 export type LimitedBody =
   | { status: "ok"; text: string }
   | { status: "too-large" }
@@ -6,12 +11,13 @@ export type LimitedBody =
 /**
  * Read a request or response body while enforcing a byte ceiling, so neither
  * a client nor an upstream service can stream an unbounded payload into
- * memory before JSON parsing. Shared by the playground proxy routes.
+ * memory. A declared Content-Length over the limit is refused before reading;
+ * a missing body reads as zero bytes.
  */
-export async function readBodyWithLimit(
+export async function readBytesWithLimit(
   message: Pick<Request, "body" | "headers">,
   maxBytes: number,
-): Promise<LimitedBody> {
+): Promise<LimitedBytes> {
   const contentLengthHeader = message.headers.get("content-length");
   if (contentLengthHeader !== null) {
     const contentLength = Number(contentLengthHeader);
@@ -21,7 +27,7 @@ export async function readBodyWithLimit(
   }
 
   if (!message.body) {
-    return { status: "ok", text: "" };
+    return { status: "ok", bytes: new Uint8Array(0) };
   }
 
   const reader = message.body.getReader();
@@ -52,5 +58,14 @@ export async function readBodyWithLimit(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return { status: "ok", text: new TextDecoder().decode(bytes) };
+  return { status: "ok", bytes };
+}
+
+/** readBytesWithLimit, decoded as UTF-8 (malformed sequences become U+FFFD). */
+export async function readBodyWithLimit(
+  message: Pick<Request, "body" | "headers">,
+  maxBytes: number,
+): Promise<LimitedBody> {
+  const body = await readBytesWithLimit(message, maxBytes);
+  return body.status === "ok" ? { status: "ok", text: new TextDecoder().decode(body.bytes) } : body;
 }

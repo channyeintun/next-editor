@@ -1,3 +1,4 @@
+import { readBytesWithLimit } from "../httpBody";
 import {
   MAX_COLLABORATION_ASSET_BYTES,
   collaborationAssetDescriptorSchema,
@@ -31,33 +32,19 @@ export async function readCollaborationAsset(
     if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
       return { ok: false, status: 400, error: "invalid asset length" };
     }
-    if (contentLength > MAX_COLLABORATION_ASSET_BYTES) {
-      return { ok: false, status: 413, error: "collaboration asset is too large" };
-    }
   }
 
-  if (!request.body) return { ok: false, status: 400, error: "asset body is required" };
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_COLLABORATION_ASSET_BYTES) {
-      await reader.cancel();
-      return { ok: false, status: 413, error: "collaboration asset is too large" };
-    }
-    chunks.push(value);
+  const body = await readBytesWithLimit(request, MAX_COLLABORATION_ASSET_BYTES);
+  if (body.status === "too-large") {
+    return { ok: false, status: 413, error: "collaboration asset is too large" };
   }
+  if (body.status === "read-error") {
+    return { ok: false, status: 400, error: "asset body could not be read" };
+  }
+  const { bytes } = body;
+  const size = bytes.byteLength;
   if (size === 0) return { ok: false, status: 400, error: "asset body is required" };
 
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
   const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim();
   const descriptor = collaborationAssetDescriptorSchema.safeParse({
     id: await sha256Hex(bytes),

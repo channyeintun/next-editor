@@ -59,6 +59,7 @@ import {
   readCollaborationAsset,
 } from "../collaboration/assetStore";
 import type { Env } from "../env";
+import { readBodyWithLimit, readBytesWithLimit } from "../httpBody";
 import {
   deleteCollaborationRoomSqliteDocument,
   exportCollaborationRoomSqliteDocument,
@@ -157,81 +158,26 @@ async function readBoundedJson(
   c: CollaborationContext,
   maxBytes: number,
 ): Promise<{ ok: true; body: unknown } | { ok: false; status: 400 | 413 }> {
-  const contentLengthHeader = c.req.header("content-length");
-  if (contentLengthHeader) {
-    const contentLength = Number(contentLengthHeader);
-    if (!Number.isFinite(contentLength) || contentLength < 0) {
-      return { ok: false, status: 400 };
-    }
-    if (contentLength > maxBytes) {
-      return { ok: false, status: 413 };
-    }
-  }
-
-  const stream = c.req.raw.body;
-  if (!stream) return { ok: false, status: 400 };
-
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > maxBytes) {
-      await reader.cancel();
-      return { ok: false, status: 413 };
-    }
-    chunks.push(value);
-  }
-
-  const bytes = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
+  const body = await readBodyWithLimit(c.req.raw, maxBytes);
+  if (body.status === "too-large") return { ok: false, status: 413 };
+  if (body.status === "read-error") return { ok: false, status: 400 };
   try {
-    return { ok: true, body: JSON.parse(new TextDecoder().decode(bytes)) as unknown };
+    return { ok: true, body: JSON.parse(body.text) as unknown };
   } catch {
     return { ok: false, status: 400 };
   }
 }
 
+/** The body as strict UTF-8: the maintenance job's signature covers exact text. */
 async function readBoundedText(
   c: CollaborationContext,
   maxBytes: number,
 ): Promise<{ ok: true; body: string } | { ok: false; status: 400 | 413 }> {
-  const contentLengthHeader = c.req.header("content-length");
-  if (contentLengthHeader) {
-    const contentLength = Number(contentLengthHeader);
-    if (!Number.isFinite(contentLength) || contentLength < 0) return { ok: false, status: 400 };
-    if (contentLength > maxBytes) return { ok: false, status: 413 };
-  }
-  const stream = c.req.raw.body;
-  if (!stream) return { ok: false, status: 400 };
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > maxBytes) {
-      await reader.cancel();
-      return { ok: false, status: 413 };
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
+  const body = await readBytesWithLimit(c.req.raw, maxBytes);
+  if (body.status === "too-large") return { ok: false, status: 413 };
+  if (body.status === "read-error") return { ok: false, status: 400 };
   try {
-    return { ok: true, body: new TextDecoder("utf-8", { fatal: true }).decode(bytes) };
+    return { ok: true, body: new TextDecoder("utf-8", { fatal: true }).decode(body.bytes) };
   } catch {
     return { ok: false, status: 400 };
   }
@@ -1052,13 +998,10 @@ collaborationRoute.all("/rooms/:roomId/voice/sfu/*", async (c) => {
       });
     }
   }
-  // A declared Content-Length is REQUIRED, not defaulted to 0. Defaulting made
-  // a chunked request (no Content-Length) sail past this check, and the body is
-  // then streamed to the voice DO, which buffers the whole thing with
-  // request.text() before it applies its own byte cap — so an authenticated
-  // member could exhaust the Durable Object's memory and take down voice for
-  // everyone in the room. The header is only the cheap first gate; the DO still
-  // enforces the real limit on what it actually read.
+  // A declared Content-Length is REQUIRED, not defaulted to 0: a default let a
+  // chunked request (no Content-Length) straight past this check. The header is
+  // only the cheap first gate; the voice DO still bounds the body as it reads it
+  // (readBodyWithLimit), so a lying header cannot exhaust its memory.
   const contentLengthHeader = c.req.header("content-length");
   const contentLength = Number(contentLengthHeader);
   if (
