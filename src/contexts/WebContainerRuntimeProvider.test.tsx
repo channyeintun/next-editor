@@ -10,8 +10,13 @@ import {
   useWebContainerRuntimeSaveWorkspace,
 } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions, useWorkspaceDirtyState } from "../hooks/useWorkspace";
+import { createWorkspaceFile } from "../starters/shared";
 import { WorkspaceStoreContext } from "../stores/workspaceStore";
-import { isWorkspaceTextFile } from "../types/workspace";
+import {
+  isWorkspaceTextFile,
+  type WorkspaceLessonType,
+  type WorkspaceProject,
+} from "../types/workspace";
 import type { WorkspaceActions, WorkspaceDirtyState } from "./WorkspaceContext";
 import type { WebContainerRuntimeActions } from "./WebContainerRuntimeContext";
 
@@ -723,5 +728,88 @@ describe("WebContainerRuntimeProvider saveWorkspace", () => {
 
     await expect(saved).resolves.toBeUndefined();
     expect(boot).not.toHaveBeenCalled();
+  });
+
+  /** A runtime whose start failed: status "error" and no container to sync to. */
+  async function renderAfterFailedStart() {
+    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const boot = vi.mocked(getOrBootSharedWebContainer);
+    boot.mockReset();
+    boot.mockRejectedValue(new Error("boot failed"));
+
+    const captured: {
+      runtime: WebContainerRuntimeActions | null;
+      workspace: WorkspaceActions | null;
+      save: (() => Promise<void>) | null;
+      status: string | null;
+    } = { runtime: null, workspace: null, save: null, status: null };
+    function Capture() {
+      captured.runtime = useWebContainerRuntimeActions();
+      captured.workspace = useWorkspaceActions();
+      captured.save = useWebContainerRuntimeSaveWorkspace();
+      captured.status = useWebContainerRuntimeMetadata().status;
+      return null;
+    }
+    render(
+      <WorkspaceProvider>
+        <WebContainerRuntimeProvider allowAmbientStart={false}>
+          <Capture />
+        </WebContainerRuntimeProvider>
+      </WorkspaceProvider>,
+    );
+    await act(async () => {
+      await captured.runtime?.startRuntime();
+    });
+    expect(captured.status).toBe("error");
+    expect(boot).toHaveBeenCalledTimes(1);
+
+    return { captured, boot };
+  }
+
+  function lessonProject(id: string, lessonType: WorkspaceLessonType): WorkspaceProject {
+    const entryFilePath = lessonType === "go" ? "main.go" : "main.js";
+    return {
+      id,
+      name: id,
+      lessonType,
+      entryFilePath,
+      folders: [],
+      files: { [entryFilePath]: createWorkspaceFile(entryFilePath, "") },
+    };
+  }
+
+  // A replayed recording load saves in the same task as loadProject, before the
+  // provider re-renders. The save must leave the switch to the project and
+  // lesson-type effects rather than run the new project on the old settings.
+  it.each([
+    { switchTo: "a non-WebContainer lesson", project: lessonProject("go-workspace", "go") },
+    { switchTo: "another project", project: lessonProject("other-project", "javascript") },
+  ])("does not boot for a save in the same task as a switch to $switchTo", async ({ project }) => {
+    const { captured, boot } = await renderAfterFailedStart();
+
+    await act(async () => {
+      captured.workspace?.loadProject(project, project.entryFilePath);
+      void captured.save?.();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(boot).toHaveBeenCalledTimes(1);
+  });
+
+  // updateLessonType switches the lesson type under the same project id, so only
+  // the store's lesson type, not the render ref, tells this save to stand down.
+  it("does not boot for a save in the same task as a lesson-type switch under the same id", async () => {
+    const { captured, boot } = await renderAfterFailedStart();
+
+    await act(async () => {
+      const workspace = captured.workspace;
+      if (!workspace) throw new Error("Expected the workspace provider to render");
+      const project = lessonProject(workspace.getProject().id, "go");
+      workspace.loadProject(project, project.entryFilePath);
+      void captured.save?.();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(boot).toHaveBeenCalledTimes(1);
   });
 });

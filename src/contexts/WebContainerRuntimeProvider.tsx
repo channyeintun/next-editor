@@ -436,7 +436,16 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   };
 
   const saveWorkspace = async () => {
-    if (!lessonRunsInWebContainer(lessonTypeRef.current)) {
+    // A replayed recording load calls this in the same task as loadProject, before
+    // this provider re-renders, so the project comes from the store rather than the
+    // render refs. A project the runtime has not switched to yet is left to the
+    // switch: the project and lesson-type effects reset the runtime, and the
+    // auto-start decides whether the new one runs.
+    const project = getProject();
+    if (
+      !lessonRunsInWebContainer(project.lessonType) ||
+      project.id !== loadedProjectIdRef.current
+    ) {
       return;
     }
 
@@ -444,9 +453,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     const instance = instanceRef.current;
 
     if (instance) {
-      // Save is an explicit durability boundary. A latest-project sync also
-      // covers mutations that landed during an effect subscription handoff.
-      const synced = await queueProjectSync({ instance, project: getProject() }).then(
+      // Save is an explicit durability boundary: a whole-project sync (it supersedes
+      // the debounced per-file queue) makes the rerun below read what was saved.
+      const synced = await queueProjectSync({ instance, project }).then(
         () => true,
         (error: unknown) => {
           // Both callers fire and forget, so the runner console is where a

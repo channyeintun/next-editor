@@ -310,7 +310,17 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
       ) {
         previewHandle.dockWidthDeltaApplier.current?.(snapshot.previewDockWidthDelta);
       }
-      void saveRuntimeWorkspace();
+      // The runtime's workspace sync already moves these files into the container.
+      // Saving as well re-runs a finished run-on-save runner on them, so the live
+      // console, shown whenever playback is not playing (ready, paused, ended),
+      // follows the replayed workspace, including a next lesson loaded in place
+      // under the same starter project id. Only for a runtime that has been started
+      // (any status but idle): starting one is the auto-start's call
+      // (allowAmbientStart, runOnStartup, browser support) or the viewer's, never
+      // the replay's.
+      if (getRuntimeRecordingSnapshot().status !== "idle") {
+        void saveRuntimeWorkspace();
+      }
     },
     getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
       const snapshot = getRuntimeRecordingSnapshot();

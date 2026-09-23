@@ -42,7 +42,10 @@ with the mode:
   store stays the owner; the recording accumulates a history.
 - **Playback:** the machine _drives_ the store. `applyWorkspaceSnapshot` calls
   `loadProject(...)`, so the store becomes a _render target_ reflecting the
-  recording at the current timeline position.
+  recording at the current timeline position. When the viewer's WebContainer
+  runtime has been started, each applied snapshot is also saved to it (sync, plus
+  a run-on-save rerun of a finished runner) so the live console follows the
+  replay; playback never starts a runtime that has not been started.
 
 ### The invariant
 
