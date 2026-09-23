@@ -39,6 +39,7 @@ import {
   type CollaborationWebSocketServerMessage,
 } from "../../../src/collaboration/protocol";
 import {
+  CollaborationTeachingError,
   assertCollaborationTeachingTransition,
   collaborationTransactionTouchesOnlyTeaching,
   collaborationTransactionTouchesTeaching,
@@ -46,6 +47,7 @@ import {
   type CollaborationTeachingIntegrity,
 } from "../../../src/collaboration/teachingDocument";
 import {
+  CollaborationProjectError,
   assertCollaborationProjectStructure,
   projectCollaborationDocument,
 } from "../../../src/collaboration/projectDocument";
@@ -1156,10 +1158,14 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       }
       return Response.json({ initialized: true });
     } catch (error) {
-      return Response.json(
-        { error: error instanceof Error ? error.message : "invalid teaching initialization" },
-        { status: error instanceof CollaborationRoomSqliteQuotaError ? 413 : 400 },
-      );
+      // The document validators' messages are written for the owner. Anything
+      // else (mostly Yjs failing to read the submitted bytes) gets a generic
+      // answer rather than library or storage internals.
+      const reason =
+        error instanceof CollaborationTeachingError || error instanceof CollaborationProjectError
+          ? error.message
+          : "invalid teaching initialization";
+      return Response.json({ error: reason }, { status: 400 });
     } finally {
       candidate.destroy();
     }

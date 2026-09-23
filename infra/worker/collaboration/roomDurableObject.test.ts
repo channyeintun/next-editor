@@ -18,7 +18,13 @@ import {
   type CollaborationBootstrapResponse,
   type CollaborationRole,
 } from "../../../src/collaboration/protocol";
-import { applyEncodedYjsSnapshot, encodeYjsDocument } from "../../../src/collaboration/yjsUpdates";
+import { seedCollaborationProject } from "../../../src/collaboration/projectDocument";
+import {
+  applyEncodedYjsSnapshot,
+  encodeYjsDocument,
+  encodeYjsUpdate,
+} from "../../../src/collaboration/yjsUpdates";
+import { createStarterHtmlCssWorkspace } from "../../../src/starters/htmlCss";
 import {
   getCollaborationAsset,
   getCollaborationRoomAccess,
@@ -143,7 +149,10 @@ beforeEach(() => {
   vi.mocked(getCollaborationRoomAccess).mockReset();
 });
 
-async function createRoom() {
+/** A room whose durable document starts as `seed` leaves the shared test document. */
+async function createRoom(
+  seed: (doc: Y.Doc) => void = (doc) => doc.getText("scratch").insert(0, "seed"),
+) {
   const storage = new RoomTestStorage();
   openStorages.push(storage);
   const sockets: FakeSocket[] = [];
@@ -160,7 +169,7 @@ async function createRoom() {
   );
   // The shared document every participant edits in these tests.
   const doc = new Y.Doc();
-  doc.getText("scratch").insert(0, "seed");
+  seed(doc);
   const initialized = await room.fetch(
     new Request(`${ROOM_ORIGIN}/sqlite/initialize`, {
       method: "POST",
@@ -241,7 +250,7 @@ async function createRoom() {
     );
   }
 
-  return { room, connect, edit, persistedText, control };
+  return { room, doc, connect, edit, persistedText, control };
 }
 
 function awarenessFrame(socket: FakeSocket, clientId: number, clock: number): ArrayBuffer {
@@ -372,6 +381,56 @@ describe("CollaborationRoomDurableObject sync requests", () => {
 
     expect(errors(member)).toEqual([expect.objectContaining({ code: "invalid-message" })]);
     expect(member.closeCode).toBe(1008);
+  });
+});
+
+describe("CollaborationRoomDurableObject teaching initialization", () => {
+  function initializeTeaching(room: CollaborationRoomDurableObject, update: string) {
+    return room.fetch(
+      new Request(`${ROOM_ORIGIN}/sqlite/teaching/initialize`, {
+        method: "POST",
+        body: JSON.stringify({
+          roomId: ROOM_ID,
+          actorId: OWNER_ID,
+          update: {
+            protocolVersion: COLLABORATION_PROTOCOL_VERSION,
+            documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+            clientId: CLIENT_ID,
+            updateId: uuid(),
+            update,
+          },
+        }),
+      }),
+    );
+  }
+
+  const seedProject = (doc: Y.Doc) =>
+    seedCollaborationProject(doc, createStarterHtmlCssWorkspace());
+
+  it("answers bytes that are not a Yjs update without Yjs's own error text", async () => {
+    const { room } = await createRoom(seedProject);
+
+    // Three 0xff bytes: a varint that runs off the end of the update.
+    const response = await initializeTeaching(room, "////");
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid teaching initialization" });
+  });
+
+  it("names the document rule an initialization breaks", async () => {
+    const { room, doc } = await createRoom(seedProject);
+    const before = Y.encodeStateVector(doc);
+    doc.getMap("project").set("schemaVersion", 2);
+
+    const response = await initializeTeaching(
+      room,
+      encodeYjsUpdate(Y.encodeStateAsUpdate(doc, before)),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Unsupported collaboration document schema version",
+    });
   });
 });
 
