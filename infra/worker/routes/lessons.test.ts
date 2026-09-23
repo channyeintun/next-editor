@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { lessonsRoute } from "./lessons";
 import { getCurrentUser } from "../auth/session";
-import { insertDraftLesson, listPublishedLessons, updateLesson } from "../../db/queries";
+import {
+  deleteLesson,
+  getLessonById,
+  insertDraftLesson,
+  listPublishedLessons,
+  updateLesson,
+} from "../../db/queries";
 import type { LessonRow } from "../../db/types";
 
 vi.mock("../auth/session", () => ({
@@ -12,7 +18,8 @@ vi.mock("../../db/queries", () => ({
   insertDraftLesson: vi.fn<() => Promise<LessonRow>>(),
   listPublishedLessons: vi.fn<() => Promise<{ rows: LessonRow[]; nextPage: number | null }>>(),
   updateLesson: vi.fn<() => Promise<LessonRow | null>>(),
-  getLessonById: vi.fn<() => Promise<null>>(async () => null),
+  getLessonById: vi.fn<() => Promise<LessonRow | null>>(async () => null),
+  deleteLesson: vi.fn<() => Promise<boolean>>(),
 }));
 
 vi.mock("../../db/slug", () => ({
@@ -149,5 +156,49 @@ describe("lessonsRoute gallery pages", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ lessons: [], nextPage: null });
     expect(cache.put).not.toHaveBeenCalled();
+  });
+});
+
+describe("lessonsRoute delete", () => {
+  function createBucket() {
+    return {
+      list: vi.fn<() => Promise<{ objects: { key: string }[] }>>(async () => ({
+        objects: [{ key: `lessons/${LESSON_ID}/${LESSON_ID}.ne` }],
+      })),
+      delete: vi.fn<() => Promise<void>>(async () => undefined),
+    };
+  }
+
+  function deleteRequest(bucket: ReturnType<typeof createBucket>) {
+    return lessonsRoute.request(`https://nexteditor.dev/${LESSON_ID}`, { method: "DELETE" }, {
+      DB: {} as D1Database,
+      BUCKET: bucket as unknown as R2Bucket,
+    } as never);
+  }
+
+  beforeEach(() => {
+    vi.mocked(getLessonById).mockResolvedValue(lessonRow(LESSON_ID));
+  });
+
+  it("deletes the row and then the lesson's media", async () => {
+    vi.mocked(deleteLesson).mockResolvedValue(true);
+    const bucket = createBucket();
+
+    const response = await deleteRequest(bucket);
+
+    expect(response.status).toBe(200);
+    expect(bucket.delete).toHaveBeenCalledWith([`lessons/${LESSON_ID}/${LESSON_ID}.ne`]);
+  });
+
+  // Media removed first and a row that then failed to delete left a lesson,
+  // possibly published, whose recording 404s for every viewer.
+  it("keeps the media when the row could not be deleted", async () => {
+    vi.mocked(deleteLesson).mockRejectedValue(new Error("D1_ERROR: network connection lost"));
+    const bucket = createBucket();
+
+    const response = await deleteRequest(bucket);
+
+    expect(response.status).toBe(500);
+    expect(bucket.delete).not.toHaveBeenCalled();
   });
 });

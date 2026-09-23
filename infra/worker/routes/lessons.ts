@@ -296,9 +296,13 @@ lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
     return c.json({ error: "not found" }, 404);
   }
 
-  // Best-effort: an orphaned R2 object is a minor storage cost, not a
-  // correctness problem, so a listing/delete failure here doesn't block the
-  // D1 delete below. Phase 4's reconcile cron can sweep anything this misses.
+  await deleteLesson(c.env.DB, id, user.id);
+  await invalidateCache(getCache(c.env), lessonSlugKey(existing.slug));
+
+  // The row goes first. If this cleanup fails the cost is orphaned R2 objects;
+  // in the other order a failed row delete left a live lesson, possibly
+  // published, whose media 404s for every viewer. Best-effort, and nothing
+  // sweeps what it misses.
   try {
     const listed = await c.env.BUCKET.list({ prefix: `lessons/${id}/` });
     if (listed.objects.length > 0) {
@@ -308,8 +312,6 @@ lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
     console.error("Failed to clean up R2 objects", { lessonId: id }, error);
   }
 
-  await deleteLesson(c.env.DB, id, user.id);
-  await invalidateCache(getCache(c.env), lessonSlugKey(existing.slug));
   return c.json({ success: true });
 });
 
