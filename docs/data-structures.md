@@ -393,7 +393,6 @@ interface EditorMachineContext {
   hasManualWorkspaceOverride: boolean;
   pendingPlaybackEditorSync: boolean;
   playbackAudioSpawned: boolean;
-  lastCallbackFrameTimestamp?: number;
 
   // Snapshot/state getters and appliers (slides, preview, workspace, runtime)
   applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
@@ -411,14 +410,8 @@ interface EditorMachineContext {
   // Lifecycle callbacks
   onRecordingStart?: () => void;
   onRecordingStop?: (recording: Recording) => void;
-  onPlaybackStart?: () => void;
-  onPlaybackPause?: () => void;
-  onPlaybackEnd?: () => void;
   onSeek?: (time: number) => void;
   onError?: (error: Error) => void;
-  onFrame?: (frame: EditorFrame) => void;
-  onStateChange?: (state: EditorFrame["state"]) => void;
-  onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
 }
 ```
 

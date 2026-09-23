@@ -414,29 +414,29 @@ Action bodies are split by concern: capture-side actions live in `captureActions
 
 ### Playback (replay-side) actions
 
-| Action                                                                                                                      | Description                                                                                    |
-| --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `setRecording`                                                                                                              | Install the `loadRecording` output and reset replay cursors (an inline `assign` in `onDone`)   |
-| `extendRecording`                                                                                                           | Replace `context.recording` with a longer append-only prefix                                   |
-| `applyFrameAtTime`                                                                                                          | Apply the frame at current time to the editor                                                  |
-| `applyPreviewEventsAtTime`                                                                                                  | Apply preview events up to current time (advances its cursor)                                  |
-| `applyPreviewPatchBatchesAtTime`                                                                                            | Feed rrweb patch batches up to current time into `applyPreviewPatchReplay`                     |
-| `applySlideEventsAtTime`                                                                                                    | Apply slide events up to current time                                                          |
-| `applyWorkspaceEventsAtTime`                                                                                                | Apply workspace events up to current time                                                      |
-| `applyRuntimeEventsAtTime`                                                                                                  | Apply runtime events up to current time                                                        |
-| `seekToTime`                                                                                                                | Set current time and invalidate replay cursors so the next apply re-derives state              |
-| `seekPlaybackActors`                                                                                                        | Send the stored playhead to the timeline actor and, once spawned, the narration player         |
-| `setPlaybackSpeed` / `setVolume`                                                                                            | Update `timeline.speed` / `timeline.volume`                                                    |
-| `resetPlayback`                                                                                                             | Reset timeline to t=0                                                                          |
-| `clearCursorDecorations`                                                                                                    | Remove fake-cursor Monaco decorations                                                          |
-| `detachPlaybackWorkspace` / `reattachPlaybackWorkspace` / `adoptPlaybackWorkspaceAtPause`                                   | Manage the hand-off between recorded workspace snapshots and manual user edits during playback |
-| `invalidateAppliedPlaybackState` / `invalidateRenderedPlaybackState`                                                        | Force replay actions to re-apply on next tick (e.g. after a seek or resume)                    |
-| `clearPendingPlaybackEditorSync`                                                                                            | Clear the flag once `SET_EDITOR_REF` has resynced playback state                               |
-| `clearPendingEditorSyncForPausedSeek`                                                                                       | Clear it on a paused seek (no model swap follows) while the viewer is on the recorded file     |
-| `addCaptionTrack` / `removeCaptionTrack`                                                                                    | Mutate `recording.captions` directly, outside the timeline                                     |
-| `clearRecording`                                                                                                            | Unload the current recording and reset machine context                                         |
-| `setEditorRef`                                                                                                              | Store the live Monaco editor reference                                                         |
-| `notifyPlaybackStart` / `notifyPlaybackPause` / `notifyPlaybackEnd` / `notifySeek` / `notifyPlaybackUpdate` / `notifyFrame` | Fire the corresponding `UseNextEditorConfig` lifecycle callback                                |
+| Action                                                                                    | Description                                                                                    |
+| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `setRecording`                                                                            | Install the `loadRecording` output and reset replay cursors (an inline `assign` in `onDone`)   |
+| `extendRecording`                                                                         | Replace `context.recording` with a longer append-only prefix                                   |
+| `applyFrameAtTime`                                                                        | Apply the frame at current time to the editor                                                  |
+| `applyPreviewEventsAtTime`                                                                | Apply preview events up to current time (advances its cursor)                                  |
+| `applyPreviewPatchBatchesAtTime`                                                          | Feed rrweb patch batches up to current time into `applyPreviewPatchReplay`                     |
+| `applySlideEventsAtTime`                                                                  | Apply slide events up to current time                                                          |
+| `applyWorkspaceEventsAtTime`                                                              | Apply workspace events up to current time                                                      |
+| `applyRuntimeEventsAtTime`                                                                | Apply runtime events up to current time                                                        |
+| `seekToTime`                                                                              | Set current time and invalidate replay cursors so the next apply re-derives state              |
+| `seekPlaybackActors`                                                                      | Send the stored playhead to the timeline actor and, once spawned, the narration player         |
+| `setPlaybackSpeed` / `setVolume`                                                          | Update `timeline.speed` / `timeline.volume`                                                    |
+| `resetPlayback`                                                                           | Reset timeline to t=0                                                                          |
+| `clearCursorDecorations`                                                                  | Remove fake-cursor Monaco decorations                                                          |
+| `detachPlaybackWorkspace` / `reattachPlaybackWorkspace` / `adoptPlaybackWorkspaceAtPause` | Manage the hand-off between recorded workspace snapshots and manual user edits during playback |
+| `invalidateAppliedPlaybackState` / `invalidateRenderedPlaybackState`                      | Force replay actions to re-apply on next tick (e.g. after a seek or resume)                    |
+| `clearPendingPlaybackEditorSync`                                                          | Clear the flag once `SET_EDITOR_REF` has resynced playback state                               |
+| `clearPendingEditorSyncForPausedSeek`                                                     | Clear it on a paused seek (no model swap follows) while the viewer is on the recorded file     |
+| `addCaptionTrack` / `removeCaptionTrack`                                                  | Mutate `recording.captions` directly, outside the timeline                                     |
+| `clearRecording`                                                                          | Unload the current recording and reset machine context                                         |
+| `setEditorRef`                                                                            | Store the live Monaco editor reference                                                         |
+| `notifySeek`                                                                              | Fire the `UseNextEditorConfig` `onSeek` callback                                               |
 
 Timeline clock progression itself is not a named machine action — the `TICK` handler in the `playback` state directly `assign`s `timeline.currentTime` from the event, then runs the `applyXAtTime` actions above.
 

@@ -1322,7 +1322,6 @@ describe("editorMachine actor lifecycle", () => {
 
   it("replays from the end by applying each track once", async () => {
     const applied: string[] = [];
-    const playbackUpdates: number[] = [];
 
     const recording: Recording = {
       ...createRecording(),
@@ -1356,9 +1355,6 @@ describe("editorMachine actor lifecycle", () => {
         applyChatSnapshot: () => {
           applied.push("chat");
         },
-        onPlaybackUpdate: (currentTime) => {
-          playbackUpdates.push(currentTime);
-        },
       },
     }).start();
 
@@ -1368,14 +1364,12 @@ describe("editorMachine actor lifecycle", () => {
     actor.send({ type: "FINISHED" });
     expect(actor.getSnapshot().matches({ playback: "ended" })).toBe(true);
     applied.length = 0;
-    playbackUpdates.length = 0;
 
     actor.send({ type: "PLAY" });
 
     expect(actor.getSnapshot().matches({ playback: "playing" })).toBe(true);
     expect(actor.getSnapshot().context.timeline.currentTime).toBe(0);
     expect(applied).toEqual(["runtime", "whiteboard", "chat"]);
-    expect(playbackUpdates).toEqual([0]);
 
     actor.stop();
   });

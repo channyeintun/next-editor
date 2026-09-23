@@ -318,16 +318,9 @@ export interface UseNextEditorConfig {
   // Callbacks
   onRecordingStart?: () => void;
   onRecordingStop?: (recording: Recording) => void;
-  onPlaybackStart?: () => void;
-  onPlaybackPause?: () => void;
-  onPlaybackEnd?: () => void;
   onSeek?: (time: number) => void;
   onError?: (error: Error) => void;
 
-  // Granular callbacks
-  onFrame?: (frame: EditorFrame) => void;
-  onStateChange?: (state: EditorState) => void;
-  onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
   getSlideState?: () => {
     previewState: SlidePreviewState;
     currentSlideIndex: number;

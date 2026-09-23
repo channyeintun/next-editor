@@ -322,28 +322,14 @@ export interface EditorMachineContext {
   pendingPlaybackEditorSync: boolean;
   /** Whether the playback audio element has been spawned for the loaded recording */
   playbackAudioSpawned: boolean;
-  /** Last frame timestamp sent to granular callbacks */
-  lastCallbackFrameTimestamp?: number;
   /** Callback invoked after recording starts */
   onRecordingStart?: () => void;
   /** Callback invoked after recording stops */
   onRecordingStop?: (recording: Recording) => void;
-  /** Callback invoked after playback starts */
-  onPlaybackStart?: () => void;
-  /** Callback invoked after playback pauses */
-  onPlaybackPause?: () => void;
-  /** Callback invoked after playback ends */
-  onPlaybackEnd?: () => void;
   /** Callback invoked after seeking */
   onSeek?: (time: number) => void;
   /** Callback invoked after machine errors */
   onError?: (error: Error) => void;
-  /** Callback invoked after a frame is captured */
-  onFrame?: (frame: EditorFrame) => void;
-  /** Callback invoked after editor state changes */
-  onStateChange?: (state: EditorFrame["state"]) => void;
-  /** Callback invoked after playback time/frame updates */
-  onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
   /** Callback invoked once a local screen recording finishes assembling (local-save only). */
   onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
 }
@@ -569,14 +555,8 @@ export interface EditorMachineInput {
   /** Callbacks */
   onRecordingStart?: () => void;
   onRecordingStop?: (recording: Recording) => void;
-  onPlaybackStart?: () => void;
-  onPlaybackPause?: () => void;
-  onPlaybackEnd?: () => void;
   onSeek?: (time: number) => void;
   onError?: (error: Error) => void;
-  onFrame?: (frame: EditorFrame) => void;
-  onStateChange?: (state: EditorFrame["state"]) => void;
-  onPlaybackUpdate?: (currentTime: number, frame: EditorFrame | null) => void;
   onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
   getSlideState?: () => {
     previewState: SlidePreviewState;
@@ -663,7 +643,6 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   hasManualWorkspaceOverride: false,
   pendingPlaybackEditorSync: false,
   playbackAudioSpawned: false,
-  lastCallbackFrameTimestamp: undefined,
   lastAppliedFrameIndex: -1,
   lastAppliedPreviewEventIndex: -1,
   lastAppliedPreviewPatchBatchIndex: -1,
@@ -689,13 +668,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   applyWhiteboardState: input.applyWhiteboardState,
   onRecordingStart: input.onRecordingStart,
   onRecordingStop: input.onRecordingStop,
-  onPlaybackStart: input.onPlaybackStart,
-  onPlaybackPause: input.onPlaybackPause,
-  onPlaybackEnd: input.onPlaybackEnd,
   onSeek: input.onSeek,
   onError: input.onError,
-  onFrame: input.onFrame,
-  onStateChange: input.onStateChange,
-  onPlaybackUpdate: input.onPlaybackUpdate,
   onScreenRecordingReady: input.onScreenRecordingReady,
 });

@@ -358,7 +358,6 @@ export const initRecordingSession = ({
       lastMousePosition: initialMousePosition,
     },
     sessionRevision: 0,
-    lastCallbackFrameTimestamp: undefined,
   };
 };
 

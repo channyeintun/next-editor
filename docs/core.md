@@ -122,8 +122,7 @@ The main extension hooks in `UseNextEditorConfig` are:
 - `recordingStreamSink` to forward a live SCR3 byte stream.
 - Snapshot getters and appliers for slides, preview, workspace, and runtime state.
 - `applyPreviewPatchReplay` to feed recorded rrweb preview events into the current preview surface's `Replayer`.
-- Lifecycle callbacks such as `onRecordingStop`, `onPlaybackStart`, and `onError`.
-- Granular callbacks such as `onFrame`, `onStateChange`, and `onPlaybackUpdate`.
+- Lifecycle callbacks: `onRecordingStart`, `onRecordingStop`, `onSeek`, and `onError`.
 
 ## Utility Modules (`src/core/src/utils`)
 

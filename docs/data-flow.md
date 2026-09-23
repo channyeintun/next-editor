@@ -242,9 +242,8 @@ flowchart TB
     ApplyWorkspace --> ApplyRuntime[applyRuntimeEventsAtTime]
     ApplyRuntime --> SyncAudio{Audio spawned &<br/>250ms since last sync?}
     SyncAudio -->|Yes| SyncAudioActor[Send SYNC to audioPlayer]
-    SyncAudio -->|No| NotifyUpdate
-    SyncAudioActor --> NotifyUpdate[notifyPlaybackUpdate]
-    NotifyUpdate --> Done([Frame Applied])
+    SyncAudio -->|No| Done([Frame Applied])
+    SyncAudioActor --> Done
 ```
 
 Each `applyXAtTime` action reads its own `lastApplied*Index` cursor from context, applies only newly-reached events since that cursor, and advances the cursor — so a `TICK` (or an `EXTEND_RECORDING`) only does incremental work regardless of total recording length.

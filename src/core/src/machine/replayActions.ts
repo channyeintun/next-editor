@@ -206,7 +206,6 @@ export const setRecording = (
       volume: context.timeline.volume,
     },
     currentFrame: null,
-    lastCallbackFrameTimestamp: undefined,
     // Every cursor starts before its track's first event (chat folds from the empty
     // transcript applied above), except workspace and runtime, whose first snapshot was
     // applied above. Their overrides follow the spread: the other order would reset them,
@@ -600,14 +599,12 @@ export const resetPlayback = ({
     currentTime: 0,
   },
   currentFrame: null,
-  lastCallbackFrameTimestamp: undefined,
   ...REPLAY_CURSORS_RESET,
   lastAppliedPreviewState: undefined,
 });
 
 export const invalidateAppliedPlaybackState = (): Partial<EditorMachineContext> => ({
   currentFrame: null,
-  lastCallbackFrameTimestamp: undefined,
   ...REPLAY_CURSORS_RESET,
   lastAppliedPreviewState: undefined,
 });
@@ -681,7 +678,6 @@ export const clearRecording = {
   pendingPlaybackEditorSync: false,
   recording: null,
   currentFrame: null,
-  lastCallbackFrameTimestamp: undefined,
   ...REPLAY_CURSORS_RESET,
   // No recording is left for a width delta to be relative to.
   lastAppliedWorkspaceEventIndex: -1,
@@ -728,18 +724,6 @@ export const removeCaptionTrack = ({
   };
 };
 
-export const notifyPlaybackStart = ({ context }: { context: EditorMachineContext }): void => {
-  context.onPlaybackStart?.();
-};
-
-export const notifyPlaybackPause = ({ context }: { context: EditorMachineContext }): void => {
-  context.onPlaybackPause?.();
-};
-
-export const notifyPlaybackEnd = ({ context }: { context: EditorMachineContext }): void => {
-  context.onPlaybackEnd?.();
-};
-
 export const notifySeek = ({
   context,
   event,
@@ -752,28 +736,6 @@ export const notifySeek = ({
   if (event.type === "SEEK") {
     context.onSeek?.(context.timeline.currentTime);
   }
-};
-
-export const notifyFrame = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => {
-  const frame = context.currentFrame;
-  if (!frame || context.lastCallbackFrameTimestamp === frame.timestamp) {
-    return {};
-  }
-
-  context.onFrame?.(frame);
-  context.onStateChange?.(frame.state);
-
-  return {
-    lastCallbackFrameTimestamp: frame.timestamp,
-  };
-};
-
-export const notifyPlaybackUpdate = ({ context }: { context: EditorMachineContext }): void => {
-  context.onPlaybackUpdate?.(context.timeline.currentTime, context.currentFrame);
 };
 
 export const setEditorRef = ({

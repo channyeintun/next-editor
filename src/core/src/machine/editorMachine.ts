@@ -81,12 +81,7 @@ import {
   clearPendingEditorSyncForPausedSeek,
   invalidateRenderedPlaybackState,
   clearRecording,
-  notifyPlaybackStart,
-  notifyPlaybackPause,
-  notifyPlaybackEnd,
   notifySeek,
-  notifyFrame,
-  notifyPlaybackUpdate,
   setEditorRef,
   applyPreviewEventsAtTime,
   applyPreviewPatchBatchesAtTime,
@@ -266,12 +261,7 @@ export const editorMachine = setup({
     clearPendingEditorSyncForPausedSeek: assign(clearPendingEditorSyncForPausedSeek),
     invalidateRenderedPlaybackState: assign(invalidateRenderedPlaybackState),
     clearRecording: assign(clearRecording),
-    notifyPlaybackStart,
-    notifyPlaybackPause,
-    notifyPlaybackEnd,
     notifySeek,
-    notifyFrame: assign(notifyFrame),
-    notifyPlaybackUpdate,
     setEditorRef: assign(setEditorRef),
     applyPreviewEventsAtTime: assign(applyPreviewEventsAtTime),
     applyPreviewPatchBatchesAtTime: assign(applyPreviewPatchBatchesAtTime),
@@ -415,7 +405,6 @@ export const editorMachine = setup({
               "captureInitialFrame",
               "startExternalAudioPlayback",
               "notifyRecordingStart",
-              "notifyFrame",
             ],
           },
           {
@@ -431,7 +420,6 @@ export const editorMachine = setup({
               "initRecordingSession",
               "captureInitialFrame",
               "notifyRecordingStart",
-              "notifyFrame",
             ],
           },
         ],
@@ -479,7 +467,6 @@ export const editorMachine = setup({
             "initRecordingSession",
             "captureInitialFrame",
             "notifyRecordingStart",
-            "notifyFrame",
           ],
         },
         AUDIO_RECORDING_ERROR: {
@@ -588,7 +575,7 @@ export const editorMachine = setup({
       ],
       on: {
         CAPTURE_FRAME: {
-          actions: ["captureFrame", "notifyFrame"],
+          actions: "captureFrame",
         },
         AUDIO_RECORDING_CHUNK: {
           actions: "captureAudioChunk",
@@ -646,10 +633,10 @@ export const editorMachine = setup({
           actions: ["handleAudioRecordingError", "notifyError"],
         },
         SLIDE_EVENT: {
-          actions: ["captureSlideEvent", "captureFrame", "notifyFrame"],
+          actions: ["captureSlideEvent", "captureFrame"],
         },
         PREVIEW_EVENT: {
-          actions: ["capturePreviewEvent", "capturePreviewRefreshFrame", "notifyFrame"],
+          actions: ["capturePreviewEvent", "capturePreviewRefreshFrame"],
         },
         PREVIEW_INITIAL_DOCUMENT: {
           actions: "capturePreviewInitialDocument",
@@ -910,7 +897,6 @@ export const editorMachine = setup({
                 enqueue.assign({ lastSyncTime: now });
               }
             }),
-            "notifyPlaybackUpdate",
           ],
         },
         SEEK: {
@@ -919,7 +905,6 @@ export const editorMachine = setup({
             "seekToTime",
             ...APPLY_REPLAY_STATE_ACTIONS,
             "notifySeek",
-            "notifyPlaybackUpdate",
             "seekPlaybackActors",
           ],
         },
@@ -953,11 +938,7 @@ export const editorMachine = setup({
         },
         STOP: {
           target: ".ready",
-          actions: [
-            ...RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
-            "notifyPlaybackUpdate",
-            "seekPlaybackActors",
-          ],
+          actions: [...RESET_AND_REATTACH_REPLAY_STATE_ACTIONS, "seekPlaybackActors"],
         },
         // A mic recorder still waiting on its blob after the finalize watchdog belongs to
         // the take being left. Stop it, or its straggler blob would land on whatever
@@ -1014,8 +995,6 @@ export const editorMachine = setup({
                 enqueue.sendTo("audioPlayer", { type: "PLAY" });
               }
             }),
-            "notifyPlaybackStart",
-            "notifyPlaybackUpdate",
           ],
           exit: enqueueActions(({ context, enqueue }) => {
             enqueue.sendTo("timelineActor", { type: "PAUSE" });
@@ -1026,16 +1005,14 @@ export const editorMachine = setup({
           on: {
             PAUSE: {
               target: "paused",
-              actions: "notifyPlaybackPause",
             },
             WORKSPACE_EVENT: {
               target: "paused",
-              actions: ["detachPlaybackWorkspace", "notifyPlaybackPause"],
+              actions: "detachPlaybackWorkspace",
             },
             USER_INTERACTION: {
               target: "paused",
               guard: "shouldPauseOnInteraction",
-              actions: "notifyPlaybackPause",
             },
             FINISHED: {
               target: "ended",
@@ -1046,8 +1023,6 @@ export const editorMachine = setup({
                     currentTime: context.timeline.duration,
                   }),
                 }),
-                "notifyPlaybackEnd",
-                "notifyPlaybackUpdate",
               ],
             },
           },
@@ -1069,7 +1044,6 @@ export const editorMachine = setup({
                 ...APPLY_REPLAY_STATE_ACTIONS,
                 ...SYNC_PAUSED_WORKSPACE_ACTIONS,
                 "notifySeek",
-                "notifyPlaybackUpdate",
                 "seekPlaybackActors",
               ],
             },
