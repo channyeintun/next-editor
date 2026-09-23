@@ -24,6 +24,7 @@ const PROVIDER_FILES = [
   "src/contexts/RuntimePanelStoreContext.tsx",
   "src/contexts/SlidesContext.tsx",
   "src/contexts/SlidesStoreContext.tsx",
+  "src/contexts/WebContainerRuntimeProviderImpl.tsx",
   "src/contexts/WhiteboardContext.tsx",
   "src/contexts/WhiteboardStoreContext.tsx",
   "src/contexts/WorkspaceProvider.tsx",

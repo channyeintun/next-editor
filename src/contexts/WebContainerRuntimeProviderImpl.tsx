@@ -36,6 +36,22 @@ import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
 import { areWorkspaceProjectsEqual, lessonRunsInWebContainer } from "../types/workspace";
 
+/**
+ * Awaits `task` and hands a failure to `onError` instead of rejecting.
+ * Module-level because the React Compiler skips a component whose try/catch
+ * holds conditional or logical expressions.
+ */
+async function reportFailure(
+  task: () => Promise<void>,
+  onError: (error: unknown) => void,
+): Promise<void> {
+  try {
+    await task();
+  } catch (error) {
+    onError(error);
+  }
+}
+
 interface WebContainerRuntimeProviderProps {
   children: React.ReactNode;
   allowAmbientStart?: boolean;
@@ -349,14 +365,15 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
     const generation = getRuntimeGeneration();
 
-    try {
-      await bootAndStartRunner(generation);
-    } catch (error) {
-      if (isRuntimeGenerationActive(generation)) {
-        setStatus("error");
-        setErrorMessage(getRuntimeErrorMessage(error));
-      }
-    }
+    await reportFailure(
+      () => bootAndStartRunner(generation),
+      (error) => {
+        if (isRuntimeGenerationActive(generation)) {
+          setStatus("error");
+          setErrorMessage(getRuntimeErrorMessage(error));
+        }
+      },
+    );
   };
 
   /** Like rerunRunner, but leaves a boot, mount, install or start under way alone. */
@@ -387,16 +404,19 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
     const generation = getRuntimeGeneration();
 
-    try {
-      const instance = await prepareRuntime();
-      if (instance && isRuntimeGenerationActive(generation)) {
-        await task(instance, generation);
-      }
-    } catch (error) {
-      if (isRuntimeGenerationActive(generation)) {
-        setErrorMessage(getRuntimeErrorMessage(error));
-      }
-    }
+    await reportFailure(
+      async () => {
+        const instance = await prepareRuntime();
+        if (instance && isRuntimeGenerationActive(generation)) {
+          await task(instance, generation);
+        }
+      },
+      (error) => {
+        if (isRuntimeGenerationActive(generation)) {
+          setErrorMessage(getRuntimeErrorMessage(error));
+        }
+      },
+    );
   };
 
   const startTerminalSession = () =>
@@ -429,16 +449,20 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     const instance = instanceRef.current;
 
     if (instance) {
-      try {
-        // Save is an explicit durability boundary. A latest-project sync also
-        // covers mutations that landed during an effect subscription handoff.
-        await queueProjectSync({ instance, project: getProject() });
-      } catch (error) {
-        // Both callers fire and forget, so the runner console is where a
-        // failed save is reported.
-        if (isRuntimeGenerationActive(generation)) {
-          setErrorMessage(getRuntimeErrorMessage(error));
-        }
+      // Save is an explicit durability boundary. A latest-project sync also
+      // covers mutations that landed during an effect subscription handoff.
+      const synced = await queueProjectSync({ instance, project: getProject() }).then(
+        () => true,
+        (error: unknown) => {
+          // Both callers fire and forget, so the runner console is where a
+          // failed save is reported.
+          if (isRuntimeGenerationActive(generation)) {
+            setErrorMessage(getRuntimeErrorMessage(error));
+          }
+          return false;
+        },
+      );
+      if (!synced) {
         return;
       }
     }
