@@ -1,4 +1,5 @@
 import { createStore } from "@xstate/store-react";
+import { readStoredPreference, writeStoredPreference } from "./preferenceStorage";
 
 const ENABLED_KEY = "caption-enabled";
 const LANGUAGE_KEY = "caption-language";
@@ -9,10 +10,9 @@ export interface CaptionStoreContext {
 }
 
 function readInitialContext(): CaptionStoreContext {
-  if (typeof window === "undefined") return { enabled: false, language: null };
   return {
-    enabled: window.localStorage.getItem(ENABLED_KEY) === "true",
-    language: window.localStorage.getItem(LANGUAGE_KEY),
+    enabled: readStoredPreference(ENABLED_KEY) === "true",
+    language: readStoredPreference(LANGUAGE_KEY),
   };
 }
 
@@ -30,12 +30,8 @@ export function createCaptionStore() {
 
   store.subscribe((snapshot) => {
     const { enabled, language } = snapshot.context;
-    window.localStorage.setItem(ENABLED_KEY, String(enabled));
-    if (language) {
-      window.localStorage.setItem(LANGUAGE_KEY, language);
-    } else {
-      window.localStorage.removeItem(LANGUAGE_KEY);
-    }
+    writeStoredPreference(ENABLED_KEY, String(enabled));
+    writeStoredPreference(LANGUAGE_KEY, language || null);
   });
 
   return store;

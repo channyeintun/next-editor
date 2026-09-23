@@ -1,4 +1,5 @@
 import { createStore } from "@xstate/store-react";
+import { readStoredPreference, writeStoredPreference } from "./preferenceStorage";
 
 const AUTOPLAY_KEY = "playback-autoplay";
 const CONTINUE_TO_NEXT_KEY = "playback-continue-to-next";
@@ -27,19 +28,16 @@ const clampSpeed = (speed: number): number => Math.min(SPEED_MAX, Math.max(SPEED
 const clampVolume = (volume: number): number => Math.min(VOLUME_MAX, Math.max(VOLUME_MIN, volume));
 
 function readStoredNumber(key: string, fallback: number, clamp: (value: number) => number): number {
-  const raw = window.localStorage.getItem(key);
+  const raw = readStoredPreference(key);
   if (raw === null) return fallback;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? clamp(parsed) : fallback;
 }
 
 function readInitialContext(): PlaybackSettingsContext {
-  if (typeof window === "undefined") {
-    return { autoplay: false, continueToNext: false, speed: 1, volume: 1 };
-  }
   return {
-    autoplay: window.localStorage.getItem(AUTOPLAY_KEY) === "true",
-    continueToNext: window.localStorage.getItem(CONTINUE_TO_NEXT_KEY) === "true",
+    autoplay: readStoredPreference(AUTOPLAY_KEY) === "true",
+    continueToNext: readStoredPreference(CONTINUE_TO_NEXT_KEY) === "true",
     speed: readStoredNumber(SPEED_KEY, 1, clampSpeed),
     volume: readStoredNumber(VOLUME_KEY, 1, clampVolume),
   };
@@ -68,10 +66,10 @@ export function createPlaybackSettingsStore() {
 
   store.subscribe((snapshot) => {
     const { autoplay, continueToNext, speed, volume } = snapshot.context;
-    window.localStorage.setItem(AUTOPLAY_KEY, String(autoplay));
-    window.localStorage.setItem(CONTINUE_TO_NEXT_KEY, String(continueToNext));
-    window.localStorage.setItem(SPEED_KEY, String(speed));
-    window.localStorage.setItem(VOLUME_KEY, String(volume));
+    writeStoredPreference(AUTOPLAY_KEY, String(autoplay));
+    writeStoredPreference(CONTINUE_TO_NEXT_KEY, String(continueToNext));
+    writeStoredPreference(SPEED_KEY, String(speed));
+    writeStoredPreference(VOLUME_KEY, String(volume));
   });
 
   return store;

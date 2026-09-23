@@ -1,4 +1,5 @@
 import { createStore } from "@xstate/store-react";
+import { readStoredPreference, writeStoredPreference } from "./preferenceStorage";
 
 const SCREEN_RECORDING_KEY = "recording-screen-capture";
 
@@ -9,11 +10,8 @@ export interface RecordingSettingsContext {
 }
 
 function readInitialContext(): RecordingSettingsContext {
-  if (typeof window === "undefined") {
-    return { screenRecordingEnabled: false };
-  }
   return {
-    screenRecordingEnabled: window.localStorage.getItem(SCREEN_RECORDING_KEY) === "true",
+    screenRecordingEnabled: readStoredPreference(SCREEN_RECORDING_KEY) === "true",
   };
 }
 
@@ -30,7 +28,7 @@ export function createRecordingSettingsStore() {
 
   store.subscribe((snapshot) => {
     const { screenRecordingEnabled } = snapshot.context;
-    window.localStorage.setItem(SCREEN_RECORDING_KEY, String(screenRecordingEnabled));
+    writeStoredPreference(SCREEN_RECORDING_KEY, String(screenRecordingEnabled));
   });
 
   return store;
