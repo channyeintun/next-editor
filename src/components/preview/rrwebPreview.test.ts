@@ -261,14 +261,29 @@ describe("recorder wiring snapshot handshake", () => {
         "data:image/png;base64,YXZhdGFy",
       );
 
-      // Host asks for the recording-start snapshot.
+      const findRefreshDocs = () =>
+        messages.filter(
+          (message) =>
+            message.type === RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE && message.payload.refresh,
+        );
+
+      // Only the host may ask: jsdom delivers window.postMessage with a null
+      // source, i.e. from a window that is not this page's parent.
       window.postMessage({ type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE }, "*");
       await sleep(50);
+      expect(findRefreshDocs()).toHaveLength(0);
 
-      const refreshDocs = messages.filter(
-        (message) =>
-          message.type === RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE && message.payload.refresh,
+      // Host asks for the recording-start snapshot (jsdom's top window is its
+      // own parent).
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
+          source: window,
+        }),
       );
+      await sleep(50);
+
+      const refreshDocs = findRefreshDocs();
       expect(refreshDocs).toHaveLength(1);
       expect(refreshDocs[0].payload.documentId).toBe(documentId);
       // The answer carries a FullSnapshot (type 2) so it can seed replay.

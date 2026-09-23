@@ -292,7 +292,10 @@ export function createRrwebPreviewRecorderScript({
       // synchronous inside takeFullSnapshot, so the flag is scoped to this call;
       // the trailing reset covers the throw path.
       window.addEventListener('message', function(event) {
-        var data = event && event.data;
+        // Only the host may ask; any frame or popup of the previewed app could
+        // otherwise make the recorder re-serialize the whole page at will.
+        if (!event || event.source !== window.parent) return;
+        var data = event.data;
         if (!data || data.type !== ${JSON.stringify(RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE)}) return;
         if (!sentInitial) return;
         try {

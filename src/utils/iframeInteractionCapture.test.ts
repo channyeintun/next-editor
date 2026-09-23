@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   createIframeInteractionCaptureScript,
   IFRAME_INTERACTION_MESSAGE_TYPE,
+  IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE,
 } from "./iframeInteractionCapture";
 
 const SETUP_MARKER = "__TEST_INTERACTION_CAPTURE__";
@@ -73,6 +74,7 @@ function createCaptureHarness() {
   body.children.push(button);
   button.parentElement = body;
 
+  const hostWindow = { postMessage: parentPostMessage };
   const frameDocument = {
     ...documentTarget,
     body,
@@ -83,6 +85,8 @@ function createCaptureHarness() {
     ...windowTarget,
     cancelAnimationFrame: vi.fn<(id: number) => void>(),
     history: {
+      back: vi.fn<() => void>(),
+      forward: vi.fn<() => void>(),
       pushState: vi.fn<() => void>(),
       replaceState: vi.fn<() => void>(),
     },
@@ -94,9 +98,7 @@ function createCaptureHarness() {
     },
     innerHeight: 600,
     innerWidth: 800,
-    parent: {
-      postMessage: parentPostMessage,
-    },
+    parent: hostWindow,
     requestAnimationFrame: vi.fn<(callback: FrameRequestCallback) => number>((callback) => {
       callback(0);
       return 1;
@@ -149,6 +151,8 @@ function createCaptureHarness() {
     createInput,
     documentTarget,
     frameWindow,
+    hostWindow,
+    windowTarget,
     install: () => install(...installArgs),
     installWithRouteCapture: () => installWithRouteCapture(...installArgs),
     installWithMouseMoveCapture: () => installWithMouseMoveCapture(...installArgs),
@@ -254,6 +258,24 @@ describe("createIframeInteractionCaptureScript", () => {
       }),
       "*",
     );
+  });
+
+  it("navigates history only when the host asks", () => {
+    const { frameWindow, hostWindow, install, windowTarget } = createCaptureHarness();
+    const history = frameWindow.history as { back: () => void; forward: () => void };
+
+    install();
+    windowTarget.emit("message", {
+      data: { payload: { action: "back" }, type: IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE },
+      source: { postMessage: vi.fn<() => void>() },
+    });
+    expect(history.back).not.toHaveBeenCalled();
+
+    windowTarget.emit("message", {
+      data: { payload: { action: "back" }, type: IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE },
+      source: hostWindow,
+    });
+    expect(history.back).toHaveBeenCalledOnce();
   });
 
   it("masks password values and keys the way the rrweb recorder does", () => {

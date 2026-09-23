@@ -249,6 +249,10 @@ export function createIframeInteractionCaptureScript(
       }
 
       addWindowListener('message', (event) => {
+        if (event.source !== window.parent) {
+          return;
+        }
+
         const message = event.data || {};
 
         if (
