@@ -159,6 +159,51 @@ describe("recordingCodec", () => {
     expect(reconstructed?.state.content).toBe("LINE one\nline two\nline three\nLINE four\n");
   });
 
+  it("gives every decoded delta its own bytes instead of a view into the segment", async () => {
+    const withPreview = (timestamp: number, content: string, html: string) => {
+      const frame = makeKeyframe(timestamp, content);
+      return {
+        ...frame,
+        state: { ...frame.state, previewState: { size: "medium" as const, content: html } },
+      };
+    };
+    const first = withPreview(0, "line one\n".repeat(200), "<p>one</p>".repeat(200));
+    const second = withPreview(
+      16,
+      "LINE one\n" + "line one\n".repeat(199),
+      "<p>two</p>".repeat(200),
+    );
+    const frameDelta = createFrameDelta(first, second);
+    const chatDelta = createContentDelta("", "Hello!");
+    if (!chatDelta) throw new Error("Expected a chat content delta");
+    const recording = createRecording({
+      duration: 800,
+      frames: [first, frameDelta],
+      chatEvents: [{ timestamp: 5, event: { k: "content", delta: chatDelta } }],
+    });
+
+    const decoded = decodeRecordingStream(await encodeRecordingToStream(recording));
+    const [, decodedDelta] = decoded.frames;
+    const chatEvent = decoded.chatEvents?.[0].event;
+    const views = [
+      !decodedDelta.isKeyframe ? decodedDelta.contentDelta?.delta : undefined,
+      !decodedDelta.isKeyframe &&
+      decodedDelta.previewState &&
+      "contentDelta" in decodedDelta.previewState
+        ? decodedDelta.previewState.contentDelta.delta
+        : undefined,
+      chatEvent?.k === "content" ? chatEvent.delta.delta : undefined,
+    ];
+
+    for (const view of views) {
+      expect(view).toBeInstanceOf(Uint8Array);
+      // A view into the inflated segment would keep every byte of it alive.
+      expect(view?.buffer.byteLength).toBe(view?.byteLength);
+    }
+    expect(decoded.frames).toEqual(recording.frames);
+    expect(decoded.chatEvents).toEqual(recording.chatEvents);
+  });
+
   it("round trips whiteboard events, including an unknown-kind-8 skip guard", async () => {
     const recording = createRecording({
       duration: 800,

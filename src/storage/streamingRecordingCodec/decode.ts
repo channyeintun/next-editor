@@ -203,7 +203,7 @@ function decodeSegment(stream: DecodedStream, kind: number, payload: Uint8Array)
       // see framePreviewContentDedup.ts), then normalize each frame once, as it arrives,
       // so a growing stream never re-normalizes the frames it already holds.
       const frames = hydrateFramePreviewContent(decodeRecords<DeltaFrame>(payload, budget)).map(
-        normalizeDeltaFrame,
+        (frame) => normalizeDeltaFrame(ownFrameDeltaBytes(frame)),
       );
       assertFrameFormatCompatibility(frames, stream.formatVersion);
       return { recordCount: frames.length, commit: () => appendAll(records.frames, frames) };
@@ -255,7 +255,10 @@ function decodeSegment(stream: DecodedStream, kind: number, payload: Uint8Array)
     case SEGMENT_KIND.whiteboard:
       return appendTo(records.whiteboardEvents, decodeRecords<WhiteboardEvent>(payload, budget));
     case SEGMENT_KIND.chat:
-      return appendTo(records.chatEvents, decodeRecords<ChatRecordingEvent>(payload, budget));
+      return appendTo(
+        records.chatEvents,
+        decodeRecords<ChatRecordingEvent>(payload, budget).map(ownChatDeltaBytes),
+      );
     case SEGMENT_KIND.finalMeta: {
       const meta = mergeFinalMetadata(stream.meta, payload, budget);
       return {
@@ -268,6 +271,32 @@ function decodeSegment(stream: DecodedStream, kind: number, payload: Uint8Array)
     default:
       return { recordCount: 0, commit: () => {} };
   }
+}
+
+/**
+ * msgpack decodes a binary field as a view into the segment's inflated buffer, so a single
+ * delta that survives keeps every byte of its segment alive for as long as the recording
+ * is open, and a worker's structured clone ships all of them. The recorded binary fields
+ * are the dmp deltas below; each gets a copy that owns only its own bytes. The records
+ * were just decoded, so replacing the field in place touches nothing anyone else holds.
+ */
+function ownDeltaBytes(holder: unknown): void {
+  if (typeof holder !== "object" || holder === null) return;
+  const delta = holder as { delta?: unknown };
+  if (delta.delta instanceof Uint8Array) delta.delta = delta.delta.slice();
+}
+
+function ownFrameDeltaBytes(frame: DeltaFrame): DeltaFrame {
+  if (!frame.isKeyframe) {
+    ownDeltaBytes(frame.contentDelta);
+    ownDeltaBytes((frame.previewState as { contentDelta?: unknown } | undefined)?.contentDelta);
+  }
+  return frame;
+}
+
+function ownChatDeltaBytes(record: ChatRecordingEvent): ChatRecordingEvent {
+  if (record.event?.k === "content") ownDeltaBytes(record.event.delta);
+  return record;
 }
 
 function appendTo<T>(target: T[], decoded: T[]): PendingSegment {
