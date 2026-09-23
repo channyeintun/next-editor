@@ -20,7 +20,6 @@ import {
 import {
   applyEncodedYjsUpdate,
   createCollaborationRoomSnapshot,
-  createCollaborationDocumentUpdate,
   decodeYjsUpdate,
   encodeYjsUpdate,
 } from "./yjsUpdates";
@@ -41,19 +40,6 @@ describe("collaboration protocol", () => {
     applyEncodedYjsUpdate(target, encoded);
 
     expect(target.getText("content").toString()).toBe("shared text");
-  });
-
-  it("creates a versioned, validated document update envelope", () => {
-    const doc = new Y.Doc();
-    doc.getText("content").insert(0, "hello");
-
-    const input = createCollaborationDocumentUpdate(Y.encodeStateAsUpdate(doc), CLIENT_ID);
-
-    expect(input.protocolVersion).toBe(COLLABORATION_PROTOCOL_VERSION);
-    expect(input.documentSchemaVersion).toBe(COLLABORATION_DOCUMENT_SCHEMA_VERSION);
-    expect(input.clientId).toBe(CLIENT_ID);
-    expect(input.updateId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(collaborationDocumentUpdateInputSchema.safeParse(input).success).toBe(true);
   });
 
   it("rejects malformed, oversized, and version-mismatched updates", () => {
@@ -290,9 +276,7 @@ describe("collaboration protocol", () => {
   });
 
   it("validates the binary transport's JSON control envelopes", () => {
-    const doc = new Y.Doc();
-    doc.getText("content").insert(0, "hello");
-    const update = createCollaborationDocumentUpdate(Y.encodeStateAsUpdate(doc), CLIENT_ID);
+    const update = { updateId: "7d4a1f0e-2b3c-4d5e-8f60-718293a4b5c6" };
 
     expect(
       collaborationWebSocketServerMessageSchema.safeParse({

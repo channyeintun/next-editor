@@ -9,7 +9,6 @@ import {
   collaborationSlidePayloadAssetId,
   collaborationTransactionTouchesOnlyTeaching,
   collaborationTransactionTouchesTeaching,
-  decodeCollaborationSlideAsset,
   decodeCollaborationSlidePayload,
   encodeCollaborationSlidePayload,
   hydrateCollaborationSlideManifest,
@@ -254,7 +253,9 @@ describe("collaboration teaching document", () => {
       },
     };
 
-    await expect(decodeCollaborationSlideAsset(payload, manifest)).resolves.toMatchObject({
+    const fromBytes = (bytes: Uint8Array) =>
+      hydrateCollaborationSlideManifest(manifest, new Map(), async () => bytes);
+    await expect(fromBytes(payload)).resolves.toMatchObject({
       id: "manifest-slide",
       content: "<h1>source</h1>",
     });
@@ -290,10 +291,8 @@ describe("collaboration teaching document", () => {
 
     const tampered = payload.slice();
     tampered[0] = (tampered[0] ?? 0) ^ 1;
-    await expect(decodeCollaborationSlideAsset(tampered, manifest)).rejects.toThrow(/digest/);
-    await expect(decodeCollaborationSlideAsset(payload.subarray(1), manifest)).rejects.toThrow(
-      /size/,
-    );
+    await expect(fromBytes(tampered)).rejects.toThrow(/digest/);
+    await expect(fromBytes(payload.subarray(1))).rejects.toThrow(/size/);
   });
 
   it("rejects unsafe or malformed teaching payloads before projection", () => {

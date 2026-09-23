@@ -506,14 +506,6 @@ export async function collaborationSlidePayloadAssetId(payload: Uint8Array): Pro
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function decodeCollaborationSlideAsset(
-  bytes: Uint8Array,
-  manifest: CollaborationTeachingSlideManifest,
-): Promise<Slide> {
-  await verifyCollaborationSlideAsset(bytes, manifest.asset);
-  return decodeCollaborationSlidePayload(bytes, manifest);
-}
-
 export async function verifyCollaborationSlideAsset(
   bytes: Uint8Array,
   asset: CollaborationAssetDescriptor,

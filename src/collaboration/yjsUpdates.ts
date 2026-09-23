@@ -2,12 +2,10 @@ import { applyUpdate, encodeStateAsUpdate, type Doc } from "yjs";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
-  collaborationDocumentUpdateInputSchema,
   collaborationCreateRoomInputSchema,
   collaborationTeachingInitializationInputSchema,
   encodedYjsSnapshotSchema,
   encodedYjsUpdateSchema,
-  type CollaborationDocumentUpdateInput,
   type CollaborationCreateRoomInput,
   type CollaborationTeachingInitializationInput,
 } from "./protocol";
@@ -63,20 +61,6 @@ export function applyEncodedYjsUpdate(doc: Doc, encoded: string, origin?: unknow
 
 export function applyEncodedYjsSnapshot(doc: Doc, encoded: string, origin?: unknown): void {
   applyUpdate(doc, decodeYjsSnapshot(encoded), origin);
-}
-
-export function createCollaborationDocumentUpdate(
-  update: Uint8Array,
-  clientId: string,
-  updateId: string = crypto.randomUUID(),
-): CollaborationDocumentUpdateInput {
-  return collaborationDocumentUpdateInputSchema.parse({
-    protocolVersion: COLLABORATION_PROTOCOL_VERSION,
-    documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
-    clientId,
-    updateId,
-    update: encodeYjsUpdate(update),
-  });
 }
 
 export function createCollaborationRoomSnapshot(
