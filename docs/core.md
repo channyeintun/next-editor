@@ -10,7 +10,7 @@ flowchart TB
     Index[index.ts]
     Types[types.ts]
     Slides[slides.ts]
-    Hook[useNextEditor.ts]
+    Hook[useNextEditor.ts<br/>actor senders + interaction effects]
     Machine[machine/editorMachine.ts]
     Timeline[machine/timelineMachine.ts]
     Utils[utils/*]
@@ -46,13 +46,12 @@ The main public entrypoint is `src/core/src/index.ts`.
 
 Key exports:
 
-- `useNextEditor`
 - `NextEditorProvider`
 - `useNextEditorActions`, `useNextEditorMetadata`, `useNextEditorPlayback`
 - `editorMachine`, `timelineMachine`, `EditorActorRef`, `TimelineActorRef`
 - `EditorMachineContext`, `EditorMachineEvent`
 - `Recording`, `EditorFrame`, `EditorState`
-- `RecordingStreamSink`, `UseNextEditorConfig`, `UseNextEditorReturn`
+- `RecordingStreamSink`, `UseNextEditorConfig`
 - Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewState`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
 - Caption types such as `CaptionTrack`, `CaptionCue`, and `CaptionWord`
 - Track/cluster metadata types: `RecordingTrackKind`, `RecordingTrackMeta`, `RecordingClusterMeta`, `RecordingMediaFragment`
@@ -156,29 +155,28 @@ const rebuilt = codec.applyDelta(bytesA, delta);
 
 ## Integration Example
 
-```typescript
-import { useNextEditor, NextEditorProvider, type Recording } from "@/core/src";
+`NextEditorProvider` creates the editor actor (it builds the `UseNextEditorConfig` itself from the app's stores) and exposes it through context. Components read it with the context hooks:
 
-// In your component
-const {
-  startRecording,
-  stopRecording,
-  play,
-  pause,
-  seekTo,
-  isRecording,
-  isPlaying,
-  currentTime,
-  currentRecording,
-} = useNextEditor({
-  editorRef,
-  enableAudioRecording: true,
-  pauseOnUserInteraction: true,
-  onRecordingStop: (recording) => {
-    saveRecording(recording);
-  },
-});
+```typescript
+import { NextEditorProvider, useNextEditorActions, useNextEditorMetadata } from "../src/core/src";
+import { useLiveTime } from "../src/hooks/useNextEditorContext";
+
+function Controls() {
+  // Stable senders: never re-render on machine transitions.
+  const { startRecording, stopRecording, play, pause, seekTo } = useNextEditorActions();
+  // State flags: re-render on recording/playback transitions only.
+  const { isRecording, isPlaying, currentRecording } = useNextEditorMetadata();
+  // Playhead: re-renders on every tick, so keep it in a small component.
+  const currentTime = useLiveTime();
+  // ...
+}
+
+<NextEditorProvider>
+  <Controls />
+</NextEditorProvider>;
 ```
+
+`useNextEditorPlayback` gives the playback speed, volume, duration and the editor actor itself.
 
 ## Related Docs
 

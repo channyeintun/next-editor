@@ -23,7 +23,7 @@ flowchart TB
     end
 
     subgraph Core["Core Recording Layer"]
-        Hook[useNextEditor / useNextEditorContext]
+        Hook[useNextEditor.ts + useNextEditorContext]
         Machine[editorMachine]
         Timeline[timelineMachine]
     end
@@ -194,7 +194,7 @@ replayed.
 flowchart LR
     subgraph Provider["NextEditorProvider"]
         direction TB
-        Hook[useNextEditor Hook]
+        Hook["useNextEditorActorActions<br/>+ NextEditorActorContext"]
 
         subgraph Contexts["Split Contexts"]
             Actions["Actions Context<br/>(Stable Functions)"]

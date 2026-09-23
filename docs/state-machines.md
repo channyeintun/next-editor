@@ -446,36 +446,30 @@ Timeline clock progression itself is not a named machine action — the `TICK` h
 flowchart TB
     subgraph React["React Layer"]
         Provider[NextEditorProvider]
-        Hook[useNextEditor Hook]
+        Actions[useNextEditorActorActions]
+        Effects[useNextEditorInteractionEffects]
+        Hooks["useNextEditorActions / useNextEditorMetadata / useNextEditorPlayback"]
     end
 
     subgraph XState["XState Layer"]
-        Machine[editorMachine]
-        State[state]
-        Send[send]
+        ActorCtx["NextEditorActorContext<br/>createActorContext(editorMachine)"]
+        Machine[editorMachine actor]
     end
 
-    subgraph Bridge["useMachine Bridge"]
-        HM["useMachine(editorMachine, { input })"]
-    end
-
-    Provider --> Hook
-    Hook --> Bridge
-    Bridge --> Machine
-    Machine --> State
-    Machine --> Send
-
-    State --> Hook
-    Send --> Hook
+    Provider --> ActorCtx
+    ActorCtx --> Machine
+    Provider --> Actions
+    Provider --> Effects
+    Actions -->|send| Machine
+    Effects -->|SET_EDITOR_REF, USER_INTERACTION| Machine
+    Machine -->|useSelector| Hooks
 ```
 
-The `useNextEditor` hook:
+`NextEditorProvider` creates the actor through `NextEditorActorContext.Provider` and wires it to React:
 
-1. Initializes the machine with `useMachine`.
-2. Maps machine state to boolean flags (`isRecording`, `isPlaying`, etc.).
-3. Wraps `send` in stable-shaped callbacks (`startRecording`, `play`, etc.) — no `useCallback` is needed since the React Compiler handles memoization.
-4. Manages editor ref synchronization (`SET_EDITOR_REF`, including the `shouldSyncPlaybackEditorRef` re-attach path).
-5. Handles keyboard shortcuts for playback control.
+1. `useNextEditorActorActions` wraps `send` in senders (`startRecording`, `play`, `syncEditorRef`, etc.). Their identities are held in `useState`, because the React Compiler skips hookless hooks and `CodeEditor` keys an unmount cleanup on `syncEditorRef`.
+2. `useNextEditorInteractionEffects` re-asserts `SET_EDITOR_REF` on mount and after every transition (a send to a stopped actor is dropped), and pauses playback on editor input or the Space key.
+3. Components read state through the context hooks, which select slices with `NextEditorActorContext.useSelector` (`useNextEditorMetadata` for flags, `useNextEditorPlayback` for speed/volume/duration, `useLiveTime` for the playhead).
 
 ## Practical Summary
 

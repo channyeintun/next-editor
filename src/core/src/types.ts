@@ -8,8 +8,6 @@ import type {
   SlideEvent,
   SlidePreviewState,
 } from "./slides";
-import type { TimelineActorRef } from "./machine/timelineMachine";
-import type { EditorActorRef } from "./useNextEditor";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../types/runtime";
 import type {
   WorkspaceRecordingAsset,
@@ -18,7 +16,6 @@ import type {
 } from "../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "./whiteboard";
 import type { ChatCheckpoint, ChatRecordingEvent } from "../../types/chat";
-import type { TextEditEvent } from "../../types/textEdit";
 
 /**
  * Audio storage placeholder for serialization
@@ -294,7 +291,7 @@ export interface RecordingStreamSink {
 }
 
 /**
- * Configuration options for useNextEditor hook
+ * Configuration options for the editor machine (passed as NextEditorProvider's actor input)
  */
 export interface UseNextEditorConfig {
   // Required
@@ -396,68 +393,4 @@ export interface EditorState {
   slideState?: SlidePreviewState;
   currentSlideIndex?: number;
   previewState?: PreviewState;
-}
-
-/**
- * Return type of useNextEditor hook
- */
-export interface UseNextEditorReturn {
-  // Recording State
-  isRecording: boolean;
-  isRecordingAudio: boolean;
-  recordingStartTime: number | null;
-
-  // Playback State
-  isPlaying: boolean;
-  isPaused: boolean;
-  hasEnded: boolean;
-  timelineActor: TimelineActorRef | undefined;
-  editorActor: EditorActorRef;
-  playbackSpeed: number;
-  volume: number;
-
-  // Data
-  currentRecording: Recording | null;
-  actualDuration: number;
-
-  // Recording Controls
-  startRecording: (options?: {
-    audioBlob?: Blob;
-    enableCamera?: boolean;
-    screenStream?: MediaStream;
-  }) => void;
-  stopRecording: () => void;
-
-  // Playback Controls
-  play: () => void;
-  pause: () => void;
-  stop: () => void;
-  seekTo: (time: number) => void;
-  setPlaybackSpeed: (speed: number) => void;
-  setVolume: (volume: number) => void;
-
-  // Recording Management
-  loadRecording: (recording: Recording) => void;
-  extendRecording: (recording: Recording) => void;
-  appendRecordingDelta: (delta: RecordingStreamDelta) => void;
-  addCaptionTrack: (track: CaptionTrack) => void;
-  removeCaptionTrack: (trackId: string) => void;
-  clearRecording: () => void;
-
-  // Monaco Editor Integration
-  syncEditorRef: (editor: monaco.editor.IStandaloneCodeEditor | null) => void;
-  handleEditorChange: (selection?: EditorSelection, textEdit?: TextEditEvent) => void;
-  handleSlideEvent: (event: SlideEvent) => void;
-  handlePreviewEvent: (event: PreviewEvent) => void;
-  handlePreviewInitialDocument: (document: PreviewInitialDocument) => void;
-  handlePreviewPatchBatch: (batch: PreviewDomPatchBatch) => void;
-  handleWorkspaceEvent: (event?: {
-    sidebarWidthDelta?: number;
-    previewDockWidthDelta?: number;
-  }) => void;
-  handleRuntimeEvent: () => void;
-
-  // Helper functions
-  getEditorState: () => EditorState | null;
-  getFrame: (timestamp?: number) => EditorFrame | null;
 }

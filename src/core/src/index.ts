@@ -1,5 +1,3 @@
-export { useNextEditor } from "./useNextEditor";
-
 // Contexts
 export { NextEditorProvider } from "../../contexts/NextEditorProvider";
 export { NextEditorActorContext } from "../../contexts/NextEditorActorContext";
@@ -42,7 +40,6 @@ export type {
   CameraPlaceholder,
   RecordingStreamSink,
   UseNextEditorConfig,
-  UseNextEditorReturn,
   EditorState,
 } from "./types";
 

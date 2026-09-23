@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
 import type * as monaco from "monaco-editor";
-import { useActorRef, useSelector } from "@xstate/react";
+import { useSelector } from "@xstate/react";
 import type { ActorRefFrom } from "xstate";
 import { editorMachine } from "./machine/editorMachine";
 import type {
   CaptionTrack,
   UseNextEditorConfig,
-  UseNextEditorReturn,
-  EditorState,
-  EditorFrame,
   EditorSelection,
   Recording,
   RecordingStreamDelta,
@@ -22,7 +19,6 @@ import type {
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";
-import { findFrameIndexAtTime, reconstructFrameAtIndex } from "./utils/frameDelta";
 import { isAtPlaybackEnd } from "./machine/editorMachineHelpers";
 import type { SnapshotFrom } from "xstate";
 
@@ -357,100 +353,4 @@ export const useNextEditorInteractionEffects = (
       };
     }
   }, [isPlaying, actorRef]);
-};
-
-export const useNextEditorActorBindings = (
-  actorRef: EditorActorRef,
-  config: UseNextEditorConfig,
-): UseNextEditorReturn => {
-  const actions = useNextEditorActorActions(actorRef);
-  useNextEditorInteractionEffects(actorRef, config);
-
-  // Subscribe to specific state slices using selectors
-  // Recording state
-  const isRecording = useSelector(actorRef, selectIsRecording);
-  const isRecordingAudio = useSelector(actorRef, selectIsRecordingAudio);
-  const recordingStartTime = useSelector(actorRef, selectRecordingStartTime);
-
-  // Playback state
-  const isPlaying = useSelector(actorRef, selectIsPlaying);
-  const isPaused = useSelector(actorRef, selectIsPaused);
-  const hasEnded = useSelector(actorRef, selectHasEnded);
-
-  // Timeline state (high-frequency)
-  const playbackSpeed = useSelector(actorRef, selectPlaybackSpeed);
-  const volume = useSelector(actorRef, selectVolume);
-  const duration = useSelector(actorRef, selectDuration);
-
-  // Recording arrays grow in place for streamed deltas, while the top-level
-  // recording reference changes to notify consumers without copying prior records.
-  const currentRecording = useSelector(actorRef, selectRecording);
-  const editor = useSelector(actorRef, selectEditor);
-  const timelineActor = useSelector(actorRef, selectTimelineActor);
-
-  // Helper functions
-  const getEditorState = (): EditorState | null => {
-    if (!editor) return null;
-    return {
-      content: editor.getValue(),
-      selection: editor.getSelection()!,
-      position: editor.getPosition()!,
-      viewState: editor.saveViewState(),
-    };
-  };
-
-  const getFrame = (timestamp?: number): EditorFrame | null => {
-    if (!currentRecording) return null;
-
-    if (timestamp === undefined) {
-      // Get current frame from actor context directly to avoid hook-level re-renders
-      return actorRef.getSnapshot().context.currentFrame;
-    }
-
-    // Find closest frame at or before timestamp
-    const { frames } = currentRecording;
-    const index = findFrameIndexAtTime(frames, timestamp);
-    return reconstructFrameAtIndex(frames, index);
-  };
-
-  return {
-    // State
-    isRecording,
-    isRecordingAudio,
-    recordingStartTime,
-
-    isPlaying,
-    isPaused,
-    hasEnded,
-
-    timelineActor,
-    editorActor: actorRef,
-    playbackSpeed,
-    volume,
-
-    // Data
-    currentRecording,
-    actualDuration: duration / 1000, // seconds for actualDuration
-
-    // Controls + Integration (subscription-free senders)
-    ...actions,
-
-    // Helpers
-    getEditorState,
-    getFrame,
-  };
-};
-
-/**
- * Main useNextEditor hook refactored with XState v5
- * Uses useActorRef + useSelector for optimized re-renders.
- * Components using specific selectors only re-render when those values change.
- */
-export const useNextEditor = (config: UseNextEditorConfig): UseNextEditorReturn => {
-  // Initialize the actor ref (stable reference, doesn't cause re-renders)
-  const actorRef = useActorRef(editorMachine, {
-    input: config,
-  });
-
-  return useNextEditorActorBindings(actorRef, config);
 };

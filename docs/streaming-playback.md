@@ -177,7 +177,8 @@ const sink: RecordingStreamSink = {
   },
 };
 
-// const editor = useNextEditor({ editorRef, recordingStreamSink: sink });
+// NextEditorProvider forwards config.recordingStreamSink via
+// useRecordingStreamSink(actorRef, config.recordingStreamSink).
 ```
 
 The bytes a sink receives are the **same `SCR3` stream** the exporter produces, so a viewer
