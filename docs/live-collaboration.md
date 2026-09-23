@@ -242,9 +242,11 @@ attachments and never enters durable history.
 Initial and reconnect synchronization use the standard Yjs state-vector exchange over the same
 socket. The room alarm compacts its SQLite update tail into a new snapshot.
 
-Reconnect uses capped exponential backoff with jitter. Local CRDT updates may continue while
-offline and merge after reconnection. Awareness is cleared on disconnect and republished only
-after document sync succeeds.
+Reconnect uses exponential backoff with jitter (500 ms doubling, five attempts, then `failed`
+until the user retries). Local CRDT updates may continue while offline and merge after
+reconnection. Remote awareness states are kept through a disconnect and expire by their TTL, so a
+followed participant survives a reconnect; this client's own awareness is republished only after
+document sync succeeds.
 
 The server is authoritative for membership and roles. A viewer connection must not be allowed to
 publish durable document updates even if a modified client claims editor permissions.
@@ -257,28 +259,28 @@ network and room-lifecycle coordinator.
 ```mermaid
 stateDiagram-v2
     [*] --> disconnected
-    disconnected --> session : CONNECT
-
-    state session {
-        [*] --> connecting
-        connecting --> syncing : SOCKET_CONNECTED
-        connecting --> reconnecting : DISCONNECTED
-        syncing --> live : SYNCED
-        syncing --> reconnecting : DISCONNECTED
-        live --> reconnecting : DISCONNECTED
-        reconnecting --> connecting : RETRY
-    }
-
-    session --> disconnected : LEAVE
-    session --> failed : FATAL_ERROR / RETRIES_EXHAUSTED
-    failed --> session : RETRY
-    failed --> disconnected : LEAVE
+    disconnected --> connecting : CONNECT
+    connecting --> syncing : PROVIDER_OPEN
+    connecting --> reconnecting : DISCONNECTED
+    syncing --> live : SYNCED
+    syncing --> reconnecting : DISCONNECTED
+    live --> reconnecting : DISCONNECTED
+    reconnecting --> connecting : RETRY
+    connecting --> failed : FATAL_ERROR
+    syncing --> failed : FATAL_ERROR
+    live --> failed : FATAL_ERROR
+    reconnecting --> failed : FATAL_ERROR
+    failed --> connecting : RETRY
+    note right of failed : any state --> disconnected on LEAVE
 ```
 
-The machine owns connection lifecycle, room identity, effective role, host identity, retry
-metadata, and user-facing connection errors. The `session` parent invokes one callback/provider
-actor for the entire connection lifetime. That actor owns the socket and CRDT provider, survives
-transitions between the connection substates, and is automatically disposed when `session` exits.
+`CollaborationRoomProvider` owns the socket, the Yjs document and awareness, the retry timers and
+the room session (room descriptor, effective role, host), and drives the machine with events: the
+provider creates the actor, not the other way round. The machine is flat and holds only what its
+guards and the connection UI need: the session and attempt IDs, the unsent-changes flag and the
+user-facing connection error. When the provider stores a refreshed room session it sends
+`SESSION_REFRESHED` so subscribers re-read it; running out of reconnect attempts is a
+`FATAL_ERROR` like any other terminal failure.
 
 Do not send every keystroke through XState or store document content in machine context. Monaco
 bindings and file commands transact directly against the CRDT document; observers update the
@@ -287,9 +289,9 @@ updates into orchestration events.
 
 Required lifecycle behavior:
 
-- `CONNECT` creates one provider actor for the requested room.
+- One provider (and one machine actor) exists per joined room; a room change replaces both.
 - `SYNCED` enables document projection and publishes awareness.
-- Disconnect retains unsent local document changes but clears remote awareness.
+- Disconnect retains unsent local document changes; remote awareness expires by TTL.
 - Role downgrade immediately disables all local collaborative write commands.
 - `LEAVE`, unmount, and room changes destroy observers, awareness, sockets, and retry timers.
 - Fatal authentication, schema, and permission errors do not retry automatically.

@@ -473,7 +473,7 @@ to separate objects.
 
 | Failure                                  | Required behavior                                                                          |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Browser loses network                    | Keep offline Yjs edits; clear remote awareness; reconnect with backoff                     |
+| Browser loses network                    | Keep offline Yjs edits; let remote awareness expire by TTL; reconnect with backoff         |
 | Room object hibernates                   | Preserve sockets; reconstruct document and session state on wake                           |
 | Room object restarts                     | Reconstruct from SQLite snapshot and update tail; clients reconnect if needed              |
 | SQLite write fails                       | Do not acknowledge/broadcast the update; surface reconnecting or failed state              |
