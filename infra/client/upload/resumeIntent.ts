@@ -38,15 +38,25 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
+/**
+ * Settles with a readwrite transaction: resolves once it commits, rejects if it aborts.
+ * Listening for `error` is not enough: a commit that fails on its own (the disk write
+ * runs over quota) fires only `abort`, and a promise waiting for `error` would never
+ * settle. A failed request aborts its transaction too, with that request's error.
+ */
+function transactionCommitted(tx: IDBTransaction, failure: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error ?? new Error(failure));
+  });
+}
+
 export async function saveResumeIntent(intent: ResumeIntent): Promise<void> {
   const db = await openDb();
   try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      tx.objectStore(STORE_NAME).put(intent, KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? new Error("Failed to save resume intent"));
-    });
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).put(intent, KEY);
+    await transactionCommitted(tx, "Failed to save resume intent");
   } finally {
     db.close();
   }
@@ -71,12 +81,9 @@ export async function loadResumeIntent(): Promise<ResumeIntent | null> {
 export async function clearResumeIntent(): Promise<void> {
   const db = await openDb();
   try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      tx.objectStore(STORE_NAME).delete(KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? new Error("Failed to clear resume intent"));
-    });
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).delete(KEY);
+    await transactionCommitted(tx, "Failed to clear resume intent");
   } finally {
     db.close();
   }
