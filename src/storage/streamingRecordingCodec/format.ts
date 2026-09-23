@@ -26,8 +26,9 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 //
 // A single recording serializes to one self-describing stream. The same byte
 // layout is produced whether the stream is built live (segment-by-segment) or
-// exported in one shot, so a still-recording prefix is replayable and a
-// finalized file is seekable via its footer index.
+// exported in one shot, so a still-recording prefix is replayable. A finalized
+// file ends in a footer indexing every segment; readers use it to confirm the
+// stream is complete, and nothing seeks with the index yet.
 //
 // Three independent "version" numbers exist; do not conflate them:
 //   * the magic "SCR3"          — container family marker (STREAM_MAGIC_BYTES).

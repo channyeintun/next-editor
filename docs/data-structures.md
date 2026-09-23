@@ -267,18 +267,22 @@ type RecordingCameraSource = "camera";
     On load, `cameraFile` resolves to a `cameraUrl` (hosted URL or imported object URL) and plays
     through a native `<video>` so the browser range-streams it. A missing video is non-fatal and
     silent: the recording plays without the camera overlay.
-- `tracks`, `clusters`, and `mediaFragments` describe the stream-oriented container layout for
-  **audio** (and editor/event tracks): time-clustered segments, per-track metadata, and
-  timeline-aligned media coverage. Camera is not part of this stream layout.
+- `tracks` and `clusters` describe the recording's timeline: per-track metadata (editor and
+  event tracks, plus audio and camera references) and the keyframe-led clusters that SCR3
+  segments are grouped by. Both are written into the SCR3 metadata. `mediaFragments` is built at
+  capture time from the session's audio fragments but is not written into SCR3, so a decoded
+  recording never has it.
 - During active capture, the machine's `RecordingSession` tracks `audioFragments`
-  (`RecordingSessionMediaFragment[]`, each with `trackId`/`startTimeMs`/`endTimeMs`/`blob`/`mimeType`)
-  so the live SCR3 stream and the finalized recording are built from the same timeline-aware audio
-  model. Camera is captured as one finalized blob when the camera recorder stops (no per-chunk
-  streaming, so camera is not crash-resilient mid-recording).
+  (`RecordingSessionMediaFragment[]`, each with `trackId`/`startTimeMs`/`endTimeMs`/`blob`/`mimeType`):
+  the microphone's timeslices, kept for a live recording sink, though the SCR3 stream never
+  carries audio bytes. The take's audio is the recorder's finalized blob, stored and exported as
+  a sibling file. Camera is captured as one finalized blob when the camera recorder stops (no
+  per-chunk streaming, so camera is not crash-resilient mid-recording).
 
 ### AudioPlaceholder
 
-Used for serialization of audio blobs:
+A shape the type of `Recording.audioBlob` still admits. Nothing in the app creates or reads one;
+the SCR3 codec never did, since audio is a sibling file:
 
 ```typescript
 interface AudioPlaceholder {
@@ -290,7 +294,8 @@ interface AudioPlaceholder {
 
 ### CameraPlaceholder
 
-Used by storage layers that need to describe camera bytes without eagerly holding a Blob:
+A shape the type of `Recording.cameraBlob` still admits. Nothing in the app creates or reads one;
+the SCR3 codec never did, since camera is a sibling file:
 
 ```typescript
 interface CameraPlaceholder {

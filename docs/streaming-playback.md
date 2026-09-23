@@ -34,8 +34,9 @@ Both are exposed from the actions hook (`useNextEditorActions`) and used by the 
 ## Why it works
 
 1. **Append-only, prefix-decodable container.** `SCR3` is `header → segments… → footer`. Each
-   segment is time-clustered and track-aware: frame/event batches stay deflate-compressed while
-   audio and camera fragments are stored as raw media bytes. The stateful reader
+   segment is time-clustered and track-aware: frame/event batches are deflate-compressed, and
+   workspace-asset segments carry raw file bytes. Audio and camera are never in the stream; they
+   are sibling files. The stateful reader
    [`createStreamingRecordingReader`](../src/storage/streamingRecordingCodec/decode.ts) tolerates a
    **missing footer** (still-writing stream) and a **truncated trailing segment** (mid-download),
    decoding only newly-arrived complete segments on each `push()` call.
@@ -163,7 +164,8 @@ A producer records and forwards the live `SCR3` byte stream; viewers tail it and
 
 Pass a `recordingStreamSink` to the editor config. The provider's
 [`useRecordingStreamSink`](../src/hooks/useRecordingStreamSink.ts) forwards the live `SCR3`
-stream (frames, events, **and audio for both mic and selected-file modes**) as it is captured:
+stream (frames, events and workspace assets; audio and camera stay sibling files) as it is
+captured:
 
 ```ts
 import type { RecordingStreamSink } from "../src/core/src";
@@ -224,18 +226,12 @@ effective duration in your UI.
 
 - **Visual playback still streams immediately.** Frames, cursor, rrweb preview snapshots, slides,
   and workspace/runtime state replay from any decodable prefix.
-- **Audio now rides the same clustered stream model.** Later prefixes extend the recording's
-  audio coverage and rebuild a larger contiguous blob snapshot. The `audioPlaybackActor` keeps
-  using `HTMLAudioElement`, but in stream mode it can reattach that growing blob, seek back to the
-  current editor time, and continue playback without resetting the lesson timeline.
-- **Microphone audio is still browser-decoded media.** For WebM/Opus specifically, a prefix is
-  only useful once the bytes up to the current playback point are decodable as one contiguous
-  region, so stream mode improves availability but does not magically make arbitrary partial WebM
-  seeks free.
-- **Selected-file audio** remains a valid track source and follows the same playback surface.
-- **Camera follows the same progressive pattern through `CameraOverlay`.** Prefix decode rebuilds a
-  larger `cameraBlob`, and the overlay swaps to the new object URL while still deriving video time
-  from `timeline.currentTime - cameraStartOffsetMs`.
+- **Audio and camera never ride the SCR3 stream.** The metadata carries only their references
+  (`audioFile`/`audioUrl`, `cameraFile`/`cameraUrl`) and start offsets, so no prefix decode
+  produces media bytes. The URL loader resolves them out of band once the `.ne` has loaded: the
+  sibling audio is downloaded and attached as `audioBlob` through `extendRecording`, and the
+  camera plays from `cameraUrl` in a native `<video>` that range-streams it, with `CameraOverlay`
+  deriving video time from `timeline.currentTime - cameraStartOffsetMs`.
 - **Captions load out of band.** Inline `captions` arrive with the SCR3 metadata prefix; sibling
   `captionFiles` are fetched separately (relative to the `.ne` URL) and merged via `addCaptionTrack`
   once available, so a long download shows captions as soon as the small sidecar resolves rather than
@@ -261,8 +257,10 @@ effective duration in your UI.
 - **No re-seek needed.** `extendRecording` preserves position; you do **not** reload + `seekTo`.
 - **Keyframe cadence = seek granularity.** Keyframes every ≤120 frames bound how early the first
   frame is playable and how cheaply a prefix reconstructs.
-- **Final pass.** When the download completes, the last decode includes the footer index and
-  authoritative final metadata; sibling audio/camera resolution remains out of band.
+- **Final pass.** When the download completes, the last decode reaches the footer, which marks
+  the stream finalized (its segment index is read only to tell the stream's own footer from a
+  `.ne` file carried inside an asset segment), and applies the authoritative final metadata;
+  sibling audio/camera resolution remains out of band.
 
 ---
 
