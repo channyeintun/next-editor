@@ -21,8 +21,9 @@ export function computeRrwebOffsetMs(currentTime: number, firstEventTime: number
 
 // Drives an rrweb `Replayer` from the recording timeline. The host timeline is
 // the single clock: every tick/seek calls `seekToRecordingTime`, which casts all
-// events up to that offset deterministically via `Replayer.pause`. The Replayer's
-// own timer never autoplays. DOM, scroll, input and pointer all live in one rrweb
+// events up to that offset deterministically via `Replayer.pause` (a play that is
+// paused at once, which clears rrweb's timer), so the Replayer never advances on
+// its own. DOM, scroll, input and pointer all live in one rrweb
 // event stream, so they stay coupled (unlike the legacy two-applier model).
 export class RrwebPreviewReplayer {
   private replayer: Replayer;
@@ -44,10 +45,10 @@ export class RrwebPreviewReplayer {
     this.events = events;
     this.firstEventTime = events[0]?.timestamp ?? 0;
     this.ReplayerConstructor = ReplayerConstructor;
+    // No seek here: pause(0) casts nothing, and rrweb paints the first
+    // FullSnapshot itself on a 1ms timer after construction, which is what keeps
+    // the panel from being blank before the first tick.
     this.replayer = this.createReplayer();
-    // Render the initial snapshot immediately so the panel is never blank before
-    // the first tick arrives.
-    this.seekToRecordingTime(this.firstEventTime);
   }
 
   private createReplayer(): Replayer {
@@ -57,8 +58,6 @@ export class RrwebPreviewReplayer {
       mouseTail: false,
       showWarning: false,
       showDebug: false,
-      // We seek explicitly; the player must never run its own timer.
-      speed: 1,
       // Real DOM replay into the mounted iframe (no virtual DOM diffing layer).
       useVirtualDom: false,
       insertStyleRules: ["::selection { background-color: #b4d5fe; }"],
