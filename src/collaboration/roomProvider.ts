@@ -155,6 +155,7 @@ export class CollaborationRoomProvider {
   /** Set by `fatal()`, cleared only by an explicit `retryNow()`. */
   private isFatal = false;
   private hasDroppedLocalChanges = false;
+  private hasCompletedSync = false;
   private isPublishing = false;
   private flushPromise: Promise<void> | null = null;
   private bufferedBinaryUpdates: Array<
@@ -222,6 +223,14 @@ export class CollaborationRoomProvider {
 
   get hasPendingUpdates(): boolean {
     return this.pendingUpdates.length > 0 || this.outbox.length > 0 || this.isPublishing;
+  }
+
+  /**
+   * True once a sync has completed. From then on the document holds the room's
+   * state, so local edits made while reconnecting are real edits to queue.
+   */
+  get hasSynced(): boolean {
+    return this.hasCompletedSync;
   }
 
   /**
@@ -801,6 +810,7 @@ export class CollaborationRoomProvider {
       this.bufferedBinaryUpdates = [];
       for (const frame of buffered) this.applyBinaryServerUpdate(frame);
       if (!this.roomSession) throw new Error("Collaboration room session is missing");
+      this.hasCompletedSync = true;
       this.actor.send({
         type: "SYNCED",
         sessionId: this.sessionId,

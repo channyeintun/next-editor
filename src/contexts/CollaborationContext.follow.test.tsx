@@ -28,6 +28,7 @@ const controls = vi.hoisted(() => ({
     setConnectionState: (state: string) => void;
     hasDivergedDocument: boolean;
     hasPendingUpdates: boolean;
+    hasSynced: boolean;
     retries: number;
     stopped: boolean;
   }>,
@@ -116,6 +117,7 @@ vi.mock("../collaboration/roomProvider", async () => {
     }
 
     hasDivergedDocument = false;
+    hasSynced = true;
     retries = 0;
     stopped = false;
 
@@ -770,5 +772,45 @@ describe("CollaborationContext asset hydration", () => {
     }
 
     expect(workspaceActions.notifyAssetAvailable).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CollaborationContext write access while reconnecting", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  it("keeps a synced room writable through every reconnect state", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    expect(collaboration!.canWrite).toBe(true);
+
+    // Offline edits are queued in every one of these states; turning the editor
+    // read-only for each retry's handshake only rejects keystrokes.
+    for (const state of ["reconnecting", "connecting", "syncing"]) {
+      act(() => provider.setConnectionState(state));
+      expect(collaboration!.canWrite).toBe(true);
+    }
+    act(() => provider.setConnectionState("failed"));
+    expect(collaboration!.canWrite).toBe(false);
+
+    // Before the first sync the workspace still shows the pre-room project.
+    provider.hasSynced = false;
+    act(() => provider.setConnectionState("reconnecting"));
+    expect(collaboration!.canWrite).toBe(false);
   });
 });

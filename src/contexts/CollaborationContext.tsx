@@ -966,11 +966,19 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     : "disconnected";
   const session = provider?.session ?? null;
   const role = session?.membership.role ?? machineSnapshot?.context.role ?? null;
+  // Once synced, the provider queues local edits in every reconnect state
+  // (reconnecting → connecting → syncing); before the first sync the workspace
+  // still shows the pre-room project.
+  const isConnectionWritable =
+    connectionState === "live" ||
+    (Boolean(provider?.hasSynced) &&
+      connectionState !== "failed" &&
+      connectionState !== "disconnected");
   const canWrite = Boolean(
     provider &&
     role &&
     canWriteCollaborationDocument(role) &&
-    (connectionState === "live" || connectionState === "reconnecting") &&
+    isConnectionWritable &&
     !usesPlaybackModel,
   );
   const canWriteRef = useRef(canWrite);

@@ -607,8 +607,10 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
       webSocketFactory: factory,
     });
     await provider.start();
+    expect(provider.hasSynced).toBe(false);
     await openAndSync(provider, sockets[0]!, server);
     sockets[0]!.close(1006, "network");
+    expect(provider.hasSynced).toBe(true);
     provider.doc.getText("source").insert(0, "offline work");
     await waitUntil(() => provider.hasPendingUpdates);
 
