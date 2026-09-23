@@ -63,6 +63,14 @@ export interface WebContainerRuntimeActions {
     environmentVariables: EnvironmentVariables;
     runnerConfig: RunnerConfig;
   }) => void;
+  /**
+   * Turns on or off the reverse sync, which pulls files a container process
+   * writes back into the workspace. CollaborationProvider turns it off while a
+   * live room owns the workspace: the room is the project's source of truth and
+   * the container only mirrors it (docs/live-collaboration.md), so container
+   * output stays in this browser's container.
+   */
+  setReverseSyncEnabled: (enabled: boolean) => void;
 }
 
 export interface WebContainerRuntimeMetadata {

@@ -81,6 +81,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const loadedProjectIdRef = useRef<string | null>(null);
   const reverseSyncTimeoutRef = useRef<number | null>(null);
   const reverseSyncRequestRef = useRef(0);
+  const reverseSyncEnabledRef = useRef(true);
   const lessonTypeRef = useRef(lessonType);
   const runnerConfigRef = useRef<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
   const [environmentVariables, setEnvironmentVariables] = useState<EnvironmentVariables>(
@@ -104,7 +105,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   });
 
   const requestReverseSync = (instance: WebContainer, generation: number) => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || !reverseSyncEnabledRef.current) {
       return;
     }
 
@@ -247,16 +248,28 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   const isSupported = isWebContainerRuntimeSupported();
 
-  const resetRuntime = () => {
-    hasRunInitCommandRef.current = false;
-    prepareRuntimePromiseRef.current = null;
+  /** Clears a queued reverse sync; the new request ID makes one in flight return unapplied. */
+  const cancelPendingReverseSync = () => {
     reverseSyncRequestRef.current += 1;
     if (typeof window !== "undefined" && reverseSyncTimeoutRef.current !== null) {
       window.clearTimeout(reverseSyncTimeoutRef.current);
       reverseSyncTimeoutRef.current = null;
     }
+  };
+
+  const resetRuntime = () => {
+    hasRunInitCommandRef.current = false;
+    prepareRuntimePromiseRef.current = null;
+    cancelPendingReverseSync();
     resetWorkspaceSync();
     resetRuntimeSession();
+  };
+
+  const setReverseSyncEnabled = (enabled: boolean) => {
+    reverseSyncEnabledRef.current = enabled;
+    if (!enabled) {
+      cancelPendingReverseSync();
+    }
   };
 
   const prepareRuntime = (): Promise<WebContainer | null> => {
@@ -657,6 +670,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     updateEnvironmentVariables,
     updateRunnerConfig,
     configureRuntime,
+    setReverseSyncEnabled,
   };
 
   const metadataValue: WebContainerRuntimeMetadata = {

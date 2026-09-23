@@ -77,8 +77,9 @@ vi.mock("../hooks/useWorkspace", () => ({
   useWorkspaceActions: () => baseActions,
   useWorkspaceActiveFilePath: () => project.entryFilePath,
 }));
+let usesPlaybackModel = false;
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({ usesPlaybackModel: false, isRecording: false }),
+  useNextEditorMetadata: () => ({ usesPlaybackModel, isRecording: false }),
   useNextEditorActions: () => ({
     handleSlideEvent: mocks.handleSlideEvent,
     handleWhiteboardEvent: mocks.handleWhiteboardEvent,
@@ -101,6 +102,10 @@ import {
 import { SlidesStoreProvider, useSlidesStore } from "./SlidesStoreContext";
 import { WhiteboardStoreProvider } from "./WhiteboardStoreContext";
 import { WhiteboardProvider, useWhiteboardContext } from "./WhiteboardContext";
+import {
+  WebContainerRuntimeActionsContext,
+  type WebContainerRuntimeActions,
+} from "./WebContainerRuntimeContext";
 import type { SlidesStoreInstance } from "../stores/slidesStore";
 
 let testSlidesStore: SlidesStoreInstance | null = null;
@@ -146,6 +151,7 @@ describe("CollaborationProvider", () => {
     resetWorkspaceAssetStoreForTests();
     localStorage.clear();
     currentProject = project;
+    usesPlaybackModel = false;
     testSlidesStore = null;
     testWhiteboardController = null;
     mocks.closeRoom.mockResolvedValue(undefined);
@@ -268,6 +274,62 @@ describe("CollaborationProvider", () => {
     expect(collaboration!.error).toBeNull();
     expect(collaboration!.doc?.getMap("project").get("texts")).toBeUndefined();
     view.unmount();
+  });
+
+  it("switches the runtime reverse sync off while the room owns the workspace", async () => {
+    mocks.getRoom.mockImplementation(() => new Promise(() => {}));
+    const setReverseSyncEnabled = vi.fn<WebContainerRuntimeActions["setReverseSyncEnabled"]>();
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+
+    const view = render(
+      <MemoryRouter initialEntries={[`/code?room=${roomSession.room.id}`]}>
+        <WebContainerRuntimeActionsContext
+          value={{ setReverseSyncEnabled } as unknown as WebContainerRuntimeActions}
+        >
+          <TestProviders>
+            <Probe />
+          </TestProviders>
+        </WebContainerRuntimeActionsContext>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(collaboration!.provider).not.toBeNull());
+    expect(setReverseSyncEnabled).toHaveBeenLastCalledWith(false);
+    view.unmount();
+    expect(setReverseSyncEnabled).toHaveBeenLastCalledWith(true);
+  });
+
+  // During playback the recording drives the store, and the override lets bulk
+  // replacement through, so the room does not own the workspace.
+  it("leaves the runtime reverse sync on while a room plays back a recording", async () => {
+    usesPlaybackModel = true;
+    mocks.getRoom.mockImplementation(() => new Promise(() => {}));
+    const setReverseSyncEnabled = vi.fn<WebContainerRuntimeActions["setReverseSyncEnabled"]>();
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+
+    const view = render(
+      <MemoryRouter initialEntries={[`/code?room=${roomSession.room.id}`]}>
+        <WebContainerRuntimeActionsContext
+          value={{ setReverseSyncEnabled } as unknown as WebContainerRuntimeActions}
+        >
+          <TestProviders>
+            <Probe />
+          </TestProviders>
+        </WebContainerRuntimeActionsContext>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(collaboration!.provider).not.toBeNull());
+    view.unmount();
+    expect(setReverseSyncEnabled).not.toHaveBeenCalledWith(false);
   });
 
   it("includes uploaded binary descriptors in the initial room snapshot", async () => {

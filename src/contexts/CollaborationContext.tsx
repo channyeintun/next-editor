@@ -72,6 +72,7 @@ import {
   reprojectCollaborationWorkspace,
 } from "../collaboration/workspaceAdapter";
 import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
+import { WebContainerRuntimeActionsContext } from "./WebContainerRuntimeContext";
 import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useWorkspaceActions, useWorkspaceActiveFilePath } from "../hooks/useWorkspace";
@@ -269,6 +270,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const posthogRef = useRef(posthog);
   posthogRef.current = posthog;
   const baseActions = useWorkspaceActions();
+  // Null where no runtime is mounted, as in tests of this provider alone.
+  const runtimeActions = useContext(WebContainerRuntimeActionsContext);
   const { store: slidesStore } = useSlidesStore();
   const { store: whiteboardStore } = useWhiteboardStore();
   const activeFilePath = useWorkspaceActiveFilePath();
@@ -848,6 +851,20 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     };
   }, [provider]);
 
+  // The runtime's reverse sync is off while the room owns the workspace: the
+  // room is the source of truth and the container only mirrors it, so files a
+  // container process writes stay in this browser's container. Imported into
+  // the projected store they would reach the host's recording, could not be
+  // edited, and the next projection would delete them from the container.
+  // Declared before the reprojection below so the guard is on before the
+  // room's first projection.
+  const liveRoomOwnsWorkspace = provider !== null && !usesPlaybackModel;
+  useLayoutEffect(() => {
+    if (!runtimeActions || !liveRoomOwnsWorkspace) return;
+    runtimeActions.setReverseSyncEnabled(false);
+    return () => runtimeActions.setReverseSyncEnabled(true);
+  }, [liveRoomOwnsWorkspace, runtimeActions]);
+
   useLayoutEffect(() => {
     if (usesPlaybackModel || !provider) return;
     try {
@@ -1033,6 +1050,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       updateLessonType: (lessonType) => run(() => controller.updateLessonType(lessonType)),
       loadProject: () =>
         reportWriteError(new Error("Leave the room before loading another project.")),
+      // WebContainerRuntimeProvider sits above this provider and uses the base
+      // actions, so its reverse sync is switched off by the layout effect above
+      // rather than refused here.
       reconcileExternalProject: (project) => {
         if (playbackRef.current) baseActions.reconcileExternalProject(project);
         else reportWriteError(new Error("Bulk project replacement is disabled in a live room."));

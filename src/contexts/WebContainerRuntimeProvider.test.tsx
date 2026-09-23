@@ -174,6 +174,43 @@ function renderProviders(allowAmbientStart = true) {
   };
 }
 
+/**
+ * Starts the runtime on a container that holds the workspace project and has an
+ * fs.watch, then drains the post-init reverse sync. `fireWatch` reports a file a
+ * container process wrote.
+ */
+async function startWatchedRuntime() {
+  const fakeFs = createFakeFs({});
+  const { instance } = createFakeInstance(fakeFs);
+  type WatchListener = (event: "rename" | "change", filename: string | Uint8Array) => void;
+  const capturedWatch: { listener: WatchListener | null } = { listener: null };
+  Object.assign(instance.fs, {
+    watch: vi.fn<
+      (path: string, options: unknown, listener: WatchListener) => { close: () => void }
+    >((_path, _options, listener) => {
+      capturedWatch.listener = listener;
+      return { close: vi.fn<() => void>() };
+    }),
+  });
+  const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+  vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+
+  const { runtime, workspace } = renderProviders();
+  // The fake mount writes nothing, so seed the container with the mounted project.
+  for (const [path, file] of Object.entries(workspace.getProject().files)) {
+    if (isWorkspaceTextFile(file)) fakeFs.addFile(path, file.content);
+  }
+
+  await act(async () => {
+    await runtime.startRuntime();
+    await vi.advanceTimersByTimeAsync(200);
+  });
+  const fireWatch = capturedWatch.listener;
+  if (!fireWatch) throw new Error("Expected the provider to register an fs.watch listener");
+
+  return { fakeFs, instance, runtime, workspace, fireWatch };
+}
+
 describe("WebContainerRuntimeProvider reverse sync", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -499,6 +536,89 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
     expect(await instance.fs.readFile("gen.ts", "utf-8")).toBe("v2");
     const genFile = workspace.getProject().files["gen.ts"];
     expect(isWorkspaceTextFile(genFile) ? genFile.content : null).toBe("v2");
+  });
+
+  // A live room turns the reverse sync off: the room's tree is the workspace and
+  // the container only mirrors it. Importing a build output there made the next
+  // room projection delete it from the container, since the forward sync removes
+  // whatever the last synced project holds and the next one does not.
+  it("keeps container output in the container while reverse sync is off", async () => {
+    const { fakeFs, instance, runtime, workspace, fireWatch } = await startWatchedRuntime();
+    const roomProject = workspace.getProject();
+
+    runtime.setReverseSyncEnabled(false);
+    fakeFs.addFile("dist/out.js", "built");
+    fireWatch("rename", "dist/out.js");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(workspace.getProject().files["dist/out.js"]).toBeUndefined();
+
+    // A collaborator creates b.js, and the room projects its tree into the store.
+    act(() => {
+      workspace.reconcileExternalProject({
+        ...roomProject,
+        files: { ...roomProject.files, "b.js": createWorkspaceFile("b.js", "b") },
+      });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    const removedPaths = vi.mocked(instance.fs.rm).mock.calls.map(([path]) => path);
+    expect(removedPaths).not.toContain("dist/out.js");
+    expect(removedPaths).not.toContain("dist");
+    expect(await instance.fs.readFile("dist/out.js", "utf-8")).toBe("built");
+    expect(vi.mocked(instance.fs.writeFile).mock.calls.map(([path]) => path)).toContain("b.js");
+  });
+
+  it("imports container writes again once reverse sync is back on", async () => {
+    const { fakeFs, runtime, workspace, fireWatch } = await startWatchedRuntime();
+
+    runtime.setReverseSyncEnabled(false);
+    fakeFs.addFile("dist/out.js", "built");
+    fireWatch("rename", "dist/out.js");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    runtime.setReverseSyncEnabled(true);
+    fireWatch("change", "dist/out.js");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(workspace.getProject().files["dist/out.js"]).toBeDefined();
+  });
+
+  it("drops a reverse read already in flight when reverse sync is turned off", async () => {
+    const { fakeFs, instance, runtime, workspace, fireWatch } = await startWatchedRuntime();
+    const readFile = vi.mocked(instance.fs.readFile);
+    const readFromFakeFs = readFile.getMockImplementation()!;
+    let releaseRead: (() => void) | null = null;
+    readFile.mockImplementation(async (path, encoding) => {
+      if (path === "dist/out.js") {
+        await new Promise<void>((resolve) => {
+          releaseRead = resolve;
+        });
+      }
+      return readFromFakeFs(path, encoding);
+    });
+
+    fakeFs.addFile("dist/out.js", "built");
+    fireWatch("rename", "dist/out.js");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    expect(releaseRead).not.toBeNull();
+
+    runtime.setReverseSyncEnabled(false);
+    await act(async () => {
+      releaseRead?.();
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(workspace.getProject().files["dist/out.js"]).toBeUndefined();
   });
 });
 

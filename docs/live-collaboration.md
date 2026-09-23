@@ -341,6 +341,11 @@ Every participant runs the project in a separate local WebContainer. For the fir
 - Reconnect suspends view application while retaining the exact target session. Target leave/TTL,
   room replacement, terminal connection failure, and playback stop following.
 - Runtime logs, terminal input, and process state are not merged.
+- The runtime's reverse sync, which outside a room imports files a container process writes (build
+  output, lockfiles, generated code) into the workspace, is off while the room owns the workspace,
+  so it never carries them into the room or the host's recording; they stay in that participant's
+  container. The known exception is the agent's bash tool, which still folds the container changes
+  its own commands make into the workspace store.
 - Runtime and preview events are not part of cross-surface following.
 - Only the effective host sees enabled recording controls. For a recorded MVP session, the owner
   remains host until recording has stopped and the local SCR3 has been finalized.
