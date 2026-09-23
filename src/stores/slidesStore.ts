@@ -86,6 +86,13 @@ export const saveSlidesToStorage = (slides: Slide[]): void => {
 export interface SlidesContext {
   slides: Slide[];
   previewState: SlidePreviewState;
+  /**
+   * The deck is not the user's own (a live room's, or a loaded recording's), so
+   * persistence must never write it to the shared `next-editor-slides` key. It
+   * lives in the context so a snapshot taken on entering a room restores it
+   * along with the deck on leaving.
+   */
+  deckBorrowed: boolean;
 }
 
 const DEFAULT_PREVIEW_STATE: SlidePreviewState = {
@@ -95,23 +102,15 @@ const DEFAULT_PREVIEW_STATE: SlidePreviewState = {
   indexv: 0,
 };
 
-/**
- * Stores whose current deck is not the user's own, so it must never be written
- * back to the shared `next-editor-slides` key: a live collaboration room, and a
- * loaded recording being replayed.
- */
-const borrowedDeckStores = new WeakSet<object>();
-
-export interface SlidesStoreSnapshot {
-  slides: Slide[];
-  previewState: SlidePreviewState;
-}
+/** The whole store state, including whether the deck was borrowed. */
+export type SlidesStoreSnapshot = SlidesContext;
 
 export function createSlidesStore() {
   return createStore({
     context: {
       slides: loadSlidesFromStorage(),
       previewState: DEFAULT_PREVIEW_STATE,
+      deckBorrowed: false,
     } as SlidesContext,
     on: {
       setSlides: (context, event: { slides: Slide[] }) =>
@@ -120,6 +119,10 @@ export function createSlidesStore() {
         event.previewState === context.previewState
           ? context
           : { ...context, previewState: event.previewState },
+      setDeckBorrowed: (context, event: { borrowed: boolean }) =>
+        event.borrowed === context.deckBorrowed
+          ? context
+          : { ...context, deckBorrowed: event.borrowed },
     },
   });
 }
@@ -134,8 +137,11 @@ export function restoreSlidesStore(
   store: SlidesStoreInstance,
   snapshot: SlidesStoreSnapshot,
 ): void {
+  // The deck goes back while the current one is still marked borrowed, so
+  // restoring the user's own deck does not write it to storage a second time.
   store.trigger.setSlides({ slides: structuredClone(snapshot.slides) });
   store.trigger.setPreviewState({ previewState: structuredClone(snapshot.previewState) });
+  store.trigger.setDeckBorrowed({ borrowed: snapshot.deckBorrowed });
 }
 
 /**
@@ -145,12 +151,7 @@ export function restoreSlidesStore(
  * deck over the viewer's own, unrecoverably, just from opening a lesson.
  */
 export function setSlidesStoreDeckBorrowed(store: SlidesStoreInstance, borrowed: boolean): void {
-  if (borrowed) borrowedDeckStores.add(store);
-  else borrowedDeckStores.delete(store);
-}
-
-export function isSlidesStoreDeckBorrowed(store: SlidesStoreInstance): boolean {
-  return borrowedDeckStores.has(store);
+  store.trigger.setDeckBorrowed({ borrowed });
 }
 
 /** Persist only when the slides array identity changes; preview state stays ephemeral. */
@@ -159,7 +160,7 @@ export function subscribeSlidesPersistence(store: SlidesStoreInstance): () => vo
   const subscription = store.subscribe((snapshot) => {
     if (snapshot.context.slides === previousSlides) return;
     previousSlides = snapshot.context.slides;
-    if (isSlidesStoreDeckBorrowed(store)) return;
+    if (snapshot.context.deckBorrowed) return;
     saveSlidesToStorage(previousSlides);
   });
   return () => subscription.unsubscribe();

@@ -66,9 +66,36 @@ describe("slides storage round-trip", () => {
     expect(loadSlidesFromStorage()).toEqual(standalone);
 
     restoreSlidesStore(store, snapshot);
-    setSlidesStoreDeckBorrowed(store, false);
     expect(store.getSnapshot().context).toEqual(snapshot);
     expect(loadSlidesFromStorage()).toEqual(standalone);
+
+    // Restoring the user's own deck makes it theirs again: edits persist.
+    const edited = [makeHtmlSlide("standalone, edited")];
+    store.trigger.setSlides({ slides: edited });
+    expect(loadSlidesFromStorage()).toEqual(edited);
+    unsubscribe();
+  });
+
+  // A room entered from an opened lesson snapshots the lesson's deck. Leaving
+  // used to mark the restored deck as the viewer's own, so their next slide
+  // edit wrote the lesson's deck over the one they had saved.
+  it("keeps a lesson's deck borrowed across a room round-trip", () => {
+    const store = createSlidesStore();
+    const unsubscribe = subscribeSlidesPersistence(store);
+    const own = [makeHtmlSlide("my own deck")];
+    store.trigger.setSlides({ slides: own });
+
+    // NextEditorProvider's applySlides for the opened lesson ...
+    setSlidesStoreDeckBorrowed(store, true);
+    store.trigger.setSlides({ slides: [makeHtmlSlide("lesson 1"), makeHtmlSlide("lesson 2")] });
+    // ... then CollaborationContext entering and leaving a room.
+    const standalone = snapshotSlidesStore(store);
+    setSlidesStoreDeckBorrowed(store, true);
+    store.trigger.setSlides({ slides: [] });
+    restoreSlidesStore(store, standalone);
+
+    store.trigger.setSlides({ slides: store.getSnapshot().context.slides.slice(1) });
+    expect(loadSlidesFromStorage()).toEqual(own);
     unsubscribe();
   });
 

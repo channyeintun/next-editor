@@ -385,6 +385,7 @@ describe("CollaborationContext follow lifecycle", () => {
         currentSlideId: "standalone",
         indexv: 2,
       },
+      deckBorrowed: false,
     };
     const standaloneWhiteboard = {
       elements: [],

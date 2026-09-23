@@ -815,7 +815,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       discardPendingWhiteboardChange(whiteboardStore);
       if (standaloneStoresRef.current === standalone) {
         restoreSlidesStore(slidesStore, standalone.slides);
-        setSlidesStoreDeckBorrowed(slidesStore, false);
         restoreWhiteboardStore(whiteboardStore, standalone.whiteboard);
         standaloneStoresRef.current = null;
       }
