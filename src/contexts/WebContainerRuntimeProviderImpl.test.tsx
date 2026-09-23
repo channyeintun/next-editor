@@ -239,10 +239,10 @@ describe("WebContainerRuntimeProviderImpl reverse sync", () => {
       await vi.advanceTimersByTimeAsync(200);
     });
 
-    // `loadProject` is redefined every `WorkspaceProvider` render (a fresh closure over the
-    // store ref each time), so a `vi.spyOn` captured before the reverse sync's own render
-    // wouldn't observe the call the provider actually makes internally. Assert on the
-    // resulting store state instead — the ground truth the fix is supposed to produce.
+    // Vitest does not run the React Compiler, so `loadProject` is a fresh closure on every
+    // `WorkspaceProvider` render here and a `vi.spyOn` captured before the reverse sync's own
+    // render wouldn't observe the call the provider actually makes. Assert on the resulting
+    // store state instead — the ground truth the fix is supposed to produce.
     const project = workspace.getProject();
     expect(project.files["pnpm-lock.yaml"]).toBeDefined();
   });

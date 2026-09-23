@@ -1,4 +1,5 @@
 import { act, render, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
   WorkspaceActions,
@@ -184,5 +185,39 @@ describe("WorkspaceProvider durable asset saves", () => {
     const persisted = JSON.parse(window.localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? "null");
     expect(persisted.assetGeneration).toBeUndefined();
     expect(persisted.project.files[entryPath].content).toBe("second");
+  });
+});
+
+describe("WorkspaceProvider initial state", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  // The saved workspace is parsed once, when the store is created; a parent
+  // re-render (auth or resume state in CodeRoute) must not parse it again.
+  it("reads the saved workspace once across parent re-renders", () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem");
+    const workspaceReads = () =>
+      getItem.mock.calls.filter(([key]) => key === WORKSPACE_STORAGE_KEY).length;
+    let rerenderParent: () => void = () => {};
+
+    function Parent() {
+      const [renders, setRenders] = useState(0);
+      rerenderParent = () => setRenders(renders + 1);
+      return (
+        <WorkspaceProvider>
+          <span>{renders}</span>
+        </WorkspaceProvider>
+      );
+    }
+
+    render(<Parent />);
+    const readsAtMount = workspaceReads();
+    act(() => rerenderParent());
+    act(() => rerenderParent());
+
+    expect(readsAtMount).toBe(1);
+    expect(workspaceReads()).toBe(1);
+    getItem.mockRestore();
   });
 });

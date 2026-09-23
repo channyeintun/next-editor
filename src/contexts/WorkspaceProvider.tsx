@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   WorkspaceActionsContext,
   type WorkspaceActions,
@@ -12,7 +12,9 @@ import {
   createWorkspaceStore,
   normalizeProject,
   toPersistedSnapshot,
+  type InitializedWorkspaceState,
   type StoredWorkspaceSnapshot,
+  type WorkspaceStoreInstance,
 } from "../stores/workspaceStore";
 import {
   migrateLegacyWorkspaceAssets,
@@ -41,22 +43,82 @@ interface WorkspaceProviderProps {
   pendingRecordingUrl?: string;
 }
 
+/**
+ * Makes one workspace generation durable: the assets first, then the
+ * localStorage metadata that references them. A failure leaves the workspace
+ * dirty and is reported through the store. Module-level so WorkspaceProvider
+ * stays compilable: the React Compiler skips a component whose try/catch holds
+ * conditional expressions.
+ */
+async function persistWorkspace(
+  workspaceStore: WorkspaceStoreInstance,
+  { activeFilePath, project, savedSnapshot }: InitializedWorkspaceState,
+): Promise<void> {
+  workspaceStore.trigger.beginSave();
+
+  try {
+    const migratedDescriptors = await migrateLegacyWorkspaceAssets(
+      project,
+      savedSnapshot.assetGeneration,
+    );
+    const storedProject: WorkspaceProject =
+      Object.keys(migratedDescriptors).length === 0
+        ? project
+        : {
+            ...project,
+            files: Object.fromEntries(
+              Object.entries(project.files).map(([path, file]): [string, WorkspaceFile] => {
+                const descriptor = migratedDescriptors[path];
+                return descriptor && isLegacyWorkspaceBinaryFile(file)
+                  ? [path, { ...file, content: descriptor, encoding: "asset" as const }]
+                  : [path, file];
+              }),
+            ),
+          };
+    if (Object.keys(migratedDescriptors).length > 0) {
+      workspaceStore.trigger.hydrateAssetDescriptors({ descriptors: migratedDescriptors });
+    }
+    await persistWorkspaceAssets(storedProject);
+
+    // Capture the exact durable project generation. Edits arriving while
+    // this save is in flight remain dirty against this snapshot.
+    const storedSnapshot = {
+      activeFilePath,
+      project: storedProject,
+    } satisfies StoredWorkspaceSnapshot;
+
+    // Publish metadata only after every referenced asset is durable.
+    window.localStorage.setItem(
+      WORKSPACE_STORAGE_KEY,
+      JSON.stringify(toPersistedSnapshot(storedSnapshot)),
+    );
+    workspaceStore.trigger.markSaved({ snapshot: cloneWorkspaceSnapshot(storedSnapshot) });
+
+    void pruneLegacyWorkspaceAssetKeys().catch((error) => {
+      console.warn("Failed to prune old workspace assets:", error);
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The workspace could not be saved";
+    workspaceStore.trigger.saveFailed({ message });
+    console.warn("Failed to save workspace snapshot:", error);
+  }
+}
+
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   children,
   pendingRecordingUrl,
 }) => {
-  const initialSnapshotRef = useRef<StoredWorkspaceSnapshot | null>(
-    createInitialWorkspaceSnapshot(pendingRecordingUrl),
+  // Created once: the initial snapshot parses the whole saved workspace.
+  const [workspaceStore] = useState(() =>
+    createWorkspaceStore(createInitialWorkspaceSnapshot(pendingRecordingUrl)),
   );
-  const workspaceStoreRef = useRef(createWorkspaceStore(initialSnapshotRef.current));
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // Convert v1 generation/path binary entries to content-addressed descriptors.
   // The bytes remain in IndexedDB and are loaded only by a concrete consumer.
   useEffect(() => {
     let cancelled = false;
-    const store = workspaceStoreRef.current;
-    const context = store.getSnapshot().context;
+    const context = workspaceStore.getSnapshot().context;
 
     if (!context.isInitialized) {
       return;
@@ -68,11 +130,11 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
           return;
         }
 
-        store.trigger.hydrateAssetDescriptors({ descriptors });
+        workspaceStore.trigger.hydrateAssetDescriptors({ descriptors });
       })
       .catch((error) => {
         if (!cancelled) {
-          workspaceStoreRef.current.trigger.saveFailed({
+          workspaceStore.trigger.saveFailed({
             message:
               error instanceof Error
                 ? error.message
@@ -85,41 +147,39 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [workspaceStore]);
 
   const setActiveFilePath = (path: string) => {
-    workspaceStoreRef.current.trigger.setActiveFilePath({ path });
+    workspaceStore.trigger.setActiveFilePath({ path });
   };
 
   const setPreviewFilePath = (path: string) => {
-    workspaceStoreRef.current.trigger.setPreviewFilePath({ path });
+    workspaceStore.trigger.setPreviewFilePath({ path });
   };
 
   const setCollapsedFolders = (paths: string[]) => {
-    workspaceStoreRef.current.trigger.setCollapsedFolders({ paths });
+    workspaceStore.trigger.setCollapsedFolders({ paths });
   };
 
   const setSidebarScrollTop = (scrollTop: number) => {
-    workspaceStoreRef.current.trigger.setSidebarScrollTop({ scrollTop });
+    workspaceStore.trigger.setSidebarScrollTop({ scrollTop });
   };
 
   const setSidebarWidth = (width: number) => {
     // Width is session-only: not written to storage, so it resets to the default
     // on reload. Recording captures resizes as offsets via handleWorkspaceEvent.
-    workspaceStoreRef.current.trigger.setSidebarWidth({ width });
+    workspaceStore.trigger.setSidebarWidth({ width });
   };
 
   const setSidebarCollapsed = (collapsed: boolean) => {
-    workspaceStoreRef.current.trigger.setSidebarCollapsed({ collapsed });
-    writeStoredFileSidebarCollapsed(
-      workspaceStoreRef.current.getSnapshot().context.sidebarCollapsed,
-    );
+    workspaceStore.trigger.setSidebarCollapsed({ collapsed });
+    writeStoredFileSidebarCollapsed(workspaceStore.getSnapshot().context.sidebarCollapsed);
   };
 
   // The same trigger with no write behind it: a lesson that opens with the
   // explorer shut must not leave that behind in the viewer's own editor.
   const startSidebarCollapsed = (collapsed: boolean) => {
-    workspaceStoreRef.current.trigger.setSidebarCollapsed({ collapsed });
+    workspaceStore.trigger.setSidebarCollapsed({ collapsed });
   };
 
   const createFile = (
@@ -127,52 +187,52 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     content: WorkspaceFileContent = "",
     encoding?: WorkspaceFileEncoding,
   ) => {
-    workspaceStoreRef.current.trigger.createFile({ path, content, encoding });
+    workspaceStore.trigger.createFile({ path, content, encoding });
   };
 
   const createFolder = (path: string) => {
-    workspaceStoreRef.current.trigger.createFolder({ path });
+    workspaceStore.trigger.createFolder({ path });
   };
 
   const hydrateAssetDescriptors: WorkspaceActions["hydrateAssetDescriptors"] = (descriptors) => {
-    workspaceStoreRef.current.trigger.hydrateAssetDescriptors({ descriptors });
+    workspaceStore.trigger.hydrateAssetDescriptors({ descriptors });
   };
 
   const notifyAssetAvailable = (assetId: string) => {
-    workspaceStoreRef.current.trigger.notifyAssetAvailable({ assetId });
+    workspaceStore.trigger.notifyAssetAvailable({ assetId });
   };
 
   const renameFile = (currentPath: string, nextPath: string) => {
-    workspaceStoreRef.current.trigger.renameFile({
+    workspaceStore.trigger.renameFile({
       currentPath,
       nextPath,
     });
   };
 
   const renameFolder = (currentPath: string, nextPath: string) => {
-    workspaceStoreRef.current.trigger.renameFolder({
+    workspaceStore.trigger.renameFolder({
       currentPath,
       nextPath,
     });
   };
 
   const deleteFile = (path: string) => {
-    workspaceStoreRef.current.trigger.deleteFile({ path });
+    workspaceStore.trigger.deleteFile({ path });
   };
 
   const deleteFolder = (path: string) => {
-    workspaceStoreRef.current.trigger.deleteFolder({ path });
+    workspaceStore.trigger.deleteFolder({ path });
   };
 
   const updateFileContent = (path: string, content: string) => {
-    workspaceStoreRef.current.trigger.updateFileContent({
+    workspaceStore.trigger.updateFileContent({
       path,
       content,
     });
   };
 
   const applyFileTextEdits = (event: TextEditEvent): string | null => {
-    const context = workspaceStoreRef.current.getSnapshot().context;
+    const context = workspaceStore.getSnapshot().context;
     if (!context.isInitialized) return null;
 
     const path = normalizeWorkspacePath(event.path);
@@ -181,20 +241,20 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       return null;
     }
 
-    workspaceStoreRef.current.trigger.applyFileTextEdits({ ...event, path });
-    const nextContext = workspaceStoreRef.current.getSnapshot().context;
+    workspaceStore.trigger.applyFileTextEdits({ ...event, path });
+    const nextContext = workspaceStore.getSnapshot().context;
     if (!nextContext.isInitialized) return null;
     const nextFile = nextContext.project.files[path];
     return nextFile && isWorkspaceTextFile(nextFile) ? nextFile.content : null;
   };
 
   const updateActiveFileContent = (content: string) => {
-    const context = workspaceStoreRef.current.getSnapshot().context;
+    const context = workspaceStore.getSnapshot().context;
     if (!context.isInitialized) {
       return;
     }
 
-    workspaceStoreRef.current.trigger.updateFileContent({
+    workspaceStore.trigger.updateFileContent({
       path: context.activeFilePath,
       content,
     });
@@ -205,67 +265,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       return Promise.resolve();
     }
 
-    const context = workspaceStoreRef.current.getSnapshot().context;
+    const context = workspaceStore.getSnapshot().context;
     if (!context.isInitialized) {
       return Promise.resolve();
     }
 
-    const { activeFilePath, project, savedSnapshot } = context;
-
-    const run = async () => {
-      workspaceStoreRef.current.trigger.beginSave();
-
-      try {
-        const migratedDescriptors = await migrateLegacyWorkspaceAssets(
-          project,
-          savedSnapshot.assetGeneration,
-        );
-        const storedProject: WorkspaceProject =
-          Object.keys(migratedDescriptors).length === 0
-            ? project
-            : {
-                ...project,
-                files: Object.fromEntries(
-                  Object.entries(project.files).map(([path, file]): [string, WorkspaceFile] => {
-                    const descriptor = migratedDescriptors[path];
-                    return descriptor && isLegacyWorkspaceBinaryFile(file)
-                      ? [path, { ...file, content: descriptor, encoding: "asset" as const }]
-                      : [path, file];
-                  }),
-                ),
-              };
-        if (Object.keys(migratedDescriptors).length > 0) {
-          workspaceStoreRef.current.trigger.hydrateAssetDescriptors({
-            descriptors: migratedDescriptors,
-          });
-        }
-        await persistWorkspaceAssets(storedProject);
-
-        // Capture the exact durable project generation. Edits arriving while
-        // this save is in flight remain dirty against this snapshot.
-        const storedSnapshot = {
-          activeFilePath,
-          project: storedProject,
-        } satisfies StoredWorkspaceSnapshot;
-
-        // Publish metadata only after every referenced asset is durable.
-        window.localStorage.setItem(
-          WORKSPACE_STORAGE_KEY,
-          JSON.stringify(toPersistedSnapshot(storedSnapshot)),
-        );
-        workspaceStoreRef.current.trigger.markSaved({
-          snapshot: cloneWorkspaceSnapshot(storedSnapshot),
-        });
-
-        void pruneLegacyWorkspaceAssetKeys().catch((error) => {
-          console.warn("Failed to prune old workspace assets:", error);
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "The workspace could not be saved";
-        workspaceStoreRef.current.trigger.saveFailed({ message });
-        console.warn("Failed to save workspace snapshot:", error);
-      }
-    };
+    const run = () => persistWorkspace(workspaceStore, context);
 
     const result = saveQueueRef.current.then(run, run);
     saveQueueRef.current = result.catch(() => undefined);
@@ -291,7 +296,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       sidebarWidth,
     });
 
-    workspaceStoreRef.current.trigger.loadProject({
+    workspaceStore.trigger.loadProject({
       project: normalizedProject,
       activeFilePath: resolvedActiveFilePath,
       collapsedFolders,
@@ -306,17 +311,17 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   };
 
   const updateLessonType = (lessonType: WorkspaceLessonType) => {
-    workspaceStoreRef.current.trigger.updateLessonType({ lessonType });
+    workspaceStore.trigger.updateLessonType({ lessonType });
   };
 
   const reconcileExternalProject = (project: WorkspaceProject) => {
-    workspaceStoreRef.current.trigger.reconcileExternalProject({
+    workspaceStore.trigger.reconcileExternalProject({
       project: normalizeProject(project),
     });
   };
 
   const getProject = () => {
-    const context = workspaceStoreRef.current.getSnapshot().context;
+    const context = workspaceStore.getSnapshot().context;
     return context.isInitialized
       ? context.project
       : {
@@ -330,32 +335,32 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   };
 
   const getWorkspaceRevision = () => {
-    return workspaceStoreRef.current.getSnapshot().context.syncVersion;
+    return workspaceStore.getSnapshot().context.syncVersion;
   };
 
   const getActiveFilePath = () => {
-    const context = workspaceStoreRef.current.getSnapshot().context;
+    const context = workspaceStore.getSnapshot().context;
     return context.isInitialized ? context.activeFilePath : "";
   };
 
   const getCollapsedFolders = () => {
-    return workspaceStoreRef.current.getSnapshot().context.collapsedFolders;
+    return workspaceStore.getSnapshot().context.collapsedFolders;
   };
 
   const getSidebarScrollTop = () => {
-    return workspaceStoreRef.current.getSnapshot().context.sidebarScrollTop;
+    return workspaceStore.getSnapshot().context.sidebarScrollTop;
   };
 
   const getSidebarWidth = () => {
-    return workspaceStoreRef.current.getSnapshot().context.sidebarWidth;
+    return workspaceStore.getSnapshot().context.sidebarWidth;
   };
 
   const getSidebarCollapsed = () => {
-    return workspaceStoreRef.current.getSnapshot().context.sidebarCollapsed;
+    return workspaceStore.getSnapshot().context.sidebarCollapsed;
   };
 
   const getFile = (path: string) => {
-    const context = workspaceStoreRef.current.getSnapshot().context;
+    const context = workspaceStore.getSnapshot().context;
     if (!context.isInitialized) {
       return null;
     }
@@ -363,7 +368,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   };
 
   const listFiles = () => {
-    const context = workspaceStoreRef.current.getSnapshot().context;
+    const context = workspaceStore.getSnapshot().context;
     return context.isInitialized
       ? Object.values(context.project.files).sort((left, right) =>
           left.path.localeCompare(right.path),
@@ -374,9 +379,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   const subscribeWorkspaceSync = (
     listener: (mutation: WorkspaceSyncMutation) => void,
   ): (() => void) => {
-    const store = workspaceStoreRef.current;
-    let observedRevision = store.getSnapshot().context.syncVersion;
-    const subscription = store.subscribe((snapshot) => {
+    let observedRevision = workspaceStore.getSnapshot().context.syncVersion;
+    const subscription = workspaceStore.subscribe((snapshot) => {
       const context = snapshot.context;
       if (!context.isInitialized || context.syncVersion === observedRevision) return;
       observedRevision = context.syncVersion;
@@ -432,7 +436,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
 
   return (
     <WorkspaceActionsContext value={actionsValue}>
-      <WorkspaceStoreContext value={workspaceStoreRef.current}>{children}</WorkspaceStoreContext>
+      <WorkspaceStoreContext value={workspaceStore}>{children}</WorkspaceStoreContext>
     </WorkspaceActionsContext>
   );
 };
