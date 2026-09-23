@@ -119,13 +119,26 @@ export class IndexedDBRecordingStore {
         const oldVersion = (event as IDBVersionChangeEvent).oldVersion;
         const discardUnsupportedRecordings = oldVersion > 0 && oldVersion < 5;
 
+        if (upgradeTransaction && discardUnsupportedRecordings) {
+          // Recordings older than v5 are not retained across an upgrade. Clear every
+          // store they could have rows in (camera since v3, audio since v4): a blob
+          // left behind has no metadata left to find it by, so nothing could delete it.
+          for (const storeName of [
+            RECORDING_METADATA_STORE,
+            RECORDING_SEGMENTS_STORE,
+            RECORDING_CAMERA_STORE,
+            RECORDING_AUDIO_STORE,
+          ]) {
+            if (database.objectStoreNames.contains(storeName)) {
+              upgradeTransaction.objectStore(storeName).clear();
+            }
+          }
+        }
+
         if (!database.objectStoreNames.contains(RECORDING_METADATA_STORE)) {
           database.createObjectStore(RECORDING_METADATA_STORE, {
             keyPath: "id",
           });
-        } else if (upgradeTransaction && discardUnsupportedRecordings) {
-          // Old recordings are not retained across an upgrade; discard the dangling metadata.
-          upgradeTransaction.objectStore(RECORDING_METADATA_STORE).clear();
         }
 
         // Drop the pre-2 single-blob payload store; the segment store is the only payload.
@@ -137,9 +150,6 @@ export class IndexedDBRecordingStore {
           database.createObjectStore(RECORDING_SEGMENTS_STORE, {
             keyPath: ["recordingId", "seq"],
           });
-        } else if (upgradeTransaction && discardUnsupportedRecordings) {
-          // Stream segments of non-retained old recordings are dropped along with their metadata.
-          upgradeTransaction.objectStore(RECORDING_SEGMENTS_STORE).clear();
         }
 
         // v3: camera video moved out of the SCR3 stream into its own store.

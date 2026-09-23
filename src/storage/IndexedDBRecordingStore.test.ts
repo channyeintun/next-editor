@@ -200,6 +200,36 @@ describe("IndexedDBRecordingStore", () => {
     expect(opfs.deleteRecordingOpfs).toHaveBeenCalledWith("take-1");
   });
 
+  it("drops every row of a pre-v5 database, camera and audio included", async () => {
+    fake.seed(DATABASE, 4, {
+      "recording-metadata": { keyPath: "id", records: [{ id: "v4-take", name: "Old" }] },
+      "recording-segments": {
+        keyPath: ["recordingId", "seq"],
+        records: [{ recordingId: "v4-take", seq: 0, bytes: new Uint8Array([1]).buffer }],
+      },
+      "recording-camera": {
+        keyPath: "recordingId",
+        records: [{ recordingId: "v4-take", blob: new Blob(["old camera"]) }],
+      },
+      "recording-audio": {
+        keyPath: "recordingId",
+        records: [{ recordingId: "v4-take", blob: new Blob(["old audio"]) }],
+      },
+    });
+    const store = new IndexedDBRecordingStore();
+
+    expect(await store.getEntry("v4-take")).toBeNull();
+
+    for (const storeName of [
+      "recording-metadata",
+      "recording-segments",
+      "recording-camera",
+      "recording-audio",
+    ]) {
+      expect(fake.read(DATABASE, storeName)).toEqual([]);
+    }
+  });
+
   it("keeps recordings written by a v6 build, reading their segments in order", async () => {
     fake.seed(DATABASE, 6, {
       "recording-metadata": {
