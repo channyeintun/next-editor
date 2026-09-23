@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
 import {
   decodeCollaborationAwarenessProtocolUpdate,
@@ -6,6 +7,7 @@ import {
   encodeCollaborationAwarenessProtocolUpdate,
   encodeCollaborationAwarenessUpdate,
   encodeCollaborationClientUpdate,
+  encodeCollaborationSyncStep1,
   type CollaborationBinaryFrame,
 } from "../../../src/collaboration/binaryProtocol";
 import {
@@ -339,6 +341,36 @@ describe("CollaborationRoomDurableObject document updates", () => {
 
     expect(member.closeCode).toBeNull();
     expect(member.messages()).toEqual([]);
+  });
+});
+
+describe("CollaborationRoomDurableObject sync requests", () => {
+  it("answers a state vector with the missing document state", async () => {
+    const { room, connect } = await createRoom();
+    const member = connect(MEMBER_ID, "viewer");
+    const empty = new Y.Doc();
+
+    await room.webSocketMessage(
+      member as never,
+      toArrayBuffer(encodeCollaborationSyncStep1(empty)),
+    );
+
+    const [reply] = member.frames();
+    expect(reply).toMatchObject({ kind: "sync", messageType: syncProtocol.messageYjsSyncStep2 });
+    Y.applyUpdate(empty, (reply as { payload: Uint8Array }).payload);
+    expect(empty.getText("scratch").toString()).toBe("seed");
+  });
+
+  it("rejects a state vector that does not decode", async () => {
+    const { room, connect } = await createRoom();
+    const member = connect(MEMBER_ID, "viewer");
+    // Protocol v3, sync frame, step 1, a one-byte payload claiming five clients.
+    const truncated = new Uint8Array([3, 0, syncProtocol.messageYjsSyncStep1, 1, 5]);
+
+    await room.webSocketMessage(member as never, toArrayBuffer(truncated));
+
+    expect(errors(member)).toEqual([expect.objectContaining({ code: "invalid-message" })]);
+    expect(member.closeCode).toBe(1008);
   });
 });
 

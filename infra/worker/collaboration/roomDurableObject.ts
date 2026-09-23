@@ -427,7 +427,16 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       }
       const refreshed = await this.refreshAccess(socket, attachment);
       if (!refreshed) return;
-      sendBinary(socket, encodeCollaborationSyncStep2(this.getBinaryDocument(), frame.payload));
+      const document = this.getBinaryDocument();
+      let stepTwo: Uint8Array;
+      try {
+        // The envelope decoder leaves the state vector opaque; Yjs reads it here.
+        stepTwo = encodeCollaborationSyncStep2(document, frame.payload);
+      } catch {
+        this.rejectSocket(socket, "invalid-message", "Invalid Yjs sync request", true, 1008);
+        return;
+      }
+      sendBinary(socket, stepTwo);
       return;
     }
     if (frame.kind !== "client-update" || frame.update.byteLength > MAX_YJS_UPDATE_BYTES) {
