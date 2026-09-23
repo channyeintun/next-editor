@@ -109,7 +109,7 @@ describe("RoomSqliteDocumentStore", () => {
     const { store } = createStore();
 
     // Valid base64 of three 0xff bytes, which no Yjs decoder can read.
-    expect(() => store.initialize("////", 100)).toThrow();
+    expect(() => store.initialize("////", 100)).toThrow(/Unexpected end of array/);
     expect(() => store.createDocument()).toThrow(/not initialized/);
   });
 
