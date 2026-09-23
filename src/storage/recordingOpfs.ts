@@ -2,10 +2,6 @@ import { transfer, wrap, type Remote } from "comlink";
 import type { RecordingOpfsWorkerApi } from "./recordingOpfs.worker";
 import { RECORDING_OPFS_DIRECTORY, recordingOpfsFilename } from "./recordingOpfsShared";
 
-interface StorageManagerWithOpfs {
-  getDirectory?: () => Promise<FileSystemDirectoryHandle>;
-}
-
 interface RecordingOpfsClient {
   api: Remote<RecordingOpfsWorkerApi>;
   worker: Worker;
@@ -23,13 +19,18 @@ let client: RecordingOpfsClient | null = null;
 let unavailable = false;
 let availabilityPromise: Promise<boolean> | null = null;
 
+/** The storage manager when this browser has OPFS, or null (older browsers, jsdom). */
+function getOpfsStorage(): StorageManager | null {
+  const storage: StorageManager | undefined = globalThis.navigator?.storage;
+  return typeof storage?.getDirectory === "function" ? storage : null;
+}
+
 function canUseOpfsWorker(): boolean {
-  const storage = globalThis.navigator?.storage as unknown as StorageManagerWithOpfs | undefined;
   return (
     !unavailable &&
     typeof window !== "undefined" &&
     typeof Worker !== "undefined" &&
-    typeof storage?.getDirectory === "function"
+    getOpfsStorage() !== null
   );
 }
 
@@ -131,26 +132,52 @@ export async function appendRecordingOpfs(
   );
 }
 
+function isNotFoundError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "NotFoundError";
+}
+
+/**
+ * Streams a stored recording, or returns null when its file does not exist.
+ * Reading needs no worker, so the writer worker is not consulted: a take stored
+ * earlier stays readable when the worker fails to start. Storage that cannot be
+ * reached is an error, never passed off as a missing take.
+ */
 export async function openRecordingOpfsStream(
   recordingId: string,
 ): Promise<ReadableStream<Uint8Array> | null> {
-  if (!(await isRecordingOpfsAvailable())) return null;
-  const storage = navigator.storage as unknown as StorageManagerWithOpfs;
+  const storage = getOpfsStorage();
+  if (!storage) {
+    throw new Error("Origin-private recording storage is unavailable");
+  }
   try {
-    const root = await storage.getDirectory!();
+    const root = await storage.getDirectory();
     const directory = await root.getDirectoryHandle(RECORDING_OPFS_DIRECTORY);
     const handle = await directory.getFileHandle(recordingOpfsFilename(recordingId));
     return (await handle.getFile()).stream();
   } catch (error) {
-    if (error instanceof DOMException && error.name === "NotFoundError") return null;
+    if (isNotFoundError(error)) return null;
     throw error;
   }
 }
 
 export async function deleteRecordingOpfs(recordingId: string): Promise<void> {
   const current = getClient();
-  if (!current || !(await isRecordingOpfsAvailable())) return;
-  await callWorker(current, current.api.delete(recordingId));
+  if (current && (await isRecordingOpfsAvailable())) {
+    // Through the worker, so the removal waits for any write it has queued for this id.
+    await callWorker(current, current.api.delete(recordingId));
+    return;
+  }
+  // Without a writer there is no queued write to wait for, so remove the file here.
+  // Without OPFS at all, nothing can have been stored there.
+  const storage = getOpfsStorage();
+  if (!storage) return;
+  try {
+    const root = await storage.getDirectory();
+    const directory = await root.getDirectoryHandle(RECORDING_OPFS_DIRECTORY);
+    await directory.removeEntry(recordingOpfsFilename(recordingId));
+  } catch (error) {
+    if (!isNotFoundError(error)) throw error;
+  }
 }
 
 export async function clearRecordingOpfs(): Promise<void> {
