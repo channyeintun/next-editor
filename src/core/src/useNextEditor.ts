@@ -154,10 +154,6 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     actorRef.send({ type: "ADD_CAPTION_TRACK", recordingId, track });
   };
 
-  const removeCaptionTrack = (trackId: string) => {
-    actorRef.send({ type: "REMOVE_CAPTION_TRACK", trackId });
-  };
-
   const clearRecording = () => {
     actorRef.send({ type: "UNLOAD" });
   };
@@ -223,7 +219,6 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     extendRecording,
     appendRecordingDelta,
     addCaptionTrack,
-    removeCaptionTrack,
     clearRecording,
     syncEditorRef,
     handleEditorChange,

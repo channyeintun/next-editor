@@ -209,7 +209,7 @@ interface CaptionTrack {
   caption store (`src/stores/captionStore.ts`), independent of any single recording.
 - On the container, captions are either inlined as `captions` or referenced by
   `captionFiles`; sibling files are fetched relative to the `.ne` URL during URL loading.
-- `ADD_CAPTION_TRACK` / `REMOVE_CAPTION_TRACK` machine events mutate the loaded recording's
+- The `ADD_CAPTION_TRACK` machine event adds or replaces a track in the loaded recording's
   `captions` directly rather than riding the timeline (see `docs/state-machines.md`).
 
 ## API Client Data
@@ -288,7 +288,7 @@ Important action methods include:
 - `extendRecording(recording)`
 - `handlePreviewInitialDocument(document)`
 - `handlePreviewPatchBatch(batch)`
-- `addCaptionTrack(recordingId, track)` / `removeCaptionTrack(trackId)`
+- `addCaptionTrack(recordingId, track)`
 - `exportAsFile(recording, filename?)`
 
 ## SCR3 Metadata

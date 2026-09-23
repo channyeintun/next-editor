@@ -475,12 +475,6 @@ export type AddCaptionTrackEvent = {
   track: CaptionTrack;
 };
 
-/** Remove a caption track from the loaded recording */
-export type RemoveCaptionTrackEvent = {
-  type: "REMOVE_CAPTION_TRACK";
-  trackId: string;
-};
-
 /**
  * Union of all machine events
  */
@@ -511,7 +505,6 @@ export type EditorMachineEvent =
   | WhiteboardEventOccurred
   | ChatEventOccurred
   | AddCaptionTrackEvent
-  | RemoveCaptionTrackEvent
   // What the child actors send back. Each actor owns its union, and fromTypedCallback
   // checks its sendBack calls against it.
   | AudioRecordingEmit

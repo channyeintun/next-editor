@@ -705,23 +705,6 @@ export const addCaptionTrack = ({
   };
 };
 
-export const removeCaptionTrack = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
-  if (event.type !== "REMOVE_CAPTION_TRACK" || !context.recording?.captions) return {};
-  const filtered = context.recording.captions.filter((t) => t.id !== event.trackId);
-  return {
-    recording: {
-      ...context.recording,
-      captions: filtered.length > 0 ? filtered : undefined,
-    },
-  };
-};
-
 export const notifySeek = ({
   context,
   event,

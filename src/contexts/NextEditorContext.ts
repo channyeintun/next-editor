@@ -37,7 +37,6 @@ export interface NextEditorActions {
   extendRecording: (recording: Recording) => void;
   appendRecordingDelta: (delta: RecordingStreamDelta) => void;
   addCaptionTrack: (recordingId: string, track: CaptionTrack) => void;
-  removeCaptionTrack: (trackId: string) => void;
   clearRecording: () => void;
   handleEditorChange: (selection?: EditorSelection, textEdit?: TextEditEvent) => void;
   handleSlideEvent: (event: SlideEvent) => void;

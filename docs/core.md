@@ -36,7 +36,7 @@ Core responsibilities:
 - Maintain the editor machine and playback timeline.
 - Capture editor frames, cursor samples, preview events (including API client requests/responses), rrweb preview snapshots, workspace events, and runtime events.
 - Normalize recordings into the `Recording` shape used across the app.
-- Expose stable controls such as `startRecording`, `play`, `seekTo`, `loadRecording`, `extendRecording`, and caption-track management (`addCaptionTrack` / `removeCaptionTrack`).
+- Expose stable controls such as `startRecording`, `play`, `seekTo`, `loadRecording`, `extendRecording`, and caption-track management (`addCaptionTrack`).
 
 The app layer is responsible for React composition, WebContainer integration, IndexedDB persistence, import/export UI, and route-level behavior.
 

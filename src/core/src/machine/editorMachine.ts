@@ -65,7 +65,6 @@ import {
   extendRecording,
   appendRecordingDelta,
   addCaptionTrack,
-  removeCaptionTrack,
   applyFrameAtTime,
   seekToTime,
   setPlaybackSpeed,
@@ -246,7 +245,6 @@ export const editorMachine = setup({
     extendRecording: assign(extendRecording),
     appendRecordingDelta: assign(appendRecordingDelta),
     addCaptionTrack: assign(addCaptionTrack),
-    removeCaptionTrack: assign(removeCaptionTrack),
     applyFrameAtTime: assign(applyFrameAtTime),
     seekToTime: assign(seekToTime),
     setPlaybackSpeed: assign(setPlaybackSpeed),
@@ -342,9 +340,6 @@ export const editorMachine = setup({
     ADD_CAPTION_TRACK: {
       guard: "isForLoadedRecording",
       actions: "addCaptionTrack",
-    },
-    REMOVE_CAPTION_TRACK: {
-      actions: "removeCaptionTrack",
     },
     // Screen recording is independent of the session's finalize join: its blob never enters the
     // `Recording`, so these are handled at the machine root and fire in any state. SCREEN_STOPPED

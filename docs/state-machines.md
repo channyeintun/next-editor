@@ -256,13 +256,13 @@ These indices are preserved across `EXTEND_RECORDING`, which is the critical det
 `PREVIEW_EVENT` is the single channel for runtime-preview state, including the API client:
 its `api_client_mode`, `api_client_request`, `api_client_response`, `api_client_request_tab`,
 and `api_client_inspect_history` variants are applied through the same preview replay cursor
-as DOM snapshots. Caption tracks are managed out of band — `ADD_CAPTION_TRACK` /
-`REMOVE_CAPTION_TRACK` mutate the loaded recording's `captions` directly (e.g. from a
-`.vtt`/`.srt` import or sibling-file load) rather than riding the timeline. `ADD_CAPTION_TRACK`
-names the recording the track belongs to and is dropped when another one is loaded
-(`isForLoadedRecording`), so a late sibling `.vtt` cannot land on the next lesson. Once a
-recording has captions, `EXTEND_RECORDING` keeps its list instead of taking the extended
-recording's, so a late audio or stream extend does not drop tracks added after load.
+as DOM snapshots. Caption tracks are managed out of band — `ADD_CAPTION_TRACK` adds or
+replaces a track in the loaded recording's `captions` directly (e.g. from a `.vtt`/`.srt`
+import or sibling-file load) rather than riding the timeline. The event names the recording
+the track belongs to and is dropped when another one is loaded (`isForLoadedRecording`), so a
+late sibling `.vtt` cannot land on the next lesson. Once a recording has captions,
+`EXTEND_RECORDING` keeps its list instead of taking the extended recording's, so a late audio
+or stream extend does not drop tracks added after load.
 
 ## Key Events
 
@@ -293,7 +293,6 @@ type EditorMachineEvent =
   | { type: "WORKSPACE_EVENT"; sidebarWidthDelta?: number; previewDockWidthDelta?: number }
   | { type: "RUNTIME_EVENT" }
   | { type: "ADD_CAPTION_TRACK"; recordingId: string; track: CaptionTrack }
-  | { type: "REMOVE_CAPTION_TRACK"; trackId: string }
   | {
       type: "AUDIO_RECORDING_STARTED";
       mediaRecorder: MediaRecorder;
@@ -424,7 +423,7 @@ Action bodies are split by concern: capture-side actions live in `captureActions
 | `invalidateAppliedPlaybackState` / `invalidateRenderedPlaybackState`                      | Force replay actions to re-apply on next tick (e.g. after a seek or resume)                    |
 | `clearPendingPlaybackEditorSync`                                                          | Clear the flag once `SET_EDITOR_REF` has resynced playback state                               |
 | `clearPendingEditorSyncForPausedSeek`                                                     | Clear it on a paused seek (no model swap follows) while the viewer is on the recorded file     |
-| `addCaptionTrack` / `removeCaptionTrack`                                                  | Mutate `recording.captions` directly, outside the timeline                                     |
+| `addCaptionTrack`                                                                         | Add or replace a track in `recording.captions`, outside the timeline                           |
 | `clearRecording`                                                                          | Unload the current recording and reset machine context                                         |
 | `setEditorRef`                                                                            | Store the live Monaco editor reference                                                         |
 | `notifySeek`                                                                              | Fire the `EditorMachineInput` `onSeek` callback                                                |
