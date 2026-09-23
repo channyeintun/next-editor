@@ -1,5 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import type { EditorFrame } from "../types";
 import type { PreviewState } from "../slides";
@@ -16,17 +14,7 @@ import {
   reconstructFrameAtIndex,
 } from "./frameDelta";
 import { compressFrames } from "./frameStreamEncoder";
-import {
-  DmpBaseMismatchError,
-  installDmpCodec,
-  instantiateDmpCodec,
-  isDmpCodecLoaded,
-} from "../../../storage/dmpCodec/dmpCodec";
-
-// Same artifact-gating as dmpCodec.test.ts: instantiate the wasm from bytes and
-// skip when it hasn't been built (`bun run build:wasm`).
-const wasmPath = resolve(process.cwd(), "src/core/dmp/build/next-editor-dmp.wasm");
-const hasArtifact = existsSync(wasmPath);
+import { DmpBaseMismatchError } from "../../../storage/dmpCodec/dmpCodec";
 
 const frameAt = (timestamp: number, content: string): EditorFrame => ({
   timestamp,
@@ -105,12 +93,8 @@ describe("Monaco content edit deltas", () => {
   });
 });
 
-describe.skipIf(!hasArtifact)("frameDelta reconstruction errors", () => {
-  it("encodes append-only text as one codec-compatible suffix delta", async () => {
-    if (!isDmpCodecLoaded()) {
-      installDmpCodec(await instantiateDmpCodec(readFileSync(wasmPath)));
-    }
-
+describe("frameDelta reconstruction errors", () => {
+  it("encodes append-only text as one codec-compatible suffix delta", () => {
     const base = "existing streamed response ".repeat(8);
     const appended = "plus a final 🌍 suffix";
     const created = createAppendContentDelta(base, appended);
@@ -138,11 +122,7 @@ describe.skipIf(!hasArtifact)("frameDelta reconstruction errors", () => {
     expect(applyContentDelta("split emoji: �", fallback)).toBe("split emoji: 🌍");
   });
 
-  it("attributes a base-mismatch failure to the failing frame index", async () => {
-    if (!isDmpCodecLoaded()) {
-      installDmpCodec(await instantiateDmpCodec(readFileSync(wasmPath)));
-    }
-
+  it("attributes a base-mismatch failure to the failing frame index", () => {
     const base = "const value = 1;\nconst other = 2;\n";
     const edited = base.replace("= 1", "= 9");
     const frames = compressFrames([frameAt(0, base), frameAt(100, edited)]);
@@ -223,8 +203,7 @@ describe("previewState delta stays incremental", () => {
     const prev = withPreview(0, preview(PREVIEW_HTML, 0));
     const next = withPreview(16, preview("<p>new</p>", 0));
 
-    // Depending on whether the dmp codec is installed this delta is a patch or
-    // a full-copy fallback; the applied result must be identical either way.
+    // vitest.setup.ts installs the dmp codec, so this delta is always a dmp patch.
     const delta = createFrameDelta(prev, next);
 
     expect(delta.previewState).toBeDefined();
@@ -247,18 +226,14 @@ describe("previewState delta stays incremental", () => {
   // undo/redo walking back through earlier versions) never re-embeds the full
   // preview HTML per change. A measured 40s editing session stored 60 full
   // ~58KB copies (27 distinct versions) before this.
-  describe.skipIf(!hasArtifact)("content edits become dmp patches", () => {
+  describe("content edits become dmp patches", () => {
     const versions = [
       PREVIEW_HTML,
       PREVIEW_HTML.replace("static preview", "static preview edited"),
       PREVIEW_HTML.replace("static preview", "static preview edited twice"),
     ];
 
-    it("stores a typing + undo chain without re-embedding full contents", async () => {
-      if (!isDmpCodecLoaded()) {
-        installDmpCodec(await instantiateDmpCodec(readFileSync(wasmPath)));
-      }
-
+    it("stores a typing + undo chain without re-embedding full contents", () => {
       // Type forward through the versions, then undo back down.
       const contents = [...versions, versions[1], versions[0]];
       const frames = contents.map((content, index) =>
