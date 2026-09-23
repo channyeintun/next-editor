@@ -447,6 +447,35 @@ describe("normalizeUpstreamExecuteResponse", () => {
     ).toBeNull();
   });
 
+  // The Running check must stay on one line. `^\s+` let it run across blank
+  // lines: a failed build whose diagnostics hold "\n\nRunning `" read as a
+  // program that had started, and a long run of blank lines made the match
+  // retry from every line start, costing quadratic Worker CPU.
+  it("classifies a build failure by a Running line on one line only", () => {
+    expect(
+      normalizeUpstreamExecuteResponse({
+        success: false,
+        exitDetail: "",
+        stdout: "",
+        stderr: "error: \n\nRunning `not-cargo`\n",
+      }),
+    ).toMatchObject({ status: "compile-error" });
+  });
+
+  it("classifies a failed build with a long run of blank lines in linear time", () => {
+    const startedAt = performance.now();
+    const result = normalizeUpstreamExecuteResponse({
+      success: false,
+      exitDetail: "",
+      stdout: "",
+      stderr: `error: ${"\n".repeat(50_000)}aborting\n`,
+    });
+
+    expect(result).toMatchObject({ status: "compile-error" });
+    // About 3 s with the old pattern on a desktop machine; well under 1 ms now.
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
+  });
+
   it("keeps rustc warnings in stderr while stripping cargo status lines", () => {
     expect(
       normalizeUpstreamExecuteResponse({

@@ -69,8 +69,11 @@ const REQUIRED_FILE_PATH = "main.rs";
 // program output keep flowing through.
 const CARGO_STATUS_LINE = /^\s+(Compiling|Finished|Running)\s.*$/;
 // The Running line is also the discriminator between "the build failed" and
-// "the program ran and then failed".
-const CARGO_RUNNING_LINE = /^\s+Running\s`/m;
+// "the program ran and then failed". Spaces and tabs, not \s: with the m flag,
+// \s would let the match start on one line and run across blank lines, which
+// both misreads diagnostics and retries from every line start of a long run
+// of blank lines (quadratic time on the raw, untruncated stderr).
+const CARGO_RUNNING_LINE = /^[ \t]+Running[ \t]`/m;
 
 function stripCargoStatusLines(stderr: string): string {
   return stderr
