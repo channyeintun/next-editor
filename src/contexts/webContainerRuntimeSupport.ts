@@ -114,11 +114,6 @@ export function getRuntimeErrorMessage(error: unknown): string {
   return "Unknown WebContainer runtime error";
 }
 
-// Re-exported so existing runtime-support imports keep working; the
-// implementation lives in a dependency-free util that the light landing critical
-// path can also import without dragging in this module.
-export { isMobileBrowser };
-
 /**
  * Whether the in-browser WebContainer runtime can boot here. It requires both
  * cross-origin isolation (for SharedArrayBuffer) and a non-mobile browser. Mobile

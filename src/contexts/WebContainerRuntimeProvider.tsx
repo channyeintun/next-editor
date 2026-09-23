@@ -15,7 +15,6 @@ import {
   formatCommandError,
   getRuntimeErrorMessage,
   resolveRuntimeRunCommand,
-  isMobileBrowser,
   isRuntimeBusy,
   isWebContainerRuntimeSupported,
   loadStoredEnvironmentVariables,
@@ -31,6 +30,7 @@ import {
 } from "../hooks/useWorkspace";
 import type { WorkspaceSyncMutation } from "./WorkspaceContext";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
+import { isMobileBrowser } from "../utils/isMobileBrowser";
 import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
 import { areWorkspaceProjectsEqual, lessonRunsInWebContainer } from "../types/workspace";
 
