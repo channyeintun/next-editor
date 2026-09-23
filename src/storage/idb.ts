@@ -10,12 +10,15 @@ export function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
-/** Resolves when an IDB transaction completes; rejects if it errors or aborts. */
+/**
+ * Resolves when an IDB transaction completes; rejects when it aborts. A request that
+ * fails aborts its transaction, and the abort carries that request's error. (The
+ * request's error event reaches the transaction first, but before the abort has set
+ * transaction.error, so rejecting there would lose the cause.)
+ */
 export function transactionToPromise(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve();
-    transaction.onerror = () =>
-      reject(transaction.error ?? new Error("IndexedDB transaction failed"));
     transaction.onabort = () =>
       reject(transaction.error ?? new Error("IndexedDB transaction aborted"));
   });
