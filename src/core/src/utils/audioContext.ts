@@ -1,52 +1,60 @@
 /**
- * Singleton AudioContext management for robust browser support
+ * The page's one realtime AudioContext. Narration plays through an HTMLAudioElement,
+ * so no audio is routed through this context. Its state is how Editor tells whether
+ * the page has had the user gesture the autoplay policy asks for before it autoplays
+ * a lesson with audio, and play/seek clicks resume it to keep that answer current.
  */
+
+// Gestures that grant user activation. mousedown, touchstart and keydown bubble to
+// window; click is taken in the capture phase so a handler that stops propagation
+// cannot hide it.
+const UNLOCK_GESTURES: ReadonlyArray<readonly [type: string, capture: boolean]> = [
+  ["mousedown", false],
+  ["touchstart", false],
+  ["keydown", false],
+  ["click", true],
+];
 
 let sharedAudioContext: AudioContext | null = null;
-export let isUnlocked = false;
+let isListeningForGesture = false;
 
 /**
- * Gets the singleton AudioContext instance
+ * Returns the shared context after asking it to resume. Called from a user gesture,
+ * that resumes it directly. Otherwise, until it runs, the next gesture anywhere on
+ * the page resumes it; those listeners are installed once, however often this is
+ * called, and removed once the context runs.
  */
-export function getAudioContext(): AudioContext {
-  if (!sharedAudioContext) {
-    const AudioContextClass =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    sharedAudioContext = new AudioContextClass();
+export function resumeSharedAudioContext(): AudioContext {
+  const context = (sharedAudioContext ??= new AudioContext());
+  context.resume().catch(() => {});
+  if (context.state !== "running" && !isListeningForGesture) {
+    resumeOnNextGesture(context);
   }
-  return sharedAudioContext!;
+  return context;
 }
 
-/**
- * Aggressively unlocks the AudioContext on the first user gesture
- */
-export function unlockAudioContext(ctx: AudioContext): void {
-  if (isUnlocked) return;
+function resumeOnNextGesture(context: AudioContext): void {
+  isListeningForGesture = true;
 
-  const unlock = () => {
-    ctx
-      .resume()
-      .then(() => {
-        if (ctx.state === "running") {
-          isUnlocked = true;
-          removeListeners();
-        }
-      })
-      .catch((err) => {
-        console.warn("Failed to resume AudioContext:", err);
-      });
+  const stopListening = () => {
+    isListeningForGesture = false;
+    for (const [type, capture] of UNLOCK_GESTURES) {
+      window.removeEventListener(type, resume, capture);
+    }
   };
 
-  const removeListeners = () => {
-    window.removeEventListener("mousedown", unlock);
-    window.removeEventListener("touchstart", unlock);
-    window.removeEventListener("keydown", unlock);
-    window.removeEventListener("click", unlock, true);
+  const resume = () => {
+    context.resume().then(
+      () => {
+        if (context.state === "running") stopListening();
+      },
+      (error: unknown) => {
+        console.warn("Failed to resume AudioContext:", error);
+      },
+    );
   };
 
-  window.addEventListener("mousedown", unlock);
-  window.addEventListener("touchstart", unlock);
-  window.addEventListener("keydown", unlock);
-  window.addEventListener("click", unlock, true);
+  for (const [type, capture] of UNLOCK_GESTURES) {
+    window.addEventListener(type, resume, capture);
+  }
 }

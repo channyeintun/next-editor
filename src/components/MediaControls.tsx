@@ -19,7 +19,7 @@ import {
   useNextEditorPlayback,
   useLiveTime,
 } from "../hooks/useNextEditorContext";
-import { getAudioContext, unlockAudioContext } from "../core/src/utils/audioContext";
+import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import ReplayIcon from "./icon/Replay";
 import IdleRecordButton from "./IdleRecordButton";
 import PlayIcon from "./icon/Play";
@@ -216,10 +216,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   }, [collaboration?.isHost, collaboration?.provider, isRecording, onStopRecording, stopRecording]);
 
   const handlePlayPause = () => {
-    // Aggressive Safari Wake: Resume context directly in the click handler
-    const ctx = getAudioContext();
-    unlockAudioContext(ctx);
-    ctx.resume().catch(() => {});
+    // Resume inside the click, which is the gesture the autoplay policy looks for.
+    resumeSharedAudioContext();
 
     if (isPlaying) {
       pause();
@@ -229,10 +227,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   };
 
   const handleSeek = (targetTime: number) => {
-    // Aggressive Safari Wake: Resume context or ensure it's awake during seek
-    const ctx = getAudioContext();
-    unlockAudioContext(ctx);
-    ctx.resume().catch(() => {});
+    resumeSharedAudioContext();
 
     seekTo(targetTime);
   };

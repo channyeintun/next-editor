@@ -12,7 +12,7 @@ import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { selectLiveTime } from "../core/src/useNextEditor";
 import { usePostRecordingTarget } from "../hooks/usePostRecordingTarget";
 import { usePlaybackSettings } from "../hooks/usePlaybackSettings";
-import { getAudioContext, unlockAudioContext } from "../core/src/utils/audioContext";
+import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
@@ -239,9 +239,7 @@ export function EditorLayout({
       return;
     }
 
-    const ctx = getAudioContext();
-    unlockAudioContext(ctx);
-    ctx.resume().catch(() => {});
+    const ctx = resumeSharedAudioContext();
 
     // play() drives the replay machine, not a media element, so the browser's
     // autoplay policy can't block it — starting an audio-bearing recording with a
