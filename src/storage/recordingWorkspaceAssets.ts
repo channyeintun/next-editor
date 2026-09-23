@@ -18,6 +18,17 @@ function descriptorsMatch(
   );
 }
 
+/** Rejects an asset payload whose descriptor is malformed or whose bytes do not match it. */
+function assertValidWorkspaceAsset(asset: WorkspaceRecordingAsset): void {
+  if (
+    !isWorkspaceAssetDescriptor(asset.descriptor) ||
+    !(asset.bytes instanceof Uint8Array) ||
+    asset.bytes.byteLength !== asset.descriptor.size
+  ) {
+    throw new Error("Recording contains an invalid workspace asset payload");
+  }
+}
+
 function collectSnapshotDescriptors(
   snapshot: WorkspaceRecordingSnapshot | undefined,
   descriptors: Map<string, WorkspaceAssetDescriptor>,
@@ -64,13 +75,7 @@ export async function* iterateRecordingWorkspaceAssets(
   const descriptors = collectRecordingWorkspaceAssetDescriptors(recording);
   const supplied = new Map<string, WorkspaceRecordingAsset>();
   for (const asset of recording.workspaceAssets ?? []) {
-    if (
-      !isWorkspaceAssetDescriptor(asset.descriptor) ||
-      !(asset.bytes instanceof Uint8Array) ||
-      asset.bytes.byteLength !== asset.descriptor.size
-    ) {
-      throw new Error("Recording contains an invalid workspace asset payload");
-    }
+    assertValidWorkspaceAsset(asset);
     const duplicate = supplied.get(asset.descriptor.assetId);
     if (duplicate && !descriptorsMatch(duplicate.descriptor, asset.descriptor)) {
       throw new Error(`Workspace asset ${asset.descriptor.assetId} has conflicting descriptors`);
@@ -98,13 +103,7 @@ export async function persistDecodedWorkspaceAssets(
   assets: ReadonlyArray<WorkspaceRecordingAsset> | undefined,
 ): Promise<void> {
   for (const asset of assets ?? []) {
-    if (
-      !isWorkspaceAssetDescriptor(asset.descriptor) ||
-      !(asset.bytes instanceof Uint8Array) ||
-      asset.bytes.byteLength !== asset.descriptor.size
-    ) {
-      throw new Error("Recording contains an invalid workspace asset payload");
-    }
+    assertValidWorkspaceAsset(asset);
     await registerWorkspaceAsset(asset.bytes, {
       mimeType: asset.descriptor.mimeType,
       expectedAssetId: asset.descriptor.assetId,
