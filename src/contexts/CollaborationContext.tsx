@@ -779,7 +779,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         }
       },
       onAwarenessEvent: (event) => {
-        if (providerGenerationRef.current === providerGeneration) applyAwarenessEvent(event);
+        if (providerGenerationRef.current !== providerGeneration) return;
+        // The room stamps expiresAt with its own clock, and every expiry check
+        // here uses this browser's, so restart the TTL on receipt.
+        applyAwarenessEvent(
+          event.kind === "state"
+            ? { ...event, expiresAt: Date.now() + COLLABORATION_AWARENESS_TTL_MS }
+            : event,
+        );
       },
       onControlEvent: () => {
         if (providerGenerationRef.current !== providerGeneration) return;

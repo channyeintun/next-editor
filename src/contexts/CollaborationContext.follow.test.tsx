@@ -814,3 +814,43 @@ describe("CollaborationContext write access while reconnecting", () => {
     expect(collaboration!.canWrite).toBe(false);
   });
 });
+
+describe("CollaborationContext participant expiry", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  // expiresAt is stamped with the room's clock; this browser's clock may differ.
+  it("lists and follows a participant whose server expiry looks past on a fast local clock", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const serverNow = Date.now() - 90_000;
+    const remote = {
+      ...participant({
+        actorId: "50000000-0000-4000-8000-000000000001",
+        sessionId: "60000000-0000-4000-8000-000000000001",
+      }),
+      occurredAt: serverNow,
+      expiresAt: serverNow + 30_000,
+    };
+
+    act(() => controls.providers[0]!.emitAwareness(remote));
+    act(() => collaboration!.followParticipant(remote.sessionId));
+
+    expect(collaboration!.participants.map((entry) => entry.sessionId)).toContain(remote.sessionId);
+    expect(collaboration!.followedSessionId).toBe(remote.sessionId);
+  });
+});
