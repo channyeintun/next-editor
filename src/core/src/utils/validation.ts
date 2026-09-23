@@ -17,7 +17,7 @@ export const isValidEditorState = (state: unknown): state is EditorState => {
   }
 
   // Validate position structure
-  if (!obj.position || typeof obj.position !== "object" || obj.position === null) {
+  if (!obj.position || typeof obj.position !== "object") {
     return false;
   }
 
@@ -32,7 +32,7 @@ export const isValidEditorState = (state: unknown): state is EditorState => {
   }
 
   // Validate selection structure
-  if (!obj.selection || typeof obj.selection !== "object" || obj.selection === null) {
+  if (!obj.selection || typeof obj.selection !== "object") {
     return false;
   }
 
@@ -54,30 +54,9 @@ export const isValidEditorState = (state: unknown): state is EditorState => {
 };
 
 /**
- * Validates frame state structure from recording data
+ * Whether the editor has a model to apply a frame to. Monaco detaches a model as it
+ * is disposed (the editor's onWillDispose handler calls setModel(null)), so an
+ * attached model is always usable.
  */
-export const isValidFrameState = (state: unknown): boolean => {
-  return isValidEditorState(state);
-};
-
-/**
- * Checks if Monaco Editor instance is fully ready for operations
- */
-export const isEditorReady = (editor: monaco.editor.IStandaloneCodeEditor | null): boolean => {
-  if (!editor) return false;
-
-  try {
-    // Check if editor has a model and can perform basic operations
-    const model = editor.getModel();
-    if (!model) return false;
-
-    // Try to get basic properties - if these throw, editor isn't ready
-    model.getLineCount();
-    model.getValueLength();
-
-    return true;
-  } catch (err) {
-    console.debug("Editor not ready yet:", err);
-    return false;
-  }
-};
+export const isEditorReady = (editor: monaco.editor.IStandaloneCodeEditor | null): boolean =>
+  editor?.getModel() != null;

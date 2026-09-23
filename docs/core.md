@@ -129,7 +129,7 @@ The main extension hooks in `UseNextEditorConfig` are:
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `frameDelta.ts`                        | `reconstructFrameAtIndex`, `createContentDelta`, `applyContentDelta`, `findFrameIndexAtTime`                  |
 | `editorDiff.ts`                        | `applyContentDiff`, `applySelectionDiff` — apply a replayed frame to a live Monaco editor                     |
-| `validation.ts`                        | `isValidFrameState`, `isValidEditorState`, `isEditorReady`                                                    |
+| `validation.ts`                        | `isValidEditorState`, `isEditorReady`                                                                         |
 | `deltaTypes.ts`                        | `DeltaFrame` and related delta wire types                                                                     |
 | `frameStreamEncoder.ts`                | `pushFrame` (incremental keyframe/delta encoder used during live capture) and its batch fold `compressFrames` |
 | `editorState.ts`                       | Reads/builds `EditorState` snapshots from a Monaco editor instance                                            |

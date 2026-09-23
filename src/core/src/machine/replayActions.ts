@@ -11,7 +11,7 @@ import {
   isKeyframe,
 } from "../utils/frameDelta";
 import { normalizeRecordingData } from "../utils/editorState";
-import { isValidFrameState } from "../utils/validation";
+import { isValidEditorState } from "../utils/validation";
 import { arePreviewSizesEqual } from "../../../utils/equality";
 import {
   getChatReplayResult,
@@ -400,7 +400,7 @@ export const applyFrameAtTime = ({
     return { lastAppliedFrameIndex: frameIndex };
   }
 
-  if (!frame || !frame.state || !isValidFrameState(frame.state)) {
+  if (!frame || !isValidEditorState(frame.state)) {
     return { lastAppliedFrameIndex: frameIndex };
   }
 
