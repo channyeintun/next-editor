@@ -67,4 +67,36 @@ describe("useUrlQuery", () => {
 
     expect(fetchNextEditorFile).toHaveBeenCalledWith(`${window.location.origin}/lessons/b.ne`);
   });
+
+  // searchParams.get already percent-decodes the param once; the URL it yields must reach the
+  // loader unchanged.
+  describe("URL resolution", () => {
+    const loadedUrlFor = (entry: string) => {
+      const { loader, fetchNextEditorFile } = fakeLoader();
+      renderHook(() => useUrlQuery(loader), { wrapper: inRouterAt(entry) });
+      return fetchNextEditorFile.mock.calls[0]?.[0];
+    };
+
+    it("keeps percent-escapes in an encoded target URL", () => {
+      const target = "https://example.com/lesson%20%231.ne"; // the file "lesson #1.ne"
+      expect(loadedUrlFor(`/code?url=${encodeURIComponent(target)}`)).toBe(target);
+    });
+
+    it("keeps an encoded plus in a signed query string", () => {
+      const target = "https://cdn.example.com/a.ne?sig=ab%2Bcd";
+      expect(loadedUrlFor(`/code?url=${encodeURIComponent(target)}`)).toBe(target);
+    });
+
+    it("loads a raw link whose target contains a lone percent sign", () => {
+      expect(loadedUrlFor("/code?url=https://example.com/50%off.ne")).toBe(
+        "https://example.com/50%off.ne",
+      );
+    });
+
+    it("resolves a relative path against the site root", () => {
+      const origin = window.location.origin;
+      expect(loadedUrlFor("/code?url=/lessons/a.ne")).toBe(`${origin}/lessons/a.ne`);
+      expect(loadedUrlFor("/code?url=lessons/a.ne")).toBe(`${origin}/lessons/a.ne`);
+    });
+  });
 });
