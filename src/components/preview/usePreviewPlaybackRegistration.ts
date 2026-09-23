@@ -13,7 +13,7 @@ import type {
   PreviewState,
 } from "../../types/slides";
 import { arePreviewSizesEqual } from "../../utils/equality";
-import { getElementByXPath, type PreviewScrollPosition } from "./previewIframeUtils";
+import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
 import { buildRrwebReplayEvents, hasRrwebPreviewSeed } from "./rrwebPreview";
 import { createRrwebPreviewReplayer, type RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
@@ -32,44 +32,15 @@ interface UsePreviewPlaybackRegistrationOptions {
   sizeRef: RefObject<PreviewSize>;
   isOpenRef: RefObject<boolean>;
   modeRef: RefObject<PreviewPanelMode>;
-  updateIframeContent: (
-    content: string,
-    options?: { force?: boolean; preserveDocument?: boolean },
-  ) => void;
-  iframeRef: RefObject<HTMLIFrameElement | null>;
+  updateIframeContent: (content: string, options?: { force?: boolean }) => void;
   setSize: Dispatch<SetStateAction<PreviewSize>>;
   applyPreviewRoute: (route: string) => void;
   applyPreviewPanelState: (state: { isOpen?: boolean; mode?: PreviewPanelMode }) => void;
   lastRefreshKeyRef: RefObject<number | undefined>;
-  isRecordingRef: RefObject<boolean>;
-  isUserScrollingRef: RefObject<boolean>;
-  targetScrollRef: RefObject<PreviewScrollPosition | null>;
-  rafRef: RefObject<number | null>;
   replayContainerRef: RefObject<HTMLDivElement | null>;
   onActiveModeChange?: (mode: PreviewActiveMode) => void;
   onRequestTabChange?: (tab: ApiClientRequestTab) => void;
   onApiClientStateChange?: (state: ApiClientReplayState) => void;
-}
-
-function getIframeDocumentAndWindow(iframe: HTMLIFrameElement): {
-  iframeDoc: Document;
-  iframeWindow: NonNullable<HTMLIFrameElement["contentWindow"]>;
-} | null {
-  try {
-    const iframeWindow = iframe.contentWindow;
-    const iframeDoc = iframe.contentDocument || iframeWindow?.document;
-
-    if (!iframeDoc || !iframeWindow) {
-      return null;
-    }
-
-    return {
-      iframeDoc,
-      iframeWindow,
-    };
-  } catch {
-    return null;
-  }
 }
 
 export function usePreviewPlaybackRegistration({
@@ -87,21 +58,15 @@ export function usePreviewPlaybackRegistration({
   isOpenRef,
   modeRef,
   updateIframeContent,
-  iframeRef,
   setSize,
   applyPreviewRoute,
   applyPreviewPanelState,
   lastRefreshKeyRef,
-  isRecordingRef,
-  isUserScrollingRef,
-  targetScrollRef,
-  rafRef,
   replayContainerRef,
   onActiveModeChange,
   onRequestTabChange,
   onApiClientStateChange,
 }: UsePreviewPlaybackRegistrationOptions) {
-  const targetScrollInteractionRef = useRef<IframeInteractionEvent | null>(null);
   // rrweb replay: the Replayer owns the recorded DOM + scroll + input in one
   // ordered stream, driven by `currentTime`. Rebuilt when the recording changes.
   const rrwebReplayerRef = useRef<RrwebPreviewReplayer | null>(null);
@@ -336,171 +301,17 @@ export function usePreviewPlaybackRegistration({
         previewState.refreshKey !== lastRefreshKeyRef.current;
 
       lastRefreshKeyRef.current = previewState.refreshKey;
-      // Static / snapshot previews swap full HTML content. rrweb runtime replay
-      // rebuilds from recorded events, so it must never have content forced in.
-      const shouldApplySnapshotContent = !hasPreviewPatchReplay;
-
-      if (shouldApplySnapshotContent && didRefreshKeyChange) {
-        if (previewState.content !== undefined) {
-          updateIframeContent(previewState.content, {
-            force: true,
-            preserveDocument: true,
-          });
-        }
-      } else if (
-        shouldApplySnapshotContent &&
+      // Snapshot-fallback playback swaps in the recorded HTML. rrweb replay rebuilds
+      // from recorded events, so it must never have content forced in. The frame
+      // is sandboxed without allow-same-origin during playback (recorded HTML is
+      // foreign), so its document cannot be reached from here: content is the
+      // only thing this can replay, by replacing the srcdoc.
+      if (
+        !hasPreviewPatchReplay &&
         previewState.content !== undefined &&
-        previewState.content !== lastContentRef.current
+        (didRefreshKeyChange || previewState.content !== lastContentRef.current)
       ) {
-        updateIframeContent(previewState.content, {
-          force: true,
-          preserveDocument: true,
-        });
-      }
-
-      const iframe = iframeRef.current;
-      if (!iframe || isLiveRuntimePreviewActive) {
-        return;
-      }
-
-      const iframeState = getIframeDocumentAndWindow(iframe);
-      if (!iframeState) {
-        return;
-      }
-
-      const { iframeDoc } = iframeState;
-
-      if (previewState.scrollTop !== undefined || previewState.scrollLeft !== undefined) {
-        const targetTop = previewState.scrollTop ?? 0;
-        const targetLeft = previewState.scrollLeft ?? 0;
-
-        if (isRecordingRef.current && isUserScrollingRef.current) {
-          return;
-        }
-
-        targetScrollRef.current = {
-          scrollTop: targetTop,
-          scrollLeft: targetLeft,
-        };
-        targetScrollInteractionRef.current =
-          previewState.currentInteraction?.type === "scroll"
-            ? previewState.currentInteraction
-            : null;
-
-        if (!rafRef.current) {
-          rafRef.current = requestAnimationFrame(() => {
-            rafRef.current = null;
-
-            const target = targetScrollRef.current;
-            if (!target || !iframeRef.current) {
-              return;
-            }
-
-            const iframe = iframeRef.current;
-            const iframeState = getIframeDocumentAndWindow(iframe);
-
-            if (!iframeState) {
-              return;
-            }
-
-            const { iframeDoc, iframeWindow } = iframeState;
-
-            let scrollTarget: Element | Window = iframeWindow;
-            const targetInteraction = targetScrollInteractionRef.current;
-
-            if (
-              targetInteraction?.type === "scroll" &&
-              targetInteraction.data &&
-              !targetInteraction.data.isDocument
-            ) {
-              const element = getElementByXPath(iframeDoc, targetInteraction.target.xpath);
-              if (element instanceof Element) {
-                scrollTarget = element;
-              }
-            }
-
-            let currentTop = 0;
-            let currentLeft = 0;
-            try {
-              if (scrollTarget === iframeWindow) {
-                currentTop = iframeWindow.scrollY || iframeDoc.documentElement.scrollTop;
-                currentLeft = iframeWindow.scrollX || iframeDoc.documentElement.scrollLeft;
-              } else if (scrollTarget instanceof Element) {
-                currentTop = scrollTarget.scrollTop;
-                currentLeft = scrollTarget.scrollLeft;
-              }
-            } catch (error: unknown) {
-              console.warn("Failed to read scroll position:", error);
-            }
-
-            if (
-              Math.abs(currentTop - target.scrollTop) > 0.1 ||
-              Math.abs(currentLeft - target.scrollLeft) > 0.1
-            ) {
-              try {
-                if (scrollTarget === iframeWindow) {
-                  iframeWindow.scrollTo({
-                    top: target.scrollTop,
-                    left: target.scrollLeft,
-                    behavior: "instant",
-                  });
-                } else if (scrollTarget instanceof Element) {
-                  scrollTarget.scrollTo({
-                    top: target.scrollTop,
-                    left: target.scrollLeft,
-                    behavior: "instant",
-                  });
-                }
-              } catch (error: unknown) {
-                console.warn("Failed to update scroll position:", error);
-              }
-            }
-          });
-        }
-      }
-
-      if (!previewState.currentInteraction) {
-        return;
-      }
-
-      const interaction = previewState.currentInteraction;
-      const element = getElementByXPath(iframeDoc, interaction.target.xpath) as HTMLElement | null;
-
-      if (!element) {
-        return;
-      }
-
-      const elementWithStyle = element as HTMLElement & { value?: string };
-      const tagName = element.tagName.toLowerCase();
-
-      switch (interaction.type) {
-        case "click":
-          elementWithStyle.style.setProperty("--ring-color", "rgba(59, 130, 246, 0.5)");
-          elementWithStyle.style.boxShadow = "0 0 0 4px rgba(59, 130, 246, 0.5)";
-          setTimeout(() => {
-            elementWithStyle.style.removeProperty("--ring-color");
-            elementWithStyle.style.boxShadow = "";
-          }, 300);
-          break;
-        case "focus":
-          elementWithStyle.focus();
-          break;
-        case "scroll":
-          if (interaction.data?.scrollTop !== undefined) {
-            elementWithStyle.scrollTop = interaction.data.scrollTop;
-          }
-          if (interaction.data?.scrollLeft !== undefined) {
-            elementWithStyle.scrollLeft = interaction.data.scrollLeft;
-          }
-          break;
-        case "input": {
-          const isInput =
-            tagName === "input" || tagName === "textarea" || elementWithStyle.isContentEditable;
-          if (isInput && interaction.data?.value !== undefined) {
-            elementWithStyle.value = interaction.data.value;
-          }
-          break;
-        }
+        updateIframeContent(previewState.content, { force: true });
       }
     };
 
@@ -511,18 +322,12 @@ export function usePreviewPlaybackRegistration({
     applyPreviewPanelState,
     applyPreviewRoute,
     hasPreviewPatchReplay,
-    iframeRef,
     isPlaybackPreviewActive,
-    isLiveRuntimePreviewActive,
-    isRecordingRef,
-    isUserScrollingRef,
     lastContentRef,
     lastRefreshKeyRef,
-    rafRef,
     previewHandle,
     setSize,
     sizeRef,
-    targetScrollRef,
     updateIframeContent,
   ]);
 }

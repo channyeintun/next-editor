@@ -40,9 +40,6 @@ interface UsePreviewMessageBridgeOptions {
   recordedPreviewInitialDocumentIdRef: RefObject<string | null>;
   lastRuntimeSnapshotRef: RefObject<string>;
   scrollPositionRef: RefObject<PreviewScrollPosition>;
-  userScrollTimeoutRef: RefObject<NodeJS.Timeout | null>;
-  isUserScrollingRef: RefObject<boolean>;
-  targetScrollRef: RefObject<PreviewScrollPosition | null>;
   pendingInteractionRef: RefObject<IframeInteractionEvent | null>;
   sizeRef: RefObject<PreviewSize>;
   onConsoleMessage: (message: string) => void;
@@ -166,9 +163,6 @@ export function usePreviewMessageBridge({
   recordedPreviewInitialDocumentIdRef,
   lastRuntimeSnapshotRef,
   scrollPositionRef,
-  userScrollTimeoutRef,
-  isUserScrollingRef,
-  targetScrollRef,
   pendingInteractionRef,
   sizeRef,
   onConsoleMessage,
@@ -329,19 +323,6 @@ export function usePreviewMessageBridge({
         };
 
         if (isRecordingRef.current && handlePreviewEventRef.current) {
-          isUserScrollingRef.current = true;
-          if (userScrollTimeoutRef.current) {
-            clearTimeout(userScrollTimeoutRef.current);
-          }
-          userScrollTimeoutRef.current = setTimeout(() => {
-            isUserScrollingRef.current = false;
-          }, 100);
-
-          targetScrollRef.current = {
-            scrollTop: data.scrollTop as number,
-            scrollLeft: data.scrollLeft as number,
-          };
-
           handlePreviewEventRef.current({
             type: "preview_scroll",
             timestamp: Date.now(),
@@ -385,7 +366,6 @@ export function usePreviewMessageBridge({
     handlePreviewPatchBatchRef,
     iframeRef,
     isRecordingRef,
-    isUserScrollingRef,
     lastRuntimeSnapshotRef,
     onApiClientResponse,
     onConsoleMessage,
@@ -396,7 +376,5 @@ export function usePreviewMessageBridge({
     scrollPositionRef,
     shouldAcceptRuntimeSnapshot,
     sizeRef,
-    targetScrollRef,
-    userScrollTimeoutRef,
   ]);
 }

@@ -40,7 +40,6 @@ import type {
 import { lessonRunsInWebContainer } from "../../types/workspace";
 import {
   createReplayableRuntimePreview,
-  patchIframeContentFromHtml,
   type PreviewScrollPosition,
   RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE,
 } from "./previewIframeUtils";
@@ -175,26 +174,13 @@ function navigateIframeHistory(
 }
 
 /**
- * Writes preview HTML into the iframe (patching the live document when asked and
- * possible, falling back to a srcdoc swap). Returns whether the content landed, so
- * the caller only records it as applied on success. Module-level (not inside the
- * hook) because its try/catch would otherwise force a React Compiler bailout of
- * the whole controller hook.
+ * Writes preview HTML into the iframe as its srcdoc. Returns whether the content
+ * landed, so the caller only records it as applied on success. Module-level (not
+ * inside the hook) because its try/catch would otherwise force a React Compiler
+ * bailout of the whole controller hook.
  */
-function writeIframeContent(
-  iframe: HTMLIFrameElement,
-  content: string,
-  preserveDocument: boolean,
-): boolean {
+function writeIframeContent(iframe: HTMLIFrameElement, content: string): boolean {
   try {
-    if (
-      preserveDocument &&
-      iframe.getAttribute("src") === null &&
-      patchIframeContentFromHtml(iframe, content)
-    ) {
-      return true;
-    }
-
     iframe.removeAttribute("src");
     iframe.srcdoc = content;
     return true;
@@ -281,11 +267,6 @@ export function usePreviewController(): PreviewController {
   });
   const pendingInteractionRef = useRef<IframeInteractionEvent | null>(null);
   const previewRouteRef = useRef("/");
-
-  const targetScrollRef = useRef<PreviewScrollPosition | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const isUserScrollingRef = useRef(false);
-  const userScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const isRecordingRef = useRef(false);
   const handlePreviewEventRef = useRef<((event: PreviewEvent) => void) | null>(null);
@@ -726,9 +707,6 @@ export function usePreviewController(): PreviewController {
     recordedPreviewInitialDocumentIdRef,
     lastRuntimeSnapshotRef,
     scrollPositionRef,
-    userScrollTimeoutRef,
-    isUserScrollingRef,
-    targetScrollRef,
     pendingInteractionRef,
     sizeRef,
     onConsoleMessage: (msg: string) => consoleAppender.current?.(msg),
@@ -738,10 +716,7 @@ export function usePreviewController(): PreviewController {
     onApiClientResponse: apiClient.handleResponse,
   });
 
-  const updateIframeContent = (
-    content: string,
-    options?: { force?: boolean; preserveDocument?: boolean },
-  ) => {
+  const updateIframeContent = (content: string, options?: { force?: boolean }) => {
     if (!iframeRef.current || (isLiveRuntimePreviewActive && !options?.force)) {
       return;
     }
@@ -750,7 +725,7 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    if (writeIframeContent(iframeRef.current, content, options?.preserveDocument === true)) {
+    if (writeIframeContent(iframeRef.current, content)) {
       lastContentRef.current = content;
     }
   };
@@ -891,15 +866,10 @@ export function usePreviewController(): PreviewController {
     isOpenRef,
     modeRef: panelModeRef,
     updateIframeContent,
-    iframeRef,
     setSize,
     applyPreviewRoute,
     applyPreviewPanelState,
     lastRefreshKeyRef,
-    isRecordingRef,
-    isUserScrollingRef,
-    targetScrollRef,
-    rafRef,
     replayContainerRef,
     onActiveModeChange: setActiveMode,
     onRequestTabChange: (tab) => apiClientStore.trigger.setRequestTab({ tab }),
