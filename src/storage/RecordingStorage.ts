@@ -153,7 +153,7 @@ export async function buildRecordingFiles(
   }
 
   // Externalize the audio blob the same way (`.weba` etc., so it never collides with the
-  // camera's `.webm`). The encoder then writes no inline `audioChunk` segments.
+  // camera's `.webm`). Audio never goes into the stream; the `.ne` records the sibling name.
   const audioBlob = recording.audioBlob instanceof Blob ? recording.audioBlob : null;
   let audioName: string | null = null;
   if (audioBlob && audioBlob.size > 0) {
@@ -404,8 +404,6 @@ export class RecordingStorage {
             ),
           );
 
-          // Don't save to localStorage to avoid quota issues with large files
-          // Just return the imported recordings for immediate use
           resolve(withVideo);
         } catch (error) {
           console.error("Import error details:", error);

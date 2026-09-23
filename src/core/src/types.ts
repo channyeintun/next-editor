@@ -223,7 +223,7 @@ export interface Recording {
   audioStartOffsetMs?: number;
   /**
    * Sibling audio filename for audio stored outside the `.ne` (e.g. `recording-xyz.weba`).
-   * When set, the stream carries no inline `audioChunk` segments; the audio lives in its own file.
+   * The stream never carries audio bytes; this names the file that holds them.
    */
   audioFile?: string;
   /**

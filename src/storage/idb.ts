@@ -1,7 +1,6 @@
 // Shared IndexedDB plumbing used by the recording store and the workspace asset
-// store. Both stores wrap the same callback-based IDB request/transaction API in
-// promises and copy Uint8Arrays into standalone ArrayBuffers before persisting;
-// these helpers are the single source of truth for that boilerplate.
+// store: promise wrappers for the callback-based request/transaction API, and the
+// helper that copies bytes into a standalone ArrayBuffer before they are stored.
 
 /** Resolves/rejects when an IDB request settles. */
 export function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {

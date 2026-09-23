@@ -1,8 +1,7 @@
 import type { Recording, RecordingStreamSink } from "../core/src/types";
 import type { RecordingSession } from "../core/src/machine/types";
 import type { WorkspaceAssetDescriptor } from "../types/workspace";
-import { DELTA_CONFIG } from "../core/src/utils/deltaTypes";
-import { isKeyframe } from "../core/src/utils/deltaTypes";
+import { DELTA_CONFIG, isKeyframe } from "../core/src/utils/deltaTypes";
 import {
   SEGMENT_KIND,
   RECORDING_EVENT_SEGMENTS,
