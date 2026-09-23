@@ -222,9 +222,7 @@ studioRoute.post("/tts/voxcpm2", requireUser, async (c) => {
 
   const request = await validateSynthesisRequest(c.req.raw);
   if (!request.ok) {
-    return request.status === 413
-      ? c.json({ error: request.error }, 413)
-      : c.json({ error: request.error }, 400);
+    return c.json({ error: request.error }, request.status);
   }
 
   let upstream: Response;

@@ -230,9 +230,7 @@ rustPlaygroundRoute.post("/run", async (c) => {
     maxRequestBytes: MAX_REQUEST_BYTES,
   });
   if (!request.ok) {
-    return request.status === 413
-      ? c.json({ error: request.error }, 413)
-      : c.json({ error: request.error }, 400);
+    return c.json({ error: request.error }, request.status);
   }
   const { code, sourceBytes } = request;
 
@@ -379,9 +377,7 @@ rustPlaygroundRoute.post("/format", async (c) => {
     maxRequestBytes: MAX_REQUEST_BYTES,
   });
   if (!request.ok) {
-    return request.status === 413
-      ? c.json({ error: request.error }, 413)
-      : c.json({ error: request.error }, 400);
+    return c.json({ error: request.error }, request.status);
   }
 
   const cache = getCache(c.env);

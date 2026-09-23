@@ -459,9 +459,7 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
 
   const request = await validateKotlinLessonRequest(c.req.raw);
   if (!request.ok) {
-    return request.status === 413
-      ? c.json({ error: request.error }, 413)
-      : c.json({ error: request.error }, 400);
+    return c.json({ error: request.error }, request.status);
   }
   const { files, sourceBytes } = request;
 

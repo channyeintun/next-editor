@@ -554,9 +554,7 @@ goPlaygroundRoute.post("/run", async (c) => {
 
   const request = await validateGoLessonRequest(c.req.raw);
   if (!request.ok) {
-    return request.status === 413
-      ? c.json({ error: request.error }, 413)
-      : c.json({ error: request.error }, 400);
+    return c.json({ error: request.error }, request.status);
   }
   const { source, sourceBytes } = request;
 
@@ -682,9 +680,7 @@ goPlaygroundRoute.post("/format", async (c) => {
 
   const request = await validateGoLessonRequest(c.req.raw);
   if (!request.ok) {
-    return request.status === 413
-      ? c.json({ error: request.error }, 413)
-      : c.json({ error: request.error }, 400);
+    return c.json({ error: request.error }, request.status);
   }
 
   const cache = getCache(c.env);
