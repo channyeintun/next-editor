@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   MAX_THUMBNAIL_BYTES,
+  MAX_TITLE_CHARS,
   resizeThumbnail,
   THUMBNAIL_ACCEPT,
   useDeleteLesson,
@@ -277,6 +278,7 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
                 if (e.key === "Enter") submitRename();
                 if (e.key === "Escape") setRenaming(false);
               }}
+              maxLength={MAX_TITLE_CHARS}
               disabled={updateName.isPending}
               className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white outline-none focus:border-pinata-purple/60 disabled:opacity-60"
             />

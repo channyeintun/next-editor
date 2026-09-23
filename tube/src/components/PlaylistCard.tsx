@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Check, ListMusic, MoreVertical, Trash2, X } from "lucide-react";
-import { useDeletePlaylist, useUpdatePlaylist, type OwnedPlaylist } from "@next-editor/infra";
+import {
+  MAX_TITLE_CHARS,
+  useDeletePlaylist,
+  useUpdatePlaylist,
+  type OwnedPlaylist,
+} from "@next-editor/infra";
 
 const ghostButton =
   "px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-slate-400 transition-colors hover:text-white disabled:cursor-default disabled:opacity-60";
@@ -173,6 +178,7 @@ export default function PlaylistCard({
                 if (e.key === "Enter") submitRename();
                 if (e.key === "Escape") setRenaming(false);
               }}
+              maxLength={MAX_TITLE_CHARS}
               disabled={update.isPending}
               className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white outline-none focus:border-pinata-purple/60 disabled:opacity-60"
             />
