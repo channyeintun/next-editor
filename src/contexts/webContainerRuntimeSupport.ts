@@ -377,34 +377,27 @@ export async function createWorkspaceTree(project: WorkspaceProject): Promise<Fi
   const createDirectory = (): FileSystemTree => Object.create(null) as FileSystemTree;
   const tree = createDirectory();
 
-  const ensureTreeDirectory = (directoryPath: string) => {
+  /** Returns the tree's node for `directoryPath`, creating any missing levels. */
+  const ensureTreeDirectory = (directoryPath: string): FileSystemTree => {
     const normalizedDirectoryPath = directoryPath ? parseWorkspacePath(directoryPath) : "";
-
-    if (!normalizedDirectoryPath) {
-      return;
-    }
-
     let currentDirectory = tree;
 
-    for (const segment of normalizedDirectoryPath.split("/")) {
-      const existingEntry = currentDirectory[segment];
+    if (!normalizedDirectoryPath) {
+      return currentDirectory;
+    }
 
-      if (existingEntry && !("directory" in existingEntry)) {
+    for (const segment of normalizedDirectoryPath.split("/")) {
+      const entry = currentDirectory[segment] ?? { directory: createDirectory() };
+
+      if (!("directory" in entry)) {
         throw new Error(`Workspace path "${normalizedDirectoryPath}" conflicts with a file`);
       }
 
-      if (!existingEntry) {
-        currentDirectory[segment] = { directory: createDirectory() };
-      }
-
-      const nextEntry = currentDirectory[segment];
-
-      if (!nextEntry || !("directory" in nextEntry)) {
-        return;
-      }
-
-      currentDirectory = nextEntry.directory;
+      currentDirectory[segment] = entry;
+      currentDirectory = entry.directory;
     }
+
+    return currentDirectory;
   };
 
   for (const folderPath of project.folders) {
@@ -419,23 +412,13 @@ export async function createWorkspaceTree(project: WorkspaceProject): Promise<Fi
       continue;
     }
 
-    ensureTreeDirectory(segments.join("/"));
+    const directory = ensureTreeDirectory(segments.join("/"));
 
-    let currentDirectory = tree;
-    for (const segment of segments) {
-      const nextEntry = currentDirectory[segment];
-      if (!nextEntry || !("directory" in nextEntry)) {
-        return tree;
-      }
-
-      currentDirectory = nextEntry.directory;
-    }
-
-    if (currentDirectory[fileName]) {
+    if (directory[fileName]) {
       throw new Error(`Workspace path "${normalizedPath}" conflicts with another entry`);
     }
 
-    currentDirectory[fileName] = {
+    directory[fileName] = {
       file: {
         // The recorder is injected at the preview layer (see
         // createRuntimePreviewScript + setPreviewScript), never written into
