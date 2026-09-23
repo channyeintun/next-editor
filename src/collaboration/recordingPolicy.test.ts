@@ -9,9 +9,8 @@ describe("live collaboration recording policy", () => {
     expect(canRecordInLiveRoom(false, true, true)).toBe(false);
   });
 
-  it("requires recording finalization and accepted updates before live can end", () => {
-    expect(liveRoomEndBlockReason(true, false)).toContain("finalize");
-    expect(liveRoomEndBlockReason(false, true)).toContain("synchronize");
-    expect(liveRoomEndBlockReason(false, false)).toBeNull();
+  it("requires recording finalization before live can end", () => {
+    expect(liveRoomEndBlockReason(true)).toContain("finalize");
+    expect(liveRoomEndBlockReason(false)).toBeNull();
   });
 });

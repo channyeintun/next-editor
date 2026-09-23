@@ -1371,11 +1371,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     stopFollowing("room-changed");
     const current = providerRef.current;
     if (!current) return;
-    const blockReason = liveRoomEndBlockReason(isRecording, false);
+    const blockReason = liveRoomEndBlockReason(isRecording);
     if (blockReason) {
-      const message = blockReason;
-      setLocalError(message);
-      throw new Error(message);
+      setLocalError(blockReason);
+      throw new Error(blockReason);
     }
     await flushCurrentEdits(current);
     await closeCollaborationRoom(current.session?.room.id ?? roomId ?? "");

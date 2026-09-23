@@ -6,13 +6,7 @@ export function canRecordInLiveRoom(
   return recordModeRequested && (!hasLiveRoom || isHost);
 }
 
-export function liveRoomEndBlockReason(
-  isRecording: boolean,
-  hasPendingCollaborationUpdates: boolean,
-): string | null {
-  if (isRecording) return "Stop and finalize the host recording before ending the live room.";
-  if (hasPendingCollaborationUpdates) {
-    return "Live cannot end until offline collaboration changes synchronize.";
-  }
-  return null;
+/** Unsent edits are checked separately, by the flush that closing the room runs first. */
+export function liveRoomEndBlockReason(isRecording: boolean): string | null {
+  return isRecording ? "Stop and finalize the host recording before ending the live room." : null;
 }
