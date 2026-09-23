@@ -451,6 +451,8 @@ describe("recordingCodec", () => {
   it("decodes a segment holding more records than fit in one call's arguments", async () => {
     // A stretch with no editor change is one cluster, so all of its cursor samples
     // (one per pointer event) share a segment: 200,000 is about 28 minutes at 120 Hz.
+    // That takes about half a second to encode and decode on an idle machine, so the
+    // default 5 s timeout is too tight when the suite runs beside other work.
     const cursorEvents = Array.from({ length: 200_000 }, (_, index) => ({
       timestamp: index,
       x: index % 800,
@@ -465,7 +467,7 @@ describe("recordingCodec", () => {
     const reader = createStreamingRecordingReader();
     reader.push(bytes);
     expect(reader.getRecording()?.cursorEvents).toHaveLength(200_000);
-  });
+  }, 30_000);
 
   it("round trips a preview snapshot of a deeply nested page", async () => {
     // rrweb serializes the DOM as nested childNodes, two MessagePack levels per DOM
