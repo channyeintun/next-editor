@@ -11,18 +11,6 @@ function toFiniteInteger(value: unknown, fallback: number): number {
   return Math.trunc(value);
 }
 
-export function cloneStructuredData<T>(value: T): T {
-  if (value == null) {
-    return value;
-  }
-
-  if (typeof globalThis.structuredClone === "function") {
-    return globalThis.structuredClone(value);
-  }
-
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
 function selectionToPosition(
   selection: Partial<EditorSelection> | null | undefined,
 ): Partial<EditorPosition> | null {
@@ -46,50 +34,27 @@ function selectionToPosition(
   };
 }
 
+/** Monaco's first cursor in a saved view state, or null when there is none. */
+function getPrimaryCursorState(
+  viewState: monaco.editor.ICodeEditorViewState | null | undefined,
+): Record<string, unknown> | null {
+  const cursorState = (viewState as { cursorState?: unknown } | null | undefined)?.cursorState;
+  const primaryCursorState: unknown = Array.isArray(cursorState) ? cursorState[0] : null;
+  return primaryCursorState && typeof primaryCursorState === "object"
+    ? (primaryCursorState as Record<string, unknown>)
+    : null;
+}
+
 function getPrimaryCursorSelection(
   viewState: monaco.editor.ICodeEditorViewState | null | undefined,
 ): Partial<EditorSelection> | null {
-  if (!viewState) {
-    return null;
-  }
-
-  const cursorState = (viewState as unknown as { cursorState?: Array<Record<string, unknown>> })
-    .cursorState;
-
-  if (!Array.isArray(cursorState) || cursorState.length === 0) {
-    return null;
-  }
-
-  const primaryCursorState = cursorState[0];
-
-  if (!primaryCursorState || typeof primaryCursorState !== "object") {
-    return null;
-  }
-
-  return (primaryCursorState.selection as Partial<EditorSelection> | null) ?? null;
+  return (getPrimaryCursorState(viewState)?.selection as Partial<EditorSelection> | null) ?? null;
 }
 
 function getPrimaryCursorPosition(
   viewState: monaco.editor.ICodeEditorViewState | null | undefined,
 ): Partial<EditorPosition> | null {
-  if (!viewState) {
-    return null;
-  }
-
-  const cursorState = (viewState as unknown as { cursorState?: Array<Record<string, unknown>> })
-    .cursorState;
-
-  if (!Array.isArray(cursorState) || cursorState.length === 0) {
-    return null;
-  }
-
-  const primaryCursorState = cursorState[0];
-
-  if (!primaryCursorState || typeof primaryCursorState !== "object") {
-    return null;
-  }
-
-  return (primaryCursorState.position as Partial<EditorPosition> | null) ?? null;
+  return (getPrimaryCursorState(viewState)?.position as Partial<EditorPosition> | null) ?? null;
 }
 
 export function normalizeEditorPosition(
@@ -189,7 +154,7 @@ export function normalizeEditorViewState(
     position ?? selectionToPosition(normalizedSelection),
     selectionToPosition(normalizedSelection),
   );
-  const clonedViewState = cloneStructuredData(viewState) as unknown as Record<string, unknown>;
+  const clonedViewState = structuredClone(viewState) as unknown as Record<string, unknown>;
 
   if (Array.isArray(clonedViewState.cursorState)) {
     clonedViewState.cursorState = clonedViewState.cursorState.map((cursorState) => {

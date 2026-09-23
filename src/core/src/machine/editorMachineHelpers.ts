@@ -23,7 +23,6 @@ import {
   arePositionsEqual,
 } from "../utils/editorDiff";
 import {
-  cloneStructuredData,
   normalizeEditorPosition,
   normalizeEditorSelection,
   normalizeEditorViewState,
@@ -191,7 +190,7 @@ export const applyFrameState = (
     // Monaco cursorState inside viewState cannot override the recorded caret.
     if (viewStateChanged) {
       try {
-        editor.restoreViewState(cloneStructuredData(state.viewState));
+        editor.restoreViewState(structuredClone(state.viewState));
       } catch (err) {
         console.error("Failed to restore view state:", err);
       }
