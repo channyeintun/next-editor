@@ -209,6 +209,21 @@ describe("applyWhiteboardEvent", () => {
     expect(next.elements.map((item) => item.id)).toEqual(["c", "b", "a"]);
   });
 
+  // A comparator that calls an unindexed element "equal" to everything is not a
+  // consistent order, so Array.prototype.sort left the indexed elements around one
+  // unsorted: a2 stayed below a1 in a scene that mixed an authored asset with
+  // elements drawn on the canvas.
+  it("keeps indexed elements in index order when an unindexed one sits between them", () => {
+    const scene = {
+      ...EMPTY_WHITEBOARD_SCENE,
+      elements: [element("top", "a2"), element("asset"), element("bottom", "a1")],
+    };
+
+    const next = applyWhiteboardEvent(scene, { timestamp: 0, upserts: [element("asset")] });
+
+    expect(next.elements.map((item) => item.id)).toEqual(["asset", "bottom", "top"]);
+  });
+
   it("carries view and panel flags forward when the delta omits them", () => {
     const scene = { ...EMPTY_WHITEBOARD_SCENE, isOpen: true, isMaximized: true };
 

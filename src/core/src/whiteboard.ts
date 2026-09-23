@@ -109,19 +109,11 @@ export function rebaseWhiteboardDelta(
       .map((element) => [element.id, element] as const),
   );
   for (const element of delta.upserts ?? []) byId.set(element.id, element);
-  return Array.from(byId.values()).sort((left, right) => {
-    const leftIndex = typeof left.index === "string" ? left.index : "";
-    const rightIndex = typeof right.index === "string" ? right.index : "";
-    return leftIndex < rightIndex
-      ? -1
-      : leftIndex > rightIndex
-        ? 1
-        : left.id < right.id
-          ? -1
-          : left.id > right.id
-            ? 1
-            : 0;
-  });
+  return Array.from(byId.values()).sort(
+    (left, right) =>
+      compareWhiteboardElementIndices(left, right) ||
+      (left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
+  );
 }
 
 /**
@@ -182,15 +174,19 @@ export function areWhiteboardViewsEqual(
  * bring-to-front. Excalidraw's updateScene treats array order as the truth and
  * rewrites disagreeing `index` fields (syncInvalidIndices), so the array must be
  * sorted by `index` before it ever reaches updateScene.
+ *
+ * An element without an index (an authored asset) sorts as `""`, below every
+ * indexed one. Treating it as equal to everything instead is not a consistent
+ * order, and the sort then left the indexed elements around it unsorted. Ties
+ * return 0, so a stable sort keeps unindexed elements in their array order.
  */
 export function compareWhiteboardElementIndices(
   a: WhiteboardElementJSON,
   b: WhiteboardElementJSON,
 ): number {
-  const aIndex = typeof a.index === "string" ? a.index : undefined;
-  const bIndex = typeof b.index === "string" ? b.index : undefined;
-  if (aIndex === undefined || bIndex === undefined || aIndex === bIndex) return 0;
-  return aIndex < bIndex ? -1 : 1;
+  const aIndex = typeof a.index === "string" ? a.index : "";
+  const bIndex = typeof b.index === "string" ? b.index : "";
+  return aIndex < bIndex ? -1 : aIndex > bIndex ? 1 : 0;
 }
 
 /**
