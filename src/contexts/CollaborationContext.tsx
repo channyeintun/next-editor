@@ -97,7 +97,7 @@ import {
   collaborationTransactionTouchesOnlyTeaching,
   collaborationTransactionTouchesTeaching,
   collaborationSlidePayloadAssetId,
-  collaborationTeachingSlideMimeType,
+  COLLABORATION_SLIDE_ASSET_MIME_TYPE,
   hydrateCollaborationSlideManifest,
   isCollaborationTeachingInitialized,
   normalizeCollaborationTeachingSlides,
@@ -244,17 +244,21 @@ async function createCollaborationTeachingAssetPlan(
   const assets: CollaborationTeachingAssetPlan["assets"] = new Map();
   for (const item of normalized) {
     const assetId = await collaborationSlidePayloadAssetId(item.payload);
-    const mimeType = collaborationTeachingSlideMimeType(item.slide.contentType);
     const existing = assets.get(assetId);
     if (
       existing &&
-      (existing.mimeType !== mimeType ||
-        existing.payload.byteLength !== item.payload.byteLength ||
+      (existing.payload.byteLength !== item.payload.byteLength ||
         !existing.payload.every((byte, index) => byte === item.payload[index]))
     ) {
       throw new Error("Distinct teaching payloads produced the same content digest.");
     }
-    if (!existing) assets.set(assetId, { id: assetId, payload: item.payload, mimeType });
+    if (!existing) {
+      assets.set(assetId, {
+        id: assetId,
+        payload: item.payload,
+        mimeType: COLLABORATION_SLIDE_ASSET_MIME_TYPE,
+      });
+    }
     items.push({ ...item, assetId });
   }
   return { items, assets };

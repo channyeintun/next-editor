@@ -54,10 +54,6 @@ export const collaborationCurrentSlideCommandSchema = z
   .object({ slideId: collaborationSlideIdSchema })
   .strict();
 
-export type CollaborationCurrentSlideCommand = z.infer<
-  typeof collaborationCurrentSlideCommandSchema
->;
-
 export interface CollaborationRoomDescriptor {
   id: string;
   ownerId: string;
@@ -298,7 +294,6 @@ export const collaborationSurfaceSchema = z.discriminatedUnion("kind", [
 
 export type CollaborationEditorViewport = z.infer<typeof collaborationEditorViewportSchema>;
 export type CollaborationSurface = z.infer<typeof collaborationSurfaceSchema>;
-export type LocalCollaborationSurface = CollaborationSurface;
 
 const collaborationAwarenessStateFields = {
   sessionId: collaborationIdSchema,

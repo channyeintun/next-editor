@@ -1,12 +1,11 @@
 import * as Y from "yjs";
 import { z } from "zod";
 import type { WhiteboardElementJSON, WhiteboardEvent } from "../core/src/whiteboard";
-import type { Slide, SlideContentType } from "../types/slides";
+import type { Slide } from "../types/slides";
 import {
   collaborationAssetDescriptorSchema,
   collaborationCurrentSlideCommandSchema,
   collaborationSlideIdSchema,
-  MAX_COLLABORATION_SLIDE_ID_LENGTH,
   MAX_COLLABORATION_WHITEBOARD_COORDINATE,
   MAX_YJS_SNAPSHOT_BYTES,
   type CollaborationAssetDescriptor,
@@ -24,7 +23,6 @@ export const COLLABORATION_TEACHING_PRESENTATION = "presentation";
 export const COLLABORATION_TEACHING_WHITEBOARD = "whiteboardElements";
 
 export const MAX_COLLABORATION_TEACHING_SLIDES = 100;
-export { MAX_COLLABORATION_SLIDE_ID_LENGTH };
 export const MAX_COLLABORATION_SLIDE_PAYLOAD_BYTES = 5 * 1024 * 1024;
 export const MAX_COLLABORATION_WHITEBOARD_ELEMENTS = 5_000;
 export const MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES = 48 * 1024;
@@ -194,11 +192,9 @@ const collaborationWhiteboardElementSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const collaborationTeachingSlideIdSchema = collaborationSlideIdSchema;
-
 export const collaborationTeachingSlideManifestSchema = z
   .object({
-    id: collaborationTeachingSlideIdSchema,
+    id: collaborationSlideIdSchema,
     contentType: z.enum(["html", "markdown", "google-svg"]),
     asset: collaborationAssetDescriptorSchema.refine(
       (asset) => asset.mimeType === COLLABORATION_SLIDE_ASSET_MIME_TYPE,
@@ -368,7 +364,7 @@ export function isCollaborationTeachingInitialized(doc: Y.Doc): boolean {
 }
 
 function normalizeSlideId(value: string): string {
-  const parsed = collaborationTeachingSlideIdSchema.safeParse(value);
+  const parsed = collaborationSlideIdSchema.safeParse(value);
   if (!parsed.success) throw new CollaborationTeachingError("A slide has an invalid ID");
   return parsed.data;
 }
@@ -1230,10 +1226,4 @@ export function applyCollaborationWhiteboardDelta(
     }, origin);
   }
   return next;
-}
-
-export function collaborationTeachingSlideMimeType(
-  _contentType: SlideContentType,
-): "application/vnd.next-editor.slide+json" {
-  return COLLABORATION_SLIDE_ASSET_MIME_TYPE;
 }
