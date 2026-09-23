@@ -641,7 +641,7 @@ export class CollaborationRoomProvider {
       return;
     }
     if (frame.kind !== "server-update") return;
-    if (this.isSynchronizing || this.connectionState === "syncing") {
+    if (this.isSynchronizing) {
       this.bufferedBinaryUpdates.push(frame);
     } else {
       this.applyBinaryServerUpdate(frame);
@@ -804,8 +804,12 @@ export class CollaborationRoomProvider {
       if (this.isStopped || attemptId !== this.attemptId) return;
 
       Y.applyUpdate(this.doc, update, COLLABORATION_ORIGIN.remoteProvider);
+      // Server updates that arrived while the snapshot was requested. Nothing can
+      // be buffered after this: socket messages are separate tasks, and there is
+      // no await between here and flushOutbox.
       const buffered = this.bufferedBinaryUpdates;
       this.bufferedBinaryUpdates = [];
+      this.isSynchronizing = false;
       for (const frame of buffered) this.applyBinaryServerUpdate(frame);
       if (!this.roomSession) throw new Error("Collaboration room session is missing");
       this.hasCompletedSync = true;
@@ -816,10 +820,6 @@ export class CollaborationRoomProvider {
         roomSession: this.roomSession,
       });
       this.reconnectAttempt = 0;
-      const finalBuffered = this.bufferedBinaryUpdates;
-      this.bufferedBinaryUpdates = [];
-      this.isSynchronizing = false;
-      for (const frame of finalBuffered) this.applyBinaryServerUpdate(frame);
       await this.flushOutbox();
     } catch (error) {
       synchronizationOutcome = "failure";
