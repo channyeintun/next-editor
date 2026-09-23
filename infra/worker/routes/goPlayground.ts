@@ -56,8 +56,6 @@ const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
 const MAX_UPSTREAM_FORMAT_RESPONSE_BYTES = MAX_SOURCE_BYTES * 6 + 64 * 1024;
 const MAX_FORMAT_ERROR_CHARS = 16 * 1024;
 const CACHE_TTL_SECONDS = 60 * 60;
-const RATE_LIMIT_RUNS_PER_MINUTE = 10;
-const RATE_LIMIT_FORMATS_PER_MINUTE = 20;
 
 interface GoSourceToken {
   kind: "identifier" | "string" | "symbol";
@@ -531,10 +529,9 @@ goPlaygroundRoute.post("/run", async (c) => {
     return c.json(cachedResult);
   }
 
-  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+  // The run budget is GO_RUN_RATE_LIMITER's, set in infra/wrangler.toml.
+  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.GO_RUN_RATE_LIMITER, {
     userId: user.id,
-    keyPrefix: "gp:rl",
-    limit: RATE_LIMIT_RUNS_PER_MINUTE,
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {
@@ -631,11 +628,9 @@ goPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: request.error }, request.status);
   }
 
-  const cache = getCache(c.env);
-  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+  // The format budget is GO_FORMAT_RATE_LIMITER's, set in infra/wrangler.toml.
+  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.GO_FORMAT_RATE_LIMITER, {
     userId: user.id,
-    keyPrefix: "gp:fmt:rl",
-    limit: RATE_LIMIT_FORMATS_PER_MINUTE,
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {

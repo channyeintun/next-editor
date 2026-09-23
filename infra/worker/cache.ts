@@ -33,13 +33,12 @@ export function playlistSlugKey(slug: string): string {
 }
 
 // The checked-in Wrangler config provides this binding, but keeping it
-// optional lets self-hosted/test environments omit it. What that costs depends
-// on the caller: `cached()` below degrades to its loader, so the lesson and
-// playlist reads only lose their cache. The playground routes
-// (routes/{go,kotlin,rust,zig,haskell}Playground.ts) also use this binding as
-// their rate-limit policy store, and that one fails closed — without CACHE
-// every run answers 502 rather than running uncached, because a route that
-// cannot count calls must not proxy to a third-party service at all.
+// optional lets self-hosted/test environments omit it. Every caller only loses
+// its cache without it: `cached()` below degrades to its loader for the lesson
+// and playlist reads, and the playground routes
+// (routes/{go,kotlin,rust,zig,haskell}Playground.ts) run uncached against their
+// upstream. Their per-user rate limit never touches KV: the *_RATE_LIMITER
+// bindings (see env.d.ts) enforce it.
 export function getCache(env: Env): KVNamespace | null {
   return env.CACHE ?? null;
 }

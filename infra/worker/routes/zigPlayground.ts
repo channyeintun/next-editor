@@ -40,9 +40,10 @@ import {
 //
 // The upstream also rate-limits at 5 requests per minute per client IP, and
 // /server/run and /server/fmt share that one counter. Runs and formats are
-// therefore charged against a single per-user window set below it, and
-// deterministic outcomes of both are cached, so one lesson's repeated work
-// does not spend the shared budget.
+// therefore charged against a single per-user budget set below it
+// (ZIG_UPSTREAM_RATE_LIMITER in infra/wrangler.toml), and deterministic
+// outcomes of both are cached, so one lesson's repeated work does not spend
+// the shared budget.
 //
 // Privacy invariant: user sources, program output, and diagnostics must never
 // be logged — telemetry is aggregate fields only (see logRun below). Nothing
@@ -79,15 +80,6 @@ const MAX_FORMAT_ERROR_CHARS = 16 * 1024;
 const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
 const MAX_EXIT_DETAIL_CHARS = 256;
 const CACHE_TTL_SECONDS = 60 * 60;
-// One window for runs and formats together, deliberately below the upstream's
-// own 5/minute per-IP budget, which /server/run and /server/fmt share: every
-// Next Editor user shares this Worker's egress, so our ceiling has to leave
-// room for other users rather than spend the whole upstream window on one
-// person. Cached results are served before the window is charged, so this
-// counts upstream calls rather than button presses. Both handlers therefore
-// pass the one "zp:rl" prefix, where the Go and Rust routes give /run and
-// /format a bucket each.
-const RATE_LIMIT_UPSTREAM_CALLS_PER_MINUTE = 4;
 
 // The upstream compiles one root source file from a single text body, so
 // lessons submit exactly one file with this fixed name.
@@ -349,11 +341,10 @@ zigPlaygroundRoute.post("/run", async (c) => {
   }
 
   // Charged only once the request is really going upstream, so re-running
-  // unchanged source never spends a slot a Format may need.
-  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+  // unchanged source never spends a slot a Format may need. The budget, shared
+  // with /format, is ZIG_UPSTREAM_RATE_LIMITER's, set in infra/wrangler.toml.
+  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
     userId: user.id,
-    keyPrefix: "zp:rl",
-    limit: RATE_LIMIT_UPSTREAM_CALLS_PER_MINUTE,
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {
@@ -381,8 +372,8 @@ zigPlaygroundRoute.post("/run", async (c) => {
       : c.json({ error: "the Zig Playground service is unavailable" }, 502);
   }
 
-  // Backpressure: our own window sits below the upstream's per-IP budget, so
-  // reaching the upstream's limit means somebody else spent it. Reported as a
+  // Backpressure: our own budget sits below the upstream's per-IP limit, so
+  // reaching that limit means somebody else spent it. Reported as a
   // 502 rather than a 429, because the client renders a 429 as "Too many runs"
   // — which blames a learner who pressed Run once. The distinction stays
   // visible in telemetry through the upstream-busy outcome, matching Haskell.
@@ -479,10 +470,10 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json(cachedFormat);
   }
 
-  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+  // The budget, shared with /run, is ZIG_UPSTREAM_RATE_LIMITER's, set in
+  // infra/wrangler.toml.
+  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
     userId: user.id,
-    keyPrefix: "zp:rl",
-    limit: RATE_LIMIT_UPSTREAM_CALLS_PER_MINUTE,
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {

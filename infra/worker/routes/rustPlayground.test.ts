@@ -6,6 +6,7 @@ import {
 } from "./rustPlayground";
 import type { Env } from "../env";
 import type { UserRow } from "../../db/types";
+import { countingRateLimiter, refusingRateLimiter } from "../testing/rateLimit";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -32,8 +33,8 @@ function dbWithSessionUser(user: UserRow | null): D1Database {
 }
 
 /** In-memory KV covering the get/put subset the route uses. */
-function memoryKv(seed: Record<string, string> = {}): KVNamespace {
-  const values = new Map(Object.entries(seed));
+function memoryKv(): KVNamespace {
+  const values = new Map<string, string>();
   return {
     get: async (key: string, type?: unknown) => {
       const value = values.get(key) ?? null;
@@ -53,6 +54,8 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     DB: dbWithSessionUser(USER),
     CACHE: memoryKv(),
     RUST_PLAYGROUND_ENABLED: "true",
+    RUST_RUN_RATE_LIMITER: countingRateLimiter(Infinity),
+    RUST_FORMAT_RATE_LIMITER: countingRateLimiter(Infinity),
     ...overrides,
   } as Env;
 }
@@ -174,25 +177,31 @@ describe("rustPlaygroundRoute", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("returns 429 once the per-user minute window is exhausted", async () => {
+  it("returns 429 once the per-user budget is spent", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
-    // Freeze the clock: the seeded key and the route's own key are computed at
-    // different moments, and a minute boundary between them would leave the
-    // seeded count invisible and let the request through.
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
-    const windowKey = `rp:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
-    const response = await runRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "10" }) }));
+    const response = await runRequest(makeEnv({ RUST_RUN_RATE_LIMITER: refusingRateLimiter() }));
 
     expect(response.status).toBe(429);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the rate-limit store is unavailable", async () => {
+  it("fails closed when the rate-limit binding is missing", async () => {
+    const spy = stubUpstream(UPSTREAM_SUCCESS);
+    const response = await runRequest(makeEnv({ RUST_RUN_RATE_LIMITER: undefined }));
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "Rust Playground execution policy is unavailable",
+    });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("runs uncached when CACHE is absent", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
     const response = await runRequest(makeEnv({ CACHE: undefined }));
 
-    expect(response.status).toBe(502);
-    expect(spy).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("proxies the pinned execute config with a unique user agent, and strips cargo noise", async () => {
@@ -321,12 +330,10 @@ describe("rustPlaygroundRoute", () => {
     expect(await second.json()).toEqual(await first.json());
   });
 
-  it("does not spend the window on a run served from the cache", async () => {
-    // Frozen so the loop cannot straddle a minute boundary and reset the
-    // fixed window halfway through.
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
+  it("does not spend the budget on a run served from the cache", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
-    const env = makeEnv();
+    const limiter = countingRateLimiter(10);
+    const env = makeEnv({ RUST_RUN_RATE_LIMITER: limiter });
     const statuses: number[] = [];
 
     // Same source every time, so only the first run reaches the upstream and
@@ -337,6 +344,7 @@ describe("rustPlaygroundRoute", () => {
 
     expect(statuses.every((status) => status === 200)).toBe(true);
     expect(spy).toHaveBeenCalledTimes(1);
+    expect(limiter.keys).toEqual([USER.id]);
   });
 
   it("does not cache runtime errors", async () => {
@@ -410,10 +418,10 @@ describe("rustPlaygroundRoute", () => {
 
   it("rate-limits formatting independently from Run", async () => {
     const spy = stubUpstream({ success: true, code: SOURCE, stdout: "", stderr: "" });
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
-    const windowKey = `rp:fmt:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
 
-    const response = await formatRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "20" }) }));
+    const response = await formatRequest(
+      makeEnv({ RUST_FORMAT_RATE_LIMITER: refusingRateLimiter() }),
+    );
 
     expect(response.status).toBe(429);
     expect(spy).not.toHaveBeenCalled();

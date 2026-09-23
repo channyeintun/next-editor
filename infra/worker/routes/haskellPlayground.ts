@@ -82,13 +82,6 @@ const MAX_OUTPUT_CHARS = 256 * 1024;
 const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
 const MAX_EXIT_DETAIL_CHARS = 256;
 const CACHE_TTL_SECONDS = 60 * 60;
-// The upstream publishes no per-IP budget, but every run occupies one worker
-// in a small shared community pool for seconds of real compile time, and the
-// service answers 503 once that pool saturates. So this sits below the 10/min
-// the Rust and Kotlin routes allow against far larger hosted services, and
-// above the Zig route's 4/min, which is pinned by that upstream's hard
-// documented 5/min per-IP cap rather than by politeness.
-const RATE_LIMIT_RUNS_PER_MINUTE = 6;
 
 // The upstream compiles one module from a single source string, so lessons
 // submit exactly one file with this fixed name. Capital M: GHC names the
@@ -272,10 +265,9 @@ haskellPlaygroundRoute.post("/run", async (c) => {
     return c.json(cachedResult);
   }
 
-  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+  // The run budget is HASKELL_RUN_RATE_LIMITER's, set in infra/wrangler.toml.
+  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.HASKELL_RUN_RATE_LIMITER, {
     userId: user.id,
-    keyPrefix: "hp:rl",
-    limit: RATE_LIMIT_RUNS_PER_MINUTE,
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {
@@ -319,7 +311,7 @@ haskellPlaygroundRoute.post("/run", async (c) => {
   // Backpressure: 503 "Service busy, please try again later" means every
   // worker in the shared pool is occupied. Reported as a 502 rather than a
   // 429, because a 429 tells the learner THEY ran too often — this is somebody
-  // else's load, and our own per-user window is what polices their rate. The
+  // else's load, and our own per-user budget is what polices their rate. The
   // 502 copy ("unavailable right now — your code is unchanged, try again
   // shortly") is the accurate thing to show, and the distinction stays visible
   // in telemetry through the upstream-busy outcome.

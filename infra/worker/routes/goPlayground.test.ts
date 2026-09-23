@@ -11,6 +11,7 @@ import {
 } from "./goPlayground";
 import type { Env } from "../env";
 import type { UserRow } from "../../db/types";
+import { countingRateLimiter, refusingRateLimiter } from "../testing/rateLimit";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -39,8 +40,8 @@ function dbWithSessionUser(user: UserRow | null): D1Database {
 }
 
 /** In-memory KV covering the get/put subset the route uses. */
-function memoryKv(seed: Record<string, string> = {}): KVNamespace {
-  const values = new Map(Object.entries(seed));
+function memoryKv(): KVNamespace {
+  const values = new Map<string, string>();
   return {
     get: async (key: string, type?: unknown) => {
       const value = values.get(key) ?? null;
@@ -60,6 +61,8 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     DB: dbWithSessionUser(USER),
     CACHE: memoryKv(),
     GO_PLAYGROUND_ENABLED: "true",
+    GO_RUN_RATE_LIMITER: countingRateLimiter(Infinity),
+    GO_FORMAT_RATE_LIMITER: countingRateLimiter(Infinity),
     ...overrides,
   } as Env;
 }
@@ -282,25 +285,31 @@ describe("goPlaygroundRoute", () => {
     },
   );
 
-  it("returns 429 once the per-user minute window is exhausted", async () => {
+  it("returns 429 once the per-user budget is spent", async () => {
     const spy = stubUpstream({});
-    // Freeze the clock: the seeded key and the route's own key are computed at
-    // different moments, and a minute boundary between them would leave the
-    // seeded count invisible and let the request through.
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
-    const windowKey = `gp:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
-    const response = await runRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "10" }) }));
+    const response = await runRequest(makeEnv({ GO_RUN_RATE_LIMITER: refusingRateLimiter() }));
 
     expect(response.status).toBe(429);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the rate-limit store is unavailable", async () => {
+  it("fails closed when the rate-limit binding is missing", async () => {
     const spy = stubUpstream({});
-    const response = await runRequest(makeEnv({ CACHE: undefined }));
+    const response = await runRequest(makeEnv({ GO_RUN_RATE_LIMITER: undefined }));
 
     expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "Go Playground execution policy is unavailable",
+    });
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("runs uncached when CACHE is absent", async () => {
+    const spy = stubUpstream({ Events: [{ Message: "hi\n", Kind: "stdout" }], Status: 0 });
+    const response = await runRequest(makeEnv({ CACHE: undefined }));
+
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("serializes multiple files as deterministic txtar before proxying", async () => {
@@ -447,12 +456,10 @@ describe("goPlaygroundRoute", () => {
     expect(await second.json()).toEqual(await first.json());
   });
 
-  it("does not spend the window on a run served from the cache", async () => {
-    // Frozen so the loop cannot straddle a minute boundary and reset the
-    // fixed window halfway through.
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
+  it("does not spend the budget on a run served from the cache", async () => {
     const spy = stubUpstream({ Events: [{ Message: "hi\n", Kind: "stdout" }], Status: 0 });
-    const env = makeEnv();
+    const limiter = countingRateLimiter(10);
+    const env = makeEnv({ GO_RUN_RATE_LIMITER: limiter });
     const statuses: number[] = [];
 
     // Same source every time, so only the first run reaches the upstream and
@@ -463,6 +470,7 @@ describe("goPlaygroundRoute", () => {
 
     expect(statuses.every((status) => status === 200)).toBe(true);
     expect(spy).toHaveBeenCalledTimes(1);
+    expect(limiter.keys).toEqual([USER.id]);
   });
 
   it("does not cache runtime errors", async () => {
@@ -545,10 +553,10 @@ describe("goPlaygroundRoute", () => {
 
   it("rate-limits formatting independently from Run", async () => {
     const spy = stubUpstream({ Body: TXTAR_SOURCE, Error: "" });
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
-    const windowKey = `gp:fmt:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
 
-    const response = await formatRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "20" }) }));
+    const response = await formatRequest(
+      makeEnv({ GO_FORMAT_RATE_LIMITER: refusingRateLimiter() }),
+    );
 
     expect(response.status).toBe(429);
     expect(spy).not.toHaveBeenCalled();

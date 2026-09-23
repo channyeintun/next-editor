@@ -57,8 +57,6 @@ const MAX_UPSTREAM_RESPONSE_BYTES = MAX_OUTPUT_CHARS * 6 + 64 * 1024;
 const MAX_FORMAT_ERROR_CHARS = 16 * 1024;
 const MAX_EXIT_DETAIL_CHARS = 256;
 const CACHE_TTL_SECONDS = 60 * 60;
-const RATE_LIMIT_RUNS_PER_MINUTE = 10;
-const RATE_LIMIT_FORMATS_PER_MINUTE = 20;
 
 // The upstream compiles one crate from a single source string, so lessons
 // submit exactly one file with this fixed name.
@@ -259,10 +257,9 @@ rustPlaygroundRoute.post("/run", async (c) => {
     return c.json(cachedResult);
   }
 
-  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+  // The run budget is RUST_RUN_RATE_LIMITER's, set in infra/wrangler.toml.
+  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.RUST_RUN_RATE_LIMITER, {
     userId: user.id,
-    keyPrefix: "rp:rl",
-    limit: RATE_LIMIT_RUNS_PER_MINUTE,
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {
@@ -380,11 +377,9 @@ rustPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: request.error }, request.status);
   }
 
-  const cache = getCache(c.env);
-  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+  // The format budget is RUST_FORMAT_RATE_LIMITER's, set in infra/wrangler.toml.
+  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.RUST_FORMAT_RATE_LIMITER, {
     userId: user.id,
-    keyPrefix: "rp:fmt:rl",
-    limit: RATE_LIMIT_FORMATS_PER_MINUTE,
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {

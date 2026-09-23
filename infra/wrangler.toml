@@ -186,6 +186,65 @@ bucket_name = "next-editor-tube-media"
 [[kv_namespaces]]
 binding = "CACHE"
 
+# Per-user budgets for the playground proxies (worker/routes/*Playground.ts),
+# enforced by Workers Rate Limiting and keyed by user id. Each budget is its
+# own binding: Go and Rust give /run and /format one each, and Zig charges both
+# to one because its upstream counts them together. Cached results are served
+# before a budget is charged, so these count upstream calls, not button presses.
+# Counters live per Cloudflare location and are approximate by design, which
+# is enough for a courtesy ceiling in front of a community service, and they
+# cost no KV writes. A route whose binding is missing answers 502 rather than
+# proxying without a limit (fails closed, like the kill switches above).
+# `period` may only be 10 or 60 seconds; keep 60, because the routes' 429 says
+# "retry in a minute". `namespace_id` names the counter across the whole
+# Cloudflare account: never reuse one for a different budget, and keep this
+# 7101-7107 block clear of other Workers' ids, or they would share counters.
+[[ratelimits]]
+name = "GO_RUN_RATE_LIMITER"
+namespace_id = "7101"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "GO_FORMAT_RATE_LIMITER"
+namespace_id = "7102"
+simple = { limit = 20, period = 60 }
+
+[[ratelimits]]
+name = "RUST_RUN_RATE_LIMITER"
+namespace_id = "7103"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "RUST_FORMAT_RATE_LIMITER"
+namespace_id = "7104"
+simple = { limit = 20, period = 60 }
+
+[[ratelimits]]
+name = "KOTLIN_RUN_RATE_LIMITER"
+namespace_id = "7105"
+simple = { limit = 10, period = 60 }
+
+# play.haskell.org publishes no per-IP budget, but every run occupies one
+# worker in a small shared community pool for seconds of real compile time,
+# and the service answers 503 once that pool saturates. So this sits below the
+# 10/min the Rust and Kotlin routes allow against far larger hosted services,
+# and above Zig's 4/min, which is pinned by that upstream's hard documented
+# 5/min per-IP cap rather than by politeness.
+[[ratelimits]]
+name = "HASKELL_RUN_RATE_LIMITER"
+namespace_id = "7106"
+simple = { limit = 6, period = 60 }
+
+# One budget for Zig runs and formats together, deliberately below
+# zig-play.dev's own 5/minute per-IP budget, which /server/run and /server/fmt
+# share: every Next Editor user shares this Worker's egress, so our ceiling has
+# to leave room for other users rather than spend the whole upstream budget on
+# one person.
+[[ratelimits]]
+name = "ZIG_UPSTREAM_RATE_LIMITER"
+namespace_id = "7107"
+simple = { limit = 4, period = 60 }
+
 # One hibernating WebSocket coordinator per live-collaboration room. Every room
 # keeps its durable Yjs log in this object's SQLite storage.
 [[durable_objects.bindings]]

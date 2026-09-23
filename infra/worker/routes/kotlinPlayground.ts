@@ -66,7 +66,6 @@ const MAX_EXCEPTION_CHARS = 16 * 1024;
 const MAX_STACK_FRAMES = 20;
 const MAX_CAUSE_DEPTH = 4;
 const CACHE_TTL_SECONDS = 60 * 60;
-const RATE_LIMIT_RUNS_PER_MINUTE = 10;
 
 const KT_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*\.kt$/;
 
@@ -435,10 +434,9 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
     return c.json(cachedResult);
   }
 
-  const rateLimitDecision = await checkPlaygroundRateLimit(cache, {
+  // The run budget is KOTLIN_RUN_RATE_LIMITER's, set in infra/wrangler.toml.
+  const rateLimitDecision = await checkPlaygroundRateLimit(c.env.KOTLIN_RUN_RATE_LIMITER, {
     userId: user.id,
-    keyPrefix: "kp:rl",
-    limit: RATE_LIMIT_RUNS_PER_MINUTE,
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {

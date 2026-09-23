@@ -28,6 +28,16 @@ export interface Env {
   // Same kill-switch contract for Zig lessons via the Zig Playground proxy
   // (routes/zigPlayground.ts).
   ZIG_PLAYGROUND_ENABLED?: string;
+  // Per-user playground budgets (Workers Rate Limiting, see the [[ratelimits]]
+  // section of infra/wrangler.toml). Like the kill switches above they fail
+  // closed: a route whose binding is missing answers 502 instead of proxying.
+  GO_RUN_RATE_LIMITER?: RateLimit;
+  GO_FORMAT_RATE_LIMITER?: RateLimit;
+  RUST_RUN_RATE_LIMITER?: RateLimit;
+  RUST_FORMAT_RATE_LIMITER?: RateLimit;
+  KOTLIN_RUN_RATE_LIMITER?: RateLimit;
+  HASKELL_RUN_RATE_LIMITER?: RateLimit;
+  ZIG_UPSTREAM_RATE_LIMITER?: RateLimit;
   // Private Burmese Studio narration. All three values are required and the
   // requesting user must also have studio.burmese-voxcpm2 enabled in D1.
   // The browser never receives these Modal workspace credentials.

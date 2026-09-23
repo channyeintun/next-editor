@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { haskellPlaygroundRoute, normalizeUpstreamRunResponse } from "./haskellPlayground";
 import type { Env } from "../env";
 import type { UserRow } from "../../db/types";
+import { countingRateLimiter, refusingRateLimiter } from "../testing/rateLimit";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -28,8 +29,8 @@ function dbWithSessionUser(user: UserRow | null): D1Database {
 }
 
 /** In-memory KV covering the get/put subset the route uses. */
-function memoryKv(seed: Record<string, string> = {}): KVNamespace {
-  const values = new Map(Object.entries(seed));
+function memoryKv(): KVNamespace {
+  const values = new Map<string, string>();
   return {
     get: async (key: string, type?: unknown) => {
       const value = values.get(key) ?? null;
@@ -49,6 +50,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     DB: dbWithSessionUser(USER),
     CACHE: memoryKv(),
     HASKELL_PLAYGROUND_ENABLED: "true",
+    HASKELL_RUN_RATE_LIMITER: countingRateLimiter(Infinity),
     ...overrides,
   } as Env;
 }
@@ -570,25 +572,17 @@ describe("haskellPlaygroundRoute", () => {
     });
   });
 
-  it("returns 429 once the per-user minute window is exhausted", async () => {
+  it("returns 429 once the per-user budget is spent", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
-    // Freeze the clock: the seeded key and the route's own key are computed at
-    // different moments, and a minute boundary between them would leave the
-    // seeded count invisible and let the request through.
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
-    const windowKey = `hp:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
-    const response = await runRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "6" }) }));
+    const response = await runRequest(makeEnv({ HASKELL_RUN_RATE_LIMITER: refusingRateLimiter() }));
 
     expect(response.status).toBe(429);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("limits runs per user below what the shared community pool can absorb", async () => {
+  it("limits runs per user to the binding's budget", async () => {
     stubUpstream(UPSTREAM_SUCCESS);
-    // Freeze the clock so the loop cannot straddle a minute boundary and reset
-    // the fixed window halfway through.
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
-    const env = makeEnv();
+    const env = makeEnv({ HASKELL_RUN_RATE_LIMITER: countingRateLimiter(6) });
     const statuses: number[] = [];
 
     // Distinct sources so the cache cannot absorb the repeats.
@@ -604,27 +598,23 @@ describe("haskellPlaygroundRoute", () => {
     expect(statuses.filter((status) => status === 429)).toHaveLength(2);
   });
 
-  it("fails closed when the rate-limit store is missing", async () => {
+  it("fails closed when the rate-limit binding is missing", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
-    const response = await runRequest(makeEnv({ CACHE: undefined }));
+    const response = await runRequest(makeEnv({ HASKELL_RUN_RATE_LIMITER: undefined }));
 
     expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "Haskell Playground execution policy is unavailable",
+    });
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the rate-limit store throws", async () => {
+  it("runs uncached when CACHE is absent", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
-    const failingKv = {
-      get: async () => {
-        throw new Error("KV unavailable");
-      },
-      put: async () => undefined,
-    } as unknown as KVNamespace;
+    const response = await runRequest(makeEnv({ CACHE: undefined }));
 
-    const response = await runRequest(makeEnv({ CACHE: failingKv }));
-
-    expect(response.status).toBe(502);
-    expect(spy).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("serves an identical request from the cache without a second upstream call", async () => {
@@ -662,15 +652,13 @@ describe("haskellPlaygroundRoute", () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
-  it("does not charge the minute window for a request the cache answers", async () => {
+  it("does not charge the budget for a request the cache answers", async () => {
     // The ceiling protects the upstream's shared pool, and a cache hit never
     // reaches it. Re-running an unchanged Main.hs while reading its output
     // must not use up the budget the next real edit needs.
     const spy = stubUpstream(UPSTREAM_SUCCESS);
-    // Frozen so the loop cannot straddle a minute boundary and refill the
-    // window halfway through.
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
-    const env = makeEnv();
+    const limiter = countingRateLimiter(6);
+    const env = makeEnv({ HASKELL_RUN_RATE_LIMITER: limiter });
     const statuses: number[] = [];
 
     for (let index = 0; index < 9; index++) {
@@ -679,6 +667,7 @@ describe("haskellPlaygroundRoute", () => {
 
     expect(statuses).toEqual(Array(9).fill(200));
     expect(spy).toHaveBeenCalledTimes(1);
+    expect(limiter.keys).toEqual([USER.id]);
   });
 
   it("re-runs the program when the cached entry no longer parses", async () => {
@@ -687,8 +676,7 @@ describe("haskellPlaygroundRoute", () => {
     // upstream path rather than serve or throw.
     const spy = stubUpstream(UPSTREAM_SUCCESS);
     const staleKv = {
-      get: async (key: string) =>
-        key.startsWith("hp:rl:") ? null : { status: "compile-error", stdout: "", stderr: "" },
+      get: async () => ({ status: "compile-error", stdout: "", stderr: "" }),
       put: async () => undefined,
     } as unknown as KVNamespace;
 
@@ -704,12 +692,11 @@ describe("haskellPlaygroundRoute", () => {
   });
 
   it("runs the program when the result-cache read fails", async () => {
-    // Unlike a failing rate-limit store, this is not fail-closed: the policy
-    // check still works, so a broken cache only costs an upstream run.
+    // Unlike a failing rate-limit binding, this is not fail-closed: a broken
+    // cache only costs an upstream run.
     const spy = stubUpstream(UPSTREAM_SUCCESS);
     const failingResultKv = {
-      get: async (key: string) => {
-        if (key.startsWith("hp:rl:")) return null;
+      get: async () => {
         throw new Error("KV unavailable");
       },
       put: async () => undefined,

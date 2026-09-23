@@ -5,7 +5,7 @@ import { readBodyWithLimit } from "./httpBody";
 // rust,zig,haskell}Playground.ts), alongside httpBody.ts's readBodyWithLimit.
 //
 // Only the parts that are genuinely identical across upstreams live here: the
-// fixed-window rate limiter, the content-addressed cache key, the KV result
+// per-user rate-limit check, the content-addressed cache key, the KV result
 // cache, the output bound, and reading the `{ files: [...] }` request body
 // (whole for single-file upstreams, up to the per-language policy for Go and
 // Kotlin). Everything that encodes a particular service's behaviour — its file
@@ -32,63 +32,33 @@ export async function contentCacheKey(prefix: string, content: string): Promise<
   return `${prefix}:${await sha256Hex(content)}`;
 }
 
-// Fixed-window per-user limit in KV. Approximate by design (KV is eventually
-// consistent), but fail closed when the policy store is missing or unavailable
-// so a configuration outage cannot turn a route into an unlimited proxy.
+// Per-user limit through a Workers Rate Limiting binding. Approximate by design
+// (Cloudflare counts per location), but fail closed when the binding is missing
+// or unavailable so a configuration outage cannot turn a route into an
+// unlimited proxy.
 export type RateLimitDecision = "allowed" | "limited" | "unavailable";
 
 /**
- * Workers KV accepts one write per key per second and rejects the next one with
- * "KV PUT failed: 429 Too Many Requests". On the window counter that means this
- * user was charged less than a second ago: they are calling too fast, which is
- * a limit, not an outage of the policy store (its read just succeeded).
- */
-function isKvWriteRateLimited(error: unknown): boolean {
-  return error instanceof Error && /\b429\b/.test(error.message);
-}
-
-/**
- * Charge one call against `userId`'s current minute window.
+ * Charge one call against `userId`'s budget on `limiter`.
  *
- * `keyPrefix` and `limit` are per route, and a route that serves both /run and
- * /format passes a different prefix for each so the two get their own budgets
- * — except where the upstream itself counts them together (zigPlayground.ts),
- * which passes one prefix for both. `label` only ever reaches console.error;
- * user sources and output must never be logged.
+ * Each budget is its own binding, declared with its limit and period in
+ * infra/wrangler.toml. A route that serves both /run and /format passes a
+ * different binding for each so the two get their own budgets — except where
+ * the upstream itself counts them together (zigPlayground.ts), which passes
+ * one binding for both. `label` only ever reaches console.error; user sources
+ * and output must never be logged.
  */
 export async function checkPlaygroundRateLimit(
-  cache: KVNamespace | null,
-  options: { userId: string; keyPrefix: string; limit: number; label: string },
+  limiter: RateLimit | undefined,
+  options: { userId: string; label: string },
 ): Promise<RateLimitDecision> {
-  if (!cache) {
+  if (!limiter) {
     return "unavailable";
   }
-  const windowKey = `${options.keyPrefix}:${options.userId}:${Math.floor(Date.now() / 60_000)}`;
-  let count: number;
   try {
-    count = Number((await cache.get(windowKey)) ?? "0");
+    const { success } = await limiter.limit({ key: options.userId });
+    return success ? "allowed" : "limited";
   } catch {
-    console.error(`${options.label} rate-limit check failed`);
-    return "unavailable";
-  }
-  if (!Number.isSafeInteger(count) || count < 0) {
-    console.error(`${options.label} rate-limit state was invalid`);
-    return "unavailable";
-  }
-  if (count >= options.limit) {
-    return "limited";
-  }
-  try {
-    // Two windows' worth of TTL: the key only has to outlive the minute it
-    // counts, and KV cannot expire it precisely on the boundary.
-    await cache.put(windowKey, String(count + 1), { expirationTtl: 120 });
-    return "allowed";
-  } catch (error) {
-    // Still refused either way: a call that could not be charged never goes
-    // upstream, or a burst inside one second would all pass uncounted.
-    if (isKvWriteRateLimited(error)) {
-      return "limited";
-    }
     console.error(`${options.label} rate-limit check failed`);
     return "unavailable";
   }

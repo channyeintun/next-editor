@@ -8,6 +8,11 @@ import {
 } from "./zigPlayground";
 import type { Env } from "../env";
 import type { UserRow } from "../../db/types";
+import {
+  countingRateLimiter,
+  kvWithPerKeyWriteLimit,
+  refusingRateLimiter,
+} from "../testing/rateLimit";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -35,8 +40,8 @@ function dbWithSessionUser(user: UserRow | null): D1Database {
 }
 
 /** In-memory KV covering the get/put subset the route uses. */
-function memoryKv(seed: Record<string, string> = {}): KVNamespace {
-  const values = new Map(Object.entries(seed));
+function memoryKv(): KVNamespace {
+  const values = new Map<string, string>();
   return {
     get: async (key: string, type?: unknown) => {
       const value = values.get(key) ?? null;
@@ -56,6 +61,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     DB: dbWithSessionUser(USER),
     CACHE: memoryKv(),
     ZIG_PLAYGROUND_ENABLED: "true",
+    ZIG_UPSTREAM_RATE_LIMITER: countingRateLimiter(Infinity),
     ...overrides,
   } as Env;
 }
@@ -475,8 +481,8 @@ describe("zigPlaygroundRoute", () => {
   });
 
   it("reports the upstream's own rate limit as backpressure, not the learner's fault", async () => {
-    // Our per-user window sits below the upstream's per-IP budget, so hitting
-    // that budget means somebody else spent it. A 429 would print "Too many
+    // Our per-user budget sits below the upstream's per-IP limit, so hitting
+    // that limit means somebody else spent it. A 429 would print "Too many
     // runs" at a learner who pressed Run once.
     const spy = stubUpstream("Too many requests.", 429);
     const response = await runRequest(makeEnv());
@@ -528,12 +534,9 @@ describe("zigPlaygroundRoute", () => {
     expect((await runRequest(makeEnv())).status).toBe(504);
   });
 
-  it("limits upstream calls per user below the upstream's shared budget", async () => {
-    // Frozen so the six requests cannot straddle a minute boundary and reset
-    // the fixed window halfway through.
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
+  it("limits upstream calls per user to the binding's budget", async () => {
     stubUpstream(UPSTREAM_SUCCESS);
-    const env = makeEnv();
+    const env = makeEnv({ ZIG_UPSTREAM_RATE_LIMITER: countingRateLimiter(4) });
     const statuses: number[] = [];
 
     // Distinct sources so the cache cannot absorb the repeats.
@@ -548,21 +551,23 @@ describe("zigPlaygroundRoute", () => {
     expect(statuses).toEqual([200, 200, 200, 200, 429, 429]);
   });
 
-  it("returns 429 once the per-user minute window is exhausted", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
+  it("returns 429 once the per-user budget is spent", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
-    const windowKey = `zp:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
-    const response = await runRequest(makeEnv({ CACHE: memoryKv({ [windowKey]: "4" }) }));
+    const response = await runRequest(
+      makeEnv({ ZIG_UPSTREAM_RATE_LIMITER: refusingRateLimiter() }),
+    );
 
     expect(response.status).toBe(429);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("charges runs and formats to the same window, because the upstream does", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
+  it("charges runs and formats to the same budget, because the upstream does", async () => {
     const spy = stubUpstream("pub fn main() void {}\n");
-    const windowKey = `zp:rl:${USER.id}:${Math.floor(Date.now() / 60_000)}`;
-    const env = makeEnv({ CACHE: memoryKv({ [windowKey]: "3" }) });
+    const limiter = countingRateLimiter(4);
+    for (let charge = 0; charge < 3; charge++) {
+      await limiter.limit({ key: USER.id });
+    }
+    const env = makeEnv({ ZIG_UPSTREAM_RATE_LIMITER: limiter });
 
     expect((await formatRequest(env)).status).toBe(200);
     // The format spent the last slot, so the run has to wait rather than
@@ -571,10 +576,26 @@ describe("zigPlaygroundRoute", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it("does not spend the window on a run served from the cache", async () => {
+  // A learner pressing Format and then Run is two calls to one budget, not a
+  // burst. Counting them in KV refused the Run with 429, because KV takes one
+  // write per key per second and both calls charged the same counter key.
+  it("lets a Format and a Run inside one second both reach the upstream", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1_770_000_000_000);
+    const spy = stubUpstream("pub fn main() void {}\n");
+    const env = makeEnv({
+      CACHE: kvWithPerKeyWriteLimit(),
+      ZIG_UPSTREAM_RATE_LIMITER: countingRateLimiter(4),
+    });
+
+    expect((await formatRequest(env)).status).toBe(200);
+    expect((await runRequest(env)).status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not spend the budget on a run served from the cache", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
-    const env = makeEnv();
+    const limiter = countingRateLimiter(4);
+    const env = makeEnv({ ZIG_UPSTREAM_RATE_LIMITER: limiter });
     const statuses: number[] = [];
 
     for (let index = 0; index < 6; index++) {
@@ -583,14 +604,26 @@ describe("zigPlaygroundRoute", () => {
 
     expect(statuses).toEqual([200, 200, 200, 200, 200, 200]);
     expect(spy).toHaveBeenCalledTimes(1);
+    expect(limiter.keys).toEqual([USER.id]);
   });
 
-  it("fails closed when the rate-limit store is missing", async () => {
+  it("fails closed when the rate-limit binding is missing", async () => {
+    const spy = stubUpstream(UPSTREAM_SUCCESS);
+    const response = await runRequest(makeEnv({ ZIG_UPSTREAM_RATE_LIMITER: undefined }));
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "Zig Playground execution policy is unavailable",
+    });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("runs uncached when CACHE is absent", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
     const response = await runRequest(makeEnv({ CACHE: undefined }));
 
-    expect(response.status).toBe(502);
-    expect(spy).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("reports an upstream timeout as 504", async () => {
