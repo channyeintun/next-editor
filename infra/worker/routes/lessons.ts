@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../env";
 import {
   deleteLesson,
-  getLessonById,
+  getOwnedLessonById,
   insertDraftLesson,
   listOwnedLessons,
   listPublishedLessons,
@@ -232,7 +232,9 @@ lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
   // post-update row — the old value would otherwise already be gone by the
   // time we know whether the thumbnail actually changed.
   const previousThumbnail =
-    updateParams.thumbnail !== undefined ? (await getLessonById(c.env.DB, id))?.thumbnail : null;
+    updateParams.thumbnail !== undefined
+      ? (await getOwnedLessonById(c.env.DB, id, user.id))?.thumbnail
+      : null;
 
   const row = await updateLesson(c.env.DB, id, user.id, updateParams);
   // Deliberately the same 404 whether the lesson doesn't exist or exists but
@@ -303,8 +305,8 @@ lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, async (c) => {
   }
 
   const id = c.req.param("id");
-  const existing = await getLessonById(c.env.DB, id);
-  if (!existing || existing.owner_id !== user.id) {
+  const existing = await getOwnedLessonById(c.env.DB, id, user.id);
+  if (!existing) {
     return c.json({ error: "not found" }, 404);
   }
 

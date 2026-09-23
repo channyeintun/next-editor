@@ -3,7 +3,7 @@ import { lessonsRoute } from "./lessons";
 import { getCurrentUser } from "../auth/session";
 import {
   deleteLesson,
-  getLessonById,
+  getOwnedLessonById,
   insertDraftLesson,
   listPublishedLessons,
   updateLesson,
@@ -18,7 +18,7 @@ vi.mock("../../db/queries", () => ({
   insertDraftLesson: vi.fn<() => Promise<LessonRow>>(),
   listPublishedLessons: vi.fn<() => Promise<{ rows: LessonRow[]; nextPage: number | null }>>(),
   updateLesson: vi.fn<() => Promise<LessonRow | null>>(),
-  getLessonById: vi.fn<() => Promise<LessonRow | null>>(async () => null),
+  getOwnedLessonById: vi.fn<() => Promise<LessonRow | null>>(async () => null),
   deleteLesson: vi.fn<() => Promise<boolean>>(),
 }));
 
@@ -177,7 +177,19 @@ describe("lessonsRoute delete", () => {
   }
 
   beforeEach(() => {
-    vi.mocked(getLessonById).mockResolvedValue(lessonRow(LESSON_ID));
+    vi.mocked(getOwnedLessonById).mockResolvedValue(lessonRow(LESSON_ID));
+  });
+
+  it("answers 404 and deletes nothing for a lesson the caller does not own", async () => {
+    vi.mocked(getOwnedLessonById).mockResolvedValue(null);
+    const bucket = createBucket();
+
+    const response = await deleteRequest(bucket);
+
+    expect(response.status).toBe(404);
+    expect(getOwnedLessonById).toHaveBeenCalledWith(expect.anything(), LESSON_ID, "user-1");
+    expect(deleteLesson).not.toHaveBeenCalled();
+    expect(bucket.list).not.toHaveBeenCalled();
   });
 
   it("deletes the row and then the lesson's media", async () => {
