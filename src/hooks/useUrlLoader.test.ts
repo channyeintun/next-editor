@@ -849,4 +849,46 @@ describe("useUrlLoader", () => {
       expect(reloaded?.frames).toHaveLength(40);
     });
   });
+
+  it("extends late audio onto everything a footer-less stream decoded", async () => {
+    // A stream that ends without its footer (a still-writing or cut-off file) is never
+    // finalized; the player gets it as a first load plus appended deltas.
+    const lesson = largeRecording(80, 24_000, {
+      id: "lesson",
+      audioFile: "lesson.weba",
+      audioSource: "external",
+    });
+    const encoded = await encodeRecordingToStream(lesson);
+    const withoutFooter = encoded.slice(0, encoded.length - 1);
+    const stream = streamingResponse(withoutFooter, { chunkSize: 64 * 1024 });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+        const url = targetUrl(typeof input === "string" ? input : input.toString());
+        if (url.endsWith("/lesson.ne")) return stream.response;
+        if (url.endsWith("/lesson.weba")) {
+          return fakeResponse(new Uint8Array([1, 2, 3]), { ok: true, contentType: "audio/webm" });
+        }
+        return fakeResponse(null, { ok: false, status: 404 });
+      }),
+    );
+    const actions = makeActionsMock();
+    const { result } = renderLoader(actions);
+
+    await result.current.fetchNextEditorFile("https://example.com/lesson.ne");
+    await waitFor(() => {
+      expect(
+        vi.mocked(actions.extendRecording).mock.calls.some(([recording]) => recording.audioBlob),
+      ).toBe(true);
+    });
+
+    const [firstLoad] = vi.mocked(actions.loadRecording).mock.calls[0] ?? [];
+    const appendedFrames = vi
+      .mocked(actions.appendRecordingDelta)
+      .mock.calls.reduce((count, [delta]) => count + delta.newFrames.length, 0);
+    expect(appendedFrames).toBeGreaterThan(0);
+    const [withAudio] = vi.mocked(actions.extendRecording).mock.calls.at(-1) ?? [];
+    expect(withAudio?.audioBlob).toBeInstanceOf(Blob);
+    expect(withAudio?.frames).toHaveLength((firstLoad?.frames.length ?? 0) + appendedFrames);
+  });
 });

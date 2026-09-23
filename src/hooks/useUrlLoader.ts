@@ -371,8 +371,9 @@ export const useUrlLoader = () => {
    * Streams a `.ne` response and progressively decodes ever-larger prefixes of the SCR3 stream,
    * so playback can begin before the whole file has downloaded. The first decodable prefix is
    * loaded; subsequent intervals append only newly decoded records. A complete immutable
-   * recording is constructed again only at finalization. Falls back to the caller for whole-file
-   * decoding when the body is not streamable.
+   * recording is constructed again only at the end: at finalization, or when the body ends
+   * without a footer. Falls back to the caller for whole-file decoding when the body is not
+   * streamable.
    */
   const streamRecordingFromResponse = async (
     response: Response,
@@ -397,8 +398,8 @@ export const useUrlLoader = () => {
       }
 
       const resolved = withResolvedMediaUrls(recording, baseUrl);
-      // Track the newest decoded snapshot — the caller needs the *final* recording
-      // (for sibling captions/audio), not the first playable prefix.
+      // Track the newest complete snapshot (the first prefix, then the final recording) —
+      // the caller needs the final one (for sibling captions/audio).
       latestRecording = resolved;
       return resolved;
     };
@@ -430,7 +431,10 @@ export const useUrlLoader = () => {
         appendRecordingDelta({ ...delta, newWorkspaceAssets: [] });
       }
 
-      if (streamReader.isFinalized() && !appliedFinalSnapshot) {
+      // Settle on the complete recording once the footer is in, or once the body ends
+      // without one (a still-writing or cut-off file): the caller extends late media onto
+      // `latestRecording`, which must hold every decoded record, not the first prefix.
+      if ((endOfStream || streamReader.isFinalized()) && !appliedFinalSnapshot) {
         const decoded = streamReader.getRecording();
         const finalRecording = resolveRecording(
           decoded ? stripRecordingWorkspaceAssets(decoded) : null,

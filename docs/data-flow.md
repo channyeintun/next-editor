@@ -176,7 +176,8 @@ The shipped URL loader supports both same-origin and cross-origin recording URLs
 - When the response body is streamable, the loader feeds raw SCR3 bytes to an incremental
   `StreamingRecordingReader`, persists any raw asset handoffs, loads the first playable prefix as
   soon as one has decoded, appends later `readDelta()` deliveries about every 512 KiB, and
-  constructs another complete immutable recording only at finalization.
+  constructs another complete immutable recording only at the end (finalization, or a body that
+  ends without its footer).
 - After the recording loads, the loader resolves any `captionFiles` the recording declares relative to the `.ne` URL, fetches and parses each one, and adds it via `addCaptionTrack`. A recording that declares no captions gets none (HTTP exposes no directory listing); when every declared file fails, the `.ne` basename with `.vtt` is tried once, for a lesson renamed together with its captions.
 
 ## API Client Transport
