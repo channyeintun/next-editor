@@ -166,7 +166,6 @@ async function createRoom(
     storage,
     setWebSocketAutoResponse: () => undefined,
     getWebSockets: () => sockets,
-    waitUntil: () => undefined,
   };
   const room = new CollaborationRoomDurableObject(
     ctx as unknown as DurableObjectState,

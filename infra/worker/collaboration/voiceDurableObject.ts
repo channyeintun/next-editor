@@ -518,17 +518,14 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     ];
     if (mids.length === 0) return;
     const url = buildUpstreamSfuUrl(appId, `/sessions/${attachment.sfuSessionId}/tracks/close`);
-    this.ctx.waitUntil(
-      fetch(url, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ tracks: mids.map((mid) => ({ mid })), force: true }),
-        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      }).then(
-        () => undefined,
-        () => undefined,
-      ),
-    );
+    // Not awaited, and no waitUntil (it has no effect in a Durable Object,
+    // which stays alive for pending I/O anyway).
+    void fetch(url, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ tracks: mids.map((mid) => ({ mid })), force: true }),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    }).catch(() => undefined);
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {

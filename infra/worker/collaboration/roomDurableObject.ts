@@ -1152,20 +1152,20 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private scheduleSqliteCompaction(): void {
     if (this.sqliteCompactionScheduled) return;
     this.sqliteCompactionScheduled = true;
-    this.ctx.waitUntil(
-      this.ctx.storage
-        .getAlarm()
-        .then((scheduledAt) =>
-          scheduledAt === null ? this.ctx.storage.setAlarm(Date.now() + 1_000) : undefined,
-        )
-        .catch((error) => {
-          this.sqliteCompactionScheduled = false;
-          console.error("collaboration_sqlite_alarm_failed", {
-            roomId: this.ctx.id.name ?? null,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }),
-    );
+    // Not awaited: a Durable Object stays alive for pending I/O on its own,
+    // so this needs no waitUntil (which has no effect in one).
+    void this.ctx.storage
+      .getAlarm()
+      .then((scheduledAt) =>
+        scheduledAt === null ? this.ctx.storage.setAlarm(Date.now() + 1_000) : undefined,
+      )
+      .catch((error) => {
+        this.sqliteCompactionScheduled = false;
+        console.error("collaboration_sqlite_alarm_failed", {
+          roomId: this.ctx.id.name ?? null,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
   }
 
   private applyControl(command: CollaborationRoomControlCommand): void {
