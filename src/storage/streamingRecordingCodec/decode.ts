@@ -22,6 +22,7 @@ import {
   HEADER_PREFIX_SIZE,
   isKnownSegmentKind,
   parseHeader,
+  readFooterSegmentOffset,
   readRecordingStreamMeta,
   readSegmentHeader,
   SEGMENT_HEADER_SIZE,
@@ -335,12 +336,15 @@ interface RegionProgress {
   consumed: number;
   /** The walk stopped at a complete segment that failed to decode (only without a footer). */
   stoppedAtUndecodable: boolean;
+  /** The footer candidate held up, and every segment before it was ingested. */
+  finalized: boolean;
 }
 
 /**
  * Ingests the segments in `bytes` from `start` and reports how far it got. `footerStart`
- * is where a complete footer begins, or null while none has arrived; both decoders call
- * this, so they draw the same line between a prefix and a damaged file.
+ * is where a footer candidate begins, or null while none has arrived, and `baseOffset` is
+ * the absolute stream offset of `bytes[0]`; both decoders call this, so they draw the
+ * same line between a prefix and a damaged file.
  *
  * With a footer the segment region is final: a segment of an unknown (future) kind is
  * skipped and counted, a segment that fails to decode is corruption and throws, and the
@@ -353,9 +357,11 @@ function ingestSegmentRegion(
   stream: DecodedStream,
   bytes: Uint8Array,
   start: number,
-  footerStart: number | null,
+  candidateFooterStart: number | null,
+  baseOffset: number,
 ): RegionProgress {
-  const end = footerStart ?? bytes.length;
+  let footerStart = candidateFooterStart;
+  let end = footerStart ?? bytes.length;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let cursor = start;
 
@@ -363,7 +369,22 @@ function ingestSegmentRegion(
     const header = readSegmentHeader(view, cursor);
     const payloadStart = cursor + SEGMENT_HEADER_SIZE;
     const payloadEnd = payloadStart + header.byteLength;
-    if (payloadEnd > end) break; // a truncated tail, or a length that overruns the footer
+    if (payloadEnd > end) {
+      // Asset segments carry raw file bytes, so a complete one holding a `.ne` file ends in
+      // bytes that pass every footer check. This stream's own footer indexes the segment
+      // at its absolute offset; a candidate inside the payload that does not is part of
+      // it, so walk on as though no footer had arrived.
+      if (
+        footerStart !== null &&
+        payloadEnd <= bytes.length &&
+        readFooterSegmentOffset(bytes, footerStart, stream.segmentCount) !== baseOffset + cursor
+      ) {
+        footerStart = null;
+        end = bytes.length;
+        continue;
+      }
+      break; // a truncated tail, or a corrupt length that overruns the footer
+    }
 
     if (!isKnownSegmentKind(header.kind)) {
       if (footerStart === null) break;
@@ -373,7 +394,7 @@ function ingestSegmentRegion(
         ingestSegment(stream, header, bytes.subarray(payloadStart, payloadEnd));
       } catch (error) {
         if (footerStart !== null) throw error;
-        return { consumed: cursor, stoppedAtUndecodable: true };
+        return { consumed: cursor, stoppedAtUndecodable: true, finalized: false };
       }
     }
     cursor = payloadEnd;
@@ -387,7 +408,7 @@ function ingestSegmentRegion(
       throw new Error("Invalid SCR3 stream: footer segment count does not match the stream");
     }
   }
-  return { consumed: cursor, stoppedAtUndecodable: false };
+  return { consumed: cursor, stoppedAtUndecodable: false, finalized: footerStart !== null };
 }
 
 /**
@@ -480,8 +501,13 @@ export function decodeRecordingStream(bytes: Uint8Array): Recording {
   }
   const { meta, headerEnd, formatVersion } = parseHeader(bytes);
   const stream = createDecodedStream(meta, formatVersion);
-  const footerStart = findFooterStart(bytes, headerEnd);
-  ingestSegmentRegion(stream, bytes, headerEnd, footerStart);
+  const progress = ingestSegmentRegion(
+    stream,
+    bytes,
+    headerEnd,
+    findFooterStart(bytes, headerEnd),
+    0,
+  );
 
   // A whole buffer may come from any writer, so order each track by time here. Array
   // sort is stable, so records already in timeline order keep their stream order.
@@ -500,7 +526,7 @@ export function decodeRecordingStream(bytes: Uint8Array): Recording {
   records.whiteboardEvents.sort(byTimestamp);
   records.chatEvents.sort(byTimestamp);
 
-  return assembleRecording(stream, records, footerStart !== null);
+  return assembleRecording(stream, records, progress.finalized);
 }
 
 // ============================================================================
@@ -641,8 +667,9 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     const retained = buffer.subarray(0, retainedLength);
     const footerStart = findFooterStart(retained, 0);
     if (footerStart === null && headSegmentUndecodable) return;
-    const progress = ingestSegmentRegion(stream, retained, 0, footerStart);
-    if (footerStart !== null) {
+    const retainedOffset = totalLength - retainedLength;
+    const progress = ingestSegmentRegion(stream, retained, 0, footerStart, retainedOffset);
+    if (progress.finalized) {
       finalized = true;
       discardPrefix(retainedLength);
       return;

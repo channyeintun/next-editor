@@ -586,6 +586,17 @@ export function findFooterStart(bytes: Uint8Array, headerEnd: number): number | 
   return footerStart;
 }
 
+/** The absolute byte offset the footer at `footerStart` records for segment `index`, if any. */
+export function readFooterSegmentOffset(
+  bytes: Uint8Array,
+  footerStart: number,
+  index: number,
+): number | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (index >= view.getUint32(footerStart, true)) return null;
+  return view.getUint32(footerStart + 4 + index * INDEX_ENTRY_SIZE + 1, true);
+}
+
 export function readSegmentHeader(view: DataView, offset: number): SegmentHeaderFields {
   const kind = view.getUint8(offset);
   const byteLength = view.getUint32(offset + 1, true);

@@ -635,6 +635,50 @@ describe("recordingCodec", () => {
     expect(() => reader.push(bytes)).toThrow(/malformed segment tail before footer/);
   });
 
+  it("does not take a .ne file carried as a workspace asset for the stream's footer", async () => {
+    // Asset segments hold raw file bytes, so a prefix that ends with an asset which is
+    // itself a finalized .ne ends in bytes that pass every footer check.
+    const embedded = await encodeRecordingToStream(createRecording({ id: "embedded" }));
+    const writer = createStreamingRecordingWriter();
+    writer.writeHeader({
+      version: 4,
+      id: "outer",
+      name: "Outer",
+      keyframeInterval: 120,
+      createdAt: 1,
+      duration: 0,
+    });
+    const chunks = [writer.drainPending()];
+    writer.appendWorkspaceAssetSegment({
+      descriptor: {
+        kind: "asset",
+        assetId: "sha256-embedded",
+        mimeType: "application/octet-stream",
+        size: embedded.byteLength,
+      },
+      bytes: embedded,
+    });
+    chunks.push(writer.drainPending());
+    writer.appendFrameSegment([makeKeyframe(0, "a\n")]);
+    writer.appendFrameSegment([makeKeyframe(500, "ab\n")]);
+    writer.finalizeStream();
+    chunks.push(writer.drainPending());
+
+    const prefix = new Uint8Array(chunks[0].byteLength + chunks[1].byteLength);
+    prefix.set(chunks[0]);
+    prefix.set(chunks[1], chunks[0].byteLength);
+    const decodedPrefix = decodeRecordingStream(prefix);
+    expect(decodedPrefix.streamFinalized).toBe(false);
+    expect(decodedPrefix.workspaceAssets?.[0].bytes).toEqual(embedded);
+
+    const reader = createStreamingRecordingReader();
+    for (const chunk of chunks) reader.push(chunk);
+    const streamed = reader.getRecording();
+    expect(reader.isFinalized()).toBe(true);
+    expect(streamed?.frames).toHaveLength(2);
+    expect(streamed?.workspaceAssets).toHaveLength(1);
+  });
+
   it("rejects bytes that are not an SCR3 stream", async () => {
     await expect(decompressBinaryToRecordings(new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow(
       /SCR3/,
