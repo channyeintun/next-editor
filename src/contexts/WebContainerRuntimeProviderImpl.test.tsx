@@ -497,6 +497,70 @@ describe("WebContainerRuntimeProviderImpl reverse sync", () => {
   });
 });
 
+describe("WebContainerRuntimeProviderImpl runner control", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("crossOriginIsolated", true);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  // startRuntime (ambient start, opening the preview) joins a runner that is
+  // still starting; rerunRunner (the Run button, run-on-save) replaces it.
+  it("restarts a starting runner on rerun but not on start", async () => {
+    const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
+    const { instance } = createFakeInstance(fakeFs);
+    const runners: Array<{ kill: ReturnType<typeof vi.fn> }> = [];
+    vi.mocked(instance.spawn).mockImplementation((async (_command: string, args: string[]) => {
+      const isRunner = args.join(" ").includes("pnpm dev");
+      // The dev server runs until killed and never reports server-ready here.
+      let exitRunner: (code: number) => void = () => {};
+      const exit = isRunner
+        ? new Promise<number>((resolve) => {
+            exitRunner = resolve;
+          })
+        : Promise.resolve(0);
+      const kill = vi.fn<() => void>(() => exitRunner(143));
+      if (isRunner) runners.push({ kill });
+      return {
+        output: new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        input: new WritableStream(),
+        exit,
+        kill,
+        resize: vi.fn<() => void>(),
+      } as unknown as WebContainerProcess;
+    }) as never);
+    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const { runtime } = renderProviders(false);
+
+    await act(async () => {
+      await runtime.startRuntime();
+    });
+    expect(runners).toHaveLength(1);
+
+    await act(async () => {
+      await runtime.startRuntime();
+    });
+    expect(runners).toHaveLength(1);
+
+    await act(async () => {
+      void runtime.rerunRunner();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(runners).toHaveLength(2);
+    expect(runners[0]?.kill).toHaveBeenCalled();
+  });
+});
+
 describe("WebContainerRuntimeProviderImpl subscriptions", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

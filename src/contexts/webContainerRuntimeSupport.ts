@@ -3,6 +3,7 @@ import type {
   EnvironmentVariables,
   RunnerConfig,
   RuntimePreviewMessage,
+  WebContainerRuntimeStatus,
 } from "./WebContainerRuntimeContext";
 import {
   base64ToBytes,
@@ -94,6 +95,16 @@ const OSC_PATTERN = new RegExp(
   `${ESCAPE_CHARACTER}\\][^${BELL_CHARACTER}]*(?:${BELL_CHARACTER}|${ESCAPE_CHARACTER}\\\\)`,
   "g",
 );
+
+/** A boot, mount, install or runner start is under way. */
+export function isRuntimeBusy(status: WebContainerRuntimeStatus): boolean {
+  return (
+    status === "booting" ||
+    status === "mounting" ||
+    status === "installing" ||
+    status === "starting"
+  );
+}
 
 export function getRuntimeErrorMessage(error: unknown): string {
   if (error instanceof Error) {

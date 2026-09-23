@@ -17,6 +17,7 @@ import {
   resolveRuntimeRunCommand,
   getWorkspaceRoot,
   isMobileBrowser,
+  isRuntimeBusy,
   isWebContainerRuntimeSupported,
   loadStoredEnvironmentVariables,
   normalizeEnvironmentVariables,
@@ -320,51 +321,26 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     return instance;
   };
 
-  const startRuntime = async () => {
-    if (!lessonRunsInWebContainer(lessonType)) {
-      resetRuntime();
+  /** Boots or joins the runtime, then (re)starts the runner. Failures reach the caller. */
+  const bootAndStartRunner = async (generation: number) => {
+    setStatus("booting");
+    const instance = await prepareRuntime();
+    if (!instance || !isRuntimeGenerationActive(generation)) {
       return;
     }
 
-    const currentStatus = statusRef.current;
-    if (
-      currentStatus === "booting" ||
-      currentStatus === "mounting" ||
-      currentStatus === "installing" ||
-      currentStatus === "starting"
-    ) {
+    if (!runnerConfig.enabled) {
+      setStatus("ready");
       return;
     }
 
-    const generation = getRuntimeGeneration();
-
-    try {
-      setStatus("booting");
-
-      const instance = await prepareRuntime();
-      if (!instance || !isRuntimeGenerationActive(generation)) {
-        return;
-      }
-
-      const project = getProject();
-      const runCommandLine = resolveRuntimeRunCommand(project, runnerConfig.runCommand);
-
-      if (!runnerConfig.enabled) {
-        if (isRuntimeGenerationActive(generation)) {
-          setStatus("ready");
-        }
-        return;
-      }
-
-      await startRunnerProcess(instance, runCommandLine);
-    } catch (error) {
-      if (isRuntimeGenerationActive(generation)) {
-        setStatus("error");
-        setErrorMessage(getRuntimeErrorMessage(error));
-      }
-    }
+    await startRunnerProcess(
+      instance,
+      resolveRuntimeRunCommand(getProject(), runnerConfig.runCommand),
+    );
   };
 
+  /** Restarts the runner, even while one is starting: the Run button and run-on-save. */
   const rerunRunner = async () => {
     if (!lessonRunsInWebContainer(lessonType)) {
       resetRuntime();
@@ -374,30 +350,22 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     const generation = getRuntimeGeneration();
 
     try {
-      setStatus("booting");
-      const instance = await prepareRuntime();
-
-      if (!instance || !isRuntimeGenerationActive(generation)) {
-        return;
-      }
-
-      const project = getProject();
-      const runCommandLine = resolveRuntimeRunCommand(project, runnerConfig.runCommand);
-
-      if (!runnerConfig.enabled) {
-        if (isRuntimeGenerationActive(generation)) {
-          setStatus("ready");
-        }
-        return;
-      }
-
-      await startRunnerProcess(instance, runCommandLine);
+      await bootAndStartRunner(generation);
     } catch (error) {
       if (isRuntimeGenerationActive(generation)) {
         setStatus("error");
         setErrorMessage(getRuntimeErrorMessage(error));
       }
     }
+  };
+
+  /** Like rerunRunner, but leaves a boot, mount, install or start under way alone. */
+  const startRuntime = async () => {
+    if (lessonRunsInWebContainer(lessonType) && isRuntimeBusy(statusRef.current)) {
+      return;
+    }
+
+    await rerunRunner();
   };
   const rerunRunnerRef = useRef(rerunRunner);
   // Layout-effect sync (not render-time) for the same compiler-bailout reason as
@@ -406,7 +374,13 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     rerunRunnerRef.current = rerunRunner;
   });
 
-  const startTerminalSession = async () => {
+  /**
+   * Prepares the runtime (joining a boot or install already under way) and runs a
+   * terminal task on it; a failure is reported in the runner console.
+   */
+  const withPreparedRuntime = async (
+    task: (instance: WebContainer, generation: number) => Promise<void>,
+  ) => {
     if (!lessonRunsInWebContainer(lessonType)) {
       return;
     }
@@ -415,64 +389,32 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
     try {
       const instance = await prepareRuntime();
-      if (!instance || !isRuntimeGenerationActive(generation)) {
-        return;
+      if (instance && isRuntimeGenerationActive(generation)) {
+        await task(instance, generation);
       }
+    } catch (error) {
+      if (isRuntimeGenerationActive(generation)) {
+        setErrorMessage(getRuntimeErrorMessage(error));
+      }
+    }
+  };
 
+  const startTerminalSession = () =>
+    withPreparedRuntime(async (instance) => {
       await ensureTerminalSession(instance);
-    } catch (error) {
-      if (isRuntimeGenerationActive(generation)) {
-        setErrorMessage(getRuntimeErrorMessage(error));
-      }
-    }
-  };
+    });
 
-  const createTerminalSession = async () => {
-    if (!lessonRunsInWebContainer(lessonType)) {
-      return;
-    }
+  const createTerminalSession = () => withPreparedRuntime(createTerminalSessionInRuntime);
 
-    const generation = getRuntimeGeneration();
-
-    try {
-      const instance = await prepareRuntime();
-      if (!instance || !isRuntimeGenerationActive(generation)) {
-        return;
-      }
-
-      await createTerminalSessionInRuntime(instance);
-    } catch (error) {
-      if (isRuntimeGenerationActive(generation)) {
-        setErrorMessage(getRuntimeErrorMessage(error));
-      }
-    }
-  };
-
-  const sendTerminalInput = async (input: string) => {
-    if (!lessonRunsInWebContainer(lessonType)) {
-      return;
-    }
-
-    const generation = getRuntimeGeneration();
-
-    try {
-      const instance = await prepareRuntime();
-      if (!instance || !isRuntimeGenerationActive(generation)) {
-        return;
-      }
-
+  const sendTerminalInput = (input: string) =>
+    withPreparedRuntime(async (instance, generation) => {
       await flushWorkspaceSync({ instance });
       await writeTerminalInput(instance, input);
 
       if (input.includes("\n") || input.includes("\u0003")) {
         requestReverseSync(instance, generation);
       }
-    } catch (error) {
-      if (isRuntimeGenerationActive(generation)) {
-        setErrorMessage(getRuntimeErrorMessage(error));
-      }
-    }
-  };
+    });
 
   const runCommand = async (commandLine: string) => {
     await sendTerminalInput(`${commandLine}\n`);
@@ -508,19 +450,12 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     }
 
     const currentRunnerConfig = runnerConfigRef.current;
-    const currentStatus = statusRef.current;
 
     if (!currentRunnerConfig.enabled || !currentRunnerConfig.runOnFileSave) {
       return;
     }
 
-    if (
-      hasActiveRunner() ||
-      currentStatus === "booting" ||
-      currentStatus === "mounting" ||
-      currentStatus === "installing" ||
-      currentStatus === "starting"
-    ) {
+    if (hasActiveRunner() || isRuntimeBusy(statusRef.current)) {
       return;
     }
 
