@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   authorizeCloseTracks,
-  authorizeCreateSession,
   authorizePullTracks,
   authorizePushTracks,
   authorizeSessionScoped,
@@ -11,7 +10,6 @@ import {
   pullTracksRequestSchema,
   pushTracksRequestSchema,
   renegotiateRequestSchema,
-  sanitizeTracksResponse,
   upstreamNewSessionResponseSchema,
   upstreamTracksResponseSchema,
   VoiceSfuRequestQueue,
@@ -161,11 +159,6 @@ describe("request schemas", () => {
 });
 
 describe("authorization matrix", () => {
-  it("allows an atomic replacement session for PartyTracks recovery", () => {
-    expect(authorizeCreateSession(idleState)).toEqual({ ok: true });
-    expect(authorizeCreateSession(connectedState)).toEqual({ ok: true });
-  });
-
   it("scopes every session operation to the caller's registered session", () => {
     expect(authorizeSessionScoped(connectedState, "session-abc")).toEqual({ ok: true });
     expect(authorizeSessionScoped(connectedState, "session-other").ok).toBe(false);
@@ -340,11 +333,12 @@ describe("SFU request serialization", () => {
     releaseFirst();
     await Promise.all([first, second]);
     expect(order).toEqual(["first-start", "first-end", "second"]);
-    expect(queue.pending("connection")).toBeNull();
     expect(queue.pendingCount("connection")).toBe(0);
   });
 });
 
+// The Durable Object forwards the parsed response as it is, so the schema's
+// stripping of unknown keys is the sanitization.
 describe("upstream response sanitization", () => {
   it("keeps only the fields the client contract needs", () => {
     const parsed = upstreamTracksResponseSchema.parse({
@@ -362,7 +356,7 @@ describe("upstream response sanitization", () => {
       sessionDescription: { type: "answer", sdp: AUDIO_SDP, upstreamExtra: true },
       unknownTopLevel: "dropped",
     });
-    expect(sanitizeTracksResponse(parsed)).toEqual({
+    expect(parsed).toEqual({
       requiresImmediateRenegotiation: false,
       tracks: [{ trackName: "their-mic", sessionId: "session-other", mid: "4" }],
       sessionDescription: { type: "answer", sdp: AUDIO_SDP },
@@ -373,7 +367,7 @@ describe("upstream response sanitization", () => {
     const parsed = upstreamTracksResponseSchema.parse({
       tracks: [{ errorCode: "track_limit", errorDescription: "secret detail", mid: null }],
     });
-    expect(sanitizeTracksResponse(parsed)).toEqual({
+    expect(parsed).toEqual({
       tracks: [{ errorCode: "track_limit", mid: null }],
     });
   });

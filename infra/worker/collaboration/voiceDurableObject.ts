@@ -25,7 +25,6 @@ import {
 import {
   VOICE_STUN_ICE_SERVERS,
   authorizeCloseTracks,
-  authorizeCreateSession,
   authorizePullTracks,
   authorizePushTracks,
   authorizeSessionScoped,
@@ -35,7 +34,6 @@ import {
   pullTracksRequestSchema,
   pushTracksRequestSchema,
   renegotiateRequestSchema,
-  sanitizeTracksResponse,
   upstreamNewSessionResponseSchema,
   upstreamRenegotiateResponseSchema,
   upstreamTracksResponseSchema,
@@ -49,9 +47,9 @@ import type { Env } from "../env";
 import { readBodyWithLimit } from "../httpBody";
 
 const VOICE_ORIGIN = "https://collaboration-voice.internal";
-export const VOICE_SESSION_HEADER = "X-Collaboration-Voice-Session";
+const VOICE_SESSION_HEADER = "X-Collaboration-Voice-Session";
 export { VOICE_CAPABILITY_HEADER };
-export const VOICE_CONNECTION_HEADER = "X-Voice-Connection";
+const VOICE_CONNECTION_HEADER = "X-Voice-Connection";
 const MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE = 12;
 /**
  * Concurrent voice sockets one account may hold. Seats are counted per user, so
@@ -72,7 +70,7 @@ const CLOSE_LEFT = 4002;
 const CLOSE_REMOVED = 4003;
 const CLOSE_PROTOCOL_ERROR = 1008;
 
-export const canonicalVoiceSessionSchema = z
+const canonicalVoiceSessionSchema = z
   .object({
     roomId: collaborationIdSchema,
     userId: collaborationIdSchema,
@@ -1016,16 +1014,11 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       };
 
       if (operation.kind === "create-session") {
-        const authorized = authorizeCreateSession(state);
-        if (!authorized.ok) {
-          logOutcome(operation.kind, authorized.status);
-          return noStoreJson({ error: authorized.error }, authorized.status);
-        }
-        // PartyTracks automatically creates a replacement PeerConnection/SFU
-        // session after terminal media failure. Close every registered track
-        // first, then clear the old ownership registry before creating the new
-        // session. This preserves one active session without breaking library
-        // recovery.
+        // Any live connection may create a session: PartyTracks creates a
+        // replacement PeerConnection/SFU session after terminal media failure.
+        // Close every registered track first, then clear the old ownership
+        // registry before creating the new session. This keeps one active
+        // session per connection without breaking library recovery.
         if (current.sfuSessionId !== null) {
           const hadPublication = current.publishedTrackName !== null;
           if (!(await closeRegisteredTracks(current))) {
@@ -1131,7 +1124,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
             this.broadcastUpsert(next, socket);
           }
           logOutcome("push-tracks", 200);
-          return noStoreJson(sanitizeTracksResponse(parsed.data));
+          return noStoreJson(parsed.data);
         }
         if (pull && pull.success) {
           const authorized = authorizePullTracks(
@@ -1251,7 +1244,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
             }
           }
           logOutcome("pull-tracks", 200);
-          return noStoreJson(sanitizeTracksResponse(parsed.data));
+          return noStoreJson(parsed.data);
         }
         logOutcome("push-tracks", 400);
         return noStoreJson({ error: "invalid request" }, 400);
@@ -1320,7 +1313,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       if (!next) return noStoreJson({ error: "unauthorized" }, 403);
       if (wasPublishing) this.broadcastUpsert(next, socket);
       logOutcome("close-tracks", 200);
-      return noStoreJson(sanitizeTracksResponse(parsed.data));
+      return noStoreJson(parsed.data);
     });
   }
 }

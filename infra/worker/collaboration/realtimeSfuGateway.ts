@@ -11,7 +11,7 @@ import {
 // stateful ownership checks receive a snapshot of the caller's registered
 // state so this module stays testable without a Durable Object.
 
-export const REALTIME_SFU_API_BASE = "https://rtc.live.cloudflare.com/v1";
+const REALTIME_SFU_API_BASE = "https://rtc.live.cloudflare.com/v1";
 
 // Cloudflare's public STUN service. TURN is deliberately not configured in
 // the initial rollout; add short-lived TURN credentials only with staging
@@ -82,9 +82,9 @@ export const closeTracksRequestSchema = z
   })
   .strict();
 
-// Upstream responses are validated and rebuilt field-by-field. Plain
-// z.object() strips unknown keys, so verbose upstream fields (including
-// upstream error descriptions) never reach the browser.
+// Upstream responses are validated with plain z.object() schemas, which strip
+// unknown keys, so verbose upstream fields (including upstream error
+// descriptions) never reach the browser.
 const upstreamSessionDescriptionSchema = z.object({
   type: z.enum(["offer", "answer"]),
   sdp: sdpSchema,
@@ -113,47 +113,6 @@ export const upstreamTracksResponseSchema = z.object({
 export const upstreamRenegotiateResponseSchema = z.object({
   errorCode: z.string().max(64).optional(),
 });
-
-export type SanitizedTrackResult = {
-  trackName?: string;
-  sessionId?: string;
-  mid?: string | null;
-  errorCode?: string;
-};
-
-export type SanitizedTracksResponse = {
-  requiresImmediateRenegotiation?: boolean;
-  tracks?: SanitizedTrackResult[];
-  sessionDescription?: { type: "offer" | "answer"; sdp: string };
-  errorCode?: string;
-};
-
-export function sanitizeTracksResponse(
-  parsed: z.infer<typeof upstreamTracksResponseSchema>,
-): SanitizedTracksResponse {
-  const response: SanitizedTracksResponse = {};
-  if (parsed.requiresImmediateRenegotiation !== undefined) {
-    response.requiresImmediateRenegotiation = parsed.requiresImmediateRenegotiation;
-  }
-  if (parsed.tracks) {
-    response.tracks = parsed.tracks.map((track) => {
-      const entry: SanitizedTrackResult = {};
-      if (track.trackName !== undefined) entry.trackName = track.trackName;
-      if (track.sessionId !== undefined) entry.sessionId = track.sessionId;
-      if (track.mid !== undefined) entry.mid = track.mid;
-      if (track.errorCode !== undefined) entry.errorCode = track.errorCode;
-      return entry;
-    });
-  }
-  if (parsed.sessionDescription) {
-    response.sessionDescription = {
-      type: parsed.sessionDescription.type,
-      sdp: parsed.sessionDescription.sdp,
-    };
-  }
-  if (parsed.errorCode !== undefined) response.errorCode = parsed.errorCode;
-  return response;
-}
 
 // The SFU operations this gateway understands. Everything else — including
 // tracks/update (simulcast) and session-state reads — fails closed until an
@@ -210,14 +169,6 @@ export type VoiceSfuAuthorization =
 
 function deny(status: 403 | 400 | 409, error: string): VoiceSfuAuthorization {
   return { ok: false, status, error };
-}
-
-export function authorizeCreateSession(_state: VoiceConnectionSfuState): VoiceSfuAuthorization {
-  // PartyTracks replaces its PeerConnection and creates a new SFU session
-  // after a terminal media failure. The Durable Object serializes this
-  // operation and closes every registered track in the previous session
-  // before calling sessions/new, so at most one session remains active.
-  return { ok: true };
 }
 
 export function authorizeSessionScoped(
@@ -335,10 +286,6 @@ export class VoiceSfuRequestQueue {
         this.tails.delete(voiceConnectionId);
       }
     });
-  }
-
-  pending(voiceConnectionId: string): Promise<unknown> | null {
-    return this.tails.get(voiceConnectionId) ?? null;
   }
 
   pendingCount(voiceConnectionId: string): number {
