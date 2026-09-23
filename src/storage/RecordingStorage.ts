@@ -337,14 +337,6 @@ export class RecordingStorage {
   }
 
   /**
-   * Append already-encoded SCR3 stream bytes as the next segment of a recording, for
-   * crash-resilient incremental persistence while recording.
-   */
-  async appendRecordingSegments(recordingId: string, bytes: Uint8Array): Promise<void> {
-    await this.indexedDBStore.appendSegments(recordingId, bytes);
-  }
-
-  /**
    * Load all recordings from IndexedDB, decoding one at a time by id. A corrupt or
    * unreadable entry is skipped rather than failing the whole library; its id is
    * reported in `failedIds` so the caller can surface it.

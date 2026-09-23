@@ -150,12 +150,10 @@ Current storage rules:
 
 - The app stores and exports SCR3 recordings.
 - IndexedDB persists searchable metadata, media blobs, and SCR3 payloads below 8 MiB.
-- Larger SCR3 payloads move to OPFS. A dedicated worker appends them with a synchronous access
+- Larger SCR3 payloads move to OPFS. A dedicated worker writes them with a synchronous access
   handle when supported (and an async OPFS writer otherwise), while loads stream `File` chunks
   into the bounded SCR3 reader instead of calling IndexedDB `getAll()` and concatenating buffers.
 - OPFS is origin-private, so explicit `.ne` export/import remains the portable backup path.
-- Each recording keeps its next segment sequence in a small state record, so appends do not scan
-  or count the existing segment range.
 - Exported `.ne` files are raw SCR3 bytes with no base64 wrapping; the runtime loader reads the same raw byte stream.
 - Workspace snapshots carry only content-addressed asset descriptors. SCR3 writes each referenced
   asset once as a raw segment; progressive readers verify/persist the bytes in workspace asset

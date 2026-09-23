@@ -8,9 +8,8 @@ interface RecordingOpfsClient {
   /**
    * Rejects when the worker dies. Comlink settles a call only when a reply
    * message arrives, so without something to race against, a worker that fails
-   * at runtime leaves every call pending forever — and a pending
-   * `appendSegments` is never removed from the store's append queue, wedging
-   * save, delete and clear for the rest of the page's life.
+   * at runtime leaves every call pending forever, and with it the save or
+   * delete that is waiting on the call.
    */
   failed: Promise<never>;
 }
@@ -115,21 +114,6 @@ export async function replaceRecordingOpfs(
     throw new Error("Origin-private recording storage is unavailable");
   }
   return callWorker(current, current.api.replace(recordingId, transferableCopy(bytes)));
-}
-
-export async function appendRecordingOpfs(
-  recordingId: string,
-  bytes: Uint8Array,
-  expectedOffset: number,
-): Promise<number> {
-  const current = getClient();
-  if (!current || !(await isRecordingOpfsAvailable())) {
-    throw new Error("Origin-private recording storage is unavailable");
-  }
-  return callWorker(
-    current,
-    current.api.append(recordingId, transferableCopy(bytes), expectedOffset),
-  );
 }
 
 function isNotFoundError(error: unknown): boolean {

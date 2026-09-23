@@ -1,14 +1,12 @@
 import type { Recording } from "../core/src";
 import { requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
 import {
-  appendRecordingOpfs,
   clearRecordingOpfs,
   deleteRecordingOpfs,
   isRecordingOpfsAvailable,
   openRecordingOpfsStream,
   replaceRecordingOpfs,
 } from "./recordingOpfs";
-import { recordPerformanceMetric, startPerformanceSpan } from "../utils/performanceMetrics";
 
 const RECORDING_DATABASE_NAME = "next-editor-recordings-db";
 // v5: recording schema renumbered to 4 (binary-only .ne, mandatory dmp check ops).
@@ -33,6 +31,11 @@ interface StoredRecordingSegment {
   bytes: ArrayBuffer;
 }
 
+/**
+ * Written with every save, read by nothing: it served incremental appends while
+ * recording, which are gone. The store stays in the v7 schema until a version
+ * bump drops it.
+ */
 interface StoredRecordingStreamState {
   recordingId: string;
   nextSeq: number;
@@ -89,7 +92,6 @@ function compareMetadataByRecency(
 
 export class IndexedDBRecordingStore {
   private databasePromise: Promise<IDBDatabase> | null = null;
-  private readonly appendQueues = new Map<string, Promise<void>>();
 
   private getIndexedDB(): IDBFactory {
     if (typeof indexedDB === "undefined") {
@@ -303,8 +305,6 @@ export class IndexedDBRecordingStore {
       throw new Error(`Recording ${recordingId} has no finalized binary payload`);
     }
 
-    await (this.appendQueues.get(recordingId) ?? Promise.resolve()).catch(() => {});
-
     const payloadStorage = await this.storeLargePayloadInOpfs(recordingId, binaryData);
     try {
       await this.commitEntry(entry, binaryData, payloadStorage);
@@ -404,165 +404,7 @@ export class IndexedDBRecordingStore {
     await transactionToPromise(transaction);
   }
 
-  /**
-   * Appends streamed bytes as the next segment for a recording, for crash-resilient
-   * incremental persistence while recording. Segments concatenate (in seq order) into
-   * the same SCR3 byte layout the exporter produces.
-   */
-  appendSegments(recordingId: string, bytes: Uint8Array): Promise<void> {
-    if (bytes.length === 0) return Promise.resolve();
-
-    const previous = this.appendQueues.get(recordingId) ?? Promise.resolve();
-    const next = previous
-      .catch(() => {})
-      .then(() => this.appendSegmentsInternal(recordingId, bytes));
-    this.appendQueues.set(recordingId, next);
-    return next.finally(() => {
-      if (this.appendQueues.get(recordingId) === next) this.appendQueues.delete(recordingId);
-    });
-  }
-
-  private async getStreamState(recordingId: string): Promise<StoredRecordingStreamState> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(RECORDING_STREAM_STATE_STORE, "readonly");
-    const state = (await requestToPromise(
-      transaction.objectStore(RECORDING_STREAM_STATE_STORE).get(recordingId),
-    )) as StoredRecordingStreamState | undefined;
-    await transactionToPromise(transaction);
-    return (
-      state ?? {
-        recordingId,
-        nextSeq: 0,
-        payloadSize: 0,
-        payloadStorage: "indexeddb",
-      }
-    );
-  }
-
-  private async getSegmentBySequence(
-    recordingId: string,
-    seq: number,
-  ): Promise<StoredRecordingSegment | null> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(RECORDING_SEGMENTS_STORE, "readonly");
-    const segment = (await requestToPromise(
-      transaction.objectStore(RECORDING_SEGMENTS_STORE).get([recordingId, seq]),
-    )) as StoredRecordingSegment | undefined;
-    await transactionToPromise(transaction);
-    return segment ?? null;
-  }
-
-  private async commitStreamAppend(
-    state: StoredRecordingStreamState,
-    segment?: StoredRecordingSegment,
-    clearSegments = false,
-  ): Promise<void> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(
-      [RECORDING_METADATA_STORE, RECORDING_SEGMENTS_STORE, RECORDING_STREAM_STATE_STORE],
-      "readwrite",
-    );
-    const metadataStore = transaction.objectStore(RECORDING_METADATA_STORE);
-    const metadata = (await requestToPromise(metadataStore.get(state.recordingId))) as
-      | StoredRecordingMetadata
-      | undefined;
-    const segmentsStore = transaction.objectStore(RECORDING_SEGMENTS_STORE);
-    if (clearSegments) segmentsStore.delete(this.segmentRange(state.recordingId));
-    if (segment) segmentsStore.put(segment);
-    transaction.objectStore(RECORDING_STREAM_STATE_STORE).put(state);
-    if (metadata) {
-      metadataStore.put({
-        ...metadata,
-        payloadSize: state.payloadSize,
-        payloadStorage: state.payloadStorage,
-        updatedAt: Date.now(),
-      } satisfies StoredRecordingMetadata);
-    }
-    await transactionToPromise(transaction);
-  }
-
-  private async migrateSegmentsToOpfs(
-    state: StoredRecordingStreamState,
-    bytes: Uint8Array,
-  ): Promise<void> {
-    const initialSize = await replaceRecordingOpfs(state.recordingId, new Uint8Array(0));
-    if (initialSize !== 0) throw new Error("OPFS recording truncation failed");
-    let opfsOffset = 0;
-    for (let seq = 0; seq < state.nextSeq; seq += 1) {
-      const segment = await this.getSegmentBySequence(state.recordingId, seq);
-      if (!segment) {
-        throw new Error(`Recording ${state.recordingId} is missing segment ${seq}`);
-      }
-      opfsOffset = await appendRecordingOpfs(
-        state.recordingId,
-        new Uint8Array(segment.bytes),
-        opfsOffset,
-      );
-    }
-    opfsOffset = await appendRecordingOpfs(state.recordingId, bytes, opfsOffset);
-    await this.commitStreamAppend(
-      {
-        recordingId: state.recordingId,
-        nextSeq: 0,
-        payloadSize: opfsOffset,
-        payloadStorage: "opfs",
-      },
-      undefined,
-      true,
-    );
-  }
-
-  private async appendSegmentsInternal(recordingId: string, bytes: Uint8Array): Promise<void> {
-    const state = await this.getStreamState(recordingId);
-    const nextPayloadSize = state.payloadSize + bytes.byteLength;
-    const endAppendSpan = startPerformanceSpan("recording.storage_append");
-    let outcome = "success";
-    let payloadStorage = state.payloadStorage;
-
-    try {
-      if (state.payloadStorage === "opfs") {
-        const payloadSize = await appendRecordingOpfs(recordingId, bytes, state.payloadSize);
-        await this.commitStreamAppend({ ...state, payloadSize });
-        return;
-      }
-
-      if (nextPayloadSize >= RECORDING_OPFS_THRESHOLD_BYTES && (await isRecordingOpfsAvailable())) {
-        try {
-          await this.migrateSegmentsToOpfs(state, bytes);
-          payloadStorage = "opfs";
-          return;
-        } catch {
-          // Leave the authoritative IndexedDB segments untouched and continue there.
-        }
-      }
-
-      payloadStorage = "indexeddb";
-      await this.commitStreamAppend(
-        {
-          ...state,
-          nextSeq: state.nextSeq + 1,
-          payloadSize: nextPayloadSize,
-          payloadStorage,
-        },
-        {
-          recordingId,
-          seq: state.nextSeq,
-          bytes: toArrayBuffer(bytes),
-        },
-      );
-    } catch (error) {
-      outcome = "failure";
-      throw error;
-    } finally {
-      recordPerformanceMetric("recording.storage_append_bytes", bytes.byteLength, "bytes", {
-        storage: payloadStorage,
-      });
-      endAppendSpan({ outcome, storage: payloadStorage });
-    }
-  }
-
   async delete(id: string): Promise<void> {
-    await (this.appendQueues.get(id) ?? Promise.resolve()).catch(() => {});
     const database = await this.getDatabase();
     const transaction = database.transaction(
       [
@@ -584,7 +426,6 @@ export class IndexedDBRecordingStore {
   }
 
   async clear(): Promise<void> {
-    await Promise.all(Array.from(this.appendQueues.values(), (pending) => pending.catch(() => {})));
     const database = await this.getDatabase();
     const transaction = database.transaction(
       [

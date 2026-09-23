@@ -8,34 +8,8 @@ interface StorageManagerWithOpfs {
 interface SyncAccessHandleLike {
   close(): void;
   flush(): void;
-  getSize(): number;
-  read(buffer: Uint8Array, options?: { at?: number }): number;
   truncate(newSize: number): void;
   write(buffer: Uint8Array, options?: { at?: number }): number;
-}
-
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.byteLength !== right.byteLength) return false;
-  for (let index = 0; index < left.byteLength; index += 1) {
-    if (left[index] !== right[index]) return false;
-  }
-  return true;
-}
-
-function syncTailMatches(
-  access: SyncAccessHandleLike,
-  expectedOffset: number,
-  bytes: Uint8Array,
-): boolean {
-  if (bytes.byteLength === 0) return true;
-  const existing = new Uint8Array(bytes.byteLength);
-  let readOffset = 0;
-  while (readOffset < existing.byteLength) {
-    const read = access.read(existing.subarray(readOffset), { at: expectedOffset + readOffset });
-    if (read <= 0) return false;
-    readOffset += read;
-  }
-  return bytesEqual(existing, bytes);
 }
 
 interface FileHandleWithSyncAccess {
@@ -66,11 +40,13 @@ function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.slice().buffer as ArrayBuffer;
 }
 
+/**
+ * Replaces the file's contents through a synchronous access handle and returns the
+ * number of bytes written, or null when this browser offers no such handle.
+ */
 async function writeWithSyncHandle(
   fileHandle: FileSystemFileHandle,
   bytes: Uint8Array,
-  append: boolean,
-  expectedOffset?: number,
 ): Promise<number | null> {
   const createSyncAccessHandle = (fileHandle as unknown as FileHandleWithSyncAccess)
     .createSyncAccessHandle;
@@ -78,32 +54,15 @@ async function writeWithSyncHandle(
 
   const access = await createSyncAccessHandle.call(fileHandle);
   try {
-    const currentSize = append ? access.getSize() : 0;
-    if (append && expectedOffset !== undefined) {
-      if (
-        currentSize === expectedOffset + bytes.byteLength &&
-        syncTailMatches(access, expectedOffset, bytes)
-      ) {
-        return currentSize;
-      }
-      if (currentSize !== expectedOffset) {
-        throw new Error(
-          `OPFS append offset mismatch: expected ${expectedOffset}, received ${currentSize}`,
-        );
-      }
-    }
-    let fileOffset = currentSize;
-    if (!append) access.truncate(0);
-
-    let inputOffset = 0;
-    while (inputOffset < bytes.byteLength) {
-      const written = access.write(bytes.subarray(inputOffset), { at: fileOffset });
-      if (written <= 0) throw new Error("OPFS sync write made no progress");
-      inputOffset += written;
-      fileOffset += written;
+    access.truncate(0);
+    let written = 0;
+    while (written < bytes.byteLength) {
+      const count = access.write(bytes.subarray(written), { at: written });
+      if (count <= 0) throw new Error("OPFS sync write made no progress");
+      written += count;
     }
     access.flush();
-    return fileOffset;
+    return written;
   } finally {
     access.close();
   }
@@ -112,47 +71,25 @@ async function writeWithSyncHandle(
 async function writeWithAsyncHandle(
   fileHandle: FileSystemFileHandle,
   bytes: Uint8Array,
-  append: boolean,
-  expectedOffset?: number,
 ): Promise<number> {
-  const existingFile = append ? await fileHandle.getFile() : null;
-  const existingSize = existingFile?.size ?? 0;
-  if (append && expectedOffset !== undefined) {
-    if (existingSize === expectedOffset + bytes.byteLength) {
-      const existing = new Uint8Array(
-        await existingFile!.slice(expectedOffset, existingSize).arrayBuffer(),
-      );
-      if (bytesEqual(existing, bytes)) return existingSize;
-    }
-    if (existingSize !== expectedOffset) {
-      throw new Error(
-        `OPFS append offset mismatch: expected ${expectedOffset}, received ${existingSize}`,
-      );
-    }
-  }
-  const writable = await fileHandle.createWritable({ keepExistingData: append });
+  const writable = await fileHandle.createWritable();
   try {
-    if (append) await writable.seek(existingSize);
     if (bytes.byteLength > 0) await writable.write(exactArrayBuffer(bytes));
   } finally {
     await writable.close();
   }
-  return existingSize + bytes.byteLength;
+  return bytes.byteLength;
 }
 
-async function writeRecording(
-  recordingId: string,
-  bytes: Uint8Array,
-  append: boolean,
-  expectedOffset?: number,
-): Promise<number> {
+/** Replaces a recording's OPFS file with `bytes`, returning how many bytes it now holds. */
+async function writeRecording(recordingId: string, bytes: Uint8Array): Promise<number> {
   const directory = await getRecordingDirectory();
   const fileHandle = await directory.getFileHandle(recordingOpfsFilename(recordingId), {
     create: true,
   });
-  const syncSize = await writeWithSyncHandle(fileHandle, bytes, append, expectedOffset);
+  const syncSize = await writeWithSyncHandle(fileHandle, bytes);
   if (syncSize !== null) return syncSize;
-  return writeWithAsyncHandle(fileHandle, bytes, append, expectedOffset);
+  return writeWithAsyncHandle(fileHandle, bytes);
 }
 
 const writeQueues = new Map<string, Promise<unknown>>();
@@ -176,12 +113,7 @@ const api = {
     }
   },
   replace(recordingId: string, bytes: Uint8Array): Promise<number> {
-    return enqueueWrite(recordingId, () => writeRecording(recordingId, bytes, false));
-  },
-  append(recordingId: string, bytes: Uint8Array, expectedOffset: number): Promise<number> {
-    return enqueueWrite(recordingId, () =>
-      writeRecording(recordingId, bytes, true, expectedOffset),
-    );
+    return enqueueWrite(recordingId, () => writeRecording(recordingId, bytes));
   },
   async delete(recordingId: string): Promise<void> {
     await (writeQueues.get(recordingId) ?? Promise.resolve()).catch(() => {});
