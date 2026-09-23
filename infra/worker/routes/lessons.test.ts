@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { lessonsRoute } from "./lessons";
 import { getCurrentUser } from "../auth/session";
-import { insertDraftLesson, updateLesson } from "../../db/queries";
+import { insertDraftLesson, listPublishedLessons, updateLesson } from "../../db/queries";
 import type { LessonRow } from "../../db/types";
 
 vi.mock("../auth/session", () => ({
@@ -10,6 +10,7 @@ vi.mock("../auth/session", () => ({
 
 vi.mock("../../db/queries", () => ({
   insertDraftLesson: vi.fn<() => Promise<LessonRow>>(),
+  listPublishedLessons: vi.fn<() => Promise<{ rows: LessonRow[]; nextPage: number | null }>>(),
   updateLesson: vi.fn<() => Promise<LessonRow | null>>(),
   getLessonById: vi.fn<() => Promise<null>>(async () => null),
 }));
@@ -106,5 +107,47 @@ describe("lessonsRoute lesson ids", () => {
 
     expect(response.status).toBe(404);
     expect(updateLesson).not.toHaveBeenCalled();
+  });
+});
+
+describe("lessonsRoute gallery pages", () => {
+  function createKv() {
+    return {
+      get: vi.fn<() => Promise<null>>(async () => null),
+      put: vi.fn<() => Promise<void>>(async () => undefined),
+    };
+  }
+
+  function listPage(page: number, cache: ReturnType<typeof createKv>) {
+    return lessonsRoute.request(`https://nexteditor.dev/?page=${page}`, undefined, {
+      DB: {} as D1Database,
+      CACHE: cache as unknown as KVNamespace,
+    } as never);
+  }
+
+  it("caches a page that has lessons on it", async () => {
+    vi.mocked(listPublishedLessons).mockResolvedValue({
+      rows: [{ ...lessonRow(LESSON_ID), status: "published" }],
+      nextPage: null,
+    });
+    const cache = createKv();
+
+    const response = await listPage(0, cache);
+
+    expect(response.status).toBe(200);
+    expect(cache.put).toHaveBeenCalledTimes(1);
+  });
+
+  // Every distinct ?page= is its own KV key, so caching an empty page let an
+  // unauthenticated loop over page numbers mint one billable KV write each.
+  it("answers a page past the end without writing it to KV", async () => {
+    vi.mocked(listPublishedLessons).mockResolvedValue({ rows: [], nextPage: null });
+    const cache = createKv();
+
+    const response = await listPage(500, cache);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ lessons: [], nextPage: null });
+    expect(cache.put).not.toHaveBeenCalled();
   });
 });

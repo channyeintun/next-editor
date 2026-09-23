@@ -91,16 +91,19 @@ lessonsRoute.get("/", async (c) => {
     return c.json({ error: "invalid page" }, 400);
   }
 
+  // An empty page loads as null, which cached() never stores: every distinct
+  // ?page= is its own KV key, so caching the empty pages past the end would let
+  // an unauthenticated loop over page numbers mint one KV write per request.
   const body = await cached(
     getCache(c.env),
     lessonListKey(page, DEFAULT_PAGE_SIZE),
     LIST_CACHE_TTL_SECONDS,
     async () => {
       const { rows, nextPage } = await listPublishedLessons(c.env.DB, page, DEFAULT_PAGE_SIZE);
-      return { lessons: rows.map(lessonRowToLesson), nextPage };
+      return rows.length > 0 ? { lessons: rows.map(lessonRowToLesson), nextPage } : null;
     },
   );
-  return c.json(body);
+  return c.json(body ?? { lessons: [], nextPage: null });
 });
 
 interface CreateLessonBody {

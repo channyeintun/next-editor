@@ -18,9 +18,9 @@ const SEED_LESSONS = seedManifest.lessons as Lesson[];
 // are static assets, not D1 rows at all), then the published D1 catalog behind
 // the KV cache.
 //
-// A cache miss on a not-found slug is never populated: cached() treats a stored
-// `null` the same as "no entry" and re-queries D1 every time. Fine here — 404s
-// are cheap and rare enough not to need their own cache path.
+// A cache miss on a not-found slug is never populated: cached() does not store
+// a null, so every lookup of that slug re-queries D1. Fine here — 404s are
+// cheap and rare enough not to need their own cache path.
 export async function findPublishedLessonBySlug(env: Env, slug: string): Promise<Lesson | null> {
   const seeded = SEED_LESSONS.find((lesson) => lesson.slug === slug);
   if (seeded) {
