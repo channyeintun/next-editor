@@ -20,12 +20,19 @@ class FakeElement {
     this.id = id;
   }
 
+  attributes = new Map<string, string>();
+
   getAttribute(name: string) {
-    return name === "data-testid" ? this.testId || null : null;
+    return name === "data-testid" ? this.testId || null : (this.attributes.get(name) ?? null);
+  }
+
+  hasAttribute(name: string) {
+    return this.getAttribute(name) !== null;
   }
 }
 
 class FakeInputElement extends FakeElement {
+  type = "text";
   value = "";
 }
 
@@ -129,8 +136,17 @@ function createCaptureHarness() {
     FakeTextAreaElement,
   ] as const;
 
+  const createInput = (type: string) => {
+    const input = new FakeInputElement("INPUT");
+    input.type = type;
+    body.children.push(input);
+    input.parentElement = body;
+    return input;
+  };
+
   return {
     button,
+    createInput,
     documentTarget,
     frameWindow,
     install: () => install(...installArgs),
@@ -238,6 +254,45 @@ describe("createIframeInteractionCaptureScript", () => {
       }),
       "*",
     );
+  });
+
+  it("masks password values and keys the way the rrweb recorder does", () => {
+    const { createInput, documentTarget, install, parentPostMessage } = createCaptureHarness();
+    const password = createInput("password");
+    const text = createInput("text");
+    // rrweb marks a password field whose type was later switched ("show
+    // password") and keeps masking it; the interaction track must agree.
+    const revealed = createInput("text");
+    revealed.attributes.set("data-rr-is-password", "true");
+
+    install();
+    documentTarget.emit("keydown", { code: "KeyS", key: "s", target: password });
+    documentTarget.emit("keyup", { code: "KeyS", key: "s", target: password });
+    password.value = "s3cret";
+    documentTarget.emit("input", { target: password });
+    revealed.value = "hunter2";
+    documentTarget.emit("input", { target: revealed });
+    documentTarget.emit("keydown", { code: "KeyA", key: "a", target: text });
+    text.value = "Ada";
+    documentTarget.emit("input", { target: text });
+
+    const payloads = parentPostMessage.mock.calls.map(
+      ([message]) =>
+        (message as { payload: { type: string; data: Record<string, unknown> } }).payload,
+    );
+    const [passwordKeyDown, passwordKeyUp, passwordInput, revealedInput, textKeyDown, textInput] =
+      payloads;
+
+    expect(passwordKeyDown.type).toBe("keydown");
+    expect(passwordKeyDown.data).not.toHaveProperty("key");
+    expect(passwordKeyDown.data).not.toHaveProperty("code");
+    expect(passwordKeyUp.type).toBe("keyup");
+    expect(passwordKeyUp.data).not.toHaveProperty("key");
+    expect(passwordInput.data.value).toBe("******");
+    expect(revealedInput.data.value).toBe("*******");
+    expect(textKeyDown.data).toMatchObject({ code: "KeyA", key: "a" });
+    expect(textInput.data.value).toBe("Ada");
+    expect(JSON.stringify(payloads)).not.toMatch(/s3cret|hunter2/);
   });
 
   it("emits mousemove coordinates with iframe viewport dimensions when enabled", () => {

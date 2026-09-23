@@ -145,6 +145,23 @@ export function createIframeInteractionCaptureScript(
         };
       }
 
+      // The rrweb recorder in the same page masks password fields (its
+      // default maskInputOptions is { password: true }), including one whose
+      // type was later switched to text, which it marks data-rr-is-password.
+      // Mask them here too, or the interaction track would store the plain
+      // text and every keystroke that the DOM track hides.
+      function isPasswordInput(target) {
+        return (
+          target instanceof HTMLInputElement &&
+          (String(target.type).toLowerCase() === 'password' ||
+            target.hasAttribute('data-rr-is-password'))
+        );
+      }
+
+      function getKeyData(event) {
+        return isPasswordInput(event.target) ? undefined : { key: event.key, code: event.code };
+      }
+
       function emit(type, target, data) {
         if (!(target instanceof Element)) {
           return;
@@ -353,7 +370,7 @@ export function createIframeInteractionCaptureScript(
       addDocumentListener(
         'keydown',
         (event) => {
-          emit('keydown', event.target, { key: event.key, code: event.code });
+          emit('keydown', event.target, getKeyData(event));
         },
         true,
       );
@@ -361,7 +378,7 @@ export function createIframeInteractionCaptureScript(
       addDocumentListener(
         'keyup',
         (event) => {
-          emit('keyup', event.target, { key: event.key, code: event.code });
+          emit('keyup', event.target, getKeyData(event));
         },
         true,
       );
@@ -375,7 +392,10 @@ export function createIframeInteractionCaptureScript(
             target instanceof HTMLInputElement ||
             target instanceof HTMLTextAreaElement
           ) {
-            emit('input', target, { value: target.value });
+            emit('input', target, {
+              // Same-length mask, as rrweb writes it.
+              value: isPasswordInput(target) ? '*'.repeat(target.value.length) : target.value,
+            });
           }
         },
         true,

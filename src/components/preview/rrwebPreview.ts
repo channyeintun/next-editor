@@ -329,7 +329,9 @@ export function createRrwebPreviewRecorderScript({
             // behavior, not a regression).
             inlineImages: true,
             // Capture real input values: the preview replays the author's own demo
-            // content, and typed text must stay visible in replay.
+            // content, and typed text must stay visible in replay. Password fields
+            // stay masked (rrweb's default { password: true }); the interaction
+            // capture script masks them the same way.
             maskAllInputs: false,
             // Scripts never execute in replay and our own injected scripts must not
             // bloat the snapshot; comments are noise. Drop both.
