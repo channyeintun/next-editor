@@ -580,6 +580,12 @@ export class FakeIndexedDB {
     return records.map((record) => copyValue(record.value));
   }
 
+  /** Empties a store behind the code under test's back (e.g. site data cleared). */
+  clear(name: string, store: string): void {
+    const data = this.databases.get(name)?.stores.get(store);
+    if (data) data.records = [];
+  }
+
   storeNames(name: string): string[] {
     return [...(this.databases.get(name)?.stores.keys() ?? [])].sort();
   }

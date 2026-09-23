@@ -271,20 +271,47 @@ export async function migrateLegacyWorkspaceAssets(
   return descriptors;
 }
 
-/** Verify that every descriptor referenced by the save has durable bytes. */
+/**
+ * Verify that every descriptor referenced by the save has durable bytes.
+ *
+ * Registering an asset already stores it, so this normally only reads. It writes
+ * an asset back from memory when its stored copy is missing or the wrong size (a
+ * registration whose write failed, or site data cleared under the page); an asset
+ * that is in neither place fails the save.
+ */
 export async function persistWorkspaceAssets(project: WorkspaceProject): Promise<void> {
   try {
     const assetFiles = Object.values(project.files).filter(isWorkspaceAssetFile);
     if (assetFiles.length === 0) return;
-    if (!getDatabase()) {
+    const databaseResult = getDatabase();
+    if (!databaseResult) {
       throw new WorkspaceAssetPersistenceError(
         "This browser does not provide IndexedDB for binary workspace assets",
       );
     }
 
-    for (const file of assetFiles) {
-      const blob = await getWorkspaceAssetBlob(file.content);
-      await writeAssetBlob(file.content.assetId, blob);
+    const database = await databaseResult;
+    const transaction = database.transaction(ASSET_STORE, "readonly");
+    const complete = transactionToPromise(transaction);
+    const store = transaction.objectStore(ASSET_STORE);
+    // Reading a stored Blob yields a handle; its bytes are not loaded.
+    const [storedValues] = await Promise.all([
+      Promise.all(
+        assetFiles.map((file) => requestToPromise(store.get(getAssetKey(file.content.assetId)))),
+      ),
+      complete,
+    ]);
+
+    for (const [index, file] of assetFiles.entries()) {
+      const descriptor = file.content;
+      if (asBlob(storedValues[index], descriptor.mimeType)?.size === descriptor.size) continue;
+      const cached = blobCache.get(descriptor.assetId);
+      if (!cached || cached.size !== descriptor.size) {
+        throw new WorkspaceAssetPersistenceError(
+          `Workspace asset ${descriptor.assetId} is missing or corrupt`,
+        );
+      }
+      await writeAssetBlob(descriptor.assetId, cached);
     }
   } catch (error) {
     if (error instanceof WorkspaceAssetPersistenceError) throw error;
