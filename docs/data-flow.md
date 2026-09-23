@@ -137,7 +137,7 @@ flowchart LR
     Encode --> IndexedDB[Metadata + small SCR3 payloads]
     Encode --> OPFS[Large SCR3 payloads]
     Encode --> Live[Forward live bytes to sink]
-    NeFile --> Decode[decompressBinaryToRecordings in worker]
+    NeFile --> Decode[decompressBinaryToRecording in worker]
     IndexedDB --> Decode
     OPFS --> PrefixDecode
     Live --> PrefixDecode[createStreamingRecordingReader prefix decode]

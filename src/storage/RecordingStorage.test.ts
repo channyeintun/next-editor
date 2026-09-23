@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Recording } from "../core/src";
 import type { StoredRecordingEntry, StoredRecordingMetadata } from "./IndexedDBRecordingStore";
-import { decompressBinaryToRecordings, encodeRecordingToStream } from "./recordingCodecClient";
+import { decompressBinaryToRecording, encodeRecordingToStream } from "./recordingCodecClient";
 import { attachCompanionAudio, buildRecordingFiles, RecordingStorage } from "./RecordingStorage";
 
 function createRecording(overrides: Partial<Recording> = {}): Recording {
@@ -55,8 +55,7 @@ async function exportAndDecode(recording: Recording, filename?: string): Promise
   const neEntry = downloaded.find((entry) => entry.filename.endsWith(".ne"));
   if (!neEntry) throw new Error("Expected a .ne download");
   const bytes = new Uint8Array(await neEntry.blob.arrayBuffer());
-  const [decoded] = await decompressBinaryToRecordings(bytes);
-  return decoded;
+  return decompressBinaryToRecording(bytes);
 }
 
 describe("buildRecordingFiles", () => {
@@ -67,7 +66,7 @@ describe("buildRecordingFiles", () => {
     expect(files.audio).toBeUndefined();
     expect(files.camera).toBeUndefined();
     const bytes = new Uint8Array(await files.ne.arrayBuffer());
-    const [decoded] = await decompressBinaryToRecordings(bytes);
+    const decoded = await decompressBinaryToRecording(bytes);
     expect(decoded.id).toBe(recording.id);
   });
 
@@ -88,14 +87,14 @@ describe("buildRecordingFiles", () => {
     const withCaptions = await buildRecordingFiles(recording, "lesson-1", {
       captionFiles: ["lesson-1.en.vtt", "lesson-1.my.vtt"],
     });
-    const [decodedWith] = await decompressBinaryToRecordings(
+    const decodedWith = await decompressBinaryToRecording(
       new Uint8Array(await withCaptions.ne.arrayBuffer()),
     );
     expect(decodedWith.captionFiles).toEqual(["lesson-1.en.vtt", "lesson-1.my.vtt"]);
 
     // Without the option (the plain export path) the existing declaration is preserved.
     const withoutOption = await buildRecordingFiles(recording, "lesson-1");
-    const [decodedWithout] = await decompressBinaryToRecordings(
+    const decodedWithout = await decompressBinaryToRecording(
       new Uint8Array(await withoutOption.ne.arrayBuffer()),
     );
     expect(decodedWithout.captionFiles).toEqual(["stale.en.vtt"]);
@@ -105,9 +104,9 @@ describe("buildRecordingFiles", () => {
     const recording = createRecording();
     const viaBuild = await buildRecordingFiles(recording, "recording-1");
     const viaExport = await exportAndDecode(recording);
-    const decodedFromBuild = (
-      await decompressBinaryToRecordings(new Uint8Array(await viaBuild.ne.arrayBuffer()))
-    )[0];
+    const decodedFromBuild = await decompressBinaryToRecording(
+      new Uint8Array(await viaBuild.ne.arrayBuffer()),
+    );
 
     expect(decodedFromBuild.id).toBe(viaExport.id);
     expect(decodedFromBuild.frames).toEqual(viaExport.frames);

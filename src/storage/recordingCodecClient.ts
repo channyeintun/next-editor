@@ -4,7 +4,7 @@ import type { DeltaFrame } from "../core/src/utils/deltaTypes";
 import type { WorkspaceRecordingAsset } from "../types/workspace";
 import { loadDmpCodec } from "./dmpCodec/dmpCodec";
 import {
-  decompressBinaryToRecordings as decompressBinaryToRecordingsInProcess,
+  decompressBinaryToRecording as decompressBinaryToRecordingInProcess,
   encodeRecordingToStream as encodeRecordingToStreamInProcess,
   normalizeRecording,
 } from "./recordingCodec";
@@ -276,7 +276,7 @@ export function createLiveRecordingStreamEncoder(): LiveRecordingStreamEncoder {
   return new LiveRecordingStreamEncoderClient(getRecordingCodecWorkerClient());
 }
 
-export async function decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
+export async function decompressBinaryToRecording(binaryData: Uint8Array): Promise<Recording> {
   // The worker decodes, but the main thread reconstructs frames synchronously
   // during replay (applyContentDelta → diff-match-patch), so the codec must be
   // loaded here regardless of whether the worker is used.
@@ -287,17 +287,17 @@ export async function decompressBinaryToRecordings(binaryData: Uint8Array): Prom
   // whole point of keeping the in-process implementation around. The bytes are
   // copied to the worker, not transferred, so that fallback still has them. A
   // decode error is the file's, not the worker's, and is reported as it is.
-  const recordings = client
-    ? await callCodecWorker(client, client.api.decompressBinaryToRecordings(binaryData)).catch(
+  const recording = client
+    ? await callCodecWorker(client, client.api.decompressBinaryToRecording(binaryData)).catch(
         (error: unknown) => {
           if (error instanceof CodecWorkerFailedError) {
-            return decompressBinaryToRecordingsInProcess(binaryData);
+            return decompressBinaryToRecordingInProcess(binaryData);
           }
           throw error;
         },
       )
-    : await decompressBinaryToRecordingsInProcess(binaryData);
-  return Promise.all(recordings.map(hydrateDecodedRecordingWorkspaceAssets));
+    : await decompressBinaryToRecordingInProcess(binaryData);
+  return hydrateDecodedRecordingWorkspaceAssets(recording);
 }
 
 export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {

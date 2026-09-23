@@ -6,7 +6,7 @@ import {
   createFrameDelta,
   reconstructFrameAtIndex,
 } from "../core/src/utils/frameDelta";
-import { decompressBinaryToRecordings } from "./recordingCodec";
+import { decompressBinaryToRecording } from "./recordingCodec";
 import {
   createStreamingRecordingReader,
   createStreamingRecordingWriter,
@@ -94,7 +94,7 @@ describe("recordingCodec", () => {
     const recording = createRecording({ audioBlob, audioSource: "external" });
 
     const encoded = await encodeRecordingToStream(recording);
-    const [decoded] = await decompressBinaryToRecordings(encoded);
+    const decoded = await decompressBinaryToRecording(encoded);
 
     expect(decoded.id).toBe(recording.id);
     expect(decoded.version).toBe(4);
@@ -151,7 +151,7 @@ describe("recordingCodec", () => {
     const recording = createRecording({ duration: 800, frames: [base, deltaFrame] });
 
     const encoded = await encodeRecordingToStream(recording);
-    const [decoded] = await decompressBinaryToRecordings(encoded);
+    const decoded = await decompressBinaryToRecording(encoded);
 
     // The opaque delta must survive msgpack-bin + deflate byte-for-byte...
     expect(decoded.frames).toEqual(recording.frames);
@@ -228,7 +228,7 @@ describe("recordingCodec", () => {
     });
 
     const encoded = await encodeRecordingToStream(recording);
-    const [decoded] = await decompressBinaryToRecordings(encoded);
+    const decoded = await decompressBinaryToRecording(encoded);
 
     expect(decoded.whiteboardEvents).toEqual(recording.whiteboardEvents);
     expect(decoded.tracks?.some((track) => track.kind === "whiteboard")).toBe(true);
@@ -275,7 +275,7 @@ describe("recordingCodec", () => {
     });
 
     const encoded = await encodeRecordingToStream(recording);
-    const [decoded] = await decompressBinaryToRecordings(encoded);
+    const decoded = await decompressBinaryToRecording(encoded);
 
     expect(decoded.chatEvents).toEqual(recording.chatEvents);
     expect(decoded.tracks?.some((track) => track.kind === "chat")).toBe(true);
@@ -285,7 +285,7 @@ describe("recordingCodec", () => {
     const recording = createRecording({ duration: 800 });
 
     const encoded = await encodeRecordingToStream(recording);
-    const [decoded] = await decompressBinaryToRecordings(encoded);
+    const decoded = await decompressBinaryToRecording(encoded);
 
     expect(decoded.chatEvents).toBeUndefined();
   });
@@ -680,7 +680,7 @@ describe("recordingCodec", () => {
   });
 
   it("rejects bytes that are not an SCR3 stream", async () => {
-    await expect(decompressBinaryToRecordings(new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow(
+    await expect(decompressBinaryToRecording(new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow(
       /SCR3/,
     );
   });
@@ -791,7 +791,7 @@ describe("recordingCodec", () => {
     });
 
     const encoded = await encodeRecordingToStream(recording);
-    const [decoded] = await decompressBinaryToRecordings(encoded);
+    const decoded = await decompressBinaryToRecording(encoded);
 
     expect(decoded.captions).toEqual(recording.captions);
   });
@@ -858,7 +858,7 @@ describe("recordingCodec", () => {
     });
 
     const encoded = await encodeRecordingToStream(recording);
-    const [decoded] = await decompressBinaryToRecordings(encoded);
+    const decoded = await decompressBinaryToRecording(encoded);
 
     expect(decoded.audioFile).toBe("my-recording.weba");
     expect(decoded.audioUrl).toBe("https://example.com/my-recording.weba");
@@ -874,7 +874,7 @@ describe("recordingCodec", () => {
     });
 
     const encoded = await encodeRecordingToStream(recording);
-    const [decoded] = await decompressBinaryToRecordings(encoded);
+    const decoded = await decompressBinaryToRecording(encoded);
 
     expect(decoded.cameraFile).toBe("my-recording.webm");
     expect(decoded.cameraStartOffsetMs).toBe(80);

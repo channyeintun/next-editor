@@ -18,13 +18,13 @@ export function normalizeRecording(recording: Recording): Recording {
   );
 }
 
-export async function decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
+export async function decompressBinaryToRecording(binaryData: Uint8Array): Promise<Recording> {
   if (!isStreamingRecording(binaryData)) {
     throw new Error("Invalid recording format: expected an SCR3 stream");
   }
 
-  // The SCR3 container holds a single recording per stream. Decoding is tolerant of
-  // an in-progress footer or truncated trailing segment, so callers can progressively
-  // decode larger binary prefixes during download.
-  return [decodeRecordingStream(binaryData)];
+  // An SCR3 stream holds exactly one recording. Decoding is tolerant of an in-progress
+  // footer or truncated trailing segment, so callers can progressively decode larger
+  // binary prefixes during download.
+  return decodeRecordingStream(binaryData);
 }

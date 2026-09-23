@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNextEditorActions } from "./useNextEditorContext";
-import { decompressBinaryToRecordings } from "../storage/recordingCodecClient";
+import { decompressBinaryToRecording } from "../storage/recordingCodecClient";
 import {
   audioMimeFromFilename,
   createStreamingRecordingReader,
@@ -361,14 +361,10 @@ export const useUrlLoader = () => {
   const loadRecordingFromBinaryBytes = async (
     bytes: Uint8Array,
     baseUrl?: string,
-  ): Promise<Recording | null> => {
-    const recordings = await decompressBinaryToRecordings(bytes);
-    if (recordings.length > 0) {
-      const resolved = withResolvedMediaUrls(recordings[0], baseUrl);
-      loadRecording(resolved);
-      return resolved;
-    }
-    return null;
+  ): Promise<Recording> => {
+    const resolved = withResolvedMediaUrls(await decompressBinaryToRecording(bytes), baseUrl);
+    loadRecording(resolved);
+    return resolved;
   };
 
   /**

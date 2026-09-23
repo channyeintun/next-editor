@@ -148,7 +148,7 @@ function useStreamedIntro(url: string, autoplay = false) {
 `extendRecording` keeps the current time and applied state, so you can `play()` after the first
 prefix and let later prefixes fill in **without any re-seek or visible jump**.
 
-> Tip: whole-file decodes go through `decompressBinaryToRecordings`, which runs deflate + msgpack
+> Tip: whole-file decodes go through `decompressBinaryToRecording`, which runs deflate + msgpack
 > **in the codec worker** ([recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)),
 > keeping the main thread responsive. Throttle `push()` calls by bytes (above) or time — each
 > decode is bounded by newly-arrived segments, not the whole prefix.
@@ -256,7 +256,7 @@ effective duration in your UI.
   permits one ordered worker encode plus sink write in flight. Finalization awaits the worker's
   final metadata/footer response, so no queued segment can land after the sink closes.
 - **Decode in the worker.** For whole-file (non-progressive) decodes, prefer
-  [`decompressBinaryToRecordings`](../src/storage/recordingCodecClient.ts) so deflate stays off
+  [`decompressBinaryToRecording`](../src/storage/recordingCodecClient.ts) so deflate stays off
   the main thread.
 - **No re-seek needed.** `extendRecording` preserves position; you do **not** reload + `seekTo`.
 - **Keyframe cadence = seek granularity.** Keyframes every ≤120 frames bound how early the first
@@ -307,7 +307,7 @@ operate on growing arrays.
 | `extendRecording(recording)`              | [useNextEditorContext.ts](../src/hooks/useNextEditorContext.ts)                       | Swap in a larger prefix in place, keeping position/timeline.           |
 | `createStreamingRecordingReader()`        | [streamingRecordingCodec/decode.ts](../src/storage/streamingRecordingCodec/decode.ts) | Stateful reader: `push(bytes)` + `getRecording()` (missing footer OK). |
 | `decodeRecordingStream(bytes)`            | [streamingRecordingCodec/decode.ts](../src/storage/streamingRecordingCodec/decode.ts) | Decode a complete, finalized stream (or any prefix) in one call.       |
-| `decompressBinaryToRecordings(bytes)`     | [recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)                     | Worker-backed binary decode (prefix or full) → `Recording[]`.          |
+| `decompressBinaryToRecording(bytes)`      | [recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)                     | Worker-backed binary decode (prefix or full) → `Recording`.            |
 | `RecordingStreamSink`                     | [core types](../src/core/src/types.ts)                                                | `{ write(bytes), close() }` live sink interface.                       |
 | `UseNextEditorConfig.recordingStreamSink` | [core types](../src/core/src/types.ts)                                                | Opt-in: forward the live `SCR3` stream while recording.                |
 

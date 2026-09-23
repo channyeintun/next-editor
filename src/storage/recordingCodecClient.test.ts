@@ -1,7 +1,7 @@
 import { expose } from "comlink";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Recording } from "../core/src";
-import { decompressBinaryToRecordings as decodeInProcess } from "./recordingCodec";
+import { decompressBinaryToRecording as decodeInProcess } from "./recordingCodec";
 import { encodeRecordingToStream } from "./streamingRecordingCodec";
 
 // The real worker needs the wasm diff codec, which Vitest cannot import; the
@@ -23,7 +23,7 @@ function installWorker(behavior: WorkerBehavior): void {
       const { port1, port2 } = new MessageChannel();
       expose(
         {
-          decompressBinaryToRecordings: (bytes: Uint8Array) => {
+          decompressBinaryToRecording: (bytes: Uint8Array) => {
             if (behavior === "decode") return decodeInProcess(bytes);
             setTimeout(() => this.errorListeners.forEach((listener) => listener()), 0);
             return new Promise(() => {});
@@ -78,14 +78,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("decompressBinaryToRecordings through the codec worker", () => {
+describe("decompressBinaryToRecording through the codec worker", () => {
   it("decodes in process, from the caller's intact bytes, when the worker dies", async () => {
     installWorker("die");
-    const { decompressBinaryToRecordings } = await importClient();
+    const { decompressBinaryToRecording } = await importClient();
     const bytes = await encodeRecordingToStream(recording);
     const byteLength = bytes.byteLength;
 
-    const [decoded] = await decompressBinaryToRecordings(bytes);
+    const decoded = await decompressBinaryToRecording(bytes);
 
     expect(decoded.id).toBe("take-1");
     expect(bytes.byteLength).toBe(byteLength);
@@ -93,11 +93,11 @@ describe("decompressBinaryToRecordings through the codec worker", () => {
 
   it("reports the worker's own decode error instead of retrying in process", async () => {
     installWorker("decode");
-    const { decompressBinaryToRecordings } = await importClient();
+    const { decompressBinaryToRecording } = await importClient();
     const bytes = await encodeRecordingToStream(recording);
     new DataView(bytes.buffer, bytes.byteOffset).setUint16(4, 5, true); // a newer format
 
-    await expect(decompressBinaryToRecordings(bytes)).rejects.toThrow(
+    await expect(decompressBinaryToRecording(bytes)).rejects.toThrow(
       "Unsupported SCR3 format version: 5",
     );
   });

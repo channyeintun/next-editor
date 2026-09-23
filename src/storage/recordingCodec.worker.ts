@@ -2,7 +2,7 @@ import { expose, transfer } from "comlink";
 import type { Recording } from "../core/src";
 import type { DeltaFrame } from "../core/src/utils/deltaTypes";
 import type { WorkspaceAssetDescriptor } from "../types/workspace";
-import { decompressBinaryToRecordings, encodeRecordingToStream } from "./recordingCodec";
+import { decompressBinaryToRecording, encodeRecordingToStream } from "./recordingCodec";
 import {
   createStreamingRecordingWriter,
   type RecordingStreamMeta,
@@ -15,11 +15,11 @@ const transferUint8Array = (data: Uint8Array): Uint8Array => {
   return transfer(data, [data.buffer as ArrayBuffer]);
 };
 
-const transferRecordings = (recordings: Recording[]): Recording[] => {
-  const buffers = recordings.flatMap((recording) =>
-    (recording.workspaceAssets ?? []).map((asset) => asset.bytes.buffer as ArrayBuffer),
+const transferRecording = (recording: Recording): Recording => {
+  const buffers = (recording.workspaceAssets ?? []).map(
+    (asset) => asset.bytes.buffer as ArrayBuffer,
   );
-  return transfer(recordings, buffers);
+  return transfer(recording, buffers);
 };
 
 interface LiveWriterState {
@@ -46,8 +46,8 @@ function drainLiveWriter(state: LiveWriterState): Uint8Array {
 }
 
 const api = {
-  async decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
-    return transferRecordings(await decompressBinaryToRecordings(binaryData));
+  async decompressBinaryToRecording(binaryData: Uint8Array): Promise<Recording> {
+    return transferRecording(await decompressBinaryToRecording(binaryData));
   },
   async encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
     return transferUint8Array(await encodeRecordingToStream(recording));

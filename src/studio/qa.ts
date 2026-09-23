@@ -1,5 +1,5 @@
 import type { Recording, RecordingTrackKind } from "../core/src";
-import { decompressBinaryToRecordings } from "../storage/recordingCodec";
+import { decompressBinaryToRecording } from "../storage/recordingCodec";
 import { isWorkspaceTextFile } from "../types/workspace";
 import type { StudioPlan, StudioPlanAction } from "./plan";
 import type { StudioCheckResult } from "./report";
@@ -190,14 +190,11 @@ export async function runArtifactChecks({
   // recording.decodes
   let decoded: Recording | null = null;
   try {
-    const decodedRecordings = await decompressBinaryToRecordings(neBytes);
-    decoded = decodedRecordings[0] ?? null;
+    decoded = await decompressBinaryToRecording(neBytes);
     results.push({
       id: "recording.decodes",
-      ok: decoded !== null && decoded.version === 4 && decoded.streamFinalized === true,
-      detail: decoded
-        ? `SCR3 decodes; ${neBytes.byteLength} bytes, finalized=${String(decoded.streamFinalized)}`
-        : "decode produced no recording",
+      ok: decoded.version === 4 && decoded.streamFinalized === true,
+      detail: `SCR3 decodes; ${neBytes.byteLength} bytes, finalized=${String(decoded.streamFinalized)}`,
     });
   } catch (error) {
     results.push({

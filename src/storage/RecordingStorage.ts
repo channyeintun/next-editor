@@ -5,7 +5,7 @@ import {
   type StoredRecordingMetadata,
 } from "./IndexedDBRecordingStore";
 import {
-  decompressBinaryToRecordings,
+  decompressBinaryToRecording,
   encodeRecordingToStream,
   normalizeRecording,
 } from "./recordingCodecClient";
@@ -135,8 +135,7 @@ export async function decodeRecordingFile(neFile: File): Promise<Recording> {
   if (!isStreamingRecording(bytes)) {
     throw new Error("File is not a valid .ne recording (bad SCR3 magic)");
   }
-  const [recording] = await decompressBinaryToRecordings(bytes);
-  return recording;
+  return decompressBinaryToRecording(bytes);
 }
 
 /**
@@ -271,13 +270,7 @@ export class RecordingStorage {
   private async decodeStoredEntry(entry: StoredRecordingEntry): Promise<Recording> {
     let decoded: Recording;
     if (entry.binaryData) {
-      const recordings = await decompressBinaryToRecordings(entry.binaryData);
-      if (recordings.length !== 1) {
-        throw new Error(
-          `Expected one recording payload for ${entry.metadata.id}, received ${recordings.length}`,
-        );
-      }
-      decoded = recordings[0];
+      decoded = await decompressBinaryToRecording(entry.binaryData);
     } else if (entry.binaryStream) {
       const streamReader = entry.binaryStream.getReader();
       const recordingReader = createStreamingRecordingReader();
