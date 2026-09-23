@@ -16,6 +16,7 @@ import {
 } from "./streamingRecordingCodec";
 import type { StreamingRecordingDelta } from "./streamingRecordingCodec";
 import {
+  buildHeaderChunk,
   FLAG_HAS_AUDIO,
   FLAG_HAS_CAMERA,
   LEGACY_STREAM_FORMAT_VERSION,
@@ -637,6 +638,34 @@ describe("recordingCodec", () => {
   it("rejects bytes that are not an SCR3 stream", async () => {
     await expect(decompressBinaryToRecordings(new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow(
       /SCR3/,
+    );
+  });
+
+  it("rejects a header whose metadata is not a recording's", () => {
+    const valid = {
+      version: 4 as const,
+      id: "header",
+      name: "Header",
+      keyframeInterval: 120,
+      createdAt: 1,
+      duration: 10,
+    };
+    for (const meta of [{}, null, { ...valid, duration: "10" }, { ...valid, clusters: "abc" }]) {
+      const header = buildHeaderChunk(meta as never, 0);
+      expect(() => decodeRecordingStream(header)).toThrow(
+        "Invalid SCR3 stream: malformed header metadata",
+      );
+      expect(() => createStreamingRecordingReader().push(header)).toThrow(
+        "Invalid SCR3 stream: malformed header metadata",
+      );
+    }
+    expect(decodeRecordingStream(buildHeaderChunk(valid, 0)).id).toBe("header");
+  });
+
+  it("rejects a stream too short to hold its header prefix", () => {
+    const magicAndVersion = new Uint8Array([0x53, 0x43, 0x52, 0x33, 4, 0]);
+    expect(() => decodeRecordingStream(magicAndVersion)).toThrow(
+      "Invalid SCR3 stream: truncated header",
     );
   });
 

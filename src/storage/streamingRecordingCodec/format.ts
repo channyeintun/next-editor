@@ -505,6 +505,33 @@ export function isStreamingRecording(bytes: Uint8Array): boolean {
   return bytes.length >= 4 && hasMagicAt(bytes, 0);
 }
 
+/**
+ * Accepts a decoded metadata value (the header's, or a final-metadata segment's) only
+ * when it carries the fields every decoded recording relies on. A hosted `.ne` is
+ * untrusted: unchecked, `{}` decoded to a recording with no id and a NaN duration, and a
+ * non-array `clusters` or `tracks` crashed assembly with a TypeError.
+ */
+export function readRecordingStreamMeta(value: unknown, label: string): RecordingStreamMeta {
+  const meta = value as Partial<Record<keyof RecordingStreamMeta, unknown>> | null;
+  if (
+    typeof meta !== "object" ||
+    meta === null ||
+    meta.version !== 4 ||
+    typeof meta.id !== "string" ||
+    typeof meta.name !== "string" ||
+    typeof meta.createdAt !== "number" ||
+    !Number.isFinite(meta.createdAt) ||
+    typeof meta.duration !== "number" ||
+    !Number.isFinite(meta.duration) ||
+    meta.duration < 0 ||
+    (meta.clusters != null && !Array.isArray(meta.clusters)) ||
+    (meta.tracks != null && !Array.isArray(meta.tracks))
+  ) {
+    throw new Error(`Invalid SCR3 stream: malformed ${label}`);
+  }
+  return meta as RecordingStreamMeta;
+}
+
 export function parseHeader(bytes: Uint8Array): {
   meta: RecordingStreamMeta;
   headerEnd: number;
@@ -512,6 +539,9 @@ export function parseHeader(bytes: Uint8Array): {
 } {
   if (!isStreamingRecording(bytes)) {
     throw new Error("Invalid SCR3 stream: bad magic number");
+  }
+  if (bytes.length < HEADER_PREFIX_SIZE) {
+    throw new Error("Invalid SCR3 stream: truncated header");
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const formatVersion = view.getUint16(4, true);
@@ -524,9 +554,12 @@ export function parseHeader(bytes: Uint8Array): {
   if (metaLength === 0 || metaLength > MAX_COMPRESSED_META_BYTES || metaEnd > bytes.length) {
     throw new Error("Invalid SCR3 stream: bad header length");
   }
-  const meta = msgpackDecode(
-    boundedUnzlib(bytes.subarray(metaStart, metaEnd), MAX_INFLATED_META_BYTES, "header"),
-  ) as RecordingStreamMeta;
+  const meta = readRecordingStreamMeta(
+    msgpackDecode(
+      boundedUnzlib(bytes.subarray(metaStart, metaEnd), MAX_INFLATED_META_BYTES, "header"),
+    ),
+    "header metadata",
+  );
   return { meta, headerEnd: metaEnd, formatVersion };
 }
 

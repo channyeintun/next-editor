@@ -22,6 +22,7 @@ import {
   HEADER_PREFIX_SIZE,
   isKnownSegmentKind,
   parseHeader,
+  readRecordingStreamMeta,
   readSegmentHeader,
   SEGMENT_HEADER_SIZE,
   SEGMENT_KIND,
@@ -163,23 +164,8 @@ function mergeFinalMetadata(
   payload: Uint8Array,
   budget: InflationBudget,
 ): RecordingStreamMeta {
-  const records = decodeRecords<RecordingStreamMeta>(payload, budget);
-  const candidate = records[records.length - 1];
-
-  if (
-    !candidate ||
-    candidate.version !== 4 ||
-    typeof candidate.id !== "string" ||
-    typeof candidate.name !== "string" ||
-    typeof candidate.createdAt !== "number" ||
-    !Number.isFinite(candidate.createdAt) ||
-    typeof candidate.duration !== "number" ||
-    !Number.isFinite(candidate.duration) ||
-    candidate.duration < 0
-  ) {
-    throw new Error("Invalid SCR3 stream: malformed final metadata");
-  }
-
+  const records = decodeRecords<unknown>(payload, budget);
+  const candidate = readRecordingStreamMeta(records[records.length - 1], "final metadata");
   return { ...current, ...candidate };
 }
 
