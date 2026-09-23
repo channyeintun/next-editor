@@ -87,10 +87,6 @@ export function useApiClient({
         return;
       }
 
-      if (payload.id !== pendingIdRef.current) {
-        return;
-      }
-
       clearPending();
 
       // `payload` is the recorded (flat) result shape plus an `id`; reuse it for

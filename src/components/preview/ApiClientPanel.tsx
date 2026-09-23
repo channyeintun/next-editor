@@ -71,8 +71,7 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(2)} s`;
 }
 
-function formatSize(text: string): string {
-  const bytes = new Blob([text]).size;
+function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
@@ -414,7 +413,12 @@ function SuccessfulResponseView({
           <Clock size={11} />
           {formatDuration(response.durationMs)}
         </span>
-        <span className="text-[11px] text-slate-600">{formatSize(response.body)}</span>
+        <span className="text-[11px] text-slate-600">
+          {/* bodyBytes counts the bytes received; a body kept in history or a
+              recording may have been cut shorter. Results recorded before
+              bodyBytes existed are measured instead. */}
+          {formatSize(response.bodyBytes ?? new TextEncoder().encode(response.body).byteLength)}
+        </span>
         {response.truncated ? (
           <span
             className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300"
