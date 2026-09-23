@@ -2,7 +2,6 @@ import { expose, transfer } from "comlink";
 import type { Recording } from "../core/src";
 import type { DeltaFrame } from "../core/src/utils/deltaTypes";
 import type { WorkspaceAssetDescriptor } from "../types/workspace";
-import { loadDmpCodec } from "./dmpCodec/dmpCodec";
 import { decompressBinaryToRecordings, encodeRecordingToStream } from "./recordingCodec";
 import {
   createStreamingRecordingWriter,
@@ -48,11 +47,9 @@ function drainLiveWriter(state: LiveWriterState): Uint8Array {
 
 const api = {
   async decompressBinaryToRecordings(binaryData: Uint8Array): Promise<Recording[]> {
-    await loadDmpCodec();
     return transferRecordings(await decompressBinaryToRecordings(binaryData));
   },
   async encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
-    await loadDmpCodec();
     return transferUint8Array(await encodeRecordingToStream(recording));
   },
   startLiveRecordingStream(streamId: string, meta: RecordingStreamMeta): Uint8Array {

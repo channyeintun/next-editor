@@ -301,7 +301,6 @@ export async function decompressBinaryToRecordings(binaryData: Uint8Array): Prom
 }
 
 export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
-  await loadDmpCodec();
   const client = getRecordingCodecWorkerClient();
 
   if (!client || recording.workspaceAssets?.length || typeof indexedDB === "undefined") {
