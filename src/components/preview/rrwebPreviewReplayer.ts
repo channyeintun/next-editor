@@ -7,18 +7,16 @@ type ReplayModuleLoader = () => Promise<{ Replayer: ReplayerConstructor }>;
 export interface RrwebPreviewReplayerOptions {
   // Host element the Replayer mounts its wrapper/iframe into.
   root: HTMLElement;
-  // Full, time-ordered rrweb event stream (Meta + FullSnapshot + incrementals).
+  // Full, time-ordered rrweb event stream (Meta + FullSnapshot + incrementals),
+  // already rebased onto the recording clock by buildRrwebReplayEvents.
   events: eventWithTime[];
-  // Recording-relative time (ms) of the first snapshot — i.e. the recorded
-  // `previewInitialDocuments[0].time`. The replay timeline's `currentTime` is on
-  // this same recording clock, so the rrweb offset is `currentTime - baseTime`.
-  baseTime: number;
 }
 
-// Maps the recording-relative playback `currentTime` to the rrweb `pause` offset
-// (both clocks advance at real time, so it is a simple shift, clamped at 0).
-export function computeRrwebOffsetMs(currentTime: number, baseTime: number): number {
-  return Math.max(0, currentTime - baseTime);
+// Maps the recording-relative playback `currentTime` to the rrweb `pause` offset.
+// rrweb measures that offset from its first event, and the events already carry
+// recording-clock timestamps, so it is a simple shift, clamped at 0.
+export function computeRrwebOffsetMs(currentTime: number, firstEventTime: number): number {
+  return Math.max(0, currentTime - firstEventTime);
 }
 
 // Drives an rrweb `Replayer` from the recording timeline. The host timeline is
@@ -31,22 +29,25 @@ export class RrwebPreviewReplayer {
   private readonly ReplayerConstructor: ReplayerConstructor;
   private readonly root: HTMLElement;
   private readonly events: eventWithTime[];
-  private readonly baseTime: number;
+  // Recording-clock time of the first event: rrweb's offset zero. Not the seed's
+  // `time`, which is when the host received it, after rrweb had stamped its Meta
+  // event and serialized the page.
+  private readonly firstEventTime: number;
   private lastOffsetMs = 0;
   private destroyed = false;
 
   constructor(
-    { root, events, baseTime }: RrwebPreviewReplayerOptions,
+    { root, events }: RrwebPreviewReplayerOptions,
     ReplayerConstructor: ReplayerConstructor,
   ) {
     this.root = root;
     this.events = events;
-    this.baseTime = baseTime;
+    this.firstEventTime = events[0]?.timestamp ?? 0;
     this.ReplayerConstructor = ReplayerConstructor;
     this.replayer = this.createReplayer();
     // Render the initial snapshot immediately so the panel is never blank before
     // the first tick arrives.
-    this.seekToRecordingTime(baseTime);
+    this.seekToRecordingTime(this.firstEventTime);
   }
 
   private createReplayer(): Replayer {
@@ -82,7 +83,7 @@ export class RrwebPreviewReplayer {
       return;
     }
 
-    const offsetMs = computeRrwebOffsetMs(currentTime, this.baseTime);
+    const offsetMs = computeRrwebOffsetMs(currentTime, this.firstEventTime);
 
     try {
       // rrweb cannot reliably seek a used Replayer to offset zero: pause(0)

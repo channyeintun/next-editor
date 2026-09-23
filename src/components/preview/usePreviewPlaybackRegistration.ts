@@ -186,7 +186,6 @@ export function usePreviewPlaybackRegistration({
 
       if (!rrwebReplayerRef.current && rrwebReplayLoadStateRef.current === "idle") {
         const events = buildRrwebReplayEvents(input.initialDocuments, input.patchBatches);
-        const baseTime = input.initialDocuments[0]?.time ?? 0;
         rrwebReplayBuiltInitialDocCountRef.current = input.initialDocuments.length;
         rrwebReplayBuiltPatchBatchCountRef.current = input.patchBatches.length;
 
@@ -194,7 +193,7 @@ export function usePreviewPlaybackRegistration({
         if (events.length >= 2) {
           const loadGeneration = ++rrwebReplayLoadGenerationRef.current;
           rrwebReplayLoadStateRef.current = "loading";
-          void createRrwebPreviewReplayer({ root: container, events, baseTime })
+          void createRrwebPreviewReplayer({ root: container, events })
             .then((replayer) => {
               if (
                 rrwebReplayLoadGenerationRef.current !== loadGeneration ||

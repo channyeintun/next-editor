@@ -61,7 +61,7 @@ afterEach(() => {
 });
 
 // Drives an rrweb Replayer the same way RrwebPreviewReplayer does (offset =
-// currentTime - baseTime via computeRrwebOffsetMs), but constructs the Replayer
+// currentTime - events[0].timestamp via computeRrwebOffsetMs), but constructs the Replayer
 // directly with UNSAFE_replayCanvas so the rebuild target guard is bypassed: rrweb
 // 2.x rejects rebuilding into a document whose iframe it can't verify as
 // sandboxed, and jsdom's sandboxed-iframe contentDocument identity is unstable, so

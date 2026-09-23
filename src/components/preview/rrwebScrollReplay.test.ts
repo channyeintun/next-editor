@@ -135,7 +135,7 @@ describe("rrweb preview scroll replay timing", () => {
       UNSAFE_replayCanvas: true,
     });
     const seekToRecordingTime = (currentTime: number) =>
-      activeReplayer?.pause(computeRrwebOffsetMs(currentTime, baseTime));
+      activeReplayer?.pause(computeRrwebOffsetMs(currentTime, events[0].timestamp));
     await sleep(0);
 
     // The replay iframe is its own jsdom realm with its own Element prototype —
@@ -253,7 +253,7 @@ describe("rrweb preview scroll replay timing", () => {
       replayWindow.Element.prototype.scrollTo = Element.prototype.scrollTo;
     }
 
-    activeReplayer.pause(computeRrwebOffsetMs(1_500, 1_000));
+    activeReplayer.pause(computeRrwebOffsetMs(1_500, events[0].timestamp));
     await sleep(0);
 
     const replayedDoc = container.querySelector("iframe")?.contentDocument;
