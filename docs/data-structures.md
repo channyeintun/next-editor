@@ -288,7 +288,7 @@ Important action methods include:
 - `extendRecording(recording)`
 - `handlePreviewInitialDocument(document)`
 - `handlePreviewPatchBatch(batch)`
-- `addCaptionTrack(track)` / `removeCaptionTrack(trackId)`
+- `addCaptionTrack(recordingId, track)` / `removeCaptionTrack(trackId)`
 - `exportAsFile(recording, filename?)`
 
 ## SCR3 Metadata

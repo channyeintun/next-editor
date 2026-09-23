@@ -150,8 +150,8 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     actorRef.send({ type: "APPEND_RECORDING_DELTA", delta });
   };
 
-  const addCaptionTrack = (track: CaptionTrack) => {
-    actorRef.send({ type: "ADD_CAPTION_TRACK", track });
+  const addCaptionTrack = (recordingId: string, track: CaptionTrack) => {
+    actorRef.send({ type: "ADD_CAPTION_TRACK", recordingId, track });
   };
 
   const removeCaptionTrack = (trackId: string) => {

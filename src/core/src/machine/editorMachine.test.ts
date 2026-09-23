@@ -483,7 +483,9 @@ describe("editorMachine actor lifecycle", () => {
       const recording: Recording = { ...createRecording(), captions: embedded };
       actor.send({ type: "LOAD_RECORDING", recording });
       await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
-      for (const track of added) actor.send({ type: "ADD_CAPTION_TRACK", track });
+      for (const track of added) {
+        actor.send({ type: "ADD_CAPTION_TRACK", recordingId: recording.id, track });
+      }
 
       actor.send({
         type: "EXTEND_RECORDING",
@@ -510,6 +512,51 @@ describe("editorMachine actor lifecycle", () => {
     it("keeps both the stream's captions and an added sibling track", async () => {
       const actor = await loadAndExtend([captionTrack("emb")], [captionTrack("en-sibling")]);
       expect(captionIds(actor)).toEqual(["emb", "en-sibling"]);
+      actor.stop();
+    });
+  });
+
+  // useUrlLoader drops a late sibling .vtt only when one of its own loads supersedes it. A
+  // lesson opened through the header import (or a new take) leaves the previous lesson's
+  // caption fetch running, and its tracks used to land on whichever recording was loaded.
+  describe("caption tracks sent after another lesson opened", () => {
+    const lessonATrack: CaptionTrack = {
+      id: "sibling:/lesson-a.en.vtt",
+      language: "en",
+      cues: [{ start: 0, end: 1000, text: "lesson A" }],
+    };
+
+    const openLessonBAfterLessonA = async () => {
+      const actor = createActor(editorMachine, {
+        input: { editorRef: { current: null } },
+      }).start();
+      actor.send({ type: "LOAD_RECORDING", recording: { ...createRecording(), id: "lesson-A" } });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      actor.send({ type: "LOAD_RECORDING", recording: { ...createRecording(), id: "lesson-B" } });
+      await waitFor(
+        actor,
+        (snapshot) =>
+          snapshot.matches({ playback: "ready" }) && snapshot.context.recording?.id === "lesson-B",
+      );
+      return actor;
+    };
+
+    it("drops a caption track sent for a recording that is no longer loaded", async () => {
+      const actor = await openLessonBAfterLessonA();
+
+      actor.send({ type: "ADD_CAPTION_TRACK", recordingId: "lesson-A", track: lessonATrack });
+
+      expect(actor.getSnapshot().context.recording!.captions).toBeUndefined();
+      actor.stop();
+    });
+
+    it("adds a caption track sent for the loaded recording", async () => {
+      const actor = await openLessonBAfterLessonA();
+      const lessonBTrack: CaptionTrack = { ...lessonATrack, id: "sibling:/lesson-b.en.vtt" };
+
+      actor.send({ type: "ADD_CAPTION_TRACK", recordingId: "lesson-B", track: lessonBTrack });
+
+      expect(actor.getSnapshot().context.recording!.captions).toEqual([lessonBTrack]);
       actor.stop();
     });
   });

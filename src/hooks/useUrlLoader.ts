@@ -662,10 +662,11 @@ export const useUrlLoader = () => {
 
       if (isStale()) return;
 
-      fetchSiblingCaptions(url, loaded?.captionFiles, signal)
+      const recordingId = loaded.id;
+      fetchSiblingCaptions(url, loaded.captionFiles, signal)
         .then((tracks) => {
           if (!isStale()) {
-            for (const track of tracks) addCaptionTrack(track);
+            for (const track of tracks) addCaptionTrack(recordingId, track);
           }
         })
         .catch(() => {});

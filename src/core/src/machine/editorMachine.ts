@@ -181,16 +181,18 @@ export const editorMachine = setup({
         event.type === "SCREEN_STOPPED" ||
         event.type === "SCREEN_ERROR") &&
       context.screen.actorId === event.actorId,
-    // Streamed prefixes and late out-of-band media (external audio/camera) must only extend
-    // the recording they were decoded from. useUrlLoader guards staleness only against its own
-    // loads (the `?url=` lesson and drops), so a lesson opened another way (the header import)
-    // could otherwise be replaced mid-playback by the previous lesson's late download.
-    isSameRecordingStream: ({ context, event }) => {
+    // Streamed prefixes and late out-of-band media (external audio/camera, sibling captions)
+    // must only reach the recording they were fetched for. useUrlLoader guards staleness only
+    // against its own loads (the `?url=` lesson and drops), so a lesson opened another way (the
+    // header import) could otherwise be replaced mid-playback by the previous lesson's late
+    // download, or be given its subtitles.
+    isForLoadedRecording: ({ context, event }) => {
       if (!context.recording) return false;
       if (event.type === "EXTEND_RECORDING") return event.recording.id === context.recording.id;
       if (event.type === "APPEND_RECORDING_DELTA") {
         return event.delta.recordingId === context.recording.id;
       }
+      if (event.type === "ADD_CAPTION_TRACK") return event.recordingId === context.recording.id;
       return false;
     },
     isPlaybackWorkspaceDetached: ({ context }) => context.hasManualWorkspaceOverride,
@@ -338,6 +340,7 @@ export const editorMachine = setup({
       actions: "releaseUnacceptedScreenStream",
     },
     ADD_CAPTION_TRACK: {
+      guard: "isForLoadedRecording",
       actions: "addCaptionTrack",
     },
     REMOVE_CAPTION_TRACK: {
@@ -833,11 +836,11 @@ export const editorMachine = setup({
         // recording on top of the viewer's edits. PLAY/SEEK reattach and pick up the new data.
         EXTEND_RECORDING: [
           {
-            guard: and(["isSameRecordingStream", "isPlaybackWorkspaceDetached"]),
+            guard: and(["isForLoadedRecording", "isPlaybackWorkspaceDetached"]),
             actions: ["extendRecording", "syncStreamedRecordingGrowth"],
           },
           {
-            guard: "isSameRecordingStream",
+            guard: "isForLoadedRecording",
             actions: [
               "extendRecording",
               ...APPLY_REPLAY_STATE_ACTIONS,
@@ -847,11 +850,11 @@ export const editorMachine = setup({
         ],
         APPEND_RECORDING_DELTA: [
           {
-            guard: and(["isSameRecordingStream", "isPlaybackWorkspaceDetached"]),
+            guard: and(["isForLoadedRecording", "isPlaybackWorkspaceDetached"]),
             actions: ["appendRecordingDelta", "syncStreamedRecordingGrowth"],
           },
           {
-            guard: "isSameRecordingStream",
+            guard: "isForLoadedRecording",
             actions: [
               "appendRecordingDelta",
               ...APPLY_REPLAY_STATE_ACTIONS,

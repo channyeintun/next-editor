@@ -1019,7 +1019,10 @@ describe("useUrlLoader", () => {
   });
 
   it("adds every declared caption file, even two without a language tag", async () => {
-    const recording = createRecording({ captionFiles: ["captions.vtt", "transcript.vtt"] });
+    const recording = createRecording({
+      id: "lesson",
+      captionFiles: ["captions.vtt", "transcript.vtt"],
+    });
     const neBytes = await encodeRecordingToStream(recording);
     vi.stubGlobal(
       "fetch",
@@ -1042,8 +1045,12 @@ describe("useUrlLoader", () => {
       expect(actions.addCaptionTrack).toHaveBeenCalledTimes(2);
     });
 
+    const calls = vi.mocked(actions.addCaptionTrack).mock.calls;
+    // Each track names the lesson it was fetched for, so the machine can drop it once
+    // another lesson has opened by a route this loader does not see (the header import).
+    expect(calls.map(([recordingId]) => recordingId)).toEqual(["lesson", "lesson"]);
     // ADD_CAPTION_TRACK replaces a track with the same id, so the ids must differ.
-    const ids = vi.mocked(actions.addCaptionTrack).mock.calls.map(([track]) => track.id);
+    const ids = calls.map(([, track]) => track.id);
     expect(new Set(ids).size).toBe(2);
   });
 

@@ -280,6 +280,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     if (!file) return;
     event.target.value = "";
     setCaptionImportError(null);
+    // Read before parsing awaits: the track belongs to the lesson the viewer picked it for.
+    const recordingId = currentRecording?.id;
+    if (!recordingId) return;
 
     // The parser yields zero cues for any file whose timestamp lines miss its
     // format — timestamps with no fractional part, a non-subtitle file picked
@@ -303,7 +306,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     }
 
     const language = inferLanguageFromFilename(file.name) ?? "en";
-    addCaptionTrack({
+    addCaptionTrack(recordingId, {
       id: `${language}-${Date.now()}`,
       language,
       label: language.toUpperCase(),

@@ -465,9 +465,13 @@ export type ChatEventOccurred = {
   event: ChatRecordingEvent["event"];
 };
 
-/** Add or replace a caption track on the loaded recording */
+/**
+ * Add or replace a caption track on the recording `recordingId`; dropped when another
+ * recording is loaded
+ */
 export type AddCaptionTrackEvent = {
   type: "ADD_CAPTION_TRACK";
+  recordingId: string;
   track: CaptionTrack;
 };
 

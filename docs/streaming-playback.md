@@ -194,7 +194,7 @@ prefix and let later prefixes fill in **without any re-seek or visible jump**.
 `EXTEND_RECORDING` is handled at the `playback` parent state in
 [editorMachine.ts](../src/core/src/machine/editorMachine.ts):
 
-- Both `EXTEND_RECORDING` and `APPEND_RECORDING_DELTA` are guarded by `isSameRecordingStream`:
+- Both `EXTEND_RECORDING` and `APPEND_RECORDING_DELTA` are guarded by `isForLoadedRecording`:
   the extended recording (or the delta's `recordingId`) must have the loaded recording's `id`.
   Growth from a lesson that is no longer open — a late sibling-audio download after another
   file was imported, for example — is ignored whole, including its audio seek.

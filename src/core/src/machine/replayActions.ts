@@ -288,7 +288,7 @@ export const extendRecording = ({
   context: EditorMachineContext;
   event: EditorMachineEvent;
 }): Partial<EditorMachineContext> => {
-  // The transition is guarded by `isSameRecordingStream` too; this keeps the action itself
+  // The transition is guarded by `isForLoadedRecording` too; this keeps the action itself
   // from ever swapping another lesson in, like `appendRecordingDelta`'s id check.
   if (
     event.type !== "EXTEND_RECORDING" ||

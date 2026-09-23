@@ -470,7 +470,12 @@ export async function runStudioRender(
 
   // ---- Captions + encode + QA ---------------------------------------------
   phase("qa");
-  deps.nextEditor.addCaptionTrack(plan.narration.captions);
+  const finalized = deps.actor.getSnapshot().context.recording;
+  if (!finalized) {
+    return failedResult("The finalized recording disappeared before encoding");
+  }
+  deps.nextEditor.addCaptionTrack(finalized.id, plan.narration.captions);
+  // Adding the track replaces the recording; encode the one that carries it.
   const recording: Recording | null = deps.actor.getSnapshot().context.recording;
   if (!recording) {
     return failedResult("The finalized recording disappeared before encoding");
