@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useImperativeHandle,
+  useState,
+  type ReactNode,
+} from "react";
 import type { PreviewPanelMode } from "../types/slides";
 import { usePreviewAdapterHandle } from "./PreviewAdapterHandleContext";
 
@@ -57,15 +64,14 @@ export function PreviewPanelProvider({ children }: PreviewPanelProviderProps) {
     setDockWidthState(clampPreviewDockWidth(width));
   };
 
-  useEffect(() => {
-    previewHandle.dockWidthDeltaApplier.current = (delta) => {
+  // A replayed workspace snapshot moves the dock by its recorded width delta.
+  useImperativeHandle(
+    previewHandle.dockWidthDeltaApplier,
+    () => (delta: number) => {
       setDockWidthState((currentWidth) => clampPreviewDockWidth(currentWidth + delta));
-    };
-
-    return () => {
-      previewHandle.dockWidthDeltaApplier.current = null;
-    };
-  }, [previewHandle]);
+    },
+    [],
+  );
 
   const openPreview = (nextMode?: PreviewPanelMode) => {
     if (nextMode) {
