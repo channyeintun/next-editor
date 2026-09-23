@@ -7,7 +7,7 @@ import { audioRecordingActor, audioPlaybackActor } from "./audioActor";
 import { cameraRecordingActor } from "./cameraActor";
 import { screenRecordingActor } from "./screenActor";
 import { mouseTrackingActor } from "./mouseTrackingActor";
-import { calculateDurationFromFileReader } from "../utils/audioDuration";
+import { measureAudioDurationSeconds } from "../utils/audioDuration";
 import {
   APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS,
   APPLY_REPLAY_STATE_ACTIONS,
@@ -137,7 +137,7 @@ export const editorMachine = setup({
       if (playbackAudioState?.finalized && recording.audioSource !== "external") {
         try {
           if (recording.audioBlob instanceof Blob) {
-            const exactDuration = await calculateDurationFromFileReader(recording.audioBlob);
+            const exactDuration = await measureAudioDurationSeconds(recording.audioBlob);
             // Use audio duration as the source of truth if it exists
             // This prevents trailing silence from wall-clock overhead
             duration = normalizeTimelineDuration(exactDuration * 1000, duration);

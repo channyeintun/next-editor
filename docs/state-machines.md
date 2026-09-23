@@ -162,7 +162,7 @@ This ordering matters because the live stream sink must preserve append-only SCR
 
 An invoked `loadRecording` actor (a promise actor, not a spawned child) normalizes the recording:
 
-- computes exact duration from the audio blob via `calculateDurationFromFileReader` when finalized non-external audio is present (avoids trailing silence from wall-clock overhead)
+- computes exact duration from the audio blob via `measureAudioDurationSeconds` (an offline decode) when finalized non-external audio is present (avoids trailing silence from wall-clock overhead)
 - `onDone` passes the actor's typed output to `setRecording` and transitions to `playback.ready`
 - `onError` records the error and returns to `idle`
 - `LOAD_RECORDING` re-enters `loading`, restarting the invoke with the newer recording; the

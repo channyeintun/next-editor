@@ -1,12 +1,15 @@
 /**
- * Calculates exact duration from audio blob using FileReader and AudioContext.
- * This approach provides more accurate duration than HTML audio elements.
- *
- * Falls back to an HTMLAudioElement duration read when AudioContext.decodeAudioData
- * rejects — this covers iOS WebKit where `audio/mp4` blobs are playable but
- * cannot be decoded through the Web Audio API.
+ * Exact narration length, measured by decoding the audio. MediaRecorder's WebM
+ * carries no duration, so an HTMLAudioElement reports Infinity for it; decoding is
+ * what gives the real length. When decodeAudioData rejects, the element's duration
+ * is read instead: iOS WebKit plays `audio/mp4` blobs it cannot decode through the
+ * Web Audio API.
  */
-import { getAudioContext } from "./audioContext";
+
+// Decoding resamples the whole file to the context's rate as Float32, so the rate
+// sets the memory cost: 20 minutes of mono audio is ~230 MB at 48 kHz and ~38 MB
+// here. The length is still exact to a fraction of a millisecond.
+const DECODE_SAMPLE_RATE = 8000;
 
 /**
  * Attempts to determine audio duration via `HTMLAudioElement.duration`.
@@ -47,54 +50,25 @@ function getDurationFromAudioElement(audioBlob: Blob): Promise<number> {
   });
 }
 
-export async function calculateDurationFromFileReader(audioBlob: Blob): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = function (e) {
-      try {
-        const arrayBuffer = e.target?.result as ArrayBuffer;
-        if (!arrayBuffer) {
-          reject(new Error("Failed to read audio blob"));
-          return;
-        }
-
-        const audioContext = getAudioContext();
-
-        audioContext.decodeAudioData(
-          arrayBuffer,
-          (buffer: AudioBuffer) => {
-            const rawDuration = buffer.duration;
-            resolve(rawDuration);
-          },
-          async (error: Error) => {
-            // AudioContext.decodeAudioData can fail on iOS WebKit for codecs
-            // that are supported for playback (e.g. audio/mp4) but not for
-            // offline decoding. Fall back to HTMLAudioElement duration.
-            console.warn(
-              "AudioContext.decodeAudioData failed, falling back to HTMLAudioElement:",
-              error,
-            );
-            try {
-              const duration = await getDurationFromAudioElement(audioBlob);
-              resolve(duration);
-            } catch (fallbackError) {
-              console.error("FileReader decode error (all methods failed):", fallbackError);
-              reject(error);
-            }
-          },
-        );
-      } catch (error) {
-        console.error("FileReader processing error:", error);
-        reject(error);
-      }
-    };
-
-    reader.onerror = function () {
-      console.error("FileReader read error");
-      reject(new Error("FileReader failed"));
-    };
-
-    reader.readAsArrayBuffer(audioBlob);
-  });
+/**
+ * Duration of `audioBlob` in seconds. Decodes on an OfflineAudioContext: it opens no
+ * audio device and is not subject to the autoplay policy, unlike the page's shared
+ * realtime context, which this used to create on load before any user gesture.
+ */
+export async function measureAudioDurationSeconds(audioBlob: Blob): Promise<number> {
+  const context = new OfflineAudioContext(1, 1, DECODE_SAMPLE_RATE);
+  try {
+    return (await context.decodeAudioData(await audioBlob.arrayBuffer())).duration;
+  } catch (decodeError) {
+    console.warn(
+      "AudioContext.decodeAudioData failed, falling back to HTMLAudioElement:",
+      decodeError,
+    );
+    try {
+      return await getDurationFromAudioElement(audioBlob);
+    } catch (fallbackError) {
+      console.error("Audio duration unavailable (all methods failed):", fallbackError);
+      throw decodeError;
+    }
+  }
 }
