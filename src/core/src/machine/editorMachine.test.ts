@@ -387,9 +387,9 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
-  // Each useUrlLoader instance guards staleness only against its own fetches. A lesson opened
-  // through the header import or drag-and-drop leaves the previous lesson's audio download
-  // and stream running, and their late extends used to swap that lesson back in.
+  // useUrlLoader guards staleness only against its own loads. A lesson opened through the
+  // header import leaves the previous lesson's audio download and stream running, and their
+  // late extends used to swap that lesson back in.
   it("ignores stream growth and late media from a lesson that is no longer open", async () => {
     const audioPlayerEvents: AudioPlaybackEvent["type"][] = [];
     const machine = editorMachine.provide({

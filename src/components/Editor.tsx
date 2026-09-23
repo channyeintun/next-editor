@@ -30,6 +30,7 @@ import { CollaborationProvider, useOptionalCollaboration } from "../contexts/Col
 import { CollaborationVoiceProvider } from "../contexts/CollaborationVoiceContext";
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
+import { useUrlLoader } from "../hooks/useUrlLoader";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
 import {
@@ -108,8 +109,17 @@ export function EditorLayout({
   playlistMode = false,
   autoplayOverride = false,
 }: EditorProps = {}) {
-  const { isLoading: urlLoading, error: urlError, retry } = useUrlQuery(recordingUrl);
-  const { isDragging, error: dropError, clearError: clearDropError } = useDragAndDropUrl();
+  // One loader for the `?url=` lesson and for drops, so whichever load is newest wins and its
+  // state is the one shown.
+  const recordingLoader = useUrlLoader();
+  useUrlQuery(recordingLoader, recordingUrl);
+  const { isDragging } = useDragAndDropUrl(recordingLoader);
+  const {
+    isLoading: recordingLoading,
+    error: loadError,
+    retry: retryLoad,
+    clearError: dismissLoadError,
+  } = recordingLoader;
 
   const { isRecording, isPlaying, currentRecording, hasEnded } = useNextEditorMetadata();
   const { isOpen: isWhiteboardOpen } = useWhiteboardContext();
@@ -216,7 +226,7 @@ export function EditorLayout({
     AUTOPLAY_NOT_FIRED,
   );
   useEffect(() => {
-    if (!readOnly || urlLoading || urlError || !currentRecording || !editorActor) {
+    if (!readOnly || recordingLoading || loadError || !currentRecording || !editorActor) {
       return;
     }
     if (!(autoplay || autoplayOverride) || isPlaying) {
@@ -248,8 +258,8 @@ export function EditorLayout({
     play();
   }, [
     readOnly,
-    urlLoading,
-    urlError,
+    recordingLoading,
+    loadError,
     currentRecording,
     autoplay,
     autoplayOverride,
@@ -263,7 +273,7 @@ export function EditorLayout({
     // Don't tour inside read-only embeds (the landing-page demo iframe), and wait
     // until any URL-driven recording load has finished. Skip the tour entirely when
     // the load failed — the editor is showing an error panel, not a touchable surface.
-    if (urlLoading || urlError || readOnly || tourStartedRef.current) {
+    if (recordingLoading || loadError || readOnly || tourStartedRef.current) {
       return;
     }
 
@@ -276,7 +286,7 @@ export function EditorLayout({
     requestAnimationFrame(() => {
       startTour();
     });
-  }, [urlLoading, urlError, readOnly]);
+  }, [recordingLoading, loadError, readOnly]);
 
   return (
     <div
@@ -307,25 +317,25 @@ export function EditorLayout({
 
         {/* Loading / error overlays live inside the (relative) editor surface so they
             center on the editor region in both viewport and `fill` layouts. */}
-        {urlLoading ? (
+        {recordingLoading ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3">
             <LoadingSpinner />
             <p className="text-sm text-slate-400">Loading recording…</p>
           </div>
-        ) : urlError ? (
-          <RecordingLoadError message={urlError} onRetry={retry} />
-        ) : dropError ? (
-          // A dropped file can't be re-fetched, so offer dismiss rather than retry.
-          <RecordingLoadError message={dropError} onDismiss={clearDropError} />
+        ) : loadError ? (
+          // A dropped file can't be re-fetched, so it gets Dismiss rather than Retry.
+          <RecordingLoadError
+            message={loadError}
+            onRetry={retryLoad}
+            onDismiss={retryLoad ? undefined : dismissLoadError}
+          />
         ) : null}
       </div>
 
       {/* MediaControls renders nothing until a recording exists, so a surface
           that is fetching one (the /learn detail view) would otherwise grow a
           player bar mid-load and shove the code surface upward. */}
-      {recordingUrl && !currentRecording && !urlError && !dropError ? (
-        <EditorPlayerBarSkeleton />
-      ) : null}
+      {recordingUrl && !currentRecording && !loadError ? <EditorPlayerBarSkeleton /> : null}
 
       <MediaControls
         recordMode={!readOnly}
@@ -336,7 +346,7 @@ export function EditorLayout({
 
       <DragDropOverlay isDragging={isDragging} />
 
-      {!urlLoading && !urlError && !dropError ? <FloatingPlayButton /> : null}
+      {!recordingLoading && !loadError ? <FloatingPlayButton /> : null}
 
       {postRecordingTarget && !collaboration?.provider && renderPostRecordingModal
         ? renderPostRecordingModal({

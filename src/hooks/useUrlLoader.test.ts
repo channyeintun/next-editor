@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Recording } from "../core/src";
@@ -117,6 +117,21 @@ function fakeResponse(
 /** A minimal valid single-cue VTT file body, used by caption-fallback tests. */
 function vttBody(): Uint8Array {
   return new TextEncoder().encode("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n");
+}
+
+/** A promise the test settles by hand, to hold a request open while something else happens. */
+function gate() {
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { opened, open };
+}
+
+function renderLoader(actions: NextEditorActions) {
+  const wrapper = ({ children }: { children: React.ReactNode }) =>
+    createElement(NextEditorActionsContext.Provider, { value: actions }, children);
+  return renderHook(() => useUrlLoader(), { wrapper });
 }
 
 describe("useUrlLoader", () => {
@@ -573,5 +588,87 @@ describe("useUrlLoader", () => {
     // Only the `.ne` itself was fetched — no speculative caption probe.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(addCaptionTrackMock).not.toHaveBeenCalled();
+  });
+
+  // Editor.tsx serves the `?url=` load and drag-and-drop from one loader. A dropped file must
+  // supersede a URL lesson that is still downloading, or that lesson lands on top of it.
+  describe("a file import during a URL load", () => {
+    it("keeps the imported lesson when the URL lesson arrives afterwards", async () => {
+      const urlBytes = await encodeRecordingToStream(createRecording({ id: "url-lesson" }));
+      const droppedBytes = await encodeRecordingToStream(createRecording({ id: "dropped-lesson" }));
+      const download = gate();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async () => {
+          await download.opened;
+          return fakeResponse(urlBytes, { ok: true, contentType: "application/octet-stream" });
+        }),
+      );
+      const actions = makeActionsMock();
+      const { result } = renderLoader(actions);
+
+      const urlLoad = result.current.fetchNextEditorFile("https://example.com/a.ne");
+      await result.current.importNextEditorFile(new File([droppedBytes as BlobPart], "dropped.ne"));
+      download.open();
+      await urlLoad;
+
+      const loadedIds = vi.mocked(actions.loadRecording).mock.calls.map(([loaded]) => loaded.id);
+      expect(loadedIds).toEqual(["dropped-lesson"]);
+    });
+
+    it("does not add the URL lesson's sibling captions to the imported lesson", async () => {
+      const urlBytes = await encodeRecordingToStream(
+        createRecording({ id: "url-lesson", captionFiles: ["a.en.vtt"] }),
+      );
+      const droppedBytes = await encodeRecordingToStream(createRecording({ id: "dropped-lesson" }));
+      const captionDownload = gate();
+      const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+        const url = targetUrl(typeof input === "string" ? input : input.toString());
+        if (url.endsWith("/a.ne")) {
+          return fakeResponse(urlBytes, { ok: true, contentType: "application/octet-stream" });
+        }
+        if (url.endsWith("/a.en.vtt")) {
+          await captionDownload.opened;
+          return fakeResponse(vttBody(), { ok: true, contentType: "text/vtt" });
+        }
+        return fakeResponse(null, { ok: false, status: 404 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const actions = makeActionsMock();
+      const { result } = renderLoader(actions);
+
+      await result.current.fetchNextEditorFile("https://example.com/a.ne");
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith("https://example.com/a.en.vtt");
+      });
+      await result.current.importNextEditorFile(new File([droppedBytes as BlobPart], "dropped.ne"));
+      captionDownload.open();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(vi.mocked(actions.loadRecording).mock.calls.at(-1)?.[0].id).toBe("dropped-lesson");
+      expect(actions.addCaptionTrack).not.toHaveBeenCalled();
+    });
+
+    it("replaces a failed URL load's error, and offers Retry only for a URL", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<() => Promise<Response>>(async () => fakeResponse(null, { ok: false, status: 404 })),
+      );
+      const actions = makeActionsMock();
+      const { result } = renderLoader(actions);
+
+      await expect(result.current.fetchNextEditorFile("https://example.com/a.ne")).rejects.toThrow(
+        "Failed to fetch file",
+      );
+      await waitFor(() => {
+        expect(result.current.error).not.toBeNull();
+      });
+      expect(result.current.retry).toBeTypeOf("function");
+
+      await act(() => result.current.importNextEditorFile(new File([], "dropped.ne")));
+      expect(result.current.error).toMatch(/Failed to import file/);
+      // A dropped file cannot be fetched again.
+      expect(result.current.retry).toBeUndefined();
+    });
   });
 });

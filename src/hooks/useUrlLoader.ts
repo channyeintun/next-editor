@@ -271,15 +271,43 @@ async function probeMediaUrl(url: string, signal?: AbortSignal): Promise<boolean
   }
 }
 
+interface LoadFailure {
+  /** Human-readable reason, shown in the editor's inline error panel. */
+  message: string;
+  /** The URL that failed, so it can be retried; null for a file, which cannot be fetched again. */
+  url: string | null;
+}
+
+export type UrlLoader = ReturnType<typeof useUrlLoader>;
+
+/**
+ * Loads a lesson from a URL or a dropped/picked `.ne` file into the editor. One instance serves
+ * every entry point of an editor surface (the `?url=` query and drag-and-drop), so a newer load of
+ * either kind supersedes an older one: its requests are aborted and its late results dropped.
+ */
 export const useUrlLoader = () => {
   const [isLoading, setIsLoading] = useState(false);
   // Surfaces a human-readable load failure to the UI instead of a blocking `alert()`,
   // so callers can render an inline, themeable error panel (with retry) in context.
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<LoadFailure | null>(null);
   const { loadRecording, extendRecording, appendRecordingDelta, addCaptionTrack } =
     useNextEditorActions();
   const generationRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  /** Starts a load that supersedes the previous one: aborts its requests and makes it stale. */
+  const beginLoad = () => {
+    const generation = ++generationRef.current;
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    setIsLoading(true);
+    setFailure(null);
+    return {
+      signal: abortController.signal,
+      isStale: () => generationRef.current !== generation,
+    };
+  };
 
   useEffect(() => {
     return () => {
@@ -311,9 +339,8 @@ export const useUrlLoader = () => {
       }
       return result;
     };
+    const { isStale } = beginLoad();
     try {
-      setIsLoading(true);
-      setError(null);
       if (file.name.endsWith(".ne")) {
         const bytes = new Uint8Array(await file.arrayBuffer());
 
@@ -322,15 +349,21 @@ export const useUrlLoader = () => {
         }
 
         const recordings = await decompressBinaryToRecordings(bytes);
-        if (recordings.length > 0) {
+        if (recordings.length > 0 && !isStale()) {
           loadRecording(attachVideo(recordings[0]));
         }
       }
     } catch (err) {
+      if (isStale()) return;
       console.error("Failed to import file:", err);
-      setError(`Failed to import file: ${err instanceof Error ? err.message : "Unknown error"}`);
+      setFailure({
+        message: `Failed to import file: ${err instanceof Error ? err.message : "Unknown error"}`,
+        url: null,
+      });
     } finally {
-      setIsLoading(false);
+      if (!isStale()) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -356,7 +389,8 @@ export const useUrlLoader = () => {
    */
   const streamRecordingFromResponse = async (
     response: Response,
-    baseUrl?: string,
+    baseUrl: string,
+    isStale: () => boolean,
   ): Promise<Recording | null> => {
     const body = response.body;
     if (!body || typeof body.getReader !== "function") {
@@ -386,6 +420,8 @@ export const useUrlLoader = () => {
       if (!loadedOnce) {
         const decoded = streamReader.getRecording();
         const hydrated = decoded ? await hydrateDecodedRecordingWorkspaceAssets(decoded) : null;
+        // A newer load may have started during the IndexedDB round trip.
+        if (isStale()) return;
         const resolved = resolveRecording(hydrated);
         if (!resolved) return;
         loadRecording(resolved);
@@ -401,6 +437,7 @@ export const useUrlLoader = () => {
       const delta = streamReader.readDelta();
       if (delta) {
         await persistDecodedWorkspaceAssets(delta.newWorkspaceAssets);
+        if (isStale()) return;
         appendRecordingDelta({ ...delta, newWorkspaceAssets: [] });
       }
 
@@ -557,18 +594,10 @@ export const useUrlLoader = () => {
       throw new Error("URL does not point to a supported file (.ne)");
     }
 
-    const generation = ++generationRef.current;
-    abortControllerRef.current?.abort();
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    const isStale = () => generationRef.current !== generation;
-
-    setIsLoading(true);
-    setError(null);
+    const { signal, isStale } = beginLoad();
 
     try {
-      const response = await fetchNextEditorUrl(url, { signal: abortController.signal });
+      const response = await fetchNextEditorUrl(url, { signal });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch file: ${response.statusText}`);
@@ -585,7 +614,7 @@ export const useUrlLoader = () => {
       let loaded: Recording | null = null;
       let bodyConsumed = false;
       try {
-        loaded = await streamRecordingFromResponse(response, url);
+        loaded = await streamRecordingFromResponse(response, url, isStale);
       } catch {
         bodyConsumed = true;
       }
@@ -593,9 +622,7 @@ export const useUrlLoader = () => {
       if (isStale()) return;
 
       if (!loaded) {
-        const source = bodyConsumed
-          ? await fetchNextEditorUrl(url, { signal: abortController.signal })
-          : response;
+        const source = bodyConsumed ? await fetchNextEditorUrl(url, { signal }) : response;
         const bytes = new Uint8Array(await source.arrayBuffer());
         loaded = await loadRecordingFromBinaryBytes(bytes, url);
       }
@@ -612,7 +639,7 @@ export const useUrlLoader = () => {
 
       // Externalized audio/camera resolve out-of-band, after the (now tiny) `.ne` finished.
       if (loaded && !isStale()) {
-        void resolveExternalMedia(loaded, url, isStale, abortController.signal);
+        void resolveExternalMedia(loaded, url, isStale, signal);
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -620,7 +647,10 @@ export const useUrlLoader = () => {
       }
       if (isStale()) return;
       console.error("Failed to load tutorial from URL:", err);
-      setError(`Failed to load tutorial: ${err instanceof Error ? err.message : "Unknown error"}`);
+      setFailure({
+        message: `Failed to load tutorial: ${err instanceof Error ? err.message : "Unknown error"}`,
+        url,
+      });
       throw err;
     } finally {
       if (!isStale()) {
@@ -629,12 +659,22 @@ export const useUrlLoader = () => {
     }
   };
 
+  const failedUrl = failure?.url;
+
   return {
     fetchNextEditorFile,
     importNextEditorFile,
     isNextEditorUrl,
     isLoading,
-    error,
-    clearError: () => setError(null),
+    error: failure?.message ?? null,
+    /** Repeats a failed URL load; undefined when the last failure was a file. */
+    retry: failedUrl
+      ? () => {
+          // The loader records a new failure itself; this only keeps it off the console as an
+          // unhandled rejection.
+          fetchNextEditorFile(failedUrl).catch(() => {});
+        }
+      : undefined,
+    clearError: () => setFailure(null),
   };
 };

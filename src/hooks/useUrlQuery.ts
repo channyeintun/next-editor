@@ -1,13 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { useUrlLoader } from "./useUrlLoader";
+import type { UrlLoader } from "./useUrlLoader";
 
-export const useUrlQuery = (overrideUrl?: string) => {
-  const { fetchNextEditorFile, isLoading, error, clearError } = useUrlLoader();
+/** Loads the lesson named by the `overrideUrl` prop or the `?url=` query param with the given loader. */
+export const useUrlQuery = ({ fetchNextEditorFile }: UrlLoader, overrideUrl?: string) => {
   const [searchParams] = useSearchParams();
-  // Remember the last resolved URL so Retry can re-run the same load without
-  // re-deriving it from params (which may have changed in the meantime).
-  const lastUrlRef = useRef<string | null>(null);
 
   const resolveUrl = (): string | null => {
     // An explicit override (e.g. the /learn detail view passing a recording via a
@@ -28,30 +25,15 @@ export const useUrlQuery = (overrideUrl?: string) => {
     return decodedUrl.startsWith("/") ? `${origin}${decodedUrl}` : `${origin}/${decodedUrl}`;
   };
 
-  const load = (fullUrl: string) => {
-    lastUrlRef.current = fullUrl;
-    // The loader records the failure in its `error` state; the catch only keeps the
-    // rejected promise from surfacing as an unhandled rejection.
-    fetchNextEditorFile(fullUrl).catch((err) => {
-      console.error("Failed to load from URL query:", err);
-    });
-  };
-
   useEffect(() => {
     const fullUrl = resolveUrl();
     if (fullUrl) {
-      load(fullUrl);
+      // The loader records the failure in its `error` state; the catch only keeps the
+      // rejected promise from surfacing as an unhandled rejection.
+      fetchNextEditorFile(fullUrl).catch((err) => {
+        console.error("Failed to load from URL query:", err);
+      });
     }
     // Re-runs when the resolved URL changes (override prop or `?url=` param).
   }, [overrideUrl, searchParams]);
-
-  const retry = () => {
-    const fullUrl = lastUrlRef.current ?? resolveUrl();
-    if (fullUrl) {
-      clearError();
-      load(fullUrl);
-    }
-  };
-
-  return { isLoading, error, retry };
 };

@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
-import { useUrlLoader } from "./useUrlLoader";
+import type { UrlLoader } from "./useUrlLoader";
 
-export const useDragAndDropUrl = () => {
+/** Loads a `.ne` file or `.ne` URL dropped anywhere on the document with the given loader. */
+export const useDragAndDropUrl = ({
+  fetchNextEditorFile,
+  importNextEditorFile,
+  isNextEditorUrl,
+}: UrlLoader) => {
   const [isDragging, setIsDragging] = useState(false);
-  const {
-    fetchNextEditorFile,
-    importNextEditorFile,
-    isNextEditorUrl,
-    isLoading,
-    error,
-    clearError,
-  } = useUrlLoader();
 
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {
@@ -78,5 +75,5 @@ export const useDragAndDropUrl = () => {
     };
   }, [fetchNextEditorFile, importNextEditorFile, isNextEditorUrl]);
 
-  return { isDragging, isLoading, error, clearError };
+  return { isDragging };
 };

@@ -183,8 +183,8 @@ export const editorMachine = setup({
         event.type === "SCREEN_ERROR") &&
       context.screen.actorId === event.actorId,
     // Streamed prefixes and late out-of-band media (external audio/camera) must only extend
-    // the recording they were decoded from. Each useUrlLoader instance guards staleness only
-    // against its own fetches, so a lesson opened another way (header import, drag-and-drop)
+    // the recording they were decoded from. useUrlLoader guards staleness only against its own
+    // loads (the `?url=` lesson and drops), so a lesson opened another way (the header import)
     // could otherwise be replaced mid-playback by the previous lesson's late download.
     isSameRecordingStream: ({ context, event }) => {
       if (!context.recording) return false;
