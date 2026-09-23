@@ -123,7 +123,7 @@ describe("applyContentDiff", () => {
     for (const [current, target] of cases) {
       const model = new FakeTextModel(current);
 
-      expect(applyContentDiff(createEditor(model), target, current)).toBe(true);
+      applyContentDiff(createEditor(model), target);
       expect(model.getValue()).toBe(target);
       expect(model.widenedRanges).toBe(0);
     }
@@ -135,8 +135,8 @@ describe("applyContentDiff", () => {
   it("keeps replayed edits off the model's undo stack", () => {
     const model = new FakeTextModel("const a = 1;");
 
-    applyContentDiff(createEditor(model), "const a = 2;", "const a = 1;");
-    applyContentDiff(createEditor(model), "const a = 23;", "const a = 2;");
+    applyContentDiff(createEditor(model), "const a = 2;");
+    applyContentDiff(createEditor(model), "const a = 23;");
 
     expect(model.getValue()).toBe("const a = 23;");
     expect(model.undoableEdits).toBe(0);

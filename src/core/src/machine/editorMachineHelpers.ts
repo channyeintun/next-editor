@@ -180,7 +180,7 @@ export const applyFrameState = (
   try {
     // Apply content changes
     if (!previousFrame || previousFrame.state.content !== state.content) {
-      applyContentDiff(editor, state.content, previousFrame?.state.content);
+      applyContentDiff(editor, state.content);
     }
 
     const viewStateChanged =

@@ -65,70 +65,47 @@ export const applySelectionDiff = (
 export const applyContentDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
   targetContent: string,
-  knownCurrentContent?: string | null,
-): boolean => {
+): void => {
   const model = editor.getModel();
-  if (!model) return false;
+  if (!model) return;
 
-  const actualCurrentContent = model.getValue();
-  const currentContent =
-    knownCurrentContent !== undefined &&
-    knownCurrentContent !== null &&
-    actualCurrentContent === knownCurrentContent
-      ? knownCurrentContent
-      : actualCurrentContent;
-
-  // If content is identical, no need to apply any operations
-  if (currentContent === targetContent) {
-    return true;
-  }
+  const currentContent = model.getValue();
+  if (currentContent === targetContent) return;
 
   if (model.canUndo()) {
     model.setValue(targetContent);
-    return true;
+    return;
   }
 
   try {
-    // Find the common prefix and suffix to minimize the edit range.
+    // Narrow the edit to the part between the common prefix and suffix.
     const commonPrefix = findCommonPrefixJS(currentContent, targetContent);
     const commonSuffix = findCommonSuffixJS(
       currentContent.slice(commonPrefix),
       targetContent.slice(commonPrefix),
     );
+    const startPos = model.getPositionAt(commonPrefix);
+    const endPos = model.getPositionAt(currentContent.length - commonSuffix);
 
-    const currentMiddle = currentContent.slice(commonPrefix, currentContent.length - commonSuffix);
-    const targetMiddle = targetContent.slice(commonPrefix, targetContent.length - commonSuffix);
-
-    // If only the middle part differs, create a single edit operation
-    if (commonPrefix > 0 || commonSuffix > 0 || currentMiddle !== targetMiddle) {
-      const startPos = model.getPositionAt(commonPrefix);
-      const endPos = model.getPositionAt(commonPrefix + currentMiddle.length);
-
-      const editOperation: monaco.editor.IIdentifiedSingleEditOperation = {
+    model.applyEdits([
+      {
         range: {
           startLineNumber: startPos.lineNumber,
           startColumn: startPos.column,
           endLineNumber: endPos.lineNumber,
           endColumn: endPos.column,
         },
-        text: targetMiddle,
+        text: targetContent.slice(commonPrefix, targetContent.length - commonSuffix),
         forceMoveMarkers: true,
-      };
-
-      model.applyEdits([editOperation]);
-      return true;
-    }
-
-    return true;
+      },
+    ]);
   } catch (error) {
     console.warn("Error applying content diff:", error);
     // Fall back to setValue if the edit is rejected
     try {
       model.setValue(targetContent);
-      return true;
     } catch (fallbackError) {
       console.warn("Fallback setValue also failed:", fallbackError);
-      return false;
     }
   }
 };
