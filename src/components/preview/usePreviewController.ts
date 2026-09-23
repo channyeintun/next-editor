@@ -27,6 +27,7 @@ import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRunti
 import type {
   ApiClientRecordedRequest,
   ApiClientRecordedResult,
+  ApiClientReplayState,
   ApiClientRequestTab,
   IframeInteractionEvent,
   PreviewActiveMode,
@@ -412,10 +413,15 @@ export function usePreviewController(): PreviewController {
   // The store instance is created once in its provider, so it is referentially
   // stable and safe to close over directly (no ref indirection needed).
   const apiClientStore = useApiClientStoreInstance();
-  // Replay re-applies preview state at many timeline points and carries API state
-  // forward across unrelated events, so dedupe by content to apply each distinct
-  // recorded state exactly once.
-  const lastAppliedApiSignatureRef = useRef<string | null>(null);
+  // Replay hands every preview event's state to the applier, and after the first
+  // API event each state carries the same recorded API object forward. Skip a
+  // re-apply only when both that object and the store are exactly as the last
+  // apply left them: the viewer can change the store while paused, and resuming
+  // must show the recorded request again.
+  const lastAppliedApiStateRef = useRef<{
+    recorded: ApiClientReplayState;
+    storeContext: unknown;
+  } | null>(null);
 
   const apiClient = useApiClient({
     iframeRef,
@@ -904,11 +910,13 @@ export function usePreviewController(): PreviewController {
     onActiveModeChange: setActiveMode,
     onRequestTabChange: (tab) => apiClientStore.trigger.setRequestTab({ tab }),
     onApiClientStateChange: (apiState) => {
-      const signature = JSON.stringify(apiState);
-      if (signature === lastAppliedApiSignatureRef.current) {
+      const lastApplied = lastAppliedApiStateRef.current;
+      if (
+        lastApplied?.recorded === apiState &&
+        lastApplied.storeContext === apiClientStore.getSnapshot().context
+      ) {
         return;
       }
-      lastAppliedApiSignatureRef.current = signature;
 
       const request = apiState.request;
       const history: ApiClientHistoryEntry[] = (apiState.history ?? []).map((entry) => ({
@@ -930,6 +938,10 @@ export function usePreviewController(): PreviewController {
         result: apiState.result ? recordedResultToStoreResult(apiState.result) : null,
         history,
       });
+      lastAppliedApiStateRef.current = {
+        recorded: apiState,
+        storeContext: apiClientStore.getSnapshot().context,
+      };
     },
   });
 
