@@ -161,21 +161,17 @@ class MockTextModel {
     return { lineNumber: 1, column: offset + 1 };
   }
 
-  pushEditOperations(
-    _selections: unknown[],
-    edits: monaco.editor.IIdentifiedSingleEditOperation[],
-  ) {
+  applyEdits(edits: readonly monaco.editor.IIdentifiedSingleEditOperation[]) {
     const edit = edits[0];
 
     if (!edit) {
-      return null;
+      return;
     }
 
     const startOffset = edit.range.startColumn - 1;
     const endOffset = edit.range.endColumn - 1;
     this.content =
       this.content.slice(0, startOffset) + (edit.text ?? "") + this.content.slice(endOffset);
-    return null;
   }
 }
 

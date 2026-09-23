@@ -139,8 +139,11 @@ export const applySelectionDiff = (
 };
 
 /**
- * Calculates the minimal edit operations needed to transform the current content
- * to the target content and applies them using pushEditOperations
+ * Rewrites the model to `targetContent` with one edit that spans only the part that
+ * differs. The edit goes through `applyEdits`, not `pushEditOperations`: replayed
+ * content is the recording's history, not the viewer's edits, so it must stay off
+ * the model's undo stack. There it merged into one element, and Ctrl+Z after a
+ * lesson ended rewound the editor to the lesson's opening code.
  */
 export const applyContentDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
@@ -190,15 +193,14 @@ export const applyContentDiff = (
         forceMoveMarkers: true,
       };
 
-      // Apply the edit operation
-      model.pushEditOperations([], [editOperation], () => null);
+      model.applyEdits([editOperation]);
       return true;
     }
 
     return true;
   } catch (error) {
     console.warn("Error applying content diff:", error);
-    // Fallback to setValue if pushEditOperations fails
+    // Fall back to setValue if the edit is rejected
     try {
       model.setValue(targetContent);
       return true;

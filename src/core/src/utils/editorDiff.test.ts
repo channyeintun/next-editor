@@ -9,9 +9,12 @@ const isHighSurrogate = (charCode: number) => charCode >= 0xd800 && charCode <= 
  * moves an offset that sits right after a high surrogate to the pair boundary
  * (widening the range, or shifting a collapsed one left) but keeps the
  * replacement text as given, so a half pair in the text survives into the model.
+ * `pushEditOperations` applies the same edits and also puts them on the undo
+ * stack, which `applyEdits` does not.
  */
 class FakeTextModel {
   widenedRanges = 0;
+  undoableEdits = 0;
   private value: string;
 
   constructor(value: string) {
@@ -35,6 +38,12 @@ class FakeTextModel {
     _selections: unknown,
     operations: monaco.editor.IIdentifiedSingleEditOperation[],
   ): null {
+    this.undoableEdits += operations.length;
+    this.applyEdits(operations);
+    return null;
+  }
+
+  applyEdits(operations: readonly monaco.editor.IIdentifiedSingleEditOperation[]): void {
     for (const { range, text } of operations) {
       let start = this.getOffsetAt(range.startLineNumber, range.startColumn);
       let end = this.getOffsetAt(range.endLineNumber, range.endColumn);
@@ -55,7 +64,6 @@ class FakeTextModel {
 
       this.value = this.value.slice(0, start) + (text ?? "") + this.value.slice(end);
     }
-    return null;
   }
 
   private getOffsetAt(lineNumber: number, column: number): number {
@@ -90,5 +98,18 @@ describe("applyContentDiff", () => {
       expect(model.getValue()).toBe(target);
       expect(model.widenedRanges).toBe(0);
     }
+  });
+
+  // Replayed content is the recording's history, not the viewer's edits. On the undo
+  // stack it merged into one element, so Ctrl+Z at the end of a lesson rewound the
+  // editor to the lesson's opening code.
+  it("keeps replayed edits off the model's undo stack", () => {
+    const model = new FakeTextModel("const a = 1;");
+
+    applyContentDiff(createEditor(model), "const a = 2;", "const a = 1;");
+    applyContentDiff(createEditor(model), "const a = 23;", "const a = 2;");
+
+    expect(model.getValue()).toBe("const a = 23;");
+    expect(model.undoableEdits).toBe(0);
   });
 });
