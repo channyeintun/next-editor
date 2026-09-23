@@ -11,7 +11,6 @@ const opfs = vi.hoisted(() => ({
   replaceRecordingOpfs: vi.fn<(id: string, bytes: Uint8Array) => Promise<number>>(),
   openRecordingOpfsStream: vi.fn<(id: string) => Promise<ReadableStream<Uint8Array> | null>>(),
   deleteRecordingOpfs: vi.fn<(id: string) => Promise<void>>(),
-  clearRecordingOpfs: vi.fn<() => Promise<void>>(),
 }));
 
 vi.mock("./recordingOpfs", () => opfs);

@@ -21,13 +21,6 @@ import {
   persistDecodedWorkspaceAssets,
 } from "./recordingWorkspaceAssets";
 
-interface StorageStats {
-  count: number;
-  totalSize: string;
-  compressedSize?: string;
-  compressionRatio?: string;
-}
-
 function stripExtension(filename: string): string {
   return filename.replace(/\.[^.]+$/, "");
 }
@@ -50,22 +43,9 @@ export function isAudioFile(file: File): boolean {
   return file.type.startsWith("audio/") || /\.(weba|ogg|m4a|mp3|wav)$/i.test(file.name);
 }
 
-/**
- * True when a recording carries non-empty media bytes. The blob is a real {@link Blob}
- * for in-memory recordings, or a `{ [sizeKey]: number }` size placeholder for recordings
- * whose bytes were stripped for the lightweight metadata snapshot.
- */
-function hasMediaPayload(blob: unknown, sizeKey: "__audio_size" | "__camera_size"): boolean {
-  if (blob instanceof Blob) {
-    return blob.size > 0;
-  }
-
-  if (!blob || typeof blob !== "object" || !(sizeKey in blob)) {
-    return false;
-  }
-
-  const size = (blob as Record<string, unknown>)[sizeKey];
-  return typeof size === "number" && size > 0;
+/** True when a recording carries non-empty media bytes. */
+function hasMediaPayload(blob: unknown): boolean {
+  return blob instanceof Blob && blob.size > 0;
 }
 
 /**
@@ -211,19 +191,6 @@ export async function buildRecordingFiles(
 export class RecordingStorage {
   private indexedDBStore = createIndexedDBRecordingStore();
 
-  private formatSize(bytes: number): string {
-    const units = ["B", "KB", "MB", "GB"];
-    let size = bytes;
-    let unitIndex = 0;
-
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
-
-    return `${size.toFixed(1)} ${units[unitIndex]}`;
-  }
-
   private createStoredMetadata(recording: Recording, payloadSize: number): StoredRecordingMetadata {
     return {
       id: recording.id,
@@ -232,8 +199,8 @@ export class RecordingStorage {
       duration: recording.duration,
       createdAt: recording.createdAt,
       updatedAt: Date.now(),
-      hasAudio: hasMediaPayload(recording.audioBlob, "__audio_size"),
-      hasCamera: hasMediaPayload(recording.cameraBlob, "__camera_size"),
+      hasAudio: hasMediaPayload(recording.audioBlob),
+      hasCamera: hasMediaPayload(recording.cameraBlob),
       payloadSize,
     };
   }
@@ -302,14 +269,6 @@ export class RecordingStorage {
   }
 
   /**
-   * List stored recordings by metadata only — no stream/media bytes are read or decoded.
-   * Use this for library UIs; decode individual recordings on demand via {@link loadById}.
-   */
-  async list(): Promise<StoredRecordingMetadata[]> {
-    return this.indexedDBStore.listMetadata();
-  }
-
-  /**
    * Load and decode a single recording by id, reading only that recording's bytes.
    * Returns null when the id has no stored entry (or its payload is missing).
    */
@@ -334,47 +293,6 @@ export class RecordingStorage {
         `Failed to save recording: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
-  }
-
-  /**
-   * Load all recordings from IndexedDB, decoding one at a time by id. A corrupt or
-   * unreadable entry is skipped rather than failing the whole library; its id is
-   * reported in `failedIds` so the caller can surface it.
-   */
-  async loadAll(): Promise<{ recordings: Recording[]; failedIds: string[] }> {
-    try {
-      const metadata = await this.indexedDBStore.listMetadata();
-      const recordings: Recording[] = [];
-      const failedIds: string[] = [];
-
-      for (const entry of metadata) {
-        try {
-          const recording = await this.loadById(entry.id);
-          if (recording) {
-            recordings.push(recording);
-          } else {
-            failedIds.push(entry.id);
-          }
-        } catch (error) {
-          console.error(`RecordingStorage: Failed to decode recording ${entry.id}:`, error);
-          failedIds.push(entry.id);
-        }
-      }
-
-      return { recordings, failedIds };
-    } catch (error) {
-      console.error("Failed to load recordings from IndexedDB:", error);
-      return { recordings: [], failedIds: [] };
-    }
-  }
-
-  /**
-   * Load all recordings from IndexedDB. Prefer {@link list} + {@link loadById} (or
-   * {@link loadAll} for the failure-isolated form) for library UIs.
-   */
-  async load(): Promise<Recording[]> {
-    const { recordings } = await this.loadAll();
-    return recordings;
   }
 
   /**
@@ -498,51 +416,6 @@ export class RecordingStorage {
 
       input.click();
     });
-  }
-
-  /**
-   * Clear all recordings from IndexedDB.
-   */
-  async clear(): Promise<void> {
-    await this.indexedDBStore.clear();
-  }
-
-  /**
-   * Get storage statistics from IndexedDB metadata.
-   */
-  async getStats(): Promise<StorageStats> {
-    try {
-      const storedMetadata = await this.indexedDBStore.listMetadata();
-
-      if (storedMetadata.length === 0) {
-        return {
-          count: 0,
-          totalSize: "0 B",
-          compressedSize: "0 B",
-          compressionRatio: "0%",
-        };
-      }
-
-      const totalCompressedSize = storedMetadata.reduce(
-        (total, metadata) => total + metadata.payloadSize,
-        0,
-      );
-
-      return {
-        count: storedMetadata.length,
-        totalSize: this.formatSize(totalCompressedSize),
-        compressedSize: this.formatSize(totalCompressedSize),
-        compressionRatio: "N/A",
-      };
-    } catch (error) {
-      console.error("Failed to read recording stats from IndexedDB:", error);
-      return {
-        count: 0,
-        totalSize: "0 B",
-        compressedSize: "0 B",
-        compressionRatio: "0%",
-      };
-    }
   }
 }
 

@@ -129,15 +129,6 @@ const api = {
       if (!isNotFoundError(error)) throw error;
     }
   },
-  async clear(): Promise<void> {
-    await Promise.all(Array.from(writeQueues.values(), (pending) => pending.catch(() => {})));
-    const root = await getRootDirectory();
-    try {
-      await root.removeEntry(RECORDING_OPFS_DIRECTORY, { recursive: true });
-    } catch (error) {
-      if (!isNotFoundError(error)) throw error;
-    }
-  },
 };
 
 export type RecordingOpfsWorkerApi = typeof api;

@@ -6,7 +6,6 @@ import type {
   RecordingStreamDelta,
 } from "../core/src/types";
 import type { EditorActorRef } from "../core/src/useNextEditor";
-import type { StoredRecordingMetadata } from "../storage/IndexedDBRecordingStore";
 import type {
   PreviewDomPatchBatch,
   PreviewEvent,
@@ -54,13 +53,6 @@ export interface NextEditorActions {
   handleChatEvent: (event: ChatRecordingEvent["event"]) => void;
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;
   importFromFile: () => Promise<Recording[]>;
-  clearStorage: () => Promise<void>;
-  getStorageStats: () => Promise<{ count: number; totalSize: string }>;
-  /** Metadata only (no stream/media decode) — the source for library list UIs. */
-  listStoredRecordings: () => Promise<StoredRecordingMetadata[]>;
-  /** Decodes one recording's full payload; call only when the user opens/selects it. */
-  loadStoredRecordingById: (id: string) => Promise<Recording | null>;
-  deleteFromStorage: (id: string) => Promise<void>;
 }
 
 export const NextEditorActionsContext = createContext<NextEditorActions | null>(null);

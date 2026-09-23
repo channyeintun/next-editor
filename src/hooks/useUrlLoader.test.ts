@@ -71,11 +71,6 @@ function makeActionsMock(): NextEditorActions {
     handleChatEvent: vi.fn(),
     exportAsFile: vi.fn(),
     importFromFile: vi.fn(),
-    clearStorage: vi.fn(),
-    getStorageStats: vi.fn(),
-    listStoredRecordings: vi.fn(),
-    loadStoredRecordingById: vi.fn(),
-    deleteFromStorage: vi.fn(),
   };
 }
 /* eslint-enable vitest/require-mock-type-parameters */

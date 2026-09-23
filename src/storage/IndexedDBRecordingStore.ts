@@ -1,7 +1,6 @@
 import type { Recording } from "../core/src";
 import { requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
 import {
-  clearRecordingOpfs,
   deleteRecordingOpfs,
   isRecordingOpfsAvailable,
   openRecordingOpfsStream,
@@ -76,18 +75,6 @@ export interface StoredRecordingEntry {
   cameraBlob?: Blob;
   /** Audio stored alongside the (media-free) stream; absent when there is no audio. */
   audioBlob?: Blob;
-}
-
-/** Most-recently-updated first, breaking ties by creation time (newest first). */
-function compareMetadataByRecency(
-  left: StoredRecordingMetadata,
-  right: StoredRecordingMetadata,
-): number {
-  if (left.updatedAt !== right.updatedAt) {
-    return right.updatedAt - left.updatedAt;
-  }
-
-  return right.createdAt - left.createdAt;
 }
 
 export class IndexedDBRecordingStore {
@@ -267,16 +254,6 @@ export class IndexedDBRecordingStore {
     return this.concatSegments(segments);
   }
 
-  async listMetadata(): Promise<StoredRecordingMetadata[]> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(RECORDING_METADATA_STORE, "readonly");
-    const store = transaction.objectStore(RECORDING_METADATA_STORE);
-    const metadata = await requestToPromise(store.getAll());
-    await transactionToPromise(transaction);
-
-    return metadata.sort(compareMetadataByRecency);
-  }
-
   async getEntry(id: string): Promise<StoredRecordingEntry | null> {
     const database = await this.getDatabase();
     const transaction = database.transaction(
@@ -433,27 +410,6 @@ export class IndexedDBRecordingStore {
     transaction.objectStore(RECORDING_AUDIO_STORE).delete(id);
     await transactionToPromise(transaction);
     await deleteRecordingOpfs(id);
-  }
-
-  async clear(): Promise<void> {
-    const database = await this.getDatabase();
-    const transaction = database.transaction(
-      [
-        RECORDING_METADATA_STORE,
-        RECORDING_SEGMENTS_STORE,
-        RECORDING_STREAM_STATE_STORE,
-        RECORDING_CAMERA_STORE,
-        RECORDING_AUDIO_STORE,
-      ],
-      "readwrite",
-    );
-    transaction.objectStore(RECORDING_METADATA_STORE).clear();
-    transaction.objectStore(RECORDING_SEGMENTS_STORE).clear();
-    transaction.objectStore(RECORDING_STREAM_STATE_STORE).clear();
-    transaction.objectStore(RECORDING_CAMERA_STORE).clear();
-    transaction.objectStore(RECORDING_AUDIO_STORE).clear();
-    await transactionToPromise(transaction);
-    await clearRecordingOpfs();
   }
 }
 

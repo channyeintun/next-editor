@@ -187,12 +187,10 @@ async function entryFor(recording: Recording): Promise<StoredRecordingEntry> {
 function withStubbedStore(
   storage: RecordingStorage,
   stubs: {
-    listMetadata?: () => Promise<StoredRecordingMetadata[]>;
     getEntry?: (id: string) => Promise<StoredRecordingEntry | null>;
   },
 ): void {
   const store = (storage as unknown as { indexedDBStore: Record<string, unknown> }).indexedDBStore;
-  if (stubs.listMetadata) store.listMetadata = stubs.listMetadata;
   if (stubs.getEntry) store.getEntry = stubs.getEntry;
 }
 
@@ -222,26 +220,9 @@ describe("attachCompanionAudio", () => {
   });
 });
 
-describe("RecordingStorage lazy library loading", () => {
+describe("RecordingStorage.loadById", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("list() returns metadata only, without touching stream/media decode", async () => {
-    const storage = new RecordingStorage();
-    const recordingA = createRecording({ id: "rec-a", name: "A" });
-    const recordingB = createRecording({ id: "rec-b", name: "B" });
-    const listMetadata = vi
-      .fn<() => Promise<StoredRecordingMetadata[]>>()
-      .mockResolvedValue([metadataFor(recordingA), metadataFor(recordingB)]);
-    const getEntry = vi.fn<(id: string) => Promise<StoredRecordingEntry | null>>();
-    withStubbedStore(storage, { listMetadata, getEntry });
-
-    const result = await storage.list();
-
-    expect(result.map((m) => m.id)).toEqual(["rec-a", "rec-b"]);
-    expect(listMetadata).toHaveBeenCalledTimes(1);
-    expect(getEntry).not.toHaveBeenCalled();
   });
 
   it("loadById() decodes only the requested recording", async () => {
@@ -286,27 +267,5 @@ describe("RecordingStorage lazy library loading", () => {
     const loaded = await storage.loadById("missing-id");
 
     expect(loaded).toBeNull();
-  });
-
-  it("loadAll() skips a corrupt entry and reports it in failedIds, without dropping the rest", async () => {
-    const storage = new RecordingStorage();
-    const good = createRecording({ id: "rec-good", name: "Good" });
-    const goodEntry = await entryFor(good);
-    const badMetadata = metadataFor(createRecording({ id: "rec-bad", name: "Bad" }));
-
-    withStubbedStore(storage, {
-      listMetadata: async () => [goodEntry.metadata, badMetadata],
-      getEntry: async (id: string) => {
-        if (id === "rec-good") return goodEntry;
-        if (id === "rec-bad") throw new Error("corrupt payload");
-        return null;
-      },
-    });
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const { recordings, failedIds } = await storage.loadAll();
-
-    expect(recordings.map((r) => r.id)).toEqual(["rec-good"]);
-    expect(failedIds).toEqual(["rec-bad"]);
   });
 });

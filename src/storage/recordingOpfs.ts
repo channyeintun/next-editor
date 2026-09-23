@@ -163,9 +163,3 @@ export async function deleteRecordingOpfs(recordingId: string): Promise<void> {
     if (!isNotFoundError(error)) throw error;
   }
 }
-
-export async function clearRecordingOpfs(): Promise<void> {
-  const current = getClient();
-  if (!current || !(await isRecordingOpfsAvailable())) return;
-  await callWorker(current, current.api.clear());
-}
