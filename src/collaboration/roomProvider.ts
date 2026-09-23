@@ -21,7 +21,6 @@ import {
   type CollaborationAwarenessInput,
   type CollaborationControlEvent,
   type CollaborationRoomSession,
-  type CollaborationUpdateAccepted,
   type CollaborationWebSocketServerMessage,
 } from "./protocol";
 import { COLLABORATION_ORIGIN, canWriteCollaborationDocument } from "./projectDocument";
@@ -179,7 +178,7 @@ export class CollaborationRoomProvider {
   private readonly pendingWebSocketAcks = new Map<
     string,
     {
-      resolve: (value: CollaborationUpdateAccepted) => void;
+      resolve: () => void;
       reject: (reason: Error) => void;
       timer: ReturnType<typeof setTimeout>;
     }
@@ -433,15 +432,9 @@ export class CollaborationRoomProvider {
       if (!first) return;
       const update =
         batch.length === 1 ? first.update : Y.mergeUpdates(batch.map((item) => item.update));
+      // Only a merged batch can land here: the loop below rejects a single
+      // oversize update before batching it. Send the parts unmerged instead.
       if (update.byteLength > MAX_YJS_UPDATE_BYTES) {
-        if (batch.length === 1) {
-          this.fatal(
-            `A local collaboration change exceeded the ${MAX_YJS_UPDATE_BYTES}-byte update limit`,
-          );
-          batch = [];
-          batchBytes = 0;
-          return;
-        }
         for (const pending of batch) {
           this.outbox.push({
             updateId: crypto.randomUUID(),
@@ -591,20 +584,14 @@ export class CollaborationRoomProvider {
     const parsed = collaborationWebSocketServerMessageSchema.safeParse(value);
     if (!parsed.success) return;
     const message = parsed.data;
-    if (message.type === "session.ready") {
-      if (message.sessionId !== this.sessionId || message.attemptId !== attemptId) return;
-      return;
-    }
+    // The room's handshake acknowledgement; synchronization starts on open.
+    if (message.type === "session.ready") return;
     if (message.type === "document.ack") {
       const pending = this.pendingWebSocketAcks.get(message.updateId);
       if (!pending) return;
       clearTimeout(pending.timer);
       this.pendingWebSocketAcks.delete(message.updateId);
-      pending.resolve({
-        accepted: true,
-        updateId: message.updateId,
-        streamId: message.streamId,
-      });
+      pending.resolve();
       return;
     }
     if (message.type === "control.room") {
@@ -886,10 +873,7 @@ export class CollaborationRoomProvider {
           );
         }
         try {
-          const accepted = await this.publishTransportUpdate(pending);
-          if (!accepted.accepted || accepted.updateId !== pending.updateId) {
-            throw new Error("Collaboration update acknowledgement did not match the request");
-          }
+          await this.publishTransportUpdate(pending);
           const acknowledgedAt = monotonicNow();
           recordPerformanceMetric(
             "collaboration.send_to_ack",
@@ -942,12 +926,13 @@ export class CollaborationRoomProvider {
     this.actor.send({ type: hasPendingUpdates ? "OFFLINE_CHANGES" : "CHANGES_FLUSHED" });
   }
 
-  private publishTransportUpdate(pending: PendingUpdate): Promise<CollaborationUpdateAccepted> {
+  /** Sends one update and settles when the room acknowledges or rejects its updateId. */
+  private publishTransportUpdate(pending: PendingUpdate): Promise<void> {
     const socket = this.socket;
     if (!socket || socket.readyState !== WEBSOCKET_OPEN) {
       return Promise.reject(websocketRequestError("Collaboration WebSocket is not connected"));
     }
-    return new Promise<CollaborationUpdateAccepted>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingWebSocketAcks.delete(pending.updateId);
         reject(websocketRequestError("Collaboration update acknowledgement timed out"));
@@ -1054,7 +1039,7 @@ export class CollaborationRoomProvider {
     });
   }
 
-  private closeSocket(): void {
+  private closeTransport(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
     const socket = this.socket;
@@ -1077,9 +1062,5 @@ export class CollaborationRoomProvider {
     socket.onerror = null;
     socket.onclose = null;
     socket.close(1000, "provider closed");
-  }
-
-  private closeTransport(): void {
-    this.closeSocket();
   }
 }

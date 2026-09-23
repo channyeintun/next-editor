@@ -439,12 +439,6 @@ export const collaborationControlEventSchema = z
 
 export type CollaborationControlEvent = z.infer<typeof collaborationControlEventSchema>;
 
-export interface CollaborationUpdateAccepted {
-  accepted: true;
-  updateId: string;
-  streamId?: string;
-}
-
 export interface CollaborationDocumentSnapshot {
   generation: number;
   streamCutoff: string;
