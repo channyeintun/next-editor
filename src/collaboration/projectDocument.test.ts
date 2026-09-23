@@ -257,6 +257,28 @@ describe("collaboration project document", () => {
     }
   });
 
+  // Each chunk is its own update, and lib0 encodes a lone surrogate as U+FFFD, so a
+  // chunk boundary inside a pair would corrupt the text for everyone but the author.
+  it("sends long replacements in chunks that end on code point boundaries", () => {
+    const project = createStarterHtmlCssWorkspace();
+    const path = project.entryFilePath;
+    project.files[path] = { path, name: path, language: "html", content: "" };
+    const local = new Y.Doc();
+    seedCollaborationProject(local, project, { idFactory: idFactory() });
+    const peer = new Y.Doc();
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(local));
+    local.on("update", (update: Uint8Array) => Y.applyUpdate(peer, update));
+    const next = `${"a".repeat(12 * 1024 - 1)}😀b`;
+
+    new CollaborationProjectController(local, { canWrite: () => true }).replaceFileContent(
+      path,
+      next,
+    );
+
+    expect(projectCollaborationDocument(local).project.files[path].content).toBe(next);
+    expect(projectCollaborationDocument(peer).project.files[path].content).toBe(next);
+  });
+
   it("keeps binary bytes outside Yjs and projects content-addressed asset descriptors", () => {
     const project = createStarterHtmlCssWorkspace();
     project.files["logo.png"] = {

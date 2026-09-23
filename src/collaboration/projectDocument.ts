@@ -596,6 +596,10 @@ export interface CollaborationProjectControllerOptions {
 
 const COLLABORATION_TEXT_INSERT_CHUNK_CHARS = 12 * 1024;
 
+function isHighSurrogate(charCode: number): boolean {
+  return charCode >= 0xd800 && charCode <= 0xdbff;
+}
+
 function sharedTextReplacement(text: Y.Text, nextContent: string) {
   const current = text.toString();
   if (current === nextContent) return null;
@@ -671,19 +675,16 @@ export class CollaborationProjectController {
         COLLABORATION_ORIGIN.localEditor,
       );
     }
-    for (
-      let offset = 0;
-      offset < replacement.insertion.length;
-      offset += COLLABORATION_TEXT_INSERT_CHUNK_CHARS
-    ) {
-      const chunk = replacement.insertion.slice(
-        offset,
-        offset + COLLABORATION_TEXT_INSERT_CHUNK_CHARS,
-      );
-      this.doc.transact(
-        () => text.insert(replacement.prefixLength + offset, chunk),
-        COLLABORATION_ORIGIN.localEditor,
-      );
+    const { insertion } = replacement;
+    for (let offset = 0; offset < insertion.length;) {
+      // Each chunk becomes its own update, and lib0 encodes a lone surrogate as
+      // U+FFFD, so a chunk must not end between the halves of a pair.
+      let end = Math.min(offset + COLLABORATION_TEXT_INSERT_CHUNK_CHARS, insertion.length);
+      if (end < insertion.length && isHighSurrogate(insertion.charCodeAt(end - 1))) end -= 1;
+      const chunk = insertion.slice(offset, end);
+      const index = replacement.prefixLength + offset;
+      this.doc.transact(() => text.insert(index, chunk), COLLABORATION_ORIGIN.localEditor);
+      offset = end;
     }
   }
 
