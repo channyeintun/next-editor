@@ -26,9 +26,13 @@ import { getCurrentUser, setSessionCookie } from "./session";
 
 const RP_NAME = "Next Editor";
 
-// Same transient-signed-cookie pattern as the OAuth handshake in google.ts:
-// the challenge has no DB backing, so the cookie itself must be
-// tamper-proof, single-use, and short-lived.
+// Same transient-signed-cookie pattern as the OAuth handshake in google.ts: the
+// challenge has no DB backing, so the cookie carries it, signed so it cannot be
+// forged, with its expiry signed in too (the cookie's Max-Age only asks the
+// browser to drop it). A verify attempt deletes the cookie, but that is advice to
+// the browser as well: a copied verify request can be replayed until the
+// challenge expires, a window no wider than the session cookie the same copy of
+// the response would carry.
 const CHALLENGE_COOKIE = "ne_webauthn";
 const CHALLENGE_MAX_AGE_SECONDS = 5 * 60;
 
@@ -37,6 +41,8 @@ interface ChallengePayload {
   purpose: "register" | "login";
   /** Only set for registration, which requires an authenticated session. */
   userId?: string;
+  /** Epoch ms after which the challenge is refused. */
+  expiresAt: number;
 }
 
 // The WebAuthn Relying Party identity. In production both come from
@@ -58,8 +64,12 @@ function relyingParty(c: Context<{ Bindings: Env }>): { rpID: string; expectedOr
 
 async function setChallengeCookie(
   c: Context<{ Bindings: Env }>,
-  payload: ChallengePayload,
+  challenge: Omit<ChallengePayload, "expiresAt">,
 ): Promise<void> {
+  const payload: ChallengePayload = {
+    ...challenge,
+    expiresAt: Date.now() + CHALLENGE_MAX_AGE_SECONDS * 1000,
+  };
   await setSignedCookie(c, CHALLENGE_COOKIE, JSON.stringify(payload), c.env.SESSION_SECRET, {
     httpOnly: true,
     secure: new URL(c.req.url).protocol === "https:",
@@ -69,8 +79,9 @@ async function setChallengeCookie(
   });
 }
 
-// Reads and immediately invalidates the challenge cookie — each issued
-// challenge may be consumed by exactly one verify attempt.
+// Reads the challenge cookie and has the browser drop it, so one ceremony gets
+// one verify attempt. Returns null for a missing, forged, expired or
+// other-purpose challenge.
 async function takeChallengeCookie(
   c: Context<{ Bindings: Env }>,
   purpose: ChallengePayload["purpose"],
@@ -80,7 +91,8 @@ async function takeChallengeCookie(
   if (!raw) return null;
   try {
     const payload = JSON.parse(raw) as ChallengePayload;
-    return payload.purpose === purpose ? payload : null;
+    const isCurrent = typeof payload.expiresAt === "number" && payload.expiresAt > Date.now();
+    return payload.purpose === purpose && isCurrent ? payload : null;
   } catch {
     return null;
   }
