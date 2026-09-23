@@ -570,6 +570,64 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     provider.stop();
   });
 
+  it("signals unsent changes once per batch, not once per keystroke", async () => {
+    const { sockets, factory } = socketRecorder();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      batchWindowMs: 60_000,
+      webSocketFactory: factory,
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+    let snapshots = 0;
+    provider.subscribe(() => {
+      snapshots += 1;
+    });
+
+    for (let keystroke = 0; keystroke < 10; keystroke += 1) {
+      provider.doc.getText("source").insert(0, "x");
+    }
+
+    expect(snapshots).toBe(1);
+    expect(provider.actor.getSnapshot().context.hasOfflineChanges).toBe(true);
+    provider.stop();
+  });
+
+  it("keeps offline changes flagged until the room acknowledges them", async () => {
+    const { sockets, factory } = socketRecorder();
+    const server = new Y.Doc();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      batchWindowMs: 0,
+      random: () => 0,
+      webSocketFactory: factory,
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, server);
+    sockets[0]!.close(1006, "network");
+    provider.doc.getText("source").insert(0, "offline work");
+    await waitUntil(() => provider.hasPendingUpdates);
+
+    await provider.retryNow();
+    await openAndSync(provider, sockets[1]!, server);
+    const update = await nextClientUpdate(sockets[1]!);
+    expect(provider.actor.getSnapshot().context.hasOfflineChanges).toBe(true);
+
+    sockets[1]!.message({
+      type: "document.ack",
+      updateId: update.updateId,
+      streamId: "2-0",
+      duplicate: false,
+    });
+    await waitUntil(() => !provider.hasPendingUpdates);
+    expect(provider.actor.getSnapshot().context.hasOfflineChanges).toBe(false);
+    provider.stop();
+  });
+
   it("reports offline edits it can no longer send after a downgrade while offline", async () => {
     const { sockets, factory } = socketRecorder();
     const api = new FakeApi();

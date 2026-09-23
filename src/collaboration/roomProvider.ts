@@ -388,7 +388,7 @@ export class CollaborationRoomProvider {
       return;
     }
     this.pendingUpdates.push({ update, queuedAt: monotonicNow() });
-    this.actor.send({ type: "OFFLINE_CHANGES" });
+    this.reportPendingUpdates();
     if (this.batchTimer) return;
     this.batchTimer = setTimeout(() => {
       this.batchTimer = null;
@@ -903,13 +903,22 @@ export class CollaborationRoomProvider {
           return;
         }
       }
-      if (!this.hasPendingUpdates) this.actor.send({ type: "CHANGES_FLUSHED" });
     } finally {
       this.isPublishing = false;
-      if (this.pendingUpdates.length === 0 && this.outbox.length === 0) {
-        this.actor.send({ type: "CHANGES_FLUSHED" });
-      }
+      this.reportPendingUpdates();
     }
+  }
+
+  /**
+   * Tells the machine when unacknowledged local edits appear or are all gone.
+   * Only the edges are sent: a keystroke must not become an actor snapshot (and
+   * a re-render of every collaboration consumer).
+   */
+  private reportPendingUpdates(): void {
+    if (this.isStopped) return;
+    const hasPendingUpdates = this.hasPendingUpdates;
+    if (hasPendingUpdates === this.actor.getSnapshot().context.hasOfflineChanges) return;
+    this.actor.send({ type: hasPendingUpdates ? "OFFLINE_CHANGES" : "CHANGES_FLUSHED" });
   }
 
   private publishTransportUpdate(pending: PendingUpdate): Promise<CollaborationUpdateAccepted> {
@@ -965,6 +974,7 @@ export class CollaborationRoomProvider {
     this.pendingUpdates = [];
     this.outbox = [];
     this.hasDroppedLocalChanges = true;
+    this.reportPendingUpdates();
   }
 
   private handleTransportFailure(message: string, attemptId: string): void {

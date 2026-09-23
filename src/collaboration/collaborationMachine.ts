@@ -94,7 +94,6 @@ export const collaborationMachine = setup({
       return {
         room: event.roomSession.room,
         role: event.roomSession.membership.role,
-        hasOfflineChanges: false,
         error: null,
       };
     }),
