@@ -53,11 +53,14 @@ export type RecordingTrackKind =
   | "whiteboard"
   | "chat";
 
+/**
+ * One entry of the SCR3 header's track list. Encode and decode copy each track
+ * whole, so a field this build does not declare survives a decode/encode round trip.
+ */
 export interface RecordingTrackMeta {
   id: string;
   kind: RecordingTrackKind;
   mimeType?: string;
-  codec?: string;
   source?: RecordingAudioSource | RecordingCameraSource;
   startOffsetMs?: number;
   durationMs?: number;

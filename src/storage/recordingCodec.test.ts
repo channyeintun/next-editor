@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Recording } from "../core/src";
+import type { Recording, RecordingTrackMeta } from "../core/src";
 import {
   createContentDelta,
   createContentEditDelta,
@@ -1013,6 +1013,23 @@ describe("recordingCodec", () => {
     expect(decoded.cameraFile).toBe("my-recording.webm");
     expect(decoded.cameraStartOffsetMs).toBe(80);
     expect(decoded.cameraBlob).toBeUndefined();
+  });
+
+  it("keeps header track fields this build does not declare", async () => {
+    // A file written by another build may give a track a field this one does not know.
+    // Encode and decode both copy each track whole, so opening and saving such a file
+    // keeps the field instead of dropping it.
+    const recording = createRecording({
+      audioFile: "recording-1.weba",
+      tracks: [
+        { id: "editor", kind: "editor", durationMs: 1200 },
+        { id: "audio", kind: "audio", mimeType: "audio/webm", codec: "opus" } as RecordingTrackMeta,
+      ],
+    });
+
+    const decoded = decodeRecordingStream(await encodeRecordingToStream(recording));
+
+    expect(decoded.tracks).toEqual(recording.tracks);
   });
 });
 
