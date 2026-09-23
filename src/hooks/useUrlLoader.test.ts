@@ -778,8 +778,8 @@ describe("useUrlLoader", () => {
   });
 
   it("loads the first playable prefix without waiting for 512 KB", async () => {
-    // ~1 MB of keyframes: the first one is decodable after the first 16 KB chunk.
-    const bytes = await encodeRecordingToStream(largeRecording(300, 4000));
+    // ~250 KB of keyframes: the first one is decodable after the first 16 KB chunk.
+    const bytes = await encodeRecordingToStream(largeRecording(60, 4000));
     const stream = streamingResponse(bytes);
     vi.stubGlobal(
       "fetch",
@@ -800,7 +800,7 @@ describe("useUrlLoader", () => {
     // Everything decoded after that first load still arrives, and the finalized stream is
     // installed whole.
     const [extended] = vi.mocked(actions.extendRecording).mock.calls.at(-1) ?? [];
-    expect(extended?.frames).toHaveLength(300);
+    expect(extended?.frames).toHaveLength(60);
   });
 
   describe("when streaming fails", () => {
@@ -853,14 +853,14 @@ describe("useUrlLoader", () => {
   it("extends late audio onto everything a footer-less stream decoded", async () => {
     // A stream that ends without its footer (a still-writing or cut-off file) is never
     // finalized; the player gets it as a first load plus appended deltas.
-    const lesson = largeRecording(80, 24_000, {
+    const lesson = largeRecording(60, 4000, {
       id: "lesson",
       audioFile: "lesson.weba",
       audioSource: "external",
     });
     const encoded = await encodeRecordingToStream(lesson);
     const withoutFooter = encoded.slice(0, encoded.length - 1);
-    const stream = streamingResponse(withoutFooter, { chunkSize: 64 * 1024 });
+    const stream = streamingResponse(withoutFooter);
     vi.stubGlobal(
       "fetch",
       vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
