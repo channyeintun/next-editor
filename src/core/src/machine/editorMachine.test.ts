@@ -161,6 +161,10 @@ class MockTextModel {
     return { lineNumber: 1, column: offset + 1 };
   }
 
+  canUndo() {
+    return false;
+  }
+
   applyEdits(edits: readonly monaco.editor.IIdentifiedSingleEditOperation[]) {
     const edit = edits[0];
 

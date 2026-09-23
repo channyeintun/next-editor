@@ -144,6 +144,13 @@ export const applySelectionDiff = (
  * content is the recording's history, not the viewer's edits, so it must stay off
  * the model's undo stack. There it merged into one element, and Ctrl+Z after a
  * lesson ended rewound the editor to the lesson's opening code.
+ *
+ * Replay therefore adds no undo history, so a model that can undo holds the
+ * viewer's own typing (an ended lesson's playback model stays editable). Those
+ * elements store offsets into the text they were typed in, `applyEdits` leaves
+ * them in place, and Monaco's undo applies them without checking, so Ctrl+Z after
+ * the rewrite would splice old text in at stale offsets. Such a model gets
+ * `setValue`, which replaces the content and clears that history.
  */
 export const applyContentDiff = (
   editor: monaco.editor.IStandaloneCodeEditor,
@@ -163,6 +170,11 @@ export const applyContentDiff = (
 
   // If content is identical, no need to apply any operations
   if (currentContent === targetContent) {
+    return true;
+  }
+
+  if (model.canUndo()) {
+    model.setValue(targetContent);
     return true;
   }
 
