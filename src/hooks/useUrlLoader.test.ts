@@ -117,17 +117,37 @@ function vttBody(): Uint8Array {
 /**
  * A response whose body arrives in `chunkSize` pieces, one per read, the way a slow download
  * does. `pulledBytes()` reports how much of it the loader has read so far, `cancelled()` whether
- * the loader cancelled the rest, and `failAfter` makes the download break after that many bytes.
+ * the loader cancelled the rest, `failAfter` makes the download break after that many bytes,
+ * `holdAfter` stalls it there until `resume` settles, and `signal` errors it on abort as fetch
+ * does.
  */
 function streamingResponse(
   bytes: Uint8Array,
-  { chunkSize = 16 * 1024, failAfter = Infinity }: { chunkSize?: number; failAfter?: number } = {},
+  {
+    chunkSize = 16 * 1024,
+    failAfter = Infinity,
+    holdAfter = Infinity,
+    resume,
+    signal,
+  }: {
+    chunkSize?: number;
+    failAfter?: number;
+    holdAfter?: number;
+    resume?: Promise<void>;
+    signal?: AbortSignal | null;
+  } = {},
 ) {
   let offset = 0;
   let cancelled = false;
   const body = new ReadableStream<Uint8Array>(
     {
-      pull(controller) {
+      start(controller) {
+        signal?.addEventListener("abort", () => {
+          controller.error(new DOMException("The operation was aborted.", "AbortError"));
+        });
+      },
+      async pull(controller) {
+        if (offset >= holdAfter) await resume;
         if (offset >= failAfter) {
           controller.error(new TypeError("network error"));
           return;
@@ -1051,5 +1071,70 @@ describe("useUrlLoader", () => {
     await waitFor(() => {
       expect(actions.addCaptionTrack).toHaveBeenCalledTimes(1);
     });
+  });
+
+  // The progressive path end to end: one load, then deltas in stream order, then the final
+  // recording. At ~650 KB this lesson gets a delta at the 512 KB step and one at the end.
+  it("hands a long lesson over as a load, ordered deltas and a final extend", async () => {
+    const bytes = await encodeRecordingToStream(largeRecording(220, 4000, { id: "long" }));
+    const stream = streamingResponse(bytes);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<() => Promise<Response>>(async () => stream.response),
+    );
+    const actions = makeActionsMock();
+    const { result } = renderLoader(actions);
+
+    await result.current.fetchNextEditorFile("https://example.com/long.ne");
+
+    const [loaded] = vi.mocked(actions.loadRecording).mock.calls[0] ?? [];
+    const deltas = vi.mocked(actions.appendRecordingDelta).mock.calls.map(([delta]) => delta);
+    expect(actions.loadRecording).toHaveBeenCalledTimes(1);
+    expect(deltas.length).toBeGreaterThanOrEqual(2);
+    const cursors = deltas.map((delta) => delta.cursor);
+    expect(cursors).toEqual([...cursors].sort((a, b) => a - b));
+    expect(new Set(cursors).size).toBe(cursors.length);
+    const appended = deltas.reduce((count, delta) => count + delta.newFrames.length, 0);
+    expect((loaded?.frames.length ?? 0) + appended).toBe(220);
+    const [final] = vi.mocked(actions.extendRecording).mock.calls.at(-1) ?? [];
+    expect(final?.frames).toHaveLength(220);
+    expect(final?.streamFinalized).toBe(true);
+  }, 15_000);
+
+  it("sends nothing more from a stream once a newer URL load starts", async () => {
+    const oldBytes = await encodeRecordingToStream(largeRecording(60, 4000, { id: "old" }));
+    const newBytes = await encodeRecordingToStream(createRecording({ id: "new" }));
+    const oldDownload = gate();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        async (input, init) => {
+          const url = targetUrl(typeof input === "string" ? input : input.toString());
+          if (url.endsWith("/old.ne")) {
+            return streamingResponse(oldBytes, {
+              holdAfter: 64 * 1024,
+              resume: oldDownload.opened,
+              signal: init?.signal,
+            }).response;
+          }
+          return fakeResponse(newBytes, { ok: true, contentType: "application/octet-stream" });
+        },
+      ),
+    );
+    const actions = makeActionsMock();
+    const { result } = renderLoader(actions);
+
+    const oldLoad = result.current.fetchNextEditorFile("https://example.com/old.ne");
+    await waitFor(() => {
+      expect(actions.loadRecording).toHaveBeenCalledTimes(1);
+    });
+    await result.current.fetchNextEditorFile("https://example.com/new.ne");
+    oldDownload.open();
+    await oldLoad;
+
+    const loadedIds = vi.mocked(actions.loadRecording).mock.calls.map(([loaded]) => loaded.id);
+    expect(loadedIds).toEqual(["old", "new"]);
+    expect(actions.appendRecordingDelta).not.toHaveBeenCalled();
+    expect(actions.extendRecording).not.toHaveBeenCalled();
   });
 });
