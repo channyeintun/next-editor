@@ -1,4 +1,5 @@
 import { readBytesWithLimit } from "../httpBody";
+import { sha256Hex } from "./bytes";
 import {
   MAX_COLLABORATION_ASSET_BYTES,
   collaborationAssetDescriptorSchema,
@@ -7,17 +8,12 @@ import {
 
 const MAX_ASSET_DELETE_PAGES = 100;
 
-export function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+function collaborationRoomAssetPrefix(roomId: string): string {
+  return `collaboration/rooms/${roomId}/assets/`;
 }
 
 export function collaborationAssetKey(roomId: string, assetId: string): string {
-  return `collaboration/rooms/${roomId}/assets/${assetId}`;
-}
-
-export async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", exactArrayBuffer(bytes));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${collaborationRoomAssetPrefix(roomId)}${assetId}`;
 }
 
 export async function readCollaborationAsset(
@@ -61,7 +57,7 @@ export async function deleteCollaborationRoomAssets(
   bucket: R2Bucket,
   roomId: string,
 ): Promise<number> {
-  const prefix = `collaboration/rooms/${roomId}/assets/`;
+  const prefix = collaborationRoomAssetPrefix(roomId);
   let cursor: string | undefined;
   let deleted = 0;
   for (let page = 0; page < MAX_ASSET_DELETE_PAGES; page += 1) {

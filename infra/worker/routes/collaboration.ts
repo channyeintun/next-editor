@@ -55,9 +55,9 @@ import {
 import {
   collaborationAssetKey,
   deleteCollaborationRoomAssets,
-  exactArrayBuffer,
   readCollaborationAsset,
 } from "../collaboration/assetStore";
+import { exactArrayBuffer, randomToken, sha256Hex } from "../collaboration/bytes";
 import type { Env } from "../env";
 import { readBodyWithLimit, readBytesWithLimit } from "../httpBody";
 import {
@@ -135,23 +135,6 @@ function invitationResponse(invitation: CollaborationInvitationRow) {
     revokedAt: invitation.revoked_at,
     createdAt: invitation.created_at,
   };
-}
-
-function encodeBase64Url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-function createInvitationToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return encodeBase64Url(bytes);
-}
-
-async function hashInvitationToken(token: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 async function readBoundedJson(
@@ -661,11 +644,11 @@ collaborationRoute.post("/rooms/:roomId/invitations", async (c) => {
   if (!access || access.member_role !== "owner" || access.status !== "active") {
     return c.json({ error: "not found" }, 404);
   }
-  const token = createInvitationToken();
+  const token = randomToken();
   const invitation = await createCollaborationInvitation(c.env.DB, {
     roomId: access.id,
     createdBy: user.id,
-    tokenHash: await hashInvitationToken(token),
+    tokenHash: await sha256Hex(token),
     role: input.data.role,
     maxUses: input.data.maxUses,
     expiresAt: Date.now() + input.data.expiresInHours * 60 * 60 * 1000,
@@ -829,7 +812,7 @@ collaborationRoute.post("/invitations/claim", async (c) => {
   if (!input.success) return c.json({ error: "invalid invitation" }, 400);
   const invitation = await getCollaborationInvitationByHash(
     c.env.DB,
-    await hashInvitationToken(input.data.token),
+    await sha256Hex(input.data.token),
   );
   if (!invitation) return c.json({ error: "invitation is invalid or expired" }, 404);
   const access = await claimCollaborationInvitation(c.env.DB, invitation, user.id);

@@ -3,8 +3,8 @@ import {
   collaborationAssetKey,
   deleteCollaborationRoomAssets,
   readCollaborationAsset,
-  sha256Hex,
 } from "./assetStore";
+import { sha256Hex } from "./bytes";
 
 describe("collaboration asset store", () => {
   it("hashes and bounds a private room asset", async () => {

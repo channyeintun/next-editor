@@ -64,8 +64,16 @@ import {
   type RoomSqliteStorage,
   type StoredAppendRoomSqliteUpdateResult,
 } from "./roomSqliteDocumentStore";
-import { exactArrayBuffer } from "./assetStore";
+import { collaborationAssetKey } from "./assetStore";
+import { exactArrayBuffer } from "./bytes";
 import type { CollaborationRoomLocationHint } from "./roomLocation";
+import {
+  ConnectionQuota,
+  decodeHeaderJson,
+  encodeHeaderJson,
+  isCurrentRoom,
+  isOpen,
+} from "./socketSupport";
 import type { Env } from "../env";
 
 const ROOM_ORIGIN = "https://collaboration-room.internal";
@@ -114,29 +122,9 @@ type SocketAttachment = z.infer<typeof socketAttachmentSchema>;
 
 type ClientUpdateFrame = Extract<CollaborationBinaryFrame, { kind: "client-update" }>;
 
-function encodeCanonicalSession(session: CanonicalSocketSession): string {
-  return encodeURIComponent(JSON.stringify(canonicalSocketSessionSchema.parse(session)));
-}
-
-function decodeCanonicalSession(request: Request): CanonicalSocketSession | null {
-  const encoded = request.headers.get(SESSION_HEADER);
-  if (!encoded) return null;
-  try {
-    const parsed = JSON.parse(decodeURIComponent(encoded)) as unknown;
-    const result = canonicalSocketSessionSchema.safeParse(parsed);
-    return result.success ? result.data : null;
-  } catch {
-    return null;
-  }
-}
-
 function attachmentFor(socket: WebSocket): SocketAttachment | null {
   const result = socketAttachmentSchema.safeParse(socket.deserializeAttachment());
   return result.success ? result.data : null;
-}
-
-function isOpen(socket: WebSocket): boolean {
-  return socket.readyState === 1;
 }
 
 function sendMessage(socket: WebSocket, message: CollaborationWebSocketServerMessage): void {
@@ -194,7 +182,7 @@ export async function forwardCollaborationWebSocket(
   const stub = roomStub(env, session.roomId);
   if (!stub) return new Response("collaboration WebSocket unavailable", { status: 503 });
   const headers = new Headers(request.headers);
-  headers.set(SESSION_HEADER, encodeCanonicalSession(session));
+  headers.set(SESSION_HEADER, encodeHeaderJson(canonicalSocketSessionSchema, session));
   return stub.fetch(new Request(request, { headers }));
 }
 
@@ -292,8 +280,7 @@ export async function deleteCollaborationRoomSqliteDocument(
 export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private roomUpdateWindowSecond = 0;
   private roomUpdateWindowCount = 0;
-  private connectionWindowMinute = 0;
-  private readonly connectionWindowCounts = new Map<string, number>();
+  private readonly connectionQuota = new ConnectionQuota(MAX_USER_CONNECTIONS_PER_MINUTE);
   private sqliteCompactionScheduled = false;
   private readonly sqliteDocument: RoomSqliteDocumentStore;
   private binaryDocument: Y.Doc | null = null;
@@ -318,7 +305,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       if (!parsed.success) {
         return Response.json({ error: "invalid SQLite document initialization" }, { status: 400 });
       }
-      if (!this.isCurrentRoom(parsed.data.roomId)) {
+      if (!isCurrentRoom(this.ctx, parsed.data.roomId)) {
         return Response.json({ error: "invalid collaboration room" }, { status: 403 });
       }
       this.sqliteDocument.initialize(parsed.data.snapshot);
@@ -332,7 +319,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       const parsed = teachingDocumentInitializationSchema.safeParse(
         await request.json().catch(() => null),
       );
-      if (!parsed.success || !this.isCurrentRoom(parsed.data.roomId)) {
+      if (!parsed.success || !isCurrentRoom(this.ctx, parsed.data.roomId)) {
         return Response.json({ error: "invalid teaching initialization" }, { status: 400 });
       }
       return this.initializeTeachingDocument(parsed.data);
@@ -350,7 +337,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       );
       if (!parsed.success)
         return Response.json({ error: "invalid control command" }, { status: 400 });
-      if (!this.isCurrentRoom(parsed.data.event.roomId)) {
+      if (!isCurrentRoom(this.ctx, parsed.data.event.roomId)) {
         return Response.json({ error: "invalid collaboration room" }, { status: 403 });
       }
       this.applyControl(parsed.data);
@@ -472,12 +459,12 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   }
 
   private acceptConnection(request: Request): Response {
-    const session = decodeCanonicalSession(request);
+    const session = decodeHeaderJson(canonicalSocketSessionSchema, request, SESSION_HEADER);
     if (!session) return new Response("invalid collaboration session", { status: 403 });
-    if (!this.isCurrentRoom(session.roomId)) {
+    if (!isCurrentRoom(this.ctx, session.roomId)) {
       return new Response("invalid collaboration room", { status: 403 });
     }
-    if (!this.consumeConnectionQuota(session.userId)) {
+    if (!this.connectionQuota.consume(session.userId)) {
       return new Response("collaboration connection rate limit exceeded", {
         status: 429,
         headers: { "Retry-After": "60" },
@@ -536,11 +523,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       );
     }
     return new Response(null, { status: 101, webSocket: client });
-  }
-
-  private isCurrentRoom(roomId: string): boolean {
-    const objectName = this.ctx.id.name;
-    return !objectName || objectName === roomId;
   }
 
   private awarenessClientIdInUse(clientId: number, except?: WebSocket): boolean {
@@ -1038,7 +1020,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       }
       try {
         for (const manifest of teaching.slides.values()) {
-          const assetKey = `collaboration/rooms/${input.roomId}/assets/${manifest.asset.id}`;
+          const assetKey = collaborationAssetKey(input.roomId, manifest.asset.id);
           const asset = await getCollaborationAsset(this.env.DB, input.roomId, manifest.asset.id);
           const object = await this.env.BUCKET.head(assetKey);
           if (
@@ -1165,17 +1147,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     this.binaryDocument?.destroy();
     this.binaryDocument = null;
     this.binaryTeachingIntegrity = null;
-  }
-
-  private consumeConnectionQuota(userId: string): boolean {
-    const minute = Math.floor(Date.now() / 60_000);
-    if (this.connectionWindowMinute !== minute) {
-      this.connectionWindowMinute = minute;
-      this.connectionWindowCounts.clear();
-    }
-    const count = (this.connectionWindowCounts.get(userId) ?? 0) + 1;
-    this.connectionWindowCounts.set(userId, count);
-    return count <= MAX_USER_CONNECTIONS_PER_MINUTE;
   }
 
   private scheduleSqliteCompaction(): void {

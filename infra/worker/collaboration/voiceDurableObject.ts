@@ -45,6 +45,14 @@ import {
 import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
 import type { Env } from "../env";
 import { readBodyWithLimit } from "../httpBody";
+import { randomToken, sha256Hex } from "./bytes";
+import {
+  ConnectionQuota,
+  decodeHeaderJson,
+  encodeHeaderJson,
+  isCurrentRoom,
+  isOpen,
+} from "./socketSupport";
 
 const VOICE_ORIGIN = "https://collaboration-voice.internal";
 const VOICE_SESSION_HEADER = "X-Collaboration-Voice-Session";
@@ -127,40 +135,9 @@ function attachmentFor(socket: WebSocket): VoiceSocketAttachment | null {
   return result.success ? result.data : null;
 }
 
-function isOpen(socket: WebSocket): boolean {
-  return socket.readyState === 1;
-}
-
-function encodeCanonicalVoiceSession(session: CanonicalVoiceSession): string {
-  return encodeURIComponent(JSON.stringify(canonicalVoiceSessionSchema.parse(session)));
-}
-
-function decodeCanonicalVoiceSession(request: Request): CanonicalVoiceSession | null {
-  const encoded = request.headers.get(VOICE_SESSION_HEADER);
-  if (!encoded) return null;
-  try {
-    const parsed = JSON.parse(decodeURIComponent(encoded)) as unknown;
-    const result = canonicalVoiceSessionSchema.safeParse(parsed);
-    return result.success ? result.data : null;
-  } catch {
-    return null;
-  }
-}
-
 function sendVoiceMessage(socket: WebSocket, message: VoiceServerMessage): void {
   if (!isOpen(socket)) return;
   socket.send(JSON.stringify(voiceServerMessageSchema.parse(message)));
-}
-
-function encodeBase64Url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function isVoiceChatEnabled(env: Env): boolean {
@@ -185,7 +162,7 @@ export async function forwardCollaborationVoiceWebSocket(
   const stub = voiceRoomStub(env, session.roomId);
   if (!stub) return Response.json({ error: "voice chat unavailable" }, { status: 503 });
   const headers = new Headers(request.headers);
-  headers.set(VOICE_SESSION_HEADER, encodeCanonicalVoiceSession(session));
+  headers.set(VOICE_SESSION_HEADER, encodeHeaderJson(canonicalVoiceSessionSchema, session));
   return stub.fetch(new Request(request, { headers }));
 }
 
@@ -204,7 +181,7 @@ export async function forwardCollaborationVoiceSfuRequest(
   const headers = new Headers();
   const contentType = request.headers.get("Content-Type");
   if (contentType) headers.set("Content-Type", contentType);
-  headers.set(VOICE_SESSION_HEADER, encodeCanonicalVoiceSession(input.session));
+  headers.set(VOICE_SESSION_HEADER, encodeHeaderJson(canonicalVoiceSessionSchema, input.session));
   headers.set(VOICE_CAPABILITY_HEADER, input.capability);
   headers.set(VOICE_CONNECTION_HEADER, input.voiceConnectionId);
   return stub.fetch(`${VOICE_ORIGIN}/sfu${input.subpath}`, {
@@ -245,8 +222,7 @@ function noStoreJson(body: unknown, status = 200): Response {
 // migration (plan §5.2).
 export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
   private roomRevision: number | null = null;
-  private connectionWindowMinute = 0;
-  private readonly connectionWindowCounts = new Map<string, number>();
+  private readonly connectionQuota = new ConnectionQuota(MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE);
   private readonly sfuRequestQueue = new VoiceSfuRequestQueue();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -266,7 +242,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       if (!parsed.success) {
         return Response.json({ error: "invalid control command" }, { status: 400 });
       }
-      if (!this.isCurrentRoom(parsed.data.event.roomId)) {
+      if (!isCurrentRoom(this.ctx, parsed.data.event.roomId)) {
         return Response.json({ error: "invalid collaboration room" }, { status: 403 });
       }
       this.applyControl(parsed.data);
@@ -276,22 +252,6 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       return this.handleSfuRequest(request, url);
     }
     return new Response("not found", { status: 404 });
-  }
-
-  private isCurrentRoom(roomId: string): boolean {
-    const objectName = this.ctx.id.name;
-    return !objectName || objectName === roomId;
-  }
-
-  private consumeConnectionQuota(userId: string): boolean {
-    const minute = Math.floor(Date.now() / 60_000);
-    if (this.connectionWindowMinute !== minute) {
-      this.connectionWindowMinute = minute;
-      this.connectionWindowCounts.clear();
-    }
-    const count = (this.connectionWindowCounts.get(userId) ?? 0) + 1;
-    this.connectionWindowCounts.set(userId, count);
-    return count <= MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE;
   }
 
   private nextRevision(): number {
@@ -397,8 +357,8 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
   }
 
   private async acceptConnection(request: Request): Promise<Response> {
-    const session = decodeCanonicalVoiceSession(request);
-    if (!session || !this.isCurrentRoom(session.roomId)) {
+    const session = decodeHeaderJson(canonicalVoiceSessionSchema, request, VOICE_SESSION_HEADER);
+    if (!session || !isCurrentRoom(this.ctx, session.roomId)) {
       return Response.json({ error: "invalid voice session" }, { status: 403 });
     }
 
@@ -406,12 +366,10 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     // Object events can interleave at awaits; scanning first would let two
     // simultaneous reconnects both miss and fail to supersede each other.
     const voiceConnectionId = crypto.randomUUID();
-    const capabilityBytes = new Uint8Array(32);
-    crypto.getRandomValues(capabilityBytes);
-    const capability = encodeBase64Url(capabilityBytes);
+    const capability = randomToken();
     const capabilityDigest = await sha256Hex(capability);
 
-    if (!this.consumeConnectionQuota(session.userId)) {
+    if (!this.connectionQuota.consume(session.userId)) {
       return Response.json(
         { error: "voice connection rate limit exceeded" },
         { status: 429, headers: { "Retry-After": "60" } },
@@ -776,7 +734,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     const secret = this.env.REALTIME_SFU_APP_SECRET;
     if (!appId || !secret) return noStoreJson({ error: "voice chat unavailable" }, 503);
 
-    const session = decodeCanonicalVoiceSession(request);
+    const session = decodeHeaderJson(canonicalVoiceSessionSchema, request, VOICE_SESSION_HEADER);
     const capability = voiceCapabilitySchema.safeParse(
       request.headers.get(VOICE_CAPABILITY_HEADER),
     );
@@ -785,7 +743,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     );
     if (
       !session ||
-      !this.isCurrentRoom(session.roomId) ||
+      !isCurrentRoom(this.ctx, session.roomId) ||
       !capability.success ||
       !voiceConnectionId.success
     ) {

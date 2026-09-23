@@ -11,6 +11,7 @@ import {
   decodeYjsSnapshot,
   decodeYjsUpdate,
 } from "../../../src/collaboration/yjsUpdates";
+import { exactArrayBuffer } from "./bytes";
 
 // Updates folded into the snapshot per compaction pass; the room's alarm runs
 // another pass while more remain, so a long tail shrinks in bounded steps.
@@ -107,10 +108,6 @@ function legacySnapshotColumn(snapshot: Uint8Array): string {
   return 4 * Math.ceil(snapshot.byteLength / 3) <= LEGACY_SNAPSHOT_MAX_LENGTH
     ? encodeBase64(snapshot)
     : "";
-}
-
-function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 function streamId(sequence: number): string {
