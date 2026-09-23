@@ -1179,16 +1179,20 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = attachmentFor(socket);
       if (!attachment || attachment.roomId !== event.roomId) continue;
-      // D1's role version is room-wide and monotonic, and each route POSTs
-      // /control on its own, so commands can arrive out of order. An older one
-      // must not restore a replaced role or remove a member who rejoined.
+      const isTarget = event.targetUserId !== null && attachment.userId === event.targetUserId;
+      // A removal closes the member's sockets whatever their role version: the
+      // version is room-wide, so another member's later change may already
+      // have raised it here, and a repeated removal carries the current one.
+      if (isTarget && (command.targetRole === null || command.targetRole === undefined)) {
+        sendMessage(socket, { type: "control.room", data: event });
+        socket.close(4003, "room access revoked");
+        continue;
+      }
+      // Each route POSTs /control on its own, so commands can arrive out of
+      // order; an older role change must not restore a replaced role. (A
+      // skipped one is corrected by the next access recheck.)
       if (event.roleVersion <= attachment.roleVersion) continue;
-      if (event.targetUserId && attachment.userId === event.targetUserId) {
-        if (command.targetRole === null || command.targetRole === undefined) {
-          sendMessage(socket, { type: "control.room", data: event });
-          socket.close(4003, "room access revoked");
-          continue;
-        }
+      if (isTarget && command.targetRole) {
         const next = this.withRole(attachment, command.targetRole, event.roleVersion);
         socket.serializeAttachment(next);
       } else {

@@ -36,6 +36,7 @@ import {
   type CollaborationRoomAccess,
 } from "../../db/collaborationQueries";
 import type { Env } from "../env";
+import { FakeWebSocket } from "../testing/fakeWebSocket";
 import { SqliteTestStorage } from "../testing/sqliteStorage";
 import { CollaborationRoomDurableObject } from "./roomDurableObject";
 
@@ -60,44 +61,14 @@ const OWNER_ID = "20000000-0000-4000-8000-000000000001";
 const MEMBER_ID = "20000000-0000-4000-8000-000000000002";
 const PEER_ID = "20000000-0000-4000-8000-000000000003";
 const CLIENT_ID = "30000000-0000-4000-8000-000000000001";
-const WEBSOCKET_OPEN = 1;
-const WEBSOCKET_CLOSED = 3;
 
 let nextId = 1;
 function uuid(): string {
   return `40000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`;
 }
 
-/** The parts of a hibernatable server WebSocket the room uses. */
-class FakeSocket {
-  readyState = WEBSOCKET_OPEN;
-  closeCode: number | null = null;
-  readonly sent: Array<string | ArrayBuffer> = [];
-  private attachment: unknown = null;
-
-  serializeAttachment(value: unknown): void {
-    this.attachment = structuredClone(value);
-  }
-
-  deserializeAttachment(): unknown {
-    return structuredClone(this.attachment);
-  }
-
-  send(message: string | ArrayBuffer): void {
-    this.sent.push(message);
-  }
-
-  close(code?: number): void {
-    this.closeCode = code ?? null;
-    this.readyState = WEBSOCKET_CLOSED;
-  }
-
-  messages(): Array<Record<string, unknown>> {
-    return this.sent.flatMap((message) =>
-      typeof message === "string" ? [JSON.parse(message) as Record<string, unknown>] : [],
-    );
-  }
-
+/** A fake hibernatable socket that also decodes the room's binary frames. */
+class FakeSocket extends FakeWebSocket {
   frames(): CollaborationBinaryFrame[] {
     return this.sent.flatMap((message) =>
       typeof message === "string" ? [] : [decodeCollaborationBinaryFrame(message)],
@@ -383,14 +354,26 @@ describe("CollaborationRoomDurableObject document updates", () => {
     expect(await persistedText()).toBe("seed");
   });
 
-  it("keeps a member who rejoined at a newer version when an older removal arrives", async () => {
+  // The role version is room-wide: another member's change can raise this
+  // socket's version before the removal arrives, and a repeated removal
+  // carries the version the room already has.
+  it("closes a removed member even when a later change reached the room first", async () => {
     const { connect, control } = await createRoom();
-    const member = connect(MEMBER_ID, "editor", { roleVersion: 6 });
+    const member = connect(MEMBER_ID, "editor");
 
-    await control(5, MEMBER_ID, null);
+    await control(3, PEER_ID, "editor");
+    await control(2, MEMBER_ID, null);
 
-    expect(member.closeCode).toBeNull();
-    expect(member.messages()).toEqual([]);
+    expect(member.closeCode).toBe(4003);
+  });
+
+  it("closes a removed member when the owner repeats the removal", async () => {
+    const { connect, control } = await createRoom();
+    const member = connect(MEMBER_ID, "editor", { roleVersion: 2 });
+
+    await control(2, MEMBER_ID, null);
+
+    expect(member.closeCode).toBe(4003);
   });
 });
 

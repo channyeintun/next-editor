@@ -693,20 +693,25 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     if (command.targetRole === undefined) return;
     const targetRole = command.targetRole;
     for (const { socket, attachment } of this.activeSockets()) {
-      // D1 roleVersion is room-wide and monotonic. Ignore delayed control
-      // deliveries so an old removal cannot close a member who rejoined at a
-      // newer version.
-      if (event.roleVersion <= attachment.roleVersion) continue;
+      // D1 roleVersion is room-wide and monotonic; a delayed command must not
+      // move a socket's version or role backwards.
       if (attachment.userId !== event.targetUserId) {
-        this.serializeAttachment(socket, { ...attachment, roleVersion: event.roleVersion });
+        if (event.roleVersion > attachment.roleVersion) {
+          this.serializeAttachment(socket, { ...attachment, roleVersion: event.roleVersion });
+        }
         continue;
       }
+      // A removal retires the member's sockets whatever their role version:
+      // another member's later change may already have raised it here, and a
+      // repeated removal carries the current one. Nothing else revalidates a
+      // member who stays silent.
       if (targetRole === null) {
         this.retireSocket(socket, attachment, CLOSE_REMOVED, "removed from room", {
           reason: "member-removed",
         });
         continue;
       }
+      if (event.roleVersion <= attachment.roleVersion) continue;
       if (attachment.role !== targetRole) {
         const updated: VoiceSocketAttachment = {
           ...attachment,

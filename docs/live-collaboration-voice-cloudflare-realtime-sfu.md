@@ -1005,8 +1005,9 @@ reads fail closed.
 - Voice Durable Object runtime tests (hibernation attachment restoration, duplicate-generation
   replacement, socket lifecycle): at the time the DO's `cloudflare:workers` import had no test
   stand-in. `infra/worker/vitest.config.ts` now aliases it to `infra/worker/testing/`, and
-  `roomDurableObject.test.ts` drives the room Durable Object with fake sockets that way; the
-  voice DO has no such suite yet. The pure authorization matrix is covered by
+  `roomDurableObject.test.ts` drives the room Durable Object with fake sockets that way;
+  `voiceDurableObject.test.ts` covers only the voice DO's membership control so far. The pure
+  authorization matrix is covered by
   `realtimeSfuGateway.test.ts`; behaviors that need workerd itself (real hibernation, the 101
   upgrade) must still be exercised by the staging smoke test in
   `deployment-operations-collaboration.md` (and a `@cloudflare/vitest-pool-workers` suite is a
