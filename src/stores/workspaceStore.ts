@@ -52,7 +52,6 @@ export { normalizeProject, WorkspaceProjectValidationError } from "./workspacePr
 export interface StoredWorkspaceSnapshot {
   activeFilePath: string;
   project: WorkspaceProject;
-  sidebarWidth?: number;
   /** Legacy v1 generation key; removed after descriptor migration. */
   assetGeneration?: string;
 }
@@ -228,7 +227,6 @@ export function createInitialWorkspaceSnapshot(
   return {
     activeFilePath: project.entryFilePath,
     project,
-    sidebarWidth: DEFAULT_FILE_SIDEBAR_WIDTH,
   };
 }
 
@@ -540,7 +538,8 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
   const savedSnapshot: StoredWorkspaceSnapshot = { ...initialSnapshot, project, activeFilePath };
   const collapsedFolders: string[] = [];
   const sidebarScrollTop = 0;
-  const sidebarWidth = normalizeSidebarWidth(initialSnapshot.sidebarWidth);
+  // Width is session-only (see sidebarLayout.ts): every workspace starts at the default.
+  const sidebarWidth = DEFAULT_FILE_SIDEBAR_WIDTH;
   const sidebarCollapsed = readStoredFileSidebarCollapsed();
 
   return {
@@ -1067,7 +1066,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           savedSnapshot: StoredWorkspaceSnapshot;
           collapsedFolders?: string[];
           sidebarScrollTop?: number;
-          sidebarWidth?: number;
         },
       ) => {
         const baseContext: InitializedWorkspaceState = context.isInitialized
@@ -1083,10 +1081,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             activeFilePath: event.activeFilePath,
             collapsedFolders: event.collapsedFolders ?? [],
             sidebarScrollTop: normalizeSidebarScrollTop(event.sidebarScrollTop),
-            sidebarWidth:
-              event.sidebarWidth === undefined
-                ? baseContext.sidebarWidth
-                : normalizeSidebarWidth(event.sidebarWidth),
             savedSnapshot: event.savedSnapshot,
             workspaceLoadVersion: baseContext.workspaceLoadVersion + 1,
             projectVersion: baseContext.projectVersion + 1,
