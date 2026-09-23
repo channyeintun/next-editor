@@ -37,6 +37,16 @@ export async function contentCacheKey(prefix: string, content: string): Promise<
 export type RateLimitDecision = "allowed" | "limited" | "unavailable";
 
 /**
+ * Workers KV accepts one write per key per second and rejects the next one with
+ * "KV PUT failed: 429 Too Many Requests". On the window counter that means this
+ * user was charged less than a second ago: they are calling too fast, which is
+ * a limit, not an outage of the policy store (its read just succeeded).
+ */
+function isKvWriteRateLimited(error: unknown): boolean {
+  return error instanceof Error && /\b429\b/.test(error.message);
+}
+
+/**
  * Charge one call against `userId`'s current minute window.
  *
  * `keyPrefix` and `limit` are per route, and a route that serves both /run and
@@ -53,20 +63,31 @@ export async function checkPlaygroundRateLimit(
     return "unavailable";
   }
   const windowKey = `${options.keyPrefix}:${options.userId}:${Math.floor(Date.now() / 60_000)}`;
+  let count: number;
   try {
-    const count = Number((await cache.get(windowKey)) ?? "0");
-    if (!Number.isSafeInteger(count) || count < 0) {
-      console.error(`${options.label} rate-limit state was invalid`);
-      return "unavailable";
-    }
-    if (count >= options.limit) {
-      return "limited";
-    }
+    count = Number((await cache.get(windowKey)) ?? "0");
+  } catch {
+    console.error(`${options.label} rate-limit check failed`);
+    return "unavailable";
+  }
+  if (!Number.isSafeInteger(count) || count < 0) {
+    console.error(`${options.label} rate-limit state was invalid`);
+    return "unavailable";
+  }
+  if (count >= options.limit) {
+    return "limited";
+  }
+  try {
     // Two windows' worth of TTL: the key only has to outlive the minute it
     // counts, and KV cannot expire it precisely on the boundary.
     await cache.put(windowKey, String(count + 1), { expirationTtl: 120 });
     return "allowed";
-  } catch {
+  } catch (error) {
+    // Still refused either way: a call that could not be charged never goes
+    // upstream, or a burst inside one second would all pass uncounted.
+    if (isKvWriteRateLimited(error)) {
+      return "limited";
+    }
     console.error(`${options.label} rate-limit check failed`);
     return "unavailable";
   }
