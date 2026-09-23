@@ -1,7 +1,8 @@
 // Persists across the full-page OAuth redirect (see docs/upload-modal-ux-spec.md's
 // "signed-out flow"). Uses its own tiny IndexedDB store rather than
-// localStorage/sessionStorage — the recording itself already lives in
-// IndexedDB, so this keeps everything in one storage system. Self-contained
+// localStorage/sessionStorage — the upload modal stores the recording itself in
+// IndexedDB right before this pointer, so this keeps everything in one storage
+// system. Self-contained
 // rather than reusing src/storage/idb.ts (that's internal plumbing for the
 // recording/workspace stores specifically, not a general-purpose export) —
 // a single-key get/set/delete doesn't need shared infrastructure.

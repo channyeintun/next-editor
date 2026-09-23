@@ -8,6 +8,7 @@ const recovery = vi.hoisted(() => ({
   clearIntent: vi.fn<() => Promise<void>>(),
   loadIntent: vi.fn<() => Promise<{ recordingId: string; draft?: { title?: string } } | null>>(),
   loadRecording: vi.fn<(id: string) => Promise<Recording | null>>(),
+  deleteRecording: vi.fn<(id: string) => Promise<void>>(),
   uploadModal: vi.fn<() => null>(() => null),
 }));
 
@@ -28,6 +29,9 @@ vi.mock("../storage/RecordingStorage", () => ({
   RecordingStorage: class {
     loadById(id: string) {
       return recovery.loadRecording(id);
+    }
+    delete(id: string) {
+      return recovery.deleteRecording(id);
     }
   },
 }));
@@ -55,6 +59,7 @@ describe("CodeRoute upload recovery", () => {
     });
     recovery.clearIntent.mockResolvedValue();
     recovery.loadRecording.mockResolvedValue(recording);
+    recovery.deleteRecording.mockResolvedValue();
   });
 
   it("survives the StrictMode effect replay and clears only after modal handoff", async () => {
@@ -67,6 +72,26 @@ describe("CodeRoute upload recovery", () => {
     await waitFor(() => expect(recovery.uploadModal).toHaveBeenCalled());
     expect(recovery.loadRecording).toHaveBeenCalledTimes(1);
     expect(recovery.clearIntent).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletes the take kept across sign-in once the modal owns it", async () => {
+    render(<CodeRoute />);
+
+    await waitFor(() => expect(recovery.deleteRecording).toHaveBeenCalledWith(recording.id));
+    expect(recovery.uploadModal).toHaveBeenCalled();
+    expect(recovery.clearIntent).toHaveBeenCalledTimes(1);
+  });
+
+  it("still hands off when the kept take cannot be deleted", async () => {
+    recovery.deleteRecording.mockRejectedValueOnce(new Error("IndexedDB unavailable"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    render(<CodeRoute />);
+
+    await waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(recovery.uploadModal).toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+    warn.mockRestore();
   });
 
   it("retains a transient failure and retries without consuming the intent", async () => {
@@ -114,6 +139,7 @@ describe("CodeRoute upload recovery", () => {
     await waitFor(() => expect(recovery.clearIntent).toHaveBeenCalledTimes(1));
     expect(recovery.loadRecording).not.toHaveBeenCalled();
     expect(recovery.uploadModal).not.toHaveBeenCalled();
+    await waitFor(() => expect(recovery.deleteRecording).toHaveBeenCalledWith(recording.id));
   });
 
   it("does nothing after unmount while the intent load is pending", async () => {

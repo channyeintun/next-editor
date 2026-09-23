@@ -256,10 +256,11 @@ token is opaque (random), validated against D1 on each authed request; sessions
 expire (`expires_at`) and can be revoked by deleting the row.
 
 **OAuth redirect + the recording:** a full-page redirect to Google would drop an
-open modal and in-memory state. Mitigation: the finished recording is already
-persisted to IndexedDB by the recorder, so before redirecting the modal stores a
-small "resume intent" (recording id + `returnTo`); on return, the host reopens
-the upload modal against the persisted recording.
+open modal and in-memory state. Mitigation: before redirecting, the modal saves
+the finished recording to IndexedDB and then a small "resume intent" (recording
+id + `returnTo`) pointing at it, and it stays on the page if either save fails;
+on return, the host reopens the upload modal against the persisted recording and
+deletes the stored copy along with the intent.
 
 ## API surface (Hono routes)
 

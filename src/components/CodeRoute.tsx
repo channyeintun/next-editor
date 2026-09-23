@@ -13,6 +13,20 @@ import {
 } from "@next-editor/infra";
 import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
 
+/**
+ * Consumes the sign-in resume pointer together with the take it points at: the
+ * upload modal stored that take only so it could cross the redirect, and once the
+ * pointer is gone nothing else would ever read or delete it.
+ */
+async function consumeResumeIntent(intent: ResumeIntent): Promise<void> {
+  await clearResumeIntent();
+  try {
+    await new RecordingStorage().delete(intent.recordingId);
+  } catch (error) {
+    console.warn("Failed to delete the recording kept across sign-in:", error);
+  }
+}
+
 // Composition root for /code: this is the one place that wires infra's
 // upload modal into the editor (renderPostRecordingModal), plus a second,
 // independent trigger for the "resume after the OAuth redirect" case — a
@@ -56,7 +70,7 @@ export default function CodeRoute() {
         // Backed out of Google's sign-in screen -> nothing to resume into;
         // this is a confirmed terminal outcome, so consume the intent.
         if (!isSignedIn) {
-          await clearResumeIntent();
+          await consumeResumeIntent(intent);
           resumeCompletedRef.current = true;
           return;
         }
@@ -66,7 +80,7 @@ export default function CodeRoute() {
 
         // The recording was deliberately removed or belongs to another device.
         if (!recording) {
-          await clearResumeIntent();
+          await consumeResumeIntent(intent);
           resumeCompletedRef.current = true;
           return;
         }
@@ -79,7 +93,7 @@ export default function CodeRoute() {
         // The modal now owns a complete in-memory recording, so consuming the
         // retry pointer cannot lose the pending upload.
         try {
-          await clearResumeIntent();
+          await consumeResumeIntent(intent);
         } catch (error) {
           console.warn("Failed to clear the upload resume intent:", error);
         }

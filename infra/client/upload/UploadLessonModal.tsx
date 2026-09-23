@@ -3,9 +3,10 @@ import axios from "axios";
 import { Captions, ImagePlus, X } from "lucide-react";
 import type { CaptionCue, Recording } from "@app/core/src";
 import { copyTextToClipboard } from "@app/components/fileSidebarHelpers";
+import { createRecordingStorage } from "@app/storage/RecordingStorage";
 import { useAuth, signInUrl } from "../auth/useAuth";
 import { useUploadLesson, usePublishLesson, formatDuration } from "./useUploadLesson";
-import { saveResumeIntent } from "./resumeIntent";
+import { saveResumeIntent, type ResumeIntent } from "./resumeIntent";
 import { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./thumbnailConstraints";
 import { CAPTION_ACCEPT, MAX_CAPTION_BYTES } from "./captionConstraints";
 import { resizeThumbnail } from "./resizeThumbnail";
@@ -83,6 +84,7 @@ export default function UploadLessonModal({
   const [captionTracks, setCaptionTracks] = useState<SelectedCaption[]>([]);
   const [captionError, setCaptionError] = useState<string | null>(null);
   const captionInputRef = useRef<HTMLInputElement | null>(null);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   const { upload, cancel, progress, isUploading, error, reset } = useUploadLesson();
   const publish = usePublishLesson();
@@ -102,17 +104,30 @@ export default function UploadLessonModal({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  const handleSignIn = async () => {
-    posthog?.capture("sign_in_initiated", { trigger: "upload_modal" });
+  // Signing in is a full-page redirect, which destroys this in-memory take. Store the
+  // take on this device first, then the pointer CodeRoute follows back to it. If either
+  // cannot be stored, stay here: navigating away would lose the only copy.
+  const redirectToSignIn = async (draft?: ResumeIntent["draft"]) => {
     try {
+      await createRecordingStorage().save(recording);
       await saveResumeIntent({
         recordingId: recording.id,
         returnTo: window.location.pathname,
+        draft,
       });
     } catch (err) {
-      console.error("Failed to save resume intent", err);
+      console.error("Failed to keep the recording across sign-in", err);
+      setSignInError(
+        "This recording couldn't be saved on this device, so signing in now would lose it. Export it first, then sign in.",
+      );
+      return;
     }
     window.location.href = signInUrl(window.location.pathname);
+  };
+
+  const handleSignIn = async () => {
+    posthog?.capture("sign_in_initiated", { trigger: "upload_modal" });
+    await redirectToSignIn();
   };
 
   const handleSelectThumbnail = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -238,6 +253,7 @@ export default function UploadLessonModal({
       return;
     }
     setTitleError(null);
+    setSignInError(null);
 
     try {
       const result = await upload({
@@ -272,16 +288,7 @@ export default function UploadLessonModal({
       if (axios.isAxiosError(err) && err.response?.status === 401) {
         // Session expired mid-form — unlike the initial signed-out entry
         // (which never shows a form), typed values must survive this redirect.
-        try {
-          await saveResumeIntent({
-            recordingId: recording.id,
-            returnTo: window.location.pathname,
-            draft: { title: trimmedTitle, description, tags: tagsInput },
-          });
-        } catch (resumeErr) {
-          console.error("Failed to save resume intent", resumeErr);
-        }
-        window.location.href = signInUrl(window.location.pathname);
+        await redirectToSignIn({ title: trimmedTitle, description, tags: tagsInput });
         return;
       }
       // Any other error: `error` from useUploadLesson already reflects it,
@@ -363,6 +370,7 @@ export default function UploadLessonModal({
             <p className="text-xs text-slate-400">
               Sign in to save and share this recording — {formatDuration(recording.duration)} long.
             </p>
+            {signInError ? <p className="text-xs text-rose-300">{signInError}</p> : null}
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -563,7 +571,9 @@ export default function UploadLessonModal({
               />
             </div>
 
-            {error ? (
+            {signInError ? (
+              <p className="text-sm text-rose-300">{signInError}</p>
+            ) : error ? (
               <p className="text-sm text-rose-300">
                 {axios.isAxiosError(error) && error.response?.status === 409
                   ? "That recording was already uploaded — try again."
