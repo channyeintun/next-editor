@@ -39,7 +39,10 @@ Both are exposed from the actions hook (`useNextEditorActions`) and used by the 
    are sibling files. The stateful reader
    [`createStreamingRecordingReader`](../src/storage/streamingRecordingCodec/decode.ts) tolerates a
    **missing footer** (still-writing stream) and a **truncated trailing segment** (mid-download),
-   decoding only newly-arrived complete segments on each `push()` call.
+   decoding only newly-arrived complete segments on each `push()` call. A segment of a kind this
+   build does not know (a newer writer's) is skipped once the footer has arrived. Before that, both
+   decoders stop at it, because the first bytes of a partial footer can read as one, so a live
+   stream from a newer writer plays only up to its first new-kind segment until it finishes.
 
 2. **Forward-only replay.** Playback reconstructs a frame from the nearest keyframe **at or
    before** the target, applying deltas forward

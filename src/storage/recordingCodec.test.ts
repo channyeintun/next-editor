@@ -16,7 +16,10 @@ import {
 } from "./streamingRecordingCodec";
 import type { StreamingRecordingDelta } from "./streamingRecordingCodec";
 import {
+  buildFooterChunk,
   buildHeaderChunk,
+  buildSegmentChunk,
+  encodeRecords,
   FLAG_HAS_AUDIO,
   FLAG_HAS_CAMERA,
   LEGACY_STREAM_FORMAT_VERSION,
@@ -205,7 +208,7 @@ describe("recordingCodec", () => {
     expect(decoded.chatEvents).toEqual(recording.chatEvents);
   });
 
-  it("round trips whiteboard events, including an unknown-kind-8 skip guard", async () => {
+  it("round trips whiteboard events", async () => {
     const recording = createRecording({
       duration: 800,
       whiteboardEvents: [
@@ -677,6 +680,73 @@ describe("recordingCodec", () => {
     expect(reader.isFinalized()).toBe(true);
     expect(streamed?.frames).toHaveLength(2);
     expect(streamed?.workspaceAssets).toHaveLength(1);
+  });
+
+  it("skips a segment kind it does not know once the footer confirms the stream", () => {
+    // A newer writer's kind (12+), between a frame segment and a cursor segment.
+    const header = buildHeaderChunk(
+      {
+        version: 4,
+        id: "future",
+        name: "Future",
+        keyframeInterval: 120,
+        createdAt: 1,
+        duration: 100,
+      },
+      0,
+    );
+    const segments = [
+      buildSegmentChunk(0, encodeRecords([makeKeyframe(0, "a\n")]).payload, 0, 10, 0, 0, true),
+      buildSegmentChunk(12, new Uint8Array([1, 2, 3, 4, 5]), 10, 10, -1, 0, false),
+      buildSegmentChunk(
+        7,
+        encodeRecords([{ timestamp: 20, x: 1, y: 1, visible: true }]).payload,
+        20,
+        20,
+        -1,
+        0,
+        false,
+      ),
+    ];
+    let byteOffset = header.byteLength;
+    const index = segments.map((segment) => {
+      const entry = { kind: segment[0], byteOffset, firstTimestampMs: 0, firstFrameIndex: -1 };
+      byteOffset += segment.byteLength;
+      return entry;
+    });
+    const concat = (parts: Uint8Array[]) => {
+      const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
+      let offset = 0;
+      for (const part of parts) {
+        bytes.set(part, offset);
+        offset += part.byteLength;
+      }
+      return bytes;
+    };
+    // The footer counts the skipped segment too.
+    const bytes = concat([header, ...segments, buildFooterChunk(index)]);
+
+    const oneShot = decodeRecordingStream(bytes);
+    expect(oneShot.streamFinalized).toBe(true);
+    expect(oneShot.frames).toHaveLength(1);
+    expect(oneShot.cursorEvents).toHaveLength(1);
+    for (const chunkSize of [1, 7, 64, bytes.length]) {
+      const reader = createStreamingRecordingReader();
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        reader.push(bytes.subarray(offset, offset + chunkSize));
+      }
+      expect(reader.isFinalized()).toBe(true);
+      expect(reader.getRecording()?.cursorEvents).toHaveLength(1);
+    }
+
+    // Without the footer the unknown kind could be the footer's first bytes, so both
+    // decoders stop there: the cursor segment after it waits for the footer.
+    const livePrefix = concat([header, ...segments]);
+    expect(decodeRecordingStream(livePrefix).cursorEvents).toBeUndefined();
+    const reader = createStreamingRecordingReader();
+    reader.push(livePrefix);
+    expect(reader.getRecording()?.frames).toHaveLength(1);
+    expect(reader.getRecording()?.cursorEvents).toBeUndefined();
   });
 
   it("rejects bytes that are not an SCR3 stream", async () => {
