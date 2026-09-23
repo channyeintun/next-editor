@@ -9,6 +9,7 @@ import {
   CollaborationRoomQuotaError,
   createCollaborationInvitation,
   createProvisioningCollaborationRoom,
+  removeCollaborationMember,
   setCollaborationRoomStatus,
 } from "./collaborationQueries";
 
@@ -97,6 +98,7 @@ const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations/", import.meta.url));
 
 const OWNER_ID = "owner";
 const VIEWER_ID = "viewer";
+const NEWCOMER_ID = "newcomer";
 
 interface CollaborationDb {
   db: D1Database;
@@ -168,7 +170,7 @@ async function openRoom({ db, sqlite }: CollaborationDb) {
   const insertUser = sqlite.prepare(
     "INSERT INTO users (id, google_sub, email, username, created_at) VALUES (?, ?, ?, ?, 0)",
   );
-  for (const id of [OWNER_ID, VIEWER_ID]) {
+  for (const id of [OWNER_ID, VIEWER_ID, NEWCOMER_ID]) {
     insertUser.run(id, `google-${id}`, `${id}@example.com`, id);
   }
 
@@ -188,6 +190,26 @@ async function openRoom({ db, sqlite }: CollaborationDb) {
     viewerInvitation: await invite("viewer"),
     editorInvitation: await invite("editor"),
   };
+}
+
+function limitRoomTo(sqlite: DatabaseSync, roomId: string, maxMembers: number): void {
+  sqlite
+    .prepare("UPDATE collaboration_rooms SET max_members = ? WHERE id = ?")
+    .run(maxMembers, roomId);
+}
+
+function memberCount(sqlite: DatabaseSync, roomId: string): number {
+  const row = sqlite
+    .prepare("SELECT COUNT(*) AS count FROM collaboration_members WHERE room_id = ?")
+    .get(roomId) as { count: number };
+  return row.count;
+}
+
+function isMember(sqlite: DatabaseSync, roomId: string, userId: string): boolean {
+  const row = sqlite
+    .prepare("SELECT 1 FROM collaboration_members WHERE room_id = ? AND user_id = ?")
+    .get(roomId, userId);
+  return row !== undefined;
 }
 
 function roleVersion(sqlite: DatabaseSync, roomId: string): number {
@@ -275,5 +297,69 @@ describe("claimCollaborationInvitation", () => {
     expect(hasClaimed(sqlite, editorInvitation.id, VIEWER_ID)).toBe(false);
     expect(useCount(sqlite, editorInvitation.id)).toBe(0);
     expect(roleVersion(sqlite, roomId)).toBe(versionBefore);
+  });
+
+  // Removing a member deletes their membership but keeps their claim, and the
+  // claim is what stops the invitation that admitted them from admitting them
+  // again. Otherwise "Remove" would last only until they reopened their link.
+  it("refuses a removed member who re-presents the invitation that admitted them", async () => {
+    const database = openCollaborationDb();
+    const { db, sqlite } = database;
+    const { roomId, viewerInvitation } = await openRoom(database);
+    await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
+    await removeCollaborationMember(db, roomId, OWNER_ID, VIEWER_ID);
+    const versionBefore = roleVersion(sqlite, roomId);
+
+    const access = await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
+
+    expect(access).toBeNull();
+    expect(isMember(sqlite, roomId, VIEWER_ID)).toBe(false);
+    expect(useCount(sqlite, viewerInvitation.id)).toBe(1);
+    expect(roleVersion(sqlite, roomId)).toBe(versionBefore);
+  });
+
+  it("does not re-admit a removed member past max_members", async () => {
+    const database = openCollaborationDb();
+    const { db, sqlite } = database;
+    const { roomId, viewerInvitation, editorInvitation } = await openRoom(database);
+    limitRoomTo(sqlite, roomId, 2);
+    await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
+    await removeCollaborationMember(db, roomId, OWNER_ID, VIEWER_ID);
+    await claimCollaborationInvitation(db, editorInvitation, NEWCOMER_ID);
+
+    const access = await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
+
+    expect(access).toBeNull();
+    expect(memberCount(sqlite, roomId)).toBe(2);
+  });
+
+  // This is how the owner lets a removed member back in: a link they have
+  // never used admits them like anyone else.
+  it("admits a removed member through a new invitation, spending a seat and a use", async () => {
+    const database = openCollaborationDb();
+    const { db, sqlite } = database;
+    const { roomId, viewerInvitation, editorInvitation } = await openRoom(database);
+    await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
+    await removeCollaborationMember(db, roomId, OWNER_ID, VIEWER_ID);
+
+    const access = await claimCollaborationInvitation(db, editorInvitation, VIEWER_ID);
+
+    expect(access?.member_role).toBe("editor");
+    expect(memberCount(sqlite, roomId)).toBe(2);
+    expect(useCount(sqlite, editorInvitation.id)).toBe(1);
+  });
+
+  it("refuses a claim when the room is full", async () => {
+    const database = openCollaborationDb();
+    const { db, sqlite } = database;
+    const { roomId, viewerInvitation, editorInvitation } = await openRoom(database);
+    limitRoomTo(sqlite, roomId, 2);
+    await claimCollaborationInvitation(db, viewerInvitation, VIEWER_ID);
+
+    const access = await claimCollaborationInvitation(db, editorInvitation, NEWCOMER_ID);
+
+    expect(access).toBeNull();
+    expect(memberCount(sqlite, roomId)).toBe(2);
+    expect(useCount(sqlite, editorInvitation.id)).toBe(0);
   });
 });

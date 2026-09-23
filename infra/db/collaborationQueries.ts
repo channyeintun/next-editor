@@ -520,10 +520,15 @@ export async function claimCollaborationInvitation(
 
   const now = Date.now();
   await db.batch([
+    // Admit the user. This INSERT carries every guard, including that this
+    // invitation has never admitted them: an invitation admits each person at
+    // most once, so the claim left by a member the owner removed keeps them
+    // out. An existing member conflicts and keeps their role, which only
+    // updateCollaborationMemberRole changes.
     db
       .prepare(
-        `INSERT INTO collaboration_invitation_claims (invitation_id, user_id, claimed_at)
-         SELECT invitations.id, ?, ?
+        `INSERT INTO collaboration_members (room_id, user_id, role, joined_at, updated_at)
+         SELECT invitations.room_id, ?, invitations.role, ?, ?
          FROM collaboration_invitations AS invitations
          JOIN collaboration_rooms AS rooms ON rooms.id = invitations.room_id
          WHERE invitations.id = ?
@@ -535,25 +540,24 @@ export async function claimCollaborationInvitation(
            AND (SELECT COUNT(*) FROM collaboration_members WHERE room_id = rooms.id)
                < rooms.max_members
            AND NOT EXISTS (
-             SELECT 1 FROM collaboration_members WHERE room_id = rooms.id AND user_id = ?
+             SELECT 1 FROM collaboration_invitation_claims
+             WHERE invitation_id = invitations.id AND user_id = ?
            )
-         ON CONFLICT (invitation_id, user_id) DO NOTHING`,
-      )
-      .bind(userId, now, invitation.id, invitation.token_hash, now, userId),
-    // An invitation admits new members only; role changes go through
-    // updateCollaborationMemberRole. joined_at = now marks a row this call
-    // admitted, which the role_version bump below reads. An existing member
-    // keeps their earlier joined_at.
-    db
-      .prepare(
-        `INSERT INTO collaboration_members (room_id, user_id, role, joined_at, updated_at)
-         SELECT invitations.room_id, claims.user_id, invitations.role, ?, ?
-         FROM collaboration_invitation_claims AS claims
-         JOIN collaboration_invitations AS invitations ON invitations.id = claims.invitation_id
-         WHERE claims.invitation_id = ? AND claims.user_id = ?
          ON CONFLICT (room_id, user_id) DO NOTHING`,
       )
-      .bind(now, now, invitation.id, userId),
+      .bind(userId, now, now, invitation.id, invitation.token_hash, now, userId),
+    // Record the claim for the member the INSERT above admitted. joined_at = now
+    // picks the row it just wrote, because an existing member keeps their
+    // earlier joined_at. The role_version bump below reads it the same way.
+    db
+      .prepare(
+        `INSERT INTO collaboration_invitation_claims (invitation_id, user_id, claimed_at)
+         SELECT ?, user_id, joined_at
+         FROM collaboration_members
+         WHERE room_id = ? AND user_id = ? AND joined_at = ?
+         ON CONFLICT (invitation_id, user_id) DO NOTHING`,
+      )
+      .bind(invitation.id, invitation.room_id, userId, now),
     db
       .prepare(
         `UPDATE collaboration_invitations
@@ -627,6 +631,11 @@ export async function updateCollaborationMemberRole(
     .first<CollaborationMemberRow>();
 }
 
+/**
+ * Removes a member other than the owner. Their invitation claims are kept on
+ * purpose: a claim is what stops the invitation that admitted them from
+ * admitting them again. Re-admitting a removed member takes a new invitation.
+ */
 export async function removeCollaborationMember(
   db: D1Database,
   roomId: string,
