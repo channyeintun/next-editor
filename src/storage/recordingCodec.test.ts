@@ -494,6 +494,30 @@ describe("recordingCodec", () => {
     expect(decoded.previewInitialDocuments).toEqual(recording.previewInitialDocuments);
   });
 
+  it("refuses to save a workspace snapshot larger than a header may hold", async () => {
+    // The header carries the recorded project's text; a reader stops inflating it at 8 MiB.
+    const content = "export const value = 42;\n".repeat(400_000); // ~9.5 MiB
+    const recording = createRecording({
+      workspaceSnapshot: {
+        activeFilePath: "data.ts",
+        project: {
+          id: "big",
+          name: "Big",
+          lessonType: "react",
+          entryFilePath: "data.ts",
+          folders: [],
+          files: {
+            "data.ts": { path: "data.ts", name: "data.ts", language: "typescript", content },
+          },
+        },
+      },
+    });
+
+    await expect(encodeRecordingToStream(recording)).rejects.toThrow(
+      /Recording is too large to save: its metadata/,
+    );
+  });
+
   it("decodes a replayable prefix before the footer arrives, then finalizes", async () => {
     const recording = createRecording({
       duration: 800,

@@ -17,9 +17,14 @@ import {
   encodeWorkspaceAssetPayload,
   FLAG_HAS_AUDIO,
   FLAG_HAS_CAMERA,
+  formatMiB,
+  MAX_DECODED_RECORDS,
+  MAX_INFLATED_STREAM_BYTES,
+  MAX_STREAM_BYTES,
   readLastRecordTimestamp,
   readRecordTimestamp,
   RECORDING_EVENT_SEGMENTS,
+  refuseUnreadableRecording,
   SEGMENT_KIND,
   type RecordingStreamMeta,
   type SegmentIndexEntry,
@@ -76,11 +81,21 @@ export interface StreamingRecordingWriter {
   isFinalized(): boolean;
 }
 
+/** What a reader charges one segment against the whole stream's limits. */
+interface SegmentReadCost {
+  inflatedByteLength: number;
+  recordCount: number;
+}
+
 export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   const chunks: Uint8Array[] = [];
   const index: SegmentIndexEntry[] = [];
   let length = 0;
   let pendingLength = 0;
+  // Running totals of what a reader will charge this stream, so the writer refuses the
+  // segment that would cross a read limit instead of writing a file nobody can open.
+  let inflatedByteLength = 0;
+  let recordCount = 0;
   let hasDrained = false;
   let headerWritten = false;
   let finalized = false;
@@ -96,6 +111,9 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   const stripPreviewPatchAdds = createPreviewAddNodeStripper();
 
   const pushChunk = (bytes: Uint8Array): void => {
+    if (length + bytes.length > MAX_STREAM_BYTES) {
+      refuseUnreadableRecording(`the .ne file would exceed ${formatMiB(MAX_STREAM_BYTES)}`);
+    }
     chunks.push(bytes);
     length += bytes.length;
     pendingLength += bytes.length;
@@ -125,8 +143,17 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   const appendSegment = (
     kind: number,
     payload: Uint8Array,
+    cost: SegmentReadCost,
     options: StreamingSegmentAppendOptions,
   ): void => {
+    if (inflatedByteLength + cost.inflatedByteLength > MAX_INFLATED_STREAM_BYTES) {
+      refuseUnreadableRecording(
+        `its records would exceed ${formatMiB(MAX_INFLATED_STREAM_BYTES)} once decoded`,
+      );
+    }
+    if (recordCount + cost.recordCount > MAX_DECODED_RECORDS) {
+      refuseUnreadableRecording(`it would hold more than ${MAX_DECODED_RECORDS} records`);
+    }
     const startTimeMs = clampU32(options.startTimeMs ?? 0);
     const endTimeMs = clampU32(Math.max(startTimeMs, options.endTimeMs ?? startTimeMs));
     const firstFrameIndex = options.firstFrameIndex ?? -1;
@@ -148,6 +175,8 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     );
 
     index.push({ kind, byteOffset, firstTimestampMs: startTimeMs, firstFrameIndex });
+    inflatedByteLength += cost.inflatedByteLength;
+    recordCount += cost.recordCount;
 
     if (kind === SEGMENT_KIND.frames) {
       nextFrameClusterIndex = Math.max(nextFrameClusterIndex, clusterIndex + 1);
@@ -168,7 +197,9 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
       // Repeated previewState contents are stripped per segment (frame segments
       // are keyframe-bounded and range-loadable, so the carry must not cross a
       // segment boundary) — see framePreviewContentDedup.ts.
-      appendSegment(SEGMENT_KIND.frames, encodeRecords(stripFramePreviewContent(frames)), {
+      const encoded = encodeRecords(stripFramePreviewContent(frames));
+      const cost = { inflatedByteLength: encoded.inflatedByteLength, recordCount: frames.length };
+      appendSegment(SEGMENT_KIND.frames, encoded.payload, cost, {
         startTimeMs: options?.startTimeMs ?? frames[0].timestamp,
         endTimeMs: options?.endTimeMs ?? readLastRecordTimestamp(frames),
         firstFrameIndex: options?.firstFrameIndex ?? frameCount,
@@ -187,7 +218,9 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
           : kind === SEGMENT_KIND.previewPatch
             ? stripPreviewPatchAdds(records)
             : records;
-      appendSegment(kind, encodeRecords(streamRecords), {
+      const encoded = encodeRecords(streamRecords);
+      const cost = { inflatedByteLength: encoded.inflatedByteLength, recordCount: records.length };
+      appendSegment(kind, encoded.payload, cost, {
         startTimeMs: options?.startTimeMs ?? readRecordTimestamp(records[0]),
         endTimeMs: options?.endTimeMs ?? readLastRecordTimestamp(records),
         firstFrameIndex: options?.firstFrameIndex ?? -1,
@@ -198,7 +231,9 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     },
     appendWorkspaceAssetSegment(asset, options) {
       ensureWritable();
-      appendSegment(SEGMENT_KIND.workspaceAsset, encodeWorkspaceAssetPayload(asset), {
+      // Raw bytes: a reader inflates nothing and counts the asset as one record.
+      const cost = { inflatedByteLength: 0, recordCount: 1 };
+      appendSegment(SEGMENT_KIND.workspaceAsset, encodeWorkspaceAssetPayload(asset), cost, {
         startTimeMs: options?.startTimeMs ?? 0,
         endTimeMs: options?.endTimeMs ?? options?.startTimeMs ?? 0,
         firstFrameIndex: -1,
@@ -207,7 +242,10 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     },
     appendFinalMetadata(meta) {
       ensureWritable();
-      appendSegment(SEGMENT_KIND.finalMeta, encodeRecords([meta]), {
+      const encoded = encodeRecords([meta]);
+      // Readers count no records for the final metadata, only its inflated bytes.
+      const cost = { inflatedByteLength: encoded.inflatedByteLength, recordCount: 0 };
+      appendSegment(SEGMENT_KIND.finalMeta, encoded.payload, cost, {
         startTimeMs: meta.duration,
         endTimeMs: meta.duration,
         clusterIndex: Math.max(0, (meta.clusters?.length ?? 1) - 1),

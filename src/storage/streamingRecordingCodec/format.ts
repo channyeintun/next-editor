@@ -209,12 +209,43 @@ export function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
  */
 const MSGPACK_ENCODE_OPTIONS = { ignoreUndefined: true, maxDepth: 1_100 } as const;
 
-export function encodeRecords(records: ReadonlyArray<unknown>): Uint8Array {
+/**
+ * The MAX_* limits in this file protect readers from hostile files, so a writer must never
+ * cross one: the take would save without complaint and then never open again. Writers
+ * refuse with this error instead, while the recording still exists in memory.
+ */
+export function refuseUnreadableRecording(reason: string): never {
+  throw new Error(`Recording is too large to save: ${reason}`);
+}
+
+export function formatMiB(bytes: number): string {
+  return `${bytes / (1024 * 1024)} MiB`;
+}
+
+export interface EncodedRecords {
+  /** deflate(msgpack(records)), the segment payload. */
+  payload: Uint8Array;
+  /** What the payload inflates back to; readers charge it to the stream's budget. */
+  inflatedByteLength: number;
+}
+
+export function encodeRecords(records: ReadonlyArray<unknown>): EncodedRecords {
   const endEncodeSpan = startPerformanceSpan("recording.segment_encode");
   try {
-    const compressed = zlibSync(msgpackEncode(records, MSGPACK_ENCODE_OPTIONS));
-    recordPerformanceMetric("recording.segment_compressed", compressed.byteLength, "bytes");
-    return compressed;
+    const packed = msgpackEncode(records, MSGPACK_ENCODE_OPTIONS);
+    if (packed.byteLength > MAX_INFLATED_SEGMENT_BYTES) {
+      refuseUnreadableRecording(
+        `one segment's records exceed ${formatMiB(MAX_INFLATED_SEGMENT_BYTES)}`,
+      );
+    }
+    const payload = zlibSync(packed);
+    if (payload.byteLength > MAX_COMPRESSED_SEGMENT_BYTES) {
+      refuseUnreadableRecording(
+        `one segment exceeds ${formatMiB(MAX_COMPRESSED_SEGMENT_BYTES)} compressed`,
+      );
+    }
+    recordPerformanceMetric("recording.segment_compressed", payload.byteLength, "bytes");
+    return { payload, inflatedByteLength: packed.byteLength };
   } finally {
     endEncodeSpan();
   }
@@ -389,7 +420,16 @@ export function readLastRecordTimestamp(records: ReadonlyArray<unknown>): number
 // ----------------------------------------------------------------------------
 
 export function buildHeaderChunk(meta: RecordingStreamMeta, flags: number): Uint8Array {
-  const metaBytes = zlibSync(msgpackEncode(meta, MSGPACK_ENCODE_OPTIONS));
+  const packedMeta = msgpackEncode(meta, MSGPACK_ENCODE_OPTIONS);
+  const metaBytes = zlibSync(packedMeta);
+  if (
+    packedMeta.byteLength > MAX_INFLATED_META_BYTES ||
+    metaBytes.byteLength > MAX_COMPRESSED_META_BYTES
+  ) {
+    refuseUnreadableRecording(
+      `its metadata (workspace snapshot, slides, captions) exceeds the ${formatMiB(MAX_INFLATED_META_BYTES)} (${formatMiB(MAX_COMPRESSED_META_BYTES)} compressed) a header may hold`,
+    );
+  }
   const chunk = new Uint8Array(HEADER_PREFIX_SIZE + metaBytes.length);
   const view = new DataView(chunk.buffer);
   chunk.set(STREAM_MAGIC_BYTES, 0);
