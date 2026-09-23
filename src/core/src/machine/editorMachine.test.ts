@@ -2735,7 +2735,6 @@ describe("audioPlaybackActor", () => {
     // The studio reads this length to reject stale narration.
     const recordingContext = actor.getSnapshot().context;
     expect(recordingContext.audio.externalDurationMs).toBe(3200);
-    expect(recordingContext.session!.audioFragments[0]!.endTimeMs).toBe(3200);
 
     // The element ends after its length plus the time play() took to start.
     clock.now += 3250;
@@ -2744,9 +2743,6 @@ describe("audioPlaybackActor", () => {
 
     const recording = actor.getSnapshot().context.recording!;
     expect(recording.duration).toBe(3200);
-    expect(recording.mediaFragments).toEqual([
-      expect.objectContaining({ trackId: "audio", startTimeMs: 0, endTimeMs: 3200 }),
-    ]);
   });
 
   // Chrome reports Infinity for a MediaRecorder WebM, our own .weba narration included.

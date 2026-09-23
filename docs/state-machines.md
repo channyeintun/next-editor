@@ -143,14 +143,13 @@ What happens here:
 - an invoked `mouseTracking` actor drives `CAPTURE_FRAME` for cursor movement
 - camera capture spawns conditionally on entry if `enableCameraRecording`
 - `CAPTURE_FRAME`, `SLIDE_EVENT`, `PREVIEW_EVENT`, `PREVIEW_INITIAL_DOCUMENT`, `PREVIEW_PATCH_BATCH`, `WORKSPACE_EVENT`, and `RUNTIME_EVENT` are all captured into the session
-- audio chunks (`AUDIO_RECORDING_CHUNK`) and camera lifecycle events are folded into session/audio/camera state
+- camera lifecycle events are folded into camera state
 - `STOP_RECORDING` branches on `isMicrophoneAudioRecording` / `isCameraRecording` / `isExternalAudioRecording` to decide whether a drain (`stoppingRecording`) is needed before finalizing
 
 ### `stoppingRecording`
 
 This is a drain state, not a second recording mode.
 
-- microphone capture may still emit a final post-stop chunk
 - camera capture may stop before or after audio
 - the machine finalizes once the required blobs arrive (`AUDIO_RECORDING_STOPPED` / `CAMERA_STOPPED`), with a two-second timeout as a defensive fallback
 
@@ -216,8 +215,7 @@ stateDiagram-v2
 
 ### Audio recording actor (`audioRecordingActor`)
 
-- Starts microphone capture and emits `AUDIO_RECORDING_STARTED`, `AUDIO_RECORDING_CHUNK`, `AUDIO_RECORDING_STOPPED`, and `AUDIO_RECORDING_ERROR`.
-- Produces timesliced chunks during recording, which the machine keeps as the session's audio fragments.
+- Starts microphone capture and emits `AUDIO_RECORDING_STARTED`, `AUDIO_RECORDING_STOPPED`, and `AUDIO_RECORDING_ERROR`.
 
 ### Camera recording actor (`cameraRecordingActor`)
 
@@ -302,12 +300,6 @@ type EditorMachineEvent =
       startedAtPerf: number;
     }
   | { type: "AUDIO_RECORDING_STOPPED"; blob: Blob }
-  | {
-      type: "AUDIO_RECORDING_CHUNK";
-      chunk: Blob;
-      startTimeMs: number;
-      endTimeMs: number;
-    }
   | { type: "AUDIO_RECORDING_ERROR"; error: string }
   | { type: "AUDIO_PLAYBACK_READY"; duration: number }
   | { type: "AUDIO_PLAYBACK_FINISHED" }
@@ -396,7 +388,6 @@ Action bodies are split by concern: capture-side actions live in `captureActions
 | `capturePreviewPatchBatch`      | Append a `PreviewDomPatchBatch` (rrweb incremental events) to the session                    |
 | `captureWorkspaceEvent`         | Append a timed workspace event                                                               |
 | `captureRuntimeEvent`           | Append a timed runtime event                                                                 |
-| `captureAudioChunk`             | Fold an `AUDIO_RECORDING_CHUNK` into the session's `audioFragments`                          |
 | `setCameraRecordingEnabled`     | Set `enableCameraRecording` from the `START_RECORDING` event                                 |
 | `prepareExternalAudioRecording` | Set up audio state for the external-audio-blob recording path                                |
 | `startExternalAudioPlayback`    | Start driving the external audio blob as the recording's audio track                         |

@@ -6,16 +6,9 @@ import type {
   EditorSelection,
   MouseCursorPosition,
   Recording,
-  RecordingClusterMeta,
-  RecordingMediaFragment,
   RecordingTrackMeta,
 } from "../types";
-import type {
-  EditorMachineContext,
-  EditorMachineInput,
-  RecordingSessionMediaFragment,
-  TimelineState,
-} from "./types";
+import type { EditorMachineContext, EditorMachineInput, TimelineState } from "./types";
 import {
   applyContentDiff,
   applySelectionDiff,
@@ -30,14 +23,13 @@ import {
 import { isEditorReady } from "../utils/validation";
 import { areStructuredDataEqual } from "../../../utils/equality";
 import { areMouseCursorPositionsEqual } from "../utils/cursorCoordinates";
-import { resolveClusterIndexForTime } from "../utils/recordingClusters";
 import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 
 // ============================================================================
 // Editor machine helpers
 //
 // Pure(ish) building blocks for `editorMachine.ts`: recording metadata derivation
-// (tracks/media fragments), editor frame capture/apply, playback-audio
+// (tracks), editor frame capture/apply, playback-audio
 // state inspection, and the named action lists reused across machine transitions.
 // Kept out of the machine file so the machine reads as state/transition wiring.
 // ============================================================================
@@ -50,7 +42,7 @@ const RUNTIME_TRACK_ID = "runtime";
 const CURSOR_TRACK_ID = "cursor";
 const WHITEBOARD_TRACK_ID = "whiteboard";
 const CHAT_TRACK_ID = "chat";
-export const AUDIO_TRACK_ID = "audio";
+const AUDIO_TRACK_ID = "audio";
 export const CAMERA_TRACK_ID = "camera";
 
 export const buildTrackMetadata = ({
@@ -140,23 +132,6 @@ export const buildTrackMetadata = ({
 
   return tracks;
 };
-
-export const buildMediaFragmentMetadata = (
-  fragments: ReadonlyArray<RecordingSessionMediaFragment>,
-  clusters: ReadonlyArray<RecordingClusterMeta>,
-  finalEndTimeMs?: number,
-): RecordingMediaFragment[] =>
-  fragments.map((fragment, index) => ({
-    trackId: fragment.trackId,
-    clusterIndex: resolveClusterIndexForTime(clusters, fragment.startTimeMs),
-    startTimeMs: fragment.startTimeMs,
-    endTimeMs: Math.max(
-      fragment.startTimeMs,
-      typeof finalEndTimeMs === "number" ? finalEndTimeMs : fragment.endTimeMs,
-    ),
-    byteLength: fragment.blob.size,
-    isInit: index === 0,
-  }));
 
 /**
  * Apply editor state from a frame

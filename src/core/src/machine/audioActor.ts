@@ -23,9 +23,8 @@ const AUDIO_SYNC_DRIFT_THRESHOLD_MS = 500;
 const AUDIO_EXACT_SYNC_EPSILON_MS = 50;
 
 /**
- * MediaRecorder timeslice (ms). Emitting `ondataavailable` on an interval produces
- * live audio chunks (forwarded as `AUDIO_RECORDING_CHUNK`) for incremental persistence / streaming,
- * while the final assembled blob is still emitted on stop exactly as before.
+ * MediaRecorder timeslice (ms), as for the camera and screen recorders: the recorder
+ * hands its data over every second, and the blob is assembled from those chunks on stop.
  */
 const AUDIO_TIMESLICE_MS = 1000;
 
@@ -90,12 +89,6 @@ export type AudioRecordingEmit =
       startedAtMs: number;
       startedAtPerf: number;
     }
-  | {
-      type: "AUDIO_RECORDING_CHUNK";
-      chunk: Blob;
-      startTimeMs: number;
-      endTimeMs: number;
-    }
   | { type: "AUDIO_RECORDING_STOPPED"; blob: Blob }
   | { type: "AUDIO_RECORDING_ERROR"; error: string };
 
@@ -123,9 +116,6 @@ export const audioRecordingActor = fromTypedCallback<
   let disposed = false;
   let starting = false;
   let stopRequested = false;
-  let startedAtMs = 0;
-  let startedAtPerfMs = 0;
-  let nextChunkStartTimeMs = 0;
 
   const cleanupStream = () => {
     if (stream) {
@@ -172,18 +162,7 @@ export const audioRecordingActor = fromTypedCallback<
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          const endTimeMs =
-            startedAtPerfMs > 0
-              ? Math.max(nextChunkStartTimeMs, performance.now() - startedAtPerfMs)
-              : nextChunkStartTimeMs;
           chunks.push(event.data);
-          sendBack({
-            type: "AUDIO_RECORDING_CHUNK",
-            chunk: event.data,
-            startTimeMs: nextChunkStartTimeMs,
-            endTimeMs,
-          });
-          nextChunkStartTimeMs = endTimeMs;
         }
       };
 
@@ -198,9 +177,8 @@ export const audioRecordingActor = fromTypedCallback<
 
       mediaRecorder.onstart = () => {
         if (!disposed && !stopRequested && mediaRecorder) {
-          startedAtMs = Date.now();
-          startedAtPerfMs = performance.now();
-          nextChunkStartTimeMs = 0;
+          const startedAtMs = Date.now();
+          const startedAtPerfMs = performance.now();
           sendBack({
             type: "AUDIO_RECORDING_STARTED",
             mediaRecorder,
@@ -220,8 +198,6 @@ export const audioRecordingActor = fromTypedCallback<
         });
       };
 
-      // Timeslice so audio data is delivered incrementally as `AUDIO_RECORDING_CHUNK` events; the
-      // final blob is still assembled from the same chunks on stop.
       mediaRecorder.start(AUDIO_TIMESLICE_MS);
     } catch (error) {
       cleanupStream();

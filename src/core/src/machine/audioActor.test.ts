@@ -259,6 +259,19 @@ describe("audioRecordingActor lifecycle", () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     });
 
+    it("lists the audio track of a take whose narration lands after the watchdog", async () => {
+      provideMicrophones(new FakeAudioTrack());
+      const actor = startRecorder();
+
+      await stopSlowTake(actor);
+      vi.advanceTimersByTime(2000);
+      expect(actor.getSnapshot().value).toBe("loading");
+
+      const take = actor.getSnapshot().context.recording!;
+      expect(take.audioBlob).toBeUndefined();
+      expect(take.tracks).toContainEqual(expect.objectContaining({ kind: "audio" }));
+    });
+
     it("reattaches a blob that lands while the finalized take is loading", async () => {
       const track = new FakeAudioTrack();
       provideMicrophones(track);

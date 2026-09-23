@@ -24,7 +24,6 @@ classDiagram
         +slides?: Slide[]
         +tracks?: RecordingTrackMeta[]
         +clusters?: RecordingClusterMeta[]
-        +mediaFragments?: RecordingMediaFragment[]
         +audioBlob?: Blob
         +audioSource?: RecordingAudioSource
         +audioStartOffsetMs?: number
@@ -69,7 +68,6 @@ interface Recording {
   slides?: Slide[];
   tracks?: RecordingTrackMeta[];
   clusters?: RecordingClusterMeta[];
-  mediaFragments?: RecordingMediaFragment[];
   audioBlob?: Blob;
   audioSource?: RecordingAudioSource; // "microphone" | "external"
   audioStartOffsetMs?: number;
@@ -269,15 +267,11 @@ type RecordingCameraSource = "camera";
     silent: the recording plays without the camera overlay.
 - `tracks` and `clusters` describe the recording's timeline: per-track metadata (editor and
   event tracks, plus audio and camera references) and the keyframe-led clusters that SCR3
-  segments are grouped by. Both are written into the SCR3 metadata. `mediaFragments` is built at
-  capture time from the session's audio fragments but is not written into SCR3, so a decoded
-  recording never has it.
-- During active capture, the machine's `RecordingSession` tracks `audioFragments`
-  (`RecordingSessionMediaFragment[]`, each with `trackId`/`startTimeMs`/`endTimeMs`/`blob`/`mimeType`):
-  the microphone's timeslices, though the SCR3 stream never carries audio bytes. The take's audio
-  is the recorder's finalized blob, stored and exported as a sibling file. Camera is captured as
-  one finalized blob when the camera recorder stops (no per-chunk streaming, so camera is not
-  crash-resilient mid-recording).
+  segments are grouped by. Both are written into the SCR3 metadata.
+- During capture the take's audio is the recorder's finalized blob, stored and exported as a
+  sibling file; the SCR3 stream never carries audio bytes. Camera is captured as one finalized
+  blob when the camera recorder stops (no per-chunk streaming, so camera is not crash-resilient
+  mid-recording).
 
 ## Provider Context Shapes
 
@@ -419,13 +413,12 @@ interface RecordingSession {
   workspaceEvents: WorkspaceRecordingEvent[];
   runtimeEvents: RuntimeRecordingEvent[];
   cursorEvents: CursorRecordingEvent[]; // High-cadence fake cursor samples
-  audioFragments: RecordingSessionMediaFragment[]; // Timeline-aware audio fragments
   lastMousePosition: MouseCursorPosition;
   lastCapturedViewStateRef?: CapturedViewStateRef; // Perf: reuse saveViewState() result and, by its versionId + modelUri, the content string when unchanged
 }
 ```
 
-Note: camera has no equivalent `cameraFragments` array on the session — it is captured as a single finalized blob when the camera recorder stops, not streamed per-chunk.
+Note: the session holds no audio or camera media — each is captured as a single finalized blob when its recorder stops, not streamed per-chunk.
 
 ## Summary
 

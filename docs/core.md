@@ -53,7 +53,7 @@ Key exports:
 - `Recording`, `EditorFrame`, `EditorState`
 - Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewState`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
 - Caption types such as `CaptionTrack`, `CaptionCue`, and `CaptionWord`
-- Track/cluster metadata types: `RecordingTrackKind`, `RecordingTrackMeta`, `RecordingClusterMeta`, `RecordingMediaFragment`
+- Track/cluster metadata types: `RecordingTrackKind`, `RecordingTrackMeta`, `RecordingClusterMeta`
 
 The core module also re-exports app-level components such as `CodeEditor`, `MediaControls`, `Preview`, `CursorComponent`, and `SlidePanel`, but the recording and playback logic lives underneath those components in the machine and hook layer.
 
@@ -69,15 +69,15 @@ flowchart LR
   Slides[Slide events] --> Recording
   Workspace[Workspace events + snapshot] --> Recording
   Runtime[Runtime events + snapshot] --> Recording
-  Audio[Audio track / fragments] --> Recording
-  Camera[Optional camera track / fragments] --> Recording
+  Audio[Audio track] --> Recording
+  Camera[Optional camera track] --> Recording
 ```
 
 Important current details:
 
 - Frames are delta-compressed during capture, not as a final batch-only step — the recording session keeps an incremental `FrameStreamEncoderState` (`src/core/src/utils/frameStreamEncoder.ts`) rather than compressing after the fact.
 - The current app emits schema version `4` recordings in SCR3 format v4. Ordinary local Monaco changes carry exact edit batches with base/result integrity checks. Append-only agent snapshots emit a checked equal/insert delta containing only the suffix without running Myers; provider rewrites, bulk/imported/remote editor changes, and preview changes retain the verified DMP fallback. Raw workspace assets use dedicated v4 segments, while SCR3 formats v2 and v3 remain readable.
-- The public `Recording` facade carries stream-oriented metadata through `tracks`, `clusters`, and `mediaFragments` in addition to the assembled playback blobs.
+- The public `Recording` facade carries stream-oriented metadata through `tracks` and `clusters` in addition to the assembled playback blobs.
 - `previewInitialDocuments` and `previewPatchBatches` are first-class parts of the recording. They carry rrweb events verbatim (`PreviewRecordedEvent`): the seed document holds the rrweb Meta + FullSnapshot pair, and each patch batch holds the incremental events for a frame. Replay drives an rrweb `Replayer`, so the preview is restored without requiring a runtime rerun.
 - `cursorEvents` are stored separately from frame deltas for smoother fake-cursor playback.
 - `audioStartOffsetMs` and `cameraStartOffsetMs` align media tracks to the editor timeline.

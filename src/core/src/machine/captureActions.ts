@@ -6,7 +6,6 @@ import {
   type EditorMachineContext,
   type EditorMachineEvent,
   type RecordingSession,
-  type RecordingSessionMediaFragment,
 } from "./types";
 import type { EditorFrame, MouseCursorPosition, Recording } from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
@@ -30,8 +29,6 @@ import {
 } from "./recordingSession";
 import {
   appendCursorEvent,
-  AUDIO_TRACK_ID,
-  buildMediaFragmentMetadata,
   buildTrackMetadata,
   createFrame,
   MOUSE_FRAME_INTERVAL_MS,
@@ -194,18 +191,7 @@ export const storeExternalAudioDuration = ({
     Number.isFinite(event.duration) && event.duration > 0 ? event.duration : null;
   if (externalDurationMs === null) return {};
 
-  if (context.session && context.session.audioFragments.length > 0) {
-    // In-place update of a constant-size element (index 0 always exists here), not a
-    // spread-append — consistent with the mutable-session invariant.
-    context.session.audioFragments[0] = {
-      ...context.session.audioFragments[0],
-      endTimeMs: context.audio.startOffsetMs + externalDurationMs,
-    };
-  }
-
   return {
-    session: context.session,
-    sessionRevision: context.session ? context.sessionRevision + 1 : context.sessionRevision,
     audio: {
       ...context.audio,
       externalDurationMs,
@@ -262,22 +248,6 @@ export const initRecordingSession = ({
   const runtimeEvents: RuntimeRecordingEvent[] = [];
   const whiteboardEvents: WhiteboardEvent[] = [];
   const initialMousePosition: MouseCursorPosition = { x: 0, y: 0, visible: false };
-  const externalAudioFragment =
-    context.audio.source === "external" && context.audio.blob
-      ? [
-          {
-            trackId: AUDIO_TRACK_ID,
-            startTimeMs: context.audio.startOffsetMs,
-            endTimeMs:
-              typeof context.audio.externalDurationMs === "number" &&
-              Number.isFinite(context.audio.externalDurationMs)
-                ? context.audio.startOffsetMs + context.audio.externalDurationMs
-                : context.audio.startOffsetMs,
-            blob: context.audio.blob,
-            mimeType: context.audio.mimeType || context.audio.blob.type || "audio/webm",
-          },
-        ]
-      : [];
 
   // Capture initial slide state if open
   const initialSlideState = context.getSlideState?.();
@@ -351,10 +321,6 @@ export const initRecordingSession = ({
       whiteboardEvents,
       chatEvents: [],
       cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
-      // External (selected file) audio is fully known at start, so seed it as the single
-      // audio fragment. Microphone audio is appended as timeslice events. Camera video is
-      // never streamed inline — its blob is captured whole when the camera recorder stops.
-      audioFragments: externalAudioFragment,
       lastMousePosition: initialMousePosition,
     },
     sessionRevision: 0,
@@ -729,17 +695,16 @@ export const finalizeRecording = ({
     audioMimeType: context.audio.mimeType || context.audio.blob?.type,
     audioSource: context.audio.source || undefined,
     audioStartOffsetMs: context.audio.startOffsetMs,
-    hasAudio: context.session.audioFragments.length > 0 || Boolean(context.audio.blob),
+    // A microphone take's blob can still be on its way when the watchdog finalizes
+    // (attachLateAudioBlob splices it in), so a running microphone recorder counts.
+    hasAudio:
+      Boolean(context.audio.blob) ||
+      (context.audio.isRecording && context.audio.source === "microphone"),
     cameraMimeType: context.camera.mimeType || context.camera.blob?.type,
     cameraSource: context.camera.source || undefined,
     cameraStartOffsetMs: context.camera.startOffsetMs,
     hasCamera: Boolean(context.camera.blob),
   });
-  const mediaFragments = buildMediaFragmentMetadata(
-    context.session.audioFragments,
-    clusters,
-    context.audio.source === "external" ? duration : undefined,
-  );
 
   const recording: Recording = {
     version: DELTA_CONFIG.VERSION,
@@ -760,7 +725,6 @@ export const finalizeRecording = ({
     slides: slides,
     tracks,
     clusters: clusters.length > 0 ? clusters : undefined,
-    mediaFragments: mediaFragments.length > 0 ? mediaFragments : undefined,
     duration,
     audioBlob: context.audio.blob || undefined,
     audioSource: context.audio.source || undefined,
@@ -829,7 +793,7 @@ export const storeAudioBlob = ({
  * anyway; a slower stop then delivers `AUDIO_RECORDING_STOPPED` in `loading` or
  * `playback`, where the capture-side handlers no longer exist. The blob is the
  * entire narration, so dropping it produced a silently silent lesson — the track
- * metadata still advertised audio (the timeslice fragments made `hasAudio` true)
+ * metadata still advertised audio (the microphone recorder was running at finalize)
  * while `Recording.audioBlob` was undefined, so playback and export found none.
  *
  * Splice it into the finalized recording instead. An already-attached blob wins:
@@ -902,31 +866,6 @@ export const storeCameraBlob = ({
       mimeType: event.blob.type,
       source: "camera" as const,
     },
-  };
-};
-
-// Append a live microphone timeslice fragment to the session's append-only audio stream so
-// an optional live recording sink can forward it. The finalized AUDIO_RECORDING_STOPPED blob is
-// unchanged.
-export const captureAudioChunk = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
-  if (event.type !== "AUDIO_RECORDING_CHUNK" || !context.session) return {};
-  const fragment: RecordingSessionMediaFragment = {
-    trackId: AUDIO_TRACK_ID,
-    startTimeMs: context.audio.startOffsetMs + event.startTimeMs,
-    endTimeMs: context.audio.startOffsetMs + event.endTimeMs,
-    blob: event.chunk,
-    mimeType: event.chunk.type || context.audio.mimeType || "audio/webm",
-  };
-  context.session.audioFragments.push(fragment);
-  return {
-    session: context.session,
-    sessionRevision: context.sessionRevision + 1,
   };
 };
 

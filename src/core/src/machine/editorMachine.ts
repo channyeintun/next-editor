@@ -48,7 +48,6 @@ import {
   attachLateAudioBlob,
   storeAudioStarted,
   storeCameraBlob,
-  captureAudioChunk,
   storeCameraStarted,
   handleCameraError,
   clearCameraRecording,
@@ -224,7 +223,6 @@ export const editorMachine = setup({
     attachLateAudioBlob: assign(attachLateAudioBlob),
     storeAudioStarted: assign(storeAudioStarted),
     storeCameraBlob: assign(storeCameraBlob),
-    captureAudioChunk: assign(captureAudioChunk),
     storeCameraStarted: assign(storeCameraStarted),
     handleCameraError: assign(handleCameraError),
     clearCameraRecording: assign(clearCameraRecording),
@@ -577,9 +575,6 @@ export const editorMachine = setup({
         CAPTURE_FRAME: {
           actions: "captureFrame",
         },
-        AUDIO_RECORDING_CHUNK: {
-          actions: "captureAudioChunk",
-        },
         CAMERA_STARTED: {
           actions: "storeCameraStarted",
         },
@@ -696,9 +691,6 @@ export const editorMachine = setup({
       // take is unloaded or replaced.
       exit: [stopChild("cameraRecorder")],
       on: {
-        AUDIO_RECORDING_CHUNK: {
-          actions: "captureAudioChunk",
-        },
         AUDIO_RECORDING_STOPPED: [
           {
             guard: "isCameraRecording",

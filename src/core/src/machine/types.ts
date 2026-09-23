@@ -53,18 +53,6 @@ export interface TimelineState {
 }
 
 /**
- * Timeline-aware media fragment captured during recording. The blob is retained only
- * until the recording is finalized or streamed to a sink.
- */
-export interface RecordingSessionMediaFragment {
-  trackId: string;
-  startTimeMs: number;
-  endTimeMs: number;
-  blob: Blob;
-  mimeType: string;
-}
-
-/**
  * Recording session state.
  *
  * This is a mutable capture buffer: its object identity — and the identity of every
@@ -107,11 +95,6 @@ export interface RecordingSession {
   whiteboardEvents: WhiteboardEvent[];
   /** Collected coding-agent chat deltas + sparse checkpoints during recording */
   chatEvents: ChatRecordingEvent[];
-  /**
-   * Timeline-aware audio fragments captured during recording. For microphone recordings these are
-   * `MediaRecorder` timeslice fragments; for a selected audio file it is the single file blob.
-   */
-  audioFragments: RecordingSessionMediaFragment[];
   /** Last known mouse position */
   lastMousePosition: MouseCursorPosition;
   /**

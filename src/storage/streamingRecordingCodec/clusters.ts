@@ -1,9 +1,5 @@
 import type { Recording } from "../../core/src";
-import type {
-  RecordingClusterMeta,
-  RecordingMediaFragment,
-  RecordingTrackMeta,
-} from "../../core/src/types";
+import type { RecordingClusterMeta, RecordingTrackMeta } from "../../core/src/types";
 import {
   buildRecordingClusters,
   resolveClusterIndexForTime,
@@ -24,42 +20,6 @@ import {
 // can derive what a stream's metadata leaves out. No bytes here — pure metadata.
 // ============================================================================
 
-function buildClustersFromMediaFragments(
-  fragments: ReadonlyArray<RecordingMediaFragment>,
-  duration: number,
-): RecordingClusterMeta[] {
-  if (fragments.length === 0) {
-    return duration > 0
-      ? [{ index: 0, startTimeMs: 0, endTimeMs: duration, containsKeyframe: false }]
-      : [];
-  }
-
-  const clusterMap = new Map<number, RecordingClusterMeta>();
-
-  for (const fragment of fragments) {
-    const existing = clusterMap.get(fragment.clusterIndex);
-    if (existing) {
-      existing.startTimeMs = Math.min(existing.startTimeMs, fragment.startTimeMs);
-      existing.endTimeMs = Math.max(existing.endTimeMs, fragment.endTimeMs);
-      continue;
-    }
-
-    clusterMap.set(fragment.clusterIndex, {
-      index: fragment.clusterIndex,
-      startTimeMs: fragment.startTimeMs,
-      endTimeMs: fragment.endTimeMs,
-      containsKeyframe: false,
-    });
-  }
-
-  const clusters = Array.from(clusterMap.values()).sort((left, right) => left.index - right.index);
-  const lastCluster = clusters[clusters.length - 1];
-  if (lastCluster) {
-    lastCluster.endTimeMs = Math.max(lastCluster.endTimeMs, duration);
-  }
-  return clusters;
-}
-
 export function deriveRecordingClusters(recording: Recording): RecordingClusterMeta[] {
   if (recording.clusters && recording.clusters.length > 0) {
     return [...recording.clusters]
@@ -72,11 +32,7 @@ export function deriveRecordingClusters(recording: Recording): RecordingClusterM
       .sort((left, right) => left.index - right.index);
   }
 
-  if (recording.frames.length > 0) {
-    return buildRecordingClusters(recording.frames, recording.duration);
-  }
-
-  return buildClustersFromMediaFragments(recording.mediaFragments ?? [], recording.duration);
+  return buildRecordingClusters(recording.frames, recording.duration);
 }
 
 export function deriveRecordingTracks(recording: Recording): RecordingTrackMeta[] {

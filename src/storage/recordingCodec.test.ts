@@ -331,7 +331,6 @@ describe("recordingCodec", () => {
     expect(streamed.duration).toBe(oneShot.duration);
     expect(streamed.clusters).toEqual(oneShot.clusters);
     expect(streamed.tracks).toEqual(oneShot.tracks);
-    expect(streamed.mediaFragments).toEqual(oneShot.mediaFragments);
     expect(streamed.cursorEvents).toEqual(oneShot.cursorEvents);
     expect(streamed.streamFinalized).toBe(true);
     expect(deltas.flatMap((delta) => delta.newFrames)).toEqual(oneShot.frames);
@@ -966,7 +965,6 @@ describe("recordingCodec", () => {
     expect(decoded.tracks?.some((track) => track.kind === "audio")).toBe(true);
     // ...but no audio bytes were embedded, so there is no reassembled blob.
     expect(decoded.audioBlob).toBeUndefined();
-    expect(decoded.mediaFragments?.some((fragment) => fragment.trackId === "audio")).toBeFalsy();
   });
 
   it("does not embed audio bytes when a recording carries both a blob and an audioFile", async () => {

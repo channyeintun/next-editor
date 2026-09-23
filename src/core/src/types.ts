@@ -70,17 +70,6 @@ export interface RecordingClusterMeta {
   containsKeyframe: boolean;
 }
 
-export interface RecordingMediaFragment {
-  trackId: string;
-  clusterIndex: number;
-  startTimeMs: number;
-  endTimeMs: number;
-  bytes?: Uint8Array;
-  byteLength?: number;
-  isInit?: boolean;
-  isKeyframe?: boolean;
-}
-
 /**
  * Data-only type for monaco.Selection that includes both selection and range info.
  * This is compatible with monaco.ISelection and monaco.IRange.
@@ -195,7 +184,6 @@ export interface Recording {
   slides?: Slide[];
   tracks?: RecordingTrackMeta[];
   clusters?: RecordingClusterMeta[];
-  mediaFragments?: RecordingMediaFragment[];
   audioBlob?: Blob;
   audioSource?: RecordingAudioSource;
   /** Audio start offset (ms) between the recording origin and the first decodable audio byte. */

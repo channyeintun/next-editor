@@ -26,7 +26,6 @@ export type {
   RecordingTrackKind,
   RecordingTrackMeta,
   RecordingClusterMeta,
-  RecordingMediaFragment,
   CursorTargetRect,
   CursorTargetSnapshot,
   MouseCursorPosition,

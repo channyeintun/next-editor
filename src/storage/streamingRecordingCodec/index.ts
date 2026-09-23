@@ -2,7 +2,7 @@
 //
 // The implementation is split by concern:
 //   * format.ts  — the on-wire byte layout (constants, structs, field primitives)
-//   * clusters.ts — deriving tracks/clusters/media fragments from a Recording
+//   * clusters.ts — deriving tracks/clusters from a Recording
 //   * encode.ts  — Recording → bytes (incremental writer + one-shot exporter)
 //   * decode.ts  — bytes → Recording (one-shot decoder + incremental reader)
 //
