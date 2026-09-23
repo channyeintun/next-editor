@@ -222,4 +222,25 @@ describe("cursorReplay", () => {
       },
     });
   });
+
+  it("holds a sample's own tween as a copy", () => {
+    const target = {
+      id: "code-editor",
+      x: 5,
+      y: 6,
+      rect: { left: 0, top: 0, width: 50, height: 60 },
+    };
+    const tween = {
+      from: { x: 0, y: 0, visible: true, coordinateSpace: "root" as const, target },
+      to: { x: 10, y: 20, visible: true },
+      progress: 0.25,
+    };
+    const samples = [{ timestamp: 0, x: 3, y: 5, visible: true, tween }];
+
+    const held = getCursorPositionAtTime(samples, 100)?.cursor;
+
+    expect(held?.tween).toEqual(tween);
+    expect(held?.tween).not.toBe(tween);
+    expect(held?.tween?.from.target).not.toBe(target);
+  });
 });

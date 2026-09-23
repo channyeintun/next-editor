@@ -11,8 +11,6 @@ import { findFrameIndexAtTime } from "./frameDelta";
 import { isKeyframe } from "./deltaTypes";
 import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
 
-export type CursorReplaySample = CursorRecordingEvent;
-
 // Longer than any real cursor glide: pointer motion is sampled every ~16–50ms,
 // so even a slow, deliberate move has dense samples. A gap beyond this with no
 // samples between two *different* positions means the cursor was parked between
@@ -60,7 +58,7 @@ const copyCursorTarget = (
       }
     : undefined;
 
-const copyCursorTweenEndpoint = (cursor: MouseCursorPosition): CursorTweenEndpoint => {
+const copyCursorTweenEndpoint = (cursor: CursorTweenEndpoint): CursorTweenEndpoint => {
   const target = copyCursorTarget(cursor.target);
 
   return {
@@ -77,20 +75,8 @@ const copyCursorTween = (
 ): CursorTweenSnapshot | undefined =>
   tween
     ? {
-        from: {
-          x: tween.from.x,
-          y: tween.from.y,
-          visible: tween.from.visible,
-          ...(tween.from.coordinateSpace ? { coordinateSpace: tween.from.coordinateSpace } : {}),
-          ...(tween.from.target ? { target: copyCursorTarget(tween.from.target) } : {}),
-        },
-        to: {
-          x: tween.to.x,
-          y: tween.to.y,
-          visible: tween.to.visible,
-          ...(tween.to.coordinateSpace ? { coordinateSpace: tween.to.coordinateSpace } : {}),
-          ...(tween.to.target ? { target: copyCursorTarget(tween.to.target) } : {}),
-        },
+        from: copyCursorTweenEndpoint(tween.from),
+        to: copyCursorTweenEndpoint(tween.to),
         progress: tween.progress,
       }
     : undefined;
@@ -114,13 +100,13 @@ const copyCursorPosition = (cursor: MouseCursorPosition): MouseCursorPosition =>
 };
 
 const appendCursorSample = (
-  samples: CursorReplaySample[],
+  samples: CursorRecordingEvent[],
   timestamp: number,
   cursor: MouseCursorPosition | undefined,
 ): void => {
   if (!cursor || !hasFiniteCursorPosition(cursor)) return;
 
-  const sample: CursorReplaySample = {
+  const sample: CursorRecordingEvent = {
     timestamp: Math.max(0, timestamp),
     ...copyCursorPosition(cursor),
   };
@@ -132,8 +118,8 @@ const appendCursorSample = (
   samples.push(sample);
 };
 
-const normalizeCursorEvents = (events: CursorRecordingEvent[]): CursorReplaySample[] => {
-  const samples: CursorReplaySample[] = [];
+const normalizeCursorEvents = (events: CursorRecordingEvent[]): CursorRecordingEvent[] => {
+  const samples: CursorRecordingEvent[] = [];
 
   events
     .filter((event) => Number.isFinite(event.timestamp))
@@ -145,8 +131,8 @@ const normalizeCursorEvents = (events: CursorRecordingEvent[]): CursorReplaySamp
   return samples;
 };
 
-export const deriveCursorSamplesFromFrames = (frames: DeltaFrame[]): CursorReplaySample[] => {
-  const samples: CursorReplaySample[] = [];
+const deriveCursorSamplesFromFrames = (frames: DeltaFrame[]): CursorRecordingEvent[] => {
+  const samples: CursorRecordingEvent[] = [];
 
   frames.forEach((frame) => {
     if (isKeyframe(frame)) {
@@ -162,7 +148,7 @@ export const deriveCursorSamplesFromFrames = (frames: DeltaFrame[]): CursorRepla
   return samples;
 };
 
-export const getCursorReplaySamples = (recording: Recording): CursorReplaySample[] => {
+export const getCursorReplaySamples = (recording: Recording): CursorRecordingEvent[] => {
   if (recording.cursorEvents?.length) {
     return normalizeCursorEvents(recording.cursorEvents);
   }
@@ -171,7 +157,7 @@ export const getCursorReplaySamples = (recording: Recording): CursorReplaySample
 };
 
 export const getCursorPositionAtTime = (
-  samples: CursorReplaySample[],
+  samples: CursorRecordingEvent[],
   time: number,
   startIndex = 0,
 ): CursorReplayPositionResult | null => {
@@ -183,23 +169,11 @@ export const getCursorPositionAtTime = (
 
   if (!previous) return null;
 
-  if (!next || !previous.visible || !next.visible || previous.visible !== next.visible) {
-    return {
-      cursor: {
-        ...copyCursorPosition(previous),
-      },
-      index,
-    };
-  }
-
-  const duration = next.timestamp - previous.timestamp;
-  if (duration <= 0) {
-    return {
-      cursor: {
-        ...copyCursorPosition(previous),
-      },
-      index,
-    };
+  // Hold at `previous` when there is nothing to glide to: no next sample, a
+  // hidden cursor on either side, or samples that share a timestamp.
+  const duration = next ? next.timestamp - previous.timestamp : 0;
+  if (!next || !previous.visible || !next.visible || duration <= 0) {
+    return { cursor: copyCursorPosition(previous), index };
   }
 
   // Across a long idle gap the cursor was parked between gestures: hold at
