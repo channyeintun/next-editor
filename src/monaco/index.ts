@@ -18,6 +18,7 @@ export {
   isPlaybackModelUri,
   syncPlaybackModel,
   syncWorkspaceModel,
+  toInternalModelUri,
   toMonacoModelPath,
   toPlaybackModelPath,
   workspacePathFromMonacoModelUri,

@@ -83,7 +83,7 @@ describe("editor model helpers", () => {
   it("normalizes workspace paths into Monaco model URIs", () => {
     expect(toMonacoModelPath("/src//App.tsx")).toBe("file:///src/App.tsx");
     expect(toPlaybackModelPath("/src//App.tsx")).toBe(
-      "file:///__next-editor__/playback/src/App.tsx",
+      "inmemory://next-editor/playback/src/App.tsx",
     );
   });
 
@@ -153,26 +153,26 @@ describe("editor model helpers", () => {
   it("does not resolve playback model URIs as writable workspace paths", () => {
     expect(
       workspacePathFromMonacoModelUri({
-        toString: () => "file:///__next-editor__/playback/src/App.tsx",
+        toString: () => "inmemory://next-editor/playback/src/App.tsx",
       }),
     ).toBeNull();
   });
 
-  it("does not resolve other reserved next-editor URIs as writable workspace paths", () => {
+  it("does not resolve other internal editor buffers as writable workspace paths", () => {
     expect(
       workspacePathFromMonacoModelUri({
-        toString: () => "file:///__next-editor__/api-client/request-body.json",
+        toString: () => "inmemory://next-editor/api-client/request-body.json",
       }),
     ).toBeNull();
   });
 
   it("identifies playback model URIs", () => {
     expect(
-      isPlaybackModelUri({ toString: () => "file:///__next-editor__/playback/src/App.tsx" }),
+      isPlaybackModelUri({ toString: () => "inmemory://next-editor/playback/src/App.tsx" }),
     ).toBe(true);
     expect(isPlaybackModelUri({ toString: () => "file:///src/App.tsx" })).toBe(false);
     expect(
-      isPlaybackModelUri({ toString: () => "file:///__next-editor__/api-client/request.json" }),
+      isPlaybackModelUri({ toString: () => "inmemory://next-editor/api-client/request.json" }),
     ).toBe(false);
   });
 

@@ -2,7 +2,12 @@ import { useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { Clock, Loader2, Minus, Plus, Send, Trash2 } from "lucide-react";
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
-import { MonacoEditor, useOwnedModel, type MonacoEditorProps } from "../../monaco";
+import {
+  MonacoEditor,
+  toInternalModelUri,
+  useOwnedModel,
+  type MonacoEditorProps,
+} from "../../monaco";
 import {
   selectBody,
   selectHeaders,
@@ -113,7 +118,7 @@ export default function ApiClientPanel({
   const history = useSelector(store, (s) => selectHistory(s.context));
   const activeTab = useSelector(store, (s) => selectRequestTab(s.context));
   const requestModel = useOwnedModel({
-    uri: "file:///__next-editor__/api-client/request-body.json",
+    uri: toInternalModelUri("api-client/request-body.json"),
     value: body,
     language: "json",
   });
@@ -391,7 +396,9 @@ function SuccessfulResponseView({
   const prettyBody = tryPrettyJson(response.body);
   const lang = detectLanguage(response.headers, response.body);
   const responseModel = useOwnedModel({
-    uri: `file:///__next-editor__/api-client/response-${response.status}-${response.durationMs}.${lang}`,
+    uri: toInternalModelUri(
+      `api-client/response-${response.status}-${response.durationMs}.${lang}`,
+    ),
     value: prettyBody,
     language: lang,
   });

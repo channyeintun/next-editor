@@ -8,8 +8,10 @@ import type { Monaco } from "./runtime";
 import {
   acknowledgeWorkspaceModelContent,
   disposePlaybackModels,
+  isPlaybackModelUri,
   syncPlaybackModel,
   syncWorkspaceModel,
+  toInternalModelUri,
   toMonacoModelPath,
   toPlaybackModelPath,
   workspacePathFromMonacoModelUri,
@@ -131,5 +133,24 @@ describe("workspace model URIs", () => {
 
     expect(active.disposed).toBe(false);
     expect(idle.disposed).toBe(true);
+  });
+
+  // Workspace paths may be any name, including the one the editor once used as the
+  // root of its own buffers; such a file used to become a playback model.
+  it("keeps a workspace file under __next-editor__/ out of the editor's own buffers", () => {
+    const { monaco } = createFakeMonaco((value): FakeUri => URI.parse(value));
+    const path = "__next-editor__/playback/notes.md";
+    const model = syncWorkspaceModel(monaco, path, "mine", "markdown") as unknown as FakeModel;
+
+    expect(workspacePathFromMonacoModelUri(model.uri)).toBe(path);
+    expect(isPlaybackModelUri(model.uri)).toBe(false);
+    disposePlaybackModels(monaco);
+    expect(model.disposed).toBe(false);
+
+    // Nor does it take the API client's request-body buffer.
+    syncWorkspaceModel(monaco, "__next-editor__/api-client/request-body.json", "{}", "json");
+    expect(
+      monaco.editor.getModel(URI.parse(toInternalModelUri("api-client/request-body.json"))),
+    ).toBeNull();
   });
 });

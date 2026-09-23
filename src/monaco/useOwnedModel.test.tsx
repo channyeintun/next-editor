@@ -39,6 +39,10 @@ const fake = vi.hoisted(() => {
     editor: {
       getModel: (uri: { toString(): string }) => models.get(uri.toString()) ?? null,
       createModel(content: string, language: string, uri: { toString(): string }) {
+        // Monaco's model service refuses a second model at one URI.
+        if (models.has(uri.toString())) {
+          throw new Error("Cannot add model because it already exists!");
+        }
         createCount += 1;
         const model: FakeModel = {
           content,
@@ -102,7 +106,7 @@ describe("useOwnedModel", () => {
 
     render(
       <StrictMode>
-        <Probe uri="file:///__next-editor__/api-client/request.json" value="{}" language="json" />
+        <Probe uri="inmemory://next-editor/api-client/request.json" value="{}" language="json" />
       </StrictMode>,
     );
 
@@ -158,5 +162,19 @@ describe("useOwnedModel", () => {
     rerender(<Probe uri="file:///a.json" value="updated" language="plaintext" />);
     expect(model.setValueCalls).toEqual(["updated"]);
     expect(model.language).toBe("plaintext");
+  });
+
+  it("never writes into or disposes a model it did not create", () => {
+    fake.reset();
+    latestModel = null;
+    const foreign = fake.editor.createModel("the user's file", "json", {
+      toString: () => "file:///shared.json",
+    });
+    expect(() =>
+      render(<Probe uri="file:///shared.json" value="{}" language="json" />).unmount(),
+    ).toThrow("already exists");
+
+    expect(foreign.setValueCalls).toEqual([]);
+    expect(foreign.isDisposed()).toBe(false);
   });
 });

@@ -1,10 +1,12 @@
 import type { Monaco } from "./runtime";
 import { normalizeWorkspacePath } from "../types/workspace";
 
-// Everything under this root is an internal scratch buffer (playback models,
-// API-client request/response bodies, …) and never a writable workspace path.
-const NEXT_EDITOR_RESERVED_ROOT = "file:///__next-editor__/";
-const PLAYBACK_MODEL_ROOT = `${NEXT_EDITOR_RESERVED_ROOT}playback`;
+// Workspace files are `file:///<path>` models. The editor's own scratch buffers
+// (playback models, API-client request/response bodies, …) live under Monaco's
+// `inmemory` scheme instead, which no workspace path can produce: under a
+// `file:///` root, a workspace folder of the same name would share their models.
+const INTERNAL_MODEL_ROOT = "inmemory://next-editor/";
+const PLAYBACK_MODEL_ROOT = `${INTERNAL_MODEL_ROOT}playback`;
 const FILE_URI_PREFIX = "file:///";
 type TextModel = ReturnType<Monaco["editor"]["createModel"]>;
 const synchronizedWorkspaceContent = new WeakMap<TextModel, string>();
@@ -16,6 +18,11 @@ export function acknowledgeWorkspaceModelContent(model: TextModel, content: stri
 
 export function toMonacoModelPath(workspacePath: string) {
   return `${FILE_URI_PREFIX}${encodeURI(normalizeWorkspacePath(workspacePath))}`;
+}
+
+/** The URI of an internal scratch buffer, e.g. `toInternalModelUri("api-client/body.json")`. */
+export function toInternalModelUri(name: string) {
+  return `${INTERNAL_MODEL_ROOT}${name}`;
 }
 
 export function toPlaybackModelPath(workspacePath: string) {
@@ -92,7 +99,7 @@ export function syncWorkspaceModel(
 export function workspacePathFromMonacoModelUri(uri: { toString(): string }) {
   const modelUri = uri.toString();
 
-  if (!modelUri.startsWith(FILE_URI_PREFIX) || modelUri.startsWith(NEXT_EDITOR_RESERVED_ROOT)) {
+  if (!modelUri.startsWith(FILE_URI_PREFIX)) {
     return null;
   }
 

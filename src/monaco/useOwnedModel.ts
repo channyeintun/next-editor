@@ -9,7 +9,9 @@ interface UseOwnedModelOptions {
 
 /**
  * Creates a Monaco model owned by the calling component and disposes it on
- * unmount or URI change.
+ * unmount or URI change. It only ever creates: Monaco throws if a model already
+ * exists at `uri`, rather than the hook writing into, and later disposing, a
+ * model something else owns.
  *
  * Creation lives in a layout effect (not render) and the model is held in
  * state so the ownership cycle survives StrictMode's dev-only effect replay:
@@ -25,8 +27,7 @@ export function useOwnedModel({ uri, value, language }: UseOwnedModelOptions) {
   // current at that point, and the sync effect below reconciles later changes.
   useLayoutEffect(() => {
     const parsedUri = monaco.Uri.parse(uri);
-    const ownedModel =
-      monaco.editor.getModel(parsedUri) ?? monaco.editor.createModel(value, language, parsedUri);
+    const ownedModel = monaco.editor.createModel(value, language, parsedUri);
     setModel(ownedModel);
 
     return () => {
