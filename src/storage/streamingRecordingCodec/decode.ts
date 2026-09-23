@@ -177,12 +177,17 @@ interface PendingSegment {
 
 /**
  * Decodes one segment's payload without touching the stream. Every step that can
- * throw runs here, so a throw (a partial footer misread as a segment, or genuine
- * corruption) leaves the records, the dedup carries and the counters as they were,
- * and the streaming reader can retry the same bytes once more have arrived.
+ * throw runs here, and inflation is charged to `budget`, a copy of the stream's, so a
+ * throw (a partial footer misread as a segment, or genuine corruption) leaves the
+ * records, the dedup carries, the counters and the stream's budget as they were.
  */
-function decodeSegment(stream: DecodedStream, kind: number, payload: Uint8Array): PendingSegment {
-  const { records, budget } = stream;
+function decodeSegment(
+  stream: DecodedStream,
+  budget: InflationBudget,
+  kind: number,
+  payload: Uint8Array,
+): PendingSegment {
+  const { records } = stream;
   switch (kind) {
     case SEGMENT_KIND.frames: {
       // Resolve the segment's previewState-content markers (self-contained, no carry —
@@ -305,10 +310,12 @@ function ingestSegment(
   header: SegmentHeaderFields,
   payload: Uint8Array,
 ): void {
-  const segment = decodeSegment(stream, header.kind, payload);
+  const budget = { remaining: stream.budget.remaining };
+  const segment = decodeSegment(stream, budget, header.kind, payload);
   if (stream.recordCount + segment.recordCount > MAX_DECODED_RECORDS) {
     throw new Error("Invalid SCR3 stream: recording contains too many records");
   }
+  stream.budget.remaining = budget.remaining;
   stream.segmentCount += 1;
   stream.recordCount += segment.recordCount;
   stream.maxSegmentTimeMs = Math.max(stream.maxSegmentTimeMs, header.startTimeMs, header.endTimeMs);
@@ -322,11 +329,18 @@ function ingestSegment(
   segment.commit();
 }
 
+/** How far {@link ingestSegmentRegion} got. */
+interface RegionProgress {
+  /** Offset of the first byte not consumed. */
+  consumed: number;
+  /** The walk stopped at a complete segment that failed to decode (only without a footer). */
+  stoppedAtUndecodable: boolean;
+}
+
 /**
- * Ingests the segments in `bytes` from `start` and returns the offset of the first byte
- * it did not consume. `footerStart` is where a complete footer begins, or null while none
- * has arrived; both decoders call this, so they draw the same line between a prefix and
- * a damaged file.
+ * Ingests the segments in `bytes` from `start` and reports how far it got. `footerStart`
+ * is where a complete footer begins, or null while none has arrived; both decoders call
+ * this, so they draw the same line between a prefix and a damaged file.
  *
  * With a footer the segment region is final: a segment of an unknown (future) kind is
  * skipped and counted, a segment that fails to decode is corruption and throws, and the
@@ -340,7 +354,7 @@ function ingestSegmentRegion(
   bytes: Uint8Array,
   start: number,
   footerStart: number | null,
-): number {
+): RegionProgress {
   const end = footerStart ?? bytes.length;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let cursor = start;
@@ -359,7 +373,7 @@ function ingestSegmentRegion(
         ingestSegment(stream, header, bytes.subarray(payloadStart, payloadEnd));
       } catch (error) {
         if (footerStart !== null) throw error;
-        break;
+        return { consumed: cursor, stoppedAtUndecodable: true };
       }
     }
     cursor = payloadEnd;
@@ -373,7 +387,7 @@ function ingestSegmentRegion(
       throw new Error("Invalid SCR3 stream: footer segment count does not match the stream");
     }
   }
-  return cursor;
+  return { consumed: cursor, stoppedAtUndecodable: false };
 }
 
 /**
@@ -537,6 +551,11 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   // Null until the header has fully arrived.
   let stream: DecodedStream | null = null;
   let finalized = false;
+  // The first retained segment is complete but failed to decode, with no footer in
+  // sight. Its bytes cannot change, so inflating it again on every push only burns CPU:
+  // the footer settles it, as a misread partial footer (the walk then ends before it)
+  // or as corruption (decoded once more, it throws).
+  let headSegmentUndecodable = false;
 
   let deltaCursor = 0;
   let deliveredSegmentCount = 0;
@@ -621,13 +640,15 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
 
     const retained = buffer.subarray(0, retainedLength);
     const footerStart = findFooterStart(retained, 0);
-    const consumed = ingestSegmentRegion(stream, retained, 0, footerStart);
+    if (footerStart === null && headSegmentUndecodable) return;
+    const progress = ingestSegmentRegion(stream, retained, 0, footerStart);
     if (footerStart !== null) {
       finalized = true;
       discardPrefix(retainedLength);
       return;
     }
-    discardPrefix(consumed);
+    headSegmentUndecodable = progress.stoppedAtUndecodable;
+    discardPrefix(progress.consumed);
   };
 
   return {
