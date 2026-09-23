@@ -68,27 +68,26 @@ const getPlaybackState = (state: EditorMachineSnapshot): "playing" | "paused" | 
   return null;
 };
 
-// Recording state selectors
-export const selectIsRecording = (state: EditorMachineSnapshot) => state.matches("recording");
-export const selectIsRecordingAudio = (state: EditorMachineSnapshot) =>
-  state.context.audio.isRecording;
-export const selectRecordingStartTime = (state: EditorMachineSnapshot) =>
-  state.context.session?.startedAt || null;
+/**
+ * Every flag useNextEditorMetadata exposes, from one pass over the snapshot. The hook
+ * compares the result with shallowEqual, so consumers re-render only when a field
+ * changes, not on every TICK or captured frame.
+ */
+export const selectNextEditorMetadata = (state: EditorMachineSnapshot) => {
+  const playbackState = getPlaybackState(state);
+  return {
+    isRecording: state.matches("recording"),
+    isPlaying: playbackState === "playing",
+    hasEnded: playbackState === "ended" && isAtPlaybackEnd(state.context.timeline),
+    usesPlaybackModel: !state.context.hasManualWorkspaceOverride && playbackState !== null,
+    currentRecording: state.context.recording,
+    recordingStartTime: state.context.session?.startedAt || null,
+  };
+};
 
 // Playback state selectors
 export const selectIsPlaying = (state: EditorMachineSnapshot) =>
   state.matches({ playback: "playing" });
-export const selectIsPaused = (state: EditorMachineSnapshot) => {
-  const playbackState = getPlaybackState(state);
-  return (
-    playbackState === "paused" ||
-    (playbackState === "ended" && !isAtPlaybackEnd(state.context.timeline))
-  );
-};
-export const selectHasEnded = (state: EditorMachineSnapshot) =>
-  state.matches({ playback: "ended" }) && isAtPlaybackEnd(state.context.timeline);
-export const selectUsesPlaybackModel = (state: EditorMachineSnapshot) =>
-  !state.context.hasManualWorkspaceOverride && getPlaybackState(state) !== null;
 
 // Timeline selectors (high-frequency updates)
 export const selectPlaybackSpeed = (state: EditorMachineSnapshot) => state.context.timeline.speed;

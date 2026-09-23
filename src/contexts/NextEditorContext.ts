@@ -68,9 +68,7 @@ export const NextEditorActionsContext = createContext<NextEditorActions | null>(
 // 2. Metadata Context: Relatively stable state (flags)
 export interface NextEditorMetadata {
   isRecording: boolean;
-  isRecordingAudio: boolean;
   isPlaying: boolean;
-  isPaused: boolean;
   hasEnded: boolean;
   usesPlaybackModel: boolean;
   currentRecording: Recording | null;

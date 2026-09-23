@@ -1,4 +1,5 @@
 import { useContext } from "react";
+import { shallowEqual } from "@xstate/react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import {
   NextEditorActionsContext,
@@ -8,16 +9,9 @@ import {
 } from "../contexts/NextEditorContext";
 import {
   selectDuration,
-  selectHasEnded,
-  selectIsPaused,
-  selectIsPlaying,
-  selectIsRecording,
-  selectIsRecordingAudio,
   selectLiveTime,
+  selectNextEditorMetadata,
   selectPlaybackSpeed,
-  selectRecording,
-  selectRecordingStartTime,
-  selectUsesPlaybackModel,
   selectVolume,
 } from "../core/src/useNextEditor";
 
@@ -37,27 +31,8 @@ export const useNextEditorActions = (): NextEditorActions => {
  * Hook to access metadata/flags (isRecording, isPlaying, etc.).
  * Component using this will re-render when recording/playback state transitions.
  */
-export const useNextEditorMetadata = (): NextEditorMetadata => {
-  const isRecording = NextEditorActorContext.useSelector(selectIsRecording);
-  const isRecordingAudio = NextEditorActorContext.useSelector(selectIsRecordingAudio);
-  const isPlaying = NextEditorActorContext.useSelector(selectIsPlaying);
-  const isPaused = NextEditorActorContext.useSelector(selectIsPaused);
-  const hasEnded = NextEditorActorContext.useSelector(selectHasEnded);
-  const usesPlaybackModel = NextEditorActorContext.useSelector(selectUsesPlaybackModel);
-  const currentRecording = NextEditorActorContext.useSelector(selectRecording);
-  const recordingStartTime = NextEditorActorContext.useSelector(selectRecordingStartTime);
-
-  return {
-    isRecording,
-    isRecordingAudio,
-    isPlaying,
-    isPaused,
-    hasEnded,
-    usesPlaybackModel,
-    currentRecording,
-    recordingStartTime,
-  };
-};
+export const useNextEditorMetadata = (): NextEditorMetadata =>
+  NextEditorActorContext.useSelector(selectNextEditorMetadata, shallowEqual);
 
 /**
  * Hook to access high-frequency playback state refs (volume, duration).
