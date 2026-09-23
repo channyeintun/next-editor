@@ -32,7 +32,6 @@ import {
   type WorkspaceProject,
 } from "../types/workspace";
 import { prepareTextEditEvent, type TextEditEvent } from "../types/textEdit";
-import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { writeStoredFileSidebarCollapsed } from "../utils/sidebarLayout";
 
 interface WorkspaceProviderProps {
@@ -194,10 +193,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     workspaceStore.trigger.createFolder({ path });
   };
 
-  const hydrateAssetDescriptors: WorkspaceActions["hydrateAssetDescriptors"] = (descriptors) => {
-    workspaceStore.trigger.hydrateAssetDescriptors({ descriptors });
-  };
-
   const notifyAssetAvailable = (assetId: string) => {
     workspaceStore.trigger.notifyAssetAvailable({ assetId });
   };
@@ -248,18 +243,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     return nextFile && isWorkspaceTextFile(nextFile) ? nextFile.content : null;
   };
 
-  const updateActiveFileContent = (content: string) => {
-    const context = workspaceStore.getSnapshot().context;
-    if (!context.isInitialized) {
-      return;
-    }
-
-    workspaceStore.trigger.updateFileContent({
-      path: context.activeFilePath,
-      content,
-    });
-  };
-
   const saveProject = (): Promise<void> => {
     if (typeof window === "undefined") {
       return Promise.resolve();
@@ -282,7 +265,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     nextActiveFilePath?: string,
     collapsedFolders?: string[],
     sidebarScrollTop?: number,
-    sidebarWidth?: number,
   ) => {
     const normalizedProject = normalizeProject(project);
     const normalizedNextActiveFilePath = normalizeWorkspacePath(nextActiveFilePath ?? "");
@@ -293,7 +275,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     const savedSnapshot = cloneWorkspaceSnapshot({
       activeFilePath: resolvedActiveFilePath,
       project: normalizedProject,
-      sidebarWidth,
     });
 
     workspaceStore.trigger.loadProject({
@@ -301,13 +282,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       activeFilePath: resolvedActiveFilePath,
       collapsedFolders,
       sidebarScrollTop,
-      sidebarWidth,
       savedSnapshot,
     });
-  };
-
-  const createNewEditor = () => {
-    loadProject(createStarterHtmlCssWorkspace());
   };
 
   const updateLessonType = (lessonType: WorkspaceLessonType) => {
@@ -367,15 +343,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     return context.project.files[normalizeWorkspacePath(path)] ?? null;
   };
 
-  const listFiles = () => {
-    const context = workspaceStore.getSnapshot().context;
-    return context.isInitialized
-      ? Object.values(context.project.files).sort((left, right) =>
-          left.path.localeCompare(right.path),
-        )
-      : [];
-  };
-
   const subscribeWorkspaceSync = (
     listener: (mutation: WorkspaceSyncMutation) => void,
   ): (() => void) => {
@@ -406,7 +373,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     setSidebarWidth,
     setSidebarCollapsed,
     startSidebarCollapsed,
-    createNewEditor,
     createFile,
     createFolder,
     deleteFolder,
@@ -415,8 +381,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     deleteFile,
     updateFileContent,
     applyFileTextEdits,
-    updateActiveFileContent,
-    hydrateAssetDescriptors,
     notifyAssetAvailable,
     saveProject,
     loadProject,
@@ -430,7 +394,6 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     getSidebarWidth,
     getSidebarCollapsed,
     getFile,
-    listFiles,
     subscribeWorkspaceSync,
   };
 

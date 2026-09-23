@@ -49,7 +49,6 @@ const baseActions: WorkspaceActions = {
   setSidebarWidth: vi.fn(),
   setSidebarCollapsed: vi.fn(),
   startSidebarCollapsed: vi.fn(),
-  createNewEditor: vi.fn(),
   createFile: vi.fn(),
   createFolder: vi.fn(),
   renameFile: vi.fn(),
@@ -58,8 +57,6 @@ const baseActions: WorkspaceActions = {
   deleteFolder: vi.fn(),
   updateFileContent: vi.fn(),
   applyFileTextEdits: vi.fn(() => "updated"),
-  updateActiveFileContent: vi.fn(),
-  hydrateAssetDescriptors: vi.fn(),
   notifyAssetAvailable: vi.fn(),
   saveProject: vi.fn(async () => {}),
   loadProject: vi.fn(),
@@ -73,7 +70,6 @@ const baseActions: WorkspaceActions = {
   getSidebarWidth: () => 260,
   getSidebarCollapsed: () => false,
   getFile: (path) => project.files[path] ?? null,
-  listFiles: () => Object.values(project.files),
   subscribeWorkspaceSync: vi.fn(() => () => {}),
 };
 

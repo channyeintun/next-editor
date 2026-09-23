@@ -144,7 +144,6 @@ const workspaceActions = {
   getSidebarWidth: () => 260,
   getWorkspaceRevision: () => 0,
   getFile: () => null,
-  listFiles: () => [],
   subscribeWorkspaceSync: () => () => {},
 };
 

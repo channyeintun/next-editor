@@ -1,7 +1,6 @@
 import { createContext } from "react";
 import type {
   WorkspaceFile,
-  WorkspaceAssetDescriptor,
   WorkspaceFileContent,
   WorkspaceFileEncoding,
   WorkspaceLessonType,
@@ -23,7 +22,6 @@ export interface WorkspaceActions {
    * the editor themselves; a lesson only gets to choose its opening frame.
    */
   startSidebarCollapsed: (collapsed: boolean) => void;
-  createNewEditor: () => void;
   createFile: (
     path: string,
     content?: WorkspaceFileContent,
@@ -36,8 +34,6 @@ export interface WorkspaceActions {
   deleteFolder: (path: string) => void;
   updateFileContent: (path: string, content: string) => void;
   applyFileTextEdits: (event: TextEditEvent) => string | null;
-  updateActiveFileContent: (content: string) => void;
-  hydrateAssetDescriptors: (descriptors: Record<string, WorkspaceAssetDescriptor>) => void;
   notifyAssetAvailable: (assetId: string) => void;
   saveProject: () => Promise<void>;
   loadProject: (
@@ -45,7 +41,6 @@ export interface WorkspaceActions {
     activeFilePath?: string,
     collapsedFolders?: string[],
     sidebarScrollTop?: number,
-    sidebarWidth?: number,
   ) => void;
   reconcileExternalProject: (project: WorkspaceProject) => void;
   updateLessonType: (lessonType: WorkspaceLessonType) => void;
@@ -57,7 +52,6 @@ export interface WorkspaceActions {
   getSidebarWidth: () => number;
   getSidebarCollapsed: () => boolean;
   getFile: (path: string) => WorkspaceFile | null;
-  listFiles: () => WorkspaceFile[];
   subscribeWorkspaceSync: (listener: (mutation: WorkspaceSyncMutation) => void) => () => void;
 }
 

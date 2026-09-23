@@ -974,8 +974,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     };
     return {
       ...baseActions,
-      createNewEditor: () =>
-        reportWriteError(new Error("Leave the room before replacing the project.")),
       createFile: (path, content = "", encoding) => {
         if (encoding !== "asset") {
           if (typeof content !== "string") {
@@ -1031,8 +1029,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           return null;
         }
       },
-      updateActiveFileContent: (content) =>
-        run(() => controller.replaceFileContent(baseActions.getActiveFilePath(), content)),
       setPreviewFilePath: (path) => run(() => controller.setEntryFile(path)),
       updateLessonType: (lessonType) => run(() => controller.updateLessonType(lessonType)),
       loadProject: () =>
