@@ -108,7 +108,7 @@ The playback side is intentionally append-friendly.
 
 - `loadRecording(recording)` sets up an initial timeline.
 - `extendRecording(recording)` swaps in a longer append-only prefix of the same SCR3 recording without resetting playback position.
-- The machine keeps per-stream replay cursors — `lastAppliedFrameIndex`, `lastAppliedPreviewEventIndex`, `lastAppliedPreviewPatchBatchIndex`, `lastAppliedSlideEventIndex`, `lastAppliedWorkspaceEventIndex`, `lastAppliedRuntimeEventIndex` — so it can continue forward efficiently.
+- The machine keeps per-stream replay cursors — `lastAppliedFrameIndex`, `lastAppliedPreviewEventIndex`, `lastAppliedSlideEventIndex`, `lastAppliedWorkspaceEventIndex`, `lastAppliedRuntimeEventIndex` — so it can continue forward efficiently.
 - Progressive audio uses the same `HTMLAudioElement` surface in blob or stream mode; when later prefixes extend the audio track, the actor reattaches the growing blob snapshot and stays synchronized to the editor timeline.
 - Progressive camera playback stays in the React `CameraOverlay` boundary: `extendRecording` replaces `cameraBlob` with a larger reassembled snapshot, and the overlay reattaches that blob while continuing to derive video time from the timeline.
 

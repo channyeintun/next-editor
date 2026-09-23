@@ -21,7 +21,6 @@ import {
   getWhiteboardReplayResult,
   getWorkspaceReplayResult,
   isReplayResync,
-  isSeekReplayEvent,
   resolveReplayTime,
 } from "./replayState";
 import { applyFrameState, reportMachineError } from "./editorMachineHelpers";
@@ -70,7 +69,6 @@ const resolveBoundedReplayTime = (
 const REPLAY_CURSORS_RESET = {
   lastAppliedFrameIndex: -1,
   lastAppliedPreviewEventIndex: -1,
-  lastAppliedPreviewPatchBatchIndex: -1,
   lastAppliedSlideEventIndex: -1,
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedWhiteboardEventIndex: -1,
@@ -806,33 +804,24 @@ export const applyPreviewPatchBatchesAtTime = ({
 }: {
   context: EditorMachineContext;
   event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
-  const { recording, applyPreviewPatchReplay, lastAppliedPreviewPatchBatchIndex } = context;
+}): void => {
+  const { recording, applyPreviewPatchReplay } = context;
 
   // An initial document alone is a complete replayable stream (Meta +
   // FullSnapshot), so requiring patch batches too meant a preview that was
   // opened and never mutated replayed as an empty box. Batches without an
   // initial document are not replayable, so that half stays required.
   if (!recording?.previewInitialDocuments?.length || !applyPreviewPatchReplay) {
-    return {};
+    return;
   }
 
-  const nextIndex = applyPreviewPatchReplay({
+  // rrweb replay is driven by time alone, so no cursor comes back to keep.
+  applyPreviewPatchReplay({
     recordingId: recording.id,
     currentTime: resolveBoundedReplayTime(context, event),
-    isSeeking: isSeekReplayEvent(event),
     initialDocuments: recording.previewInitialDocuments,
     patchBatches: recording.previewPatchBatches ?? [],
-    lastAppliedPatchBatchIndex: lastAppliedPreviewPatchBatchIndex,
   });
-
-  if (nextIndex !== lastAppliedPreviewPatchBatchIndex) {
-    return {
-      lastAppliedPreviewPatchBatchIndex: nextIndex,
-    };
-  }
-
-  return {};
 };
 
 export const applyWorkspaceEventsAtTime = ({

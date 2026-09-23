@@ -253,7 +253,6 @@ The machine keeps replay progress in context so it can apply large recordings ef
 
 - `lastAppliedFrameIndex`
 - `lastAppliedPreviewEventIndex`
-- `lastAppliedPreviewPatchBatchIndex`
 - `lastAppliedSlideEventIndex`
 - `lastAppliedWorkspaceEventIndex`
 - `lastAppliedRuntimeEventIndex`

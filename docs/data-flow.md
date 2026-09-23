@@ -126,7 +126,7 @@ sequenceDiagram
 
 Current playback behavior:
 
-- The machine keeps a replay cursor for each append-only event stream (frames, preview events, preview patch batches, slides, workspace, runtime) so streamed growth (`appendRecordingDelta`, `extendRecording`) can continue from the current point efficiently.
+- The machine keeps a replay cursor for each append-only event stream (frames, preview events, slides, workspace, runtime) so streamed growth (`appendRecordingDelta`, `extendRecording`) can continue from the current point efficiently. rrweb preview replay needs no cursor: it is seeked to the current time on every apply.
 - Audio playback is lazy when a progressive load first gains usable audio, then stays in sync by updating the same `HTMLAudioElement` with larger contiguous blob snapshots as more fragments arrive; the machine throttles resyncs to roughly every 250ms during a `TICK`.
 - Camera playback is rendered by `CameraOverlay`, which derives the correct video time from timeline time minus `cameraStartOffsetMs`.
 

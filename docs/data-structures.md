@@ -361,7 +361,6 @@ interface EditorMachineContext {
   // Replay cursors — one per append-only event stream
   lastAppliedFrameIndex: number;
   lastAppliedPreviewEventIndex: number;
-  lastAppliedPreviewPatchBatchIndex: number;
   lastAppliedSlideEventIndex: number;
   lastAppliedWorkspaceEventIndex: number;
   lastAppliedRuntimeEventIndex: number;
@@ -377,7 +376,7 @@ interface EditorMachineContext {
   applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
   applySlides?: (slides: Slide[]) => void;
   applyPreviewState?: (previewState: PreviewState) => void;
-  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
+  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => void;
   getSlideState?: () => { previewState: SlidePreviewState; currentSlideIndex: number } | null;
   getSlides?: () => Slide[];
   getPreviewState?: () => PreviewState | null;

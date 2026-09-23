@@ -1,4 +1,5 @@
-import type { PreviewDomPatchBatch, PreviewInitialDocument, PreviewState } from "../types/slides";
+import type { PreviewPatchReplayInput } from "../core/src/types";
+import type { PreviewState } from "../types/slides";
 import type { PreviewScreenshotResult } from "../utils/iframeScreenshotBridge";
 import type {
   StudioPreviewCommand,
@@ -14,18 +15,9 @@ export interface LivePreviewInspection {
   width: number;
 }
 
-export interface PreviewPatchReplayInput {
-  recordingId: string;
-  currentTime: number;
-  isSeeking: boolean;
-  initialDocuments: PreviewInitialDocument[];
-  patchBatches: PreviewDomPatchBatch[];
-  lastAppliedPatchBatchIndex: number;
-}
-
 export type SnapshotGetter = () => PreviewState | null;
 export type SnapshotApplier = (previewState: PreviewState) => void;
-export type PatchReplayApplier = (input: PreviewPatchReplayInput) => number;
+export type PatchReplayApplier = (input: PreviewPatchReplayInput) => void;
 export type DockWidthDeltaApplier = (delta: number) => void;
 export type LivePreviewInspectionGetter = () => Promise<LivePreviewInspection | null>;
 export type PreviewScreenshotCapturer = () => Promise<PreviewScreenshotResult>;

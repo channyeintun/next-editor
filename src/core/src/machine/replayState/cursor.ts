@@ -34,7 +34,7 @@ export function resolveReplayTime(event: ReplayTriggerEvent, fallbackTime: numbe
   return fallbackTime;
 }
 
-export function isSeekReplayEvent(event: ReplayTriggerEvent): boolean {
+function isSeekReplayEvent(event: ReplayTriggerEvent): boolean {
   return event.type === "SEEK";
 }
 

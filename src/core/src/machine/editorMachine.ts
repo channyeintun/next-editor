@@ -264,7 +264,7 @@ export const editorMachine = setup({
     notifySeek,
     setEditorRef: assign(setEditorRef),
     applyPreviewEventsAtTime: assign(applyPreviewEventsAtTime),
-    applyPreviewPatchBatchesAtTime: assign(applyPreviewPatchBatchesAtTime),
+    applyPreviewPatchBatchesAtTime,
     applyWorkspaceEventsAtTime: assign(applyWorkspaceEventsAtTime),
     applyRuntimeEventsAtTime: assign(applyRuntimeEventsAtTime),
     applySlideEventsAtTime: assign(applySlideEventsAtTime),

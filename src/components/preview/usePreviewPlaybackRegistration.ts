@@ -1,8 +1,6 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
-import type {
-  PreviewAdapterHandle,
-  PreviewPatchReplayInput,
-} from "../../stores/previewAdapterHandle";
+import type { PreviewPatchReplayInput } from "../../core/src/types";
+import type { PreviewAdapterHandle } from "../../stores/previewAdapterHandle";
 import type {
   ApiClientReplayState,
   ApiClientRequestTab,
@@ -15,7 +13,7 @@ import type {
 import { arePreviewSizesEqual } from "../../utils/equality";
 import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
-import { buildRrwebReplayEvents, hasRrwebPreviewSeed } from "./rrwebPreview";
+import { buildRrwebReplayEvents } from "./rrwebPreview";
 import { createRrwebPreviewReplayer, type RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 interface UsePreviewPlaybackRegistrationOptions {
@@ -115,11 +113,11 @@ export function usePreviewPlaybackRegistration({
   );
 
   useEffect(() => {
-    const applyRrwebReplay = (input: PreviewPatchReplayInput): number => {
+    const applyRrwebReplay = (input: PreviewPatchReplayInput) => {
       const container = replayContainerRef.current;
       if (!container) {
-        // Container not mounted yet; retry on the next tick.
-        return -1;
+        // Container not mounted yet; the next tick calls again.
+        return;
       }
 
       // Only rebuild for growth once the current Replayer is actually ready:
@@ -184,31 +182,12 @@ export function usePreviewPlaybackRegistration({
       }
 
       rrwebReplayerRef.current?.seekToRecordingTime(input.currentTime);
-
-      // Report the last batch at/before currentTime so the machine's change
-      // detection keeps advancing the cursor.
-      let cursor = -1;
-      for (let index = 0; index < input.patchBatches.length; index++) {
-        if (input.patchBatches[index].time > input.currentTime) {
-          break;
-        }
-        cursor = index;
-      }
-      return cursor;
     };
 
     previewHandle.patchReplayApplier.current = (input) => {
-      if (!hasPreviewPatchReplay || isLiveRuntimePreviewActive) {
-        return input.lastAppliedPatchBatchIndex;
+      if (hasPreviewPatchReplay && !isLiveRuntimePreviewActive) {
+        applyRrwebReplay(input);
       }
-
-      if (hasRrwebPreviewSeed(input.initialDocuments)) {
-        return applyRrwebReplay(input);
-      }
-
-      // Runtime previews always record in the rrweb format; there is no other
-      // runtime replay path.
-      return -1;
     };
 
     return () => {

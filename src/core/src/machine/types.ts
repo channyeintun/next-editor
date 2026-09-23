@@ -272,7 +272,7 @@ export interface EditorMachineContext {
   /** Callback to apply preview state during playback */
   applyPreviewState?: (previewState: PreviewState) => void;
   /** Callback to apply preview DOM patches during playback */
-  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
+  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => void;
   /** Callback to get slide state during recording */
   getSlideState?: () => {
     previewState: SlidePreviewState;
@@ -300,8 +300,6 @@ export interface EditorMachineContext {
   lastAppliedFrameIndex: number;
   /** Index of the last applied preview event during playback */
   lastAppliedPreviewEventIndex: number;
-  /** Index of the last applied preview patch batch during playback */
-  lastAppliedPreviewPatchBatchIndex: number;
   /** Index of the last applied slide event during playback */
   lastAppliedSlideEventIndex: number;
   /** Index of the last applied workspace event during playback */
@@ -573,7 +571,7 @@ export interface EditorMachineInput {
   applySlides?: (slides: Slide[]) => void;
   getPreviewState?: () => PreviewState | null;
   applyPreviewState?: (previewState: PreviewState) => void;
-  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => number;
+  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => void;
   getWorkspaceSnapshot?: () => WorkspaceRecordingSnapshot | null;
   applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
   getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
@@ -655,7 +653,6 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   playbackAudioSpawned: false,
   lastAppliedFrameIndex: -1,
   lastAppliedPreviewEventIndex: -1,
-  lastAppliedPreviewPatchBatchIndex: -1,
   lastAppliedSlideEventIndex: -1,
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedRuntimeEventIndex: -1,

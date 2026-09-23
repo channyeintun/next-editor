@@ -303,10 +303,8 @@ export interface ScreenRecordingReadyPayload {
 export interface PreviewPatchReplayInput {
   recordingId: string;
   currentTime: number;
-  isSeeking: boolean;
   initialDocuments: PreviewInitialDocument[];
   patchBatches: PreviewDomPatchBatch[];
-  lastAppliedPatchBatchIndex: number;
 }
 
 /**
