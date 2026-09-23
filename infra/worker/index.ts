@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
+import { csrf } from "hono/csrf";
 import type { Env } from "./env";
 import { lessonsRoute } from "./routes/lessons";
 import { playlistsRoute } from "./routes/playlists";
@@ -66,6 +67,15 @@ const requestLog: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
 };
 app.use("/api/*", requestLog);
 app.use("/media/*", requestLog);
+
+// The API authenticates by cookie, and SameSite=Lax still sends that cookie on a
+// top-level cross-site form POST and stores any cookie the response sets. So a
+// state-changing request with a form-submittable body (urlencoded, multipart,
+// text/plain or none) must come from this origin. Without this, another site
+// could auto-submit a text/plain form whose body parses as JSON to
+// /api/auth/google/onetap and sign the visitor into the attacker's account. The
+// SPA's own requests are same-origin, and QStash's maintenance callback is JSON.
+app.use("/api/*", csrf());
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
