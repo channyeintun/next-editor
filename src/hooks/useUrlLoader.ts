@@ -5,7 +5,11 @@ import {
   audioMimeFromFilename,
   createStreamingRecordingReader,
 } from "../storage/streamingRecordingCodec";
-import { createImportedCameraObjectUrl } from "../storage/cameraVideoUrl";
+import {
+  attachCompanionMedia,
+  decodeRecordingFile,
+  selectRecordingFiles,
+} from "../storage/RecordingStorage";
 import {
   hydrateDecodedRecordingWorkspaceAssets,
   persistDecodedWorkspaceAssets,
@@ -326,33 +330,19 @@ export const useUrlLoader = () => {
     }
   };
 
-  const importNextEditorFile = async (file: File, videoFile?: File, audioFile?: File) => {
-    // Attach dropped sibling media: camera video as an object URL so playback streams it
-    // directly, audio directly as the playback blob (a `File` is a `Blob`).
-    const attachVideo = (recording: Recording): Recording => {
-      let result = recording;
-      if (result.cameraFile && videoFile) {
-        result = { ...result, cameraUrl: createImportedCameraObjectUrl(videoFile) };
-      }
-      const declaresExternalAudio = result.audioFile || result.audioSource === "external";
-      if (declaresExternalAudio && audioFile && !(result.audioBlob instanceof Blob)) {
-        result = { ...result, audioBlob: audioFile };
-      }
-      return result;
-    };
+  /**
+   * Loads the `.ne` among files dropped together, pairing it with the camera video and audio
+   * among them the way the file picker does. Files without a `.ne` are not a lesson: they are
+   * left alone and do not interrupt a load in progress.
+   */
+  const importNextEditorFile = async (files: File[]) => {
+    const selection = selectRecordingFiles(files);
+    if (!selection) return;
     const { isStale } = beginLoad();
     try {
-      if (file.name.endsWith(".ne")) {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-
-        if (bytes.length === 0) {
-          throw new Error("File appears to be empty or corrupted");
-        }
-
-        const recordings = await decompressBinaryToRecordings(bytes);
-        if (recordings.length > 0 && !isStale()) {
-          loadRecording(attachVideo(recordings[0]));
-        }
+      const recording = await decodeRecordingFile(selection.neFile);
+      if (!isStale()) {
+        loadRecording(attachCompanionMedia(recording, selection));
       }
     } catch (err) {
       if (isStale()) return;

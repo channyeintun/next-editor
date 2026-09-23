@@ -603,7 +603,9 @@ describe("useUrlLoader", () => {
       const { result } = renderLoader(actions);
 
       const urlLoad = result.current.fetchNextEditorFile("https://example.com/a.ne");
-      await result.current.importNextEditorFile(new File([droppedBytes as BlobPart], "dropped.ne"));
+      await result.current.importNextEditorFile([
+        new File([droppedBytes as BlobPart], "dropped.ne"),
+      ]);
       download.open();
       await urlLoad;
 
@@ -637,7 +639,9 @@ describe("useUrlLoader", () => {
         const requested = fetchMock.mock.calls.map(([input]) => targetUrl(String(input)));
         expect(requested).toContain("https://example.com/a.en.vtt");
       });
-      await result.current.importNextEditorFile(new File([droppedBytes as BlobPart], "dropped.ne"));
+      await result.current.importNextEditorFile([
+        new File([droppedBytes as BlobPart], "dropped.ne"),
+      ]);
       captionDownload.open();
       await new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -661,7 +665,7 @@ describe("useUrlLoader", () => {
       });
       expect(result.current.retry).toBeTypeOf("function");
 
-      await act(() => result.current.importNextEditorFile(new File([], "dropped.ne")));
+      await act(() => result.current.importNextEditorFile([new File([], "dropped.ne")]));
       expect(result.current.error).toMatch(/Failed to import file/);
       // A dropped file cannot be fetched again.
       expect(result.current.retry).toBeUndefined();

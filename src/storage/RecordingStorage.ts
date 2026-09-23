@@ -40,8 +40,13 @@ function sanitizeMediaUrlsForExport(recording: Recording): Recording {
 }
 
 /** True for companion files that are audio (by MIME, or by extension for `.weba` etc.). */
-export function isAudioFile(file: File): boolean {
+function isAudioFile(file: File): boolean {
   return file.type.startsWith("audio/") || /\.(weba|ogg|m4a|mp3|wav)$/i.test(file.name);
+}
+
+/** True for companion files that are video (by MIME, or by extension). */
+function isVideoFile(file: File): boolean {
+  return file.type.startsWith("video/") || /\.(webm|mp4|mov)$/i.test(file.name);
 }
 
 /** True when a recording carries non-empty media bytes. */
@@ -70,25 +75,13 @@ function pickCompanionFile(
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-export function pickCompanionVideo(
-  videos: File[],
-  neFileName: string,
-  cameraFile: string | undefined,
-): File | null {
-  return pickCompanionFile(videos, neFileName, cameraFile);
-}
-
 /**
  * Attach a companion camera video to a recording as an object URL on `cameraUrl`, when the
  * recording references an external camera (`cameraFile`) and a matching video file is present.
  */
-export function attachCompanionVideo(
-  recording: Recording,
-  videos: File[],
-  neFileName: string,
-): Recording {
+function attachCompanionVideo(recording: Recording, videos: File[], neFileName: string): Recording {
   if (!recording.cameraFile) return recording;
-  const video = pickCompanionVideo(videos, neFileName, recording.cameraFile);
+  const video = pickCompanionFile(videos, neFileName, recording.cameraFile);
   if (!video) return recording;
   return { ...recording, cameraUrl: createImportedCameraObjectUrl(video) };
 }
@@ -109,6 +102,58 @@ export function attachCompanionAudio(
   const audio = pickCompanionFile(audios, neFileName, recording.audioFile);
   if (!audio) return recording;
   return { ...recording, audioBlob: audio };
+}
+
+/** A `.ne` picked or dropped together with other files, and the media among those files. */
+export interface RecordingFileSelection {
+  neFile: File;
+  videoFiles: File[];
+  audioFiles: File[];
+}
+
+/**
+ * Finds the `.ne` (in any letter case) among files picked or dropped together, and the
+ * video and audio files that may be its siblings. Null when no file is a `.ne`.
+ */
+export function selectRecordingFiles(files: File[]): RecordingFileSelection | null {
+  const neFile = files.find((file) => file.name.toLowerCase().endsWith(".ne"));
+  if (!neFile) return null;
+  const companions = files.filter((file) => file !== neFile);
+  return {
+    neFile,
+    videoFiles: companions.filter((file) => isVideoFile(file) && !isAudioFile(file)),
+    audioFiles: companions.filter(isAudioFile),
+  };
+}
+
+/** Reads and decodes a `.ne` file, rejecting one that is empty or not an SCR3 stream. */
+export async function decodeRecordingFile(neFile: File): Promise<Recording> {
+  const bytes = new Uint8Array(await neFile.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error("File appears to be empty or corrupted");
+  }
+  if (!isStreamingRecording(bytes)) {
+    throw new Error("File is not a valid .ne recording (bad SCR3 magic)");
+  }
+  const [recording] = await decompressBinaryToRecordings(bytes);
+  return recording;
+}
+
+/**
+ * Attaches the camera video (as an object URL on `cameraUrl`) and the audio (as `audioBlob`)
+ * that pair with the recording decoded from `selection.neFile`, matched by the names the
+ * recording declares, then by the `.ne`'s basename, then as the only candidate.
+ */
+export function attachCompanionMedia(
+  recording: Recording,
+  selection: RecordingFileSelection,
+): Recording {
+  const { neFile, videoFiles, audioFiles } = selection;
+  return attachCompanionAudio(
+    attachCompanionVideo(recording, videoFiles, neFile.name),
+    audioFiles,
+    neFile.name,
+  );
 }
 
 export interface RecordingFileSet {
@@ -355,45 +400,15 @@ export class RecordingStorage {
 
       input.onchange = async (event) => {
         const files = Array.from((event.target as HTMLInputElement).files ?? []);
-        const neFile = files.find((file) => file.name.toLowerCase().endsWith(".ne"));
-        if (!neFile) {
+        const selection = selectRecordingFiles(files);
+        if (!selection) {
           reject(new Error("No .ne file selected"));
           return;
         }
-        const companions = files.filter((file) => file !== neFile);
-        const audioFiles = companions.filter(isAudioFile);
-        const videoFiles = companions.filter((file) => !isAudioFile(file));
 
         try {
-          const bytes = new Uint8Array(await neFile.arrayBuffer());
-          if (bytes.length === 0) {
-            reject(new Error("File appears to be empty or corrupted"));
-            return;
-          }
-          if (!isStreamingRecording(bytes)) {
-            reject(new Error("File is not a valid .ne recording (bad SCR3 magic)"));
-            return;
-          }
-
-          const importedRecordings = await decompressBinaryToRecordings(bytes);
-
-          // Validate imported recordings
-          if (!Array.isArray(importedRecordings) || importedRecordings.length === 0) {
-            reject(new Error("No valid recordings found in file"));
-            return;
-          }
-
-          // Attach companion media (if provided): camera video streams via object URL,
-          // audio attaches as the playback blob.
-          const withVideo = importedRecordings.map((recording) =>
-            attachCompanionAudio(
-              attachCompanionVideo(recording, videoFiles, neFile.name),
-              audioFiles,
-              neFile.name,
-            ),
-          );
-
-          resolve(withVideo);
+          const recording = await decodeRecordingFile(selection.neFile);
+          resolve([attachCompanionMedia(recording, selection)]);
         } catch (error) {
           console.error("Import error details:", error);
           const errorMessage = error instanceof Error ? error.message : "Invalid file format";

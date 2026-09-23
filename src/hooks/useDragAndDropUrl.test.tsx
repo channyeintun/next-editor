@@ -1,8 +1,11 @@
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Recording } from "../core/src";
+import { NextEditorActionsContext, type NextEditorActions } from "../contexts/NextEditorContext";
+import { encodeRecordingToStream } from "../storage/streamingRecordingCodec";
 import { useDragAndDropUrl } from "./useDragAndDropUrl";
-import type { UrlLoader } from "./useUrlLoader";
+import { useUrlLoader, type UrlLoader } from "./useUrlLoader";
 
 // jsdom has no DragEvent; a bubbling Event carrying a dataTransfer is all the hook reads.
 function dragEvent(type: string, files: File[] = []) {
@@ -108,6 +111,82 @@ describe("useDragAndDropUrl", () => {
     });
 
     expect(state.isDragging).toBe(false);
-    expect(loader.importNextEditorFile).toHaveBeenCalledWith(lesson, undefined, undefined);
+    expect(loader.importNextEditorFile).toHaveBeenCalledWith([lesson]);
+  });
+});
+
+describe("dropping a lesson with other files", () => {
+  const originalCreateObjectUrl = URL.createObjectURL;
+  const originalRevokeObjectUrl = URL.revokeObjectURL;
+
+  afterEach(() => {
+    URL.createObjectURL = originalCreateObjectUrl;
+    URL.revokeObjectURL = originalRevokeObjectUrl;
+    document.body.innerHTML = "";
+  });
+
+  async function lessonFile(name: string, overrides: Partial<Recording> = {}): Promise<File> {
+    const recording: Recording = {
+      version: 4,
+      id: "lesson",
+      name: "Lesson",
+      createdAt: 1,
+      duration: 1_000,
+      keyframeInterval: 120,
+      frames: [],
+      ...overrides,
+    };
+    return new File([(await encodeRecordingToStream(recording)) as BlobPart], name);
+  }
+
+  /** The editor's real loader behind the drop hook; returns what reached loadRecording. */
+  function renderEditorDropTarget() {
+    const loadRecording = vi.fn<NextEditorActions["loadRecording"]>();
+    const actions = {
+      loadRecording,
+      extendRecording: vi.fn<NextEditorActions["extendRecording"]>(),
+      appendRecordingDelta: vi.fn<NextEditorActions["appendRecordingDelta"]>(),
+      addCaptionTrack: vi.fn<NextEditorActions["addCaptionTrack"]>(),
+    } as unknown as NextEditorActions;
+    function DropTarget() {
+      useDragAndDropUrl(useUrlLoader());
+      return createElement("main", { "data-testid": "surface" });
+    }
+    const view = render(
+      createElement(
+        NextEditorActionsContext.Provider,
+        { value: actions },
+        createElement(DropTarget),
+      ),
+    );
+    const drop = (files: File[]) =>
+      act(() => {
+        view.getByTestId("surface").dispatchEvent(dragEvent("drop", files));
+      });
+    return { drop, loadRecording };
+  }
+
+  it("loads the .ne even when an image is dropped first, in any letter case", async () => {
+    const { drop, loadRecording } = renderEditorDropTarget();
+
+    drop([new File(["png"], "cover.png", { type: "image/png" }), await lessonFile("LESSON.NE")]);
+
+    await waitFor(() => expect(loadRecording).toHaveBeenCalledTimes(1));
+    expect(loadRecording.mock.calls[0][0].id).toBe("lesson");
+  });
+
+  it("pairs the camera video named like the lesson, not the first video dropped", async () => {
+    URL.createObjectURL = vi.fn<(blob: Blob) => string>((blob) => `blob:${(blob as File).name}`);
+    URL.revokeObjectURL = vi.fn<(url: string) => void>();
+    const { drop, loadRecording } = renderEditorDropTarget();
+
+    drop([
+      await lessonFile("intro.ne", { cameraFile: "take.webm" }),
+      new File(["other"], "other-lesson.webm", { type: "video/webm" }),
+      new File(["intro"], "intro.webm", { type: "video/webm" }),
+    ]);
+
+    await waitFor(() => expect(loadRecording).toHaveBeenCalledTimes(1));
+    expect(loadRecording.mock.calls[0][0].cameraUrl).toBe("blob:intro.webm");
   });
 });
