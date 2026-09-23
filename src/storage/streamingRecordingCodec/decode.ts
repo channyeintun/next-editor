@@ -33,12 +33,7 @@ import {
   type RecordingStreamMeta,
   type SegmentHeaderFields,
 } from "./format";
-import {
-  deriveRecordingClusters,
-  deriveRecordingMediaFragments,
-  deriveRecordingTracks,
-  mergeClusterSummary,
-} from "./clusters";
+import { deriveRecordingClusters, deriveRecordingTracks, mergeClusterSummary } from "./clusters";
 import { hydrateFramePreviewContent } from "./framePreviewContentDedup";
 import { createPreviewAddNodeHydrator } from "./previewPatchDedup";
 import { createWorkspaceEventContentHydrator } from "./workspaceEventDedup";
@@ -472,13 +467,10 @@ function assembleRecording(
       ? meta.tracks.map((track) => ({ ...track }))
       : deriveRecordingTracks(provisionalRecording);
 
-  const mediaFragments = deriveRecordingMediaFragments(provisionalRecording, tracks, clusters);
-
   return {
     ...provisionalRecording,
     tracks: nonEmpty(tracks),
     clusters: nonEmpty(clusters),
-    mediaFragments: nonEmpty(mediaFragments),
   };
 }
 

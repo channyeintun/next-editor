@@ -16,12 +16,10 @@ import {
 // ============================================================================
 // Recording metadata derivation.
 //
-// A `Recording` may already carry explicit tracks/clusters/media-fragments (when
-// it was decoded from a stream that recorded them), or it may carry none (a
-// freshly captured recording). These helpers fill in the gaps so the encoder
-// always has a consistent track/cluster/fragment view to write, and so the
-// decoder can reconstruct the same view from segments. No bytes here — pure
-// metadata.
+// A `Recording` usually carries its tracks and clusters (capture builds them and
+// decoding restores them), but need not. These helpers fill in the gaps so the
+// encoder always has a consistent track/cluster view to write, and so the decoder
+// can derive what a stream's metadata leaves out. No bytes here — pure metadata.
 // ============================================================================
 
 export function resolveClusterIndexForTime(
@@ -39,14 +37,6 @@ export function resolveClusterIndexForTime(
   }
 
   return clusters[0].index;
-}
-
-export function getTrackId(
-  tracks: ReadonlyArray<RecordingTrackMeta> | undefined,
-  kind: RecordingTrackMeta["kind"],
-  fallback: string,
-): string {
-  return tracks?.find((track) => track.kind === kind)?.id ?? fallback;
 }
 
 function buildClustersFromFrames(frames: DeltaFrame[], duration: number): RecordingClusterMeta[] {
@@ -202,49 +192,6 @@ export function deriveRecordingTracks(recording: Recording): RecordingTrackMeta[
   }
 
   return tracks;
-}
-
-export function deriveRecordingMediaFragments(
-  recording: Recording,
-  tracks: ReadonlyArray<RecordingTrackMeta>,
-  clusters: ReadonlyArray<RecordingClusterMeta>,
-): RecordingMediaFragment[] {
-  if (recording.mediaFragments && recording.mediaFragments.length > 0) {
-    return recording.mediaFragments
-      .map((fragment) => ({ ...fragment }))
-      .sort(
-        (left, right) =>
-          left.startTimeMs - right.startTimeMs || left.clusterIndex - right.clusterIndex,
-      );
-  }
-
-  const fragments: RecordingMediaFragment[] = [];
-
-  if (recording.audioBlob instanceof Blob && recording.audioBlob.size > 0) {
-    const startTimeMs = recording.audioStartOffsetMs ?? 0;
-    fragments.push({
-      trackId: getTrackId(tracks, "audio", DEFAULT_AUDIO_TRACK_ID),
-      clusterIndex: resolveClusterIndexForTime(clusters, startTimeMs),
-      startTimeMs,
-      endTimeMs: Math.max(startTimeMs, recording.duration),
-      byteLength: recording.audioBlob.size,
-      isInit: true,
-    });
-  }
-
-  if (recording.cameraBlob instanceof Blob && recording.cameraBlob.size > 0) {
-    const startTimeMs = recording.cameraStartOffsetMs ?? 0;
-    fragments.push({
-      trackId: getTrackId(tracks, "camera", DEFAULT_CAMERA_TRACK_ID),
-      clusterIndex: resolveClusterIndexForTime(clusters, startTimeMs),
-      startTimeMs,
-      endTimeMs: Math.max(startTimeMs, recording.duration),
-      byteLength: recording.cameraBlob.size,
-      isInit: true,
-    });
-  }
-
-  return fragments;
 }
 
 /**
