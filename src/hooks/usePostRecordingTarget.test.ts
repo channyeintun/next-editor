@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Recording } from "../core/src";
 import { usePostRecordingTarget } from "./usePostRecordingTarget";
@@ -80,6 +80,24 @@ describe("usePostRecordingTarget", () => {
     // Same recording still in context, no new recording session — shouldn't
     // resurrect the modal after the user already dismissed it.
     rerender({ isRecording: false, currentRecording: recording });
+    expect(result.current.target).toBeNull();
+  });
+
+  it("does not offer a lesson opened after the take's modal was closed", () => {
+    // Playback accepts LOAD_RECORDING (a dropped file, the header import, a new ?url=), so
+    // another lesson can replace the take while isRecording stays false.
+    const take = createRecording("take");
+    const opened = createRecording("someone-elses-lesson");
+    const { result, rerender } = renderHook(
+      ({ isRecording, currentRecording }) => usePostRecordingTarget(isRecording, currentRecording),
+      { initialProps: { isRecording: true, currentRecording: null as Recording | null } },
+    );
+
+    rerender({ isRecording: false, currentRecording: take });
+    expect(result.current.target).toBe(take);
+    act(() => result.current.clear());
+
+    rerender({ isRecording: false, currentRecording: opened });
     expect(result.current.target).toBeNull();
   });
 });
