@@ -4,8 +4,10 @@ import type {
   RecordingMediaFragment,
   RecordingTrackMeta,
 } from "../../core/src/types";
-import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
-import { isKeyframe } from "../../core/src/utils/deltaTypes";
+import {
+  buildRecordingClusters,
+  resolveClusterIndexForTime,
+} from "../../core/src/utils/recordingClusters";
 import {
   clampU32,
   DEFAULT_AUDIO_TRACK_ID,
@@ -21,61 +23,6 @@ import {
 // encoder always has a consistent track/cluster view to write, and so the decoder
 // can derive what a stream's metadata leaves out. No bytes here — pure metadata.
 // ============================================================================
-
-export function resolveClusterIndexForTime(
-  clusters: ReadonlyArray<RecordingClusterMeta>,
-  timeMs: number,
-): number {
-  if (clusters.length === 0) {
-    return 0;
-  }
-
-  for (let index = clusters.length - 1; index >= 0; index -= 1) {
-    if (timeMs >= clusters[index].startTimeMs) {
-      return clusters[index].index;
-    }
-  }
-
-  return clusters[0].index;
-}
-
-function buildClustersFromFrames(frames: DeltaFrame[], duration: number): RecordingClusterMeta[] {
-  if (frames.length === 0) {
-    return duration > 0
-      ? [{ index: 0, startTimeMs: 0, endTimeMs: duration, containsKeyframe: false }]
-      : [];
-  }
-
-  const clusters: RecordingClusterMeta[] = [];
-  let startIndex = 0;
-
-  while (startIndex < frames.length) {
-    let endIndex = startIndex + 1;
-    while (endIndex < frames.length && !isKeyframe(frames[endIndex])) {
-      endIndex += 1;
-    }
-
-    const startTimeMs = frames[startIndex]?.timestamp ?? 0;
-    const nextStartTimeMs = endIndex < frames.length ? frames[endIndex].timestamp : duration;
-    const lastFrameTimeMs = frames[endIndex - 1]?.timestamp ?? startTimeMs;
-
-    clusters.push({
-      index: clusters.length,
-      startTimeMs,
-      endTimeMs: Math.max(startTimeMs, nextStartTimeMs, lastFrameTimeMs),
-      containsKeyframe: isKeyframe(frames[startIndex]),
-    });
-
-    startIndex = endIndex;
-  }
-
-  const lastCluster = clusters[clusters.length - 1];
-  if (lastCluster) {
-    lastCluster.endTimeMs = Math.max(lastCluster.startTimeMs, lastCluster.endTimeMs, duration);
-  }
-
-  return clusters;
-}
 
 function buildClustersFromMediaFragments(
   fragments: ReadonlyArray<RecordingMediaFragment>,
@@ -126,7 +73,7 @@ export function deriveRecordingClusters(recording: Recording): RecordingClusterM
   }
 
   if (recording.frames.length > 0) {
-    return buildClustersFromFrames(recording.frames, recording.duration);
+    return buildRecordingClusters(recording.frames, recording.duration);
   }
 
   return buildClustersFromMediaFragments(recording.mediaFragments ?? [], recording.duration);
@@ -231,19 +178,4 @@ export function groupRecordsByCluster<T>(
     grouped.set(clusterIndex, [record]);
   }
   return grouped;
-}
-
-/** Splits frames into keyframe-anchored batches: each batch starts at a keyframe. */
-export function batchFramesByKeyframe(frames: DeltaFrame[]): DeltaFrame[][] {
-  const batches: DeltaFrame[][] = [];
-  let index = 0;
-  while (index < frames.length) {
-    const start = index;
-    index += 1;
-    while (index < frames.length && !isKeyframe(frames[index])) {
-      index += 1;
-    }
-    batches.push(frames.slice(start, index));
-  }
-  return batches;
 }

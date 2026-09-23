@@ -32,14 +32,14 @@ import {
 import { isEditorReady } from "../utils/validation";
 import { areStructuredDataEqual } from "../../../utils/equality";
 import { areMouseCursorPositionsEqual } from "../utils/cursorCoordinates";
-import { isKeyframe } from "../utils/frameDelta";
+import { resolveClusterIndexForTime } from "../utils/recordingClusters";
 import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 
 // ============================================================================
 // Editor machine helpers
 //
 // Pure(ish) building blocks for `editorMachine.ts`: recording metadata derivation
-// (tracks/clusters/media fragments), editor frame capture/apply, playback-audio
+// (tracks/media fragments), editor frame capture/apply, playback-audio
 // state inspection, and the named action lists reused across machine transitions.
 // Kept out of the machine file so the machine reads as state/transition wiring.
 // ============================================================================
@@ -54,64 +54,6 @@ const WHITEBOARD_TRACK_ID = "whiteboard";
 const CHAT_TRACK_ID = "chat";
 export const AUDIO_TRACK_ID = "audio";
 export const CAMERA_TRACK_ID = "camera";
-
-export const buildRecordingClusters = (
-  frames: Recording["frames"],
-  durationMs: number,
-): RecordingClusterMeta[] => {
-  if (frames.length === 0) {
-    return durationMs > 0
-      ? [{ index: 0, startTimeMs: 0, endTimeMs: durationMs, containsKeyframe: false }]
-      : [];
-  }
-
-  const clusters: RecordingClusterMeta[] = [];
-  let startIndex = 0;
-
-  while (startIndex < frames.length) {
-    let endIndex = startIndex + 1;
-    while (endIndex < frames.length && !isKeyframe(frames[endIndex])) {
-      endIndex += 1;
-    }
-
-    const startTimeMs = frames[startIndex]?.timestamp ?? 0;
-    const nextStartTimeMs = endIndex < frames.length ? frames[endIndex].timestamp : durationMs;
-    const lastFrameTimeMs = frames[endIndex - 1]?.timestamp ?? startTimeMs;
-
-    clusters.push({
-      index: clusters.length,
-      startTimeMs,
-      endTimeMs: Math.max(startTimeMs, nextStartTimeMs, lastFrameTimeMs),
-      containsKeyframe: isKeyframe(frames[startIndex]),
-    });
-
-    startIndex = endIndex;
-  }
-
-  const lastCluster = clusters[clusters.length - 1];
-  if (lastCluster) {
-    lastCluster.endTimeMs = Math.max(lastCluster.startTimeMs, lastCluster.endTimeMs, durationMs);
-  }
-
-  return clusters;
-};
-
-const resolveClusterIndex = (
-  clusters: ReadonlyArray<RecordingClusterMeta>,
-  timeMs: number,
-): number => {
-  if (clusters.length === 0) {
-    return 0;
-  }
-
-  for (let index = clusters.length - 1; index >= 0; index -= 1) {
-    if (timeMs >= clusters[index].startTimeMs) {
-      return clusters[index].index;
-    }
-  }
-
-  return clusters[0].index;
-};
 
 export const buildTrackMetadata = ({
   durationMs,
@@ -208,7 +150,7 @@ export const buildMediaFragmentMetadata = (
 ): RecordingMediaFragment[] =>
   fragments.map((fragment, index) => ({
     trackId: fragment.trackId,
-    clusterIndex: resolveClusterIndex(clusters, fragment.startTimeMs),
+    clusterIndex: resolveClusterIndexForTime(clusters, fragment.startTimeMs),
     startTimeMs: fragment.startTimeMs,
     endTimeMs: Math.max(
       fragment.startTimeMs,

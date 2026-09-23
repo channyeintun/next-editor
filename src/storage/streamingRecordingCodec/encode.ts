@@ -31,12 +31,10 @@ import {
   type SegmentKind,
 } from "./format";
 import {
-  batchFramesByKeyframe,
-  deriveRecordingClusters,
-  deriveRecordingTracks,
-  groupRecordsByCluster,
   resolveClusterIndexForTime,
-} from "./clusters";
+  splitFramesAtKeyframes,
+} from "../../core/src/utils/recordingClusters";
+import { deriveRecordingClusters, deriveRecordingTracks, groupRecordsByCluster } from "./clusters";
 import { stripFramePreviewContent } from "./framePreviewContentDedup";
 import { createPreviewAddNodeStripper } from "./previewPatchDedup";
 import { createWorkspaceEventContentStripper } from "./workspaceEventDedup";
@@ -357,7 +355,7 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
     write: () => void;
   }> = [];
 
-  const frameBatches = batchFramesByKeyframe(normalized.frames);
+  const frameBatches = splitFramesAtKeyframes(normalized.frames);
   frameBatches.forEach((batch, batchIndex) => {
     const clusterIndex = resolveClusterIndexForTime(clusters, batch[0]?.timestamp ?? 0);
     const cluster =

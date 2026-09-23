@@ -32,7 +32,6 @@ import {
   appendCursorEvent,
   AUDIO_TRACK_ID,
   buildMediaFragmentMetadata,
-  buildRecordingClusters,
   buildTrackMetadata,
   createFrame,
   MOUSE_FRAME_INTERVAL_MS,
@@ -40,6 +39,7 @@ import {
   type CapturedViewStateRef,
 } from "./editorMachineHelpers";
 import { normalizeNonNegativeTime } from "./playbackValues";
+import { buildRecordingClusters } from "../utils/recordingClusters";
 import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 
 const SCREEN_RECORDER_ID_PREFIX = "screenRecorder-";
