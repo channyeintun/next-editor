@@ -10,7 +10,6 @@ export {
   useNextEditorMetadata,
   useNextEditorPlayback,
 } from "../../hooks/useNextEditorContext";
-export { useSlides } from "../../hooks/useSlides";
 
 // Components
 export { default as CodeEditor } from "../../components/CodeEditor";

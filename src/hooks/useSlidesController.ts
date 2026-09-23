@@ -1,6 +1,6 @@
 import { useRef, useEffect } from "react";
 import { useSelector } from "@xstate/store-react";
-import type { Slide, SlideEvent, SlidePreviewState, SlideContentType } from "../types/slides";
+import type { Slide, SlideEvent, SlidePreviewState } from "../types/slides";
 import { selectPreviewState, selectSlides, type SlidesStoreInstance } from "../stores/slidesStore";
 
 interface UseSlidesControllerConfig {
@@ -19,10 +19,8 @@ export const useSlidesController = ({
   const slides = useSelector(store, (snapshot) => selectSlides(snapshot.context));
   const previewState = useSelector(store, (snapshot) => selectPreviewState(snapshot.context));
 
-  const setSlides = (updater: Slide[] | ((prev: Slide[]) => Slide[])) => {
-    const current = store.getSnapshot().context.slides;
-    const next = typeof updater === "function" ? updater(current) : updater;
-    store.trigger.setSlides({ slides: next });
+  const setSlides = (nextSlides: Slide[]) => {
+    store.trigger.setSlides({ slides: nextSlides });
   };
 
   const setPreviewState = (
@@ -39,7 +37,6 @@ export const useSlidesController = ({
   }, [onSlideEvent]);
 
   const currentSlideIndex = slides.findIndex((slide) => slide.id === previewState.currentSlideId);
-  const slideEventsRef = useRef<SlideEvent[]>([]);
   const lastVerticalIndicesRef = useRef<Record<string, number>>({});
   const lastViewedSlideIdRef = useRef<string | null>(null);
 
@@ -49,50 +46,8 @@ export const useSlidesController = ({
     }
   }, [previewState.currentSlideId, resetBuildStepOnOpen]);
 
-  const addSlide = (content: string, contentType: SlideContentType) => {
-    const newSlide: Slide = {
-      id: Date.now().toString(),
-      content: content.trim(),
-      contentType,
-      order: slides.length,
-    };
-    setSlides((prev) => [...prev, newSlide]);
-    return newSlide;
-  };
-
-  const removeSlide = (slideId: string) => {
-    setSlides((prev) => {
-      const updated = prev
-        .filter((slide) => slide.id !== slideId)
-        .map((slide, index) => ({ ...slide, order: index }));
-
-      if (previewState.currentSlideId === slideId) {
-        if (updated.length > 0) {
-          const newIndex = Math.min(currentSlideIndex, updated.length - 1);
-          setPreviewState((prevState) => ({
-            ...prevState,
-            currentSlideId: updated[newIndex]?.id || null,
-          }));
-        } else {
-          setPreviewState((prevState) => ({
-            ...prevState,
-            isOpen: false,
-            currentSlideId: null,
-          }));
-        }
-      }
-
-      return updated;
-    });
-  };
-
-  const reorderSlides = (newSlides: Slide[]) => {
-    setSlides(newSlides);
-  };
-
   const handleSlideEvent = (event: SlideEvent) => {
     if (onSlideEventRef.current?.(event) === false) return false;
-    slideEventsRef.current.push(event);
 
     switch (event.type) {
       case "slide_open":
@@ -259,44 +214,16 @@ export const useSlidesController = ({
     });
   };
 
-  const goToSlide = (index: number, indexv?: number) => {
-    if (index >= 0 && index < slides.length) {
-      const slideId = slides[index].id;
-      const targetIndexv = indexv ?? lastVerticalIndicesRef.current[slideId] ?? 0;
-
-      setPreviewState((prev) => ({
-        ...prev,
-        currentSlideId: slideId,
-        indexv: targetIndexv,
-      }));
-    }
-  };
-
-  const clearSlideEvents = () => {
-    slideEventsRef.current = [];
-  };
-
-  const getSlideEvents = () => {
-    return [...slideEventsRef.current];
-  };
-
   return {
     slides,
     previewState,
     currentSlideIndex: Math.max(0, currentSlideIndex),
 
-    addSlide,
-    removeSlide,
-    reorderSlides,
     setSlides,
-    setPreviewState,
     openPresentation,
     startPresentation,
     closePresentation,
-    goToSlide,
 
     handleSlideEvent,
-    clearSlideEvents,
-    getSlideEvents,
   };
 };
