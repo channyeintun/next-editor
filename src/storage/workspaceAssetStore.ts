@@ -116,9 +116,9 @@ function asBlob(value: unknown, mimeType: string): Blob | null {
   return null;
 }
 
-async function writeAssetBlob(assetId: string, blob: Blob): Promise<boolean> {
+async function writeAssetBlob(assetId: string, blob: Blob): Promise<void> {
   const databaseResult = getDatabase();
-  if (!databaseResult) return false;
+  if (!databaseResult) return;
 
   const run = async () => {
     const database = await databaseResult;
@@ -130,7 +130,6 @@ async function writeAssetBlob(assetId: string, blob: Blob): Promise<boolean> {
   const result = assetWriteQueue.then(run, run);
   assetWriteQueue = result.catch(() => undefined);
   await result;
-  return true;
 }
 
 export interface RegisterWorkspaceAssetOptions {
@@ -321,10 +320,14 @@ export async function persistWorkspaceAssets(project: WorkspaceProject): Promise
   }
 }
 
-/** Best-effort cleanup after a project manifest has been published. */
-export function pruneWorkspaceAssets(project: WorkspaceProject): Promise<void> {
+/**
+ * Best-effort removal of the v1 generation/path entries once the migrated manifest is
+ * durable. Content-addressed `asset:` entries are never pruned here: stored recordings and
+ * other sessions may share them, so an asset the project no longer references can still be
+ * in use.
+ */
+export function pruneLegacyWorkspaceAssetKeys(): Promise<void> {
   const run = async () => {
-    void project;
     const databaseResult = getDatabase();
     if (!databaseResult) return;
     const database = await databaseResult;

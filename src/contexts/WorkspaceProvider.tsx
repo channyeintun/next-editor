@@ -17,7 +17,7 @@ import {
 import {
   migrateLegacyWorkspaceAssets,
   persistWorkspaceAssets,
-  pruneWorkspaceAssets,
+  pruneLegacyWorkspaceAssetKeys,
 } from "../storage/workspaceAssetStore";
 import {
   isLegacyWorkspaceBinaryFile,
@@ -257,7 +257,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
           snapshot: cloneWorkspaceSnapshot(storedSnapshot),
         });
 
-        void pruneWorkspaceAssets(storedProject).catch((error) => {
+        void pruneLegacyWorkspaceAssetKeys().catch((error) => {
           console.warn("Failed to prune old workspace assets:", error);
         });
       } catch (error) {

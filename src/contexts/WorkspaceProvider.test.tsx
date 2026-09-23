@@ -10,7 +10,7 @@ import type { WorkspaceAssetDescriptor, WorkspaceProject } from "../types/worksp
 
 const assets = vi.hoisted(() => ({
   persist: vi.fn<(project: WorkspaceProject) => Promise<void>>(),
-  prune: vi.fn<(project: WorkspaceProject) => Promise<void>>(),
+  prune: vi.fn<() => Promise<void>>(),
   migrate: vi.fn<
     (
       project: WorkspaceProject,
@@ -25,7 +25,7 @@ vi.mock("../storage/workspaceAssetStore", async (importOriginal) => {
     ...actual,
     migrateLegacyWorkspaceAssets: assets.migrate,
     persistWorkspaceAssets: assets.persist,
-    pruneWorkspaceAssets: assets.prune,
+    pruneLegacyWorkspaceAssetKeys: assets.prune,
   };
 });
 
