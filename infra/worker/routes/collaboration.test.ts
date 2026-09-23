@@ -143,3 +143,35 @@ describe("POST /rooms/:roomId/close", () => {
     expect(publishCollaborationMaintenanceJob).not.toHaveBeenCalled();
   });
 });
+
+describe("small JSON bodies", () => {
+  it("refuses an invitation claim larger than a few kilobytes before parsing it", async () => {
+    const response = await collaborationRoute.request(
+      "https://nexteditor.dev/invitations/claim",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: "x".repeat(64), padding: "y".repeat(8 * 1024) }),
+      },
+      { DB: {} } as Env,
+    );
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "invalid invitation" });
+  });
+
+  it("still claims with a well-formed small body", async () => {
+    const response = await collaborationRoute.request(
+      "https://nexteditor.dev/invitations/claim",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: "not-a-valid-token!" }),
+      },
+      { DB: {} } as Env,
+    );
+
+    // Parsed and rejected by the token schema, as before.
+    expect(response.status).toBe(400);
+  });
+});

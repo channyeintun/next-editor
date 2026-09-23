@@ -87,6 +87,8 @@ import {
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
 const MAX_TEACHING_INITIALIZATION_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
 const MAX_MAINTENANCE_REQUEST_BYTES = 2 * 1024;
+// Invitation, claim and member-role bodies are a few short fields.
+const MAX_SMALL_JSON_REQUEST_BYTES = 4 * 1024;
 
 type CollaborationContext = Context<{ Bindings: Env }>;
 
@@ -636,8 +638,9 @@ collaborationRoute.post("/rooms/:roomId/invitations", async (c) => {
   if (!user) return c.json({ error: "not signed in" }, 401);
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   if (!roomIdResult.success) return c.json({ error: "invalid room id" }, 400);
-  const body = await c.req.json<unknown>().catch(() => null);
-  const input = createCollaborationInvitationInputSchema.safeParse(body);
+  const body = await readBoundedJson(c, MAX_SMALL_JSON_REQUEST_BYTES);
+  if (!body.ok) return c.json({ error: "invalid invitation" }, body.status);
+  const input = createCollaborationInvitationInputSchema.safeParse(body.body);
   if (!input.success) return c.json({ error: "invalid invitation" }, 400);
 
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
@@ -691,8 +694,9 @@ collaborationRoute.patch("/rooms/:roomId/members/:userId", async (c) => {
   if (!user) return c.json({ error: "not signed in" }, 401);
   const roomIdResult = collaborationIdSchema.safeParse(c.req.param("roomId"));
   const userIdResult = collaborationIdSchema.safeParse(c.req.param("userId"));
-  const body = await c.req.json<unknown>().catch(() => null);
-  const input = updateCollaborationMemberInputSchema.safeParse(body);
+  const body = await readBoundedJson(c, MAX_SMALL_JSON_REQUEST_BYTES);
+  if (!body.ok) return c.json({ error: "invalid member update" }, body.status);
+  const input = updateCollaborationMemberInputSchema.safeParse(body.body);
   if (!roomIdResult.success || !userIdResult.success || !input.success) {
     return c.json({ error: "invalid member update" }, 400);
   }
@@ -807,8 +811,9 @@ collaborationRoute.post("/rooms/:roomId/close", async (c) => {
 collaborationRoute.post("/invitations/claim", async (c) => {
   const user = await getCurrentUser(c);
   if (!user) return c.json({ error: "not signed in" }, 401);
-  const body = await c.req.json<unknown>().catch(() => null);
-  const input = claimCollaborationInvitationInputSchema.safeParse(body);
+  const body = await readBoundedJson(c, MAX_SMALL_JSON_REQUEST_BYTES);
+  if (!body.ok) return c.json({ error: "invalid invitation" }, body.status);
+  const input = claimCollaborationInvitationInputSchema.safeParse(body.body);
   if (!input.success) return c.json({ error: "invalid invitation" }, 400);
   const invitation = await getCollaborationInvitationByHash(
     c.env.DB,
