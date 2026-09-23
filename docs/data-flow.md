@@ -227,7 +227,7 @@ This context splitting pattern prevents unnecessary re-renders:
 
 - **Actions Context** (`useNextEditorActions`): Stable function references, rarely changes.
 - **Metadata Context** (`useNextEditorMetadata`): Recording state flags, changes on state transitions.
-- **Playback Context** (`useNextEditorPlayback`): Timeline actor, speed, volume, duration — high-frequency, tick-driven consumers should prefer the narrower `useLiveTime` / `useLiveCursor` selectors.
+- **Playback Context** (`useNextEditorPlayback`): Editor actor, speed, volume, duration — high-frequency, tick-driven consumers should prefer the narrower `useLiveTime` selector.
 
 ## Frame Application Flow
 

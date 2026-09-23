@@ -99,9 +99,6 @@ export const selectLiveTime = (state: EditorMachineSnapshot) => state.context.ti
 // Data selectors
 export const selectRecording = (state: EditorMachineSnapshot) => state.context.recording;
 export const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
-export const selectTimelineActor = (state: EditorMachineSnapshot) => state.children.timelineActor;
-export const selectLiveCursor = (state: EditorMachineSnapshot) =>
-  state.context.currentFrame?.state?.mouseCursor || null;
 
 const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   // Recording Controls

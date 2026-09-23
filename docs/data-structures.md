@@ -306,8 +306,8 @@ The app splits editor access into a few focused surfaces:
 
 - `NextEditorActionsContext` (`useNextEditorActions`): stable imperative controls and storage helpers.
 - `useNextEditorMetadata()`: coarse recording and playback flags.
-- `useNextEditorPlayback()`: timeline actor, playback speed, volume, and duration.
-- `useLiveTime()` and `useLiveCursor()`: high-frequency selectors for tick-driven UI.
+- `useNextEditorPlayback()`: editor actor, playback speed, volume, and duration.
+- `useLiveTime()`: the high-frequency playhead selector for tick-driven UI.
 
 Important action methods include:
 

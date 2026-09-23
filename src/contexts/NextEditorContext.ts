@@ -5,7 +5,6 @@ import type {
   Recording,
   RecordingStreamDelta,
 } from "../core/src/types";
-import type { TimelineActorRef } from "../core/src/machine/timelineMachine";
 import type { EditorActorRef } from "../core/src/useNextEditor";
 import type { StoredRecordingMetadata } from "../storage/IndexedDBRecordingStore";
 import type {
@@ -80,8 +79,7 @@ export interface NextEditorMetadata {
 
 // 3. Playback Context: High-frequency state (ticks)
 export interface NextEditorPlayback {
-  timelineActor: TimelineActorRef | undefined;
-  editorActor: EditorActorRef | undefined;
+  editorActor: EditorActorRef;
   playbackSpeed: number;
   volume: number;
   duration: number; // actualDuration

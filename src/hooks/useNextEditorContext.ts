@@ -1,5 +1,4 @@
 import { useContext } from "react";
-import { shallowEqual } from "@xstate/react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import {
   NextEditorActionsContext,
@@ -14,12 +13,10 @@ import {
   selectIsPlaying,
   selectIsRecording,
   selectIsRecordingAudio,
-  selectLiveCursor,
   selectLiveTime,
   selectPlaybackSpeed,
   selectRecording,
   selectRecordingStartTime,
-  selectTimelineActor,
   selectUsesPlaybackModel,
   selectVolume,
 } from "../core/src/useNextEditor";
@@ -68,13 +65,11 @@ export const useNextEditorMetadata = (): NextEditorMetadata => {
  */
 export const useNextEditorPlayback = (): NextEditorPlayback => {
   const actorRef = NextEditorActorContext.useActorRef();
-  const timelineActor = NextEditorActorContext.useSelector(selectTimelineActor);
   const playbackSpeed = NextEditorActorContext.useSelector(selectPlaybackSpeed);
   const volume = NextEditorActorContext.useSelector(selectVolume);
   const duration = NextEditorActorContext.useSelector(selectDuration);
 
   return {
-    timelineActor,
     editorActor: actorRef,
     playbackSpeed,
     volume,
@@ -88,12 +83,4 @@ export const useNextEditorPlayback = (): NextEditorPlayback => {
  */
 export const useLiveTime = () => {
   return NextEditorActorContext.useSelector(selectLiveTime);
-};
-
-/**
- * Hook to access live cursor position with high frequency.
- * Only the component using this hook will re-render on cursor movement.
- */
-export const useLiveCursor = () => {
-  return NextEditorActorContext.useSelector(selectLiveCursor, shallowEqual);
 };
