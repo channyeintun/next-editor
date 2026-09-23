@@ -98,7 +98,8 @@ slideImagesRoute.post("/", async (c) => {
     return c.json({ error: "invalid JSON body" }, 400);
   }
 
-  const urls = (body as { urls?: unknown }).urls;
+  // `null` is valid JSON too, and has no properties to read.
+  const urls = typeof body === "object" && body !== null ? (body as { urls?: unknown }).urls : null;
   if (!Array.isArray(urls) || urls.length === 0 || urls.some((url) => typeof url !== "string")) {
     return c.json({ error: "'urls' must be a non-empty array of strings" }, 400);
   }
