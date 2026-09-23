@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import type { UrlLoader } from "./useUrlLoader";
 
 /** Loads a `.ne` file or `.ne` URL dropped anywhere on the document with the given loader. */
@@ -8,8 +8,24 @@ export const useDragAndDropUrl = ({
   isNextEditorUrl,
 }: UrlLoader) => {
   const [isDragging, setIsDragging] = useState(false);
-  // Outlives the effect below, which re-subscribes whenever the loader's functions change.
-  const enteredElementsRef = useRef(0);
+
+  // The loader hands out new functions on every render (the React Compiler skips useUrlLoader),
+  // so the drop reads them through an Effect Event and the listeners below are added once.
+  const loadDropped = useEffectEvent(async (e: DragEvent) => {
+    // Handle file drops: a `.ne` plus optional sibling camera video / audio files.
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      await importNextEditorFile(Array.from(files));
+    }
+
+    // Handle URL drops
+    const text = e.dataTransfer?.getData("text/plain");
+    if (text && isNextEditorUrl(text)) {
+      await fetchNextEditorFile(text).catch((error: unknown) => {
+        console.error("Failed to load dropped URL:", error);
+      });
+    }
+  });
 
   useEffect(() => {
     // Whether the drag carries something this page can load: a file or a URL.
@@ -33,39 +49,27 @@ export const useDragAndDropUrl = ({
     // enter is matched by a leave. These run on window in the capture phase so that a child
     // which stops propagation (the file sidebar again) cannot hide the end of the drag and
     // leave the overlay up.
+    let enteredElements = 0;
     const handleDragEnter = (e: DragEvent) => {
       if (carriesDroppable(e)) {
-        enteredElementsRef.current += 1;
+        enteredElements += 1;
       }
     };
     const handleDragLeave = (e: DragEvent) => {
       if (!carriesDroppable(e)) return;
-      enteredElementsRef.current = Math.max(0, enteredElementsRef.current - 1);
-      if (enteredElementsRef.current === 0) {
+      enteredElements = Math.max(0, enteredElements - 1);
+      if (enteredElements === 0) {
         setIsDragging(false);
       }
     };
     const endDrag = () => {
-      enteredElementsRef.current = 0;
+      enteredElements = 0;
       setIsDragging(false);
     };
 
-    const handleDrop = async (e: DragEvent) => {
+    const handleDrop = (e: DragEvent) => {
       e.preventDefault();
-
-      // Handle file drops: a `.ne` plus optional sibling camera video / audio files.
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) {
-        await importNextEditorFile(Array.from(files));
-      }
-
-      // Handle URL drops
-      const text = e.dataTransfer?.getData("text/plain");
-      if (text && isNextEditorUrl(text)) {
-        await fetchNextEditorFile(text).catch((error: unknown) => {
-          console.error("Failed to load dropped URL:", error);
-        });
-      }
+      void loadDropped(e);
     };
 
     window.addEventListener("dragenter", handleDragEnter, true);
@@ -83,7 +87,7 @@ export const useDragAndDropUrl = ({
       document.removeEventListener("dragover", handleDragOver);
       document.removeEventListener("drop", handleDrop);
     };
-  }, [fetchNextEditorFile, importNextEditorFile, isNextEditorUrl]);
+  }, []);
 
   return { isDragging };
 };

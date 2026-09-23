@@ -52,7 +52,7 @@ function renderPage(loader: UrlLoader) {
     );
   }
   const view = render(createElement(Page));
-  return { state, ...view };
+  return { state, ...view, rerenderPage: () => view.rerender(createElement(Page)) };
 }
 
 describe("useDragAndDropUrl", () => {
@@ -112,6 +112,18 @@ describe("useDragAndDropUrl", () => {
 
     expect(state.isDragging).toBe(false);
     expect(loader.importNextEditorFile).toHaveBeenCalledWith([lesson]);
+  });
+
+  it("adds its document listeners once, however often the page re-renders", () => {
+    const addListener = vi.spyOn(document, "addEventListener");
+    const { rerenderPage } = renderPage(fakeLoader());
+    const dropListeners = () => addListener.mock.calls.filter(([type]) => type === "drop").length;
+    expect(dropListeners()).toBe(1);
+
+    // Every render hands the hook new loader functions, as EditorLayout does.
+    for (let i = 0; i < 3; i++) rerenderPage();
+    expect(dropListeners()).toBe(1);
+    addListener.mockRestore();
   });
 });
 
