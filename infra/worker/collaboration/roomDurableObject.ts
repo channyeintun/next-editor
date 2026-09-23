@@ -71,7 +71,8 @@ const ROOM_ORIGIN = "https://collaboration-room.internal";
 const SESSION_HEADER = "X-Collaboration-Session";
 const MAX_BINARY_WEBSOCKET_MESSAGE_LENGTH = MAX_YJS_UPDATE_BYTES + 1024;
 const MAX_BINARY_AWARENESS_MESSAGE_LENGTH = 16 * 1024;
-const MAX_USER_UPDATES_PER_SECOND = 30;
+// Counted per socket (the window lives in its attachment), not per user.
+const MAX_SOCKET_UPDATES_PER_SECOND = 30;
 const MAX_ROOM_UPDATES_PER_SECOND = 120;
 const MAX_AWARENESS_UPDATES_PER_SECOND = 20;
 const MAX_USER_CONNECTIONS_PER_MINUTE = 30;
@@ -821,16 +822,17 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return;
     }
     const second = Math.floor(Date.now() / 1000);
-    const userCount =
+    const socketCount =
       attachment.updateWindowSecond === second ? (attachment.updateWindowCount ?? 0) + 1 : 1;
     if (this.roomUpdateWindowSecond !== second) {
       this.roomUpdateWindowSecond = second;
       this.roomUpdateWindowCount = 0;
     }
-    this.roomUpdateWindowCount += 1;
+    // Only updates within the socket's own limit spend the room budget, so
+    // one flooding socket cannot rate-limit everyone else.
     if (
-      userCount > MAX_USER_UPDATES_PER_SECOND ||
-      this.roomUpdateWindowCount > MAX_ROOM_UPDATES_PER_SECOND
+      socketCount > MAX_SOCKET_UPDATES_PER_SECOND ||
+      this.roomUpdateWindowCount >= MAX_ROOM_UPDATES_PER_SECOND
     ) {
       this.rejectSocket(
         socket,
@@ -842,10 +844,11 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       );
       return;
     }
+    this.roomUpdateWindowCount += 1;
     socket.serializeAttachment({
       ...attachment,
       updateWindowSecond: second,
-      updateWindowCount: userCount,
+      updateWindowCount: socketCount,
     } satisfies SocketAttachment);
 
     const validationDocument = this.getBinaryDocument();

@@ -133,6 +133,7 @@ const openStorages: RoomTestStorage[] = [];
 
 afterEach(() => {
   for (const storage of openStorages.splice(0)) storage.close();
+  vi.restoreAllMocks();
 });
 
 beforeEach(() => {
@@ -338,6 +339,43 @@ describe("CollaborationRoomDurableObject document updates", () => {
 
     expect(member.closeCode).toBeNull();
     expect(member.messages()).toEqual([]);
+  });
+});
+
+describe("CollaborationRoomDurableObject update rate limits", () => {
+  it("does not charge the room budget for updates a socket's own limit refused", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const { room, connect, edit } = await createRoom();
+    const flooding = connect(MEMBER_ID, "editor");
+    const other = connect(PEER_ID, "editor");
+
+    for (let index = 0; index < 125; index += 1) {
+      await room.webSocketMessage(flooding as never, edit("x"));
+    }
+    await room.webSocketMessage(other as never, edit("+mine"));
+
+    expect(acks(flooding)).toHaveLength(30);
+    expect(errors(other)).toEqual([]);
+    expect(acks(other)).toHaveLength(1);
+  });
+
+  it("still caps the whole room at 120 accepted updates a second", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const { room, connect, edit } = await createRoom();
+    const editors = Array.from({ length: 5 }, (_, index) =>
+      connect(`20000000-0000-4000-8000-00000000001${index}`, "editor"),
+    );
+
+    for (const editor of editors) {
+      for (let index = 0; index < 25; index += 1) {
+        await room.webSocketMessage(editor as never, edit("x"));
+      }
+    }
+
+    expect(editors.flatMap(acks)).toHaveLength(120);
+    expect(editors.flatMap(errors)).toEqual(
+      Array.from({ length: 5 }, () => expect.objectContaining({ code: "rate-limited" })),
+    );
   });
 });
 
