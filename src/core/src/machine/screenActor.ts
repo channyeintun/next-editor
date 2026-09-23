@@ -1,5 +1,5 @@
 import { fromTypedCallback } from "./fromTypedCallback";
-import { getSupportedVideoMimeType, SCREEN_VIDEO_MIME_TYPES } from "../utils/videoMimeType";
+import { getSupportedRecorderMimeType, SCREEN_VIDEO_MIME_TYPES } from "../utils/recorderMimeType";
 import { fixWebmDuration } from "../utils/webmDuration";
 
 const SCREEN_TIMESLICE_MS = 1000;
@@ -165,7 +165,7 @@ export const screenRecordingActor = fromTypedCallback<
     started = true;
 
     try {
-      mimeType = getSupportedVideoMimeType(SCREEN_VIDEO_MIME_TYPES);
+      mimeType = getSupportedRecorderMimeType(SCREEN_VIDEO_MIME_TYPES);
       if (!mimeType) {
         if (!disposed) {
           sendBack({

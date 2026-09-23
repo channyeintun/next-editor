@@ -1,5 +1,5 @@
 import { fromTypedCallback } from "./fromTypedCallback";
-import { getSupportedAudioMimeType } from "../utils/audioMimeType";
+import { AUDIO_MIME_TYPES, getSupportedRecorderMimeType } from "../utils/recorderMimeType";
 import { isAllowedRecordingMediaUrl } from "../utils/mediaUrl";
 import {
   normalizeNonNegativeTime,
@@ -151,7 +151,7 @@ export const audioRecordingActor = fromTypedCallback<
         return;
       }
 
-      mimeType = getSupportedAudioMimeType();
+      mimeType = getSupportedRecorderMimeType(AUDIO_MIME_TYPES);
       if (!mimeType) {
         cleanupStream();
         if (!disposed && !stopRequested) {

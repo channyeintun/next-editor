@@ -1,5 +1,5 @@
 import { fromTypedCallback } from "./fromTypedCallback";
-import { getSupportedVideoMimeType, CAMERA_VIDEO_MIME_TYPES } from "../utils/videoMimeType";
+import { getSupportedRecorderMimeType, CAMERA_VIDEO_MIME_TYPES } from "../utils/recorderMimeType";
 
 const CAMERA_TIMESLICE_MS = 1000;
 
@@ -59,7 +59,7 @@ export const cameraRecordingActor = fromTypedCallback<
         return;
       }
 
-      mimeType = getSupportedVideoMimeType(CAMERA_VIDEO_MIME_TYPES);
+      mimeType = getSupportedRecorderMimeType(CAMERA_VIDEO_MIME_TYPES);
       if (!mimeType) {
         cleanupStream();
         if (!disposed) {

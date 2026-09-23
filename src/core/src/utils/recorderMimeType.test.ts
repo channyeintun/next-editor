@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
+  AUDIO_MIME_TYPES,
   CAMERA_VIDEO_MIME_TYPES,
   SCREEN_VIDEO_MIME_TYPES,
-  getSupportedVideoMimeType,
-} from "./videoMimeType";
+  getSupportedRecorderMimeType,
+} from "./recorderMimeType";
 
-describe("videoMimeType", () => {
+describe("recorderMimeType", () => {
   let originalMediaRecorder: typeof MediaRecorder | undefined;
 
   beforeEach(() => {
@@ -24,7 +25,7 @@ describe("videoMimeType", () => {
 
   it("returns empty string when MediaRecorder is undefined", () => {
     delete (globalThis as any).MediaRecorder;
-    const result = getSupportedVideoMimeType(CAMERA_VIDEO_MIME_TYPES);
+    const result = getSupportedRecorderMimeType(CAMERA_VIDEO_MIME_TYPES);
     expect(result).toBe("");
   });
 
@@ -34,7 +35,7 @@ describe("videoMimeType", () => {
       isTypeSupported: (mimeType: string) => mimeType === "video/webm;codecs=vp8",
     };
 
-    const result = getSupportedVideoMimeType(CAMERA_VIDEO_MIME_TYPES);
+    const result = getSupportedRecorderMimeType(CAMERA_VIDEO_MIME_TYPES);
     expect(result).toBe("video/webm;codecs=vp8");
   });
 
@@ -45,7 +46,7 @@ describe("videoMimeType", () => {
         mimeType === "video/webm;codecs=vp9" || mimeType === "video/webm;codecs=vp8",
     };
 
-    const result = getSupportedVideoMimeType(CAMERA_VIDEO_MIME_TYPES);
+    const result = getSupportedRecorderMimeType(CAMERA_VIDEO_MIME_TYPES);
     // vp9 comes first in CAMERA_VIDEO_MIME_TYPES
     expect(result).toBe("video/webm;codecs=vp9");
   });
@@ -55,7 +56,7 @@ describe("videoMimeType", () => {
       isTypeSupported: () => false,
     };
 
-    const result = getSupportedVideoMimeType(CAMERA_VIDEO_MIME_TYPES);
+    const result = getSupportedRecorderMimeType(CAMERA_VIDEO_MIME_TYPES);
     expect(result).toBe("");
   });
 
@@ -65,7 +66,7 @@ describe("videoMimeType", () => {
       isTypeSupported: (mimeType: string) => mimeType === "video/webm;codecs=vp9,opus",
     };
 
-    const result = getSupportedVideoMimeType(SCREEN_VIDEO_MIME_TYPES);
+    const result = getSupportedRecorderMimeType(SCREEN_VIDEO_MIME_TYPES);
     expect(result).toBe("video/webm;codecs=vp9,opus");
   });
 
@@ -74,5 +75,13 @@ describe("videoMimeType", () => {
     expect(CAMERA_VIDEO_MIME_TYPES[0]).not.toContain("opus");
     expect(SCREEN_VIDEO_MIME_TYPES[1]).toContain("opus");
     expect(CAMERA_VIDEO_MIME_TYPES[1]).not.toContain("opus");
+  });
+
+  it("probes audio in the same order the microphone recorder always used", () => {
+    (globalThis as any).MediaRecorder = {
+      isTypeSupported: (mimeType: string) => mimeType === "audio/mp4" || mimeType === "audio/ogg",
+    };
+
+    expect(getSupportedRecorderMimeType(AUDIO_MIME_TYPES)).toBe("audio/mp4");
   });
 });
