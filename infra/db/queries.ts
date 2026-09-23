@@ -15,11 +15,23 @@ export interface UpsertUserParams {
   avatarUrl: string | null;
 }
 
+/**
+ * The one shape a username may have: 3-32 characters, lowercase alphanumeric
+ * and hyphens, no leading or trailing hyphen. PATCH /api/auth/username enforces
+ * it on renames, and generateUniqueUsername below only ever produces it.
+ */
+export const USERNAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/;
+
+// Leaves room for the longest suffix generateUniqueUsername appends (a hyphen
+// and 8 random hex characters) within USERNAME_PATTERN's 32.
+const MAX_USERNAME_BASE_CHARS = 23;
+
 function slugifyUsername(base: string): string {
   const slug = base
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, MAX_USERNAME_BASE_CHARS)
     .replace(/^-+|-+$/g, "");
   return slug || "user";
 }
@@ -31,7 +43,7 @@ function slugifyUsername(base: string): string {
 // D1 round-trip at a time inside a single OAuth-callback invocation.
 const MAX_USERNAME_SUFFIX_PROBES = 50;
 
-// Generates a username unique against the DB by appending -2, -3, ... on
+// Generates a username unique against the DB by appending -1, -2, ... on
 // collision. Only called once per user, at creation — see updateUsername
 // below for renames (which also has to keep the lesson author_url cascade
 // in sync, unlike this initial assignment).
@@ -39,6 +51,8 @@ async function generateUniqueUsername(db: D1Database, base: string): Promise<str
   const slug = slugifyUsername(base);
   for (let suffix = 0; suffix <= MAX_USERNAME_SUFFIX_PROBES; suffix++) {
     const candidate = suffix === 0 ? slug : `${slug}-${suffix}`;
+    // A one- or two-letter name ("Jo") is too short on its own; it starts at "-1".
+    if (!USERNAME_PATTERN.test(candidate)) continue;
     const existing = await db
       .prepare("SELECT 1 FROM users WHERE username = ?")
       .bind(candidate)

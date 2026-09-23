@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { listPublishedLessons, upsertUserByGoogleSub } from "./queries";
+import { listPublishedLessons, upsertUserByGoogleSub, USERNAME_PATTERN } from "./queries";
 
 /**
  * The gallery's paging, exercised against real SQLite rather than a stub, so
@@ -198,6 +198,26 @@ describe("upsertUserByGoogleSub", () => {
     expect(row.username).toBe("ada-lovelace-1");
   });
 
+  // PATCH /api/auth/username only accepts USERNAME_PATTERN (3-32 characters), so
+  // a generated name outside it is one its owner could never choose again.
+  it.each([
+    ["Jo", "jo-1"],
+    ["A", "a-1"],
+    ["Maximilian Alexander von Habsburg-Lothringen", "maximilian-alexander-vo"],
+  ])("generates a username the rename rule accepts for %j", async (name, expected) => {
+    const { db } = makeUserDb([]);
+
+    const row = await upsertUserByGoogleSub(db, {
+      googleSub: `sub-${name}`,
+      email: "someone@example.com",
+      name,
+      avatarUrl: null,
+    });
+
+    expect(row.username).toBe(expected);
+    expect(row.username).toMatch(USERNAME_PATTERN);
+  });
+
   // slugifyUsername strips everything outside [a-z0-9], so every display name
   // written entirely in a non-Latin script falls back to the same "user" base
   // and that whole cohort competes for one series. Unbounded, the Nth such
@@ -215,6 +235,7 @@ describe("upsertUserByGoogleSub", () => {
     });
 
     expect(row.username).toMatch(/^user-[0-9a-f]{8}$/);
+    expect(row.username).toMatch(USERNAME_PATTERN);
     expect(probed.length, "unbounded username probing").toBeLessThanOrEqual(51);
   });
 });

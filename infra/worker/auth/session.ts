@@ -2,17 +2,12 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { Env } from "../env";
-import { deleteSession, getSessionUser, updateUsername } from "../../db/queries";
+import { deleteSession, getSessionUser, updateUsername, USERNAME_PATTERN } from "../../db/queries";
 import { userRowToAuthUser } from "../../db/types";
 
 export const SESSION_COOKIE = "ne_session";
 // Matches createSession's TTL in db/queries.ts.
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
-
-// Same shape the auto-generated usernames already satisfy (see
-// slugifyUsername in db/queries.ts): 3-32 chars, lowercase alphanumeric and
-// hyphens, no leading/trailing hyphen.
-const USERNAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/;
 
 function isHttps(c: Context): boolean {
   return new URL(c.req.url).protocol === "https:";
