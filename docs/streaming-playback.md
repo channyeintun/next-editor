@@ -124,7 +124,7 @@ incomplete tail for diagnostics.
 
 ```tsx
 import { useEffect } from "react";
-import { useNextEditorActions } from "../src/core/src"; // public barrel
+import { useNextEditorActions } from "../src/hooks/useNextEditorContext";
 
 function useStreamedIntro(url: string, autoplay = false) {
   const { loadRecording, extendRecording, play } = useNextEditorActions();
@@ -233,4 +233,5 @@ operate on growing arrays.
 | `decompressBinaryToRecording(bytes)` | [recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)                     | Worker-backed binary decode (prefix or full) → `Recording`.            |
 
 A `.ne` is raw SCR3 bytes end-to-end — there is no base64 wrapping to strip. `useNextEditorActions`
-(public barrel) exposes `loadRecording` / `extendRecording` to components.
+(in [useNextEditorContext.ts](../src/hooks/useNextEditorContext.ts)) exposes `loadRecording` /
+`extendRecording` to components.

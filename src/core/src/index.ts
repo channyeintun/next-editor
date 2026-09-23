@@ -1,24 +1,8 @@
-// Contexts
-export { NextEditorProvider } from "../../contexts/NextEditorProvider";
-export { NextEditorActorContext } from "../../contexts/NextEditorActorContext";
-export { NextEditorActionsContext } from "../../contexts/NextEditorContext";
-export { SlidesProvider } from "../../contexts/SlidesContext";
+// The recording model's types, and nothing else. Values are imported from their
+// own modules, so importing this barrel never adds CodeEditor (and the Monaco chunk)
+// to a route's eager graph.
 
-// Hooks
-export {
-  useNextEditorActions,
-  useNextEditorMetadata,
-  useNextEditorPlayback,
-} from "../../hooks/useNextEditorContext";
-
-// Components
-export { default as CodeEditor } from "../../components/CodeEditor";
-export { default as MediaControls } from "../../components/MediaControls";
-export { default as Preview } from "../../components/Preview";
-export { default as CursorComponent } from "../../components/Cursor";
-export { default as SlidePanel } from "../../components/SlidePanel";
-
-// Type exports for users
+// Recording type exports
 export type {
   CaptionWord,
   CaptionCue,
@@ -37,10 +21,8 @@ export type {
   EditorState,
 } from "./types";
 
-// Machine exports
-export { editorMachine } from "./machine/editorMachine";
+// Machine type exports
 export type { EditorActorRef } from "./useNextEditor";
-export { timelineMachine } from "./machine/timelineMachine";
 export type { TimelineActorRef } from "./machine/timelineMachine";
 export type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./machine/types";
 

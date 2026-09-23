@@ -42,20 +42,22 @@ The app layer is responsible for React composition, WebContainer integration, In
 
 ## Public API Surface
 
-The main public entrypoint is `src/core/src/index.ts`.
+`src/core/src/index.ts` re-exports the recording model's types, and nothing else:
 
-Key exports:
-
-- `NextEditorProvider`
-- `useNextEditorActions`, `useNextEditorMetadata`, `useNextEditorPlayback`
-- `editorMachine`, `timelineMachine`, `EditorActorRef`, `TimelineActorRef`
-- `EditorMachineContext`, `EditorMachineEvent`, `EditorMachineInput`
 - `Recording`, `EditorFrame`, `EditorState`
+- `EditorActorRef`, `TimelineActorRef`
+- `EditorMachineContext`, `EditorMachineEvent`, `EditorMachineInput`
 - Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewState`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
 - Caption types such as `CaptionTrack`, `CaptionCue`, and `CaptionWord`
 - Track/cluster metadata types: `RecordingTrackKind`, `RecordingTrackMeta`, `RecordingClusterMeta`
 
-The core module also re-exports app-level components such as `CodeEditor`, `MediaControls`, `Preview`, `CursorComponent`, and `SlidePanel`, but the recording and playback logic lives underneath those components in the machine and hook layer.
+Values are imported from their own modules, so importing the barrel never adds `CodeEditor` (and the Monaco chunk) to a route's eager graph:
+
+- `NextEditorProvider` from `src/contexts/NextEditorProvider.tsx`
+- `useNextEditorActions`, `useNextEditorMetadata`, `useNextEditorPlayback`, and `useLiveTime` from `src/hooks/useNextEditorContext.ts`
+- `editorMachine` from `src/core/src/machine/editorMachine.ts`
+- `timelineMachine` from `src/core/src/machine/timelineMachine.ts`
+- Components such as `CodeEditor`, `MediaControls`, `Preview`, and `SlidePanel` from `src/components/*`
 
 ## Recording Model
 
@@ -156,8 +158,12 @@ const rebuilt = codec.applyDelta(bytesA, delta);
 `NextEditorProvider` creates the editor actor (it builds the `EditorMachineInput` itself from the app's stores) and exposes it through context. Components read it with the context hooks:
 
 ```typescript
-import { NextEditorProvider, useNextEditorActions, useNextEditorMetadata } from "../src/core/src";
-import { useLiveTime } from "../src/hooks/useNextEditorContext";
+import { NextEditorProvider } from "../src/contexts/NextEditorProvider";
+import {
+  useLiveTime,
+  useNextEditorActions,
+  useNextEditorMetadata,
+} from "../src/hooks/useNextEditorContext";
 
 function Controls() {
   // Stable senders: never re-render on machine transitions.
