@@ -20,7 +20,6 @@ import {
   selectWorkspaceExternalProjectVersion,
   selectWorkspacePreviewVersion,
   selectWorkspaceProjectVersion,
-  selectWorkspaceProjectName,
   selectWorkspaceProjectId,
   selectWorkspaceSaveVersion,
   selectWorkspaceIsSaving,
@@ -81,10 +80,6 @@ export const useWorkspaceActiveFilePath = (): string => {
 
 export const useWorkspaceLessonType = (): WorkspaceLessonType => {
   return useWorkspaceSelector("useWorkspaceLessonType", selectWorkspaceLessonType);
-};
-
-export const useWorkspaceProjectName = (): string => {
-  return useWorkspaceSelector("useWorkspaceProjectName", selectWorkspaceProjectName);
 };
 
 export const useWorkspaceLoadVersion = (): number => {

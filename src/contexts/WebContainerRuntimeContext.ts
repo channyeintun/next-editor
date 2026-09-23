@@ -33,11 +33,6 @@ export interface RuntimePreviewMessage {
   pathname: string;
 }
 
-export interface RuntimePort {
-  port: number;
-  url: string;
-}
-
 export type RuntimeLifecycleEventKind = "port-open" | "port-close" | "internal-error";
 
 export interface RuntimeLifecycleEvent {
@@ -61,7 +56,6 @@ export interface WebContainerRuntimeActions {
   setActiveTerminalSession: (sessionId: string) => void;
   sendTerminalInput: (input: string) => Promise<void>;
   resizeTerminal: (size: { cols: number; rows: number }) => void;
-  saveWorkspace: () => Promise<void>;
   updateEnvironmentVariables: (variables: EnvironmentVariables) => void;
   updateRunnerConfig: (config: Partial<RunnerConfig>) => void;
   /** Applies an ephemeral, complete Studio contract without persisting it as a user setting. */
@@ -78,7 +72,6 @@ export interface WebContainerRuntimeMetadata {
   isSupported: boolean;
   errorMessage: string | null;
   latestPreviewMessage: RuntimePreviewMessage | null;
-  openPorts: RuntimePort[];
   latestLifecycleEvent: RuntimeLifecycleEvent | null;
   lastOutput: string | null;
   terminalSessions: RuntimeTerminalSessionSnapshot[];
@@ -86,7 +79,6 @@ export interface WebContainerRuntimeMetadata {
   activeCommand: string | null;
   environmentVariables: EnvironmentVariables;
   runnerConfig: RunnerConfig;
-  workspaceRoot: string;
   /** False on /studio: only typed plan actions may start the runtime there. */
   ambientStartEnabled: boolean;
 }

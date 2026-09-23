@@ -598,16 +598,6 @@ export function resolveRuntimeRunCommand(
   return normalizedCommandLine;
 }
 
-export function getWorkspaceRoot(projectName: string): string {
-  const normalizedProjectName = projectName
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return `~/projects/${normalizedProjectName || "next-editor"}`;
-}
-
 export function normalizeEnvironmentVariables(
   variables: EnvironmentVariables,
 ): EnvironmentVariables {

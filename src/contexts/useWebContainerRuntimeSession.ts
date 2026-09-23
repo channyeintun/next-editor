@@ -3,7 +3,6 @@ import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
 import type {
   EnvironmentVariables,
   RuntimeLifecycleEvent,
-  RuntimePort,
   RuntimePreviewMessage,
   WebContainerRuntimeRecordingSnapshot,
   WebContainerRuntimeStatus,
@@ -132,7 +131,6 @@ export function useWebContainerRuntimeSession({
   const [errorMessage, setErrorMessageState] = useState<string | null>(null);
   const [latestPreviewMessage, setLatestPreviewMessageState] =
     useState<RuntimePreviewMessage | null>(null);
-  const [openPorts, setOpenPorts] = useState<RuntimePort[]>([]);
   const [latestLifecycleEvent, setLatestLifecycleEventState] =
     useState<RuntimeLifecycleEvent | null>(null);
   const [lastOutput, setLastOutputState] = useState<string | null>(null);
@@ -194,19 +192,19 @@ export function useWebContainerRuntimeSession({
     setLatestLifecycleEventState(event);
   };
 
-  const appendOutput = (chunk: string, options?: { logToConsole?: boolean }) => {
+  // Runner output is mirrored to the browser console for local debugging;
+  // session replay never records it (POSTHOG_REPLAY_PRIVACY_OPTIONS).
+  const appendOutput = (chunk: string) => {
     const sanitizedChunk = sanitizeTerminalChunk(chunk);
 
     if (!sanitizedChunk) {
       return;
     }
 
-    if (options?.logToConsole) {
-      const consoleChunk = sanitizedChunk.trim();
+    const consoleChunk = sanitizedChunk.trim();
 
-      if (consoleChunk) {
-        console.log("[runner]", consoleChunk);
-      }
+    if (consoleChunk) {
+      console.log("[runner]", consoleChunk);
     }
 
     setLastOutput(`${lastOutputRef.current ?? ""}${sanitizedChunk}`.slice(-RUNNER_OUTPUT_LIMIT));
@@ -352,7 +350,6 @@ export function useWebContainerRuntimeSession({
     setPreviewPort(null);
     setErrorMessage(null);
     setLatestPreviewMessage(null);
-    setOpenPorts([]);
     setLatestLifecycleEvent(null);
     setLastOutput(null);
     setTerminalSessions([]);
@@ -395,16 +392,6 @@ export function useWebContainerRuntimeSession({
       if (!isRuntimeGenerationActive(generation) || instanceRef.current !== instance) {
         return;
       }
-
-      setOpenPorts((current) => {
-        if (type === "open") {
-          return [...current.filter((entry) => entry.port !== port), { port, url }].sort(
-            (left, right) => left.port - right.port,
-          );
-        }
-
-        return current.filter((entry) => entry.port !== port);
-      });
 
       pushLifecycleEvent({
         kind: type === "open" ? "port-open" : "port-close",
@@ -463,7 +450,7 @@ export function useWebContainerRuntimeSession({
       setLastOutput(null);
     }
 
-    appendOutput(`$ ${commandLine}\n`, { logToConsole: true });
+    appendOutput(`$ ${commandLine}\n`);
 
     if (options.trackAsActiveCommand) {
       setActiveCommand(commandLine);
@@ -491,7 +478,7 @@ export function useWebContainerRuntimeSession({
           new WritableStream({
             write(chunk) {
               if (isRuntimeGenerationActive(generation)) {
-                appendOutput(chunk, { logToConsole: true });
+                appendOutput(chunk);
               }
             },
           }),
@@ -507,9 +494,7 @@ export function useWebContainerRuntimeSession({
             foregroundProcessesRef.current.has(spawned)
           ) {
             console.error("[runner] Command output stream error", error);
-            appendOutput(`\n${getRuntimeErrorMessage(error)}\n`, {
-              logToConsole: true,
-            });
+            appendOutput(`\n${getRuntimeErrorMessage(error)}\n`);
           }
         });
       void outputPipe;
@@ -522,9 +507,7 @@ export function useWebContainerRuntimeSession({
         return 0;
       }
 
-      appendOutput(`\nCommand exited with code ${exitCode}\n`, {
-        logToConsole: true,
-      });
+      appendOutput(`\nCommand exited with code ${exitCode}\n`);
 
       if (exitCode !== 0) {
         console.log("[runner]", formatCommandError(commandLine));
@@ -538,9 +521,7 @@ export function useWebContainerRuntimeSession({
       (error) => {
         if (isRuntimeGenerationActive(generation)) {
           console.log("[runner]", getRuntimeErrorMessage(error), error);
-          appendOutput(`\n${getRuntimeErrorMessage(error)}\n`, {
-            logToConsole: true,
-          });
+          appendOutput(`\n${getRuntimeErrorMessage(error)}\n`);
         }
         return -1;
       },
@@ -577,7 +558,7 @@ export function useWebContainerRuntimeSession({
     setErrorMessage(null);
     setLastOutput(null);
     setStatus("starting");
-    appendOutput(`$ ${commandLine}\n`, { logToConsole: true });
+    appendOutput(`$ ${commandLine}\n`);
 
     const spawnOptions =
       Object.keys(environmentVariables).length > 0 ? { env: environmentVariables } : undefined;
@@ -612,7 +593,7 @@ export function useWebContainerRuntimeSession({
               startId === runnerStartIdRef.current &&
               isRuntimeGenerationActive(generation)
             ) {
-              appendOutput(chunk, { logToConsole: true });
+              appendOutput(chunk);
             }
           },
         }),
@@ -650,9 +631,7 @@ export function useWebContainerRuntimeSession({
         runnerProcessRef.current = null;
         setPreviewUrl(null);
         setPreviewPort(null);
-        appendOutput(`\nRunner exited with code ${exitCode}\n`, {
-          logToConsole: true,
-        });
+        appendOutput(`\nRunner exited with code ${exitCode}\n`);
 
         if (exitCode !== 0) {
           console.error("[runner]", formatCommandError(commandLine));
@@ -918,7 +897,6 @@ export function useWebContainerRuntimeSession({
     lastOutput,
     latestLifecycleEvent,
     latestPreviewMessage,
-    openPorts,
     previewUrl,
     previewPort,
     resetRuntimeSession,

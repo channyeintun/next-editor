@@ -15,7 +15,6 @@ import {
   formatCommandError,
   getRuntimeErrorMessage,
   resolveRuntimeRunCommand,
-  getWorkspaceRoot,
   isMobileBrowser,
   isRuntimeBusy,
   isWebContainerRuntimeSupported,
@@ -29,7 +28,6 @@ import {
   useWorkspaceActions,
   useWorkspaceLessonType,
   useWorkspaceProjectId,
-  useWorkspaceProjectName,
 } from "../hooks/useWorkspace";
 import type { WorkspaceSyncMutation } from "./WorkspaceContext";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
@@ -65,7 +63,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     useWorkspaceActions();
   const lessonType = useWorkspaceLessonType();
   const projectId = useWorkspaceProjectId();
-  const projectName = useWorkspaceProjectName();
   const fileCount = useWorkspaceFileCount();
   const hasRunInitCommandRef = useRef(false);
   // `hasRunInitCommandRef` only flips AFTER the init command finishes, so it
@@ -191,7 +188,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     clearRunnerOutput,
     latestLifecycleEvent,
     latestPreviewMessage,
-    openPorts,
     previewPort,
     previewUrl,
     resetRuntimeSession,
@@ -249,7 +245,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   });
 
   const isSupported = isWebContainerRuntimeSupported();
-  const workspaceRoot = getWorkspaceRoot(projectName);
 
   const resetRuntime = () => {
     hasRunInitCommandRef.current = false;
@@ -649,7 +644,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     startTerminalSession,
     sendTerminalInput,
     resizeTerminal,
-    saveWorkspace,
     updateEnvironmentVariables,
     updateRunnerConfig,
     configureRuntime,
@@ -662,7 +656,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     isSupported,
     errorMessage,
     latestPreviewMessage,
-    openPorts,
     latestLifecycleEvent,
     lastOutput,
     terminalSessions,
@@ -670,7 +663,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     activeCommand,
     environmentVariables,
     runnerConfig,
-    workspaceRoot,
     ambientStartEnabled: allowAmbientStart,
   };
 
