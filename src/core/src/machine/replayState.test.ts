@@ -522,6 +522,30 @@ describe("replayState", () => {
     expect(backwardSeek.snapshotToApply).toMatchObject({ sidebarWidthDelta: -48 });
   });
 
+  it("does not hand back the target's own resize when seeking back across events without one", () => {
+    const toggledSnapshot = { ...createWorkspaceSnapshot("same", 0), collapsedFolders: ["src"] };
+    const workspaceEvents: WorkspaceRecordingEvent[] = [
+      { timestamp: 0, snapshot: createWorkspaceSnapshot("same", 0, 0, 0) },
+      { timestamp: 100, snapshot: createWorkspaceSnapshot("same", 0, 40, 25) },
+      { timestamp: 200, snapshot: toggledSnapshot },
+    ];
+
+    const backwardSeek = getWorkspaceReplayResult({
+      workspaceEvents,
+      currentTime: 150,
+      getCurrentSnapshot: () => toggledSnapshot,
+      lastAppliedIndex: 2,
+    });
+
+    // Event 1's resize was applied when playback first reached it; nothing between
+    // the two events moved a panel, so there is no width delta to apply now.
+    expect(backwardSeek.nextIndex).toBe(1);
+    expect(backwardSeek.snapshotToApply).toBeDefined();
+    expect(backwardSeek.snapshotToApply).not.toHaveProperty("sidebarWidthDelta");
+    expect(backwardSeek.snapshotToApply).not.toHaveProperty("previewDockWidthDelta");
+    expect(backwardSeek.snapshotToApply?.collapsedFolders).toEqual([]);
+  });
+
   it("replays docked-preview resize deltas against the current local width", () => {
     const firstSnapshot = createWorkspaceSnapshot("same", 0, 0, 0);
     const resizedSnapshot = createWorkspaceSnapshot("same", 0, undefined, 64);

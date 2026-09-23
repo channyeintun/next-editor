@@ -90,7 +90,13 @@ function resolveWorkspaceSnapshotForReplay({
     "previewDockWidthDelta",
   );
 
-  if (!sidebarWidthDelta.hasDelta && !previewDockWidthDelta.hasDelta) {
+  // A backward move leaves the target event outside the undone range, so its own
+  // width fields were applied when playback first reached it and must not be
+  // handed back; the fields are always replaced by the net delta for this move.
+  const carriesWidthDelta =
+    snapshot.sidebarWidthDelta !== undefined || snapshot.previewDockWidthDelta !== undefined;
+
+  if (!sidebarWidthDelta.hasDelta && !previewDockWidthDelta.hasDelta && !carriesWidthDelta) {
     return snapshot;
   }
 

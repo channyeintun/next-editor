@@ -1575,6 +1575,57 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  // Only resize events carry a width field. Seeking back across events that do not
+  // (a folder toggle, a file switch) lands on a resize event whose own delta was
+  // applied when playback first passed it; handing that event back unchanged
+  // re-applied it on every backward crossing.
+  it("does not re-apply a resize when seeking back across events without one", async () => {
+    let liveWidth = 200;
+    let currentWorkspace: WorkspaceRecordingSnapshot = createWorkspaceSnapshot("outside");
+    const folderToggle = { ...createWorkspaceSnapshot("w1"), collapsedFolders: ["src"] };
+
+    const recording: Recording = {
+      ...createRecording(),
+      workspaceEvents: [
+        { timestamp: 0, snapshot: { ...createWorkspaceSnapshot("w1"), sidebarWidthDelta: 0 } },
+        { timestamp: 100, snapshot: { ...createWorkspaceSnapshot("w1"), sidebarWidthDelta: 40 } },
+        { timestamp: 200, snapshot: folderToggle },
+      ],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        getWorkspaceSnapshot: () => currentWorkspace,
+        applyWorkspaceSnapshot: (snapshot) => {
+          if (typeof snapshot.sidebarWidthDelta === "number") {
+            liveWidth += snapshot.sidebarWidthDelta;
+          }
+          currentWorkspace = {
+            activeFilePath: snapshot.activeFilePath,
+            collapsedFolders: snapshot.collapsedFolders,
+            sidebarScrollTop: snapshot.sidebarScrollTop,
+            project: snapshot.project,
+          };
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    const widths: number[] = [];
+    for (const time of [250, 150, 250, 150]) {
+      actor.send({ type: "SEEK", time });
+      widths.push(liveWidth);
+    }
+
+    // The recorded width after the drag is 240 at both times.
+    expect(widths).toEqual([240, 240, 240, 240]);
+
+    actor.stop();
+  });
+
   it("keeps typed editor content visible when a same-file workspace snapshot follows it", async () => {
     const editor = new MockEditor(new MockTextModel("outside"));
     const initialWorkspace = createWorkspaceSnapshot("before");
