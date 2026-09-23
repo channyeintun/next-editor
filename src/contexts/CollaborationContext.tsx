@@ -1099,8 +1099,16 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
   const flushCurrentEdits = useCallback(async (current: CollaborationRoomProvider) => {
     // A failed provider never drains its outbox again (the room closed, access
-    // was revoked, or reconnects ran out until an explicit retry), so waiting
-    // for it would block leaving, closing and exporting indefinitely.
+    // was revoked, the room rejected an update as invalid, or reconnects ran
+    // out until an explicit retry), so waiting for it would block leaving,
+    // closing, exporting and member changes indefinitely. Go ahead without the
+    // unsent edits rather than asking: the panel already shows them as
+    // "changes waiting" beside "Retry connection", which, once reconnects have
+    // run out, is the one action that can still deliver them. Going ahead
+    // leaves them out of an export. Leaving or closing discards unsent
+    // whiteboard and slide edits along with the room's teaching state, and
+    // keeps unsent file edits only in this tab's unsaved workspace until the
+    // next room join reprojects over it.
     if (current.connectionState === "failed") return;
     await current.flushNow();
     if (!current.hasPendingUpdates) return;
