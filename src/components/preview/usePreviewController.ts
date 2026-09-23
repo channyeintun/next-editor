@@ -5,8 +5,7 @@ import {
   type RefObject,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
-  type TouchEvent as ReactTouchEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 import { usePreviewAdapterHandle } from "../../contexts/PreviewAdapterHandleContext";
@@ -107,8 +106,8 @@ export interface PreviewController {
   handleRefresh: () => void;
   handleReload: () => void;
   handleOpenConsole: () => void;
-  handleResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
-  handleDockResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
+  handleResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
+  handleDockResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
   handleTransitionStart: () => void;
   handleTransitionComplete: () => void;
   setActiveMode: (mode: PreviewActiveMode) => void;
@@ -136,16 +135,43 @@ interface PendingRuntimeSnapshotRequest {
 
 const RUNTIME_SNAPSHOT_REQUEST_TIMEOUT_MS = 1_200;
 
-/** Pointer coordinates from a mouse or touch event (React or native). */
-function getPointerCoords(event: MouseEvent | TouchEvent | ReactMouseEvent | ReactTouchEvent): {
-  x: number;
-  y: number;
-} {
-  if ("touches" in event) {
-    return { x: event.touches[0].clientX, y: event.touches[0].clientY };
-  }
+/**
+ * Follows the pointer that pressed a resize handle until it is released or
+ * cancelled (a system gesture, palm rejection). The handle captures the pointer,
+ * so moves keep arriving over the preview iframe and outside the window, for
+ * mouse, touch and pen alike. Returns a function that stops following without
+ * ending the drag, for when the controller unmounts mid-drag.
+ */
+function followPointerDrag(
+  event: ReactPointerEvent<HTMLElement>,
+  onMove: (moveEvent: PointerEvent) => void,
+  onEnd: () => void,
+): () => void {
+  const { pointerId } = event;
+  event.currentTarget.setPointerCapture(pointerId);
 
-  return { x: event.clientX, y: event.clientY };
+  const handleMove = (moveEvent: PointerEvent) => {
+    if (moveEvent.pointerId === pointerId) {
+      onMove(moveEvent);
+    }
+  };
+  const handleEnd = (endEvent: PointerEvent) => {
+    if (endEvent.pointerId !== pointerId) {
+      return;
+    }
+    stopFollowing();
+    onEnd();
+  };
+  const stopFollowing = () => {
+    window.removeEventListener("pointermove", handleMove);
+    window.removeEventListener("pointerup", handleEnd);
+    window.removeEventListener("pointercancel", handleEnd);
+  };
+
+  window.addEventListener("pointermove", handleMove);
+  window.addEventListener("pointerup", handleEnd);
+  window.addEventListener("pointercancel", handleEnd);
+  return stopFollowing;
 }
 
 /**
@@ -1190,8 +1216,14 @@ export function usePreviewController(): PreviewController {
     handleRefresh();
   }, [activeMode, emitPreviewEvent, handleRefresh, isPlaying, isRecording]);
 
-  const handleResizeStart = (event: ReactMouseEvent | ReactTouchEvent) => {
-    if ("button" in event && event.button !== 0) {
+  // Stops the window listeners of a resize drag still in progress; the unmount
+  // cleanup below calls it so a drag cannot outlive the preview.
+  const stopFollowingDragRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => stopFollowingDragRef.current?.(), []);
+
+  const handleResizeStart = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) {
       return;
     }
 
@@ -1204,28 +1236,19 @@ export function usePreviewController(): PreviewController {
     event.stopPropagation();
     setIsResizing(true);
 
-    const { x: startX, y: startY } = getPointerCoords(event);
-    const startWidth = rect.width;
-    const startHeight = rect.height;
+    const startPointer = { x: event.clientX, y: event.clientY };
+    const startSize = { width: rect.width, height: rect.height };
 
     setSize(
-      clampCustomPreviewSize(
-        { width: startWidth, height: startHeight },
-        { width: window.innerWidth, height: window.innerHeight },
-      ),
+      clampCustomPreviewSize(startSize, { width: window.innerWidth, height: window.innerHeight }),
     );
 
     let resizeRaf: number | null = null;
-    const onMove = (moveEvent: MouseEvent | TouchEvent) => {
-      if (moveEvent.cancelable) {
-        moveEvent.preventDefault();
-      }
-      const { x: currentX, y: currentY } = getPointerCoords(moveEvent);
-
+    const onMove = (moveEvent: PointerEvent) => {
       const newSize = getCustomPreviewSizeFromResize({
-        startSize: { width: startWidth, height: startHeight },
-        startPointer: { x: startX, y: startY },
-        currentPointer: { x: currentX, y: currentY },
+        startSize,
+        startPointer,
+        currentPointer: { x: moveEvent.clientX, y: moveEvent.clientY },
         viewport: { width: window.innerWidth, height: window.innerHeight },
       });
       setSize(newSize);
@@ -1239,25 +1262,20 @@ export function usePreviewController(): PreviewController {
     };
 
     const onEnd = () => {
+      stopFollowingDragRef.current = null;
       setIsResizing(false);
       if (resizeRaf) {
         cancelAnimationFrame(resizeRaf);
       }
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onEnd);
-      window.removeEventListener("touchmove", onMove);
-      window.removeEventListener("touchend", onEnd);
       emitPreviewEvent("preview_resize");
     };
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onEnd);
-    window.addEventListener("touchmove", onMove, { passive: false });
-    window.addEventListener("touchend", onEnd);
+    stopFollowingDragRef.current?.();
+    stopFollowingDragRef.current = followPointerDrag(event, onMove, onEnd);
   };
 
-  const handleDockResizeStart = (event: ReactMouseEvent | ReactTouchEvent) => {
-    if ("button" in event && event.button !== 0) {
+  const handleDockResizeStart = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) {
       return;
     }
 
@@ -1270,26 +1288,18 @@ export function usePreviewController(): PreviewController {
     event.stopPropagation();
     setIsResizing(true);
 
-    const { x: startX } = getPointerCoords(event);
+    const startX = event.clientX;
     const startWidth = rect.width;
     let lastWidth = startWidth;
 
-    const onMove = (moveEvent: MouseEvent | TouchEvent) => {
-      if (moveEvent.cancelable) {
-        moveEvent.preventDefault();
-      }
-
-      const { x: currentX } = getPointerCoords(moveEvent);
-      lastWidth = clampPreviewDockWidth(startWidth + startX - currentX, window.innerWidth);
+    const onMove = (moveEvent: PointerEvent) => {
+      lastWidth = clampPreviewDockWidth(startWidth + startX - moveEvent.clientX, window.innerWidth);
       setDockWidth(lastWidth);
     };
 
     const onEnd = () => {
+      stopFollowingDragRef.current = null;
       setIsResizing(false);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onEnd);
-      window.removeEventListener("touchmove", onMove);
-      window.removeEventListener("touchend", onEnd);
 
       // Record the net resize as an offset (not an absolute width) so playback
       // applies the same delta to whatever dock width the viewer has.
@@ -1299,10 +1309,8 @@ export function usePreviewController(): PreviewController {
       }
     };
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onEnd);
-    window.addEventListener("touchmove", onMove, { passive: false });
-    window.addEventListener("touchend", onEnd);
+    stopFollowingDragRef.current?.();
+    stopFollowingDragRef.current = followPointerDrag(event, onMove, onEnd);
   };
 
   const forceIframeRepaint = () => {

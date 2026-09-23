@@ -3,10 +3,9 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
-  type TouchEvent as ReactTouchEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
   ArrowLeft,
@@ -39,8 +38,8 @@ interface PreviewChromeProps {
   onRefresh: () => void;
   isRefreshing: boolean;
   onOpenConsole: () => void;
-  onResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
-  onDockResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
+  onResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
+  onDockResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
   onTransitionStart: () => void;
   onTransitionComplete: () => void;
   previewAddressLabel: string;
@@ -322,14 +321,13 @@ function PreviewToolbar({
 }
 
 interface PreviewResizeHandleProps {
-  onResizeStart: (event: ReactMouseEvent | ReactTouchEvent) => void;
+  onResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
 }
 
 function PreviewResizeHandle({ onResizeStart }: PreviewResizeHandleProps) {
   return (
     <div
-      onMouseDown={onResizeStart}
-      onTouchStart={onResizeStart}
+      onPointerDown={onResizeStart}
       onDoubleClick={(event) => event.stopPropagation()}
       className="absolute bottom-0 left-0 z-50 flex items-end justify-start cursor-sw-resize touch-none transition-colors group size-10"
       title="Resize preview"
@@ -356,8 +354,7 @@ function DockedPreviewResizeHandle({ onResizeStart }: PreviewResizeHandleProps) 
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize preview"
-      onMouseDown={onResizeStart}
-      onTouchStart={onResizeStart}
+      onPointerDown={onResizeStart}
       className="absolute inset-y-0 left-0 z-50 w-2 cursor-ew-resize touch-none group"
       title="Resize preview"
     >

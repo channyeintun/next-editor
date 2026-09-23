@@ -92,14 +92,27 @@ function renderController() {
   return renderHook(() => usePreviewController(), { wrapper: Providers });
 }
 
-function mouseDown(clientX: number, clientY: number) {
+const POINTER_ID = 7;
+
+// A React pointerdown on a resize handle that can capture the pointer (jsdom
+// has no setPointerCapture).
+function pointerDown(clientX: number, clientY: number) {
+  const handle = document.createElement("div");
+  handle.setPointerCapture = vi.fn<(pointerId: number) => void>();
+  document.body.append(handle);
   return {
     button: 0,
     clientX,
     clientY,
+    currentTarget: handle,
+    pointerId: POINTER_ID,
     preventDefault: vi.fn<() => void>(),
     stopPropagation: vi.fn<() => void>(),
   } as unknown as Parameters<ReturnType<typeof usePreviewController>["handleResizeStart"]>[0];
+}
+
+function firePointer(type: string, clientX = 0, clientY = 0) {
+  window.dispatchEvent(new PointerEvent(type, { clientX, clientY, pointerId: POINTER_ID }));
 }
 
 afterEach(() => {
@@ -128,14 +141,54 @@ describe("usePreviewController resize", () => {
     expect(result.current.iframeRef.current).toBeNull();
 
     act(() => {
-      result.current.handleResizeStart(mouseDown(100, 100));
+      result.current.handleResizeStart(pointerDown(100, 100));
     });
     act(() => {
-      window.dispatchEvent(new MouseEvent("mouseup"));
+      firePointer("pointerup");
     });
 
     expect(result.current.isResizing).toBe(false);
     expect(result.current.disablePointerEvents).toBe(false);
+  });
+
+  it("ends a resize whose pointer is cancelled and ignores later moves", () => {
+    const { result } = renderController();
+    const panel = document.createElement("div");
+    document.body.append(panel);
+    result.current.containerRef.current = panel;
+
+    act(() => {
+      result.current.handleResizeStart(pointerDown(100, 100));
+    });
+    expect(result.current.isResizing).toBe(true);
+    const sizeAtStart = result.current.size;
+
+    // A system gesture or palm rejection cancels the pointer mid-drag.
+    act(() => {
+      firePointer("pointercancel");
+    });
+    act(() => {
+      firePointer("pointermove", 20, 400);
+    });
+
+    expect(result.current.isResizing).toBe(false);
+    expect(result.current.size).toEqual(sizeAtStart);
+  });
+
+  it("stops following a dock resize once the preview unmounts", () => {
+    const { result, unmount } = renderController();
+    const panel = document.createElement("div");
+    document.body.append(panel);
+    result.current.containerRef.current = panel;
+    const removeEventListener = vi.spyOn(window, "removeEventListener");
+
+    act(() => {
+      result.current.handleDockResizeStart(pointerDown(100, 100));
+    });
+    unmount();
+
+    const removed = removeEventListener.mock.calls.map(([type]) => type);
+    expect(removed).toEqual(expect.arrayContaining(["pointermove", "pointerup", "pointercancel"]));
   });
 });
 
