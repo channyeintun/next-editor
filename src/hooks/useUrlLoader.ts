@@ -149,24 +149,17 @@ async function fetchVttFile(url: string, signal?: AbortSignal): Promise<CaptionT
 }
 
 /**
- * Loads caption tracks the recording explicitly declares via `captionFiles`, resolved relative
- * to the `.ne` URL. Captions are never guessed from sibling filenames when a recording declares
- * none at all — HTTP has no directory listing, so a recording must name its companion VTTs to
- * have them auto-load. But when captions *are* declared and every one 404s (the same rename case
- * handled for audio/camera), `<neBasename>.vtt` is tried as a last-ditch fallback candidate
- * (mirrors `buildMediaCandidates`, kept to a single candidate since captions are optional and
- * multi-language guessing would be over-engineering for this low-priority case).
- */
-/**
  * Resolves one declared caption file against the recording's URL, returning it
- * only when it stays a sibling of that recording. Captions are companion files
- * by definition, so this is exactly the intended relationship — and it stops a
- * recording naming an absolute URL, which `new URL(file, base)` would pass
- * through untouched, from making a viewer's browser fetch an arbitrary origin.
+ * only when it stays a sibling of that recording (null otherwise, or when it is
+ * not a URL at all). Captions are companion files by definition, so this is
+ * exactly the intended relationship — and it stops a recording naming an
+ * absolute URL, which `new URL(file, base)` would pass through untouched, from
+ * making a viewer's browser fetch an arbitrary origin. The scheme stays the
+ * `.ne`'s http(s).
  */
 function resolveSiblingCaptionUrl(file: string, neUrl: string): string | null {
   try {
-    const base = new URL(neUrl, typeof location === "undefined" ? undefined : location.href);
+    const base = new URL(neUrl);
     const resolved = new URL(file, base);
     if (resolved.origin !== base.origin) return null;
     const directory = base.pathname.slice(0, base.pathname.lastIndexOf("/") + 1);
@@ -177,6 +170,15 @@ function resolveSiblingCaptionUrl(file: string, neUrl: string): string | null {
   }
 }
 
+/**
+ * Loads caption tracks the recording explicitly declares via `captionFiles`, resolved relative
+ * to the `.ne` URL. Captions are never guessed from sibling filenames when a recording declares
+ * none at all — HTTP has no directory listing, so a recording must name its companion VTTs to
+ * have them auto-load. But when captions *are* declared and every one fails (the same rename case
+ * handled for audio/camera), `<neBasename>.vtt` is tried as a last-ditch fallback candidate
+ * (mirrors `buildMediaCandidates`, kept to a single candidate since captions are optional and
+ * multi-language guessing would be over-engineering for this low-priority case).
+ */
 async function fetchSiblingCaptions(
   neUrl: string,
   captionFiles: string[] | undefined,
@@ -186,11 +188,6 @@ async function fetchSiblingCaptions(
     return [];
   }
 
-  // `new URL(file, neUrl)` returns `file` unchanged when it is already
-  // absolute, so a recording could name any origin here and have the viewer's
-  // browser fetch it. Caption tracks are siblings of the `.ne`, so anything
-  // that does not resolve under the recording's own directory is dropped —
-  // which also keeps the scheme http(s), inherited from neUrl.
   const results = await Promise.allSettled(
     captionFiles
       .map((file) => resolveSiblingCaptionUrl(file, neUrl))
@@ -209,7 +206,7 @@ async function fetchSiblingCaptions(
     const basenameUrl = neBasenameMediaUrl(neUrl, "vtt");
     if (
       basenameUrl &&
-      !captionFiles.some((file) => new URL(file, neUrl).toString() === basenameUrl)
+      !captionFiles.some((file) => resolveSiblingCaptionUrl(file, neUrl) === basenameUrl)
     ) {
       const track = await fetchVttFile(basenameUrl, signal);
       if (track) tracks.push(track);
@@ -545,9 +542,7 @@ export const useUrlLoader = () => {
         // Some hosts serve sibling audio without a usable content type; fall back to the
         // extension-derived MIME so `decodeAudioData` and track metadata behave.
         const type =
-          (raw.type && !raw.type.includes("text/html") ? raw.type : undefined) ??
-          audioMimeFromFilename(recording.audioFile ?? url) ??
-          "audio/webm";
+          raw.type || (audioMimeFromFilename(recording.audioFile ?? url) ?? "audio/webm");
         const blob = raw.type === type ? raw : new Blob([raw], { type });
         return { url, blob };
       } catch (err) {

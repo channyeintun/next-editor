@@ -1026,4 +1026,30 @@ describe("useUrlLoader", () => {
     const ids = vi.mocked(actions.addCaptionTrack).mock.calls.map(([track]) => track.id);
     expect(new Set(ids).size).toBe(2);
   });
+
+  it("still tries the .ne basename VTT when a declared caption name is not a valid URL", async () => {
+    const recording = createRecording({ captionFiles: ["http://[broken"] });
+    const neBytes = await encodeRecordingToStream(recording);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+        const url = targetUrl(typeof input === "string" ? input : input.toString());
+        if (url.endsWith(".ne")) {
+          return fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" });
+        }
+        if (url.endsWith("/intro-01.vtt")) {
+          return fakeResponse(vttBody(), { ok: true, contentType: "text/vtt" });
+        }
+        return fakeResponse(null, { ok: false, status: 404 });
+      }),
+    );
+    const actions = makeActionsMock();
+    const { result } = renderLoader(actions);
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+
+    await waitFor(() => {
+      expect(actions.addCaptionTrack).toHaveBeenCalledTimes(1);
+    });
+  });
 });
