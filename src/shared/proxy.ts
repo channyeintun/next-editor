@@ -211,7 +211,8 @@ export async function proxyUrl(rawUrl: string | null): Promise<ProxyResult> {
       return {
         status: 200,
         body: limitBody(response.body, abortController, () => clearTimeout(timeout)),
-        contentType: response.headers.get("content-type") ?? "",
+        // Absent stays absent, so each caller's own fallback type applies.
+        contentType: response.headers.get("content-type") ?? undefined,
       };
     }
     return { status: 502, error: "Upstream exceeded the redirect limit." };
