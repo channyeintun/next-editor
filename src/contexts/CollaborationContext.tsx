@@ -716,6 +716,26 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     whiteboardStore.trigger.setScene({ scene: structuredClone(EMPTY_WHITEBOARD_SCENE) });
 
     const providerGeneration = ++providerGenerationRef.current;
+    // A whiteboard delta writes one transaction per element so every update
+    // stays under the room limit. Projecting the whole teaching tree (which
+    // re-validates every element) after each of them made one delta cost
+    // O(changed × board); project once after the current task's transactions.
+    let isTeachingProjectionScheduled = false;
+    const scheduleTeachingProjection = (doc: Y.Doc) => {
+      if (isTeachingProjectionScheduled) return;
+      isTeachingProjectionScheduled = true;
+      queueMicrotask(() => {
+        isTeachingProjectionScheduled = false;
+        if (providerGenerationRef.current !== providerGeneration || playbackRef.current) return;
+        try {
+          projectTeachingState(doc, roomId);
+        } catch (error) {
+          setLocalError(
+            messageFromError(error, "The shared teaching surfaces could not be projected."),
+          );
+        }
+      });
+    };
     const nextProvider = new CollaborationRoomProvider({
       roomId,
       api: collaborationApi,
@@ -746,7 +766,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           }
           if (!teachingOnly) hydrateProjectionAssets(projection, roomId);
           if (collaborationTransactionTouchesTeaching(doc, transaction)) {
-            projectTeachingState(doc, roomId);
+            scheduleTeachingProjection(doc);
           }
         } catch (error) {
           setLocalError(messageFromError(error, "The shared workspace could not be projected."));
@@ -1714,9 +1734,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       if (!(event.upserts?.length || event.removedIds?.length)) return true;
       try {
         const next = applyCollaborationWhiteboardDelta(current.doc, event);
-        // projectTeachingState runs synchronously inside the Yjs transaction,
-        // while React applies its projection effect after this callback. Tag
-        // that exact authoritative result so normalization cannot make this
+        // The teaching projection of these transactions runs in a microtask and
+        // React applies it to the stores in an effect, both after this callback.
+        // Tag that exact authoritative result so normalization cannot make this
         // local canvas echo look like a remote scene update.
         localWhiteboardProjectionFingerprintRef.current = JSON.stringify(next);
         const nextById = new Map(next.map((element) => [element.id, element] as const));

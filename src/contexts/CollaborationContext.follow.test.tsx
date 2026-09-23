@@ -8,6 +8,7 @@ const controls = vi.hoisted(() => ({
   handleSlideEvent: vi.fn(),
   handleWhiteboardEvent: vi.fn(),
   providers: [] as Array<{
+    doc: import("yjs").Doc;
     awarenessSessionId: string;
     emitDocumentChange: () => void;
     emitAwareness: (event: Record<string, unknown>) => void;
@@ -93,6 +94,9 @@ vi.mock("../collaboration/roomProvider", async () => {
       ) => void;
     }) {
       this.options = options;
+      this.doc.on("afterTransaction", (transaction) =>
+        this.options.onDocumentChange?.(this.doc, transaction),
+      );
       controls.providers.push(this);
     }
 
@@ -155,7 +159,18 @@ const workspaceActions = {
   getWorkspaceRevision: () => 0,
   getFile: () => null,
   subscribeWorkspaceSync: () => () => {},
+  reconcileExternalProject: vi.fn(),
+  updateFileContent: vi.fn(),
+  notifyAssetAvailable: vi.fn(),
 };
+
+vi.mock("../collaboration/teachingDocument", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../collaboration/teachingDocument")>();
+  return {
+    ...actual,
+    projectCollaborationTeachingDocument: vi.fn(actual.projectCollaborationTeachingDocument),
+  };
+});
 
 vi.mock("../hooks/useWorkspace", () => ({
   useWorkspaceActions: () => workspaceActions,
@@ -174,6 +189,13 @@ import { SlidesStoreProvider, useSlidesStore } from "./SlidesStoreContext";
 import { WhiteboardStoreProvider, useWhiteboardStore } from "./WhiteboardStoreContext";
 import type { SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
+import {
+  projectCollaborationTeachingDocument,
+  seedCollaborationTeachingDocument,
+} from "../collaboration/teachingDocument";
+import type { WhiteboardElementJSON } from "../core/src/whiteboard";
+import { seedCollaborationProject } from "../collaboration/projectDocument";
+import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 
 function Providers({ children }: { children: ReactNode }) {
   return (
@@ -533,4 +555,78 @@ describe("CollaborationContext leaving a failed room", () => {
       view.unmount();
     });
   }
+});
+
+function rectangle(id: string, index: string): WhiteboardElementJSON {
+  return {
+    id,
+    type: "rectangle",
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 80,
+    angle: 0,
+    strokeColor: "#1e1e1e",
+    backgroundColor: "transparent",
+    fillStyle: "solid",
+    strokeWidth: 1,
+    strokeStyle: "solid",
+    roundness: null,
+    roughness: 1,
+    opacity: 100,
+    seed: 1,
+    version: 1,
+    versionNonce: 10,
+    index,
+    isDeleted: false,
+    groupIds: [],
+    frameId: null,
+    boundElements: null,
+    updated: 1,
+    link: null,
+    locked: false,
+  } as WhiteboardElementJSON;
+}
+
+describe("CollaborationContext teaching projection", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  // A delta writes one transaction per element so every update stays under the
+  // room limit; the teaching tree must not be re-projected (and every element
+  // re-validated) after each of them.
+  it("projects a multi-element whiteboard delta once", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    act(() => {
+      seedCollaborationProject(provider.doc, createStarterHtmlCssWorkspace());
+      seedCollaborationTeachingDocument(provider.doc, { slides: [], whiteboardElements: [] });
+    });
+    await waitFor(() => expect(collaboration!.teaching.initialized).toBe(true));
+    vi.mocked(projectCollaborationTeachingDocument).mockClear();
+
+    const upserts = Array.from({ length: 20 }, (_, index) => rectangle(`e${index}`, `a${index}`));
+    act(() => {
+      collaboration!.publishWhiteboardDelta({ upserts });
+    });
+
+    await waitFor(() => expect(collaboration!.teaching.whiteboardElements).toHaveLength(20));
+    expect(projectCollaborationTeachingDocument).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
 });
