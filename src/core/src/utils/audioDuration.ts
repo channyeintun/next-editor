@@ -11,37 +11,57 @@
 // here. The length is still exact to a fraction of a millisecond.
 const DECODE_SAMPLE_RATE = 8000;
 
+// Metadata for an in-memory blob loads in milliseconds when it loads at all. Some
+// WebKit builds may never load media without a user gesture, and loadRecording waits
+// on this promise, so give up and let the caller keep the recording's wall-clock
+// duration.
+const ELEMENT_METADATA_TIMEOUT_MS = 5_000;
+
 /**
  * Attempts to determine audio duration via `HTMLAudioElement.duration`.
  * Used as a fallback when AudioContext decoding fails (e.g. iOS WebKit).
+ * Rejects when the element has loaded no metadata after
+ * `ELEMENT_METADATA_TIMEOUT_MS`.
  */
 function getDurationFromAudioElement(audioBlob: Blob): Promise<number> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(audioBlob);
     const audio = new Audio();
+    const listeners = new AbortController();
 
-    const cleanup = () => URL.revokeObjectURL(url);
+    const settle = () => {
+      clearTimeout(timer);
+      listeners.abort();
+      URL.revokeObjectURL(url);
+    };
+
+    const timer = setTimeout(() => {
+      settle();
+      reject(
+        new Error(`HTMLAudioElement loaded no metadata within ${ELEMENT_METADATA_TIMEOUT_MS} ms`),
+      );
+    }, ELEMENT_METADATA_TIMEOUT_MS);
 
     audio.addEventListener(
       "loadedmetadata",
       () => {
-        cleanup();
+        settle();
         if (Number.isFinite(audio.duration) && audio.duration > 0) {
           resolve(audio.duration);
         } else {
           reject(new Error("HTMLAudioElement reported invalid duration"));
         }
       },
-      { once: true },
+      { signal: listeners.signal },
     );
 
     audio.addEventListener(
       "error",
       () => {
-        cleanup();
+        settle();
         reject(new Error("HTMLAudioElement failed to load blob"));
       },
-      { once: true },
+      { signal: listeners.signal },
     );
 
     audio.src = url;

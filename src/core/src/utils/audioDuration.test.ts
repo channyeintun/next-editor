@@ -30,6 +30,8 @@ const stubOfflineAudioContext = (decode: (bytes: ArrayBuffer) => DecodeResult) =
 
 describe("audio duration", () => {
   afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -53,6 +55,7 @@ describe("audio duration", () => {
 
   // iOS WebKit plays audio/mp4 it cannot decode through Web Audio.
   it("reads the media element's duration when decoding fails", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     stubOfflineAudioContext(() => new Error("EncodingError"));
     class FakeAudio extends EventTarget {
       src = "";
@@ -65,5 +68,36 @@ describe("audio duration", () => {
     vi.stubGlobal("Audio", FakeAudio);
 
     await expect(measureAudioDurationSeconds(new Blob([new Uint8Array(4)]))).resolves.toBe(3.25);
+    // An element that answers also clears the give-up timer.
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // The editor stays in `loading` until this settles, so an element that fires
+  // neither loadedmetadata nor error used to leave the UI stuck after STOP.
+  it("gives up on a media element that never loads metadata", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const decodeError = new Error("EncodingError");
+    stubOfflineAudioContext(() => decodeError);
+    let markLoadStarted!: () => void;
+    const loadStarted = new Promise<void>((resolve) => {
+      markLoadStarted = resolve;
+    });
+    // Starts loading, then fires neither loadedmetadata nor error.
+    class SilentAudio extends EventTarget {
+      src = "";
+      duration = Number.NaN;
+      load() {
+        markLoadStarted();
+      }
+    }
+    vi.stubGlobal("Audio", SilentAudio);
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
+
+    const measured = measureAudioDurationSeconds(new Blob([new Uint8Array(4)]));
+    await loadStarted;
+    vi.advanceTimersByTime(5_000);
+
+    expect(revokeObjectURL).toHaveBeenCalledOnce();
+    await expect(measured).rejects.toBe(decodeError);
   });
 });
