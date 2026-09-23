@@ -16,6 +16,10 @@ type SluggedTable = "lessons" | "playlists";
  * lesson titled "Introduction" gets `introduction` and the built-in tour is
  * served in its place. Reserving them here fixes it at the source and leaves
  * both resolvers' seed-first order intact.
+ *
+ * This only guards new rows. Lessons that already held a seed slug were moved
+ * off it by migrations/0013_rename_unreachable_slugs.sql; a lesson added to the
+ * seed later needs a follow-up migration like it.
  */
 const RESERVED_LESSON_SLUGS: ReadonlySet<string> = new Set(
   seedManifest.lessons.map((lesson) => lesson.slug),
@@ -27,6 +31,10 @@ const RESERVED_LESSON_SLUGS: ReadonlySet<string> = new Set(
  * registration order, so `/api/lessons/mine` and `/api/playlists/mine` can never
  * reach a row whose slug is "mine": viewers would get a 401 or their own
  * library instead of it.
+ *
+ * This only guards new rows. Rows that already held "mine" were moved off it by
+ * migrations/0013_rename_unreachable_slugs.sql; a slug added here later needs a
+ * follow-up migration like it.
  */
 const ROUTE_SEGMENT_SLUGS: ReadonlySet<string> = new Set(["mine"]);
 
