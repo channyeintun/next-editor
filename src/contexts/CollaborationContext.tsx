@@ -745,15 +745,16 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         try {
           const queuedTextEdit = pendingLocalTextEditRef.current;
           let projectedQueuedTextEdit = false;
+          const previousProjection = projectionRef.current;
           const teachingOnly =
-            projectionRef.current !== null &&
+            previousProjection !== null &&
             collaborationTransactionTouchesOnlyTeaching(doc, transaction);
           const projection = teachingOnly
-            ? projectionRef.current!
+            ? previousProjection
             : projectCollaborationTransaction(
                 doc,
                 transaction,
-                projectionRef.current,
+                previousProjection,
                 baseActionsRef.current,
                 queuedTextEdit?.event,
                 (content) => {
@@ -765,7 +766,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           if (projectedQueuedTextEdit && pendingLocalTextEditRef.current === queuedTextEdit) {
             pendingLocalTextEditRef.current = null;
           }
-          if (!teachingOnly) hydrateProjectionAssets(projection, roomId);
+          // Asset descriptors live on tree nodes, so only a reprojection (a new
+          // projection object) can add or change one. Text edits keep the old
+          // projection, and hydrating on them re-notified every asset, forcing
+          // a whole-project runtime sync per keystroke.
+          if (projection !== previousProjection) hydrateProjectionAssets(projection, roomId);
           if (collaborationTransactionTouchesTeaching(doc, transaction)) {
             scheduleTeachingProjection(doc);
           }

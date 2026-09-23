@@ -202,7 +202,15 @@ import {
   seedCollaborationTeachingDocument,
 } from "../collaboration/teachingDocument";
 import type { WhiteboardElementJSON } from "../core/src/whiteboard";
-import { seedCollaborationProject } from "../collaboration/projectDocument";
+import {
+  getCollaborationTexts,
+  projectCollaborationDocument,
+  seedCollaborationProject,
+} from "../collaboration/projectDocument";
+import {
+  registerWorkspaceAsset,
+  resetWorkspaceAssetStoreForTests,
+} from "../storage/workspaceAssetStore";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 
 function Providers({ children }: { children: ReactNode }) {
@@ -711,5 +719,56 @@ describe("CollaborationContext presence", () => {
     expect(provider.awarenessPublications).not.toContainEqual(
       expect.objectContaining({ kind: "leave" }),
     );
+  });
+});
+
+describe("CollaborationContext asset hydration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetWorkspaceAssetStoreForTests();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  // notifyAssetAvailable bumps the workspace sync and preview versions, which
+  // makes the runtime diff the whole project; text edits cannot change assets.
+  it("hydrates room assets when the tree changes, not on every text edit", async () => {
+    const asset = await registerWorkspaceAsset(new Uint8Array([1, 2, 3, 4]), {
+      mimeType: "image/png",
+    });
+    const project = createStarterHtmlCssWorkspace();
+    project.files["logo.png"] = {
+      path: "logo.png",
+      name: "logo.png",
+      language: "plaintext",
+      encoding: "asset",
+      content: asset,
+    };
+    render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <div />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    act(() => seedCollaborationProject(provider.doc, project));
+    await waitFor(() => expect(workspaceActions.notifyAssetAvailable).toHaveBeenCalledTimes(1));
+
+    const entryId = projectCollaborationDocument(provider.doc).nodeIdByPath.get(
+      project.entryFilePath,
+    )!;
+    for (let edit = 0; edit < 3; edit += 1) {
+      act(() => {
+        provider.doc.transact(
+          () => getCollaborationTexts(provider.doc).get(entryId)!.insert(0, "x"),
+          "remote-provider",
+        );
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    expect(workspaceActions.notifyAssetAvailable).toHaveBeenCalledTimes(1);
   });
 });
