@@ -390,14 +390,7 @@ export class CollaborationRoomProvider {
   };
 
   private readonly handleDocumentUpdate = (update: Uint8Array, origin: unknown) => {
-    if (
-      origin === COLLABORATION_ORIGIN.remoteProvider ||
-      origin === COLLABORATION_ORIGIN.workspaceProjection ||
-      origin === COLLABORATION_ORIGIN.playback ||
-      !this.canWrite
-    ) {
-      return;
-    }
+    if (origin === COLLABORATION_ORIGIN.remoteProvider || !this.canWrite) return;
     this.pendingUpdates.push({ update, queuedAt: monotonicNow() });
     this.reportPendingUpdates();
     if (this.batchTimer) return;

@@ -40,13 +40,37 @@ describe("collaboration workspace projection", () => {
     expect(projection.textIdByType).not.toBe(initialTextIndex);
   });
 
-  it("does not turn projection-origin store writes into Yjs writes", () => {
+  it("projects remote text and tree changes without writing to the document", () => {
+    const project = createStarterHtmlCssWorkspace();
     const doc = new Y.Doc();
-    seedCollaborationProject(doc, createStarterHtmlCssWorkspace());
+    seedCollaborationProject(doc, project);
+    const remote = new Y.Doc();
+    Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+    const actions = {
+      reconcileExternalProject: vi.fn<WorkspaceActions["reconcileExternalProject"]>(),
+      updateFileContent: vi.fn<WorkspaceActions["updateFileContent"]>(),
+    };
+    let projection = reprojectCollaborationWorkspace(doc, actions);
+    doc.on("afterTransaction", (transaction) => {
+      projection = projectCollaborationTransaction(doc, transaction, projection, actions);
+    });
     const origins: unknown[] = [];
     doc.on("update", (_update, origin) => origins.push(origin));
-    doc.transact(() => {}, COLLABORATION_ORIGIN.workspaceProjection);
-    expect(origins).toEqual([]);
+
+    const remoteBefore = Y.encodeStateVector(remote);
+    const remoteController = new CollaborationProjectController(remote, { canWrite: () => true });
+    remoteController.replaceFileContent(project.entryFilePath, "remote text");
+    remoteController.createFile("remote.ts", "export {}");
+    Y.applyUpdate(
+      doc,
+      Y.encodeStateAsUpdate(remote, remoteBefore),
+      COLLABORATION_ORIGIN.remoteProvider,
+    );
+
+    // The only document update is the remote one: projecting it wrote nothing back.
+    expect(origins).toEqual([COLLABORATION_ORIGIN.remoteProvider]);
+    expect(projection.project.files["remote.ts"].content).toBe("export {}");
+    expect(projection.project.files[project.entryFilePath].content).toBe("remote text");
   });
 
   it("projects a queued local Monaco edit without replacing the full file", () => {

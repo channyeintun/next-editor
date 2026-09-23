@@ -35,9 +35,6 @@ export const COLLABORATION_ORIGIN = {
   localPresentation: "local-presentation",
   localWhiteboard: "local-whiteboard",
   remoteProvider: "remote-provider",
-  workspaceProjection: "workspace-projection",
-  teachingProjection: "teaching-projection",
-  playback: "playback",
 } as const;
 
 export type CollaborationTransactionOrigin =

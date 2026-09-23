@@ -300,9 +300,11 @@ Required lifecycle behavior:
 
 ### Monaco and workspace projection
 
-Bind each open Monaco model to the corresponding collaborative text object. Tag transaction
-origins such as `local-editor`, `local-tree-command`, `remote-provider`, `workspace-projection`,
-and `playback` so adapters can prevent feedback loops and scope undo to a user's own changes.
+Bind each open Monaco model to the corresponding collaborative text object. Transactions carry
+an origin (`local-editor`, `local-tree-command`, `local-presentation`, `local-whiteboard`,
+`remote-provider`, and the seed origins) so the provider sends only local changes and undo stays
+scoped to a user's own edits. Projection never writes to the document, and playback does not rely
+on origins: the projection is paused and writes are disabled while playback owns the workspace.
 
 File create, rename, move, and delete actions must become CRDT commands in collaboration mode.
 The projection adapter updates `workspaceStore` from the resulting document transaction. Existing
@@ -349,9 +351,10 @@ Current playback writes recorded workspace snapshots into `workspaceStore`. Thos
 never be published to the shared document.
 
 The first implementation should make live room projection and playback mutually exclusive in a
-single editor instance. Entering playback pauses the collaboration projection and tags every
-playback store update as non-publishable. Unloading playback reprojects the current shared
-document before editing is enabled again. A later implementation may use separate live and replay
+single editor instance. Entering playback pauses the collaboration projection and disables the
+collaborative write commands, so playback store updates stay local (only bulk project replacement
+is passed through to the store). Unloading playback reprojects the current shared document before
+editing is enabled again. A later implementation may use separate live and replay
 workspace instances.
 
 ## Recording and SCR3
