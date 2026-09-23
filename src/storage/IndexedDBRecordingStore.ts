@@ -98,6 +98,8 @@ export class IndexedDBRecordingStore {
           // Recordings older than v5 are not retained across an upgrade. Clear every
           // store they could have rows in (camera since v3, audio since v4): a blob
           // left behind has no metadata left to find it by, so nothing could delete it.
+          // No build before v5 ever called save, so a database already upgraded past
+          // v4 holds no such blobs and needs no reclaim pass.
           for (const storeName of [
             RECORDING_METADATA_STORE,
             RECORDING_SEGMENTS_STORE,
