@@ -21,6 +21,7 @@ import {
   useCollaborationVoice,
   useCollaborationVoiceState,
 } from "../contexts/CollaborationVoiceContext";
+import { collaborationParticipantKey } from "../collaboration/participantKey";
 import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
 import type { CollaborationInviteRole } from "../collaboration/protocol";
 import type { VoiceClientErrorCode } from "../voice/machine";
@@ -471,10 +472,9 @@ export default function CollaborationPanel() {
                     ) : (
                       collaboration.participants.map((participant) => {
                         const color = collaborationParticipantColorIndex(participant);
-                        const isSelf =
-                          participant.sessionId === collaboration.provider?.awarenessSessionId;
-                        const isFollowed =
-                          participant.sessionId === collaboration.followedSessionId;
+                        const participantKey = collaborationParticipantKey(participant);
+                        const isSelf = participantKey === collaboration.ownParticipantKey;
+                        const isFollowed = participantKey === collaboration.followedParticipantKey;
                         const surfaceLabel = (() => {
                           if (participant.surface.kind === "slides") {
                             if (collaboration.isTeachingLoading) return "Loading shared slide…";
@@ -499,7 +499,7 @@ export default function CollaborationPanel() {
                         })();
                         return (
                           <div
-                            key={`${participant.actorId}:${participant.sessionId}`}
+                            key={participantKey}
                             className="flex items-center gap-2 rounded-lg bg-white/3 px-2.5 py-2"
                           >
                             {participant.avatarUrl ? (
@@ -540,7 +540,7 @@ export default function CollaborationPanel() {
                                 onClick={() =>
                                   isFollowed
                                     ? collaboration.stopFollowing("user")
-                                    : collaboration.followParticipant(participant.sessionId)
+                                    : collaboration.followParticipant(participant)
                                 }
                                 className={`rounded px-2 py-1 text-[10px] font-semibold ${
                                   isFollowed

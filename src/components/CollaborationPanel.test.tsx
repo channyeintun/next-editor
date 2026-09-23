@@ -46,8 +46,10 @@ vi.mock("../contexts/CollaborationVoiceContext", () => ({
 }));
 
 import CollaborationPanel from "./CollaborationPanel";
+import { collaborationParticipantKey } from "../collaboration/participantKey";
 
 const OWN_SESSION = "10000000-0000-4000-8000-000000000001";
+const OWN_ACTOR_ID = "30000000-0000-4000-8000-000000000001";
 
 function participant({
   actorId,
@@ -82,10 +84,10 @@ function participant({
   };
 }
 
-function makeCollaborationState(followedSessionId: string | null = null) {
+function makeCollaborationState(followedParticipantKey: string | null = null) {
   const participants = [
     participant({
-      actorId: "30000000-0000-4000-8000-000000000001",
+      actorId: OWN_ACTOR_ID,
       sessionId: OWN_SESSION,
       name: "Self",
       role: "viewer",
@@ -123,7 +125,8 @@ function makeCollaborationState(followedSessionId: string | null = null) {
     }),
   ];
   const followedParticipant =
-    participants.find((item) => item.sessionId === followedSessionId) ?? null;
+    participants.find((item) => collaborationParticipantKey(item) === followedParticipantKey) ??
+    null;
   return {
     provider: { awarenessSessionId: OWN_SESSION },
     connectionState: "live",
@@ -131,7 +134,11 @@ function makeCollaborationState(followedSessionId: string | null = null) {
     isHost: false,
     hasOfflineChanges: false,
     participants,
-    followedSessionId,
+    ownParticipantKey: collaborationParticipantKey({
+      actorId: OWN_ACTOR_ID,
+      sessionId: OWN_SESSION,
+    }),
+    followedParticipantKey,
     followedParticipant,
     teaching: {
       initialized: true,
@@ -182,11 +189,40 @@ describe("CollaborationPanel follow actions", () => {
     expect(screen.getByText("Whiteboard")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Follow Grace" }));
-    expect(mocks.followParticipant).toHaveBeenCalledWith("40000000-0000-4000-8000-000000000003");
+    expect(mocks.followParticipant).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: "30000000-0000-4000-8000-000000000003",
+        sessionId: "40000000-0000-4000-8000-000000000003",
+      }),
+    );
+  });
+
+  it("marks only this member's own session as (you)", () => {
+    const state = makeCollaborationState();
+    const reusingOwnSession = participant({
+      actorId: "30000000-0000-4000-8000-000000000005",
+      sessionId: OWN_SESSION,
+      name: "Mallory",
+      role: "viewer",
+      surface: { kind: "editor", fileNodeId: null, viewport: null },
+    });
+    collaborationState = { ...state, participants: [...state.participants, reusingOwnSession] };
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    expect(screen.getByText("Self (you)")).toBeInTheDocument();
+    expect(screen.getByText("Mallory")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Follow Mallory" }));
+    expect(mocks.followParticipant).toHaveBeenCalledWith(reusingOwnSession);
   });
 
   it("marks the exact followed session as pressed and exposes keyboard-operable stop", () => {
-    collaborationState = makeCollaborationState("40000000-0000-4000-8000-000000000002");
+    collaborationState = makeCollaborationState(
+      collaborationParticipantKey({
+        actorId: "30000000-0000-4000-8000-000000000002",
+        sessionId: "40000000-0000-4000-8000-000000000002",
+      }),
+    );
     render(<CollaborationPanel />);
     fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
 

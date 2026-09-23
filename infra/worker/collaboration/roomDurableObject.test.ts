@@ -38,6 +38,7 @@ import {
 import type { Env } from "../env";
 import { FakeWebSocket } from "../testing/fakeWebSocket";
 import { SqliteTestStorage } from "../testing/sqliteStorage";
+import { stubWebSocketUpgrade } from "../testing/webSocketUpgrade";
 import { CollaborationRoomDurableObject } from "./roomDurableObject";
 
 vi.mock("../../db/collaborationQueries", () => ({
@@ -75,6 +76,8 @@ class FakeSocket extends FakeWebSocket {
     );
   }
 }
+
+stubWebSocketUpgrade(() => new FakeSocket());
 
 class RoomTestStorage extends SqliteTestStorage {
   async getAlarm(): Promise<number | null> {
@@ -137,6 +140,7 @@ async function createRoom(
     storage,
     setWebSocketAutoResponse: () => undefined,
     getWebSockets: () => sockets,
+    acceptWebSocket: (socket: FakeSocket) => sockets.push(socket),
   };
   const room = new CollaborationRoomDurableObject(
     ctx as unknown as DurableObjectState,
@@ -153,7 +157,10 @@ async function createRoom(
   );
   expect(initialized.status).toBe(200);
 
-  /** A socket as acceptConnection leaves it (WebSocketPair and a 101 need workerd). */
+  /**
+   * A socket as acceptConnection leaves it, placed directly. It skips the
+   * upgrade, so it can set the role version and the last access check.
+   */
   function connect(
     userId: string,
     role: CollaborationRole,
@@ -161,20 +168,35 @@ async function createRoom(
   ): FakeSocket {
     const socket = new FakeSocket();
     socket.serializeAttachment({
-      roomId: ROOM_ID,
-      userId,
-      username: `user-${userId.slice(-1)}`,
-      name: null,
-      avatarUrl: null,
-      hostUserId: OWNER_ID,
-      role,
-      roleVersion: options.roleVersion ?? 1,
-      sessionId: uuid(),
-      attemptId: uuid(),
+      ...canonicalSession(userId, role, uuid(), options.roleVersion ?? 1),
       accessCheckedAt: options.accessCheckedAt ?? Date.now(),
     });
     sockets.push(socket);
     return socket;
+  }
+
+  /** Opens an editor's socket through the room's WebSocket upgrade. */
+  async function upgrade(
+    userId: string,
+    sessionId: string,
+  ): Promise<{ response: Response; socket: FakeSocket | null }> {
+    const session = canonicalSession(userId, "editor", sessionId);
+    const response = await room.fetch(
+      new Request(`${ROOM_ORIGIN}/websocket`, {
+        headers: {
+          Upgrade: "websocket",
+          "X-Collaboration-Session": encodeURIComponent(JSON.stringify(session)),
+        },
+      }),
+    );
+    return { response, socket: response.status === 101 ? sockets.at(-1)! : null };
+  }
+
+  /** Loses `socket`'s client: workerd stops listing it, then reports the close. */
+  function disconnect(socket: FakeSocket): void {
+    socket.close(1006);
+    sockets.splice(sockets.indexOf(socket), 1);
+    room.webSocketClose(socket as never);
   }
 
   /** Appends `text` to the shared document and returns it as a client-update frame. */
@@ -225,7 +247,28 @@ async function createRoom(
     );
   }
 
-  return { room, doc, connect, edit, persistedText, control };
+  return { room, doc, connect, upgrade, disconnect, edit, persistedText, control };
+}
+
+/** The session the Worker hands the room when a member opens a socket. */
+function canonicalSession(
+  userId: string,
+  role: CollaborationRole,
+  sessionId: string,
+  roleVersion = 1,
+) {
+  return {
+    roomId: ROOM_ID,
+    userId,
+    username: `user-${userId.slice(-1)}`,
+    name: null,
+    avatarUrl: null,
+    hostUserId: OWNER_ID,
+    role,
+    roleVersion,
+    sessionId,
+    attemptId: uuid(),
+  };
 }
 
 function awarenessFrame(socket: FakeSocket, clientId: number, clock: number): ArrayBuffer {
@@ -530,6 +573,47 @@ describe("CollaborationRoomDurableObject update rate limits", () => {
     expect(editors.flatMap(errors)).toEqual(
       Array.from({ length: 5 }, () => expect.objectContaining({ code: "rate-limited" })),
     );
+  });
+});
+
+// Every member sees the others' session IDs in awareness, so a session ID
+// alone does not say whose socket it is.
+describe("CollaborationRoomDurableObject session reconnects", () => {
+  it("lets a member reconnect with their session ID while another member holds it", async () => {
+    const { upgrade, disconnect } = await createRoom();
+    const sessionId = uuid();
+    const first = await upgrade(MEMBER_ID, sessionId);
+    disconnect(first.socket!);
+    await upgrade(PEER_ID, sessionId);
+
+    const reconnect = await upgrade(MEMBER_ID, sessionId);
+
+    expect(reconnect.response.status).toBe(101);
+  });
+
+  it("leaves another member's socket with the same session ID open", async () => {
+    const { upgrade } = await createRoom();
+    const sessionId = uuid();
+    const member = await upgrade(MEMBER_ID, sessionId);
+
+    const peer = await upgrade(PEER_ID, sessionId);
+    await upgrade(MEMBER_ID, sessionId);
+
+    expect(peer.response.status).toBe(101);
+    expect(peer.socket!.closeCode).toBeNull();
+    expect(member.socket!.closeCode).toBe(4000);
+  });
+
+  it("still replaces the same member's previous socket for that session ID", async () => {
+    const { upgrade } = await createRoom();
+    const sessionId = uuid();
+    const first = await upgrade(MEMBER_ID, sessionId);
+
+    const second = await upgrade(MEMBER_ID, sessionId);
+
+    expect(second.response.status).toBe(101);
+    expect(first.socket!.closeCode).toBe(4000);
+    expect(second.socket!.closeCode).toBeNull();
   });
 });
 

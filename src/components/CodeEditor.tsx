@@ -31,6 +31,7 @@ import type { TextEditEvent } from "../types/textEdit";
 import { getCollaborationTexts } from "../collaboration/projectDocument";
 import { canPublishCollaborationUpdate } from "../collaboration/protocol";
 import { resolveMonacoAwarenessSelections } from "../collaboration/monacoAwareness";
+import { collaborationParticipantKey } from "../collaboration/participantKey";
 import {
   collaborationParticipantColorIndex,
   resolveCollaborationCursor,
@@ -391,7 +392,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       if (
         !slidesContext.previewState.isOpen &&
         !whiteboardContext.isOpen &&
-        !collaboration.followedSessionId
+        !collaboration.followedParticipantKey
       ) {
         publishYMonacoSelection(provider, editor, model, text);
       }
@@ -413,7 +414,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       if (
         !slidesContext.previewState.isOpen &&
         !whiteboardContext.isOpen &&
-        !collaboration.followedSessionId
+        !collaboration.followedParticipantKey
       ) {
         publishYMonacoSelection(provider, editor, model, text);
       }
@@ -752,7 +753,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     activeModel,
     collaboration?.canWrite,
     collaboration?.connectionState,
-    collaboration?.followedSessionId,
+    collaboration?.followedParticipantKey,
     collaboration?.provider,
     isBinaryActiveFile,
     slidesContext.previewState.isOpen,
@@ -785,7 +786,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     const targetFileNodeId = targetSurface.fileNodeId;
     const targetViewport = targetSurface.viewport;
     const targetCursor = target.cursor;
-    const applicationKey = `${target.sessionId}:${target.revision}:${targetFileNodeId}:${model.getVersionId()}`;
+    const applicationKey = `${collaborationParticipantKey(target)}:${target.revision}:${targetFileNodeId}:${model.getVersionId()}`;
     if (appliedFollowViewportRef.current === applicationKey) return;
 
     let applied = false;
@@ -886,9 +887,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       const styleRules: string[] = [];
       const standardParticipantKeys = new Set<string>();
       for (const selection of selections) {
-        standardParticipantKeys.add(
-          `${selection.participant.actorId}:${selection.participant.sessionId}`,
-        );
+        standardParticipantKeys.add(collaborationParticipantKey(selection.participant));
         const colorIndex = collaborationParticipantColorIndex(selection.participant);
         const color = COLLABORATION_CURSOR_COLORS[colorIndex] ?? COLLABORATION_CURSOR_COLORS[0];
         const selectionColor =
@@ -926,7 +925,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           });
         }
         labels.push({
-          id: `${selection.participant.actorId}:${selection.participant.sessionId}`,
+          id: collaborationParticipantKey(selection.participant),
           name: displayParticipantName(selection.participant),
           colorIndex,
           position: model.getPositionAt(selection.headOffset),
@@ -934,10 +933,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       }
       const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
       for (const participant of collaboration.participants) {
-        const key = `${participant.actorId}:${participant.sessionId}`;
+        const key = collaborationParticipantKey(participant);
         if (
           standardParticipantKeys.has(key) ||
-          participant.sessionId === collaboration.provider.awarenessSessionId ||
+          key === collaboration.ownParticipantKey ||
           !participant.cursor ||
           participant.cursor.fileNodeId !== activeFileNodeId
         ) {
@@ -1009,8 +1008,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     const decorations: monaco.editor.IModelDeltaDecoration[] = [];
     const cursorLabels: CollaborationCursorLabel[] = [];
     for (const participant of collaboration.participants) {
+      const key = collaborationParticipantKey(participant);
       if (
-        participant.sessionId === collaboration.provider.awarenessSessionId ||
+        key === collaboration.ownParticipantKey ||
         !participant.cursor ||
         participant.cursor.fileNodeId !== activeFileNodeId
       ) {
@@ -1042,7 +1042,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         },
       });
       cursorLabels.push({
-        id: `${participant.actorId}:${participant.sessionId}`,
+        id: key,
         name: participantName,
         colorIndex: color,
         position: head,
@@ -1070,6 +1070,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     collaboration?.connectionState,
     collaboration?.doc,
     collaboration?.getNodeIdForPath,
+    collaboration?.ownParticipantKey,
     collaboration?.participants,
     collaboration?.provider,
   ]);
@@ -1099,7 +1100,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         headOffset: number,
       ) => {
         if (!canPublishCollaborationUpdate(participant.role)) return;
-        const key = `${participant.actorId}:${participant.sessionId}`;
+        const key = collaborationParticipantKey(participant);
         const signature = `${anchorOffset}:${headOffset}`;
         currentSignatures.set(key, signature);
         if (
@@ -1150,18 +1151,17 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           provider.awareness,
           awarenessText,
         )) {
-          standardParticipantKeys.add(
-            `${selection.participant.actorId}:${selection.participant.sessionId}`,
-          );
+          standardParticipantKeys.add(collaborationParticipantKey(selection.participant));
           captureSelection(selection.participant, selection.anchorOffset, selection.headOffset);
         }
       }
       const activeFileNodeId = collaboration.getNodeIdForPath(activeFile.path) ?? undefined;
 
       for (const participant of participants) {
+        const key = collaborationParticipantKey(participant);
         if (
-          standardParticipantKeys.has(`${participant.actorId}:${participant.sessionId}`) ||
-          participant.sessionId === provider.awarenessSessionId ||
+          standardParticipantKeys.has(key) ||
+          key === collaboration.ownParticipantKey ||
           !participant.cursor ||
           participant.cursor.fileNodeId !== activeFileNodeId
         ) {
@@ -1190,6 +1190,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     activeFile.path,
     collaboration?.doc,
     collaboration?.getNodeIdForPath,
+    collaboration?.ownParticipantKey,
     collaboration?.participants,
     collaboration?.provider,
     editorRef,

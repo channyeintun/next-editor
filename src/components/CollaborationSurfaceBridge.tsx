@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { collaborationParticipantKey } from "../collaboration/participantKey";
 import { useCollaboration } from "../contexts/CollaborationContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
@@ -18,7 +19,7 @@ export default function CollaborationSurfaceBridge() {
   const activeFilePath = useWorkspaceActiveFilePath();
   const workspaceTreeVersion = useWorkspaceTreeVersion();
   const { setActiveFilePath } = useWorkspaceActions();
-  const appliedRevisionRef = useRef<{ sessionId: string; revision: number } | null>(null);
+  const appliedRevisionRef = useRef<{ participantKey: string; revision: number } | null>(null);
 
   const slidesOpen = slides.previewState.isOpen;
   const whiteboardOpen = whiteboard.isOpen;
@@ -72,9 +73,10 @@ export default function CollaborationSurfaceBridge() {
     if (collaboration.connectionState !== "live" || usesPlaybackModel || !collaboration.provider) {
       return;
     }
+    const participantKey = collaborationParticipantKey(target);
     const previousApplication = appliedRevisionRef.current;
     if (
-      previousApplication?.sessionId === target.sessionId &&
+      previousApplication?.participantKey === participantKey &&
       previousApplication.revision >= target.revision
     ) {
       return;
@@ -121,7 +123,7 @@ export default function CollaborationSurfaceBridge() {
       didApply = true;
     });
     if (didApply) {
-      appliedRevisionRef.current = { sessionId: target.sessionId, revision: target.revision };
+      appliedRevisionRef.current = { participantKey, revision: target.revision };
     }
   }, [
     activeFilePath,

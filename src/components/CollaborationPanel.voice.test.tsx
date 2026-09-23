@@ -34,6 +34,7 @@ vi.mock("../contexts/CollaborationVoiceContext", () => ({
 }));
 
 import CollaborationPanel from "./CollaborationPanel";
+import { collaborationParticipantKey } from "../collaboration/participantKey";
 
 const OWN_SESSION = "10000000-0000-4000-8000-000000000001";
 const OWN_USER = "30000000-0000-4000-8000-000000000001";
@@ -114,7 +115,8 @@ beforeEach(() => {
       awarenessParticipant(OWN_USER, OWN_SESSION, "Self"),
       awarenessParticipant(PEER_USER, PEER_SESSION, "Ada"),
     ],
-    followedSessionId: null,
+    ownParticipantKey: collaborationParticipantKey({ actorId: OWN_USER, sessionId: OWN_SESSION }),
+    followedParticipantKey: null,
     followedParticipant: null,
     isApplyingFollow: false,
     teaching: { initialized: true, slideOrder: [], slides: new Map(), currentSlideId: null },

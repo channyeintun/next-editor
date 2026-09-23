@@ -2,6 +2,7 @@ import * as Y from "yjs";
 import { getCollaborationTexts } from "./projectDocument";
 import type { CollaborationAwarenessEvent, CollaborationCursor } from "./protocol";
 import { base64ToBytes, bytesToBase64 } from "./base64";
+import { collaborationParticipantKey } from "./participantKey";
 
 /**
  * False for the one relative-position shape that can mutate our document.
@@ -73,7 +74,7 @@ export function collaborationParticipantColorIndex(
   colorCount = 8,
 ): number {
   let hash = 2166136261;
-  const identity = `${participant.actorId}:${participant.sessionId}`;
+  const identity = collaborationParticipantKey(participant);
   for (let index = 0; index < identity.length; index += 1) {
     hash ^= identity.charCodeAt(index);
     hash = Math.imul(hash, 16777619);

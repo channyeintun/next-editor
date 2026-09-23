@@ -6,10 +6,14 @@ import {
   scheduleCollaborationAwarenessFlush,
   type CollaborationPresenceParticipant,
 } from "./followLifecycle";
+import { collaborationParticipantKey } from "./participantKey";
 
 const OWN_SESSION = "10000000-0000-4000-8000-000000000001";
 const TARGET_SESSION = "20000000-0000-4000-8000-000000000002";
 const ACTOR_ID = "30000000-0000-4000-8000-000000000003";
+const OWN_ACTOR_ID = "30000000-0000-4000-8000-000000000004";
+const OWN_KEY = collaborationParticipantKey({ actorId: OWN_ACTOR_ID, sessionId: OWN_SESSION });
+const TARGET_KEY = collaborationParticipantKey({ actorId: ACTOR_ID, sessionId: TARGET_SESSION });
 
 function participant(revision: number, expiresAt = 10_000): CollaborationPresenceParticipant {
   return {
@@ -62,21 +66,37 @@ describe("collaboration follow lifecycle", () => {
     }
   });
 
-  it("accepts only the exact present remote session while live", () => {
+  it("accepts only the exact present remote participant while live", () => {
     expect(
       getCollaborationFollowAvailability({
-        followedSessionId: TARGET_SESSION,
-        ownSessionId: OWN_SESSION,
+        followedParticipantKey: TARGET_KEY,
+        ownParticipantKey: OWN_KEY,
         connectionState: "live",
-        participantSessionIds: new Set([TARGET_SESSION]),
+        participantKeys: new Set([TARGET_KEY]),
       }),
     ).toBe("active");
     expect(
       getCollaborationFollowAvailability({
-        followedSessionId: OWN_SESSION,
-        ownSessionId: OWN_SESSION,
+        followedParticipantKey: OWN_KEY,
+        ownParticipantKey: OWN_KEY,
         connectionState: "live",
-        participantSessionIds: new Set([OWN_SESSION]),
+        participantKeys: new Set([OWN_KEY]),
+      }),
+    ).toBe("missing");
+  });
+
+  it("does not take another member reusing the target's session ID for the target", () => {
+    const reuser = collaborationParticipantKey({
+      actorId: "50000000-0000-4000-8000-000000000005",
+      sessionId: TARGET_SESSION,
+    });
+
+    expect(
+      getCollaborationFollowAvailability({
+        followedParticipantKey: TARGET_KEY,
+        ownParticipantKey: OWN_KEY,
+        connectionState: "live",
+        participantKeys: new Set([reuser]),
       }),
     ).toBe("missing");
   });
@@ -86,20 +106,20 @@ describe("collaboration follow lifecycle", () => {
       expect(isCollaborationFollowSuspendedConnectionState(connectionState)).toBe(true);
       expect(
         getCollaborationFollowAvailability({
-          followedSessionId: TARGET_SESSION,
-          ownSessionId: OWN_SESSION,
+          followedParticipantKey: TARGET_KEY,
+          ownParticipantKey: OWN_KEY,
           connectionState,
-          participantSessionIds: new Set(),
+          participantKeys: new Set(),
         }),
       ).toBe("suspended");
     }
     expect(isCollaborationFollowSuspendedConnectionState("live")).toBe(false);
     expect(
       getCollaborationFollowAvailability({
-        followedSessionId: TARGET_SESSION,
-        ownSessionId: OWN_SESSION,
+        followedParticipantKey: TARGET_KEY,
+        ownParticipantKey: OWN_KEY,
         connectionState: "live",
-        participantSessionIds: new Set(),
+        participantKeys: new Set(),
       }),
     ).toBe("missing");
   });
@@ -107,17 +127,16 @@ describe("collaboration follow lifecycle", () => {
   it("does not retain a target after a terminal connection failure", () => {
     expect(
       getCollaborationFollowAvailability({
-        followedSessionId: TARGET_SESSION,
-        ownSessionId: OWN_SESSION,
+        followedParticipantKey: TARGET_KEY,
+        ownParticipantKey: OWN_KEY,
         connectionState: "failed",
-        participantSessionIds: new Set([TARGET_SESSION]),
+        participantKeys: new Set([TARGET_KEY]),
       }),
     ).toBe("missing");
   });
 
   it("ignores stale revisions and applies leave only to the exact actor session", () => {
-    const key = `${ACTOR_ID}:${TARGET_SESSION}`;
-    const current = new Map([[key, participant(2)]]);
+    const current = new Map([[TARGET_KEY, participant(2)]]);
     const stale = applyCollaborationParticipantEvent(current, participant(1), 2);
     expect(stale).toBe(current);
     const staleLeave = applyCollaborationParticipantEvent(
@@ -138,7 +157,7 @@ describe("collaboration follow lifecycle", () => {
     unrelated.sessionId = "50000000-0000-4000-8000-000000000005";
     const withUnrelated = applyCollaborationParticipantEvent(current, unrelated, 2);
     expect(withUnrelated.size).toBe(2);
-    expect(withUnrelated.get(key)?.revision).toBe(2);
+    expect(withUnrelated.get(TARGET_KEY)?.revision).toBe(2);
 
     const afterLeave = applyCollaborationParticipantEvent(
       withUnrelated,
@@ -152,7 +171,7 @@ describe("collaboration follow lifecycle", () => {
       },
       3,
     );
-    expect(afterLeave.has(key)).toBe(false);
+    expect(afterLeave.has(TARGET_KEY)).toBe(false);
     expect(afterLeave.size).toBe(1);
   });
 
@@ -164,9 +183,8 @@ describe("collaboration follow lifecycle", () => {
 
   it("treats an equal-revision leave as terminal after revision saturation", () => {
     const saturated = participant(Number.MAX_SAFE_INTEGER);
-    const key = `${ACTOR_ID}:${TARGET_SESSION}`;
     const next = applyCollaborationParticipantEvent(
-      new Map([[key, saturated]]),
+      new Map([[TARGET_KEY, saturated]]),
       {
         kind: "leave",
         roomId: saturated.roomId,
@@ -178,6 +196,6 @@ describe("collaboration follow lifecycle", () => {
       2,
     );
 
-    expect(next.has(key)).toBe(false);
+    expect(next.has(TARGET_KEY)).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import type { CollaborationConnectionState } from "./collaborationMachine";
+import { collaborationParticipantKey } from "./participantKey";
 import type { CollaborationAwarenessEvent } from "./protocol";
 
 export type CollaborationPresenceParticipant = Extract<
@@ -31,7 +32,7 @@ export function applyCollaborationParticipantEvent(
   event: CollaborationAwarenessEvent,
   now = Date.now(),
 ): Map<string, CollaborationPresenceParticipant> {
-  const key = `${event.actorId}:${event.sessionId}`;
+  const key = collaborationParticipantKey(event);
   const previous = current.get(key);
   if (
     previous &&
@@ -47,21 +48,21 @@ export function applyCollaborationParticipantEvent(
 }
 
 export function getCollaborationFollowAvailability({
-  followedSessionId,
-  ownSessionId,
+  followedParticipantKey,
+  ownParticipantKey,
   connectionState,
-  participantSessionIds,
+  participantKeys,
 }: {
-  followedSessionId: string | null;
-  ownSessionId: string | null;
+  followedParticipantKey: string | null;
+  ownParticipantKey: string | null;
   connectionState: CollaborationConnectionState;
-  participantSessionIds: ReadonlySet<string>;
+  participantKeys: ReadonlySet<string>;
 }): CollaborationFollowAvailability {
-  if (!followedSessionId) return "none";
-  if (followedSessionId === ownSessionId) return "missing";
+  if (!followedParticipantKey) return "none";
+  if (followedParticipantKey === ownParticipantKey) return "missing";
   if (isCollaborationFollowSuspendedConnectionState(connectionState)) {
     return "suspended";
   }
   if (connectionState !== "live") return "missing";
-  return participantSessionIds.has(followedSessionId) ? "active" : "missing";
+  return participantKeys.has(followedParticipantKey) ? "active" : "missing";
 }

@@ -471,11 +471,15 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       });
     }
 
+    // A socket for the same (userId, sessionId) is this session's previous
+    // connection, and the reconnect replaces it. A session ID alone names no
+    // one: the client picks it and every member sees it in awareness. Another
+    // member's socket with the same ID is a different session, neither refused
+    // nor replaced, so it cannot lock out the member whose ID it copied.
     for (const existing of this.ctx.getWebSockets()) {
       const attachment = attachmentFor(existing);
-      if (attachment?.sessionId !== session.sessionId) continue;
-      if (attachment.userId !== session.userId) {
-        return new Response("collaboration session is already in use", { status: 409 });
+      if (attachment?.userId !== session.userId || attachment.sessionId !== session.sessionId) {
+        continue;
       }
       this.broadcastLeave(existing);
       existing.serializeAttachment({

@@ -45,8 +45,15 @@ vi.mock("../hooks/useWorkspace", () => ({
 
 import CollaborationSurfaceBridge from "./CollaborationSurfaceBridge";
 
-function participant(revision: number, surface: Record<string, unknown>) {
+const TARGET_ACTOR_ID = "30000000-0000-4000-8000-000000000003";
+
+function participant(
+  revision: number,
+  surface: Record<string, unknown>,
+  actorId = TARGET_ACTOR_ID,
+) {
   return {
+    actorId,
     sessionId: "20000000-0000-4000-8000-000000000002",
     revision,
     surface,
@@ -131,6 +138,30 @@ describe("CollaborationSurfaceBridge", () => {
     await act(async () => view.rerender(<CollaborationSurfaceBridge />));
     expect(mocks.setWhiteboardOpen).toHaveBeenLastCalledWith(false);
     expect(mocks.setActiveFilePath).toHaveBeenCalledWith("lesson.ts");
+    view.unmount();
+  });
+
+  it("applies a new target that shares the previous target's session ID", async () => {
+    collaborationState = {
+      ...collaborationState,
+      followedParticipant: participant(5, { kind: "editor", fileNodeId: "file-2", viewport: null }),
+    };
+    const view = render(<CollaborationSurfaceBridge />);
+    expect(mocks.setActiveFilePath).toHaveBeenCalledWith("lesson.ts");
+
+    // Another member reusing the session ID, at a lower revision of their own.
+    collaborationState = {
+      ...collaborationState,
+      followedParticipant: participant(
+        3,
+        { kind: "whiteboard", isMaximized: false, viewport: { scrollX: 5, scrollY: 5, zoom: 1 } },
+        "30000000-0000-4000-8000-000000000004",
+      ),
+    };
+    await act(async () => view.rerender(<CollaborationSurfaceBridge />));
+
+    expect(mocks.setWhiteboardOpen).toHaveBeenCalledWith(true);
+    expect(mocks.applyView).toHaveBeenCalledWith({ scrollX: 5, scrollY: 5, zoom: 1 }, false);
     view.unmount();
   });
 

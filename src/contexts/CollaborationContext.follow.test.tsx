@@ -214,6 +214,7 @@ import {
   resetWorkspaceAssetStoreForTests,
 } from "../storage/workspaceAssetStore";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
+import { collaborationParticipantKey } from "../collaboration/participantKey";
 
 function Providers({ children }: { children: ReactNode }) {
   return (
@@ -298,11 +299,16 @@ describe("CollaborationContext follow lifecycle", () => {
       for (const remote of remotes) provider.emitAwareness(remote);
     });
 
-    act(() => collaboration!.followParticipant(provider.awarenessSessionId));
-    expect(collaboration!.followedSessionId).toBeNull();
+    act(() =>
+      collaboration!.followParticipant({
+        actorId: controls.auth.user.id,
+        sessionId: provider.awarenessSessionId,
+      }),
+    );
+    expect(collaboration!.followedParticipantKey).toBeNull();
     for (const remote of remotes) {
-      act(() => collaboration!.followParticipant(remote.sessionId));
-      expect(collaboration!.followedSessionId).toBe(remote.sessionId);
+      act(() => collaboration!.followParticipant(remote));
+      expect(collaboration!.followedParticipantKey).toBe(collaborationParticipantKey(remote));
     }
     view.unmount();
   });
@@ -327,7 +333,7 @@ describe("CollaborationContext follow lifecycle", () => {
       sessionId: "60000000-0000-4000-8000-000000000001",
     });
     act(() => provider.emitAwareness(target));
-    act(() => collaboration!.followParticipant(target.sessionId));
+    act(() => collaboration!.followParticipant(target));
 
     const downstreamEscape = vi.fn();
     window.addEventListener("keydown", downstreamEscape);
@@ -339,14 +345,14 @@ describe("CollaborationContext follow lifecycle", () => {
     act(() => window.dispatchEvent(escape));
     expect(escape.defaultPrevented).toBe(true);
     expect(downstreamEscape).not.toHaveBeenCalled();
-    expect(collaboration!.followedSessionId).toBeNull();
+    expect(collaboration!.followedParticipantKey).toBeNull();
     window.removeEventListener("keydown", downstreamEscape);
 
-    act(() => collaboration!.followParticipant(target.sessionId));
+    act(() => collaboration!.followParticipant(target));
     act(() => provider.setConnectionState("reconnecting"));
-    expect(collaboration!.followedSessionId).toBe(target.sessionId);
+    expect(collaboration!.followedParticipantKey).toBe(collaborationParticipantKey(target));
     act(() => provider.setConnectionState("live"));
-    expect(collaboration!.followedSessionId).toBe(target.sessionId);
+    expect(collaboration!.followedParticipantKey).toBe(collaborationParticipantKey(target));
 
     act(() =>
       provider.emitAwareness({
@@ -358,10 +364,10 @@ describe("CollaborationContext follow lifecycle", () => {
         occurredAt: 2,
       }),
     );
-    await waitFor(() => expect(collaboration!.followedSessionId).toBeNull());
+    await waitFor(() => expect(collaboration!.followedParticipantKey).toBeNull());
 
     act(() => provider.emitAwareness({ ...target, revision: 3 }));
-    act(() => collaboration!.followParticipant(target.sessionId));
+    act(() => collaboration!.followParticipant(target));
     usesPlaybackModel = true;
     view.rerender(
       <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
@@ -370,7 +376,7 @@ describe("CollaborationContext follow lifecycle", () => {
         </Providers>
       </MemoryRouter>,
     );
-    await waitFor(() => expect(collaboration!.followedSessionId).toBeNull());
+    await waitFor(() => expect(collaboration!.followedParticipantKey).toBeNull());
     view.unmount();
   });
 
@@ -394,20 +400,105 @@ describe("CollaborationContext follow lifecycle", () => {
       sessionId: "60000000-0000-4000-8000-000000000001",
     });
     act(() => provider.emitAwareness(target));
-    act(() => collaboration!.followParticipant(target.sessionId));
+    act(() => collaboration!.followParticipant(target));
 
     const now = vi.spyOn(Date, "now").mockReturnValue(target.expiresAt + 1);
     try {
       act(() => provider.setConnectionState("reconnecting"));
-      expect(collaboration!.followedSessionId).toBe(target.sessionId);
+      expect(collaboration!.followedParticipantKey).toBe(collaborationParticipantKey(target));
       expect(collaboration!.followedParticipant?.sessionId).toBe(target.sessionId);
 
       act(() => provider.setConnectionState("live"));
-      await waitFor(() => expect(collaboration!.followedSessionId).toBeNull());
+      await waitFor(() => expect(collaboration!.followedParticipantKey).toBeNull());
     } finally {
       now.mockRestore();
       view.unmount();
     }
+  });
+
+  // A session ID is chosen by the client and visible to every member, so
+  // another member can publish awareness under the same one.
+  it("follows the member chosen, not another member reusing their session ID", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    const sessionId = "60000000-0000-4000-8000-000000000001";
+    // Participants are listed by name, so the reusing member comes first.
+    const target = {
+      ...participant({ actorId: "50000000-0000-4000-8000-000000000001", sessionId }),
+      name: "Zed",
+    };
+    const reusing = {
+      ...participant({ actorId: "50000000-0000-4000-8000-000000000002", sessionId }),
+      name: "Aaron",
+    };
+    act(() => {
+      provider.emitAwareness(target);
+      provider.emitAwareness(reusing);
+    });
+
+    act(() => collaboration!.followParticipant(target));
+    expect(collaboration!.followedParticipant?.actorId).toBe(target.actorId);
+
+    act(() =>
+      provider.emitAwareness({
+        kind: "leave",
+        roomId: target.roomId,
+        actorId: target.actorId,
+        sessionId,
+        revision: 2,
+        occurredAt: 2,
+      }),
+    );
+    await waitFor(() => expect(collaboration!.followedParticipantKey).toBeNull());
+    expect(collaboration!.followedParticipant).toBeNull();
+    view.unmount();
+  });
+
+  it("refuses to follow this member's own session but follows another member reusing its ID", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    const own = { actorId: controls.auth.user.id, sessionId: provider.awarenessSessionId };
+    expect(collaboration!.ownParticipantKey).toBe(`${own.actorId}:${own.sessionId}`);
+    await waitFor(() =>
+      expect(collaboration!.participants.map(collaborationParticipantKey)).toContain(
+        collaboration!.ownParticipantKey,
+      ),
+    );
+    const reusing = participant({
+      actorId: "50000000-0000-4000-8000-000000000001",
+      sessionId: own.sessionId,
+    });
+    act(() => provider.emitAwareness(reusing));
+
+    act(() => collaboration!.followParticipant(own));
+    expect(collaboration!.followedParticipantKey).toBeNull();
+    act(() => collaboration!.followParticipant(reusing));
+    expect(collaboration!.followedParticipantKey).toBe(collaborationParticipantKey(reusing));
+    view.unmount();
   });
 
   it("isolates room switches from late providers and restores the exact standalone stores", async () => {
@@ -954,10 +1045,10 @@ describe("CollaborationContext participant expiry", () => {
     };
 
     act(() => controls.providers[0]!.emitAwareness(remote));
-    act(() => collaboration!.followParticipant(remote.sessionId));
+    act(() => collaboration!.followParticipant(remote));
 
     expect(collaboration!.participants.map((entry) => entry.sessionId)).toContain(remote.sessionId);
-    expect(collaboration!.followedSessionId).toBe(remote.sessionId);
+    expect(collaboration!.followedParticipantKey).toBe(collaborationParticipantKey(remote));
   });
 });
 
@@ -1021,15 +1112,15 @@ describe("CollaborationContext room switch", () => {
       sessionId: "60000000-0000-4000-8000-000000000001",
     });
     act(() => controls.providers[0]!.emitAwareness(remote));
-    act(() => collaboration!.followParticipant(remote.sessionId));
-    expect(collaboration!.followedSessionId).toBe(remote.sessionId);
+    act(() => collaboration!.followParticipant(remote));
+    expect(collaboration!.followedParticipantKey).toBe(collaborationParticipantKey(remote));
 
     act(() => collaboration!.joinRoom("40000000-0000-4000-8000-000000000002"));
     await waitFor(() => expect(controls.providers).toHaveLength(2));
 
     expect(controls.providers[0]!.stopped).toBe(true);
     expect(collaboration!.provider).toBe(controls.providers[1]);
-    expect(collaboration!.followedSessionId).toBeNull();
+    expect(collaboration!.followedParticipantKey).toBeNull();
     expect(collaboration!.participants.map((entry) => entry.sessionId)).not.toContain(
       remote.sessionId,
     );

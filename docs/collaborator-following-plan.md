@@ -174,7 +174,7 @@ after the room starts.
 
 1. Every remote participant row in `Online now` exposes a `Follow` action.
 2. The current tab/session is not a followable target.
-3. Activating `Follow` selects that participant's exact `sessionId`.
+3. Activating `Follow` selects that participant: the member and their exact `sessionId`.
 4. Activating another participant switches targets immediately.
 5. Activating the current target again, the visible `Stop` action, or `Escape` stops following.
 6. The host remains visibly identified but is no longer the only follow target.
@@ -257,7 +257,7 @@ When that target leaves the slide surface, close it for the follower without cha
 presentation state. If content is missing, retain following and show a nonfatal loading/unavailable
 state; never display a different local slide as a fallback.
 
-`slide_change` must not be placed in participant awareness or filtered by `followedSessionId`.
+`slide_change` must not be placed in participant awareness or filtered by `followedParticipantKey`.
 Live collaboration has no `slide_interaction` message.
 
 ### Whiteboard application
@@ -303,7 +303,7 @@ cause because the manager is unavailable while the room is live.
 
 ### Target loss, reconnect, and playback
 
-- During local reconnect, retain `followedSessionId` but suspend all surface application.
+- During local reconnect, retain `followedParticipantKey` but suspend all surface application.
 - Resume only when the connection is live and the same session is present.
 - Stop on an explicit target leave, awareness TTL expiry, or room replacement.
 - A target page reload creates a new session ID and requires a new follow action.
@@ -359,16 +359,17 @@ type CollaborationFollowStopReason =
   | "playback";
 
 interface CollaborationFollowState {
-  followedSessionId: string | null;
+  followedParticipantKey: string | null;
 }
 ```
 
 The public context should expose:
 
 ```ts
-followedSessionId: string | null;
+ownParticipantKey: string | null;
+followedParticipantKey: string | null;
 followedParticipant: CollaborationParticipant | null;
-followParticipant(sessionId: string): void;
+followParticipant(participant: Pick<CollaborationParticipant, "actorId" | "sessionId">): void;
 stopFollowing(reason?: CollaborationFollowStopReason): void;
 publishSurface(surface: LocalCollaborationSurface): void;
 isApplyingFollow: boolean;
@@ -377,15 +378,15 @@ isApplyingFollow: boolean;
 Required invariants:
 
 - at most one target per browser tab;
-- the target is never the provider's own `awarenessSessionId`;
+- the target is never this tab's own participant (`ownParticipantKey`);
 - follow does not grant write access or bypass viewer guards;
 - the target choice is not encoded in shared content, awareness, URL, invitation, recording, or
   recovery export;
 - follow-view application runs only for a live provider, a current target, and a non-playback
   editor;
-- only awareness from the selected `sessionId` can move the local view;
+- only awareness from the selected member's `sessionId` can move the local view;
 - the immutable room deck, current-slide changes, and whiteboard element deltas apply regardless of
-  `followedSessionId`;
+  `followedParticipantKey`;
 - viewers receive every canonical shared change but cannot publish current-slide or whiteboard
   updates;
 - every target awareness revision is applied at most once;
@@ -394,8 +395,10 @@ Required invariants:
 - programmatic follow application does not cancel itself or publish an awareness echo;
 - stopping is idempotent.
 
-Use `sessionId`, not `actorId`, because the same account can have multiple tabs with independent
-surfaces and viewports.
+Key the target on `actorId` and `sessionId` together (`collaborationParticipantKey`). The
+`sessionId` separates one account's tabs, which have independent surfaces and viewports. The
+`actorId` is needed too: each client picks its own session ID and every member sees the others', so
+another member can reuse one.
 
 ## Shared teaching-surface content
 
@@ -744,7 +747,7 @@ an older pending surface after a newer awareness state.
 | 2.1  | `src/collaboration/protocol.ts`                                                    | Add strict view-awareness and current-slide command schemas; remove `followingHost` and top-level `activeFileNodeId`.   | Views and slide IDs validate separately; `indexv`, payload/import data, iframe events, and unknown fields fail. |
 | 2.2  | `src/collaboration/binaryProtocol.ts`, Worker collaboration route/room object      | Rev binary awareness to v3 while retaining existing Yjs update transport and role checks; add no interaction frame.     | Version 2 fails explicitly; current slide converges through Yjs and no live iframe-event frame is accepted.     |
 | 2.3  | `src/collaboration/roomProvider.ts`                                                | Publish view awareness and authorized current-slide transactions separately; preserve/clear Monaco selection correctly. | Provider tests carry every view surface and current-slide state without cross-plane echoes.                     |
-| 2.4  | `src/contexts/CollaborationContext.tsx`                                            | Replace `isFollowingHost` with `followedSessionId`; add follow/stop/publish APIs and lifecycle cleanup.                 | Any remote session can be followed; self/unrelated/stale sessions cannot move the UI.                           |
+| 2.4  | `src/contexts/CollaborationContext.tsx`                                            | Replace `isFollowingHost` with `followedParticipantKey`; add follow/stop/publish APIs and lifecycle cleanup.            | Any remote session can be followed; self/unrelated/stale sessions cannot move the UI.                           |
 | 2.5  | `src/components/CollaborationSurfaceBridge.tsx` (new), `src/components/Editor.tsx` | Project room state for all; apply only visibility/viewport from the target; add separate echo/recording guards.         | Shared changes work with no target; target view transitions apply once even when awareness precedes content.    |
 
 ### Phase 3 — editor adapter
@@ -856,7 +859,7 @@ an older pending surface after a newer awareness state.
   - deterministic repair if both overlays are open;
   - awareness-before-document and awareness-before-asset ordering;
   - newer target state cancels an older pending hydration;
-  - shared slide/whiteboard changes apply when `followedSessionId` is `null` or points elsewhere;
+  - shared slide/whiteboard changes apply when `followedParticipantKey` is `null` or points elsewhere;
   - programmatic changes neither cancel nor republish.
 - slide tests
   - target open/close mirrors visibility only;

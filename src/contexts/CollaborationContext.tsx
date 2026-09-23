@@ -66,6 +66,7 @@ import {
   isCollaborationFollowSuspendedConnectionState,
   scheduleCollaborationAwarenessFlush,
 } from "../collaboration/followLifecycle";
+import { collaborationParticipantKey } from "../collaboration/participantKey";
 import {
   projectCollaborationTransaction,
   reprojectCollaborationWorkspace,
@@ -142,7 +143,9 @@ interface CollaborationContextValue {
   members: CollaborationMember[];
   invitations: CollaborationInvitation[];
   participants: CollaborationParticipant[];
-  followedSessionId: string | null;
+  /** This tab's own participant's collaborationParticipantKey; null without a room or user. */
+  ownParticipantKey: string | null;
+  followedParticipantKey: string | null;
   followedParticipant: CollaborationParticipant | null;
   isApplyingFollow: boolean;
   teaching: CollaborationTeachingProjection;
@@ -166,7 +169,7 @@ interface CollaborationContextValue {
   revokeInvitation: (invitationId: string) => Promise<void>;
   updateMemberRole: (userId: string, role: CollaborationInviteRole) => Promise<void>;
   removeMember: (userId: string) => Promise<void>;
-  followParticipant: (sessionId: string) => void;
+  followParticipant: (participant: Pick<CollaborationParticipant, "actorId" | "sessionId">) => void;
   stopFollowing: (reason?: CollaborationFollowStopReason) => void;
   publishSurface: (surface: CollaborationSurface) => void;
   runFollowApplication: (application: () => void) => void;
@@ -309,10 +312,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [participantsBySession, setParticipantsBySession] = useState(
     () => new Map<string, CollaborationParticipant>(),
   );
-  const [followedSessionId, setFollowedSessionId] = useState<string | null>(null);
-  const followedSessionIdRef = useRef<string | null>(null);
+  const [followedParticipantKey, setFollowedParticipantKey] = useState<string | null>(null);
+  const followedParticipantKeyRef = useRef<string | null>(null);
   const followedSurfaceKindRef = useRef<CollaborationSurface["kind"] | null>(null);
-  followedSessionIdRef.current = followedSessionId;
+  followedParticipantKeyRef.current = followedParticipantKey;
+  // The key of the participant publishAwarenessState adds for this tab.
+  const ownParticipantKey =
+    user && provider
+      ? collaborationParticipantKey({ actorId: user.id, sessionId: provider.awarenessSessionId })
+      : null;
   const [isApplyingFollow, setIsApplyingFollow] = useState(false);
   const applyingFollowDepthRef = useRef(0);
   const applyingFollowReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -348,11 +356,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   }, [localError]);
 
   const stopFollowing = useCallback((reason: CollaborationFollowStopReason = "user") => {
-    if (!followedSessionIdRef.current) return;
-    followedSessionIdRef.current = null;
+    if (!followedParticipantKeyRef.current) return;
+    followedParticipantKeyRef.current = null;
     followedSurfaceKindRef.current = null;
     providerRef.current?.setAwarenessPublicationSuppressed(applyingFollowDepthRef.current > 0);
-    setFollowedSessionId(null);
+    setFollowedParticipantKey(null);
     posthogRef.current?.capture("collaboration_follow_stopped", { reason });
   }, []);
 
@@ -1249,7 +1257,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     (surface: CollaborationSurface) => {
       if (
         playbackRef.current ||
-        followedSessionIdRef.current ||
+        followedParticipantKeyRef.current ||
         applyingFollowDepthRef.current > 0
       ) {
         return;
@@ -1270,24 +1278,23 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   );
 
   const followParticipant = useCallback(
-    (sessionId: string) => {
+    (target: Pick<CollaborationParticipant, "actorId" | "sessionId">) => {
       const current = providerRef.current;
-      if (!current || current.awarenessSessionId === sessionId) return;
-      const participant = Array.from(participantsBySession.values()).find(
-        (candidate) => candidate.sessionId === sessionId && candidate.expiresAt > Date.now(),
-      );
-      if (!participant) return;
-      if (followedSessionIdRef.current === sessionId) {
+      const key = collaborationParticipantKey(target);
+      if (!current || key === ownParticipantKey) return;
+      const participant = participantsBySession.get(key);
+      if (!participant || participant.expiresAt <= Date.now()) return;
+      if (followedParticipantKeyRef.current === key) {
         stopFollowing("user");
         return;
       }
-      if (followedSessionIdRef.current) stopFollowing("user");
-      followedSessionIdRef.current = sessionId;
+      if (followedParticipantKeyRef.current) stopFollowing("user");
+      followedParticipantKeyRef.current = key;
       current.setAwarenessPublicationSuppressed(true);
-      setFollowedSessionId(sessionId);
+      setFollowedParticipantKey(key);
       posthog?.capture("collaboration_follow_started");
     },
-    [participantsBySession, posthog, stopFollowing],
+    [ownParticipantKey, participantsBySession, posthog, stopFollowing],
   );
 
   const runFollowApplication = useCallback((application: () => void) => {
@@ -1310,7 +1317,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         applyingFollowReleaseTimerRef.current = null;
         applyingFollowDepthRef.current = 0;
         providerRef.current?.setAwarenessPublicationSuppressed(
-          followedSessionIdRef.current !== null,
+          followedParticipantKeyRef.current !== null,
         );
         setIsApplyingFollow(false);
       }, 0);
@@ -1381,7 +1388,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
           if (
             participant.expiresAt <= now &&
             !(
-              participant.sessionId === followedSessionIdRef.current &&
+              key === followedParticipantKeyRef.current &&
               isCollaborationFollowSuspendedConnectionState(providerRef.current?.connectionState)
             )
           ) {
@@ -1406,25 +1413,25 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   );
 
   const followedParticipant = useMemo(() => {
-    if (!followedSessionId) return null;
-    const participant = participants.find((candidate) => candidate.sessionId === followedSessionId);
+    if (!followedParticipantKey) return null;
+    const participant = participantsBySession.get(followedParticipantKey);
     if (!participant) return null;
     if (participant.expiresAt > Date.now()) return participant;
     return isCollaborationFollowSuspendedConnectionState(connectionState) ? participant : null;
-  }, [connectionState, followedSessionId, participants]);
+  }, [connectionState, followedParticipantKey, participantsBySession]);
   const followAvailability = useMemo(
     () =>
       getCollaborationFollowAvailability({
-        followedSessionId,
-        ownSessionId: provider?.awarenessSessionId ?? null,
+        followedParticipantKey,
+        ownParticipantKey,
         connectionState,
-        participantSessionIds: new Set(
-          participants
-            .filter((participant) => participant.expiresAt > Date.now())
-            .map((participant) => participant.sessionId),
+        participantKeys: new Set(
+          Array.from(participantsBySession)
+            .filter(([, participant]) => participant.expiresAt > Date.now())
+            .map(([key]) => key),
         ),
       }),
-    [connectionState, followedSessionId, participants, provider],
+    [connectionState, followedParticipantKey, ownParticipantKey, participantsBySession],
   );
 
   useEffect(() => {
@@ -1447,7 +1454,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   }, [stopFollowing, usesPlaybackModel]);
 
   useEffect(() => {
-    if (!followedSessionId) return;
+    if (!followedParticipantKey) return;
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -1456,7 +1463,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", handleEscape, true);
     return () => window.removeEventListener("keydown", handleEscape, true);
-  }, [followedSessionId, stopFollowing]);
+  }, [followedParticipantKey, stopFollowing]);
 
   const refreshRoomData = useCallback(async () => {
     const current = providerRef.current?.session;
@@ -1526,7 +1533,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const updateCursor = useCallback(
     (path: string, anchorOffset: number, headOffset: number) => {
       const current = providerRef.current;
-      if (!current || current.connectionState !== "live" || followedSessionIdRef.current) return;
+      if (!current || current.connectionState !== "live" || followedParticipantKeyRef.current) {
+        return;
+      }
       const fileNodeId = getNodeIdForPath(path);
       awarenessCursorRef.current = fileNodeId
         ? createCollaborationCursor(current.doc, fileNodeId, anchorOffset, headOffset)
@@ -1606,7 +1615,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       members,
       invitations,
       participants,
-      followedSessionId,
+      ownParticipantKey,
+      followedParticipantKey,
       followedParticipant,
       isApplyingFollow,
       teaching,
@@ -1664,7 +1674,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       getPathForNodeId,
       invitations,
       followedParticipant,
-      followedSessionId,
+      followedParticipantKey,
       followParticipant,
       initializeTeachingSurfaces,
       isApplyingFollow,
@@ -1676,6 +1686,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       members,
       machineSnapshot?.context.error,
       machineSnapshot?.context.hasOfflineChanges,
+      ownParticipantKey,
       participants,
       publishCurrentSlide,
       publishSurface,
