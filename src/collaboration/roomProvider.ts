@@ -58,7 +58,7 @@ export interface CollaborationWebSocket {
   onmessage: ((event: MessageEvent<unknown>) => void) | null;
   onerror: ((event: Event) => void) | null;
   onclose: ((event: CloseEvent) => void) | null;
-  send(data: string | ArrayBuffer): void;
+  send(data: string | ArrayBufferView<ArrayBuffer>): void;
   close(code?: number, reason?: string): void;
 }
 
@@ -93,10 +93,6 @@ interface PendingLocalUpdate {
 
 function monotonicNow(): number {
   return globalThis.performance?.now() ?? Date.now();
-}
-
-function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 function errorStatus(error: unknown): number | null {
@@ -349,10 +345,8 @@ export class CollaborationRoomProvider {
     if (!socket || socket.readyState !== WEBSOCKET_OPEN) return;
     try {
       socket.send(
-        exactArrayBuffer(
-          encodeCollaborationAwarenessUpdate(
-            awarenessProtocol.encodeAwarenessUpdate(this.awareness, [this.awareness.clientID]),
-          ),
+        encodeCollaborationAwarenessUpdate(
+          awarenessProtocol.encodeAwarenessUpdate(this.awareness, [this.awareness.clientID]),
         ),
       );
     } catch {
@@ -782,7 +776,7 @@ export class CollaborationRoomProvider {
         }, WEBSOCKET_ACK_TIMEOUT_MS);
         this.pendingBinarySync = { attemptId, resolve, reject, timer };
         try {
-          socket.send(exactArrayBuffer(encodeCollaborationSyncStep1(this.doc)));
+          socket.send(encodeCollaborationSyncStep1(this.doc));
         } catch (error) {
           clearTimeout(timer);
           if (this.pendingBinarySync?.timer === timer) this.pendingBinarySync = null;
@@ -922,13 +916,11 @@ export class CollaborationRoomProvider {
       this.pendingWebSocketAcks.set(pending.updateId, { resolve, reject, timer });
       try {
         socket.send(
-          exactArrayBuffer(
-            encodeCollaborationClientUpdate({
-              clientId: this.clientId,
-              updateId: pending.updateId,
-              update: pending.update,
-            }),
-          ),
+          encodeCollaborationClientUpdate({
+            clientId: this.clientId,
+            updateId: pending.updateId,
+            update: pending.update,
+          }),
         );
       } catch (error) {
         clearTimeout(timer);

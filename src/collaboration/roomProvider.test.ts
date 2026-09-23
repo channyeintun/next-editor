@@ -63,7 +63,7 @@ class FakeWebSocket implements CollaborationWebSocket {
   onerror: ((event: Event) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
   readonly sent: string[] = [];
-  readonly binarySent: ArrayBuffer[] = [];
+  readonly binarySent: Uint8Array[] = [];
 
   open(): void {
     this.readyState = 1;
@@ -76,10 +76,12 @@ class FakeWebSocket implements CollaborationWebSocket {
     this.onmessage?.(new MessageEvent("message", { data }));
   }
 
-  send(data: string | ArrayBuffer): void {
+  send(data: string | ArrayBufferView<ArrayBuffer>): void {
     if (this.readyState !== 1) throw new Error("socket is not open");
     if (typeof data === "string") this.sent.push(data);
-    else this.binarySent.push(data);
+    // A browser WebSocket sends exactly the view's bytes.
+    else
+      this.binarySent.push(new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice());
   }
 
   close(code = 1000, reason = ""): void {

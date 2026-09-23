@@ -55,7 +55,7 @@ function createFrameEncoder(frameType: number): encoding.Encoder {
   return encoder;
 }
 
-function finishFrame(encoder: encoding.Encoder): Uint8Array {
+function finishFrame(encoder: encoding.Encoder): Uint8Array<ArrayBuffer> {
   return encoding.toUint8Array(encoder);
 }
 
@@ -105,13 +105,16 @@ function parseAwarenessState(value: string): Record<string, unknown> | null {
   return state as Record<string, unknown> | null;
 }
 
-export function encodeCollaborationSyncStep1(doc: Y.Doc): Uint8Array {
+export function encodeCollaborationSyncStep1(doc: Y.Doc): Uint8Array<ArrayBuffer> {
   const encoder = createFrameEncoder(BINARY_FRAME_SYNC);
   syncProtocol.writeSyncStep1(encoder, doc);
   return finishFrame(encoder);
 }
 
-export function encodeCollaborationSyncStep2(doc: Y.Doc, stateVector: Uint8Array): Uint8Array {
+export function encodeCollaborationSyncStep2(
+  doc: Y.Doc,
+  stateVector: Uint8Array,
+): Uint8Array<ArrayBuffer> {
   const encoder = createFrameEncoder(BINARY_FRAME_SYNC);
   syncProtocol.writeSyncStep2(encoder, doc, stateVector);
   return finishFrame(encoder);
@@ -121,7 +124,7 @@ export function encodeCollaborationClientUpdate(input: {
   clientId: string;
   updateId: string;
   update: Uint8Array;
-}): Uint8Array {
+}): Uint8Array<ArrayBuffer> {
   const encoder = createFrameEncoder(BINARY_FRAME_CLIENT_UPDATE);
   encoding.writeVarString(encoder, collaborationIdSchema.parse(input.clientId));
   encoding.writeVarString(encoder, collaborationIdSchema.parse(input.updateId));
@@ -133,7 +136,7 @@ export function encodeCollaborationServerUpdate(input: {
   streamId: string;
   updateId: string;
   update: Uint8Array;
-}): Uint8Array {
+}): Uint8Array<ArrayBuffer> {
   const encoder = createFrameEncoder(BINARY_FRAME_SERVER_UPDATE);
   if (!/^\d+-\d+$/.test(input.streamId)) {
     throw new CollaborationBinaryProtocolError("invalid collaboration stream ID");
@@ -144,7 +147,7 @@ export function encodeCollaborationServerUpdate(input: {
   return finishFrame(encoder);
 }
 
-export function encodeCollaborationAwarenessUpdate(update: Uint8Array): Uint8Array {
+export function encodeCollaborationAwarenessUpdate(update: Uint8Array): Uint8Array<ArrayBuffer> {
   const encoder = createFrameEncoder(BINARY_FRAME_AWARENESS);
   encoding.writeVarUint8Array(encoder, update);
   return finishFrame(encoder);
@@ -152,7 +155,7 @@ export function encodeCollaborationAwarenessUpdate(update: Uint8Array): Uint8Arr
 
 export function encodeCollaborationAwarenessProtocolUpdate(
   entries: readonly CollaborationAwarenessProtocolEntry[],
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   if (entries.length > MAX_AWARENESS_UPDATE_ENTRIES) {
     throw new CollaborationBinaryProtocolError("too many awareness entries");
   }
