@@ -320,6 +320,21 @@ describe("CollaborationRoomDurableObject document updates", () => {
     expect(await persistedText()).toBe("seed");
   });
 
+  it("rejects an empty client update instead of throwing", async () => {
+    const { room, connect } = await createRoom();
+    const editor = connect(MEMBER_ID, "editor");
+    const empty = encodeCollaborationClientUpdate({
+      clientId: CLIENT_ID,
+      updateId: uuid(),
+      update: new Uint8Array(0),
+    });
+
+    await room.webSocketMessage(editor as never, toArrayBuffer(empty));
+
+    expect(errors(editor)).toEqual([expect.objectContaining({ code: "invalid-message" })]);
+    expect(editor.closeCode).toBe(1008);
+  });
+
   it("applies a /control demotion to the member's open socket", async () => {
     const { room, connect, edit, control, persistedText } = await createRoom();
     const member = connect(MEMBER_ID, "editor");
