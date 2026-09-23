@@ -954,4 +954,47 @@ describe("useUrlLoader", () => {
     expect(result.current.retry).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("stops looking for sibling media once the lesson is left", async () => {
+    // Three audio candidates: the configured URL, the stored file name, the .ne basename.
+    const recording = createRecording({
+      audioUrl: "https://cdn.example.com/hosted.weba",
+      audioFile: "lesson.weba",
+      audioSource: "external",
+    });
+    const neBytes = await encodeRecordingToStream(recording);
+    let left = false;
+    const requestedAfterLeaving: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>((input, init) => {
+        const url = targetUrl(typeof input === "string" ? input : input.toString());
+        if (left) requestedAfterLeaving.push(url);
+        if (url.endsWith(".ne")) {
+          return Promise.resolve(
+            fakeResponse(neBytes, { ok: true, contentType: "application/octet-stream" }),
+          );
+        }
+        // Audio downloads hang until the request is aborted, like a slow host.
+        return new Promise<Response>((_, reject) => {
+          const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+          if (init?.signal?.aborted) abort();
+          init?.signal?.addEventListener("abort", abort);
+        });
+      }),
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { result, unmount } = renderLoader(makeActionsMock());
+
+    await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    left = true;
+    unmount();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // Before, each remaining candidate was tried (and its proxy fallback) and reported as failed.
+    expect(requestedAfterLeaving).toEqual([]);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });

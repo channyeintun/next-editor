@@ -123,10 +123,10 @@ function withResolvedMediaUrls(recording: Recording, baseUrl: string | undefined
   return resolved;
 }
 
-async function fetchVttFile(url: string): Promise<CaptionTrack | null> {
+async function fetchVttFile(url: string, signal?: AbortSignal): Promise<CaptionTrack | null> {
   try {
     // Same route as the `.ne` and its media: a host without CORS is reachable only via the proxy.
-    const res = await fetchNextEditorUrl(url);
+    const res = await fetchNextEditorUrl(url, { signal });
     if (!res.ok) return null;
     const text = await res.text();
     if (!text.trim().startsWith("WEBVTT")) return null;
@@ -177,7 +177,8 @@ function resolveSiblingCaptionUrl(file: string, neUrl: string): string | null {
 
 async function fetchSiblingCaptions(
   neUrl: string,
-  captionFiles?: string[],
+  captionFiles: string[] | undefined,
+  signal: AbortSignal,
 ): Promise<CaptionTrack[]> {
   if (!captionFiles || captionFiles.length === 0) {
     return [];
@@ -192,7 +193,7 @@ async function fetchSiblingCaptions(
     captionFiles
       .map((file) => resolveSiblingCaptionUrl(file, neUrl))
       .filter((url): url is string => url !== null)
-      .map((url) => fetchVttFile(url)),
+      .map((url) => fetchVttFile(url, signal)),
   );
   const tracks: CaptionTrack[] = [];
   for (const result of results) {
@@ -208,7 +209,7 @@ async function fetchSiblingCaptions(
       basenameUrl &&
       !captionFiles.some((file) => new URL(file, neUrl).toString() === basenameUrl)
     ) {
-      const track = await fetchVttFile(basenameUrl);
+      const track = await fetchVttFile(basenameUrl, signal);
       if (track) tracks.push(track);
     }
   }
@@ -246,7 +247,11 @@ async function fetchNextEditorUrl(url: string, init?: RequestInit): Promise<Resp
     ) {
       return proxyResponse;
     }
+    // Not the proxy's answer: stop that download before asking the host directly.
+    await proxyResponse.body?.cancel().catch(() => {});
   } catch (error) {
+    // An abort means the load was left or superseded, not that the proxy is missing.
+    if (init?.signal?.aborted) throw error;
     console.warn("Same-origin proxy request failed, falling back to direct fetch:", error);
   }
 
@@ -284,13 +289,17 @@ async function probeMediaUrl(url: string, signal?: AbortSignal): Promise<boolean
     let response = await fetchNextEditorUrl(url, { method: "HEAD", signal });
     if (!response.ok) {
       response = await fetchNextEditorUrl(url, { headers: { Range: "bytes=0-0" }, signal });
+      // Only the status and type matter, and a host that ignores Range sends the whole video.
+      await response.body?.cancel().catch(() => {});
     }
     if (!response.ok) {
       return false;
     }
     const contentType = response.headers.get("content-type") ?? "";
     return !contentType.includes("text/html");
-  } catch {
+  } catch (error) {
+    // An abort ends the search for a camera URL; any other failure rules out this candidate.
+    if (signal?.aborted) throw error;
     return false;
   }
 }
@@ -520,6 +529,7 @@ export const useUrlLoader = () => {
       recording.audioSource === "external",
     );
     for (const url of candidates) {
+      signal?.throwIfAborted();
       try {
         const response = await fetchNextEditorUrl(url, { signal });
         if (!response.ok) {
@@ -539,6 +549,8 @@ export const useUrlLoader = () => {
         const blob = raw.type === type ? raw : new Blob([raw], { type });
         return { url, blob };
       } catch (err) {
+        // An abort ends the search (the lesson was left); it says nothing about this candidate.
+        if (signal?.aborted) throw err;
         console.warn(`Failed to fetch external audio from ${url}:`, err);
       }
     }
@@ -653,7 +665,7 @@ export const useUrlLoader = () => {
 
       if (isStale()) return;
 
-      fetchSiblingCaptions(url, loaded?.captionFiles)
+      fetchSiblingCaptions(url, loaded?.captionFiles, signal)
         .then((tracks) => {
           if (!isStale()) {
             for (const track of tracks) addCaptionTrack(track);
@@ -663,7 +675,10 @@ export const useUrlLoader = () => {
 
       // Externalized audio/camera resolve out-of-band, after the (now tiny) `.ne` finished.
       if (loaded && !isStale()) {
-        void resolveExternalMedia(loaded, url, isStale, signal);
+        resolveExternalMedia(loaded, url, isStale, signal).catch((error: unknown) => {
+          // Leaving or replacing the lesson aborts these downloads; that is not a failure.
+          if (!signal.aborted) console.warn("Resolving the lesson's sibling media failed:", error);
+        });
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
