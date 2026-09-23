@@ -12,9 +12,12 @@ import {
   type CollaborationBinaryFrame,
 } from "../../../src/collaboration/binaryProtocol";
 import {
+  COLLABORATION_AWARENESS_TTL_MS,
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
   COLLABORATION_PROTOCOL_VERSION,
   COLLABORATION_SQLITE_PERSISTENCE_VERSION,
+  MAX_COLLABORATION_EDITOR_SCROLL_LEFT_PX,
+  MAX_COLLABORATION_EDITOR_TOP_DELTA_PX,
   type CollaborationBootstrapResponse,
   type CollaborationRole,
 } from "../../../src/collaboration/protocol";
@@ -159,16 +162,27 @@ async function createRoom(
 
   /**
    * A socket as acceptConnection leaves it, placed directly. It skips the
-   * upgrade, so it can set the role version and the last access check.
+   * upgrade, so it can set the role version, the last access check and the
+   * member's profile.
    */
   function connect(
     userId: string,
     role: CollaborationRole,
-    options: { roleVersion?: number; accessCheckedAt?: number } = {},
+    options: {
+      roleVersion?: number;
+      accessCheckedAt?: number;
+      username?: string;
+      name?: string | null;
+      avatarUrl?: string | null;
+    } = {},
   ): FakeSocket {
     const socket = new FakeSocket();
+    const session = canonicalSession(userId, role, uuid(), options.roleVersion ?? 1);
     socket.serializeAttachment({
-      ...canonicalSession(userId, role, uuid(), options.roleVersion ?? 1),
+      ...session,
+      username: options.username ?? session.username,
+      name: options.name ?? session.name,
+      avatarUrl: options.avatarUrl ?? session.avatarUrl,
       accessCheckedAt: options.accessCheckedAt ?? Date.now(),
     });
     sockets.push(socket);
@@ -688,6 +702,125 @@ describe("CollaborationRoomDurableObject awareness", () => {
 
     expect(errors(peer)).toEqual([expect.objectContaining({ code: "invalid-session" })]);
     expect(peer.closeCode).toBe(1008);
+  });
+
+  // The largest state the schemas accept, with the display name and the
+  // selection's type names in two-byte text, which V8 stores at two bytes a
+  // character. Its attachment is about 16.2 KB, fewer than 200 bytes under
+  // the 16,384 that serializeAttachment takes. This is the worst case and
+  // must stay green: a schema change that turns it red drops real members'
+  // awareness.
+  it("stores and relays a maximal schema-valid awareness state", async () => {
+    const { room, connect, edit } = await createRoom();
+    const member = connect(MEMBER_ID, "editor", {
+      username: "u".repeat(64),
+      name: "\u4e00".repeat(120),
+      avatarUrl: "a".repeat(2048),
+    });
+    const peer = connect(PEER_ID, "viewer");
+    const { sessionId } = member.deserializeAttachment() as { sessionId: string };
+    const fileNodeId = uuid();
+    const position = "A".repeat(2048);
+    const id = { client: 0xffff_ffff, clock: Number.MAX_SAFE_INTEGER };
+    const end = { type: id, tname: "\u4e00".repeat(1024), item: id, assoc: -1 };
+    const message = encodeCollaborationAwarenessUpdate(
+      encodeCollaborationAwarenessProtocolUpdate([
+        {
+          clientId: 0xffff_ffff,
+          clock: Number.MAX_SAFE_INTEGER,
+          state: {
+            collaboration: {
+              kind: "state",
+              sessionId,
+              revision: Number.MAX_SAFE_INTEGER,
+              surface: {
+                kind: "editor",
+                fileNodeId,
+                viewport: {
+                  topAnchor: position,
+                  topDeltaPx: MAX_COLLABORATION_EDITOR_TOP_DELTA_PX,
+                  scrollLeftPx: MAX_COLLABORATION_EDITOR_SCROLL_LEFT_PX,
+                },
+              },
+              cursor: { fileNodeId, anchor: position, head: position },
+            },
+            selection: { anchor: end, head: end },
+          },
+        },
+      ]),
+    );
+
+    // An editor who has typed also carries the socket's update window.
+    await room.webSocketMessage(member as never, edit("x"));
+    peer.sent.length = 0;
+    await room.webSocketMessage(member as never, toArrayBuffer(message));
+
+    expect(peer.frames().map((frame) => frame.kind)).toEqual(["awareness"]);
+    expect(member.deserializeAttachment()).toMatchObject({
+      updateWindowCount: 1,
+      awarenessState: { selection: { anchor: end, head: end } },
+    });
+  });
+
+  // Earlier revisions also stored the awareness event as `awareness`, beside
+  // the same event inside awarenessState.
+  it("reads an attachment an earlier revision wrote and drops its awareness copy", async () => {
+    const { room, connect } = await createRoom();
+    const member = connect(MEMBER_ID, "editor");
+    const peer = connect(PEER_ID, "viewer");
+    const session = member.deserializeAttachment() as ReturnType<typeof canonicalSession>;
+    const now = Date.now();
+    const event = {
+      kind: "state",
+      sessionId: session.sessionId,
+      revision: 1,
+      surface: { kind: "slides", isMaximized: false },
+      cursor: null,
+      roomId: ROOM_ID,
+      actorId: MEMBER_ID,
+      role: "editor",
+      username: session.username,
+      name: null,
+      avatarUrl: null,
+      isHost: false,
+      occurredAt: now,
+      expiresAt: now + COLLABORATION_AWARENESS_TTL_MS,
+    };
+    member.serializeAttachment({
+      ...session,
+      awarenessClientId: 7,
+      awarenessClock: 1,
+      awareness: event,
+      awarenessState: { collaboration: event },
+    });
+
+    await room.webSocketMessage(member as never, awarenessFrame(member, 7, 2));
+
+    expect(peer.frames().map((frame) => frame.kind)).toEqual(["awareness"]);
+    const stored = member.deserializeAttachment();
+    expect(stored).not.toHaveProperty("awareness");
+    expect(stored).toMatchObject({ awarenessState: { collaboration: { revision: 2 } } });
+
+    peer.sent.length = 0;
+    room.webSocketClose(member as never);
+    const leaves = peer
+      .frames()
+      .flatMap((frame) =>
+        frame.kind === "awareness" ? decodeCollaborationAwarenessProtocolUpdate(frame.update) : [],
+      );
+    expect(leaves).toEqual([expect.objectContaining({ clientId: 7, state: null })]);
+  });
+
+  it("carries a demotion into the member's stored awareness state", async () => {
+    const { room, connect, control } = await createRoom();
+    const member = connect(MEMBER_ID, "editor");
+    await room.webSocketMessage(member as never, awarenessFrame(member, 7, 1));
+
+    await control(2, MEMBER_ID, "viewer");
+
+    expect(member.deserializeAttachment()).toMatchObject({
+      awarenessState: { collaboration: { role: "viewer" } },
+    });
   });
 });
 

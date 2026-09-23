@@ -21,7 +21,6 @@ import {
   MAX_YJS_UPDATE_BYTES,
   canPublishCollaborationUpdate,
   collaborationAwarenessClientStateSchema,
-  collaborationAwarenessEventSchema,
   collaborationAwarenessServerStateSchema,
   collaborationIdSchema,
   collaborationRoleSchema,
@@ -105,9 +104,15 @@ const canonicalSocketSessionSchema = z
 
 type CanonicalSocketSession = z.infer<typeof canonicalSocketSessionSchema>;
 
+// serializeAttachment refuses more than 16,384 bytes. A maximal schema-valid
+// attachment (two-byte selection type names and display name) serializes to
+// about 16.2 KB, fewer than 200 bytes under that; the test "stores and relays
+// a maximal schema-valid awareness state" pins it. Check that budget before
+// adding a field here or to the awareness schemas. If more room is needed,
+// stop storing the session's username, name and avatarUrl a second time
+// inside awarenessState rather than capping the wire schema.
 const socketAttachmentSchema = canonicalSocketSessionSchema
   .extend({
-    awareness: collaborationAwarenessEventSchema.optional(),
     awarenessClientId: z.number().int().nonnegative().max(0xffff_ffff).optional(),
     awarenessClock: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
     awarenessState: collaborationAwarenessServerStateSchema.optional(),
@@ -121,11 +126,21 @@ const socketAttachmentSchema = canonicalSocketSessionSchema
 
 type SocketAttachment = z.infer<typeof socketAttachmentSchema>;
 
+// Earlier revisions also stored the awareness event as `awareness`, a copy of
+// awarenessState.collaboration that pushed a maximal state past the attachment
+// limit. Accept an attachment they wrote and drop the copy. Delete this once
+// the change has deployed.
+const storedSocketAttachmentSchema = socketAttachmentSchema
+  .extend({ awareness: z.unknown().optional() })
+  .strict();
+
 type ClientUpdateFrame = Extract<CollaborationBinaryFrame, { kind: "client-update" }>;
 
 function attachmentFor(socket: WebSocket): SocketAttachment | null {
-  const result = socketAttachmentSchema.safeParse(socket.deserializeAttachment());
-  return result.success ? result.data : null;
+  const result = storedSocketAttachmentSchema.safeParse(socket.deserializeAttachment());
+  if (!result.success) return null;
+  const { awareness: _awareness, ...attachment } = result.data;
+  return attachment;
 }
 
 function sendMessage(socket: WebSocket, message: CollaborationWebSocketServerMessage): void {
@@ -489,7 +504,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       this.broadcastLeave(existing);
       existing.serializeAttachment({
         ...attachment,
-        awareness: undefined,
         awarenessState: undefined,
       } satisfies SocketAttachment);
       existing.close(4000, "replaced by reconnect");
@@ -509,12 +523,13 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     for (const existing of this.ctx.getWebSockets()) {
       if (existing === server || !isOpen(existing)) continue;
       const existingAttachment = attachmentFor(existing);
+      const existingState = existingAttachment?.awarenessState;
       if (
-        existingAttachment?.awareness?.kind !== "state" ||
-        existingAttachment.awareness.expiresAt <= now ||
+        !existingState ||
+        existingState.collaboration.kind !== "state" ||
+        existingState.collaboration.expiresAt <= now ||
         existingAttachment.awarenessClientId === undefined ||
-        existingAttachment.awarenessClock === undefined ||
-        !existingAttachment.awarenessState
+        existingAttachment.awarenessClock === undefined
       ) {
         continue;
       }
@@ -525,7 +540,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
             {
               clientId: existingAttachment.awarenessClientId,
               clock: existingAttachment.awarenessClock,
-              state: existingAttachment.awarenessState,
+              state: existingState,
             },
           ]),
         ),
@@ -604,25 +619,24 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     role: CollaborationRole,
     roleVersion: number,
   ): SocketAttachment {
-    const awareness = attachment.awareness;
-    const updatedAwareness =
-      awareness?.kind === "state"
-        ? { ...awareness, role, isHost: attachment.hostUserId === attachment.userId }
-        : undefined;
+    const state = attachment.awarenessState;
     const awarenessState =
-      updatedAwareness && attachment.awarenessState
+      state?.collaboration.kind === "state"
         ? collaborationAwarenessServerStateSchema.parse({
-            ...attachment.awarenessState,
-            collaboration: updatedAwareness,
+            ...state,
+            collaboration: {
+              ...state.collaboration,
+              role,
+              isHost: attachment.hostUserId === attachment.userId,
+            },
           })
-        : attachment.awarenessState;
+        : state;
     return {
       ...attachment,
       role,
       roleVersion,
       accessCheckedAt: Date.now(),
       awarenessState,
-      ...(updatedAwareness ? { awareness: updatedAwareness } : {}),
     };
   }
 
@@ -675,12 +689,12 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     if (attachment.awarenessClock !== undefined && entry.clock <= attachment.awarenessClock) return;
 
     if (entry.state === null) {
-      if (!attachment.awareness || attachment.awareness.kind !== "state") {
+      const current = attachment.awarenessState?.collaboration;
+      if (current?.kind !== "state") {
         socket.serializeAttachment({
           ...attachment,
           awarenessClientId: entry.clientId,
           awarenessClock: entry.clock,
-          awareness: undefined,
           awarenessState: undefined,
         } satisfies SocketAttachment);
         return;
@@ -691,7 +705,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         {
           kind: "leave",
           sessionId: attachment.sessionId,
-          revision: Math.min(attachment.awareness.revision + 1, Number.MAX_SAFE_INTEGER),
+          revision: Math.min(current.revision + 1, Number.MAX_SAFE_INTEGER),
         },
         entry,
       );
@@ -726,7 +740,8 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       this.rejectSocket(socket, "rate-limited", "Awareness rate limit exceeded", false);
       return;
     }
-    const previous = attachment.awareness?.kind === "state" ? attachment.awareness : null;
+    const stored = attachment.awarenessState?.collaboration;
+    const previous = stored?.kind === "state" ? stored : null;
     if (previous) {
       if (input.revision < previous.revision) {
         socket.serializeAttachment({
@@ -791,9 +806,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       awarenessWindowCount: count,
       awarenessClientId,
       awarenessClock,
-      ...(event.kind === "state"
-        ? { awareness: event, awarenessState }
-        : { awareness: undefined, awarenessState: undefined }),
+      awarenessState,
     } satisfies SocketAttachment);
     this.broadcastAwareness(
       {
@@ -1273,7 +1286,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
 
   private broadcastLeave(socket: WebSocket): void {
     const attachment = attachmentFor(socket);
-    if (!attachment?.awareness || attachment.awareness.kind !== "state") return;
+    if (attachment?.awarenessState?.collaboration.kind !== "state") return;
     if (attachment.awarenessClientId === undefined || attachment.awarenessClock === undefined)
       return;
     // y-protocols removes a state on a null update at the same clock. The
