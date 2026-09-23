@@ -7,7 +7,7 @@ import type {
   SlideEvent,
 } from "../../core/src/slides";
 import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
-import { normalizeDeltaFrame, normalizeRecordingData } from "../../core/src/utils/editorState";
+import { normalizeDeltaFrame } from "../../core/src/utils/editorState";
 import type { RuntimeRecordingEvent } from "../../types/runtime";
 import type { WorkspaceRecordingAsset, WorkspaceRecordingEvent } from "../../types/workspace";
 import type { WhiteboardEvent } from "../../core/src/whiteboard";
@@ -21,16 +21,13 @@ import {
   hasMagicAt,
   HEADER_PREFIX_SIZE,
   isKnownSegmentKind,
-  isSupportedStreamFormatVersion,
   parseHeader,
   readSegmentHeader,
   SEGMENT_HEADER_SIZE,
   SEGMENT_KIND,
   MAX_COMPRESSED_META_BYTES,
-  MAX_COMPRESSED_SEGMENT_BYTES,
   MAX_DECODED_RECORDS,
   MAX_STREAM_BYTES,
-  MAX_WORKSPACE_ASSET_PAYLOAD_BYTES,
   type RecordingStreamMeta,
   type SegmentHeaderFields,
 } from "./format";
@@ -50,20 +47,15 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 //
 // `decodeRecordingStream` decodes a whole buffer in one shot.
 // `createStreamingRecordingReader` decodes incrementally as bytes arrive, decoding
-// only newly-completed segments per push. Both feed `assembleRecording`, so a
+// only newly-completed segments per push. Both decode every segment through
+// `ingestSegment` and build the result with `assembleRecording`, so a
 // progressively-decoded prefix and a one-shot decode of the same bytes match.
 // ============================================================================
 
-interface DecodedSegment {
-  kind: number;
+/** One complete segment inside a byte range: its header fields plus a view of its payload. */
+interface WalkedSegment {
+  header: SegmentHeaderFields;
   payload: Uint8Array;
-  startTimeMs: number;
-  endTimeMs: number;
-  firstFrameIndex: number;
-  clusterIndex: number;
-  containsKeyframe: boolean;
-  isInit: boolean;
-  sequence: number;
 }
 
 function assertFrameFormatCompatibility(
@@ -81,75 +73,118 @@ function assertWorkspaceAssetFormatCompatibility(formatVersion: number): void {
   throw new Error("Invalid SCR3 stream: workspace assets require format version 4");
 }
 
-function* walkSegments(bytes: Uint8Array, start: number, end: number): Generator<DecodedSegment> {
+/**
+ * Yields every complete segment of a known kind in `[start, end)`. Unknown (future)
+ * kinds are self-delimiting, so they are skipped rather than aborting the walk and
+ * silently dropping every later segment plus the footer. A segment that runs past
+ * `end` is a truncated tail, and the walk stops there.
+ */
+function* walkSegments(bytes: Uint8Array, start: number, end: number): Generator<WalkedSegment> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let offset = start;
-  let sequence = 0;
 
   while (offset + SEGMENT_HEADER_SIZE <= end) {
     const header = readSegmentHeader(view, offset);
     const payloadStart = offset + SEGMENT_HEADER_SIZE;
     const payloadEnd = payloadStart + header.byteLength;
+    if (payloadEnd > end) return;
 
-    // A segment that runs past the known end is a truncated tail — stop and wait.
-    if (payloadEnd > end) {
-      break;
+    if (isKnownSegmentKind(header.kind)) {
+      yield { header, payload: bytes.subarray(payloadStart, payloadEnd) };
     }
-
-    // Unknown (future) segment kinds are self-delimiting, so skip them rather than
-    // aborting the walk and silently dropping every later segment plus the footer.
-    if (!isKnownSegmentKind(header.kind)) {
-      offset = payloadEnd;
-      sequence += 1;
-      continue;
-    }
-
-    yield {
-      kind: header.kind,
-      payload: bytes.subarray(payloadStart, payloadEnd),
-      startTimeMs: header.startTimeMs,
-      endTimeMs: header.endTimeMs,
-      firstFrameIndex: header.firstFrameIndex,
-      clusterIndex: header.clusterIndex,
-      containsKeyframe: header.containsKeyframe,
-      isInit: header.isInit,
-      sequence,
-    };
-
     offset = payloadEnd;
-    sequence += 1;
   }
 }
 
-/**
- * Decoded-stream accumulators shared by the one-shot decoder and the incremental
- * reader. Record arrays are expected in stream (timeline) order. Audio/camera are
- * external files; workspace assets are raw handoff segments stored by asset id.
- */
-interface DecodedStreamState {
-  meta: RecordingStreamMeta;
-  streamFinalized: boolean;
-  /**
-   * True when frames were already normalized record-by-record as they were decoded
-   * (the incremental reader). Skips the whole-recording `normalizeRecordingData`
-   * pass, which deep-clones every frame and is O(n) per call — quadratic when run
-   * on every progressive-decode interval of a growing stream.
-   */
-  prenormalized?: boolean;
-  hasSegments: boolean;
-  maxSegmentTimeMs: number;
+/** Decoded records per track, each in stream (timeline) order. */
+interface DecodedRecords {
   frames: DeltaFrame[];
   slideEvents: SlideEvent[];
   previewEvents: PreviewEvent[];
   previewInitialDocuments: PreviewInitialDocument[];
   previewPatchBatches: PreviewDomPatchBatch[];
   workspaceEvents: WorkspaceRecordingEvent[];
-  workspaceAssets: WorkspaceRecordingAsset[];
   runtimeEvents: RuntimeRecordingEvent[];
   cursorEvents: CursorRecordingEvent[];
   whiteboardEvents: WhiteboardEvent[];
   chatEvents: ChatRecordingEvent[];
-  clusterSummaries: RecordingClusterMeta[];
+}
+
+/** Fresh arrays holding the same record objects, so consumers keyed on reference see growth. */
+function copyDecodedRecords(records: DecodedRecords): DecodedRecords {
+  return {
+    frames: records.frames.slice(),
+    slideEvents: records.slideEvents.slice(),
+    previewEvents: records.previewEvents.slice(),
+    previewInitialDocuments: records.previewInitialDocuments.slice(),
+    previewPatchBatches: records.previewPatchBatches.slice(),
+    workspaceEvents: records.workspaceEvents.slice(),
+    runtimeEvents: records.runtimeEvents.slice(),
+    cursorEvents: records.cursorEvents.slice(),
+    whiteboardEvents: records.whiteboardEvents.slice(),
+    chatEvents: records.chatEvents.slice(),
+  };
+}
+
+/**
+ * Everything decoded from one SCR3 stream so far. The one-shot decoder and the
+ * streaming reader both advance it through {@link ingestSegment}, so a progressively
+ * decoded prefix and a one-shot decode of the same bytes cannot drift apart.
+ */
+interface DecodedStream {
+  /** The header's metadata until a final-metadata segment replaces it. */
+  meta: RecordingStreamMeta;
+  readonly formatVersion: number;
+  /** MAX_INFLATED_SEGMENT_BYTES bounds each segment; this bounds their sum. */
+  readonly budget: InflationBudget;
+  readonly records: DecodedRecords;
+  /**
+   * Raw assets not yet handed off. Their bytes are not part of the long-lived decoded
+   * recording, so the streaming reader drains this queue on every `readDelta`.
+   */
+  readonly workspaceAssets: WorkspaceRecordingAsset[];
+  /** Every asset id ever decoded, drained or not, so a repeated asset segment is caught. */
+  readonly workspaceAssetIds: Set<string>;
+  readonly clusterSummaries: Map<number, RecordingClusterMeta>;
+  /**
+   * Stream-order carries that mirror the writer's strippers: segments arrive in encode
+   * order, so one carry per stream resolves every dedup marker (see
+   * workspaceEventDedup.ts and previewPatchDedup.ts).
+   */
+  readonly hydrateWorkspaceEvents: (events: WorkspaceRecordingEvent[]) => WorkspaceRecordingEvent[];
+  readonly hydratePreviewPatchBatches: (batches: PreviewDomPatchBatch[]) => PreviewDomPatchBatch[];
+  /** Segments accepted so far, including skipped unknown kinds; the footer must agree. */
+  segmentCount: number;
+  recordCount: number;
+  maxSegmentTimeMs: number;
+}
+
+function createDecodedStream(meta: RecordingStreamMeta, formatVersion: number): DecodedStream {
+  return {
+    meta,
+    formatVersion,
+    budget: createInflationBudget(),
+    records: {
+      frames: [],
+      slideEvents: [],
+      previewEvents: [],
+      previewInitialDocuments: [],
+      previewPatchBatches: [],
+      workspaceEvents: [],
+      runtimeEvents: [],
+      cursorEvents: [],
+      whiteboardEvents: [],
+      chatEvents: [],
+    },
+    workspaceAssets: [],
+    workspaceAssetIds: new Set(),
+    clusterSummaries: new Map(),
+    hydrateWorkspaceEvents: createWorkspaceEventContentHydrator(),
+    hydratePreviewPatchBatches: createPreviewAddNodeHydrator(),
+    segmentCount: 0,
+    recordCount: 0,
+    maxSegmentTimeMs: 0,
+  };
 }
 
 function mergeFinalMetadata(
@@ -177,18 +212,126 @@ function mergeFinalMetadata(
   return { ...current, ...candidate };
 }
 
-/**
- * Builds a {@link Recording} from accumulated stream state. The single source of
- * truth for both `decodeSegments` (whole buffer) and the incremental reader, so a
- * progressively-decoded prefix and a one-shot decode of the same bytes match.
- */
-function assembleRecording(state: DecodedStreamState): Recording {
-  const { meta, streamFinalized } = state;
+/** A decoded segment waiting to be applied: `commit` only appends, so it cannot throw. */
+interface PendingSegment {
+  recordCount: number;
+  commit(): void;
+}
 
-  const decodedDuration = Math.max(meta.duration, state.maxSegmentTimeMs);
-  // Media bytes never live in the stream; audio/camera offsets come from meta alone.
-  const audioStartOffsetMs = meta.audioStartOffsetMs ?? undefined;
-  const cameraStartOffsetMs = meta.cameraStartOffsetMs ?? undefined;
+/**
+ * Decodes one segment's payload without touching the stream. Every step that can
+ * throw runs here, so a throw (a partial footer misread as a segment, or genuine
+ * corruption) leaves the records, the dedup carries and the counters as they were,
+ * and the streaming reader can retry the same bytes once more have arrived.
+ */
+function decodeSegment(stream: DecodedStream, kind: number, payload: Uint8Array): PendingSegment {
+  const { records, budget } = stream;
+  switch (kind) {
+    case SEGMENT_KIND.frames: {
+      // Resolve the segment's previewState-content markers (self-contained, no carry —
+      // see framePreviewContentDedup.ts), then normalize each frame once, as it arrives,
+      // so a growing stream never re-normalizes the frames it already holds.
+      const frames = hydrateFramePreviewContent(decodeRecords<DeltaFrame>(payload, budget)).map(
+        normalizeDeltaFrame,
+      );
+      assertFrameFormatCompatibility(frames, stream.formatVersion);
+      return { recordCount: frames.length, commit: () => records.frames.push(...frames) };
+    }
+    case SEGMENT_KIND.slide:
+      return appendTo(records.slideEvents, decodeRecords<SlideEvent>(payload, budget));
+    case SEGMENT_KIND.preview:
+      return appendTo(records.previewEvents, decodeRecords<PreviewEvent>(payload, budget));
+    case SEGMENT_KIND.previewDoc:
+      return appendTo(
+        records.previewInitialDocuments,
+        decodeRecords<PreviewInitialDocument>(payload, budget),
+      );
+    case SEGMENT_KIND.previewPatch: {
+      const batches = decodeRecords<PreviewDomPatchBatch>(payload, budget);
+      // Hydration advances the template list, so it runs at commit.
+      return {
+        recordCount: batches.length,
+        commit: () =>
+          records.previewPatchBatches.push(...stream.hydratePreviewPatchBatches(batches)),
+      };
+    }
+    case SEGMENT_KIND.workspace: {
+      const events = decodeRecords<WorkspaceRecordingEvent>(payload, budget);
+      // Hydration advances the carried file contents, so it runs at commit.
+      return {
+        recordCount: events.length,
+        commit: () => records.workspaceEvents.push(...stream.hydrateWorkspaceEvents(events)),
+      };
+    }
+    case SEGMENT_KIND.workspaceAsset: {
+      assertWorkspaceAssetFormatCompatibility(stream.formatVersion);
+      const asset = decodeWorkspaceAssetPayload(payload);
+      if (stream.workspaceAssetIds.has(asset.descriptor.assetId)) {
+        throw new Error("Invalid SCR3 stream: duplicate workspace asset segment");
+      }
+      return {
+        recordCount: 1,
+        commit: () => {
+          stream.workspaceAssetIds.add(asset.descriptor.assetId);
+          stream.workspaceAssets.push(asset);
+        },
+      };
+    }
+    case SEGMENT_KIND.runtime:
+      return appendTo(records.runtimeEvents, decodeRecords<RuntimeRecordingEvent>(payload, budget));
+    case SEGMENT_KIND.cursor:
+      return appendTo(records.cursorEvents, decodeRecords<CursorRecordingEvent>(payload, budget));
+    case SEGMENT_KIND.whiteboard:
+      return appendTo(records.whiteboardEvents, decodeRecords<WhiteboardEvent>(payload, budget));
+    case SEGMENT_KIND.chat:
+      return appendTo(records.chatEvents, decodeRecords<ChatRecordingEvent>(payload, budget));
+    case SEGMENT_KIND.finalMeta: {
+      const meta = mergeFinalMetadata(stream.meta, payload, budget);
+      return {
+        recordCount: 0,
+        commit: () => {
+          stream.meta = meta;
+        },
+      };
+    }
+    default:
+      return { recordCount: 0, commit: () => {} };
+  }
+}
+
+function appendTo<T>(target: T[], decoded: T[]): PendingSegment {
+  return { recordCount: decoded.length, commit: () => target.push(...decoded) };
+}
+
+/** Decodes one segment and, only if that succeeds, folds it into the stream. */
+function ingestSegment(stream: DecodedStream, { header, payload }: WalkedSegment): void {
+  const segment = decodeSegment(stream, header.kind, payload);
+  if (stream.recordCount + segment.recordCount > MAX_DECODED_RECORDS) {
+    throw new Error("Invalid SCR3 stream: recording contains too many records");
+  }
+  stream.segmentCount += 1;
+  stream.recordCount += segment.recordCount;
+  stream.maxSegmentTimeMs = Math.max(stream.maxSegmentTimeMs, header.startTimeMs, header.endTimeMs);
+  mergeClusterSummary(
+    stream.clusterSummaries,
+    header.clusterIndex,
+    header.startTimeMs,
+    header.endTimeMs,
+    header.containsKeyframe,
+  );
+  segment.commit();
+}
+
+/**
+ * Builds a {@link Recording} from a decoded stream. `records` are passed separately
+ * so the streaming reader can hand in a copy and keep its own arrays private.
+ */
+function assembleRecording(
+  stream: DecodedStream,
+  records: DecodedRecords,
+  streamFinalized: boolean,
+): Recording {
+  const { meta } = stream;
 
   const provisionalRecording: Recording = {
     version: meta.version,
@@ -196,31 +339,29 @@ function assembleRecording(state: DecodedStreamState): Recording {
     name: meta.name,
     keyframeInterval: meta.keyframeInterval,
     createdAt: meta.createdAt,
-    duration: decodedDuration,
-    frames: state.frames,
-    slideEvents: state.slideEvents.length > 0 ? state.slideEvents : undefined,
-    previewEvents: state.previewEvents.length > 0 ? state.previewEvents : undefined,
-    previewInitialDocuments:
-      state.previewInitialDocuments.length > 0 ? state.previewInitialDocuments : undefined,
-    previewPatchBatches:
-      state.previewPatchBatches.length > 0 ? state.previewPatchBatches : undefined,
-    workspaceEvents: state.workspaceEvents.length > 0 ? state.workspaceEvents : undefined,
-    workspaceAssets: state.workspaceAssets.length > 0 ? state.workspaceAssets : undefined,
-    runtimeEvents: state.runtimeEvents.length > 0 ? state.runtimeEvents : undefined,
-    cursorEvents: state.cursorEvents.length > 0 ? state.cursorEvents : undefined,
-    whiteboardEvents: state.whiteboardEvents.length > 0 ? state.whiteboardEvents : undefined,
-    chatEvents: state.chatEvents.length > 0 ? state.chatEvents : undefined,
+    duration: Math.max(meta.duration, stream.maxSegmentTimeMs),
+    frames: records.frames,
+    slideEvents: nonEmpty(records.slideEvents),
+    previewEvents: nonEmpty(records.previewEvents),
+    previewInitialDocuments: nonEmpty(records.previewInitialDocuments),
+    previewPatchBatches: nonEmpty(records.previewPatchBatches),
+    workspaceEvents: nonEmpty(records.workspaceEvents),
+    workspaceAssets: nonEmpty(stream.workspaceAssets.slice()),
+    runtimeEvents: nonEmpty(records.runtimeEvents),
+    cursorEvents: nonEmpty(records.cursorEvents),
+    whiteboardEvents: nonEmpty(records.whiteboardEvents),
+    chatEvents: nonEmpty(records.chatEvents),
     captions: meta.captions,
     captionFiles: meta.captionFiles,
     slides: meta.slides,
+    // Media bytes never live in the stream: audio and camera are sibling files, so the
+    // header carries only their references and timeline offsets.
     audioSource: meta.audioSource,
-    audioStartOffsetMs,
-    // Audio may live outside the stream — the header then carries only the reference.
+    audioStartOffsetMs: meta.audioStartOffsetMs,
     audioFile: meta.audioFile,
     audioUrl: meta.audioUrl,
-    // Camera is always external — the stream carries only the reference/metadata, never bytes.
     cameraSource: meta.cameraSource,
-    cameraStartOffsetMs,
+    cameraStartOffsetMs: meta.cameraStartOffsetMs,
     cameraFile: meta.cameraFile,
     cameraUrl: meta.cameraUrl,
     streamFinalized,
@@ -228,13 +369,13 @@ function assembleRecording(state: DecodedStreamState): Recording {
     runtimeSnapshot: meta.runtimeSnapshot,
   };
 
+  // Copies, never the summaries themselves: later segments keep widening those in
+  // place, and a recording already handed out must not change underneath its owner.
   const clusters =
     meta.clusters && meta.clusters.length > 0
-      ? meta.clusters
-          .map((cluster) => ({ ...cluster }))
-          .sort((left, right) => left.index - right.index)
-      : state.hasSegments
-        ? [...state.clusterSummaries].sort((left, right) => left.index - right.index)
+      ? sortClusters(meta.clusters.map((cluster) => ({ ...cluster })))
+      : stream.segmentCount > 0
+        ? sortClusters(Array.from(stream.clusterSummaries.values(), (cluster) => ({ ...cluster })))
         : deriveRecordingClusters(provisionalRecording);
 
   const tracks =
@@ -244,167 +385,20 @@ function assembleRecording(state: DecodedStreamState): Recording {
 
   const mediaFragments = deriveRecordingMediaFragments(provisionalRecording, tracks, clusters);
 
-  const assembled: Recording = {
+  return {
     ...provisionalRecording,
-    tracks: tracks.length > 0 ? tracks : undefined,
-    clusters: clusters.length > 0 ? clusters : undefined,
-    mediaFragments: mediaFragments.length > 0 ? mediaFragments : undefined,
+    tracks: nonEmpty(tracks),
+    clusters: nonEmpty(clusters),
+    mediaFragments: nonEmpty(mediaFragments),
   };
-
-  return state.prenormalized ? assembled : normalizeRecordingData(assembled);
 }
 
-function decodeSegments(bytes: Uint8Array): Recording {
-  const parsedHeader = parseHeader(bytes);
-  // One budget for the whole stream: MAX_INFLATED_SEGMENT_BYTES bounds each
-  // segment, this bounds their sum.
-  const budget = createInflationBudget();
-  let meta = parsedHeader.meta;
-  const { headerEnd, formatVersion } = parsedHeader;
-  const footerStart = findFooterStart(bytes, headerEnd);
-  const segmentsEnd = footerStart ?? bytes.length;
-  const streamFinalized = footerStart !== null;
+function nonEmpty<T>(items: T[]): T[] | undefined {
+  return items.length > 0 ? items : undefined;
+}
 
-  const frames: DeltaFrame[] = [];
-  const slideEvents: SlideEvent[] = [];
-  const previewEvents: PreviewEvent[] = [];
-  const previewInitialDocuments: PreviewInitialDocument[] = [];
-  const previewPatchBatches: PreviewDomPatchBatch[] = [];
-  const workspaceEvents: WorkspaceRecordingEvent[] = [];
-  const workspaceAssets: WorkspaceRecordingAsset[] = [];
-  const workspaceAssetIds = new Set<string>();
-  const runtimeEvents: RuntimeRecordingEvent[] = [];
-  const cursorEvents: CursorRecordingEvent[] = [];
-  const whiteboardEvents: WhiteboardEvent[] = [];
-  const chatEvents: ChatRecordingEvent[] = [];
-  const clusterMap = new Map<number, RecordingClusterMeta>();
-  let hasSegments = false;
-  let maxSegmentTimeMs = meta.duration;
-  // Stream order matches encode order, so carrying deduped file contents forward
-  // here mirrors the stripper's state exactly (see workspaceEventDedup.ts).
-  const hydrateWorkspaceEvents = createWorkspaceEventContentHydrator();
-  // Same contract for repeated rrweb added-node payloads: hydration must run in
-  // stream order (before the time re-sort below) — see previewPatchDedup.ts.
-  const hydratePreviewPatchBatches = createPreviewAddNodeHydrator();
-
-  for (const segment of walkSegments(bytes, headerEnd, segmentsEnd)) {
-    hasSegments = true;
-    maxSegmentTimeMs = Math.max(maxSegmentTimeMs, segment.startTimeMs, segment.endTimeMs);
-    mergeClusterSummary(
-      clusterMap,
-      segment.clusterIndex,
-      segment.startTimeMs,
-      segment.endTimeMs,
-      segment.containsKeyframe,
-    );
-    switch (segment.kind) {
-      case SEGMENT_KIND.frames: {
-        // Per-segment marker resolution — self-contained, no cross-segment carry
-        // (see framePreviewContentDedup.ts).
-        const records = hydrateFramePreviewContent(
-          decodeRecords<DeltaFrame>(segment.payload, budget),
-        );
-        assertFrameFormatCompatibility(records, formatVersion);
-        frames.push(...records);
-        break;
-      }
-      case SEGMENT_KIND.slide:
-        slideEvents.push(...decodeRecords<SlideEvent>(segment.payload, budget));
-        break;
-      case SEGMENT_KIND.preview:
-        previewEvents.push(...decodeRecords<PreviewEvent>(segment.payload, budget));
-        break;
-      case SEGMENT_KIND.previewDoc:
-        previewInitialDocuments.push(
-          ...decodeRecords<PreviewInitialDocument>(segment.payload, budget),
-        );
-        break;
-      case SEGMENT_KIND.previewPatch:
-        previewPatchBatches.push(
-          ...hydratePreviewPatchBatches(
-            decodeRecords<PreviewDomPatchBatch>(segment.payload, budget),
-          ),
-        );
-        break;
-      case SEGMENT_KIND.workspace:
-        workspaceEvents.push(
-          ...hydrateWorkspaceEvents(
-            decodeRecords<WorkspaceRecordingEvent>(segment.payload, budget),
-          ),
-        );
-        break;
-      case SEGMENT_KIND.workspaceAsset: {
-        assertWorkspaceAssetFormatCompatibility(formatVersion);
-        const asset = decodeWorkspaceAssetPayload(segment.payload);
-        if (workspaceAssetIds.has(asset.descriptor.assetId)) {
-          throw new Error("Invalid SCR3 stream: duplicate workspace asset segment");
-        }
-        workspaceAssetIds.add(asset.descriptor.assetId);
-        workspaceAssets.push(asset);
-        break;
-      }
-      case SEGMENT_KIND.runtime:
-        runtimeEvents.push(...decodeRecords<RuntimeRecordingEvent>(segment.payload, budget));
-        break;
-      case SEGMENT_KIND.cursor:
-        cursorEvents.push(...decodeRecords<CursorRecordingEvent>(segment.payload, budget));
-        break;
-      case SEGMENT_KIND.whiteboard:
-        whiteboardEvents.push(...decodeRecords<WhiteboardEvent>(segment.payload, budget));
-        break;
-      case SEGMENT_KIND.chat:
-        chatEvents.push(...decodeRecords<ChatRecordingEvent>(segment.payload, budget));
-        break;
-      case SEGMENT_KIND.finalMeta:
-        meta = mergeFinalMetadata(meta, segment.payload, budget);
-        break;
-    }
-    const decodedRecordCount =
-      frames.length +
-      slideEvents.length +
-      previewEvents.length +
-      previewInitialDocuments.length +
-      previewPatchBatches.length +
-      workspaceEvents.length +
-      workspaceAssetIds.size +
-      runtimeEvents.length +
-      cursorEvents.length +
-      whiteboardEvents.length +
-      chatEvents.length;
-    if (decodedRecordCount > MAX_DECODED_RECORDS) {
-      throw new Error("Invalid SCR3 stream: recording contains too many records");
-    }
-  }
-
-  frames.sort((left, right) => left.timestamp - right.timestamp);
-  slideEvents.sort((left, right) => left.timestamp - right.timestamp);
-  previewEvents.sort((left, right) => left.timestamp - right.timestamp);
-  previewInitialDocuments.sort((left, right) => left.time - right.time);
-  previewPatchBatches.sort((left, right) => left.time - right.time);
-  workspaceEvents.sort((left, right) => left.timestamp - right.timestamp);
-  runtimeEvents.sort((left, right) => left.timestamp - right.timestamp);
-  cursorEvents.sort((left, right) => left.timestamp - right.timestamp);
-  whiteboardEvents.sort((left, right) => left.timestamp - right.timestamp);
-  chatEvents.sort((left, right) => left.timestamp - right.timestamp);
-
-  return assembleRecording({
-    meta,
-    streamFinalized,
-    hasSegments,
-    maxSegmentTimeMs,
-    frames,
-    slideEvents,
-    previewEvents,
-    previewInitialDocuments,
-    previewPatchBatches,
-    workspaceEvents,
-    workspaceAssets,
-    runtimeEvents,
-    cursorEvents,
-    whiteboardEvents,
-    chatEvents,
-    clusterSummaries: Array.from(clusterMap.values()),
-  });
+function sortClusters(clusters: RecordingClusterMeta[]): RecordingClusterMeta[] {
+  return clusters.sort((left, right) => left.index - right.index);
 }
 
 /**
@@ -416,7 +410,32 @@ export function decodeRecordingStream(bytes: Uint8Array): Recording {
   if (bytes.byteLength > MAX_STREAM_BYTES) {
     throw new Error("Invalid SCR3 stream: recording exceeds the size limit");
   }
-  return decodeSegments(bytes);
+  const { meta, headerEnd, formatVersion } = parseHeader(bytes);
+  const stream = createDecodedStream(meta, formatVersion);
+  const footerStart = findFooterStart(bytes, headerEnd);
+
+  for (const segment of walkSegments(bytes, headerEnd, footerStart ?? bytes.length)) {
+    ingestSegment(stream, segment);
+  }
+
+  // A whole buffer may come from any writer, so order each track by time here. Array
+  // sort is stable, so records already in timeline order keep their stream order.
+  const { records } = stream;
+  const byTimestamp = (left: { timestamp: number }, right: { timestamp: number }) =>
+    left.timestamp - right.timestamp;
+  const byTime = (left: { time: number }, right: { time: number }) => left.time - right.time;
+  records.frames.sort(byTimestamp);
+  records.slideEvents.sort(byTimestamp);
+  records.previewEvents.sort(byTimestamp);
+  records.previewInitialDocuments.sort(byTime);
+  records.previewPatchBatches.sort(byTime);
+  records.workspaceEvents.sort(byTimestamp);
+  records.runtimeEvents.sort(byTimestamp);
+  records.cursorEvents.sort(byTimestamp);
+  records.whiteboardEvents.sort(byTimestamp);
+  records.chatEvents.sort(byTimestamp);
+
+  return assembleRecording(stream, records, footerStart !== null);
 }
 
 // ============================================================================
@@ -461,44 +480,18 @@ const STREAMING_READER_INITIAL_CAPACITY = 64 * 1024;
 
 export function createStreamingRecordingReader(): StreamingRecordingReader {
   let buffer = new Uint8Array(0);
-  // One budget for the lifetime of this reader, matching decodeSegments.
-  const budget = createInflationBudget();
   let retainedLength = 0;
   let totalLength = 0;
 
-  let headerParsed = false;
-  let meta: RecordingStreamMeta | null = null;
-  let formatVersion: number | null = null;
+  // Null until the header has fully arrived.
+  let stream: DecodedStream | null = null;
   let finalized = false;
-
-  const frames: DeltaFrame[] = [];
-  const slideEvents: SlideEvent[] = [];
-  const previewEvents: PreviewEvent[] = [];
-  const previewInitialDocuments: PreviewInitialDocument[] = [];
-  const previewPatchBatches: PreviewDomPatchBatch[] = [];
-  const workspaceEvents: WorkspaceRecordingEvent[] = [];
-  const workspaceAssets: WorkspaceRecordingAsset[] = [];
-  const workspaceAssetIds = new Set<string>();
-  const runtimeEvents: RuntimeRecordingEvent[] = [];
-  const cursorEvents: CursorRecordingEvent[] = [];
-  const whiteboardEvents: WhiteboardEvent[] = [];
-  const chatEvents: ChatRecordingEvent[] = [];
-  const clusterMap = new Map<number, RecordingClusterMeta>();
-  // Segments arrive in stream (= encode) order, so one carry map per reader mirrors
-  // the writer's stripper state (see workspaceEventDedup.ts).
-  const hydrateWorkspaceEvents = createWorkspaceEventContentHydrator();
-  // Same stream-order contract for repeated rrweb added-node payloads
-  // (see previewPatchDedup.ts).
-  const hydratePreviewPatchBatches = createPreviewAddNodeHydrator();
-
-  let segmentCount = 0;
-  let maxSegmentTimeMs = 0;
 
   let deltaCursor = 0;
   let deliveredSegmentCount = 0;
   let deliveredDuration = 0;
   let deliveredFinalized = false;
-  const deliveredRecordCounts = {
+  const deliveredRecordCounts: Record<keyof DecodedRecords, number> = {
     frames: 0,
     slideEvents: 0,
     previewEvents: 0,
@@ -554,7 +547,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
   };
 
   const tryParseHeader = (): void => {
-    if (headerParsed || retainedLength < HEADER_PREFIX_SIZE) return;
+    if (stream || retainedLength < HEADER_PREFIX_SIZE) return;
     if (!hasMagicAt(buffer, 0)) {
       throw new Error("Invalid SCR3 stream: bad magic number");
     }
@@ -566,160 +559,14 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     const metaEnd = HEADER_PREFIX_SIZE + metaLength;
     if (metaEnd > retainedLength) return; // header not fully downloaded yet
 
-    const nextFormatVersion = view.getUint16(4, true);
-    if (!isSupportedStreamFormatVersion(nextFormatVersion)) {
-      throw new Error(`Unsupported SCR3 format version: ${nextFormatVersion}`);
-    }
-    const parsedHeader = parseHeader(buffer.subarray(0, metaEnd));
-    meta = parsedHeader.meta;
-    formatVersion = parsedHeader.formatVersion;
-    headerParsed = true;
+    const { meta, formatVersion } = parseHeader(buffer.subarray(0, metaEnd));
+    stream = createDecodedStream(meta, formatVersion);
     deliveredDuration = meta.duration;
     discardPrefix(metaEnd);
   };
 
-  // Decodes the payload *before* mutating any accumulator so that a throw (a partial
-  // footer misparsed as a segment, or genuine corruption) leaves the reader's state and
-  // cursor untouched and the parse can be safely retried or rolled back.
-  const ingestSegment = (header: SegmentHeaderFields, payload: Uint8Array): void => {
-    const currentFormatVersion = formatVersion;
-    if (!meta || currentFormatVersion === null) return;
-    const maxPayloadBytes =
-      header.kind === SEGMENT_KIND.workspaceAsset
-        ? MAX_WORKSPACE_ASSET_PAYLOAD_BYTES
-        : MAX_COMPRESSED_SEGMENT_BYTES;
-    if (header.byteLength > maxPayloadBytes) {
-      throw new Error("Invalid SCR3 stream: segment exceeds the size limit");
-    }
-
-    let commit: () => void;
-    let pendingRecordCount = 0;
-    switch (header.kind) {
-      case SEGMENT_KIND.frames: {
-        // Resolve per-segment previewState-content markers first (self-contained,
-        // no reader state — see framePreviewContentDedup.ts), then normalize each
-        // frame once, as it arrives. `getRecording()` then skips the
-        // whole-recording normalize pass (`prenormalized`), so progressive decoding
-        // stays O(total bytes) instead of re-cloning every frame per interval.
-        const records = hydrateFramePreviewContent(decodeRecords<DeltaFrame>(payload, budget)).map(
-          normalizeDeltaFrame,
-        );
-        assertFrameFormatCompatibility(records, currentFormatVersion);
-        pendingRecordCount = records.length;
-        commit = () => frames.push(...records);
-        break;
-      }
-      case SEGMENT_KIND.slide: {
-        const records = decodeRecords<SlideEvent>(payload, budget);
-        pendingRecordCount = records.length;
-        commit = () => slideEvents.push(...records);
-        break;
-      }
-      case SEGMENT_KIND.preview: {
-        const records = decodeRecords<PreviewEvent>(payload, budget);
-        pendingRecordCount = records.length;
-        commit = () => previewEvents.push(...records);
-        break;
-      }
-      case SEGMENT_KIND.previewDoc: {
-        const records = decodeRecords<PreviewInitialDocument>(payload, budget);
-        pendingRecordCount = records.length;
-        commit = () => previewInitialDocuments.push(...records);
-        break;
-      }
-      case SEGMENT_KIND.previewPatch: {
-        const records = decodeRecords<PreviewDomPatchBatch>(payload, budget);
-        pendingRecordCount = records.length;
-        // Hydration advances the template list, so it runs inside `commit` — a
-        // decode throw above must leave the dedup state untouched.
-        commit = () => previewPatchBatches.push(...hydratePreviewPatchBatches(records));
-        break;
-      }
-      case SEGMENT_KIND.workspace: {
-        const records = decodeRecords<WorkspaceRecordingEvent>(payload, budget);
-        pendingRecordCount = records.length;
-        // Hydration advances the carry map, so it runs inside `commit` — a decode
-        // throw above must leave the dedup state untouched along with the arrays.
-        commit = () => workspaceEvents.push(...hydrateWorkspaceEvents(records));
-        break;
-      }
-      case SEGMENT_KIND.workspaceAsset: {
-        assertWorkspaceAssetFormatCompatibility(currentFormatVersion);
-        const asset = decodeWorkspaceAssetPayload(payload);
-        if (workspaceAssetIds.has(asset.descriptor.assetId)) {
-          throw new Error("Invalid SCR3 stream: duplicate workspace asset segment");
-        }
-        pendingRecordCount = 1;
-        commit = () => {
-          workspaceAssetIds.add(asset.descriptor.assetId);
-          workspaceAssets.push(asset);
-        };
-        break;
-      }
-      case SEGMENT_KIND.runtime: {
-        const records = decodeRecords<RuntimeRecordingEvent>(payload, budget);
-        pendingRecordCount = records.length;
-        commit = () => runtimeEvents.push(...records);
-        break;
-      }
-      case SEGMENT_KIND.cursor: {
-        const records = decodeRecords<CursorRecordingEvent>(payload, budget);
-        pendingRecordCount = records.length;
-        commit = () => cursorEvents.push(...records);
-        break;
-      }
-      case SEGMENT_KIND.whiteboard: {
-        const records = decodeRecords<WhiteboardEvent>(payload, budget);
-        pendingRecordCount = records.length;
-        commit = () => whiteboardEvents.push(...records);
-        break;
-      }
-      case SEGMENT_KIND.chat: {
-        const records = decodeRecords<ChatRecordingEvent>(payload, budget);
-        pendingRecordCount = records.length;
-        commit = () => chatEvents.push(...records);
-        break;
-      }
-      case SEGMENT_KIND.finalMeta: {
-        const finalMeta = mergeFinalMetadata(meta, payload, budget);
-        commit = () => {
-          meta = finalMeta;
-        };
-        break;
-      }
-      default:
-        commit = () => {};
-    }
-
-    const decodedRecordCount =
-      frames.length +
-      slideEvents.length +
-      previewEvents.length +
-      previewInitialDocuments.length +
-      previewPatchBatches.length +
-      workspaceEvents.length +
-      workspaceAssetIds.size +
-      runtimeEvents.length +
-      cursorEvents.length +
-      whiteboardEvents.length +
-      chatEvents.length;
-    if (decodedRecordCount + pendingRecordCount > MAX_DECODED_RECORDS) {
-      throw new Error("Invalid SCR3 stream: recording contains too many records");
-    }
-    segmentCount += 1;
-    maxSegmentTimeMs = Math.max(maxSegmentTimeMs, header.startTimeMs, header.endTimeMs);
-    mergeClusterSummary(
-      clusterMap,
-      header.clusterIndex,
-      header.startTimeMs,
-      header.endTimeMs,
-      header.containsKeyframe,
-    );
-    commit();
-  };
-
   const parseSegments = (): void => {
-    if (!headerParsed || finalized) return;
+    if (!stream || finalized) return;
 
     const retained = buffer.subarray(0, retainedLength);
     const footerStart = findFooterStart(retained, 0);
@@ -741,12 +588,12 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         // inside its segment region is a genuine future segment that is safe to skip.
         if (footerStart === null) break;
         cursor = payloadEnd;
-        segmentCount += 1;
+        stream.segmentCount += 1;
         continue;
       }
 
       try {
-        ingestSegment(header, buffer.subarray(payloadStart, payloadEnd));
+        ingestSegment(stream, { header, payload: buffer.subarray(payloadStart, payloadEnd) });
       } catch (error) {
         // Inside the segment region (footer already seen) this is real corruption.
         // Otherwise these are most likely partial-footer bytes that happen to read as
@@ -762,7 +609,7 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
         throw new Error("Invalid SCR3 stream: malformed segment tail before footer");
       }
       const footerSegmentCount = view.getUint32(footerStart, true);
-      if (footerSegmentCount !== segmentCount) {
+      if (footerSegmentCount !== stream.segmentCount) {
         throw new Error("Invalid SCR3 stream: footer segment count does not match the stream");
       }
       finalized = true;
@@ -796,80 +643,50 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
       }
     },
     readDelta() {
-      if (!headerParsed || !meta) return null;
-      const duration = Math.max(meta.duration, maxSegmentTimeMs);
+      if (!stream) return null;
+      const { meta, records } = stream;
+      const duration = Math.max(meta.duration, stream.maxSegmentTimeMs);
       const hasChanges =
-        deliveredSegmentCount !== segmentCount ||
+        deliveredSegmentCount !== stream.segmentCount ||
         deliveredDuration !== duration ||
         deliveredFinalized !== finalized;
       if (!hasChanges) return null;
 
+      const undelivered = <K extends keyof DecodedRecords>(key: K): DecodedRecords[K] =>
+        records[key].slice(deliveredRecordCounts[key]) as DecodedRecords[K];
       const delta: StreamingRecordingDelta = {
         cursor: ++deltaCursor,
         recordingId: meta.id,
         duration,
         streamFinalized: finalized,
-        newFrames: frames.slice(deliveredRecordCounts.frames),
-        newSlideEvents: slideEvents.slice(deliveredRecordCounts.slideEvents),
-        newPreviewEvents: previewEvents.slice(deliveredRecordCounts.previewEvents),
-        newPreviewInitialDocuments: previewInitialDocuments.slice(
-          deliveredRecordCounts.previewInitialDocuments,
-        ),
-        newPreviewPatchBatches: previewPatchBatches.slice(
-          deliveredRecordCounts.previewPatchBatches,
-        ),
-        newWorkspaceEvents: workspaceEvents.slice(deliveredRecordCounts.workspaceEvents),
-        newWorkspaceAssets: workspaceAssets.slice(),
-        newRuntimeEvents: runtimeEvents.slice(deliveredRecordCounts.runtimeEvents),
-        newCursorEvents: cursorEvents.slice(deliveredRecordCounts.cursorEvents),
-        newWhiteboardEvents: whiteboardEvents.slice(deliveredRecordCounts.whiteboardEvents),
-        newChatEvents: chatEvents.slice(deliveredRecordCounts.chatEvents),
+        newFrames: undelivered("frames"),
+        newSlideEvents: undelivered("slideEvents"),
+        newPreviewEvents: undelivered("previewEvents"),
+        newPreviewInitialDocuments: undelivered("previewInitialDocuments"),
+        newPreviewPatchBatches: undelivered("previewPatchBatches"),
+        newWorkspaceEvents: undelivered("workspaceEvents"),
+        // Asset bytes are a handoff queue, not part of the long-lived decoded
+        // recording. Consumers persist them before applying the returned delta.
+        newWorkspaceAssets: stream.workspaceAssets.splice(0),
+        newRuntimeEvents: undelivered("runtimeEvents"),
+        newCursorEvents: undelivered("cursorEvents"),
+        newWhiteboardEvents: undelivered("whiteboardEvents"),
+        newChatEvents: undelivered("chatEvents"),
       };
 
-      deliveredSegmentCount = segmentCount;
+      deliveredSegmentCount = stream.segmentCount;
       deliveredDuration = duration;
       deliveredFinalized = finalized;
-      deliveredRecordCounts.frames = frames.length;
-      deliveredRecordCounts.slideEvents = slideEvents.length;
-      deliveredRecordCounts.previewEvents = previewEvents.length;
-      deliveredRecordCounts.previewInitialDocuments = previewInitialDocuments.length;
-      deliveredRecordCounts.previewPatchBatches = previewPatchBatches.length;
-      deliveredRecordCounts.workspaceEvents = workspaceEvents.length;
-      deliveredRecordCounts.runtimeEvents = runtimeEvents.length;
-      deliveredRecordCounts.cursorEvents = cursorEvents.length;
-      deliveredRecordCounts.whiteboardEvents = whiteboardEvents.length;
-      deliveredRecordCounts.chatEvents = chatEvents.length;
-      // Asset bytes are a handoff queue, not part of the long-lived decoded
-      // recording. Consumers persist them before applying the returned delta.
-      workspaceAssets.length = 0;
+      for (const key of Object.keys(deliveredRecordCounts) as Array<keyof DecodedRecords>) {
+        deliveredRecordCounts[key] = records[key].length;
+      }
       return delta;
     },
     getRecording() {
-      if (!headerParsed || !meta) return null;
+      if (!stream) return null;
       const endSnapshotSpan = startPerformanceSpan("recording.reader_snapshot");
       try {
-        return assembleRecording({
-          meta,
-          streamFinalized: finalized,
-          // Frames were normalized at ingest; skip the whole-recording normalize pass.
-          prenormalized: true,
-          hasSegments: segmentCount > 0,
-          maxSegmentTimeMs: Math.max(meta.duration, maxSegmentTimeMs),
-          // Fresh arrays per snapshot so consumers keyed on reference see the growth;
-          // copying pointers is cheap, unlike the per-frame deep clone this replaces.
-          frames: frames.slice(),
-          slideEvents: slideEvents.slice(),
-          previewEvents: previewEvents.slice(),
-          previewInitialDocuments: previewInitialDocuments.slice(),
-          previewPatchBatches: previewPatchBatches.slice(),
-          workspaceEvents: workspaceEvents.slice(),
-          workspaceAssets: workspaceAssets.slice(),
-          runtimeEvents: runtimeEvents.slice(),
-          cursorEvents: cursorEvents.slice(),
-          whiteboardEvents: whiteboardEvents.slice(),
-          chatEvents: chatEvents.slice(),
-          clusterSummaries: Array.from(clusterMap.values()),
-        });
+        return assembleRecording(stream, copyDecodedRecords(stream.records), finalized);
       } finally {
         endSnapshotSpan();
       }

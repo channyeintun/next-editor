@@ -9,8 +9,10 @@ import {
 import { decompressBinaryToRecordings } from "./recordingCodec";
 import {
   createStreamingRecordingReader,
+  createStreamingRecordingWriter,
   decodeRecordingStream,
   encodeRecordingToStream,
+  SEGMENT_KIND,
 } from "./streamingRecordingCodec";
 import type { StreamingRecordingDelta } from "./streamingRecordingCodec";
 import {
@@ -404,6 +406,46 @@ describe("recordingCodec", () => {
     // The snapshots must have different array references (not shared).
     expect(snapshot1.cursorEvents).not.toBe(snapshot2.cursorEvents);
     expect(snapshot1.slideEvents).not.toBe(snapshot2.slideEvents);
+  });
+
+  it("progressive snapshots keep the cluster bounds they were handed", () => {
+    // A live stream's header carries no cluster table, so clusters come from the
+    // per-segment summaries, which later segments widen in place. A snapshot handed out
+    // before that must keep its own copy.
+    const writer = createStreamingRecordingWriter();
+    writer.writeHeader({
+      version: 4,
+      id: "live-clusters",
+      name: "Live clusters",
+      keyframeInterval: 120,
+      createdAt: 1,
+      duration: 0,
+    });
+    const reader = createStreamingRecordingReader();
+    writer.appendEventSegment(
+      SEGMENT_KIND.cursor,
+      [{ timestamp: 100, x: 1, y: 1, visible: true }],
+      {
+        clusterIndex: 0,
+      },
+    );
+    reader.push(writer.drainPending());
+    const early = reader.getRecording();
+    expect(early?.clusters).toEqual([
+      { index: 0, startTimeMs: 100, endTimeMs: 100, containsKeyframe: false },
+    ]);
+
+    writer.appendEventSegment(
+      SEGMENT_KIND.cursor,
+      [{ timestamp: 900, x: 2, y: 2, visible: true }],
+      {
+        clusterIndex: 0,
+      },
+    );
+    reader.push(writer.drainPending());
+
+    expect(reader.getRecording()?.clusters?.[0].endTimeMs).toBe(900);
+    expect(early?.clusters?.[0].endTimeMs).toBe(100);
   });
 
   it("decodes a replayable prefix before the footer arrives, then finalizes", async () => {
