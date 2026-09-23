@@ -203,13 +203,13 @@ async function createRoom(
   }
 
   /** Appends `text` to the shared document and returns it as a client-update frame. */
-  function edit(text: string): ArrayBuffer {
+  function edit(text: string, updateId = uuid()): ArrayBuffer {
     const before = Y.encodeStateVector(doc);
     doc.getText("scratch").insert(doc.getText("scratch").length, text);
     return toArrayBuffer(
       encodeCollaborationClientUpdate({
         clientId: CLIENT_ID,
-        updateId: uuid(),
+        updateId,
         update: Y.encodeStateAsUpdate(doc, before),
       }),
     );
@@ -295,6 +295,42 @@ describe("CollaborationRoomDurableObject document updates", () => {
     expect(acks(editor)).toHaveLength(1);
     expect(peer.frames().map((frame) => frame.kind)).toEqual(["server-update"]);
     expect(await persistedText()).toBe("seed+edit");
+  });
+
+  it("serves an accepted update to the next sync request", async () => {
+    const { room, connect, edit } = await createRoom();
+    const editor = connect(MEMBER_ID, "editor");
+    const joining = connect(PEER_ID, "viewer");
+
+    await room.webSocketMessage(editor as never, edit("+edit"));
+    const fresh = new Y.Doc();
+    await room.webSocketMessage(
+      joining as never,
+      toArrayBuffer(encodeCollaborationSyncStep1(fresh)),
+    );
+
+    const reply = joining.frames().find((frame) => frame.kind === "sync");
+    Y.applyUpdate(fresh, (reply as { payload: Uint8Array }).payload);
+    expect(fresh.getText("scratch").toString()).toBe("seed+edit");
+  });
+
+  it("fans out the stored update when a retry reuses its update ID", async () => {
+    const { room, connect, edit, persistedText } = await createRoom();
+    const editor = connect(MEMBER_ID, "editor");
+    const peer = connect(PEER_ID, "viewer");
+    const updateId = uuid();
+
+    await room.webSocketMessage(editor as never, edit("+first", updateId));
+    await room.webSocketMessage(editor as never, edit("+changed", updateId));
+
+    expect(acks(editor)).toEqual([
+      expect.objectContaining({ duplicate: false }),
+      expect.objectContaining({ duplicate: true }),
+    ]);
+    // Both fan-outs carry the first update's stream ID and bytes.
+    const [original, retry] = peer.frames();
+    expect(retry).toEqual(original);
+    expect(await persistedText()).toBe("seed+first");
   });
 
   it("refuses a viewer's update without persisting or broadcasting it", async () => {

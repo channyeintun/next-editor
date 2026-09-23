@@ -10,6 +10,7 @@ import {
   encodeCollaborationServerUpdate,
   encodeCollaborationSyncStep2,
   type CollaborationAwarenessProtocolEntry,
+  type CollaborationBinaryFrame,
 } from "../../../src/collaboration/binaryProtocol";
 import {
   COLLABORATION_DOCUMENT_SCHEMA_VERSION,
@@ -32,7 +33,6 @@ import {
   type CollaborationBootstrapResponse,
   type CollaborationControlEvent,
   type CollaborationDocumentUpdateEvent,
-  type CollaborationDocumentUpdateInput,
   type CollaborationTeachingInitializationInput,
   type CollaborationRole,
   type CollaborationRoomControlCommand,
@@ -52,7 +52,6 @@ import {
   projectCollaborationDocument,
 } from "../../../src/collaboration/projectDocument";
 import {
-  applyEncodedYjsUpdate,
   decodeYjsSnapshot,
   decodeYjsUpdate,
   encodeYjsUpdate,
@@ -111,6 +110,8 @@ const socketAttachmentSchema = canonicalSocketSessionSchema
   .strict();
 
 type SocketAttachment = z.infer<typeof socketAttachmentSchema>;
+
+type ClientUpdateFrame = Extract<CollaborationBinaryFrame, { kind: "client-update" }>;
 
 function encodeCanonicalSession(session: CanonicalSocketSession): string {
   return encodeURIComponent(JSON.stringify(canonicalSocketSessionSchema.parse(session)));
@@ -450,14 +451,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     }
     const refreshed = await this.refreshAccess(socket, attachment);
     if (!refreshed) return;
-    const input: CollaborationDocumentUpdateInput = {
-      protocolVersion: COLLABORATION_PROTOCOL_VERSION,
-      documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
-      clientId: frame.clientId,
-      updateId: frame.updateId,
-      update: encodeYjsUpdate(frame.update),
-    };
-    await this.acceptDocumentUpdate(socket, refreshed, input);
+    this.acceptDocumentUpdate(socket, refreshed, frame);
   }
 
   webSocketClose(socket: WebSocket): void {
@@ -820,11 +814,11 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     );
   }
 
-  private async acceptDocumentUpdate(
+  private acceptDocumentUpdate(
     socket: WebSocket,
     attachment: SocketAttachment,
-    input: CollaborationDocumentUpdateInput,
-  ): Promise<void> {
+    frame: ClientUpdateFrame,
+  ): void {
     const handlerStartedAt = performance.now();
     if (!canPublishCollaborationUpdate(attachment.role)) {
       this.rejectSocket(
@@ -833,7 +827,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         "This collaboration room is read-only for your role",
         false,
         undefined,
-        input.updateId,
+        frame.updateId,
       );
       return;
     }
@@ -856,7 +850,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         "Collaboration update rate limit exceeded",
         false,
         undefined,
-        input.updateId,
+        frame.updateId,
       );
       return;
     }
@@ -880,11 +874,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       };
       validationDocument.on("afterTransaction", observeTransaction);
       try {
-        Y.applyUpdate(
-          validationDocument,
-          decodeYjsUpdate(input.update),
-          "server-teaching-validation",
-        );
+        Y.applyUpdate(validationDocument, frame.update, "server-teaching-validation");
       } finally {
         validationDocument.off("afterTransaction", observeTransaction);
       }
@@ -911,13 +901,17 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         "Invalid document update",
         true,
         1008,
-        input.updateId,
+        frame.updateId,
       );
       return;
     }
 
     const event: CollaborationDocumentUpdateEvent = {
-      ...input,
+      protocolVersion: COLLABORATION_PROTOCOL_VERSION,
+      documentSchemaVersion: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+      clientId: frame.clientId,
+      updateId: frame.updateId,
+      update: encodeYjsUpdate(frame.update),
       roomId: attachment.roomId,
       actorId: attachment.userId,
       receivedAt: Date.now(),
@@ -934,14 +928,16 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       });
       const acknowledgedAt = performance.now();
       if (result.event) {
-        this.broadcastDocument(result.streamId, result.event, socket);
+        // A retry fans out the stored update, whatever bytes it was resent with.
+        const update = result.duplicate ? decodeYjsUpdate(result.event.update) : frame.update;
+        this.broadcastDocument(result.streamId, event.updateId, update, socket);
       }
       const broadcastAt = performance.now();
       if (result.shouldCompact) this.scheduleSqliteCompaction();
       console.log("collaboration_websocket_update", {
         roomId: attachment.roomId,
         updateId: event.updateId,
-        bytes: Math.floor((event.update.length * 3) / 4),
+        bytes: frame.update.byteLength,
         duplicate: result.duplicate,
         updateCount: result.updateCount,
         persistence: "do-sqlite",
@@ -976,16 +972,10 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     event: CollaborationDocumentUpdateEvent,
   ): StoredAppendRoomSqliteUpdateResult {
     const result = this.sqliteDocument.append(event);
-    if (result.duplicate) {
-      // Validation applies the submitted bytes optimistically. A retry with an
-      // already-used update ID may carry different bytes, so rematerialize the
-      // shadow document from the authoritative SQLite snapshot/tail.
-      this.resetBinaryDocument();
-    } else if (this.binaryDocument) {
-      // The validation pass already applied this update. Yjs application is
-      // idempotent, and this keeps the helper safe if validation is refactored.
-      applyEncodedYjsUpdate(this.binaryDocument, event.update, "sqlite-live-update");
-    }
+    // Validation applied the submitted bytes to the shadow document, which is
+    // right for a new update. A retry with an already-used update ID may carry
+    // different bytes, so rematerialize from the authoritative SQLite state.
+    if (result.duplicate) this.resetBinaryDocument();
     return result;
   }
 
@@ -1140,11 +1130,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
           initializationUpdate.byteLength,
         );
         this.resetBinaryDocument();
-        this.broadcastTeachingInitialization(
-          result.streamId,
-          input.update.updateId,
-          initializationUpdate,
-        );
+        this.broadcastDocument(result.streamId, input.update.updateId, initializationUpdate);
       } catch (error) {
         return Response.json(
           {
@@ -1247,15 +1233,12 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
 
   private broadcastDocument(
     streamId: string,
-    event: CollaborationDocumentUpdateEvent,
+    updateId: string,
+    update: Uint8Array,
     except?: WebSocket,
   ): void {
     const binary = exactArrayBuffer(
-      encodeCollaborationServerUpdate({
-        streamId,
-        updateId: event.updateId,
-        update: decodeYjsUpdate(event.update),
-      }),
+      encodeCollaborationServerUpdate({ streamId, updateId, update }),
     );
     for (const socket of this.ctx.getWebSockets()) {
       if (socket === except || !isOpen(socket)) continue;
@@ -1263,24 +1246,6 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         socket.send(binary);
       } catch {
         socket.close(1011, "broadcast failed");
-      }
-    }
-  }
-
-  private broadcastTeachingInitialization(
-    streamId: string,
-    updateId: string,
-    update: Uint8Array,
-  ): void {
-    const binary = exactArrayBuffer(
-      encodeCollaborationServerUpdate({ streamId, updateId, update }),
-    );
-    for (const socket of this.ctx.getWebSockets()) {
-      if (!isOpen(socket)) continue;
-      try {
-        socket.send(binary);
-      } catch {
-        socket.close(1011, "teaching initialization broadcast failed");
       }
     }
   }
