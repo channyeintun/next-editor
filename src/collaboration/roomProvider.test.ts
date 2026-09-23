@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import {
   COLLABORATION_BINARY_PROTOCOL_VERSION,
@@ -400,5 +400,204 @@ describe("CollaborationRoomProvider", () => {
 
     provider.stop();
     server.destroy();
+  });
+});
+
+function socketRecorder() {
+  const sockets: FakeWebSocket[] = [];
+  return {
+    sockets,
+    factory: () => {
+      const socket = new FakeWebSocket();
+      sockets.push(socket);
+      return socket;
+    },
+  };
+}
+
+function sentFrames(socket: FakeWebSocket) {
+  return socket.binarySent.map((raw) => decodeCollaborationBinaryFrame(raw));
+}
+
+async function openAndSync(
+  provider: CollaborationRoomProvider,
+  socket: FakeWebSocket,
+  server: Y.Doc,
+): Promise<void> {
+  socket.open();
+  await waitUntil(() => socket.binarySent.length >= 1);
+  const request = decodeCollaborationBinaryFrame(socket.binarySent[0]!);
+  if (request.kind !== "sync") throw new Error("state-vector sync was not requested");
+  socket.message(exactArrayBuffer(encodeCollaborationSyncStep2(server, request.payload)));
+  await waitUntil(() => provider.connectionState === "live");
+}
+
+async function nextClientUpdate(socket: FakeWebSocket) {
+  await waitUntil(() => sentFrames(socket).some((frame) => frame.kind === "client-update"));
+  const frame = sentFrames(socket).findLast((candidate) => candidate.kind === "client-update");
+  if (frame?.kind !== "client-update") throw new Error("no client update was sent");
+  return frame;
+}
+
+describe("CollaborationRoomProvider connection lifecycle", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    resetPerformanceMetricsForTests();
+  });
+
+  it("backs off between reconnect attempts and fails once they are exhausted", async () => {
+    vi.useFakeTimers();
+    const { sockets, factory } = socketRecorder();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      maxReconnectAttempts: 2,
+      random: () => 0,
+      webSocketFactory: factory,
+    });
+
+    await provider.start();
+    expect(sockets).toHaveLength(1);
+    sockets[0]!.close(1006, "network");
+    expect(provider.connectionState).toBe("reconnecting");
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(sockets).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sockets).toHaveLength(2);
+    expect(provider.connectionState).toBe("connecting");
+
+    sockets[1]!.close(1006, "network");
+    await vi.advanceTimersByTimeAsync(999);
+    expect(sockets).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sockets).toHaveLength(3);
+
+    sockets[2]!.close(1006, "network");
+    expect(provider.connectionState).toBe("failed");
+    expect(provider.actor.getSnapshot().context.error).toBe(
+      "Collaboration reconnect attempts were exhausted",
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sockets).toHaveLength(3);
+    provider.stop();
+  });
+
+  it("stays failed with the host's reason after a 4001 close, even with an update in flight", async () => {
+    const { sockets, factory } = socketRecorder();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      batchWindowMs: 0,
+      random: () => 0,
+      webSocketFactory: factory,
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+
+    provider.doc.getText("source").insert(0, "in flight");
+    await nextClientUpdate(sockets[0]!);
+    sockets[0]!.close(4001, "room closed");
+    // The close rejects the pending ack; that rejection must not schedule a
+    // reconnect that would clear the fatal state and its message.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    expect(provider.connectionState).toBe("failed");
+    expect(provider.actor.getSnapshot().context.error).toBe(
+      "The host ended this live collaboration room",
+    );
+    expect(sockets).toHaveLength(1);
+    provider.stop();
+  });
+
+  it("opens no socket when stopped while the room request is in flight", async () => {
+    const { sockets, factory } = socketRecorder();
+    let resolveRoom: (session: CollaborationRoomSession) => void = () => {};
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: { getRoom: () => new Promise((resolve) => (resolveRoom = resolve)) },
+      clientId: CLIENT_ID,
+      webSocketFactory: factory,
+    });
+
+    const starting = provider.start();
+    provider.stop();
+    resolveRoom(roomSession());
+    await starting;
+
+    expect(sockets).toHaveLength(0);
+    expect(provider.connectionState).toBe("disconnected");
+  });
+
+  it("applies server updates that arrive during synchronization after the snapshot", async () => {
+    const { sockets, factory } = socketRecorder();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      webSocketFactory: factory,
+    });
+    const server = new Y.Doc();
+    server.getText("source").insert(0, "snapshot");
+    await provider.start();
+    const socket = sockets[0]!;
+    socket.open();
+    await waitUntil(() => socket.binarySent.length === 1);
+    const request = decodeCollaborationBinaryFrame(socket.binarySent[0]!);
+    if (request.kind !== "sync") throw new Error("state-vector sync was not requested");
+    const snapshot = encodeCollaborationSyncStep2(server, request.payload);
+
+    const beforeRemote = Y.encodeStateVector(server);
+    server.getText("source").insert(8, "+remote");
+    socket.message(
+      exactArrayBuffer(
+        encodeCollaborationServerUpdate({
+          streamId: "2-0",
+          updateId: REMOTE_UPDATE_ID,
+          update: Y.encodeStateAsUpdate(server, beforeRemote),
+        }),
+      ),
+    );
+    expect(provider.doc.getText("source").toString()).toBe("");
+
+    socket.message(exactArrayBuffer(snapshot));
+    await waitUntil(() => provider.connectionState === "live");
+    expect(provider.doc.getText("source").toString()).toBe("snapshot+remote");
+    provider.stop();
+  });
+
+  it("drops edits the server rejects as read-only, reports them and fails", async () => {
+    const { sockets, factory } = socketRecorder();
+    const api = new FakeApi();
+    const rejected: string[] = [];
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api,
+      clientId: CLIENT_ID,
+      batchWindowMs: 0,
+      webSocketFactory: factory,
+      onRejectedLocalChanges: (message) => rejected.push(message),
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+
+    provider.doc.getText("source").insert(0, "mine");
+    const update = await nextClientUpdate(sockets[0]!);
+    api.session = { ...roomSession("viewer"), room: { ...roomSession().room, roleVersion: 2 } };
+    sockets[0]!.message({
+      type: "error",
+      code: "read-only",
+      message: "This collaboration room is read-only for your role",
+      fatal: false,
+      updateId: update.updateId,
+    });
+    await waitUntil(() => provider.connectionState === "failed");
+
+    expect(rejected).toHaveLength(1);
+    expect(provider.hasPendingUpdates).toBe(false);
+    expect(provider.canWrite).toBe(false);
+    provider.stop();
   });
 });
