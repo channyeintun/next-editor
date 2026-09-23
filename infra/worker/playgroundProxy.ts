@@ -1,3 +1,4 @@
+import { sha256Hex } from "../../src/shared/sha256Hex";
 import { readBodyWithLimit } from "./httpBody";
 
 // Plumbing shared by the language playground proxy routes (routes/{go,kotlin,
@@ -28,9 +29,7 @@ export function truncateOutput(text: string, maxChars: number): string {
  * produced under a different toolchain.
  */
 export async function contentCacheKey(prefix: string, content: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
-  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `${prefix}:${hex}`;
+  return `${prefix}:${await sha256Hex(content)}`;
 }
 
 // Fixed-window per-user limit in KV. Approximate by design (KV is eventually

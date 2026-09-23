@@ -3,6 +3,7 @@ import type { Env } from "../env";
 import { requireUser } from "../auth/requireUser";
 import { proxyUrl, readProxyBody } from "../../../src/shared/proxy";
 import { isGoogleImageUrl } from "../../../src/shared/googleImageHosts";
+import { sha256Hex } from "../../../src/shared/sha256Hex";
 
 // Mounted at /api/slide-images in worker/index.ts. Called once per Google
 // Slides deck import
@@ -43,9 +44,7 @@ const ALLOWED_CONTENT_TYPES = new Set([
 ]);
 
 async function keyForUrl(url: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(url));
-  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `slide-images/${hex}`;
+  return `slide-images/${await sha256Hex(url)}`;
 }
 
 interface IngestResult {
