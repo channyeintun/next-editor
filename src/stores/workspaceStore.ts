@@ -32,6 +32,7 @@ import { startPerformanceSpan } from "../utils/performanceMetrics";
 import { resolveRecordingUrl } from "../utils/recordingUrl";
 import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import {
+  areStringArraysEqual,
   areWorkspaceFilesEqual,
   areWorkspaceTopologiesEqual,
   createWorkspaceFile,
@@ -56,61 +57,39 @@ export interface StoredWorkspaceSnapshot {
   assetGeneration?: string;
 }
 
+/** What the store tracks before and after a project is loaded. */
+interface WorkspaceBaseState {
+  sidebarWidth: number;
+  sidebarCollapsed: boolean;
+  collapsedFolders: string[];
+  sidebarScrollTop: number;
+  workspaceLoadVersion: number;
+  projectVersion: number;
+  externalProjectVersion: number;
+  treeVersion: number;
+  saveVersion: number;
+  syncVersion: number;
+  lastFileSync: { path: string; revision: number } | null;
+  isSaving: boolean;
+  saveError: string | null;
+}
+
 export type WorkspaceState =
-  | {
-      isInitialized: false;
-      sidebarWidth: number;
-      sidebarCollapsed: boolean;
-      collapsedFolders: string[];
-      sidebarScrollTop: number;
-      workspaceLoadVersion: number;
-      projectVersion: number;
-      externalProjectVersion: number;
-      treeVersion: number;
-      saveVersion: number;
-      syncVersion: number;
-      lastFileSync: { path: string; revision: number } | null;
-      isSaving: boolean;
-      saveError: string | null;
-    }
-  | {
+  | (WorkspaceBaseState & { isInitialized: false })
+  | (WorkspaceBaseState & {
       isInitialized: true;
       project: WorkspaceProject;
       activeFilePath: string;
-      collapsedFolders: string[];
-      sidebarScrollTop: number;
-      sidebarWidth: number;
-      sidebarCollapsed: boolean;
       savedSnapshot: StoredWorkspaceSnapshot;
-      workspaceLoadVersion: number;
-      projectVersion: number;
-      externalProjectVersion: number;
-      treeVersion: number;
-      saveVersion: number;
-      syncVersion: number;
-      lastFileSync: { path: string; revision: number } | null;
-      isSaving: boolean;
-      saveError: string | null;
       editorState: WorkspaceEditorState;
       sidebarState: WorkspaceSidebarState;
-      lessonType: WorkspaceLessonType;
-      projectName: string;
       fileCount: number;
       dirtyState: WorkspaceDirtyState;
-    };
+    });
 
 export type InitializedWorkspaceState = Extract<WorkspaceState, { isInitialized: true }>;
 
 export const WORKSPACE_STORAGE_KEY = "next-editor-workspace";
-
-export function cloneWorkspaceSnapshot(snapshot: StoredWorkspaceSnapshot): StoredWorkspaceSnapshot {
-  return {
-    activeFilePath: snapshot.activeFilePath,
-    project: snapshot.project,
-    sidebarWidth: snapshot.sidebarWidth,
-    assetGeneration: snapshot.assetGeneration,
-  };
-}
 
 /**
  * Asset descriptors are already lightweight and JSON-serializable. Only legacy
@@ -326,14 +305,6 @@ function createSidebarState(
   };
 }
 
-function areStringArraysEqual(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((value, index) => value === right[index]);
-}
-
 function areSidebarFilesEqual(left: WorkspaceTreeFile[], right: WorkspaceTreeFile[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -421,8 +392,6 @@ function withRefreshedWorkspaceSlices(state: WorkspaceState): WorkspaceState {
     sidebarState: areSidebarStatesEqual(state.sidebarState, nextSidebarState)
       ? state.sidebarState
       : nextSidebarState,
-    lessonType: state.project.lessonType,
-    projectName: state.project.name,
     fileCount: Object.keys(state.project.files).length,
   };
 }
@@ -568,12 +537,8 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
   const activeFilePath = project.files[requestedActiveFilePath]
     ? requestedActiveFilePath
     : project.entryFilePath;
-  const savedSnapshot = cloneWorkspaceSnapshot({
-    ...initialSnapshot,
-    project,
-    activeFilePath,
-  });
-  const collapsedFolders = normalizeCollapsedFolders(project.folders, []);
+  const savedSnapshot: StoredWorkspaceSnapshot = { ...initialSnapshot, project, activeFilePath };
+  const collapsedFolders: string[] = [];
   const sidebarScrollTop = 0;
   const sidebarWidth = normalizeSidebarWidth(initialSnapshot.sidebarWidth);
   const sidebarCollapsed = readStoredFileSidebarCollapsed();
@@ -605,8 +570,6 @@ function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): Workspa
       sidebarWidth,
       0,
     ),
-    lessonType: project.lessonType,
-    projectName: project.name,
     fileCount: Object.keys(project.files).length,
     dirtyState: createDirtyState(project, savedSnapshot.project),
   };
@@ -1271,7 +1234,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         return {
           ...context,
           syncVersion: context.syncVersion + 1,
-          lastFileSync: null,
         };
       },
     },
@@ -1279,7 +1241,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
 }
 
 export type WorkspaceStoreInstance = ReturnType<typeof createWorkspaceStore>;
-export type WorkspaceStoreSnapshot = ReturnType<WorkspaceStoreInstance["getSnapshot"]>;
 
 export const WorkspaceStoreContext = createContext<WorkspaceStoreInstance | null>(null);
 
@@ -1329,10 +1290,10 @@ export const selectWorkspaceActiveFilePath = (context: WorkspaceState): string =
   context.isInitialized ? context.activeFilePath : "";
 
 export const selectWorkspaceLessonType = (context: WorkspaceState): WorkspaceLessonType =>
-  context.isInitialized ? context.lessonType : "html-css";
+  context.isInitialized ? context.project.lessonType : "html-css";
 
 export const selectWorkspaceProjectName = (context: WorkspaceState): string =>
-  context.isInitialized ? context.projectName : "Untitled";
+  context.isInitialized ? context.project.name : "Untitled";
 
 export const selectWorkspaceProjectId = (context: WorkspaceState): string =>
   context.isInitialized ? context.project.id : "";

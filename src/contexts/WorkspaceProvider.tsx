@@ -7,7 +7,6 @@ import {
 import {
   WORKSPACE_STORAGE_KEY,
   WorkspaceStoreContext,
-  cloneWorkspaceSnapshot,
   createInitialWorkspaceSnapshot,
   createWorkspaceStore,
   normalizeProject,
@@ -92,7 +91,7 @@ async function persistWorkspace(
       JSON.stringify(toPersistedSnapshot(storedSnapshot)),
     );
     workspaceStore.trigger.markSaved({
-      snapshot: cloneWorkspaceSnapshot(storedSnapshot),
+      snapshot: storedSnapshot,
       workspaceLoadVersion,
     });
 
@@ -276,10 +275,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
       ? normalizedNextActiveFilePath
       : normalizedProject.entryFilePath;
 
-    const savedSnapshot = cloneWorkspaceSnapshot({
+    const savedSnapshot: StoredWorkspaceSnapshot = {
       activeFilePath: resolvedActiveFilePath,
       project: normalizedProject,
-    });
+    };
 
     workspaceStore.trigger.loadProject({
       project: normalizedProject,
@@ -295,9 +294,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   };
 
   const reconcileExternalProject = (project: WorkspaceProject) => {
-    workspaceStore.trigger.reconcileExternalProject({
-      project: normalizeProject(project),
-    });
+    // The transition normalizes the project (the agent's bash tool triggers it directly).
+    workspaceStore.trigger.reconcileExternalProject({ project });
   };
 
   const getProject = () => {

@@ -18,7 +18,7 @@ import {
   type WorkspaceTreeFile,
 } from "../types/workspace";
 
-function areStringArraysEqual(left: string[], right: string[]): boolean {
+export function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
