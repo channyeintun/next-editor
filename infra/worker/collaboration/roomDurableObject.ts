@@ -326,16 +326,9 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       if (!this.isCurrentRoom(parsed.data.roomId)) {
         return Response.json({ error: "invalid collaboration room" }, { status: 403 });
       }
-      try {
-        this.sqliteDocument.initialize(parsed.data.snapshot);
-        this.resetBinaryDocument();
-        return Response.json({ initialized: true });
-      } catch (error) {
-        if (error instanceof CollaborationRoomSqliteQuotaError) {
-          return Response.json({ error: error.message }, { status: 413 });
-        }
-        throw error;
-      }
+      this.sqliteDocument.initialize(parsed.data.snapshot);
+      this.resetBinaryDocument();
+      return Response.json({ initialized: true });
     }
     if (request.method === "POST" && url.pathname === "/sqlite/export") {
       return Response.json(this.sqliteDocument.exportDocument());

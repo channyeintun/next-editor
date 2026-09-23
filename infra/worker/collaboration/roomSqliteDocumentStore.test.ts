@@ -82,7 +82,7 @@ function updateEvent(update: Uint8Array, updateId = UPDATE_ID): CollaborationDoc
 }
 
 describe("RoomSqliteDocumentStore", () => {
-  it("initializes, appends idempotently, and pages from the snapshot cutoff", () => {
+  it("initializes and appends idempotently", () => {
     const { store } = createStore();
     const source = new Y.Doc();
     source.getText("content").insert(0, "a");
@@ -101,12 +101,7 @@ describe("RoomSqliteDocumentStore", () => {
       duplicate: true,
       event,
     });
-    expect(store.bootstrap()).toMatchObject({
-      snapshot: { generation: 1, streamCutoff: "0-0", update: snapshot },
-      updates: [{ streamId: "1-0", event }],
-      nextCursor: "1-0",
-      hasMore: false,
-    });
+    expect(materializedText(store)).toBe("ab");
     source.destroy();
   });
 
@@ -126,18 +121,19 @@ describe("RoomSqliteDocumentStore", () => {
       appliedUpdates: 1,
       hasMore: false,
     });
-    const bootstrap = store.bootstrap("0-0");
-    expect(bootstrap.snapshot).toMatchObject({ generation: 2, streamCutoff: "1-0" });
-    expect(bootstrap.updates).toEqual([]);
-    const restored = new Y.Doc();
-    applyEncodedYjsSnapshot(restored, bootstrap.snapshot.update, "test");
-    expect(restored.getText("content").toString()).toBe("before-after");
+    const exported = store.exportDocument(350);
+    expect(exported).toMatchObject({
+      snapshot: { generation: 2, streamCutoff: "1-0" },
+      updates: [],
+      nextCursor: "1-0",
+      hasMore: false,
+    });
+    expect(snapshotText(exported.snapshot.update)).toBe("before-after");
     expect(store.append(updateEvent(Y.encodeStateAsUpdate(source), UPDATE_ID), 400)).toMatchObject({
       streamId: "1-0",
       duplicate: true,
       event: null,
     });
-    restored.destroy();
     source.destroy();
   });
 
@@ -181,7 +177,7 @@ describe("RoomSqliteDocumentStore", () => {
     const result = store.replaceSnapshot(Y.encodeStateAsUpdate(replacement), 128, 300);
 
     expect(result).toEqual({ generation: 2, streamId: "1-1" });
-    expect(store.bootstrap()).toMatchObject({
+    expect(store.exportDocument(350)).toMatchObject({
       snapshot: { generation: 2, streamCutoff: "1-0" },
       updates: [],
       nextCursor: "1-0",

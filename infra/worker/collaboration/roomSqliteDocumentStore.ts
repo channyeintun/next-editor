@@ -12,7 +12,6 @@ import {
   decodeYjsUpdate,
 } from "../../../src/collaboration/yjsUpdates";
 
-const BOOTSTRAP_PAGE_SIZE = 100;
 // Updates folded into the snapshot per compaction pass; the room's alarm runs
 // another pass while more remain, so a long tail shrinks in bounded steps.
 const MAX_COMPACTION_UPDATES = 10_000;
@@ -63,18 +62,15 @@ interface DeduplicationRow {
   expires_at: number;
 }
 
-export interface AppendRoomSqliteUpdateResult {
+export interface StoredAppendRoomSqliteUpdateResult {
   streamId: string;
   updateCount: number;
   duplicate: boolean;
   shouldCompact: boolean;
-}
-
-export interface StoredAppendRoomSqliteUpdateResult extends AppendRoomSqliteUpdateResult {
   event: CollaborationDocumentUpdateEvent | null;
 }
 
-export interface CompactRoomSqliteDocumentResult {
+interface CompactRoomSqliteDocumentResult {
   compacted: boolean;
   generation: number;
   streamCutoff: string;
@@ -83,7 +79,7 @@ export interface CompactRoomSqliteDocumentResult {
   hasMore: boolean;
 }
 
-export interface ReplaceRoomSqliteSnapshotResult {
+interface ReplaceRoomSqliteSnapshotResult {
   generation: number;
   streamId: string;
 }
@@ -128,17 +124,6 @@ function sequenceFromStreamId(value: string): number {
     throw new Error("collaboration SQLite stream ID is invalid");
   }
   return sequence;
-}
-
-function parseCursor(cursor: string | undefined, fallback: number): number {
-  if (!cursor) return fallback;
-  const match = /^(\d+)-0$/.exec(cursor);
-  if (!match) throw new Error("collaboration SQLite cursor is invalid");
-  const sequence = Number(match[1]);
-  if (!Number.isSafeInteger(sequence) || sequence < 0) {
-    throw new Error("collaboration SQLite cursor is invalid");
-  }
-  return Math.max(sequence, fallback);
 }
 
 function parseEvent(eventJson: string): CollaborationDocumentUpdateEvent {
@@ -200,11 +185,9 @@ export class RoomSqliteDocumentStore {
   }
 
   initialize(snapshot: string, now = Date.now()): void {
+    // decodeYjsSnapshot enforces the 4 MiB create limit, far below the room's
+    // accepted-bytes quota, so a new room always fits it.
     const snapshotBytes = decodeYjsSnapshot(snapshot);
-    if (snapshotBytes.byteLength > MAX_COLLABORATION_ROOM_ACCEPTED_BYTES) {
-      throw new CollaborationRoomSqliteQuotaError();
-    }
-
     this.storage.transactionSync(() => {
       const existing = this.storage.sql
         .exec<{ singleton: number }>(
@@ -356,38 +339,6 @@ export class RoomSqliteDocumentStore {
     });
   }
 
-  bootstrap(requestedCursor?: string): CollaborationBootstrapResponse {
-    const metadata = this.metadata();
-    const cursor = parseCursor(requestedCursor, metadata.stream_cutoff);
-    const rows = this.storage.sql
-      .exec<UpdateRow>(
-        `SELECT sequence, event_json FROM collaboration_updates
-         WHERE sequence > ? ORDER BY sequence ASC LIMIT ?`,
-        cursor,
-        BOOTSTRAP_PAGE_SIZE + 1,
-      )
-      .toArray();
-    const page = rows.slice(0, BOOTSTRAP_PAGE_SIZE);
-    const updates = page.map((row) => ({
-      streamId: streamId(row.sequence),
-      event: parseEvent(row.event_json),
-    }));
-    const nextCursor = page.at(-1)?.sequence ?? cursor;
-
-    return {
-      protocolVersion: metadata.protocol_version,
-      documentSchemaVersion: metadata.document_schema_version,
-      snapshot: {
-        generation: metadata.generation,
-        streamCutoff: streamId(metadata.stream_cutoff),
-        update: encodeBase64(this.readSnapshot(metadata)),
-      },
-      updates,
-      nextCursor: streamId(nextCursor),
-      hasMore: rows.length > BOOTSTRAP_PAGE_SIZE,
-    };
-  }
-
   compact(now = Date.now()): CompactRoomSqliteDocumentResult {
     const metadata = this.metadata();
     if (!this.hasTailAfter(metadata.stream_cutoff)) {
@@ -415,14 +366,9 @@ export class RoomSqliteDocumentStore {
       );
       const snapshot = Y.encodeStateAsUpdate(doc);
       const generation = metadata.generation + 1;
+      // Nothing can change the generation in between: this method never
+      // yields, and the object handles one event at a time.
       this.storage.transactionSync(() => {
-        const current = this.metadata();
-        if (
-          current.generation !== metadata.generation ||
-          current.stream_cutoff !== metadata.stream_cutoff
-        ) {
-          throw new Error("collaboration SQLite compaction generation changed");
-        }
         this.storage.sql.exec(
           `UPDATE collaboration_document
            SET generation = ?, stream_cutoff = ?, snapshot = ?,
@@ -453,13 +399,30 @@ export class RoomSqliteDocumentStore {
     }
   }
 
+  /**
+   * The whole document as one snapshot, compacting the tail in as many passes
+   * as it takes. `updates`, `nextCursor` and `hasMore` keep the shape of the
+   * export file owners download; the tail they described is always empty here.
+   */
   exportDocument(now = Date.now()): CollaborationBootstrapResponse {
-    // Fold the whole tail into the snapshot, however many passes it takes.
     let result: CompactRoomSqliteDocumentResult;
     do {
       result = this.compact(now);
     } while (result.hasMore);
-    return this.bootstrap();
+    const metadata = this.metadata();
+    const cutoff = streamId(metadata.stream_cutoff);
+    return {
+      protocolVersion: metadata.protocol_version,
+      documentSchemaVersion: metadata.document_schema_version,
+      snapshot: {
+        generation: metadata.generation,
+        streamCutoff: cutoff,
+        update: encodeBase64(this.readSnapshot(metadata)),
+      },
+      updates: [],
+      nextCursor: cutoff,
+      hasMore: false,
+    };
   }
 
   createDocument(): Y.Doc {
