@@ -31,7 +31,6 @@ flowchart TB
     subgraph Persistence["Storage + Transport"]
         IndexedDB[IndexedDB recording store]
         Codec[recordingCodec.worker.ts]
-        Stream[recordingStreamSink]
         Export[.ne file export/import]
     end
 
@@ -44,7 +43,6 @@ flowchart TB
     Hook --> Machine
     Machine --> Timeline
     Machine --> IndexedDB
-    Machine --> Stream
     Export --> Codec
     IndexedDB --> Codec
 ```
@@ -59,7 +57,6 @@ sequenceDiagram
     participant Machine as editorMachine
     participant Preview as Preview adapter
     participant Runtime as Workspace/runtime adapters
-    participant Sink as recordingStreamSink
 
     User->>UI: Start recording
     UI->>Provider: startRecording(...)
@@ -71,7 +68,6 @@ sequenceDiagram
         Provider->>Machine: CAPTURE_FRAME
         Preview-->>Machine: PREVIEW_EVENT / PREVIEW_INITIAL_DOCUMENT / PREVIEW_PATCH_BATCH
         Runtime-->>Machine: WORKSPACE_EVENT / RUNTIME_EVENT
-        Machine-->>Sink: append SCR3 bytes (optional)
     end
 
     User->>UI: Stop recording
@@ -87,7 +83,6 @@ Key points:
 - Preview replay data is captured with rrweb: a seed document (Meta + FullSnapshot) plus later patch batches of incremental rrweb events.
 - API client interactions on a runtime lesson are captured as preview events: switching to API mode, each request, its response (or timeout), request-tab switches, and history inspections all land on the timeline.
 - Workspace and runtime snapshots are captured alongside timed events so playback can restore the full lesson context.
-- If `recordingStreamSink` is configured, the provider forwards a live SCR3 stream while capture is in progress.
 
 ## Playback Flow
 
@@ -104,7 +99,7 @@ sequenceDiagram
     Machine->>Machine: normalize + restore snapshots
     Machine->>Timeline: spawn
 
-    alt Progressive download / live stream
+    alt Progressive download
         Loader->>Provider: appendRecordingDelta(newRecords)
         Provider->>Machine: APPEND_RECORDING_DELTA
         Machine->>Machine: append records without resetting current time
@@ -139,11 +134,9 @@ flowchart LR
     Encode --> NeFile[Raw SCR3 bytes for .ne file]
     Encode --> IndexedDB[Metadata + small SCR3 payloads]
     Encode --> OPFS[Large SCR3 payloads]
-    Encode --> Live[Forward live bytes to sink]
     NeFile --> Decode[decompressBinaryToRecording in worker]
     IndexedDB --> Decode
-    OPFS --> PrefixDecode
-    Live --> PrefixDecode[createStreamingRecordingReader prefix decode]
+    OPFS --> PrefixDecode[createStreamingRecordingReader prefix decode]
     Decode --> Load[loadRecording]
     PrefixDecode --> Append[appendRecordingDelta]
     PrefixDecode -->|first / finalized| Extend[loadRecording / extendRecording]
@@ -161,11 +154,9 @@ Current storage rules:
 - Workspace snapshots carry only content-addressed asset descriptors. SCR3 writes each referenced
   asset once as a raw segment; progressive readers verify/persist the bytes in workspace asset
   storage and release them after delta delivery.
-- `src/storage/recordingCodec.worker.ts` (backing `recordingCodecClient.ts`) owns each live SCR3
-  writer and keeps per-segment MessagePack/deflate plus whole-file codec work off the main thread.
-  Completed segment buffers transfer back in sequence; the bridge permits one encode/write in
-  flight and coalesces later capture notifications. `src/storage/streamingRecordingCodec/decode.ts`
-  does incremental prefix decoding for progressive/live loads.
+- `src/storage/recordingCodec.worker.ts` (backing `recordingCodecClient.ts`) keeps whole-file
+  MessagePack/deflate codec work off the main thread. `src/storage/streamingRecordingCodec/decode.ts`
+  does incremental prefix decoding for progressive loads.
 
 ## URL Loading Flow
 

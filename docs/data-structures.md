@@ -95,7 +95,7 @@ Notable current fields:
 - `cursorEvents` gives higher-fidelity cursor playback than relying on frame snapshots alone.
 - `audioFile`/`audioUrl` and `cameraFile`/`cameraUrl` describe audio/camera stored as sibling files rather than inline blobs; `audioStartOffsetMs`/`cameraStartOffsetMs` compensate for recorder warmup so playback stays aligned.
 - `captions` carries parsed subtitle tracks inline; `captionFiles` instead names sibling `.vtt`/`.srt` files that a hosted recording loads at play time.
-- `streamFinalized` distinguishes a complete decoded stream from a still-growing progressive-download/live prefix.
+- `streamFinalized` distinguishes a complete decoded stream from a still-growing progressive-download prefix.
 - Workspace projects store `{ kind: "asset", assetId, mimeType, size }` descriptors rather than
   base64. `workspaceAssets` exists only while raw SCR3 asset segments are handed to IndexedDB; it
   is stripped before the recording enters playback state.
@@ -256,8 +256,8 @@ type RecordingCameraSource = "camera";
 ```
 
 - `audioBlob` remains the assembled audio playback facade that UI surfaces consume; `audioFile`/`audioUrl` describe audio stored as a sibling file instead.
-- **Camera video is always external — its bytes never live inside an SCR3 stream** (exported,
-  persisted, or live-streamed). The stream carries only a camera reference + metadata
+- **Camera video is always external — its bytes never live inside an SCR3 stream** (exported or
+  persisted). The stream carries only a camera reference + metadata
   (`cameraFile`, `cameraUrl`, `cameraSource`, `cameraStartOffsetMs`). The camera bytes
   live as:
   - an in-memory `cameraBlob` on the `Recording` (just recorded, or paired from an imported file),
@@ -274,10 +274,10 @@ type RecordingCameraSource = "camera";
   recording never has it.
 - During active capture, the machine's `RecordingSession` tracks `audioFragments`
   (`RecordingSessionMediaFragment[]`, each with `trackId`/`startTimeMs`/`endTimeMs`/`blob`/`mimeType`):
-  the microphone's timeslices, kept for a live recording sink, though the SCR3 stream never
-  carries audio bytes. The take's audio is the recorder's finalized blob, stored and exported as
-  a sibling file. Camera is captured as one finalized blob when the camera recorder stops (no
-  per-chunk streaming, so camera is not crash-resilient mid-recording).
+  the microphone's timeslices, though the SCR3 stream never carries audio bytes. The take's audio
+  is the recorder's finalized blob, stored and exported as a sibling file. Camera is captured as
+  one finalized blob when the camera recorder stops (no per-chunk streaming, so camera is not
+  crash-resilient mid-recording).
 
 ## Provider Context Shapes
 
@@ -326,13 +326,11 @@ and event payloads. Audio and camera bytes remain sibling media files:
 ├─────────────────────────────────────────┤
 │ Frame and event segments                  │
 ├─────────────────────────────────────────┤
-│ Final metadata segment (live streams)     │
-├─────────────────────────────────────────┤
 │ Footer segment index                      │
 └─────────────────────────────────────────┘
 ```
 
-`src/storage/recordingCodec.ts` implements encode/decode; `src/storage/recordingCodec.worker.ts` runs it off the main thread (via `recordingCodecClient.ts`); `src/storage/streamingRecordingCodec/` implements the incremental prefix reader/writer used for progressive and live playback (see `docs/streaming-playback.md`).
+`src/storage/recordingCodec.ts` implements encode/decode; `src/storage/recordingCodec.worker.ts` runs it off the main thread (via `recordingCodecClient.ts`); `src/storage/streamingRecordingCodec/` implements the incremental prefix reader/writer used for progressive playback (see `docs/streaming-playback.md`).
 
 ## Machine Context Types
 

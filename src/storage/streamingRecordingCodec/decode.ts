@@ -23,7 +23,6 @@ import {
   isKnownSegmentKind,
   parseHeader,
   readFooterSegmentOffset,
-  readRecordingStreamMeta,
   readSegmentHeader,
   SEGMENT_HEADER_SIZE,
   SEGMENT_KIND,
@@ -100,8 +99,8 @@ function copyDecodedRecords(records: DecodedRecords): DecodedRecords {
  * decoded prefix and a one-shot decode of the same bytes cannot drift apart.
  */
 interface DecodedStream {
-  /** The header's metadata until a final-metadata segment replaces it. */
-  meta: RecordingStreamMeta;
+  /** The header's metadata. */
+  readonly meta: RecordingStreamMeta;
   readonly formatVersion: number;
   /** MAX_INFLATED_SEGMENT_BYTES bounds each segment; this bounds their sum. */
   readonly budget: InflationBudget;
@@ -153,16 +152,6 @@ function createDecodedStream(meta: RecordingStreamMeta, formatVersion: number): 
     recordCount: 0,
     maxSegmentTimeMs: 0,
   };
-}
-
-function mergeFinalMetadata(
-  current: RecordingStreamMeta,
-  payload: Uint8Array,
-  budget: InflationBudget,
-): RecordingStreamMeta {
-  const records = decodeRecords<unknown>(payload, budget);
-  const candidate = readRecordingStreamMeta(records[records.length - 1], "final metadata");
-  return { ...current, ...candidate };
 }
 
 /** A decoded segment waiting to be applied: `commit` only appends, so it cannot throw. */
@@ -246,16 +235,8 @@ function decodeSegment(
         records.chatEvents,
         decodeRecords<ChatRecordingEvent>(payload, budget).map(ownChatDeltaBytes),
       );
-    case SEGMENT_KIND.finalMeta: {
-      const meta = mergeFinalMetadata(stream.meta, payload, budget);
-      return {
-        recordCount: 0,
-        commit: () => {
-          stream.meta = meta;
-        },
-      };
-    }
     default:
+      // Kind 10, the retired final-metadata segment: no file carries one, so skip it.
       return { recordCount: 0, commit: () => {} };
   }
 }

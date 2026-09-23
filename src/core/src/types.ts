@@ -16,7 +16,6 @@ import type {
 } from "../../types/workspace";
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
-import type { EditorMachineInput } from "./machine/types";
 
 export type RecordingAudioSource = "microphone" | "external";
 export type RecordingCameraSource = "camera";
@@ -256,31 +255,6 @@ export interface RecordingStreamDelta {
   newCursorEvents: CursorRecordingEvent[];
   newWhiteboardEvents: WhiteboardEvent[];
   newChatEvents: ChatRecordingEvent[];
-}
-
-/**
- * Sink for the live SCR3 recording byte stream (WebSocket / fetch ReadableStream /
- * callback). Receives append-only chunks as they are recorded and is closed when the
- * recording ends. The bytes form a valid SCR3 stream replayable via `decodeRecordingStream`.
- */
-export interface RecordingStreamSink {
-  write(bytes: Uint8Array): void | Promise<void>;
-  close(): void | Promise<void>;
-  /** Called once when encoding or delivery fails before the sink is closed. */
-  onError?(error: unknown): void | Promise<void>;
-}
-
-/**
- * What NextEditorProvider configures the editor with: the machine's input, which it
- * passes as the actor's `input`, plus the options the provider handles itself.
- */
-export interface UseNextEditorConfig extends EditorMachineInput {
-  /**
-   * Optional sink for live, stream-compatible recording. When provided, the SCR3 byte
-   * stream produced while recording is forwarded here as it is captured, so a remote
-   * consumer can tail and replay it with `decodeRecordingStream`. Inert when omitted.
-   */
-  recordingStreamSink?: RecordingStreamSink;
 }
 
 /**

@@ -49,9 +49,8 @@ Key exports:
 - `NextEditorProvider`
 - `useNextEditorActions`, `useNextEditorMetadata`, `useNextEditorPlayback`
 - `editorMachine`, `timelineMachine`, `EditorActorRef`, `TimelineActorRef`
-- `EditorMachineContext`, `EditorMachineEvent`
+- `EditorMachineContext`, `EditorMachineEvent`, `EditorMachineInput`
 - `Recording`, `EditorFrame`, `EditorState`
-- `RecordingStreamSink`, `UseNextEditorConfig`
 - Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewState`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
 - Caption types such as `CaptionTrack`, `CaptionCue`, and `CaptionWord`
 - Track/cluster metadata types: `RecordingTrackKind`, `RecordingTrackMeta`, `RecordingClusterMeta`, `RecordingMediaFragment`
@@ -112,13 +111,12 @@ The playback side is intentionally append-friendly.
 - Progressive audio uses the same `HTMLAudioElement` surface in blob or stream mode; when later prefixes extend the audio track, the actor reattaches the growing blob snapshot and stays synchronized to the editor timeline.
 - Progressive camera playback stays in the React `CameraOverlay` boundary: `extendRecording` replaces `cameraBlob` with a larger reassembled snapshot, and the overlay reattaches that blob while continuing to derive video time from the timeline.
 
-That design is what makes partial-download playback and live stream replay possible; see `docs/streaming-playback.md` for the full mechanics.
+That design is what makes partial-download playback possible; see `docs/streaming-playback.md` for the full mechanics.
 
 ## Extension Points
 
-The main extension hooks in `UseNextEditorConfig` are:
+The main extension hooks in `EditorMachineInput` are:
 
-- `recordingStreamSink` to forward a live SCR3 byte stream.
 - Snapshot getters and appliers for slides, preview, workspace, and runtime state.
 - `applyPreviewPatchReplay` to feed recorded rrweb preview events into the current preview surface's `Replayer`.
 - Lifecycle callbacks: `onRecordingStart`, `onRecordingStop`, `onSeek`, and `onError`.
@@ -155,7 +153,7 @@ const rebuilt = codec.applyDelta(bytesA, delta);
 
 ## Integration Example
 
-`NextEditorProvider` creates the editor actor (it builds the `UseNextEditorConfig` itself from the app's stores) and exposes it through context. Components read it with the context hooks:
+`NextEditorProvider` creates the editor actor (it builds the `EditorMachineInput` itself from the app's stores) and exposes it through context. Components read it with the context hooks:
 
 ```typescript
 import { NextEditorProvider, useNextEditorActions, useNextEditorMetadata } from "../src/core/src";

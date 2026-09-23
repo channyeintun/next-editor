@@ -143,10 +143,7 @@ What happens here:
 - an invoked `mouseTracking` actor drives `CAPTURE_FRAME` for cursor movement
 - camera capture spawns conditionally on entry if `enableCameraRecording`
 - `CAPTURE_FRAME`, `SLIDE_EVENT`, `PREVIEW_EVENT`, `PREVIEW_INITIAL_DOCUMENT`, `PREVIEW_PATCH_BATCH`, `WORKSPACE_EVENT`, and `RUNTIME_EVENT` are all captured into the session
-- audio chunks (`AUDIO_RECORDING_CHUNK`) and camera lifecycle events are folded into session/audio/camera state for live SCR3 streaming
-- the live stream bridge sends ordered frame/event batches to one worker-owned SCR3 writer; its
-  single in-flight queue provides backpressure, and recording finalization awaits the worker's
-  final metadata/footer flush before closing the sink
+- audio chunks (`AUDIO_RECORDING_CHUNK`) and camera lifecycle events are folded into session/audio/camera state
 - `STOP_RECORDING` branches on `isMicrophoneAudioRecording` / `isCameraRecording` / `isExternalAudioRecording` to decide whether a drain (`stoppingRecording`) is needed before finalizing
 
 ### `stoppingRecording`
@@ -156,8 +153,6 @@ This is a drain state, not a second recording mode.
 - microphone capture may still emit a final post-stop chunk
 - camera capture may stop before or after audio
 - the machine finalizes once the required blobs arrive (`AUDIO_RECORDING_STOPPED` / `CAMERA_STOPPED`), with a two-second timeout as a defensive fallback
-
-This ordering matters because the live stream sink must preserve append-only SCR3 ordering even while the media recorders are draining.
 
 ### `loading`
 
@@ -222,7 +217,7 @@ stateDiagram-v2
 ### Audio recording actor (`audioRecordingActor`)
 
 - Starts microphone capture and emits `AUDIO_RECORDING_STARTED`, `AUDIO_RECORDING_CHUNK`, `AUDIO_RECORDING_STOPPED`, and `AUDIO_RECORDING_ERROR`.
-- Produces timesliced chunks during recording so the live SCR3 bridge can stream them before finalization.
+- Produces timesliced chunks during recording, which the machine keeps as the session's audio fragments.
 
 ### Camera recording actor (`cameraRecordingActor`)
 
@@ -439,7 +434,7 @@ Action bodies are split by concern: capture-side actions live in `captureActions
 | `addCaptionTrack` / `removeCaptionTrack`                                                  | Mutate `recording.captions` directly, outside the timeline                                     |
 | `clearRecording`                                                                          | Unload the current recording and reset machine context                                         |
 | `setEditorRef`                                                                            | Store the live Monaco editor reference                                                         |
-| `notifySeek`                                                                              | Fire the `UseNextEditorConfig` `onSeek` callback                                               |
+| `notifySeek`                                                                              | Fire the `EditorMachineInput` `onSeek` callback                                                |
 
 Timeline clock progression itself is not a named machine action — the `TICK` handler in the `playback` state directly `assign`s `timeline.currentTime` from the event, then runs the `applyXAtTime` actions above.
 

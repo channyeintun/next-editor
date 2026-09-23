@@ -40,7 +40,7 @@ const KIND_NAME = [
   "cursor",
   "whiteboard",
   "chat",
-  "finalMeta",
+  "retired (10)",
   "workspaceAsset",
 ];
 

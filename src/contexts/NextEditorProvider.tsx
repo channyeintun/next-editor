@@ -1,6 +1,6 @@
 import { useRef, useEffect } from "react";
 import type * as monaco from "monaco-editor";
-import type { Recording, UseNextEditorConfig } from "../core/src";
+import type { EditorMachineInput, Recording } from "../core/src";
 import {
   useNextEditorActorActions,
   useNextEditorInteractionEffects,
@@ -18,7 +18,6 @@ import {
   useWebContainerRuntimeSnapshotGetter,
 } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
-import { useRecordingStreamSink } from "../hooks/useRecordingStreamSink";
 import { createRecordingStorage } from "../storage/RecordingStorage";
 import { saveScreenRecordingLocally } from "../storage/screenRecordingSave";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
@@ -31,7 +30,7 @@ interface NextEditorProviderProps {
 
 interface NextEditorProviderContentProps {
   children: React.ReactNode;
-  config: UseNextEditorConfig;
+  config: EditorMachineInput;
   recordingStorage: { current: ReturnType<typeof createRecordingStorage> };
   suppressWorkspaceEventsRef: { current: boolean };
 }
@@ -106,9 +105,6 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     }
     return stopRecordingPromiseRef.current;
   };
-
-  // Opt-in: forward the live SCR3 recording stream to a configured sink (inert if absent).
-  useRecordingStreamSink(actorRef, config.recordingStreamSink);
 
   const exportAsFile = (recording: Recording, filename?: string) =>
     recordingStorage.current.exportAsFile(recording, filename);
@@ -203,7 +199,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
     }, 0);
   };
 
-  const config: UseNextEditorConfig = {
+  const config: EditorMachineInput = {
     editorRef,
     enableAudioRecording: true, // Enable built-in synchronized audio recording
     pauseOnUserInteraction: true,

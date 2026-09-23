@@ -1,7 +1,7 @@
 # Streaming Playback Guide
 
 How to **play a recording before its bytes have fully arrived** — progressive playback of a
-finalized `.ne` while it downloads, or tailing a still-being-recorded broadcast.
+finalized `.ne` while it downloads.
 
 This is one-way _playback_ streaming (one producer → many viewers, watch-as-it-arrives). It is
 **not** collaborative editing / real-time screen sharing.
@@ -42,8 +42,8 @@ Both are exposed from the actions hook (`useNextEditorActions`) and used by the 
    **missing footer** (still-writing stream) and a **truncated trailing segment** (mid-download),
    decoding only newly-arrived complete segments on each `push()` call. A segment of a kind this
    build does not know (a newer writer's) is skipped once the footer has arrived. Before that, both
-   decoders stop at it, because the first bytes of a partial footer can read as one, so a live
-   stream from a newer writer plays only up to its first new-kind segment until it finishes.
+   decoders stop at it, because the first bytes of a partial footer can read as one, so a newer
+   writer's file plays only up to its first new-kind segment until its footer arrives.
 
 2. **Forward-only replay.** Playback reconstructs a frame from the nearest keyframe **at or
    before** the target, applying deltas forward
@@ -58,30 +58,20 @@ Both are exposed from the actions hook (`useNextEditorActions`) and used by the 
 
 4. **The header carries the real total duration** for a finalized file. Because the header is at
    the very start of the stream, an early prefix of a finalized recording already knows the full
-   timeline length, so the seek bar is correct before all frames have downloaded. (For a live
-   broadcast the header duration is `0` and grows as you decode more — see Scenario B.)
+   timeline length, so the seek bar is correct before all frames have downloaded.
 
 ---
 
-## Byte layout: file vs. live (read this first)
+## Byte layout (read this first)
 
-Both finalized exports and live broadcasts now use the same stream-oriented layout idea:
-
-- **Finalized export / saved file**
-  ([`encodeRecordingToStream`](../src/storage/streamingRecordingCodec/encode.ts)) writes `SCR3` in
-  **time-cluster order** after any raw workspace-asset segments: each cluster contains frame and
-  event batches for that slice of the timeline. Audio and camera remain sibling media files.
-
-- **Live broadcast** ([`RecordingStreamBridge`](../src/storage/recordingStreamSink.ts)) writes
-  each workspace asset once before its first referencing event and writes the same frame/event
-  segment types as capture progresses, so a prefix is still a clean "everything up to time _T_"
-  slice.
-
-Both are valid `SCR3` and both decode with the same incremental reader.
+A finalized export or saved file
+([`encodeRecordingToStream`](../src/storage/streamingRecordingCodec/encode.ts)) writes `SCR3` in
+**time-cluster order** after any raw workspace-asset segments: each cluster contains frame and
+event batches for that slice of the timeline. Audio and camera remain sibling media files.
 
 ---
 
-### Scenario A — Play a finalized `.ne` while it downloads (what `introduction.ne` does)
+### Play a finalized `.ne` while it downloads (what `introduction.ne` does)
 
 Stream the bytes with `fetch` and feed each chunk to a
 [`createStreamingRecordingReader`](../src/storage/streamingRecordingCodec/decode.ts), then feed the
@@ -160,72 +150,6 @@ prefix and let later prefixes fill in **without any re-seek or visible jump**.
 
 ---
 
-## Scenario B — Tail a live broadcast
-
-A producer records and forwards the live `SCR3` byte stream; viewers tail it and play.
-
-### Producer (the machine streams it for you)
-
-Pass a `recordingStreamSink` to the editor config. The provider's
-[`useRecordingStreamSink`](../src/hooks/useRecordingStreamSink.ts) forwards the live `SCR3`
-stream (frames, events and workspace assets; audio and camera stay sibling files) as it is
-captured:
-
-```ts
-import type { RecordingStreamSink } from "../src/core/src";
-
-const sink: RecordingStreamSink = {
-  write(bytes) {
-    socket.send(bytes); // append-only SCR3 chunks, in stream order
-  },
-  close() {
-    socket.close(); // sent after the footer is written
-  },
-};
-
-// NextEditorProvider forwards config.recordingStreamSink via
-// useRecordingStreamSink(actorRef, config.recordingStreamSink).
-```
-
-The bytes a sink receives are the **same `SCR3` stream** the exporter produces, so a viewer
-replays them with exactly the decode path below.
-
-### Viewer (tail + decode prefix)
-
-```ts
-import { createStreamingRecordingReader } from "../src/storage/streamingRecordingCodec/decode";
-import {
-  hydrateDecodedRecordingWorkspaceAssets,
-  persistDecodedWorkspaceAssets,
-} from "../src/storage/recordingWorkspaceAssets";
-
-const reader = createStreamingRecordingReader();
-let loadedOnce = false;
-
-socket.onmessage = async (ev: MessageEvent<ArrayBuffer>) => {
-  reader.push(new Uint8Array(ev.data));
-  if (!loadedOnce) {
-    const recording = reader.getRecording();
-    if (!recording) return;
-    loadRecording(await hydrateDecodedRecordingWorkspaceAssets(recording));
-    reader.readDelta();
-    loadedOnce = true;
-  } else {
-    const delta = reader.readDelta();
-    if (delta) {
-      await persistDecodedWorkspaceAssets(delta.newWorkspaceAssets);
-      appendRecordingDelta({ ...delta, newWorkspaceAssets: [] });
-    }
-  }
-};
-```
-
-For a live stream the header `duration` is `0`, so the seek bar grows as frames arrive. If you
-want the bar to track the latest captured moment, use the last frame's timestamp as the
-effective duration in your UI.
-
----
-
 ## Audio and camera behavior (important)
 
 - **Visual playback still streams immediately.** Frames, cursor, rrweb preview snapshots, slides,
@@ -253,9 +177,6 @@ effective duration in your UI.
 - **Persist asset handoffs before playback.** Raw `workspaceAssets`/`newWorkspaceAssets` are
   verified and moved to content-addressed asset storage, then stripped so decoded byte buffers do
   not accumulate in playback state.
-- **Encode live segments in the codec worker.** The bridge coalesces capture notifications and
-  permits one ordered worker encode plus sink write in flight. Finalization awaits the worker's
-  final metadata/footer response, so no queued segment can land after the sink closes.
 - **Decode in the worker.** For whole-file (non-progressive) decodes, prefer
   [`decompressBinaryToRecording`](../src/storage/recordingCodecClient.ts) so deflate stays off
   the main thread.
@@ -264,8 +185,7 @@ effective duration in your UI.
   frame is playable and how cheaply a prefix reconstructs.
 - **Final pass.** When the download completes, the last decode reaches the footer, which marks
   the stream finalized (its segment index is read only to tell the stream's own footer from a
-  `.ne` file carried inside an asset segment), and applies the authoritative final metadata;
-  sibling audio/camera resolution remains out of band.
+  `.ne` file carried inside an asset segment); sibling audio/camera resolution remains out of band.
 
 ---
 
@@ -304,15 +224,13 @@ operate on growing arrays.
 
 ## API reference
 
-| Function / type                           | Module                                                                                | Purpose                                                                |
-| ----------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `loadRecording(recording)`                | [useNextEditorContext.ts](../src/hooks/useNextEditorContext.ts)                       | Load the first (possibly partial) recording into the player.           |
-| `extendRecording(recording)`              | [useNextEditorContext.ts](../src/hooks/useNextEditorContext.ts)                       | Swap in a larger prefix in place, keeping position/timeline.           |
-| `createStreamingRecordingReader()`        | [streamingRecordingCodec/decode.ts](../src/storage/streamingRecordingCodec/decode.ts) | Stateful reader: `push(bytes)` + `getRecording()` (missing footer OK). |
-| `decodeRecordingStream(bytes)`            | [streamingRecordingCodec/decode.ts](../src/storage/streamingRecordingCodec/decode.ts) | Decode a complete, finalized stream (or any prefix) in one call.       |
-| `decompressBinaryToRecording(bytes)`      | [recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)                     | Worker-backed binary decode (prefix or full) → `Recording`.            |
-| `RecordingStreamSink`                     | [core types](../src/core/src/types.ts)                                                | `{ write(bytes), close() }` live sink interface.                       |
-| `UseNextEditorConfig.recordingStreamSink` | [core types](../src/core/src/types.ts)                                                | Opt-in: forward the live `SCR3` stream while recording.                |
+| Function / type                      | Module                                                                                | Purpose                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `loadRecording(recording)`           | [useNextEditorContext.ts](../src/hooks/useNextEditorContext.ts)                       | Load the first (possibly partial) recording into the player.           |
+| `extendRecording(recording)`         | [useNextEditorContext.ts](../src/hooks/useNextEditorContext.ts)                       | Swap in a larger prefix in place, keeping position/timeline.           |
+| `createStreamingRecordingReader()`   | [streamingRecordingCodec/decode.ts](../src/storage/streamingRecordingCodec/decode.ts) | Stateful reader: `push(bytes)` + `getRecording()` (missing footer OK). |
+| `decodeRecordingStream(bytes)`       | [streamingRecordingCodec/decode.ts](../src/storage/streamingRecordingCodec/decode.ts) | Decode a complete, finalized stream (or any prefix) in one call.       |
+| `decompressBinaryToRecording(bytes)` | [recordingCodecClient.ts](../src/storage/recordingCodecClient.ts)                     | Worker-backed binary decode (prefix or full) → `Recording`.            |
 
 A `.ne` is raw SCR3 bytes end-to-end — there is no base64 wrapping to strip. `useNextEditorActions`
 (public barrel) exposes `loadRecording` / `extendRecording` to components.

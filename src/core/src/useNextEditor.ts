@@ -3,13 +3,8 @@ import type * as monaco from "monaco-editor";
 import { useSelector } from "@xstate/react";
 import type { ActorRefFrom } from "xstate";
 import { editorMachine } from "./machine/editorMachine";
-import type {
-  CaptionTrack,
-  UseNextEditorConfig,
-  EditorSelection,
-  Recording,
-  RecordingStreamDelta,
-} from "./types";
+import type { EditorMachineInput } from "./machine/types";
+import type { CaptionTrack, EditorSelection, Recording, RecordingStreamDelta } from "./types";
 import type {
   PreviewDomPatchBatch,
   PreviewEvent,
@@ -276,7 +271,7 @@ export const useNextEditorActorActions = (actorRef: EditorActorRef) => {
  */
 export const useNextEditorInteractionEffects = (
   actorRef: EditorActorRef,
-  config: UseNextEditorConfig,
+  config: EditorMachineInput,
 ): void => {
   const isPlaying = useSelector(actorRef, selectIsPlaying);
   const editor = useSelector(actorRef, selectEditor);

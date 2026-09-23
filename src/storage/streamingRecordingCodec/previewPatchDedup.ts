@@ -24,13 +24,12 @@ import type { PreviewDomPatchBatch } from "../../core/src/slides";
 // decode(encode(x)) round-trip reproduces `x` exactly.
 //
 // Symmetry contract: strippers and hydrators must observe added nodes in the
-// same order. Both encoders (the live writer and the one-shot exporter) funnel
-// previewPatch records through `StreamingRecordingWriter.appendEventSegment` in
-// stream order, and both decoders (one-shot and incremental) hydrate segments
-// in stream order — before any time re-sort — so the per-writer/per-reader
-// template lists stay in lockstep: every non-marker dedupable node in the
-// stream is a first occurrence, and both sides append it to their template
-// list at the same index.
+// same order. The writer funnels previewPatch records through
+// `StreamingRecordingWriter.appendEventSegment` in stream order, and both
+// decoders (one-shot and incremental) hydrate segments in stream order — before
+// any time re-sort — so the per-writer/per-reader template lists stay in
+// lockstep: every non-marker dedupable node in the stream is a first occurrence,
+// and both sides append it to their template list at the same index.
 // ============================================================================
 
 // rrweb EventType.IncrementalSnapshot / IncrementalSource.Mutation. Hardcoded

@@ -85,7 +85,7 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - `src/components`: editor UI, preview surfaces, media controls, slides, runtime dock, and camera overlay.
 - `src/contexts`: editor, workspace, slides, runtime, and provider wiring.
 - `src/storage`: SCR3 codec, IndexedDB persistence, import/export helpers, and worker-backed decoding.
-- `src/hooks`: URL loading, live stream forwarding, workspace/runtime hooks, and app adapters.
+- `src/hooks`: URL loading, workspace/runtime hooks, and app adapters.
 - `src/collaboration`: Yjs project schema, provider protocol, room lifecycle, and workspace adapter.
 - `src/voice`: voice-chat engine, state machine, partytracks adapter, audio sinks, and recorder
   privacy bridge.
@@ -139,7 +139,7 @@ vp preview
 
 Next Editor records a timeline of delta-compressed editor frames plus timed side-channel events for slides, preview state, rrweb preview snapshots, API client requests/responses, workspace mutations, runtime events, cursor samples, audio, and optional camera video.
 
-Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporter writes raw SCR3 bytes and the loader reads them directly, with no base64 wrapping. Content-addressed workspace assets ride in dedicated raw segments while project snapshots retain only descriptors; progressive readers persist those bytes and release the handoff buffer. SCR3 is append-only and prefix-decodable, which enables progressive playback from an incomplete download and live forwarding through `recordingStreamSink`. Caption tracks ride along in the SCR3 metadata, either inlined as parsed cues or referenced by `captionFiles` so a hosted `.ne` can load sibling `.vtt`/`.srt` files.
+Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporter writes raw SCR3 bytes and the loader reads them directly, with no base64 wrapping. Content-addressed workspace assets ride in dedicated raw segments while project snapshots retain only descriptors; progressive readers persist those bytes and release the handoff buffer. SCR3 is append-only and prefix-decodable, which enables progressive playback from an incomplete download. Caption tracks ride along in the SCR3 metadata, either inlined as parsed cues or referenced by `captionFiles` so a hosted `.ne` can load sibling `.vtt`/`.srt` files.
 
 ## Streaming And Camera Notes
 
@@ -168,7 +168,7 @@ Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporte
 - [docs/data-flow.md](docs/data-flow.md) for capture, playback, and storage flow.
 - [docs/data-structures.md](docs/data-structures.md) for the recording model and core types.
 - [docs/state-machines.md](docs/state-machines.md) for the XState architecture.
-- [docs/streaming-playback.md](docs/streaming-playback.md) for partial-download and live-stream playback.
+- [docs/streaming-playback.md](docs/streaming-playback.md) for partial-download playback.
 - [docs/cloudflare-architecture.md](docs/cloudflare-architecture.md) for the deployed platform and
   storage responsibility split.
 - [docs/cloudflare-deploy-guide.md](docs/cloudflare-deploy-guide.md) for Cloudflare provisioning,

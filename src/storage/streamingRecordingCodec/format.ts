@@ -99,8 +99,8 @@ export const SEGMENT_KIND = {
   cursor: 7,
   whiteboard: 8,
   chat: 9,
-  /** Authoritative metadata written immediately before the footer by live streams. */
-  finalMeta: 10,
+  // 10 is retired: it named a final-metadata segment that only the never-enabled live
+  // recording sink wrote, so no file carries one. Readers skip it; do not reuse it.
   /** Raw content-addressed workspace asset; project snapshots carry only its descriptor. */
   workspaceAsset: 11,
   // Audio/camera are never inline — they remain sibling files. 12+ are free for future kinds.
@@ -109,9 +109,8 @@ export const SEGMENT_KIND = {
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
 
 /**
- * Canonical mapping between Recording/RecordingSession event arrays and SCR3
- * segment kinds. Both the one-shot exporter and live bridge iterate this table,
- * so adding a track cannot silently update only one encoding path.
+ * Canonical mapping between Recording event arrays and SCR3 segment kinds; the
+ * exporter writes one segment track per entry.
  */
 export const RECORDING_EVENT_SEGMENTS = [
   { kind: SEGMENT_KIND.slide, key: "slideEvents" },
@@ -124,8 +123,6 @@ export const RECORDING_EVENT_SEGMENTS = [
   { kind: SEGMENT_KIND.whiteboard, key: "whiteboardEvents" },
   { kind: SEGMENT_KIND.chat, key: "chatEvents" },
 ] as const;
-
-export type RecordingEventSegmentKey = (typeof RECORDING_EVENT_SEGMENTS)[number]["key"];
 
 export interface RecordingStreamMeta {
   version: 4;
@@ -496,12 +493,12 @@ export function isStreamingRecording(bytes: Uint8Array): boolean {
 }
 
 /**
- * Accepts a decoded metadata value (the header's, or a final-metadata segment's) only
- * when it carries the fields every decoded recording relies on. A hosted `.ne` is
- * untrusted: unchecked, `{}` decoded to a recording with no id and a NaN duration, and a
- * non-array `clusters` or `tracks` crashed assembly with a TypeError.
+ * Accepts decoded header metadata only when it carries the fields every decoded recording
+ * relies on. A hosted `.ne` is untrusted: unchecked, `{}` decoded to a recording with no
+ * id and a NaN duration, and a non-array `clusters` or `tracks` crashed assembly with a
+ * TypeError.
  */
-export function readRecordingStreamMeta(value: unknown, label: string): RecordingStreamMeta {
+function readRecordingStreamMeta(value: unknown, label: string): RecordingStreamMeta {
   const meta = value as Partial<Record<keyof RecordingStreamMeta, unknown>> | null;
   if (
     typeof meta !== "object" ||
@@ -606,6 +603,7 @@ export function readSegmentHeader(view: DataView, offset: number): SegmentHeader
   };
 }
 
+/** Retired kind 10 falls inside this range, so a reader skips it rather than stopping. */
 export function isKnownSegmentKind(kind: number): boolean {
   return kind >= SEGMENT_KIND.frames && kind <= SEGMENT_KIND.workspaceAsset;
 }

@@ -42,10 +42,10 @@ import { createWorkspaceEventContentStripper } from "./workspaceEventDedup";
 // ============================================================================
 // Encoding: turn a `Recording` into SCR3 bytes.
 //
-// `createStreamingRecordingWriter` is the low-level, append-as-you-go writer used
-// while recording live. `encodeRecordingToStream` is the one-shot exporter that
-// writes raw workspace assets once, then orders frame/event segments by cluster and time, so a
-// finalized file is laid out for seeking.
+// `createStreamingRecordingWriter` is the low-level, append-as-you-go writer; its bytes
+// can be taken segment by segment as they are written. `encodeRecordingToStream` is the
+// one-shot exporter that writes raw workspace assets once, then orders frame/event
+// segments by cluster and time, so a finalized file is laid out for seeking.
 // ============================================================================
 
 export interface StreamingSegmentAppendOptions {
@@ -68,14 +68,14 @@ export interface StreamingRecordingWriter {
     asset: WorkspaceRecordingAsset,
     options?: StreamingSegmentAppendOptions,
   ): void;
-  appendFinalMetadata(meta: RecordingStreamMeta): void;
   /** Finalize and materialize a one-shot stream. Invalid after bytes have been drained. */
   finalize(): Uint8Array;
-  /** Append the footer without copying historical bytes (for a draining live writer). */
+  /** Append the footer without materializing the stream (for a caller that drains as it goes). */
   finalizeStream(): void;
+  /** Hand over the bytes written since the last drain and stop retaining them. */
   drainPending(): Uint8Array;
+  /** Bytes written but not yet drained. */
   retainedByteLength(): number;
-  isFinalized(): boolean;
 }
 
 /** What a reader charges one segment against the whole stream's limits. */
@@ -234,17 +234,6 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
         clusterIndex: options?.clusterIndex ?? 0,
       });
     },
-    appendFinalMetadata(meta) {
-      ensureWritable();
-      const encoded = encodeRecords([meta]);
-      // Readers count no records for the final metadata, only its inflated bytes.
-      const cost = { inflatedByteLength: encoded.inflatedByteLength, recordCount: 0 };
-      appendSegment(SEGMENT_KIND.finalMeta, encoded.payload, cost, {
-        startTimeMs: meta.duration,
-        endTimeMs: meta.duration,
-        clusterIndex: Math.max(0, (meta.clusters?.length ?? 1) - 1),
-      });
-    },
     finalize() {
       ensureWritable();
       if (hasDrained) {
@@ -269,9 +258,6 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     },
     retainedByteLength() {
       return pendingLength;
-    },
-    isFinalized() {
-      return finalized;
     },
   };
 }
@@ -329,11 +315,6 @@ function buildRecordingStreamMeta(
     workspaceSnapshot: normalized.workspaceSnapshot,
     runtimeSnapshot: normalized.runtimeSnapshot,
   };
-}
-
-/** Build the authoritative metadata shared by one-shot and finalized live streams. */
-export function createRecordingStreamMeta(recording: Recording): RecordingStreamMeta {
-  return buildRecordingStreamMeta(normalizeRecordingData(recording));
 }
 
 export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {

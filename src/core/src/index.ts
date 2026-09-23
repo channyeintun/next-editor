@@ -35,8 +35,6 @@ export type {
   Recording,
   RecordingStreamDelta,
   RecordingCameraSource,
-  RecordingStreamSink,
-  UseNextEditorConfig,
   EditorState,
 } from "./types";
 
@@ -45,7 +43,7 @@ export { editorMachine } from "./machine/editorMachine";
 export type { EditorActorRef } from "./useNextEditor";
 export { timelineMachine } from "./machine/timelineMachine";
 export type { TimelineActorRef } from "./machine/timelineMachine";
-export type { EditorMachineContext, EditorMachineEvent } from "./machine/types";
+export type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./machine/types";
 
 // Slide type exports
 export type {

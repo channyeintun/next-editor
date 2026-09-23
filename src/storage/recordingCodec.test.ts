@@ -14,7 +14,7 @@ import {
   encodeRecordingToStream,
   SEGMENT_KIND,
 } from "./streamingRecordingCodec";
-import type { StreamingRecordingDelta } from "./streamingRecordingCodec";
+import type { RecordingStreamMeta, StreamingRecordingDelta } from "./streamingRecordingCodec";
 import {
   buildFooterChunk,
   buildHeaderChunk,
@@ -458,7 +458,7 @@ describe("recordingCodec", () => {
   });
 
   it("progressive snapshots keep the cluster bounds they were handed", () => {
-    // A live stream's header carries no cluster table, so clusters come from the
+    // When the header carries no cluster table, clusters come from the
     // per-segment summaries, which later segments widen in place. A snapshot handed out
     // before that must keep its own copy.
     const writer = createStreamingRecordingWriter();
@@ -749,6 +749,72 @@ describe("recordingCodec", () => {
     expect(reader.getRecording()?.cursorEvents).toBeUndefined();
   });
 
+  it("skips a retired kind-10 segment and keeps the header's metadata", () => {
+    // Kind 10 once carried final metadata from a live writer that never shipped; no
+    // file holds one. A reader must neither stop at it nor let it replace the header.
+    const header = buildHeaderChunk(
+      {
+        version: 4,
+        id: "header-id",
+        name: "Header",
+        keyframeInterval: 120,
+        createdAt: 1,
+        duration: 100,
+      },
+      0,
+    );
+    const retiredMeta = {
+      version: 4,
+      id: "retired-id",
+      name: "Retired",
+      keyframeInterval: 120,
+      createdAt: 1,
+      duration: 9_000,
+    };
+    const segments = [
+      buildSegmentChunk(0, encodeRecords([makeKeyframe(0, "a\n")]).payload, 0, 10, 0, 0, true),
+      buildSegmentChunk(10, encodeRecords([retiredMeta]).payload, 10, 10, -1, 0, false),
+      buildSegmentChunk(
+        7,
+        encodeRecords([{ timestamp: 20, x: 1, y: 1, visible: true }]).payload,
+        20,
+        20,
+        -1,
+        0,
+        false,
+      ),
+    ];
+    let byteOffset = header.byteLength;
+    const index = segments.map((segment) => {
+      const entry = { kind: segment[0], byteOffset, firstTimestampMs: 0, firstFrameIndex: -1 };
+      byteOffset += segment.byteLength;
+      return entry;
+    });
+    const concat = (parts: Uint8Array[]) => {
+      const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
+      let offset = 0;
+      for (const part of parts) {
+        bytes.set(part, offset);
+        offset += part.byteLength;
+      }
+      return bytes;
+    };
+
+    for (const bytes of [
+      concat([header, ...segments, buildFooterChunk(index)]),
+      concat([header, ...segments]),
+    ]) {
+      const oneShot = decodeRecordingStream(bytes);
+      expect(oneShot.id).toBe("header-id");
+      expect(oneShot.duration).toBe(100);
+      expect(oneShot.cursorEvents).toHaveLength(1);
+      const reader = createStreamingRecordingReader();
+      reader.push(bytes);
+      expect(reader.getRecording()?.id).toBe("header-id");
+      expect(reader.getRecording()?.cursorEvents).toHaveLength(1);
+    }
+  });
+
   it("rejects bytes that are not an SCR3 stream", async () => {
     await expect(decompressBinaryToRecording(new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow(
       /SCR3/,
@@ -951,3 +1017,134 @@ describe("recordingCodec", () => {
     expect(decoded.cameraBlob).toBeUndefined();
   });
 });
+
+describe("createStreamingRecordingWriter", () => {
+  it("carries raw workspace assets outside project snapshots", () => {
+    const meta: RecordingStreamMeta = {
+      version: 4,
+      id: "asset-writer",
+      name: "Asset writer",
+      keyframeInterval: 120,
+      createdAt: 1,
+      duration: 10,
+    };
+    const descriptor = {
+      kind: "asset" as const,
+      assetId: "asset-payload",
+      mimeType: "image/png",
+      size: 4,
+    };
+    const writer = createStreamingRecordingWriter();
+    writer.writeHeader(meta);
+    writer.appendWorkspaceAssetSegment({
+      descriptor,
+      bytes: new Uint8Array([1, 2, 3, 4]),
+    });
+    const encoded = writer.finalize();
+
+    expect(decodeRecordingStream(encoded).workspaceAssets).toEqual([
+      { descriptor, bytes: new Uint8Array([1, 2, 3, 4]) },
+    ]);
+
+    const reader = createStreamingRecordingReader();
+    reader.push(encoded);
+    expect(reader.readDelta()?.newWorkspaceAssets).toEqual([
+      { descriptor, bytes: new Uint8Array([1, 2, 3, 4]) },
+    ]);
+    expect(reader.getRecording()?.workspaceAssets).toBeUndefined();
+  });
+
+  it("releases drained chunks and finalizes without materializing stream history", () => {
+    const meta: RecordingStreamMeta = {
+      version: 4,
+      id: "bounded-writer",
+      name: "Bounded writer",
+      keyframeInterval: 120,
+      createdAt: 1,
+      duration: 10,
+    };
+    const writer = createStreamingRecordingWriter();
+    writer.writeHeader(meta);
+    expect(writer.retainedByteLength()).toBeGreaterThan(0);
+    expect(writer.drainPending().length).toBeGreaterThan(0);
+    expect(writer.retainedByteLength()).toBe(0);
+
+    for (let index = 0; index < 100; index += 1) {
+      writer.appendEventSegment(SEGMENT_KIND.cursor, [
+        { timestamp: index, x: index, y: index, visible: true },
+      ]);
+      expect(writer.drainPending().length).toBeGreaterThan(0);
+      expect(writer.retainedByteLength()).toBe(0);
+    }
+
+    writer.finalizeStream();
+    expect(writer.drainPending().length).toBeGreaterThan(0);
+    expect(writer.retainedByteLength()).toBe(0);
+    expect(() => writer.finalize()).toThrow(/already finalized/i);
+  });
+});
+
+// Opt in explicitly because this is an acceptance/soak case, not a unit-test
+// workload. It moves 100 MiB through the codec but keeps only one 1 MiB asset
+// segment live at a time, so the assertion measures the reader's retained tail
+// instead of relying on process-wide heap sampling.
+describe.skipIf(process.env.NEXT_EDITOR_LARGE_RECORDING_TESTS !== "1")(
+  "large streaming recording acceptance",
+  () => {
+    it("keeps compressed input capacity bounded across a 100 MiB stream", () => {
+      const meta: RecordingStreamMeta = {
+        version: 4,
+        id: "large-bounded-reader",
+        name: "Large bounded reader",
+        keyframeInterval: 120,
+        createdAt: 1,
+        duration: 10,
+      };
+      const oneMiB = 1024 * 1024;
+      const writer = createStreamingRecordingWriter();
+      const reader = createStreamingRecordingReader();
+      let streamedBytes = 0;
+      let maximumCapacity = 0;
+
+      const pushChunk = (chunk: Uint8Array) => {
+        streamedBytes += chunk.byteLength;
+        const split = Math.floor(chunk.byteLength / 2);
+        reader.push(chunk.subarray(0, split));
+        maximumCapacity = Math.max(maximumCapacity, reader.retainedCapacity());
+        reader.push(chunk.subarray(split));
+        maximumCapacity = Math.max(maximumCapacity, reader.retainedCapacity());
+      };
+
+      writer.writeHeader(meta);
+      pushChunk(writer.drainPending());
+      reader.readDelta();
+
+      const assetBytes = new Uint8Array(oneMiB);
+      for (let index = 0; index < 100; index += 1) {
+        assetBytes.fill(index);
+        writer.appendWorkspaceAssetSegment({
+          descriptor: {
+            kind: "asset",
+            assetId: `large-asset-${index}`,
+            mimeType: "application/octet-stream",
+            size: assetBytes.byteLength,
+          },
+          bytes: assetBytes,
+        });
+        pushChunk(writer.drainPending());
+        const delta = reader.readDelta();
+        expect(delta?.newWorkspaceAssets).toHaveLength(1);
+      }
+
+      writer.finalizeStream();
+      pushChunk(writer.drainPending());
+      reader.readDelta();
+
+      expect(streamedBytes).toBeGreaterThanOrEqual(100 * oneMiB);
+      expect(reader.byteLength()).toBe(streamedBytes);
+      expect(reader.retainedByteLength()).toBe(0);
+      expect(maximumCapacity).toBeLessThanOrEqual(2 * oneMiB);
+      expect(reader.isFinalized()).toBe(true);
+    });
+  },
+);

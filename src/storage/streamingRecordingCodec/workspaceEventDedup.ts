@@ -17,10 +17,10 @@ import type { WorkspaceFile, WorkspaceRecordingEvent } from "../../types/workspa
 // decode(encode(x)) round-trip reproduces `x` exactly.
 //
 // Symmetry contract: strippers and hydrators must observe events in the same
-// order. Both encoders (the live writer and the one-shot exporter) funnel
-// workspace records through `StreamingRecordingWriter.appendEventSegment` in
-// stream order, and both decoders (one-shot and incremental) accumulate segments
-// in stream order, so a per-writer/per-reader carry map stays in lockstep.
+// order. The writer funnels workspace records through
+// `StreamingRecordingWriter.appendEventSegment` in stream order, and both
+// decoders (one-shot and incremental) accumulate segments in stream order, so a
+// per-writer/per-reader carry map stays in lockstep.
 // ============================================================================
 
 /** Stream-only shape: a `WorkspaceFile` whose content was deduped away. */

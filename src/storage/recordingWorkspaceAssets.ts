@@ -4,7 +4,6 @@ import {
   isWorkspaceAssetFile,
   type WorkspaceAssetDescriptor,
   type WorkspaceRecordingAsset,
-  type WorkspaceRecordingEvent,
   type WorkspaceRecordingSnapshot,
 } from "../types/workspace";
 import { getWorkspaceAssetBytes, registerWorkspaceAsset } from "./workspaceAssetStore";
@@ -52,19 +51,6 @@ export function collectRecordingWorkspaceAssetDescriptors(
   collectSnapshotDescriptors(recording.workspaceSnapshot, descriptors);
   for (const event of recording.workspaceEvents ?? []) {
     collectSnapshotDescriptors(event.snapshot, descriptors);
-  }
-  return Array.from(descriptors.values());
-}
-
-export function collectWorkspaceEventAssetDescriptors(
-  records: ReadonlyArray<unknown>,
-): WorkspaceAssetDescriptor[] {
-  const descriptors = new Map<string, WorkspaceAssetDescriptor>();
-  for (const record of records) {
-    if (!record || typeof record !== "object") continue;
-    const snapshot = (record as Partial<WorkspaceRecordingEvent>).snapshot;
-    if (!snapshot || typeof snapshot !== "object" || !("project" in snapshot)) continue;
-    collectSnapshotDescriptors(snapshot as WorkspaceRecordingSnapshot, descriptors);
   }
   return Array.from(descriptors.values());
 }

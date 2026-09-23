@@ -110,8 +110,6 @@ The streaming codec is also deliberately ordered:
 - [format.ts](../src/storage/streamingRecordingCodec/format.ts) describes time-ordered segment
   tracks; segments do not contain the client, operation, or causal identifiers needed for
   conflict resolution.
-- [recordingStreamSink.ts](../src/storage/recordingStreamSink.ts) batches recording data for
-  append-only streaming rather than low-latency editing acknowledgements.
 
 Changing those invariants would make recording recovery and progressive playback substantially
 more complex. A CRDT can resolve concurrent changes first, after which the existing recorder can
@@ -501,8 +499,8 @@ release gate.
 - Following any exact remote session mirrors only its editor/slides/whiteboard view. Local input,
   target loss, room change, and playback stop following without changing permissions.
 - Leaving a room restores the exact standalone slide deck and whiteboard scene.
-- Standalone editing, recording, saved-file playback, and one-producer live streaming continue to
-  work when collaboration is not configured.
+- Standalone editing, recording, and saved-file playback continue to work when collaboration is
+  not configured.
 
 ## Testing strategy
 
@@ -520,8 +518,8 @@ release gate.
 - Verify collaboration transports receive no SCR3 payload and the post-session recording can be
   resumed from IndexedDB and passed to the existing `UploadLessonModal` flow.
 - Test that non-host recording controls are disabled and host transfer is rejected while recording.
-- Keep codec regression fixtures for finalized, partial-prefix, and live SCR3 streams. CRDT
-  transport changes must not alter their decoded output.
+- Keep codec regression fixtures for finalized and partial-prefix SCR3 streams. CRDT transport
+  changes must not alter their decoded output.
 
 ## Security, privacy, and operations
 

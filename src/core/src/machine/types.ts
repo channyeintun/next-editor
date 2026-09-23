@@ -71,8 +71,8 @@ export interface RecordingSessionMediaFragment {
  * array field below — stays stable for the whole recording. Appenders push in place
  * rather than spreading into a new array/object, so capture cost is O(1) instead of
  * O(session-so-far) per sample. Arrays are append-only during a session; only indices
- * `<= length` observed at read time are stable, so incremental readers (e.g. the
- * live stream sink) must track their own read cursor rather than diffing snapshots.
+ * `<= length` observed at read time are stable, so code that reads a session while it
+ * records must keep its own read cursor; snapshots share these arrays and cannot be diffed.
  * `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-
  * equality selectors can still detect a change.
  */
@@ -537,8 +537,8 @@ export type EditorMachineEvent =
 // ============================================================================
 
 /**
- * Input provided when creating the machine. NextEditorProvider supplies it as part of
- * UseNextEditorConfig (src/core/src/types.ts).
+ * Input provided when creating the machine. NextEditorProvider builds it from the app's
+ * stores and passes it as the editor actor's `input`.
  */
 export interface EditorMachineInput {
   /** Monaco editor ref */
