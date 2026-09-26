@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import type { LoggerEvent } from "babel-plugin-react-compiler";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 /**
  * The React Compiler is this app's memoization: manual useMemo/useCallback were

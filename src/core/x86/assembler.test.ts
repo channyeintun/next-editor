@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { assemble } from "./assembler";
 import { AsmError } from "./errors";
 import { parseIntegerLiteral, tokenize } from "./lexer";

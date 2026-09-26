@@ -1,5 +1,5 @@
 import { act, render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { WorkspaceEventRecorder } from "./WorkspaceEventRecorder";
 import { createWorkspaceStore, WorkspaceStoreContext } from "../stores/workspaceStore";
 import type { WorkspaceProject, WorkspaceTextFile } from "../types/workspace";

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { ZIG_LANGUAGE_ID, zigLanguageConfiguration, zigMonarchLanguage } from "./zigLanguage";
 import { inferLanguageFromPath } from "../types/workspace";
 import type { Monaco } from "./runtime";

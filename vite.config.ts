@@ -1,6 +1,4 @@
-import { defineConfig, lazyPlugins } from "vite-plus";
-import { loadEnv } from "vite";
-import type { PluginOption } from "@voidzero-dev/vite-plus-core";
+import { defineConfig, lazyPlugins, loadEnv } from "vite-plus";
 import tailwindcss from "@tailwindcss/vite";
 import wasm from "vite-plugin-wasm";
 import posthog from "@posthog/rollup-plugin";
@@ -29,11 +27,9 @@ function stagedChecks(stagedFileNames: readonly string[]): string[] {
 
   return [
     ...(files.length > 0 ? [`vp fmt --threads=1 ${files.join(" ")}`] : []),
-    ...(lintableFiles.length > 0
-      ? [
-          `oxlint --fix --threads=1 --deny-warnings --react-plugin --vitest-plugin -A react-hooks/exhaustive-deps ${lintableFiles.join(" ")}`,
-        ]
-      : []),
+    // Vite+ bundles its own oxlint (it no longer ships an `oxlint` binary), and
+    // `vp lint` applies the `lint` block below — plugins, rules, denyWarnings.
+    ...(lintableFiles.length > 0 ? [`vp lint --fix --threads=1 ${lintableFiles.join(" ")}`] : []),
   ];
 }
 
@@ -49,23 +45,23 @@ export default ({ mode }: { mode: string }) => {
     // exhaust the allocator before analysis begins.
     staged: stagedChecks,
     plugins: [
-      rrwebRecorderBundlePlugin() as unknown as PluginOption,
+      rrwebRecorderBundlePlugin(),
       // Dev-server equivalent of infra/worker/routes/proxy.ts: lets
       // `bun run dev` resolve the same /api/proxy route the Worker
       // serves in production.
-      proxyPlugin() as unknown as PluginOption,
+      proxyPlugin(),
       // Dev-server equivalent of infra/worker/routes/openrouter.ts: lets
       // `bun run dev` resolve the same /api/openrouter/responses route the
       // Worker serves in production (see src/shared/openrouterProxy.ts).
-      openrouterProxyPlugin() as unknown as PluginOption,
-      wasm() as unknown as PluginOption,
+      openrouterProxyPlugin(),
+      wasm(),
       posthog({
         personalApiKey: process.env.POSTHOG_API_KEY!,
         projectId: process.env.POSTHOG_PROJECT_ID,
         host: process.env.POSTHOG_HOST,
         sourcemaps: { deleteAfterUpload: true },
-      }) as unknown as PluginOption,
-      tailwindcss() as unknown as PluginOption,
+      }),
+      tailwindcss(),
       lazyPlugins(async () => {
         const { default: react, reactCompilerPreset } = await import("@vitejs/plugin-react");
         const { default: babel } = await import("@rolldown/plugin-babel");
@@ -86,9 +82,9 @@ export default ({ mode }: { mode: string }) => {
           // `const $ = _c(`. Vitest does not run this plugin; for the context
           // providers, src/contexts/reactCompilerCoverage.test.ts does.
           babel({ presets: [reactCompilerPreset()] }),
-        ] as unknown as PluginOption[];
+        ];
       }),
-    ] as unknown as PluginOption[],
+    ],
     resolve: {
       // tube/ installs its own dependencies (it is not a root workspace), so a
       // package it depends on resolves React from tube/node_modules while the
@@ -115,16 +111,29 @@ export default ({ mode }: { mode: string }) => {
         "@next-editor/infra": fileURLToPath(new URL("./infra/client/index.ts", import.meta.url)),
         // Lets the tube package import the app's Editor for the /learn detail view.
         "@app": fileURLToPath(new URL("./src", import.meta.url)),
+        // y-monaco (0.1.6, still the latest) imports Monaco's pre-0.56 deep path.
+        // monaco-editor 0.56+ maps its `exports` onto esm/vs/, so that specifier
+        // would resolve to esm/vs/esm/vs/…; send it to the same module the app
+        // reaches through `monaco-editor/editor`, keeping a single Monaco instance.
+        "monaco-editor/esm/vs/editor/editor.api.js": "monaco-editor/editor/editor.api.js",
       },
     },
     worker: {
       // ES-module workers tolerate the top-level await that vite-plugin-wasm emits
       // in the generated wasm module (the recording worker is already type:module).
       format: "es",
-      plugins: () => [wasm()] as unknown as PluginOption[],
+      plugins: () => [wasm()],
     },
     test: {
       globals: true,
+      // jsdom is held at 27.4, the last release whose internals match the Blob
+      // conversion behind this environment's URL.createObjectURL and Blob/FormData
+      // request bodies in the bundled Vitest 5.0.1: jsdom 28 renamed the byte
+      // store, so Blobs silently arrive as the text "undefined"
+      // (https://github.com/vitest-dev/vitest/issues/11294), and 30.1 moved it
+      // behind a private field, so they throw
+      // (https://github.com/vitest-dev/vitest/issues/11336). Lift the hold once a
+      // Vite+ release bundles both fixes.
       environment: "jsdom",
       setupFiles: ["./vitest.setup.ts"],
       include: [
@@ -143,6 +152,9 @@ export default ({ mode }: { mode: string }) => {
         // so Vitest resolves that import through this mock instead of asking
         // Node to load Monaco's CSS-bearing ESM graph directly.
         "monaco-editor/esm/vs/editor/editor.api.js": monacoTestMock,
+        // The first-party grammars import Monaco's editor entry point. It has to
+        // precede the bare package alias, which would otherwise prefix-match it.
+        "monaco-editor/editor": monacoTestMock,
         "monaco-editor": monacoTestMock,
       },
       server: {
@@ -174,6 +186,16 @@ export default ({ mode }: { mode: string }) => {
         // with "changes every render" on values the compiler already memoizes.
         // rules-of-hooks stays on. See [[react-compiler-babel-preset]].
         "react-hooks/exhaustive-deps": "off",
+        // oxlint 1.78+ ports the React Compiler's own diagnostics (rules of React:
+        // mutated props and globals, refs read during render, setState in effects,
+        // impure render calls). They flag components the compiler already skips —
+        // pre-existing bailouts, not regressions — so they stay off until those
+        // are refactored, rather than failing denyWarnings all at once.
+        "react/globals": "off",
+        "react/immutability": "off",
+        "react/purity": "off",
+        "react/refs": "off",
+        "react/set-state-in-effect": "off",
         "tailwindcss/enforce-canonical": "warn",
         "tailwindcss/enforce-shorthand": "warn",
         "tailwindcss/no-unnecessary-arbitrary-value": "warn",

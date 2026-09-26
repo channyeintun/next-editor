@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { AsmPlaygroundClient, AsmPlaygroundServiceError } from "./client";
 import { collectAsmPlaygroundFiles } from "./files";
 import { parseAsmPlaygroundRunResult } from "./types";

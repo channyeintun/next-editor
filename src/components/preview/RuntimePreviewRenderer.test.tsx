@@ -1,6 +1,6 @@
 import { createRef } from "react";
 import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { RuntimePreviewRenderer } from "./RuntimePreviewRenderer";
 
 function renderFrame(allowSameOrigin: boolean) {

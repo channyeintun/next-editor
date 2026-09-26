@@ -1,5 +1,5 @@
 import { createActor } from "xstate";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { collaborationMachine } from "./collaborationMachine";
 
 const SESSION_ID = "20000000-0000-4000-8000-000000000001";

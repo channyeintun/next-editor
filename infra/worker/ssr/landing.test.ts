@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToString } from "react-dom/server.edge";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import LandingPage from "../../../src/components/LandingPage";
 import { injectLandingMarkup, renderLandingMarkup, renderLandingResponse } from "./landing";
 

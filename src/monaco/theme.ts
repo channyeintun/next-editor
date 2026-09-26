@@ -161,7 +161,7 @@ const EDITOR_OPTIONS = {
   wordBasedSuggestions: "currentDocument" as const,
   parameterHints: { enabled: false },
   fontWeight: "normal" as const,
-  hover: { enabled: false },
+  hover: { enabled: "off" as const },
   contextmenu: false,
   folding: false,
   foldingHighlight: false,

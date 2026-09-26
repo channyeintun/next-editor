@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WhiteboardEvent } from "../core/src/whiteboard";
 import { createWhiteboardStore } from "../stores/whiteboardStore";
 import {

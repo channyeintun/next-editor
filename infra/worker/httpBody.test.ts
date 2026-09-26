@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { readBodyWithLimit, readBytesWithLimit } from "./httpBody";
 
 function streamOf(...chunks: Uint8Array[]): ReadableStream<Uint8Array> {

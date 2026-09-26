@@ -2,7 +2,7 @@
 // (fake-indexeddb stores Blobs with the global structuredClone, which under jsdom
 // cannot clone jsdom's Blob; see src/test/fakeIndexedDB.ts.)
 import { IDBObjectStore } from "fake-indexeddb";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { FakeIndexedDB } from "../test/fakeIndexedDB";
 import type { WorkspaceAssetDescriptor, WorkspaceProject } from "../types/workspace";
 import {

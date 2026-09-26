@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { WorkspaceLessonType } from "../types/workspace";
 import type { ChatDelta } from "../types/chat";
@@ -60,12 +60,24 @@ interface FakeModelInput {
   input: unknown;
   instructions?: unknown;
   model?: unknown;
+  signal?: AbortSignal;
   tools?: { name?: string; function?: { name?: string } }[];
+}
+
+/** The SDK's `getUsage()` totals, as a run that made `modelCalls` calls reports them. */
+function usageTotals(inputTokens: number, outputTokens: number, modelCalls = 1) {
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    cachedTokens: 0,
+    reasoningTokens: 0,
+    modelCalls,
+  };
 }
 
 function fakeCallModel(items: StreamItem[], usage?: { inputTokens: number; outputTokens: number }) {
   const calls: FakeModelInput[] = [];
-  const cancel = vi.fn<() => Promise<void>>(async () => {});
   const callModel = ((request: FakeModelInput) => {
     calls.push(request);
     return {
@@ -74,11 +86,11 @@ function fakeCallModel(items: StreamItem[], usage?: { inputTokens: number; outpu
           yield item;
         }
       },
-      getResponse: async () => ({ usage }),
-      cancel,
+      getUsage: async () =>
+        usage ? usageTotals(usage.inputTokens, usage.outputTokens) : usageTotals(0, 0, 0),
     };
   }) as unknown as NonNullable<RunAgentLoopOptions["callModel"]>;
-  return { callModel, calls, cancel };
+  return { callModel, calls };
 }
 
 function baseOptions() {
@@ -113,8 +125,6 @@ describe("runAgentLoop", () => {
         yield { type: "provider_failure_pending" };
         throw new Error("Response failed");
       },
-      getResponse: async () => ({ usage: undefined }),
-      cancel: async () => {},
     })) as unknown as NonNullable<RunAgentLoopOptions["callModel"]>;
 
     await expect(
@@ -374,35 +384,21 @@ describe("runAgentLoop", () => {
     expect(deltas.some((d) => d.k === "status" && d.status === "error")).toBe(false);
   });
 
-  // The SDK overwrites `finalResponse` every turn and never accumulates, so
-  // reading it once after the run reported only the last turn — the single
-  // largest summand, since the transcript grows monotonically. A tool-heavy run
-  // understated real spend by a multiple.
-  it("sums token usage across every turn of a multi-step run", async () => {
+  // `getResponse()` reports only the final turn — the single largest summand,
+  // since the transcript grows monotonically — so reading usage from it
+  // understated a tool-heavy run's real spend by a multiple.
+  it("reports the whole run's usage from getUsage(), not the last turn's response", async () => {
     const { deltas, ...options } = baseOptions();
     const usages: { inputTokens: number; outputTokens: number }[] = [];
 
     const callModel = (() => ({
-      getFullResponsesStream: async function* () {
-        yield {
-          type: "response.completed",
-          response: { usage: { inputTokens: 100, outputTokens: 10 } },
-        };
-        yield {
-          type: "response.completed",
-          response: { usage: { inputTokens: 250, outputTokens: 20 } },
-        };
-        yield {
-          type: "response.completed",
-          response: { usage: { inputTokens: 400, outputTokens: 30 } },
-        };
-      },
       getItemsStream: async function* () {
         yield messageItem("m1", "done");
       },
-      // The last turn alone, which is what the old code reported.
+      // Three model calls: 100+250+400 in, 10+20+30 out.
+      getUsage: async () => usageTotals(750, 60, 3),
+      // The last turn alone.
       getResponse: async () => ({ usage: { inputTokens: 400, outputTokens: 30 } }),
-      cancel: async () => {},
     })) as unknown as NonNullable<RunAgentLoopOptions["callModel"]>;
 
     await runAgentLoop({
@@ -416,17 +412,34 @@ describe("runAgentLoop", () => {
     expect(usages).toEqual([{ inputTokens: 750, outputTokens: 60 }]);
   });
 
+  it("reports no usage when no model call completed", async () => {
+    const { deltas, ...options } = baseOptions();
+    const { callModel } = fakeCallModel([]);
+    const onUsage = vi.fn<(usage: { inputTokens: number; outputTokens: number }) => void>();
+
+    await runAgentLoop({
+      ...options,
+      prompt: "hi",
+      callModel,
+      onUsage,
+      onDelta: (d) => deltas.push(d),
+    });
+
+    expect(onUsage).not.toHaveBeenCalled();
+  });
+
   // The SDK's full-response stream is fed by the same broadcaster its tool loop
-  // completes, so awaiting it on the abort path would block until the abandoned
-  // run exhausts `stopWhen` — leaving `isRunning` true and the panel wedged.
+  // completes, and an aborted loop only stops at its next turn boundary, so
+  // awaiting it on the abort path would leave `isRunning` true and the panel
+  // wedged until a tool still in flight returned.
   it("settles immediately on abort instead of awaiting the provider-error observer", async () => {
     const controller = new AbortController();
     const { deltas, ...options } = baseOptions();
     let observerReleased = false;
 
     const callModel = (() => ({
-      // Never ends on its own — stands in for a broadcaster still feeding an
-      // abandoned tool loop.
+      // Never ends on its own — stands in for a broadcaster still feeding the
+      // aborted tool loop.
       getFullResponsesStream: () => ({
         [Symbol.asyncIterator]: () => ({
           next: () =>
@@ -440,8 +453,6 @@ describe("runAgentLoop", () => {
         controller.abort();
         yield messageItem("m1", "partial and then some");
       },
-      getResponse: async () => ({ usage: undefined }),
-      cancel: async () => {},
     })) as unknown as NonNullable<RunAgentLoopOptions["callModel"]>;
 
     await runAgentLoop({
@@ -456,10 +467,27 @@ describe("runAgentLoop", () => {
     expect(deltas.filter((d) => d.k === "status").at(-1)).toEqual({ k: "status", status: "done" });
   });
 
-  // `cancel()` reaches only the first turn's stream; on a later turn it rejects
-  // against an already-released reader, and an unhandled rejection would surface
-  // as a spurious error long after Stop.
-  it("swallows a rejecting cancel() so abort produces no unhandled rejection", async () => {
+  // Stop has to reach the SDK itself: without the signal its tool loop keeps
+  // calling the model on the user's key until `stopWhen` is met.
+  it("hands the run's abort signal to callModel", async () => {
+    const controller = new AbortController();
+    const { deltas, ...options } = baseOptions();
+    const { callModel, calls } = fakeCallModel([messageItem("m1", "ok")]);
+
+    await runAgentLoop({
+      ...options,
+      signal: controller.signal,
+      prompt: "hi",
+      callModel,
+      onDelta: (d) => deltas.push(d),
+    });
+
+    expect(calls[0]?.signal).toBe(controller.signal);
+  });
+
+  // With the signal, the SDK rejects its streams with the abort reason; that is
+  // a stopped run, not a failed one.
+  it("ends with status done (no error) when the item stream rejects with the abort", async () => {
     const controller = new AbortController();
     const { deltas, ...options } = baseOptions();
 
@@ -467,11 +495,7 @@ describe("runAgentLoop", () => {
       getItemsStream: async function* () {
         yield messageItem("m1", "working");
         controller.abort();
-        yield messageItem("m1", "working still");
-      },
-      getResponse: async () => ({ usage: undefined }),
-      cancel: async () => {
-        throw new Error("Reader has been released");
+        throw controller.signal.reason;
       },
     })) as unknown as NonNullable<RunAgentLoopOptions["callModel"]>;
 
@@ -484,5 +508,7 @@ describe("runAgentLoop", () => {
         onDelta: (d) => deltas.push(d),
       }),
     ).resolves.toBeUndefined();
+    expect(deltas.filter((d) => d.k === "status").at(-1)).toEqual({ k: "status", status: "done" });
+    expect(deltas.some((d) => d.k === "status" && d.status === "error")).toBe(false);
   });
 });

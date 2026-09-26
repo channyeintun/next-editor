@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { createStarterAsmWorkspace } from "./asm";
 import { assembleAndRun } from "../core/x86";
 import { isWorkspaceTextFile } from "../types/workspace";

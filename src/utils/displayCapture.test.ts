@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { acquireDisplayStream, isScreenCaptureSupported } from "./displayCapture";
 
 // isMobileBrowser reads navigator; stub it so support gating is deterministic.

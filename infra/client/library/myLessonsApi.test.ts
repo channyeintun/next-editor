@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { apiClient } from "../apiClient";
 import { deleteLesson, fetchMyLessons, unpublishLesson } from "./myLessonsApi";
 

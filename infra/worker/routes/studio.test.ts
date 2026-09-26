@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { encodeWavPcm16 } from "../../../src/studio/tts/wav";
 import type { UserRow } from "../../db/types";
 import type { Env } from "../env";

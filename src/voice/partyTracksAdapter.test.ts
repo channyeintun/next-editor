@@ -1,5 +1,5 @@
 import { Observable, BehaviorSubject, Subject, type Subscriber } from "rxjs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { createVoiceMediaSession } from "./partyTracksAdapter";
 
 const partyMocks = vi.hoisted(() => ({

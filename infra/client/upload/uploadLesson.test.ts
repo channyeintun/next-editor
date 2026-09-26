@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "@app/core/src";
 import { apiClient } from "../apiClient";
 import { formatDuration, uploadLesson } from "./uploadLesson";

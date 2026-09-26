@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WebContainer } from "@webcontainer/api";
 import type { WorkspaceProject } from "../types/workspace";
 import {

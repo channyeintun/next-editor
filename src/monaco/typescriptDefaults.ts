@@ -1,7 +1,4 @@
-import * as monacoTypeScriptModule from "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
-
-const monacoTypeScript =
-  monacoTypeScriptModule as unknown as typeof import("monaco-editor").typescript;
+import * as monacoTypeScript from "monaco-editor/languages/features/typescript/register";
 
 const MONACO_BUNDLER_MODULE_RESOLUTION = 100;
 

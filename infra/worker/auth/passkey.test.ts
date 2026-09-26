@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { passkeyRoute } from "./passkey";
 import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import type { SessionRow } from "../../db/types";

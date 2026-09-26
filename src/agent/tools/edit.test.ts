@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { makeFile, makeStore, makeCtx } from "./testUtils";
 import { getProject } from "./workspaceFs";
 import { makeEditTool } from "./edit";

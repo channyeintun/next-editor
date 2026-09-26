@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { cached, getCache, invalidateCache } from "./cache";
 
 // A minimal in-memory fake satisfying only the three KV methods cached() and

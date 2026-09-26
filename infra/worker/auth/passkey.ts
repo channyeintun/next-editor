@@ -7,11 +7,7 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import type {
-  AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
-  RegistrationResponseJSON,
-} from "@simplewebauthn/server";
+import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import type { Env } from "../env";
 import { createSession } from "../../db/queries";
@@ -101,10 +97,10 @@ async function takeChallengeCookie<E extends { Bindings: Env }>(
   }
 }
 
-function parseTransports(json: string | null): AuthenticatorTransportFuture[] | undefined {
+function parseTransports(json: string | null): string[] | undefined {
   if (!json) return undefined;
   try {
-    return JSON.parse(json) as AuthenticatorTransportFuture[];
+    return JSON.parse(json) as string[];
   } catch {
     return undefined;
   }

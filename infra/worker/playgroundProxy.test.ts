@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { checkPlaygroundRateLimit } from "./playgroundProxy";
 import { countingRateLimiter, refusingRateLimiter } from "./testing/rateLimit";
 

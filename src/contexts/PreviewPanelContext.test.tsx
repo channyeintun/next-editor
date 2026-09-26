@@ -1,5 +1,5 @@
 import { act, render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import {
   PREVIEW_DOCK_MAX_WIDTH,
   PREVIEW_DOCK_MIN_WIDTH,

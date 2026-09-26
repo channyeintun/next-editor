@@ -6,7 +6,7 @@ import type { Plugin } from "vite";
 
 export const RRWEB_RECORDER_BUNDLE_MODULE_ID = "virtual:rrweb-recorder-bundle";
 export const RRWEB_RECORDER_GZIP_BUDGET_BYTES = 56_171;
-export const PINNED_RRWEB_RECORD_VERSION = "2.1.0";
+export const PINNED_RRWEB_RECORD_VERSION = "2.1.6";
 
 const RESOLVED_MODULE_ID = `\0${RRWEB_RECORDER_BUNDLE_MODULE_ID}`;
 const require = createRequire(import.meta.url);

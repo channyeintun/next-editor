@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { LEXICON_V1, spokenFormOf } from "./lexicon";
 
 describe("spokenFormOf", () => {

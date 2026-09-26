@@ -1,4 +1,4 @@
-import { expect } from "vitest";
+import { expect } from "vite-plus/test";
 
 import { resolveAnchorOffset } from "./async";
 import type { LessonScript } from "./script/schema";

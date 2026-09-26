@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { hydrate, QueryClient } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { hydrate, QueryClient, type DehydratedState } from "@tanstack/react-query";
+import { describe, expect, it } from "vite-plus/test";
 import type { Lesson } from "../../../tube/src/types";
 import {
   buildLessonJsonLd,
@@ -32,7 +32,7 @@ const LESSON: Lesson = {
 
 const CONTEXT = { lesson: LESSON, slug: LESSON.slug, origin: "https://nexteditor.dev" };
 
-function readQueryState(document: string): unknown {
+function readQueryState(document: string): DehydratedState {
   const match = new RegExp(
     `<script type="application/json" id="${QUERY_STATE_ELEMENT_ID}">([\\s\\S]*?)</script>`,
   ).exec(document);

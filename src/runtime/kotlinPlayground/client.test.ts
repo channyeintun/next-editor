@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { KotlinPlaygroundClient, KotlinPlaygroundServiceError } from "./client";
 import type { KotlinPlaygroundFile, KotlinPlaygroundRunResult } from "./types";
 

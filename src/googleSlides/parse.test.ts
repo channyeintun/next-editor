@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import fixtureHtml from "./__fixtures__/published-deck.html?raw";
 import { isPublishedDeckUrl, parsePublishedDeck } from "./parse";
 import { normalizeSvg } from "./normalizeSvg";

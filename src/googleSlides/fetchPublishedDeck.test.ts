@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import fixtureHtml from "./__fixtures__/published-deck.html?raw";
 import { fetchPublishedDeck } from "./fetchPublishedDeck";
 import { GoogleSlidesParseError } from "./types";

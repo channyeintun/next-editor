@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { generateUniqueSlug } from "./slug";
 
 /** D1 stand-in whose `lessons`/`playlists` tables hold the given slugs. */

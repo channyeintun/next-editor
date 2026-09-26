@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import type { ChatDelta } from "../../../types/chat";
 import { createContentDelta } from "./frameDelta";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "./chatDelta";

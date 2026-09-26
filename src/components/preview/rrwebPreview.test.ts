@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   loadRrwebRecorderBundle,
   PINNED_RRWEB_RECORD_VERSION,
@@ -243,6 +243,7 @@ describe("recorder wiring snapshot handshake", () => {
     try {
       // Indirect eval so the bundle + wiring run at global scope, as they would
       // when inlined into the served preview page.
+      // oxlint-disable-next-line no-eval -- running the served script is the point
       (0, eval)(createRrwebPreviewRecorderScript({ setupMarker: "__WIRING_TEST__" }));
       await sleep(50);
 

@@ -1,7 +1,7 @@
 import { act, render } from "@testing-library/react";
 import { useContext } from "react";
 import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import {

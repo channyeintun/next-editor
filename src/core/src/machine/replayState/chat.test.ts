@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import type { ChatCheckpoint, ChatRecordingEvent } from "../../../../types/chat";
 import { createContentDelta } from "../../utils/frameDelta";
 import { getChatReplayResult } from "./chat";

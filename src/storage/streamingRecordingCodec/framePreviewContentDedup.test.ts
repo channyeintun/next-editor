@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import type { Recording } from "../../core/src";
 import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
 import { normalizeRecordingData } from "../../core/src/utils/editorState";

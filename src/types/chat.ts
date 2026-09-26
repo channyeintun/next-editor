@@ -101,13 +101,11 @@ export function toEasyInputMessage({
   const content = images?.length
     ? [
         ...(text ? ([{ type: "input_text", text }] satisfies InputText[]) : []),
-        ...images.map(
-          (image): EasyInputMessageContentInputImage => ({
-            type: "input_image",
-            imageUrl: image.dataUrl,
-            detail: "auto",
-          }),
-        ),
+        ...images.map((image): EasyInputMessageContentInputImage => ({
+          type: "input_image",
+          imageUrl: image.dataUrl,
+          detail: "auto",
+        })),
       ]
     : text;
 

@@ -1,4 +1,4 @@
-import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { installDmpCodec, instantiateDmpCodec } from "./src/storage/dmpCodec/dmpCodec";

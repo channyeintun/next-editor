@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { createActor } from "xstate";
 import { voiceMachine, type VoiceMachineEvent } from "./machine";
 

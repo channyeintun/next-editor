@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   FILE_SIDEBAR_COLLAPSED_STORAGE_KEY,
   getClampedFileSidebarWidth,

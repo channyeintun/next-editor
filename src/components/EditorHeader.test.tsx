@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { PreviewHeaderButton } from "./EditorHeader";
