@@ -36,6 +36,7 @@ import {
 } from "./recordingClock";
 import { withSafePoint } from "./retake";
 import { totalMediaSpanLength } from "../utils/mediaSpans";
+import { defaultChapterTitle } from "../utils/chapters";
 import {
   appendCursorEvent,
   createFrame,
@@ -322,6 +323,7 @@ export const initRecordingSession = ({
       // The take's start is the first moment a retake can rewind to.
       safePoints: [{ recordingTime: 0, perf: startedAtPerf, wall: startedAt, mediaTime: 0 }],
       mediaCuts: [],
+      chapters: [],
       frames: [],
       encoder: createFrameStreamEncoder(),
       slideEvents,
@@ -709,6 +711,42 @@ export const resumeRecordingSession = ({
   return { session, sessionRevision: context.sessionRevision + 1 };
 };
 
+/**
+ * Marks a chapter at the take's current moment. A chapter is where the author is happy
+ * with the take so far, so it is also a safe point a retake can rewind to.
+ */
+export const addChapterMarker = ({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  const session = context.session;
+  if (!session || event.type !== "ADD_CHAPTER_MARKER") return {};
+  const recordingTime = getRecordingTimestamp(session);
+  const last = session.chapters[session.chapters.length - 1];
+  // One chapter per moment: a second press where the take stands still adds nothing.
+  if (last && last.time === recordingTime) return {};
+
+  session.chapters = [
+    ...session.chapters,
+    {
+      time: recordingTime,
+      title: event.title?.trim() || defaultChapterTitle(session.chapters.length),
+    },
+  ];
+  // While paused, the clock stands at the moment the pause began: that is the anchor.
+  const at = session.clock.pausedAt ?? { perf: performance.now(), wall: Date.now() };
+  session.safePoints = withSafePoint(session.safePoints, {
+    recordingTime,
+    perf: at.perf,
+    wall: at.wall,
+    mediaTime: recordingTime + totalMediaSpanLength(session.mediaCuts),
+  });
+  return { session, sessionRevision: context.sessionRevision + 1 };
+};
+
 export const finalizeRecording = ({
   context,
 }: {
@@ -758,6 +796,7 @@ export const finalizeRecording = ({
       startOffsetMs: context.camera.startOffsetMs,
     },
     mediaCuts: context.session.mediaCuts,
+    chapters: context.session.chapters,
   });
 
   return {

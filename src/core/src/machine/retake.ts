@@ -109,6 +109,7 @@ export function rewindSessionToSafePoint(
   session.mediaCuts = addMediaCut(session.mediaCuts, { start: target.mediaTime, end: mediaNow });
   session.clock = rewindRecordingClock(session.clock, target.perf, target.wall);
   session.safePoints = session.safePoints.filter((point) => point.recordingTime <= time);
+  session.chapters = session.chapters.filter((chapter) => chapter.time <= time);
 
   const droppedWorkspace = session.workspaceEvents.slice(
     keptUntil(session.workspaceEvents, time, byTimestamp).length,

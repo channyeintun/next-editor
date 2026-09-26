@@ -40,6 +40,7 @@ import { createPreviewAddNodeHydrator } from "./previewPatchDedup";
 import { createWorkspaceEventContentHydrator } from "./workspaceEventDedup";
 import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/performanceMetrics";
 import { normalizeMediaSpans } from "../../core/src/utils/mediaSpans";
+import { normalizeChapters } from "../../core/src/utils/chapters";
 
 // ============================================================================
 // Decoding: turn SCR3 bytes into a `Recording`.
@@ -423,6 +424,7 @@ function assembleRecording(
     chatEvents: nonEmpty(records.chatEvents),
     captions: meta.captions,
     captionFiles: meta.captionFiles,
+    chapters: Array.isArray(meta.chapters) ? normalizeChapters(meta.chapters) : undefined,
     slides: meta.slides,
     // Media bytes never live in the stream: audio and camera are sibling files, so the
     // header carries only their references and timeline offsets.

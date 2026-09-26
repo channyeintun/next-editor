@@ -16,6 +16,7 @@ import {
 } from "../../types/workspace";
 import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/performanceMetrics";
 import type { MediaSpan } from "../../core/src/utils/mediaSpans";
+import type { RecordingChapter } from "../../core/src/types";
 
 // ============================================================================
 // SCR3 — append-only, seekable, range-loadable recording stream container.
@@ -160,6 +161,7 @@ export interface RecordingStreamMeta {
   cameraUrl?: string;
   captions?: CaptionTrack[];
   captionFiles?: string[];
+  chapters?: RecordingChapter[];
   slides?: Slide[];
   workspaceSnapshot?: WorkspaceRecordingSnapshot;
   runtimeSnapshot?: RuntimeRecordingSnapshot;

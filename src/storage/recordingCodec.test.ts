@@ -895,6 +895,26 @@ describe("recordingCodec", () => {
     expect(decoded.pendingAudioEdit).toBeUndefined();
   });
 
+  it("round trips chapters, and checks a file's on the way back", async () => {
+    const recording = createRecording({
+      duration: 800,
+      frames: [makeKeyframe(0, "a\n")],
+      chapters: [
+        { time: 0, title: "Setup" },
+        { time: 400, title: "Routing" },
+      ],
+    });
+    const decoded = decodeRecordingStream(await encodeRecordingToStream(recording));
+    expect(decoded.chapters).toEqual(recording.chapters);
+
+    const hostile = createRecording({
+      duration: 800,
+      frames: [makeKeyframe(0, "a\n")],
+      chapters: [{ time: 100, title: 7 }, null] as unknown as Recording["chapters"],
+    });
+    expect(decodeRecordingStream(await encodeRecordingToStream(hostile)).chapters).toEqual([]);
+  });
+
   it("round trips captions through SCR3 encode/decode", async () => {
     const recording = createRecording({
       captions: [

@@ -46,6 +46,7 @@ export interface StudioRunDeps {
     | "stopRecording"
     | "clearRecording"
     | "addCaptionTrack"
+    | "setChapters"
     | "handleWorkspaceEvent"
     | "handleRuntimeEvent"
     | "handleSlideEvent"
@@ -475,7 +476,8 @@ export async function runStudioRender(
     return failedResult("The finalized recording disappeared before encoding");
   }
   deps.nextEditor.addCaptionTrack(finalized.id, plan.narration.captions);
-  // Adding the track replaces the recording; encode the one that carries it.
+  if (plan.chapters.length > 0) deps.nextEditor.setChapters(finalized.id, plan.chapters);
+  // Adding the track (and chapters) replaces the recording; encode the one that carries it.
   const recording: Recording | null = deps.actor.getSnapshot().context.recording;
   if (!recording) {
     return failedResult("The finalized recording disappeared before encoding");

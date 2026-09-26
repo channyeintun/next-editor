@@ -840,6 +840,10 @@ export const studioPlanSchema = z
     slides: z.array(studioSlideSchema).default([]),
     whiteboardAssets: z.array(studioWhiteboardAssetSchema).default([]),
     narration: studioNarrationSchema,
+    /** Chapter starts, from the scenes that title one; attached to the finished recording. */
+    chapters: z
+      .array(z.object({ time: z.number().finite().nonnegative(), title: z.string().min(1) }))
+      .default([]),
     runtime: studioRuntimeSchema,
     /** Optional per-plan QA thresholds beyond the always-on artifact gates. */
     gates: z

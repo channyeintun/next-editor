@@ -314,6 +314,7 @@ function buildRecordingStreamMeta(
     cameraUrl: normalized.cameraUrl,
     captions: normalized.captions,
     captionFiles: normalized.captionFiles,
+    chapters: normalized.chapters?.length ? normalized.chapters : undefined,
     slides: normalized.slides,
     workspaceSnapshot: normalized.workspaceSnapshot,
     runtimeSnapshot: normalized.runtimeSnapshot,

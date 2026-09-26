@@ -270,6 +270,11 @@ export function applyRecordingEdit(recording: Recording, edit: RecordingEdit): R
     whiteboardEvents: retimeByTimestamp(recording.whiteboardEvents, validCuts),
     chatEvents: retimeByTimestamp(recording.chatEvents, validCuts),
     captions: editCaptions(recording.captions, validCuts),
+    // A chapter inside a cut starts where the cut now is.
+    chapters: recording.chapters?.map((chapter) => ({
+      ...chapter,
+      time: mapTimeThroughCuts(chapter.time, validCuts),
+    })),
     duration,
     clusters: frames.length > 0 ? buildRecordingClusters(frames, duration) : undefined,
     tracks: recording.tracks?.map((track) => ({ ...track, durationMs: duration })),

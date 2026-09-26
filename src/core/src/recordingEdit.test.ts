@@ -198,6 +198,24 @@ describe("applying an edit to a recording", () => {
     ]);
   });
 
+  it("moves chapters with the time around them", () => {
+    const edited = applyRecordingEdit(
+      recordingWith({
+        chapters: [
+          { time: 1_000, title: "Before" },
+          { time: 3_000, title: "Inside" },
+          { time: 6_000, title: "After" },
+        ],
+      }),
+      { cuts: [cut], mutes: [] },
+    );
+    expect(edited.chapters?.map(({ time }) => time)).toEqual([
+      1_000,
+      mapTimeThroughCuts(3_000, [cut]),
+      3_000 + CUT_WINDOW_MS,
+    ]);
+  });
+
   it("will not cut narration it only has a link to", () => {
     expect(() =>
       applyRecordingEdit(recordingWith({ audioUrl: "https://example.com/a.weba" }), {

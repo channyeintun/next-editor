@@ -1,4 +1,7 @@
 import React, { type MouseEvent, useRef, useState, useEffect } from "react";
+import type { RecordingChapter } from "../core/src/types";
+import { findChapterIndexAt } from "../core/src/utils/chapters";
+import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 
 export interface ProgressBarProps {
   /**
@@ -45,6 +48,10 @@ export interface ProgressBarProps {
    * Custom styles
    */
   style?: React.CSSProperties;
+  /**
+   * Chapters to mark on the bar, and to name in the hover tooltip
+   */
+  chapters?: readonly RecordingChapter[];
 }
 
 /**
@@ -63,10 +70,13 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   onSeek,
   className = "",
   style = {},
+  chapters,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragProgress, setDragProgress] = useState<number | null>(null);
+  // Where the pointer hovers, as a fraction of the bar, for the time/chapter tooltip.
+  const [hoverFraction, setHoverFraction] = useState<number | null>(null);
 
   const calculateProgress = (clientX: number): number => {
     if (!containerRef.current || !duration) return 0;
@@ -191,9 +201,16 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
           // Grow height on hover like the original
           e.currentTarget.style.height = hoverHeight;
         }}
+        onMouseMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (rect.width > 0) {
+            setHoverFraction(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
+          }
+        }}
         onMouseLeave={(e) => {
           // Return to original height
           e.currentTarget.style.height = height;
+          setHoverFraction(null);
         }}
         role="progressbar"
         aria-valuenow={currentTime}
@@ -202,10 +219,59 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         aria-label="Playback progress"
       >
         <div className="next-editor-progress-bar" style={progressStyle} />
+        {duration > 0
+          ? chapters?.map((chapter) =>
+              chapter.time > 0 && chapter.time < duration ? (
+                // A notch in the bar where each chapter starts.
+                <div
+                  key={chapter.time}
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    bottom: 0,
+                    left: `${(chapter.time / duration) * 100}%`,
+                    width: "2px",
+                    transform: "translateX(-1px)",
+                    backgroundColor: "#11141c",
+                    pointerEvents: "none",
+                  }}
+                />
+              ) : null,
+            )
+          : null}
         <div className="next-editor-progress-thumb" style={thumbStyle} />
+        {hoverFraction !== null && duration > 0 ? (
+          <HoverTooltip
+            fraction={hoverFraction}
+            time={hoverFraction * duration}
+            chapters={chapters}
+          />
+        ) : null}
       </div>
     </>
   );
 };
+
+function HoverTooltip({
+  fraction,
+  time,
+  chapters,
+}: {
+  fraction: number;
+  time: number;
+  chapters?: readonly RecordingChapter[];
+}) {
+  const chapter = chapters?.length ? chapters[findChapterIndexAt(chapters, time)] : undefined;
+  return (
+    <div
+      className="pointer-events-none absolute bottom-full mb-2.5 max-w-56 -translate-x-1/2 truncate rounded-md border border-slate-700 bg-[#151821] px-2 py-1 text-[11px] whitespace-nowrap text-slate-200 shadow-lg"
+      style={{ left: `${Math.min(Math.max(fraction * 100, 6), 94)}%` }}
+    >
+      {chapter ? <span className="font-semibold">{chapter.title} · </span> : null}
+      <span className="font-mono text-slate-400">{formatPlaybackTime(time)}</span>
+    </div>
+  );
+}
 
 export default ProgressBar;

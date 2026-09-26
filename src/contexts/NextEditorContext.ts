@@ -3,6 +3,7 @@ import type {
   CaptionTrack,
   EditorSelection,
   Recording,
+  RecordingChapter,
   RecordingStreamDelta,
 } from "../core/src/types";
 import type { EditorActorRef } from "../core/src/useNextEditor";
@@ -37,6 +38,10 @@ export interface NextEditorActions {
    * resume), put the editor back, and hold the take paused there.
    */
   retakeRecording: () => void;
+  /** Mark a chapter at the take's current moment (also a safe point for retakes). */
+  addChapterMarker: (title?: string) => void;
+  /** Replace the loaded recording's chapters. */
+  setChapters: (recordingId: string, chapters: RecordingChapter[]) => void;
   play: () => void;
   pause: () => void;
   stop: () => void;

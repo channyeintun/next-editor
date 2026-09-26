@@ -12,6 +12,7 @@ import {
   selectLiveTime,
   selectNextEditorMetadata,
   selectPlaybackSpeed,
+  selectRecordingChapterCount,
   selectRecordingClock,
   selectRecordingSafePoints,
   selectVolume,
@@ -95,3 +96,7 @@ export const useRetakeTargetTime = (recordingTime: number): number | null => {
   const safePoints = NextEditorActorContext.useSelector(selectRecordingSafePoints);
   return safePoints ? (findRetakeTarget(safePoints, recordingTime)?.recordingTime ?? null) : null;
 };
+
+/** How many chapters the running take has marked. */
+export const useRecordingChapterCount = (): number =>
+  NextEditorActorContext.useSelector(selectRecordingChapterCount);

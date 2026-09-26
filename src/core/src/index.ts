@@ -10,6 +10,7 @@ export type {
   RecordingTrackKind,
   RecordingTrackMeta,
   RecordingClusterMeta,
+  RecordingChapter,
   CursorTargetRect,
   CursorTargetSnapshot,
   MouseCursorPosition,

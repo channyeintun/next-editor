@@ -538,6 +538,11 @@ export function compileLessonScript({
         label: script.lesson.locale,
       }),
     },
+    chapters: script.scenes.flatMap((scene) =>
+      scene.chapter
+        ? [{ time: sceneStartMs(alignment, extracted, scene.id), title: scene.chapter }]
+        : [],
+    ),
     runtime: script.runtime,
     gates: timingCheck ? { timingP95MaxMs: timingCheck.max } : undefined,
     dependencies: dependencies.size > 0 ? Object.fromEntries(dependencies) : undefined,

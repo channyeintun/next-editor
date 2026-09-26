@@ -29,6 +29,7 @@ export interface RecordingDraftFlush {
   audio?: RecordingDraftMeta["audio"];
   camera?: RecordingDraftMeta["camera"];
   mediaCuts?: RecordingDraftMeta["mediaCuts"];
+  chapters?: RecordingDraftMeta["chapters"];
   slides?: Slide[];
   finished?: boolean;
   recordingId?: string;

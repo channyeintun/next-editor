@@ -4,7 +4,13 @@ import { useSelector } from "@xstate/react";
 import type { ActorRefFrom } from "xstate";
 import { editorMachine } from "./machine/editorMachine";
 import type { EditorMachineInput } from "./machine/types";
-import type { CaptionTrack, EditorSelection, Recording, RecordingStreamDelta } from "./types";
+import type {
+  CaptionTrack,
+  EditorSelection,
+  Recording,
+  RecordingChapter,
+  RecordingStreamDelta,
+} from "./types";
 import type {
   PreviewDomPatchBatch,
   PreviewEvent,
@@ -106,6 +112,10 @@ export const selectRecordingClock = (
     ? { clock: state.context.session.clock, startedAtPerf: state.context.session.startedAtPerf }
     : null;
 
+/** How many chapters the running take has marked (0 outside a take). */
+export const selectRecordingChapterCount = (state: EditorMachineSnapshot) =>
+  state.matches("recording") ? (state.context.session?.chapters.length ?? 0) : 0;
+
 /** Where a retake can rewind to, or null outside a take. Replaced whenever it changes. */
 export const selectRecordingSafePoints = (state: EditorMachineSnapshot) =>
   state.matches("recording") && state.context.session ? state.context.session.safePoints : null;
@@ -143,6 +153,14 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
 
   const retakeRecording = () => {
     actorRef.send({ type: "RETAKE_RECORDING" });
+  };
+
+  const addChapterMarker = (title?: string) => {
+    actorRef.send({ type: "ADD_CHAPTER_MARKER", title });
+  };
+
+  const setChapters = (recordingId: string, chapters: RecordingChapter[]) => {
+    actorRef.send({ type: "SET_CHAPTERS", recordingId, chapters });
   };
 
   // Playback Controls
@@ -252,6 +270,8 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     pauseRecording,
     resumeRecording,
     retakeRecording,
+    addChapterMarker,
+    setChapters,
     play,
     pause,
     stop,

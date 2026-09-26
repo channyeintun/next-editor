@@ -148,6 +148,7 @@ What happens here:
 - `CAPTURE_FRAME`, `SLIDE_EVENT`, `PREVIEW_EVENT`, `PREVIEW_INITIAL_DOCUMENT`, `PREVIEW_PATCH_BATCH`, `WORKSPACE_EVENT`, and `RUNTIME_EVENT` are all captured into the session
 - `PAUSE_RECORDING` / `RESUME_RECORDING` stop and restart the take without leaving `recording`: the session clock (`recordingClock.ts`) stands still, and the microphone, camera and screen recorders (or a selected narration file) pause with it. Everything captured while paused is stamped at the pause, so edits made then replay as one jump; pointer samples are dropped until the resume records where the pointer ended up. Preview rrweb stamps have the pauses taken out on the wall clock, so replay's single preview offset stays valid
 - `RETAKE_RECORDING` rewinds the take to its last safe point (its start, or the last resume; `retake.ts`) and holds it paused there. Only the tail is discarded: every track is cut back to the entries at or before that point (new arrays), the frame encoder is re-based on the last kept frame, and the clock is rewound. The recorders keep their files, so the stretch they recorded since is added to `session.mediaCuts` (microphone narration is cut when the take loads, via `pendingAudioEdit`; the camera is mapped around `cameraCuts`), while a selected narration file is sought back instead. The live workspace, whiteboard, slides and preview panel are put back through their appliers; the live terminal and agent chat, which cannot be rewound, are recorded whole at the safe point; and the preview's rrweb stream drops patches until a fresh full snapshot re-bases it
+- `ADD_CHAPTER_MARKER` marks a chapter at the take's current moment (one per moment); it is also a safe point a retake can rewind to, anchored at the pause when marked while paused. A retake drops the chapters it discards, and finalize hands the rest to the recording
 - camera lifecycle events are folded into camera state
 - `STOP_RECORDING` branches on `isMicrophoneAudioRecording` / `isCameraRecording` / `isExternalAudioRecording` to decide whether a drain (`stoppingRecording`) is needed before finalizing
 
@@ -268,7 +269,8 @@ import or sibling-file load) rather than riding the timeline. The event names th
 the track belongs to and is dropped when another one is loaded (`isForLoadedRecording`), so a
 late sibling `.vtt` cannot land on the next lesson. Once a recording has captions,
 `EXTEND_RECORDING` keeps its list instead of taking the extended recording's, so a late audio
-or stream extend does not drop tracks added after load.
+or stream extend does not drop tracks added after load. Chapters are edited the same way:
+`SET_CHAPTERS` replaces the loaded recording's `chapters` (normalized) outside the timeline.
 
 ## Key Events
 
@@ -281,6 +283,8 @@ type EditorMachineEvent =
   | { type: "PAUSE_RECORDING" }
   | { type: "RESUME_RECORDING" }
   | { type: "RETAKE_RECORDING" }
+  | { type: "ADD_CHAPTER_MARKER"; title?: string }
+  | { type: "SET_CHAPTERS"; recordingId: string; chapters: RecordingChapter[] }
   | { type: "CAPTURE_FRAME"; isMouseMovement?: boolean; mousePosition?: MouseCursorPosition }
   | { type: "LOAD_RECORDING"; recording: Recording }
   | { type: "EXTEND_RECORDING"; recording: Recording }

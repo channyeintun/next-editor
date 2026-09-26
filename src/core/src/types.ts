@@ -43,6 +43,13 @@ export interface CaptionTrack {
   default?: boolean;
 }
 
+/** A named point in a recording, to jump to and to show where a long lesson is. */
+export interface RecordingChapter {
+  /** Where it starts, in ms. */
+  time: number;
+  title: string;
+}
+
 export type RecordingTrackKind =
   | "editor"
   | "audio"
@@ -186,6 +193,8 @@ export interface Recording {
   whiteboardEvents?: WhiteboardEvent[];
   chatEvents?: ChatRecordingEvent[];
   captions?: CaptionTrack[];
+  /** Named points in the recording, sorted by time (see utils/chapters.ts). */
+  chapters?: RecordingChapter[];
   slides?: Slide[];
   tracks?: RecordingTrackMeta[];
   clusters?: RecordingClusterMeta[];

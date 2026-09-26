@@ -303,12 +303,18 @@ by hand.
 ```yaml
 scenes:
   - id: unique-scene-id
+    chapter: Borrowing a value # optional: titles the chapter this scene starts
     narration: >
       Prose the voice speaks. [[mark:do-it]] More prose after the anchor.
     sources: # ≥1 per scene or the critic flags it
       - { title: "…", url: "https://…" }
     actions: […]
 ```
+
+`chapter` (optional, ≤120 characters) starts a chapter at the scene's first spoken
+word. Viewers see the chapters as notches on the progress bar and in the player's
+chapter list, and can link to them; a scene without one continues the chapter
+before it. Title the few scenes where the lesson turns to a new idea, not every one.
 
 Marker rules:
 

@@ -6,6 +6,7 @@ import {
   Play,
   RotateCcw,
   Scissors,
+  BookmarkPlus,
   Plus,
   FileMusic,
   Mic,
@@ -24,7 +25,10 @@ import {
   useLiveTime,
   useRecordingElapsedMs,
   useRetakeTargetTime,
+  useRecordingChapterCount,
 } from "../hooks/useNextEditorContext";
+import ChaptersMenu, { CurrentChapterTitle } from "./ChaptersMenu";
+import type { RecordingChapter } from "../core/src/types";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import ReplayIcon from "./icon/Replay";
 import IdleRecordButton from "./IdleRecordButton";
@@ -83,10 +87,12 @@ const readCameraOverlayVisibility = (): boolean => {
 const PlaybackProgress = ({
   progressDuration,
   onSeek,
+  chapters,
   large = false,
 }: {
   progressDuration: number;
   onSeek: (time: number) => void;
+  chapters?: readonly RecordingChapter[];
   large?: boolean;
 }) => {
   const currentTime = useLiveTime();
@@ -101,6 +107,7 @@ const PlaybackProgress = ({
         duration={progressDuration}
         currentTime={currentTime}
         onSeek={onSeek}
+        chapters={chapters}
         height={large ? "10px" : "2px"}
         hoverHeight={large ? "14px" : "6px"}
         backgroundColor="#475569"
@@ -144,6 +151,25 @@ const PlaybackTimer = ({
       ) : null}
       {isRecording ? formatPlaybackTime(displayTime) : `-${formatPlaybackTime(displayTime)}`}
     </span>
+  );
+};
+
+/** Marks a chapter where the take is now; a retake can also rewind to it. */
+const AddChapterButton = ({ iconSize, className }: { iconSize: number; className: string }) => {
+  const { addChapterMarker } = useNextEditorActions();
+  const count = useRecordingChapterCount();
+  const label =
+    count === 0 ? "Mark a chapter here" : `Mark a chapter here (${count} marked so far)`;
+  return (
+    <button
+      type="button"
+      onClick={() => addChapterMarker()}
+      aria-label={label}
+      title={label}
+      className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto ${className}`}
+    >
+      <BookmarkPlus size={iconSize} aria-hidden="true" />
+    </button>
   );
 };
 
@@ -547,6 +573,10 @@ const MediaControls: React.FC<MediaControlsProps> = ({
           <RetakeButton iconSize={controlIconSize} className={transportButtonWidth} />
         ) : null}
 
+        {effectiveRecordMode && isRecording ? (
+          <AddChapterButton iconSize={controlIconSize} className={transportButtonWidth} />
+        ) : null}
+
         {showAudioSourceControls ? (
           <div className="flex min-w-0 items-center gap-2 pointer-events-auto">
             <div className="inline-flex h-7 overflow-hidden rounded-full border border-slate-700 bg-slate-900/90 p-0.5 text-xs font-semibold text-slate-400 shadow-sm">
@@ -685,7 +715,15 @@ const MediaControls: React.FC<MediaControlsProps> = ({
             <PlaybackProgress
               progressDuration={progressDuration}
               onSeek={handleSeek}
+              chapters={currentRecording.chapters}
               large={large}
+            />
+
+            <ChaptersMenu
+              recording={currentRecording}
+              editable={effectiveRecordMode}
+              iconSize={controlIconSize}
+              buttonClassName={transportButtonWidth}
             />
 
             {hasCameraRecording ? (
@@ -895,6 +933,10 @@ const MediaControls: React.FC<MediaControlsProps> = ({
             </div>
           </>
         )}
+
+        {!isRecording && currentRecording?.chapters?.length ? (
+          <CurrentChapterTitle chapters={currentRecording.chapters} large={large} />
+        ) : null}
 
         {(isRecording || currentRecording) && (
           <PlaybackTimer

@@ -71,7 +71,9 @@ import {
   releaseUnacceptedScreenStream,
   pauseRecordingSession,
   resumeRecordingSession,
+  addChapterMarker,
 } from "./captureActions";
+import { normalizeChapters } from "../utils/chapters";
 import { isRecordingClockPaused } from "./recordingClock";
 import { findRetakeTarget, rewindSessionToSafePoint } from "./retake";
 import { appendRuntimeRecordingEvent, getRecordingTimestamp } from "./recordingSession";
@@ -248,6 +250,7 @@ export const editorMachine = setup({
         return event.delta.recordingId === context.recording.id;
       }
       if (event.type === "ADD_CAPTION_TRACK") return event.recordingId === context.recording.id;
+      if (event.type === "SET_CHAPTERS") return event.recordingId === context.recording.id;
       return false;
     },
     isPlaybackWorkspaceDetached: ({ context }) => context.hasManualWorkspaceOverride,
@@ -274,6 +277,15 @@ export const editorMachine = setup({
     captureWhiteboardEvent: assign(captureWhiteboardEvent),
     captureChatEvent: assign(captureChatEvent),
     finalizeRecording: assign(finalizeRecording),
+    addChapterMarker: assign(addChapterMarker),
+    // Chapters sit outside the timeline, like captions: editing them changes nothing else.
+    setChapters: assign(({ context, event }) => {
+      if (event.type !== "SET_CHAPTERS" || !context.recording) return {};
+      const chapters = normalizeChapters(event.chapters);
+      return {
+        recording: { ...context.recording, chapters: chapters.length > 0 ? chapters : undefined },
+      };
+    }),
     pauseRecordingSession: assign(pauseRecordingSession),
     resumeRecordingSession: assign(resumeRecordingSession),
     // The recorders follow the take's clock: each writes nothing while it is paused, so
@@ -508,6 +520,10 @@ export const editorMachine = setup({
     ADD_CAPTION_TRACK: {
       guard: "isForLoadedRecording",
       actions: "addCaptionTrack",
+    },
+    SET_CHAPTERS: {
+      guard: "isForLoadedRecording",
+      actions: "setChapters",
     },
     // Screen recording is independent of the session's finalize join: its blob never enters the
     // `Recording`, so these are handled at the machine root and fire in any state. SCREEN_STOPPED
@@ -755,6 +771,9 @@ export const editorMachine = setup({
         RETAKE_RECORDING: {
           guard: "canRetake",
           actions: "retakeRecording",
+        },
+        ADD_CHAPTER_MARKER: {
+          actions: "addChapterMarker",
         },
         CAMERA_STARTED: {
           actions: "storeCameraStarted",

@@ -1,4 +1,5 @@
 import type { Slide } from "../../core/src/slides";
+import type { RecordingChapter } from "../../core/src/types";
 import type { RecordingTrackName } from "../../core/src/machine/recordingAssembly";
 import type { MediaSpan } from "../../core/src/utils/mediaSpans";
 import { requestToPromise, transactionToPromise } from "../idb";
@@ -36,6 +37,8 @@ export interface RecordingDraftMeta {
   camera?: { mimeType: string; startOffsetMs: number };
   /** What retakes discarded from the recorders' files, applied when the draft is recovered. */
   mediaCuts?: MediaSpan[];
+  /** Chapters marked while recording. */
+  chapters?: RecordingChapter[];
   /** The id of the Recording the take finalized into, in the tab that recorded it. */
   recordingId?: string;
 }

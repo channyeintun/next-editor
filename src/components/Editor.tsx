@@ -44,6 +44,7 @@ import LoadingSpinner from "./LoadingSpinner.tsx";
 import EditorShellSkeleton, { EditorPlayerBarSkeleton } from "./EditorShellSkeleton.tsx";
 import RecordingLoadError from "./RecordingLoadError.tsx";
 import RecordingDraftRecovery from "./RecordingDraftRecovery";
+import { useLinkedStartTime } from "../hooks/useLinkedStartTime";
 import { ApiClientStoreProvider } from "../contexts/ApiClientStoreContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
 import { startTour } from "./tour/productTour";
@@ -131,7 +132,7 @@ export function EditorLayout({
 
   const { isRecording, isPlaying, currentRecording, hasEnded } = useNextEditorMetadata();
   const { isOpen: isWhiteboardOpen } = useWhiteboardContext();
-  const { play, setPlaybackSpeed, setVolume, loadRecording } = useNextEditorActions();
+  const { play, seekTo, setPlaybackSpeed, setVolume, loadRecording } = useNextEditorActions();
   const { editorActor, playbackSpeed, volume } = useNextEditorPlayback();
   const { autoplay, speed: persistedSpeed, volume: persistedVolume } = usePlaybackSettings();
   const {
@@ -231,6 +232,9 @@ export function EditorLayout({
   // either the persisted Autoplay setting or a one-shot playlist override requests
   // it. Guarded to fire once per recording load (once per mount on surfaces where
   // recordingUrl is undefined — ?url= and drag-drop).
+  // Opens a linked lesson at its moment (?t=). Before autoplay, which then plays from there.
+  const getLinkedStart = useLinkedStartTime(currentRecording, searchParams.get("t"), seekTo);
+
   const autoplayedForRef = useRef<string | undefined | typeof AUTOPLAY_NOT_FIRED>(
     AUTOPLAY_NOT_FIRED,
   );
@@ -244,7 +248,7 @@ export function EditorLayout({
     if (autoplayedForRef.current === recordingUrl) {
       return;
     }
-    if (selectLiveTime(editorActor.getSnapshot()) !== 0) {
+    if (selectLiveTime(editorActor.getSnapshot()) !== getLinkedStart(currentRecording.id)) {
       return;
     }
 
@@ -367,7 +371,11 @@ export function EditorLayout({
 
       {postRecordingTarget && !collaboration?.provider && renderPostRecordingModal
         ? renderPostRecordingModal({
-            recording: postRecordingTarget,
+            // The loaded take once it changes in place (chapters renamed after the stop).
+            recording:
+              currentRecording?.id === postRecordingTarget.id
+                ? currentRecording
+                : postRecordingTarget,
             onClose: clearPostRecordingTarget,
           })
         : null}

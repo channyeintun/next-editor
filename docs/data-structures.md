@@ -94,6 +94,10 @@ Notable current fields:
 - `audioFile`/`audioUrl` and `cameraFile`/`cameraUrl` describe audio/camera stored as sibling files rather than inline blobs; `audioStartOffsetMs`/`cameraStartOffsetMs` compensate for recorder warmup so playback stays aligned.
 - `captions` carries parsed subtitle tracks inline; `captionFiles` instead names sibling `.vtt`/`.srt` files that a hosted recording loads at play time.
 - `streamFinalized` distinguishes a complete decoded stream from a still-growing progressive-download prefix.
+- `chapters` names points in the recording (`{ time, title }`, sorted, one per moment; see
+  `src/core/src/utils/chapters.ts`). They are marked while recording, edited in the player's
+  chapter list, generated from studio scenes that set `chapter`, and carried in the SCR3 header,
+  which is validated on decode. A `?t=` link (`90`, `1m30s`, `1:30`) opens a lesson at a moment.
 - `cameraCuts` lists camera footage a retake discarded (spans of the camera's media timeline), which playback maps around; `pendingAudioEdit` is a narration edit (retake cuts) that `loadRecording` applies to `audioBlob` and drops — it is never written to a file.
 - Workspace projects store `{ kind: "asset", assetId, mimeType, size }` descriptors rather than
   base64. `workspaceAssets` exists only while raw SCR3 asset segments are handed to IndexedDB; it

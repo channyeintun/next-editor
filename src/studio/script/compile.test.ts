@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
 import { canonicalJson } from "../hash";
-import { estimateAlignment } from "./alignment";
+import { estimateAlignment, sceneStartMs } from "./alignment";
 import { CompileError, compileLessonScript, type CompileInput } from "./compile";
 import { splitIntoDialogs } from "./dialogs";
 import { LEXICON_V1, speechTextOf, spokenFormOf } from "./lexicon";
@@ -138,6 +138,24 @@ describe("compileLessonScript", () => {
       (action) => action.type === "cursor.moveTo" && action.target.kind === "editor",
     );
     expect(editorCursor).toBe(false);
+  });
+
+  it("starts a chapter at the first spoken word of each scene that titles one", () => {
+    const script = loadPilotScript();
+    const [first, ...rest] = script.scenes;
+    const titled: LessonScript = {
+      ...script,
+      scenes: [{ ...first, chapter: "The cube" }, ...rest],
+    };
+    const input = scheduledInputFor(titled);
+    const { plan } = compileLessonScript(input);
+
+    expect(plan.chapters).toHaveLength(1);
+    expect(plan.chapters[0].title).toBe("The cube");
+    // At the scene's first spoken word.
+    expect(plan.chapters[0].time).toBe(sceneStartMs(input.alignment, input.extracted, first.id));
+    // An untitled lesson has none.
+    expect(compileLessonScript(scheduledInputFor(script)).plan.chapters).toEqual([]);
   });
 
   it("compiles the checked-in pilot script into a valid plan", () => {

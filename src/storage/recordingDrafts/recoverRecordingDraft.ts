@@ -76,6 +76,7 @@ export async function recoverRecordingDraft(draftId: string): Promise<Recording 
     },
     // The recorders' chunks still hold what the take's retakes discarded.
     mediaCuts: meta.mediaCuts ?? [],
+    chapters: meta.chapters ?? [],
   });
   // The take's own id, when it got as far as being finalized: the draft is found by it
   // again after an upload or export, even from another page load.

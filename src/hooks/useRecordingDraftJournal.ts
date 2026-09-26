@@ -38,6 +38,7 @@ function describeTake(
         ? { mimeType: camera.mimeType, startOffsetMs: camera.startOffsetMs }
         : undefined,
     mediaCuts: [...session.mediaCuts],
+    chapters: [...session.chapters],
     slides: snapshot.context.getSlides?.(),
   };
 }

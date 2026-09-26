@@ -51,6 +51,8 @@ function makeActionsMock(): NextEditorActions {
     pauseRecording: vi.fn(),
     resumeRecording: vi.fn(),
     retakeRecording: vi.fn(),
+    addChapterMarker: vi.fn(),
+    setChapters: vi.fn(),
     play: vi.fn(),
     pause: vi.fn(),
     stop: vi.fn(),

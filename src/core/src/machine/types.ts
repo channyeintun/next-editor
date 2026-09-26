@@ -10,6 +10,7 @@ import type {
 } from "../slides";
 import type {
   CaptionTrack,
+  RecordingChapter,
   MouseCursorPosition,
   CursorRecordingEvent,
   EditorFrame,
@@ -106,6 +107,8 @@ export interface RecordingSession {
    * narration when the take loads and mapped around in the camera video.
    */
   mediaCuts: readonly MediaSpan[];
+  /** Chapters marked while recording, in order. Replaced, never mutated. */
+  chapters: readonly RecordingChapter[];
   /**
    * Set by a retake until the preview recorder answers with a fresh full snapshot. The
    * patch batches in between describe a document the take no longer holds, so they are
@@ -420,6 +423,16 @@ export type ResumeRecordingEvent = { type: "RESUME_RECORDING" };
  */
 export type RetakeRecordingEvent = { type: "RETAKE_RECORDING" };
 
+/** Mark a chapter at the take's current moment, which a retake can also rewind to. */
+export type AddChapterMarkerEvent = { type: "ADD_CHAPTER_MARKER"; title?: string };
+
+/** Replace the chapters of the loaded recording `recordingId`; dropped for any other. */
+export type SetChaptersEvent = {
+  type: "SET_CHAPTERS";
+  recordingId: string;
+  chapters: RecordingChapter[];
+};
+
 /** Capture a frame during recording */
 export type CaptureFrameEvent = {
   type: "CAPTURE_FRAME";
@@ -599,6 +612,8 @@ export type EditorMachineEvent =
   | PauseRecordingEvent
   | ResumeRecordingEvent
   | RetakeRecordingEvent
+  | AddChapterMarkerEvent
+  | SetChaptersEvent
   | CaptureFrameEvent
   | LoadRecordingEvent
   | ExtendRecordingEvent

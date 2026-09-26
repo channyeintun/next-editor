@@ -224,6 +224,11 @@ export const scriptSourceSchema = z.object({
 
 export const scriptSceneSchema = z.object({
   id: z.string().min(1),
+  /**
+   * Titles the chapter this scene starts. The rendered lesson lists its chapters and marks
+   * them on the progress bar; a scene without one continues the chapter before it.
+   */
+  chapter: z.string().trim().min(1).max(120).optional(),
   /** Display narration with `[[mark:name]]` control tokens. */
   narration: z.string().min(1),
   sources: z.array(scriptSourceSchema).default([]),

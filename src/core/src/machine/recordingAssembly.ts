@@ -8,6 +8,7 @@ import type {
 import type {
   CursorRecordingEvent,
   Recording,
+  RecordingChapter,
   RecordingAudioSource,
   RecordingCameraSource,
 } from "../types";
@@ -97,6 +98,7 @@ export interface AssembleRecordingInput {
    * narration when the take loads, and mapped around in the camera video.
    */
   mediaCuts?: readonly MediaSpan[];
+  chapters?: readonly RecordingChapter[];
 }
 
 export function assembleRecording({
@@ -108,6 +110,7 @@ export function assembleRecording({
   audio,
   camera,
   mediaCuts = [],
+  chapters = [],
 }: AssembleRecordingInput): Recording {
   // Frames were compressed incrementally during capture.
   const clusters = buildRecordingClusters(tracks.frames, duration);
@@ -150,6 +153,7 @@ export function assembleRecording({
     whiteboardEvents: tracks.whiteboardEvents,
     chatEvents: tracks.chatEvents,
     slides,
+    chapters: chapters.length > 0 ? [...chapters] : undefined,
     tracks: trackMetadata,
     clusters: clusters.length > 0 ? clusters : undefined,
     duration,
