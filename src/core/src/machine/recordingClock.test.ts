@@ -7,6 +7,7 @@ import {
   readRecordingClock,
   recordingTimeAtPerf,
   resumeRecordingClock,
+  rewindRecordingClock,
   toRecordingWallTime,
 } from "./recordingClock";
 
@@ -63,6 +64,28 @@ describe("recording clock", () => {
     );
     expect(clock.excludedPerfMs).toBe(5_000);
     expect(clock.excludedWallMs).toBe(0);
+  });
+
+  it("rewinds to a moment it was running at and holds there", () => {
+    // Running again from 8_000 (perf), then paused a second time at 10_000.
+    const clock = pauseRecordingClock(pausedOnce(), 10_000, 59_000);
+    // Rewind to 9_000: recorded 3_000, after the first pause.
+    const rewound = rewindRecordingClock(clock, 9_000, 58_000);
+    expect(rewound.exclusions).toHaveLength(1);
+    expect(rewound.pausedAt).toEqual({ perf: 9_000, wall: 58_000 });
+    expect(readRecordingClock(rewound, START_PERF, 20_000)).toBe(3_000);
+
+    // Resuming turns the whole stretch since the safe point into one exclusion.
+    const resumed = resumeRecordingClock(rewound, 20_000, 69_000);
+    expect(readRecordingClock(resumed, START_PERF, 20_500)).toBe(3_500);
+    expect(toRecordingWallTime(resumed, 69_500)).toBe(53_500);
+  });
+
+  it("drops exclusions a rewind to before them discards", () => {
+    const rewound = rewindRecordingClock(pausedOnce(), 2_000, 51_000);
+    expect(rewound.exclusions).toEqual([]);
+    expect(rewound.excludedPerfMs).toBe(0);
+    expect(readRecordingClock(rewound, START_PERF, 30_000)).toBe(1_000);
   });
 
   describe("wall-clock stamps", () => {

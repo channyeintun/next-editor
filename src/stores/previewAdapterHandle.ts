@@ -22,6 +22,7 @@ export type DockWidthDeltaApplier = (delta: number) => void;
 export type LivePreviewInspectionGetter = () => Promise<LivePreviewInspection | null>;
 export type PreviewScreenshotCapturer = () => Promise<PreviewScreenshotResult>;
 export type RecordingStopPreparer = () => Promise<void>;
+export type RecordingCheckpointRequester = () => void;
 export type PreviewCommandExecutor = (
   command: StudioPreviewCommand,
   options: { signal: AbortSignal; timeoutMs: number },
@@ -36,6 +37,8 @@ export interface PreviewAdapterHandle {
   previewScreenshotCapturer: { current: PreviewScreenshotCapturer | null };
   previewCommandExecutor: { current: PreviewCommandExecutor | null };
   recordingStopPreparer: { current: RecordingStopPreparer | null };
+  /** Asks the live preview for a fresh full snapshot to re-base the take's stream on. */
+  recordingCheckpointRequester: { current: RecordingCheckpointRequester | null };
 }
 
 export function createPreviewAdapterHandle(): PreviewAdapterHandle {
@@ -48,5 +51,6 @@ export function createPreviewAdapterHandle(): PreviewAdapterHandle {
     previewScreenshotCapturer: { current: null },
     previewCommandExecutor: { current: null },
     recordingStopPreparer: { current: null },
+    recordingCheckpointRequester: { current: null },
   };
 }

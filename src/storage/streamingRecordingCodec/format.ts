@@ -15,6 +15,7 @@ import {
   type WorkspaceRecordingSnapshot,
 } from "../../types/workspace";
 import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/performanceMetrics";
+import type { MediaSpan } from "../../core/src/utils/mediaSpans";
 
 // ============================================================================
 // SCR3 — append-only, seekable, range-loadable recording stream container.
@@ -151,6 +152,8 @@ export interface RecordingStreamMeta {
   cameraType?: string;
   cameraSource?: RecordingCameraSource;
   cameraStartOffsetMs?: number;
+  /** Camera footage a retake discarded (see {@link Recording.cameraCuts}). */
+  cameraCuts?: MediaSpan[];
   /** Sibling video filename when camera bytes live outside the stream (see {@link Recording.cameraFile}). */
   cameraFile?: string;
   /** Resolved/absolute URL for an external camera video, when known at encode time. */

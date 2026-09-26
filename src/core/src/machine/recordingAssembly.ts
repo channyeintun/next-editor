@@ -18,6 +18,7 @@ import type { ChatRecordingEvent } from "../../../types/chat";
 import { DELTA_CONFIG, type DeltaFrame } from "../utils/deltaTypes";
 import { buildRecordingClusters } from "../utils/recordingClusters";
 import { buildTrackMetadata } from "./editorMachineHelpers";
+import type { MediaSpan } from "../utils/mediaSpans";
 
 // ============================================================================
 // Turning a take's tracks into a Recording.
@@ -91,6 +92,11 @@ export interface AssembleRecordingInput {
     pending?: boolean;
   };
   camera: RecordingMediaInput<RecordingCameraSource>;
+  /**
+   * What retakes discarded from the recorders' files (media time). Cut from recorded
+   * narration when the take loads, and mapped around in the camera video.
+   */
+  mediaCuts?: readonly MediaSpan[];
 }
 
 export function assembleRecording({
@@ -101,6 +107,7 @@ export function assembleRecording({
   runtimeSnapshot,
   audio,
   camera,
+  mediaCuts = [],
 }: AssembleRecordingInput): Recording {
   // Frames were compressed incrementally during capture.
   const clusters = buildRecordingClusters(tracks.frames, duration);
@@ -152,6 +159,11 @@ export function assembleRecording({
     cameraBlob: camera.blob,
     cameraSource: camera.source,
     cameraStartOffsetMs: camera.blob ? camera.startOffsetMs : undefined,
+    // A selected narration file is an input played in step with the take, so a retake
+    // rewinds it instead of recording over it: only a microphone take is cut.
+    pendingAudioEdit:
+      mediaCuts.length > 0 && audio.source === "microphone" ? { cuts: [...mediaCuts] } : undefined,
+    cameraCuts: mediaCuts.length > 0 && camera.blob ? [...mediaCuts] : undefined,
     streamFinalized: true,
     workspaceSnapshot,
     runtimeSnapshot,

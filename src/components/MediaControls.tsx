@@ -4,6 +4,7 @@ import {
   Square,
   Pause,
   Play,
+  RotateCcw,
   Plus,
   FileMusic,
   Mic,
@@ -21,6 +22,7 @@ import {
   useNextEditorPlayback,
   useLiveTime,
   useRecordingElapsedMs,
+  useRetakeTargetTime,
 } from "../hooks/useNextEditorContext";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import ReplayIcon from "./icon/Replay";
@@ -138,6 +140,64 @@ const PlaybackTimer = ({
       ) : null}
       {isRecording ? formatPlaybackTime(displayTime) : `-${formatPlaybackTime(displayTime)}`}
     </span>
+  );
+};
+
+/** How long a first click on Retake waits for the confirming second one. */
+const RETAKE_CONFIRM_MS = 4_000;
+
+/**
+ * Rewinds the take to its last safe point (its start, or the last resume). Retaking
+ * discards what was recorded since, so the first click only shows how much, and a
+ * second click within a few seconds confirms.
+ */
+const RetakeButton = ({ iconSize, className }: { iconSize: number; className: string }) => {
+  const { retakeRecording } = useNextEditorActions();
+  const recordingTime = useRecordingElapsedMs();
+  const targetTime = useRetakeTargetTime(recordingTime);
+  const [armed, setArmed] = useState(false);
+
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(false), RETAKE_CONFIRM_MS);
+    return () => clearTimeout(timer);
+  }, [armed]);
+
+  const discarded = targetTime === null ? "" : formatPlaybackTime(recordingTime - targetTime);
+  const label =
+    targetTime === null
+      ? "Nothing to retake yet"
+      : armed
+        ? `Discard the last ${discarded} and retake from ${formatPlaybackTime(targetTime)}`
+        : `Retake from ${formatPlaybackTime(targetTime)} (the last resume)`;
+
+  const handleClick = () => {
+    if (!armed) {
+      setArmed(true);
+      return;
+    }
+    setArmed(false);
+    retakeRecording();
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={targetTime === null}
+      aria-label={label}
+      title={label}
+      className={`flex items-center justify-center gap-1.5 transition-colors pointer-events-auto disabled:cursor-not-allowed disabled:opacity-40 ${
+        armed
+          ? "rounded-full bg-amber-500/15 px-2 text-amber-200"
+          : `text-slate-300 hover:text-white ${className}`
+      }`}
+    >
+      <RotateCcw size={iconSize} aria-hidden="true" />
+      {armed ? (
+        <span className="whitespace-nowrap text-xs font-semibold">Discard {discarded}?</span>
+      ) : null}
+    </button>
   );
 };
 
@@ -468,6 +528,10 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               <Pause size={controlIconSize} className="fill-current" aria-hidden="true" />
             )}
           </button>
+        ) : null}
+
+        {effectiveRecordMode && isRecording ? (
+          <RetakeButton iconSize={controlIconSize} className={transportButtonWidth} />
         ) : null}
 
         {showAudioSourceControls ? (

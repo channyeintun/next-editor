@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { selectIsPlaying, selectRecording } from "../core/src/useNextEditor";
 import { allowedRecordingMediaUrl } from "../core/src/utils/mediaUrl";
+import { mapRecordingTimeToMediaTime } from "../core/src/utils/mediaSpans";
 
 export const CAMERA_OVERLAY_VISIBILITY_KEY = "next-editor-camera-overlay-visible";
 export const CAMERA_OVERLAY_POSITION_KEY = "next-editor-camera-overlay-position";
@@ -136,6 +137,7 @@ const CameraOverlay: React.FC = () => {
   // preview, exactly as a recording with no external camera already does.
   const cameraUrl = allowedRecordingMediaUrl(recording?.cameraUrl);
   const cameraStartOffsetMs = recording?.cameraStartOffsetMs ?? 0;
+  const cameraCuts = recording?.cameraCuts;
   // Live preview takes over whenever the camera toggle is on and there is no recorded camera to
   // replay (i.e. idle or actively recording). During playback, the loaded recording wins and
   // replays either the external video URL (loaded/imported recordings) or the in-memory camera
@@ -277,12 +279,20 @@ const CameraOverlay: React.FC = () => {
     // Drop any leftover live-preview stream so the recorded blob `src` actually drives the element.
     video.srcObject = null;
 
+    // The camera starts a beat after the recording origin (getUserMedia warmup), so shift the
+    // timeline back by that offset to keep the face video aligned with audio/typing. A
+    // retake left the stretch it discarded in the file, so step over those first.
+    const cameraTimeAt = (currentTime: number) =>
+      Math.max(
+        0,
+        (cameraCuts?.length ? mapRecordingTimeToMediaTime(currentTime, cameraCuts) : currentTime) -
+          cameraStartOffsetMs,
+      );
+
     const applyTimeline = () => {
       const { currentTime, speed } = actorRef.getSnapshot().context.timeline;
       video.playbackRate = speed;
-      // The camera starts a beat after the recording origin (getUserMedia warmup), so shift the
-      // timeline back by that offset to keep the face video aligned with audio/typing.
-      const targetMs = Math.max(0, currentTime - cameraStartOffsetMs);
+      const targetMs = cameraTimeAt(currentTime);
       if (
         Number.isFinite(targetMs) &&
         Math.abs(video.currentTime * 1000 - targetMs) > DRIFT_THRESHOLD_MS
@@ -310,7 +320,7 @@ const CameraOverlay: React.FC = () => {
     // lands inside the epsilon and terminates the cycle.
     const handlePlaying = () => {
       const { currentTime } = actorRef.getSnapshot().context.timeline;
-      const targetMs = Math.max(0, currentTime - cameraStartOffsetMs);
+      const targetMs = cameraTimeAt(currentTime);
       if (
         Number.isFinite(targetMs) &&
         Math.abs(video.currentTime * 1000 - targetMs) > START_SYNC_EPSILON_MS
@@ -332,7 +342,7 @@ const CameraOverlay: React.FC = () => {
       video.removeEventListener("playing", handlePlaying);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [actorRef, cameraStartOffsetMs, isMinimized, isVisible, isPlaying, videoUrl]);
+  }, [actorRef, cameraCuts, cameraStartOffsetMs, isMinimized, isVisible, isPlaying, videoUrl]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);

@@ -6,6 +6,9 @@
  * every duration exact (samples / rate).
  */
 
+// The 16-bit PCM mono writer is shared with recorded narration, so it lives in core.
+import { encodeWavPcm16, floatTo16BitPcm } from "../../core/src/utils/wavPcm16";
+
 const RIFF = 0x46464952; // "RIFF" LE
 const WAVE = 0x45564157; // "WAVE" LE
 const FMT_ = 0x20746d66; // "fmt " LE
@@ -54,37 +57,7 @@ export function trimSilence(
   return samples.slice(start, end);
 }
 
-export function floatTo16BitPcm(samples: Float32Array): Int16Array {
-  const pcm = new Int16Array(samples.length);
-  for (let i = 0; i < samples.length; i++) {
-    const clamped = Math.max(-1, Math.min(1, samples[i]));
-    pcm[i] = Math.round(clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff);
-  }
-  return pcm;
-}
-
-export function encodeWavPcm16(pcm: Int16Array, sampleRate: number): Uint8Array {
-  const dataBytes = pcm.length * 2;
-  const buffer = new ArrayBuffer(44 + dataBytes);
-  const view = new DataView(buffer);
-
-  view.setUint32(0, RIFF, true);
-  view.setUint32(4, 36 + dataBytes, true);
-  view.setUint32(8, WAVE, true);
-  view.setUint32(12, FMT_, true);
-  view.setUint32(16, 16, true); // PCM fmt chunk size
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true); // byte rate
-  view.setUint16(32, 2, true); // block align
-  view.setUint16(34, 16, true); // bits per sample
-  view.setUint32(36, DATA, true);
-  view.setUint32(40, dataBytes, true);
-  new Int16Array(buffer, 44).set(pcm);
-
-  return new Uint8Array(buffer);
-}
+export { encodeWavPcm16, floatTo16BitPcm };
 
 export interface DecodedWav {
   pcm: Int16Array;

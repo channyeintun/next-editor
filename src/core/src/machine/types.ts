@@ -31,6 +31,7 @@ import type { ChatCheckpoint, ChatRecordingEvent } from "../../../types/chat";
 import type { TextEditEvent } from "../../../types/textEdit";
 import type { CapturedViewStateRef } from "./editorMachineHelpers";
 import type { RecordingClock } from "./recordingClock";
+import type { MediaSpan } from "../utils/mediaSpans";
 import type { AudioPlaybackEmit, AudioRecordingEmit } from "./audioActor";
 import type { CameraRecordingEmit } from "./cameraActor";
 import type { ScreenRecordingEmit } from "./screenActor";
@@ -52,6 +53,19 @@ export interface TimelineState {
   speed: number;
   /** Volume level (0.0 - 1.0) */
   volume: number;
+}
+
+/**
+ * A moment a take can be rewound to: its start, and each resume. `perf` and `wall` are
+ * the clock readings there, so rewinding can put the take's clock back; `mediaTime` is
+ * where the recorders' own files were then (recorded time plus what earlier retakes
+ * discarded).
+ */
+export interface RecordingSafePoint {
+  recordingTime: number;
+  perf: number;
+  wall: number;
+  mediaTime: number;
 }
 
 /**
@@ -81,7 +95,32 @@ export interface RecordingSession {
    * `getRecordingTimestamp`, not `performance.now() - startedAtPerf`.
    */
   clock: RecordingClock;
-  /** Already-compressed frames built incrementally during capture (append-only) */
+  /**
+   * Where a retake can rewind to, oldest first (see RecordingSafePoint). Replaced, never
+   * mutated, so a selector sees a new one.
+   */
+  safePoints: readonly RecordingSafePoint[];
+  /**
+   * What retakes discarded from the recorders' files, in media time. The microphone and
+   * camera keep recording across a retake (paused), so these spans are cut from the
+   * narration when the take loads and mapped around in the camera video.
+   */
+  mediaCuts: readonly MediaSpan[];
+  /**
+   * Set by a retake until the preview recorder answers with a fresh full snapshot. The
+   * patch batches in between describe a document the take no longer holds, so they are
+   * dropped.
+   */
+  previewAwaitingCheckpoint?: boolean;
+  /**
+   * The raw wall stamp of that snapshot. Patch events stamped before it were queued
+   * before the snapshot was taken, so they are dropped too.
+   */
+  previewCheckpointWall?: number;
+  /**
+   * Already-compressed frames built incrementally during capture. Append-only, except
+   * that a retake replaces it (and every other track) with a shorter copy.
+   */
   frames: DeltaFrame[];
   /** Incremental encoder state (input count, last stored frame, last full frame) */
   encoder: FrameStreamEncoderState;
@@ -293,6 +332,13 @@ export interface EditorMachineContext {
   applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
   /** Callback to apply the folded chat transcript during playback (replayState/chat.ts) */
   applyChatSnapshot?: (snapshot: ChatCheckpoint) => void;
+  /**
+   * Asks the live preview for a fresh full snapshot: a retake discarded the part of the
+   * preview stream the next patches would build on.
+   */
+  requestPreviewCheckpoint?: () => void;
+  /** The live coding-agent conversation, recorded whole after a retake. */
+  getChatCheckpoint?: () => ChatCheckpoint | null;
   /** Callback to get whiteboard scene state during recording */
   getWhiteboardState?: () => WhiteboardSceneState | null;
   /** Callback to apply whiteboard scene state during playback */
@@ -367,6 +413,12 @@ export type PauseRecordingEvent = { type: "PAUSE_RECORDING" };
 
 /** Run a paused take's clock and recorders again. */
 export type ResumeRecordingEvent = { type: "RESUME_RECORDING" };
+
+/**
+ * Discard everything recorded since the last safe point before now, put the editor back
+ * the way it was there, and leave the take paused at that point.
+ */
+export type RetakeRecordingEvent = { type: "RETAKE_RECORDING" };
 
 /** Capture a frame during recording */
 export type CaptureFrameEvent = {
@@ -546,6 +598,7 @@ export type EditorMachineEvent =
   | StopRecordingEvent
   | PauseRecordingEvent
   | ResumeRecordingEvent
+  | RetakeRecordingEvent
   | CaptureFrameEvent
   | LoadRecordingEvent
   | ExtendRecordingEvent
@@ -636,6 +689,10 @@ export interface EditorMachineInput {
   applyChatSnapshot?: (snapshot: ChatCheckpoint) => void;
   getWhiteboardState?: () => WhiteboardSceneState | null;
   applyWhiteboardState?: (state: WhiteboardSceneState) => void;
+  /** See EditorMachineContext.requestPreviewCheckpoint. */
+  requestPreviewCheckpoint?: () => void;
+  /** See EditorMachineContext.getChatCheckpoint. */
+  getChatCheckpoint?: () => ChatCheckpoint | null;
 }
 
 // ============================================================================
@@ -728,6 +785,8 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   applyChatSnapshot: input.applyChatSnapshot,
   getWhiteboardState: input.getWhiteboardState,
   applyWhiteboardState: input.applyWhiteboardState,
+  requestPreviewCheckpoint: input.requestPreviewCheckpoint,
+  getChatCheckpoint: input.getChatCheckpoint,
   onRecordingStart: input.onRecordingStart,
   onRecordingStop: input.onRecordingStop,
   onSeek: input.onSeek,

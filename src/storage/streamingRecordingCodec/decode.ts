@@ -39,6 +39,7 @@ import { hydrateFramePreviewContent } from "./framePreviewContentDedup";
 import { createPreviewAddNodeHydrator } from "./previewPatchDedup";
 import { createWorkspaceEventContentHydrator } from "./workspaceEventDedup";
 import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/performanceMetrics";
+import { normalizeMediaSpans } from "../../core/src/utils/mediaSpans";
 
 // ============================================================================
 // Decoding: turn SCR3 bytes into a `Recording`.
@@ -431,6 +432,8 @@ function assembleRecording(
     audioUrl: meta.audioUrl,
     cameraSource: meta.cameraSource,
     cameraStartOffsetMs: meta.cameraStartOffsetMs,
+    // Header fields are the file's word, so the spans are checked before playback maps by them.
+    cameraCuts: Array.isArray(meta.cameraCuts) ? normalizeMediaSpans(meta.cameraCuts) : undefined,
     cameraFile: meta.cameraFile,
     cameraUrl: meta.cameraUrl,
     streamFinalized,

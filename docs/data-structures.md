@@ -94,6 +94,7 @@ Notable current fields:
 - `audioFile`/`audioUrl` and `cameraFile`/`cameraUrl` describe audio/camera stored as sibling files rather than inline blobs; `audioStartOffsetMs`/`cameraStartOffsetMs` compensate for recorder warmup so playback stays aligned.
 - `captions` carries parsed subtitle tracks inline; `captionFiles` instead names sibling `.vtt`/`.srt` files that a hosted recording loads at play time.
 - `streamFinalized` distinguishes a complete decoded stream from a still-growing progressive-download prefix.
+- `cameraCuts` lists camera footage a retake discarded (spans of the camera's media timeline), which playback maps around; `pendingAudioEdit` is a narration edit (retake cuts) that `loadRecording` applies to `audioBlob` and drops — it is never written to a file.
 - Workspace projects store `{ kind: "asset", assetId, mimeType, size }` descriptors rather than
   base64. `workspaceAssets` exists only while raw SCR3 asset segments are handed to IndexedDB; it
   is stripped before the recording enters playback state.
@@ -405,6 +406,8 @@ interface RecordingSession {
   startedAt: number; // Date.now() wall-clock, metadata only
   startedAtPerf: number; // performance.now(), monotonic origin for in-session timestamps
   clock: RecordingClock; // Pauses recorded time skips (recordingClock.ts); read it via getRecordingTimestamp
+  safePoints: RecordingSafePoint[]; // Where a retake can rewind to: the start and each resume
+  mediaCuts: MediaSpan[]; // What retakes discarded from the recorders' files, in media time
   frames: DeltaFrame[]; // Already-compressed frames, built incrementally
   encoder: FrameStreamEncoderState; // Incremental keyframe/delta encoder state
   slideEvents: SlideEvent[];

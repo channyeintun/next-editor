@@ -32,6 +32,11 @@ export interface NextEditorActions {
   pauseRecording: () => void;
   /** Run a paused take's clock and recorders again. */
   resumeRecording: () => void;
+  /**
+   * Discard what the take recorded since its last safe point (its start, or the last
+   * resume), put the editor back, and hold the take paused there.
+   */
+  retakeRecording: () => void;
   play: () => void;
   pause: () => void;
   stop: () => void;

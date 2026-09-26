@@ -13,8 +13,10 @@ import {
   selectNextEditorMetadata,
   selectPlaybackSpeed,
   selectRecordingClock,
+  selectRecordingSafePoints,
   selectVolume,
 } from "../core/src/useNextEditor";
+import { findRetakeTarget } from "../core/src/machine/retake";
 import { isRecordingClockPaused, readRecordingClock } from "../core/src/machine/recordingClock";
 
 /**
@@ -83,4 +85,13 @@ export const useRecordingElapsedMs = (intervalMs = 100): number => {
   return recordingClock
     ? readRecordingClock(recordingClock.clock, recordingClock.startedAtPerf, now)
     : 0;
+};
+
+/**
+ * Where a retake would rewind the running take to, in recorded time, or null when
+ * there is nothing before now to rewind to (or no take).
+ */
+export const useRetakeTargetTime = (recordingTime: number): number | null => {
+  const safePoints = NextEditorActorContext.useSelector(selectRecordingSafePoints);
+  return safePoints ? (findRetakeTarget(safePoints, recordingTime)?.recordingTime ?? null) : null;
 };

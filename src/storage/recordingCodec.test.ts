@@ -878,6 +878,23 @@ describe("recordingCodec", () => {
     expect(decoded.cameraBlob).toBeUndefined();
   });
 
+  it("carries a retake's camera cuts in the header, and checks them on the way back", async () => {
+    const recording = createRecording({
+      duration: 800,
+      frames: [makeKeyframe(0, "a\n")],
+      cameraFile: "recording-1.webm",
+      cameraSource: "camera",
+      cameraStartOffsetMs: 120,
+      cameraCuts: [{ start: 200, end: 900 }],
+      // Only ever applied while a take loads; it must never reach a file.
+      pendingAudioEdit: { cuts: [{ start: 200, end: 900 }] },
+    });
+
+    const decoded = decodeRecordingStream(await encodeRecordingToStream(recording));
+    expect(decoded.cameraCuts).toEqual([{ start: 200, end: 900 }]);
+    expect(decoded.pendingAudioEdit).toBeUndefined();
+  });
+
   it("round trips captions through SCR3 encode/decode", async () => {
     const recording = createRecording({
       captions: [

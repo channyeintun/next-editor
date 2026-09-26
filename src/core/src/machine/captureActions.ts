@@ -34,6 +34,8 @@ import {
   recordingTimeAtPerf,
   resumeRecordingClock,
 } from "./recordingClock";
+import { withSafePoint } from "./retake";
+import { totalMediaSpanLength } from "../utils/mediaSpans";
 import {
   appendCursorEvent,
   createFrame,
@@ -317,6 +319,9 @@ export const initRecordingSession = ({
       startedAt,
       startedAtPerf,
       clock: createRecordingClock(),
+      // The take's start is the first moment a retake can rewind to.
+      safePoints: [{ recordingTime: 0, perf: startedAtPerf, wall: startedAt, mediaTime: 0 }],
+      mediaCuts: [],
       frames: [],
       encoder: createFrameStreamEncoder(),
       slideEvents,
@@ -680,7 +685,8 @@ export const pauseRecordingSession = ({
 
 /**
  * Runs the take's clock again. The pointer was followed but not recorded while paused,
- * so the resumed stretch starts with a sample of where it is now.
+ * so the resumed stretch starts with a sample of where it is now. The moment it resumes
+ * is where a later retake can rewind to.
  */
 export const resumeRecordingSession = ({
   context,
@@ -689,12 +695,17 @@ export const resumeRecordingSession = ({
 }): Partial<EditorMachineContext> => {
   const session = context.session;
   if (!session || !isRecordingClockPaused(session.clock)) return {};
-  session.clock = resumeRecordingClock(session.clock, performance.now(), Date.now());
-  appendCursorEvent(
-    session.cursorEvents,
-    getRecordingTimestamp(session),
-    session.lastMousePosition,
-  );
+  const perf = performance.now();
+  const wall = Date.now();
+  session.clock = resumeRecordingClock(session.clock, perf, wall);
+  const recordingTime = getRecordingTimestamp(session);
+  session.safePoints = withSafePoint(session.safePoints, {
+    recordingTime,
+    perf,
+    wall,
+    mediaTime: recordingTime + totalMediaSpanLength(session.mediaCuts),
+  });
+  appendCursorEvent(session.cursorEvents, recordingTime, session.lastMousePosition);
   return { session, sessionRevision: context.sessionRevision + 1 };
 };
 
@@ -746,6 +757,7 @@ export const finalizeRecording = ({
       mimeType: context.camera.mimeType,
       startOffsetMs: context.camera.startOffsetMs,
     },
+    mediaCuts: context.session.mediaCuts,
   });
 
   return {

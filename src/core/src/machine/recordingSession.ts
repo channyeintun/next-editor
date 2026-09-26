@@ -90,10 +90,23 @@ export function appendPreviewRecordingEvent(
   return true;
 }
 
+/** The oldest raw stamp among a segment's events. */
+function earliestEventStamp(events: PreviewRecordedEvent[] | undefined): number | undefined {
+  if (!events?.length) return undefined;
+  let earliest = events[0].timestamp;
+  for (const event of events) earliest = Math.min(earliest, event.timestamp);
+  return earliest;
+}
+
 export function appendPreviewInitialDocument(
   session: RecordingSession,
   document: PreviewInitialDocument,
 ): boolean {
+  // After a retake, the first full document re-bases the preview stream.
+  if (session.previewAwaitingCheckpoint) {
+    session.previewAwaitingCheckpoint = false;
+    session.previewCheckpointWall = earliestEventStamp(document.events);
+  }
   session.previewInitialDocuments.push({
     ...withRecordingWallEvents(session, document),
     time: getRecordingTimestamp(session),
@@ -101,12 +114,27 @@ export function appendPreviewInitialDocument(
   return true;
 }
 
+/**
+ * Returns `false` when the batch was dropped. After a retake, patches describe the
+ * document the take discarded until the preview's fresh full snapshot arrives, and
+ * events queued before that snapshot trail in after it; both are dropped.
+ */
 export function appendPreviewPatchBatch(
   session: RecordingSession,
   batch: PreviewDomPatchBatch,
 ): boolean {
+  if (session.previewAwaitingCheckpoint) return false;
+
+  let segment = batch;
+  const checkpointWall = session.previewCheckpointWall;
+  if (checkpointWall !== undefined && batch.events?.length) {
+    const events = batch.events.filter((event) => event.timestamp >= checkpointWall);
+    if (events.length === 0) return false;
+    if (events.length !== batch.events.length) segment = { ...batch, events };
+  }
+
   session.previewPatchBatches.push({
-    ...withRecordingWallEvents(session, batch),
+    ...withRecordingWallEvents(session, segment),
     time: getRecordingTimestamp(session),
   });
   return true;

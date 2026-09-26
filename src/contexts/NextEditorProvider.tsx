@@ -23,6 +23,7 @@ import { saveScreenRecordingLocally } from "../storage/screenRecordingSave";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import type { WorkspaceRecordingSnapshot } from "../types/workspace";
 import { getAgentStore } from "../agent/agentStore";
+import { createChatCheckpoint } from "../agent/chatRecording";
 import { keepLearnerWorkspace } from "../stores/learnerVersionsStore";
 import { useRecordingDraftJournal } from "../hooks/useRecordingDraftJournal";
 
@@ -78,6 +79,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     stopRecording: stopRecordingImmediately,
     pauseRecording,
     resumeRecording,
+    retakeRecording,
     play,
     pause,
     stop,
@@ -178,6 +180,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     stopRecording,
     pauseRecording,
     resumeRecording,
+    retakeRecording,
     play,
     pause,
     stop,
@@ -404,6 +407,8 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     applyChatSnapshot: (snapshot) => {
       getAgentStore().trigger.applyReplaySnapshot({ snapshot });
     },
+    getChatCheckpoint: () => createChatCheckpoint(getAgentStore()),
+    requestPreviewCheckpoint: () => previewHandle.recordingCheckpointRequester.current?.(),
     getWhiteboardState: () => whiteboardStore.getSnapshot().context.scene,
     applyWhiteboardState: (scene) => {
       whiteboardStore.trigger.setScene({ scene });

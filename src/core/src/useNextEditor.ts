@@ -106,6 +106,10 @@ export const selectRecordingClock = (
     ? { clock: state.context.session.clock, startedAtPerf: state.context.session.startedAtPerf }
     : null;
 
+/** Where a retake can rewind to, or null outside a take. Replaced whenever it changes. */
+export const selectRecordingSafePoints = (state: EditorMachineSnapshot) =>
+  state.matches("recording") && state.context.session ? state.context.session.safePoints : null;
+
 // Data selectors
 export const selectRecording = (state: EditorMachineSnapshot) => state.context.recording;
 export const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
@@ -135,6 +139,10 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
 
   const resumeRecording = () => {
     actorRef.send({ type: "RESUME_RECORDING" });
+  };
+
+  const retakeRecording = () => {
+    actorRef.send({ type: "RETAKE_RECORDING" });
   };
 
   // Playback Controls
@@ -243,6 +251,7 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     stopRecording,
     pauseRecording,
     resumeRecording,
+    retakeRecording,
     play,
     pause,
     stop,

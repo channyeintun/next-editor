@@ -74,6 +74,8 @@ export async function recoverRecordingDraft(draftId: string): Promise<Recording 
       mimeType: meta.camera?.mimeType,
       startOffsetMs: meta.camera?.startOffsetMs ?? 0,
     },
+    // The recorders' chunks still hold what the take's retakes discarded.
+    mediaCuts: meta.mediaCuts ?? [],
   });
   // The take's own id, when it got as far as being finalized: the draft is found by it
   // again after an upload or export, even from another page load.

@@ -645,12 +645,23 @@ export function usePreviewController(): PreviewController {
     previewHandle.recordingStopPreparer.current = async () => {
       await requestRuntimePreviewSnapshot("recording-finalize");
     };
+    // A retake discarded the stretch of the preview stream the live document's next
+    // patches would build on. Its fresh full snapshot is accepted as the new seed, the
+    // way the recording-start answer is.
+    previewHandle.recordingCheckpointRequester.current = () => {
+      recordedPreviewInitialDocumentIdRef.current = null;
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE },
+        "*",
+      );
+    };
 
     return () => {
       previewHandle.livePreviewInspectionGetter.current = null;
       previewHandle.previewScreenshotCapturer.current = null;
       previewHandle.previewCommandExecutor.current = null;
       previewHandle.recordingStopPreparer.current = null;
+      previewHandle.recordingCheckpointRequester.current = null;
     };
   }, [effectiveRuntimePreviewUrl, previewHandle, requestRuntimePreviewSnapshot]);
 

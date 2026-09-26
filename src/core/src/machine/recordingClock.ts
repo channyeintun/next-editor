@@ -116,6 +116,27 @@ export function resumeRecordingClock(
 }
 
 /**
+ * Puts the clock back to a moment it was running at (`perf`/`wall`, a safe point), and
+ * holds it there paused. Exclusions after that moment are dropped: the whole stretch
+ * from there to the next resume becomes the one exclusion that resume closes, so the
+ * clock reads that moment's recorded time until then.
+ */
+export function rewindRecordingClock(
+  clock: RecordingClock,
+  perf: number,
+  wall: number,
+): RecordingClock {
+  const exclusions = clock.exclusions.filter((exclusion) => exclusion.endPerf <= perf);
+  let excludedPerfMs = 0;
+  let excludedWallMs = 0;
+  for (const exclusion of exclusions) {
+    excludedPerfMs += exclusion.endPerf - exclusion.startPerf;
+    excludedWallMs += exclusion.endWall - exclusion.startWall;
+  }
+  return { exclusions, excludedPerfMs, excludedWallMs, pausedAt: { perf, wall } };
+}
+
+/**
  * Removes the exclusions from a `Date.now()` stamp taken during the take, so a
  * pause does not open a gap between the wall-clock stamps rrweb puts on preview
  * events and the recorded time they are replayed at. A stamp inside an exclusion

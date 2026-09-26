@@ -309,6 +309,7 @@ function buildRecordingStreamMeta(
       : undefined,
     cameraSource: hasCamera ? normalized.cameraSource : undefined,
     cameraStartOffsetMs: hasCamera ? normalized.cameraStartOffsetMs : undefined,
+    cameraCuts: hasCamera && normalized.cameraCuts?.length ? normalized.cameraCuts : undefined,
     cameraFile: normalized.cameraFile,
     cameraUrl: normalized.cameraUrl,
     captions: normalized.captions,

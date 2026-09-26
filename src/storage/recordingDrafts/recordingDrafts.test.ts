@@ -124,6 +124,21 @@ describe("recovering a take from its draft", () => {
     expect(recording!.streamFinalized).toBe(true);
   });
 
+  it("carries a retaken take's cuts, to cut the narration when it loads", async () => {
+    const tracks = createEmptyRecordingTracks();
+    const journal = new RecordingDraftJournal(tracks, 1_000);
+    tracks.frames.push(...compressFrames([frame(0, "a")]));
+    journal.addMedia("audio", new Blob(["chunk"]));
+    await journal.flush({
+      durationMs: 500,
+      audio: { mimeType: "audio/webm", source: "microphone" },
+      mediaCuts: [{ start: 100, end: 900 }],
+    });
+
+    const recording = await recoverRecordingDraft(journal.id);
+    expect(recording?.pendingAudioEdit).toEqual({ cuts: [{ start: 100, end: 900 }] });
+  });
+
   it("offers nothing for a draft whose tab closed before its first frame was written", async () => {
     const journal = new RecordingDraftJournal(createEmptyRecordingTracks(), 1_000);
     await journal.flush({ durationMs: 0 });

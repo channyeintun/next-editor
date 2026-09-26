@@ -37,6 +37,7 @@ function describeTake(
       camera.source === "camera" && camera.mimeType
         ? { mimeType: camera.mimeType, startOffsetMs: camera.startOffsetMs }
         : undefined,
+    mediaCuts: [...session.mediaCuts],
     slides: snapshot.context.getSlides?.(),
   };
 }

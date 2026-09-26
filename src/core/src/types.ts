@@ -16,6 +16,8 @@ import type {
 } from "../../types/workspace";
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
+import type { MediaSpan } from "./utils/mediaSpans";
+import type { AudioEdit } from "./utils/audioEdit";
 
 export type RecordingAudioSource = "microphone" | "external";
 export type RecordingCameraSource = "camera";
@@ -205,6 +207,19 @@ export interface Recording {
   cameraSource?: RecordingCameraSource;
   /** Camera warmup offset (ms) between the recording origin and the first camera frame. */
   cameraStartOffsetMs?: number;
+  /**
+   * Camera footage the take discarded with a retake. The camera kept recording across a
+   * retake, so its file still holds those stretches: spans of its media timeline (recorded
+   * time with the cuts put back, which camera time trails by `cameraStartOffsetMs`) that
+   * playback maps around. Sorted and non-overlapping.
+   */
+  cameraCuts?: MediaSpan[];
+  /**
+   * Narration edit still to apply when this recording loads: a retake's discarded
+   * stretches, or an edit's cuts and mutes. Loading replaces `audioBlob` with the edited
+   * file and drops this. Never written to a file.
+   */
+  pendingAudioEdit?: AudioEdit;
   /**
    * Sibling video filename for camera stored outside the `.ne` (e.g. `recording-xyz.webm`).
    * When set, the stream carries no inline `cameraChunk` segments; the video lives in its own file.

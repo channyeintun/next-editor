@@ -1,5 +1,6 @@
 import type { Slide } from "../../core/src/slides";
 import type { RecordingTrackName } from "../../core/src/machine/recordingAssembly";
+import type { MediaSpan } from "../../core/src/utils/mediaSpans";
 import { requestToPromise, transactionToPromise } from "../idb";
 
 // ============================================================================
@@ -33,6 +34,8 @@ export interface RecordingDraftMeta {
   /** A microphone take's recorder output, or a selected narration file kept whole. */
   audio?: { mimeType: string; source: "microphone" | "external" };
   camera?: { mimeType: string; startOffsetMs: number };
+  /** What retakes discarded from the recorders' files, applied when the draft is recovered. */
+  mediaCuts?: MediaSpan[];
   /** The id of the Recording the take finalized into, in the tab that recorded it. */
   recordingId?: string;
 }

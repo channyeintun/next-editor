@@ -73,6 +73,9 @@ import {
   resumeRecordingSession,
 } from "./captureActions";
 import { isRecordingClockPaused } from "./recordingClock";
+import { findRetakeTarget, rewindSessionToSafePoint } from "./retake";
+import { appendRuntimeRecordingEvent, getRecordingTimestamp } from "./recordingSession";
+import { editRecordedAudio, hasAudioEdit } from "../utils/audioEdit";
 import {
   setRecording,
   extendRecording,
@@ -143,8 +146,34 @@ export const editorMachine = setup({
     >(async ({ input }) => {
       // Thrown here, not in the invoke's `input`: xstate treats a throwing input as fatal to
       // the whole editor actor, while a rejection reaches `loading.onError`.
-      const recording = input.recording;
+      let recording = input.recording;
       if (!recording) throw new Error("No recording found to load");
+
+      // A retake left what it discarded in the narration file, and an edit asks for cuts
+      // and mutes. Both are applied here, once the audio is in hand; a microphone blob
+      // that has not arrived yet keeps the edit for when it does.
+      if (hasAudioEdit(recording.pendingAudioEdit) && recording.audioBlob instanceof Blob) {
+        try {
+          const audioBlob = await editRecordedAudio(
+            recording.audioBlob,
+            recording.pendingAudioEdit,
+          );
+          recording = {
+            ...recording,
+            audioBlob,
+            pendingAudioEdit: undefined,
+            tracks: recording.tracks?.map((track) =>
+              track.kind === "audio" ? { ...track, mimeType: audioBlob.type } : track,
+            ),
+          };
+        } catch (err) {
+          // Keeping the unedited narration is the lesser harm: it still plays, and its
+          // stretches before the first cut stay in step.
+          console.error("Failed to edit the recording's narration:", err);
+          recording = { ...recording, pendingAudioEdit: undefined };
+        }
+      }
+
       let duration = normalizeTimelineDuration(recording.duration);
 
       const playbackAudioState = getPlaybackAudioState(recording);
@@ -187,6 +216,13 @@ export const editorMachine = setup({
       context.session !== null && !isRecordingClockPaused(context.session.clock),
     isRecordingPaused: ({ context }) =>
       context.session !== null && isRecordingClockPaused(context.session.clock),
+    canRetake: ({ context }) =>
+      context.session !== null &&
+      findRetakeTarget(context.session.safePoints, getRecordingTimestamp(context.session)) !== null,
+    // A microphone blob that lands after its take finalized (the stop watchdog won) and
+    // whose narration still has a retake's cut to apply must go back through loading.
+    isLateAudioAwaitingEdit: ({ context }) =>
+      hasAudioEdit(context.recording?.pendingAudioEdit) && !context.recording?.audioBlob,
     shouldPauseOnInteraction: ({ context }) => context.pauseOnUserInteraction,
     shouldSyncPlaybackEditorRef: ({ context, event }) =>
       event.type === "SET_EDITOR_REF" &&
@@ -270,6 +306,66 @@ export const editorMachine = setup({
       if (context.screen.isRecording && context.screen.actorId) {
         enqueue.sendTo(context.screen.actorId, { type: "RESUME" });
       }
+    }),
+    // Rewinds the take to its last safe point and holds it paused there (see retake.ts).
+    retakeRecording: enqueueActions(({ context, enqueue }) => {
+      const session = context.session;
+      if (!session) return;
+      const target = findRetakeTarget(session.safePoints, getRecordingTimestamp(session));
+      if (!target) return;
+      const restore = rewindSessionToSafePoint(session, target);
+
+      // The recorders hold still until the take resumes; the stretch they recorded since
+      // the safe point is in the session's media cuts. A selected narration file is an
+      // input, so it is rewound to be performed over again.
+      if (context.audio.isRecording && context.audio.source === "microphone") {
+        enqueue.sendTo("audioRecorder", { type: "PAUSE" });
+      }
+      if (context.audio.isRecording && context.audio.source === "external") {
+        enqueue.sendTo("recordingAudioPlayer", { type: "PAUSE" });
+        enqueue.sendTo("recordingAudioPlayer", { type: "SEEK", timeMs: target.recordingTime });
+      }
+      if (shouldRecordCamera(context)) {
+        enqueue.sendTo("cameraRecorder", { type: "PAUSE" });
+      }
+      if (context.screen.isRecording && context.screen.actorId) {
+        enqueue.sendTo(context.screen.actorId, { type: "PAUSE" });
+      }
+
+      // The live terminal and agent conversation cannot be rewound. What they show now is
+      // recorded whole at the safe point, so what follows is recorded against it.
+      if (restore.runtimeChanged) {
+        const runtime = context.getRuntimeSnapshot?.();
+        if (runtime) appendRuntimeRecordingEvent(session, runtime);
+      }
+      if (restore.chatChanged) {
+        const checkpoint = context.getChatCheckpoint?.();
+        if (checkpoint) {
+          session.chatEvents.push({
+            timestamp: getRecordingTimestamp(session),
+            event: { k: "checkpoint", state: checkpoint },
+          });
+        }
+      }
+
+      enqueue.assign({
+        session,
+        sessionRevision: context.sessionRevision + 1,
+        currentFrame: restore.frame,
+      });
+
+      // Put the editor back the way it was at the safe point. These write to the app's
+      // stores, whose own capture records any remaining difference at that moment.
+      enqueue(() => {
+        if (restore.workspace) context.applyWorkspaceSnapshot?.(restore.workspace);
+        if (restore.whiteboard) context.applyWhiteboardState?.(restore.whiteboard);
+        const state = restore.frame?.state;
+        if (state?.slideState) {
+          context.applySlideState?.(state.slideState, state.currentSlideIndex ?? 0);
+        }
+        if (state?.previewState) context.applyPreviewState?.(state.previewState);
+        if (restore.previewStreamed) context.requestPreviewCheckpoint?.();
+      });
     }),
     notifyRecordingStart,
     notifyRecordingStop,
@@ -392,9 +488,17 @@ export const editorMachine = setup({
     // specific handlers and take precedence there. The recorder is kept alive past
     // the watchdog precisely so this can happen, so it is stopped here, once its
     // blob is in.
-    AUDIO_RECORDING_STOPPED: {
-      actions: ["attachLateAudioBlob", stopChild("audioRecorder")],
-    },
+    AUDIO_RECORDING_STOPPED: [
+      {
+        guard: "isLateAudioAwaitingEdit",
+        target: ".loading",
+        reenter: true,
+        actions: ["attachLateAudioBlob", stopChild("audioRecorder")],
+      },
+      {
+        actions: ["attachLateAudioBlob", stopChild("audioRecorder")],
+      },
+    ],
     // Only idle accepts START_RECORDING (its last branch has no guard, so it never bubbles up
     // from there). Anywhere else the event would be dropped along with the display stream the
     // host already acquired and handed over, so release that stream here.
@@ -647,6 +751,10 @@ export const editorMachine = setup({
         RESUME_RECORDING: {
           guard: "isRecordingPaused",
           actions: ["resumeRecordingSession", "resumeRecordingMedia"],
+        },
+        RETAKE_RECORDING: {
+          guard: "canRetake",
+          actions: "retakeRecording",
         },
         CAMERA_STARTED: {
           actions: "storeCameraStarted",
