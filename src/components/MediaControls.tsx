@@ -49,6 +49,7 @@ import { applyVoiceRecordingPolicy, isVoiceJoinedForRecording } from "../voice/r
 import { canRecordInLiveRoom } from "../collaboration/recordingPolicy";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 import LearnerVersionsMenu from "./LearnerVersionsMenu";
+import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
 
 interface MediaControlsProps {
   onRecord?: () => void;
@@ -335,6 +336,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     }
 
     if (currentRecording) {
+      // Starting over is the author's word that the take is done with: its draft goes too.
+      void discardRecordingDraftFor(currentRecording.id);
       clearRecording();
       return;
     }

@@ -51,6 +51,7 @@ import CollaborationPanel from "./CollaborationPanel";
 import { startTour } from "./tour/productTour";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
+import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
 
 const LESSON_TYPE_OPTIONS: Array<{
   value: WorkspaceLessonType;
@@ -261,6 +262,8 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
     try {
       await exportAsFile(currentRecording);
+      // The take is saved to disk now, so it no longer needs its recovery draft.
+      void discardRecordingDraftFor(currentRecording.id);
       posthog?.capture("recording_exported", {
         recording_duration: currentRecording.duration,
       });

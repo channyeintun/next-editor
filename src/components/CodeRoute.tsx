@@ -12,6 +12,10 @@ import {
   type ResumeIntent,
 } from "@next-editor/infra";
 import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
+import {
+  claimRecordingDraftFor,
+  discardRecordingDraftFor,
+} from "../storage/recordingDrafts/recordingDraftJournal";
 
 /**
  * Consumes the sign-in resume pointer together with the take it points at: the
@@ -85,6 +89,10 @@ export default function CodeRoute() {
           return;
         }
 
+        // The take's recovery draft (if it still has one) is this page's now, so the
+        // recovery prompt does not offer the take the upload modal is showing.
+        await claimRecordingDraftFor(recording.id);
+        if (cancelled) return;
         setResumedRecording(recording);
         setResumedDraft(intent.draft);
         setResumeError(null);
@@ -119,7 +127,11 @@ export default function CodeRoute() {
         // iframe itself to the gallery, so it keeps the plain "Editor" label.
         breadcrumb={readOnly ? undefined : <Breadcrumb title="Editor" />}
         renderPostRecordingModal={(ctx) => (
-          <UploadLessonModal recording={ctx.recording} onClose={ctx.onClose} />
+          <UploadLessonModal
+            recording={ctx.recording}
+            onClose={ctx.onClose}
+            onUploaded={() => void discardRecordingDraftFor(ctx.recording.id)}
+          />
         )}
       />
       {resumedRecording ? (
@@ -127,6 +139,7 @@ export default function CodeRoute() {
           <UploadLessonModal
             recording={resumedRecording}
             onClose={() => setResumedRecording(null)}
+            onUploaded={() => void discardRecordingDraftFor(resumedRecording.id)}
             initialTitle={resumedDraft?.title}
             initialDescription={resumedDraft?.description}
             initialTags={resumedDraft?.tags}

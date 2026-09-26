@@ -158,6 +158,25 @@ Current storage rules:
   MessagePack/deflate codec work off the main thread. `src/storage/streamingRecordingCodec/decode.ts`
   does incremental prefix decoding for progressive loads.
 
+### Take drafts (crash recovery)
+
+A take is held in memory until it is uploaded or exported. So that a crash, a reload or a
+closed tab does not lose it, `useRecordingDraftJournal` (run by `NextEditorProvider`, off for
+studio renders) journals every take to its own IndexedDB database,
+`next-editor-recording-drafts` (`src/storage/recordingDrafts/`):
+
+- Every 3 s, on a pause, and when the tab is hidden, it writes what each session track gained
+  since the last write, with the draft's meta, in one transaction; a failed write stops the
+  journal, so a draft is always a consistent prefix of its take. Workspace events are written
+  with only the files that changed since the one before.
+- The microphone and camera recorders' chunks are appended as they arrive (the journal listens
+  to the same MediaRecorders); a selected narration file is stored whole.
+- A tab holds a Web Lock per draft it owns. The editor's recovery prompt
+  (`RecordingDraftRecovery`) offers the newest draft no open tab owns, and rebuilds it through
+  the same `assembleRecording` the stop uses.
+- A draft is deleted once its take is uploaded, exported, or replaced with New Recording, or
+  when the author discards it from the prompt.
+
 ## URL Loading Flow
 
 The shipped URL loader supports both same-origin and cross-origin recording URLs.

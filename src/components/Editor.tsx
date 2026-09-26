@@ -43,6 +43,7 @@ import CursorComponent from "./Cursor.tsx";
 import LoadingSpinner from "./LoadingSpinner.tsx";
 import EditorShellSkeleton, { EditorPlayerBarSkeleton } from "./EditorShellSkeleton.tsx";
 import RecordingLoadError from "./RecordingLoadError.tsx";
+import RecordingDraftRecovery from "./RecordingDraftRecovery";
 import { ApiClientStoreProvider } from "../contexts/ApiClientStoreContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
 import { startTour } from "./tour/productTour";
@@ -96,6 +97,12 @@ export interface EditorProps {
   overlay?: ReactNode;
   /** Disable runtime startup caused by workspace load or preview open (Studio owns it). */
   runtimeAutoStart?: boolean;
+  /**
+   * Keep every take as a recoverable draft while it records, and offer back takes a
+   * closed or crashed tab left unsaved. Off for studio renders, which are not the
+   * author's to lose. Defaults to on; a read-only editor records nothing either way.
+   */
+  recordingDrafts?: boolean;
 }
 
 export function EditorLayout({
@@ -108,6 +115,7 @@ export function EditorLayout({
   onEnded,
   playlistMode = false,
   autoplayOverride = false,
+  recordingDrafts = true,
 }: EditorProps = {}) {
   // One loader for the `?url=` lesson and for drops, so whichever load is newest wins and its
   // state is the one shown.
@@ -123,13 +131,14 @@ export function EditorLayout({
 
   const { isRecording, isPlaying, currentRecording, hasEnded } = useNextEditorMetadata();
   const { isOpen: isWhiteboardOpen } = useWhiteboardContext();
-  const { play, setPlaybackSpeed, setVolume } = useNextEditorActions();
+  const { play, setPlaybackSpeed, setVolume, loadRecording } = useNextEditorActions();
   const { editorActor, playbackSpeed, volume } = useNextEditorPlayback();
   const { autoplay, speed: persistedSpeed, volume: persistedVolume } = usePlaybackSettings();
-  const { target: postRecordingTarget, clear: clearPostRecordingTarget } = usePostRecordingTarget(
-    isRecording,
-    currentRecording,
-  );
+  const {
+    target: postRecordingTarget,
+    clear: clearPostRecordingTarget,
+    offer: offerPostRecordingTarget,
+  } = usePostRecordingTarget(isRecording, currentRecording);
   const collaboration = useOptionalCollaboration();
 
   // Props win; otherwise fall back to URL params so the /code route keeps working.
@@ -312,6 +321,14 @@ export function EditorLayout({
           </Suspense>
         ) : null}
         <CollaborationFollowOverlay />
+        {recordingDrafts && !readOnly && !collaboration?.provider ? (
+          <RecordingDraftRecovery
+            onRecovered={(recording) => {
+              loadRecording(recording);
+              offerPostRecordingTarget(recording);
+            }}
+          />
+        ) : null}
 
         {/* Loading / error overlays live inside the (relative) editor surface so they
             center on the editor region in both viewport and `fill` layouts. */}
@@ -356,7 +373,12 @@ export function EditorLayout({
   );
 }
 
-export default function Editor({ overlay, runtimeAutoStart = true, ...props }: EditorProps = {}) {
+export default function Editor({
+  overlay,
+  runtimeAutoStart = true,
+  recordingDrafts = true,
+  ...props
+}: EditorProps = {}) {
   return (
     <WorkspaceProvider pendingRecordingUrl={props.recordingUrl}>
       <WebContainerRuntimeProvider allowAmbientStart={runtimeAutoStart}>
@@ -366,14 +388,14 @@ export default function Editor({ overlay, runtimeAutoStart = true, ...props }: E
               <PreviewAdapterHandleProvider>
                 <CaptionStoreProvider>
                   <ApiClientStoreProvider>
-                    <NextEditorProvider>
+                    <NextEditorProvider recordingDrafts={recordingDrafts}>
                       <CollaborationProvider>
                         <CollaborationVoiceProvider>
                           <SlidesProvider>
                             <WhiteboardProvider>
                               <PreviewPanelProvider>
                                 <CollaborationSurfaceBridge />
-                                <EditorLayout {...props} />
+                                <EditorLayout {...props} recordingDrafts={recordingDrafts} />
                                 {overlay}
                               </PreviewPanelProvider>
                             </WhiteboardProvider>

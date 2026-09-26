@@ -7,14 +7,13 @@ import {
   type EditorMachineEvent,
   type RecordingSession,
 } from "./types";
-import type { EditorFrame, MouseCursorPosition, Recording } from "../types";
+import type { EditorFrame, MouseCursorPosition } from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import type { WhiteboardEvent } from "../whiteboard";
 import {
   toSidebarWidthDeltaSnapshot,
   type WorkspaceRecordingEvent,
 } from "../../../types/workspace";
-import { DELTA_CONFIG } from "../utils/deltaTypes";
 import { createContentEditDelta, type CreatedContentEditDelta } from "../utils/frameDelta";
 import { createFrameStreamEncoder, pushFrame } from "../utils/frameStreamEncoder";
 import {
@@ -37,14 +36,13 @@ import {
 } from "./recordingClock";
 import {
   appendCursorEvent,
-  buildTrackMetadata,
   createFrame,
   MOUSE_FRAME_INTERVAL_MS,
   type CapturedContentRef,
   type CapturedViewStateRef,
 } from "./editorMachineHelpers";
 import { normalizeNonNegativeTime } from "./playbackValues";
-import { buildRecordingClusters } from "../utils/recordingClusters";
+import { assembleRecording } from "./recordingAssembly";
 import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 
 const SCREEN_RECORDER_ID_PREFIX = "screenRecorder-";
@@ -724,72 +722,31 @@ export const finalizeRecording = ({
     externalDurationMs > 0
       ? Math.max(Math.min(elapsedMs, externalDurationMs), 1)
       : elapsedMs;
-  const slides = context.getSlides?.();
   const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() || undefined;
-  const workspaceSnapshot = currentWorkspaceSnapshot
-    ? toSidebarWidthDeltaSnapshot(currentWorkspaceSnapshot, 0)
-    : undefined;
-  const runtimeSnapshot = context.getRuntimeSnapshot?.() || undefined;
-
-  // Frames were compressed incrementally during capture.
-  const frames = context.session.frames;
-  const clusters = buildRecordingClusters(frames, duration);
-  const tracks = buildTrackMetadata({
-    durationMs: duration,
-    hasSlideEvents: context.session.slideEvents.length > 0,
-    hasPreviewEvents:
-      context.session.previewEvents.length > 0 ||
-      context.session.previewInitialDocuments.length > 0 ||
-      context.session.previewPatchBatches.length > 0,
-    hasWorkspaceEvents: context.session.workspaceEvents.length > 0,
-    hasRuntimeEvents: context.session.runtimeEvents.length > 0,
-    hasCursorEvents: context.session.cursorEvents.length > 0,
-    hasWhiteboardEvents: context.session.whiteboardEvents.length > 0,
-    hasChatEvents: context.session.chatEvents.length > 0,
-    audioMimeType: context.audio.mimeType || context.audio.blob?.type,
-    audioSource: context.audio.source || undefined,
-    audioStartOffsetMs: context.audio.startOffsetMs,
-    // A microphone take's blob can still be on its way when the watchdog finalizes
-    // (attachLateAudioBlob splices it in), so a running microphone recorder counts.
-    hasAudio:
-      Boolean(context.audio.blob) ||
-      (context.audio.isRecording && context.audio.source === "microphone"),
-    cameraMimeType: context.camera.mimeType || context.camera.blob?.type,
-    cameraSource: context.camera.source || undefined,
-    cameraStartOffsetMs: context.camera.startOffsetMs,
-    hasCamera: Boolean(context.camera.blob),
-  });
-
-  const recording: Recording = {
-    version: DELTA_CONFIG.VERSION,
-    id: Date.now().toString(),
-    name: `Recording ${Date.now()}`,
-    createdAt: Date.now(),
-    frames,
-    keyframeInterval: DELTA_CONFIG.KEYFRAME_INTERVAL,
-    slideEvents: context.session.slideEvents,
-    previewEvents: context.session.previewEvents,
-    previewInitialDocuments: context.session.previewInitialDocuments,
-    previewPatchBatches: context.session.previewPatchBatches,
-    workspaceEvents: context.session.workspaceEvents,
-    runtimeEvents: context.session.runtimeEvents,
-    cursorEvents: context.session.cursorEvents,
-    whiteboardEvents: context.session.whiteboardEvents,
-    chatEvents: context.session.chatEvents,
-    slides: slides,
-    tracks,
-    clusters: clusters.length > 0 ? clusters : undefined,
+  const recording = assembleRecording({
+    tracks: context.session,
     duration,
-    audioBlob: context.audio.blob || undefined,
-    audioSource: context.audio.source || undefined,
-    audioStartOffsetMs: context.audio.blob ? context.audio.startOffsetMs : undefined,
-    cameraBlob: context.camera.blob || undefined,
-    cameraSource: context.camera.source || undefined,
-    cameraStartOffsetMs: context.camera.blob ? context.camera.startOffsetMs : undefined,
-    streamFinalized: true,
-    workspaceSnapshot,
-    runtimeSnapshot,
-  };
+    slides: context.getSlides?.(),
+    workspaceSnapshot: currentWorkspaceSnapshot
+      ? toSidebarWidthDeltaSnapshot(currentWorkspaceSnapshot, 0)
+      : undefined,
+    runtimeSnapshot: context.getRuntimeSnapshot?.() || undefined,
+    audio: {
+      blob: context.audio.blob || undefined,
+      source: context.audio.source || undefined,
+      mimeType: context.audio.mimeType,
+      startOffsetMs: context.audio.startOffsetMs,
+      // A microphone take's blob can still be on its way when the watchdog finalizes
+      // (attachLateAudioBlob splices it in), so a running microphone recorder counts.
+      pending: context.audio.isRecording && context.audio.source === "microphone",
+    },
+    camera: {
+      blob: context.camera.blob || undefined,
+      source: context.camera.source || undefined,
+      mimeType: context.camera.mimeType,
+      startOffsetMs: context.camera.startOffsetMs,
+    },
+  });
 
   return {
     recording,
@@ -917,6 +874,7 @@ export const storeCameraBlob = ({
       ...context.camera,
       blob: event.blob,
       isRecording: false,
+      mediaRecorder: null,
       mimeType: event.blob.type,
       source: "camera" as const,
     },
@@ -944,6 +902,7 @@ export const storeCameraStarted = ({
     camera: {
       ...context.camera,
       mimeType: event.mimeType,
+      mediaRecorder: event.mediaRecorder ?? null,
       startOffsetMs,
     },
   };

@@ -922,6 +922,7 @@ describe("editorMachine actor lifecycle", () => {
       blob: null,
       isRecording: false,
       mimeType: "",
+      mediaRecorder: null,
       source: null,
       startOffsetMs: 0,
     });

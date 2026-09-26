@@ -33,5 +33,10 @@ export function usePostRecordingTarget(isRecording: boolean, currentRecording: R
     }
   }, [isRecording, currentRecording]);
 
-  return { target, clear: () => setTarget(null) };
+  return {
+    target,
+    clear: () => setTarget(null),
+    /** Offers a take that finished another way — a recovered draft — the same as a live one. */
+    offer: (recording: Recording) => setTarget(recording),
+  };
 }

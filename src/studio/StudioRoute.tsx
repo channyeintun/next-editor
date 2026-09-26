@@ -19,6 +19,7 @@ export default function StudioRoute() {
       breadcrumb={<Breadcrumb title="Studio" />}
       overlay={<StudioController />}
       runtimeAutoStart={false}
+      recordingDrafts={false}
     />
   );
 }

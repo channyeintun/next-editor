@@ -24,13 +24,20 @@ import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import type { WorkspaceRecordingSnapshot } from "../types/workspace";
 import { getAgentStore } from "../agent/agentStore";
 import { keepLearnerWorkspace } from "../stores/learnerVersionsStore";
+import { useRecordingDraftJournal } from "../hooks/useRecordingDraftJournal";
 
 interface NextEditorProviderProps {
   children: React.ReactNode;
+  /**
+   * Journal takes to IndexedDB as they record so a crash or closed tab can be recovered
+   * (hooks/useRecordingDraftJournal). Off where takes are not the author's to lose.
+   */
+  recordingDrafts?: boolean;
 }
 
 interface NextEditorProviderContentProps {
   children: React.ReactNode;
+  recordingDrafts: boolean;
   config: EditorMachineInput;
   recordingStorage: { current: ReturnType<typeof createRecordingStorage> };
   suppressWorkspaceEventsRef: { current: boolean };
@@ -55,6 +62,7 @@ async function prepareThenStopRecording(
 
 const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   children,
+  recordingDrafts,
   config,
   recordingStorage,
   suppressWorkspaceEventsRef,
@@ -94,6 +102,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     handleChatEvent,
   } = useNextEditorActorActions(actorRef);
   useNextEditorInteractionEffects(actorRef, config);
+  useRecordingDraftJournal(actorRef, recordingDrafts);
 
   // Leaving the page (closing the tab, navigating, a phone backgrounding it) is the
   // one hand-back that sends the machine nothing, so ask it to keep the viewer's
@@ -198,7 +207,10 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   return <NextEditorActionsContext value={actionsValue}>{children}</NextEditorActionsContext>;
 };
 
-export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children }) => {
+export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
+  children,
+  recordingDrafts = true,
+}) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const recordingStorage = useRef(createRecordingStorage());
   const previewHandle = usePreviewAdapterHandle();
@@ -407,6 +419,7 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({ children
   return (
     <NextEditorActorContext.Provider options={{ input: config }}>
       <NextEditorProviderContent
+        recordingDrafts={recordingDrafts}
         config={config}
         recordingStorage={recordingStorage}
         suppressWorkspaceEventsRef={suppressWorkspaceEventsRef}

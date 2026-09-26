@@ -14,7 +14,13 @@ export type CameraRecordingEvent =
   | { type: "RESUME" };
 
 export type CameraRecordingEmit =
-  | { type: "CAMERA_STARTED"; mimeType: string; startedAtPerf: number }
+  | {
+      type: "CAMERA_STARTED";
+      mimeType: string;
+      startedAtPerf: number;
+      /** The running recorder, so the host can journal its chunks as they arrive. */
+      mediaRecorder?: MediaRecorder;
+    }
   | { type: "CAMERA_STOPPED"; blob: Blob }
   | { type: "CAMERA_ERROR"; error: string };
 
@@ -118,6 +124,7 @@ export const cameraRecordingActor = fromTypedCallback<
             type: "CAMERA_STARTED",
             mimeType,
             startedAtPerf: startedAtPerfMs,
+            mediaRecorder: mediaRecorder ?? undefined,
           });
           syncPauseState();
         }

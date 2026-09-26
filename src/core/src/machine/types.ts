@@ -161,6 +161,8 @@ export interface CameraState {
   isRecording: boolean;
   /** Detected MIME type */
   mimeType: string;
+  /** The running camera MediaRecorder, for hosts that journal its chunks. */
+  mediaRecorder: MediaRecorder | null;
   /** Source used for the active or finalized camera video */
   source: RecordingCameraSource | null;
   /**
@@ -657,6 +659,7 @@ export const createIdleCameraState = (): CameraState => ({
   blob: null,
   isRecording: false,
   mimeType: "",
+  mediaRecorder: null,
   source: null,
   startOffsetMs: 0,
 });

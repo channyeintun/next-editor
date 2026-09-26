@@ -585,6 +585,7 @@ export const editorMachine = setup({
               blob: null,
               isRecording: true,
               mimeType: "",
+              mediaRecorder: null,
               source: "camera" as const,
               startOffsetMs: 0,
             },

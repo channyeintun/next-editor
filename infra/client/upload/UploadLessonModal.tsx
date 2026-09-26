@@ -21,6 +21,8 @@ import { usePostHog } from "@posthog/react";
 export interface UploadLessonModalProps {
   recording: Recording;
   onClose: () => void;
+  /** The recording and its media reached the server as a draft lesson. */
+  onUploaded?: () => void;
   /** Restored after a "session expired mid-form" round trip (see the UX spec) —
    *  the one case where typed values cross the OAuth redirect. */
   initialTitle?: string;
@@ -64,6 +66,7 @@ interface SelectedCaption {
 export default function UploadLessonModal({
   recording,
   onClose,
+  onUploaded,
   initialTitle,
   initialDescription,
   initialTags,
@@ -289,6 +292,7 @@ export default function UploadLessonModal({
         },
       });
       setUploadResult(result);
+      onUploaded?.();
       posthog?.capture("lesson_uploaded", {
         has_thumbnail: !!(thumbnailFile || useDefaultThumbnail),
         has_description: !!description.trim(),
