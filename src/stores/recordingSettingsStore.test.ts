@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vite-plus/test";
 import {
   createRecordingSettingsStore,
+  selectMicrophoneDeviceId,
   selectScreenRecordingEnabled,
 } from "./recordingSettingsStore";
 
@@ -54,5 +55,21 @@ describe("recordingSettingsStore", () => {
 
     expect(snapshot1).not.toBe(snapshot2);
     expect(selectScreenRecordingEnabled(snapshot2)).toBe(true);
+  });
+
+  it("defaults to the system microphone", () => {
+    expect(selectMicrophoneDeviceId(ctx(createRecordingSettingsStore()))).toBeNull();
+  });
+
+  it("remembers the picked microphone, and forgets it for the default", () => {
+    const store = createRecordingSettingsStore();
+    store.trigger.setMicrophoneDeviceId({ deviceId: "usb-mic" });
+
+    expect(window.localStorage.getItem("recording-microphone-device")).toBe("usb-mic");
+    expect(selectMicrophoneDeviceId(ctx(createRecordingSettingsStore()))).toBe("usb-mic");
+
+    store.trigger.setMicrophoneDeviceId({ deviceId: "" });
+    expect(selectMicrophoneDeviceId(ctx(store))).toBeNull();
+    expect(window.localStorage.getItem("recording-microphone-device")).toBeNull();
   });
 });

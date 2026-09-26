@@ -25,6 +25,7 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - Runtime lessons also include an API client mode: a built-in HTTP client that sends requests to the running server inside the preview iframe (same-origin, no CORS) and records each request/response so they replay on the timeline.
 - Subtitles (captions) can be imported from `.vtt`/`.srt` files, generated from a recorded narration on the author's device (Whisper, the audio never leaves the browser), or shipped alongside a hosted `.ne`, and render as a time-synced overlay with per-language track selection.
 - Recording captures more than text deltas: it stores workspace changes, rrweb preview snapshots, API client requests/responses, slide events, cursor motion, runtime events, audio, and optional camera video.
+- A microphone check before a take picks the microphone (remembered per browser) and shows its live level with a plain-language verdict; during the take a small meter beside the timer shows the narration coming in, and warns when nothing has.
 - Playback restores the recorded project state and replays it from a single timeline.
 - Import and export use the SCR3 `.ne` container.
 - Progressive loading lets `/code?url=...` start playing a recording from a partial download.

@@ -27,6 +27,8 @@ export interface NextEditorActions {
     audioBlob?: Blob;
     enableCamera?: boolean;
     screenStream?: MediaStream;
+    /** The microphone to narrate with; the default one when absent. */
+    microphoneDeviceId?: string;
   }) => void;
   stopRecording: () => Promise<void>;
   /** Stop the take's clock and recorders without ending the take. */

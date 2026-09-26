@@ -304,6 +304,8 @@ export interface EditorMachineContext {
    * back to this, never to a previous take's choice.
    */
   defaultEnableCameraRecording: boolean;
+  /** The microphone this take narrates with, from its START_RECORDING; null for the default. */
+  microphoneDeviceId: string | null;
   /** Whether to pause on user interaction */
   pauseOnUserInteraction: boolean;
   /** Error message if any */
@@ -403,6 +405,8 @@ export type StartRecordingEvent = {
   enableCamera?: boolean;
   /** Pre-acquired display capture stream (opt-in screen recording); undefined when off. */
   screenStream?: MediaStream;
+  /** The microphone to narrate with (a `deviceId`); the default one when absent. */
+  microphoneDeviceId?: string;
 };
 
 /** Stop recording event */
@@ -772,6 +776,7 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
   enableAudioRecording: input.enableAudioRecording ?? false,
   enableCameraRecording: input.enableCameraRecording ?? false,
   defaultEnableCameraRecording: input.enableCameraRecording ?? false,
+  microphoneDeviceId: null,
   pauseOnUserInteraction: input.pauseOnUserInteraction ?? true,
   error: null,
   hasManualWorkspaceOverride: false,

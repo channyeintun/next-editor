@@ -216,6 +216,80 @@ describe("audioRecordingActor lifecycle", () => {
     ]);
   });
 
+  describe("with a picked microphone", () => {
+    const defaults = { autoGainControl: true, echoCancellation: true, noiseSuppression: true };
+    const liveStream = () =>
+      Promise.resolve(new FakeAudioStream(new FakeAudioTrack()) as unknown as MediaStream);
+    const failure = (name: string, message: string) =>
+      Promise.reject(Object.assign(new Error(message), { name }));
+
+    const answerMicrophone = (
+      answer: (call: number) => Promise<MediaStream>,
+    ): MediaStreamConstraints[] => {
+      const requests: MediaStreamConstraints[] = [];
+      Object.defineProperty(navigator, "mediaDevices", {
+        configurable: true,
+        value: {
+          getUserMedia: (constraints: MediaStreamConstraints) => {
+            requests.push(constraints);
+            return answer(requests.length);
+          },
+        },
+      });
+      return requests;
+    };
+
+    const startMachine = (onError?: (error: Error) => void) => {
+      const actor = createActor(editorMachine, {
+        input: { editorRef: { current: null }, enableAudioRecording: true, onError },
+      }).start();
+      actors.push(actor);
+      return actor;
+    };
+
+    it("records from it", async () => {
+      const requests = answerMicrophone(liveStream);
+      const actor = startMachine();
+
+      actor.send({ type: "START_RECORDING", microphoneDeviceId: "usb-mic" });
+      await waitFor(actor, (snapshot) => snapshot.value === "recording");
+
+      expect(requests).toEqual([{ audio: { ...defaults, deviceId: { exact: "usb-mic" } } }]);
+    });
+
+    it("records from the default microphone when the picked one is gone", async () => {
+      const requests = answerMicrophone((call) =>
+        call === 1 ? failure("OverconstrainedError", "no such device") : liveStream(),
+      );
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const actor = startMachine();
+
+      actor.send({ type: "START_RECORDING", microphoneDeviceId: "unplugged" });
+      await waitFor(actor, (snapshot) => snapshot.value === "recording");
+
+      expect(requests).toEqual([
+        { audio: { ...defaults, deviceId: { exact: "unplugged" } } },
+        { audio: defaults },
+      ]);
+      expect(warn).toHaveBeenCalledOnce();
+      warn.mockRestore();
+    });
+
+    it("does not retry past a refused permission", async () => {
+      const requests = answerMicrophone(() => failure("NotAllowedError", "Permission denied"));
+      const onError = vi.fn<(error: Error) => void>();
+      const actor = startMachine(onError);
+
+      actor.send({ type: "START_RECORDING", microphoneDeviceId: "usb-mic" });
+      await waitFor(actor, (snapshot) => snapshot.value === "idle");
+
+      expect(requests).toHaveLength(1);
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "Permission denied" }),
+      );
+    });
+  });
+
   describe("in the editor machine, past the finalize watchdog", () => {
     const narration = new Blob(["narration"], { type: "audio/webm" });
 

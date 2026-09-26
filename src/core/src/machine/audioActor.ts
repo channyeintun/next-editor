@@ -39,13 +39,52 @@ const DEFAULT_MIC_CONSTRAINTS: MediaTrackConstraints = {
   noiseSuppression: true,
 };
 
+/**
+ * What a take asks the microphone for: the recording defaults, from `deviceId` when the
+ * author picked one. The microphone check listens with the same (through
+ * `openMicrophone`), so its meter shows the level the take will record.
+ */
+function microphoneConstraints(deviceId?: string): MediaTrackConstraints {
+  return deviceId
+    ? { ...DEFAULT_MIC_CONSTRAINTS, deviceId: { exact: deviceId } }
+    : DEFAULT_MIC_CONSTRAINTS;
+}
+
+/** A picked microphone that is not there (unplugged, or an id from another browser profile). */
+function isMissingDevice(error: unknown): boolean {
+  const name = (error as { name?: unknown } | null)?.name;
+  return name === "OverconstrainedError" || name === "NotFoundError";
+}
+
+/**
+ * Opens the microphone a take records from: `input.constraints` as given, or the recording
+ * defaults on the picked device, falling back to the default device when it is gone.
+ */
+export async function openMicrophone(input: AudioRecordingInput): Promise<MediaStream> {
+  if (input.constraints) {
+    return navigator.mediaDevices.getUserMedia({ audio: input.constraints });
+  }
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: microphoneConstraints(input.deviceId),
+    });
+  } catch (error) {
+    // A take is not lost to a missing device: it records from the default microphone.
+    if (!input.deviceId || !isMissingDevice(error)) throw error;
+    console.warn("The chosen microphone is unavailable; recording from the default one.", error);
+    return navigator.mediaDevices.getUserMedia({ audio: microphoneConstraints() });
+  }
+}
+
 // ============================================================================
 // Audio Actor Types
 // ============================================================================
 
 export interface AudioRecordingInput {
-  /** Audio constraints; DEFAULT_MIC_CONSTRAINTS when absent */
+  /** Audio constraints; microphoneConstraints(deviceId) when absent */
   constraints?: MediaTrackConstraints;
+  /** The microphone the author picked; the default one when absent or gone. */
+  deviceId?: string;
 }
 
 export interface AudioPlaybackInput {
@@ -149,9 +188,7 @@ export const audioRecordingActor = fromTypedCallback<
     starting = true;
 
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: input.constraints ?? DEFAULT_MIC_CONSTRAINTS,
-      });
+      stream = await openMicrophone(input);
 
       if (disposed || stopRequested) {
         cleanupStream();

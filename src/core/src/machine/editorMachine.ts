@@ -34,6 +34,7 @@ import {
 import {
   getExternalAudioBlob,
   setCameraRecordingEnabled,
+  setMicrophoneDevice,
   prepareExternalAudioRecording,
   startExternalAudioPlayback,
   storeExternalAudioDuration,
@@ -259,6 +260,7 @@ export const editorMachine = setup({
     // Recording (capture-side) actions — bodies live in captureActions.ts, wrapped
     // here so `setup()` can infer this machine's exact context/event/actor types.
     setCameraRecordingEnabled: assign(setCameraRecordingEnabled),
+    setMicrophoneDevice: assign(setMicrophoneDevice),
     prepareExternalAudioRecording: assign(prepareExternalAudioRecording),
     startExternalAudioPlayback: enqueueActions(startExternalAudioPlayback),
     storeExternalAudioDuration: assign(storeExternalAudioDuration),
@@ -590,7 +592,7 @@ export const editorMachine = setup({
           {
             target: "startingRecording",
             guard: ({ context }) => context.enableAudioRecording,
-            actions: ["setCameraRecordingEnabled", "setScreenStream"],
+            actions: ["setCameraRecordingEnabled", "setMicrophoneDevice", "setScreenStream"],
           },
           {
             target: "recording",
@@ -623,7 +625,7 @@ export const editorMachine = setup({
           // AUDIO_RECORDING_STOPPED event arrives after leaving this state.
           enqueue.spawnChild("audioRecording", {
             id: "audioRecorder",
-            input: {},
+            input: { deviceId: context.microphoneDeviceId ?? undefined },
           });
           enqueue.sendTo("audioRecorder", { type: "START" });
           enqueue.assign({

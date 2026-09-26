@@ -132,7 +132,10 @@ No recording or playback is active.
 Used only when `enableAudioRecording` is set and no external audio blob was supplied —
 i.e. the microphone bootstrap path.
 
-- Spawns `audioRecording` and sends it `START`.
+- Spawns `audioRecording` and sends it `START`, on the microphone the `START_RECORDING`
+  named (`microphoneDeviceId`, stored per take by `setMicrophoneDevice`). A named microphone
+  that is gone (`OverconstrainedError`/`NotFoundError`) falls back to the default one rather
+  than failing the take; a refused permission still fails it.
 - Waits for `AUDIO_RECORDING_STARTED` to move to `recording`.
 - `STOP_RECORDING` aborts straight back to `idle`.
 
@@ -278,7 +281,13 @@ Representative machine events (`src/core/src/machine/types.ts`):
 
 ```ts
 type EditorMachineEvent =
-  | { type: "START_RECORDING"; audioBlob?: Blob; enableCamera?: boolean }
+  | {
+      type: "START_RECORDING";
+      audioBlob?: Blob;
+      enableCamera?: boolean;
+      screenStream?: MediaStream;
+      microphoneDeviceId?: string;
+    }
   | { type: "STOP_RECORDING" }
   | { type: "PAUSE_RECORDING" }
   | { type: "RESUME_RECORDING" }
@@ -410,6 +419,7 @@ Action bodies are split by concern: capture-side actions live in `captureActions
 | `captureWorkspaceEvent`         | Append a timed workspace event                                                               |
 | `captureRuntimeEvent`           | Append a timed runtime event                                                                 |
 | `setCameraRecordingEnabled`     | Set `enableCameraRecording` from the `START_RECORDING` event                                 |
+| `setMicrophoneDevice`           | Set the take's `microphoneDeviceId` from the `START_RECORDING` event (null: default)         |
 | `prepareExternalAudioRecording` | Set up audio state for the external-audio-blob recording path                                |
 | `startExternalAudioPlayback`    | Start driving the external audio blob as the recording's audio track                         |
 | `storeExternalAudioDuration`    | Store known duration once external audio metadata is ready                                   |

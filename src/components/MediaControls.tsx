@@ -60,6 +60,7 @@ import { canRecordInLiveRoom } from "../collaboration/recordingPolicy";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 import LearnerVersionsMenu from "./LearnerVersionsMenu";
 import RecordingEditPanel from "./RecordingEditPanel";
+import MicrophoneCheck, { RecordingMicrophoneLevel } from "./MicrophoneCheck";
 import { describeCaptionGeneration, useCaptionGeneration } from "../hooks/useCaptionGeneration";
 import { serializeCuesToVtt } from "../captions/serializeVtt";
 import { downloadBlob } from "../utils/downloadBlob";
@@ -277,7 +278,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const captionTrigger = useCaptionStoreTrigger();
   const { autoplay, continueToNext } = usePlaybackSettings();
   const playbackSettingsTrigger = usePlaybackSettingsTrigger();
-  const { screenRecordingEnabled } = useRecordingSettings();
+  const { screenRecordingEnabled, microphoneDeviceId } = useRecordingSettings();
   const recordingSettingsTrigger = useRecordingSettingsTrigger();
   const [showSettings, setShowSettings] = useState(false);
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
@@ -471,7 +472,11 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         screenStream,
       });
     } else {
-      startRecording({ enableCamera: enableCameraForNextRecording, screenStream });
+      startRecording({
+        enableCamera: enableCameraForNextRecording,
+        screenStream,
+        microphoneDeviceId: microphoneDeviceId ?? undefined,
+      });
     }
     onRecord?.();
   };
@@ -635,6 +640,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 <span className="hidden sm:inline">File</span>
               </button>
             </div>
+            {recordingAudioSource === "microphone" ? <MicrophoneCheck /> : null}
             {isVoiceJoined ? (
               <span
                 className="hidden items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-200 shadow-sm sm:inline-flex"
@@ -1020,6 +1026,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         {!isRecording && currentRecording?.chapters?.length ? (
           <CurrentChapterTitle chapters={currentRecording.chapters} large={large} />
         ) : null}
+
+        {isRecording ? <RecordingMicrophoneLevel /> : null}
 
         {(isRecording || currentRecording) && (
           <PlaybackTimer

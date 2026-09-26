@@ -14,6 +14,7 @@ import {
   selectPlaybackSpeed,
   selectRecordingChapterCount,
   selectRecordingClock,
+  selectRecordingMicrophoneStream,
   selectRecordingSafePoints,
   selectVolume,
 } from "../core/src/useNextEditor";
@@ -100,3 +101,7 @@ export const useRetakeTargetTime = (recordingTime: number): number | null => {
 /** How many chapters the running take has marked. */
 export const useRecordingChapterCount = (): number =>
   NextEditorActorContext.useSelector(selectRecordingChapterCount);
+
+/** The running take's microphone stream, for a level meter; null outside a microphone take. */
+export const useRecordingMicrophoneStream = (): MediaStream | null =>
+  NextEditorActorContext.useSelector(selectRecordingMicrophoneStream);

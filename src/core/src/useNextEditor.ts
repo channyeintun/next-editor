@@ -112,6 +112,15 @@ export const selectRecordingClock = (
     ? { clock: state.context.session.clock, startedAtPerf: state.context.session.startedAtPerf }
     : null;
 
+/**
+ * The running take's microphone stream (for a level meter), or null outside a microphone
+ * take. It is the recorder's own stream: metering it shows what is being recorded.
+ */
+export const selectRecordingMicrophoneStream = (state: EditorMachineSnapshot) =>
+  state.matches("recording") && state.context.audio.source === "microphone"
+    ? (state.context.audio.mediaRecorder?.stream ?? null)
+    : null;
+
 /** How many chapters the running take has marked (0 outside a take). */
 export const selectRecordingChapterCount = (state: EditorMachineSnapshot) =>
   state.matches("recording") ? (state.context.session?.chapters.length ?? 0) : 0;
@@ -130,12 +139,14 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     audioBlob?: Blob;
     enableCamera?: boolean;
     screenStream?: MediaStream;
+    microphoneDeviceId?: string;
   }) => {
     actorRef.send({
       type: "START_RECORDING",
       audioBlob: options?.audioBlob,
       enableCamera: options?.enableCamera,
       screenStream: options?.screenStream,
+      microphoneDeviceId: options?.microphoneDeviceId,
     });
   };
 

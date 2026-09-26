@@ -112,6 +112,16 @@ const commitCapturedFrame = (
   session.lastCapturedViewStateRef = viewStateRef;
 };
 
+/** The take's microphone, per take like the camera: a start that names none uses the default. */
+export const setMicrophoneDevice = ({
+  event,
+}: {
+  event: EditorMachineEvent;
+}): Partial<EditorMachineContext> => {
+  if (event.type !== "START_RECORDING") return {};
+  return { microphoneDeviceId: event.microphoneDeviceId ?? null };
+};
+
 export const setCameraRecordingEnabled = ({
   context,
   event,
