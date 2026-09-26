@@ -18,6 +18,7 @@ import {
   Captions,
   Check,
   Download,
+  Keyboard,
   Loader2,
   Sparkles,
 } from "lucide-react";
@@ -61,6 +62,8 @@ import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 import LearnerVersionsMenu from "./LearnerVersionsMenu";
 import RecordingEditPanel from "./RecordingEditPanel";
 import MicrophoneCheck, { RecordingMicrophoneLevel } from "./MicrophoneCheck";
+import PlayerShortcutsHelp, { PlayerShortcutFeedback } from "./PlayerShortcutsHelp";
+import { usePlayerShortcuts } from "../hooks/usePlayerShortcuts";
 import { describeCaptionGeneration, useCaptionGeneration } from "../hooks/useCaptionGeneration";
 import { serializeCuesToVtt } from "../captions/serializeVtt";
 import { downloadBlob } from "../utils/downloadBlob";
@@ -284,6 +287,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);
   const captionGeneration = useCaptionGeneration();
+  const playerShortcuts = usePlayerShortcuts();
   const [recordingAudioSource, setRecordingAudioSource] =
     useState<RecordingAudioSourceOption>("microphone");
   const [enableCameraForNextRecording, setEnableCameraForNextRecording] = useState(false);
@@ -537,6 +541,15 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         className="sr-only"
         onChange={(event) => void handleCaptionFileChange(event)}
       />
+      {playerShortcuts.feedback ? (
+        <PlayerShortcutFeedback
+          key={playerShortcuts.feedback.at}
+          text={playerShortcuts.feedback.text}
+        />
+      ) : null}
+      {playerShortcuts.helpOpen ? (
+        <PlayerShortcutsHelp onClose={playerShortcuts.closeHelp} />
+      ) : null}
       {showEditPanel && currentRecording && !isRecording && effectiveRecordMode ? (
         <RecordingEditPanel
           recording={currentRecording}
@@ -1015,6 +1028,22 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                           Download captions (.vtt)
                         </button>
                       ) : null}
+                    </div>
+                    <div className="mt-3 border-t border-slate-700 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSettings(false);
+                          playerShortcuts.openHelp();
+                        }}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700"
+                      >
+                        <Keyboard size={14} aria-hidden="true" />
+                        Keyboard shortcuts
+                        <kbd className="ml-auto rounded border border-slate-600 px-1 font-mono text-[11px] text-slate-400">
+                          ?
+                        </kbd>
+                      </button>
                     </div>
                   </div>
                 </div>

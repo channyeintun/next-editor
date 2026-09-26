@@ -26,7 +26,7 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - Subtitles (captions) can be imported from `.vtt`/`.srt` files, generated from a recorded narration on the author's device (Whisper, the audio never leaves the browser), or shipped alongside a hosted `.ne`, and render as a time-synced overlay with per-language track selection.
 - Recording captures more than text deltas: it stores workspace changes, rrweb preview snapshots, API client requests/responses, slide events, cursor motion, runtime events, audio, and optional camera video.
 - A microphone check before a take picks the microphone (remembered per browser) and shows its live level with a plain-language verdict; during the take a small meter beside the timer shows the narration coming in, and warns when nothing has.
-- Playback restores the recorded project state and replays it from a single timeline.
+- Playback restores the recorded project state and replays it from a single timeline, with video-player keyboard shortcuts (Space/K, arrows and J/L to seek, `,`/`.` to step, `<`/`>` for speed, `[`/`]` for chapters, 0–9, M, C; `?` lists them).
 - Import and export use the SCR3 `.ne` container.
 - Progressive loading lets `/code?url=...` start playing a recording from a partial download.
 - Authenticated collaboration rooms support owner/editor/viewer roles, offline Yjs edits, remote

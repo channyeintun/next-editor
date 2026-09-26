@@ -124,6 +124,13 @@ Current playback behavior:
 - The machine keeps a replay cursor for each append-only event stream (frames, preview events, slides, workspace, runtime) so streamed growth (`appendRecordingDelta`, `extendRecording`) can continue from the current point efficiently. rrweb preview replay needs no cursor: it is seeked to the current time on every apply.
 - Audio playback is lazy when a progressive load first gains usable audio, then stays in sync by updating the same `HTMLAudioElement` with larger contiguous blob snapshots as more fragments arrive; the machine throttles resyncs to roughly every 250ms during a `TICK`.
 - Camera playback is rendered by `CameraOverlay`, which derives the correct video time from timeline time minus `cameraStartOffsetMs`.
+- The player takes video-player keys while a recording is loaded (`usePlayerShortcuts`, "?" lists
+  them): Space/K play and pause, ←/→ and J/L seek 5 s and 10 s, `,`/`.` pause and step a second,
+  `<`/`>` change speed within 0.5×–2× (remembered like the slider), `[`/`]` move between chapters,
+  0–9 jump to tenths, Home/End, M mutes, C toggles captions. Keys are left alone while the editor,
+  terminal, whiteboard, a field, a dialog or a menu has focus, when a modifier is held, and when
+  another handler already took them (`defaultPrevented`): during playback Space still reaches
+  `useNextEditor`'s capture-phase listener first, which pauses without typing into the editor.
 
 ## Storage Flow
 
