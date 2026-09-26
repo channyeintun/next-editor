@@ -23,7 +23,7 @@ catalog, publishing workflow, playlists, and private collaboration assets.
 - Compiled-language lessons run code without a WebContainer: Go, Kotlin, Rust, Zig, and Haskell assemble their sources through playground proxies on the Worker, while Kite and x86-64 assembly need no service at all — Kite compiles on a Wasm build of `kitec` in the page, and assembly runs on a first-party NASM-syntax assembler and x86-64 Linux machine in `src/core/x86`.
 - Runtime preview is recorded and replayed with rrweb: the live DOM, scroll, input, and pointer all ride a single event stream, replayed by an rrweb `Replayer` driven from the recording timeline.
 - Runtime lessons also include an API client mode: a built-in HTTP client that sends requests to the running server inside the preview iframe (same-origin, no CORS) and records each request/response so they replay on the timeline.
-- Subtitles (captions) can be imported from `.vtt`/`.srt` files or shipped alongside a hosted `.ne`, and render as a time-synced overlay with per-language track selection.
+- Subtitles (captions) can be imported from `.vtt`/`.srt` files, generated from a recorded narration on the author's device (Whisper, the audio never leaves the browser), or shipped alongside a hosted `.ne`, and render as a time-synced overlay with per-language track selection.
 - Recording captures more than text deltas: it stores workspace changes, rrweb preview snapshots, API client requests/responses, slide events, cursor motion, runtime events, audio, and optional camera video.
 - Playback restores the recorded project state and replays it from a single timeline.
 - Import and export use the SCR3 `.ne` container.
@@ -152,6 +152,7 @@ Recordings use the SCR3 `.ne` container as raw binary end-to-end — the exporte
 ## Subtitles (Captions)
 
 - Captions are imported from `.vtt` (WebVTT) or `.srt` (SubRip) files through the captions control in the media bar; the parser detects the format, strips cue tags, and normalizes/sorts cues.
+- "Generate captions" transcribes a recording's narration on the author's device: Whisper (`whisper-base`, int8 ONNX, downloaded once and cached) runs in a worker on ONNX Runtime Web, prompted with the lesson's libraries and file names, and the result lands as an "(auto)" track that can be downloaded as `.vtt`, corrected, and imported again.
 - The track language is inferred from the filename (e.g. `lesson.es.vtt` → `es`), and multiple tracks can be loaded — the captions button switches into a language menu when more than one track is present.
 - `CaptionsOverlay` renders the active cue against the live timeline, with binary-search cue lookup, right-to-left layout for RTL languages, and on/off plus language preference persisted in `localStorage`.
 - Hosted recordings can declare sibling caption files via `captionFiles` in the SCR3 metadata; `useUrlLoader` resolves and fetches them relative to the `.ne` URL (captions are never guessed from sibling filenames).

@@ -216,6 +216,9 @@ interface CaptionTrack {
   `captionFiles`; sibling files are fetched relative to the `.ne` URL during URL loading.
 - The `ADD_CAPTION_TRACK` machine event adds or replaces a track in the loaded recording's
   `captions` directly rather than riding the timeline (see `docs/state-machines.md`).
+- Tracks generated on the device from the narration (see "Generating captions" in
+  `docs/data-flow.md`) are ordinary tracks with an `auto-<language>-<time>` id and a
+  "<LANG> (auto)" label; they are saved and uploaded like imported ones.
 
 ## API Client Data
 

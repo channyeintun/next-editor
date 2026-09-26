@@ -17,6 +17,9 @@ import {
   X,
   Captions,
   Check,
+  Download,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 import {
   useNextEditorActions,
@@ -57,6 +60,9 @@ import { canRecordInLiveRoom } from "../collaboration/recordingPolicy";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 import LearnerVersionsMenu from "./LearnerVersionsMenu";
 import RecordingEditPanel from "./RecordingEditPanel";
+import { describeCaptionGeneration, useCaptionGeneration } from "../hooks/useCaptionGeneration";
+import { serializeCuesToVtt } from "../captions/serializeVtt";
+import { downloadBlob } from "../utils/downloadBlob";
 import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
 
 interface MediaControlsProps {
@@ -276,6 +282,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);
+  const captionGeneration = useCaptionGeneration();
   const [recordingAudioSource, setRecordingAudioSource] =
     useState<RecordingAudioSourceOption>("microphone");
   const [enableCameraForNextRecording, setEnableCameraForNextRecording] = useState(false);
@@ -479,6 +486,23 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     currentRecording?.cameraBlob instanceof Blob || Boolean(currentRecording?.cameraUrl);
   const captionTracks = currentRecording?.captions;
   const hasCaptionTracks = captionTracks && captionTracks.length > 0;
+  const hasNarration = Boolean(currentRecording?.audioBlob || currentRecording?.audioUrl);
+  // Until a cut reaches the narration, its audio runs on the old clock.
+  const isNarrationBeingEdited = Boolean(currentRecording?.pendingAudioEdit);
+  const isGeneratingCaptions = captionGeneration.state.status === "running";
+  // The track the viewer would see: their language, the default, or the first.
+  const activeCaptionTrack =
+    captionTracks?.find((track) => track.language === captionLanguage) ??
+    captionTracks?.find((track) => track.default) ??
+    captionTracks?.[0];
+
+  const handleDownloadCaptions = () => {
+    if (!activeCaptionTrack || !currentRecording) return;
+    downloadBlob(
+      new Blob([serializeCuesToVtt(activeCaptionTrack.cues)], { type: "text/vtt" }),
+      `${currentRecording.name || "recording"}.${activeCaptionTrack.language}.vtt`,
+    );
+  };
   const hasMultipleCaptionTracks = captionTracks && captionTracks.length > 1;
 
   // Size tokens — scale the controls up for small embeds when `large` is set.
@@ -845,6 +869,21 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               </div>
             ) : null}
 
+            {isGeneratingCaptions ? (
+              // Captioning carries on with the settings closed; this says it is.
+              <button
+                type="button"
+                onClick={() => setShowSettings(true)}
+                title={describeCaptionGeneration(captionGeneration.state)}
+                className="inline-flex shrink-0 items-center gap-1 text-[11px] text-slate-400 pointer-events-auto"
+              >
+                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                {captionGeneration.state.status === "running" && captionGeneration.state.progress
+                  ? `${Math.round(captionGeneration.state.progress.fraction * 100)}%`
+                  : ""}
+              </button>
+            ) : null}
+
             <div className="relative pointer-events-auto">
               <button
                 onClick={() => setShowSettings((prev) => !prev)}
@@ -926,6 +965,50 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                       {captionImportError && (
                         <p className="px-2 pt-2 text-xs text-red-400">{captionImportError}</p>
                       )}
+                      {effectiveRecordMode && hasNarration ? (
+                        isGeneratingCaptions ? (
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-300">
+                            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                            <span className="flex-1">
+                              {describeCaptionGeneration(captionGeneration.state)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={captionGeneration.cancel}
+                              className="font-medium text-slate-400 hover:text-white"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void captionGeneration.start(currentRecording)}
+                            disabled={isNarrationBeingEdited}
+                            title="Transcribe the narration on this device; the audio never leaves your browser"
+                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-transparent"
+                          >
+                            <Sparkles size={14} aria-hidden="true" />
+                            Generate captions
+                          </button>
+                        )
+                      ) : null}
+                      {captionGeneration.state.status === "failed" ? (
+                        <p className="px-2 pt-1 text-xs text-red-400">
+                          {describeCaptionGeneration(captionGeneration.state)}
+                        </p>
+                      ) : null}
+                      {effectiveRecordMode && activeCaptionTrack ? (
+                        <button
+                          type="button"
+                          onClick={handleDownloadCaptions}
+                          title="Save these captions as WebVTT, to correct and import again"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700"
+                        >
+                          <Download size={14} aria-hidden="true" />
+                          Download captions (.vtt)
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>

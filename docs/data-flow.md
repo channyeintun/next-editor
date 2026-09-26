@@ -193,6 +193,27 @@ mutes stretches of a finished recording through `applyRecordingEdit` (`src/core/
   offered for upload like a take that just finished. "Suggest dead-air cuts" proposes quiet
   stretches with no recorded activity (`suggestDeadAirCuts`).
 
+### Generating captions
+
+"Generate captions" (player settings, record mode, a recording with narration) transcribes the
+narration on the author's device with Whisper; the audio never leaves the browser
+(`src/captions/generateCaptions.ts`, `useCaptionGeneration`):
+
+- The narration is decoded to 16 kHz mono on the page and transferred to a module worker
+  (`src/captions/whisper/captionWorker.ts`), which runs `whisper-base` (int8 ONNX, a pinned
+  Hugging Face revision, ~79 MB cached in Cache Storage after the first run) on ONNX Runtime
+  Web's single-threaded WASM backend.
+- The worker computes Whisper's log-mel features, decodes each 30 s window greedily under the
+  reference timestamp rules, and moves on from the window's last closed segment. Every window is
+  prompted with the lesson's vocabulary (`buildCaptionPrompt`: its libraries from `package.json`,
+  lesson type, and file names) rather than the text before it.
+- `segmentsToCues` puts the segments on the recording's clock (`audioStartOffsetMs`), clamps them
+  to its length, and splits cues that run long in text or time. The result is added with
+  `addCaptionTrack` as an "(auto)" track and shown; "Download captions (.vtt)" saves a track for
+  correction and re-import.
+- Generating is disabled while a cut is still reaching the narration (`pendingAudioEdit`), since
+  that audio runs on the old clock. Cancel (or leaving the player) terminates the worker.
+
 ## URL Loading Flow
 
 The shipped URL loader supports both same-origin and cross-origin recording URLs.
