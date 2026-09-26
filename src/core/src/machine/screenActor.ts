@@ -28,7 +28,11 @@ export interface ScreenRecordingInput {
   sessionStartedAtPerf: number;
 }
 
-export type ScreenRecordingEvent = { type: "START" } | { type: "STOP" };
+export type ScreenRecordingEvent =
+  | { type: "START" }
+  | { type: "STOP" }
+  | { type: "PAUSE" }
+  | { type: "RESUME" };
 
 export type ScreenRecordingEmit =
   | {
@@ -129,6 +133,32 @@ export const screenRecordingActor = fromTypedCallback<
   let started = false;
   let failed = false;
   let startedAtPerfMs = 0;
+  // The take's pause state, and how long the recorder has spent paused: the file's
+  // real length leaves those spans out, and its duration header must too.
+  let paused = false;
+  let pausedSincePerfMs: number | null = null;
+  let pausedTotalMs = 0;
+
+  const syncPauseState = () => {
+    if (!mediaRecorder) return;
+    if (paused && mediaRecorder.state === "recording") {
+      mediaRecorder.pause();
+      pausedSincePerfMs = performance.now();
+    } else if (!paused && mediaRecorder.state === "paused") {
+      mediaRecorder.resume();
+      if (pausedSincePerfMs !== null) {
+        pausedTotalMs += Math.max(0, performance.now() - pausedSincePerfMs);
+        pausedSincePerfMs = null;
+      }
+    }
+  };
+
+  const recordedDurationMs = () => {
+    if (startedAtPerfMs <= 0) return 0;
+    const now = performance.now();
+    const openPauseMs = pausedSincePerfMs === null ? 0 : Math.max(0, now - pausedSincePerfMs);
+    return Math.max(0, now - startedAtPerfMs - pausedTotalMs - openPauseMs);
+  };
 
   const stopTrack = (track: MediaStreamTrack) => {
     try {
@@ -217,8 +247,7 @@ export const screenRecordingActor = fromTypedCallback<
         // MediaRecorder WebM has no Duration header (Chromium issue 642012), so players can't build a
         // seek bar. Inject the measured wall-clock length before handing the file off. MP4 already
         // carries a duration; a non-WebM/failed patch falls back to the raw blob (see fixWebmDuration).
-        const durationMs =
-          startedAtPerfMs > 0 ? Math.max(0, performance.now() - startedAtPerfMs) : 0;
+        const durationMs = recordedDurationMs();
         const finalize = mimeType.startsWith("video/webm")
           ? fixWebmDuration(rawBlob, durationMs)
           : Promise.resolve(rawBlob);
@@ -255,6 +284,7 @@ export const screenRecordingActor = fromTypedCallback<
             hasAudio,
             startedAtPerf: startedAtPerfMs,
           });
+          syncPauseState();
         }
       };
 
@@ -296,6 +326,14 @@ export const screenRecordingActor = fromTypedCallback<
         break;
       case "STOP":
         stopRecording();
+        break;
+      case "PAUSE":
+        paused = true;
+        syncPauseState();
+        break;
+      case "RESUME":
+        paused = false;
+        syncPauseState();
         break;
     }
   });

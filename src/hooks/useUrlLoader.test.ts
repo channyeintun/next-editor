@@ -48,6 +48,8 @@ function makeActionsMock(): NextEditorActions {
     syncEditorRef: vi.fn(),
     startRecording: vi.fn(),
     stopRecording: vi.fn(),
+    pauseRecording: vi.fn(),
+    resumeRecording: vi.fn(),
     play: vi.fn(),
     pause: vi.fn(),
     stop: vi.fn(),

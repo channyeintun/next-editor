@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Circle,
   Square,
+  Pause,
+  Play,
   Plus,
   FileMusic,
   Mic,
@@ -18,6 +20,7 @@ import {
   useNextEditorMetadata,
   useNextEditorPlayback,
   useLiveTime,
+  useRecordingElapsedMs,
 } from "../hooks/useNextEditorContext";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import ReplayIcon from "./icon/Replay";
@@ -103,18 +106,20 @@ const PlaybackProgress = ({
 
 const PlaybackTimer = ({
   isRecording,
-  recordingTime,
+  isRecordingPaused,
   currentRecording,
   progressDuration,
   large = false,
 }: {
   isRecording: boolean;
-  recordingTime: number;
+  isRecordingPaused: boolean;
   currentRecording: Recording | null;
   progressDuration: number;
   large?: boolean;
 }) => {
   const currentTime = useLiveTime();
+  // The take's recorded time, which stands still while it is paused.
+  const recordingTime = useRecordingElapsedMs();
   const displayTime = isRecording
     ? recordingTime
     : currentRecording
@@ -123,8 +128,13 @@ const PlaybackTimer = ({
 
   return (
     <span
-      className={`text-slate-400 font-mono pointer-events-auto ${large ? "text-4xl" : "text-sm"}`}
+      className={`inline-flex items-center gap-2 text-slate-400 font-mono pointer-events-auto ${large ? "text-4xl" : "text-sm"}`}
     >
+      {isRecording && isRecordingPaused ? (
+        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-sans text-[11px] font-semibold uppercase tracking-wide text-amber-300">
+          Paused
+        </span>
+      ) : null}
       {isRecording ? formatPlaybackTime(displayTime) : `-${formatPlaybackTime(displayTime)}`}
     </span>
   );
@@ -141,6 +151,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const {
     startRecording,
     stopRecording,
+    pauseRecording,
+    resumeRecording,
     clearRecording,
     play,
     pause,
@@ -150,7 +162,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     addCaptionTrack,
   } = useNextEditorActions();
 
-  const { isRecording, isPlaying, currentRecording, hasEnded, recordingStartTime } =
+  const { isRecording, isRecordingPaused, isPlaying, currentRecording, hasEnded } =
     useNextEditorMetadata();
   const collaboration = useOptionalCollaboration();
   const voiceState = useOptionalCollaborationVoiceState();
@@ -171,7 +183,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const recordingSettingsTrigger = useRecordingSettingsTrigger();
   const [showSettings, setShowSettings] = useState(false);
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
   const [recordingAudioSource, setRecordingAudioSource] =
     useState<RecordingAudioSourceOption>("microphone");
   const [enableCameraForNextRecording, setEnableCameraForNextRecording] = useState(false);
@@ -187,22 +198,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     setIsCameraSupported(Boolean(navigator.mediaDevices?.getUserMedia));
     setIsScreenSupported(isScreenCaptureSupported());
   }, []);
-
-  // Update recording time every 100ms when recording
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
-    if (isRecording && recordingStartTime !== null) {
-      interval = setInterval(() => {
-        setRecordingTime(Date.now() - recordingStartTime);
-      }, 100);
-    } else {
-      setRecordingTime(0);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isRecording, recordingStartTime]);
 
   useEffect(() => {
     if (isRecording && collaboration?.provider && !collaboration.isHost) {
@@ -434,7 +429,10 @@ const MediaControls: React.FC<MediaControlsProps> = ({
             }
           >
             {isRecording ? (
-              <Square size={recordIconSize} className="fill-red-500 text-red-500 animate-pulse" />
+              <Square
+                size={recordIconSize}
+                className={`fill-red-500 text-red-500 ${isRecordingPaused ? "" : "animate-pulse"}`}
+              />
             ) : currentRecording ? (
               <div className="relative">
                 <Circle size={recordIconSize} className="fill-red-500 text-red-500" />
@@ -447,6 +445,27 @@ const MediaControls: React.FC<MediaControlsProps> = ({
             )}
           </button>
         )}
+
+        {effectiveRecordMode && isRecording ? (
+          <button
+            type="button"
+            onClick={isRecordingPaused ? resumeRecording : pauseRecording}
+            aria-pressed={isRecordingPaused}
+            aria-label={isRecordingPaused ? "Resume recording" : "Pause recording"}
+            title={
+              isRecordingPaused
+                ? "Resume recording"
+                : "Pause recording (edits you make while paused appear at once)"
+            }
+            className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto ${transportButtonWidth}`}
+          >
+            {isRecordingPaused ? (
+              <Play size={controlIconSize} className="fill-current" aria-hidden="true" />
+            ) : (
+              <Pause size={controlIconSize} className="fill-current" aria-hidden="true" />
+            )}
+          </button>
+        ) : null}
 
         {showAudioSourceControls ? (
           <div className="flex min-w-0 items-center gap-2 pointer-events-auto">
@@ -784,7 +803,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         {(isRecording || currentRecording) && (
           <PlaybackTimer
             isRecording={isRecording}
-            recordingTime={recordingTime}
+            isRecordingPaused={isRecordingPaused}
             currentRecording={currentRecording}
             progressDuration={progressDuration}
             large={large}

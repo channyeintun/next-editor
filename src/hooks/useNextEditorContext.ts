@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import { shallowEqual } from "@xstate/react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import {
@@ -12,8 +12,10 @@ import {
   selectLiveTime,
   selectNextEditorMetadata,
   selectPlaybackSpeed,
+  selectRecordingClock,
   selectVolume,
 } from "../core/src/useNextEditor";
+import { isRecordingClockPaused, readRecordingClock } from "../core/src/machine/recordingClock";
 
 /**
  * Hook to access stable actions, refs, and storage methods.
@@ -59,4 +61,26 @@ export const useNextEditorPlayback = (): NextEditorPlayback => {
  */
 export const useLiveTime = () => {
   return NextEditorActorContext.useSelector(selectLiveTime);
+};
+
+/**
+ * The running take's recorded time in ms, refreshed every `intervalMs` while it runs.
+ * It stands still while the take is paused, and is 0 outside a take.
+ */
+export const useRecordingElapsedMs = (intervalMs = 100): number => {
+  const recordingClock = NextEditorActorContext.useSelector(selectRecordingClock, shallowEqual);
+  const [now, setNow] = useState(() => performance.now());
+
+  useEffect(() => {
+    if (!recordingClock || isRecordingClockPaused(recordingClock.clock)) return;
+    const tick = () => setNow(performance.now());
+    // Read at once, so a resumed take does not show the reading from before its pause.
+    tick();
+    const interval = setInterval(tick, intervalMs);
+    return () => clearInterval(interval);
+  }, [recordingClock, intervalMs]);
+
+  return recordingClock
+    ? readRecordingClock(recordingClock.clock, recordingClock.startedAtPerf, now)
+    : 0;
 };

@@ -146,6 +146,7 @@ What happens here:
 - an invoked `mouseTracking` actor drives `CAPTURE_FRAME` for cursor movement
 - camera capture spawns conditionally on entry if `enableCameraRecording`
 - `CAPTURE_FRAME`, `SLIDE_EVENT`, `PREVIEW_EVENT`, `PREVIEW_INITIAL_DOCUMENT`, `PREVIEW_PATCH_BATCH`, `WORKSPACE_EVENT`, and `RUNTIME_EVENT` are all captured into the session
+- `PAUSE_RECORDING` / `RESUME_RECORDING` stop and restart the take without leaving `recording`: the session clock (`recordingClock.ts`) stands still, and the microphone, camera and screen recorders (or a selected narration file) pause with it. Everything captured while paused is stamped at the pause, so edits made then replay as one jump; pointer samples are dropped until the resume records where the pointer ended up. Preview rrweb stamps have the pauses taken out on the wall clock, so replay's single preview offset stays valid
 - camera lifecycle events are folded into camera state
 - `STOP_RECORDING` branches on `isMicrophoneAudioRecording` / `isCameraRecording` / `isExternalAudioRecording` to decide whether a drain (`stoppingRecording`) is needed before finalizing
 
@@ -276,6 +277,8 @@ Representative machine events (`src/core/src/machine/types.ts`):
 type EditorMachineEvent =
   | { type: "START_RECORDING"; audioBlob?: Blob; enableCamera?: boolean }
   | { type: "STOP_RECORDING" }
+  | { type: "PAUSE_RECORDING" }
+  | { type: "RESUME_RECORDING" }
   | { type: "CAPTURE_FRAME"; isMouseMovement?: boolean; mousePosition?: MouseCursorPosition }
   | { type: "LOAD_RECORDING"; recording: Recording }
   | { type: "EXTEND_RECORDING"; recording: Recording }

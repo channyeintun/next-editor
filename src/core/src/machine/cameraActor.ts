@@ -7,7 +7,11 @@ export interface CameraRecordingInput {
   constraints?: MediaTrackConstraints;
 }
 
-export type CameraRecordingEvent = { type: "START" } | { type: "STOP" };
+export type CameraRecordingEvent =
+  | { type: "START" }
+  | { type: "STOP" }
+  | { type: "PAUSE" }
+  | { type: "RESUME" };
 
 export type CameraRecordingEmit =
   | { type: "CAMERA_STARTED"; mimeType: string; startedAtPerf: number }
@@ -28,11 +32,25 @@ export const cameraRecordingActor = fromTypedCallback<
   let stopRequested = false;
   let failed = false;
   let startedAtPerfMs = 0;
+  // The take's pause state. The camera warms up after the take starts, so a pause
+  // can arrive before its recorder exists; it is applied once the recorder starts.
+  let paused = false;
 
   const cleanupStream = () => {
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
       stream = null;
+    }
+  };
+
+  // A paused MediaRecorder writes no frames, so the video skips the take's pauses
+  // the way its recorded time does.
+  const syncPauseState = () => {
+    if (!mediaRecorder) return;
+    if (paused && mediaRecorder.state === "recording") {
+      mediaRecorder.pause();
+    } else if (!paused && mediaRecorder.state === "paused") {
+      mediaRecorder.resume();
     }
   };
 
@@ -101,6 +119,7 @@ export const cameraRecordingActor = fromTypedCallback<
             mimeType,
             startedAtPerf: startedAtPerfMs,
           });
+          syncPauseState();
         }
       };
 
@@ -158,6 +177,14 @@ export const cameraRecordingActor = fromTypedCallback<
         break;
       case "STOP":
         stopRecording();
+        break;
+      case "PAUSE":
+        paused = true;
+        syncPauseState();
+        break;
+      case "RESUME":
+        paused = false;
+        syncPauseState();
         break;
     }
   });

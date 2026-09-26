@@ -69,7 +69,10 @@ import {
   handleScreenError,
   releaseScreenStream,
   releaseUnacceptedScreenStream,
+  pauseRecordingSession,
+  resumeRecordingSession,
 } from "./captureActions";
+import { isRecordingClockPaused } from "./recordingClock";
 import {
   setRecording,
   extendRecording,
@@ -180,6 +183,10 @@ export const editorMachine = setup({
     isExternalAudioRecording: ({ context }) =>
       context.audio.isRecording && context.audio.source === "external",
     isCameraRecording: ({ context }) => shouldRecordCamera(context),
+    isRecordingRunning: ({ context }) =>
+      context.session !== null && !isRecordingClockPaused(context.session.clock),
+    isRecordingPaused: ({ context }) =>
+      context.session !== null && isRecordingClockPaused(context.session.clock),
     shouldPauseOnInteraction: ({ context }) => context.pauseOnUserInteraction,
     shouldSyncPlaybackEditorRef: ({ context, event }) =>
       event.type === "SET_EDITOR_REF" &&
@@ -231,6 +238,39 @@ export const editorMachine = setup({
     captureWhiteboardEvent: assign(captureWhiteboardEvent),
     captureChatEvent: assign(captureChatEvent),
     finalizeRecording: assign(finalizeRecording),
+    pauseRecordingSession: assign(pauseRecordingSession),
+    resumeRecordingSession: assign(resumeRecordingSession),
+    // The recorders follow the take's clock: each writes nothing while it is paused, so
+    // the narration, camera and screen files skip the same spans the timeline does. A
+    // selected narration file is an input, not a recording, so it pauses in place.
+    pauseRecordingMedia: enqueueActions(({ context, enqueue }) => {
+      if (context.audio.isRecording && context.audio.source === "microphone") {
+        enqueue.sendTo("audioRecorder", { type: "PAUSE" });
+      }
+      if (context.audio.isRecording && context.audio.source === "external") {
+        enqueue.sendTo("recordingAudioPlayer", { type: "PAUSE" });
+      }
+      if (shouldRecordCamera(context)) {
+        enqueue.sendTo("cameraRecorder", { type: "PAUSE" });
+      }
+      if (context.screen.isRecording && context.screen.actorId) {
+        enqueue.sendTo(context.screen.actorId, { type: "PAUSE" });
+      }
+    }),
+    resumeRecordingMedia: enqueueActions(({ context, enqueue }) => {
+      if (context.audio.isRecording && context.audio.source === "microphone") {
+        enqueue.sendTo("audioRecorder", { type: "RESUME" });
+      }
+      if (context.audio.isRecording && context.audio.source === "external") {
+        enqueue.sendTo("recordingAudioPlayer", { type: "PLAY" });
+      }
+      if (shouldRecordCamera(context)) {
+        enqueue.sendTo("cameraRecorder", { type: "RESUME" });
+      }
+      if (context.screen.isRecording && context.screen.actorId) {
+        enqueue.sendTo(context.screen.actorId, { type: "RESUME" });
+      }
+    }),
     notifyRecordingStart,
     notifyRecordingStop,
     storeAudioBlob: assign(storeAudioBlob),
@@ -596,6 +636,16 @@ export const editorMachine = setup({
       on: {
         CAPTURE_FRAME: {
           actions: "captureFrame",
+        },
+        // A pause stays inside `recording`: every capture handler below keeps running,
+        // stamped with the paused instant, so edits made while paused are part of the take.
+        PAUSE_RECORDING: {
+          guard: "isRecordingRunning",
+          actions: ["pauseRecordingSession", "pauseRecordingMedia"],
+        },
+        RESUME_RECORDING: {
+          guard: "isRecordingPaused",
+          actions: ["resumeRecordingSession", "resumeRecordingMedia"],
         },
         CAMERA_STARTED: {
           actions: "storeCameraStarted",

@@ -71,7 +71,11 @@ export interface AudioPlaybackInput {
   startOffsetMs?: number;
 }
 
-export type AudioRecordingEvent = { type: "START" } | { type: "STOP" };
+export type AudioRecordingEvent =
+  | { type: "START" }
+  | { type: "STOP" }
+  | { type: "PAUSE" }
+  | { type: "RESUME" };
 
 export type AudioPlaybackEvent =
   | { type: "PLAY" }
@@ -116,11 +120,24 @@ export const audioRecordingActor = fromTypedCallback<
   let disposed = false;
   let starting = false;
   let stopRequested = false;
+  // The take's pause state, which can arrive before the recorder has started.
+  let paused = false;
 
   const cleanupStream = () => {
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
       stream = null;
+    }
+  };
+
+  // MediaRecorder writes nothing while paused, so the narration stays as long as the
+  // take's recorded time, which skips the same pauses.
+  const syncPauseState = () => {
+    if (!mediaRecorder) return;
+    if (paused && mediaRecorder.state === "recording") {
+      mediaRecorder.pause();
+    } else if (!paused && mediaRecorder.state === "paused") {
+      mediaRecorder.resume();
     }
   };
 
@@ -186,6 +203,7 @@ export const audioRecordingActor = fromTypedCallback<
             startedAtMs,
             startedAtPerf: startedAtPerfMs,
           });
+          syncPauseState();
         }
       };
 
@@ -226,6 +244,14 @@ export const audioRecordingActor = fromTypedCallback<
         break;
       case "STOP":
         stopRecording();
+        break;
+      case "PAUSE":
+        paused = true;
+        syncPauseState();
+        break;
+      case "RESUME":
+        paused = false;
+        syncPauseState();
         break;
     }
   });

@@ -404,6 +404,7 @@ interface TimelineState {
 interface RecordingSession {
   startedAt: number; // Date.now() wall-clock, metadata only
   startedAtPerf: number; // performance.now(), monotonic origin for in-session timestamps
+  clock: RecordingClock; // Pauses recorded time skips (recordingClock.ts); read it via getRecordingTimestamp
   frames: DeltaFrame[]; // Already-compressed frames, built incrementally
   encoder: FrameStreamEncoderState; // Incremental keyframe/delta encoder state
   slideEvents: SlideEvent[];

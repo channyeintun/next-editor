@@ -123,6 +123,37 @@ describe("NextEditorProvider stopRecording", () => {
   });
 });
 
+describe("NextEditorProvider leaving the page mid-take", () => {
+  /** Whether the page asked the browser to confirm an unload. */
+  const unloadWasQuestioned = () => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+
+  afterEach(() => {
+    delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+  });
+
+  it("asks before unloading while a take is in progress, and not before or after", async () => {
+    // A microphone prompt left open keeps the take in startingRecording.
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: () => new Promise<MediaStream>(() => {}) },
+    });
+    const { actions } = renderNextEditorProvider();
+    expect(unloadWasQuestioned()).toBe(false);
+
+    act(() => actions.startRecording());
+    await waitFor(() => expect(unloadWasQuestioned()).toBe(true));
+
+    await act(async () => {
+      await actions.stopRecording();
+    });
+    await waitFor(() => expect(unloadWasQuestioned()).toBe(false));
+  });
+});
+
 function workspaceSnapshot(activeFilePath: string, content: string): WorkspaceRecordingSnapshot {
   return {
     activeFilePath,

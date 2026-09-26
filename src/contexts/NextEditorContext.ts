@@ -28,6 +28,10 @@ export interface NextEditorActions {
     screenStream?: MediaStream;
   }) => void;
   stopRecording: () => Promise<void>;
+  /** Stop the take's clock and recorders without ending the take. */
+  pauseRecording: () => void;
+  /** Run a paused take's clock and recorders again. */
+  resumeRecording: () => void;
   play: () => void;
   pause: () => void;
   stop: () => void;
@@ -64,11 +68,12 @@ export const NextEditorActionsContext = createContext<NextEditorActions | null>(
 // 2. Metadata Context: Relatively stable state (flags)
 export interface NextEditorMetadata {
   isRecording: boolean;
+  /** A take is running but paused: its clock and recorders are stopped. */
+  isRecordingPaused: boolean;
   isPlaying: boolean;
   hasEnded: boolean;
   usesPlaybackModel: boolean;
   currentRecording: Recording | null;
-  recordingStartTime: number | null;
 }
 
 // 3. Playback settings: change on user action or as a stream grows, not on ticks

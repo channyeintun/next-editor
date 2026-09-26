@@ -19,10 +19,38 @@ import {
   resolveLatestRuntimeSnapshot,
   RUNTIME_CHECKPOINT_RESET,
 } from "../runtimeTrack";
+import type { PreviewRecordedEvent } from "../slides";
 import type { RecordingSession } from "./types";
+import {
+  hasRecordingClockExclusions,
+  readRecordingClock,
+  toRecordingWallTime,
+} from "./recordingClock";
 
-function getRecordingTimestamp(session: RecordingSession): number {
-  return performance.now() - session.startedAtPerf;
+/** Recorded time now: the take's clock, which stands still while it is paused. */
+export function getRecordingTimestamp(session: RecordingSession): number {
+  return readRecordingClock(session.clock, session.startedAtPerf);
+}
+
+/**
+ * rrweb stamps preview events with the page's `Date.now()`, and replay places
+ * them by one constant offset from those stamps. Taking the pauses out of the
+ * stamps here keeps that offset constant across a pause; without it everything
+ * recorded before the pause would replay early by the pause's length.
+ */
+function withRecordingWallEvents<T extends { events?: PreviewRecordedEvent[] }>(
+  session: RecordingSession,
+  segment: T,
+): T {
+  const events = segment.events;
+  if (!events?.length || !hasRecordingClockExclusions(session.clock)) return segment;
+  return {
+    ...segment,
+    events: events.map((event) => ({
+      ...event,
+      timestamp: toRecordingWallTime(session.clock, event.timestamp),
+    })),
+  };
 }
 
 /**
@@ -67,7 +95,7 @@ export function appendPreviewInitialDocument(
   document: PreviewInitialDocument,
 ): boolean {
   session.previewInitialDocuments.push({
-    ...document,
+    ...withRecordingWallEvents(session, document),
     time: getRecordingTimestamp(session),
   });
   return true;
@@ -78,7 +106,7 @@ export function appendPreviewPatchBatch(
   batch: PreviewDomPatchBatch,
 ): boolean {
   session.previewPatchBatches.push({
-    ...batch,
+    ...withRecordingWallEvents(session, batch),
     time: getRecordingTimestamp(session),
   });
   return true;

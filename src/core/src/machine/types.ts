@@ -30,6 +30,7 @@ import type { RuntimeCheckpointProgress } from "../runtimeTrack";
 import type { ChatCheckpoint, ChatRecordingEvent } from "../../../types/chat";
 import type { TextEditEvent } from "../../../types/textEdit";
 import type { CapturedViewStateRef } from "./editorMachineHelpers";
+import type { RecordingClock } from "./recordingClock";
 import type { AudioPlaybackEmit, AudioRecordingEmit } from "./audioActor";
 import type { CameraRecordingEmit } from "./cameraActor";
 import type { ScreenRecordingEmit } from "./screenActor";
@@ -74,6 +75,12 @@ export interface RecordingSession {
   startedAt: number;
   /** When recording started (`performance.now()`), monotonic origin for all in-session timestamps */
   startedAtPerf: number;
+  /**
+   * Pauses the recorded time skips over (see recordingClock.ts). Replaced, never mutated,
+   * so a selector sees a pause or resume. Read in-session timestamps through
+   * `getRecordingTimestamp`, not `performance.now() - startedAtPerf`.
+   */
+  clock: RecordingClock;
   /** Already-compressed frames built incrementally during capture (append-only) */
   frames: DeltaFrame[];
   /** Incremental encoder state (input count, last stored frame, last full frame) */
@@ -350,6 +357,15 @@ export type StartRecordingEvent = {
 /** Stop recording event */
 export type StopRecordingEvent = { type: "STOP_RECORDING" };
 
+/**
+ * Stop the take's clock and its recorders without ending it. Edits made while paused
+ * are still captured, at the moment of the pause, so the take stays consistent.
+ */
+export type PauseRecordingEvent = { type: "PAUSE_RECORDING" };
+
+/** Run a paused take's clock and recorders again. */
+export type ResumeRecordingEvent = { type: "RESUME_RECORDING" };
+
 /** Capture a frame during recording */
 export type CaptureFrameEvent = {
   type: "CAPTURE_FRAME";
@@ -526,6 +542,8 @@ export type AddCaptionTrackEvent = {
 export type EditorMachineEvent =
   | StartRecordingEvent
   | StopRecordingEvent
+  | PauseRecordingEvent
+  | ResumeRecordingEvent
   | CaptureFrameEvent
   | LoadRecordingEvent
   | ExtendRecordingEvent

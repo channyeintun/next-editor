@@ -68,6 +68,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     clearRecording,
     startRecording,
     stopRecording: stopRecordingImmediately,
+    pauseRecording,
+    resumeRecording,
     play,
     pause,
     stop,
@@ -109,6 +111,26 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
       document.removeEventListener("visibilitychange", preserveWhenHidden);
     };
   }, [actorRef]);
+  // A take lives only in this tab until it is finalized: closing or reloading the tab
+  // mid-take threw the whole recording away without a word. Ask the browser to confirm
+  // while one is starting, running (or paused), or being finalized.
+  const isTakeInProgress = NextEditorActorContext.useSelector(
+    (state) =>
+      state.matches("startingRecording") ||
+      state.matches("recording") ||
+      state.matches("stoppingRecording"),
+  );
+  useEffect(() => {
+    if (!isTakeInProgress) return;
+    const confirmLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Older engines show the prompt only when returnValue is set.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", confirmLeaving);
+    return () => window.removeEventListener("beforeunload", confirmLeaving);
+  }, [isTakeInProgress]);
+
   const previewHandle = usePreviewAdapterHandle();
   const stopRecordingPromiseRef = useRef<Promise<void> | null>(null);
 
@@ -145,6 +167,8 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     syncEditorRef,
     startRecording,
     stopRecording,
+    pauseRecording,
+    resumeRecording,
     play,
     pause,
     stop,

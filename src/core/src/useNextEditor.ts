@@ -16,6 +16,7 @@ import type { ChatRecordingEvent } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";
 import type { WorkspaceRecordingSnapshot } from "../../types/workspace";
 import { isAtPlaybackEnd } from "./machine/editorMachineHelpers";
+import { isRecordingClockPaused, type RecordingClock } from "./machine/recordingClock";
 import type { SnapshotFrom } from "xstate";
 
 // ============================================================================
@@ -73,11 +74,14 @@ export const selectNextEditorMetadata = (state: EditorMachineSnapshot) => {
   const playbackState = getPlaybackState(state);
   return {
     isRecording: state.matches("recording"),
+    isRecordingPaused:
+      state.matches("recording") &&
+      state.context.session !== null &&
+      isRecordingClockPaused(state.context.session.clock),
     isPlaying: playbackState === "playing",
     hasEnded: playbackState === "ended" && isAtPlaybackEnd(state.context.timeline),
     usesPlaybackModel: !state.context.hasManualWorkspaceOverride && playbackState !== null,
     currentRecording: state.context.recording,
-    recordingStartTime: state.context.session?.startedAt || null,
   };
 };
 
@@ -90,6 +94,17 @@ export const selectPlaybackSpeed = (state: EditorMachineSnapshot) => state.conte
 export const selectVolume = (state: EditorMachineSnapshot) => state.context.timeline.volume;
 export const selectDuration = (state: EditorMachineSnapshot) => state.context.timeline.duration;
 export const selectLiveTime = (state: EditorMachineSnapshot) => state.context.timeline.currentTime;
+
+/**
+ * What the recording timer reads: the running take's clock and origin, or null outside a
+ * take. The clock is replaced on every pause and resume, so the pair changes only then.
+ */
+export const selectRecordingClock = (
+  state: EditorMachineSnapshot,
+): { clock: RecordingClock; startedAtPerf: number } | null =>
+  state.matches("recording") && state.context.session
+    ? { clock: state.context.session.clock, startedAtPerf: state.context.session.startedAtPerf }
+    : null;
 
 // Data selectors
 export const selectRecording = (state: EditorMachineSnapshot) => state.context.recording;
@@ -112,6 +127,14 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
 
   const stopRecording = () => {
     actorRef.send({ type: "STOP_RECORDING" });
+  };
+
+  const pauseRecording = () => {
+    actorRef.send({ type: "PAUSE_RECORDING" });
+  };
+
+  const resumeRecording = () => {
+    actorRef.send({ type: "RESUME_RECORDING" });
   };
 
   // Playback Controls
@@ -218,6 +241,8 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   return {
     startRecording,
     stopRecording,
+    pauseRecording,
+    resumeRecording,
     play,
     pause,
     stop,

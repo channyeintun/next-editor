@@ -26,7 +26,15 @@ import {
   appendSlideRecordingEvent,
   appendWhiteboardRecordingEvent,
   appendWorkspaceRecordingEvent,
+  getRecordingTimestamp,
 } from "./recordingSession";
+import {
+  createRecordingClock,
+  isRecordingClockPaused,
+  pauseRecordingClock,
+  recordingTimeAtPerf,
+  resumeRecordingClock,
+} from "./recordingClock";
 import {
   appendCursorEvent,
   buildTrackMetadata,
@@ -310,6 +318,7 @@ export const initRecordingSession = ({
     session: {
       startedAt,
       startedAtPerf,
+      clock: createRecordingClock(),
       frames: [],
       encoder: createFrameStreamEncoder(),
       slideEvents,
@@ -392,12 +401,23 @@ export const captureFrame = ({
   const editor = getCaptureEditor(context);
   if (!context.session) return {};
 
-  const timestamp = performance.now() - context.session.startedAtPerf;
+  const timestamp = getRecordingTimestamp(context.session);
 
   const mousePosition =
     event.type === "CAPTURE_FRAME" && event.mousePosition
       ? event.mousePosition
       : context.session.lastMousePosition;
+
+  // While paused the pointer is followed but not recorded: every sample would land on
+  // the pause's single instant. Resuming records where it ended up.
+  if (
+    event.type === "CAPTURE_FRAME" &&
+    event.isMouseMovement &&
+    isRecordingClockPaused(context.session.clock)
+  ) {
+    context.session.lastMousePosition = mousePosition;
+    return {};
+  }
   const cursorAppended =
     event.type === "CAPTURE_FRAME" && event.isMouseMovement
       ? appendCursorEvent(context.session.cursorEvents, timestamp, mousePosition)
@@ -509,7 +529,7 @@ export const capturePreviewRefreshFrame = ({
     return {};
   }
 
-  const timestamp = performance.now() - context.session.startedAtPerf;
+  const timestamp = getRecordingTimestamp(context.session);
   const { frame, viewStateRef } = createFrame(
     editor,
     timestamp,
@@ -648,6 +668,38 @@ export const captureWhiteboardEvent = ({
   );
 };
 
+/** Stops the take's clock. Its recorders are paused by the machine alongside. */
+export const pauseRecordingSession = ({
+  context,
+}: {
+  context: EditorMachineContext;
+}): Partial<EditorMachineContext> => {
+  const session = context.session;
+  if (!session || isRecordingClockPaused(session.clock)) return {};
+  session.clock = pauseRecordingClock(session.clock, performance.now(), Date.now());
+  return { session, sessionRevision: context.sessionRevision + 1 };
+};
+
+/**
+ * Runs the take's clock again. The pointer was followed but not recorded while paused,
+ * so the resumed stretch starts with a sample of where it is now.
+ */
+export const resumeRecordingSession = ({
+  context,
+}: {
+  context: EditorMachineContext;
+}): Partial<EditorMachineContext> => {
+  const session = context.session;
+  if (!session || !isRecordingClockPaused(session.clock)) return {};
+  session.clock = resumeRecordingClock(session.clock, performance.now(), Date.now());
+  appendCursorEvent(
+    session.cursorEvents,
+    getRecordingTimestamp(session),
+    session.lastMousePosition,
+  );
+  return { session, sessionRevision: context.sessionRevision + 1 };
+};
+
 export const finalizeRecording = ({
   context,
 }: {
@@ -656,7 +708,8 @@ export const finalizeRecording = ({
 }): Partial<EditorMachineContext> => {
   if (!context.session) return { recording: null };
 
-  const elapsedMs = Math.max(performance.now() - context.session.startedAtPerf, 1);
+  // Recorded time, so a take stopped while paused ends where it paused.
+  const elapsedMs = Math.max(getRecordingTimestamp(context.session), 1);
   const externalDurationMs = context.audio.externalDurationMs;
   // A selected-file take never outlives its narration: AUDIO_PLAYBACK_FINISHED ends it,
   // directly or through stoppingRecording when the camera is on. On that second path the
@@ -881,9 +934,11 @@ export const storeCameraStarted = ({
   // The camera MediaRecorder only starts after getUserMedia resolves, which lags the
   // recording-session origin (session.startedAtPerf) by the camera warmup. Capture that
   // offset so playback can shift the video back into sync; otherwise the face video runs
-  // ahead of audio. Both sides must be the same (monotonic) clock — see P7.
+  // ahead of audio. Both sides must be the same (monotonic) clock — see P7. Read through
+  // the take's clock: a camera that finished warming up during a pause starts recording
+  // when the take resumes, which is the moment the pause holds.
   const startOffsetMs = context.session
-    ? Math.max(0, event.startedAtPerf - context.session.startedAtPerf)
+    ? recordingTimeAtPerf(context.session.clock, context.session.startedAtPerf, event.startedAtPerf)
     : 0;
   return {
     camera: {
@@ -965,7 +1020,7 @@ export const storeScreenStarted = ({
   // ran before START_RECORDING, but MediaRecorder.start resolves at spawn). Capture the offset
   // on the same monotonic clock as the session so a consumer can realign the local video.
   const startOffsetMs = context.session
-    ? Math.max(0, event.startedAtPerf - context.session.startedAtPerf)
+    ? recordingTimeAtPerf(context.session.clock, context.session.startedAtPerf, event.startedAtPerf)
     : 0;
   return {
     screen: {

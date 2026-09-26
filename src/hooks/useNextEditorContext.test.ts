@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { Recording } from "../core/src";
 import { editorMachine } from "../core/src/machine/editorMachine";
 import { createInitialContext, type RecordingSession } from "../core/src/machine/types";
+import { createRecordingClock, pauseRecordingClock } from "../core/src/machine/recordingClock";
 import { selectNextEditorMetadata, type EditorMachineSnapshot } from "../core/src/useNextEditor";
 
 // The epsilon isAtPlaybackEnd allows (editorMachineHelpers.ts PLAYBACK_END_EPSILON_MS).
@@ -58,23 +59,36 @@ const getPlaybackState = (state: EditorMachineSnapshot) => {
 };
 const legacyMetadata = (state: EditorMachineSnapshot) => ({
   isRecording: state.matches("recording"),
+  isRecordingPaused: state.matches("recording") && Boolean(state.context.session?.clock.pausedAt),
   isPlaying: state.matches({ playback: "playing" }),
   hasEnded:
     state.matches({ playback: "ended" }) &&
     state.context.timeline.currentTime >= state.context.timeline.duration - END_EPSILON_MS,
   usesPlaybackModel: !state.context.hasManualWorkspaceOverride && getPlaybackState(state) !== null,
   currentRecording: state.context.recording,
-  recordingStartTime: state.context.session?.startedAt || null,
 });
 
-const session = { startedAt: 1_700_000_000_500, startedAtPerf: 0 } as RecordingSession;
+const session = {
+  startedAt: 1_700_000_000_500,
+  startedAtPerf: 0,
+  clock: createRecordingClock(),
+} as RecordingSession;
+const pausedSession = {
+  ...session,
+  clock: pauseRecordingClock(session.clock, 2_000, 1_700_000_002_500),
+} as RecordingSession;
 
 const cases: Array<[string, EditorMachineSnapshot, Partial<ReturnType<typeof legacyMetadata>>]> = [
   ["idle", snapshotAt("idle"), { isRecording: false, usesPlaybackModel: false }],
   [
     "recording",
     snapshotAt("recording", { session }),
-    { isRecording: true, recordingStartTime: session.startedAt },
+    { isRecording: true, isRecordingPaused: false },
+  ],
+  [
+    "recording, paused",
+    snapshotAt("recording", { session: pausedSession }),
+    { isRecording: true, isRecordingPaused: true },
   ],
   ["ready", playbackAt("ready", 0), { isPlaying: false, usesPlaybackModel: false }],
   ["playing", playbackAt("playing", 400), { isPlaying: true, usesPlaybackModel: true }],
