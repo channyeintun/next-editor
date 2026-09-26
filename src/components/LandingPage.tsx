@@ -162,8 +162,9 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
   // decode + rrweb replay + audio). On mobile that runs alongside this page and
   // its replay buffers grow until iOS Safari reloads then kills the tab. Render a
   // static tap-to-open card there instead, so the landing page stays light. The
-  // server and first client render use a lightweight placeholder; only a
-  // confirmed desktop browser is allowed to start the iframe after hydration.
+  // server and first client render leave the device unresolved (null) and never
+  // include the iframe; only a confirmed desktop browser is allowed to start it
+  // after hydration.
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [frameworkIndex, setFrameworkIndex] = useState(0);
 
@@ -399,10 +400,13 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                       }`}
                     >
                       {isMobile !== false ? (
+                        // Until hydration settles isMobile, the cached SSR markup can't
+                        // know the device, so the card shows only on touch-first
+                        // screens; desktops keep the dark panel the iframe will fill.
                         <a
                           href={DEMO_URL}
                           className={`group flex flex-col items-center justify-center gap-5 px-8 py-14 text-center ${
-                            isMobile === null ? "h-full" : ""
+                            isMobile === null ? "invisible h-full pointer-coarse:visible" : ""
                           }`}
                           aria-label="Open the interactive demo"
                         >
