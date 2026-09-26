@@ -192,6 +192,15 @@ export function linkRecordingToDraft(recordingId: string, draftId: string): void
 }
 
 /**
+ * An edit of a recording makes a new one (a new id) from the same take: its draft is
+ * the edited recording's too, deleted once that is uploaded or exported.
+ */
+export function relinkRecordingDraft(fromRecordingId: string, toRecordingId: string): void {
+  const draftId = draftIdsByRecordingId.get(fromRecordingId);
+  if (draftId) draftIdsByRecordingId.set(toRecordingId, draftId);
+}
+
+/**
  * Deletes the draft of a recording that no longer needs one: it was uploaded or
  * exported, or its author started over. A draft this page does not know about is
  * looked up by the recording id its meta holds, which covers a take restored

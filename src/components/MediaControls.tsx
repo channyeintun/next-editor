@@ -5,6 +5,7 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Scissors,
   Plus,
   FileMusic,
   Mic,
@@ -51,6 +52,7 @@ import { applyVoiceRecordingPolicy, isVoiceJoinedForRecording } from "../voice/r
 import { canRecordInLiveRoom } from "../collaboration/recordingPolicy";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
 import LearnerVersionsMenu from "./LearnerVersionsMenu";
+import RecordingEditPanel from "./RecordingEditPanel";
 import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
 
 interface MediaControlsProps {
@@ -67,6 +69,8 @@ interface MediaControlsProps {
   /** Whether this recording is being played as part of a playlist — controls
    *  whether the "Continue to Next" setting is shown. */
   playlistMode?: boolean;
+  /** An edit made a new recording of the take (see RecordingEditPanel). */
+  onRecordingEdited?: (recording: Recording) => void;
 }
 
 type RecordingAudioSourceOption = "microphone" | "external";
@@ -208,6 +212,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   positioning = "fixed",
   large = false,
   playlistMode = false,
+  onRecordingEdited,
 }) => {
   const {
     startRecording,
@@ -244,6 +249,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const recordingSettingsTrigger = useRecordingSettingsTrigger();
   const [showSettings, setShowSettings] = useState(false);
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
+  const [showEditPanel, setShowEditPanel] = useState(false);
   const [recordingAudioSource, setRecordingAudioSource] =
     useState<RecordingAudioSourceOption>("microphone");
   const [enableCameraForNextRecording, setEnableCameraForNextRecording] = useState(false);
@@ -476,6 +482,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         className="sr-only"
         onChange={(event) => void handleCaptionFileChange(event)}
       />
+      {showEditPanel && currentRecording && !isRecording && effectiveRecordMode ? (
+        <RecordingEditPanel
+          recording={currentRecording}
+          onClose={() => setShowEditPanel(false)}
+          onApplied={(edited) => onRecordingEdited?.(edited)}
+        />
+      ) : null}
       <div className={`flex items-center w-full ${rowSizing}`}>
         {effectiveRecordMode && (
           <button
@@ -696,6 +709,22 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               iconSize={controlIconSize}
               buttonClassName={transportButtonWidth}
             />
+
+            {effectiveRecordMode ? (
+              <button
+                type="button"
+                onClick={() => setShowEditPanel((open) => !open)}
+                // A take whose narration is still being cut is edited once that is done.
+                disabled={Boolean(currentRecording.pendingAudioEdit)}
+                aria-expanded={showEditPanel}
+                title="Cut or mute stretches of this recording"
+                className={`flex items-center justify-center transition-colors pointer-events-auto disabled:opacity-40 ${
+                  showEditPanel ? "text-white" : "text-slate-300 hover:text-white"
+                } ${transportButtonWidth}`}
+              >
+                <Scissors size={controlIconSize} aria-hidden="true" />
+              </button>
+            ) : null}
 
             {hasCaptionTracks ? (
               <div className="relative pointer-events-auto">

@@ -357,6 +357,8 @@ export function EditorLayout({
         large={largeControls}
         positioning="relative"
         playlistMode={playlistMode}
+        // An edited take is offered for upload like one that just finished.
+        onRecordingEdited={offerPostRecordingTarget}
       />
 
       <DragDropOverlay isDragging={isDragging} />

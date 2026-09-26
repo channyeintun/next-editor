@@ -177,6 +177,22 @@ studio renders) journals every take to its own IndexedDB database,
 - A draft is deleted once its take is uploaded, exported, or replaced with New Recording, or
   when the author discards it from the prompt.
 
+### Editing a recording
+
+`RecordingEditPanel` (the scissors in the player bar, for a recording in record mode) cuts and
+mutes stretches of a finished recording through `applyRecordingEdit` (`src/core/src/recordingEdit.ts`):
+
+- A cut span is collapsed into `CUT_WINDOW_MS` at its start on every track, in order, and what
+  follows moves earlier, so no change inside it is lost. The editor frames inside a cut are
+  squashed into one keyframe of their final state, so text typed and deleted there leaves no
+  trace. The preview's rrweb stamps are first re-based onto recorded time so the cut applies to
+  them directly.
+- The narration edit (cuts less their window, and mutes, on the audio's own clock) is left as
+  `pendingAudioEdit` for `loadRecording`, and the camera's `cameraCuts` gain the cut spans.
+- The edited recording gets a new id and is loaded in place; once loaded (narration cut) it is
+  offered for upload like a take that just finished. "Suggest dead-air cuts" proposes quiet
+  stretches with no recorded activity (`suggestDeadAirCuts`).
+
 ## URL Loading Flow
 
 The shipped URL loader supports both same-origin and cross-origin recording URLs.
