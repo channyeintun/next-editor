@@ -1,7 +1,7 @@
 import { act, render, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { NextEditorProvider } from "./NextEditorProvider";
 import { NextEditorActorContext } from "./NextEditorActorContext";
 import { PreviewAdapterHandleProvider } from "./PreviewAdapterHandleContext";

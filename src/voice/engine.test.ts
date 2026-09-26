@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { VoiceParticipant, VoicePublishedTrack } from "../collaboration/voiceProtocol";
 import { VoiceEngine, type VoiceEngineDeps } from "./engine";
 import type { VoiceSocketLike } from "./client";

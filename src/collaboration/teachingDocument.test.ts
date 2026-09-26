@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import * as Y from "yjs";
 import type { Slide } from "../types/slides";
 import { MAX_YJS_UPDATE_BYTES } from "./protocol";

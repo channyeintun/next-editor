@@ -1,5 +1,5 @@
 import type * as Monaco from "monaco-editor";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   CollaborationCursorLabelManager,
   type CollaborationCursorLabel,

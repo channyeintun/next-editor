@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import type { WorkspaceProject } from "../../types/workspace";
 import { collectHaskellPlaygroundFiles } from "./files";
 

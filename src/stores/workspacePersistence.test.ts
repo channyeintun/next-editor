@@ -1,5 +1,5 @@
 /* oxlint-disable vitest/require-mock-type-parameters */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   createInitialWorkspaceSnapshot,
   createWorkspaceStore,

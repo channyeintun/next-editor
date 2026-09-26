@@ -1,7 +1,7 @@
 // @vitest-environment node
 // (fake-indexeddb stores Blobs with the global structuredClone, which under jsdom
 // cannot clone jsdom's Blob; see src/test/fakeIndexedDB.ts.)
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { FakeIndexedDB } from "../test/fakeIndexedDB";
 import {
   IndexedDBRecordingStore,

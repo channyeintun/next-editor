@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createCredentialStore, selectApiKey, selectCredentialStorage } from "./credentials";
 
 function ctx(store: ReturnType<typeof createCredentialStore>) {

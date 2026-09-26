@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import type { Recording } from "../../core/src";
 import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../../core/src/slides";
 import { createStreamingRecordingReader, decodeRecordingStream, encodeRecordingToStream } from ".";

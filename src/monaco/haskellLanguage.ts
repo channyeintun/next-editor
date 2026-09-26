@@ -1,11 +1,11 @@
-import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
+import * as monaco from "monaco-editor/editor";
 
 /**
  * First-party Haskell language support for Monaco.
  *
  * Monaco ships basic-language grammars for Go, Kotlin, Rust and a few dozen
  * others, but there is no `haskell` directory under
- * `monaco-editor/esm/vs/basic-languages/` at all — so this file is the whole
+ * `monaco-editor/languages/definitions/` at all — so this file is the whole
  * of it: language id, bracket/comment configuration, and a Monarch tokenizer.
  *
  * Three of the rules below are the reason a borrowed grammar gets a Haskell

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { ASM_LANGUAGE_ID, asmLanguageConfiguration, asmMonarchLanguage } from "./asmLanguage";
 import { inferLanguageFromPath } from "../types/workspace";
 import { KNOWN_MNEMONICS } from "../core/x86/isa";

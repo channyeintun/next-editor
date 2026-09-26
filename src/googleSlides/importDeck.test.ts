@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { applyDeckToSlides } from "./importDeck";
 import type { ParsedDeck, ParsedDeckSlide } from "./types";
 import type { Slide } from "../types/slides";

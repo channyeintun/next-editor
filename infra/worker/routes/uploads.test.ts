@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { uploadsRoute } from "./uploads";
 import { getCurrentUser } from "../auth/session";
 import { getLessonById } from "../../db/queries";

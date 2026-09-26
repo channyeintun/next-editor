@@ -2,7 +2,7 @@
 import { act, render, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const controls = vi.hoisted(() => ({
   handleSlideEvent: vi.fn() as (...args: unknown[]) => void,

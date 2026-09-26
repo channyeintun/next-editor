@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { MAX_DESCRIPTION_CHARS, MAX_TITLE_CHARS } from "../../../infra/lessons/metadataLimits";
 
 vi.mock("@next-editor/infra", async () => ({

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { haskellPlaygroundRoute, normalizeUpstreamRunResponse } from "./haskellPlayground";
 import type { Env } from "../env";
 import type { UserRow } from "../../db/types";

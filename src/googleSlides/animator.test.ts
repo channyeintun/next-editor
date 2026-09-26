@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { DeckStepAnimator, buildTimeline, sampleStyles, timeForRevealed } from "./animator";
 import type { DeckStep } from "./types";
 

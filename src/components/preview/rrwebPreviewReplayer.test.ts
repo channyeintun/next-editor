@@ -1,5 +1,5 @@
 import type { eventWithTime } from "@rrweb/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../../types/slides";
 import { buildRrwebReplayEvents } from "./rrwebPreview";
 import { computeRrwebOffsetMs, createRrwebPreviewReplayer } from "./rrwebPreviewReplayer";

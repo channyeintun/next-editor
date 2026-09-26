@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { MonacoBinding } from "y-monaco";
 import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";

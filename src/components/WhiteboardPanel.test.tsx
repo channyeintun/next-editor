@@ -1,6 +1,6 @@
 /* oxlint-disable vitest/require-mock-type-parameters */
 import { render, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WhiteboardElementJSON, WhiteboardSceneState } from "../core/src/whiteboard";
 import type { WhiteboardSceneUpdateSource } from "../stores/whiteboardStore";
 

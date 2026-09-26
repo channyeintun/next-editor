@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vite-plus/test";
 import YAML from "yaml";
 
 import { replayTypedFile, whiteboardAssetProblems } from "./crashCourseTestUtils";

@@ -1,5 +1,5 @@
 import { zipSync, strToU8, type Zippable } from "fflate";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { isWorkspaceAssetFile, type WorkspaceFile } from "../types/workspace";
 import {
   getWorkspaceAssetBytes,

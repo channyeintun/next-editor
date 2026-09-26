@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { RustPlaygroundClient, RustPlaygroundServiceError } from "./client";
 import type { RustPlaygroundFile, RustPlaygroundRunResult } from "./types";
 

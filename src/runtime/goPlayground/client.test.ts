@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { GoPlaygroundClient, GoPlaygroundServiceError } from "./client";
 import type { GoPlaygroundFile, GoPlaygroundRunResult } from "./types";
 

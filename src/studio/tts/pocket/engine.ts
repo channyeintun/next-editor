@@ -1,9 +1,10 @@
-import * as ort from "onnxruntime-web";
-// Filesystem-relative on purpose: onnxruntime-web's `exports` map doesn't
-// expose dist/, and the studio self-hosts the threaded-wasm loader pair (no
-// CDN). `?url` keeps them as served assets, outside vite-plugin-wasm's path.
-import ortWasmThreadedMjs from "../../../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs?url";
-import ortWasmThreadedWasm from "../../../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm?url";
+// The WASM-only build: since onnxruntime-web 1.30 the package root loads the
+// WebGPU/WebNN build, whose loader pair differs from the plain one below.
+import * as ort from "onnxruntime-web/wasm";
+// The studio self-hosts the threaded-wasm loader pair (no CDN). `?url` keeps
+// them as served assets, outside vite-plugin-wasm's path.
+import ortWasmThreadedMjs from "onnxruntime-web/ort-wasm-simd-threaded.mjs?url";
+import ortWasmThreadedWasm from "onnxruntime-web/ort-wasm-simd-threaded.wasm?url";
 import {
   fetchBundleAsset,
   fetchBundleMetadata,

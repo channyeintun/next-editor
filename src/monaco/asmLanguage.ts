@@ -1,11 +1,11 @@
-import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
+import * as monaco from "monaco-editor/editor";
 import { KNOWN_MNEMONICS } from "../core/x86/isa";
 
 /**
  * First-party NASM-syntax x86-64 support for Monaco.
  *
  * Monaco ships no x86 or NASM grammar at all — `mips` is the only assembly
- * mode under `basic-languages/`, and it claims `.s` but knows neither NASM's
+ * mode under `languages/definitions/`, and it claims `.s` but knows neither NASM's
  * directives nor the x86 register names, so `section .data`, `resb` and `rdi`
  * would all render as plain identifiers. In a lesson those are exactly the
  * words the eye needs to find — the register being written, the directive that

@@ -5,7 +5,9 @@ declare module "virtual:rrweb-recorder-bundle" {
   export default bundle;
 }
 
-// Monaco ships this feature barrel without a sibling .d.ts. We only import it
-// for its side effects (registering the editor's standalone features), so an
-// untyped ambient module is enough to satisfy noUncheckedSideEffectImports.
-declare module "monaco-editor/esm/vs/editor/edcore.main";
+// Editor contributions Monaco ships without a sibling .d.ts. We only import them
+// for their side effects (see src/monaco/runtime.ts), so untyped ambient modules
+// are enough to satisfy noUncheckedSideEffectImports.
+declare module "monaco-editor/editor/contrib/caretOperations/browser/caretOperations";
+declare module "monaco-editor/editor/contrib/dropOrPasteInto/browser/copyPasteContribution";
+declare module "monaco-editor/editor/contrib/semanticTokens/browser/documentSemanticTokens";

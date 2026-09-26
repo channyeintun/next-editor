@@ -1,5 +1,5 @@
 import * as awarenessProtocol from "y-protocols/awareness";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import * as Y from "yjs";
 import { resolveMonacoAwarenessSelections } from "./monacoAwareness";
 

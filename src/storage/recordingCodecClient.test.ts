@@ -1,5 +1,5 @@
 import { expose } from "comlink";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "../core/src";
 import { decompressBinaryToRecording as decodeInProcess } from "./recordingCodec";
 import { encodeRecordingToStream } from "./streamingRecordingCodec";

@@ -59,13 +59,13 @@ export const ABORTED_TOOL_OUTPUT = "The run was stopped before this tool ran; no
 /**
  * Refuse every tool call once the run is aborted.
  *
- * The SDK owns the tool loop and accepts no AbortSignal, and `ModelResult.cancel()`
- * reaches only the first turn's stream — each follow-up turn streams through its own
- * local one. So after Stop the SDK keeps calling the model and keeps invoking these
- * `execute` closures until `stopWhen` is met. This guard is the only place that can
- * refuse them, which is what keeps a stopped run from writing files the transcript
- * never records. Applied to every tool rather than just the mutating ones so a tool
- * added later inherits it, and so a stopped run stops spending on side effects at all.
+ * The run's signal stops the SDK's tool loop only at a turn boundary: a round it
+ * has already dispatched still invokes these `execute` closures after Stop (the
+ * SDK checks the signal between turns and on in-flight requests, not before each
+ * tool body). This guard is what refuses them, which is what keeps a stopped run
+ * from writing files the transcript never records. Applied to every tool rather
+ * than just the mutating ones so a tool added later inherits it, and so a stopped
+ * run stops spending on side effects at all.
  */
 function guardToolOnAbort(ctx: ToolContext, tool: Tool): Tool {
   // `tool()` returns a fresh plain `{ type, function }` object per call (tools are

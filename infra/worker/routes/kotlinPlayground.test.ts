@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { kotlinPlaygroundRoute, normalizeUpstreamRunResponse } from "./kotlinPlayground";
 import type { Env } from "../env";
 import type { UserRow } from "../../db/types";

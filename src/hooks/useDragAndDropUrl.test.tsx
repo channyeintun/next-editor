@@ -1,6 +1,6 @@
 import { act, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "../core/src";
 import { NextEditorActionsContext, type NextEditorActions } from "../contexts/NextEditorContext";
 import { encodeRecordingToStream } from "../storage/streamingRecordingCodec";

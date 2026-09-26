@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { record } from "@rrweb/record";
 import {
   POSTHOG_REPLAY_PRIVACY_OPTIONS,

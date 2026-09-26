@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { FALLBACK_MODEL_OPTIONS, fetchOpenRouterModelOptions } from "./modelCatalog";
 
 describe("OpenRouter model catalog", () => {

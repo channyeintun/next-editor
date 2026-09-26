@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { downloadBlob } from "./downloadBlob";
 
 const originalCreate = URL.createObjectURL;
@@ -18,11 +18,11 @@ describe("downloadBlob", () => {
     const revoke = vi.fn<(url: string) => void>();
     URL.revokeObjectURL = revoke;
     const clicks: Array<{ href: string; download: string; attached: boolean }> = [];
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
-      function (this: HTMLAnchorElement) {
-        clicks.push({ href: this.href, download: this.download, attached: this.isConnected });
-      },
-    );
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      clicks.push({ href: this.href, download: this.download, attached: this.isConnected });
+    });
 
     downloadBlob(new Blob(["bytes"]), "lesson.ne");
 

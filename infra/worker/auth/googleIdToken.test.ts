@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { verifyGoogleIdToken, type JwksResponse } from "./googleIdToken";
 
 const NOW = 1_800_000_000_000; // fixed epoch ms

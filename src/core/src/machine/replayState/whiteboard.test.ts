@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { getWhiteboardReplayResult } from "./whiteboard";
 import type { WhiteboardElementJSON, WhiteboardEvent } from "../../whiteboard";
 

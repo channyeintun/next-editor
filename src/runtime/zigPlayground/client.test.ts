@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { ZigPlaygroundClient, ZigPlaygroundServiceError } from "./client";
 import type { ZigPlaygroundFile, ZigPlaygroundRunResult } from "./types";
 

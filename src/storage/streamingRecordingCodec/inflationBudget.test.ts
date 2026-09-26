@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { encode as msgpackEncode } from "@msgpack/msgpack";
 import { zlibSync } from "fflate";
 import { createInflationBudget, decodeRecords, MAX_INFLATED_STREAM_BYTES } from "./format";

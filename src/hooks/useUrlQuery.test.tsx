@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { MemoryRouter, useSearchParams } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { UrlLoader } from "./useUrlLoader";
 import { useUrlQuery } from "./useUrlQuery";
 

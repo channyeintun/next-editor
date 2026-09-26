@@ -11,11 +11,12 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "paths": {
-      // monaco-editor 0.55 added an `exports` map that no longer resolves the
-      // extensionless deep path `@monaco-editor/react`'s own .d.ts imports
-      // (`monaco-editor/esm/vs/editor/editor.api`), collapsing its `Monaco`
-      // type to `any`. Point that exact specifier at the real declarations.
-      "monaco-editor/esm/vs/editor/editor.api": [
+      // monaco-editor 0.56 moved its `exports` map onto `esm/vs/*`, so the deep
+      // path y-monaco's own .d.ts imports (`monaco-editor/esm/vs/editor/
+      // editor.api.js`) no longer resolves, collapsing its binding types to
+      // `any`. Point that exact specifier at the real declarations; vite.config.ts
+      // aliases the same specifier for the bundler.
+      "monaco-editor/esm/vs/editor/editor.api.js": [
         "./node_modules/monaco-editor/esm/vs/editor/editor.api.d.ts"
       ],
       // Resolve the tube workspace package to its source so it's compiled as
@@ -50,5 +51,6 @@
   // compilerOptions. It is a second root project of `bun run typecheck`
   // (`tsc -b tsconfig.json infra/worker/tsconfig.json`) rather than a
   // reference, since neither project is composite and neither emits.
-  "include": ["src", "vite.config.ts", "tube/src", "infra/client", "api"]
+  // vitest.setup.ts loads jest-dom's matcher types for every test file.
+  "include": ["src", "vite.config.ts", "vitest.setup.ts", "tube/src", "infra/client", "api"]
 }

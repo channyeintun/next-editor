@@ -19,6 +19,8 @@ export interface PocketVoiceProfile {
   /** Immutable (revision-pinned) base URL of the exported ONNX bundle. */
   bundleBaseUrl: string;
   bundleName: string;
+  /** onnxruntime-web release the bundle runs on — see POCKET_ONNX_RUNTIME_VERSION. */
+  onnxRuntimeVersion: string;
   /** Built-in voice name from voices.bin, or "custom" for a cloned voice. */
   voice: string;
   /** Cloned voice: the locally stored reference sample this profile uses. */
@@ -66,12 +68,21 @@ export type VoiceProfile = PocketVoiceProfile | ModalVoxCpm2VoiceProfile;
 const POCKET_BUNDLE_BASE =
   "https://huggingface.co/spaces/KevinAHM/pocket-tts-web/resolve/d0c0c79b7712256a32d691c67f20b8ae2e020d00/onnx/english_2026-04";
 
+/**
+ * The onnxruntime-web release pocket-tts synthesizes on, kept equal to the
+ * package.json pin. Its kernels and graph fusions shape the samples themselves —
+ * 1.20.1 → 1.30.0 changed every sample of a dialog and can move the frame where
+ * speech ends — so, like the bundle revision, it keys the synthesis cache.
+ */
+export const POCKET_ONNX_RUNTIME_VERSION = "1.30.0";
+
 export const VOICE_PROFILES: Record<string, VoiceProfile> = {
   "pocket-alba-v1": {
     id: "pocket-alba-v1",
     providerId: "pocket-tts-web",
     bundleBaseUrl: POCKET_BUNDLE_BASE,
     bundleName: "english_2026-04",
+    onnxRuntimeVersion: POCKET_ONNX_RUNTIME_VERSION,
     voice: "alba",
     sampleRate: 24000,
     mimeType: "audio/wav",
@@ -122,6 +133,7 @@ export function customVoiceProfileOf(voice: {
     providerId: "pocket-tts-web",
     bundleBaseUrl: POCKET_BUNDLE_BASE,
     bundleName: "english_2026-04",
+    onnxRuntimeVersion: POCKET_ONNX_RUNTIME_VERSION,
     voice: "custom",
     customVoiceId: voice.id,
     customVoiceSha256: voice.sampleSha256,

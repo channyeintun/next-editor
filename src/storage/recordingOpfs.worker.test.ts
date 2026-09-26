@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { RecordingOpfsWorkerApi } from "./recordingOpfs.worker";
 import { RECORDING_OPFS_DIRECTORY } from "./recordingOpfsShared";
 

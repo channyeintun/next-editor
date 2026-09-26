@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import type { CollaborationInviteRole } from "../../src/collaboration/protocol";
 import {
   claimCollaborationInvitation,

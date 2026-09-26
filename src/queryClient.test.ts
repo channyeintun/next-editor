@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { injectLessonDocument } from "../infra/worker/ssr/lessonDetail";
 import type { Lesson } from "../tube/src/types";
 import { hydrateServerQueryState, queryClient } from "./queryClient";

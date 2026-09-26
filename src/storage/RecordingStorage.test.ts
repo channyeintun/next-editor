@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "../core/src";
 import type { StoredRecordingEntry, StoredRecordingMetadata } from "./IndexedDBRecordingStore";
 import { decompressBinaryToRecording, encodeRecordingToStream } from "./recordingCodecClient";

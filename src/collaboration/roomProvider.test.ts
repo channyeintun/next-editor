@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import * as Y from "yjs";
 import {
   COLLABORATION_BINARY_PROTOCOL_VERSION,

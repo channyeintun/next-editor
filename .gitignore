@@ -37,3 +37,4 @@ slide-research
 studio-out/
 share/*.zip
 *.pdf
+.vitest/
