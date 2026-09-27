@@ -479,6 +479,10 @@ export const editorMachine = setup({
     handleScreenError: assign(handleScreenError),
     releaseScreenStream: assign(releaseScreenStream),
     releaseUnacceptedScreenStream,
+    // A stopped child is gone for good; stopping one that is not running does nothing.
+    stopAudioRecorder: stopChild("audioRecorder"),
+    stopCameraRecorder: stopChild("cameraRecorder"),
+    stopRecordingAudioPlayer: stopChild("recordingAudioPlayer"),
     // Every SCREEN_* event names the recorder that sent it, which may belong to an earlier capture.
     stopScreenRecorderFromEvent: stopChild(({ event }) =>
       event.type === "SCREEN_STOPPED" || event.type === "SCREEN_ERROR" ? event.actorId : "",
@@ -495,6 +499,7 @@ export const editorMachine = setup({
     storeTickTime: assign(storeTickTime),
     moveToPlaybackEnd: assign(moveToPlaybackEnd),
     clearPlaybackAudioSpawned: assign(clearPlaybackAudioSpawned),
+    stopAudioPlayer: stopChild("audioPlayer"),
     setPlaybackSpeed: assign(setPlaybackSpeed),
     setVolume: assign(setVolume),
     clearCursorDecorations: assign(clearCursorDecorations),
@@ -668,10 +673,10 @@ export const editorMachine = setup({
         guard: "isLateAudioAwaitingEdit",
         target: ".loading",
         reenter: true,
-        actions: ["attachLateAudioBlob", stopChild("audioRecorder")],
+        actions: ["attachLateAudioBlob", "stopAudioRecorder"],
       },
       {
-        actions: ["attachLateAudioBlob", stopChild("audioRecorder")],
+        actions: ["attachLateAudioBlob", "stopAudioRecorder"],
       },
     ],
     // Only idle accepts START_RECORDING (its last branch has no guard, so it never bubbles up
@@ -770,7 +775,7 @@ export const editorMachine = setup({
         // splice that narration into the recording about to load.
         LOAD_RECORDING: {
           target: "loading",
-          actions: stopChild("audioRecorder"),
+          actions: "stopAudioRecorder",
         },
       },
     },
@@ -790,7 +795,7 @@ export const editorMachine = setup({
         AUDIO_RECORDING_ERROR: {
           target: "idle",
           actions: [
-            stopChild("audioRecorder"),
+            "stopAudioRecorder",
             "resetAudioAfterRecorderStop",
             // gDM ran at click time, so a display stream may be held even though the actor never
             // spawned. Release it here or the browser's "sharing this tab" indicator leaks forever.
@@ -801,11 +806,7 @@ export const editorMachine = setup({
         },
         STOP_RECORDING: {
           target: "idle",
-          actions: [
-            stopChild("audioRecorder"),
-            "resetAudioAfterRecorderStop",
-            "releaseScreenStream",
-          ],
+          actions: ["stopAudioRecorder", "resetAudioAfterRecorderStop", "releaseScreenStream"],
         },
       },
     },
@@ -825,7 +826,7 @@ export const editorMachine = setup({
         }),
       },
       entry: ["startCameraRecorder", "startScreenRecorder"],
-      exit: [stopChild("recordingAudioPlayer"), "stopScreenRecording"],
+      exit: ["stopRecordingAudioPlayer", "stopScreenRecording"],
       on: {
         CAPTURE_FRAME: {
           actions: "captureFrame",
@@ -851,10 +852,10 @@ export const editorMachine = setup({
           actions: "storeCameraStarted",
         },
         CAMERA_STOPPED: {
-          actions: ["storeCameraBlob", stopChild("cameraRecorder")],
+          actions: ["storeCameraBlob", "stopCameraRecorder"],
         },
         CAMERA_ERROR: {
-          actions: ["handleCameraError", stopChild("cameraRecorder")],
+          actions: ["handleCameraError", "stopCameraRecorder"],
         },
         AUDIO_PLAYBACK_READY: {
           actions: "storeExternalAudioDuration",
@@ -862,7 +863,7 @@ export const editorMachine = setup({
         // The recorder ended by itself (device unplugged, permission revoked). STOP_RECORDING
         // will then skip `stoppingRecording`, so this is the last place its actor is stopped.
         AUDIO_RECORDING_STOPPED: {
-          actions: ["storeAudioBlob", stopChild("audioRecorder")],
+          actions: ["storeAudioBlob", "stopAudioRecorder"],
         },
         AUDIO_PLAYBACK_FINISHED: [
           {
@@ -880,7 +881,7 @@ export const editorMachine = setup({
           target: "idle",
           guard: "isExternalAudioRecording",
           actions: [
-            stopChild("cameraRecorder"),
+            "stopCameraRecorder",
             "clearCameraRecording",
             "handleExternalAudioError",
             "notifyError",
@@ -944,18 +945,18 @@ export const editorMachine = setup({
       // blob is still on the way, and a stopped actor can no longer deliver it to the root
       // late-blob handler. It is stopped where its blob is consumed instead, or when the
       // take is unloaded or replaced.
-      exit: [stopChild("cameraRecorder")],
+      exit: "stopCameraRecorder",
       on: {
         AUDIO_RECORDING_STOPPED: [
           {
             guard: "isCameraRecording",
-            actions: ["storeAudioBlob", stopChild("audioRecorder")],
+            actions: ["storeAudioBlob", "stopAudioRecorder"],
           },
           {
             target: "loading",
             actions: [
               "storeAudioBlob",
-              stopChild("audioRecorder"),
+              "stopAudioRecorder",
               "finalizeRecording",
               "notifyRecordingStop",
             ],
@@ -967,13 +968,13 @@ export const editorMachine = setup({
             guard: not("isAudioRecording"),
             actions: [
               "storeCameraBlob",
-              stopChild("cameraRecorder"),
+              "stopCameraRecorder",
               "finalizeRecording",
               "notifyRecordingStop",
             ],
           },
           {
-            actions: ["storeCameraBlob", stopChild("cameraRecorder")],
+            actions: ["storeCameraBlob", "stopCameraRecorder"],
           },
         ],
         CAMERA_ERROR: [
@@ -982,13 +983,13 @@ export const editorMachine = setup({
             guard: not("isAudioRecording"),
             actions: [
               "handleCameraError",
-              stopChild("cameraRecorder"),
+              "stopCameraRecorder",
               "finalizeRecording",
               "notifyRecordingStop",
             ],
           },
           {
-            actions: ["handleCameraError", stopChild("cameraRecorder")],
+            actions: ["handleCameraError", "stopCameraRecorder"],
           },
         ],
         AUDIO_RECORDING_ERROR: {
@@ -1022,7 +1023,7 @@ export const editorMachine = setup({
             // A mic recorder the finalize watchdog overtook may still be waiting on its blob.
             // With no loaded take to splice it into, it would land in idle's audio slice and
             // ride into the next take, so stop it with the take that failed to load.
-            stopChild("audioRecorder"),
+            "stopAudioRecorder",
             assign({
               error: ({ event }) =>
                 event.error instanceof Error ? event.error.message : "Failed to load recording",
@@ -1041,11 +1042,11 @@ export const editorMachine = setup({
         LOAD_RECORDING: {
           target: "loading",
           reenter: true,
-          actions: stopChild("audioRecorder"),
+          actions: "stopAudioRecorder",
         },
         UNLOAD: {
           target: "idle",
-          actions: [stopChild("audioRecorder"), "clearRecording"],
+          actions: ["stopAudioRecorder", "clearRecording"],
         },
       },
     },
@@ -1062,7 +1063,7 @@ export const editorMachine = setup({
         }),
       },
       entry: [...APPLY_REPLAY_STATE_ACTIONS, "spawnPlaybackAudio"],
-      exit: [stopChild("audioPlayer"), "clearCursorDecorations", "clearPlaybackAudioSpawned"],
+      exit: ["stopAudioPlayer", "clearCursorDecorations", "clearPlaybackAudioSpawned"],
       on: {
         WORKSPACE_EVENT: {
           actions: ["detachPlaybackWorkspace"],
@@ -1130,7 +1131,7 @@ export const editorMachine = setup({
         // comes next.
         UNLOAD: {
           target: "idle",
-          actions: ["preserveLearnerWorkspace", stopChild("audioRecorder"), "clearRecording"],
+          actions: ["preserveLearnerWorkspace", "stopAudioRecorder", "clearRecording"],
         },
         PRESERVE_LEARNER_WORKSPACE: {
           actions: "preserveLearnerWorkspace",
@@ -1154,7 +1155,7 @@ export const editorMachine = setup({
         // reader failure). Exiting `playback` stops the timeline/audio children first.
         LOAD_RECORDING: {
           target: "loading",
-          actions: ["preserveLearnerWorkspace", stopChild("audioRecorder")],
+          actions: ["preserveLearnerWorkspace", "stopAudioRecorder"],
         },
       },
       states: {
