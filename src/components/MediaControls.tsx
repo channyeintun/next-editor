@@ -9,7 +9,6 @@ import {
   MonitorOff,
   X,
   Captions,
-  Check,
   Download,
   Keyboard,
   Loader2,
@@ -30,6 +29,7 @@ import ReplayIcon from "./icon/Replay";
 import RecordButton from "./mediaControls/RecordButton";
 import RecordingTransportControls from "./mediaControls/RecordingTransportControls";
 import RecordingOptionToggle from "./mediaControls/RecordingOptionToggle";
+import CaptionsMenuButton from "./mediaControls/CaptionsMenuButton";
 import PlayIcon from "./icon/Play";
 import PauseIcon from "./icon/Pause";
 import SettingIcon from "./icon/Setting";
@@ -41,7 +41,7 @@ import {
   selectCameraOverlayVisible,
   selectLivePreviewOn,
 } from "../stores/cameraOverlayStore";
-import { useCaptionStore, useCaptionStoreTrigger } from "../hooks/useCaptionStore";
+import { useCaptionStore } from "../hooks/useCaptionStore";
 import { usePlaybackSettings, usePlaybackSettingsTrigger } from "../hooks/usePlaybackSettings";
 import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
 import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/displayCapture";
@@ -216,13 +216,14 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     editorActor,
   } = useNextEditorPlayback();
 
-  const { enabled: captionsEnabled, language: captionLanguage } = useCaptionStore();
-  const captionTrigger = useCaptionStoreTrigger();
+  const { language: captionLanguage } = useCaptionStore();
   const { autoplay, continueToNext } = usePlaybackSettings();
   const playbackSettingsTrigger = usePlaybackSettingsTrigger();
   const { screenRecordingEnabled, microphoneDeviceId } = useRecordingSettings();
   const recordingSettingsTrigger = useRecordingSettingsTrigger();
   const [showSettings, setShowSettings] = useState(false);
+  // Kept here rather than in CaptionsMenuButton, which unmounts while no lesson with captions
+  // is loaded; the menu is as it was left when the button comes back.
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);
   const captionGeneration = useCaptionGeneration();
@@ -432,7 +433,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       `${currentRecording.name || "recording"}.${activeCaptionTrack.language}.vtt`,
     );
   };
-  const hasMultipleCaptionTracks = captionTracks && captionTracks.length > 1;
 
   // Size tokens — scale the controls up for small embeds when `large` is set.
   const containerPadding = large ? "px-10 py-8" : "px-4 py-1";
@@ -660,84 +660,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({
             ) : null}
 
             {hasCaptionTracks ? (
-              <div className="relative pointer-events-auto">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (hasMultipleCaptionTracks) {
-                      setShowCaptionMenu((prev) => !prev);
-                    } else {
-                      captionTrigger.toggleEnabled();
-                    }
-                  }}
-                  {...(hasMultipleCaptionTracks
-                    ? { "aria-haspopup": "menu" as const, "aria-expanded": showCaptionMenu }
-                    : { "aria-pressed": captionsEnabled })}
-                  title={
-                    hasMultipleCaptionTracks
-                      ? "Captions"
-                      : captionsEnabled
-                        ? "Hide captions"
-                        : "Show captions"
-                  }
-                  className={`flex items-center justify-center transition-colors hover:text-white ${
-                    captionsEnabled ? "text-white" : "text-slate-500"
-                  } ${transportButtonWidth}`}
-                >
-                  <Captions size={controlIconSize} aria-hidden="true" />
-                </button>
-
-                {showCaptionMenu && hasMultipleCaptionTracks && (
-                  <div
-                    role="menu"
-                    className="absolute bottom-full right-0 z-46 mb-2 min-w-40 rounded-lg border border-slate-700 bg-[#151821] py-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
-                  >
-                    <button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={!captionsEnabled}
-                      onClick={() => {
-                        captionTrigger.setEnabled({ enabled: false });
-                        setShowCaptionMenu(false);
-                      }}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-slate-700 ${
-                        !captionsEnabled ? "font-semibold text-white" : "font-normal text-slate-300"
-                      }`}
-                    >
-                      <span className="w-4">
-                        {!captionsEnabled ? <Check size={14} aria-hidden="true" /> : null}
-                      </span>
-                      Off
-                    </button>
-                    {captionTracks.map((track) => {
-                      const isSelected =
-                        captionsEnabled &&
-                        (captionLanguage === track.language || (!captionLanguage && track.default));
-                      return (
-                        <button
-                          key={track.id}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={isSelected}
-                          onClick={() => {
-                            captionTrigger.setLanguage({ language: track.language });
-                            if (!captionsEnabled) captionTrigger.toggleEnabled();
-                            setShowCaptionMenu(false);
-                          }}
-                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-slate-700 ${
-                            isSelected ? "font-semibold text-white" : "font-normal text-slate-300"
-                          }`}
-                        >
-                          <span className="w-4">
-                            {isSelected ? <Check size={14} aria-hidden="true" /> : null}
-                          </span>
-                          {track.label || track.language}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              <CaptionsMenuButton
+                tracks={captionTracks}
+                menuOpen={showCaptionMenu}
+                setMenuOpen={setShowCaptionMenu}
+                iconSize={controlIconSize}
+                className={transportButtonWidth}
+              />
             ) : null}
 
             {isGeneratingCaptions ? (
