@@ -23,7 +23,7 @@ import {
 } from "../contexts/CollaborationVoiceContext";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
 import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
-import type { CollaborationInviteRole } from "../collaboration/protocol";
+import type { CollaborationInviteRole, CollaborationSurface } from "../collaboration/protocol";
 import type { VoiceClientErrorCode } from "../voice/machine";
 import { COLLABORATOR_DOT_CLASSES, collaboratorDisplayName } from "./collaboratorAppearance";
 
@@ -218,6 +218,39 @@ function VoiceParticipantBadge({ userId, sessionId }: { userId: string; sessionI
       <Mic size={13} />
     </span>
   );
+}
+
+type CollaborationContextValue = ReturnType<typeof useCollaboration>;
+
+/**
+ * What a participant has open, for their row in the online list. A file's
+ * name comes from getPathForNodeId, which reads the room's current project
+ * projection: no prop, state or context change announces a rename, so call
+ * this on every render, never from memoized code.
+ */
+function describeParticipantSurface(
+  surface: CollaborationSurface,
+  collaboration: Pick<
+    CollaborationContextValue,
+    "isTeachingLoading" | "teachingSlides" | "teaching" | "getPathForNodeId"
+  >,
+): string {
+  if (surface.kind === "slides") {
+    if (collaboration.isTeachingLoading) return "Loading shared slide…";
+    if (collaboration.teachingSlides === null) {
+      return "Shared slide unavailable";
+    }
+    const index = collaboration.teaching.currentSlideId
+      ? collaboration.teaching.slideOrder.indexOf(collaboration.teaching.currentSlideId)
+      : -1;
+    return index >= 0
+      ? `Slides · ${index + 1}/${collaboration.teaching.slideOrder.length}`
+      : "Slides";
+  }
+  if (surface.kind === "whiteboard") return "Whiteboard";
+  if (!surface.fileNodeId) return "Editor";
+  const path = collaboration.getPathForNodeId(surface.fileNodeId);
+  return path?.split("/").at(-1) ?? "Editor";
 }
 
 export default function CollaborationPanel() {
@@ -461,28 +494,10 @@ export default function CollaborationPanel() {
                         const participantKey = collaborationParticipantKey(participant);
                         const isSelf = participantKey === collaboration.ownParticipantKey;
                         const isFollowed = participantKey === collaboration.followedParticipantKey;
-                        const surfaceLabel = (() => {
-                          if (participant.surface.kind === "slides") {
-                            if (collaboration.isTeachingLoading) return "Loading shared slide…";
-                            if (collaboration.teachingSlides === null) {
-                              return "Shared slide unavailable";
-                            }
-                            const index = collaboration.teaching.currentSlideId
-                              ? collaboration.teaching.slideOrder.indexOf(
-                                  collaboration.teaching.currentSlideId,
-                                )
-                              : -1;
-                            return index >= 0
-                              ? `Slides · ${index + 1}/${collaboration.teaching.slideOrder.length}`
-                              : "Slides";
-                          }
-                          if (participant.surface.kind === "whiteboard") return "Whiteboard";
-                          if (!participant.surface.fileNodeId) return "Editor";
-                          const path = collaboration.getPathForNodeId(
-                            participant.surface.fileNodeId,
-                          );
-                          return path?.split("/").at(-1) ?? "Editor";
-                        })();
+                        const surfaceLabel = describeParticipantSurface(
+                          participant.surface,
+                          collaboration,
+                        );
                         return (
                           <div
                             key={participantKey}

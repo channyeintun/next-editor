@@ -252,3 +252,42 @@ describe("CollaborationPanel follow actions", () => {
     expect(screen.getByRole("button", { name: "Retry shared assets" })).toBeInTheDocument();
   });
 });
+
+describe("CollaborationPanel participant surfaces", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    collaborationState = makeCollaborationState();
+  });
+
+  /** The line under a participant's name that says what they have open. */
+  function surfaceOf(name: string) {
+    return screen.getByText(name).nextElementSibling?.textContent;
+  }
+
+  it("describes a participant on slides by the state of the shared slide", () => {
+    collaborationState = { ...makeCollaborationState(), isTeachingLoading: true };
+    const view = render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+    expect(surfaceOf("Grace")).toBe("Loading shared slide…");
+
+    collaborationState = { ...makeCollaborationState(), teachingSlides: null };
+    view.rerender(<CollaborationPanel />);
+    expect(surfaceOf("Grace")).toBe("Shared slide unavailable");
+
+    const state = makeCollaborationState();
+    collaborationState = { ...state, teaching: { ...state.teaching, currentSlideId: "slide-9" } };
+    view.rerender(<CollaborationPanel />);
+    expect(surfaceOf("Grace")).toBe("Slides");
+  });
+
+  it("names the file a participant has open, or just the editor when it is unknown", () => {
+    const view = render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+    expect(surfaceOf("Ada")).toBe("index.ts");
+    expect(surfaceOf("Self (you)")).toBe("Editor");
+
+    collaborationState = { ...makeCollaborationState(), getPathForNodeId: () => null };
+    view.rerender(<CollaborationPanel />);
+    expect(surfaceOf("Ada")).toBe("Editor");
+  });
+});
