@@ -2,118 +2,30 @@ import React, { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useSelector } from "@xstate/store-react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
-import { selectIsPlaying, selectRecording } from "../core/src/useNextEditor";
+import { selectRecording } from "../core/src/useNextEditor";
 import { allowedRecordingMediaUrl } from "../core/src/utils/mediaUrl";
-import { mapRecordingTimeToMediaTime } from "../core/src/utils/mediaSpans";
 import {
   cameraOverlayStore,
   selectCameraOverlayMinimized,
   selectCameraOverlayVisible,
   selectLivePreviewOn,
 } from "../stores/cameraOverlayStore";
-import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
-
-const POSITION_KEY = "next-editor-camera-overlay-position";
-
-// Rounded-rectangle picture-in-picture framing: a square card whose corner radius stays modest
-// (~11% of its width) so the face crop reads as a framed webcam tile rather than a blurred-out
-// bubble. Paired with the bright hairline border below, this matches the familiar screen-recording
-// PiP look.
-const OVERLAY_WIDTH = 176;
-const OVERLAY_HEIGHT = 176;
-const OVERLAY_RADIUS = 20;
-const EDGE_PADDING = 24;
-const MEDIA_CONTROLS_CLEARANCE = 88;
-const DRIFT_THRESHOLD_MS = 250;
-/**
- * Dead zone for the one-shot re-anchor on the element's `playing` event.
- * `video.play()` delivers its first frame tens/hundreds of ms after the
- * timeline starts, and the rAF loop's DRIFT_THRESHOLD_MS dead zone would
- * otherwise preserve that startup lag for the whole playback.
- */
-const START_SYNC_EPSILON_MS = 50;
-const MINIMIZED_HANDLE_HEIGHT = 56;
-
-/** Live-preview capture constraints; mirror the camera recorder so the framing matches. */
-const CAMERA_PREVIEW_CONSTRAINTS = {
-  width: { ideal: 480 },
-  height: { ideal: 480 },
-  frameRate: { ideal: 24, max: 30 },
-  facingMode: "user",
-} as const;
-
-interface OverlayPosition {
-  x: number;
-  y: number;
-}
-
-function getDefaultPosition(): OverlayPosition {
-  if (typeof window === "undefined") {
-    return { x: EDGE_PADDING, y: EDGE_PADDING };
-  }
-
-  return {
-    x: window.innerWidth - OVERLAY_WIDTH - EDGE_PADDING,
-    y: window.innerHeight - OVERLAY_HEIGHT - MEDIA_CONTROLS_CLEARANCE,
-  };
-}
-
-function clampPosition(position: OverlayPosition): OverlayPosition {
-  if (typeof window === "undefined") return position;
-
-  return {
-    x: Math.min(
-      Math.max(position.x, EDGE_PADDING),
-      window.innerWidth - OVERLAY_WIDTH - EDGE_PADDING,
-    ),
-    y: Math.min(
-      Math.max(position.y, EDGE_PADDING),
-      window.innerHeight - OVERLAY_HEIGHT - MEDIA_CONTROLS_CLEARANCE,
-    ),
-  };
-}
-
-function readStoredPosition(): OverlayPosition {
-  const rawPosition = readStoredPreference(POSITION_KEY);
-  if (!rawPosition) return getDefaultPosition();
-
-  try {
-    const parsed = JSON.parse(rawPosition) as Partial<OverlayPosition>;
-    if (typeof parsed.x === "number" && typeof parsed.y === "number") {
-      return clampPosition({ x: parsed.x, y: parsed.y });
-    }
-  } catch {
-    return getDefaultPosition();
-  }
-
-  return getDefaultPosition();
-}
-
-/** The screen edge the minimized handle docks to, based on which half the overlay sits in. */
-function getDockSide(position: OverlayPosition): "left" | "right" {
-  if (typeof window === "undefined") return "right";
-  return position.x + OVERLAY_WIDTH / 2 < window.innerWidth / 2 ? "left" : "right";
-}
-
-/** Vertical offset for the minimized handle, centered on the overlay and clamped to the viewport. */
-function getMinimizedHandleTop(position: OverlayPosition): number {
-  const centeredTop = position.y + OVERLAY_HEIGHT / 2 - MINIMIZED_HANDLE_HEIGHT / 2;
-  if (typeof window === "undefined") return Math.max(centeredTop, EDGE_PADDING);
-  return Math.min(
-    Math.max(centeredTop, EDGE_PADDING),
-    window.innerHeight - MINIMIZED_HANDLE_HEIGHT - EDGE_PADDING,
-  );
-}
+import {
+  OVERLAY_HEIGHT,
+  OVERLAY_RADIUS,
+  OVERLAY_WIDTH,
+  getDockSide,
+  getMinimizedHandleTop,
+} from "./cameraOverlay/overlayGeometry";
+import { useCameraPreviewStream } from "./cameraOverlay/useCameraPreviewStream";
+import { useDraggableOverlayPosition } from "./cameraOverlay/useDraggableOverlayPosition";
+import { useTimelineSyncedVideo } from "./cameraOverlay/useTimelineSyncedVideo";
 
 const CameraOverlay: React.FC = () => {
   const actorRef = NextEditorActorContext.useActorRef();
   const recording = NextEditorActorContext.useSelector(selectRecording);
-  const isPlaying = NextEditorActorContext.useSelector(selectIsPlaying);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const dragOffsetRef = useRef<OverlayPosition>({ x: 0, y: 0 });
-  const previewStreamRef = useRef<MediaStream | null>(null);
   const isVisible = useSelector(cameraOverlayStore, (s) => selectCameraOverlayVisible(s.context));
-  const [position, setPosition] = useState(readStoredPosition);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const isMinimized = useSelector(cameraOverlayStore, (s) =>
     selectCameraOverlayMinimized(s.context),
@@ -122,7 +34,6 @@ const CameraOverlay: React.FC = () => {
   const isPreviewEnabled = useSelector(cameraOverlayStore, (s) =>
     selectLivePreviewOn(s.context, actorRef),
   );
-  const [previewError, setPreviewError] = useState(false);
 
   const cameraBlob = recording?.cameraBlob instanceof Blob ? recording.cameraBlob : null;
   // External camera video (sibling file or hosted URL) referenced by the recording. Preferred over
@@ -163,167 +74,16 @@ const CameraOverlay: React.FC = () => {
     };
   }, [cameraBlob, cameraUrl]);
 
-  // Acquire a live camera stream while in preview mode. The stream is kept in a ref so it survives
-  // minimize/restore (the <video> unmounts when minimized) without re-prompting for the camera.
-  useEffect(() => {
-    if (!previewMode) return;
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setPreviewError(true);
-      return;
-    }
-
-    const video = videoRef.current;
-    let cancelled = false;
-    navigator.mediaDevices
-      .getUserMedia({ video: CAMERA_PREVIEW_CONSTRAINTS, audio: false })
-      .then((stream) => {
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        previewStreamRef.current = stream;
-        if (video) {
-          video.srcObject = stream;
-          void video.play().catch(() => {});
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setPreviewError(true);
-      });
-
-    return () => {
-      cancelled = true;
-      previewStreamRef.current?.getTracks().forEach((track) => track.stop());
-      previewStreamRef.current = null;
-      if (video) video.srcObject = null;
-      setPreviewError(false);
-    };
-  }, [previewMode]);
-
-  // Reattach the live stream to the <video> when it remounts (e.g. after restoring from minimized).
-  useEffect(() => {
-    if (!previewMode || isMinimized) return;
-    const video = videoRef.current;
-    if (video && previewStreamRef.current && video.srcObject !== previewStreamRef.current) {
-      video.srcObject = previewStreamRef.current;
-      void video.play().catch(() => {});
-    }
-  }, [previewMode, isMinimized]);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setPosition((current) => clampPosition(current));
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
-
-  useEffect(() => {
-    writeStoredPreference(POSITION_KEY, JSON.stringify(position));
-  }, [position]);
-
-  // Drive the <video> from the playback timeline. Mirrors CursorComponent: read
-  // `timeline.currentTime` directly from the actor snapshot inside a rAF loop so
-  // playback sync never forces a React re-render. While paused, subscribe
-  // imperatively so scrubbing still updates the visible frame.
-  //
-  // `isVisible` and `isMinimized` are dependencies because the <video> unmounts when the overlay is
-  // hidden or minimized; the effect must re-run to rebind to (and resume playing) the fresh element
-  // when it remounts, otherwise toggling visibility mid-playback leaves a frozen, detached video.
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !videoUrl) return;
-
-    // Drop any leftover live-preview stream so the recorded blob `src` actually drives the element.
-    video.srcObject = null;
-
-    // The camera starts a beat after the recording origin (getUserMedia warmup), so shift the
-    // timeline back by that offset to keep the face video aligned with audio/typing. A
-    // retake left the stretch it discarded in the file, so step over those first.
-    const cameraTimeAt = (currentTime: number) =>
-      Math.max(
-        0,
-        (cameraCuts?.length ? mapRecordingTimeToMediaTime(currentTime, cameraCuts) : currentTime) -
-          cameraStartOffsetMs,
-      );
-
-    const applyTimeline = () => {
-      const { currentTime, speed } = actorRef.getSnapshot().context.timeline;
-      video.playbackRate = speed;
-      const targetMs = cameraTimeAt(currentTime);
-      if (
-        Number.isFinite(targetMs) &&
-        Math.abs(video.currentTime * 1000 - targetMs) > DRIFT_THRESHOLD_MS
-      ) {
-        video.currentTime = targetMs / 1000;
-      }
-    };
-
-    if (!isPlaying) {
-      video.pause();
-      applyTimeline();
-      const subscription = actorRef.subscribe(() => {
-        if (selectIsPlaying(actorRef.getSnapshot())) return;
-        applyTimeline();
-      });
-      return () => {
-        subscription.unsubscribe();
-      };
-    }
-
-    applyTimeline();
-
-    // Re-anchor once frames are actually flowing. The seek this triggers refires
-    // `playing`, but the residual drift is then just the seek latency, which
-    // lands inside the epsilon and terminates the cycle.
-    const handlePlaying = () => {
-      const { currentTime } = actorRef.getSnapshot().context.timeline;
-      const targetMs = cameraTimeAt(currentTime);
-      if (
-        Number.isFinite(targetMs) &&
-        Math.abs(video.currentTime * 1000 - targetMs) > START_SYNC_EPSILON_MS
-      ) {
-        video.currentTime = targetMs / 1000;
-      }
-    };
-    video.addEventListener("playing", handlePlaying);
-    void video.play().catch(() => {});
-
-    let animationFrameId = 0;
-    const syncVideo = () => {
-      applyTimeline();
-      animationFrameId = requestAnimationFrame(syncVideo);
-    };
-    animationFrameId = requestAnimationFrame(syncVideo);
-
-    return () => {
-      video.removeEventListener("playing", handlePlaying);
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [actorRef, cameraCuts, cameraStartOffsetMs, isMinimized, isVisible, isPlaying, videoUrl]);
-
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragOffsetRef.current = {
-      x: event.clientX - position.x,
-      y: event.clientY - position.y,
-    };
-  };
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-
-    setPosition(
-      clampPosition({
-        x: event.clientX - dragOffsetRef.current.x,
-        y: event.clientY - dragOffsetRef.current.y,
-      }),
-    );
-  };
+  // The hooks' effects run in this order, as when they were written out here: the preview's
+  // stream is attached or detached before the recorded video takes the element over.
+  const previewError = useCameraPreviewStream(videoRef, previewMode, isMinimized);
+  const { position, handlePointerDown, handlePointerMove } = useDraggableOverlayPosition();
+  useTimelineSyncedVideo(videoRef, videoUrl, {
+    cameraCuts,
+    cameraStartOffsetMs,
+    isVisible,
+    isMinimized,
+  });
 
   // Minimize is a pure viewer-side convenience (independent of recording/playback): stop the
   // pointer from starting a drag, then collapse to a side-docked handle.
