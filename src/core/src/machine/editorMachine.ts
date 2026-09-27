@@ -27,12 +27,12 @@ import {
   reportMachineError,
   RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
   SET_EDITOR_REF_ACTIONS,
-  shouldRecordCamera,
   syncPlaybackAudio,
   SYNC_PAUSED_WORKSPACE_ACTIONS,
 } from "./editorMachineHelpers";
 import {
   getExternalAudioBlob,
+  getRunningRecorders,
   setCameraRecordingEnabled,
   setMicrophoneDevice,
   prepareExternalAudioRecording,
@@ -219,12 +219,9 @@ export const editorMachine = setup({
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
     hasExternalAudioBlob: ({ event }) => getExternalAudioBlob(event) !== null,
     isMicrophoneAudioRecording: ({ context }) =>
-      context.enableAudioRecording &&
-      context.audio.isRecording &&
-      context.audio.source === "microphone",
-    isExternalAudioRecording: ({ context }) =>
-      context.audio.isRecording && context.audio.source === "external",
-    isCameraRecording: ({ context }) => shouldRecordCamera(context),
+      context.enableAudioRecording && getRunningRecorders(context).microphone,
+    isExternalAudioRecording: ({ context }) => getRunningRecorders(context).externalAudio,
+    isCameraRecording: ({ context }) => getRunningRecorders(context).camera,
     isRecordingRunning: ({ context }) =>
       context.session !== null && !isRecordingClockPaused(context.session.clock),
     isRecordingPaused: ({ context }) =>
@@ -370,41 +367,24 @@ export const editorMachine = setup({
     // the narration, camera and screen files skip the same spans the timeline does. A
     // selected narration file is an input, not a recording, so it pauses in place.
     pauseRecordingMedia: enqueueActions(({ context, enqueue }) => {
-      if (context.audio.isRecording && context.audio.source === "microphone") {
-        enqueue.sendTo("audioRecorder", { type: "PAUSE" });
-      }
-      if (context.audio.isRecording && context.audio.source === "external") {
-        enqueue.sendTo("recordingAudioPlayer", { type: "PAUSE" });
-      }
-      if (shouldRecordCamera(context)) {
-        enqueue.sendTo("cameraRecorder", { type: "PAUSE" });
-      }
-      if (context.screen.isRecording && context.screen.actorId) {
-        enqueue.sendTo(context.screen.actorId, { type: "PAUSE" });
-      }
+      const running = getRunningRecorders(context);
+      if (running.microphone) enqueue.sendTo("audioRecorder", { type: "PAUSE" });
+      if (running.externalAudio) enqueue.sendTo("recordingAudioPlayer", { type: "PAUSE" });
+      if (running.camera) enqueue.sendTo("cameraRecorder", { type: "PAUSE" });
+      if (running.screenActorId) enqueue.sendTo(running.screenActorId, { type: "PAUSE" });
     }),
     resumeRecordingMedia: enqueueActions(({ context, enqueue }) => {
-      if (context.audio.isRecording && context.audio.source === "microphone") {
-        enqueue.sendTo("audioRecorder", { type: "RESUME" });
-      }
-      if (context.audio.isRecording && context.audio.source === "external") {
-        enqueue.sendTo("recordingAudioPlayer", { type: "PLAY" });
-      }
-      if (shouldRecordCamera(context)) {
-        enqueue.sendTo("cameraRecorder", { type: "RESUME" });
-      }
-      if (context.screen.isRecording && context.screen.actorId) {
-        enqueue.sendTo(context.screen.actorId, { type: "RESUME" });
-      }
+      const running = getRunningRecorders(context);
+      if (running.microphone) enqueue.sendTo("audioRecorder", { type: "RESUME" });
+      if (running.externalAudio) enqueue.sendTo("recordingAudioPlayer", { type: "PLAY" });
+      if (running.camera) enqueue.sendTo("cameraRecorder", { type: "RESUME" });
+      if (running.screenActorId) enqueue.sendTo(running.screenActorId, { type: "RESUME" });
     }),
     // Asks the microphone and camera for their files; stoppingRecording waits for them.
     stopRecordingMedia: enqueueActions(({ context, enqueue }) => {
-      if (context.audio.isRecording && context.audio.source === "microphone") {
-        enqueue.sendTo("audioRecorder", { type: "STOP" });
-      }
-      if (shouldRecordCamera(context)) {
-        enqueue.sendTo("cameraRecorder", { type: "STOP" });
-      }
+      const running = getRunningRecorders(context);
+      if (running.microphone) enqueue.sendTo("audioRecorder", { type: "STOP" });
+      if (running.camera) enqueue.sendTo("cameraRecorder", { type: "STOP" });
     }),
     // Every exit from `recording` ends the session (→ stoppingRecording / loading / idle), so
     // this single action stops the screen recorder on all of them — including the external-audio
@@ -412,9 +392,8 @@ export const editorMachine = setup({
     // SCREEN_STOPPED handler then saves the blob (which can land after we've reached playback).
     // Skipped when the user already ended the share early (isRecording cleared on SCREEN_STOPPED).
     stopScreenRecording: enqueueActions(({ context, enqueue }) => {
-      if (context.screen.isRecording && context.screen.actorId) {
-        enqueue.sendTo(context.screen.actorId, { type: "STOP" });
-      }
+      const { screenActorId } = getRunningRecorders(context);
+      if (screenActorId) enqueue.sendTo(screenActorId, { type: "STOP" });
     }),
     // Rewinds the take to its last safe point and holds it paused there (see retake.ts).
     retakeRecording: enqueueActions(({ context, enqueue }) => {
@@ -427,19 +406,14 @@ export const editorMachine = setup({
       // The recorders hold still until the take resumes; the stretch they recorded since
       // the safe point is in the session's media cuts. A selected narration file is an
       // input, so it is rewound to be performed over again.
-      if (context.audio.isRecording && context.audio.source === "microphone") {
-        enqueue.sendTo("audioRecorder", { type: "PAUSE" });
-      }
-      if (context.audio.isRecording && context.audio.source === "external") {
+      const running = getRunningRecorders(context);
+      if (running.microphone) enqueue.sendTo("audioRecorder", { type: "PAUSE" });
+      if (running.externalAudio) {
         enqueue.sendTo("recordingAudioPlayer", { type: "PAUSE" });
         enqueue.sendTo("recordingAudioPlayer", { type: "SEEK", timeMs: target.recordingTime });
       }
-      if (shouldRecordCamera(context)) {
-        enqueue.sendTo("cameraRecorder", { type: "PAUSE" });
-      }
-      if (context.screen.isRecording && context.screen.actorId) {
-        enqueue.sendTo(context.screen.actorId, { type: "PAUSE" });
-      }
+      if (running.camera) enqueue.sendTo("cameraRecorder", { type: "PAUSE" });
+      if (running.screenActorId) enqueue.sendTo(running.screenActorId, { type: "PAUSE" });
 
       // The live terminal and agent conversation cannot be rewound. What they show now is
       // recorded whole at the safe point, so what follows is recorded against it.

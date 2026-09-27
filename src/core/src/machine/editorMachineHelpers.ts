@@ -519,9 +519,6 @@ export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudi
 export const hasSpawnedPlaybackAudio = (context: EditorMachineContext): boolean =>
   context.playbackAudioSpawned;
 
-export const shouldRecordCamera = (context: EditorMachineContext): boolean =>
-  context.enableCameraRecording && context.camera.isRecording;
-
 /**
  * Hand a machine failure to the host's `onError`, or to the console when the host supplies none
  * (the app's own provider does not). Without the fallback a denied microphone, a failed load or

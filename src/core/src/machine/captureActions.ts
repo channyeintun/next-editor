@@ -74,6 +74,26 @@ export const getExternalAudioBlob = (event: EditorMachineEvent): Blob | null =>
     ? event.audioBlob
     : null;
 
+/** The recorders a take is running now. A paused one is still running. */
+export interface RunningRecorders {
+  /** The microphone recorder, `audioRecorder`. */
+  microphone: boolean;
+  /** A selected narration file, played in step with the take by `recordingAudioPlayer`. */
+  externalAudio: boolean;
+  /** The camera recorder, `cameraRecorder`. */
+  camera: boolean;
+  /** The screen recorder's child id, or null when none is running. */
+  screenActorId: string | null;
+}
+
+/** The one answer to "which recorders are running", for the machine's sends and guards. */
+export const getRunningRecorders = (context: EditorMachineContext): RunningRecorders => ({
+  microphone: context.audio.isRecording && context.audio.source === "microphone",
+  externalAudio: context.audio.isRecording && context.audio.source === "external",
+  camera: context.enableCameraRecording && context.camera.isRecording,
+  screenActorId: context.screen.isRecording ? context.screen.actorId : null,
+});
+
 // Capture reads the live editor: fall back to the input ref getter so a
 // SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
 // rehydration) cannot silently disable frame/cursor capture.
@@ -704,7 +724,7 @@ export const finalizeRecording = ({ context }: EditorActionArgs): EditorContextU
       startOffsetMs: context.audio.startOffsetMs,
       // A microphone take's blob can still be on its way when the watchdog finalizes
       // (attachLateAudioBlob splices it in), so a running microphone recorder counts.
-      pending: context.audio.isRecording && context.audio.source === "microphone",
+      pending: getRunningRecorders(context).microphone,
     },
     camera: {
       blob: context.camera.blob || undefined,
