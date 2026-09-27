@@ -20,16 +20,13 @@ import {
   type WebContainerRuntimeStatus,
 } from "../contexts/WebContainerRuntimeContext";
 import {
-  selectActiveTab,
   selectConsoleLines,
-  selectIsCollapsed,
-  selectIsFullHeight,
   selectIsSettingsOpen,
   selectTerminalScrollLines,
 } from "../stores/runtimePanelStore";
 import XtermTerminal from "./XtermTerminal";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
-import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
+import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
@@ -130,9 +127,16 @@ function TerminalPanel() {
     consoleAppender: consoleAppenderRef,
     consoleOpener: consoleOpenerRef,
   } = useRuntimePanelStore();
-  const activeTab = useSelector(runtimePanelStore, (s) => selectActiveTab(s.context));
-  const isCollapsed = useSelector(runtimePanelStore, (s) => selectIsCollapsed(s.context));
-  const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
+  const {
+    activeTab,
+    isCollapsed,
+    isFullHeight,
+    recordedRuntimeSnapshot,
+    isPlaybackSnapshotActive,
+    displayActiveTab,
+    displayIsCollapsed,
+    displayIsFullHeight,
+  } = useRuntimeDockLayout();
   const isSettingsOpen = useSelector(runtimePanelStore, (s) => selectIsSettingsOpen(s.context));
   const consoleLines = useSelector(runtimePanelStore, (s) => selectConsoleLines(s.context));
   const terminalScrollLines = useSelector(runtimePanelStore, (s) =>
@@ -171,16 +175,6 @@ function TerminalPanel() {
     terminalSessions,
   } = useWebContainerRuntimeMetadata();
   const { currentRecording, isRecording } = useNextEditorMetadata();
-  const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
-  const displayActiveTab = isPlaybackSnapshotActive
-    ? (recordedRuntimeSnapshot?.activeTab ?? "runner")
-    : activeTab;
-  const displayIsCollapsed = isPlaybackSnapshotActive
-    ? (recordedRuntimeSnapshot?.isCollapsed ?? false)
-    : isCollapsed;
-  const displayIsFullHeight = isPlaybackSnapshotActive
-    ? (recordedRuntimeSnapshot?.isFullHeight ?? false)
-    : isFullHeight;
   const displayIsSettingsOpen = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isSettingsOpen ?? false)
     : isSettingsOpen;
