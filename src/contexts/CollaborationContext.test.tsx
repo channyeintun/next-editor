@@ -185,6 +185,73 @@ describe("CollaborationProvider", () => {
     expect(claimCollaborationInvitation).toHaveBeenCalledWith("attacker-token");
   });
 
+  it("moves an accepted invitation into the room URL, and lets a failed claim be retried", async () => {
+    const { claimCollaborationInvitation } = await import("@next-editor/infra");
+    vi.mocked(claimCollaborationInvitation)
+      .mockRejectedValueOnce({ response: { data: { error: "The invitation expired." } } })
+      .mockResolvedValueOnce(roomSession);
+    mocks.getRoom.mockImplementation(() => new Promise(() => {}));
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let search = "";
+    function Probe() {
+      collaboration = useCollaboration();
+      search = useLocation().search;
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?invite=invite-token"]}>
+        <TestProviders>
+          <Probe />
+        </TestProviders>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(collaboration!.pendingInviteToken).toBe("invite-token"));
+
+    await act(async () => {
+      await collaboration!.acceptInvitation();
+    });
+    expect(collaboration!.error).toBe("The invitation expired.");
+    expect(collaboration!.pendingInviteToken).toBe("invite-token");
+    expect(collaboration!.isAcceptingInvitation).toBe(false);
+    expect(search).toBe("?invite=invite-token");
+
+    await act(async () => {
+      await collaboration!.acceptInvitation();
+    });
+    expect(claimCollaborationInvitation).toHaveBeenCalledTimes(2);
+    expect(search).toBe(`?room=${roomSession.room.id}`);
+    expect(collaboration!.pendingInviteToken).toBeNull();
+    expect(collaboration!.isAcceptingInvitation).toBe(false);
+    expect(collaboration!.error).toBeNull();
+    view.unmount();
+  });
+
+  it("drops a declined invitation from the URL without claiming it", async () => {
+    const { claimCollaborationInvitation } = await import("@next-editor/infra");
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let search = "";
+    function Probe() {
+      collaboration = useCollaboration();
+      search = useLocation().search;
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?lesson=intro&invite=invite-token"]}>
+        <TestProviders>
+          <Probe />
+        </TestProviders>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(collaboration!.pendingInviteToken).toBe("invite-token"));
+
+    act(() => collaboration!.declineInvitation());
+
+    expect(search).toBe("?lesson=intro");
+    expect(collaboration!.pendingInviteToken).toBeNull();
+    expect(claimCollaborationInvitation).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
   it("seeds the current workspace and moves the editor into the created room URL", async () => {
     mocks.createRoom.mockResolvedValue(roomSession);
     mocks.getRoom.mockRejectedValue({ response: { status: 404 } });
