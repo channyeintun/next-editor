@@ -2,6 +2,7 @@ import { useRef, useEffect } from "react";
 import type * as monaco from "monaco-editor";
 import type { EditorMachineInput, Recording } from "../core/src";
 import {
+  selectIsTakeInProgress,
   useNextEditorActorActions,
   useNextEditorInteractionEffects,
 } from "../core/src/useNextEditor";
@@ -127,12 +128,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   // A take lives only in this tab until it is finalized: closing or reloading the tab
   // mid-take threw the whole recording away without a word. Ask the browser to confirm
   // while one is starting, running (or paused), or being finalized.
-  const isTakeInProgress = NextEditorActorContext.useSelector(
-    (state) =>
-      state.matches("startingRecording") ||
-      state.matches("recording") ||
-      state.matches("stoppingRecording"),
-  );
+  const isTakeInProgress = NextEditorActorContext.useSelector(selectIsTakeInProgress);
   useEffect(() => {
     if (!isTakeInProgress) return;
     const confirmLeaving = (event: BeforeUnloadEvent) => {

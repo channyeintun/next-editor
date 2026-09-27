@@ -9,6 +9,7 @@ import {
 } from "../core/src/machine/types";
 import { createRecordingClock, pauseRecordingClock } from "../core/src/machine/recordingClock";
 import {
+  selectIsTakeInProgress,
   selectNextEditorMetadata,
   selectRecordingChapterCount,
   selectRecordingClock,
@@ -225,5 +226,18 @@ describe("recording selectors", () => {
     // By reference: useSelector compares results by reference, so a copy would re-render
     // its consumer on every snapshot.
     expect(selectRecordingSafePoints(snapshot)).toBe(expected.safePoints);
+  });
+
+  // A take in this tab is lost with the tab from the moment it starts until it is finalized.
+  it.each([
+    ["idle", snapshotAt("idle"), false],
+    ["startingRecording", snapshotAt("startingRecording"), true],
+    ["recording", snapshotAt("recording", { session: takeSession }), true],
+    ["recording, paused", snapshotAt("recording", { session: pausedSession }), true],
+    ["stoppingRecording", snapshotAt("stoppingRecording", { session: takeSession }), true],
+    ["loading", snapshotAt("loading"), false],
+    ["playing", playbackAt("playing", 400), false],
+  ] as const)("says whether a take is in progress when %s", (_label, snapshot, expected) => {
+    expect(selectIsTakeInProgress(snapshot)).toBe(expected);
   });
 });

@@ -3,7 +3,7 @@ import type * as monaco from "monaco-editor";
 import { useSelector } from "@xstate/react";
 import type { ActorRefFrom } from "xstate";
 import { editorMachine } from "./machine/editorMachine";
-import type { EditorMachineInput } from "./machine/types";
+import type { EditorMachineInput, RecordingSession } from "./machine/types";
 import type {
   CaptionTrack,
   EditorSelection,
@@ -61,7 +61,9 @@ const IGNORED_PLAYBACK_INPUT_KEYS = new Set([
 ]);
 
 // ============================================================================
-// Selectors - Memoized functions for extracting state slices
+// Selectors: plain functions of a snapshot, not memoized. useSelector re-renders its
+// component whenever a selector's result changes, by reference unless the caller passes
+// a compare function, so each returns the same value until what it reports changes.
 // ============================================================================
 
 const getPlaybackState = (state: EditorMachineSnapshot): "playing" | "paused" | "ended" | null => {
@@ -71,6 +73,10 @@ const getPlaybackState = (state: EditorMachineSnapshot): "playing" | "paused" | 
   return null;
 };
 
+/** The take's session while it records (running or paused), or null. */
+const getRunningSession = (state: EditorMachineSnapshot): RecordingSession | null =>
+  state.matches("recording") ? state.context.session : null;
+
 /**
  * Every flag useNextEditorMetadata exposes, from one pass over the snapshot. The hook
  * compares the result with shallowEqual, so consumers re-render only when a field
@@ -78,18 +84,25 @@ const getPlaybackState = (state: EditorMachineSnapshot): "playing" | "paused" | 
  */
 export const selectNextEditorMetadata = (state: EditorMachineSnapshot) => {
   const playbackState = getPlaybackState(state);
+  const runningSession = getRunningSession(state);
   return {
     isRecording: state.matches("recording"),
-    isRecordingPaused:
-      state.matches("recording") &&
-      state.context.session !== null &&
-      isRecordingClockPaused(state.context.session.clock),
+    isRecordingPaused: runningSession !== null && isRecordingClockPaused(runningSession.clock),
     isPlaying: playbackState === "playing",
     hasEnded: playbackState === "ended" && isAtPlaybackEnd(state.context.timeline),
     usesPlaybackModel: !state.context.hasManualWorkspaceOverride && playbackState !== null,
     currentRecording: state.context.recording,
   };
 };
+
+/**
+ * A take is starting, recording (or paused) or being finalized. Until it is finalized it
+ * lives only in this tab.
+ */
+export const selectIsTakeInProgress = (state: EditorMachineSnapshot) =>
+  state.matches("startingRecording") ||
+  state.matches("recording") ||
+  state.matches("stoppingRecording");
 
 // Playback state selectors
 export const selectIsPlaying = (state: EditorMachineSnapshot) =>
@@ -107,10 +120,10 @@ export const selectLiveTime = (state: EditorMachineSnapshot) => state.context.ti
  */
 export const selectRecordingClock = (
   state: EditorMachineSnapshot,
-): { clock: RecordingClock; startedAtPerf: number } | null =>
-  state.matches("recording") && state.context.session
-    ? { clock: state.context.session.clock, startedAtPerf: state.context.session.startedAtPerf }
-    : null;
+): { clock: RecordingClock; startedAtPerf: number } | null => {
+  const session = getRunningSession(state);
+  return session ? { clock: session.clock, startedAtPerf: session.startedAtPerf } : null;
+};
 
 /**
  * The running take's microphone stream (for a level meter), or null outside a microphone
@@ -123,15 +136,17 @@ export const selectRecordingMicrophoneStream = (state: EditorMachineSnapshot) =>
 
 /** How many chapters the running take has marked (0 outside a take). */
 export const selectRecordingChapterCount = (state: EditorMachineSnapshot) =>
-  state.matches("recording") ? (state.context.session?.chapters.length ?? 0) : 0;
+  getRunningSession(state)?.chapters.length ?? 0;
 
 /** Where a retake can rewind to, or null outside a take. Replaced whenever it changes. */
-export const selectRecordingSafePoints = (state: EditorMachineSnapshot) =>
-  state.matches("recording") && state.context.session ? state.context.session.safePoints : null;
+export const selectRecordingSafePoints = (state: EditorMachineSnapshot) => {
+  const session = getRunningSession(state);
+  return session ? session.safePoints : null;
+};
 
 // Data selectors
 export const selectRecording = (state: EditorMachineSnapshot) => state.context.recording;
-export const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
+const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
 
 const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   // Recording Controls
