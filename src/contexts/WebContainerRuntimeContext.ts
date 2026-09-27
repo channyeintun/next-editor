@@ -83,24 +83,6 @@ export interface WebContainerRuntimeActions {
   setReverseSyncEnabled: (enabled: boolean) => void;
 }
 
-export interface WebContainerRuntimeMetadata {
-  status: WebContainerRuntimeStatus;
-  previewUrl: string | null;
-  previewPort: number | null;
-  isSupported: boolean;
-  errorMessage: string | null;
-  latestPreviewMessage: RuntimePreviewMessage | null;
-  latestLifecycleEvent: RuntimeLifecycleEvent | null;
-  lastOutput: string | null;
-  terminalSessions: RuntimeTerminalSessionSnapshot[];
-  activeTerminalSessionId: string | null;
-  activeCommand: string | null;
-  environmentVariables: EnvironmentVariables;
-  runnerConfig: RunnerConfig;
-  /** False on /studio: only typed plan actions may start the runtime there. */
-  ambientStartEnabled: boolean;
-}
-
 export interface WebContainerRuntimeRecordingSnapshot {
   status: WebContainerRuntimeStatus;
   previewUrl: string | null;
@@ -112,6 +94,15 @@ export interface WebContainerRuntimeRecordingSnapshot {
   activeTerminalSessionId: string | null;
   latestPreviewMessage: RuntimePreviewMessage | null;
   latestLifecycleEvent: RuntimeLifecycleEvent | null;
+}
+
+/** Everything a recording snapshot holds, plus the runtime's support and settings. */
+export interface WebContainerRuntimeMetadata extends WebContainerRuntimeRecordingSnapshot {
+  isSupported: boolean;
+  environmentVariables: EnvironmentVariables;
+  runnerConfig: RunnerConfig;
+  /** False on /studio: only typed plan actions may start the runtime there. */
+  ambientStartEnabled: boolean;
 }
 
 export const WebContainerRuntimeActionsContext = createContext<WebContainerRuntimeActions | null>(
