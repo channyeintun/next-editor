@@ -71,9 +71,6 @@ import { downloadBlob } from "../utils/downloadBlob";
 import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
 
 interface MediaControlsProps {
-  onRecord?: () => void;
-  onStopRecording?: () => void;
-  onSaveToImage?: (file: File) => void;
   recordMode?: boolean;
   positioning?: "fixed" | "relative" | "absolute" | "sticky";
   /**
@@ -267,8 +264,6 @@ const RetakeButton = ({ iconSize, className }: { iconSize: number; className: st
 };
 
 const MediaControls: React.FC<MediaControlsProps> = ({
-  onRecord,
-  onStopRecording,
   recordMode = true,
   positioning = "fixed",
   large = false,
@@ -347,9 +342,9 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   useEffect(() => {
     if (isRecording && collaboration?.provider && !collaboration.isHost) {
-      void stopRecording().then(() => onStopRecording?.());
+      void stopRecording();
     }
-  }, [collaboration?.isHost, collaboration?.provider, isRecording, onStopRecording, stopRecording]);
+  }, [collaboration?.isHost, collaboration?.provider, isRecording, stopRecording]);
 
   const handlePlayPause = () => {
     // Resume inside the click, which is the gesture the autoplay policy looks for.
@@ -448,7 +443,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const handleRecordButtonClick = async () => {
     if (isRecording) {
       await stopRecording();
-      onStopRecording?.();
       return;
     }
 
@@ -495,7 +489,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         microphoneDeviceId: microphoneDeviceId ?? undefined,
       });
     }
-    onRecord?.();
   };
 
   const duration = currentRecording?.duration || 0;
