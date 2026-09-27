@@ -291,3 +291,49 @@ describe("CollaborationPanel participant surfaces", () => {
     expect(surfaceOf("Ada")).toBe("Editor");
   });
 });
+
+describe("CollaborationPanel invitation prompt", () => {
+  const acceptInvitation = vi.fn<CollaborationContextValue["acceptInvitation"]>(async () => {});
+  const declineInvitation = vi.fn<CollaborationContextValue["declineInvitation"]>();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    collaborationState = {
+      ...makeCollaborationState(),
+      pendingInviteToken: "invite-token",
+      isAcceptingInvitation: false,
+      acceptInvitation,
+      declineInvitation,
+    };
+  });
+
+  it("asks before joining, and joins or declines only on request", () => {
+    render(<CollaborationPanel />);
+    expect(screen.getByRole("dialog", { name: "Collaboration invitation" })).toHaveTextContent(
+      "Join this collaboration room?",
+    );
+    expect(acceptInvitation).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Join room" }));
+    expect(acceptInvitation).toHaveBeenCalledOnce();
+    expect(acceptInvitation).toHaveBeenCalledWith();
+
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(declineInvitation).toHaveBeenCalledOnce();
+  });
+
+  it("disables both choices while the invitation is being accepted", () => {
+    collaborationState = { ...collaborationState, isAcceptingInvitation: true };
+    render(<CollaborationPanel />);
+
+    expect(screen.getByRole("button", { name: "Joining…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Not now" })).toBeDisabled();
+  });
+
+  it("shows no prompt without a staged invitation", () => {
+    collaborationState = { ...collaborationState, pendingInviteToken: null };
+    render(<CollaborationPanel />);
+
+    expect(screen.queryByRole("dialog", { name: "Collaboration invitation" })).toBeNull();
+  });
+});
