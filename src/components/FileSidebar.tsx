@@ -2,7 +2,6 @@ import { type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } f
 import { FilePlus2, FolderPlus, Upload } from "lucide-react";
 import {
   getParentWorkspacePath,
-  getUniqueWorkspacePath,
   getWorkspaceBaseName,
   joinWorkspacePath,
 } from "../types/workspace";
@@ -12,12 +11,12 @@ import {
   useWorkspaceSidebarState,
   useWorkspaceSidebarWidth,
 } from "../hooks/useWorkspace";
-import { MAX_WORKSPACE_ASSET_BYTES, readUploadedWorkspaceFile } from "../utils/workspaceFileUpload";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import { STUDIO_TARGET_ATTRIBUTE, studioTargetIdForFile } from "../studio/targets";
 import FileContextMenu from "./fileSidebar/FileContextMenu";
 import SidebarResizeHandle from "./fileSidebar/SidebarResizeHandle";
+import { useWorkspaceFileImport } from "./fileSidebar/useWorkspaceFileImport";
 import {
   buildWorkspaceTree,
   deletesEveryFile,
@@ -39,18 +38,23 @@ function FileSidebarPanel() {
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const uploadTargetPathRef = useRef("");
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const sidebarScrollAnimationFrameRef = useRef<number | null>(null);
   const pendingSidebarScrollTopRef = useRef(0);
-  const [isFileDragOver, setIsFileDragOver] = useState(false);
+  const {
+    uploadInputRef,
+    handleUploadInputChange,
+    openFilePicker,
+    isFileDragOver,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+  } = useWorkspaceFileImport();
   const {
     createFile,
     createFolder,
     deleteFile,
     deleteFolder,
-    getProject,
     renameFile,
     renameFolder,
     saveProject,
@@ -155,105 +159,9 @@ function FileSidebarPanel() {
     openCreateInput("folder", "");
   };
 
-  const importUploadedFiles = async (fileList: FileList | null, parentPath: string) => {
-    if (!fileList || fileList.length === 0) {
-      return;
-    }
-
-    const isPathTaken = (candidatePath: string) => {
-      const project = getProject();
-      return Boolean(project.files[candidatePath]) || project.folders.includes(candidatePath);
-    };
-
-    let firstCreatedPath: string | null = null;
-    const skippedNames: string[] = [];
-
-    for (const file of Array.from(fileList)) {
-      if (file.size > MAX_WORKSPACE_ASSET_BYTES) {
-        skippedNames.push(file.name);
-        continue;
-      }
-
-      let uploaded;
-      try {
-        uploaded = await readUploadedWorkspaceFile(file);
-      } catch (error) {
-        console.warn(`Failed to read uploaded file "${file.name}":`, error);
-        skippedNames.push(file.name);
-        continue;
-      }
-
-      const targetPath = getUniqueWorkspacePath(
-        joinWorkspacePath(parentPath, file.name),
-        isPathTaken,
-      );
-
-      if (!targetPath) {
-        skippedNames.push(file.name);
-        continue;
-      }
-
-      createFile(targetPath, uploaded.content, uploaded.encoding);
-      firstCreatedPath = firstCreatedPath ?? targetPath;
-    }
-
-    if (firstCreatedPath) {
-      void saveProject();
-      handleWorkspaceEvent();
-    }
-
-    if (skippedNames.length > 0) {
-      const limitMb = Math.round(MAX_WORKSPACE_ASSET_BYTES / (1024 * 1024));
-      window.alert(
-        `Skipped (must be under ${limitMb} MB or unreadable):\n${skippedNames.join("\n")}`,
-      );
-    }
-  };
-
   const openUploadDialog = (parentPath: string) => {
-    uploadTargetPathRef.current = parentPath;
     setContextMenu(null);
-    uploadInputRef.current?.click();
-  };
-
-  const handleUploadInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    void importUploadedFiles(event.target.files, uploadTargetPathRef.current);
-    event.target.value = "";
-  };
-
-  const handleSidebarDragOver = (event: React.DragEvent<HTMLElement>) => {
-    if (!event.dataTransfer.types.includes("Files")) {
-      return;
-    }
-
-    // Stop the document-level URL/file drop handler from also importing this as
-    // a NextEditor project file; the sidebar drop adds it as a workspace asset.
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
-
-    if (!isFileDragOver) {
-      setIsFileDragOver(true);
-    }
-  };
-
-  const handleSidebarDragLeave = (event: React.DragEvent<HTMLElement>) => {
-    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
-      return;
-    }
-
-    setIsFileDragOver(false);
-  };
-
-  const handleSidebarDrop = (event: React.DragEvent<HTMLElement>) => {
-    if (!event.dataTransfer.types.includes("Files")) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    setIsFileDragOver(false);
-    void importUploadedFiles(event.dataTransfer.files, "");
+    openFilePicker(parentPath);
   };
 
   const startRenameEntry = (kind: SidebarEntryKind, path: string) => {
@@ -523,9 +431,9 @@ function FileSidebarPanel() {
       className="relative flex h-full shrink-0 flex-col bg-[#11141c] text-slate-100"
       style={{ width: sidebarWidth }}
       data-cursor-replay-target="file-sidebar"
-      onDragOver={handleSidebarDragOver}
-      onDragLeave={handleSidebarDragLeave}
-      onDrop={handleSidebarDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       <div className="border-b border-slate-800 px-3 py-2">
         <div className="flex items-center justify-between gap-3">
