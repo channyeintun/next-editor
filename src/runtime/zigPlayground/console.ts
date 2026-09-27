@@ -1,5 +1,6 @@
 import type { ZigPlaygroundRunResult } from "./types";
 import type { ZigPlaygroundServiceErrorKind } from "./client";
+import { serviceErrorConsoleLines, splitOutputLines } from "../playgroundConsole";
 
 /**
  * Renders normalized run results as prefixed console lines for the runtime
@@ -31,18 +32,6 @@ export function zigFormatResultToConsoleLines(changed: boolean): string[] {
 
 export function zigFormatStaleConsoleLines(): string[] {
   return ["[zig-fmt error] Files changed while formatting; no formatting was applied"];
-}
-
-function splitOutputLines(output: string): string[] {
-  // Trimmed with an index walk rather than /\n+$/: an unanchored greedy run is
-  // retried from every newline in the run, so a program that prints thousands
-  // of blank lines followed by anything else freezes the tab for seconds.
-  let end = output.length;
-  while (end > 0 && output.charCodeAt(end - 1) === 10) {
-    end -= 1;
-  }
-  const trimmed = output.slice(0, end);
-  return trimmed ? trimmed.split("\n") : [];
 }
 
 export function zigRunResultToConsoleLines(result: ZigPlaygroundRunResult): string[] {
@@ -78,11 +67,7 @@ export function zigRunServiceErrorToConsoleLines(
   kind: Exclude<ZigPlaygroundServiceErrorKind, "aborted">,
   detail?: string,
 ): string[] {
-  const lines = [SERVICE_ERROR_LINES[kind]];
-  if (kind === "invalid-source" && detail) {
-    lines.push(detail);
-  }
-  return lines;
+  return serviceErrorConsoleLines(SERVICE_ERROR_LINES, kind, detail);
 }
 
 const FORMAT_SERVICE_ERROR_LINES: Record<
@@ -102,9 +87,5 @@ export function zigFormatServiceErrorToConsoleLines(
   kind: Exclude<ZigPlaygroundServiceErrorKind, "aborted">,
   detail?: string,
 ): string[] {
-  const lines = [FORMAT_SERVICE_ERROR_LINES[kind]];
-  if (kind === "invalid-source" && detail) {
-    lines.push(detail);
-  }
-  return lines;
+  return serviceErrorConsoleLines(FORMAT_SERVICE_ERROR_LINES, kind, detail);
 }

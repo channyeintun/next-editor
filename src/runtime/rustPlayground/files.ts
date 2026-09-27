@@ -1,4 +1,5 @@
-import { isWorkspaceTextFile, type WorkspaceProject } from "../../types/workspace";
+import type { WorkspaceProject } from "../../types/workspace";
+import { arePlaygroundFilesEqual, collectPlaygroundFiles } from "../playgroundFiles";
 import type { RustPlaygroundFile } from "./types";
 
 /**
@@ -10,26 +11,8 @@ import type { RustPlaygroundFile } from "./types";
 export function collectRustPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
 ): RustPlaygroundFile[] {
-  return Object.values(project.files)
-    .filter(isWorkspaceTextFile)
-    .filter((file) => file.path.endsWith(".rs"))
-    .sort((left, right) => {
-      if (left.path === "main.rs") return right.path === "main.rs" ? 0 : -1;
-      if (right.path === "main.rs") return 1;
-      return left.path.localeCompare(right.path);
-    })
-    .map((file) => ({ path: file.path, content: file.content }));
+  return collectPlaygroundFiles(project, { extensions: [".rs"], entryPath: "main.rs" });
 }
 
 /** Exact source snapshot comparison used to prevent stale rustfmt overwrites. */
-export function areRustPlaygroundFilesEqual(
-  left: readonly RustPlaygroundFile[],
-  right: readonly RustPlaygroundFile[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (file, index) => file.path === right[index]?.path && file.content === right[index]?.content,
-    )
-  );
-}
+export const areRustPlaygroundFilesEqual = arePlaygroundFilesEqual;

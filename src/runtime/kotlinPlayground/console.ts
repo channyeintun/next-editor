@@ -1,5 +1,10 @@
 import type { KotlinPlaygroundRunResult } from "./types";
 import type { KotlinPlaygroundServiceErrorKind } from "./client";
+import {
+  serviceErrorConsoleLines,
+  splitOutputLines,
+  summarizeFilePaths,
+} from "../playgroundConsole";
 
 /**
  * Renders normalized run results as prefixed console lines for the runtime
@@ -7,12 +12,6 @@ import type { KotlinPlaygroundServiceErrorKind } from "./client";
  * implementation-neutral shape that recordings capture and playback replays —
  * no Playground- or Worker-specific detail leaks into the recorded lines.
  */
-
-function summarizeFilePaths(filePaths: readonly string[]): string {
-  return filePaths.length <= 4
-    ? filePaths.join(" ")
-    : `${filePaths.slice(0, 3).join(" ")} … (${filePaths.length} files)`;
-}
 
 /**
  * The tags this module emits, as the pattern the runner panel colours by. It
@@ -25,18 +24,6 @@ export const KOTLIN_CONSOLE_TAG_PATTERN = /^\[kotlin-(?:run|warn)(?: error)?\]/;
 
 export function kotlinRunStartedConsoleLines(filePaths: readonly string[]): string[] {
   return [`[kotlin-run] kotlin ${summarizeFilePaths(filePaths)}`];
-}
-
-function splitOutputLines(output: string): string[] {
-  // Trimmed with an index walk rather than /\n+$/: an unanchored greedy run is
-  // retried from every newline in the run, so a program that prints thousands
-  // of blank lines followed by anything else freezes the tab for seconds.
-  let end = output.length;
-  while (end > 0 && output.charCodeAt(end - 1) === 10) {
-    end -= 1;
-  }
-  const trimmed = output.slice(0, end);
-  return trimmed ? trimmed.split("\n") : [];
 }
 
 export function kotlinRunResultToConsoleLines(result: KotlinPlaygroundRunResult): string[] {
@@ -87,9 +74,5 @@ export function kotlinRunServiceErrorToConsoleLines(
   kind: Exclude<KotlinPlaygroundServiceErrorKind, "aborted">,
   detail?: string,
 ): string[] {
-  const lines = [SERVICE_ERROR_LINES[kind]];
-  if (kind === "invalid-source" && detail) {
-    lines.push(detail);
-  }
-  return lines;
+  return serviceErrorConsoleLines(SERVICE_ERROR_LINES, kind, detail);
 }

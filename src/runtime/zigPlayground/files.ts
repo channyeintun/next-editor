@@ -1,4 +1,5 @@
-import { isWorkspaceTextFile, type WorkspaceProject } from "../../types/workspace";
+import type { WorkspaceProject } from "../../types/workspace";
+import { arePlaygroundFilesEqual, collectPlaygroundFiles } from "../playgroundFiles";
 import type { ZigPlaygroundFile } from "./types";
 
 /**
@@ -10,26 +11,8 @@ import type { ZigPlaygroundFile } from "./types";
 export function collectZigPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
 ): ZigPlaygroundFile[] {
-  return Object.values(project.files)
-    .filter(isWorkspaceTextFile)
-    .filter((file) => file.path.endsWith(".zig"))
-    .sort((left, right) => {
-      if (left.path === "main.zig") return right.path === "main.zig" ? 0 : -1;
-      if (right.path === "main.zig") return 1;
-      return left.path.localeCompare(right.path);
-    })
-    .map((file) => ({ path: file.path, content: file.content }));
+  return collectPlaygroundFiles(project, { extensions: [".zig"], entryPath: "main.zig" });
 }
 
 /** Exact source snapshot comparison used to prevent stale `zig fmt` overwrites. */
-export function areZigPlaygroundFilesEqual(
-  left: readonly ZigPlaygroundFile[],
-  right: readonly ZigPlaygroundFile[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (file, index) => file.path === right[index]?.path && file.content === right[index]?.content,
-    )
-  );
-}
+export const areZigPlaygroundFilesEqual = arePlaygroundFilesEqual;

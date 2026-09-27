@@ -1,4 +1,5 @@
-import { isWorkspaceTextFile, type WorkspaceProject } from "../../types/workspace";
+import type { WorkspaceProject } from "../../types/workspace";
+import { collectPlaygroundFiles } from "../playgroundFiles";
 import type { HaskellPlaygroundFile } from "./types";
 
 /**
@@ -21,13 +22,5 @@ import type { HaskellPlaygroundFile } from "./types";
 export function collectHaskellPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
 ): HaskellPlaygroundFile[] {
-  return Object.values(project.files)
-    .filter(isWorkspaceTextFile)
-    .filter((file) => file.path.endsWith(".hs"))
-    .sort((left, right) => {
-      if (left.path === "Main.hs") return right.path === "Main.hs" ? 0 : -1;
-      if (right.path === "Main.hs") return 1;
-      return left.path.localeCompare(right.path);
-    })
-    .map((file) => ({ path: file.path, content: file.content }));
+  return collectPlaygroundFiles(project, { extensions: [".hs"], entryPath: "Main.hs" });
 }

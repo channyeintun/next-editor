@@ -1,5 +1,10 @@
 import type { GoPlaygroundRunResult } from "./types";
 import type { GoPlaygroundServiceErrorKind } from "./client";
+import {
+  serviceErrorConsoleLines,
+  splitOutputLines,
+  summarizeFilePaths,
+} from "../playgroundConsole";
 
 /**
  * Renders normalized run results as prefixed console lines for the runtime
@@ -7,12 +12,6 @@ import type { GoPlaygroundServiceErrorKind } from "./client";
  * implementation-neutral shape that recordings capture and playback replays —
  * no Playground- or Worker-specific detail leaks into the recorded lines.
  */
-
-function summarizeFilePaths(filePaths: readonly string[]): string {
-  return filePaths.length <= 4
-    ? filePaths.join(" ")
-    : `${filePaths.slice(0, 3).join(" ")} … (${filePaths.length} files)`;
-}
 
 /**
  * The tags this module emits, as the pattern the runner panel colours by. It
@@ -41,18 +40,6 @@ export function goFormatResultToConsoleLines(changedFilePaths: readonly string[]
 
 export function goFormatStaleConsoleLines(): string[] {
   return ["[gofmt error] Files changed while formatting; no formatting was applied"];
-}
-
-function splitOutputLines(output: string): string[] {
-  // Trimmed with an index walk rather than /\n+$/: an unanchored greedy run is
-  // retried from every newline in the run, so a program that prints thousands
-  // of blank lines followed by anything else freezes the tab for seconds.
-  let end = output.length;
-  while (end > 0 && output.charCodeAt(end - 1) === 10) {
-    end -= 1;
-  }
-  const trimmed = output.slice(0, end);
-  return trimmed ? trimmed.split("\n") : [];
 }
 
 export function goRunResultToConsoleLines(result: GoPlaygroundRunResult): string[] {
@@ -96,11 +83,7 @@ export function goRunServiceErrorToConsoleLines(
   kind: Exclude<GoPlaygroundServiceErrorKind, "aborted">,
   detail?: string,
 ): string[] {
-  const lines = [SERVICE_ERROR_LINES[kind]];
-  if (kind === "invalid-source" && detail) {
-    lines.push(detail);
-  }
-  return lines;
+  return serviceErrorConsoleLines(SERVICE_ERROR_LINES, kind, detail);
 }
 
 const FORMAT_SERVICE_ERROR_LINES: Record<
@@ -120,9 +103,5 @@ export function goFormatServiceErrorToConsoleLines(
   kind: Exclude<GoPlaygroundServiceErrorKind, "aborted">,
   detail?: string,
 ): string[] {
-  const lines = [FORMAT_SERVICE_ERROR_LINES[kind]];
-  if (kind === "invalid-source" && detail) {
-    lines.push(detail);
-  }
-  return lines;
+  return serviceErrorConsoleLines(FORMAT_SERVICE_ERROR_LINES, kind, detail);
 }

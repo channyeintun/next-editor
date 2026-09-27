@@ -1,4 +1,5 @@
-import { isWorkspaceTextFile, type WorkspaceProject } from "../../types/workspace";
+import type { WorkspaceProject } from "../../types/workspace";
+import { collectPlaygroundFiles } from "../playgroundFiles";
 import type { AsmPlaygroundFile } from "./types";
 
 /** Extensions an assembly source file is written with. */
@@ -23,13 +24,8 @@ export const ASM_ENTRY_PATH = "main.asm";
 export function collectAsmPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
 ): AsmPlaygroundFile[] {
-  return Object.values(project.files)
-    .filter(isWorkspaceTextFile)
-    .filter((file) => SOURCE_EXTENSIONS.some((extension) => file.path.endsWith(extension)))
-    .sort((left, right) => {
-      if (left.path === ASM_ENTRY_PATH) return right.path === ASM_ENTRY_PATH ? 0 : -1;
-      if (right.path === ASM_ENTRY_PATH) return 1;
-      return left.path.localeCompare(right.path);
-    })
-    .map((file) => ({ path: file.path, content: file.content }));
+  return collectPlaygroundFiles(project, {
+    extensions: SOURCE_EXTENSIONS,
+    entryPath: ASM_ENTRY_PATH,
+  });
 }

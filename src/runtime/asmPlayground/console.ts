@@ -1,5 +1,6 @@
 import type { AsmPlaygroundRunResult } from "./types";
 import type { AsmPlaygroundServiceErrorKind } from "./client";
+import { splitOutputLines } from "../playgroundConsole";
 
 /**
  * Renders normalized run results as prefixed console lines for the runtime
@@ -25,18 +26,6 @@ export const ASM_CONSOLE_TAG_PATTERN = /^\[asm-run(?: error)?\]/;
 
 export function asmRunStartedConsoleLines(): string[] {
   return ["[asm-run] nasm -f elf64 main.asm && ld -o main main.o && ./main"];
-}
-
-function splitOutputLines(output: string): string[] {
-  // Trimmed with a loop rather than `/\n+$/`, which backtracks quadratically
-  // over a long run of newlines that is *not* at the end of the string. The
-  // machine here is in the page with a 256 KiB output budget, so one buggy
-  // loop that prints a blank line per iteration and then a summary hands this
-  // helper a quarter of a million newlines and freezes the tab for a minute.
-  let end = output.length;
-  while (end > 0 && output[end - 1] === "\n") end -= 1;
-  const trimmed = output.slice(0, end);
-  return trimmed ? trimmed.split("\n") : [];
 }
 
 export function asmRunResultToConsoleLines(result: AsmPlaygroundRunResult): string[] {
@@ -86,6 +75,16 @@ export function asmRegisterConsoleLines(result: AsmPlaygroundRunResult): string[
     rows.push(`[asm-run] ${cells.slice(index, index + 4).join("  ")}`);
   }
   return rows;
+}
+
+/**
+ * Everything a run prints: its own output, then the registers it changed. The
+ * runner panel and the studio both print a run through here, because a
+ * recorded lesson and a live one have to produce the same console or the
+ * fixture is not the truth.
+ */
+export function asmRunConsoleLines(result: AsmPlaygroundRunResult): string[] {
+  return [...asmRunResultToConsoleLines(result), ...asmRegisterConsoleLines(result)];
 }
 
 const SERVICE_ERROR_LINES: Record<Exclude<AsmPlaygroundServiceErrorKind, "aborted">, string> = {

@@ -48,8 +48,7 @@ import {
 import { collectHaskellPlaygroundFiles } from "../runtime/haskellPlayground/files";
 import { AsmPlaygroundClient, AsmPlaygroundServiceError } from "../runtime/asmPlayground/client";
 import {
-  asmRegisterConsoleLines,
-  asmRunResultToConsoleLines,
+  asmRunConsoleLines,
   asmRunServiceErrorToConsoleLines,
   asmRunStartedConsoleLines,
 } from "../runtime/asmPlayground/console";
@@ -491,13 +490,6 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
     }
     case "asm-playground": {
       let client: AsmPlaygroundClient | null = null;
-      // The register lines follow the run's own output, exactly as the runner
-      // panel appends them — a recorded lesson and a live one have to produce
-      // the same console or the fixture is not the truth.
-      const lines = (result: Parameters<typeof asmRunResultToConsoleLines>[0]): string[] => [
-        ...asmRunResultToConsoleLines(result),
-        ...asmRegisterConsoleLines(result),
-      ];
       return {
         label: "asm",
         collectFiles: collectAsmPlaygroundFiles,
@@ -524,7 +516,7 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
             signal,
           );
           return {
-            resultLines: lines(result),
+            resultLines: asmRunConsoleLines(result),
             ok: result.status === "success",
             status: result.status,
           };
@@ -532,7 +524,7 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
         runFixtureResult: (fixture) => {
           const result = (fixture as FixtureOf<"asm-playground">).result;
           return {
-            resultLines: lines(result),
+            resultLines: asmRunConsoleLines(result),
             ok: result.status === "success",
             status: result.status,
           };

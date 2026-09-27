@@ -1,5 +1,6 @@
 import type { KitePlaygroundRunResult } from "./types";
 import type { KitePlaygroundServiceErrorKind } from "./client";
+import { serviceErrorConsoleLines, splitOutputLines } from "../playgroundConsole";
 
 /**
  * Renders normalized run results as prefixed console lines for the runtime
@@ -36,18 +37,6 @@ export function kiteFormatStaleConsoleLines(): string[] {
   return ["[kitefmt error] Files changed while formatting; no formatting was applied"];
 }
 
-function splitOutputLines(output: string): string[] {
-  // Trimmed with an index walk rather than /\n+$/: an unanchored greedy run is
-  // retried from every newline in the run, so a program that prints thousands
-  // of blank lines followed by anything else freezes the tab for seconds.
-  let end = output.length;
-  while (end > 0 && output.charCodeAt(end - 1) === 10) {
-    end -= 1;
-  }
-  const trimmed = output.slice(0, end);
-  return trimmed ? trimmed.split("\n") : [];
-}
-
 export function kiteRunResultToConsoleLines(result: KitePlaygroundRunResult): string[] {
   if (result.status === "compile-error") {
     // Kite's diagnostics carry their own span and help text, so they are shown
@@ -79,11 +68,7 @@ export function kiteRunServiceErrorToConsoleLines(
   kind: Exclude<KitePlaygroundServiceErrorKind, "aborted">,
   detail?: string,
 ): string[] {
-  const lines = [SERVICE_ERROR_LINES[kind]];
-  if (kind === "invalid-source" && detail) {
-    lines.push(detail);
-  }
-  return lines;
+  return serviceErrorConsoleLines(SERVICE_ERROR_LINES, kind, detail);
 }
 
 const FORMAT_SERVICE_ERROR_LINES: Record<
@@ -98,9 +83,5 @@ export function kiteFormatServiceErrorToConsoleLines(
   kind: Exclude<KitePlaygroundServiceErrorKind, "aborted">,
   detail?: string,
 ): string[] {
-  const lines = [FORMAT_SERVICE_ERROR_LINES[kind]];
-  if (kind === "invalid-source" && detail) {
-    lines.push(detail);
-  }
-  return lines;
+  return serviceErrorConsoleLines(FORMAT_SERVICE_ERROR_LINES, kind, detail);
 }

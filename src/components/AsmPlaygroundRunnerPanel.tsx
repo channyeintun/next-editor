@@ -22,8 +22,7 @@ import { useAsmPlaygroundRunner } from "../hooks/useAsmPlaygroundRunner";
 import { useWorkspaceActions, useWorkspaceProjectVersion } from "../hooks/useWorkspace";
 import {
   ASM_CONSOLE_TAG_PATTERN,
-  asmRegisterConsoleLines,
-  asmRunResultToConsoleLines,
+  asmRunConsoleLines,
   asmRunServiceErrorToConsoleLines,
   asmRunStartedConsoleLines,
 } from "../runtime/asmPlayground/console";
@@ -230,10 +229,7 @@ function AsmPlaygroundRunnerPanel() {
 
     appendConsoleLines(
       outcome.kind === "result"
-        ? [
-            ...asmRunResultToConsoleLines(outcome.result),
-            ...asmRegisterConsoleLines(outcome.result),
-          ]
+        ? asmRunConsoleLines(outcome.result)
         : asmRunServiceErrorToConsoleLines(outcome.errorKind, outcome.message),
     );
   };

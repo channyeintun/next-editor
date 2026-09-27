@@ -1,4 +1,5 @@
-import { isWorkspaceTextFile, type WorkspaceProject } from "../../types/workspace";
+import type { WorkspaceProject } from "../../types/workspace";
+import { arePlaygroundFilesEqual, collectPlaygroundFiles } from "../playgroundFiles";
 import type { KitePlaygroundFile } from "./types";
 
 /**
@@ -13,26 +14,8 @@ import type { KitePlaygroundFile } from "./types";
 export function collectKitePlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
 ): KitePlaygroundFile[] {
-  return Object.values(project.files)
-    .filter(isWorkspaceTextFile)
-    .filter((file) => file.path.endsWith(".kite"))
-    .sort((left, right) => {
-      if (left.path === "main.kite") return right.path === "main.kite" ? 0 : -1;
-      if (right.path === "main.kite") return 1;
-      return left.path.localeCompare(right.path);
-    })
-    .map((file) => ({ path: file.path, content: file.content }));
+  return collectPlaygroundFiles(project, { extensions: [".kite"], entryPath: "main.kite" });
 }
 
 /** Exact source snapshot comparison, used to prevent stale format overwrites. */
-export function areKitePlaygroundFilesEqual(
-  left: readonly KitePlaygroundFile[],
-  right: readonly KitePlaygroundFile[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (file, index) => file.path === right[index]?.path && file.content === right[index]?.content,
-    )
-  );
-}
+export const areKitePlaygroundFilesEqual = arePlaygroundFilesEqual;
