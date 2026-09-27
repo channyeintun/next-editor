@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Recording } from "../core/src";
+import type { CaptionCue, Recording } from "../core/src";
 import { useNextEditorActions } from "./useNextEditorContext";
 import { useCaptionStoreTrigger } from "./useCaptionStore";
 import type { CaptionGenerationProgress } from "../captions/generateCaptions";
@@ -16,6 +16,51 @@ async function narrationOf(recording: Recording): Promise<Blob> {
   const response = await fetch(recording.audioUrl);
   if (!response.ok) throw new Error(`The narration could not be loaded (${response.status}).`);
   return response.blob();
+}
+
+/**
+ * One captioning job: transcribes the narration, reports each state it goes through to
+ * `update`, and hands the captions to `onCaptions` before it goes idle. `onSettled` runs last,
+ * however the job ends. Outside the hook because the React Compiler cannot compile a function
+ * holding `import()` or a `finally`.
+ */
+async function runCaptionJob(
+  recording: Recording,
+  controller: AbortController,
+  job: {
+    update: (state: CaptionGenerationState) => void;
+    onCaptions: (language: string, cues: CaptionCue[]) => void;
+    onSettled: () => void;
+  },
+): Promise<void> {
+  try {
+    // Loaded on demand: the model code is only paid for by authors who caption.
+    const { generateCaptions } = await import("../captions/generateCaptions");
+    const { language, cues } = await generateCaptions(recording, await narrationOf(recording), {
+      signal: controller.signal,
+      onProgress: (progress) => {
+        if (!controller.signal.aborted) job.update({ status: "running", progress });
+      },
+    });
+    if (cues.length === 0) {
+      job.update({ status: "failed", message: "No speech was found in the narration." });
+      return;
+    }
+    job.onCaptions(language, cues);
+    job.update({ status: "idle" });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      job.update({ status: "idle" });
+      return;
+    }
+    console.error("Caption generation failed:", error);
+    job.update({
+      status: "failed",
+      message: error instanceof Error ? error.message : "Captions could not be generated.",
+    });
+  } finally {
+    job.onSettled();
+  }
 }
 
 /**
@@ -36,42 +81,23 @@ export function useCaptionGeneration() {
     const controller = new AbortController();
     abortRef.current = controller;
     setState({ status: "running", progress: null });
-    try {
-      // Loaded on demand: the model code is only paid for by authors who caption.
-      const { generateCaptions } = await import("../captions/generateCaptions");
-      const { language, cues } = await generateCaptions(recording, await narrationOf(recording), {
-        signal: controller.signal,
-        onProgress: (progress) => {
-          if (!controller.signal.aborted) setState({ status: "running", progress });
-        },
-      });
-      if (cues.length === 0) {
-        setState({ status: "failed", message: "No speech was found in the narration." });
-        return;
-      }
-      addCaptionTrack(recording.id, {
-        id: `auto-${language}-${Date.now()}`,
-        language,
-        label: `${language.toUpperCase()} (auto)`,
-        cues,
-        default: !recording.captions?.length,
-      });
-      captionTrigger.setLanguage({ language });
-      captionTrigger.setEnabled({ enabled: true });
-      setState({ status: "idle" });
-    } catch (error) {
-      if (controller.signal.aborted) {
-        setState({ status: "idle" });
-        return;
-      }
-      console.error("Caption generation failed:", error);
-      setState({
-        status: "failed",
-        message: error instanceof Error ? error.message : "Captions could not be generated.",
-      });
-    } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-    }
+    await runCaptionJob(recording, controller, {
+      update: setState,
+      onCaptions: (language, cues) => {
+        addCaptionTrack(recording.id, {
+          id: `auto-${language}-${Date.now()}`,
+          language,
+          label: `${language.toUpperCase()} (auto)`,
+          cues,
+          default: !recording.captions?.length,
+        });
+        captionTrigger.setLanguage({ language });
+        captionTrigger.setEnabled({ enabled: true });
+      },
+      onSettled: () => {
+        if (abortRef.current === controller) abortRef.current = null;
+      },
+    });
   };
 
   const cancel = () => {
