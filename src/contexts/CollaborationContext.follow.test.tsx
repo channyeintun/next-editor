@@ -1,6 +1,6 @@
 /* oxlint-disable vitest/require-mock-type-parameters */
 import { act, render, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -168,7 +168,7 @@ const workspaceActions = {
   getSidebarScrollTop: () => 0,
   getSidebarWidth: () => 260,
   getWorkspaceRevision: () => 0,
-  getFile: () => null,
+  getFile: (_path: string): WorkspaceFile | null => null,
   subscribeWorkspaceSync: () => () => {},
   reconcileExternalProject: vi.fn(),
   updateFileContent: vi.fn(),
@@ -215,6 +215,7 @@ import {
   removeCollaborationMember,
   revokeCollaborationInvitation,
   updateCollaborationMemberRole,
+  uploadCollaborationAsset,
 } from "@next-editor/infra";
 import type { WhiteboardElementJSON } from "../core/src/whiteboard";
 import {
@@ -228,6 +229,8 @@ import {
 } from "../storage/workspaceAssetStore";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
+import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
+import type { WorkspaceFile } from "../types/workspace";
 
 function Providers({ children }: { children: ReactNode }) {
   return (
@@ -1515,5 +1518,121 @@ describe("CollaborationContext room roster", () => {
     });
     expect(room.memberIds()).toEqual([]);
     room.view.unmount();
+  });
+});
+
+// Inside a room the provider replaces the workspace actions below it with ones
+// that write to the room's document, which the projection then brings back
+// into the workspace.
+describe("CollaborationContext workspace actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetWorkspaceAssetStoreForTests();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  function renderEditor(url: string) {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let actions: WorkspaceActions | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      actions = useContext(WorkspaceActionsContext);
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={[url]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    return { view, collaboration: () => collaboration!, actions: () => actions! };
+  }
+
+  it("passes the workspace's own actions through outside a room", () => {
+    const editor = renderEditor("/code");
+    expect(editor.actions()).toBe(workspaceActions);
+    editor.view.unmount();
+  });
+
+  it("writes changes to the room's document and reports the ones it refuses", async () => {
+    const editor = renderEditor("/code?room=40000000-0000-4000-8000-000000000001");
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    const project = createStarterHtmlCssWorkspace();
+    act(() => seedCollaborationProject(provider.doc, project));
+    const roomFiles = () => projectCollaborationDocument(provider.doc).project.files;
+    const error = () => editor.collaboration().error;
+
+    const entry = project.files["index.html"]!;
+    const entryContent = entry.content as string;
+    const getFile = vi
+      .spyOn(workspaceActions, "getFile")
+      .mockImplementation((path) => project.files[path] ?? null);
+    let edited: string | null = null;
+    try {
+      act(() => {
+        edited = editor.actions().applyFileTextEdits({
+          fileId: "index",
+          path: "index.html",
+          beforeVersion: 1,
+          afterVersion: 2,
+          beforeLength: entryContent.length,
+          afterLength: entryContent.length + 1,
+          changes: [{ offset: 0, deleteLength: 0, text: "x" }],
+        });
+      });
+    } finally {
+      getFile.mockRestore();
+    }
+    expect(edited).toBe(`x${entryContent}`);
+    expect(roomFiles()["index.html"]?.content).toBe(`x${entryContent}`);
+
+    act(() => editor.actions().loadProject(project));
+    expect(error()).toBe("Leave the room before loading another project.");
+    act(() => editor.actions().updateFileContent("index.html", "<p>changed</p>"));
+    expect(roomFiles()["index.html"]?.content).toBe("<p>changed</p>");
+    expect(error()).toBeNull();
+
+    act(() => editor.actions().createFolder("docs"));
+    expect(projectCollaborationDocument(provider.doc).nodeIdByPath.has("docs")).toBe(true);
+
+    const reconciles = vi.mocked(workspaceActions.reconcileExternalProject).mock.calls.length;
+    act(() => editor.actions().reconcileExternalProject(project));
+    expect(workspaceActions.reconcileExternalProject).toHaveBeenCalledTimes(reconciles);
+    expect(error()).toBe("Bulk project replacement is disabled in a live room.");
+
+    const descriptor = await registerWorkspaceAsset(new Uint8Array([1, 2, 3, 4]), {
+      mimeType: "image/png",
+    });
+    act(() => editor.actions().createFile("logo.png", descriptor));
+    expect(error()).toBe("Text collaboration files require string content.");
+    act(() => editor.actions().createFile("logo.png", "text", "asset"));
+    expect(error()).toBe("Binary collaboration files require an asset descriptor.");
+
+    vi.mocked(uploadCollaborationAsset).mockResolvedValueOnce({
+      id: descriptor.assetId,
+      mimeType: descriptor.mimeType,
+      size: descriptor.size,
+    });
+    act(() => editor.actions().createFile("logo.png", descriptor, "asset"));
+    await waitFor(() =>
+      expect(roomFiles()["logo.png"]).toMatchObject({ encoding: "asset", content: descriptor }),
+    );
+    expect(uploadCollaborationAsset).toHaveBeenCalledWith(
+      "40000000-0000-4000-8000-000000000001",
+      expect.any(Uint8Array),
+      "image/png",
+    );
+    expect(error()).toBeNull();
+
+    act(() => provider.setConnectionState("failed"));
+    act(() => editor.actions().createFolder("later"));
+    expect(error()).toBe("This collaboration room is read-only");
+    act(() => editor.actions().createFile("later.png", descriptor, "asset"));
+    expect(error()).toBe("The collaboration room is not ready for asset uploads.");
+    expect(projectCollaborationDocument(provider.doc).nodeIdByPath.has("later")).toBe(false);
+    editor.view.unmount();
   });
 });
