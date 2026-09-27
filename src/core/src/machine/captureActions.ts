@@ -173,7 +173,7 @@ export const prepareExternalAudioRecording = ({
   };
 };
 
-export interface RecordingAudioPlayerEnqueue {
+interface RecordingAudioPlayerEnqueue {
   spawnChild: (
     src: "audioPlayback",
     options: { id: "recordingAudioPlayer"; input: AudioPlaybackInput },
@@ -557,7 +557,7 @@ export const capturePreviewRefreshFrame = ({
  * invariant on {@link RecordingSession}) and returns `false` when nothing was
  * appended (deduplicated event), in which case the revision must not bump.
  */
-export const appendToSession = (
+const appendToSession = (
   context: EditorMachineContext,
   append: (session: RecordingSession) => boolean,
 ): EditorContextUpdate =>

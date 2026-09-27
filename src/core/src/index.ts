@@ -24,7 +24,6 @@ export type {
 
 // Machine type exports
 export type { EditorActorRef } from "./useNextEditor";
-export type { TimelineActorRef } from "./machine/timelineMachine";
 export type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./machine/types";
 
 // Slide type exports

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type * as monaco from "monaco-editor";
 import { useSelector } from "@xstate/react";
-import type { ActorRefFrom } from "xstate";
+import type { ActorRefFrom, SnapshotFrom } from "xstate";
 import { editorMachine } from "./machine/editorMachine";
 import type { EditorMachineInput, RecordingSession, StartRecordingEvent } from "./machine/types";
 import type {
@@ -23,7 +23,6 @@ import type { TextEditEvent } from "../../types/textEdit";
 import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "../../types/workspace";
 import { isAtPlaybackEnd } from "./machine/editorMachineHelpers";
 import { isRecordingClockPaused, type RecordingClock } from "./machine/recordingClock";
-import type { SnapshotFrom } from "xstate";
 
 // ============================================================================
 // Type for machine snapshot

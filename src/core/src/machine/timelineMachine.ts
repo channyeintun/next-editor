@@ -1,4 +1,4 @@
-import { setup, assign, fromCallback, sendParent, enqueueActions, type ActorRefFrom } from "xstate";
+import { setup, assign, fromCallback, sendParent, enqueueActions } from "xstate";
 import {
   normalizePlaybackSpeed,
   normalizeTimelineDuration,
@@ -165,5 +165,3 @@ export const timelineMachine = setup({
     },
   },
 });
-
-export type TimelineActorRef = ActorRefFrom<typeof timelineMachine>;

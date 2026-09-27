@@ -42,7 +42,7 @@ const CURSOR_TRACK_ID = "cursor";
 const WHITEBOARD_TRACK_ID = "whiteboard";
 const CHAT_TRACK_ID = "chat";
 const AUDIO_TRACK_ID = "audio";
-export const CAMERA_TRACK_ID = "camera";
+const CAMERA_TRACK_ID = "camera";
 
 export const buildTrackMetadata = ({
   durationMs,
@@ -501,7 +501,7 @@ export const reportMachineError = (
  * Kept structural (rather than importing xstate's generic `ActionEnqueuer`) so this
  * helper doesn't need to thread the machine's full setup() type parameters.
  */
-export interface PlaybackAudioEnqueue {
+interface PlaybackAudioEnqueue {
   spawnChild: (
     src: "audioPlayback",
     options: { id: "audioPlayer"; input: AudioPlaybackInput },
@@ -510,7 +510,7 @@ export interface PlaybackAudioEnqueue {
   assign: (updater: Partial<EditorMachineContext>) => void;
 }
 
-export interface SyncPlaybackAudioOptions {
+interface SyncPlaybackAudioOptions {
   /** Spawn a fresh "audioPlayer" child if this recording has audio and none exists yet. */
   spawnIfMissing: boolean;
   /** Send SEEK to the current timeline position. */

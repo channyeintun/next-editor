@@ -431,35 +431,35 @@ export type StartRecordingEvent = {
 };
 
 /** Stop recording event */
-export type StopRecordingEvent = { type: "STOP_RECORDING" };
+type StopRecordingEvent = { type: "STOP_RECORDING" };
 
 /**
  * Stop the take's clock and its recorders without ending it. Edits made while paused
  * are still captured, at the moment of the pause, so the take stays consistent.
  */
-export type PauseRecordingEvent = { type: "PAUSE_RECORDING" };
+type PauseRecordingEvent = { type: "PAUSE_RECORDING" };
 
 /** Run a paused take's clock and recorders again. */
-export type ResumeRecordingEvent = { type: "RESUME_RECORDING" };
+type ResumeRecordingEvent = { type: "RESUME_RECORDING" };
 
 /**
  * Discard everything recorded since the last safe point before now, put the editor back
  * the way it was there, and leave the take paused at that point.
  */
-export type RetakeRecordingEvent = { type: "RETAKE_RECORDING" };
+type RetakeRecordingEvent = { type: "RETAKE_RECORDING" };
 
 /** Mark a chapter at the take's current moment, which a retake can also rewind to. */
-export type AddChapterMarkerEvent = { type: "ADD_CHAPTER_MARKER"; title?: string };
+type AddChapterMarkerEvent = { type: "ADD_CHAPTER_MARKER"; title?: string };
 
 /** Replace the chapters of the loaded recording `recordingId`; dropped for any other. */
-export type SetChaptersEvent = {
+type SetChaptersEvent = {
   type: "SET_CHAPTERS";
   recordingId: string;
   chapters: RecordingChapter[];
 };
 
 /** Capture a frame during recording */
-export type CaptureFrameEvent = {
+type CaptureFrameEvent = {
   type: "CAPTURE_FRAME";
   isMouseMovement?: boolean;
   mousePosition?: MouseCursorPosition;
@@ -474,7 +474,7 @@ export type CaptureFrameEvent = {
 };
 
 /** Load a recording for playback */
-export type LoadRecordingEvent = {
+type LoadRecordingEvent = {
   type: "LOAD_RECORDING";
   recording: Recording;
 };
@@ -484,58 +484,58 @@ export type LoadRecordingEvent = {
  * playback). The new recording must be an append-only superset of the current one, so already
  * applied playback indices stay valid; the current time, timeline, and applied state are kept.
  */
-export type ExtendRecordingEvent = {
+type ExtendRecordingEvent = {
   type: "EXTEND_RECORDING";
   recording: Recording;
 };
 
 /** Append only the newly decoded records from a growing SCR stream. */
-export type AppendRecordingDeltaEvent = {
+type AppendRecordingDeltaEvent = {
   type: "APPEND_RECORDING_DELTA";
   delta: RecordingStreamDelta;
 };
 
 /** Unload current recording */
-export type UnloadEvent = { type: "UNLOAD" };
+type UnloadEvent = { type: "UNLOAD" };
 
 /** Start playback */
-export type PlayEvent = { type: "PLAY" };
+type PlayEvent = { type: "PLAY" };
 
 /** Pause playback */
-export type PauseEvent = { type: "PAUSE" };
+type PauseEvent = { type: "PAUSE" };
 
 /** Stop playback and reset */
-export type StopEvent = { type: "STOP" };
+type StopEvent = { type: "STOP" };
 
 /** Seek to specific time */
-export type SeekEvent = {
+type SeekEvent = {
   type: "SEEK";
   time: number;
 };
 
 /** Set playback speed */
-export type SetSpeedEvent = {
+type SetSpeedEvent = {
   type: "SET_SPEED";
   speed: number;
 };
 
 /** Set volume */
-export type SetVolumeEvent = {
+type SetVolumeEvent = {
   type: "SET_VOLUME";
   volume: number;
 };
 
 /** Playback tick event (from animation frame) */
-export type TickEvent = {
+type TickEvent = {
   type: "TICK";
   currentTime: number;
 };
 
 /** Playback reached the end */
-export type FinishedEvent = { type: "FINISHED" };
+type FinishedEvent = { type: "FINISHED" };
 
 /** User interaction during playback */
-export type UserInteractionEvent = { type: "USER_INTERACTION" };
+type UserInteractionEvent = { type: "USER_INTERACTION" };
 
 /**
  * The viewer's edits to a lesson, saved before the recording took the workspace back
@@ -549,71 +549,71 @@ export interface LearnerWorkspaceSave {
 }
 
 /** Save the viewer's edits now, if they have any (e.g. the page is being hidden). */
-export type PreserveLearnerWorkspaceEvent = { type: "PRESERVE_LEARNER_WORKSPACE" };
+type PreserveLearnerWorkspaceEvent = { type: "PRESERVE_LEARNER_WORKSPACE" };
 
 /** Bring back a saved version of the viewer's edits, at the point in the lesson it was made. */
-export type RestoreLearnerWorkspaceEvent = {
+type RestoreLearnerWorkspaceEvent = {
   type: "RESTORE_LEARNER_WORKSPACE";
   recordingTime: number;
   snapshot: WorkspaceRecordingSnapshot;
 };
 
 /** Internal second step of RESTORE_LEARNER_WORKSPACE, once the paused seek has landed. */
-export type ApplyLearnerWorkspaceEvent = {
+type ApplyLearnerWorkspaceEvent = {
   type: "APPLY_LEARNER_WORKSPACE";
   snapshot: WorkspaceRecordingSnapshot;
 };
 
 /** Update editor reference */
-export type SetEditorRefEvent = {
+type SetEditorRefEvent = {
   type: "SET_EDITOR_REF";
   editor: monaco.editor.IStandaloneCodeEditor | null;
 };
 
 /** Slide event occurred */
-export type SlideEventOccurred = {
+type SlideEventOccurred = {
   type: "SLIDE_EVENT";
   event: SlideEvent;
 };
 
 /** Preview event occurred */
-export type PreviewEventOccurred = {
+type PreviewEventOccurred = {
   type: "PREVIEW_EVENT";
   event: PreviewEvent;
 };
 
 /** Initial preview document recorded */
-export type PreviewInitialDocumentOccurred = {
+type PreviewInitialDocumentOccurred = {
   type: "PREVIEW_INITIAL_DOCUMENT";
   document: PreviewInitialDocument;
 };
 
 /** Preview DOM patch batch recorded */
-export type PreviewPatchBatchOccurred = {
+type PreviewPatchBatchOccurred = {
   type: "PREVIEW_PATCH_BATCH";
   batch: PreviewDomPatchBatch;
 };
 
 /** Workspace event occurred */
-export type WorkspaceEventOccurred = {
+type WorkspaceEventOccurred = {
   type: "WORKSPACE_EVENT";
   sidebarWidthDelta?: number;
   previewDockWidthDelta?: number;
 };
 
 /** Runtime event occurred */
-export type RuntimeEventOccurred = {
+type RuntimeEventOccurred = {
   type: "RUNTIME_EVENT";
 };
 
 /** Whiteboard event occurred */
-export type WhiteboardEventOccurred = {
+type WhiteboardEventOccurred = {
   type: "WHITEBOARD_EVENT";
   event: WhiteboardEvent;
 };
 
 /** Coding-agent chat delta or checkpoint occurred */
-export type ChatEventOccurred = {
+type ChatEventOccurred = {
   type: "CHAT_EVENT";
   event: ChatRecordingEvent["event"];
 };
@@ -622,7 +622,7 @@ export type ChatEventOccurred = {
  * Add or replace a caption track on the recording `recordingId`; dropped when another
  * recording is loaded
  */
-export type AddCaptionTrackEvent = {
+type AddCaptionTrackEvent = {
   type: "ADD_CAPTION_TRACK";
   recordingId: string;
   track: CaptionTrack;
