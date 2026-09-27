@@ -1,13 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Circle,
-  Square,
-  Pause,
-  Play,
-  RotateCcw,
   Scissors,
-  BookmarkPlus,
-  Plus,
   FileMusic,
   Mic,
   Video,
@@ -29,14 +22,13 @@ import {
   useNextEditorPlayback,
   useLiveTime,
   useRecordingElapsedMs,
-  useRetakeTargetTime,
-  useRecordingChapterCount,
 } from "../hooks/useNextEditorContext";
 import ChaptersMenu, { CurrentChapterTitle } from "./ChaptersMenu";
 import type { CaptionCue, RecordingChapter } from "../core/src/types";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import ReplayIcon from "./icon/Replay";
-import IdleRecordButton from "./IdleRecordButton";
+import RecordButton from "./mediaControls/RecordButton";
+import RecordingTransportControls from "./mediaControls/RecordingTransportControls";
 import PlayIcon from "./icon/Play";
 import PauseIcon from "./icon/Pause";
 import SettingIcon from "./icon/Setting";
@@ -186,83 +178,6 @@ const PlaybackTimer = ({
   );
 };
 
-/** Marks a chapter where the take is now; a retake can also rewind to it. */
-const AddChapterButton = ({ iconSize, className }: { iconSize: number; className: string }) => {
-  const { addChapterMarker } = useNextEditorActions();
-  const count = useRecordingChapterCount();
-  const label =
-    count === 0 ? "Mark a chapter here" : `Mark a chapter here (${count} marked so far)`;
-  return (
-    <button
-      type="button"
-      onClick={() => addChapterMarker()}
-      aria-label={label}
-      title={label}
-      className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto ${className}`}
-    >
-      <BookmarkPlus size={iconSize} aria-hidden="true" />
-    </button>
-  );
-};
-
-/** How long a first click on Retake waits for the confirming second one. */
-const RETAKE_CONFIRM_MS = 4_000;
-
-/**
- * Rewinds the take to its last safe point (its start, or the last resume). Retaking
- * discards what was recorded since, so the first click only shows how much, and a
- * second click within a few seconds confirms.
- */
-const RetakeButton = ({ iconSize, className }: { iconSize: number; className: string }) => {
-  const { retakeRecording } = useNextEditorActions();
-  const recordingTime = useRecordingElapsedMs();
-  const targetTime = useRetakeTargetTime(recordingTime);
-  const [armed, setArmed] = useState(false);
-
-  useEffect(() => {
-    if (!armed) return;
-    const timer = setTimeout(() => setArmed(false), RETAKE_CONFIRM_MS);
-    return () => clearTimeout(timer);
-  }, [armed]);
-
-  const discarded = targetTime === null ? "" : formatPlaybackTime(recordingTime - targetTime);
-  const label =
-    targetTime === null
-      ? "Nothing to retake yet"
-      : armed
-        ? `Discard the last ${discarded} and retake from ${formatPlaybackTime(targetTime)}`
-        : `Retake from ${formatPlaybackTime(targetTime)} (the last resume)`;
-
-  const handleClick = () => {
-    if (!armed) {
-      setArmed(true);
-      return;
-    }
-    setArmed(false);
-    retakeRecording();
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={targetTime === null}
-      aria-label={label}
-      title={label}
-      className={`flex items-center justify-center gap-1.5 transition-colors pointer-events-auto disabled:cursor-not-allowed disabled:opacity-40 ${
-        armed
-          ? "rounded-full bg-amber-500/15 px-2 text-amber-200"
-          : `text-slate-300 hover:text-white ${className}`
-      }`}
-    >
-      <RotateCcw size={iconSize} aria-hidden="true" />
-      {armed ? (
-        <span className="whitespace-nowrap text-xs font-semibold">Discard {discarded}?</span>
-      ) : null}
-    </button>
-  );
-};
-
 const MediaControls: React.FC<MediaControlsProps> = ({
   recordMode = true,
   positioning = "fixed",
@@ -273,8 +188,6 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const {
     startRecording,
     stopRecording,
-    pauseRecording,
-    resumeRecording,
     clearRecording,
     play,
     pause,
@@ -565,64 +478,19 @@ const MediaControls: React.FC<MediaControlsProps> = ({
       ) : null}
       <div className={`flex items-center w-full ${rowSizing}`}>
         {effectiveRecordMode && (
-          <button
-            data-tour="record"
-            onClick={handleRecordButtonClick}
+          <RecordButton
+            isRecording={isRecording}
+            isRecordingPaused={isRecordingPaused}
+            hasRecording={Boolean(currentRecording)}
             disabled={isPlaying}
-            className={`flex items-center justify-center transition-colors relative pointer-events-auto ${isPlaying ? "opacity-50 cursor-not-allowed" : "hover:opacity-80 cursor-pointer"}`}
-            title={
-              isRecording
-                ? "Stop Recording"
-                : currentRecording
-                  ? "New Recording"
-                  : "Start Recording"
-            }
-          >
-            {isRecording ? (
-              <Square
-                size={recordIconSize}
-                className={`fill-red-500 text-red-500 ${isRecordingPaused ? "" : "animate-pulse"}`}
-              />
-            ) : currentRecording ? (
-              <div className="relative">
-                <Circle size={recordIconSize} className="fill-red-500 text-red-500" />
-                <div className="absolute -top-1 -right-1.5 bg-[#202732] rounded-full p-[0.5px]">
-                  <Plus size={recordPlusSize} className="text-red-500 stroke-[3px]" />
-                </div>
-              </div>
-            ) : (
-              <IdleRecordButton size={recordIconSize} />
-            )}
-          </button>
+            iconSize={recordIconSize}
+            plusSize={recordPlusSize}
+            onClick={handleRecordButtonClick}
+          />
         )}
 
         {effectiveRecordMode && isRecording ? (
-          <button
-            type="button"
-            onClick={isRecordingPaused ? resumeRecording : pauseRecording}
-            aria-pressed={isRecordingPaused}
-            aria-label={isRecordingPaused ? "Resume recording" : "Pause recording"}
-            title={
-              isRecordingPaused
-                ? "Resume recording"
-                : "Pause recording (edits you make while paused appear at once)"
-            }
-            className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto ${transportButtonWidth}`}
-          >
-            {isRecordingPaused ? (
-              <Play size={controlIconSize} className="fill-current" aria-hidden="true" />
-            ) : (
-              <Pause size={controlIconSize} className="fill-current" aria-hidden="true" />
-            )}
-          </button>
-        ) : null}
-
-        {effectiveRecordMode && isRecording ? (
-          <RetakeButton iconSize={controlIconSize} className={transportButtonWidth} />
-        ) : null}
-
-        {effectiveRecordMode && isRecording ? (
-          <AddChapterButton iconSize={controlIconSize} className={transportButtonWidth} />
+          <RecordingTransportControls iconSize={controlIconSize} className={transportButtonWidth} />
         ) : null}
 
         {showAudioSourceControls ? (
