@@ -75,15 +75,16 @@ function BackgroundPicker({
 
     setIsUploading(true);
     setError(null);
+    // No `finally`: the React Compiler skips a component with one. The catch cannot
+    // throw, so the line after it runs on every path, as a finally would.
     try {
       const dataUrl = await readCustomBackgroundImage(file);
       onChange(dataUrl);
     } catch (err) {
       setError(err instanceof CustomBackgroundError ? err.message : "Couldn't use that image.");
       window.setTimeout(() => setError(null), 4000);
-    } finally {
-      setIsUploading(false);
     }
+    setIsUploading(false);
   };
 
   return (
@@ -204,6 +205,8 @@ function GoogleSlidesImport({
   const runImport = async (deckUrl: string) => {
     setIsLoading(true);
     setError(null);
+    // No `finally`: the React Compiler skips a component with one. The catch cannot
+    // throw, so the line after it runs on every path, as a finally would.
     try {
       const deck = await fetchPublishedDeck(deckUrl);
       onSlidesChange(applyDeckToSlides(slides, deck));
@@ -214,9 +217,8 @@ function GoogleSlidesImport({
           ? err.message
           : "Couldn't import that deck. Please try again.",
       );
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   };
 
   const removeDeck = () => {
