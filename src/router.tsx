@@ -12,6 +12,7 @@ import { useEmbedded } from "./utils/embed";
 const DYNAMIC_IMPORT_RECOVERY_PARAM = "__route_reload";
 const DYNAMIC_IMPORT_ERROR_PATTERN =
   /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
+const ROUTE_RELOAD_STORAGE_PREFIX = "next-editor:route-reload:";
 
 function normalizeRoutePath(routePath: string) {
   if (routePath === "/") {
@@ -21,8 +22,10 @@ function normalizeRoutePath(routePath: string) {
   return routePath.replace(/\/+$/, "");
 }
 
+// Keyed by the route's pattern ("/learn/:slug"), not the URL, so each route gets
+// one automatic reload however many lessons fail to load behind it.
 function getRouteReloadStorageKey(routePath: string) {
-  return `next-editor:route-reload:${normalizeRoutePath(routePath)}`;
+  return `${ROUTE_RELOAD_STORAGE_PREFIX}${normalizeRoutePath(routePath)}`;
 }
 
 function hasRouteReloaded(routePath: string) {
@@ -35,6 +38,25 @@ function markRouteReloaded(routePath: string) {
 
 function clearRouteReload(routePath: string) {
   sessionStorage.removeItem(getRouteReloadStorageKey(routePath));
+}
+
+// The error boundary knows the URL but not the pattern it matched, so a manual
+// reload re-arms the automatic one for every route.
+function clearAllRouteReloads() {
+  for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+    const key = sessionStorage.key(index);
+    if (key?.startsWith(ROUTE_RELOAD_STORAGE_PREFIX)) {
+      sessionStorage.removeItem(key);
+    }
+  }
+}
+
+// A fresh query string makes the browser refetch the HTML, and with it the
+// current chunk names.
+function reloadWithRecoveryParam() {
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set(DYNAMIC_IMPORT_RECOVERY_PARAM, Date.now().toString());
+  window.location.replace(nextUrl.toString());
 }
 
 function clearRecoverySearchParam() {
@@ -90,10 +112,7 @@ function lazyRoute(importer: () => Promise<{ default: ComponentType }>, routePat
         !hasRouteReloaded(routePath)
       ) {
         markRouteReloaded(routePath);
-
-        const nextUrl = new URL(window.location.href);
-        nextUrl.searchParams.set(DYNAMIC_IMPORT_RECOVERY_PARAM, Date.now().toString());
-        window.location.replace(nextUrl.toString());
+        reloadWithRecoveryParam();
 
         return new Promise<never>(() => {});
       }
@@ -122,11 +141,8 @@ function RouteErrorBoundary() {
     : "This route could not be rendered.";
 
   const handleReload = () => {
-    clearRouteReload(window.location.pathname);
-
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.set(DYNAMIC_IMPORT_RECOVERY_PARAM, Date.now().toString());
-    window.location.replace(nextUrl.toString());
+    clearAllRouteReloads();
+    reloadWithRecoveryParam();
   };
 
   return (
