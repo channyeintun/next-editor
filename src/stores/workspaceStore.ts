@@ -410,6 +410,42 @@ function withDirtyState(state: WorkspaceState): WorkspaceState {
   };
 }
 
+/** What a project change may replace; the versions it bumps are commitProjectChange's to set. */
+type WorkspaceProjectChange = Partial<
+  Omit<InitializedWorkspaceState, "isInitialized" | "treeVersion" | "syncVersion">
+>;
+
+/**
+ * Commits a change that subscribeWorkspaceSync listeners (the WebContainer
+ * runtime, the preview) must see: syncVersion always moves, and treeVersion
+ * too when files or folders were added, removed or renamed. The derived slices
+ * and the dirty state are then recomputed from the result.
+ */
+function commitProjectChange(
+  context: InitializedWorkspaceState,
+  change: WorkspaceProjectChange,
+  { topologyChanged }: { topologyChanged: boolean },
+): WorkspaceState {
+  return withDirtyState(
+    withRefreshedWorkspaceSlices({
+      ...context,
+      ...change,
+      treeVersion: topologyChanged ? context.treeVersion + 1 : context.treeVersion,
+      syncVersion: context.syncVersion + 1,
+    }),
+  );
+}
+
+/**
+ * Every transition but loadProject needs a loaded project. Until one is loaded
+ * the event keeps the same context, which the store does not emit.
+ */
+function whenInitialized<TEvent>(
+  transition: (context: InitializedWorkspaceState, event: TEvent) => WorkspaceState,
+): (context: WorkspaceState, event: TEvent) => WorkspaceState {
+  return (context, event) => (context.isInitialized ? transition(context, event) : context);
+}
+
 function updateSortedPathMembership(paths: string[], path: string, included: boolean): string[] {
   let low = 0;
   let high = paths.length;
@@ -579,10 +615,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
       ? createWorkspaceState(initialSnapshot)
       : createUninitializedWorkspaceState(),
     on: {
-      setActiveFilePath: (context, event: { path: string }) => {
-        if (!context.isInitialized) {
-          return context;
-        }
+      setActiveFilePath: whenInitialized((context, event: { path: string }) => {
         const normalizedPath = normalizeWorkspacePath(event.path);
 
         if (!context.project.files[normalizedPath] || context.activeFilePath === normalizedPath) {
@@ -593,11 +626,8 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           ...context,
           activeFilePath: normalizedPath,
         });
-      },
-      setPreviewFilePath: (context, event: { path: string }) => {
-        if (!context.isInitialized) {
-          return context;
-        }
+      }),
+      setPreviewFilePath: whenInitialized((context, event: { path: string }) => {
         const normalizedPath = normalizeWorkspacePath(event.path);
 
         if (
@@ -607,30 +637,24 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           return context;
         }
 
-        return withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
+        return commitProjectChange(
+          context,
+          {
             project: {
               ...context.project,
               entryFilePath: normalizedPath,
             },
-            syncVersion: context.syncVersion + 1,
-          }),
+          },
+          { topologyChanged: false },
         );
-      },
-      setCollapsedFolders: (context, event: { paths: string[] }) => {
-        if (!context.isInitialized) {
-          return context;
-        }
+      }),
+      setCollapsedFolders: whenInitialized((context, event: { paths: string[] }) => {
         return withRefreshedWorkspaceSlices({
           ...context,
           collapsedFolders: event.paths,
         });
-      },
-      setSidebarScrollTop: (context, event: { scrollTop: number }) => {
-        if (!context.isInitialized) {
-          return context;
-        }
+      }),
+      setSidebarScrollTop: whenInitialized((context, event: { scrollTop: number }) => {
         const sidebarScrollTop = normalizeSidebarScrollTop(event.scrollTop);
 
         if (context.sidebarScrollTop === sidebarScrollTop) {
@@ -641,11 +665,8 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           ...context,
           sidebarScrollTop,
         });
-      },
-      setSidebarWidth: (context, event: { width: number }) => {
-        if (!context.isInitialized) {
-          return context;
-        }
+      }),
+      setSidebarWidth: whenInitialized((context, event: { width: number }) => {
         const sidebarWidth = normalizeSidebarWidth(event.width);
 
         if (context.sidebarWidth === sidebarWidth) {
@@ -656,17 +677,14 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           ...context,
           sidebarWidth,
         });
-      },
+      }),
       // Viewer-side UI preference: the file explorer can be toggled at any time,
       // including mid-replay, and only the viewer's own toggle is written back
       // to storage. A recording may carry `sidebarCollapsed` on its initial
       // snapshot, and a lesson may ask to open with the tree shut — a one-file
       // lesson spends its width on nothing — but that chooses the opening frame
       // and nothing more: it is never persisted, and the next toggle is theirs.
-      setSidebarCollapsed: (context, event: { collapsed: boolean }) => {
-        if (!context.isInitialized) {
-          return context;
-        }
+      setSidebarCollapsed: whenInitialized((context, event: { collapsed: boolean }) => {
         if (context.sidebarCollapsed === event.collapsed) {
           return context;
         }
@@ -675,48 +693,43 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           ...context,
           sidebarCollapsed: event.collapsed,
         };
-      },
-      createFile: (
-        context,
-        event: {
-          path: string;
-          content: WorkspaceFileContent;
-          encoding?: WorkspaceFileEncoding;
-        },
-      ) => {
-        if (!context.isInitialized) {
-          return context;
-        }
-        const normalizedPath = normalizeWorkspacePath(event.path);
+      }),
+      createFile: whenInitialized(
+        (
+          context,
+          event: {
+            path: string;
+            content: WorkspaceFileContent;
+            encoding?: WorkspaceFileEncoding;
+          },
+        ) => {
+          const normalizedPath = normalizeWorkspacePath(event.path);
 
-        if (!normalizedPath || hasFilePathConflict(context.project, normalizedPath)) {
-          return context;
-        }
+          if (!normalizedPath || hasFilePathConflict(context.project, normalizedPath)) {
+            return context;
+          }
 
-        const file = createWorkspaceFile(normalizedPath, event.content, event.encoding);
-        const nextFiles = {
-          ...context.project.files,
-          [normalizedPath]: file,
-        };
+          const file = createWorkspaceFile(normalizedPath, event.content, event.encoding);
+          const nextFiles = {
+            ...context.project.files,
+            [normalizedPath]: file,
+          };
 
-        return withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
-            project: {
-              ...context.project,
-              folders: collectWorkspaceFolders(Object.keys(nextFiles), context.project.folders),
-              files: nextFiles,
+          return commitProjectChange(
+            context,
+            {
+              project: {
+                ...context.project,
+                folders: collectWorkspaceFolders(Object.keys(nextFiles), context.project.folders),
+                files: nextFiles,
+              },
+              activeFilePath: normalizedPath,
             },
-            activeFilePath: normalizedPath,
-            treeVersion: context.treeVersion + 1,
-            syncVersion: context.syncVersion + 1,
-          }),
-        );
-      },
-      createFolder: (context, event: { path: string }) => {
-        if (!context.isInitialized) {
-          return context;
-        }
+            { topologyChanged: true },
+          );
+        },
+      ),
+      createFolder: whenInitialized((context, event: { path: string }) => {
         const normalizedPath = normalizeWorkspaceFolderPath(event.path);
 
         if (
@@ -727,9 +740,9 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           return context;
         }
 
-        return withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
+        return commitProjectChange(
+          context,
+          {
             project: {
               ...context.project,
               folders: collectWorkspaceFolders(Object.keys(context.project.files), [
@@ -737,149 +750,145 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
                 normalizedPath,
               ]),
             },
-            treeVersion: context.treeVersion + 1,
-            syncVersion: context.syncVersion + 1,
-          }),
+          },
+          { topologyChanged: true },
         );
-      },
-      renameFile: (
-        context,
-        event: {
-          currentPath: string;
-          nextPath: string;
-        },
-      ) => {
-        if (!context.isInitialized) {
-          return context;
-        }
-        const normalizedCurrentPath = normalizeWorkspacePath(event.currentPath);
-        const normalizedNextPath = normalizeWorkspacePath(event.nextPath);
-        const existingFile = context.project.files[normalizedCurrentPath];
+      }),
+      renameFile: whenInitialized(
+        (
+          context,
+          event: {
+            currentPath: string;
+            nextPath: string;
+          },
+        ) => {
+          const normalizedCurrentPath = normalizeWorkspacePath(event.currentPath);
+          const normalizedNextPath = normalizeWorkspacePath(event.nextPath);
+          const existingFile = context.project.files[normalizedCurrentPath];
 
-        if (
-          !existingFile ||
-          !normalizedNextPath ||
-          normalizedCurrentPath === normalizedNextPath ||
-          hasFilePathConflict(context.project, normalizedNextPath, normalizedCurrentPath)
-        ) {
-          return context;
-        }
-
-        const updatedFile = createWorkspaceFile(
-          normalizedNextPath,
-          existingFile.content,
-          existingFile.encoding,
-        );
-        const nextFiles = { ...context.project.files };
-        delete nextFiles[normalizedCurrentPath];
-        nextFiles[normalizedNextPath] = updatedFile;
-
-        const nextProject = {
-          ...context.project,
-          folders: collectWorkspaceFolders(Object.keys(nextFiles), context.project.folders),
-          files: nextFiles,
-          entryFilePath:
-            context.project.entryFilePath === normalizedCurrentPath
-              ? normalizedNextPath
-              : context.project.entryFilePath,
-        };
-
-        return withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
-            project: nextProject,
-            activeFilePath:
-              context.activeFilePath === normalizedCurrentPath
-                ? normalizedNextPath
-                : context.activeFilePath,
-            treeVersion: context.treeVersion + 1,
-            syncVersion: context.syncVersion + 1,
-          }),
-        );
-      },
-      renameFolder: (
-        context,
-        event: {
-          currentPath: string;
-          nextPath: string;
-        },
-      ) => {
-        if (!context.isInitialized) {
-          return context;
-        }
-        const normalizedCurrentPath = normalizeWorkspaceFolderPath(event.currentPath);
-        const normalizedNextPath = normalizeWorkspaceFolderPath(event.nextPath);
-
-        if (
-          !normalizedCurrentPath ||
-          !normalizedNextPath ||
-          normalizedCurrentPath === normalizedNextPath ||
-          !context.project.folders.includes(normalizedCurrentPath) ||
-          hasFolderPathConflict(context.project, normalizedNextPath) ||
-          context.project.folders.includes(normalizedNextPath) ||
-          isPathWithinFolder(normalizedNextPath, normalizedCurrentPath)
-        ) {
-          return context;
-        }
-
-        const nextFiles: Record<string, WorkspaceFile> = {};
-
-        for (const file of Object.values(context.project.files)) {
-          const nextFilePath = isPathWithinFolder(file.path, normalizedCurrentPath)
-            ? replacePathPrefix(file.path, normalizedCurrentPath, normalizedNextPath)
-            : file.path;
-
-          if (nextFiles[nextFilePath]) {
+          if (
+            !existingFile ||
+            !normalizedNextPath ||
+            normalizedCurrentPath === normalizedNextPath ||
+            hasFilePathConflict(context.project, normalizedNextPath, normalizedCurrentPath)
+          ) {
             return context;
           }
 
-          nextFiles[nextFilePath] =
-            nextFilePath === file.path
-              ? file
-              : createWorkspaceFile(nextFilePath, file.content, file.encoding);
-        }
+          const updatedFile = createWorkspaceFile(
+            normalizedNextPath,
+            existingFile.content,
+            existingFile.encoding,
+          );
+          const nextFiles = { ...context.project.files };
+          delete nextFiles[normalizedCurrentPath];
+          nextFiles[normalizedNextPath] = updatedFile;
 
-        const nextProject = {
-          ...context.project,
-          folders: collectWorkspaceFolders(
-            Object.keys(nextFiles),
-            context.project.folders.map((folderPath) =>
-              isPathWithinFolder(folderPath, normalizedCurrentPath)
-                ? replacePathPrefix(folderPath, normalizedCurrentPath, normalizedNextPath)
-                : folderPath,
+          const nextProject = {
+            ...context.project,
+            folders: collectWorkspaceFolders(Object.keys(nextFiles), context.project.folders),
+            files: nextFiles,
+            entryFilePath:
+              context.project.entryFilePath === normalizedCurrentPath
+                ? normalizedNextPath
+                : context.project.entryFilePath,
+          };
+
+          return commitProjectChange(
+            context,
+            {
+              project: nextProject,
+              activeFilePath:
+                context.activeFilePath === normalizedCurrentPath
+                  ? normalizedNextPath
+                  : context.activeFilePath,
+            },
+            { topologyChanged: true },
+          );
+        },
+      ),
+      renameFolder: whenInitialized(
+        (
+          context,
+          event: {
+            currentPath: string;
+            nextPath: string;
+          },
+        ) => {
+          const normalizedCurrentPath = normalizeWorkspaceFolderPath(event.currentPath);
+          const normalizedNextPath = normalizeWorkspaceFolderPath(event.nextPath);
+
+          if (
+            !normalizedCurrentPath ||
+            !normalizedNextPath ||
+            normalizedCurrentPath === normalizedNextPath ||
+            !context.project.folders.includes(normalizedCurrentPath) ||
+            hasFolderPathConflict(context.project, normalizedNextPath) ||
+            context.project.folders.includes(normalizedNextPath) ||
+            isPathWithinFolder(normalizedNextPath, normalizedCurrentPath)
+          ) {
+            return context;
+          }
+
+          const nextFiles: Record<string, WorkspaceFile> = {};
+
+          for (const file of Object.values(context.project.files)) {
+            const nextFilePath = isPathWithinFolder(file.path, normalizedCurrentPath)
+              ? replacePathPrefix(file.path, normalizedCurrentPath, normalizedNextPath)
+              : file.path;
+
+            if (nextFiles[nextFilePath]) {
+              return context;
+            }
+
+            nextFiles[nextFilePath] =
+              nextFilePath === file.path
+                ? file
+                : createWorkspaceFile(nextFilePath, file.content, file.encoding);
+          }
+
+          const nextProject = {
+            ...context.project,
+            folders: collectWorkspaceFolders(
+              Object.keys(nextFiles),
+              context.project.folders.map((folderPath) =>
+                isPathWithinFolder(folderPath, normalizedCurrentPath)
+                  ? replacePathPrefix(folderPath, normalizedCurrentPath, normalizedNextPath)
+                  : folderPath,
+              ),
             ),
-          ),
-          files: nextFiles,
-          entryFilePath: isPathWithinFolder(context.project.entryFilePath, normalizedCurrentPath)
-            ? replacePathPrefix(
-                context.project.entryFilePath,
+            files: nextFiles,
+            entryFilePath: isPathWithinFolder(context.project.entryFilePath, normalizedCurrentPath)
+              ? replacePathPrefix(
+                  context.project.entryFilePath,
+                  normalizedCurrentPath,
+                  normalizedNextPath,
+                )
+              : context.project.entryFilePath,
+          };
+
+          return commitProjectChange(
+            context,
+            {
+              project: nextProject,
+              activeFilePath: isPathWithinFolder(context.activeFilePath, normalizedCurrentPath)
+                ? replacePathPrefix(
+                    context.activeFilePath,
+                    normalizedCurrentPath,
+                    normalizedNextPath,
+                  )
+                : context.activeFilePath,
+              collapsedFolders: remapCollapsedFolders(
+                context.collapsedFolders,
                 normalizedCurrentPath,
                 normalizedNextPath,
-              )
-            : context.project.entryFilePath,
-        };
-
-        return withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
-            project: nextProject,
-            activeFilePath: isPathWithinFolder(context.activeFilePath, normalizedCurrentPath)
-              ? replacePathPrefix(context.activeFilePath, normalizedCurrentPath, normalizedNextPath)
-              : context.activeFilePath,
-            collapsedFolders: remapCollapsedFolders(
-              context.collapsedFolders,
-              normalizedCurrentPath,
-              normalizedNextPath,
-            ),
-            treeVersion: context.treeVersion + 1,
-            syncVersion: context.syncVersion + 1,
-          }),
-        );
-      },
-      deleteFile: (context, event: { path: string }) => {
-        if (!context.isInitialized) {
-          return context;
-        }
+              ),
+            },
+            { topologyChanged: true },
+          );
+        },
+      ),
+      deleteFile: whenInitialized((context, event: { path: string }) => {
         const normalizedPath = normalizeWorkspacePath(event.path);
 
         if (!context.project.files[normalizedPath]) {
@@ -905,22 +914,18 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             : Object.keys(nextFiles)[0],
         };
 
-        return withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
+        return commitProjectChange(
+          context,
+          {
             project: nextProject,
             activeFilePath: nextFiles[context.activeFilePath]
               ? context.activeFilePath
               : nextProject.entryFilePath,
-            treeVersion: context.treeVersion + 1,
-            syncVersion: context.syncVersion + 1,
-          }),
+          },
+          { topologyChanged: true },
         );
-      },
-      deleteFolder: (context, event: { path: string }) => {
-        if (!context.isInitialized) {
-          return context;
-        }
+      }),
+      deleteFolder: whenInitialized((context, event: { path: string }) => {
         const normalizedPath = normalizeWorkspaceFolderPath(event.path);
 
         if (!context.project.folders.includes(normalizedPath)) {
@@ -944,9 +949,9 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           ? Object.keys(nextFiles)[0]
           : context.project.entryFilePath;
 
-        return withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
+        return commitProjectChange(
+          context,
+          {
             project: {
               ...context.project,
               folders: collectWorkspaceFolders(
@@ -963,15 +968,11 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
               !nextFiles[context.activeFilePath]
                 ? nextEntryFilePath
                 : context.activeFilePath,
-            treeVersion: context.treeVersion + 1,
-            syncVersion: context.syncVersion + 1,
-          }),
+          },
+          { topologyChanged: true },
         );
-      },
-      applyFileTextEdits: (context, event: TextEditEvent) => {
-        if (!context.isInitialized) {
-          return context;
-        }
+      }),
+      applyFileTextEdits: whenInitialized((context, event: TextEditEvent) => {
         const normalizedPath = normalizeWorkspacePath(event.path);
         const existingFile = context.project.files[normalizedPath];
         if (!existingFile || !isWorkspaceTextFile(existingFile)) return context;
@@ -989,60 +990,58 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         const nextContext = withUpdatedFileContent(context, normalizedPath, content);
         endUpdateSpan();
         return nextContext;
-      },
-      updateFileContent: (
-        context,
-        event: {
-          path: string;
-          content: string;
+      }),
+      updateFileContent: whenInitialized(
+        (
+          context,
+          event: {
+            path: string;
+            content: string;
+          },
+        ) => {
+          const normalizedPath = normalizeWorkspacePath(event.path);
+          const existingFile = context.project.files[normalizedPath];
+
+          if (
+            !existingFile ||
+            !isWorkspaceTextFile(existingFile) ||
+            existingFile.content === event.content
+          ) {
+            return context;
+          }
+
+          const endUpdateSpan = startPerformanceSpan("workspace.content_update", {
+            project_size: projectSizeBucket(context.fileCount),
+            source: "replacement",
+          });
+          const nextContext = withUpdatedFileContent(context, normalizedPath, event.content);
+          endUpdateSpan();
+          return nextContext;
         },
-      ) => {
-        if (!context.isInitialized) {
-          return context;
-        }
-        const normalizedPath = normalizeWorkspacePath(event.path);
-        const existingFile = context.project.files[normalizedPath];
+      ),
+      updateLessonType: whenInitialized(
+        (
+          context,
+          event: {
+            lessonType: WorkspaceLessonType;
+          },
+        ) => {
+          if (context.project.lessonType === event.lessonType) {
+            return context;
+          }
 
-        if (
-          !existingFile ||
-          !isWorkspaceTextFile(existingFile) ||
-          existingFile.content === event.content
-        ) {
-          return context;
-        }
-
-        const endUpdateSpan = startPerformanceSpan("workspace.content_update", {
-          project_size: projectSizeBucket(context.fileCount),
-          source: "replacement",
-        });
-        const nextContext = withUpdatedFileContent(context, normalizedPath, event.content);
-        endUpdateSpan();
-        return nextContext;
-      },
-      updateLessonType: (
-        context,
-        event: {
-          lessonType: WorkspaceLessonType;
-        },
-      ) => {
-        if (!context.isInitialized) {
-          return context;
-        }
-        if (context.project.lessonType === event.lessonType) {
-          return context;
-        }
-
-        return withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
-            project: {
-              ...context.project,
-              lessonType: event.lessonType,
+          return commitProjectChange(
+            context,
+            {
+              project: {
+                ...context.project,
+                lessonType: event.lessonType,
+              },
             },
-            syncVersion: context.syncVersion + 1,
-          }),
-        );
-      },
+            { topologyChanged: false },
+          );
+        },
+      ),
       loadProject: (
         context,
         event: {
@@ -1077,11 +1076,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           }),
         );
       },
-      reconcileExternalProject: (context, event: { project: WorkspaceProject }) => {
-        if (!context.isInitialized) {
-          return context;
-        }
-
+      reconcileExternalProject: whenInitialized((context, event: { project: WorkspaceProject }) => {
         const project = normalizeProject(event.project);
 
         if (areWorkspaceProjectsEqual(context.project, project)) {
@@ -1091,30 +1086,25 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         const activeFilePath = project.files[context.activeFilePath]
           ? context.activeFilePath
           : project.entryFilePath;
-        const treeVersion = areWorkspaceTopologiesEqual(context.project, project)
-          ? context.treeVersion
-          : context.treeVersion + 1;
 
-        return withDirtyState(
-          withRefreshedWorkspaceSlices({
-            ...context,
+        return commitProjectChange(
+          context,
+          {
             project,
             activeFilePath,
             projectVersion: context.projectVersion + 1,
             // Marks this project bump as container/collaborator-driven rather than
             // a local user action, so playback UIs can tell the two apart.
             externalProjectVersion: context.externalProjectVersion + 1,
-            treeVersion,
-            syncVersion: context.syncVersion + 1,
-          }),
+          },
+          { topologyChanged: !areWorkspaceTopologiesEqual(context.project, project) },
         );
-      },
+      }),
       // The save events carry the workspaceLoadVersion the save started under. A
       // save finishes after its asset writes, and a loadProject in between has
       // replaced the project it saved: its outcome no longer describes this one.
-      beginSave: (context, event: { workspaceLoadVersion: number }) => {
+      beginSave: whenInitialized((context, event: { workspaceLoadVersion: number }) => {
         if (
-          !context.isInitialized ||
           event.workspaceLoadVersion !== context.workspaceLoadVersion ||
           (context.isSaving && context.saveError === null)
         ) {
@@ -1125,85 +1115,87 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           isSaving: true,
           saveError: null,
         };
-      },
-      saveFailed: (context, event: { message: string; workspaceLoadVersion: number }) => {
-        if (!context.isInitialized || event.workspaceLoadVersion !== context.workspaceLoadVersion) {
-          return context;
-        }
-        return {
-          ...context,
-          isSaving: false,
-          saveError: event.message,
-        };
-      },
-      markSaved: (
-        context,
-        event: {
-          snapshot: StoredWorkspaceSnapshot;
-          workspaceLoadVersion: number;
-        },
-      ) => {
-        if (!context.isInitialized || event.workspaceLoadVersion !== context.workspaceLoadVersion) {
-          return context;
-        }
-        return withDirtyState({
-          ...context,
-          savedSnapshot: event.snapshot,
-          saveVersion: context.saveVersion + 1,
-          isSaving: false,
-          saveError: null,
-        });
-      },
-      hydrateAssetDescriptors: (
-        context,
-        event: {
-          descriptors: Record<string, WorkspaceAssetDescriptor>;
-        },
-      ) => {
-        if (!context.isInitialized) {
-          return context;
-        }
-        // Replace legacy v1 base64 placeholders with v2 descriptors after their
-        // bytes have migrated in IndexedDB. Both live and saved snapshots change
-        // together, so startup migration does not become a dirty user edit.
-        let changed = false;
-        const nextFiles = { ...context.project.files };
-        const nextSavedFiles = { ...context.savedSnapshot.project.files };
-
-        for (const [path, descriptor] of Object.entries(event.descriptors)) {
-          const file = nextFiles[path];
-
-          if (file && isLegacyWorkspaceBinaryFile(file)) {
-            nextFiles[path] = { ...file, content: descriptor, encoding: "asset" };
-            changed = true;
+      }),
+      saveFailed: whenInitialized(
+        (context, event: { message: string; workspaceLoadVersion: number }) => {
+          if (event.workspaceLoadVersion !== context.workspaceLoadVersion) {
+            return context;
           }
-
-          const savedFile = nextSavedFiles[path];
-
-          if (savedFile && isLegacyWorkspaceBinaryFile(savedFile)) {
-            nextSavedFiles[path] = { ...savedFile, content: descriptor, encoding: "asset" };
-          }
-        }
-
-        if (!changed) {
-          return context;
-        }
-
-        return withDirtyState(
-          withRefreshedWorkspaceSlices({
+          return {
             ...context,
-            project: { ...context.project, files: nextFiles },
-            savedSnapshot: {
-              ...context.savedSnapshot,
-              project: { ...context.savedSnapshot.project, files: nextSavedFiles },
+            isSaving: false,
+            saveError: event.message,
+          };
+        },
+      ),
+      markSaved: whenInitialized(
+        (
+          context,
+          event: {
+            snapshot: StoredWorkspaceSnapshot;
+            workspaceLoadVersion: number;
+          },
+        ) => {
+          if (event.workspaceLoadVersion !== context.workspaceLoadVersion) {
+            return context;
+          }
+          return withDirtyState({
+            ...context,
+            savedSnapshot: event.snapshot,
+            saveVersion: context.saveVersion + 1,
+            isSaving: false,
+            saveError: null,
+          });
+        },
+      ),
+      hydrateAssetDescriptors: whenInitialized(
+        (
+          context,
+          event: {
+            descriptors: Record<string, WorkspaceAssetDescriptor>;
+          },
+        ) => {
+          // Replace legacy v1 base64 placeholders with v2 descriptors after their
+          // bytes have migrated in IndexedDB. Both live and saved snapshots change
+          // together, so startup migration does not become a dirty user edit.
+          let changed = false;
+          const nextFiles = { ...context.project.files };
+          const nextSavedFiles = { ...context.savedSnapshot.project.files };
+
+          for (const [path, descriptor] of Object.entries(event.descriptors)) {
+            const file = nextFiles[path];
+
+            if (file && isLegacyWorkspaceBinaryFile(file)) {
+              nextFiles[path] = { ...file, content: descriptor, encoding: "asset" };
+              changed = true;
+            }
+
+            const savedFile = nextSavedFiles[path];
+
+            if (savedFile && isLegacyWorkspaceBinaryFile(savedFile)) {
+              nextSavedFiles[path] = { ...savedFile, content: descriptor, encoding: "asset" };
+            }
+          }
+
+          if (!changed) {
+            return context;
+          }
+
+          return commitProjectChange(
+            context,
+            {
+              project: { ...context.project, files: nextFiles },
+              savedSnapshot: {
+                ...context.savedSnapshot,
+                project: { ...context.savedSnapshot.project, files: nextSavedFiles },
+              },
             },
-            syncVersion: context.syncVersion + 1,
-          }),
-        );
-      },
-      notifyAssetAvailable: (context, event: { assetId: string }) => {
+            { topologyChanged: false },
+          );
+        },
+      ),
+      notifyAssetAvailable: whenInitialized((context, event: { assetId: string }) => {
         if (
-          !context.isInitialized ||
           !Object.values(context.project.files).some(
             (file) => isWorkspaceAssetFile(file) && file.content.assetId === event.assetId,
           )
@@ -1214,7 +1206,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           ...context,
           syncVersion: context.syncVersion + 1,
         };
-      },
+      }),
     },
   });
 }
