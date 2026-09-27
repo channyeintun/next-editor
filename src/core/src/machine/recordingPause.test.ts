@@ -10,6 +10,16 @@ import type {
   AudioRecordingEvent,
   AudioRecordingInput,
 } from "./audioActor";
+import type {
+  CameraRecordingEmit,
+  CameraRecordingEvent,
+  CameraRecordingInput,
+} from "./cameraActor";
+import type {
+  ScreenRecordingEmit,
+  ScreenRecordingEvent,
+  ScreenRecordingInput,
+} from "./screenActor";
 import { fromTypedCallback } from "./fromTypedCallback";
 import { selectNextEditorMetadata } from "../useNextEditor";
 
@@ -279,6 +289,77 @@ describe("pausing a take's recorders", () => {
     actor.send({ type: "RESUME_RECORDING" });
 
     expect(received).toEqual(["PLAY", "PAUSE", "PLAY"]);
+    actor.stop();
+  });
+
+  // Fakes that only log what the machine sends them.
+  const cameraRecorder = (received: CameraRecordingEvent["type"][]) =>
+    fromTypedCallback<CameraRecordingEvent, CameraRecordingInput, CameraRecordingEmit>(
+      ({ receive }) => {
+        receive((event) => received.push(event.type));
+      },
+    );
+  const screenRecorder = (received: ScreenRecordingEvent["type"][]) =>
+    fromTypedCallback<ScreenRecordingEvent, ScreenRecordingInput, ScreenRecordingEmit>(
+      ({ receive }) => {
+        receive((event) => received.push(event.type));
+      },
+    );
+  const displayStream = () => ({ getTracks: () => [] }) as unknown as MediaStream;
+
+  it("pauses and resumes the camera with the take", () => {
+    pinClocks();
+    const received: CameraRecordingEvent["type"][] = [];
+    const machine = takeMachine.provide({
+      actors: { cameraRecording: cameraRecorder(received) },
+    });
+    const actor = createActor(machine, { input: { editorRef: { current: null } } }).start();
+
+    actor.send({ type: "START_RECORDING", enableCamera: true });
+    expect(actor.getSnapshot().value).toBe("recording");
+    actor.send({ type: "PAUSE_RECORDING" });
+    actor.send({ type: "RESUME_RECORDING" });
+
+    expect(received).toEqual(["START", "PAUSE", "RESUME"]);
+    actor.stop();
+  });
+
+  it("pauses and resumes the screen recording with the take", () => {
+    pinClocks();
+    const received: ScreenRecordingEvent["type"][] = [];
+    const machine = takeMachine.provide({
+      actors: { screenRecording: screenRecorder(received) },
+    });
+    const actor = createActor(machine, { input: { editorRef: { current: null } } }).start();
+
+    actor.send({ type: "START_RECORDING", screenStream: displayStream() });
+    expect(actor.getSnapshot().value).toBe("recording");
+    actor.send({ type: "PAUSE_RECORDING" });
+    actor.send({ type: "RESUME_RECORDING" });
+
+    expect(received).toEqual(["START", "PAUSE", "RESUME"]);
+    actor.stop();
+  });
+
+  it("holds the camera and the screen recording on a retake, and stops both with the take", () => {
+    const { advance } = pinClocks();
+    const camera: CameraRecordingEvent["type"][] = [];
+    const screen: ScreenRecordingEvent["type"][] = [];
+    const machine = takeMachine.provide({
+      actors: { cameraRecording: cameraRecorder(camera), screenRecording: screenRecorder(screen) },
+    });
+    const actor = createActor(machine, { input: { editorRef: { current: null } } }).start();
+
+    actor.send({ type: "START_RECORDING", enableCamera: true, screenStream: displayStream() });
+    advance(1_000);
+    actor.send({ type: "RETAKE_RECORDING" });
+    expect(selectNextEditorMetadata(actor.getSnapshot()).isRecordingPaused).toBe(true);
+    actor.send({ type: "STOP_RECORDING" });
+
+    // The camera drains in stoppingRecording; the screen recorder is stopped on leaving recording.
+    expect(actor.getSnapshot().value).toBe("stoppingRecording");
+    expect(camera).toEqual(["START", "PAUSE", "STOP"]);
+    expect(screen).toEqual(["START", "PAUSE", "STOP"]);
     actor.stop();
   });
 });
