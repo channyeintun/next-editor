@@ -1,18 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useNextEditorActions } from "./useNextEditorContext";
 import { decompressBinaryToRecording } from "../storage/recordingCodecClient";
-import { createStreamingRecordingReader } from "../storage/streamingRecordingCodec";
 import {
   attachCompanionMedia,
   decodeRecordingFile,
   selectRecordingFiles,
 } from "../storage/RecordingStorage";
-import {
-  hydrateDecodedRecordingWorkspaceAssets,
-  persistDecodedWorkspaceAssets,
-  stripRecordingWorkspaceAssets,
-} from "../storage/recordingWorkspaceAssets";
 import { describeFailedResponse, fetchNextEditorUrl } from "../storage/recordingFetch";
+import { streamRecording } from "../storage/recordingStream";
 import {
   fetchSiblingCaptions,
   findWorkingAudioBlob,
@@ -21,10 +16,6 @@ import {
 } from "../storage/recordingSiblingMedia";
 import { isNextEditorUrl } from "../utils/recordingUrl";
 import type { Recording } from "../core/src";
-
-// Once the first playable prefix has loaded (tried on every chunk until then), hand newly
-// decoded records to the player roughly every this many downloaded bytes.
-const STREAM_DECODE_INTERVAL_BYTES = 512 * 1024;
 
 interface LoadFailure {
   /** Human-readable reason, shown in the editor's inline error panel. */
@@ -108,118 +99,6 @@ export const useUrlLoader = () => {
   };
 
   /**
-   * Streams a `.ne` response and progressively decodes ever-larger prefixes of the SCR3 stream,
-   * so playback can begin before the whole file has downloaded. The first decodable prefix is
-   * loaded; subsequent intervals append only newly decoded records. A complete immutable
-   * recording is constructed again only at the end: at finalization, or when the body ends
-   * without a footer. Falls back to the caller for whole-file decoding when the body is not
-   * streamable.
-   */
-  const streamRecordingFromResponse = async (
-    response: Response,
-    baseUrl: string,
-    isStale: () => boolean,
-  ): Promise<Recording | null> => {
-    const body = response.body;
-    if (!body || typeof body.getReader !== "function") {
-      return null;
-    }
-
-    const reader = body.getReader();
-    const streamReader = createStreamingRecordingReader();
-    let lastDecodeLength = 0;
-    let loadedOnce = false;
-    let appliedFinalSnapshot = false;
-    let latestRecording: Recording | null = null;
-
-    const resolveRecording = (recording: Recording | null | undefined): Recording | null => {
-      if (!recording) {
-        return null;
-      }
-
-      const resolved = withResolvedMediaUrls(recording, baseUrl);
-      // Track the newest complete snapshot (the first prefix, then the final recording) —
-      // the caller needs the final one (for sibling captions/audio).
-      latestRecording = resolved;
-      return resolved;
-    };
-
-    const applyStreamed = async (endOfStream: boolean) => {
-      if (!loadedOnce) {
-        const decoded = streamReader.getRecording();
-        // Mid-stream, wait for a prefix with a frame to show; at the end, load whatever decoded.
-        if (!decoded || (!endOfStream && decoded.frames.length === 0)) return;
-        const hydrated = await hydrateDecodedRecordingWorkspaceAssets(decoded);
-        // A newer load may have started during the IndexedDB round trip.
-        if (isStale()) return;
-        const resolved = resolveRecording(hydrated);
-        if (!resolved) return;
-        loadRecording(resolved);
-        loadedOnce = true;
-        setIsLoading(false);
-        // The initial snapshot already contains every record decoded so far. Advance
-        // the reader's delivery cursors without sending those records a second time.
-        streamReader.readDelta();
-        appliedFinalSnapshot = streamReader.isFinalized();
-        return;
-      }
-
-      const delta = streamReader.readDelta();
-      if (delta) {
-        await persistDecodedWorkspaceAssets(delta.newWorkspaceAssets);
-        if (isStale()) return;
-        appendRecordingDelta({ ...delta, newWorkspaceAssets: [] });
-      }
-
-      // Settle on the complete recording once the footer is in, or once the body ends
-      // without one (a still-writing or cut-off file): the caller extends late media onto
-      // `latestRecording`, which must hold every decoded record, not the first prefix.
-      if ((endOfStream || streamReader.isFinalized()) && !appliedFinalSnapshot) {
-        const decoded = streamReader.getRecording();
-        const finalRecording = resolveRecording(
-          decoded ? stripRecordingWorkspaceAssets(decoded) : null,
-        );
-        if (finalRecording) {
-          extendRecording(finalRecording);
-          appliedFinalSnapshot = true;
-        }
-      }
-    };
-
-    try {
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        if (!value || value.length === 0) {
-          continue;
-        }
-
-        streamReader.push(value);
-
-        const downloaded = streamReader.byteLength();
-        if (!loadedOnce || downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
-          lastDecodeLength = downloaded;
-          await applyStreamed(false);
-        }
-      }
-
-      await applyStreamed(true);
-    } catch (error) {
-      // Stop the download rather than leave it stalled and open until garbage collection.
-      await reader.cancel(error).catch(() => {});
-      throw error;
-    } finally {
-      reader.releaseLock();
-    }
-
-    if (!loadedOnce) {
-      throw new Error("No valid recording found in stream");
-    }
-    return latestRecording;
-  };
-
-  /**
    * Resolves external audio/camera media out-of-band, after the (now tiny) `.ne` itself has
    * loaded. Camera is probed first (cheap HEAD/ranged-GET) so a single `extendRecording` can
    * carry both fixes — audio's full download happens after, folding in whatever the camera
@@ -281,7 +160,15 @@ export const useUrlLoader = () => {
       let loaded: Recording | null = null;
       let bodyConsumed = false;
       try {
-        loaded = await streamRecordingFromResponse(response, url, isStale);
+        loaded = await streamRecording(response, url, {
+          isStale,
+          load: (recording) => {
+            loadRecording(recording);
+            setIsLoading(false);
+          },
+          appendDelta: appendRecordingDelta,
+          extend: extendRecording,
+        });
       } catch (error) {
         if (!(error instanceof TypeError)) throw error;
         console.warn("Streaming the recording failed, fetching it whole:", error);
