@@ -697,6 +697,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     recordExternalModelChange();
   }, [activeFile.content, activeFile.path]);
 
+  // syncActivePlaybackModel is a useEffectEvent, and React 19.3 returns a new
+  // function for it on every render, so this effect runs after every commit,
+  // not once. It is also the only place monacoRef is set: until it first runs,
+  // the playback layout effect above finds no Monaco and does nothing.
   useEffect(() => {
     monacoRef.current = monaco;
     syncActivePlaybackModel(monaco);
