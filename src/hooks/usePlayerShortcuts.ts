@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { RecordingChapter } from "../core/src";
 import { findChapterIndexAt } from "../core/src/utils/chapters";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
+import { MAX_PLAYBACK_SPEED, MIN_PLAYBACK_SPEED } from "../core/src/machine/playbackValues";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
@@ -21,8 +22,6 @@ const SEEK_MS = 5_000;
 const JUMP_MS = 10_000;
 const STEP_MS = 1_000;
 const SPEED_STEP = 0.25;
-const MIN_SPEED = 0.5;
-const MAX_SPEED = 2;
 /** Further into a chapter than this, "previous chapter" goes back to its start first. */
 const CHAPTER_RESTART_MS = 2_000;
 const FEEDBACK_MS = 900;
@@ -207,7 +206,10 @@ export function usePlayerShortcuts() {
         seek(duration);
         return true;
       case "speedBy": {
-        const speed = Math.min(MAX_SPEED, Math.max(MIN_SPEED, playbackSpeed + shortcut.delta));
+        const speed = Math.min(
+          MAX_PLAYBACK_SPEED,
+          Math.max(MIN_PLAYBACK_SPEED, playbackSpeed + shortcut.delta),
+        );
         if (speed !== playbackSpeed) setSpeed(speed);
         else show(formatSpeed(speed));
         return true;
