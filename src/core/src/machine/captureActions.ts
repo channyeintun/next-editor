@@ -846,6 +846,15 @@ export const storeCameraBlob = ({ context, event }: EditorActionArgs): EditorCon
   };
 };
 
+/**
+ * Where on the take's recorded time a recorder that began at `startedAtPerf` started, or
+ * 0 outside a take. A recorder that started during a pause starts where the take resumes.
+ */
+const getRecorderStartOffsetMs = (context: EditorMachineContext, startedAtPerf: number): number =>
+  context.session
+    ? recordingTimeAtPerf(context.session.clock, context.session.startedAtPerf, startedAtPerf)
+    : 0;
+
 export const storeCameraStarted = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "CAMERA_STARTED") return {};
   // The camera MediaRecorder only starts after getUserMedia resolves, which lags the
@@ -854,9 +863,7 @@ export const storeCameraStarted = ({ context, event }: EditorActionArgs): Editor
   // ahead of audio. Both sides must be the same (monotonic) clock — see P7. Read through
   // the take's clock: a camera that finished warming up during a pause starts recording
   // when the take resumes, which is the moment the pause holds.
-  const startOffsetMs = context.session
-    ? recordingTimeAtPerf(context.session.clock, context.session.startedAtPerf, event.startedAtPerf)
-    : 0;
+  const startOffsetMs = getRecorderStartOffsetMs(context, event.startedAtPerf);
   return {
     camera: {
       ...context.camera,
@@ -929,9 +936,7 @@ export const storeScreenStarted = ({ context, event }: EditorActionArgs): Editor
   // The screen MediaRecorder starts a beat after the session origin (picker + getDisplayMedia
   // ran before START_RECORDING, but MediaRecorder.start resolves at spawn). Capture the offset
   // on the same monotonic clock as the session so a consumer can realign the local video.
-  const startOffsetMs = context.session
-    ? recordingTimeAtPerf(context.session.clock, context.session.startedAtPerf, event.startedAtPerf)
-    : 0;
+  const startOffsetMs = getRecorderStartOffsetMs(context, event.startedAtPerf);
   return {
     screen: {
       ...context.screen,

@@ -188,10 +188,10 @@ export const setRecording = (
     ? resolveRuntimeSnapshotAt(recording.runtimeEvents, 0)
     : null;
 
-  if (initialRuntimeSnapshot && context.applyRuntimeSnapshot) {
-    context.applyRuntimeSnapshot(initialRuntimeSnapshot);
-  } else if (recording.runtimeSnapshot && context.applyRuntimeSnapshot) {
-    context.applyRuntimeSnapshot(recording.runtimeSnapshot);
+  // The runtime track's state at 0, or the recording's one snapshot when it has no track.
+  const runtimeSnapshot = initialRuntimeSnapshot ?? recording.runtimeSnapshot;
+  if (runtimeSnapshot && context.applyRuntimeSnapshot) {
+    context.applyRuntimeSnapshot(runtimeSnapshot);
   }
 
   // Reset to an empty baseline before applying the recording's chat track. A
@@ -694,11 +694,7 @@ export const invalidateRenderedPlaybackState = (): EditorContextUpdate => ({
   lastAppliedFrameIndex: -1,
 });
 
-/**
- * `assign()` property-assigner object (not a function body) — matches the original
- * inline shape so `editorMachine.ts` can pass it straight to `assign(clearRecording)`.
- */
-export const clearRecording = {
+export const clearRecording = ({ context }: EditorActionArgs): EditorContextUpdate => ({
   hasManualWorkspaceOverride: false,
   learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: false,
@@ -708,12 +704,12 @@ export const clearRecording = {
   // No recording is left for a width delta to be relative to.
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedPreviewState: undefined,
-  timeline: ({ context }: EditorActionArgs) => ({
+  timeline: {
     ...context.timeline,
     currentTime: 0,
     duration: 0,
-  }),
-};
+  },
+});
 
 export const addCaptionTrack = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "ADD_CAPTION_TRACK" || !context.recording) return {};

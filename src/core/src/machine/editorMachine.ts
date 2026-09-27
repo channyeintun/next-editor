@@ -10,7 +10,7 @@ import {
   fromPromise,
 } from "xstate";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
-import { createInitialContext } from "./types";
+import { createIdleCameraState, createInitialContext } from "./types";
 import type { MouseCursorPosition, Recording } from "../types";
 import { timelineMachine } from "./timelineMachine";
 import { audioRecordingActor, audioPlaybackActor } from "./audioActor";
@@ -20,7 +20,6 @@ import { mouseTrackingActor } from "./mouseTrackingActor";
 import { measureAudioDurationSeconds } from "../utils/audioDuration";
 import {
   getPlaybackAudioState,
-  hasSpawnedPlaybackAudio,
   isAtPlaybackEnd,
   reportMachineError,
   syncPlaybackAudio,
@@ -356,15 +355,7 @@ export const editorMachine = setup({
       });
       enqueue.sendTo("cameraRecorder", { type: "START" });
       enqueue.assign({
-        camera: {
-          ...context.camera,
-          blob: null,
-          isRecording: true,
-          mimeType: "",
-          mediaRecorder: null,
-          source: "camera" as const,
-          startOffsetMs: 0,
-        },
+        camera: { ...createIdleCameraState(), isRecording: true, source: "camera" as const },
       });
     }),
     startScreenRecorder: enqueueActions(({ context, enqueue }) => {
@@ -573,7 +564,7 @@ export const editorMachine = setup({
     // just stored, so both follow the one clamped value instead of re-deriving it.
     seekPlaybackActors: enqueueActions(({ context, enqueue }) => {
       enqueue.sendTo("timelineActor", { type: "SEEK", time: context.timeline.currentTime });
-      if (hasSpawnedPlaybackAudio(context)) {
+      if (context.playbackAudioSpawned) {
         enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: context.timeline.currentTime });
       }
     }),
@@ -593,7 +584,7 @@ export const editorMachine = setup({
     syncPlaybackAudioToTimeline: enqueueActions(({ context, enqueue }) => {
       const lastSync = context.lastSyncTime || 0;
       const now = performance.now();
-      if (hasSpawnedPlaybackAudio(context) && now - lastSync > PLAYBACK_AUDIO_SYNC_INTERVAL_MS) {
+      if (context.playbackAudioSpawned && now - lastSync > PLAYBACK_AUDIO_SYNC_INTERVAL_MS) {
         enqueue.sendTo("audioPlayer", {
           type: "SYNC",
           timeMs: context.timeline.currentTime,
@@ -606,7 +597,7 @@ export const editorMachine = setup({
     syncPlaybackActorsSpeed: enqueueActions(({ context, enqueue }) => {
       const speed = context.timeline.speed;
       enqueue.sendTo("timelineActor", { type: "SET_SPEED", speed });
-      if (hasSpawnedPlaybackAudio(context)) {
+      if (context.playbackAudioSpawned) {
         enqueue.sendTo("audioPlayer", {
           type: "SET_PLAYBACK_RATE",
           rate: speed,
@@ -615,7 +606,7 @@ export const editorMachine = setup({
     }),
     // Hands the volume setVolume just stored to the narration, once spawned.
     syncPlaybackAudioVolume: enqueueActions(({ context, enqueue }) => {
-      if (hasSpawnedPlaybackAudio(context)) {
+      if (context.playbackAudioSpawned) {
         enqueue.sendTo("audioPlayer", {
           type: "SET_VOLUME",
           volume: context.timeline.volume,
@@ -649,7 +640,7 @@ export const editorMachine = setup({
     }),
     pausePlaybackActors: enqueueActions(({ context, enqueue }) => {
       enqueue.sendTo("timelineActor", { type: "PAUSE" });
-      if (hasSpawnedPlaybackAudio(context)) {
+      if (context.playbackAudioSpawned) {
         enqueue.sendTo("audioPlayer", { type: "PAUSE" });
       }
     }),

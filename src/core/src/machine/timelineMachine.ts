@@ -21,6 +21,16 @@ export type TimelineEvent =
   | { type: "SET_DURATION"; duration: number }
   | { type: "SET_SPEED"; speed: number };
 
+/** Moves the playhead to `time`, clamped to the timeline; the clock counts on from there. */
+const seekTimeline = (context: TimelineContext, time: number) => {
+  const currentTime = normalizeTimelineTime(time, context.duration, context.currentTime);
+  return { currentTime, accumulatedTime: currentTime };
+};
+
+const setTimelineSpeed = (context: TimelineContext, speed: number) => ({
+  speed: normalizePlaybackSpeed(speed, context.speed),
+});
+
 export const timelineMachine = setup({
   types: {
     context: {} as TimelineContext,
@@ -76,14 +86,7 @@ export const timelineMachine = setup({
   },
   on: {
     SEEK: {
-      actions: assign(({ context, event }) => {
-        const currentTime = normalizeTimelineTime(
-          event.time,
-          context.duration,
-          context.currentTime,
-        );
-        return { currentTime, accumulatedTime: currentTime };
-      }),
+      actions: assign(({ context, event }) => seekTimeline(context, event.time)),
     },
     SET_DURATION: {
       actions: assign(({ context, event }) => ({
@@ -94,9 +97,7 @@ export const timelineMachine = setup({
       })),
     },
     SET_SPEED: {
-      actions: assign(({ context, event }) => ({
-        speed: normalizePlaybackSpeed(event.speed, context.speed),
-      })),
+      actions: assign(({ context, event }) => setTimelineSpeed(context, event.speed)),
     },
   },
   states: {
@@ -136,23 +137,17 @@ export const timelineMachine = setup({
         },
         PAUSE: "paused",
         STOP: "stopped",
+        // While running, a seek or a speed change also restarts the clock's count, so
+        // the next pulse measures from here at the new rate.
         SEEK: {
-          actions: assign(({ context, event }) => {
-            const currentTime = normalizeTimelineTime(
-              event.time,
-              context.duration,
-              context.currentTime,
-            );
-            return {
-              currentTime,
-              accumulatedTime: currentTime,
-              startedAt: performance.now(),
-            };
-          }),
+          actions: assign(({ context, event }) => ({
+            ...seekTimeline(context, event.time),
+            startedAt: performance.now(),
+          })),
         },
         SET_SPEED: {
           actions: assign(({ context, event }) => ({
-            speed: normalizePlaybackSpeed(event.speed, context.speed),
+            ...setTimelineSpeed(context, event.speed),
             accumulatedTime: context.currentTime,
             startedAt: performance.now(),
           })),
