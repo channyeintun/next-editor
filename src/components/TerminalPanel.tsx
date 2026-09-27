@@ -41,10 +41,7 @@ import type {
   RuntimeTerminalScrollLines,
 } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
-
-function formatTerminalContent(content: string): string {
-  return content.replace(/\n{3,}/g, "\n\n").trim();
-}
+import { describeRunnerOutput, dockTabStateClassName } from "./terminalPanel/runtimeDockHelpers";
 
 const ANSI_RESET = "\u001b[0m";
 const DEFAULT_CONSOLE_LINES: string[] = [];
@@ -384,25 +381,17 @@ function TerminalPanel() {
   const isBusy = isRuntimeBusy(runtimeStatus as WebContainerRuntimeStatus);
 
   const effectiveRunnerOutput = isPlaybackSnapshotActive ? recordedOutput : lastOutput;
-  const rawContent = effectiveRunnerOutput
-    ? effectiveErrorMessage
-      ? `${effectiveRunnerOutput}\n\nRuntime error\n${effectiveErrorMessage}`
-      : effectiveRunnerOutput
-    : effectiveErrorMessage
-      ? `Runtime error\n${effectiveErrorMessage}`
-      : runtimeStatus === "installing"
-        ? "Installing dependencies inside the WebContainer..."
-        : runtimeStatus === "starting"
-          ? "Starting the workspace dev server..."
-          : "Waiting for runtime output...";
-  const content = formatTerminalContent(rawContent);
   const consoleContent =
     effectiveConsoleLines.length === 0
       ? ""
       : effectiveConsoleLines.map(decorateConsoleLine).join("\n");
 
   const runnerCommand = runnerConfig.runCommand.trim() || "Runner disabled";
-  const runnerOutput = content || "Waiting for runner output...";
+  const runnerOutput = describeRunnerOutput({
+    output: effectiveRunnerOutput,
+    errorMessage: effectiveErrorMessage,
+    status: runtimeStatus,
+  });
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
 
@@ -425,11 +414,9 @@ function TerminalPanel() {
                 type="button"
                 disabled={isPlaybackSnapshotActive}
                 onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${
-                  isActive
-                    ? "border-b border-b-[#64a3ff] bg-[#171b22] text-white"
-                    : "text-slate-400 hover:bg-[#171b22] hover:text-white"
-                } disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
+                className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${dockTabStateClassName(
+                  isActive,
+                )} disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
               >
                 {tab.icon}
                 {tab.label}
@@ -444,11 +431,9 @@ function TerminalPanel() {
             return (
               <div
                 key={session.id}
-                className={`inline-flex items-center border-r border-[#11151d] text-xs font-medium transition-colors ${
-                  isActiveSession
-                    ? "border-b border-b-[#64a3ff] bg-[#171b22] text-white"
-                    : "text-slate-400 hover:bg-[#171b22] hover:text-white"
-                }`}
+                className={`inline-flex items-center border-r border-[#11151d] text-xs font-medium transition-colors ${dockTabStateClassName(
+                  isActiveSession,
+                )}`}
               >
                 <button
                   type="button"
