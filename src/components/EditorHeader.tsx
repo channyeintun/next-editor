@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
+import { isRuntimeBusy } from "../contexts/WebContainerRuntimeContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import {
   useWebContainerRuntimeActions,
@@ -197,11 +198,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   const activeLessonOption =
     LESSON_TYPE_OPTIONS.find((option) => option.value === lessonType) ?? LESSON_TYPE_OPTIONS[0];
 
-  const isBusy =
-    status === "booting" ||
-    status === "mounting" ||
-    status === "installing" ||
-    status === "starting";
+  const isBusy = isRuntimeBusy(status);
 
   useEffect(() => {
     if (!isEnvironmentModalOpen) {

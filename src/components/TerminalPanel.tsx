@@ -15,6 +15,10 @@ import {
 import AgentPanel from "./agent/AgentPanel";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import {
+  isRuntimeBusy,
+  type WebContainerRuntimeStatus,
+} from "../contexts/WebContainerRuntimeContext";
+import {
   selectActiveTab,
   selectConsoleLines,
   selectIsCollapsed,
@@ -413,11 +417,9 @@ function TerminalPanel() {
     void startTerminalSession();
   }, [activeTab, isCreatingTerminal, isPlaybackSnapshotActive, startTerminalSession]);
 
-  const isBusy =
-    runtimeStatus === "booting" ||
-    runtimeStatus === "mounting" ||
-    runtimeStatus === "installing" ||
-    runtimeStatus === "starting";
+  // A recorded status is typed as a plain string; isRuntimeBusy only compares it
+  // with the busy statuses, so any other string reads as not busy.
+  const isBusy = isRuntimeBusy(runtimeStatus as WebContainerRuntimeStatus);
 
   const effectiveRunnerOutput = isPlaybackSnapshotActive ? recordedOutput : lastOutput;
   const rawContent = effectiveRunnerOutput
