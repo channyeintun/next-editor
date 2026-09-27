@@ -26,6 +26,7 @@ import {
   lessonSupportsPreview,
   lessonSupportsTerminal,
   type WorkspaceExecutionKind,
+  type WorkspaceLessonType,
 } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
 import { collaborationTextForPath } from "../collaboration/collaborationTextForPath";
@@ -102,6 +103,30 @@ const RUNNER_PANELS: Record<Exclude<WorkspaceExecutionKind, "webcontainer">, Com
   "kite-playground": KitePlaygroundRunnerPanel,
   "asm-playground": AsmPlaygroundRunnerPanel,
 };
+
+/**
+ * The dock under the editor that runs the lesson: the terminal for a lesson
+ * that runs in the WebContainer, its playground's runner panel otherwise, and
+ * nothing for a lesson type that has neither.
+ */
+function RuntimeDock({ lessonType }: { lessonType: WorkspaceLessonType }) {
+  // Uncompiled, like CodeEditor. Compiled, it would hand React the same panel
+  // element on every render, so the panels would no longer re-render along
+  // with the editor the way they did when CodeEditor rendered them inline.
+  "use no memo";
+  if (lessonSupportsTerminal(lessonType)) return <TerminalPanel />;
+  const executionKind = executionKindForLessonType(lessonType);
+  const RunnerPanel = executionKind === "webcontainer" ? null : RUNNER_PANELS[executionKind];
+  if (!RunnerPanel) return null;
+  return (
+    // Only the asm panel is lazy; the rest resolve synchronously and
+    // never suspend, so this Suspense is inert for them.
+    <Suspense fallback={null}>
+      <RunnerPanel />
+    </Suspense>
+  );
+}
+
 const Y_MONACO_BINDING_ENABLED = import.meta.env.VITE_COLLABORATION_Y_MONACO !== "false";
 
 interface CodeEditorProps {
@@ -1224,9 +1249,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     publishCollaborationViewport(editor);
   };
 
-  const executionKind = executionKindForLessonType(lessonType);
-  const RunnerPanel = executionKind === "webcontainer" ? null : RUNNER_PANELS[executionKind];
-
   return (
     <div className="h-full flex flex-col" data-cursor-replay-target="workspace">
       <WorkspaceEventRecorder
@@ -1268,15 +1290,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
                 />
               )}
             </div>
-            {lessonSupportsTerminal(lessonType) ? (
-              <TerminalPanel />
-            ) : RunnerPanel ? (
-              // Only the asm panel is lazy; the rest resolve synchronously and
-              // never suspend, so this Suspense is inert for them.
-              <Suspense fallback={null}>
-                <RunnerPanel />
-              </Suspense>
-            ) : null}
+            <RuntimeDock lessonType={lessonType} />
           </div>
           {/* Go, Kotlin, and Python lessons have no preview surface at all —
               the dock console is their only runtime output. */}
