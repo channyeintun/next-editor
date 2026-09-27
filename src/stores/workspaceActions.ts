@@ -1,0 +1,298 @@
+import type { WorkspaceActions } from "../contexts/WorkspaceContext";
+import {
+  WORKSPACE_STORAGE_KEY,
+  normalizeProject,
+  toPersistedSnapshot,
+  type InitializedWorkspaceState,
+  type StoredWorkspaceSnapshot,
+  type WorkspaceStoreInstance,
+} from "./workspaceStore";
+import { resolveActiveFilePath, withMigratedAssetDescriptors } from "./workspaceProjectSupport";
+import {
+  migrateLegacyWorkspaceAssets,
+  persistWorkspaceAssets,
+  pruneLegacyWorkspaceAssetKeys,
+} from "../storage/workspaceAssetStore";
+import {
+  isWorkspaceTextFile,
+  normalizeWorkspacePath,
+  type WorkspaceProject,
+} from "../types/workspace";
+import { prepareTextEditEvent } from "../types/textEdit";
+import { writeStoredFileSidebarCollapsed } from "../utils/sidebarLayout";
+
+/**
+ * Makes one workspace generation durable: the assets first, then the
+ * localStorage metadata that references them. A failure leaves the workspace
+ * dirty and is reported through the store.
+ */
+async function persistWorkspace(
+  workspaceStore: WorkspaceStoreInstance,
+  { activeFilePath, project, savedSnapshot, workspaceLoadVersion }: InitializedWorkspaceState,
+): Promise<void> {
+  workspaceStore.trigger.beginSave({ workspaceLoadVersion });
+
+  try {
+    const migratedDescriptors = await migrateLegacyWorkspaceAssets(
+      project,
+      savedSnapshot.assetGeneration,
+    );
+    const storedFiles = withMigratedAssetDescriptors(project.files, migratedDescriptors);
+    const storedProject: WorkspaceProject =
+      storedFiles === project.files ? project : { ...project, files: storedFiles };
+    if (Object.keys(migratedDescriptors).length > 0) {
+      workspaceStore.trigger.hydrateAssetDescriptors({ descriptors: migratedDescriptors });
+    }
+    await persistWorkspaceAssets(storedProject);
+
+    // Capture the exact durable project generation. Edits arriving while
+    // this save is in flight remain dirty against this snapshot.
+    const storedSnapshot = {
+      activeFilePath,
+      project: storedProject,
+    } satisfies StoredWorkspaceSnapshot;
+
+    // Publish metadata only after every referenced asset is durable.
+    window.localStorage.setItem(
+      WORKSPACE_STORAGE_KEY,
+      JSON.stringify(toPersistedSnapshot(storedSnapshot)),
+    );
+    workspaceStore.trigger.markSaved({
+      snapshot: storedSnapshot,
+      workspaceLoadVersion,
+    });
+
+    void pruneLegacyWorkspaceAssetKeys().catch((error) => {
+      console.warn("Failed to prune old workspace assets:", error);
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The workspace could not be saved";
+    workspaceStore.trigger.saveFailed({ message, workspaceLoadVersion });
+    console.warn("Failed to save workspace snapshot:", error);
+  }
+}
+
+/**
+ * The imperative workspace API over one store, as WorkspaceActionsContext
+ * hands it out. WorkspaceProvider builds it once, next to the store, so every
+ * action is stable by construction rather than by the React Compiler's
+ * memoization, and the save queue is plain closure state instead of a ref.
+ * It also keeps persistWorkspace out of the component: the compiler skips a
+ * component whose try/catch holds conditional expressions.
+ */
+export function createWorkspaceActions(workspaceStore: WorkspaceStoreInstance): WorkspaceActions {
+  // Saves run one at a time, in call order; each persists the project as it
+  // was when it was called.
+  let saveQueue: Promise<void> = Promise.resolve();
+
+  return {
+    setActiveFilePath: (path) => {
+      workspaceStore.trigger.setActiveFilePath({ path });
+    },
+
+    setPreviewFilePath: (path) => {
+      workspaceStore.trigger.setPreviewFilePath({ path });
+    },
+
+    setCollapsedFolders: (paths) => {
+      workspaceStore.trigger.setCollapsedFolders({ paths });
+    },
+
+    setSidebarScrollTop: (scrollTop) => {
+      workspaceStore.trigger.setSidebarScrollTop({ scrollTop });
+    },
+
+    setSidebarWidth: (width) => {
+      // Width is session-only: not written to storage, so it resets to the default
+      // on reload. Recording captures resizes as offsets via handleWorkspaceEvent.
+      workspaceStore.trigger.setSidebarWidth({ width });
+    },
+
+    setSidebarCollapsed: (collapsed) => {
+      workspaceStore.trigger.setSidebarCollapsed({ collapsed });
+      writeStoredFileSidebarCollapsed(workspaceStore.getSnapshot().context.sidebarCollapsed);
+    },
+
+    // The same trigger with no write behind it: a lesson that opens with the
+    // explorer shut must not leave that behind in the viewer's own editor.
+    startSidebarCollapsed: (collapsed) => {
+      workspaceStore.trigger.setSidebarCollapsed({ collapsed });
+    },
+
+    createFile: (path, content = "", encoding) => {
+      workspaceStore.trigger.createFile({ path, content, encoding });
+    },
+
+    createFolder: (path) => {
+      workspaceStore.trigger.createFolder({ path });
+    },
+
+    deleteFolder: (path) => {
+      workspaceStore.trigger.deleteFolder({ path });
+    },
+
+    renameFile: (currentPath, nextPath) => {
+      workspaceStore.trigger.renameFile({
+        currentPath,
+        nextPath,
+      });
+    },
+
+    renameFolder: (currentPath, nextPath) => {
+      workspaceStore.trigger.renameFolder({
+        currentPath,
+        nextPath,
+      });
+    },
+
+    deleteFile: (path) => {
+      workspaceStore.trigger.deleteFile({ path });
+    },
+
+    updateFileContent: (path, content) => {
+      workspaceStore.trigger.updateFileContent({
+        path,
+        content,
+      });
+    },
+
+    applyFileTextEdits: (event) => {
+      const context = workspaceStore.getSnapshot().context;
+      if (!context.isInitialized) return null;
+
+      const path = normalizeWorkspacePath(event.path);
+      const file = context.project.files[path];
+      if (
+        !file ||
+        !isWorkspaceTextFile(file) ||
+        !prepareTextEditEvent(event, file.content.length)
+      ) {
+        return null;
+      }
+
+      workspaceStore.trigger.applyFileTextEdits({ ...event, path });
+      const nextContext = workspaceStore.getSnapshot().context;
+      if (!nextContext.isInitialized) return null;
+      const nextFile = nextContext.project.files[path];
+      return nextFile && isWorkspaceTextFile(nextFile) ? nextFile.content : null;
+    },
+
+    notifyAssetAvailable: (assetId) => {
+      workspaceStore.trigger.notifyAssetAvailable({ assetId });
+    },
+
+    saveProject: () => {
+      if (typeof window === "undefined") {
+        return Promise.resolve();
+      }
+
+      const context = workspaceStore.getSnapshot().context;
+      if (!context.isInitialized) {
+        return Promise.resolve();
+      }
+
+      const run = () => persistWorkspace(workspaceStore, context);
+
+      const result = saveQueue.then(run, run);
+      saveQueue = result.catch(() => undefined);
+      return result;
+    },
+
+    loadProject: (project, nextActiveFilePath, collapsedFolders, sidebarScrollTop) => {
+      const normalizedProject = normalizeProject(project);
+      const resolvedActiveFilePath = resolveActiveFilePath(
+        normalizedProject,
+        normalizeWorkspacePath(nextActiveFilePath ?? ""),
+      );
+
+      const savedSnapshot: StoredWorkspaceSnapshot = {
+        activeFilePath: resolvedActiveFilePath,
+        project: normalizedProject,
+      };
+
+      workspaceStore.trigger.loadProject({
+        project: normalizedProject,
+        activeFilePath: resolvedActiveFilePath,
+        collapsedFolders,
+        sidebarScrollTop,
+        savedSnapshot,
+      });
+    },
+
+    reconcileExternalProject: (project) => {
+      // The transition normalizes the project (the agent's bash tool triggers it directly).
+      workspaceStore.trigger.reconcileExternalProject({ project });
+    },
+
+    updateLessonType: (lessonType) => {
+      workspaceStore.trigger.updateLessonType({ lessonType });
+    },
+
+    getProject: () => {
+      const context = workspaceStore.getSnapshot().context;
+      return context.isInitialized
+        ? context.project
+        : {
+            id: "uninitialized",
+            name: "Untitled",
+            lessonType: "html-css" as const,
+            entryFilePath: "",
+            folders: [],
+            files: {},
+          };
+    },
+
+    getWorkspaceRevision: () => {
+      return workspaceStore.getSnapshot().context.syncVersion;
+    },
+
+    getActiveFilePath: () => {
+      const context = workspaceStore.getSnapshot().context;
+      return context.isInitialized ? context.activeFilePath : "";
+    },
+
+    getCollapsedFolders: () => {
+      return workspaceStore.getSnapshot().context.collapsedFolders;
+    },
+
+    getSidebarScrollTop: () => {
+      return workspaceStore.getSnapshot().context.sidebarScrollTop;
+    },
+
+    getSidebarWidth: () => {
+      return workspaceStore.getSnapshot().context.sidebarWidth;
+    },
+
+    getSidebarCollapsed: () => {
+      return workspaceStore.getSnapshot().context.sidebarCollapsed;
+    },
+
+    getFile: (path) => {
+      const context = workspaceStore.getSnapshot().context;
+      if (!context.isInitialized) {
+        return null;
+      }
+      return context.project.files[normalizeWorkspacePath(path)] ?? null;
+    },
+
+    subscribeWorkspaceSync: (listener) => {
+      let observedRevision = workspaceStore.getSnapshot().context.syncVersion;
+      const subscription = workspaceStore.subscribe((snapshot) => {
+        const context = snapshot.context;
+        if (!context.isInitialized || context.syncVersion === observedRevision) return;
+        observedRevision = context.syncVersion;
+
+        if (context.lastFileSync?.revision === context.syncVersion) {
+          const file = context.project.files[context.lastFileSync.path];
+          if (file) {
+            listener({ kind: "file", revision: context.syncVersion, file });
+            return;
+          }
+        }
+
+        listener({ kind: "project", revision: context.syncVersion, project: context.project });
+      });
+      return () => subscription.unsubscribe();
+    },
+  };
+}
