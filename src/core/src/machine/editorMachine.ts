@@ -19,16 +19,11 @@ import { screenRecordingActor } from "./screenActor";
 import { mouseTrackingActor } from "./mouseTrackingActor";
 import { measureAudioDurationSeconds } from "../utils/audioDuration";
 import {
-  APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS,
-  APPLY_REPLAY_STATE_ACTIONS,
   getPlaybackAudioState,
   hasSpawnedPlaybackAudio,
   isAtPlaybackEnd,
   reportMachineError,
-  RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
-  SET_EDITOR_REF_ACTIONS,
   syncPlaybackAudio,
-  SYNC_PAUSED_WORKSPACE_ACTIONS,
 } from "./editorMachineHelpers";
 import {
   getExternalAudioBlob,
@@ -123,6 +118,33 @@ import { isDmpCodecLoaded } from "../../../storage/dmpCodec/dmpCodec";
  * (see audioPlaybackActor). Seeks, plays and speed changes reposition it at once.
  */
 const PLAYBACK_AUDIO_SYNC_INTERVAL_MS = 250;
+
+/**
+ * Brings every replayed track to the playhead. The workspace goes first: a replayed file
+ * switch holds the editor frame back until the editor has the new model
+ * (pendingPlaybackEditorSync).
+ */
+const APPLY_REPLAY_STATE_ACTIONS = [
+  "applyWorkspaceEventsAtTime",
+  "applyRuntimeEventsAtTime",
+  "applyFrameAtTime",
+  "applyPreviewPatchBatchesAtTime",
+  "applyPreviewEventsAtTime",
+  "applySlideEventsAtTime",
+  "applyWhiteboardEventsAtTime",
+  "applyChatEventsAtTime",
+] as const;
+
+/**
+ * Hands the workspace to the viewer (paused, ended): keep what the recording shows, stop
+ * replaying the workspace over it, and remember it as the baseline the viewer's own edits
+ * are told apart from.
+ */
+const SYNC_PAUSED_WORKSPACE_ACTIONS = [
+  "adoptPlaybackWorkspaceAtPause",
+  "detachPlaybackWorkspace",
+  "captureLearnerWorkspaceBaseline",
+] as const;
 
 // ============================================================================
 // Editor State Machine
@@ -654,10 +676,15 @@ export const editorMachine = setup({
     SET_EDITOR_REF: [
       {
         guard: "shouldSyncPlaybackEditorRef",
-        actions: [...APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS],
+        actions: [
+          "setEditorRef",
+          "clearPendingPlaybackEditorSync",
+          "invalidateRenderedPlaybackState",
+          ...APPLY_REPLAY_STATE_ACTIONS,
+        ],
       },
       {
-        actions: [...SET_EDITOR_REF_ACTIONS],
+        actions: ["setEditorRef", "invalidateRenderedPlaybackState"],
       },
     ],
     // The `stoppingRecording` watchdog finalizes 2s after STOP, so a slower
@@ -1122,7 +1149,9 @@ export const editorMachine = setup({
           target: ".ready",
           actions: [
             "preserveLearnerWorkspace",
-            ...RESET_AND_REATTACH_REPLAY_STATE_ACTIONS,
+            "resetPlayback",
+            "reattachPlaybackWorkspace",
+            ...APPLY_REPLAY_STATE_ACTIONS,
             "seekPlaybackActors",
           ],
         },

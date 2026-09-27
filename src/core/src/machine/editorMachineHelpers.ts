@@ -29,9 +29,8 @@ import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 // Editor machine helpers
 //
 // Pure(ish) building blocks for `editorMachine.ts`: recording metadata derivation
-// (tracks), editor frame capture/apply, playback-audio
-// state inspection, and the named action lists reused across machine transitions.
-// Kept out of the machine file so the machine reads as state/transition wiring.
+// (tracks), editor frame capture/apply and playback-audio state inspection. Kept out
+// of the machine file so the machine reads as state/transition wiring.
 // ============================================================================
 
 const EDITOR_TRACK_ID = "editor";
@@ -394,42 +393,6 @@ export const createFrame = (
     },
   };
 };
-
-export const APPLY_REPLAY_STATE_ACTIONS = [
-  "applyWorkspaceEventsAtTime",
-  "applyRuntimeEventsAtTime",
-  "applyFrameAtTime",
-  "applyPreviewPatchBatchesAtTime",
-  "applyPreviewEventsAtTime",
-  "applySlideEventsAtTime",
-  "applyWhiteboardEventsAtTime",
-  "applyChatEventsAtTime",
-] as const;
-
-export const SYNC_PAUSED_WORKSPACE_ACTIONS = [
-  "adoptPlaybackWorkspaceAtPause",
-  "detachPlaybackWorkspace",
-  "captureLearnerWorkspaceBaseline",
-] as const;
-
-export const APPLY_REPLAY_AFTER_EDITOR_SYNC_ACTIONS = [
-  "setEditorRef",
-  "clearPendingPlaybackEditorSync",
-  "invalidateRenderedPlaybackState",
-  ...APPLY_REPLAY_STATE_ACTIONS,
-] as const;
-
-export const SET_EDITOR_REF_ACTIONS = ["setEditorRef", "invalidateRenderedPlaybackState"] as const;
-
-const REATTACH_AND_APPLY_REPLAY_STATE_ACTIONS = [
-  "reattachPlaybackWorkspace",
-  ...APPLY_REPLAY_STATE_ACTIONS,
-] as const;
-
-export const RESET_AND_REATTACH_REPLAY_STATE_ACTIONS = [
-  "resetPlayback",
-  ...REATTACH_AND_APPLY_REPLAY_STATE_ACTIONS,
-] as const;
 
 export const MOUSE_FRAME_INTERVAL_MS = 50;
 
