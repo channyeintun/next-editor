@@ -255,8 +255,10 @@ export default function RecordingEditPanel({
 
   const handleApply = () => {
     setError(null);
+    // Worked out before the try: the React Compiler skips a whole component that has a
+    // conditional inside a try block. Spreading the recording cannot throw.
+    const source = narration ? { ...recording, audioBlob: narration.blob } : recording;
     try {
-      const source = narration ? { ...recording, audioBlob: narration.blob } : recording;
       const edited = applyRecordingEdit(source, { cuts, mutes });
       relinkRecordingDraft(recording.id, edited.id);
       setApplyingId(edited.id);
