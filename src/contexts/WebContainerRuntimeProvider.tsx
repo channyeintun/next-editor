@@ -168,11 +168,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
             }
           },
         });
-      })().catch((error) => {
-        if (isRuntimeGenerationActive(generation)) {
-          setErrorMessage(getRuntimeErrorMessage(error));
-        }
-      });
+      })().catch(reportErrorFor(generation));
     }, 150);
   };
 
@@ -196,6 +192,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     latestPreviewMessage,
     previewPort,
     previewUrl,
+    reportErrorFor,
     resetRuntimeSession,
     resizeTerminal,
     runForegroundCommand,
@@ -417,19 +414,12 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
     const generation = getRuntimeGeneration();
 
-    await reportFailure(
-      async () => {
-        const instance = await prepareRuntime();
-        if (instance && isRuntimeGenerationActive(generation)) {
-          await task(instance, generation);
-        }
-      },
-      (error) => {
-        if (isRuntimeGenerationActive(generation)) {
-          setErrorMessage(getRuntimeErrorMessage(error));
-        }
-      },
-    );
+    await reportFailure(async () => {
+      const instance = await prepareRuntime();
+      if (instance && isRuntimeGenerationActive(generation)) {
+        await task(instance, generation);
+      }
+    }, reportErrorFor(generation));
   };
 
   const startTerminalSession = () =>
@@ -478,9 +468,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
         (error: unknown) => {
           // Both callers fire and forget, so the runner console is where a
           // failed save is reported.
-          if (isRuntimeGenerationActive(generation)) {
-            setErrorMessage(getRuntimeErrorMessage(error));
-          }
+          reportErrorFor(generation)(error);
           return false;
         },
       );
@@ -606,11 +594,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       mutation.kind === "file"
         ? queueFileSync({ instance, file: mutation.file })
         : queueProjectSync({ instance, project: mutation.project });
-    void queuedSync.catch((error) => {
-      if (isRuntimeGenerationActive(generation)) {
-        setErrorMessage(getRuntimeErrorMessage(error));
-      }
-    });
+    void queuedSync.catch(reportErrorFor(generation));
   });
 
   // Effect Events are not reactive and get a new identity every render; listing
@@ -623,11 +607,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     const instance = instanceRef.current;
     if (!instance || !hasMountedProjectRef.current) return;
     const generation = getRuntimeGeneration();
-    void flushWorkspaceSync({ instance }).catch((error) => {
-      if (isRuntimeGenerationActive(generation)) {
-        setErrorMessage(getRuntimeErrorMessage(error));
-      }
-    });
+    void flushWorkspaceSync({ instance }).catch(reportErrorFor(generation));
   });
 
   useEffect(() => {

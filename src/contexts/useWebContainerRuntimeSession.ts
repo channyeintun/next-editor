@@ -173,6 +173,16 @@ export function useWebContainerRuntimeSession({
 
   const getRuntimeGeneration = () => runtimeGenerationRef.current;
 
+  /**
+   * Shows a failure in the runner console, unless a reset has replaced the
+   * runtime `generation` it happened in since.
+   */
+  const reportErrorFor = (generation: number) => (error: unknown) => {
+    if (isRuntimeGenerationActive(generation)) {
+      setErrorMessage(getRuntimeErrorMessage(error));
+    }
+  };
+
   // Runner output is mirrored to the browser console for local debugging;
   // session replay never records it (POSTHOG_REPLAY_PRIVACY_OPTIONS).
   const appendOutput = (chunk: string) => {
@@ -831,6 +841,7 @@ export function useWebContainerRuntimeSession({
     latestPreviewMessage,
     previewUrl,
     previewPort,
+    reportErrorFor,
     resetRuntimeSession,
     resizeTerminal,
     runForegroundCommand,
