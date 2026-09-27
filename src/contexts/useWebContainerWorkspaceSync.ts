@@ -202,7 +202,8 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
 
   const isFsWatchActive = () => fsWatcherRef.current !== null;
 
-  const enqueueSyncTask = (task: () => Promise<void>): Promise<void> => {
+  /** Runs `task` once every task queued before it has settled, whether it failed or not. */
+  const enqueueSyncTask = <T>(task: () => Promise<T>): Promise<T> => {
     const result = syncQueueRef.current.then(task, task);
     syncQueueRef.current = result.then(
       () => undefined,
@@ -426,12 +427,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
         : undefined;
     };
 
-    const result = syncQueueRef.current.then(run, run);
-    syncQueueRef.current = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
+    return enqueueSyncTask(run);
   };
 
   /**
