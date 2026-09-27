@@ -1,7 +1,6 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
-import { usePostHog } from "@posthog/react";
 import type { Recording } from "../core/src";
 import {
   useNextEditorActions,
@@ -9,10 +8,13 @@ import {
   useNextEditorPlayback,
 } from "../hooks/useNextEditorContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
-import { selectLiveTime } from "../core/src/useNextEditor";
 import { usePostRecordingTarget } from "../hooks/usePostRecordingTarget";
 import { usePlaybackSettings } from "../hooks/usePlaybackSettings";
-import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
+import { useDemoEmbedLargeControls } from "../hooks/useDemoEmbedLargeControls";
+import { useOnPlaybackEnded } from "../hooks/useOnPlaybackEnded";
+import { usePauseSessionReplayWhileRecording } from "../hooks/usePauseSessionReplayWhileRecording";
+import { useApplyPersistedPlaybackSettings } from "../hooks/useApplyPersistedPlaybackSettings";
+import { useAutoplayOnLoad } from "../hooks/useAutoplayOnLoad";
 import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
@@ -33,10 +35,6 @@ import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useUrlLoader } from "../hooks/useUrlLoader";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
-import {
-  DEMO_CONTROLS_SIZE_MESSAGE_TYPE,
-  DEMO_EMBED_READY_MESSAGE_TYPE,
-} from "../utils/demoEmbedControls";
 import CameraOverlay from "./CameraOverlay";
 import CaptionsOverlay from "./CaptionsOverlay";
 import CursorComponent from "./Cursor.tsx";
@@ -47,7 +45,7 @@ import RecordingDraftRecovery from "./RecordingDraftRecovery";
 import { useLinkedStartTime } from "../hooks/useLinkedStartTime";
 import { ApiClientStoreProvider } from "../contexts/ApiClientStoreContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
-import { startTour } from "./tour/productTour";
+import { useProductTourOnce } from "./tour/useProductTourOnce";
 import CollaborationSurfaceBridge from "./CollaborationSurfaceBridge";
 import CollaborationFollowOverlay from "./CollaborationFollowOverlay";
 import { loadWhiteboardPanel } from "./whiteboardPanelLoader";
@@ -56,12 +54,6 @@ const CodeEditor = lazy(() => import("./CodeEditor"));
 // Bundles Excalidraw (~180KB gzip) — deferred until the panel is actually opened,
 // not just until this component mounts (see the `isOpen` gate around its render).
 const WhiteboardPanel = lazy(loadWhiteboardPanel);
-
-// Initial value for the autoplay once-per-load guard below. A sentinel (not
-// undefined) because `recordingUrl` is legitimately undefined on ?url= and
-// drag-drop surfaces — an undefined-initialized ref would compare equal to it
-// and block autoplay before it ever fired once.
-const AUTOPLAY_NOT_FIRED = Symbol("autoplay-not-fired");
 
 export interface EditorProps {
   /** Force read-only playback (hides import/export, record mode, tour). Falls back
@@ -106,7 +98,7 @@ export interface EditorProps {
   recordingDrafts?: boolean;
 }
 
-export function EditorLayout({
+function EditorLayout({
   readOnly: readOnlyProp,
   recordingUrl,
   largeControls: largeControlsProp,
@@ -148,126 +140,26 @@ export function EditorLayout({
   const [searchParams] = useSearchParams();
   const readOnly = readOnlyProp ?? searchParams.get("readOnly") === "true";
 
-  // A same-origin parent frame (the landing page's demo embed) can retune the
-  // control size at runtime: it boots us with ?largeControls=true while scaled
-  // down, then asks for regular controls when its fullscreen mode shows us at
-  // native size. Announce readiness after subscribing so a size change from
-  // before this (lazily loaded) component mounted gets re-delivered. A
-  // cross-origin parent never gets the announce (targetOrigin mismatch drops it)
-  // and its messages fail the origin check.
-  const [largeControlsOverride, setLargeControlsOverride] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (window.parent === window) return;
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.source !== window.parent) return;
-      const data = event.data as { type?: unknown; large?: unknown } | null;
-      if (data?.type !== DEMO_CONTROLS_SIZE_MESSAGE_TYPE || typeof data.large !== "boolean") {
-        return;
-      }
-      setLargeControlsOverride(data.large);
-    };
-    window.addEventListener("message", handleMessage);
-    window.parent.postMessage({ type: DEMO_EMBED_READY_MESSAGE_TYPE }, window.location.origin);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
   // Enlarge the playback controls for small embeds (e.g. a scaled-down demo iframe).
+  const largeControlsOverride = useDemoEmbedLargeControls();
   const largeControls =
     largeControlsOverride ?? largeControlsProp ?? searchParams.get("largeControls") === "true";
 
-  const tourStartedRef = useRef(false);
-
-  // Fire onEnded once per ended-transition (not on every render while ended stays
-  // true), so a seek/replay that leaves and re-enters the ended state re-arms it.
-  const wasEndedRef = useRef(false);
-  useEffect(() => {
-    if (hasEnded && !wasEndedRef.current) {
-      onEnded?.();
-    }
-    wasEndedRef.current = hasEnded;
-  }, [hasEnded, onEnded]);
-
-  // PostHog session replay's DOM observer competes for CPU with lesson capture
-  // (content deltas + preview rrweb + audio); pause it while the user is
-  // actively recording and resume when they stop.
-  const posthog = usePostHog();
-  useEffect(() => {
-    if (!isRecording) {
-      return;
-    }
-    posthog?.stopSessionRecording();
-    return () => {
-      posthog?.startSessionRecording();
-    };
-  }, [isRecording, posthog]);
-
-  // Hydrate the machine from the persisted player-level speed/volume. Keyed on
-  // currentRecording because SET_SPEED/SET_VOLUME are only handled inside the
-  // machine's playback state (earlier sends are dropped), and setRecording
-  // assigns a fresh recording object exactly when playback is (re)entered.
-  // MediaControls writes user changes to both the machine and the settings
-  // store, so after this first push the two stay equal and the effect no-ops.
-  useEffect(() => {
-    if (!currentRecording) {
-      return;
-    }
-    if (playbackSpeed !== persistedSpeed) {
-      setPlaybackSpeed(persistedSpeed);
-    }
-    if (volume !== persistedVolume) {
-      setVolume(persistedVolume);
-    }
-  }, [
+  useOnPlaybackEnded(hasEnded, onEnded);
+  usePauseSessionReplayWhileRecording(isRecording);
+  useApplyPersistedPlaybackSettings({
     currentRecording,
     playbackSpeed,
-    persistedSpeed,
     volume,
+    persistedSpeed,
     persistedVolume,
     setPlaybackSpeed,
     setVolume,
-  ]);
+  });
 
-  // Autoplay: start playback once a read-only recording has finished loading, when
-  // either the persisted Autoplay setting or a one-shot playlist override requests
-  // it. Guarded to fire once per recording load (once per mount on surfaces where
-  // recordingUrl is undefined — ?url= and drag-drop).
   // Opens a linked lesson at its moment (?t=). Before autoplay, which then plays from there.
   const getLinkedStart = useLinkedStartTime(currentRecording, searchParams.get("t"), seekTo);
-
-  const autoplayedForRef = useRef<string | undefined | typeof AUTOPLAY_NOT_FIRED>(
-    AUTOPLAY_NOT_FIRED,
-  );
-  useEffect(() => {
-    if (!readOnly || recordingLoading || loadError || !currentRecording || !editorActor) {
-      return;
-    }
-    if (!(autoplay || autoplayOverride) || isPlaying) {
-      return;
-    }
-    if (autoplayedForRef.current === recordingUrl) {
-      return;
-    }
-    if (selectLiveTime(editorActor.getSnapshot()) !== getLinkedStart(currentRecording.id)) {
-      return;
-    }
-
-    const ctx = resumeSharedAudioContext();
-
-    // play() drives the replay machine, not a media element, so the browser's
-    // autoplay policy can't block it — starting an audio-bearing recording with a
-    // still-suspended AudioContext (cold load, no user gesture yet) would replay
-    // the visuals silently. Skip instead and leave FloatingPlayButton as the entry
-    // point. The playlist auto-advance override is exempt: it's only ever set by an
-    // in-session navigation, after a play gesture already unlocked the context.
-    const hasAudio = Boolean(currentRecording.audioBlob || currentRecording.audioUrl);
-    if (!autoplayOverride && hasAudio && ctx.state !== "running") {
-      return;
-    }
-
-    autoplayedForRef.current = recordingUrl;
-    play();
-  }, [
+  useAutoplayOnLoad({
     readOnly,
     recordingLoading,
     loadError,
@@ -278,26 +170,10 @@ export function EditorLayout({
     recordingUrl,
     editorActor,
     play,
-  ]);
+    getLinkedStart,
+  });
 
-  useEffect(() => {
-    // Don't tour inside read-only embeds (the landing-page demo iframe), and wait
-    // until any URL-driven recording load has finished. Skip the tour entirely when
-    // the load failed — the editor is showing an error panel, not a touchable surface.
-    if (recordingLoading || loadError || readOnly || tourStartedRef.current) {
-      return;
-    }
-
-    // Defer one frame so the lazily-mounted editor chrome (header, runner dock)
-    // has painted before we query the `data-tour` targets. The frame is left to
-    // fire on its own — cancelling it in cleanup would let StrictMode's dev
-    // double-invoke abort the tour entirely (run #1 schedules, cleanup cancels,
-    // run #2 short-circuits on the ref), so the tour would never auto-start.
-    tourStartedRef.current = true;
-    requestAnimationFrame(() => {
-      startTour();
-    });
-  }, [recordingLoading, loadError, readOnly]);
+  useProductTourOnce({ recordingLoading, loadError, readOnly });
 
   return (
     <div
