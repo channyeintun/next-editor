@@ -1,5 +1,5 @@
 // .srt is accepted at pick time but canonicalized to WebVTT before upload —
-// the URL loader's sibling-caption fetch (src/hooks/useUrlLoader.ts) only
+// the URL loader's sibling-caption fetch (src/storage/recordingSiblingMedia.ts) only
 // accepts documents starting with "WEBVTT", so raw .srt bytes would never load.
 export const CAPTION_ACCEPT = ".vtt,.srt";
 // Hard backstop for a text subtitle file — hours of captions fit well under this.

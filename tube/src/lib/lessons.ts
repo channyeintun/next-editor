@@ -39,7 +39,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 // always a 200 carrying index.html. A seed shard that doesn't exist (any slug
 // beyond what's in the static manifest) hits exactly this: is404() never
 // fires because there's no error at all, so the raw HTML would otherwise be
-// trusted as real JSON. Same fix useUrlLoader.ts already uses for the
+// trusted as real JSON. Same fix src/storage/recordingFetch.ts already uses for the
 // equivalent problem on the recording-proxy path — check Content-Type instead
 // of trusting the status code alone.
 function isHtmlFallback(res: { headers: Record<string, unknown> }): boolean {

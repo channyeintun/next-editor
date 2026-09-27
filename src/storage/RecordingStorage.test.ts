@@ -147,7 +147,7 @@ describe("RecordingStorage.exportAsFile", () => {
   });
 
   it("strips an https:// URL auto-resolved from a prior ?url= load (stale-host bug)", async () => {
-    // This is what `useUrlLoader`'s `withResolvedMediaUrls` produces — it can't survive a
+    // This is what the URL loader's `withResolvedMediaUrls` produces — it can't survive a
     // re-export as-is, since a present `cameraUrl`/`audioUrl` is preferred over the sibling
     // filename on the next load.
     const recording = createRecording({
