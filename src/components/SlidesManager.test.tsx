@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Slide } from "../types/slides";
 import SlidesManager from "./SlidesManager";
 
@@ -27,6 +27,10 @@ function clickThumbnail(typeLabel: string) {
   fireEvent.click(screen.getByText(typeLabel));
 }
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("SlidesManager", () => {
   // The deck it is handed can be the very array a finished take or a loaded
   // lesson holds (NextEditorProvider's getSlides/applySlides share it), so a
@@ -52,6 +56,43 @@ describe("SlidesManager", () => {
     expect(a).toEqual(slide("a", 0));
     expect(b).toEqual(slide("b", 1));
     expect(emitted).toEqual([slide("b", 0), slide("a", 1)]);
+  });
+
+  it("creates a slide from the chosen type, trimmed text and background", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const emitted = renderManager([slide("a", 0)]);
+
+    fireEvent.click(screen.getByText("HTML"));
+    fireEvent.change(screen.getByPlaceholderText(/<h1>Title<\/h1>/), {
+      target: { value: "  <p>Hi</p>  " },
+    });
+    fireEvent.click(screen.getByLabelText("Texture 2"));
+    fireEvent.click(screen.getByText("Create Slide"));
+
+    const created = emitted[0].at(-1)!;
+    expect(emitted).toEqual([[slide("a", 0), created]]);
+    // Key order is kept: decks are saved as JSON.
+    expect(JSON.stringify(created)).toBe(
+      '{"id":"1700000000000","content":"<p>Hi</p>","contentType":"html","order":1,"background":"texture-2"}',
+    );
+    // The text and background clear for the next slide; the type stays.
+    expect(screen.getByPlaceholderText(/<h1>Title<\/h1>/)).toHaveValue("");
+    expect(screen.getByLabelText("No background")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("gives an empty new slide its type's starter content", () => {
+    const emitted = renderManager([]);
+
+    fireEvent.click(screen.getByText("Create Slide"));
+    fireEvent.click(screen.getByText("HTML"));
+    fireEvent.click(screen.getByText("Create Slide"));
+
+    expect(
+      emitted.map((deck) => deck.map(({ content, contentType }) => ({ content, contentType }))),
+    ).toEqual([
+      [{ content: "# Welcome\n\nYour slide content here", contentType: "markdown" }],
+      [{ content: "<h1>Welcome</h1>\n<p>Your slide content here</p>", contentType: "html" }],
+    ]);
   });
 
   it("edits a slide's text and background in place", () => {

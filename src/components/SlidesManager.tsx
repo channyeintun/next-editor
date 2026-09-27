@@ -314,24 +314,97 @@ function GoogleSlidesImport({
   );
 }
 
-export default function SlidesManager({
-  slides,
-  onSlidesChange,
-  onStartPresentation,
-  onClose,
-}: SlidesManagerProps) {
+type NewSlide = Pick<Slide, "content" | "contentType" | "background">;
+
+/**
+ * Picks a new slide's type, text and background. An empty text becomes that type's
+ * starter content; after a slide is created the text and background clear, the type
+ * stays.
+ */
+function NewSlideForm({ onCreate }: { onCreate: (slide: NewSlide) => void }) {
   const [newSlideContent, setNewSlideContent] = useState("");
   const [contentType, setContentType] = useState<SlideContentType>("markdown");
   const [background, setBackground] = useState<string | undefined>(undefined);
-  const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState("");
-  const [editBackground, setEditBackground] = useState<string | undefined>(undefined);
 
   const addSlide = () => {
     const content =
       newSlideContent.trim() ||
       (contentType === "html" ? DEFAULT_HTML_CONTENT : DEFAULT_MARKDOWN_CONTENT);
 
+    onCreate({ content, contentType, background });
+    setNewSlideContent("");
+    setBackground(undefined);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#11141c] p-1">
+        <button
+          type="button"
+          onClick={() => setContentType("markdown")}
+          className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+            contentType === "markdown"
+              ? "border-slate-600 bg-slate-700 text-white"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <span className="flex items-center justify-center gap-2">
+            <FileText className="size-3.5 text-cyan-300" />
+            Markdown
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setContentType("html")}
+          className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+            contentType === "html"
+              ? "border-slate-600 bg-slate-700 text-white"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <span className="flex items-center justify-center gap-2">
+            <Code className="size-3.5 text-sky-300" />
+            HTML
+          </span>
+        </button>
+      </div>
+
+      <div className="relative group">
+        <textarea
+          value={newSlideContent}
+          onChange={(e) => setNewSlideContent(e.target.value)}
+          placeholder={
+            contentType === "html" ? "<h1>Title</h1>\n<p>Content</p>" : "# Title\n\nContent here..."
+          }
+          className="h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#11141c] px-4 py-3 font-mono text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-400/70"
+        />
+      </div>
+
+      <BackgroundPicker value={background} onChange={setBackground} noneBgClass="bg-[#11141c]" />
+
+      <button
+        type="button"
+        onClick={addSlide}
+        className="flex w-full items-center justify-center gap-2 rounded-md border border-[#5da4ff]/40 bg-[#273449] py-2.5 text-sm font-semibold text-slate-100 transition-colors hover:border-[#5da4ff] hover:bg-[#32435c] active:scale-[0.99]"
+      >
+        <Plus className="size-4" />
+        Create Slide
+      </button>
+    </div>
+  );
+}
+
+export default function SlidesManager({
+  slides,
+  onSlidesChange,
+  onStartPresentation,
+  onClose,
+}: SlidesManagerProps) {
+  const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editBackground, setEditBackground] = useState<string | undefined>(undefined);
+
+  const addSlide = ({ content, contentType, background }: NewSlide) => {
     const newSlide: Slide = {
       id: Date.now().toString(),
       content,
@@ -341,8 +414,6 @@ export default function SlidesManager({
     };
 
     onSlidesChange([...slides, newSlide]);
-    setNewSlideContent("");
-    setBackground(undefined);
   };
 
   const removeSlide = (slideId: string) => {
@@ -432,66 +503,7 @@ export default function SlidesManager({
         <GoogleSlidesImport slides={slides} onSlidesChange={onSlidesChange} />
 
         {/* Add Section */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#11141c] p-1">
-            <button
-              type="button"
-              onClick={() => setContentType("markdown")}
-              className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                contentType === "markdown"
-                  ? "border-slate-600 bg-slate-700 text-white"
-                  : "border-transparent text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              <span className="flex items-center justify-center gap-2">
-                <FileText className="size-3.5 text-cyan-300" />
-                Markdown
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setContentType("html")}
-              className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                contentType === "html"
-                  ? "border-slate-600 bg-slate-700 text-white"
-                  : "border-transparent text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              <span className="flex items-center justify-center gap-2">
-                <Code className="size-3.5 text-sky-300" />
-                HTML
-              </span>
-            </button>
-          </div>
-
-          <div className="relative group">
-            <textarea
-              value={newSlideContent}
-              onChange={(e) => setNewSlideContent(e.target.value)}
-              placeholder={
-                contentType === "html"
-                  ? "<h1>Title</h1>\n<p>Content</p>"
-                  : "# Title\n\nContent here..."
-              }
-              className="h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#11141c] px-4 py-3 font-mono text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-400/70"
-            />
-          </div>
-
-          <BackgroundPicker
-            value={background}
-            onChange={setBackground}
-            noneBgClass="bg-[#11141c]"
-          />
-
-          <button
-            type="button"
-            onClick={addSlide}
-            className="flex w-full items-center justify-center gap-2 rounded-md border border-[#5da4ff]/40 bg-[#273449] py-2.5 text-sm font-semibold text-slate-100 transition-colors hover:border-[#5da4ff] hover:bg-[#32435c] active:scale-[0.99]"
-          >
-            <Plus className="size-4" />
-            Create Slide
-          </button>
-        </div>
+        <NewSlideForm onCreate={addSlide} />
 
         {/* List Section */}
         <div className="space-y-3">
