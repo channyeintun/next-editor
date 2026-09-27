@@ -67,6 +67,9 @@ import {
   scheduleCollaborationAwarenessFlush,
 } from "../collaboration/followLifecycle";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
+import { areCollaborationSurfacesEqual, editorSurfaceOn } from "../collaboration/awarenessSurface";
+import { messageFromError } from "../collaboration/errorMessage";
+import { stopProviderAfterBestEffortFlush } from "../collaboration/providerShutdown";
 import {
   projectCollaborationTransaction,
   reprojectCollaborationWorkspace,
@@ -204,66 +207,6 @@ const EMPTY_TEACHING_PROJECTION: CollaborationTeachingProjection = {
   presentationRevision: 0,
   whiteboardElements: [],
 };
-
-function messageFromError(error: unknown, fallback: string): string {
-  if (typeof error === "object" && error !== null) {
-    const responseMessage = (error as { response?: { data?: { error?: unknown } } }).response?.data
-      ?.error;
-    if (typeof responseMessage === "string") return responseMessage;
-  }
-  return error instanceof Error && error.message ? error.message : fallback;
-}
-
-function areCollaborationSurfacesEqual(
-  left: CollaborationSurface,
-  right: CollaborationSurface,
-): boolean {
-  if (left.kind !== right.kind) return false;
-  if (left.kind === "editor" && right.kind === "editor") {
-    if (left.fileNodeId !== right.fileNodeId) return false;
-    if (left.viewport === right.viewport) return true;
-    if (!left.viewport || !right.viewport) return false;
-    return (
-      left.viewport.topAnchor === right.viewport.topAnchor &&
-      left.viewport.topDeltaPx === right.viewport.topDeltaPx &&
-      left.viewport.scrollLeftPx === right.viewport.scrollLeftPx
-    );
-  }
-  if (left.kind === "slides" && right.kind === "slides") {
-    return left.isMaximized === right.isMaximized;
-  }
-  if (left.kind === "whiteboard" && right.kind === "whiteboard") {
-    return (
-      left.isMaximized === right.isMaximized &&
-      left.viewport.scrollX === right.viewport.scrollX &&
-      left.viewport.scrollY === right.viewport.scrollY &&
-      left.viewport.zoom === right.viewport.zoom
-    );
-  }
-  return false;
-}
-
-type EditorSurface = Extract<CollaborationSurface, { kind: "editor" }>;
-
-/** The editor surface on `fileNodeId`, keeping `previous`'s viewport only for the same file. */
-function editorSurfaceOn(previous: EditorSurface, fileNodeId: string | null): EditorSurface {
-  return {
-    kind: "editor",
-    fileNodeId,
-    viewport: previous.fileNodeId === fileNodeId ? previous.viewport : null,
-  };
-}
-
-function stopProviderAfterBestEffortFlush(provider: CollaborationRoomProvider): void {
-  if (provider.connectionState === "live" && provider.hasPendingUpdates) {
-    void provider.flushNow().then(
-      () => provider.stop(),
-      () => provider.stop(),
-    );
-  } else {
-    provider.stop();
-  }
-}
 
 export function CollaborationProvider({ children }: { children: ReactNode }) {
   const posthog = usePostHog();
