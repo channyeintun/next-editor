@@ -499,9 +499,25 @@ export function useWebContainerRuntimeSession({
     );
   };
 
+  /** The runner's output stream or process failed: drop the runner and show why. */
+  const failRunner = (label: string, error: unknown) => {
+    console.error(label, error);
+    runnerProcessRef.current = null;
+    setPreviewUrl(null);
+    setPreviewPort(null);
+    setStatus("error");
+    setErrorMessage(getRuntimeErrorMessage(error));
+  };
+
   const startRunnerProcess = async (instance: WebContainer, commandLine: string) => {
     const startId = ++runnerStartIdRef.current;
     const generation = runtimeGenerationRef.current;
+    // Neither a later start nor a reset has superseded this start.
+    const isCurrentStart = () =>
+      startId === runnerStartIdRef.current && isRuntimeGenerationActive(generation);
+    // The runner is still `runner`, and this start is still current.
+    const isCurrentRunner = (runner: WebContainerProcess) =>
+      runnerProcessRef.current === runner && isCurrentStart();
     const parsedCommand = parseCommand(commandLine);
 
     if (!parsedCommand) {
@@ -511,7 +527,7 @@ export function useWebContainerRuntimeSession({
 
     await stopRunnerProcess({ waitForExit: true });
 
-    if (startId !== runnerStartIdRef.current || !isRuntimeGenerationActive(generation)) {
+    if (!isCurrentStart()) {
       return;
     }
 
@@ -529,7 +545,7 @@ export function useWebContainerRuntimeSession({
     try {
       process = await instance.spawn(parsedCommand.command, parsedCommand.args, spawnOptions);
     } catch (error) {
-      if (startId !== runnerStartIdRef.current || !isRuntimeGenerationActive(generation)) {
+      if (!isCurrentStart()) {
         return;
       }
 
@@ -539,7 +555,7 @@ export function useWebContainerRuntimeSession({
       return;
     }
 
-    if (startId !== runnerStartIdRef.current || !isRuntimeGenerationActive(generation)) {
+    if (!isCurrentStart()) {
       safelyKillProcess(process);
       return;
     }
@@ -550,11 +566,7 @@ export function useWebContainerRuntimeSession({
       .pipeTo(
         new WritableStream({
           write(chunk) {
-            if (
-              runnerProcessRef.current === process &&
-              startId === runnerStartIdRef.current &&
-              isRuntimeGenerationActive(generation)
-            ) {
+            if (isCurrentRunner(process)) {
               appendOutput(chunk);
             }
           },
@@ -564,29 +576,14 @@ export function useWebContainerRuntimeSession({
         { preventCancel: true },
       )
       .catch((error) => {
-        if (
-          runnerProcessRef.current !== process ||
-          startId !== runnerStartIdRef.current ||
-          !isRuntimeGenerationActive(generation)
-        ) {
-          return;
+        if (isCurrentRunner(process)) {
+          failRunner("[runner] Runner output stream error", error);
         }
-
-        console.error("[runner] Runner output stream error", error);
-        runnerProcessRef.current = null;
-        setPreviewUrl(null);
-        setPreviewPort(null);
-        setStatus("error");
-        setErrorMessage(getRuntimeErrorMessage(error));
       });
 
     void process.exit
       .then((exitCode) => {
-        if (
-          runnerProcessRef.current !== process ||
-          startId !== runnerStartIdRef.current ||
-          !isRuntimeGenerationActive(generation)
-        ) {
+        if (!isCurrentRunner(process)) {
           return;
         }
 
@@ -607,20 +604,9 @@ export function useWebContainerRuntimeSession({
         }
       })
       .catch((error) => {
-        if (
-          runnerProcessRef.current !== process ||
-          startId !== runnerStartIdRef.current ||
-          !isRuntimeGenerationActive(generation)
-        ) {
-          return;
+        if (isCurrentRunner(process)) {
+          failRunner("[runner] Runner process error", error);
         }
-
-        runnerProcessRef.current = null;
-        setPreviewUrl(null);
-        setPreviewPort(null);
-        console.error("[runner] Runner process error", error);
-        setStatus("error");
-        setErrorMessage(getRuntimeErrorMessage(error));
       });
   };
 
