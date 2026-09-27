@@ -99,26 +99,24 @@ import {
   validateCollaborationWhiteboardElement,
   type CollaborationTeachingProjection,
 } from "../collaboration/teachingDocument";
+import {
+  applyTeachingSlides,
+  applyTeachingWhiteboard,
+  borrowStandaloneTeachingStores,
+  recordCanonicalTeachingChange,
+  teachingHydrationKey,
+  type StandaloneTeachingStores,
+} from "../collaboration/teachingStoreSync";
 import { useSlidesStore } from "./SlidesStoreContext";
 import { useWhiteboardStore } from "./WhiteboardStoreContext";
 import {
   discardPendingWhiteboardChange,
   flushPendingWhiteboardChange,
 } from "../hooks/useWhiteboardController";
-import {
-  restoreSlidesStore,
-  setSlidesStoreDeckBorrowed,
-  snapshotSlidesStore,
-  type SlidesStoreSnapshot,
-} from "../stores/slidesStore";
-import { restoreWhiteboardStore, snapshotWhiteboardStore } from "../stores/whiteboardStore";
+import { snapshotSlidesStore } from "../stores/slidesStore";
+import { snapshotWhiteboardStore } from "../stores/whiteboardStore";
 import type { Slide } from "../types/slides";
-import {
-  EMPTY_WHITEBOARD_SCENE,
-  snapshotWhiteboardDelta,
-  type WhiteboardEvent,
-  type WhiteboardSceneState,
-} from "../core/src/whiteboard";
+import type { WhiteboardEvent } from "../core/src/whiteboard";
 
 export type CollaborationParticipant = Extract<CollaborationAwarenessEvent, { kind: "state" }>;
 
@@ -280,11 +278,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const teachingHydrationGenerationRef = useRef(0);
   const teachingHydrationKeyRef = useRef<string | null>(null);
   const teachingSlideCacheRef = useRef(new Map<string, Promise<Uint8Array>>());
-  const standaloneStoresRef = useRef<{
-    roomId: string;
-    slides: SlidesStoreSnapshot;
-    whiteboard: WhiteboardSceneState;
-  } | null>(null);
+  const standaloneStoresRef = useRef<({ roomId: string } & StandaloneTeachingStores) | null>(null);
   const claimingTokenRef = useRef<string | null>(null);
   const awarenessRevisionRef = useRef(0);
   const awarenessCursorRef = useRef<CollaborationCursor | null>(null);
@@ -405,52 +399,19 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
       const currentProvider = providerRef.current;
       const currentUser = userRef.current;
-      // A known uninitialized projection becoming initialized is a live room
-      // change (and must be recorded); `previous === null` is first hydration.
-      const shouldRecordCanonicalChange = Boolean(
-        previous &&
-        projection.initialized &&
-        isRecordingRef.current &&
-        currentProvider?.session &&
-        currentUser &&
-        currentProvider.session.room.hostUserId === currentUser.id,
+      recordCanonicalTeachingChange(
+        previous,
+        projection,
+        Boolean(
+          isRecordingRef.current &&
+          currentProvider?.session &&
+          currentUser &&
+          currentProvider.session.room.hostUserId === currentUser.id,
+        ),
+        { handleSlideEvent, handleWhiteboardEvent },
       );
-      if (
-        shouldRecordCanonicalChange &&
-        previous?.currentSlideId !== projection.currentSlideId &&
-        projection.currentSlideId
-      ) {
-        handleSlideEvent({
-          type: "slide_change",
-          timestamp: performance.now(),
-          slideId: projection.currentSlideId,
-          indexv: 0,
-        });
-      }
-      if (shouldRecordCanonicalChange && previous) {
-        const delta = snapshotWhiteboardDelta(
-          previous.whiteboardElements,
-          projection.whiteboardElements,
-        );
-        if (delta) {
-          handleWhiteboardEvent({
-            timestamp: performance.now(),
-            ...(delta.upserts.length ? { upserts: delta.upserts } : {}),
-            ...(delta.removedIds.length ? { removedIds: delta.removedIds } : {}),
-          });
-        }
-      }
 
-      const hydrationKey = JSON.stringify({
-        roomId: targetRoomId,
-        initialized: projection.initialized,
-        slides: projection.slideOrder.map((slideId) => {
-          const manifest = projection.slides.get(slideId);
-          return manifest
-            ? [slideId, manifest.contentType, manifest.asset.id, manifest.asset.size]
-            : [slideId, null];
-        }),
-      });
+      const hydrationKey = teachingHydrationKey(targetRoomId, projection);
       if (teachingHydrationKeyRef.current === hydrationKey) return;
       teachingHydrationKeyRef.current = hydrationKey;
 
@@ -626,24 +587,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
 
     flushPendingWhiteboardChange(whiteboardStore);
-    const standalone = {
-      roomId,
-      slides: snapshotSlidesStore(slidesStore),
-      whiteboard: snapshotWhiteboardStore(whiteboardStore),
-    };
     setIsCreatingRoom(false);
+    const borrowedStores = borrowStandaloneTeachingStores(slidesStore, whiteboardStore);
+    const standalone = { roomId, ...borrowedStores.snapshot };
     standaloneStoresRef.current = standalone;
-    setSlidesStoreDeckBorrowed(slidesStore, true);
-    slidesStore.trigger.setSlides({ slides: [] });
-    slidesStore.trigger.setPreviewState({
-      previewState: {
-        isOpen: false,
-        isMaximized: false,
-        currentSlideId: null,
-        indexv: 0,
-      },
-    });
-    whiteboardStore.trigger.setScene({ scene: structuredClone(EMPTY_WHITEBOARD_SCENE) });
 
     const providerGeneration = ++providerGenerationRef.current;
     // A whiteboard delta writes one transaction per element so every update
@@ -753,8 +700,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       teachingHydrationGenerationRef.current += 1;
       discardPendingWhiteboardChange(whiteboardStore);
       if (standaloneStoresRef.current === standalone) {
-        restoreSlidesStore(slidesStore, standalone.slides);
-        restoreWhiteboardStore(whiteboardStore, standalone.whiteboard);
+        borrowedStores.restore();
         standaloneStoresRef.current = null;
       }
     };
@@ -824,60 +770,21 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!provider || usesPlaybackModel || !teaching.initialized) return;
     if (teachingSlides) {
-      const current = slidesStore.getSnapshot().context;
       const presentationRevisionChanged =
         appliedPresentationRevisionRef.current !== teaching.presentationRevision;
       appliedPresentationRevisionRef.current = teaching.presentationRevision;
-      const sameSlides =
-        current.slides.length === teachingSlides.length &&
-        current.slides.every(
-          (slide, index) =>
-            slide.id === teachingSlides[index]?.id &&
-            slide.content === teachingSlides[index]?.content,
-        );
-      if (!sameSlides) slidesStore.trigger.setSlides({ slides: teachingSlides });
-      const currentSlideId = teaching.currentSlideId;
-      const nextPreview = {
-        ...current.previewState,
-        currentSlideId,
-        indexv:
-          !presentationRevisionChanged && current.previewState.currentSlideId === currentSlideId
-            ? (current.previewState.indexv ?? 0)
-            : 0,
-      };
-      if (
-        current.previewState.currentSlideId !== nextPreview.currentSlideId ||
-        current.previewState.indexv !== nextPreview.indexv
-      ) {
-        slidesStore.trigger.setPreviewState({ previewState: nextPreview });
-      }
+      applyTeachingSlides(
+        slidesStore,
+        teachingSlides,
+        teaching.currentSlideId,
+        presentationRevisionChanged,
+      );
     }
-
-    const currentScene = whiteboardStore.getSnapshot().context.scene;
-    const projectedWhiteboardFingerprint = JSON.stringify(teaching.whiteboardElements);
-    const isLocalCanvasProjection =
-      localWhiteboardProjectionFingerprintRef.current === projectedWhiteboardFingerprint;
-    const sameElements =
-      currentScene.elements.length === teaching.whiteboardElements.length &&
-      currentScene.elements.every((element, index) => {
-        const projected = teaching.whiteboardElements[index];
-        return (
-          element.id === projected?.id &&
-          element.version === projected.version &&
-          element.versionNonce === projected.versionNonce &&
-          element.isDeleted === projected.isDeleted &&
-          JSON.stringify(element) === JSON.stringify(projected)
-        );
-      });
-    if (!sameElements) {
-      whiteboardStore.trigger.setScene({
-        scene: {
-          ...currentScene,
-          elements: teaching.whiteboardElements.map((element) => structuredClone(element)),
-        },
-        source: isLocalCanvasProjection ? "canvas" : "external",
-      });
-    }
+    const isLocalCanvasProjection = applyTeachingWhiteboard(
+      whiteboardStore,
+      teaching.whiteboardElements,
+      localWhiteboardProjectionFingerprintRef.current,
+    );
     if (isLocalCanvasProjection) localWhiteboardProjectionFingerprintRef.current = null;
   }, [provider, slidesStore, teaching, teachingSlides, usesPlaybackModel, whiteboardStore]);
 

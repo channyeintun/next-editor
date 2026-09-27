@@ -78,7 +78,7 @@ export interface SlidesContext {
   deckBorrowed: boolean;
 }
 
-const DEFAULT_PREVIEW_STATE: SlidePreviewState = {
+export const DEFAULT_PREVIEW_STATE: SlidePreviewState = {
   isOpen: false,
   isMaximized: false,
   currentSlideId: null,
