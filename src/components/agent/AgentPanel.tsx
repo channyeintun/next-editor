@@ -56,13 +56,10 @@ import {
   useWebContainerRuntimeMetadata,
   useWebContainerRuntimeSnapshotGetter,
 } from "../../hooks/useWebContainerRuntime";
-import {
-  FALLBACK_MODEL_OPTIONS,
-  fetchOpenRouterModelOptions,
-  filterModelOptions,
-} from "../../agent/modelCatalog";
+import { filterModelOptions } from "../../agent/modelCatalog";
 import { createChatCheckpoint } from "../../agent/chatRecording";
 import { formatToolResultOutput } from "./toolResultOutput";
+import { useOpenRouterModelCatalog } from "./useOpenRouterModelCatalog";
 
 const STORAGE_OPTIONS: { id: CredentialStorage; label: string; description: string }[] = [
   { id: "memory", label: "Memory only", description: "Cleared on reload. Safest." },
@@ -220,13 +217,9 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [modelOptions, setModelOptions] = useState(FALLBACK_MODEL_OPTIONS);
   const [modelQuery, setModelQuery] = useState("");
-  const [isModelCatalogLoading, setIsModelCatalogLoading] = useState(false);
-  const [modelCatalogError, setModelCatalogError] = useState<string | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const wasRecordingRef = useRef(false);
-  const hasLoadedModelCatalogRef = useRef(false);
   const runtimeMetadataRef = useRef(runtimeMetadata);
 
   useEffect(() => {
@@ -256,41 +249,9 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
     runtimeMetadataRef.current = runtimeMetadata;
   }, [runtimeMetadata]);
 
-  useEffect(() => {
-    if (!isSettingsOpen || hasLoadedModelCatalogRef.current) {
-      return;
-    }
-
-    const controller = new AbortController();
-    setIsModelCatalogLoading(true);
-    setModelCatalogError(null);
-
-    void fetchOpenRouterModelOptions(controller.signal)
-      .then((options) => {
-        if (options.length > 0) {
-          setModelOptions(options);
-          hasLoadedModelCatalogRef.current = true;
-        } else {
-          setModelCatalogError("OpenRouter returned no models; showing fallbacks.");
-        }
-      })
-      .catch((catalogError: unknown) => {
-        if (!controller.signal.aborted) {
-          setModelCatalogError(
-            catalogError instanceof Error
-              ? `${catalogError.message}; showing fallback models.`
-              : "Could not load OpenRouter models; showing fallbacks.",
-          );
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setIsModelCatalogLoading(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, [isSettingsOpen]);
+  // Called after the effects above so its fetch effect keeps its place in their order.
+  const { modelOptions, isModelCatalogLoading, modelCatalogError } =
+    useOpenRouterModelCatalog(isSettingsOpen);
 
   // Reflects the actual live run (for Send/Stop + input disable); the status label/
   // spinner below tracks the displayed status, which during replay is the recorded one.
