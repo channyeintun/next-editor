@@ -10,7 +10,11 @@ import { NextEditorActionsContext, type NextEditorActions } from "./NextEditorCo
 import { NextEditorActorContext } from "./NextEditorActorContext";
 import { usePreviewAdapterHandle } from "./PreviewAdapterHandleContext";
 import { useSlidesStore } from "./SlidesStoreContext";
-import { setSlidesStoreDeckBorrowed } from "../stores/slidesStore";
+import {
+  applyRecordingSlides,
+  applySlideRecordingState,
+  readSlideRecordingState,
+} from "../stores/slidesRecordingAdapter";
 import { useWhiteboardStore } from "./WhiteboardStoreContext";
 import { useRuntimePanelStore } from "./RuntimePanelStoreContext";
 import { selectRecordingState } from "../stores/runtimePanelStore";
@@ -201,55 +205,15 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     editorRef,
     enableAudioRecording: true, // Enable built-in synchronized audio recording
     pauseOnUserInteraction: true,
-    getSlideState: () => {
-      const { slides, previewState } = slidesStore.getSnapshot().context;
-      const currentSlideIndex = Math.max(
-        0,
-        slides.findIndex((s) => s.id === previewState.currentSlideId),
-      );
-      return { previewState, currentSlideIndex };
-    },
-    applySlideState: (slideState) => {
-      const { previewState: prev } = slidesStore.getSnapshot().context;
-
-      const nextIsOpen = slideState.isOpen;
-      const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
-      const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
-      const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
-      const nextInteraction = slideState.currentInteraction;
-
-      if (
-        nextIsOpen !== prev.isOpen ||
-        nextIsMaximized !== prev.isMaximized ||
-        nextSlideId !== prev.currentSlideId ||
-        nextIndexv !== prev.indexv ||
-        nextInteraction !== prev.currentInteraction
-      ) {
-        slidesStore.trigger.setPreviewState({
-          previewState: {
-            isOpen: nextIsOpen,
-            isMaximized: nextIsMaximized,
-            currentSlideId: nextSlideId,
-            indexv: nextIndexv,
-            currentInteraction: nextInteraction,
-          },
-        });
-      }
-    },
+    getSlideState: () => readSlideRecordingState(slidesStore),
+    applySlideState: (slideState) => applySlideRecordingState(slidesStore, slideState),
 
     getPreviewState: () => previewHandle.snapshotGetter.current?.() ?? null,
     applyPreviewState: (previewState) => previewHandle.snapshotApplier.current?.(previewState),
     applyPreviewPatchReplay: (input) => previewHandle.patchReplayApplier.current?.(input),
 
     getSlides: () => slidesStore.getSnapshot().context.slides,
-    applySlides: (nextSlides) => {
-      // These slides come from a loaded recording, not from this user. Marking
-      // the deck borrowed keeps `subscribeSlidesPersistence` from writing the
-      // lesson's deck over the viewer's own in the shared localStorage key —
-      // which simply opening a published lesson used to do, unrecoverably.
-      setSlidesStoreDeckBorrowed(slidesStore, true);
-      slidesStore.trigger.setSlides({ slides: nextSlides });
-    },
+    applySlides: (nextSlides) => applyRecordingSlides(slidesStore, nextSlides),
     getWorkspaceSnapshot: () => {
       const project = getProject();
       const activeFilePath = getActiveFilePath();
