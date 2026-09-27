@@ -21,12 +21,8 @@ import {
 } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePreviewPanel } from "../contexts/PreviewPanelContext";
-import { isRuntimeBusy } from "../contexts/WebContainerRuntimeContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
-import {
-  useWebContainerRuntimeActions,
-  useWebContainerRuntimeMetadata,
-} from "../hooks/useWebContainerRuntime";
+import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
 import { downloadWorkspaceProjectAsZip } from "../utils/workspaceZip";
 import {
   importWorkspaceProjectFromZip,
@@ -50,7 +46,7 @@ import {
 import { createStarterWorkspaceForLessonType } from "../starters";
 import SlidesButton from "./SlidesButton";
 import CollaborationPanel from "./CollaborationPanel";
-import ModalShell from "./ModalShell";
+import EnvironmentVariablesDialog from "./editorHeader/EnvironmentVariablesDialog";
 import { startTour } from "./tour/productTour";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
@@ -67,54 +63,6 @@ const LESSON_TYPE_OPTIONS: Array<{
 const HEADER_ICON_BUTTON_CLASS =
   "inline-flex size-8 items-center justify-center rounded-lg transition-colors";
 const HEADER_ICON_BUTTON_NEUTRAL_CLASS = "text-slate-400 hover:bg-white/5 hover:text-white";
-
-function stringifyEnvironmentVariables(variables: Record<string, string>): string {
-  return Object.entries(variables)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
-}
-
-function parseEnvironmentInput(value: string): {
-  environmentVariables: Record<string, string>;
-  errorMessage: string | null;
-} {
-  const environmentVariables: Record<string, string> = {};
-  const lines = value.split(/\r?\n/);
-
-  for (const [index, line] of lines.entries()) {
-    const trimmedLine = line.trim();
-
-    if (!trimmedLine || trimmedLine.startsWith("#")) {
-      continue;
-    }
-
-    const separatorIndex = line.indexOf("=");
-
-    if (separatorIndex <= 0) {
-      return {
-        environmentVariables: {},
-        errorMessage: `Line ${index + 1} must use KEY=value format.`,
-      };
-    }
-
-    const key = line.slice(0, separatorIndex).trim();
-
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-      return {
-        environmentVariables: {},
-        errorMessage: `Line ${index + 1} has an invalid variable name.`,
-      };
-    }
-
-    environmentVariables[key] = line.slice(separatorIndex + 1);
-  }
-
-  return {
-    environmentVariables,
-    errorMessage: null,
-  };
-}
 
 function FileSidebarToggleButton() {
   const isCollapsed = useWorkspaceSidebarCollapsed();
@@ -186,15 +134,11 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   const track = (event: string, properties?: Properties) => {
     posthog?.capture(event, properties);
   };
-  const [draftValue, setDraftValue] = useState("");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isStarterSubmenuOpen, setIsStarterSubmenuOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const { rerunRunner, resetRuntime, updateEnvironmentVariables, updateRunnerConfig } =
-    useWebContainerRuntimeActions();
-  const { environmentVariables, runnerConfig, status } = useWebContainerRuntimeMetadata();
+  const { resetRuntime, updateRunnerConfig } = useWebContainerRuntimeActions();
   const { exportAsFile, importFromFile, loadRecording } = useNextEditorActions();
   const { currentRecording } = useNextEditorMetadata();
   const { getProject, reconcileExternalProject, saveProject } = useWorkspaceActions();
@@ -205,17 +149,6 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   const activeLessonOption =
     LESSON_TYPE_OPTIONS.find((option) => option.value === lessonType) ?? LESSON_TYPE_OPTIONS[0];
 
-  const isBusy = isRuntimeBusy(status);
-
-  useEffect(() => {
-    if (!isEnvironmentModalOpen) {
-      return;
-    }
-
-    setDraftValue(stringifyEnvironmentVariables(environmentVariables));
-    setErrorMessage(null);
-  }, [environmentVariables, isEnvironmentModalOpen]);
-
   useEffect(() => {
     // Collapse the starter-template flyout whenever the parent menu closes so it
     // doesn't reappear already-expanded the next time the menu opens.
@@ -223,11 +156,6 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       setIsStarterSubmenuOpen(false);
     }
   }, [isMenuOpen]);
-
-  const closeEnvironmentModal = () => {
-    setIsEnvironmentModalOpen(false);
-    setErrorMessage(null);
-  };
 
   const handleEditEnvironment = () => {
     setIsMenuOpen(false);
@@ -404,22 +332,6 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     // Each framework ships different dependencies, so tear the runtime down to
     // force a fresh mount + `pnpm install` for the new project on next start.
     resetRuntime();
-  };
-
-  const handleSave = () => {
-    const parsed = parseEnvironmentInput(draftValue);
-
-    if (parsed.errorMessage) {
-      setErrorMessage(parsed.errorMessage);
-      return;
-    }
-
-    updateEnvironmentVariables(parsed.environmentVariables);
-    closeEnvironmentModal();
-
-    if (runnerConfig.enabled && !isBusy) {
-      void rerunRunner();
-    }
   };
 
   return (
@@ -641,47 +553,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       />
 
       {isEnvironmentModalOpen && (
-        <ModalShell maxWidthClassName="max-w-xl" onBackdropClick={closeEnvironmentModal}>
-          <div className="space-y-5 overflow-y-auto p-5">
-            <p className="text-sm font-medium text-slate-100">Edit Environment</p>
-
-            <label className="block">
-              <span className="sr-only">Environment variables</span>
-              <textarea
-                value={draftValue}
-                onChange={(event) => {
-                  setDraftValue(event.target.value);
-                  if (errorMessage) {
-                    setErrorMessage(null);
-                  }
-                }}
-                rows={12}
-                spellCheck={false}
-                className="min-h-64 w-full rounded-lg border border-slate-700 bg-[#11141c] font-mono text-sm leading-6 text-slate-100 outline-none transition-colors focus:border-slate-500 p-3"
-                placeholder="API_URL=https://example.com\nNODE_ENV=development"
-              />
-            </label>
-
-            {errorMessage ? <p className="text-sm text-rose-300">{errorMessage}</p> : null}
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeEnvironmentModal}
-                className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400 transition-colors hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="rounded bg-emerald-500 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-950 transition-colors hover:bg-emerald-400"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </ModalShell>
+        <EnvironmentVariablesDialog onClose={() => setIsEnvironmentModalOpen(false)} />
       )}
     </>
   );
