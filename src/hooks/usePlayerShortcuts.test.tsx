@@ -288,6 +288,23 @@ describe("usePlayerShortcuts", () => {
     await waitFor(() => expect(seen.captions).toBe(false));
   });
 
+  it("keeps one key listener while the lesson is loaded, whatever the keys change", async () => {
+    const addListener = vi.spyOn(window, "addEventListener");
+    const removeListener = vi.spyOn(window, "removeEventListener");
+    const bubbleKeydown = (calls: unknown[][]) =>
+      calls.filter(([type, , options]) => type === "keydown" && !options);
+
+    press(">");
+    await waitFor(() => expect(seen.speed).toBe(1.25));
+    press("m");
+    await waitFor(() => expect(seen.volume).toBe(0));
+    press("c");
+    await waitFor(() => expect(seen.captions).toBe(true));
+
+    expect(bubbleKeydown(addListener.mock.calls)).toHaveLength(0);
+    expect(bubbleKeydown(removeListener.mock.calls)).toHaveLength(0);
+  });
+
   it("opens the shortcuts with ?", async () => {
     press("?");
     await waitFor(() => expect(seen.shortcuts?.helpOpen).toBe(true));

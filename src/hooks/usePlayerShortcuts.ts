@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { RecordingChapter } from "../core/src";
 import { findChapterIndexAt } from "../core/src/utils/chapters";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
@@ -161,8 +161,10 @@ export function usePlayerShortcuts() {
     return () => clearTimeout(timer);
   }, [feedback]);
 
-  useEffect(() => {
-    if (!active || !currentRecording) return;
+  // Carries out a shortcut with the player as it is now. An Effect Event, so the listener below
+  // is added once per loaded recording instead of again on every change these values see.
+  const runShortcut = useEffectEvent((shortcut: PlayerShortcut): boolean => {
+    if (!currentRecording) return false;
     const duration = durationMs > 0 ? durationMs : currentRecording.duration;
     const chapters = currentRecording.chapters ?? [];
     const hasCaptions = Boolean(currentRecording.captions?.length);
@@ -182,91 +184,76 @@ export function usePlayerShortcuts() {
       playbackSettingsTrigger.setVolume({ volume: level });
     };
 
-    const run = (shortcut: PlayerShortcut): boolean => {
-      switch (shortcut.type) {
-        case "togglePlay":
-          // Pressed during playback, Space never gets here: the editor's own listener
-          // pauses on it first (useNextEditor), so this only ever plays for Space.
-          resumeSharedAudioContext();
-          if (isPlaying) pause();
-          else play();
-          return true;
-        case "seekBy":
-          seek(now() + shortcut.ms);
-          show(`${shortcut.ms > 0 ? "+" : "−"}${Math.abs(shortcut.ms) / 1000} s`);
-          return true;
-        case "stepBy":
-          if (isPlaying) pause();
-          seek(now() + shortcut.ms);
-          return true;
-        case "seekToFraction":
-          seek(duration * shortcut.fraction);
-          return true;
-        case "seekToEnd":
-          seek(duration);
-          return true;
-        case "speedBy": {
-          const speed = Math.min(MAX_SPEED, Math.max(MIN_SPEED, playbackSpeed + shortcut.delta));
-          if (speed !== playbackSpeed) setSpeed(speed);
-          else show(formatSpeed(speed));
-          return true;
-        }
-        case "chapter": {
-          const target = chapterTarget(chapters, now(), shortcut.direction);
-          if (target === null) return false;
-          seek(target);
-          const title = chapters[findChapterIndexAt(chapters, target)]?.title;
-          if (title) show(title);
-          return true;
-        }
-        case "toggleMute":
-          if (volume > 0) {
-            unmutedVolumeRef.current = volume;
-            setLevel(0);
-            show("Muted");
-          } else {
-            setLevel(unmutedVolumeRef.current || 1);
-            show("Sound on");
-          }
-          return true;
-        case "toggleCaptions":
-          if (!hasCaptions) return false;
-          captionTrigger.toggleEnabled();
-          show(captionsEnabled ? "Captions off" : "Captions on");
-          return true;
-        case "toggleHelp":
-          setHelpOpen((open) => !open);
-          return true;
+    switch (shortcut.type) {
+      case "togglePlay":
+        // Pressed during playback, Space never gets here: the editor's own listener
+        // pauses on it first (useNextEditor), so this only ever plays for Space.
+        resumeSharedAudioContext();
+        if (isPlaying) pause();
+        else play();
+        return true;
+      case "seekBy":
+        seek(now() + shortcut.ms);
+        show(`${shortcut.ms > 0 ? "+" : "−"}${Math.abs(shortcut.ms) / 1000} s`);
+        return true;
+      case "stepBy":
+        if (isPlaying) pause();
+        seek(now() + shortcut.ms);
+        return true;
+      case "seekToFraction":
+        seek(duration * shortcut.fraction);
+        return true;
+      case "seekToEnd":
+        seek(duration);
+        return true;
+      case "speedBy": {
+        const speed = Math.min(MAX_SPEED, Math.max(MIN_SPEED, playbackSpeed + shortcut.delta));
+        if (speed !== playbackSpeed) setSpeed(speed);
+        else show(formatSpeed(speed));
+        return true;
       }
-    };
+      case "chapter": {
+        const target = chapterTarget(chapters, now(), shortcut.direction);
+        if (target === null) return false;
+        seek(target);
+        const title = chapters[findChapterIndexAt(chapters, target)]?.title;
+        if (title) show(title);
+        return true;
+      }
+      case "toggleMute":
+        if (volume > 0) {
+          unmutedVolumeRef.current = volume;
+          setLevel(0);
+          show("Muted");
+        } else {
+          setLevel(unmutedVolumeRef.current || 1);
+          show("Sound on");
+        }
+        return true;
+      case "toggleCaptions":
+        if (!hasCaptions) return false;
+        captionTrigger.toggleEnabled();
+        show(captionsEnabled ? "Captions off" : "Captions on");
+        return true;
+      case "toggleHelp":
+        setHelpOpen((open) => !open);
+        return true;
+    }
+  });
 
+  useEffect(() => {
+    if (!active) return;
     const onKeyDown = (event: KeyboardEvent) => {
       // A key another handler took (the editor's Space-to-pause, the slides' arrows) is theirs.
       // Held Space would flip between play and pause on every repeat.
       if (event.defaultPrevented || (event.repeat && event.key === " ")) return;
       const shortcut = playerShortcutFor(event);
       if (!shortcut || !isPlayerKeyTarget(event.target, event.key)) return;
-      if (run(shortcut)) event.preventDefault();
+      if (runShortcut(shortcut)) event.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    active,
-    currentRecording,
-    durationMs,
-    editorActor,
-    isPlaying,
-    playbackSpeed,
-    volume,
-    captionsEnabled,
-    play,
-    pause,
-    seekTo,
-    setPlaybackSpeed,
-    setVolume,
-    captionTrigger,
-    playbackSettingsTrigger,
-  ]);
+  }, [active]);
 
   return {
     feedback: active ? feedback : null,
