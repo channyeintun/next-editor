@@ -9,7 +9,7 @@ import {
   useNextEditorPlayback,
 } from "./useNextEditorContext";
 import { useCaptionStore, useCaptionStoreTrigger } from "./useCaptionStore";
-import { usePlaybackSettingsTrigger } from "./usePlaybackSettings";
+import { useApplySpeedAndVolume } from "./usePlaybackSettings";
 
 // ============================================================================
 // Keyboard control of the player, as in video players: play and pause, seek,
@@ -141,12 +141,12 @@ const formatSpeed = (speed: number) => `${speed}×`;
  * Returns the last action's feedback (shown briefly over the player) and the help's state.
  */
 export function usePlayerShortcuts() {
-  const { play, pause, seekTo, setPlaybackSpeed, setVolume } = useNextEditorActions();
+  const { play, pause, seekTo } = useNextEditorActions();
   const { isPlaying, isRecording, currentRecording } = useNextEditorMetadata();
   const { editorActor, playbackSpeed, volume, durationMs } = useNextEditorPlayback();
   const { enabled: captionsEnabled } = useCaptionStore();
   const captionTrigger = useCaptionStoreTrigger();
-  const playbackSettingsTrigger = usePlaybackSettingsTrigger();
+  const { applySpeed, applyVolume } = useApplySpeedAndVolume();
   const [feedback, setFeedback] = useState<{ text: string; at: number } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   // The level to unmute back to.
@@ -174,13 +174,8 @@ export function usePlayerShortcuts() {
       seekTo(Math.min(Math.max(0, time), duration));
     };
     const setSpeed = (speed: number) => {
-      setPlaybackSpeed(speed);
-      playbackSettingsTrigger.setSpeed({ speed });
+      applySpeed(speed);
       show(formatSpeed(speed));
-    };
-    const setLevel = (level: number) => {
-      setVolume(level);
-      playbackSettingsTrigger.setVolume({ volume: level });
     };
 
     switch (shortcut.type) {
@@ -225,10 +220,10 @@ export function usePlayerShortcuts() {
       case "toggleMute":
         if (volume > 0) {
           unmutedVolumeRef.current = volume;
-          setLevel(0);
+          applyVolume(0);
           show("Muted");
         } else {
-          setLevel(unmutedVolumeRef.current || 1);
+          applyVolume(unmutedVolumeRef.current || 1);
           show("Sound on");
         }
         return true;

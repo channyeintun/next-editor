@@ -1,27 +1,19 @@
 import type { ChangeEvent } from "react";
 import { MAX_PLAYBACK_SPEED, MIN_PLAYBACK_SPEED } from "../../core/src/machine/playbackValues";
-import { useNextEditorActions, useNextEditorPlayback } from "../../hooks/useNextEditorContext";
-import { usePlaybackSettingsTrigger } from "../../hooks/usePlaybackSettings";
+import { useNextEditorPlayback } from "../../hooks/useNextEditorContext";
+import { useApplySpeedAndVolume } from "../../hooks/usePlaybackSettings";
 
 /** The player settings' speed and volume sliders. */
 const PlaybackSpeedVolume = () => {
-  const { setPlaybackSpeed, setVolume } = useNextEditorActions();
   const { playbackSpeed, volume } = useNextEditorPlayback();
-  const playbackSettingsTrigger = usePlaybackSettingsTrigger();
+  const { applySpeed, applyVolume } = useApplySpeedAndVolume();
 
-  // Speed/volume go to the machine (drives this playback immediately) AND the
-  // settings store (persists them as player-level settings — Editor re-applies
-  // them when a fresh machine instance loads a recording).
   const handleVolumeChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const newVolume = parseFloat(event.target.value);
-    setVolume(newVolume);
-    playbackSettingsTrigger.setVolume({ volume: newVolume });
+    applyVolume(parseFloat(event.target.value));
   };
 
   const handleSpeedChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const newSpeed = parseFloat(event.target.value);
-    setPlaybackSpeed(newSpeed);
-    playbackSettingsTrigger.setSpeed({ speed: newSpeed });
+    applySpeed(parseFloat(event.target.value));
   };
 
   return (
