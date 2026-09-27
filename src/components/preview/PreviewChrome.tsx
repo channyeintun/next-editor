@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -7,6 +6,7 @@ import {
   type RefObject,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { useDismissOnOutsideInteraction } from "../../hooks/useDismissOnOutsideInteraction";
 import {
   ArrowLeft,
   ArrowRight,
@@ -112,20 +112,13 @@ function PreviewWindowMenu({ mode, onClose, onFloat, onDock }: PreviewWindowMenu
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!isMenuOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, [isMenuOpen]);
+  useDismissOnOutsideInteraction({
+    isOpen: isMenuOpen,
+    containerRef: menuRef,
+    onDismiss: () => setIsMenuOpen(false),
+    dismissOnEscape: false,
+    listenOn: "window",
+  });
 
   const handleDockMode = () => {
     setIsMenuOpen(false);
