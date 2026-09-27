@@ -14,6 +14,7 @@ import {
 } from "../hooks/useWorkspace";
 import { MAX_WORKSPACE_ASSET_BYTES, readUploadedWorkspaceFile } from "../utils/workspaceFileUpload";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
+import { useDismissOnOutsideInteraction } from "../hooks/useDismissOnOutsideInteraction";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,
@@ -235,32 +236,13 @@ function FileSidebarPanel() {
     };
   }, [isResizingSidebar, setSidebarWidth]);
 
-  useEffect(() => {
-    if (!contextMenu) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (contextMenuRef.current?.contains(event.target as Node)) {
-        return;
-      }
-
-      setContextMenu(null);
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setContextMenu(null);
-      }
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleEscape);
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, [contextMenu]);
+  useDismissOnOutsideInteraction({
+    isOpen: contextMenu !== null,
+    containerRef: contextMenuRef,
+    onDismiss: () => setContextMenu(null),
+    dismissOnEscape: true,
+    listenOn: "window",
+  });
 
   const commitCollapsedFolders = (next: Set<string>) => {
     const nextPaths = Array.from(next).sort((left, right) => left.localeCompare(right));

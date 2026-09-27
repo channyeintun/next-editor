@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { History, X } from "lucide-react";
+import { useDismissOnOutsideInteraction } from "../hooks/useDismissOnOutsideInteraction";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import {
   forgetLearnerVersion,
@@ -64,21 +65,13 @@ export default function LearnerVersionsMenu({
     return () => window.clearTimeout(timeout);
   }, [lastSavedAt]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setIsOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [isOpen]);
+  useDismissOnOutsideInteraction({
+    isOpen,
+    containerRef,
+    onDismiss: () => setIsOpen(false),
+    dismissOnEscape: true,
+    listenOn: "document",
+  });
 
   if (versions.length === 0) return null;
 
