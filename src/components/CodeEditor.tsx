@@ -223,6 +223,10 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const collaboration = useOptionalCollaboration();
   const slidesContext = useSlidesContext();
   const whiteboardContext = useWhiteboardContext();
+  // Slides or the whiteboard cover the editor, so this member's published
+  // surface is that overlay (see CollaborationSurfaceBridge); the editor's
+  // selection, cursor and viewport are not published over it.
+  const isEditorCovered = slidesContext.previewState.isOpen || whiteboardContext.isOpen;
   const displayIsCollapsed = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isCollapsed ?? false)
     : isCollapsed;
@@ -370,6 +374,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       return false;
     }
 
+    const shouldPublishSelection = !isEditorCovered && !collaboration.followedParticipantKey;
     const current = yMonacoBindingRef.current;
     if (
       current?.editor === editor &&
@@ -378,11 +383,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       current.text === text &&
       current.path === activeFile.path
     ) {
-      if (
-        !slidesContext.previewState.isOpen &&
-        !whiteboardContext.isOpen &&
-        !collaboration.followedParticipantKey
-      ) {
+      if (shouldPublishSelection) {
         publishYMonacoSelection(provider, editor, model, text);
       }
       return true;
@@ -400,11 +401,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         text,
         path: activeFile.path,
       };
-      if (
-        !slidesContext.previewState.isOpen &&
-        !whiteboardContext.isOpen &&
-        !collaboration.followedParticipantKey
-      ) {
+      if (shouldPublishSelection) {
         publishYMonacoSelection(provider, editor, model, text);
       }
       return true;
@@ -418,13 +415,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   });
 
   const publishCollaborationCursor = useEffectEvent((editor: StandaloneEditor | null) => {
-    if (
-      !collaboration?.provider ||
-      usesPlaybackModel ||
-      !editor ||
-      slidesContext.previewState.isOpen ||
-      whiteboardContext.isOpen
-    ) {
+    if (!collaboration?.provider || usesPlaybackModel || !editor || isEditorCovered) {
       return;
     }
     if (yMonacoBindingRef.current) return;
@@ -447,13 +438,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   });
 
   const publishCollaborationViewport = useEffectEvent((editor: StandaloneEditor | null) => {
-    if (
-      !collaboration?.provider ||
-      usesPlaybackModel ||
-      !editor ||
-      slidesContext.previewState.isOpen ||
-      whiteboardContext.isOpen
-    ) {
+    if (!collaboration?.provider || usesPlaybackModel || !editor || isEditorCovered) {
       return;
     }
     const model = editor.getModel();
