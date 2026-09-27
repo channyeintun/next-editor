@@ -1086,21 +1086,12 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   }, [editorRef, isBinaryActiveFile, syncEditorRef]);
 
   /**
-   * Handle Monaco Editor mount event
-   * Sets up the editor reference for use in recording and replay
+   * Stops following someone as soon as this member works in the editor
+   * themselves: a key, a click, a paste or the start of IME composition counts
+   * as editor input, the wheel as a local scroll. Returns the disposable that
+   * removes those listeners again.
    */
-  const handleEditorDidMount = (editor: StandaloneEditor) => {
-    disposeEditorListeners();
-    editorRef.current = editor;
-    syncEditorRef(editor);
-    const mountedModel = editor.getModel();
-    if (mountedModel) {
-      modelVersionByUriRef.current.set(mountedModel.uri.toString(), mountedModel.getVersionId());
-    }
-    restoreNormalViewState(editor, editor.getModel());
-
-    focusEditorIfNeeded(editor);
-
+  const listenForLocalIntent = (editor: StandaloneEditor): { dispose(): void } => {
     const editorDomNode = editor.getDomNode();
     const localIntentListeners: Array<{
       type: "keydown" | "pointerdown" | "wheel" | "paste" | "compositionstart";
@@ -1125,15 +1116,105 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       addLocalIntentListener("compositionstart", "local-editor-input");
     }
 
-    editorDisposablesRef.current = [
-      {
-        dispose: () => {
-          if (!editorDomNode) return;
-          for (const { type, listener } of localIntentListeners) {
-            editorDomNode.removeEventListener(type, listener, true);
-          }
-        },
+    return {
+      dispose: () => {
+        if (!editorDomNode) return;
+        for (const { type, listener } of localIntentListeners) {
+          editorDomNode.removeEventListener(type, listener, true);
+        }
       },
+    };
+  };
+
+  /**
+   * Routes one Monaco content change. A change CodeEditor itself writes into
+   * the model during render is only flagged, for a layout effect to record
+   * after the render; one y-monaco makes while setting up its binding is only
+   * recorded. Otherwise the edit is queued on the room's document when y-monaco
+   * is bound to this editor, or applied to the workspace. Every path ends the
+   * change's performance span.
+   */
+  const handleModelContentChange = (
+    editor: StandaloneEditor,
+    changeEvent: monaco.editor.IModelContentChangedEvent,
+  ) => {
+    const endChangeSpan = startPerformanceSpan("editor.model_change");
+    const modelKey = editor.getModel()?.uri.toString();
+    const beforeVersion = modelKey
+      ? (modelVersionByUriRef.current.get(modelKey) ?? Math.max(0, changeEvent.versionId - 1))
+      : Math.max(0, changeEvent.versionId - 1);
+    if (modelKey) modelVersionByUriRef.current.set(modelKey, changeEvent.versionId);
+    // syncWorkspaceModel can synchronously emit Monaco events while React
+    // is rendering. Check the ref before entering a useEffectEvent wrapper,
+    // which React intentionally rejects during render (error #440).
+    if (isApplyingExternalModelValueRef.current) {
+      pendingExternalModelCaptureRef.current = true;
+      endChangeSpan({ source: "external" });
+      return;
+    }
+    const yMonacoBinding = yMonacoBindingRef.current;
+    if (isConfiguringYMonacoRef.current) {
+      onEditorChange();
+      endChangeSpan({
+        source: "y-monaco",
+        update_mode: "binding-setup",
+        change_count: changeEvent.changes.length,
+      });
+      return;
+    }
+    if (yMonacoBinding?.editor === editor && yMonacoBinding.model === editor.getModel()) {
+      const editEvent = changeEvent.isFlush
+        ? null
+        : createMonacoTextEditEvent(editor, changeEvent, beforeVersion);
+      if (editEvent) {
+        const editedModel = yMonacoBinding.model;
+        collaboration?.queueLocalTextEdit(editEvent, (projectedContent) => {
+          if (
+            projectedContent !== null &&
+            editor.getModel() === editedModel &&
+            editedModel.getVersionId() === editEvent.afterVersion
+          ) {
+            acknowledgeWorkspaceModelContent(editedModel, projectedContent);
+          }
+        });
+      }
+      onEditorChange(editEvent ?? undefined);
+      endChangeSpan({
+        source: "y-monaco",
+        update_mode: editEvent ? "incremental" : "direct-ytext",
+        change_count: changeEvent.changes.length,
+      });
+      return;
+    }
+    const update = applyEditorChangeToWorkspace(editor, changeEvent, beforeVersion);
+    onEditorChange(
+      update.mode === "incremental" && !changeEvent.isFlush ? update.editEvent : undefined,
+    );
+    endChangeSpan({
+      source: "local",
+      update_mode: update.mode,
+      change_count: changeEvent.changes.length,
+    });
+  };
+
+  /**
+   * Handle Monaco Editor mount event
+   * Sets up the editor reference for use in recording and replay
+   */
+  const handleEditorDidMount = (editor: StandaloneEditor) => {
+    disposeEditorListeners();
+    editorRef.current = editor;
+    syncEditorRef(editor);
+    const mountedModel = editor.getModel();
+    if (mountedModel) {
+      modelVersionByUriRef.current.set(mountedModel.uri.toString(), mountedModel.getVersionId());
+    }
+    restoreNormalViewState(editor, editor.getModel());
+
+    focusEditorIfNeeded(editor);
+
+    editorDisposablesRef.current = [
+      listenForLocalIntent(editor),
       editor.onDidChangeModel(() => {
         disposeYMonacoBinding();
         const model = editor.getModel();
@@ -1150,65 +1231,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         publishCollaborationViewport(editor);
         reconcileYMonacoBinding(editor);
       }),
-      editor.onDidChangeModelContent((changeEvent) => {
-        const endChangeSpan = startPerformanceSpan("editor.model_change");
-        const modelKey = editor.getModel()?.uri.toString();
-        const beforeVersion = modelKey
-          ? (modelVersionByUriRef.current.get(modelKey) ?? Math.max(0, changeEvent.versionId - 1))
-          : Math.max(0, changeEvent.versionId - 1);
-        if (modelKey) modelVersionByUriRef.current.set(modelKey, changeEvent.versionId);
-        // syncWorkspaceModel can synchronously emit Monaco events while React
-        // is rendering. Check the ref before entering a useEffectEvent wrapper,
-        // which React intentionally rejects during render (error #440).
-        if (isApplyingExternalModelValueRef.current) {
-          pendingExternalModelCaptureRef.current = true;
-          endChangeSpan({ source: "external" });
-          return;
-        }
-        const yMonacoBinding = yMonacoBindingRef.current;
-        if (isConfiguringYMonacoRef.current) {
-          onEditorChange();
-          endChangeSpan({
-            source: "y-monaco",
-            update_mode: "binding-setup",
-            change_count: changeEvent.changes.length,
-          });
-          return;
-        }
-        if (yMonacoBinding?.editor === editor && yMonacoBinding.model === editor.getModel()) {
-          const editEvent = changeEvent.isFlush
-            ? null
-            : createMonacoTextEditEvent(editor, changeEvent, beforeVersion);
-          if (editEvent) {
-            const editedModel = yMonacoBinding.model;
-            collaboration?.queueLocalTextEdit(editEvent, (projectedContent) => {
-              if (
-                projectedContent !== null &&
-                editor.getModel() === editedModel &&
-                editedModel.getVersionId() === editEvent.afterVersion
-              ) {
-                acknowledgeWorkspaceModelContent(editedModel, projectedContent);
-              }
-            });
-          }
-          onEditorChange(editEvent ?? undefined);
-          endChangeSpan({
-            source: "y-monaco",
-            update_mode: editEvent ? "incremental" : "direct-ytext",
-            change_count: changeEvent.changes.length,
-          });
-          return;
-        }
-        const update = applyEditorChangeToWorkspace(editor, changeEvent, beforeVersion);
-        onEditorChange(
-          update.mode === "incremental" && !changeEvent.isFlush ? update.editEvent : undefined,
-        );
-        endChangeSpan({
-          source: "local",
-          update_mode: update.mode,
-          change_count: changeEvent.changes.length,
-        });
-      }),
+      editor.onDidChangeModelContent((changeEvent) =>
+        handleModelContentChange(editor, changeEvent),
+      ),
       editor.onDidChangeCursorPosition(() => {
         if (isApplyingExternalModelValueRef.current) return;
         onEditorChange();
