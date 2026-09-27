@@ -20,7 +20,7 @@ const controls = vi.hoisted(() => ({
   },
   providers: [] as Array<{
     doc: import("yjs").Doc;
-    session: { room: { roleVersion: number; hostUserId: string } };
+    session: { room: { roleVersion: number; hostUserId: string }; membership: { role: string } };
     awarenessPublications: Array<{ kind: string }>;
     awarenessSessionId: string;
     emitDocumentChange: () => void;
@@ -207,7 +207,15 @@ import {
   projectCollaborationTeachingDocument,
   seedCollaborationTeachingDocument,
 } from "../collaboration/teachingDocument";
-import { downloadCollaborationAsset } from "@next-editor/infra";
+import {
+  createCollaborationInvitation,
+  downloadCollaborationAsset,
+  listCollaborationInvitations,
+  listCollaborationMembers,
+  removeCollaborationMember,
+  revokeCollaborationInvitation,
+  updateCollaborationMemberRole,
+} from "@next-editor/infra";
 import type { WhiteboardElementJSON } from "../core/src/whiteboard";
 import {
   getCollaborationTexts,
@@ -1309,5 +1317,203 @@ describe("CollaborationContext room switch", () => {
     expect(collaboration!.participants.map((entry) => entry.sessionId)).not.toContain(
       remote.sessionId,
     );
+  });
+});
+
+describe("CollaborationContext room roster", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  const ROOM_ID = "40000000-0000-4000-8000-000000000001";
+
+  function member(userId: string, role: "owner" | "editor" | "viewer") {
+    return {
+      userId,
+      role,
+      username: userId,
+      name: null,
+      avatarUrl: null,
+      joinedAt: 1,
+      updatedAt: 1,
+    };
+  }
+
+  function invitation(id: string) {
+    return {
+      id,
+      roomId: ROOM_ID,
+      role: "editor" as const,
+      maxUses: 1,
+      useCount: 0,
+      expiresAt: Date.now() + 60_000,
+      revokedAt: null,
+      createdAt: 1,
+    };
+  }
+
+  type MemberList = { members: ReturnType<typeof member>[]; roleVersion: number };
+
+  async function renderRoom() {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={[`/code?room=${ROOM_ID}`]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    return {
+      view,
+      provider: controls.providers[0]!,
+      collaboration: () => collaboration!,
+      memberIds: () => collaboration!.members.map((entry) => entry.userId),
+      invitationIds: () => collaboration!.invitations.map((entry) => entry.id),
+    };
+  }
+
+  it("loads the members once the room is live, and invitations only for the owner", async () => {
+    vi.mocked(listCollaborationMembers).mockResolvedValueOnce({
+      members: [member("a", "owner"), member("b", "editor")],
+      roleVersion: 1,
+    });
+    const room = await renderRoom();
+
+    await waitFor(() => expect(room.memberIds()).toEqual(["a", "b"]));
+    expect(listCollaborationMembers).toHaveBeenCalledWith(ROOM_ID);
+    expect(listCollaborationInvitations).not.toHaveBeenCalled();
+    expect(room.invitationIds()).toEqual([]);
+
+    room.provider.session.membership.role = "owner";
+    vi.mocked(listCollaborationInvitations).mockResolvedValueOnce([invitation("i1")]);
+    await act(async () => {
+      await room.collaboration().refreshRoomData();
+    });
+    expect(listCollaborationInvitations).toHaveBeenCalledWith(ROOM_ID);
+    expect(room.invitationIds()).toEqual(["i1"]);
+    room.view.unmount();
+  });
+
+  it("keeps the latest of two overlapping refreshes", async () => {
+    const room = await renderRoom();
+    await waitFor(() => expect(listCollaborationMembers).toHaveBeenCalledTimes(1));
+    let resolveStale!: (value: MemberList) => void;
+    vi.mocked(listCollaborationMembers)
+      .mockImplementationOnce(
+        () =>
+          new Promise<MemberList>((resolve) => {
+            resolveStale = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ members: [member("latest", "editor")], roleVersion: 2 });
+
+    let stale!: Promise<void>;
+    act(() => {
+      stale = room.collaboration().refreshRoomData();
+    });
+    await act(async () => {
+      await room.collaboration().refreshRoomData();
+    });
+    expect(room.memberIds()).toEqual(["latest"]);
+
+    await act(async () => {
+      resolveStale({ members: [member("stale", "editor")], roleVersion: 1 });
+      await stale;
+    });
+    expect(room.memberIds()).toEqual(["latest"]);
+    room.view.unmount();
+  });
+
+  it("applies invitation and member changes to the lists", async () => {
+    const members = { members: [member("a", "owner"), member("b", "editor")], roleVersion: 1 };
+    vi.mocked(listCollaborationMembers)
+      .mockResolvedValueOnce(members)
+      .mockResolvedValueOnce(members);
+    const room = await renderRoom();
+    await waitFor(() => expect(room.memberIds()).toEqual(["a", "b"]));
+
+    await act(async () => {
+      await expect(room.collaboration().createInvitation("editor")).rejects.toThrow(
+        "Only the room owner can create invitations.",
+      );
+    });
+    expect(createCollaborationInvitation).not.toHaveBeenCalled();
+
+    room.provider.session.membership.role = "owner";
+    vi.mocked(listCollaborationInvitations).mockResolvedValueOnce([invitation("i1")]);
+    await act(async () => {
+      await room.collaboration().refreshRoomData();
+    });
+    vi.mocked(createCollaborationInvitation).mockResolvedValueOnce({
+      ...invitation("i2"),
+      token: "secret",
+    });
+    await act(async () => {
+      await room.collaboration().createInvitation("viewer");
+    });
+    expect(createCollaborationInvitation).toHaveBeenCalledWith(ROOM_ID, { role: "viewer" });
+    expect(room.invitationIds()).toEqual(["i2", "i1"]);
+
+    vi.mocked(revokeCollaborationInvitation).mockResolvedValueOnce(undefined);
+    await act(async () => {
+      await room.collaboration().revokeInvitation("i1");
+    });
+    expect(revokeCollaborationInvitation).toHaveBeenCalledWith(ROOM_ID, "i1");
+    expect(room.invitationIds()).toEqual(["i2"]);
+
+    vi.mocked(updateCollaborationMemberRole).mockResolvedValueOnce(member("b", "viewer"));
+    await act(async () => {
+      await room.collaboration().updateMemberRole("b", "viewer");
+    });
+    expect(updateCollaborationMemberRole).toHaveBeenCalledWith(ROOM_ID, "b", "viewer");
+    expect(room.collaboration().members.map((entry) => entry.role)).toEqual(["owner", "viewer"]);
+
+    vi.mocked(removeCollaborationMember).mockResolvedValueOnce(undefined);
+    await act(async () => {
+      await room.collaboration().removeMember("b");
+    });
+    expect(removeCollaborationMember).toHaveBeenCalledWith(ROOM_ID, "b");
+    expect(room.memberIds()).toEqual(["a"]);
+    room.view.unmount();
+  });
+
+  it("drops the roster on leaving, including a list that arrives afterwards", async () => {
+    vi.mocked(listCollaborationMembers).mockResolvedValueOnce({
+      members: [member("a", "owner")],
+      roleVersion: 1,
+    });
+    const room = await renderRoom();
+    await waitFor(() => expect(room.memberIds()).toEqual(["a"]));
+    let resolveLate!: (value: MemberList) => void;
+    vi.mocked(listCollaborationMembers).mockImplementationOnce(
+      () =>
+        new Promise<MemberList>((resolve) => {
+          resolveLate = resolve;
+        }),
+    );
+    let late!: Promise<void>;
+    act(() => {
+      late = room.collaboration().refreshRoomData();
+    });
+
+    await act(async () => {
+      await room.collaboration().leaveRoom();
+    });
+    await waitFor(() => expect(room.collaboration().provider).toBeNull());
+    expect(room.memberIds()).toEqual([]);
+
+    await act(async () => {
+      resolveLate({ members: [member("late", "editor")], roleVersion: 2 });
+      await late;
+    });
+    expect(room.memberIds()).toEqual([]);
+    room.view.unmount();
   });
 });
