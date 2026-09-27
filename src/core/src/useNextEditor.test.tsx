@@ -79,7 +79,7 @@ describe("useNextEditorInteractionEffects", () => {
   it("re-sends a stale editor ref after a machine transition", () => {
     const editorRef: EditorRef = { current: null };
     const actor = startActor(editorRef);
-    renderHook(() => useNextEditorInteractionEffects(actor, { editorRef }));
+    renderHook(() => useNextEditorInteractionEffects(actor, editorRef));
 
     const editor = createMockEditor("const a = 1;");
     editorRef.current = editor;

@@ -362,7 +362,7 @@ export const useNextEditorActorActions = (actorRef: EditorActorRef) => {
  */
 export const useNextEditorInteractionEffects = (
   actorRef: EditorActorRef,
-  config: EditorMachineInput,
+  editorRef: EditorMachineInput["editorRef"],
 ): void => {
   const isPlaying = useSelector(actorRef, selectIsPlaying);
   const editor = useSelector(actorRef, selectEditor);
@@ -377,7 +377,7 @@ export const useNextEditorInteractionEffects = (
   // Events sent to a not-yet-(re)started actor are buffered and flush on start.
   useEffect(() => {
     const syncEditorRefIfStale = () => {
-      const currentEditor = config.editorRef.current;
+      const currentEditor = editorRef.current;
       if (currentEditor && actorRef.getSnapshot().context.editorRefs.editor !== currentEditor) {
         actorRef.send({ type: "SET_EDITOR_REF", editor: currentEditor });
       }
@@ -387,7 +387,7 @@ export const useNextEditorInteractionEffects = (
     return () => {
       subscription.unsubscribe();
     };
-  }, [actorRef, config.editorRef]);
+  }, [actorRef, editorRef]);
 
   // Handle playback interaction detection via direct input listeners
   // This is more stable than onChange for preventing machine/user feedback loops
