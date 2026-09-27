@@ -21,6 +21,7 @@ import {
   isKeyframe,
 } from "../utils/frameDelta";
 import { normalizeRecordingData } from "../utils/editorState";
+import { normalizeChapters } from "../utils/chapters";
 import { resolveRuntimeSnapshotAt } from "../runtimeTrack";
 import { isValidEditorState } from "../utils/validation";
 import { arePreviewSizesEqual } from "../../../utils/equality";
@@ -487,6 +488,34 @@ export const seekToTime = ({ context, event }: EditorActionArgs): EditorContextU
   };
 };
 
+/** Moves the playhead to where the timeline actor ticked, clamped to the recording. */
+export const storeTickTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
+  if (event.type !== "TICK") return {};
+  return {
+    timeline: {
+      ...context.timeline,
+      currentTime: normalizeTimelineTime(
+        event.currentTime,
+        context.timeline.duration,
+        context.timeline.currentTime,
+      ),
+    },
+  };
+};
+
+/** The timeline reached the end, so the playhead rests on the recording's last moment. */
+export const moveToPlaybackEnd = ({ context }: EditorActionArgs): EditorContextUpdate => ({
+  timeline: {
+    ...context.timeline,
+    currentTime: context.timeline.duration,
+  },
+});
+
+/** Leaving playback stops the narration player, so the next entry spawns a new one. */
+export const clearPlaybackAudioSpawned = (): EditorContextUpdate => ({
+  playbackAudioSpawned: false,
+});
+
 export const setPlaybackSpeed = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "SET_SPEED") return {};
   return {
@@ -695,6 +724,15 @@ export const addCaptionTrack = ({ context, event }: EditorActionArgs): EditorCon
       ...context.recording,
       captions: [...filtered, event.track],
     },
+  };
+};
+
+// Chapters sit outside the timeline, like captions: editing them changes nothing else.
+export const setChapters = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
+  if (event.type !== "SET_CHAPTERS" || !context.recording) return {};
+  const chapters = normalizeChapters(event.chapters);
+  return {
+    recording: { ...context.recording, chapters: chapters.length > 0 ? chapters : undefined },
   };
 };
 

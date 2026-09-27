@@ -862,6 +862,20 @@ export const handleAudioRecordingError = ({ event }: EditorActionArgs): EditorCo
   return { error: event.error };
 };
 
+/**
+ * The selected narration file failed to play. The take cannot go on without it, so it
+ * ends here: its audio slice and session are dropped and the failure is kept.
+ */
+export const handleExternalAudioError = ({ event }: EditorActionArgs): EditorContextUpdate => {
+  if (event.type !== "AUDIO_PLAYBACK_ERROR") return {};
+  return {
+    error: event.error,
+    audio: createIdleAudioState(),
+    session: null,
+    sessionRevision: 0,
+  };
+};
+
 // ============================================================================
 // Local screen-recording action bodies
 //

@@ -10,7 +10,7 @@ import {
   fromPromise,
 } from "xstate";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
-import { createIdleAudioState, createInitialContext } from "./types";
+import { createInitialContext } from "./types";
 import type { MouseCursorPosition, Recording } from "../types";
 import { timelineMachine } from "./timelineMachine";
 import { audioRecordingActor, audioPlaybackActor } from "./audioActor";
@@ -63,6 +63,7 @@ import {
   handleCameraError,
   clearCameraRecording,
   handleAudioRecordingError,
+  handleExternalAudioError,
   setScreenStream,
   storeScreenStarted,
   notifyScreenRecordingReady,
@@ -74,7 +75,6 @@ import {
   resumeRecordingSession,
   addChapterMarker,
 } from "./captureActions";
-import { normalizeChapters } from "../utils/chapters";
 import { isRecordingClockPaused } from "./recordingClock";
 import { findRetakeTarget, rewindSessionToSafePoint } from "./retake";
 import { appendRuntimeRecordingEvent, getRecordingTimestamp } from "./recordingSession";
@@ -84,8 +84,12 @@ import {
   extendRecording,
   appendRecordingDelta,
   addCaptionTrack,
+  setChapters,
   applyFrameAtTime,
   seekToTime,
+  storeTickTime,
+  moveToPlaybackEnd,
+  clearPlaybackAudioSpawned,
   setPlaybackSpeed,
   setVolume,
   clearCursorDecorations,
@@ -111,8 +115,14 @@ import {
   applyWhiteboardEventsAtTime,
   applyChatEventsAtTime,
 } from "./replayActions";
-import { normalizeTimelineDuration, normalizeTimelineTime } from "./playbackValues";
+import { normalizeTimelineDuration } from "./playbackValues";
 import { isDmpCodecLoaded } from "../../../storage/dmpCodec/dmpCodec";
+
+/**
+ * How often, at most, a playing replay sends the narration player its SYNC safety net
+ * (see audioPlaybackActor). Seeks, plays and speed changes reposition it at once.
+ */
+const PLAYBACK_AUDIO_SYNC_INTERVAL_MS = 250;
 
 // ============================================================================
 // Editor State Machine
@@ -280,16 +290,82 @@ export const editorMachine = setup({
     captureChatEvent: assign(captureChatEvent),
     finalizeRecording: assign(finalizeRecording),
     addChapterMarker: assign(addChapterMarker),
-    // Chapters sit outside the timeline, like captions: editing them changes nothing else.
-    setChapters: assign(({ context, event }) => {
-      if (event.type !== "SET_CHAPTERS" || !context.recording) return {};
-      const chapters = normalizeChapters(event.chapters);
-      return {
-        recording: { ...context.recording, chapters: chapters.length > 0 ? chapters : undefined },
-      };
-    }),
     pauseRecordingSession: assign(pauseRecordingSession),
     resumeRecordingSession: assign(resumeRecordingSession),
+    startMicrophoneRecorder: enqueueActions(({ context, enqueue }) => {
+      // A previous take's recorder can outlive its session while it waits on a
+      // late blob. Spawning under the same id would only replace the reference
+      // and leave the old actor running, so stop it first.
+      enqueue.stopChild("audioRecorder");
+      // Spawn, not invoke: must survive into recording/stoppingRecording — its
+      // AUDIO_RECORDING_STOPPED event arrives after leaving this state.
+      enqueue.spawnChild("audioRecording", {
+        id: "audioRecorder",
+        input: { deviceId: context.microphoneDeviceId ?? undefined },
+      });
+      enqueue.sendTo("audioRecorder", { type: "START" });
+      enqueue.assign({
+        audio: {
+          ...context.audio,
+          blob: null,
+          isRecording: true,
+          mimeType: "",
+          source: "microphone" as const,
+          startOffsetMs: 0,
+          externalDurationMs: null,
+        },
+      });
+    }),
+    startCameraRecorder: enqueueActions(({ context, enqueue }) => {
+      if (!context.enableCameraRecording) return;
+
+      // Spawn, not invoke: conditional on enableCameraRecording.
+      enqueue.spawnChild("cameraRecording", {
+        id: "cameraRecorder",
+        input: {},
+      });
+      enqueue.sendTo("cameraRecorder", { type: "START" });
+      enqueue.assign({
+        camera: {
+          ...context.camera,
+          blob: null,
+          isRecording: true,
+          mimeType: "",
+          mediaRecorder: null,
+          source: "camera" as const,
+          startOffsetMs: 0,
+        },
+      });
+    }),
+    startScreenRecorder: enqueueActions(({ context, enqueue }) => {
+      if (!context.screenStream) return;
+
+      // Spawn the screen recorder with the pre-acquired display stream (it owns it now) plus a
+      // *clone* of the live microphone track so narration is muxed into a standalone video. The
+      // clone is essential: the actor stops its tracks on teardown, and stopping the original
+      // would kill the session's own mic recorder. Absent in external-audio mode (no mic recorder).
+      const actorId = context.screen.actorId;
+      if (!actorId || !context.session) return;
+
+      const micTrack = context.audio.mediaRecorder?.stream.getAudioTracks()[0]?.clone() ?? null;
+      enqueue.spawnChild("screenRecording", {
+        id: actorId,
+        input: {
+          stream: context.screenStream,
+          micTrack,
+          sessionStartedAtPerf: context.session.startedAtPerf,
+        },
+      });
+      enqueue.sendTo(actorId, { type: "START" });
+      enqueue.assign({
+        screen: {
+          ...context.screen,
+          isRecording: true,
+          mimeType: "",
+          startOffsetMs: 0,
+        },
+      });
+    }),
     // The recorders follow the take's clock: each writes nothing while it is paused, so
     // the narration, camera and screen files skip the same spans the timeline does. A
     // selected narration file is an input, not a recording, so it pauses in place.
@@ -319,6 +395,25 @@ export const editorMachine = setup({
       }
       if (context.screen.isRecording && context.screen.actorId) {
         enqueue.sendTo(context.screen.actorId, { type: "RESUME" });
+      }
+    }),
+    // Asks the microphone and camera for their files; stoppingRecording waits for them.
+    stopRecordingMedia: enqueueActions(({ context, enqueue }) => {
+      if (context.audio.isRecording && context.audio.source === "microphone") {
+        enqueue.sendTo("audioRecorder", { type: "STOP" });
+      }
+      if (shouldRecordCamera(context)) {
+        enqueue.sendTo("cameraRecorder", { type: "STOP" });
+      }
+    }),
+    // Every exit from `recording` ends the session (→ stoppingRecording / loading / idle), so
+    // this single action stops the screen recorder on all of them — including the external-audio
+    // and no-audio paths that bypass `stoppingRecording`. The actor's STOP → onstop → root
+    // SCREEN_STOPPED handler then saves the blob (which can land after we've reached playback).
+    // Skipped when the user already ended the share early (isRecording cleared on SCREEN_STOPPED).
+    stopScreenRecording: enqueueActions(({ context, enqueue }) => {
+      if (context.screen.isRecording && context.screen.actorId) {
+        enqueue.sendTo(context.screen.actorId, { type: "STOP" });
       }
     }),
     // Rewinds the take to its last safe point and holds it paused there (see retake.ts).
@@ -391,6 +486,7 @@ export const editorMachine = setup({
     handleCameraError: assign(handleCameraError),
     clearCameraRecording: assign(clearCameraRecording),
     handleAudioRecordingError: assign(handleAudioRecordingError),
+    handleExternalAudioError: assign(handleExternalAudioError),
     setScreenStream: assign(setScreenStream),
     storeScreenStarted: assign(storeScreenStarted),
     notifyScreenRecordingReady,
@@ -408,8 +504,12 @@ export const editorMachine = setup({
     extendRecording: assign(extendRecording),
     appendRecordingDelta: assign(appendRecordingDelta),
     addCaptionTrack: assign(addCaptionTrack),
+    setChapters: assign(setChapters),
     applyFrameAtTime: assign(applyFrameAtTime),
     seekToTime: assign(seekToTime),
+    storeTickTime: assign(storeTickTime),
+    moveToPlaybackEnd: assign(moveToPlaybackEnd),
+    clearPlaybackAudioSpawned: assign(clearPlaybackAudioSpawned),
     setPlaybackSpeed: assign(setPlaybackSpeed),
     setVolume: assign(setVolume),
     clearCursorDecorations: assign(clearCursorDecorations),
@@ -463,6 +563,82 @@ export const editorMachine = setup({
       enqueue.sendTo("timelineActor", { type: "SEEK", time: context.timeline.currentTime });
       if (hasSpawnedPlaybackAudio(context)) {
         enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: context.timeline.currentTime });
+      }
+    }),
+    // A loaded recording's narration gets its player as playback begins; one that arrives
+    // later (streaming) is spawned by syncStreamedRecordingGrowth or startPlaybackActors.
+    spawnPlaybackAudio: enqueueActions(({ context, enqueue }) => {
+      syncPlaybackAudio(context, enqueue, {
+        spawnIfMissing: true,
+        seek: false,
+        syncRate: false,
+        syncVolume: false,
+        play: false,
+      });
+    }),
+    // The timeline is the master clock: the narration follows it through the actor's SYNC
+    // safety net, at most every PLAYBACK_AUDIO_SYNC_INTERVAL_MS.
+    syncPlaybackAudioToTimeline: enqueueActions(({ context, enqueue }) => {
+      const lastSync = context.lastSyncTime || 0;
+      const now = performance.now();
+      if (hasSpawnedPlaybackAudio(context) && now - lastSync > PLAYBACK_AUDIO_SYNC_INTERVAL_MS) {
+        enqueue.sendTo("audioPlayer", {
+          type: "SYNC",
+          timeMs: context.timeline.currentTime,
+        });
+        enqueue.assign({ lastSyncTime: now });
+      }
+    }),
+    // Hands the speed setPlaybackSpeed just stored to the timeline and, once spawned, the
+    // narration.
+    syncPlaybackActorsSpeed: enqueueActions(({ context, enqueue }) => {
+      const speed = context.timeline.speed;
+      enqueue.sendTo("timelineActor", { type: "SET_SPEED", speed });
+      if (hasSpawnedPlaybackAudio(context)) {
+        enqueue.sendTo("audioPlayer", {
+          type: "SET_PLAYBACK_RATE",
+          rate: speed,
+        });
+      }
+    }),
+    // Hands the volume setVolume just stored to the narration, once spawned.
+    syncPlaybackAudioVolume: enqueueActions(({ context, enqueue }) => {
+      if (hasSpawnedPlaybackAudio(context)) {
+        enqueue.sendTo("audioPlayer", {
+          type: "SET_VOLUME",
+          volume: context.timeline.volume,
+        });
+      }
+    }),
+    startPlaybackActors: enqueueActions(({ context, enqueue }) => {
+      // Ensure actors are positioned before starting playback. Starting
+      // audio first can briefly play stale audio at high speeds, so PLAY
+      // is sent after timelineActor START rather than through `play` here.
+      //
+      // Streaming playback: the audio may have arrived after the recording was first
+      // loaded (its bytes are at the end of the stream), so the playback-entry spawn
+      // saw no audio. Spawn the player lazily now that audio is available.
+      const controllingPlaybackAudio = syncPlaybackAudio(context, enqueue, {
+        spawnIfMissing: true,
+        seek: true,
+        syncRate: true,
+        syncVolume: false,
+        play: false,
+      });
+
+      enqueue.sendTo("timelineActor", {
+        type: "SEEK",
+        time: context.timeline.currentTime,
+      });
+      enqueue.sendTo("timelineActor", { type: "START" });
+      if (controllingPlaybackAudio) {
+        enqueue.sendTo("audioPlayer", { type: "PLAY" });
+      }
+    }),
+    pausePlaybackActors: enqueueActions(({ context, enqueue }) => {
+      enqueue.sendTo("timelineActor", { type: "PAUSE" });
+      if (hasSpawnedPlaybackAudio(context)) {
+        enqueue.sendTo("audioPlayer", { type: "PAUSE" });
       }
     }),
 
@@ -615,32 +791,7 @@ export const editorMachine = setup({
     },
 
     startingRecording: {
-      entry: [
-        enqueueActions(({ context, enqueue }) => {
-          // A previous take's recorder can outlive its session while it waits on a
-          // late blob. Spawning under the same id would only replace the reference
-          // and leave the old actor running, so stop it first.
-          enqueue.stopChild("audioRecorder");
-          // Spawn, not invoke: must survive into recording/stoppingRecording — its
-          // AUDIO_RECORDING_STOPPED event arrives after leaving this state.
-          enqueue.spawnChild("audioRecording", {
-            id: "audioRecorder",
-            input: { deviceId: context.microphoneDeviceId ?? undefined },
-          });
-          enqueue.sendTo("audioRecorder", { type: "START" });
-          enqueue.assign({
-            audio: {
-              ...context.audio,
-              blob: null,
-              isRecording: true,
-              mimeType: "",
-              source: "microphone" as const,
-              startOffsetMs: 0,
-              externalDurationMs: null,
-            },
-          });
-        }),
-      ],
+      entry: "startMicrophoneRecorder",
       on: {
         AUDIO_RECORDING_STARTED: {
           target: "recording",
@@ -659,10 +810,7 @@ export const editorMachine = setup({
             // gDM ran at click time, so a display stream may be held even though the actor never
             // spawned. Release it here or the browser's "sharing this tab" indicator leaks forever.
             "releaseScreenStream",
-            assign({
-              error: ({ event }) =>
-                event.type === "AUDIO_RECORDING_ERROR" ? event.error : "Failed to start audio",
-            }),
+            "handleAudioRecordingError",
             "notifyError",
           ],
         },
@@ -691,71 +839,8 @@ export const editorMachine = setup({
           },
         }),
       },
-      entry: [
-        enqueueActions(({ context, enqueue }) => {
-          if (!context.enableCameraRecording) return;
-
-          // Spawn, not invoke: conditional on enableCameraRecording.
-          enqueue.spawnChild("cameraRecording", {
-            id: "cameraRecorder",
-            input: {},
-          });
-          enqueue.sendTo("cameraRecorder", { type: "START" });
-          enqueue.assign({
-            camera: {
-              ...context.camera,
-              blob: null,
-              isRecording: true,
-              mimeType: "",
-              mediaRecorder: null,
-              source: "camera" as const,
-              startOffsetMs: 0,
-            },
-          });
-        }),
-        enqueueActions(({ context, enqueue }) => {
-          if (!context.screenStream) return;
-
-          // Spawn the screen recorder with the pre-acquired display stream (it owns it now) plus a
-          // *clone* of the live microphone track so narration is muxed into a standalone video. The
-          // clone is essential: the actor stops its tracks on teardown, and stopping the original
-          // would kill the session's own mic recorder. Absent in external-audio mode (no mic recorder).
-          const actorId = context.screen.actorId;
-          if (!actorId || !context.session) return;
-
-          const micTrack = context.audio.mediaRecorder?.stream.getAudioTracks()[0]?.clone() ?? null;
-          enqueue.spawnChild("screenRecording", {
-            id: actorId,
-            input: {
-              stream: context.screenStream,
-              micTrack,
-              sessionStartedAtPerf: context.session.startedAtPerf,
-            },
-          });
-          enqueue.sendTo(actorId, { type: "START" });
-          enqueue.assign({
-            screen: {
-              ...context.screen,
-              isRecording: true,
-              mimeType: "",
-              startOffsetMs: 0,
-            },
-          });
-        }),
-      ],
-      exit: [
-        stopChild("recordingAudioPlayer"),
-        // Every exit from `recording` ends the session (→ stoppingRecording / loading / idle), so
-        // this single line stops the screen recorder on all of them — including the external-audio
-        // and no-audio paths that bypass `stoppingRecording`. The actor's STOP → onstop → root
-        // SCREEN_STOPPED handler then saves the blob (which can land after we've reached playback).
-        // Skipped when the user already ended the share early (isRecording cleared on SCREEN_STOPPED).
-        enqueueActions(({ context, enqueue }) => {
-          if (context.screen.isRecording && context.screen.actorId) {
-            enqueue.sendTo(context.screen.actorId, { type: "STOP" });
-          }
-        }),
-      ],
+      entry: ["startCameraRecorder", "startScreenRecorder"],
+      exit: [stopChild("recordingAudioPlayer"), "stopScreenRecording"],
       on: {
         CAPTURE_FRAME: {
           actions: "captureFrame",
@@ -812,15 +897,7 @@ export const editorMachine = setup({
           actions: [
             stopChild("cameraRecorder"),
             "clearCameraRecording",
-            assign({
-              error: ({ event }) =>
-                event.type === "AUDIO_PLAYBACK_ERROR"
-                  ? event.error
-                  : "Failed to play external audio",
-              audio: () => createIdleAudioState(),
-              session: null,
-              sessionRevision: 0,
-            }),
+            "handleExternalAudioError",
             "notifyError",
           ],
         },
@@ -877,16 +954,7 @@ export const editorMachine = setup({
     },
 
     stoppingRecording: {
-      entry: [
-        enqueueActions(({ context, enqueue }) => {
-          if (context.audio.isRecording && context.audio.source === "microphone") {
-            enqueue.sendTo("audioRecorder", { type: "STOP" });
-          }
-          if (shouldRecordCamera(context)) {
-            enqueue.sendTo("cameraRecorder", { type: "STOP" });
-          }
-        }),
-      ],
+      entry: "stopRecordingMedia",
       // The mic recorder is deliberately not stopped on exit. When the watchdog wins, its
       // blob is still on the way, and a stopped actor can no longer deliver it to the root
       // late-blob handler. It is stopped where its blob is consumed instead, or when the
@@ -1008,23 +1076,8 @@ export const editorMachine = setup({
           startPosition: context.timeline.currentTime,
         }),
       },
-      entry: [
-        ...APPLY_REPLAY_STATE_ACTIONS,
-        enqueueActions(({ context, enqueue }) => {
-          syncPlaybackAudio(context, enqueue, {
-            spawnIfMissing: true,
-            seek: false,
-            syncRate: false,
-            syncVolume: false,
-            play: false,
-          });
-        }),
-      ],
-      exit: [
-        stopChild("audioPlayer"),
-        "clearCursorDecorations",
-        assign({ playbackAudioSpawned: false }),
-      ],
+      entry: [...APPLY_REPLAY_STATE_ACTIONS, "spawnPlaybackAudio"],
+      exit: [stopChild("audioPlayer"), "clearCursorDecorations", "clearPlaybackAudioSpawned"],
       on: {
         WORKSPACE_EVENT: {
           actions: ["detachPlaybackWorkspace"],
@@ -1062,36 +1115,7 @@ export const editorMachine = setup({
           },
         ],
         TICK: {
-          actions: [
-            assign(({ context, event }) => {
-              if (event.type === "TICK") {
-                return {
-                  timeline: {
-                    ...context.timeline,
-                    currentTime: normalizeTimelineTime(
-                      event.currentTime,
-                      context.timeline.duration,
-                      context.timeline.currentTime,
-                    ),
-                  },
-                };
-              }
-              return {};
-            }),
-            ...APPLY_REPLAY_STATE_ACTIONS,
-            enqueueActions(({ context, enqueue }) => {
-              // Sync audio to timeline every 250ms or on seek
-              const lastSync = context.lastSyncTime || 0;
-              const now = performance.now();
-              if (hasSpawnedPlaybackAudio(context) && now - lastSync > 250) {
-                enqueue.sendTo("audioPlayer", {
-                  type: "SYNC",
-                  timeMs: context.timeline.currentTime,
-                });
-                enqueue.assign({ lastSyncTime: now });
-              }
-            }),
-          ],
+          actions: ["storeTickTime", ...APPLY_REPLAY_STATE_ACTIONS, "syncPlaybackAudioToTimeline"],
         },
         SEEK: {
           actions: [
@@ -1103,32 +1127,10 @@ export const editorMachine = setup({
           ],
         },
         SET_SPEED: {
-          actions: [
-            "setPlaybackSpeed",
-            enqueueActions(({ context, enqueue }) => {
-              const speed = context.timeline.speed;
-              enqueue.sendTo("timelineActor", { type: "SET_SPEED", speed });
-              if (hasSpawnedPlaybackAudio(context)) {
-                enqueue.sendTo("audioPlayer", {
-                  type: "SET_PLAYBACK_RATE",
-                  rate: speed,
-                });
-              }
-            }),
-          ],
+          actions: ["setPlaybackSpeed", "syncPlaybackActorsSpeed"],
         },
         SET_VOLUME: {
-          actions: [
-            "setVolume",
-            enqueueActions(({ context, enqueue }) => {
-              if (hasSpawnedPlaybackAudio(context)) {
-                enqueue.sendTo("audioPlayer", {
-                  type: "SET_VOLUME",
-                  volume: context.timeline.volume,
-                });
-              }
-            }),
-          ],
+          actions: ["setVolume", "syncPlaybackAudioVolume"],
         },
         STOP: {
           target: ".ready",
@@ -1185,38 +1187,9 @@ export const editorMachine = setup({
           entry: [
             "invalidateAppliedPlaybackState",
             ...APPLY_REPLAY_STATE_ACTIONS,
-            enqueueActions(({ context, enqueue }) => {
-              // Ensure actors are positioned before starting playback. Starting
-              // audio first can briefly play stale audio at high speeds, so PLAY
-              // is sent after timelineActor START rather than through `play` here.
-              //
-              // Streaming playback: the audio may have arrived after the recording was first
-              // loaded (its bytes are at the end of the stream), so the playback-entry spawn
-              // saw no audio. Spawn the player lazily now that audio is available.
-              const controllingPlaybackAudio = syncPlaybackAudio(context, enqueue, {
-                spawnIfMissing: true,
-                seek: true,
-                syncRate: true,
-                syncVolume: false,
-                play: false,
-              });
-
-              enqueue.sendTo("timelineActor", {
-                type: "SEEK",
-                time: context.timeline.currentTime,
-              });
-              enqueue.sendTo("timelineActor", { type: "START" });
-              if (controllingPlaybackAudio) {
-                enqueue.sendTo("audioPlayer", { type: "PLAY" });
-              }
-            }),
+            "startPlaybackActors",
           ],
-          exit: enqueueActions(({ context, enqueue }) => {
-            enqueue.sendTo("timelineActor", { type: "PAUSE" });
-            if (hasSpawnedPlaybackAudio(context)) {
-              enqueue.sendTo("audioPlayer", { type: "PAUSE" });
-            }
-          }),
+          exit: "pausePlaybackActors",
           on: {
             PAUSE: {
               target: "paused",
@@ -1231,14 +1204,7 @@ export const editorMachine = setup({
             },
             FINISHED: {
               target: "ended",
-              actions: [
-                assign({
-                  timeline: ({ context }) => ({
-                    ...context.timeline,
-                    currentTime: context.timeline.duration,
-                  }),
-                }),
-              ],
+              actions: "moveToPlaybackEnd",
             },
           },
         },
