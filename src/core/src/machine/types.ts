@@ -16,6 +16,7 @@ import type {
   EditorFrame,
   Recording,
   RecordingStreamDelta,
+  EditorPosition,
   EditorSelection,
   RecordingAudioSource,
   RecordingCameraSource,
@@ -30,7 +31,6 @@ import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
 import type { RuntimeCheckpointProgress } from "../runtimeTrack";
 import type { ChatCheckpoint, ChatRecordingEvent } from "../../../types/chat";
 import type { TextEditEvent } from "../../../types/textEdit";
-import type { CapturedViewStateRef } from "./editorMachineHelpers";
 import type { RecordingClock } from "./recordingClock";
 import type { MediaSpan } from "../utils/mediaSpans";
 import type { AudioPlaybackEmit, AudioRecordingEmit } from "./audioActor";
@@ -67,6 +67,28 @@ export interface RecordingSafePoint {
   perf: number;
   wall: number;
   mediaTime: number;
+}
+
+/** Content string plus the model identity it was read at, for reuse across captures. */
+export interface CapturedContentRef {
+  value: string;
+  versionId: number;
+  /** `model.uri.toString()` — version ids are per-model counters, so identity requires both. */
+  modelUri: string;
+}
+
+/**
+ * `saveViewState()` result plus the cheap scalars that fully determine whether
+ * it would come out identical if recomputed, for reuse across captures.
+ */
+export interface CapturedViewStateRef {
+  value: monaco.editor.ICodeEditorViewState | null;
+  versionId: number;
+  modelUri: string;
+  scrollTop: number;
+  scrollLeft: number;
+  selection: EditorSelection;
+  position: EditorPosition;
 }
 
 /**
@@ -160,7 +182,7 @@ export interface RecordingSession {
    * derived from (content version, model, scroll, selection, position). When a
    * new capture's scalars all match, `createFrame` reuses the `viewState` object
    * by reference instead of calling `editor.saveViewState()` again — see
-   * `CapturedViewStateRef` in `editorMachineHelpers.ts`.
+   * `CapturedViewStateRef` above.
    *
    * Its `versionId` and `modelUri` also identify the model that last captured frame's
    * `state.content` was read from (see `currentFrame` on the machine context). When a

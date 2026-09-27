@@ -1,3 +1,4 @@
+import type * as monaco from "monaco-editor";
 import type {
   EditorActionArgs,
   EditorContextUpdate,
@@ -23,8 +24,9 @@ import {
 import { normalizeRecordingData } from "../utils/editorState";
 import { normalizeChapters } from "../utils/chapters";
 import { resolveRuntimeSnapshotAt } from "../runtimeTrack";
-import { isValidEditorState } from "../utils/validation";
-import { arePreviewSizesEqual } from "../../../utils/equality";
+import { isEditorReady, isValidEditorState } from "../utils/validation";
+import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
+import { applyContentDiff, applySelectionDiff, areSelectionsEqual } from "../utils/editorDiff";
 import {
   getChatReplayResult,
   getPreviewReplayResult,
@@ -35,7 +37,7 @@ import {
   isReplayResync,
   resolveReplayTime,
 } from "./replayState";
-import { applyFrameState, reportMachineError } from "./editorMachineHelpers";
+import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 import {
   normalizePlaybackSpeed,
   normalizePlaybackVolume,
@@ -54,7 +56,28 @@ import {
 // machine's exact context/event/actor types for the wrapped action, which
 // isn't independently nameable outside `setup()`. Extracted purely so the
 // machine file reads as wiring; zero behavior change.
+//
+// Alongside them: applying a frame to Monaco (applyFrameState), driving the
+// narration player (syncPlaybackAudio, at the end), and reportMachineError,
+// which the machine's notifyError shares.
 // ============================================================================
+
+/**
+ * Hand a machine failure to the host's `onError`, or to the console when the host supplies none
+ * (the app's own provider does not). Without the fallback a denied microphone, a failed load or
+ * a damaged frame skipped during replay left no trace at all. Pass the Error itself so the stack
+ * and class (ContentEditBaseMismatchError, DmpBaseMismatchError) survive into the log.
+ */
+export const reportMachineError = (
+  context: Pick<EditorMachineContext, "onError">,
+  error: Error,
+): void => {
+  if (context.onError) {
+    context.onError(error);
+    return;
+  }
+  console.error("[editorMachine]", error);
+};
 
 const resolveBoundedReplayTime = (
   context: EditorMachineContext,
@@ -321,6 +344,102 @@ export const extendRecording = ({ context, event }: EditorActionArgs): EditorCon
       duration: Math.max(context.timeline.currentTime, duration),
     },
   };
+};
+
+/**
+ * Apply editor state from a frame
+ */
+export const applyFrameState = (
+  editor: monaco.editor.IStandaloneCodeEditor,
+  frame: EditorFrame,
+  decorationsCollection: monaco.editor.IEditorDecorationsCollection | null,
+  isPlaying: boolean,
+  previousFrame?: EditorFrame | null,
+): monaco.editor.IEditorDecorationsCollection | null => {
+  if (!frame.state || !isEditorReady(editor)) return decorationsCollection;
+
+  let collection = decorationsCollection;
+  // Replay frames are already normalized: recording keyframes by the load and the
+  // codec, delta results by applyFrameDelta. A keyframe is the recording's own
+  // object, though, so Monaco gets a copy of its view state.
+  const { state } = frame;
+
+  try {
+    // Apply content changes
+    if (!previousFrame || previousFrame.state.content !== state.content) {
+      applyContentDiff(editor, state.content);
+    }
+
+    const viewStateChanged =
+      !!state.viewState &&
+      (!previousFrame || !areStructuredDataEqual(state.viewState, previousFrame.state.viewState));
+
+    // Restore scroll/layout first, then explicitly reapply selection so
+    // Monaco cursorState inside viewState cannot override the recorded caret.
+    if (viewStateChanged) {
+      try {
+        editor.restoreViewState(structuredClone(state.viewState));
+      } catch (err) {
+        console.error("Failed to restore view state:", err);
+      }
+    }
+
+    applySelectionDiff(editor, state.selection);
+
+    // Add cursor decorations during playback only when Monaco's own caret is
+    // not visible. This avoids duplicate carets and preserves native
+    // multi-cursor behavior while the editor has text focus.
+    if (isPlaying && !editor.hasTextFocus()) {
+      // Only update decorations if selection changed or collection is missing
+      const selectionChanged =
+        !previousFrame || !areSelectionsEqual(previousFrame.state.selection, frame.state.selection);
+
+      if (selectionChanged || viewStateChanged || !collection) {
+        const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
+        const currentSelections = editor.getSelections() || [frame.state.selection];
+
+        currentSelections.forEach((selection) => {
+          newDecorations.push({
+            // Plain IRange (not `new Range(...)`) so this core machine never
+            // value-imports monaco-editor; Monaco's decoration API lifts IRange
+            // internally. Keeps the 3.7 MB editor chunk out of the eager route
+            // graph (it loads lazily with CodeEditor instead).
+            range: {
+              startLineNumber: selection.positionLineNumber,
+              startColumn: selection.positionColumn,
+              endLineNumber: selection.positionLineNumber,
+              endColumn: selection.positionColumn,
+            },
+            options: {
+              className: "playback-cursor-decoration",
+              stickiness: 1, // NeverGrowsWhenTypingAtEdges
+              minimap: {
+                color: "#007ACC",
+                position: 1, // Inline
+              },
+              overviewRuler: {
+                color: "#007ACC",
+                position: 2, // Center
+              },
+            },
+          });
+        });
+
+        // Create collection if it doesn't exist, otherwise update it
+        if (!collection) {
+          collection = editor.createDecorationsCollection(newDecorations);
+        } else {
+          collection.set(newDecorations);
+        }
+      }
+    } else if (collection) {
+      collection.clear();
+    }
+  } catch (error) {
+    console.error("Error applying editor state:", error);
+  }
+
+  return collection;
 };
 
 export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
@@ -1001,4 +1120,128 @@ export const applySlideEventsAtTime = ({
   }
 
   return {};
+};
+
+// ============================================================================
+// Playback audio
+// ============================================================================
+
+interface PlaybackAudioState {
+  /**
+   * Raw audio blob from MediaRecorder. Used for immediate playback after
+   * recording while the lesson is unpublished and has no audioUrl yet.
+   */
+  blob: Blob;
+  /**
+   * Permanent CDN/storage URL, present only after the lesson is published.
+   * Takes precedence over blob when available.
+   */
+  audioUrl?: string;
+  startOffsetMs: number;
+  finalized: boolean;
+}
+
+export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudioState | null => {
+  if (!recording) {
+    return null;
+  }
+
+  const audioBlob = recording.audioBlob;
+  if (!(audioBlob instanceof Blob) || audioBlob.size === 0) {
+    return null;
+  }
+
+  const audioUrl = recording.audioUrl;
+
+  const startOffsetMs = recording.audioStartOffsetMs ?? 0;
+
+  return {
+    blob: audioBlob,
+    audioUrl,
+    startOffsetMs,
+    finalized: recording.streamFinalized ?? true,
+  };
+};
+
+/**
+ * The subset of xstate's `enqueue` object used to drive the "audioPlayer" child actor.
+ * Kept structural (rather than importing xstate's generic `ActionEnqueuer`) so this
+ * helper doesn't need to thread the machine's full setup() type parameters.
+ */
+interface PlaybackAudioEnqueue {
+  spawnChild: (
+    src: "audioPlayback",
+    options: { id: "audioPlayer"; input: AudioPlaybackInput },
+  ) => void;
+  sendTo: (actor: "audioPlayer", event: AudioPlaybackEvent) => void;
+  assign: (updater: Partial<EditorMachineContext>) => void;
+}
+
+interface SyncPlaybackAudioOptions {
+  /** Spawn a fresh "audioPlayer" child if this recording has audio and none exists yet. */
+  spawnIfMissing: boolean;
+  /** Send SEEK to the current timeline position. */
+  seek: boolean;
+  /** Send SET_PLAYBACK_RATE to match the timeline speed. */
+  syncRate: boolean;
+  /** Send SET_VOLUME to match the timeline volume. */
+  syncVolume: boolean;
+  /** Send PLAY. */
+  play: boolean;
+}
+
+/**
+ * The one true spawn/append/seek/rate/volume/play sequence for the playback "audioPlayer"
+ * child actor, encoding what used to be duplicated (with drifting variations) across
+ * playback entry, EXTEND_RECORDING, and the "playing" entry in editorMachine.ts.
+ *
+ * Returns whether the audio actor is spawned and being controlled by this call, so
+ * callers that need to interleave other actor messages (e.g. the timelineActor) around
+ * the audio sequence can reuse that without recomputing it.
+ */
+export const syncPlaybackAudio = (
+  context: EditorMachineContext,
+  enqueue: PlaybackAudioEnqueue,
+  options: SyncPlaybackAudioOptions,
+): boolean => {
+  const audioState = getPlaybackAudioState(context.recording);
+  if (!audioState) {
+    return false;
+  }
+
+  const spawning = options.spawnIfMissing && !context.playbackAudioSpawned;
+  const controlling = spawning || context.playbackAudioSpawned;
+  if (!controlling) {
+    return false;
+  }
+
+  if (spawning) {
+    enqueue.spawnChild("audioPlayback", {
+      id: "audioPlayer",
+      input: {
+        blob: audioState.blob,
+        audioUrl: audioState.audioUrl,
+        startOffsetMs: audioState.startOffsetMs,
+        volume: context.timeline.volume,
+        playbackRate: context.timeline.speed,
+        startPositionMs: context.timeline.currentTime,
+      },
+    });
+    enqueue.assign({ playbackAudioSpawned: true });
+  }
+
+  if (options.seek) {
+    enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: context.timeline.currentTime });
+  }
+  if (options.syncRate) {
+    enqueue.sendTo("audioPlayer", { type: "SET_PLAYBACK_RATE", rate: context.timeline.speed });
+  }
+  if (options.syncVolume) {
+    enqueue.sendTo("audioPlayer", { type: "SET_VOLUME", volume: context.timeline.volume });
+  }
+  if (options.play) {
+    enqueue.sendTo("audioPlayer", { type: "PLAY" });
+  }
+
+  return true;
 };

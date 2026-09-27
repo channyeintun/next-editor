@@ -21,7 +21,7 @@ import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";
 import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "../../types/workspace";
-import { isAtPlaybackEnd } from "./machine/editorMachineHelpers";
+import { isAtPlaybackEnd } from "./machine/playbackValues";
 import { isRecordingClockPaused, type RecordingClock } from "./machine/recordingClock";
 
 // ============================================================================

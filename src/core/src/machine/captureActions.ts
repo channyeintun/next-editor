@@ -1,15 +1,24 @@
+import type * as monaco from "monaco-editor";
 import type { SlideEvent, PreviewEvent } from "../slides";
 import {
   createIdleAudioState,
   createIdleCameraState,
   createIdleScreenState,
+  type CapturedContentRef,
+  type CapturedViewStateRef,
   type EditorActionArgs,
   type EditorContextUpdate,
   type EditorMachineContext,
   type EditorMachineEvent,
+  type EditorMachineInput,
   type RecordingSession,
 } from "./types";
-import type { EditorFrame, MouseCursorPosition } from "../types";
+import type {
+  CursorRecordingEvent,
+  EditorFrame,
+  EditorSelection,
+  MouseCursorPosition,
+} from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import type { WhiteboardEvent } from "../whiteboard";
 import {
@@ -39,13 +48,13 @@ import {
 import { withSafePoint } from "./retake";
 import { totalMediaSpanLength } from "../utils/mediaSpans";
 import { defaultChapterTitle } from "../utils/chapters";
+import { arePositionsEqual, areSelectionsEqual } from "../utils/editorDiff";
 import {
-  appendCursorEvent,
-  createFrame,
-  MOUSE_FRAME_INTERVAL_MS,
-  type CapturedContentRef,
-  type CapturedViewStateRef,
-} from "./editorMachineHelpers";
+  normalizeEditorPosition,
+  normalizeEditorSelection,
+  normalizeEditorViewState,
+} from "../utils/editorState";
+import { areMouseCursorPositionsEqual } from "../utils/cursorCoordinates";
 import { normalizeNonNegativeTime } from "./playbackValues";
 import { assembleRecording } from "./recordingAssembly";
 import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
@@ -99,6 +108,191 @@ export const getRunningRecorders = (context: EditorMachineContext): RunningRecor
 // rehydration) cannot silently disable frame/cursor capture.
 const getCaptureEditor = (context: EditorMachineContext) =>
   context.editorRefs.editor ?? context.getEditorInstance();
+
+// ============================================================================
+// Frame and cursor capture
+// ============================================================================
+
+/**
+ * A pointer move this soon after the last full frame records only its cursor sample, not
+ * a frame of its own (unless the pointer's visibility changed).
+ */
+const MOUSE_FRAME_INTERVAL_MS = 50;
+
+/**
+ * Create a frame from current editor state.
+ *
+ * `previousContent`, when both its `versionId` and `modelUri` match the current
+ * model, lets the frame reuse the prior content string by reference instead of
+ * calling `editor.getValue()` again. This matters for mouse/selection frames (no
+ * document edit since the last capture): the caller's content-delta diff already
+ * short-circuits on `prev === next` by reference, so avoiding a fresh `getValue()`
+ * copy turns that into an O(1) check instead of an O(doc) string equality scan
+ * preceded by an O(doc) copy.
+ *
+ * The `modelUri` check matters because this is a multi-file workspace — Monaco's
+ * `getVersionId()` is a per-model counter, so switching the active file between
+ * captures can coincidentally produce the same numeric version id on the new
+ * model. Without also checking the model URI, that coincidence would silently
+ * reuse the previous file's content string for the new file, desyncing the
+ * recorded stream.
+ *
+ * `previousViewState` similarly lets the frame reuse the prior `viewState`
+ * object by reference, skipping `editor.saveViewState()` and the normalize pass
+ * over it, whenever the values that `saveViewState()` would derive from —
+ * content version, model, scroll position, selection, and cursor position — are
+ * all unchanged since the last capture. This is the case for mouse-move-only
+ * frames (`onDidScrollChange`/pointer frames with no edit, no scroll, no
+ * selection change): `saveViewState()` would return a structurally identical
+ * (but freshly allocated) object, and the delta encoder's `areStructuredDataEqual`
+ * deep-compare on `viewState` (see `frameDelta.ts`) already short-circuits on
+ * reference equality, so reusing the reference turns that deep compare into an
+ * O(1) check. Selection/position changes still invalidate the reuse — they are
+ * part of the gate, not bypassed by it — so cursor/selection-only frames still
+ * get a freshly saved (and correctly differing) viewState.
+ */
+export const createFrame = (
+  editor: monaco.editor.IStandaloneCodeEditor,
+  timestamp: number,
+  mouseCursor: MouseCursorPosition,
+  getSlideState?: EditorMachineInput["getSlideState"],
+  getPreviewState?: EditorMachineInput["getPreviewState"],
+  previousContent?: CapturedContentRef,
+  previousViewState?: CapturedViewStateRef,
+  selectionOverride?: EditorSelection,
+): {
+  frame: EditorFrame;
+  contentVersionId: number;
+  modelUri: string;
+  viewStateRef: CapturedViewStateRef;
+} => {
+  const model = editor.getModel();
+  const versionId = model?.getVersionId() ?? -1;
+  const modelUri = model?.uri.toString() ?? "";
+  const content =
+    previousContent &&
+    previousContent.versionId === versionId &&
+    previousContent.modelUri === modelUri
+      ? previousContent.value
+      : editor.getValue();
+  const editorPosition = normalizeEditorPosition(editor.getPosition());
+  const selection = normalizeEditorSelection(
+    selectionOverride ?? editor.getSelection(),
+    undefined,
+    editorPosition,
+  );
+  const position = selectionOverride
+    ? normalizeEditorPosition({
+        lineNumber: selection.positionLineNumber,
+        column: selection.positionColumn,
+      })
+    : editorPosition;
+  const scrollTop = editor.getScrollTop();
+  const scrollLeft = editor.getScrollLeft();
+
+  const canReuseViewState =
+    previousViewState !== undefined &&
+    previousViewState.versionId === versionId &&
+    previousViewState.modelUri === modelUri &&
+    previousViewState.scrollTop === scrollTop &&
+    previousViewState.scrollLeft === scrollLeft &&
+    arePositionsEqual(previousViewState.position, position) &&
+    areSelectionsEqual(previousViewState.selection, selection);
+
+  const viewState = canReuseViewState
+    ? previousViewState.value
+    : normalizeEditorViewState(editor.saveViewState(), selection, position);
+
+  // normalizeEditorFrame treats Monaco's primary cursorState as authoritative.
+  // Replace that primary cursor in a freshly normalized (cloned) view state so a
+  // collaborative selection survives frame normalization without moving the
+  // host's editor. A reused view state already matches: the reuse gate compared
+  // the same selection and position, and Monaco derives cursorState[0] from the
+  // primary selection alone. It is also the previous frame's object, so writing
+  // into it would change a frame that is already recorded.
+  if (selectionOverride && viewState && !canReuseViewState) {
+    const mutableViewState = viewState as unknown as {
+      cursorState?: Array<Record<string, unknown>>;
+    };
+    const cursorState = mutableViewState.cursorState;
+    const primaryCursorState = cursorState?.[0];
+    if (primaryCursorState) {
+      cursorState[0] = {
+        ...primaryCursorState,
+        inSelectionMode:
+          selection.selectionStartLineNumber !== selection.positionLineNumber ||
+          selection.selectionStartColumn !== selection.positionColumn,
+        selectionStart: {
+          lineNumber: selection.selectionStartLineNumber,
+          column: selection.selectionStartColumn,
+        },
+        position,
+        selection,
+      };
+    }
+  }
+
+  const slideState = getSlideState?.();
+  const previewState = getPreviewState?.();
+
+  return {
+    frame: {
+      timestamp,
+      state: {
+        content,
+        selection,
+        position,
+        viewState,
+        mouseCursor,
+        slideState: slideState?.previewState,
+        currentSlideIndex: slideState?.currentSlideIndex,
+        previewState: previewState || undefined,
+      },
+    },
+    contentVersionId: versionId,
+    modelUri,
+    viewStateRef: {
+      value: viewState,
+      versionId,
+      modelUri,
+      scrollTop,
+      scrollLeft,
+      selection,
+      position,
+    },
+  };
+};
+
+const didCursorPositionChange = (
+  previous: MouseCursorPosition | undefined,
+  next: MouseCursorPosition | undefined,
+): boolean => {
+  return !areMouseCursorPositionsEqual(previous, next);
+};
+
+/**
+ * Pushes in place — `cursorEvents` keeps its identity for the whole session (see the
+ * mutable capture buffer invariant on {@link RecordingSession}). Returns `false` when
+ * the position deduplicates against the last event (no push happened) so callers know
+ * whether to bump `sessionRevision`.
+ */
+const appendCursorEvent = (
+  cursorEvents: CursorRecordingEvent[],
+  timestamp: number,
+  mousePosition: MouseCursorPosition | undefined,
+): boolean => {
+  if (!mousePosition) return false;
+
+  const lastCursorEvent = cursorEvents[cursorEvents.length - 1];
+  const cursorChanged = didCursorPositionChange(lastCursorEvent, mousePosition);
+
+  if (!cursorChanged) {
+    return false;
+  }
+
+  cursorEvents.push({ timestamp, ...mousePosition });
+  return true;
+};
 
 /**
  * The last captured content string paired with the model identity it was read at, for

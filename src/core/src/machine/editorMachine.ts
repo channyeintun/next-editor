@@ -19,12 +19,6 @@ import { screenRecordingActor } from "./screenActor";
 import { mouseTrackingActor } from "./mouseTrackingActor";
 import { measureAudioDurationSeconds } from "../utils/audioDuration";
 import {
-  getPlaybackAudioState,
-  isAtPlaybackEnd,
-  reportMachineError,
-  syncPlaybackAudio,
-} from "./editorMachineHelpers";
-import {
   getExternalAudioBlob,
   getRunningRecorders,
   setCameraRecordingEnabled,
@@ -108,8 +102,11 @@ import {
   applySlideEventsAtTime,
   applyWhiteboardEventsAtTime,
   applyChatEventsAtTime,
+  getPlaybackAudioState,
+  reportMachineError,
+  syncPlaybackAudio,
 } from "./replayActions";
-import { normalizeTimelineDuration } from "./playbackValues";
+import { isAtPlaybackEnd, normalizeTimelineDuration } from "./playbackValues";
 import { isDmpCodecLoaded } from "../../../storage/dmpCodec/dmpCodec";
 
 /**

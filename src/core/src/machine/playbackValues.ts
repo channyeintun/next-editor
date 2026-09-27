@@ -42,3 +42,17 @@ export const normalizeTimelineTime = (value: number, duration: number, fallback 
     : 0;
   return Number.isFinite(value) ? Math.max(0, Math.min(value, safeDuration)) : safeFallback;
 };
+
+/**
+ * Tolerance for treating the playhead as "at the end" — timeline ticks and audio
+ * durations can disagree by a few milliseconds, so end-of-playback checks compare
+ * against `duration - PLAYBACK_END_EPSILON_MS` rather than the exact duration.
+ */
+const PLAYBACK_END_EPSILON_MS = 100;
+
+/**
+ * The one end-of-playback test: `ended.PLAY` restarts from 0 only when it holds, and
+ * the paused/ended selectors must agree with it about what "at the end" means.
+ */
+export const isAtPlaybackEnd = (timeline: { currentTime: number; duration: number }): boolean =>
+  timeline.currentTime >= timeline.duration - PLAYBACK_END_EPSILON_MS;

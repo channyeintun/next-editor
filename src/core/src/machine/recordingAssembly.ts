@@ -11,6 +11,7 @@ import type {
   RecordingChapter,
   RecordingAudioSource,
   RecordingCameraSource,
+  RecordingTrackMeta,
 } from "../types";
 import type { WhiteboardEvent } from "../whiteboard";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
@@ -18,7 +19,6 @@ import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../
 import type { ChatRecordingEvent } from "../../../types/chat";
 import { DELTA_CONFIG, type DeltaFrame } from "../utils/deltaTypes";
 import { buildRecordingClusters } from "../utils/recordingClusters";
-import { buildTrackMetadata } from "./editorMachineHelpers";
 import type { MediaSpan } from "../utils/mediaSpans";
 
 // ============================================================================
@@ -100,6 +100,105 @@ export interface AssembleRecordingInput {
   mediaCuts?: readonly MediaSpan[];
   chapters?: readonly RecordingChapter[];
 }
+
+const EDITOR_TRACK_ID = "editor";
+const SLIDE_TRACK_ID = "slide";
+const PREVIEW_TRACK_ID = "preview";
+const WORKSPACE_TRACK_ID = "workspace";
+const RUNTIME_TRACK_ID = "runtime";
+const CURSOR_TRACK_ID = "cursor";
+const WHITEBOARD_TRACK_ID = "whiteboard";
+const CHAT_TRACK_ID = "chat";
+const AUDIO_TRACK_ID = "audio";
+const CAMERA_TRACK_ID = "camera";
+
+const buildTrackMetadata = ({
+  durationMs,
+  hasSlideEvents,
+  hasPreviewEvents,
+  hasWorkspaceEvents,
+  hasRuntimeEvents,
+  hasCursorEvents,
+  hasWhiteboardEvents,
+  hasChatEvents,
+  audioMimeType,
+  audioSource,
+  audioStartOffsetMs,
+  hasAudio,
+  cameraMimeType,
+  cameraSource,
+  cameraStartOffsetMs,
+  hasCamera,
+}: {
+  durationMs: number;
+  hasSlideEvents: boolean;
+  hasPreviewEvents: boolean;
+  hasWorkspaceEvents: boolean;
+  hasRuntimeEvents: boolean;
+  hasCursorEvents: boolean;
+  hasWhiteboardEvents: boolean;
+  hasChatEvents: boolean;
+  audioMimeType?: string;
+  audioSource?: Recording["audioSource"];
+  audioStartOffsetMs: number;
+  hasAudio: boolean;
+  cameraMimeType?: string;
+  cameraSource?: Recording["cameraSource"];
+  cameraStartOffsetMs: number;
+  hasCamera: boolean;
+}): RecordingTrackMeta[] => {
+  const tracks: RecordingTrackMeta[] = [
+    {
+      id: EDITOR_TRACK_ID,
+      kind: "editor",
+      durationMs,
+    },
+  ];
+
+  if (hasSlideEvents) {
+    tracks.push({ id: SLIDE_TRACK_ID, kind: "slide", durationMs });
+  }
+  if (hasPreviewEvents) {
+    tracks.push({ id: PREVIEW_TRACK_ID, kind: "preview", durationMs });
+  }
+  if (hasWorkspaceEvents) {
+    tracks.push({ id: WORKSPACE_TRACK_ID, kind: "workspace", durationMs });
+  }
+  if (hasRuntimeEvents) {
+    tracks.push({ id: RUNTIME_TRACK_ID, kind: "runtime", durationMs });
+  }
+  if (hasCursorEvents) {
+    tracks.push({ id: CURSOR_TRACK_ID, kind: "cursor", durationMs });
+  }
+  if (hasWhiteboardEvents) {
+    tracks.push({ id: WHITEBOARD_TRACK_ID, kind: "whiteboard", durationMs });
+  }
+  if (hasChatEvents) {
+    tracks.push({ id: CHAT_TRACK_ID, kind: "chat", durationMs });
+  }
+  if (hasAudio) {
+    tracks.push({
+      id: AUDIO_TRACK_ID,
+      kind: "audio",
+      mimeType: audioMimeType || undefined,
+      source: audioSource,
+      startOffsetMs: audioStartOffsetMs,
+      durationMs: Math.max(0, durationMs - audioStartOffsetMs),
+    });
+  }
+  if (hasCamera) {
+    tracks.push({
+      id: CAMERA_TRACK_ID,
+      kind: "camera",
+      mimeType: cameraMimeType || undefined,
+      source: cameraSource,
+      startOffsetMs: cameraStartOffsetMs,
+      durationMs: Math.max(0, durationMs - cameraStartOffsetMs),
+    });
+  }
+
+  return tracks;
+};
 
 export function assembleRecording({
   tracks,

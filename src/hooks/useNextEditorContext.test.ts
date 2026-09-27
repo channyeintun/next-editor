@@ -18,7 +18,7 @@ import {
   type EditorMachineSnapshot,
 } from "../core/src/useNextEditor";
 
-// The epsilon isAtPlaybackEnd allows (editorMachineHelpers.ts PLAYBACK_END_EPSILON_MS).
+// The epsilon isAtPlaybackEnd allows (playbackValues.ts PLAYBACK_END_EPSILON_MS).
 const END_EPSILON_MS = 100;
 const DURATION_MS = 1000;
 
