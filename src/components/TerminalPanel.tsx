@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
-import ModalShell from "./ModalShell";
+import RunnerSettingsDialog from "./terminalPanel/RunnerSettingsDialog";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import {
   isRuntimeBusy,
@@ -126,49 +126,6 @@ const DOCK_TABS: RuntimeDockTabConfig[] = [
     icon: <Bot size={14} />,
   },
 ];
-
-interface RunnerToggleProps {
-  checked: boolean;
-  description?: string;
-  disabled?: boolean;
-  label: string;
-  onChange: (checked: boolean) => void;
-}
-
-function RunnerToggle({
-  checked,
-  description,
-  disabled = false,
-  label,
-  onChange,
-}: RunnerToggleProps) {
-  return (
-    <label className="flex items-start justify-between gap-4">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-slate-100">{label}</p>
-        {description ? (
-          <p className="mt-1 text-xs leading-5 text-slate-400">{description}</p>
-        ) : null}
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
-          checked ? "bg-[#10c776]" : "bg-slate-700"
-        } disabled:cursor-not-allowed disabled:opacity-60`}
-      >
-        <span
-          className={`absolute top-1 rounded-full bg-white transition-transform size-4 ${
-            checked ? "translate-x-6" : "translate-x-1"
-          }`}
-        />
-      </button>
-    </label>
-  );
-}
 
 function TerminalPanel() {
   const {
@@ -722,61 +679,12 @@ function TerminalPanel() {
       </div>
 
       {displayIsSettingsOpen && (
-        <ModalShell
-          maxWidthClassName="max-w-md"
-          onBackdropClick={() => {
-            if (!isPlaybackSnapshotActive) {
-              setIsSettingsOpen(false);
-            }
-          }}
-        >
-          <div className="space-y-5 overflow-y-auto p-5">
-            <RunnerToggle
-              checked={runnerConfig.enabled}
-              disabled={isPlaybackSnapshotActive}
-              label="Enable Runner"
-              onChange={(checked) => updateRunnerConfig({ enabled: checked })}
-            />
-            <RunnerToggle
-              checked={runnerConfig.runOnStartup}
-              disabled={isPlaybackSnapshotActive}
-              label="Run on startup"
-              description="Execute script immediately when opening the project"
-              onChange={(checked) => updateRunnerConfig({ runOnStartup: checked })}
-            />
-            <RunnerToggle
-              checked={runnerConfig.runOnFileSave}
-              disabled={isPlaybackSnapshotActive}
-              label="Run on file-save"
-              description="Execute script when saving a file"
-              onChange={(checked) => updateRunnerConfig({ runOnFileSave: checked })}
-            />
-            <label className="block">
-              <span className="block text-sm font-medium text-slate-100">Init Command</span>
-              <input
-                value={runnerConfig.initCommand}
-                disabled={isPlaybackSnapshotActive}
-                onChange={(event) => updateRunnerConfig({ initCommand: event.target.value })}
-                className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:cursor-default disabled:opacity-70"
-              />
-              <span className="mt-2 block text-xs text-slate-500">
-                Shell command to run when booting the project
-              </span>
-            </label>
-            <label className="block">
-              <span className="block text-sm font-medium text-slate-100">Run Command</span>
-              <input
-                value={runnerConfig.runCommand}
-                disabled={isPlaybackSnapshotActive}
-                onChange={(event) => updateRunnerConfig({ runCommand: event.target.value })}
-                className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:cursor-default disabled:opacity-70"
-              />
-              <span className="mt-2 block text-xs text-slate-500">
-                Shell command to run inside the workspace
-              </span>
-            </label>
-          </div>
-        </ModalShell>
+        <RunnerSettingsDialog
+          runnerConfig={runnerConfig}
+          isReadOnly={isPlaybackSnapshotActive}
+          onChange={updateRunnerConfig}
+          onClose={() => setIsSettingsOpen(false)}
+        />
       )}
     </>
   );
