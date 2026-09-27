@@ -84,6 +84,26 @@ async function withSyncOutcome<T>(
   }
 }
 
+function cloneProjectForSync(project: WorkspaceProject): WorkspaceProject {
+  return {
+    ...project,
+    folders: [...project.folders],
+    files: { ...project.files },
+  };
+}
+
+/** Resolves or rejects the callers waiting on queued file writes as `result` settles. */
+function settleFileSyncWaiters(result: Promise<void>, waiters: FileSyncWaiter[]): void {
+  void result.then(
+    () => {
+      for (const waiter of waiters) waiter.resolve();
+    },
+    (error: unknown) => {
+      for (const waiter of waiters) waiter.reject(error);
+    },
+  );
+}
+
 function closeWatcher(watcher: IFSWatcher | null): void {
   try {
     watcher?.close();
@@ -121,12 +141,6 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
   const fsWatcherRef = useRef<IFSWatcher | null>(null);
   const forwardSyncWritesRef = useRef<Map<string, number>>(new Map());
   const onExternalFileChangeRef = useRef(onExternalFileChange);
-
-  const cloneProjectForSync = (project: WorkspaceProject): WorkspaceProject => ({
-    ...project,
-    folders: [...project.folders],
-    files: { ...project.files },
-  });
 
   // Synced in a layout effect, not during render, so the React Compiler can
   // compile this hook; the only reader is the async fs.watch listener.
@@ -202,6 +216,17 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
 
   const isFsWatchActive = () => fsWatcherRef.current !== null;
 
+  /** A project is mounted, and on `instance`. */
+  const isMountedOn = (instance: WebContainer) =>
+    hasMountedProjectRef.current && mountedInstanceRef.current === instance;
+
+  const clearFileSyncTimer = () => {
+    if (fileSyncTimerRef.current !== null) {
+      clearTimeout(fileSyncTimerRef.current);
+      fileSyncTimerRef.current = null;
+    }
+  };
+
   /** Runs `task` once every task queued before it has settled, whether it failed or not. */
   const enqueueSyncTask = <T>(task: () => Promise<T>): Promise<T> => {
     const result = syncQueueRef.current.then(task, task);
@@ -217,7 +242,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     project,
     onMountStart,
   }: EnsureProjectMountedOptions) => {
-    if (hasMountedProjectRef.current && mountedInstanceRef.current === instance) {
+    if (isMountedOn(instance)) {
       return;
     }
 
@@ -248,10 +273,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
   };
 
   const flushQueuedFiles = ({ instance }: FlushWorkspaceSyncOptions): Promise<void> => {
-    if (fileSyncTimerRef.current !== null) {
-      clearTimeout(fileSyncTimerRef.current);
-      fileSyncTimerRef.current = null;
-    }
+    clearFileSyncTimer();
 
     const files = Array.from(queuedFilesRef.current.values()).sort((left, right) =>
       left.path.localeCompare(right.path),
@@ -263,11 +285,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     const generation = syncGenerationRef.current;
 
     const result = enqueueSyncTask(async () => {
-      if (
-        syncGenerationRef.current !== generation ||
-        mountedInstanceRef.current !== instance ||
-        !hasMountedProjectRef.current
-      ) {
+      if (syncGenerationRef.current !== generation || !isMountedOn(instance)) {
         return;
       }
 
@@ -300,19 +318,12 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
       }
     });
 
-    void result.then(
-      () => {
-        for (const waiter of waiters) waiter.resolve();
-      },
-      (error: unknown) => {
-        for (const waiter of waiters) waiter.reject(error);
-      },
-    );
+    settleFileSyncWaiters(result, waiters);
     return result;
   };
 
   const queueFileSync = ({ instance, file }: QueueFileSyncOptions): Promise<void> => {
-    if (!hasMountedProjectRef.current || mountedInstanceRef.current !== instance) {
+    if (!isMountedOn(instance)) {
       return Promise.resolve();
     }
 
@@ -333,15 +344,12 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
   };
 
   const queueProjectSync = ({ instance, project }: QueueProjectSyncOptions) => {
-    if (!hasMountedProjectRef.current || mountedInstanceRef.current !== instance) {
+    if (!isMountedOn(instance)) {
       return Promise.resolve();
     }
 
     const generation = syncGenerationRef.current;
-    if (fileSyncTimerRef.current !== null) {
-      clearTimeout(fileSyncTimerRef.current);
-      fileSyncTimerRef.current = null;
-    }
+    clearFileSyncTimer();
     queuedFilesRef.current.clear();
     const supersededFileWaiters = fileSyncWaitersRef.current;
     fileSyncWaitersRef.current = [];
@@ -385,14 +393,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     };
 
     const result = enqueueSyncTask(runQueuedSync);
-    void result.then(
-      () => {
-        for (const waiter of supersededFileWaiters) waiter.resolve();
-      },
-      (error: unknown) => {
-        for (const waiter of supersededFileWaiters) waiter.reject(error);
-      },
-    );
+    settleFileSyncWaiters(result, supersededFileWaiters);
     return result;
   };
 
@@ -412,11 +413,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
     const generation = syncGenerationRef.current;
 
     const run = async (): Promise<T | undefined> => {
-      if (
-        syncGenerationRef.current !== generation ||
-        mountedInstanceRef.current !== instance ||
-        !hasMountedProjectRef.current
-      ) {
+      if (syncGenerationRef.current !== generation || !isMountedOn(instance)) {
         return undefined;
       }
 
@@ -445,10 +442,7 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
   const resetWorkspaceSync = () => {
     syncGenerationRef.current += 1;
     stopFsWatch();
-    if (fileSyncTimerRef.current !== null) {
-      clearTimeout(fileSyncTimerRef.current);
-      fileSyncTimerRef.current = null;
-    }
+    clearFileSyncTimer();
     forwardSyncWritesRef.current.clear();
     queuedFilesRef.current.clear();
     for (const waiter of fileSyncWaitersRef.current) waiter.resolve();
