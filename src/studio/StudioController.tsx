@@ -17,6 +17,7 @@ import { usePreviewAdapterHandle } from "../contexts/PreviewAdapterHandleContext
 import { markTourSeen } from "../components/tour/productTour";
 import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
 import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/displayCapture";
+import { describeDraftProvenance } from "./draftProvenance";
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
 import { parseRuntimeModeParam, type StudioPlan, type StudioRuntimeMode } from "./plan";
@@ -754,7 +755,7 @@ export default function StudioController() {
         recording={artifacts.recording}
         onClose={() => setShowDraftModal(false)}
         initialTitle={activeRun.title}
-        initialDescription={`AI-produced draft — rendered unattended by the Next Editor studio (plan ${activeRun.result.manifest.planSlug}, plan sha256 ${activeRun.result.manifest.planHash.slice(0, 16)}, ${activeRun.result.manifest.runtimeMode} runtime${activeRun.narrationProvider ? `, ${activeRun.narrationProvider} narration` : ""}${activeRun.voiceName ? ` with the user-cloned voice "${activeRun.voiceName}"` : ""}). Review the full lesson before publishing.`}
+        initialDescription={describeDraftProvenance(activeRun)}
         initialTags="studio, ai-produced"
       />
     );
