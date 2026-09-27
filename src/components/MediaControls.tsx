@@ -33,7 +33,7 @@ import {
   useRecordingChapterCount,
 } from "../hooks/useNextEditorContext";
 import ChaptersMenu, { CurrentChapterTitle } from "./ChaptersMenu";
-import type { RecordingChapter } from "../core/src/types";
+import type { CaptionCue, RecordingChapter } from "../core/src/types";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import ReplayIcon from "./icon/Replay";
 import IdleRecordButton from "./IdleRecordButton";
@@ -89,6 +89,35 @@ interface MediaControlsProps {
 }
 
 type RecordingAudioSourceOption = "microphone" | "external";
+
+type ParsedCaptionFile = { cues: CaptionCue[]; language: string } | { error: string };
+
+/**
+ * A picked caption file's cues and language, or what to tell the viewer when it gives none.
+ * Kept out of the component: the React Compiler cannot compile a function holding `import()`.
+ */
+async function parseCaptionFile(file: File): Promise<ParsedCaptionFile> {
+  // The parser yields zero cues for any file whose timestamp lines miss its
+  // format — timestamps with no fractional part, a non-subtitle file picked
+  // past the accept filter, a UTF-16 file that decodes as mojibake. A bare
+  // return there meant "Import captions…" appeared to do nothing at all.
+  let parseCaptions: typeof import("../captions/parseCaptions");
+  let text: string;
+  try {
+    parseCaptions = await import("../captions/parseCaptions");
+    text = await file.text();
+  } catch {
+    return { error: `Couldn't read "${file.name}" — try selecting it again.` };
+  }
+
+  const { detectAndParse, inferLanguageFromFilename } = parseCaptions;
+  const cues = detectAndParse(file.name, text);
+  if (cues.length === 0) {
+    return { error: `No captions found in "${file.name}" — expected WebVTT or SRT.` };
+  }
+
+  return { cues, language: inferLanguageFromFilename(file.name) ?? "en" };
+}
 
 const PlaybackProgress = ({
   progressDuration,
@@ -391,28 +420,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     const recordingId = currentRecording?.id;
     if (!recordingId) return;
 
-    // The parser yields zero cues for any file whose timestamp lines miss its
-    // format — timestamps with no fractional part, a non-subtitle file picked
-    // past the accept filter, a UTF-16 file that decodes as mojibake. A bare
-    // return there meant "Import captions…" appeared to do nothing at all.
-    let parseCaptions: typeof import("../captions/parseCaptions");
-    let text: string;
-    try {
-      parseCaptions = await import("../captions/parseCaptions");
-      text = await file.text();
-    } catch {
-      setCaptionImportError(`Couldn't read "${file.name}" — try selecting it again.`);
+    const parsed = await parseCaptionFile(file);
+    if ("error" in parsed) {
+      setCaptionImportError(parsed.error);
       return;
     }
 
-    const { detectAndParse, inferLanguageFromFilename } = parseCaptions;
-    const cues = detectAndParse(file.name, text);
-    if (cues.length === 0) {
-      setCaptionImportError(`No captions found in "${file.name}" — expected WebVTT or SRT.`);
-      return;
-    }
-
-    const language = inferLanguageFromFilename(file.name) ?? "en";
+    const { cues, language } = parsed;
     addCaptionTrack(recordingId, {
       id: `${language}-${Date.now()}`,
       language,
