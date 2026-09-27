@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type { WebContainer } from "@webcontainer/api";
 import {
+  isRuntimeBusy,
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
   WebContainerRuntimeSnapshotGetterContext,
@@ -13,16 +14,19 @@ import {
 import {
   DEFAULT_RUNNER_CONFIG,
   formatCommandError,
-  getRuntimeErrorMessage,
-  holdSharedWebContainer,
   resolveRuntimeRunCommand,
-  isRuntimeBusy,
-  isWebContainerRuntimeSupported,
+} from "../runtime/webcontainer/commands";
+import { getRuntimeErrorMessage } from "../runtime/webcontainer/console";
+import {
   loadStoredEnvironmentVariables,
   normalizeEnvironmentVariables,
   persistEnvironmentVariables,
-  readWorkspaceProject,
-} from "./webContainerRuntimeSupport";
+} from "../runtime/webcontainer/environmentVariables";
+import { readWorkspaceProject } from "../runtime/webcontainer/files";
+import {
+  holdSharedWebContainer,
+  isWebContainerRuntimeSupported,
+} from "../runtime/webcontainer/sharedContainer";
 import {
   useWorkspaceFileCount,
   useWorkspaceActions,

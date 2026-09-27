@@ -20,7 +20,16 @@ const support = vi.hoisted(() => ({
   createWorkspaceTree: vi.fn<() => object>(() => ({})),
 }));
 
-vi.mock("../../contexts/webContainerRuntimeSupport", () => support);
+vi.mock("../../runtime/webcontainer/sharedContainer", () => ({
+  getOrBootSharedWebContainer: support.getOrBootSharedWebContainer,
+  isWebContainerRuntimeSupported: support.isWebContainerRuntimeSupported,
+  runSerializedWebContainerTask: support.runSerializedWebContainerTask,
+}));
+vi.mock("../../runtime/webcontainer/files", () => ({
+  createWorkspaceTree: support.createWorkspaceTree,
+  readWorkspaceProject: support.readWorkspaceProject,
+  syncWorkspaceProject: support.syncWorkspaceProject,
+}));
 
 const { makeBashTool } = await import("./bash");
 

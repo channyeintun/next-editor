@@ -4,12 +4,14 @@ import type { WebContainer } from "@webcontainer/api";
 import type { ToolContext } from "../types";
 import {
   createWorkspaceTree,
+  readWorkspaceProject,
+  syncWorkspaceProject,
+} from "../../runtime/webcontainer/files";
+import {
   getOrBootSharedWebContainer,
   isWebContainerRuntimeSupported,
-  readWorkspaceProject,
   runSerializedWebContainerTask,
-  syncWorkspaceProject,
-} from "../../contexts/webContainerRuntimeSupport";
+} from "../../runtime/webcontainer/sharedContainer";
 import { getProject } from "./workspaceFs";
 import {
   isWorkspaceAssetFile,

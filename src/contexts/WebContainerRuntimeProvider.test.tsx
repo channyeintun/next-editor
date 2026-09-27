@@ -20,8 +20,8 @@ import {
 import type { WorkspaceActions, WorkspaceDirtyState } from "./WorkspaceContext";
 import type { WebContainerRuntimeActions } from "./WebContainerRuntimeContext";
 
-vi.mock("./webContainerRuntimeSupport", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./webContainerRuntimeSupport")>();
+vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
   return {
     ...actual,
     getOrBootSharedWebContainer: vi.fn<() => Promise<WebContainer>>(),
@@ -192,7 +192,7 @@ async function startWatchedRuntime() {
       return { close: vi.fn<() => void>() };
     }),
   });
-  const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+  const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
   vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
 
   const { runtime, workspace } = renderProviders();
@@ -227,7 +227,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
   it("suppresses ambient startup while preserving explicit runtime.start", async () => {
     const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     const boot = vi.mocked(getOrBootSharedWebContainer);
     boot.mockReset();
     boot.mockResolvedValue(instance);
@@ -249,7 +249,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
       "index.html": "<main>Hello</main>",
     });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
 
     // Simulate the installer writing a lock file the instant the init command's process
@@ -297,7 +297,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
   it("runs the init command once when several entry points race it", async () => {
     const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
 
     const spawned: string[] = [];
@@ -356,7 +356,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
       "index.html": "<main>Hello</main>",
     });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
 
     const { runtime, workspace } = renderProviders();
@@ -404,7 +404,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
       writeFile: vi.fn<() => Promise<void>>(async () => {}),
     });
 
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
 
     const { runtime, workspace } = renderProviders();
@@ -440,7 +440,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
   it("requeues a stale reverse read and preserves a newer editor edit and saved baseline", async () => {
     const fakeFs = createFakeFs({});
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
     const harness = renderProviders();
     const initialProject = harness.workspace.getProject();
@@ -495,7 +495,7 @@ describe("WebContainerRuntimeProvider reverse sync", () => {
         return { close: vi.fn<() => void>() };
       }),
     });
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
 
     const { runtime, workspace } = renderProviders();
@@ -663,7 +663,7 @@ describe("WebContainerRuntimeProvider runner control", () => {
         resize: vi.fn<() => void>(),
       } as unknown as WebContainerProcess;
     }) as never);
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
     const { runtime } = renderProviders(false);
 
@@ -751,7 +751,7 @@ describe("WebContainerRuntimeProvider saveWorkspace", () => {
   async function startWithFailingWrites() {
     const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
     const { instance } = createFakeInstance(fakeFs);
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     const boot = vi.mocked(getOrBootSharedWebContainer);
     boot.mockReset();
     boot.mockResolvedValue(instance);
@@ -852,7 +852,7 @@ describe("WebContainerRuntimeProvider saveWorkspace", () => {
 
   /** A runtime whose start failed: status "error" and no container to sync to. */
   async function renderAfterFailedStart() {
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     const boot = vi.mocked(getOrBootSharedWebContainer);
     boot.mockReset();
     boot.mockRejectedValue(new Error("boot failed"));

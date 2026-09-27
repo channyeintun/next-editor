@@ -3,8 +3,8 @@ import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 
-vi.mock("./webContainerRuntimeSupport", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./webContainerRuntimeSupport")>();
+vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
   return {
     ...actual,
     getOrBootSharedWebContainer: vi.fn<() => Promise<WebContainer>>(),
@@ -63,7 +63,7 @@ function renderRuntimeSessionHook(options: { onServerReady?: () => void } = {}) 
 describe("useWebContainerRuntimeSession", () => {
   it("invokes onServerReady when the dev server reports ready with an active runner", async () => {
     const { instance, listeners } = createFakeInstance();
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
 
     const onServerReady = vi.fn<() => void>();
@@ -89,7 +89,7 @@ describe("useWebContainerRuntimeSession", () => {
 
   it("does not invoke onServerReady before a runner process has started", async () => {
     const { instance, listeners } = createFakeInstance();
-    const { getOrBootSharedWebContainer } = await import("./webContainerRuntimeSupport");
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
     vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
 
     const onServerReady = vi.fn<() => void>();

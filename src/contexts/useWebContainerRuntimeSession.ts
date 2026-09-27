@@ -10,14 +10,18 @@ import type {
 import type { RuntimeTerminalSessionSnapshot } from "../types/runtime";
 import {
   formatCommandError,
-  formatPreviewMessage,
-  getOrBootSharedWebContainer,
-  getRuntimeErrorMessage,
   parseCommand,
-  sanitizeTerminalChunk,
-  teardownSharedWebContainer,
   TERMINAL_SHELL_CANDIDATES,
-} from "./webContainerRuntimeSupport";
+} from "../runtime/webcontainer/commands";
+import {
+  formatPreviewMessage,
+  getRuntimeErrorMessage,
+  sanitizeTerminalChunk,
+} from "../runtime/webcontainer/console";
+import {
+  getOrBootSharedWebContainer,
+  teardownSharedWebContainer,
+} from "../runtime/webcontainer/sharedContainer";
 
 interface UseWebContainerRuntimeSessionOptions {
   environmentVariables: EnvironmentVariables;

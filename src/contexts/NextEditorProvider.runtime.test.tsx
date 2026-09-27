@@ -10,7 +10,7 @@ import { SlidesStoreProvider } from "./SlidesStoreContext";
 import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
 import { WhiteboardStoreProvider } from "./WhiteboardStoreContext";
 import { WorkspaceProvider } from "./WorkspaceProvider";
-import { getOrBootSharedWebContainer } from "./webContainerRuntimeSupport";
+import { getOrBootSharedWebContainer } from "../runtime/webcontainer/sharedContainer";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import { useWebContainerRuntimeMetadata } from "../hooks/useWebContainerRuntime";
 import { createWorkspaceFile } from "../starters/shared";
@@ -25,8 +25,8 @@ import {
 
 // Kept out of NextEditorProvider.test.tsx so this module mock, which puts a fake
 // WebContainer behind the runtime, does not reach the tests there.
-vi.mock("./webContainerRuntimeSupport", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./webContainerRuntimeSupport")>();
+vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
   return {
     ...actual,
     getOrBootSharedWebContainer: vi.fn<() => Promise<WebContainer>>(),

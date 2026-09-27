@@ -3,10 +3,10 @@ import type { IFSWatcher, WebContainer } from "@webcontainer/api";
 import {
   createWorkspaceTree,
   getWorkspaceRuntimeFileContents,
-  runSerializedWebContainerTask,
   shouldIgnoreRuntimeImportPath,
   syncWorkspaceProject,
-} from "./webContainerRuntimeSupport";
+} from "../runtime/webcontainer/files";
+import { runSerializedWebContainerTask } from "../runtime/webcontainer/sharedContainer";
 import {
   normalizeWorkspacePath,
   type WorkspaceFile,

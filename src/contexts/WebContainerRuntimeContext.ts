@@ -10,6 +10,16 @@ export type WebContainerRuntimeStatus =
   | "ready"
   | "error";
 
+/** A boot, mount, install or runner start is under way. */
+export function isRuntimeBusy(status: WebContainerRuntimeStatus): boolean {
+  return (
+    status === "booting" ||
+    status === "mounting" ||
+    status === "installing" ||
+    status === "starting"
+  );
+}
+
 export interface RunnerConfig {
   enabled: boolean;
   runOnStartup: boolean;

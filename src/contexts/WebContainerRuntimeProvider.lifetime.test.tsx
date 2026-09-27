@@ -7,7 +7,7 @@ import {
   getOrBootSharedWebContainer,
   holdSharedWebContainer,
   teardownSharedWebContainer,
-} from "./webContainerRuntimeSupport";
+} from "../runtime/webcontainer/sharedContainer";
 import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
 import type { WebContainerRuntimeActions } from "./WebContainerRuntimeContext";
 
