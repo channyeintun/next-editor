@@ -6,7 +6,7 @@ import {
   useNextEditorActorActions,
   useNextEditorInteractionEffects,
 } from "../core/src/useNextEditor";
-import { NextEditorActionsContext } from "./NextEditorContext";
+import { NextEditorActionsContext, type NextEditorActions } from "./NextEditorContext";
 import { NextEditorActorContext } from "./NextEditorActorContext";
 import { usePreviewAdapterHandle } from "./PreviewAdapterHandleContext";
 import { useSlidesStore } from "./SlidesStoreContext";
@@ -22,7 +22,7 @@ import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { createRecordingStorage } from "../storage/RecordingStorage";
 import { saveScreenRecordingLocally } from "../storage/screenRecordingSave";
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
-import type { WorkspaceRecordingSnapshot } from "../types/workspace";
+import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "../types/workspace";
 import { getAgentStore } from "../agent/agentStore";
 import { createChatCheckpoint } from "../agent/chatRecording";
 import { keepLearnerWorkspace } from "../stores/learnerVersionsStore";
@@ -74,38 +74,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   // transitions. (useNextEditorInteractionEffects below does subscribe to
   // isPlaying and the editor, so this component re-renders on those; the
   // compiler keeps actionsValue stable across them.)
-  const {
-    clearRecording,
-    startRecording,
-    stopRecording: stopRecordingImmediately,
-    pauseRecording,
-    resumeRecording,
-    retakeRecording,
-    addChapterMarker,
-    setChapters,
-    play,
-    pause,
-    stop,
-    seekTo,
-    restoreLearnerWorkspace,
-    preserveLearnerWorkspace,
-    setPlaybackSpeed,
-    setVolume,
-    loadRecording,
-    extendRecording,
-    appendRecordingDelta,
-    addCaptionTrack,
-    syncEditorRef,
-    handleEditorChange,
-    handleSlideEvent,
-    handlePreviewEvent,
-    handlePreviewInitialDocument,
-    handlePreviewPatchBatch,
-    handleWorkspaceEvent: handleWorkspaceEventBase,
-    handleRuntimeEvent,
-    handleWhiteboardEvent,
-    handleChatEvent,
-  } = useNextEditorActorActions(actorRef);
+  const senders = useNextEditorActorActions(actorRef);
   useNextEditorInteractionEffects(actorRef, config);
   useRecordingDraftJournal(actorRef, recordingDrafts);
 
@@ -148,7 +117,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     if (!stopRecordingPromiseRef.current) {
       stopRecordingPromiseRef.current = prepareThenStopRecording(
         previewHandle.recordingStopPreparer.current,
-        stopRecordingImmediately,
+        senders.stopRecording,
       ).finally(() => {
         stopRecordingPromiseRef.current = null;
       });
@@ -160,49 +129,19 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
     recordingStorage.current.exportAsFile(recording, filename);
   const importFromFile = () => recordingStorage.current.importFromFile();
 
-  const handleWorkspaceEvent = (event?: {
-    sidebarWidthDelta?: number;
-    previewDockWidthDelta?: number;
-  }) => {
+  const handleWorkspaceEvent = (event?: WorkspaceWidthDeltas) => {
     if (suppressWorkspaceEventsRef.current) {
       return;
     }
 
-    handleWorkspaceEventBase(event);
+    senders.handleWorkspaceEvent(event);
   };
 
-  const actionsValue = {
+  const actionsValue: NextEditorActions = {
+    ...senders,
     editorRef: config.editorRef,
-    syncEditorRef,
-    startRecording,
     stopRecording,
-    pauseRecording,
-    resumeRecording,
-    retakeRecording,
-    addChapterMarker,
-    setChapters,
-    play,
-    pause,
-    stop,
-    seekTo,
-    restoreLearnerWorkspace,
-    preserveLearnerWorkspace,
-    setPlaybackSpeed,
-    setVolume,
-    loadRecording,
-    extendRecording,
-    appendRecordingDelta,
-    addCaptionTrack,
-    handleEditorChange,
-    handleSlideEvent,
-    handlePreviewEvent,
-    handlePreviewInitialDocument,
-    handlePreviewPatchBatch,
     handleWorkspaceEvent,
-    handleRuntimeEvent,
-    handleWhiteboardEvent,
-    handleChatEvent,
-    clearRecording,
     exportAsFile,
     importFromFile,
   };

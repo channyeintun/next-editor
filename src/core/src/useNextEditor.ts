@@ -3,7 +3,7 @@ import type * as monaco from "monaco-editor";
 import { useSelector } from "@xstate/react";
 import type { ActorRefFrom } from "xstate";
 import { editorMachine } from "./machine/editorMachine";
-import type { EditorMachineInput, RecordingSession } from "./machine/types";
+import type { EditorMachineInput, RecordingSession, StartRecordingEvent } from "./machine/types";
 import type {
   CaptionTrack,
   EditorSelection,
@@ -20,7 +20,7 @@ import type {
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";
-import type { WorkspaceRecordingSnapshot } from "../../types/workspace";
+import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "../../types/workspace";
 import { isAtPlaybackEnd } from "./machine/editorMachineHelpers";
 import { isRecordingClockPaused, type RecordingClock } from "./machine/recordingClock";
 import type { SnapshotFrom } from "xstate";
@@ -150,12 +150,7 @@ const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.
 
 const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   // Recording Controls
-  const startRecording = (options?: {
-    audioBlob?: Blob;
-    enableCamera?: boolean;
-    screenStream?: MediaStream;
-    microphoneDeviceId?: string;
-  }) => {
+  const startRecording = (options?: Omit<StartRecordingEvent, "type">) => {
     actorRef.send({
       type: "START_RECORDING",
       audioBlob: options?.audioBlob,
@@ -267,10 +262,7 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     actorRef.send({ type: "PREVIEW_PATCH_BATCH", batch });
   };
 
-  const handleWorkspaceEvent = (event?: {
-    sidebarWidthDelta?: number;
-    previewDockWidthDelta?: number;
-  }) => {
+  const handleWorkspaceEvent = (event?: WorkspaceWidthDeltas) => {
     actorRef.send({
       type: "WORKSPACE_EVENT",
       sidebarWidthDelta: event?.sidebarWidthDelta,
@@ -293,16 +285,26 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   return {
     startRecording,
     stopRecording,
+    /** Stop the take's clock and recorders without ending the take. */
     pauseRecording,
+    /** Run a paused take's clock and recorders again. */
     resumeRecording,
+    /**
+     * Discard what the take recorded since its last safe point (its start, or the last
+     * resume), put the editor back, and hold the take paused there.
+     */
     retakeRecording,
+    /** Mark a chapter at the take's current moment (also a safe point for retakes). */
     addChapterMarker,
+    /** Replace the loaded recording's chapters. */
     setChapters,
     play,
     pause,
     stop,
     seekTo,
+    /** Pause and bring back the viewer's saved edits where they were made. */
     restoreLearnerWorkspace,
+    /** Save the viewer's edits now, if they have any. */
     preserveLearnerWorkspace,
     setPlaybackSpeed,
     setVolume,
@@ -323,6 +325,9 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
     handleChatEvent,
   };
 };
+
+/** The machine's event senders, as useNextEditorActorActions returns them. */
+export type NextEditorActorActions = ReturnType<typeof createNextEditorActorActions>;
 
 /**
  * Action senders that close over the stable actorRef — subscription-free by design.

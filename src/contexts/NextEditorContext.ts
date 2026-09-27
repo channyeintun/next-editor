@@ -1,76 +1,17 @@
 import { createContext, type RefObject } from "react";
-import type {
-  CaptionTrack,
-  EditorSelection,
-  Recording,
-  RecordingChapter,
-  RecordingStreamDelta,
-} from "../core/src/types";
-import type { EditorActorRef } from "../core/src/useNextEditor";
-import type {
-  PreviewDomPatchBatch,
-  PreviewEvent,
-  PreviewInitialDocument,
-  SlideEvent,
-} from "../types/slides";
-import type { WhiteboardEvent } from "../core/src/whiteboard";
-import type { ChatRecordingEvent } from "../types/chat";
-import type { TextEditEvent } from "../types/textEdit";
-import type { WorkspaceRecordingSnapshot } from "../types/workspace";
+import type { Recording } from "../core/src/types";
+import type { EditorActorRef, NextEditorActorActions } from "../core/src/useNextEditor";
 import type * as monaco from "monaco-editor";
 
-// 1. Actions Context: Stable functions, refs, and storage methods
-export interface NextEditorActions {
+// 1. Actions Context: Stable functions, refs, and storage methods. The machine's senders
+// (useNextEditorActorActions), plus what the provider adds or wraps.
+export interface NextEditorActions extends NextEditorActorActions {
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
-  syncEditorRef: (editor: monaco.editor.IStandaloneCodeEditor | null) => void;
-  startRecording: (options?: {
-    audioBlob?: Blob;
-    enableCamera?: boolean;
-    screenStream?: MediaStream;
-    /** The microphone to narrate with; the default one when absent. */
-    microphoneDeviceId?: string;
-  }) => void;
-  stopRecording: () => Promise<void>;
-  /** Stop the take's clock and recorders without ending the take. */
-  pauseRecording: () => void;
-  /** Run a paused take's clock and recorders again. */
-  resumeRecording: () => void;
   /**
-   * Discard what the take recorded since its last safe point (its start, or the last
-   * resume), put the editor back, and hold the take paused there.
+   * Lets the preview flush its last batch into the take, then stops it. Every caller
+   * shares the one stop in flight.
    */
-  retakeRecording: () => void;
-  /** Mark a chapter at the take's current moment (also a safe point for retakes). */
-  addChapterMarker: (title?: string) => void;
-  /** Replace the loaded recording's chapters. */
-  setChapters: (recordingId: string, chapters: RecordingChapter[]) => void;
-  play: () => void;
-  pause: () => void;
-  stop: () => void;
-  seekTo: (time: number) => void;
-  /** Pause and bring back the viewer's saved edits where they were made. */
-  restoreLearnerWorkspace: (recordingTime: number, snapshot: WorkspaceRecordingSnapshot) => void;
-  /** Save the viewer's edits now, if they have any. */
-  preserveLearnerWorkspace: () => void;
-  setPlaybackSpeed: (speed: number) => void;
-  setVolume: (volume: number) => void;
-  loadRecording: (recording: Recording) => void;
-  extendRecording: (recording: Recording) => void;
-  appendRecordingDelta: (delta: RecordingStreamDelta) => void;
-  addCaptionTrack: (recordingId: string, track: CaptionTrack) => void;
-  clearRecording: () => void;
-  handleEditorChange: (selection?: EditorSelection, textEdit?: TextEditEvent) => void;
-  handleSlideEvent: (event: SlideEvent) => void;
-  handlePreviewEvent: (event: PreviewEvent) => void;
-  handlePreviewInitialDocument: (document: PreviewInitialDocument) => void;
-  handlePreviewPatchBatch: (batch: PreviewDomPatchBatch) => void;
-  handleWorkspaceEvent: (event?: {
-    sidebarWidthDelta?: number;
-    previewDockWidthDelta?: number;
-  }) => void;
-  handleRuntimeEvent: () => void;
-  handleWhiteboardEvent: (event: WhiteboardEvent) => void;
-  handleChatEvent: (event: ChatRecordingEvent["event"]) => void;
+  stopRecording: () => Promise<void>;
   exportAsFile: (recording: Recording, filename?: string) => Promise<void>;
   importFromFile: () => Promise<Recording[]>;
 }
