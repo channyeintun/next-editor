@@ -93,10 +93,10 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   );
   const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
   const {
-    hasMountedProjectRef,
     ensureProjectMounted,
     flushWorkspaceSync,
     isFsWatchActive,
+    isProjectMounted,
     queueFileSync,
     queueProjectSync,
     recordContainerProject,
@@ -584,7 +584,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   const onWorkspaceSyncMutation = useEffectEvent((mutation: WorkspaceSyncMutation) => {
     const instance = instanceRef.current;
-    if (!instance || !hasMountedProjectRef.current) {
+    if (!instance || !isProjectMounted()) {
       return;
     }
 
@@ -604,7 +604,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   const onWorkspaceLifecycleBoundary = useEffectEvent(() => {
     const instance = instanceRef.current;
-    if (!instance || !hasMountedProjectRef.current) return;
+    if (!instance || !isProjectMounted()) return;
     const generation = getRuntimeGeneration();
     void flushWorkspaceSync({ instance }).catch(reportErrorFor(generation));
   });

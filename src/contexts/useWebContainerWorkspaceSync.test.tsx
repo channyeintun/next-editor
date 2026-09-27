@@ -153,7 +153,7 @@ describe("useWebContainerWorkspaceSync", () => {
     });
 
     expect(instance.mount).toHaveBeenCalledTimes(1);
-    expect(hook.hasMountedProjectRef.current).toBe(false);
+    expect(hook.isProjectMounted()).toBe(false);
   });
 
   it("reports container-originated watch events but suppresses forward-sync echoes", async () => {
@@ -250,7 +250,7 @@ describe("useWebContainerWorkspaceSync", () => {
       await hook.ensureProjectMounted({ instance, project });
     });
 
-    expect(hook.hasMountedProjectRef.current).toBe(true);
+    expect(hook.isProjectMounted()).toBe(true);
     expect(hook.isFsWatchActive()).toBe(false);
   });
 

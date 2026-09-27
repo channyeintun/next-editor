@@ -216,9 +216,11 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
 
   const isFsWatchActive = () => fsWatcherRef.current !== null;
 
+  const isProjectMounted = () => hasMountedProjectRef.current;
+
   /** A project is mounted, and on `instance`. */
   const isMountedOn = (instance: WebContainer) =>
-    hasMountedProjectRef.current && mountedInstanceRef.current === instance;
+    isProjectMounted() && mountedInstanceRef.current === instance;
 
   const clearFileSyncTimer = () => {
     if (fileSyncTimerRef.current !== null) {
@@ -455,10 +457,10 @@ export function useWebContainerWorkspaceSync({ onExternalFileChange }: Workspace
   };
 
   return {
-    hasMountedProjectRef,
     ensureProjectMounted,
     flushWorkspaceSync,
     isFsWatchActive,
+    isProjectMounted,
     queueFileSync,
     queueProjectSync,
     recordContainerProject,
