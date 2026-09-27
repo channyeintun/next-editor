@@ -8,6 +8,7 @@ import {
 } from "../../agent/credentials";
 import { filterModelOptions } from "../../agent/modelCatalog";
 import type { CredentialStorage } from "../../agent/types";
+import ModalShell from "../ModalShell";
 import type { OpenRouterModelCatalog } from "./useOpenRouterModelCatalog";
 
 const STORAGE_OPTIONS: { id: CredentialStorage; label: string; description: string }[] = [
@@ -190,35 +191,27 @@ export default function AgentSettingsDialog({
   onClose: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 bg-[#0b0d12]/62 px-4 py-8 backdrop-blur-[2px]"
-      onClick={onClose}
-    >
-      <div
-        className="mx-auto flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <p className="text-sm font-semibold text-slate-100">Agent settings</p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-500 hover:text-white"
-            aria-label="Close settings"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="space-y-5 overflow-y-auto p-5">
-          <ModelSection
-            catalog={modelCatalog}
-            query={modelQuery}
-            onQueryChange={onModelQueryChange}
-          />
-          <ApiKeySection keyDraft={keyDraft} onKeyDraftChange={onKeyDraftChange} />
-          <KeyStorageSection />
-        </div>
+    <ModalShell maxWidthClassName="max-w-md" onBackdropClick={onClose}>
+      <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+        <p className="text-sm font-semibold text-slate-100">Agent settings</p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-slate-500 hover:text-white"
+          aria-label="Close settings"
+        >
+          <X size={16} />
+        </button>
       </div>
-    </div>
+      <div className="space-y-5 overflow-y-auto p-5">
+        <ModelSection
+          catalog={modelCatalog}
+          query={modelQuery}
+          onQueryChange={onModelQueryChange}
+        />
+        <ApiKeySection keyDraft={keyDraft} onKeyDraftChange={onKeyDraftChange} />
+        <KeyStorageSection />
+      </div>
+    </ModalShell>
   );
 }
