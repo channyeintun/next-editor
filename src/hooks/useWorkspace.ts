@@ -1,4 +1,4 @@
-import { useContext, useMemo } from "react";
+import { useContext } from "react";
 import { useSelector } from "@xstate/store-react";
 import {
   WorkspaceActionsContext,
@@ -119,5 +119,5 @@ export const useWorkspaceSaveStatus = (): WorkspaceSaveStatus => {
   const isSaving = useWorkspaceSelector("useWorkspaceSaveStatus", selectWorkspaceIsSaving);
   const errorMessage = useWorkspaceSelector("useWorkspaceSaveStatus", selectWorkspaceSaveError);
 
-  return useMemo(() => ({ isSaving, errorMessage }), [errorMessage, isSaving]);
+  return { isSaving, errorMessage };
 };
