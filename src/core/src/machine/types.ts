@@ -255,10 +255,81 @@ export interface EditorRefs {
   cursorDecorationsCollection: monaco.editor.IEditorDecorationsCollection | null;
 }
 
+/** The slide deck's state as a recording frame stores it. */
+export interface SlideStateSnapshot {
+  previewState: SlidePreviewState;
+  currentSlideIndex: number;
+}
+
+/**
+ * How the machine reads and drives the app around the editor. They arrive as machine
+ * input and stay on the context as given; NextEditorProvider builds them from the app's
+ * stores. Each is optional: without one, that part of the app is neither recorded nor
+ * replayed.
+ */
+export interface EditorMachineHostHooks {
+  // Reading the app.
+  /** The slide deck's state, for each frame and the take's opening slide event. */
+  getSlideState?: () => SlideStateSnapshot | null;
+  /** The slides, stored with the finished recording. */
+  getSlides?: () => Slide[];
+  /** The preview panel's state. */
+  getPreviewState?: () => PreviewState | null;
+  /** The workspace: files, active file, sidebar. */
+  getWorkspaceSnapshot?: () => WorkspaceRecordingSnapshot | null;
+  /** The runtime: its status, output, terminals and preview. */
+  getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
+  /** The whiteboard scene. */
+  getWhiteboardState?: () => WhiteboardSceneState | null;
+  /** The live coding-agent conversation, recorded whole after a retake. */
+  getChatCheckpoint?: () => ChatCheckpoint | null;
+  /**
+   * Asks the live preview for a fresh full snapshot: a retake discarded the part of the
+   * preview stream the next patches would build on.
+   */
+  requestPreviewCheckpoint?: () => void;
+
+  // Driving the app: during replay, and by a retake while recording.
+  applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
+  /** The recording's own slides, applied when it loads. */
+  applySlides?: (slides: Slide[]) => void;
+  applyPreviewState?: (previewState: PreviewState) => void;
+  /** Replays the preview's recorded DOM (rrweb) at a moment. */
+  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => void;
+  applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
+  applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
+  /**
+   * The chat (coding-agent) transcript, folded from the nearest checkpoint rather than
+   * taken as a latest snapshot like runtime and workspace; see replayState/chat.ts.
+   */
+  applyChatSnapshot?: (snapshot: ChatCheckpoint) => void;
+  applyWhiteboardState?: (state: WhiteboardSceneState) => void;
+
+  // Notifications.
+  onRecordingStart?: () => void;
+  /** The finalized take, before it loads for playback. */
+  onRecordingStop?: (recording: Recording) => void;
+  /** Where a seek actually landed (clamped to the recording). */
+  onSeek?: (time: number) => void;
+  /**
+   * Invoked with the viewer's own edits just before the recording replaces them, so
+   * the app can keep them (see LearnerWorkspaceSave).
+   */
+  onLearnerWorkspaceSaved?: (save: LearnerWorkspaceSave) => void;
+  /** Machine failures; without this hook they go to the console (reportMachineError). */
+  onError?: (error: Error) => void;
+  /**
+   * Invoked once a local screen recording (opt-in, captured in parallel with the session)
+   * finishes assembling. The blob is saved to the user's disk only and never enters the
+   * `Recording`, `.ne` codec, storage, or any upload path — see `saveScreenRecordingLocally`.
+   */
+  onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
+}
+
 /**
  * Complete machine context
  */
-export interface EditorMachineContext {
+export interface EditorMachineContext extends EditorMachineHostHooks {
   /** Timeline state for playback */
   timeline: TimelineState;
   /** Current recording session (during recording) */
@@ -310,44 +381,6 @@ export interface EditorMachineContext {
   pauseOnUserInteraction: boolean;
   /** Error message if any */
   error: string | null;
-  /** Callback to apply slide state during playback */
-  applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
-  /** Callback to apply slides data during playback */
-  applySlides?: (slides: Slide[]) => void;
-  /** Callback to apply preview state during playback */
-  applyPreviewState?: (previewState: PreviewState) => void;
-  /** Callback to apply preview DOM patches during playback */
-  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => void;
-  /** Callback to get slide state during recording */
-  getSlideState?: () => {
-    previewState: SlidePreviewState;
-    currentSlideIndex: number;
-  } | null;
-  /** Callback to get slides data during recording */
-  getSlides?: () => Slide[];
-  /** Callback to get preview state during recording */
-  getPreviewState?: () => PreviewState | null;
-  /** Callback to get workspace snapshot during recording */
-  getWorkspaceSnapshot?: () => WorkspaceRecordingSnapshot | null;
-  /** Callback to apply workspace snapshot when loading a recording */
-  applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
-  /** Callback to get runtime snapshot during recording */
-  getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
-  /** Callback to apply runtime snapshot during playback */
-  applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
-  /** Callback to apply the folded chat transcript during playback (replayState/chat.ts) */
-  applyChatSnapshot?: (snapshot: ChatCheckpoint) => void;
-  /**
-   * Asks the live preview for a fresh full snapshot: a retake discarded the part of the
-   * preview stream the next patches would build on.
-   */
-  requestPreviewCheckpoint?: () => void;
-  /** The live coding-agent conversation, recorded whole after a retake. */
-  getChatCheckpoint?: () => ChatCheckpoint | null;
-  /** Callback to get whiteboard scene state during recording */
-  getWhiteboardState?: () => WhiteboardSceneState | null;
-  /** Callback to apply whiteboard scene state during playback */
-  applyWhiteboardState?: (state: WhiteboardSceneState) => void;
   /** Index of the last applied frame during playback */
   lastAppliedFrameIndex: number;
   /** Index of the last applied preview event during playback */
@@ -379,18 +412,6 @@ export interface EditorMachineContext {
   pendingPlaybackEditorSync: boolean;
   /** Whether the playback audio element has been spawned for the loaded recording */
   playbackAudioSpawned: boolean;
-  /** Callback invoked after recording starts */
-  onRecordingStart?: () => void;
-  /** Callback invoked after recording stops */
-  onRecordingStop?: (recording: Recording) => void;
-  /** Callback invoked after seeking */
-  onSeek?: (time: number) => void;
-  /** Callback invoked when the viewer's own edits are about to be replaced by the recording */
-  onLearnerWorkspaceSaved?: (save: LearnerWorkspaceSave) => void;
-  /** Callback invoked after machine errors */
-  onError?: (error: Error) => void;
-  /** Callback invoked once a local screen recording finishes assembling (local-save only). */
-  onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
 }
 
 // ============================================================================
@@ -607,22 +628,38 @@ export type AddCaptionTrackEvent = {
   track: CaptionTrack;
 };
 
-/**
- * Union of all machine events
- */
-export type EditorMachineEvent =
+/** Starting, pausing, retaking and stopping a take. */
+type RecordingControlEvent =
   | StartRecordingEvent
   | StopRecordingEvent
   | PauseRecordingEvent
   | ResumeRecordingEvent
   | RetakeRecordingEvent
-  | AddChapterMarkerEvent
-  | SetChaptersEvent
+  | AddChapterMarkerEvent;
+
+/** What the app reports while a take records. */
+type CaptureEvent =
   | CaptureFrameEvent
+  | SlideEventOccurred
+  | PreviewEventOccurred
+  | PreviewInitialDocumentOccurred
+  | PreviewPatchBatchOccurred
+  | WorkspaceEventOccurred
+  | RuntimeEventOccurred
+  | WhiteboardEventOccurred
+  | ChatEventOccurred;
+
+/** Loading a recording, growing it as it streams in, editing what sits outside its timeline. */
+type LoadedRecordingEvent =
   | LoadRecordingEvent
   | ExtendRecordingEvent
   | AppendRecordingDeltaEvent
-  | UnloadEvent
+  | AddCaptionTrackEvent
+  | SetChaptersEvent
+  | UnloadEvent;
+
+/** The player's controls, and what the timeline actor reports back. */
+type PlaybackEvent =
   | PlayEvent
   | PauseEvent
   | StopEvent
@@ -631,26 +668,35 @@ export type EditorMachineEvent =
   | SetVolumeEvent
   | TickEvent
   | FinishedEvent
-  | UserInteractionEvent
+  | UserInteractionEvent;
+
+/** Keeping and bringing back the viewer's own edits to a lesson. */
+type LearnerWorkspaceEvent =
   | PreserveLearnerWorkspaceEvent
   | RestoreLearnerWorkspaceEvent
-  | ApplyLearnerWorkspaceEvent
-  | SetEditorRefEvent
-  | SlideEventOccurred
-  | PreviewEventOccurred
-  | PreviewInitialDocumentOccurred
-  | PreviewPatchBatchOccurred
-  | WorkspaceEventOccurred
-  | RuntimeEventOccurred
-  | WhiteboardEventOccurred
-  | ChatEventOccurred
-  | AddCaptionTrackEvent
-  // What the child actors send back. Each actor owns its union, and fromTypedCallback
-  // checks its sendBack calls against it.
+  | ApplyLearnerWorkspaceEvent;
+
+/**
+ * What the child actors send back. Each actor owns its union, and fromTypedCallback
+ * checks its sendBack calls against it.
+ */
+type ChildActorEvent =
   | AudioRecordingEmit
   | AudioPlaybackEmit
   | CameraRecordingEmit
   | ScreenRecordingEmit;
+
+/**
+ * Union of all machine events
+ */
+export type EditorMachineEvent =
+  | RecordingControlEvent
+  | CaptureEvent
+  | LoadedRecordingEvent
+  | PlaybackEvent
+  | LearnerWorkspaceEvent
+  | SetEditorRefEvent
+  | ChildActorEvent;
 
 // ============================================================================
 // Action Bodies
@@ -677,7 +723,7 @@ export type EditorContextUpdate = Partial<EditorMachineContext>;
  * Input provided when creating the machine. NextEditorProvider builds it from the app's
  * stores and passes it as the editor actor's `input`.
  */
-export interface EditorMachineInput {
+export interface EditorMachineInput extends EditorMachineHostHooks {
   /** Monaco editor ref */
   editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   /** Enable audio recording */
@@ -688,47 +734,6 @@ export interface EditorMachineInput {
   pauseOnUserInteraction?: boolean;
   /** Default playback speed */
   defaultPlaybackSpeed?: number;
-  /** Callbacks */
-  onRecordingStart?: () => void;
-  onRecordingStop?: (recording: Recording) => void;
-  onSeek?: (time: number) => void;
-  /**
-   * Invoked with the viewer's own edits just before the recording replaces them, so
-   * the app can keep them (see LearnerWorkspaceSave).
-   */
-  onLearnerWorkspaceSaved?: (save: LearnerWorkspaceSave) => void;
-  onError?: (error: Error) => void;
-  /**
-   * Invoked once a local screen recording (opt-in, captured in parallel with the session)
-   * finishes assembling. The blob is saved to the user's disk only and never enters the
-   * `Recording`, `.ne` codec, storage, or any upload path — see `saveScreenRecordingLocally`.
-   */
-  onScreenRecordingReady?: (payload: ScreenRecordingReadyPayload) => void;
-  getSlideState?: () => {
-    previewState: SlidePreviewState;
-    currentSlideIndex: number;
-  } | null;
-  applySlideState?: (slideState: SlidePreviewState, currentSlideIndex: number) => void;
-  getSlides?: () => Slide[];
-  applySlides?: (slides: Slide[]) => void;
-  getPreviewState?: () => PreviewState | null;
-  applyPreviewState?: (previewState: PreviewState) => void;
-  applyPreviewPatchReplay?: (input: PreviewPatchReplayInput) => void;
-  getWorkspaceSnapshot?: () => WorkspaceRecordingSnapshot | null;
-  applyWorkspaceSnapshot?: (snapshot: WorkspaceRecordingSnapshot) => void;
-  getRuntimeSnapshot?: () => RuntimeRecordingSnapshot | null;
-  applyRuntimeSnapshot?: (snapshot: RuntimeRecordingSnapshot) => void;
-  /**
-   * Chat (coding-agent) replay: folded from the nearest checkpoint, not a "latest
-   * snapshot" like runtime/workspace; see replayState/chat.ts.
-   */
-  applyChatSnapshot?: (snapshot: ChatCheckpoint) => void;
-  getWhiteboardState?: () => WhiteboardSceneState | null;
-  applyWhiteboardState?: (state: WhiteboardSceneState) => void;
-  /** See EditorMachineContext.requestPreviewCheckpoint. */
-  requestPreviewCheckpoint?: () => void;
-  /** See EditorMachineContext.getChatCheckpoint. */
-  getChatCheckpoint?: () => ChatCheckpoint | null;
 }
 
 // ============================================================================
