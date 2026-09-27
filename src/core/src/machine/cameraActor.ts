@@ -1,4 +1,9 @@
 import { fromTypedCallback } from "./fromTypedCallback";
+import {
+  recorderErrorMessage,
+  syncRecorderPause,
+  type RecorderControlEvent,
+} from "./recorderControl";
 import { getSupportedRecorderMimeType, CAMERA_VIDEO_MIME_TYPES } from "../utils/recorderMimeType";
 
 const CAMERA_TIMESLICE_MS = 1000;
@@ -7,11 +12,8 @@ export interface CameraRecordingInput {
   constraints?: MediaTrackConstraints;
 }
 
-export type CameraRecordingEvent =
-  | { type: "START" }
-  | { type: "STOP" }
-  | { type: "PAUSE" }
-  | { type: "RESUME" };
+/** What the machine sends the camera recorder. */
+export type CameraRecordingEvent = RecorderControlEvent;
 
 export type CameraRecordingEmit =
   | {
@@ -40,23 +42,14 @@ export const cameraRecordingActor = fromTypedCallback<
   let startedAtPerfMs = 0;
   // The take's pause state. The camera warms up after the take starts, so a pause
   // can arrive before its recorder exists; it is applied once the recorder starts.
+  // A paused MediaRecorder writes no frames, so the video skips the take's pauses
+  // the way its recorded time does.
   let paused = false;
 
   const cleanupStream = () => {
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
       stream = null;
-    }
-  };
-
-  // A paused MediaRecorder writes no frames, so the video skips the take's pauses
-  // the way its recorded time does.
-  const syncPauseState = () => {
-    if (!mediaRecorder) return;
-    if (paused && mediaRecorder.state === "recording") {
-      mediaRecorder.pause();
-    } else if (!paused && mediaRecorder.state === "paused") {
-      mediaRecorder.resume();
     }
   };
 
@@ -126,7 +119,7 @@ export const cameraRecordingActor = fromTypedCallback<
             startedAtPerf: startedAtPerfMs,
             mediaRecorder: mediaRecorder ?? undefined,
           });
-          syncPauseState();
+          syncRecorderPause(mediaRecorder, paused);
         }
       };
 
@@ -134,10 +127,9 @@ export const cameraRecordingActor = fromTypedCallback<
         if (disposed || stopRequested) return;
         failed = true;
         stopRequested = true;
-        const recorderError = (event as Event & { error?: unknown }).error;
         sendBack({
           type: "CAMERA_ERROR",
-          error: recorderError instanceof Error ? recorderError.message : "Camera recording error",
+          error: recorderErrorMessage(event, "Camera recording error"),
         });
         if (mediaRecorder && mediaRecorder.state !== "inactive") {
           mediaRecorder.stop();
@@ -187,11 +179,11 @@ export const cameraRecordingActor = fromTypedCallback<
         break;
       case "PAUSE":
         paused = true;
-        syncPauseState();
+        syncRecorderPause(mediaRecorder, paused);
         break;
       case "RESUME":
         paused = false;
-        syncPauseState();
+        syncRecorderPause(mediaRecorder, paused);
         break;
     }
   });

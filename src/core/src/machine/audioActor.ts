@@ -1,4 +1,9 @@
 import { fromTypedCallback } from "./fromTypedCallback";
+import {
+  recorderErrorMessage,
+  syncRecorderPause,
+  type RecorderControlEvent,
+} from "./recorderControl";
 import { AUDIO_MIME_TYPES, getSupportedRecorderMimeType } from "../utils/recorderMimeType";
 import { isAllowedRecordingMediaUrl } from "../utils/mediaUrl";
 import {
@@ -110,11 +115,8 @@ export interface AudioPlaybackInput {
   startOffsetMs?: number;
 }
 
-export type AudioRecordingEvent =
-  | { type: "START" }
-  | { type: "STOP" }
-  | { type: "PAUSE" }
-  | { type: "RESUME" };
+/** What the machine sends the microphone recorder. */
+export type AudioRecordingEvent = RecorderControlEvent;
 
 export type AudioPlaybackEvent =
   | { type: "PLAY" }
@@ -160,23 +162,14 @@ export const audioRecordingActor = fromTypedCallback<
   let starting = false;
   let stopRequested = false;
   // The take's pause state, which can arrive before the recorder has started.
+  // MediaRecorder writes nothing while paused, so the narration stays as long as the
+  // take's recorded time, which skips the same pauses.
   let paused = false;
 
   const cleanupStream = () => {
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
       stream = null;
-    }
-  };
-
-  // MediaRecorder writes nothing while paused, so the narration stays as long as the
-  // take's recorded time, which skips the same pauses.
-  const syncPauseState = () => {
-    if (!mediaRecorder) return;
-    if (paused && mediaRecorder.state === "recording") {
-      mediaRecorder.pause();
-    } else if (!paused && mediaRecorder.state === "paused") {
-      mediaRecorder.resume();
     }
   };
 
@@ -240,16 +233,15 @@ export const audioRecordingActor = fromTypedCallback<
             startedAtMs,
             startedAtPerf: startedAtPerfMs,
           });
-          syncPauseState();
+          syncRecorderPause(mediaRecorder, paused);
         }
       };
 
       mediaRecorder.onerror = (event: Event) => {
         if (disposed || stopRequested) return;
-        const recorderError = (event as Event & { error?: unknown }).error;
         sendBack({
           type: "AUDIO_RECORDING_ERROR",
-          error: recorderError instanceof Error ? recorderError.message : "Audio recording error",
+          error: recorderErrorMessage(event, "Audio recording error"),
         });
       };
 
@@ -284,11 +276,11 @@ export const audioRecordingActor = fromTypedCallback<
         break;
       case "PAUSE":
         paused = true;
-        syncPauseState();
+        syncRecorderPause(mediaRecorder, paused);
         break;
       case "RESUME":
         paused = false;
-        syncPauseState();
+        syncRecorderPause(mediaRecorder, paused);
         break;
     }
   });

@@ -1,4 +1,9 @@
 import { fromTypedCallback } from "./fromTypedCallback";
+import {
+  recorderErrorMessage,
+  syncRecorderPause,
+  type RecorderControlEvent,
+} from "./recorderControl";
 import { getSupportedRecorderMimeType, SCREEN_VIDEO_MIME_TYPES } from "../utils/recorderMimeType";
 import { fixWebmDuration } from "../utils/webmDuration";
 
@@ -28,11 +33,8 @@ export interface ScreenRecordingInput {
   sessionStartedAtPerf: number;
 }
 
-export type ScreenRecordingEvent =
-  | { type: "START" }
-  | { type: "STOP" }
-  | { type: "PAUSE" }
-  | { type: "RESUME" };
+/** What the machine sends a screen recorder. */
+export type ScreenRecordingEvent = RecorderControlEvent;
 
 export type ScreenRecordingEmit =
   | {
@@ -140,16 +142,12 @@ export const screenRecordingActor = fromTypedCallback<
   let pausedTotalMs = 0;
 
   const syncPauseState = () => {
-    if (!mediaRecorder) return;
-    if (paused && mediaRecorder.state === "recording") {
-      mediaRecorder.pause();
+    const change = syncRecorderPause(mediaRecorder, paused);
+    if (change === "paused") {
       pausedSincePerfMs = performance.now();
-    } else if (!paused && mediaRecorder.state === "paused") {
-      mediaRecorder.resume();
-      if (pausedSincePerfMs !== null) {
-        pausedTotalMs += Math.max(0, performance.now() - pausedSincePerfMs);
-        pausedSincePerfMs = null;
-      }
+    } else if (change === "resumed" && pausedSincePerfMs !== null) {
+      pausedTotalMs += Math.max(0, performance.now() - pausedSincePerfMs);
+      pausedSincePerfMs = null;
     }
   };
 
@@ -291,11 +289,10 @@ export const screenRecordingActor = fromTypedCallback<
       mediaRecorder.onerror = (event: Event) => {
         if (disposed || failed) return;
         failed = true;
-        const recorderError = (event as Event & { error?: unknown }).error;
         sendBack({
           type: "SCREEN_ERROR",
           actorId: self.id,
-          error: recorderError instanceof Error ? recorderError.message : "Screen recording error",
+          error: recorderErrorMessage(event, "Screen recording error"),
         });
         cleanup();
       };
