@@ -201,9 +201,13 @@ import { WhiteboardStoreProvider, useWhiteboardStore } from "./WhiteboardStoreCo
 import type { SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import {
+  COLLABORATION_SLIDE_ASSET_MIME_TYPE,
+  collaborationSlidePayloadAssetId,
+  encodeCollaborationSlidePayload,
   projectCollaborationTeachingDocument,
   seedCollaborationTeachingDocument,
 } from "../collaboration/teachingDocument";
+import { downloadCollaborationAsset } from "@next-editor/infra";
 import type { WhiteboardElementJSON } from "../core/src/whiteboard";
 import {
   getCollaborationTexts,
@@ -814,6 +818,93 @@ describe("CollaborationContext teaching projection", () => {
 
     expect(accepted).toBe(true);
     view.unmount();
+  });
+
+  // A projection that changes neither the presentation nor its current slide
+  // (here, a whiteboard change) keeps the build step the viewer is on; moving
+  // away and back between two projections starts the slide over.
+  it("shows the room's hydrated deck in the slides store and keeps the build step until the presentation changes", async () => {
+    const slides = [
+      { id: "one", order: 0, content: "one", contentType: "html" as const },
+      { id: "two", order: 1, content: "two", contentType: "html" as const },
+    ];
+    const payloads = new Map<string, Uint8Array>();
+    const seedSlides = await Promise.all(
+      slides.map(async (slide) => {
+        const bytes = encodeCollaborationSlidePayload(slide);
+        const id = await collaborationSlidePayloadAssetId(bytes);
+        payloads.set(id, bytes);
+        return {
+          slide,
+          asset: { id, mimeType: COLLABORATION_SLIDE_ASSET_MIME_TYPE, size: bytes.byteLength },
+        };
+      }),
+    );
+    vi.mocked(downloadCollaborationAsset).mockImplementation(async (_roomId, assetId) =>
+      payloads.get(assetId)!,
+    );
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let slidesStore: SlidesStoreInstance | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      slidesStore = useSlidesStore().store;
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    try {
+      await waitFor(() => expect(controls.providers).toHaveLength(1));
+      const provider = controls.providers[0]!;
+      act(() => {
+        seedCollaborationProject(provider.doc, createStarterHtmlCssWorkspace());
+        seedCollaborationTeachingDocument(provider.doc, {
+          slides: seedSlides,
+          whiteboardElements: [],
+        });
+      });
+      const store = () => slidesStore!.getSnapshot().context;
+      await waitFor(() => expect(store().slides.map((slide) => slide.id)).toEqual(["one", "two"]));
+      expect(store().slides.map((slide) => slide.content)).toEqual(["one", "two"]);
+      expect(store().previewState).toMatchObject({ currentSlideId: "one", indexv: 0 });
+
+      act(() => {
+        slidesStore!.trigger.setPreviewState({
+          previewState: { ...store().previewState, indexv: 2 },
+        });
+      });
+      act(() => {
+        collaboration!.publishWhiteboardDelta({ upserts: [rectangle("e0", "a0")] });
+      });
+      await waitFor(() => expect(collaboration!.teaching.whiteboardElements).toHaveLength(1));
+      expect(store().previewState).toMatchObject({ currentSlideId: "one", indexv: 2 });
+
+      const revision = collaboration!.teaching.presentationRevision;
+      act(() => {
+        collaboration!.publishCurrentSlide("two");
+        collaboration!.publishCurrentSlide("one");
+      });
+      await waitFor(() => expect(collaboration!.teaching.presentationRevision).toBe(revision + 2));
+      expect(store().previewState).toMatchObject({ currentSlideId: "one", indexv: 0 });
+
+      act(() => {
+        slidesStore!.trigger.setPreviewState({
+          previewState: { ...store().previewState, indexv: 2 },
+        });
+      });
+      act(() => {
+        collaboration!.publishCurrentSlide("two");
+      });
+      await waitFor(() => expect(store().previewState.currentSlideId).toBe("two"));
+      expect(store().previewState.indexv).toBe(0);
+    } finally {
+      vi.mocked(downloadCollaborationAsset).mockReset();
+      view.unmount();
+    }
   });
 
   // WhiteboardPanel pushes only "external" scenes into the canvas. The projection of a local
