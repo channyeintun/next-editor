@@ -3,7 +3,10 @@ import type { Recording } from "../core/src/types";
 import type { EditorActorRef, NextEditorActorActions } from "../core/src/useNextEditor";
 import type * as monaco from "monaco-editor";
 
-// 1. Actions Context: Stable functions, refs, and storage methods. The machine's senders
+// What components read about the editor comes in three parts, split for render cost.
+//
+// 1. Actions: a React context whose one value NextEditorProvider keeps stable, so a
+// component using it does not re-render on machine transitions. The machine's senders
 // (useNextEditorActorActions), plus what the provider adds or wraps.
 export interface NextEditorActions extends NextEditorActorActions {
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
@@ -18,7 +21,8 @@ export interface NextEditorActions extends NextEditorActorActions {
 
 export const NextEditorActionsContext = createContext<NextEditorActions | null>(null);
 
-// 2. Metadata Context: Relatively stable state (flags)
+// 2. Metadata: relatively stable flags. Not a React context: useNextEditorMetadata
+// selects them from the editor actor (NextEditorActorContext).
 export interface NextEditorMetadata {
   isRecording: boolean;
   /** A take is running but paused: its clock and recorders are stopped. */
@@ -29,7 +33,8 @@ export interface NextEditorMetadata {
   currentRecording: Recording | null;
 }
 
-// 3. Playback settings: change on user action or as a stream grows, not on ticks
+// 3. Playback settings: they change on user action or as a stream grows, not on ticks.
+// Selected from the editor actor by useNextEditorPlayback, like the metadata.
 export interface NextEditorPlayback {
   editorActor: EditorActorRef;
   playbackSpeed: number;
