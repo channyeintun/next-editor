@@ -11,7 +11,7 @@
  * passes. `blob:` stays allowed because the same fields carry locally-created
  * object URLs during live recording and playback of an in-memory session.
  * Caption files follow a stricter rule, same origin and directory as the `.ne`
- * (`resolveSiblingCaptionUrl` in src/hooks/useUrlLoader.ts).
+ * (`resolveSiblingCaptionUrl` in src/storage/recordingSiblingMedia.ts).
  */
 const ALLOWED_MEDIA_PROTOCOLS = new Set(["http:", "https:", "blob:"]);
 

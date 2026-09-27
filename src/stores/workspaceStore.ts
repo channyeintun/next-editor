@@ -28,7 +28,7 @@ import {
   readStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
 import { startPerformanceSpan } from "../utils/performanceMetrics";
-import { resolveRecordingUrl } from "../utils/recordingUrl";
+import { isNextEditorUrl, resolveRecordingUrl } from "../utils/recordingUrl";
 import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import {
   areStringArraysEqual,
@@ -193,14 +193,17 @@ function loadStoredWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
   }
 }
 
-/** Whether `?url=` names a `.ne`, read exactly as useUrlQuery reads it before loading it. */
+/**
+ * Whether `?url=` names a `.ne`, read exactly as useUrlQuery reads it and
+ * checked exactly as the loader checks it before loading it.
+ */
 function hasPendingRecordingUrl(): boolean {
   if (typeof window === "undefined") {
     return false;
   }
 
   const url = resolveRecordingUrl(new URLSearchParams(window.location.search).get("url"));
-  return url !== null && new URL(url).pathname.toLowerCase().endsWith(".ne");
+  return url !== null && isNextEditorUrl(url);
 }
 
 /**

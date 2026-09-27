@@ -15,7 +15,7 @@ function formatTimestamp(ms: number): string {
 
 /**
  * Serializes cues into a minimal WebVTT document — the canonical sibling-caption
- * format, since `fetchVttFile` (src/hooks/useUrlLoader.ts) only accepts documents
+ * format, since `fetchVttFile` (src/storage/recordingSiblingMedia.ts) only accepts documents
  * that start with "WEBVTT". Uploads canonicalize .srt input through this so every
  * hosted caption file is loadable. Invalid cues are dropped and blank lines inside
  * cue text are flattened — a blank line would otherwise terminate the cue early.

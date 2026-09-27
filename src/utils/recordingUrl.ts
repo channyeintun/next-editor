@@ -17,3 +17,14 @@ export function resolveRecordingUrl(url: string | null): string | null {
     return null;
   }
 }
+
+/** Whether an absolute URL names a `.ne` file: its path, not its query or fragment, ends in `.ne`. */
+export function isNextEditorUrl(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname.toLowerCase();
+    return pathname.endsWith(".ne");
+  } catch {
+    return false;
+  }
+}

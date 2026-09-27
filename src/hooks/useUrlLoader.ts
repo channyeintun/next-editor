@@ -1,10 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNextEditorActions } from "./useNextEditorContext";
 import { decompressBinaryToRecording } from "../storage/recordingCodecClient";
-import {
-  audioMimeFromFilename,
-  createStreamingRecordingReader,
-} from "../storage/streamingRecordingCodec";
+import { createStreamingRecordingReader } from "../storage/streamingRecordingCodec";
 import {
   attachCompanionMedia,
   decodeRecordingFile,
@@ -15,293 +12,19 @@ import {
   persistDecodedWorkspaceAssets,
   stripRecordingWorkspaceAssets,
 } from "../storage/recordingWorkspaceAssets";
-import type { CaptionTrack, Recording } from "../core/src";
-
-const SAME_ORIGIN_PROXY_PATH = "/api/proxy";
-const MISSING_PROXY_STATUS_CODES = new Set([404, 405, 501]);
+import { describeFailedResponse, fetchNextEditorUrl } from "../storage/recordingFetch";
+import {
+  fetchSiblingCaptions,
+  findWorkingAudioBlob,
+  findWorkingCameraUrl,
+  withResolvedMediaUrls,
+} from "../storage/recordingSiblingMedia";
+import { isNextEditorUrl } from "../utils/recordingUrl";
+import type { Recording } from "../core/src";
 
 // Once the first playable prefix has loaded (tried on every chunk until then), hand newly
 // decoded records to the player roughly every this many downloaded bytes.
 const STREAM_DECODE_INTERVAL_BYTES = 512 * 1024;
-
-/** Extension (no dot) of a filename, or undefined if it has none. */
-function fileExtension(filename: string | undefined): string | undefined {
-  if (!filename) return undefined;
-  return /\.([^./]+)$/.exec(filename)?.[1];
-}
-
-/** `<neBasename>.<ext>` resolved against the `.ne` URL, e.g. `intro-01.ne` -> `intro-01.weba`. */
-function neBasenameMediaUrl(neUrl: string, ext: string): string | null {
-  try {
-    const url = new URL(neUrl);
-    const slash = url.pathname.lastIndexOf("/");
-    const base = url.pathname.slice(slash + 1).replace(/\.ne$/i, "");
-    if (!base) return null;
-    url.pathname = `${url.pathname.slice(0, slash + 1)}${base}.${ext}`;
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Ordered, deduplicated candidate URLs for a media kind (audio/camera), so a renamed/re-hosted
- * `.ne` can still find its media: (1) a configured URL persisted on the recording, (2) the
- * stored sibling filename resolved against the `.ne` URL, (3) the `.ne` file's own basename
- * with the stored (or default) extension — covers the user renaming `lesson.ne`+`lesson.weba`
- * to `intro-01.ne`+`intro-01.weba` together. Returns `[]` when the recording declares no media
- * of this kind at all (never invents media that wasn't referenced). `declaredExternal` marks a
- * kind the recording declares external without naming a file (`audioSource === "external"` from
- * an older export that omitted `audioFile`) — the basename candidate still applies then.
- */
-function buildMediaCandidates(
-  storedUrl: string | undefined,
-  storedFile: string | undefined,
-  baseUrl: string | undefined,
-  defaultExt: string,
-  declaredExternal = false,
-): string[] {
-  if (!storedUrl && !storedFile && !declaredExternal) {
-    return [];
-  }
-  const candidates: string[] = [];
-  if (storedUrl) {
-    // The stored URL may be relative to the `.ne` — resolve it against `baseUrl` like the
-    // other candidates so downstream `new URL(...)` calls don't throw on a bare relative
-    // string. Absolute URLs are unaffected by resolving against a base.
-    try {
-      const resolved = baseUrl ? new URL(storedUrl, baseUrl) : new URL(storedUrl);
-      candidates.push(resolved.toString());
-    } catch {
-      // Unresolvable (relative with no baseUrl, or malformed) — skip this candidate.
-    }
-  }
-  if (storedFile && baseUrl) {
-    try {
-      candidates.push(new URL(storedFile, baseUrl).toString());
-    } catch {
-      // Unresolvable reference — skip this candidate.
-    }
-  }
-  if (baseUrl) {
-    const basenameUrl = neBasenameMediaUrl(baseUrl, fileExtension(storedFile) ?? defaultExt);
-    if (basenameUrl) {
-      candidates.push(basenameUrl);
-    }
-  }
-  return Array.from(new Set(candidates));
-}
-
-/**
- * Resolve external media references (`cameraFile` / `audioFile`) into absolute URLs relative to
- * the original `.ne` URL, so a sibling video plays via a native `<video src>` and sibling audio
- * can be fetched for playback. Resolves against the user-facing `.ne` URL (not any same-origin
- * proxy URL) so the media is fetched from its real host. This is the fast, unverified happy
- * path — {@link resolveExternalMedia} falls back to the `.ne` basename out-of-band when this
- * guess turns out to be wrong (renamed/re-hosted media).
- */
-function withResolvedMediaUrls(recording: Recording, baseUrl: string | undefined): Recording {
-  if (!baseUrl) {
-    return recording;
-  }
-
-  let resolved = recording;
-  if (recording.cameraFile && !recording.cameraUrl) {
-    try {
-      resolved = { ...resolved, cameraUrl: new URL(recording.cameraFile, baseUrl).toString() };
-    } catch {
-      // Unresolvable reference — play without camera.
-    }
-  }
-  if (recording.audioFile && !recording.audioUrl) {
-    try {
-      resolved = { ...resolved, audioUrl: new URL(recording.audioFile, baseUrl).toString() };
-    } catch {
-      // Unresolvable reference — play without audio.
-    }
-  }
-  return resolved;
-}
-
-async function fetchVttFile(url: string, signal?: AbortSignal): Promise<CaptionTrack | null> {
-  try {
-    // Same route as the `.ne` and its media: a host without CORS is reachable only via the proxy.
-    const res = await fetchNextEditorUrl(url, { signal });
-    if (!res.ok) return null;
-    const text = await res.text();
-    if (!text.trim().startsWith("WEBVTT")) return null;
-    const { parseVtt, inferLanguageFromFilename } = await import("../captions/parseCaptions");
-    const cues = parseVtt(text);
-    if (cues.length === 0) return null;
-    const lang = inferLanguageFromFilename(url) ?? "en";
-    return {
-      // Keyed on the file, not the language: ADD_CAPTION_TRACK replaces a track with the same id,
-      // and two declared files can share a language (or both lack a tag and default to "en").
-      id: `sibling:${new URL(url).pathname}`,
-      language: lang,
-      label: lang.toUpperCase(),
-      cues,
-      default: true,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Resolves one declared caption file against the recording's URL, returning it
- * only when it stays a sibling of that recording (null otherwise, or when it is
- * not a URL at all). Captions are companion files by definition, so this is
- * exactly the intended relationship — and it stops a recording naming an
- * absolute URL, which `new URL(file, base)` would pass through untouched, from
- * making a viewer's browser fetch an arbitrary origin. The scheme stays the
- * `.ne`'s http(s).
- */
-function resolveSiblingCaptionUrl(file: string, neUrl: string): string | null {
-  try {
-    const base = new URL(neUrl);
-    const resolved = new URL(file, base);
-    if (resolved.origin !== base.origin) return null;
-    const directory = base.pathname.slice(0, base.pathname.lastIndexOf("/") + 1);
-    if (!resolved.pathname.startsWith(directory)) return null;
-    return resolved.toString();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Loads caption tracks the recording explicitly declares via `captionFiles`, resolved relative
- * to the `.ne` URL. Captions are never guessed from sibling filenames when a recording declares
- * none at all — HTTP has no directory listing, so a recording must name its companion VTTs to
- * have them auto-load. But when captions *are* declared and every one fails (the same rename case
- * handled for audio/camera), `<neBasename>.vtt` is tried as a last-ditch fallback candidate
- * (mirrors `buildMediaCandidates`, kept to a single candidate since captions are optional and
- * multi-language guessing would be over-engineering for this low-priority case).
- */
-async function fetchSiblingCaptions(
-  neUrl: string,
-  captionFiles: string[] | undefined,
-  signal: AbortSignal,
-): Promise<CaptionTrack[]> {
-  if (!captionFiles || captionFiles.length === 0) {
-    return [];
-  }
-
-  const results = await Promise.allSettled(
-    captionFiles
-      .map((file) => resolveSiblingCaptionUrl(file, neUrl))
-      .filter((url): url is string => url !== null)
-      .map((url) => fetchVttFile(url, signal)),
-  );
-  const tracks: CaptionTrack[] = [];
-  for (const result of results) {
-    if (result.status === "fulfilled" && result.value) {
-      if (tracks.length > 0) result.value.default = false;
-      tracks.push(result.value);
-    }
-  }
-
-  if (tracks.length === 0) {
-    const basenameUrl = neBasenameMediaUrl(neUrl, "vtt");
-    if (
-      basenameUrl &&
-      !captionFiles.some((file) => resolveSiblingCaptionUrl(file, neUrl) === basenameUrl)
-    ) {
-      const track = await fetchVttFile(basenameUrl, signal);
-      if (track) tracks.push(track);
-    }
-  }
-
-  return tracks;
-}
-
-function buildSameOriginProxyUrl(targetUrl: string): string {
-  const proxyUrl = new URL(SAME_ORIGIN_PROXY_PATH, window.location.origin);
-  proxyUrl.searchParams.set("url", targetUrl);
-  return proxyUrl.toString();
-}
-
-async function fetchNextEditorUrl(url: string, init?: RequestInit): Promise<Response> {
-  const urlObj = new URL(url);
-
-  if (urlObj.origin === window.location.origin) {
-    return fetch(url, init);
-  }
-
-  const proxyUrl = buildSameOriginProxyUrl(url);
-
-  try {
-    const proxyResponse = await fetch(proxyUrl, init);
-
-    // Hosts without a real `/api/proxy` endpoint (static/SPA deploys) rewrite the
-    // unknown path to the app shell and answer 200 with `text/html`. That HTML is
-    // not a recording, so treat it as "proxy unavailable" and fall through to the
-    // direct cross-origin fetch (which needs CORS on the recording's host).
-    const isSpaFallback = (proxyResponse.headers.get("content-type") ?? "").includes("text/html");
-
-    if (
-      !isSpaFallback &&
-      (proxyResponse.ok || !MISSING_PROXY_STATUS_CODES.has(proxyResponse.status))
-    ) {
-      return proxyResponse;
-    }
-    // Not the proxy's answer: stop that download before asking the host directly.
-    await proxyResponse.body?.cancel().catch(() => {});
-  } catch (error) {
-    // An abort means the load was left or superseded, not that the proxy is missing.
-    if (init?.signal?.aborted) throw error;
-    console.warn("Same-origin proxy request failed, falling back to direct fetch:", error);
-  }
-
-  return fetch(url, init);
-}
-
-/**
- * Why a `.ne` request failed, for the error panel. `statusText` is empty over HTTP/2 and HTTP/3,
- * so the status code is what is left; a proxied request that failed upstream comes back as a 502
- * whose JSON `error` says what the upstream answered, which is the more useful reason.
- */
-async function describeFailedResponse(response: Response): Promise<string> {
-  try {
-    const body: unknown = await response.json();
-    const reason =
-      typeof body === "object" && body !== null && "error" in body ? body.error : undefined;
-    if (typeof reason === "string" && reason) {
-      return `Failed to fetch file: ${reason}`;
-    }
-  } catch {
-    // Not a JSON body (a plain 404 page, say): fall back to the status code.
-  }
-  return `Failed to fetch file (HTTP ${response.status})`;
-}
-
-/**
- * Checks whether a media URL is reachable and not an HTML fallback page, without downloading
- * the body — used to verify a camera `<video src>` candidate before assigning it (playback
- * would otherwise fail silently inside the `<video>` element). Tries `HEAD` first since it's
- * cheapest; some hosts (e.g. S3 presigned URLs scoped to `GetObject`) reject `HEAD`, so a
- * ranged `GET` is the fallback.
- */
-async function probeMediaUrl(url: string, signal?: AbortSignal): Promise<boolean> {
-  try {
-    let response = await fetchNextEditorUrl(url, { method: "HEAD", signal });
-    if (!response.ok) {
-      response = await fetchNextEditorUrl(url, { headers: { Range: "bytes=0-0" }, signal });
-      // Only the status and type matter, and a host that ignores Range sends the whole video.
-      await response.body?.cancel().catch(() => {});
-    }
-    if (!response.ok) {
-      return false;
-    }
-    const contentType = response.headers.get("content-type") ?? "";
-    return !contentType.includes("text/html");
-  } catch (error) {
-    // An abort ends the search for a camera URL; any other failure rules out this candidate.
-    if (signal?.aborted) throw error;
-    return false;
-  }
-}
 
 interface LoadFailure {
   /** Human-readable reason, shown in the editor's inline error panel. */
@@ -346,16 +69,6 @@ export const useUrlLoader = () => {
       abortControllerRef.current?.abort();
     };
   }, []);
-
-  const isNextEditorUrl = (url: string): boolean => {
-    try {
-      const urlObj = new URL(url);
-      const pathname = urlObj.pathname.toLowerCase();
-      return pathname.endsWith(".ne");
-    } catch {
-      return false;
-    }
-  };
 
   /**
    * Loads the `.ne` among files dropped together, pairing it with the camera video and audio
@@ -504,83 +217,6 @@ export const useUrlLoader = () => {
       throw new Error("No valid recording found in stream");
     }
     return latestRecording;
-  };
-
-  /**
-   * Finds a working audio candidate (a sibling file referenced by `audioFile` / `audioUrl`, or
-   * the `.ne` basename fallback) and downloads it, without touching the recording — the caller
-   * applies the result via a single `extendRecording` alongside any camera fix, so the two
-   * out-of-band resolutions never race and clobber each other.
-   */
-  const findWorkingAudioBlob = async (
-    recording: Recording,
-    neUrl: string | undefined,
-    signal?: AbortSignal,
-  ): Promise<{ url: string; blob: Blob } | null> => {
-    if (recording.audioBlob instanceof Blob) {
-      return null;
-    }
-    const candidates = buildMediaCandidates(
-      recording.audioUrl,
-      recording.audioFile,
-      neUrl,
-      "weba",
-      recording.audioSource === "external",
-    );
-    for (const url of candidates) {
-      signal?.throwIfAborted();
-      try {
-        const response = await fetchNextEditorUrl(url, { signal });
-        if (!response.ok) {
-          console.warn(`External audio fetch failed (${response.status}): ${url}`);
-          continue;
-        }
-        const raw = await response.blob();
-        if (raw.size === 0 || raw.type.includes("text/html")) {
-          continue;
-        }
-        // Some hosts serve sibling audio without a usable content type; fall back to the
-        // extension-derived MIME so `decodeAudioData` and track metadata behave.
-        const type =
-          raw.type || (audioMimeFromFilename(recording.audioFile ?? url) ?? "audio/webm");
-        const blob = raw.type === type ? raw : new Blob([raw], { type });
-        return { url, blob };
-      } catch (err) {
-        // An abort ends the search (the lesson was left); it says nothing about this candidate.
-        if (signal?.aborted) throw err;
-        console.warn(`Failed to fetch external audio from ${url}:`, err);
-      }
-    }
-    return null;
-  };
-
-  /**
-   * Finds a working camera URL — playback consumes `cameraUrl` directly via a `<video src>`,
-   * which fails silently on a bad URL rather than throwing, so the happy-path guess from
-   * `withResolvedMediaUrls` is verified with a cheap probe before falling back through the
-   * `.ne` basename candidate. Returns `null` when the current URL already probes fine (the
-   * common case) or nothing works.
-   */
-  const findWorkingCameraUrl = async (
-    recording: Recording,
-    neUrl: string | undefined,
-    signal?: AbortSignal,
-  ): Promise<string | null> => {
-    const candidates = buildMediaCandidates(
-      recording.cameraUrl,
-      recording.cameraFile,
-      neUrl,
-      "webm",
-    );
-    for (const url of candidates) {
-      if (await probeMediaUrl(url, signal)) {
-        return url !== recording.cameraUrl ? url : null;
-      }
-    }
-    if (candidates.length > 0) {
-      console.warn("External camera video probe failed for all candidates:", candidates);
-    }
-    return null;
   };
 
   /**
