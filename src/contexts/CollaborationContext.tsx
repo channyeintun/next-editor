@@ -18,7 +18,6 @@ import {
   downloadCollaborationAsset,
   exportCollaborationRoom,
   getCollaborationRoom,
-  uploadCollaborationAsset,
   useAuth,
 } from "@next-editor/infra";
 import type {
@@ -37,7 +36,6 @@ import {
   canPublishCollaborationUpdate,
 } from "../collaboration/protocol";
 import {
-  CollaborationProjectController,
   projectCollaborationDocument,
   type CollaborationProjectProjection,
 } from "../collaboration/projectDocument";
@@ -67,21 +65,17 @@ import {
   projectCollaborationTransaction,
   reprojectCollaborationWorkspace,
 } from "../collaboration/workspaceAdapter";
-import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
+import { WorkspaceActionsContext } from "./WorkspaceContext";
 import { useCollaborationInvitation } from "./collaboration/useCollaborationInvitation";
 import { useCollaborationRoster } from "./collaboration/useCollaborationRoster";
+import { useCollaborativeWorkspaceActions } from "./collaboration/useCollaborativeWorkspaceActions";
 import { WebContainerRuntimeActionsContext } from "./WebContainerRuntimeContext";
-import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
+import type { TextEditEvent } from "../types/textEdit";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useWorkspaceActions, useWorkspaceActiveFilePath } from "../hooks/useWorkspace";
 import { createCollaborationCursor } from "../collaboration/relativePosition";
 import { liveRoomEndBlockReason } from "../collaboration/recordingPolicy";
-import { isWorkspaceAssetDescriptor, isWorkspaceTextFile } from "../types/workspace";
-import {
-  getWorkspaceAssetBlob,
-  getWorkspaceAssetBytes,
-  registerWorkspaceAsset,
-} from "../storage/workspaceAssetStore";
+import { getWorkspaceAssetBlob, registerWorkspaceAsset } from "../storage/workspaceAssetStore";
 import { createCollaborationUndoManager } from "../collaboration/undo";
 import {
   applyCollaborationWhiteboardDelta,
@@ -762,103 +756,16 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     isConnectionWritable &&
     !usesPlaybackModel,
   );
-  const canWriteRef = useRef(canWrite);
-  canWriteRef.current = canWrite;
-  const controller = useMemo(
-    () =>
-      provider
-        ? new CollaborationProjectController(provider.doc, {
-            canWrite: () => canWriteRef.current,
-            getProjection: getCurrentProjection,
-          })
-        : null,
-    [getCurrentProjection, provider],
-  );
-
-  const reportWriteError = useCallback((error: unknown) => {
-    setLocalError(messageFromError(error, "The shared workspace could not be changed."));
-  }, []);
-
-  const collaborativeActions = useMemo<WorkspaceActions>(() => {
-    if (!controller) return baseActions;
-    const run = (operation: () => void) => {
-      try {
-        operation();
-        setLocalError(null);
-      } catch (error) {
-        reportWriteError(error);
-      }
-    };
-    return {
-      ...baseActions,
-      createFile: (path, content = "", encoding) => {
-        if (encoding !== "asset") {
-          if (typeof content !== "string") {
-            reportWriteError(new Error("Text collaboration files require string content."));
-            return;
-          }
-          run(() => controller.createFile(path, content));
-          return;
-        }
-        if (!isWorkspaceAssetDescriptor(content)) {
-          reportWriteError(new Error("Binary collaboration files require an asset descriptor."));
-          return;
-        }
-        const currentProvider = providerRef.current;
-        const currentSession = currentProvider?.session;
-        if (!currentProvider || !currentSession || !canWriteRef.current) {
-          reportWriteError(new Error("The collaboration room is not ready for asset uploads."));
-          return;
-        }
-        void getWorkspaceAssetBytes(content)
-          .then((bytes) =>
-            uploadCollaborationAsset(currentSession.room.id, bytes, content.mimeType),
-          )
-          .then((asset) => {
-            if (providerRef.current !== currentProvider || !canWriteRef.current) return;
-            controller.createAssetFile(path, asset);
-            setLocalError(null);
-          })
-          .catch(reportWriteError);
-      },
-      createFolder: (path) => run(() => controller.createFolder(path)),
-      renameFile: (currentPath, nextPath) =>
-        run(() => controller.renameFile(currentPath, nextPath)),
-      renameFolder: (currentPath, nextPath) =>
-        run(() => controller.renameFolder(currentPath, nextPath)),
-      deleteFile: (path) => run(() => controller.deleteFile(path)),
-      deleteFolder: (path) => run(() => controller.deleteFolder(path)),
-      updateFileContent: (path, content) => run(() => controller.replaceFileContent(path, content)),
-      applyFileTextEdits: (event) => {
-        try {
-          const currentFile = baseActions.getFile(event.path);
-          const nextContent =
-            currentFile && isWorkspaceTextFile(currentFile)
-              ? applyTextEditEvent(currentFile.content, event)
-              : null;
-          if (nextContent === null) return null;
-          queueLocalTextEdit(event);
-          const applied = controller.applyFileTextEdits(event);
-          setLocalError(null);
-          return applied ? nextContent : null;
-        } catch (error) {
-          reportWriteError(error);
-          return null;
-        }
-      },
-      setPreviewFilePath: (path) => run(() => controller.setEntryFile(path)),
-      updateLessonType: (lessonType) => run(() => controller.updateLessonType(lessonType)),
-      loadProject: () =>
-        reportWriteError(new Error("Leave the room before loading another project.")),
-      // WebContainerRuntimeProvider sits above this provider and uses the base
-      // actions, so its reverse sync is switched off by the layout effect above
-      // rather than refused here.
-      reconcileExternalProject: (project) => {
-        if (playbackRef.current) baseActions.reconcileExternalProject(project);
-        else reportWriteError(new Error("Bulk project replacement is disabled in a live room."));
-      },
-    };
-  }, [baseActions, controller, queueLocalTextEdit, reportWriteError]);
+  const { canWriteRef, collaborativeActions } = useCollaborativeWorkspaceActions({
+    baseActions,
+    provider,
+    providerRef,
+    playbackRef,
+    canWrite,
+    getCurrentProjection,
+    queueLocalTextEdit,
+    setError: setLocalError,
+  });
 
   const updateRoomParam = useCallback(
     (nextRoomId: string | null) => {
