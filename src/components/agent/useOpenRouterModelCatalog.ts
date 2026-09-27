@@ -50,3 +50,5 @@ export function useOpenRouterModelCatalog(isSettingsOpen: boolean) {
 
   return { modelOptions, isModelCatalogLoading, modelCatalogError };
 }
+
+export type OpenRouterModelCatalog = ReturnType<typeof useOpenRouterModelCatalog>;

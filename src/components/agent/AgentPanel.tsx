@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import { Bot, Plus, Search, Send, Settings, Square, X } from "lucide-react";
+import { Bot, Plus, Send, Settings, Square } from "lucide-react";
 import { WorkspaceStoreContext } from "../../stores/workspaceStore";
 import {
   getAgentStore,
@@ -11,13 +11,8 @@ import {
   selectModel,
   selectReplaySnapshot,
   selectStatus,
-  selectUsage,
 } from "../../agent/agentStore";
-import {
-  getAgentCredentialStore,
-  selectApiKey,
-  selectCredentialStorage,
-} from "../../agent/credentials";
+import { getAgentCredentialStore, selectApiKey } from "../../agent/credentials";
 import {
   getAgentSessionStore,
   clearAgentRetry,
@@ -30,7 +25,6 @@ import {
   stopAgentRun,
   synchronizeAgentWorkspace,
 } from "../../agent/agentSession";
-import type { CredentialStorage } from "../../agent/types";
 import type { ChatItem, ChatStatus } from "../../types/chat";
 import {
   createChatImage,
@@ -44,23 +38,13 @@ import {
   useWebContainerRuntimeMetadata,
   useWebContainerRuntimeSnapshotGetter,
 } from "../../hooks/useWebContainerRuntime";
-import { filterModelOptions } from "../../agent/modelCatalog";
 import { createChatCheckpoint } from "../../agent/chatRecording";
 import AgentErrorNotice from "./AgentErrorNotice";
+import AgentSettingsDialog from "./AgentSettingsDialog";
 import DraftImageStrip from "./DraftImageStrip";
 import ToolConfirmationCard from "./ToolConfirmationCard";
 import { formatToolResultOutput } from "./toolResultOutput";
 import { useOpenRouterModelCatalog } from "./useOpenRouterModelCatalog";
-
-const STORAGE_OPTIONS: { id: CredentialStorage; label: string; description: string }[] = [
-  { id: "memory", label: "Memory only", description: "Cleared on reload. Safest." },
-  {
-    id: "session",
-    label: "This tab",
-    description: "Survives reload, cleared when the tab closes.",
-  },
-  { id: "local", label: "This device", description: "Persists across sessions on this browser." },
-];
 
 const STATUS_LABEL: Record<ChatStatus, string> = {
   idle: "Idle",
@@ -186,10 +170,8 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const liveDraftImages = useSelector(agentStore, (s) => selectDraftImages(s.context));
   const replaySnapshot = useSelector(agentStore, (s) => selectReplaySnapshot(s.context));
   const error = useSelector(agentStore, (s) => selectError(s.context));
-  const usage = useSelector(agentStore, (s) => selectUsage(s.context));
   const model = useSelector(agentStore, (s) => selectModel(s.context));
   const apiKey = useSelector(credentialStore, (s) => selectApiKey(s.context));
-  const credentialStorage = useSelector(credentialStore, (s) => selectCredentialStorage(s.context));
   // Run state lives in the session singleton (not this component), so it survives the
   // dock tab switches / collapses that mount and unmount this panel — see agentSession.ts.
   const isRunning = useSelector(sessionStore, (s) => selectIsRunning(s.context));
@@ -241,8 +223,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   }, [runtimeMetadata]);
 
   // Called after the effects above so its fetch effect keeps its place in their order.
-  const { modelOptions, isModelCatalogLoading, modelCatalogError } =
-    useOpenRouterModelCatalog(isSettingsOpen);
+  const modelCatalog = useOpenRouterModelCatalog(isSettingsOpen);
 
   // Reflects the actual live run (for Send/Stop + input disable); the status label/
   // spinner below tracks the displayed status, which during replay is the recorded one.
@@ -250,8 +231,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const isActiveStatus =
     status === "streaming" || status === "running-tool" || status === "waiting-confirmation";
   const activeConfirmation = pending[0] ?? null;
-  const filteredModelOptions = filterModelOptions(modelOptions, modelQuery);
-  const selectedModelOption = modelOptions.find((option) => option.id === model);
+  const selectedModelOption = modelCatalog.modelOptions.find((option) => option.id === model);
   const selectedModelLabel = selectedModelOption?.label ?? model;
 
   const applyDraft = (text: string) => {
@@ -371,15 +351,6 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
       event.preventDefault();
       handleSubmit();
     }
-  };
-
-  const handleSaveKey = () => {
-    const trimmed = keyDraft.trim();
-    if (!trimmed) {
-      return;
-    }
-    credentialStore.trigger.setApiKey({ apiKey: trimmed });
-    setKeyDraft("");
   };
 
   return (
@@ -515,141 +486,14 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
       </div>
 
       {isSettingsOpen ? (
-        <div
-          className="fixed inset-0 z-50 bg-[#0b0d12]/62 px-4 py-8 backdrop-blur-[2px]"
-          onClick={() => setIsSettingsOpen(false)}
-        >
-          <div
-            className="mx-auto flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-              <p className="text-sm font-semibold text-slate-100">Agent settings</p>
-              <button
-                type="button"
-                onClick={() => setIsSettingsOpen(false)}
-                className="text-slate-500 hover:text-white"
-                aria-label="Close settings"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="space-y-5 overflow-y-auto p-5">
-              <div>
-                <p className="text-sm font-medium text-slate-100">Model</p>
-                <div className="relative mt-2">
-                  <Search
-                    size={14}
-                    className="pointer-events-none absolute left-3 top-2.5 text-slate-500"
-                  />
-                  <input
-                    type="search"
-                    value={modelQuery}
-                    onChange={(event) => setModelQuery(event.target.value)}
-                    placeholder="Search OpenRouter models"
-                    aria-label="Search OpenRouter models"
-                    className="h-9 w-full rounded-md border border-slate-700 bg-[#11141c] pl-9 pr-3 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-slate-500"
-                  />
-                </div>
-                <div className="mt-2 flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-md border border-slate-800 p-2">
-                  {filteredModelOptions.map((option) => (
-                    <label
-                      key={option.id}
-                      className="flex cursor-pointer items-start gap-2 rounded px-1.5 py-1 text-xs text-slate-300 hover:bg-slate-800/70"
-                    >
-                      <input
-                        type="radio"
-                        name="agent-model"
-                        checked={model === option.id}
-                        onChange={() => agentStore.trigger.setModel({ model: option.id })}
-                        className="mt-0.5"
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate">{option.label}</span>
-                        <span className="block truncate font-mono text-[10px] text-slate-600">
-                          {option.id}
-                          {!option.supportsImages ? " · no image input" : ""}
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                  {filteredModelOptions.length === 0 ? (
-                    <p className="px-1.5 py-2 text-xs text-slate-500">
-                      No models match “{modelQuery.trim()}”.
-                    </p>
-                  ) : null}
-                </div>
-                <p className="mt-2 text-[11px] text-slate-500">
-                  {isModelCatalogLoading
-                    ? "Loading models from OpenRouter…"
-                    : (modelCatalogError ?? `${modelOptions.length} models from OpenRouter.`)}
-                </p>
-                <p className="mt-2 text-[11px] text-slate-500">
-                  Usage this session: {usage.inputTokens} in / {usage.outputTokens} out tokens.
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium text-slate-100">API key</p>
-                {/* ph-no-capture blocks this field from PostHog session replays so the
-                    API key is never recorded, independent of the global maskAllInputs
-                    setting (see posthog init in src/main.tsx). */}
-                <input
-                  type="password"
-                  value={keyDraft}
-                  onChange={(event) => setKeyDraft(event.target.value)}
-                  placeholder={apiKey ? "•••• (set) — paste to replace" : "sk-or-v1-..."}
-                  className="ph-no-capture mt-2 h-9 w-full rounded-md border border-slate-700 bg-[#11141c] px-3 font-mono text-xs text-slate-100 outline-none focus:border-slate-500"
-                />
-                <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    disabled={!keyDraft.trim()}
-                    onClick={handleSaveKey}
-                    className="rounded-md bg-[#173925] px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Save
-                  </button>
-                  {apiKey ? (
-                    <button
-                      type="button"
-                      onClick={() => credentialStore.trigger.clear()}
-                      className="rounded-md px-3 py-1.5 text-xs font-semibold text-slate-400 hover:text-white"
-                    >
-                      Clear
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium text-slate-100">Remember key</p>
-                <div className="mt-2 flex flex-col gap-2">
-                  {STORAGE_OPTIONS.map((option) => (
-                    <label
-                      key={option.id}
-                      className="flex items-start gap-2 text-xs text-slate-300"
-                    >
-                      <input
-                        type="radio"
-                        name="agent-credential-storage"
-                        className="mt-0.5"
-                        checked={credentialStorage === option.id}
-                        onChange={() => credentialStore.trigger.setStorage({ storage: option.id })}
-                      />
-                      <span>
-                        <span className="block">{option.label}</span>
-                        <span className="block text-[11px] text-slate-500">
-                          {option.description}
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AgentSettingsDialog
+          modelCatalog={modelCatalog}
+          modelQuery={modelQuery}
+          onModelQueryChange={setModelQuery}
+          keyDraft={keyDraft}
+          onKeyDraftChange={setKeyDraft}
+          onClose={() => setIsSettingsOpen(false)}
+        />
       ) : null}
     </>
   );
