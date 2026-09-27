@@ -1,16 +1,19 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useSelector } from "@xstate/store-react";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { selectIsPlaying, selectRecording } from "../core/src/useNextEditor";
 import { allowedRecordingMediaUrl } from "../core/src/utils/mediaUrl";
 import { mapRecordingTimeToMediaTime } from "../core/src/utils/mediaSpans";
+import {
+  cameraOverlayStore,
+  selectCameraOverlayMinimized,
+  selectCameraOverlayVisible,
+  selectLivePreviewOn,
+} from "../stores/cameraOverlayStore";
+import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
 
-export const CAMERA_OVERLAY_VISIBILITY_KEY = "next-editor-camera-overlay-visible";
-export const CAMERA_OVERLAY_POSITION_KEY = "next-editor-camera-overlay-position";
-export const CAMERA_OVERLAY_MINIMIZED_KEY = "next-editor-camera-overlay-minimized";
-export const CAMERA_OVERLAY_VISIBILITY_EVENT = "next-editor-camera-overlay-visibility";
-/** Dispatched by MediaControls when the camera capture toggle flips, to drive the live preview. */
-export const CAMERA_OVERLAY_PREVIEW_EVENT = "next-editor-camera-overlay-preview";
+const POSITION_KEY = "next-editor-camera-overlay-position";
 
 // Rounded-rectangle picture-in-picture framing: a square card whose corner radius stays modest
 // (~11% of its width) so the face crop reads as a framed webcam tile rather than a blurred-out
@@ -44,16 +47,6 @@ interface OverlayPosition {
   y: number;
 }
 
-function readStoredVisibility(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.localStorage.getItem(CAMERA_OVERLAY_VISIBILITY_KEY) !== "false";
-}
-
-function readStoredMinimized(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(CAMERA_OVERLAY_MINIMIZED_KEY) === "true";
-}
-
 function getDefaultPosition(): OverlayPosition {
   if (typeof window === "undefined") {
     return { x: EDGE_PADDING, y: EDGE_PADDING };
@@ -81,9 +74,7 @@ function clampPosition(position: OverlayPosition): OverlayPosition {
 }
 
 function readStoredPosition(): OverlayPosition {
-  if (typeof window === "undefined") return getDefaultPosition();
-
-  const rawPosition = window.localStorage.getItem(CAMERA_OVERLAY_POSITION_KEY);
+  const rawPosition = readStoredPreference(POSITION_KEY);
   if (!rawPosition) return getDefaultPosition();
 
   try {
@@ -121,11 +112,16 @@ const CameraOverlay: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const dragOffsetRef = useRef<OverlayPosition>({ x: 0, y: 0 });
   const previewStreamRef = useRef<MediaStream | null>(null);
-  const [isVisible, setIsVisible] = useState(readStoredVisibility);
+  const isVisible = useSelector(cameraOverlayStore, (s) => selectCameraOverlayVisible(s.context));
   const [position, setPosition] = useState(readStoredPosition);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [isMinimized, setIsMinimized] = useState(readStoredMinimized);
-  const [isPreviewEnabled, setIsPreviewEnabled] = useState(false);
+  const isMinimized = useSelector(cameraOverlayStore, (s) =>
+    selectCameraOverlayMinimized(s.context),
+  );
+  // Switched on from this editor's player bar, with the camera for the next take.
+  const isPreviewEnabled = useSelector(cameraOverlayStore, (s) =>
+    selectLivePreviewOn(s.context, actorRef),
+  );
   const [previewError, setPreviewError] = useState(false);
 
   const cameraBlob = recording?.cameraBlob instanceof Blob ? recording.cameraBlob : null;
@@ -166,36 +162,6 @@ const CameraOverlay: React.FC = () => {
       URL.revokeObjectURL(nextUrl);
     };
   }, [cameraBlob, cameraUrl]);
-
-  useEffect(() => {
-    const handleVisibilityChange = (event: Event) => {
-      if (!(event instanceof CustomEvent) || typeof event.detail?.visible !== "boolean") {
-        return;
-      }
-
-      setIsVisible(event.detail.visible);
-    };
-
-    window.addEventListener(CAMERA_OVERLAY_VISIBILITY_EVENT, handleVisibilityChange);
-    return () => {
-      window.removeEventListener(CAMERA_OVERLAY_VISIBILITY_EVENT, handleVisibilityChange);
-    };
-  }, []);
-
-  useEffect(() => {
-    const handlePreviewToggle = (event: Event) => {
-      if (!(event instanceof CustomEvent) || typeof event.detail?.enabled !== "boolean") {
-        return;
-      }
-
-      setIsPreviewEnabled(event.detail.enabled);
-    };
-
-    window.addEventListener(CAMERA_OVERLAY_PREVIEW_EVENT, handlePreviewToggle);
-    return () => {
-      window.removeEventListener(CAMERA_OVERLAY_PREVIEW_EVENT, handlePreviewToggle);
-    };
-  }, []);
 
   // Acquire a live camera stream while in preview mode. The stream is kept in a ref so it survives
   // minimize/restore (the <video> unmounts when minimized) without re-prompting for the camera.
@@ -257,12 +223,8 @@ const CameraOverlay: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(CAMERA_OVERLAY_POSITION_KEY, JSON.stringify(position));
+    writeStoredPreference(POSITION_KEY, JSON.stringify(position));
   }, [position]);
-
-  useEffect(() => {
-    window.localStorage.setItem(CAMERA_OVERLAY_MINIMIZED_KEY, String(isMinimized));
-  }, [isMinimized]);
 
   // Drive the <video> from the playback timeline. Mirrors CursorComponent: read
   // `timeline.currentTime` directly from the actor snapshot inside a rAF loop so
@@ -368,8 +330,8 @@ const CameraOverlay: React.FC = () => {
   const handleMinimizePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     event.stopPropagation();
   };
-  const handleMinimize = () => setIsMinimized(true);
-  const handleRestore = () => setIsMinimized(false);
+  const handleMinimize = () => cameraOverlayStore.trigger.setMinimized({ minimized: true });
+  const handleRestore = () => cameraOverlayStore.trigger.setMinimized({ minimized: false });
 
   const showPlayback = Boolean(cameraBlob || cameraUrl) && Boolean(videoUrl) && isVisible;
   const showPreview = previewMode && !previewError;

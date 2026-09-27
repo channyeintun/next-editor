@@ -22,6 +22,7 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
+import { useSelector } from "@xstate/store-react";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
@@ -43,10 +44,10 @@ import ProgressBar from "./ProgressBar";
 import Switch from "./Switch";
 import type { Recording } from "../core/src";
 import {
-  CAMERA_OVERLAY_PREVIEW_EVENT,
-  CAMERA_OVERLAY_VISIBILITY_EVENT,
-  CAMERA_OVERLAY_VISIBILITY_KEY,
-} from "./CameraOverlay";
+  cameraOverlayStore,
+  selectCameraOverlayVisible,
+  selectLivePreviewOn,
+} from "../stores/cameraOverlayStore";
 import { useCaptionStore, useCaptionStoreTrigger } from "../hooks/useCaptionStore";
 import { usePlaybackSettings, usePlaybackSettingsTrigger } from "../hooks/usePlaybackSettings";
 import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
@@ -88,11 +89,6 @@ interface MediaControlsProps {
 }
 
 type RecordingAudioSourceOption = "microphone" | "external";
-
-const readCameraOverlayVisibility = (): boolean => {
-  if (typeof window === "undefined") return true;
-  return window.localStorage.getItem(CAMERA_OVERLAY_VISIBILITY_KEY) !== "false";
-};
 
 const PlaybackProgress = ({
   progressDuration,
@@ -275,7 +271,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     collaboration?.isHost ?? false,
   );
 
-  const { playbackSpeed, volume, durationMs: timelineDurationMs } = useNextEditorPlayback();
+  const {
+    playbackSpeed,
+    volume,
+    durationMs: timelineDurationMs,
+    editorActor,
+  } = useNextEditorPlayback();
 
   const { enabled: captionsEnabled, language: captionLanguage } = useCaptionStore();
   const captionTrigger = useCaptionStoreTrigger();
@@ -290,10 +291,15 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const playerShortcuts = usePlayerShortcuts();
   const [recordingAudioSource, setRecordingAudioSource] =
     useState<RecordingAudioSourceOption>("microphone");
-  const [enableCameraForNextRecording, setEnableCameraForNextRecording] = useState(false);
+  // The overlay shows the camera live while it is switched on for the next take.
+  const enableCameraForNextRecording = useSelector(cameraOverlayStore, (s) =>
+    selectLivePreviewOn(s.context, editorActor),
+  );
   const [isCameraSupported, setIsCameraSupported] = useState(false);
   const [isScreenSupported, setIsScreenSupported] = useState(false);
-  const [isCameraOverlayVisible, setIsCameraOverlayVisible] = useState(readCameraOverlayVisibility);
+  const isCameraOverlayVisible = useSelector(cameraOverlayStore, (s) =>
+    selectCameraOverlayVisible(s.context),
+  );
   const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
   const [captionImportError, setCaptionImportError] = useState<string | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement>(null);
@@ -303,6 +309,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
     setIsCameraSupported(Boolean(navigator.mediaDevices?.getUserMedia));
     setIsScreenSupported(isScreenCaptureSupported());
   }, []);
+
+  // The camera switch belongs to this player bar and goes with it, as its own state did.
+  useEffect(
+    () => () => cameraOverlayStore.trigger.stopLivePreview({ editor: editorActor }),
+    [editorActor],
+  );
 
   useEffect(() => {
     if (isRecording && collaboration?.provider && !collaboration.isHost) {
@@ -411,25 +423,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   };
 
   const handleToggleCameraForNextRecording = () => {
-    setEnableCameraForNextRecording((current) => {
-      const next = !current;
-      // Drive the live camera preview overlay (independent of recording start/stop).
-      window.dispatchEvent(
-        new CustomEvent(CAMERA_OVERLAY_PREVIEW_EVENT, { detail: { enabled: next } }),
-      );
-      return next;
-    });
+    // Also drives the live camera preview overlay (independent of recording start/stop).
+    cameraOverlayStore.trigger.toggleLivePreview({ editor: editorActor });
   };
 
   const handleToggleCameraOverlay = () => {
-    setIsCameraOverlayVisible((current) => {
-      const next = !current;
-      window.localStorage.setItem(CAMERA_OVERLAY_VISIBILITY_KEY, String(next));
-      window.dispatchEvent(
-        new CustomEvent(CAMERA_OVERLAY_VISIBILITY_EVENT, { detail: { visible: next } }),
-      );
-      return next;
-    });
+    cameraOverlayStore.trigger.toggleVisible();
   };
 
   const handleRecordButtonClick = async () => {
