@@ -23,7 +23,10 @@ import {
 } from "../../hooks/useWebContainerRuntime";
 import { IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE } from "../../utils/iframeInteractionCapture";
 import { requestPreviewScreenshot } from "../../utils/iframeScreenshotBridge";
-import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRuntimeContext";
+import {
+  isRuntimeBusy,
+  type WebContainerRuntimeStatus,
+} from "../../contexts/WebContainerRuntimeContext";
 import type {
   ApiClientRecordedRequest,
   ApiClientRecordedResult,
@@ -1056,13 +1059,7 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    const isRuntimeBusy =
-      runtimeStatus === "booting" ||
-      runtimeStatus === "mounting" ||
-      runtimeStatus === "installing" ||
-      runtimeStatus === "starting";
-
-    if (isRuntimeBusy || hasRequestedRuntimeStartForOpenRef.current) {
+    if (isRuntimeBusy(runtimeStatus) || hasRequestedRuntimeStartForOpenRef.current) {
       return;
     }
 
