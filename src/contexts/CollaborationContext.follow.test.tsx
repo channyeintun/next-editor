@@ -1,7 +1,7 @@
 /* oxlint-disable vitest/require-mock-type-parameters */
 import { act, render, waitFor } from "@testing-library/react";
 import { useContext, type ReactNode } from "react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useSearchParams, type SetURLSearchParams } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const controls = vi.hoisted(() => ({
@@ -1634,5 +1634,108 @@ describe("CollaborationContext workspace actions", () => {
     expect(error()).toBe("The collaboration room is not ready for asset uploads.");
     expect(projectCollaborationDocument(provider.doc).nodeIdByPath.has("later")).toBe(false);
     editor.view.unmount();
+  });
+});
+
+// "Retry" is offered while the error shown is a failed asset or presentation
+// download; the room's own reset (the URL leaving the room) drops the offer but
+// leaves the message on screen.
+describe("CollaborationContext asset retry", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetWorkspaceAssetStoreForTests();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  const unavailable = { response: { data: { error: "The asset is unavailable." } } };
+
+  async function renderRoomWithMissingAsset() {
+    const bytes = new Uint8Array([5, 6, 7, 8]);
+    const descriptor = await registerWorkspaceAsset(bytes, { mimeType: "image/png" });
+    // Only the room has it now, so hydrating the project downloads it.
+    resetWorkspaceAssetStoreForTests();
+    const project = createStarterHtmlCssWorkspace();
+    project.files["logo.png"] = {
+      path: "logo.png",
+      name: "logo.png",
+      language: "plaintext",
+      encoding: "asset",
+      content: descriptor,
+    };
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let setSearchParams: SetURLSearchParams | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      setSearchParams = useSearchParams()[1];
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    vi.mocked(downloadCollaborationAsset).mockRejectedValueOnce(unavailable);
+    act(() => seedCollaborationProject(controls.providers[0]!.doc, project));
+    await waitFor(() => expect(collaboration!.error).toBe("The asset is unavailable."));
+    return {
+      view,
+      bytes,
+      descriptor,
+      collaboration: () => collaboration!,
+      setSearchParams: () => setSearchParams!,
+    };
+  }
+
+  it("offers the retry only while the failed download is the error shown", async () => {
+    const room = await renderRoomWithMissingAsset();
+    expect(room.collaboration().canRetryAssets).toBe(true);
+
+    act(() => {
+      room.collaboration().publishCurrentSlide("slide-that-is-not-there");
+    });
+    expect(room.collaboration().error).not.toBeNull();
+    expect(room.collaboration().error).not.toBe("The asset is unavailable.");
+    expect(room.collaboration().canRetryAssets).toBe(false);
+
+    act(() => room.collaboration().clearError());
+    expect(room.collaboration().error).toBeNull();
+    expect(room.collaboration().canRetryAssets).toBe(false);
+
+    vi.mocked(downloadCollaborationAsset).mockRejectedValueOnce(unavailable);
+    act(() => room.collaboration().retryAssets());
+    await waitFor(() => expect(room.collaboration().canRetryAssets).toBe(true));
+    expect(room.collaboration().error).toBe("The asset is unavailable.");
+
+    vi.mocked(downloadCollaborationAsset).mockResolvedValueOnce(room.bytes);
+    act(() => room.collaboration().retryAssets());
+    expect(room.collaboration().error).toBeNull();
+    expect(room.collaboration().canRetryAssets).toBe(false);
+    await waitFor(() =>
+      expect(workspaceActions.notifyAssetAvailable).toHaveBeenCalledWith(room.descriptor.assetId),
+    );
+    expect(room.collaboration().error).toBeNull();
+    room.view.unmount();
+  });
+
+  it("keeps the message but drops the retry when the URL leaves the room", async () => {
+    const room = await renderRoomWithMissingAsset();
+    expect(room.collaboration().canRetryAssets).toBe(true);
+
+    act(() =>
+      room.setSearchParams()((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("room");
+        return next;
+      }),
+    );
+    await waitFor(() => expect(room.collaboration().provider).toBeNull());
+
+    expect(room.collaboration().error).toBe("The asset is unavailable.");
+    expect(room.collaboration().canRetryAssets).toBe(false);
+    room.view.unmount();
   });
 });
