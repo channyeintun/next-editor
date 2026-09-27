@@ -3,6 +3,8 @@ import {
   createIdleAudioState,
   createIdleCameraState,
   createIdleScreenState,
+  type EditorActionArgs,
+  type EditorContextUpdate,
   type EditorMachineContext,
   type EditorMachineEvent,
   type RecordingSession,
@@ -113,11 +115,7 @@ const commitCapturedFrame = (
 };
 
 /** The take's microphone, per take like the camera: a start that names none uses the default. */
-export const setMicrophoneDevice = ({
-  event,
-}: {
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const setMicrophoneDevice = ({ event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "START_RECORDING") return {};
   return { microphoneDeviceId: event.microphoneDeviceId ?? null };
 };
@@ -125,10 +123,7 @@ export const setMicrophoneDevice = ({
 export const setCameraRecordingEnabled = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "START_RECORDING") return {};
   // The choice is per take. Falling back to the previous take's value let one manual
   // camera take turn the camera on for every later start that does not say, such as a
@@ -141,10 +136,7 @@ export const setCameraRecordingEnabled = ({
 export const prepareExternalAudioRecording = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   const audioBlob = getExternalAudioBlob(event);
   if (!audioBlob) return {};
 
@@ -173,11 +165,7 @@ export const startExternalAudioPlayback = ({
   context,
   event,
   enqueue,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-  enqueue: RecordingAudioPlayerEnqueue;
-}): void => {
+}: EditorActionArgs & { enqueue: RecordingAudioPlayerEnqueue }): void => {
   const audioBlob = getExternalAudioBlob(event);
   if (!audioBlob) return;
 
@@ -196,10 +184,7 @@ export const startExternalAudioPlayback = ({
 export const storeExternalAudioDuration = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "AUDIO_PLAYBACK_READY" || context.audio.source !== "external") {
     return {};
   }
@@ -218,11 +203,7 @@ export const storeExternalAudioDuration = ({
   };
 };
 
-export const stopExternalAudioRecording = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => {
+export const stopExternalAudioRecording = ({ context }: EditorActionArgs): EditorContextUpdate => {
   if (context.audio.source !== "external") return {};
   return {
     audio: {
@@ -234,9 +215,7 @@ export const stopExternalAudioRecording = ({
 
 export const resetAudioAfterRecorderStop = ({
   context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => ({
+}: EditorActionArgs): EditorContextUpdate => ({
   audio: {
     ...context.audio,
     isRecording: false,
@@ -246,13 +225,7 @@ export const resetAudioAfterRecorderStop = ({
   },
 });
 
-export const initRecordingSession = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const initRecordingSession = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const startedAt =
     event.type === "AUDIO_RECORDING_STARTED" && Number.isFinite(event.startedAtMs)
       ? event.startedAtMs
@@ -352,11 +325,7 @@ export const initRecordingSession = ({
   };
 };
 
-export const captureInitialFrame = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => {
+export const captureInitialFrame = ({ context }: EditorActionArgs): EditorContextUpdate => {
   const session = context.session;
   if (!session) return {};
 
@@ -406,13 +375,7 @@ export const captureInitialFrame = ({
   };
 };
 
-export const captureFrame = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const captureFrame = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const editor = getCaptureEditor(context);
   if (!context.session) return {};
 
@@ -531,10 +494,7 @@ export const captureFrame = ({
 export const capturePreviewRefreshFrame = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "PREVIEW_EVENT" || event.event.type !== "preview_refresh") {
     return {};
   }
@@ -580,29 +540,17 @@ export const capturePreviewRefreshFrame = ({
 export const appendToSession = (
   context: EditorMachineContext,
   append: (session: RecordingSession) => boolean,
-): Partial<EditorMachineContext> =>
+): EditorContextUpdate =>
   !context.session || !append(context.session)
     ? {}
     : { session: context.session, sessionRevision: context.sessionRevision + 1 };
 
-export const captureSlideEvent = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const captureSlideEvent = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "SLIDE_EVENT") return {};
   return appendToSession(context, (session) => appendSlideRecordingEvent(session, event.event));
 };
 
-export const capturePreviewEvent = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const capturePreviewEvent = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "PREVIEW_EVENT") return {};
   return appendToSession(context, (session) => appendPreviewRecordingEvent(session, event.event));
 };
@@ -610,10 +558,7 @@ export const capturePreviewEvent = ({
 export const capturePreviewInitialDocument = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "PREVIEW_INITIAL_DOCUMENT") return {};
   return appendToSession(context, (session) =>
     appendPreviewInitialDocument(session, event.document),
@@ -623,10 +568,7 @@ export const capturePreviewInitialDocument = ({
 export const capturePreviewPatchBatch = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "PREVIEW_PATCH_BATCH") return {};
   return appendToSession(context, (session) => appendPreviewPatchBatch(session, event.batch));
 };
@@ -634,10 +576,7 @@ export const capturePreviewPatchBatch = ({
 export const captureWorkspaceEvent = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "WORKSPACE_EVENT") return {};
   const snapshot = context.getWorkspaceSnapshot?.();
   if (!snapshot) return {};
@@ -649,23 +588,13 @@ export const captureWorkspaceEvent = ({
   );
 };
 
-export const captureRuntimeEvent = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => {
+export const captureRuntimeEvent = ({ context }: EditorActionArgs): EditorContextUpdate => {
   const snapshot = context.getRuntimeSnapshot?.();
   if (!snapshot) return {};
   return appendToSession(context, (session) => appendRuntimeRecordingEvent(session, snapshot));
 };
 
-export const captureChatEvent = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const captureChatEvent = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "CHAT_EVENT") return {};
   return appendToSession(context, (session) => appendChatDelta(session, event.event));
 };
@@ -673,10 +602,7 @@ export const captureChatEvent = ({
 export const captureWhiteboardEvent = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "WHITEBOARD_EVENT") return {};
   return appendToSession(context, (session) =>
     appendWhiteboardRecordingEvent(session, event.event),
@@ -684,11 +610,7 @@ export const captureWhiteboardEvent = ({
 };
 
 /** Stops the take's clock. Its recorders are paused by the machine alongside. */
-export const pauseRecordingSession = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => {
+export const pauseRecordingSession = ({ context }: EditorActionArgs): EditorContextUpdate => {
   const session = context.session;
   if (!session || isRecordingClockPaused(session.clock)) return {};
   session.clock = pauseRecordingClock(session.clock, performance.now(), Date.now());
@@ -700,11 +622,7 @@ export const pauseRecordingSession = ({
  * so the resumed stretch starts with a sample of where it is now. The moment it resumes
  * is where a later retake can rewind to.
  */
-export const resumeRecordingSession = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => {
+export const resumeRecordingSession = ({ context }: EditorActionArgs): EditorContextUpdate => {
   const session = context.session;
   if (!session || !isRecordingClockPaused(session.clock)) return {};
   const perf = performance.now();
@@ -725,13 +643,7 @@ export const resumeRecordingSession = ({
  * Marks a chapter at the take's current moment. A chapter is where the author is happy
  * with the take so far, so it is also a safe point a retake can rewind to.
  */
-export const addChapterMarker = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const addChapterMarker = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const session = context.session;
   if (!session || event.type !== "ADD_CHAPTER_MARKER") return {};
   const recordingTime = getRecordingTimestamp(session);
@@ -757,12 +669,7 @@ export const addChapterMarker = ({
   return { session, sessionRevision: context.sessionRevision + 1 };
 };
 
-export const finalizeRecording = ({
-  context,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const finalizeRecording = ({ context }: EditorActionArgs): EditorContextUpdate => {
   if (!context.session) return { recording: null };
 
   // Recorded time, so a take stopped while paused ends where it paused.
@@ -831,22 +738,17 @@ export const finalizeRecording = ({
   };
 };
 
-export const notifyRecordingStart = ({ context }: { context: EditorMachineContext }): void => {
+export const notifyRecordingStart = ({ context }: EditorActionArgs): void => {
   context.onRecordingStart?.();
 };
 
-export const notifyRecordingStop = ({ context }: { context: EditorMachineContext }): void => {
+export const notifyRecordingStop = ({ context }: EditorActionArgs): void => {
   if (context.recording) {
     context.onRecordingStop?.(context.recording);
   }
 };
 
-export const storeAudioBlob = ({
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const storeAudioBlob = ({ event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "AUDIO_RECORDING_STOPPED") return {};
   return {
     audio: {
@@ -871,13 +773,7 @@ export const storeAudioBlob = ({
  * Splice it into the finalized recording instead. An already-attached blob wins:
  * the normal path has run and this is a duplicate.
  */
-export const attachLateAudioBlob = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const attachLateAudioBlob = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "AUDIO_RECORDING_STOPPED") return {};
 
   const audio = {
@@ -904,13 +800,7 @@ export const attachLateAudioBlob = ({
   };
 };
 
-export const storeAudioStarted = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const storeAudioStarted = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "AUDIO_RECORDING_STARTED") return {};
   return {
     audio: {
@@ -922,13 +812,7 @@ export const storeAudioStarted = ({
   };
 };
 
-export const storeCameraBlob = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const storeCameraBlob = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "CAMERA_STOPPED") return {};
   return {
     camera: {
@@ -942,13 +826,7 @@ export const storeCameraBlob = ({
   };
 };
 
-export const storeCameraStarted = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const storeCameraStarted = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "CAMERA_STARTED") return {};
   // The camera MediaRecorder only starts after getUserMedia resolves, which lags the
   // recording-session origin (session.startedAtPerf) by the camera warmup. Capture that
@@ -969,27 +847,17 @@ export const storeCameraStarted = ({
   };
 };
 
-export const clearCameraRecording = (): Partial<EditorMachineContext> => ({
+export const clearCameraRecording = (): EditorContextUpdate => ({
   camera: createIdleCameraState(),
 });
 
-export const handleCameraError = ({
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const handleCameraError = ({ event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "CAMERA_ERROR") return {};
   console.warn("Camera recording disabled:", event.error);
   return clearCameraRecording();
 };
 
-export const handleAudioRecordingError = ({
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const handleAudioRecordingError = ({ event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "AUDIO_RECORDING_ERROR") return {};
   return { error: event.error };
 };
@@ -1004,13 +872,7 @@ export const handleAudioRecordingError = ({
 // docs/video-plan.md. Nothing here writes a `screen*` field onto the finalized recording.
 // ============================================================================
 
-export const setScreenStream = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const setScreenStream = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "START_RECORDING") return {};
   const screenStream = event.screenStream ?? null;
   const screenRecorderGeneration = screenStream
@@ -1028,13 +890,7 @@ export const setScreenStream = ({
   };
 };
 
-export const storeScreenStarted = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const storeScreenStarted = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "SCREEN_STARTED") return {};
   // The screen MediaRecorder starts a beat after the session origin (picker + getDisplayMedia
   // ran before START_RECORDING, but MediaRecorder.start resolves at spawn). Capture the offset
@@ -1052,13 +908,7 @@ export const storeScreenStarted = ({
   };
 };
 
-export const notifyScreenRecordingReady = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): void => {
+export const notifyScreenRecordingReady = ({ context, event }: EditorActionArgs): void => {
   if (event.type !== "SCREEN_STOPPED") return;
   context.onScreenRecordingReady?.({
     blob: event.blob,
@@ -1069,17 +919,12 @@ export const notifyScreenRecordingReady = ({
 };
 
 /** Reset screen slices after the blob has exited. The actor releases tracks before emitting it. */
-export const clearScreenRecording = (): Partial<EditorMachineContext> => ({
+export const clearScreenRecording = (): EditorContextUpdate => ({
   screen: createIdleScreenState(),
   screenStream: null,
 });
 
-export const handleScreenError = ({
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const handleScreenError = ({ event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "SCREEN_ERROR") return {};
   console.warn("Screen recording disabled:", event.error);
   return clearScreenRecording();
@@ -1091,11 +936,7 @@ export const handleScreenError = ({
  * spawns) —
  * once the actor owns the stream, its own teardown handles track cleanup instead.
  */
-export const releaseScreenStream = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => {
+export const releaseScreenStream = ({ context }: EditorActionArgs): EditorContextUpdate => {
   if (!context.screenStream) return {};
   context.screenStream.getTracks().forEach((track) => track.stop());
   return clearScreenRecording();
@@ -1108,13 +949,7 @@ export const releaseScreenStream = ({
  * so nothing else will ever stop those tracks. Plain side effect: it must not touch the screen
  * context of a capture that is still running or finishing.
  */
-export const releaseUnacceptedScreenStream = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): void => {
+export const releaseUnacceptedScreenStream = ({ context, event }: EditorActionArgs): void => {
   if (event.type !== "START_RECORDING" || !event.screenStream) return;
   // A host re-sending the stream the machine already owns must not kill the live capture.
   if (event.screenStream === context.screenStream) return;

@@ -653,6 +653,23 @@ export type EditorMachineEvent =
   | ScreenRecordingEmit;
 
 // ============================================================================
+// Action Bodies
+// ============================================================================
+
+/**
+ * What an action body in captureActions.ts or replayActions.ts reads. Those bodies are
+ * wrapped as named actions in `setup()`, so `event` is the whole union and each body
+ * narrows it itself (`if (event.type !== "X") return {}`).
+ */
+export interface EditorActionArgs {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}
+
+/** What an `assign` body returns: only the context fields it changes. */
+export type EditorContextUpdate = Partial<EditorMachineContext>;
+
+// ============================================================================
 // Machine Input (Configuration)
 // ============================================================================
 

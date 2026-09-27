@@ -1,4 +1,10 @@
-import type { EditorMachineContext, EditorMachineEvent, LearnerWorkspaceSave } from "./types";
+import type {
+  EditorActionArgs,
+  EditorContextUpdate,
+  EditorMachineContext,
+  EditorMachineEvent,
+  LearnerWorkspaceSave,
+} from "./types";
 import type { EditorFrame, Recording } from "../types";
 import type { FrameDelta } from "../utils/deltaTypes";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
@@ -78,7 +84,7 @@ const REPLAY_CURSORS_RESET = {
   lastAppliedRuntimeEventIndex: -1,
   lastAppliedWhiteboardEventIndex: -1,
   lastAppliedChatEventIndex: -1,
-} as const satisfies Partial<EditorMachineContext>;
+} as const satisfies EditorContextUpdate;
 
 const editorModelBoundaryTimeCache = new WeakMap<readonly WorkspaceRecordingEvent[], number[]>();
 
@@ -128,9 +134,9 @@ function latestEditorModelBoundaryTime(
 
 /** `loaded` is the `loadRecording` actor's output, passed in by `loading`'s onDone. */
 export const setRecording = (
-  { context }: { context: EditorMachineContext },
+  { context }: Pick<EditorActionArgs, "context">,
   loaded: { recording: Recording; duration: number },
-): Partial<EditorMachineContext> => {
+): EditorContextUpdate => {
   const recording = normalizeRecordingData(loaded.recording);
   const duration = normalizeTimelineDuration(loaded.duration);
 
@@ -239,13 +245,7 @@ function appendRecordsInPlace<T>(
  * far. The machine owns the arrays created by `setRecording`, so mutating those
  * append-only arrays is safe; a fresh top-level Recording still notifies selectors.
  */
-export const appendRecordingDelta = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const appendRecordingDelta = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "APPEND_RECORDING_DELTA" || !context.recording) return {};
   const { delta } = event;
   if (delta.recordingId !== context.recording.id || delta.cursor <= context.recordingStreamCursor) {
@@ -290,13 +290,7 @@ export const appendRecordingDelta = ({
 // stream. Because the stream is append-only, the new recording is a superset of the current
 // one, so the already-applied playback indices, current time, and timeline stay valid — we
 // only swap in the larger frames/events arrays and let the replay cursors catch up.
-export const extendRecording = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const extendRecording = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   // The transition is guarded by `isForLoadedRecording` too; this keeps the action itself
   // from ever swapping another lesson in, like `appendRecordingDelta`'s id check.
   if (
@@ -328,13 +322,7 @@ export const extendRecording = ({
   };
 };
 
-export const applyFrameAtTime = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
   const currentTime = resolveBoundedReplayTime(context, event);
 
@@ -419,7 +407,7 @@ export const applyFrameAtTime = ({
     currentFrame,
   );
 
-  const updates: Partial<EditorMachineContext> = {
+  const updates: EditorContextUpdate = {
     lastAppliedFrameIndex: frameIndex,
     currentFrame: frame,
   };
@@ -483,13 +471,7 @@ export const applyFrameAtTime = ({
   return updates;
 };
 
-export const seekToTime = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const seekToTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "SEEK") return {};
   const clampedTime = normalizeTimelineTime(
     event.time,
@@ -505,13 +487,7 @@ export const seekToTime = ({
   };
 };
 
-export const setPlaybackSpeed = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const setPlaybackSpeed = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "SET_SPEED") return {};
   return {
     timeline: {
@@ -521,13 +497,7 @@ export const setPlaybackSpeed = ({
   };
 };
 
-export const setVolume = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const setVolume = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "SET_VOLUME") return {};
   return {
     timeline: {
@@ -537,11 +507,7 @@ export const setVolume = ({
   };
 };
 
-export const clearCursorDecorations = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => {
+export const clearCursorDecorations = ({ context }: EditorActionArgs): EditorContextUpdate => {
   const { editorRefs } = context;
   if (editorRefs.cursorDecorationsCollection) {
     editorRefs.cursorDecorationsCollection.clear();
@@ -554,11 +520,7 @@ export const clearCursorDecorations = ({
   };
 };
 
-export const adoptPlaybackWorkspaceAtPause = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): void => {
+export const adoptPlaybackWorkspaceAtPause = ({ context }: EditorActionArgs): void => {
   const currentSnapshot = context.getWorkspaceSnapshot?.();
   const activeFilePath = currentSnapshot?.activeFilePath;
   const currentFile = activeFilePath ? currentSnapshot?.project.files[activeFilePath] : undefined;
@@ -600,9 +562,7 @@ export const adoptPlaybackWorkspaceAtPause = ({
  */
 export const captureLearnerWorkspaceBaseline = ({
   context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => ({
+}: EditorActionArgs): EditorContextUpdate => ({
   learnerWorkspaceBaseline: context.getWorkspaceSnapshot?.() ?? null,
 });
 
@@ -626,22 +586,12 @@ export const getLearnerWorkspaceSave = (
 };
 
 /** Second step of a restore: the paused seek has landed, so lay the saved edits over it. */
-export const applyLearnerWorkspace = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): void => {
+export const applyLearnerWorkspace = ({ context, event }: EditorActionArgs): void => {
   if (event.type !== "APPLY_LEARNER_WORKSPACE") return;
   context.applyWorkspaceSnapshot?.(event.snapshot);
 };
 
-export const resetPlayback = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => ({
+export const resetPlayback = ({ context }: EditorActionArgs): EditorContextUpdate => ({
   hasManualWorkspaceOverride: false,
   learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: false,
@@ -654,13 +604,13 @@ export const resetPlayback = ({
   lastAppliedPreviewState: undefined,
 });
 
-export const invalidateAppliedPlaybackState = (): Partial<EditorMachineContext> => ({
+export const invalidateAppliedPlaybackState = (): EditorContextUpdate => ({
   currentFrame: null,
   ...REPLAY_CURSORS_RESET,
   lastAppliedPreviewState: undefined,
 });
 
-export const detachPlaybackWorkspace = (): Partial<EditorMachineContext> => ({
+export const detachPlaybackWorkspace = (): EditorContextUpdate => ({
   hasManualWorkspaceOverride: true,
   pendingPlaybackEditorSync: false,
   currentFrame: null,
@@ -668,17 +618,13 @@ export const detachPlaybackWorkspace = (): Partial<EditorMachineContext> => ({
   lastAppliedPreviewState: undefined,
 });
 
-export const reattachPlaybackWorkspace = ({
-  context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => ({
+export const reattachPlaybackWorkspace = ({ context }: EditorActionArgs): EditorContextUpdate => ({
   hasManualWorkspaceOverride: false,
   learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: context.hasManualWorkspaceOverride,
 });
 
-export const clearPendingPlaybackEditorSync = (): Partial<EditorMachineContext> => ({
+export const clearPendingPlaybackEditorSync = (): EditorContextUpdate => ({
   pendingPlaybackEditorSync: false,
 });
 
@@ -698,9 +644,7 @@ export const clearPendingPlaybackEditorSync = (): Partial<EditorMachineContext> 
  */
 export const clearPendingEditorSyncForPausedSeek = ({
   context,
-}: {
-  context: EditorMachineContext;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   const recordedActiveFilePath =
     context.recording?.workspaceEvents?.[context.lastAppliedWorkspaceEventIndex]?.snapshot
       .activeFilePath;
@@ -716,7 +660,7 @@ export const clearPendingEditorSyncForPausedSeek = ({
 // Editor/model swaps only invalidate Monaco-rendered frame state. Keep the
 // dedicated preview/slide replay cursors stable so file switches do not
 // replay their full history.
-export const invalidateRenderedPlaybackState = (): Partial<EditorMachineContext> => ({
+export const invalidateRenderedPlaybackState = (): EditorContextUpdate => ({
   currentFrame: null,
   lastAppliedFrameIndex: -1,
 });
@@ -735,20 +679,14 @@ export const clearRecording = {
   // No recording is left for a width delta to be relative to.
   lastAppliedWorkspaceEventIndex: -1,
   lastAppliedPreviewState: undefined,
-  timeline: ({ context }: { context: EditorMachineContext }) => ({
+  timeline: ({ context }: EditorActionArgs) => ({
     ...context.timeline,
     currentTime: 0,
     duration: 0,
   }),
 };
 
-export const addCaptionTrack = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const addCaptionTrack = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "ADD_CAPTION_TRACK" || !context.recording) return {};
   const existing = context.recording.captions ?? [];
   const filtered = existing.filter((t) => t.id !== event.track.id);
@@ -760,13 +698,7 @@ export const addCaptionTrack = ({
   };
 };
 
-export const notifySeek = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): void => {
+export const notifySeek = ({ context, event }: EditorActionArgs): void => {
   // Runs after seekToTime, which stored the clamped target (or kept the old time for a
   // non-finite one), so the host hears the position playback actually moved to.
   if (event.type === "SEEK") {
@@ -774,13 +706,7 @@ export const notifySeek = ({
   }
 };
 
-export const setEditorRef = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+export const setEditorRef = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "SET_EDITOR_REF") {
     return {};
   }
@@ -801,10 +727,7 @@ export const setEditorRef = ({
 export const applyPreviewEventsAtTime = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   const { recording, applyPreviewState, lastAppliedPreviewEventIndex } = context;
 
   if (!recording?.previewEvents?.length || !applyPreviewState) {
@@ -836,13 +759,7 @@ export const applyPreviewEventsAtTime = ({
   return {};
 };
 
-export const applyPreviewPatchBatchesAtTime = ({
-  context,
-  event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): void => {
+export const applyPreviewPatchBatchesAtTime = ({ context, event }: EditorActionArgs): void => {
   const { recording, applyPreviewPatchReplay } = context;
 
   // An initial document alone is a complete replayable stream (Meta +
@@ -865,10 +782,7 @@ export const applyPreviewPatchBatchesAtTime = ({
 export const applyWorkspaceEventsAtTime = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   const {
     hasManualWorkspaceOverride,
     recording,
@@ -931,10 +845,7 @@ export const applyWorkspaceEventsAtTime = ({
 export const applyRuntimeEventsAtTime = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   const { recording, applyRuntimeSnapshot, lastAppliedRuntimeEventIndex } = context;
 
   if (!recording?.runtimeEvents?.length || !applyRuntimeSnapshot) {
@@ -962,10 +873,7 @@ export const applyRuntimeEventsAtTime = ({
 export const applyChatEventsAtTime = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   const { recording, applyChatSnapshot, lastAppliedChatEventIndex } = context;
 
   if (!recording?.chatEvents?.length || !applyChatSnapshot) {
@@ -1006,10 +914,7 @@ export const applyChatEventsAtTime = ({
 export const applyWhiteboardEventsAtTime = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   const { recording, applyWhiteboardState, lastAppliedWhiteboardEventIndex } = context;
 
   if (!recording?.whiteboardEvents?.length || !applyWhiteboardState) {
@@ -1036,10 +941,7 @@ export const applyWhiteboardEventsAtTime = ({
 export const applySlideEventsAtTime = ({
   context,
   event,
-}: {
-  context: EditorMachineContext;
-  event: EditorMachineEvent;
-}): Partial<EditorMachineContext> => {
+}: EditorActionArgs): EditorContextUpdate => {
   const { recording, applySlideState, lastAppliedSlideEventIndex } = context;
 
   if (!recording?.slideEvents?.length || !applySlideState) {
