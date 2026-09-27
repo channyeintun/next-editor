@@ -28,7 +28,7 @@ import {
   type WorkspaceExecutionKind,
 } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
-import { getCollaborationTexts } from "../collaboration/projectDocument";
+import { collaborationTextForPath } from "../collaboration/collaborationTextForPath";
 import { canPublishCollaborationUpdate } from "../collaboration/protocol";
 import { resolveMonacoAwarenessSelections } from "../collaboration/monacoAwareness";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
@@ -350,13 +350,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       return false;
     }
 
-    let text: Y.Text | undefined;
-    try {
-      const fileNodeId = collaboration.getNodeIdForPath(activeFile.path);
-      text = fileNodeId ? getCollaborationTexts(provider.doc).get(fileNodeId) : undefined;
-    } catch {
-      text = undefined;
-    }
+    const text = collaborationTextForPath(collaboration, provider.doc, activeFile.path);
     if (!text) {
       disposeYMonacoBinding();
       return false;
@@ -847,17 +841,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     const yMonacoRendersSelections = Boolean(
       yMonacoBinding?.editor === editor && yMonacoBinding.model === model,
     );
-    let awarenessText = yMonacoRendersSelections ? yMonacoBinding?.text : undefined;
-    if (!awarenessText) {
-      try {
-        const fileNodeId = collaboration.getNodeIdForPath(activeFile.path);
-        awarenessText = fileNodeId
-          ? getCollaborationTexts(collaboration.doc).get(fileNodeId)
-          : undefined;
-      } catch {
-        awarenessText = undefined;
-      }
-    }
+    const awarenessText =
+      (yMonacoRendersSelections ? yMonacoBinding?.text : undefined) ??
+      collaborationTextForPath(collaboration, collaboration.doc, activeFile.path);
     if (awarenessText) {
       const selections = resolveMonacoAwarenessSelections(
         collaboration.provider.awareness,
@@ -1112,20 +1098,11 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
 
       const yMonacoBinding = yMonacoBindingRef.current;
       const standardParticipantKeys = new Set<string>();
-      let awarenessText =
-        yMonacoBinding?.editor === editor && yMonacoBinding.model === model
+      const awarenessText =
+        (yMonacoBinding?.editor === editor && yMonacoBinding.model === model
           ? yMonacoBinding.text
-          : undefined;
-      if (!awarenessText) {
-        try {
-          const fileNodeId = collaboration.getNodeIdForPath(activeFile.path);
-          awarenessText = fileNodeId
-            ? getCollaborationTexts(collaborationDoc).get(fileNodeId)
-            : undefined;
-        } catch {
-          awarenessText = undefined;
-        }
-      }
+          : undefined) ??
+        collaborationTextForPath(collaboration, collaborationDoc, activeFile.path);
       if (awarenessText) {
         for (const selection of resolveMonacoAwarenessSelections(
           provider.awareness,
