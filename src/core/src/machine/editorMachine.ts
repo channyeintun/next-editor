@@ -218,6 +218,10 @@ export const editorMachine = setup({
     canPlay: ({ context }) =>
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
     hasExternalAudioBlob: ({ event }) => getExternalAudioBlob(event) !== null,
+    isMicrophoneEnabled: ({ context }) => context.enableAudioRecording,
+    // Either kind of narration is still being recorded; stoppingRecording finalizes only
+    // once it is not.
+    isAudioRecording: ({ context }) => context.audio.isRecording,
     isMicrophoneAudioRecording: ({ context }) =>
       context.enableAudioRecording && getRunningRecorders(context).microphone,
     isExternalAudioRecording: ({ context }) => getRunningRecorders(context).externalAudio,
@@ -262,6 +266,7 @@ export const editorMachine = setup({
       return false;
     },
     isPlaybackWorkspaceDetached: ({ context }) => context.hasManualWorkspaceOverride,
+    isAtPlaybackEnd: ({ context }) => isAtPlaybackEnd(context.timeline),
   },
   actions: {
     // Recording (capture-side) actions — bodies live in captureActions.ts, wrapped
@@ -741,7 +746,7 @@ export const editorMachine = setup({
           },
           {
             target: "startingRecording",
-            guard: ({ context }) => context.enableAudioRecording,
+            guard: "isMicrophoneEnabled",
             actions: ["setCameraRecordingEnabled", "setMicrophoneDevice", "setScreenStream"],
           },
           {
@@ -953,7 +958,7 @@ export const editorMachine = setup({
         CAMERA_STOPPED: [
           {
             target: "loading",
-            guard: ({ context }) => !context.audio.isRecording,
+            guard: not("isAudioRecording"),
             actions: [
               "storeCameraBlob",
               stopChild("cameraRecorder"),
@@ -968,7 +973,7 @@ export const editorMachine = setup({
         CAMERA_ERROR: [
           {
             target: "loading",
-            guard: ({ context }) => !context.audio.isRecording,
+            guard: not("isAudioRecording"),
             actions: [
               "handleCameraError",
               stopChild("cameraRecorder"),
@@ -1222,7 +1227,7 @@ export const editorMachine = setup({
             PLAY: [
               {
                 target: "playing",
-                guard: ({ context }) => isAtPlaybackEnd(context.timeline),
+                guard: "isAtPlaybackEnd",
                 // Only rewind here. Playing's entry invalidates and re-applies every
                 // track at currentTime (now 0), seeks the timeline and audio there and
                 // notifies, so doing any of that here too ran every track twice.
