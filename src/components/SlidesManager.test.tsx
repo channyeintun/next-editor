@@ -125,6 +125,32 @@ describe("SlidesManager", () => {
     expect(screen.getByDisplayValue("# a")).toBeInTheDocument();
   });
 
+  it("shows each slide type's icon, and the Markdown one for any other type", () => {
+    const typed = (id: string, contentType: string) =>
+      ({ id, content: id, contentType, order: 0 }) as unknown as Slide;
+    renderManager([
+      typed("google", "google-svg"),
+      typed("html", "html"),
+      typed("markdown", "markdown"),
+      // A recording's deck is not checked on the way in.
+      { id: "untyped", content: "untyped", order: 0 } as unknown as Slide,
+      typed("inherited", "constructor"),
+    ]);
+
+    const icons = [
+      ...document.querySelectorAll(
+        '[class="absolute inset-0 flex items-center justify-center"] > svg',
+      ),
+    ].map((icon) => icon.getAttribute("class"));
+    expect(icons).toEqual([
+      "lucide lucide-presentation text-amber-300/70 size-4",
+      "lucide lucide-code text-sky-300/60 size-4",
+      "lucide lucide-file-text text-cyan-300/60 size-4",
+      "lucide lucide-file-text text-cyan-300/60 size-4",
+      "lucide lucide-file-text text-cyan-300/60 size-4",
+    ]);
+  });
+
   it("does not open an imported Google slide for editing", () => {
     renderManager([
       {

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactElement } from "react";
 import {
   Plus,
   Trash2,
@@ -52,6 +52,24 @@ const DEFAULT_HTML_CONTENT = `<h1>Welcome</h1>
 const DEFAULT_MARKDOWN_CONTENT = `# Welcome
 
 Your slide content here`;
+
+/** Each slide type's thumbnail icon. */
+const SLIDE_TYPE_ICONS: Record<SlideContentType, ReactElement> = {
+  "google-svg": <Presentation className="text-amber-300/70 size-4" />,
+  html: <Code className="text-sky-300/60 size-4" />,
+  markdown: <FileText className="text-cyan-300/60 size-4" />,
+};
+
+/**
+ * A slide's thumbnail icon. A recording's deck reaches the store unchecked, so a slide
+ * with no type or an unknown one gets the Markdown icon, and an inherited name such as
+ * "constructor" never resolves.
+ */
+function slideTypeIcon(contentType: SlideContentType): ReactElement {
+  return Object.hasOwn(SLIDE_TYPE_ICONS, contentType)
+    ? SLIDE_TYPE_ICONS[contentType]
+    : SLIDE_TYPE_ICONS.markdown;
+}
 
 function BackgroundPicker({
   value,
@@ -586,13 +604,7 @@ export default function SlidesManager({
                         >
                           {backgroundImage && <div className="absolute inset-0 bg-[#151821]/50" />}
                           <div className="absolute inset-0 flex items-center justify-center">
-                            {slide.contentType === "google-svg" ? (
-                              <Presentation className="text-amber-300/70 size-4" />
-                            ) : slide.contentType === "html" ? (
-                              <Code className="text-sky-300/60 size-4" />
-                            ) : (
-                              <FileText className="text-cyan-300/60 size-4" />
-                            )}
+                            {slideTypeIcon(slide.contentType)}
                           </div>
                           <div className="absolute right-0 top-0 border-b border-l border-slate-700 bg-slate-800 px-1 py-0.5 text-[6px] font-bold uppercase leading-none text-slate-400">
                             {slide.contentType === "google-svg" ? "slides" : slide.contentType}
