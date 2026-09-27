@@ -14,7 +14,6 @@ import {
 } from "../hooks/useWorkspace";
 import { MAX_WORKSPACE_ASSET_BYTES, readUploadedWorkspaceFile } from "../utils/workspaceFileUpload";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
-import { useDismissOnOutsideInteraction } from "../hooks/useDismissOnOutsideInteraction";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,
@@ -25,18 +24,15 @@ import {
   MIN_FILE_SIDEBAR_WIDTH,
 } from "../utils/sidebarLayout";
 import { dispatchRecordedCursorVisibility } from "../utils/recordedCursorVisibility";
-import { copyTextToClipboard } from "../utils/clipboard";
 import { STUDIO_TARGET_ATTRIBUTE, studioTargetIdForFile } from "../studio/targets";
+import FileContextMenu from "./fileSidebar/FileContextMenu";
 import {
   buildWorkspaceTree,
-  CONTEXT_MENU_FALLBACK_HEIGHT,
-  CONTEXT_MENU_FALLBACK_WIDTH,
   deletesEveryFile,
   getDefaultFileContent,
   getEditableSelectionEnd,
   getFileIcon,
   getSidebarTreePaddingLeft,
-  getViewportClampedContextMenuPlacement,
   removeFolderFromCollapsedState,
   type SidebarContextMenuState,
   type SidebarEditState,
@@ -53,7 +49,6 @@ function FileSidebarPanel() {
   const editInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const uploadTargetPathRef = useRef("");
-  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const sidebarScrollAnimationFrameRef = useRef<number | null>(null);
   const pendingSidebarScrollTopRef = useRef(0);
@@ -64,10 +59,6 @@ function FileSidebarPanel() {
   });
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isFileDragOver, setIsFileDragOver] = useState(false);
-  const [contextMenuSize, setContextMenuSize] = useState({
-    width: CONTEXT_MENU_FALLBACK_WIDTH,
-    height: CONTEXT_MENU_FALLBACK_HEIGHT,
-  });
   const {
     createFile,
     createFolder,
@@ -100,23 +91,6 @@ function FileSidebarPanel() {
     () => buildWorkspaceTree(files, folders, activeFilePath),
     [activeFilePath, files, folders, treeVersion],
   );
-  const menuPlacement = contextMenu
-    ? getViewportClampedContextMenuPlacement({
-        anchorX: contextMenu.x,
-        anchorY: contextMenu.y,
-        menuWidth: contextMenuSize.width,
-        menuHeight: contextMenuSize.height,
-        viewportWidth: window.innerWidth,
-        viewportHeight: window.innerHeight,
-      })
-    : undefined;
-  const menuStyle = menuPlacement
-    ? {
-        left: menuPlacement.left,
-        top: menuPlacement.top,
-        maxHeight: menuPlacement.maxHeight,
-      }
-    : undefined;
   const contextMenuFile =
     contextMenu && contextMenu.kind === "file"
       ? (files.find((file) => file.path === contextMenu.path) ?? null)
@@ -125,8 +99,6 @@ function FileSidebarPanel() {
   const canOpenContextFileInPreview =
     lessonType !== "react" && contextMenuFile?.language === "html";
   const isContextFileInPreview = contextMenu?.path === previewFilePath;
-  const contextMenuCreateParentPath =
-    contextMenu?.kind === "folder" ? contextMenu.path : (contextMenu?.parentPath ?? "");
 
   useEffect(() => {
     if (!editState || !editInputRef.current) {
@@ -151,27 +123,6 @@ function FileSidebarPanel() {
       container.scrollTop = sidebarScrollTop;
     }
   }, [sidebarScrollTop]);
-
-  useLayoutEffect(() => {
-    if (!contextMenu || !contextMenuRef.current) {
-      return;
-    }
-
-    const menu = contextMenuRef.current;
-    const bounds = menu.getBoundingClientRect();
-    const nextSize = {
-      width: bounds.width || CONTEXT_MENU_FALLBACK_WIDTH,
-      height: menu.scrollHeight || bounds.height || CONTEXT_MENU_FALLBACK_HEIGHT,
-    };
-
-    setContextMenuSize((currentSize) => {
-      if (currentSize.width === nextSize.width && currentSize.height === nextSize.height) {
-        return currentSize;
-      }
-
-      return nextSize;
-    });
-  }, [contextMenu, canOpenContextFileInPreview]);
 
   useEffect(() => {
     return () => {
@@ -235,14 +186,6 @@ function FileSidebarPanel() {
       window.removeEventListener("pointercancel", stopResizing);
     };
   }, [isResizingSidebar, setSidebarWidth]);
-
-  useDismissOnOutsideInteraction({
-    isOpen: contextMenu !== null,
-    containerRef: contextMenuRef,
-    onDismiss: () => setContextMenu(null),
-    dismissOnEscape: true,
-    listenOn: "window",
-  });
 
   const commitCollapsedFolders = (next: Set<string>) => {
     const nextPaths = Array.from(next).sort((left, right) => left.localeCompare(right));
@@ -767,86 +710,18 @@ function FileSidebarPanel() {
           {tree.map((node) => renderNode(node, 0))}
         </div>
 
-        {contextMenu && (
-          <div
-            ref={contextMenuRef}
-            className="fixed z-60 min-w-56 overflow-y-auto rounded-xl border border-slate-700 bg-[#1b2029] py-2 shadow-[0_20px_40px_rgba(2,6,23,0.55)]"
-            style={menuStyle}
-          >
-            <button
-              type="button"
-              onClick={() => openCreateInput("file", contextMenuCreateParentPath)}
-              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
-            >
-              New File
-            </button>
-            <button
-              type="button"
-              onClick={() => openCreateInput("folder", contextMenuCreateParentPath)}
-              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
-            >
-              New Folder
-            </button>
-            <button
-              type="button"
-              onClick={() => openUploadDialog(contextMenuCreateParentPath)}
-              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
-            >
-              Upload Files Here
-            </button>
-            {canOpenContextFileInPreview ? (
-              <button
-                type="button"
-                onClick={() => handleOpenFileInPreview(contextMenu.path)}
-                className={`flex w-full items-center px-4 py-2 text-sm transition-colors ${
-                  isContextFileInPreview
-                    ? "text-sky-200 hover:bg-slate-800"
-                    : "text-slate-200 hover:bg-slate-800"
-                }`}
-              >
-                Open in Preview
-              </button>
-            ) : null}
-            <div className="my-2 border-t border-slate-700" />
-            <button
-              type="button"
-              onClick={() => {
-                copyTextToClipboard(`/${contextMenu.path}`);
-                setContextMenu(null);
-              }}
-              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
-            >
-              Copy Path
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                copyTextToClipboard(contextMenu.path);
-                setContextMenu(null);
-              }}
-              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
-            >
-              Copy Relative Path
-            </button>
-            <div className="my-2 border-t border-slate-700" />
-            <button
-              type="button"
-              onClick={() => startRenameEntry(contextMenu.kind, contextMenu.path)}
-              className="flex w-full items-center px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-800"
-            >
-              Rename
-            </button>
-            <button
-              type="button"
-              disabled={isDeleteRefused}
-              title={isDeleteRefused ? "A project needs at least one file" : undefined}
-              onClick={() => handleDeleteEntry(contextMenu.kind, contextMenu.path)}
-              className="flex w-full items-center px-4 py-2 text-sm text-rose-200 transition-colors hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:text-slate-500 disabled:hover:bg-transparent"
-            >
-              {contextMenu.kind === "folder" ? "Delete Folder" : "Delete File"}
-            </button>
-          </div>
-        )}
+        <FileContextMenu
+          menu={contextMenu}
+          canOpenInPreview={canOpenContextFileInPreview}
+          isInPreview={isContextFileInPreview}
+          isDeleteRefused={isDeleteRefused}
+          onDismiss={() => setContextMenu(null)}
+          onCreate={openCreateInput}
+          onUpload={openUploadDialog}
+          onOpenInPreview={handleOpenFileInPreview}
+          onRename={startRenameEntry}
+          onDelete={handleDeleteEntry}
+        />
       </div>
       {isResizingSidebar ? (
         <div aria-hidden="true" className="fixed inset-0 z-40 cursor-col-resize" />

@@ -1,0 +1,141 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import type { SidebarContextMenuState, SidebarEntryKind } from "../fileSidebarHelpers";
+import FileContextMenu from "./FileContextMenu";
+
+const clipboard = vi.hoisted(() => ({
+  copyTextToClipboard: vi.fn<(text: string) => void>(),
+}));
+vi.mock("../../utils/clipboard", () => clipboard);
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+const fileMenu: SidebarContextMenuState = {
+  x: 120,
+  y: 80,
+  kind: "file",
+  path: "src/index.html",
+  parentPath: "src",
+};
+
+function renderMenu(
+  menu: SidebarContextMenuState | null,
+  flags: { canOpenInPreview?: boolean; isInPreview?: boolean; isDeleteRefused?: boolean } = {},
+) {
+  const handlers = {
+    onDismiss: vi.fn<() => void>(),
+    onCreate: vi.fn<(kind: SidebarEntryKind, parentPath: string) => void>(),
+    onUpload: vi.fn<(parentPath: string) => void>(),
+    onOpenInPreview: vi.fn<(path: string) => void>(),
+    onRename: vi.fn<(kind: SidebarEntryKind, path: string) => void>(),
+    onDelete: vi.fn<(kind: SidebarEntryKind, path: string) => void>(),
+  };
+  const view = render(
+    <>
+      <button type="button">Outside</button>
+      <FileContextMenu
+        menu={menu}
+        canOpenInPreview={flags.canOpenInPreview ?? false}
+        isInPreview={flags.isInPreview ?? false}
+        isDeleteRefused={flags.isDeleteRefused ?? false}
+        {...handlers}
+      />
+    </>,
+  );
+  return { ...view, ...handlers };
+}
+
+const item = (name: string) => screen.getByRole("button", { name });
+
+describe("FileContextMenu", () => {
+  it("renders nothing while closed", () => {
+    renderMenu(null);
+
+    expect(screen.queryByRole("button", { name: "New File" })).not.toBeInTheDocument();
+  });
+
+  it("opens at the pointer, inside the viewport", () => {
+    renderMenu(fileMenu);
+
+    // jsdom lays nothing out, so the menu keeps its fallback size (224 × 320).
+    const menu = item("New File").parentElement!;
+    expect(menu.style.left).toBe("120px");
+    expect(menu.style.top).toBe("80px");
+    expect(menu.style.maxHeight).toBe(`${window.innerHeight - 16}px`);
+  });
+
+  it("creates and uploads next to a file, and inside a folder", () => {
+    const onFile = renderMenu(fileMenu);
+    fireEvent.click(item("New File"));
+    fireEvent.click(item("New Folder"));
+    fireEvent.click(item("Upload Files Here"));
+    expect(onFile.onCreate.mock.calls).toEqual([
+      ["file", "src"],
+      ["folder", "src"],
+    ]);
+    expect(onFile.onUpload).toHaveBeenCalledWith("src");
+    onFile.unmount();
+
+    const onFolder = renderMenu({ ...fileMenu, kind: "folder", path: "src/lib" });
+    fireEvent.click(item("New File"));
+    expect(onFolder.onCreate).toHaveBeenCalledWith("file", "src/lib");
+  });
+
+  it("copies the path and dismisses itself", () => {
+    const { onDismiss } = renderMenu(fileMenu);
+
+    fireEvent.click(item("Copy Path"));
+    fireEvent.click(item("Copy Relative Path"));
+
+    expect(clipboard.copyTextToClipboard.mock.calls).toEqual([
+      ["/src/index.html"],
+      ["src/index.html"],
+    ]);
+    expect(onDismiss).toHaveBeenCalledTimes(2);
+  });
+
+  it("renames and deletes the entry it was opened on", () => {
+    const { onRename, onDelete } = renderMenu({ ...fileMenu, kind: "folder", path: "src" });
+
+    fireEvent.click(item("Rename"));
+    fireEvent.click(item("Delete Folder"));
+
+    expect(onRename).toHaveBeenCalledWith("folder", "src");
+    expect(onDelete).toHaveBeenCalledWith("folder", "src");
+  });
+
+  it("refuses a delete that would leave no file", () => {
+    const { onDelete } = renderMenu(fileMenu, { isDeleteRefused: true });
+
+    const deleteFile = item("Delete File");
+    expect(deleteFile).toBeDisabled();
+    expect(deleteFile).toHaveAttribute("title", "A project needs at least one file");
+    fireEvent.click(deleteFile);
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it("offers Open in Preview only when it can, and marks the file already shown", () => {
+    const hidden = renderMenu(fileMenu);
+    expect(screen.queryByRole("button", { name: "Open in Preview" })).not.toBeInTheDocument();
+    hidden.unmount();
+
+    const { onOpenInPreview } = renderMenu(fileMenu, { canOpenInPreview: true, isInPreview: true });
+    const openInPreview = item("Open in Preview");
+    expect(openInPreview).toHaveClass("text-sky-200");
+    fireEvent.click(openInPreview);
+    expect(onOpenInPreview).toHaveBeenCalledWith("src/index.html");
+  });
+
+  it("dismisses on a pointer-down outside it or on Escape", () => {
+    const { onDismiss } = renderMenu(fileMenu);
+
+    fireEvent.pointerDown(item("Rename"));
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(item("Outside"));
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(onDismiss).toHaveBeenCalledTimes(2);
+  });
+});
