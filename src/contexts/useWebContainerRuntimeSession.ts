@@ -835,7 +835,6 @@ export function useWebContainerRuntimeSession({
     hasActiveRunner,
     instanceRef,
     isRuntimeGenerationActive,
-    isMountedRef,
     lastOutput,
     latestLifecycleEvent,
     latestPreviewMessage,

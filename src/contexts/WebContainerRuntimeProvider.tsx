@@ -185,7 +185,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     hasActiveRunner,
     instanceRef,
     isRuntimeGenerationActive,
-    isMountedRef,
     lastOutput,
     clearRunnerOutput,
     latestLifecycleEvent,
@@ -304,7 +303,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
     const instance = await bootInstance();
 
-    if (!instance || !isMountedRef.current || !isRuntimeGenerationActive(generation)) {
+    if (!instance || !isRuntimeGenerationActive(generation)) {
       return null;
     }
 
