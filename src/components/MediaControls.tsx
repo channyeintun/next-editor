@@ -29,6 +29,7 @@ import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import ReplayIcon from "./icon/Replay";
 import RecordButton from "./mediaControls/RecordButton";
 import RecordingTransportControls from "./mediaControls/RecordingTransportControls";
+import RecordingOptionToggle from "./mediaControls/RecordingOptionToggle";
 import PlayIcon from "./icon/Play";
 import PauseIcon from "./icon/Pause";
 import SettingIcon from "./icon/Setting";
@@ -560,54 +561,31 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               onChange={handleAudioFileChange}
             />
             {isCameraSupported ? (
-              <button
-                data-tour="camera"
-                type="button"
-                onClick={handleToggleCameraForNextRecording}
-                aria-pressed={enableCameraForNextRecording}
-                title={enableCameraForNextRecording ? "Record camera" : "Do not record camera"}
-                className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold shadow-sm transition-colors ${
-                  enableCameraForNextRecording
-                    ? "border-pinata-cyan bg-pinata-cyan text-slate-950"
-                    : "border-slate-700 bg-slate-900/90 text-slate-400 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                {enableCameraForNextRecording ? (
-                  <Video size={13} aria-hidden="true" />
-                ) : (
-                  <VideoOff size={13} aria-hidden="true" />
-                )}
-                <span className="hidden sm:inline">Camera</span>
-              </button>
+              <RecordingOptionToggle
+                tour="camera"
+                label="Camera"
+                on={enableCameraForNextRecording}
+                onToggle={handleToggleCameraForNextRecording}
+                icon={{ on: Video, off: VideoOff }}
+                title={{ on: "Record camera", off: "Do not record camera" }}
+              />
             ) : null}
             {isScreenSupported ? (
-              <button
-                data-tour="screen"
-                type="button"
-                onClick={() =>
+              <RecordingOptionToggle
+                tour="screen"
+                label="Screen"
+                on={screenRecordingEnabled}
+                onToggle={() =>
                   recordingSettingsTrigger.setScreenRecordingEnabled({
                     enabled: !screenRecordingEnabled,
                   })
                 }
-                aria-pressed={screenRecordingEnabled}
-                title={
-                  screenRecordingEnabled
-                    ? "Also screen-record (saved locally only, never uploaded)"
-                    : "Do not screen-record"
-                }
-                className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold shadow-sm transition-colors ${
-                  screenRecordingEnabled
-                    ? "border-pinata-cyan bg-pinata-cyan text-slate-950"
-                    : "border-slate-700 bg-slate-900/90 text-slate-400 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                {screenRecordingEnabled ? (
-                  <Monitor size={13} aria-hidden="true" />
-                ) : (
-                  <MonitorOff size={13} aria-hidden="true" />
-                )}
-                <span className="hidden sm:inline">Screen</span>
-              </button>
+                icon={{ on: Monitor, off: MonitorOff }}
+                title={{
+                  on: "Also screen-record (saved locally only, never uploaded)",
+                  off: "Do not screen-record",
+                }}
+              />
             ) : null}
           </div>
         ) : null}
