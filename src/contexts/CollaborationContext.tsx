@@ -14,7 +14,6 @@ import { useSearchParams } from "react-router";
 import { usePostHog } from "@posthog/react";
 import * as Y from "yjs";
 import {
-  claimCollaborationInvitation,
   closeCollaborationRoom,
   createCollaborationInvitation,
   downloadCollaborationAsset,
@@ -75,6 +74,7 @@ import {
   reprojectCollaborationWorkspace,
 } from "../collaboration/workspaceAdapter";
 import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
+import { useCollaborationInvitation } from "./collaboration/useCollaborationInvitation";
 import { WebContainerRuntimeActionsContext } from "./WebContainerRuntimeContext";
 import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -247,8 +247,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   // Bumped by `retry` to rebuild the room's provider and document from scratch.
   const [providerEpoch, setProviderEpoch] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
-  const [isAcceptingInvitation, setIsAcceptingInvitation] = useState(false);
   const [retryableAssetError, setRetryableAssetError] = useState<string | null>(null);
   const canRetryAssets = localError !== null && localError === retryableAssetError;
   const [members, setMembers] = useState<CollaborationMember[]>([]);
@@ -279,7 +277,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const teachingHydrationKeyRef = useRef<string | null>(null);
   const teachingSlideCacheRef = useRef(new Map<string, Promise<Uint8Array>>());
   const standaloneStoresRef = useRef<({ roomId: string } & StandaloneTeachingStores) | null>(null);
-  const claimingTokenRef = useRef<string | null>(null);
   const awarenessRevisionRef = useRef(0);
   const awarenessCursorRef = useRef<CollaborationCursor | null>(null);
   const awarenessSurfaceRef = useRef<CollaborationSurface>({
@@ -485,65 +482,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Claiming an invitation is a state-changing POST that permanently adds the
-  // caller to someone else's room, and joining reprojects the room's document
-  // over the local workspace — which then auto-starts the runtime and runs the
-  // room's package scripts. Firing that from a bare `?invite=` on mount made a
-  // single link enough to plant and execute another person's files in a
-  // signed-in visitor's workspace, and to start broadcasting their identity,
-  // cursor and open file. So the token is only staged here; `acceptInvitation`
-  // has to be called from a real user gesture.
-  useEffect(() => {
-    if (!inviteToken || isAuthLoading) {
-      setPendingInviteToken(null);
-      return;
-    }
-    if (!isSignedIn) {
-      setPendingInviteToken(null);
-      setLocalError("Sign in to accept this collaboration invitation.");
-      return;
-    }
-    if (claimingTokenRef.current === inviteToken) return;
-    setPendingInviteToken(inviteToken);
-  }, [inviteToken, isAuthLoading, isSignedIn]);
-
-  const acceptInvitation = useCallback(async () => {
-    const token = pendingInviteToken;
-    if (!token || claimingTokenRef.current === token) return;
-    claimingTokenRef.current = token;
-    setIsAcceptingInvitation(true);
-    try {
-      const session = await claimCollaborationInvitation(token);
-      setLocalError(null);
-      setPendingInviteToken(null);
-      setSearchParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          next.delete("invite");
-          next.set("room", session.room.id);
-          return next;
-        },
-        { replace: true },
-      );
-    } catch (error: unknown) {
-      setLocalError(messageFromError(error, "The collaboration invitation could not be accepted."));
-      claimingTokenRef.current = null;
-    } finally {
-      setIsAcceptingInvitation(false);
-    }
-  }, [pendingInviteToken, setSearchParams]);
-
-  const declineInvitation = useCallback(() => {
-    setPendingInviteToken(null);
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        next.delete("invite");
-        return next;
-      },
-      { replace: true },
-    );
-  }, [setSearchParams]);
+  const { pendingInviteToken, isAcceptingInvitation, acceptInvitation, declineInvitation } =
+    useCollaborationInvitation({
+      inviteToken,
+      isAuthLoading,
+      isSignedIn,
+      setSearchParams,
+      setError: setLocalError,
+    });
 
   // Clears everything that belongs to one room. The room effect runs it on
   // every switch, into a room or out of one; the previous provider itself is
