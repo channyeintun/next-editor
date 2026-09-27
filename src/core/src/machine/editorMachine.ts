@@ -268,6 +268,12 @@ export const editorMachine = setup({
     isPlaybackWorkspaceDetached: ({ context }) => context.hasManualWorkspaceOverride,
     isAtPlaybackEnd: ({ context }) => isAtPlaybackEnd(context.timeline),
   },
+  delays: {
+    // How long stoppingRecording waits for the recorders' files before it finalizes the
+    // take without them. A microphone blob that comes later is still accepted (see the
+    // root AUDIO_RECORDING_STOPPED handler).
+    recorderStopWatchdog: 2000,
+  },
   actions: {
     // Recording (capture-side) actions — bodies live in captureActions.ts, wrapped
     // here so `setup()` can infer this machine's exact context/event/actor types.
@@ -990,7 +996,7 @@ export const editorMachine = setup({
         },
       },
       after: {
-        2000: {
+        recorderStopWatchdog: {
           target: "loading",
           actions: ["finalizeRecording", "notifyRecordingStop"],
         },
