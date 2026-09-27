@@ -2,9 +2,20 @@ import { shallowEqual } from "@xstate/react";
 import { describe, expect, it } from "vite-plus/test";
 import type { Recording } from "../core/src";
 import { editorMachine } from "../core/src/machine/editorMachine";
-import { createInitialContext, type RecordingSession } from "../core/src/machine/types";
+import {
+  createIdleAudioState,
+  createInitialContext,
+  type RecordingSession,
+} from "../core/src/machine/types";
 import { createRecordingClock, pauseRecordingClock } from "../core/src/machine/recordingClock";
-import { selectNextEditorMetadata, type EditorMachineSnapshot } from "../core/src/useNextEditor";
+import {
+  selectNextEditorMetadata,
+  selectRecordingChapterCount,
+  selectRecordingClock,
+  selectRecordingMicrophoneStream,
+  selectRecordingSafePoints,
+  type EditorMachineSnapshot,
+} from "../core/src/useNextEditor";
 
 // The epsilon isAtPlaybackEnd allows (editorMachineHelpers.ts PLAYBACK_END_EPSILON_MS).
 const END_EPSILON_MS = 100;
@@ -122,5 +133,97 @@ describe("selectNextEditorMetadata", () => {
     const after = selectNextEditorMetadata(playbackAt("playing", 416));
     expect(before).not.toBe(after);
     expect(shallowEqual(before, after)).toBe(true);
+  });
+});
+
+describe("recording selectors", () => {
+  const takeSession = {
+    ...session,
+    chapters: [
+      { time: 0, title: "Intro" },
+      { time: 500, title: "Setup" },
+    ],
+    safePoints: [{ recordingTime: 0, perf: 0, wall: 1_700_000_000_500, mediaTime: 0 }],
+  } as RecordingSession;
+  const microphoneStream = {} as MediaStream;
+  const microphoneAudio = {
+    ...createIdleAudioState(),
+    isRecording: true,
+    source: "microphone" as const,
+    mediaRecorder: { stream: microphoneStream } as MediaRecorder,
+  };
+
+  interface RecordingReadings {
+    clock: ReturnType<typeof selectRecordingClock>;
+    microphoneStream: MediaStream | null;
+    chapterCount: number;
+    safePoints: RecordingSession["safePoints"] | null;
+  }
+  const outsideATake: RecordingReadings = {
+    clock: null,
+    microphoneStream: null,
+    chapterCount: 0,
+    safePoints: null,
+  };
+
+  const recordingCases: Array<[string, EditorMachineSnapshot, RecordingReadings]> = [
+    ["idle", snapshotAt("idle"), outsideATake],
+    [
+      "starting a microphone take",
+      snapshotAt("startingRecording", { audio: microphoneAudio }),
+      outsideATake,
+    ],
+    [
+      "recording a microphone take",
+      snapshotAt("recording", { session: takeSession, audio: microphoneAudio }),
+      {
+        clock: { clock: takeSession.clock, startedAtPerf: takeSession.startedAtPerf },
+        microphoneStream,
+        chapterCount: 2,
+        safePoints: takeSession.safePoints,
+      },
+    ],
+    [
+      "recording a take narrated from a file",
+      snapshotAt("recording", {
+        session: takeSession,
+        audio: { ...microphoneAudio, source: "external" as const },
+      }),
+      {
+        clock: { clock: takeSession.clock, startedAtPerf: takeSession.startedAtPerf },
+        microphoneStream: null,
+        chapterCount: 2,
+        safePoints: takeSession.safePoints,
+      },
+    ],
+    [
+      "recording with the microphone recorder not yet reported",
+      snapshotAt("recording", {
+        session: takeSession,
+        audio: { ...microphoneAudio, mediaRecorder: null },
+      }),
+      {
+        clock: { clock: takeSession.clock, startedAtPerf: takeSession.startedAtPerf },
+        microphoneStream: null,
+        chapterCount: 2,
+        safePoints: takeSession.safePoints,
+      },
+    ],
+    ["recording with no session", snapshotAt("recording"), outsideATake],
+    [
+      "stopping a take whose session is still set",
+      snapshotAt("stoppingRecording", { session: takeSession, audio: microphoneAudio }),
+      outsideATake,
+    ],
+    ["playing", playbackAt("playing", 400), outsideATake],
+  ];
+
+  it.each(recordingCases)("reads the take when %s", (_label, snapshot, expected) => {
+    expect(selectRecordingClock(snapshot)).toEqual(expected.clock);
+    expect(selectRecordingMicrophoneStream(snapshot)).toBe(expected.microphoneStream);
+    expect(selectRecordingChapterCount(snapshot)).toBe(expected.chapterCount);
+    // By reference: useSelector compares results by reference, so a copy would re-render
+    // its consumer on every snapshot.
+    expect(selectRecordingSafePoints(snapshot)).toBe(expected.safePoints);
   });
 });
