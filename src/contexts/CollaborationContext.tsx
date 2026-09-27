@@ -15,15 +15,9 @@ import { usePostHog } from "@posthog/react";
 import * as Y from "yjs";
 import {
   closeCollaborationRoom,
-  createCollaborationInvitation,
   downloadCollaborationAsset,
   exportCollaborationRoom,
   getCollaborationRoom,
-  listCollaborationInvitations,
-  listCollaborationMembers,
-  removeCollaborationMember,
-  revokeCollaborationInvitation,
-  updateCollaborationMemberRole,
   uploadCollaborationAsset,
   useAuth,
 } from "@next-editor/infra";
@@ -75,6 +69,7 @@ import {
 } from "../collaboration/workspaceAdapter";
 import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
 import { useCollaborationInvitation } from "./collaboration/useCollaborationInvitation";
+import { useCollaborationRoster } from "./collaboration/useCollaborationRoster";
 import { WebContainerRuntimeActionsContext } from "./WebContainerRuntimeContext";
 import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -234,7 +229,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<CollaborationRoomProvider | null>(null);
   const providerRef = useRef<CollaborationRoomProvider | null>(null);
   const providerGenerationRef = useRef(0);
-  const roomDataRequestRef = useRef(0);
   const projectionRef = useRef<CollaborationProjectProjection | null>(null);
   const pendingLocalTextEditRef = useRef<{
     event: TextEditEvent;
@@ -249,8 +243,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [localError, setLocalError] = useState<string | null>(null);
   const [retryableAssetError, setRetryableAssetError] = useState<string | null>(null);
   const canRetryAssets = localError !== null && localError === retryableAssetError;
-  const [members, setMembers] = useState<CollaborationMember[]>([]);
-  const [invitations, setInvitations] = useState<CollaborationInvitation[]>([]);
   const [participantsBySession, setParticipantsBySession] = useState(
     () => new Map<string, CollaborationParticipant>(),
   );
@@ -463,24 +455,37 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     setParticipantsBySession((current) => applyCollaborationParticipantEvent(current, event));
   }, []);
 
-  const refreshRoomDataFor = useCallback(
-    async (targetRoomId: string, owner: boolean, providerGeneration?: number) => {
-      const request = ++roomDataRequestRef.current;
-      const [{ members: nextMembers }, nextInvitations] = await Promise.all([
-        listCollaborationMembers(targetRoomId),
-        owner ? listCollaborationInvitations(targetRoomId) : Promise.resolve([]),
-      ]);
-      if (
-        request !== roomDataRequestRef.current ||
-        (providerGeneration !== undefined && providerGenerationRef.current !== providerGeneration)
-      ) {
-        return;
-      }
-      setMembers(nextMembers);
-      setInvitations(nextInvitations);
-    },
-    [],
-  );
+  const flushCurrentEdits = useCallback(async (current: CollaborationRoomProvider) => {
+    // A failed provider never drains its outbox again (the room closed, access
+    // was revoked, the room rejected an update as invalid, or reconnects ran
+    // out until an explicit retry), so waiting for it would block leaving,
+    // closing, exporting and member changes indefinitely. Go ahead without the
+    // unsent edits rather than asking: the panel already shows them as
+    // "changes waiting" beside "Retry connection", which, once reconnects have
+    // run out, is the one action that can still deliver them. Going ahead
+    // leaves them out of an export. Leaving or closing discards unsent
+    // whiteboard and slide edits along with the room's teaching state, and
+    // keeps unsent file edits only in this tab's unsaved workspace until the
+    // next room join reprojects over it.
+    if (current.connectionState === "failed") return;
+    await current.flushNow();
+    if (!current.hasPendingUpdates) return;
+    const message = "Wait for offline collaboration changes to synchronize before continuing.";
+    setLocalError(message);
+    throw new Error(message);
+  }, []);
+
+  const {
+    members,
+    invitations,
+    refreshRoomDataFor,
+    refreshRoomData,
+    createInvitation,
+    revokeInvitation,
+    updateMemberRole,
+    removeMember,
+    resetRoster,
+  } = useCollaborationRoster(providerRef, providerGenerationRef, flushCurrentEdits);
 
   const { pendingInviteToken, isAcceptingInvitation, acceptInvitation, declineInvitation } =
     useCollaborationInvitation({
@@ -503,8 +508,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     setIsApplyingFollow(false);
     stopFollowing("room-changed");
     setParticipantsBySession(new Map());
-    setMembers([]);
-    setInvitations([]);
+    resetRoster();
     awarenessCursorRef.current = null;
     awarenessSurfaceRef.current = { kind: "editor", fileNodeId: null, viewport: null };
     awarenessRevisionRef.current = 0;
@@ -521,7 +525,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     setTeaching(EMPTY_TEACHING_PROJECTION);
     setTeachingSlides(null);
     setRetryableAssetError(null);
-  }, [stopFollowing]);
+  }, [resetRoster, stopFollowing]);
 
   useEffect(() => {
     if (!roomId || inviteToken) {
@@ -921,26 +925,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const flushCurrentEdits = useCallback(async (current: CollaborationRoomProvider) => {
-    // A failed provider never drains its outbox again (the room closed, access
-    // was revoked, the room rejected an update as invalid, or reconnects ran
-    // out until an explicit retry), so waiting for it would block leaving,
-    // closing, exporting and member changes indefinitely. Go ahead without the
-    // unsent edits rather than asking: the panel already shows them as
-    // "changes waiting" beside "Retry connection", which, once reconnects have
-    // run out, is the one action that can still deliver them. Going ahead
-    // leaves them out of an export. Leaving or closing discards unsent
-    // whiteboard and slide edits along with the room's teaching state, and
-    // keeps unsent file edits only in this tab's unsaved workspace until the
-    // next room join reprojects over it.
-    if (current.connectionState === "failed") return;
-    await current.flushNow();
-    if (!current.hasPendingUpdates) return;
-    const message = "Wait for offline collaboration changes to synchronize before continuing.";
-    setLocalError(message);
-    throw new Error(message);
-  }, []);
-
   const leaveRoom = useCallback(async () => {
     flushPendingWhiteboardChange(whiteboardStore);
     stopFollowing("room-changed");
@@ -1281,16 +1265,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", handleEscape, true);
   }, [followedParticipantKey, stopFollowing]);
 
-  const refreshRoomData = useCallback(async () => {
-    const current = providerRef.current?.session;
-    if (!current) return;
-    await refreshRoomDataFor(
-      current.room.id,
-      current.membership.role === "owner",
-      providerGenerationRef.current,
-    );
-  }, [refreshRoomDataFor]);
-
   const exportRoom = useCallback(async () => {
     const currentProvider = providerRef.current;
     const current = currentProvider?.session;
@@ -1300,51 +1274,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     await flushCurrentEdits(currentProvider);
     return exportCollaborationRoom(current.room.id);
   }, [flushCurrentEdits]);
-
-  const createInvitation = useCallback(async (inviteRole: CollaborationInviteRole) => {
-    const current = providerRef.current?.session;
-    if (!current || current.membership.role !== "owner") {
-      throw new Error("Only the room owner can create invitations.");
-    }
-    const invitation = await createCollaborationInvitation(current.room.id, {
-      role: inviteRole,
-    });
-    setInvitations((existing) => [invitation, ...existing]);
-    return invitation;
-  }, []);
-
-  const revokeInvitation = useCallback(async (invitationId: string) => {
-    const current = providerRef.current?.session;
-    if (!current) return;
-    await revokeCollaborationInvitation(current.room.id, invitationId);
-    setInvitations((existing) => existing.filter((item) => item.id !== invitationId));
-  }, []);
-
-  const updateMemberRole = useCallback(
-    async (userId: string, nextRole: CollaborationInviteRole) => {
-      const currentProvider = providerRef.current;
-      const current = currentProvider?.session;
-      if (!currentProvider || !current) return;
-      await flushCurrentEdits(currentProvider);
-      const member = await updateCollaborationMemberRole(current.room.id, userId, nextRole);
-      setMembers((existing) =>
-        existing.map((item) => (item.userId === member.userId ? member : item)),
-      );
-    },
-    [flushCurrentEdits],
-  );
-
-  const removeMember = useCallback(
-    async (userId: string) => {
-      const currentProvider = providerRef.current;
-      const current = currentProvider?.session;
-      if (!currentProvider || !current) return;
-      await flushCurrentEdits(currentProvider);
-      await removeCollaborationMember(current.room.id, userId);
-      setMembers((existing) => existing.filter((item) => item.userId !== userId));
-    },
-    [flushCurrentEdits],
-  );
 
   const updateCursor = useCallback(
     (path: string, anchorOffset: number, headOffset: number) => {
