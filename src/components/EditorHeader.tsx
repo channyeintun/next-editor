@@ -1,16 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { usePostHog } from "@posthog/react";
 import type { Properties } from "posthog-js";
 import {
-  ChevronRight,
   Compass,
   Download,
   FileArchive,
   FileDown,
   FileUp,
   FilePlus2,
-  LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -47,15 +45,15 @@ import { createStarterWorkspaceForLessonType } from "../starters";
 import SlidesButton from "./SlidesButton";
 import CollaborationPanel from "./CollaborationPanel";
 import EnvironmentVariablesDialog from "./editorHeader/EnvironmentVariablesDialog";
+import StarterTemplateSubmenu, {
+  type LessonTypeOption,
+} from "./editorHeader/StarterTemplateSubmenu";
 import { startTour } from "./tour/productTour";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
 
-const LESSON_TYPE_OPTIONS: Array<{
-  value: WorkspaceLessonType;
-  label: string;
-}> = WORKSPACE_LESSON_TYPES.map((value) => ({
+const LESSON_TYPE_OPTIONS: LessonTypeOption[] = WORKSPACE_LESSON_TYPES.map((value) => ({
   value,
   label: WORKSPACE_LESSON_TYPE_LABELS[value],
 }));
@@ -136,7 +134,6 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   };
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isStarterSubmenuOpen, setIsStarterSubmenuOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const { resetRuntime, updateRunnerConfig } = useWebContainerRuntimeActions();
   const { exportAsFile, importFromFile, loadRecording } = useNextEditorActions();
@@ -148,14 +145,6 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
   const activeLessonOption =
     LESSON_TYPE_OPTIONS.find((option) => option.value === lessonType) ?? LESSON_TYPE_OPTIONS[0];
-
-  useEffect(() => {
-    // Collapse the starter-template flyout whenever the parent menu closes so it
-    // doesn't reappear already-expanded the next time the menu opens.
-    if (!isMenuOpen) {
-      setIsStarterSubmenuOpen(false);
-    }
-  }, [isMenuOpen]);
 
   const handleEditEnvironment = () => {
     setIsMenuOpen(false);
@@ -356,76 +345,17 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
               role="menu"
               className="absolute right-0 top-full z-2147483647 mt-2 w-56 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
             >
+              {/* Outside the showImportExport block on purpose: see isVisible. */}
+              <StarterTemplateSubmenu
+                isVisible={showImportExport}
+                options={LESSON_TYPE_OPTIONS}
+                activeLessonType={lessonType}
+                onSelect={(nextLessonType) => {
+                  void handleSelectLessonType(nextLessonType);
+                }}
+              />
               {showImportExport ? (
                 <>
-                  <div
-                    className="relative"
-                    onMouseEnter={() => setIsStarterSubmenuOpen(true)}
-                    onMouseLeave={() => setIsStarterSubmenuOpen(false)}
-                  >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      aria-haspopup="menu"
-                      aria-expanded={isStarterSubmenuOpen}
-                      onClick={() => setIsStarterSubmenuOpen((current) => !current)}
-                      className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
-                        isStarterSubmenuOpen
-                          ? "bg-slate-700 text-white"
-                          : "text-slate-200 hover:bg-slate-700 hover:text-white"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <LayoutTemplate size={14} aria-hidden="true" />
-                        Starter Template
-                      </span>
-                      <ChevronRight
-                        size={14}
-                        aria-hidden="true"
-                        className={isStarterSubmenuOpen ? "text-slate-300" : "text-slate-500"}
-                      />
-                    </button>
-
-                    {isStarterSubmenuOpen ? (
-                      // Flush against the parent (no horizontal gap) so the cursor can
-                      // travel into the flyout without crossing a dead zone that would
-                      // trip the wrapper's onMouseLeave and close it.
-                      <div
-                        role="menu"
-                        aria-label="Starter templates"
-                        className="absolute right-full top-0 z-2147483647 w-52 rounded-xl border border-slate-700 bg-[#151821] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
-                      >
-                        {LESSON_TYPE_OPTIONS.map((option) => {
-                          const isActive = option.value === lessonType;
-
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={isActive}
-                              onClick={() => {
-                                void handleSelectLessonType(option.value);
-                              }}
-                              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
-                                isActive
-                                  ? "bg-slate-700 text-white"
-                                  : "text-slate-200 hover:bg-slate-700 hover:text-white"
-                              }`}
-                            >
-                              <span>{option.label}</span>
-                              {isActive ? (
-                                <span className="rounded-full bg-slate-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-200">
-                                  Active
-                                </span>
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-
                   <div className="my-1 h-px bg-slate-700" />
 
                   <button
