@@ -45,6 +45,7 @@ import { createStarterWorkspaceForLessonType } from "../starters";
 import SlidesButton from "./SlidesButton";
 import CollaborationPanel from "./CollaborationPanel";
 import EnvironmentVariablesDialog from "./editorHeader/EnvironmentVariablesDialog";
+import SettingsMenuItem from "./editorHeader/SettingsMenuItem";
 import StarterTemplateSubmenu, {
   type LessonTypeOption,
 } from "./editorHeader/StarterTemplateSubmenu";
@@ -358,113 +359,73 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
                 <>
                   <div className="my-1 h-px bg-slate-700" />
 
-                  <button
-                    type="button"
-                    role="menuitem"
+                  <SettingsMenuItem
+                    icon={FilePlus2}
+                    label="New Editor"
                     onClick={() => {
                       void handleCreateNewEditor();
                     }}
-                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-                  >
-                    <span className="flex items-center gap-2">
-                      <FilePlus2 size={14} aria-hidden="true" />
-                      New Editor
-                    </span>
-                  </button>
+                  />
 
                   <div className="my-1 h-px bg-slate-700" />
 
-                  <button
-                    type="button"
-                    role="menuitem"
+                  <SettingsMenuItem
+                    icon={FileDown}
+                    label="Import Recording (.ne)"
                     onClick={() => {
                       void handleImportRecording();
                     }}
-                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-                  >
-                    <span className="flex items-center gap-2">
-                      <FileDown size={14} aria-hidden="true" />
-                      Import Recording (.ne)
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
+                  />
+                  <SettingsMenuItem
+                    icon={FileUp}
+                    label="Export Recording (.ne)"
                     onClick={() => {
                       void handleExportRecording();
                     }}
                     disabled={!currentRecording}
+                    // Greyed out, not just disabled, while there is nothing to export.
                     className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
                       currentRecording
                         ? "text-slate-200 hover:bg-slate-700 hover:text-white"
                         : "cursor-not-allowed text-slate-500"
                     }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <FileUp size={14} aria-hidden="true" />
-                      Export Recording (.ne)
-                    </span>
-                  </button>
+                  />
                   <div className="my-1 h-px bg-slate-700" />
 
-                  <button
-                    type="button"
-                    role="menuitem"
+                  <SettingsMenuItem
+                    icon={FileArchive}
+                    label="Import Project (.zip)"
                     onClick={openImportDialog}
-                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-                  >
-                    <span className="flex items-center gap-2">
-                      <FileArchive size={14} aria-hidden="true" />
-                      Import Project (.zip)
-                    </span>
-                  </button>
+                  />
                 </>
               ) : null}
               {lessonRunsInWebContainer(lessonType) ? (
-                <button
-                  type="button"
-                  role="menuitem"
+                <SettingsMenuItem
+                  icon={Variable}
+                  label="Edit Environment"
                   onClick={handleEditEnvironment}
-                  className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-                >
-                  <span className="flex items-center gap-2">
-                    <Variable size={14} aria-hidden="true" />
-                    Edit Environment
-                  </span>
-                </button>
+                />
               ) : null}
-              <button
-                type="button"
-                role="menuitem"
+              <SettingsMenuItem
+                icon={Download}
+                label="Download As Zip"
                 onClick={() => {
                   void handleDownload();
                 }}
-                className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-              >
-                <span className="flex items-center gap-2">
-                  <Download size={14} aria-hidden="true" />
-                  Download As Zip
-                </span>
-              </button>
+              />
 
               {showImportExport ? (
                 <>
                   <div className="my-1 h-px bg-slate-700" />
 
-                  <button
-                    type="button"
-                    role="menuitem"
+                  <SettingsMenuItem
+                    icon={Compass}
+                    label="Take a Tour"
                     onClick={() => {
                       setIsMenuOpen(false);
                       startTour({ force: true });
                     }}
-                    className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Compass size={14} aria-hidden="true" />
-                      Take a Tour
-                    </span>
-                  </button>
+                  />
                 </>
               ) : null}
             </div>
