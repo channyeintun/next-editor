@@ -2,7 +2,7 @@
 import { act, render, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const controls = vi.hoisted(() => ({
   handleSlideEvent: vi.fn() as (...args: unknown[]) => void,
@@ -20,7 +20,7 @@ const controls = vi.hoisted(() => ({
   },
   providers: [] as Array<{
     doc: import("yjs").Doc;
-    session: { room: { roleVersion: number } };
+    session: { room: { roleVersion: number; hostUserId: string } };
     awarenessPublications: Array<{ kind: string }>;
     awarenessSessionId: string;
     emitDocumentChange: () => void;
@@ -35,6 +35,7 @@ const controls = vi.hoisted(() => ({
 }));
 
 let usesPlaybackModel = false;
+let isRecording = false;
 
 vi.mock("@next-editor/infra", () => ({
   claimCollaborationInvitation: vi.fn(),
@@ -187,7 +188,7 @@ vi.mock("../hooks/useWorkspace", () => ({
   useWorkspaceActiveFilePath: () => "index.html",
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({ usesPlaybackModel, isRecording: false }),
+  useNextEditorMetadata: () => ({ usesPlaybackModel, isRecording }),
   useNextEditorActions: () => ({
     handleSlideEvent: controls.handleSlideEvent,
     handleWhiteboardEvent: controls.handleWhiteboardEvent,
@@ -873,6 +874,99 @@ describe("CollaborationContext teaching projection", () => {
       await waitFor(() => expect(room.scene().scene.elements).toHaveLength(2));
       expect(room.scene().scene.elements.find((element) => element.id === "e0")?.version).toBe(5);
       expect(room.scene().sceneUpdateSource).toBe("external");
+      room.view.unmount();
+    });
+  });
+
+  // The room's teaching state is canonical, so the host's recording takes its
+  // changes from the projection; the first projection is the room's starting
+  // state, not a change.
+  describe("recording the room's teaching changes", () => {
+    beforeEach(() => {
+      isRecording = true;
+    });
+    afterEach(() => {
+      isRecording = false;
+    });
+
+    async function renderRecordingRoom(hostUserId: string) {
+      let collaboration: ReturnType<typeof useCollaboration> | null = null;
+      function Probe() {
+        collaboration = useCollaboration();
+        return null;
+      }
+      const view = render(
+        <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+          <Providers>
+            <Probe />
+          </Providers>
+        </MemoryRouter>,
+      );
+      await waitFor(() => expect(controls.providers).toHaveLength(1));
+      const provider = controls.providers[0]!;
+      provider.session = { ...provider.session, room: { ...provider.session.room, hostUserId } };
+      const slide = (id: string, order: number) => ({
+        slide: { id, order, content: id, contentType: "html" as const },
+        asset: {
+          id: String(order).repeat(64),
+          mimeType: "application/vnd.next-editor.slide+json",
+          size: 32,
+        },
+      });
+      act(() => {
+        seedCollaborationProject(provider.doc, createStarterHtmlCssWorkspace());
+        seedCollaborationTeachingDocument(provider.doc, {
+          slides: [slide("one", 0), slide("two", 1)],
+          whiteboardElements: [],
+        });
+      });
+      await waitFor(() => expect(collaboration!.teaching.currentSlideId).toBe("one"));
+      return { view, collaboration: () => collaboration! };
+    }
+
+    it("records the host's slide and whiteboard changes after the first projection", async () => {
+      const room = await renderRecordingRoom(controls.auth.user.id);
+      expect(controls.handleSlideEvent).not.toHaveBeenCalled();
+      expect(controls.handleWhiteboardEvent).not.toHaveBeenCalled();
+
+      act(() => {
+        room.collaboration().publishCurrentSlide("two");
+      });
+      await waitFor(() => expect(controls.handleSlideEvent).toHaveBeenCalledTimes(1));
+      expect(controls.handleSlideEvent).toHaveBeenCalledWith({
+        type: "slide_change",
+        timestamp: expect.any(Number),
+        slideId: "two",
+        indexv: 0,
+      });
+      expect(controls.handleWhiteboardEvent).not.toHaveBeenCalled();
+
+      act(() => {
+        room.collaboration().publishWhiteboardDelta({ upserts: [rectangle("e0", "a0")] });
+      });
+      await waitFor(() => expect(controls.handleWhiteboardEvent).toHaveBeenCalledTimes(1));
+      expect(controls.handleWhiteboardEvent).toHaveBeenCalledWith({
+        timestamp: expect.any(Number),
+        upserts: [expect.objectContaining({ id: "e0" })],
+      });
+      expect(controls.handleSlideEvent).toHaveBeenCalledTimes(1);
+      room.view.unmount();
+    });
+
+    it("records nothing for a member who is not the host", async () => {
+      const room = await renderRecordingRoom("50000000-0000-4000-8000-000000000001");
+
+      act(() => {
+        room.collaboration().publishCurrentSlide("two");
+      });
+      act(() => {
+        room.collaboration().publishWhiteboardDelta({ upserts: [rectangle("e0", "a0")] });
+      });
+      await waitFor(() => expect(room.collaboration().teaching.whiteboardElements).toHaveLength(1));
+
+      expect(room.collaboration().teaching.currentSlideId).toBe("two");
+      expect(controls.handleSlideEvent).not.toHaveBeenCalled();
+      expect(controls.handleWhiteboardEvent).not.toHaveBeenCalled();
       room.view.unmount();
     });
   });
