@@ -15,17 +15,9 @@ import {
 import { MAX_WORKSPACE_ASSET_BYTES, readUploadedWorkspaceFile } from "../utils/workspaceFileUpload";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
-import {
-  DEFAULT_FILE_SIDEBAR_WIDTH,
-  FILE_SIDEBAR_KEYBOARD_LARGE_STEP,
-  FILE_SIDEBAR_KEYBOARD_STEP,
-  getClampedFileSidebarWidth,
-  getFileSidebarMaxWidth,
-  MIN_FILE_SIDEBAR_WIDTH,
-} from "../utils/sidebarLayout";
-import { dispatchRecordedCursorVisibility } from "../utils/recordedCursorVisibility";
 import { STUDIO_TARGET_ATTRIBUTE, studioTargetIdForFile } from "../studio/targets";
 import FileContextMenu from "./fileSidebar/FileContextMenu";
+import SidebarResizeHandle from "./fileSidebar/SidebarResizeHandle";
 import {
   buildWorkspaceTree,
   deletesEveryFile,
@@ -52,12 +44,6 @@ function FileSidebarPanel() {
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const sidebarScrollAnimationFrameRef = useRef<number | null>(null);
   const pendingSidebarScrollTopRef = useRef(0);
-  const sidebarResizeStartRef = useRef({
-    x: 0,
-    y: 0,
-    width: DEFAULT_FILE_SIDEBAR_WIDTH,
-  });
-  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isFileDragOver, setIsFileDragOver] = useState(false);
   const {
     createFile,
@@ -131,61 +117,6 @@ function FileSidebarPanel() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    const handleWindowResize = () => {
-      setSidebarWidth(getClampedFileSidebarWidth(sidebarWidth, window.innerWidth));
-    };
-
-    window.addEventListener("resize", handleWindowResize);
-    return () => {
-      window.removeEventListener("resize", handleWindowResize);
-    };
-  }, [setSidebarWidth, sidebarWidth]);
-
-  useEffect(() => {
-    if (!isResizingSidebar) {
-      return;
-    }
-
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const dragOffset = event.clientX - sidebarResizeStartRef.current.x;
-      const nextWidth = sidebarResizeStartRef.current.width + dragOffset;
-      setSidebarWidth(getClampedFileSidebarWidth(nextWidth, window.innerWidth));
-      dispatchRecordedCursorVisibility({
-        x: event.clientX,
-        y: event.clientY,
-        visible: false,
-      });
-    };
-
-    const stopResizing = (event: PointerEvent) => {
-      dispatchRecordedCursorVisibility({
-        x: event.clientX,
-        y: event.clientY,
-        visible: true,
-      });
-      setIsResizingSidebar(false);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopResizing);
-    window.addEventListener("pointercancel", stopResizing);
-
-    return () => {
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopResizing);
-      window.removeEventListener("pointercancel", stopResizing);
-    };
-  }, [isResizingSidebar, setSidebarWidth]);
 
   const commitCollapsedFolders = (next: Set<string>) => {
     const nextPaths = Array.from(next).sort((left, right) => left.localeCompare(right));
@@ -432,54 +363,6 @@ function FileSidebarPanel() {
     });
   };
 
-  const handleSidebarResizePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    sidebarResizeStartRef.current = {
-      x: event.clientX,
-      y: event.clientY,
-      width: sidebarWidth,
-    };
-    dispatchRecordedCursorVisibility({
-      x: event.clientX,
-      y: event.clientY,
-      visible: false,
-    });
-    setIsResizingSidebar(true);
-  };
-
-  const handleSidebarResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    let nextWidth: number;
-
-    switch (event.key) {
-      case "ArrowLeft":
-        nextWidth =
-          sidebarWidth -
-          (event.shiftKey ? FILE_SIDEBAR_KEYBOARD_LARGE_STEP : FILE_SIDEBAR_KEYBOARD_STEP);
-        break;
-      case "ArrowRight":
-        nextWidth =
-          sidebarWidth +
-          (event.shiftKey ? FILE_SIDEBAR_KEYBOARD_LARGE_STEP : FILE_SIDEBAR_KEYBOARD_STEP);
-        break;
-      case "Home":
-        nextWidth = MIN_FILE_SIDEBAR_WIDTH;
-        break;
-      case "End":
-        nextWidth = getFileSidebarMaxWidth(window.innerWidth);
-        break;
-      default:
-        return;
-    }
-
-    event.preventDefault();
-    setSidebarWidth(getClampedFileSidebarWidth(nextWidth, window.innerWidth));
-  };
-
   const handleRowContextMenu = (
     event: React.MouseEvent<HTMLElement>,
     kind: SidebarEntryKind,
@@ -723,25 +606,7 @@ function FileSidebarPanel() {
           onDelete={handleDeleteEntry}
         />
       </div>
-      {isResizingSidebar ? (
-        <div aria-hidden="true" className="fixed inset-0 z-40 cursor-col-resize" />
-      ) : null}
-      <div
-        role="separator"
-        aria-label="Resize file sidebar"
-        aria-orientation="vertical"
-        aria-valuemin={MIN_FILE_SIDEBAR_WIDTH}
-        aria-valuemax={getFileSidebarMaxWidth(
-          typeof window === "undefined" ? undefined : window.innerWidth,
-        )}
-        aria-valuenow={Math.round(sidebarWidth)}
-        tabIndex={0}
-        onPointerDown={handleSidebarResizePointerDown}
-        onKeyDown={handleSidebarResizeKeyDown}
-        className={`absolute inset-y-0 -right-1 z-50 w-2 cursor-col-resize touch-none outline-none before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-transparent before:transition-colors hover:before:bg-sky-400 focus-visible:before:bg-sky-400 ${
-          isResizingSidebar ? "before:bg-sky-400" : ""
-        }`}
-      />
+      <SidebarResizeHandle width={sidebarWidth} onWidthChange={setSidebarWidth} />
     </aside>
   );
 }
