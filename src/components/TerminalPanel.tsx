@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
+import ModalShell from "./ModalShell";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import {
   isRuntimeBusy,
@@ -721,66 +722,61 @@ function TerminalPanel() {
       </div>
 
       {displayIsSettingsOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-[#0b0d12]/62 px-4 py-8 backdrop-blur-[2px]"
-          onClick={() => {
+        <ModalShell
+          maxWidthClassName="max-w-md"
+          onBackdropClick={() => {
             if (!isPlaybackSnapshotActive) {
               setIsSettingsOpen(false);
             }
           }}
         >
-          <div
-            className="mx-auto flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="space-y-5 overflow-y-auto p-5">
-              <RunnerToggle
-                checked={runnerConfig.enabled}
+          <div className="space-y-5 overflow-y-auto p-5">
+            <RunnerToggle
+              checked={runnerConfig.enabled}
+              disabled={isPlaybackSnapshotActive}
+              label="Enable Runner"
+              onChange={(checked) => updateRunnerConfig({ enabled: checked })}
+            />
+            <RunnerToggle
+              checked={runnerConfig.runOnStartup}
+              disabled={isPlaybackSnapshotActive}
+              label="Run on startup"
+              description="Execute script immediately when opening the project"
+              onChange={(checked) => updateRunnerConfig({ runOnStartup: checked })}
+            />
+            <RunnerToggle
+              checked={runnerConfig.runOnFileSave}
+              disabled={isPlaybackSnapshotActive}
+              label="Run on file-save"
+              description="Execute script when saving a file"
+              onChange={(checked) => updateRunnerConfig({ runOnFileSave: checked })}
+            />
+            <label className="block">
+              <span className="block text-sm font-medium text-slate-100">Init Command</span>
+              <input
+                value={runnerConfig.initCommand}
                 disabled={isPlaybackSnapshotActive}
-                label="Enable Runner"
-                onChange={(checked) => updateRunnerConfig({ enabled: checked })}
+                onChange={(event) => updateRunnerConfig({ initCommand: event.target.value })}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:cursor-default disabled:opacity-70"
               />
-              <RunnerToggle
-                checked={runnerConfig.runOnStartup}
+              <span className="mt-2 block text-xs text-slate-500">
+                Shell command to run when booting the project
+              </span>
+            </label>
+            <label className="block">
+              <span className="block text-sm font-medium text-slate-100">Run Command</span>
+              <input
+                value={runnerConfig.runCommand}
                 disabled={isPlaybackSnapshotActive}
-                label="Run on startup"
-                description="Execute script immediately when opening the project"
-                onChange={(checked) => updateRunnerConfig({ runOnStartup: checked })}
+                onChange={(event) => updateRunnerConfig({ runCommand: event.target.value })}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:cursor-default disabled:opacity-70"
               />
-              <RunnerToggle
-                checked={runnerConfig.runOnFileSave}
-                disabled={isPlaybackSnapshotActive}
-                label="Run on file-save"
-                description="Execute script when saving a file"
-                onChange={(checked) => updateRunnerConfig({ runOnFileSave: checked })}
-              />
-              <label className="block">
-                <span className="block text-sm font-medium text-slate-100">Init Command</span>
-                <input
-                  value={runnerConfig.initCommand}
-                  disabled={isPlaybackSnapshotActive}
-                  onChange={(event) => updateRunnerConfig({ initCommand: event.target.value })}
-                  className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:cursor-default disabled:opacity-70"
-                />
-                <span className="mt-2 block text-xs text-slate-500">
-                  Shell command to run when booting the project
-                </span>
-              </label>
-              <label className="block">
-                <span className="block text-sm font-medium text-slate-100">Run Command</span>
-                <input
-                  value={runnerConfig.runCommand}
-                  disabled={isPlaybackSnapshotActive}
-                  onChange={(event) => updateRunnerConfig({ runCommand: event.target.value })}
-                  className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:cursor-default disabled:opacity-70"
-                />
-                <span className="mt-2 block text-xs text-slate-500">
-                  Shell command to run inside the workspace
-                </span>
-              </label>
-            </div>
+              <span className="mt-2 block text-xs text-slate-500">
+                Shell command to run inside the workspace
+              </span>
+            </label>
           </div>
-        </div>
+        </ModalShell>
       )}
     </>
   );

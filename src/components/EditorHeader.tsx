@@ -49,6 +49,7 @@ import {
 import { createStarterWorkspaceForLessonType } from "../starters";
 import SlidesButton from "./SlidesButton";
 import CollaborationPanel from "./CollaborationPanel";
+import ModalShell from "./ModalShell";
 import { startTour } from "./tour/productTour";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
@@ -634,55 +635,47 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       />
 
       {isEnvironmentModalOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-[#0b0d12]/62 px-4 py-8 backdrop-blur-[2px]"
-          onClick={closeEnvironmentModal}
-        >
-          <div
-            className="mx-auto flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#151821] shadow-[0_24px_48px_rgba(2,6,23,0.55)]"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="space-y-5 overflow-y-auto p-5">
-              <p className="text-sm font-medium text-slate-100">Edit Environment</p>
+        <ModalShell maxWidthClassName="max-w-xl" onBackdropClick={closeEnvironmentModal}>
+          <div className="space-y-5 overflow-y-auto p-5">
+            <p className="text-sm font-medium text-slate-100">Edit Environment</p>
 
-              <label className="block">
-                <span className="sr-only">Environment variables</span>
-                <textarea
-                  value={draftValue}
-                  onChange={(event) => {
-                    setDraftValue(event.target.value);
-                    if (errorMessage) {
-                      setErrorMessage(null);
-                    }
-                  }}
-                  rows={12}
-                  spellCheck={false}
-                  className="min-h-64 w-full rounded-lg border border-slate-700 bg-[#11141c] font-mono text-sm leading-6 text-slate-100 outline-none transition-colors focus:border-slate-500 p-3"
-                  placeholder="API_URL=https://example.com\nNODE_ENV=development"
-                />
-              </label>
+            <label className="block">
+              <span className="sr-only">Environment variables</span>
+              <textarea
+                value={draftValue}
+                onChange={(event) => {
+                  setDraftValue(event.target.value);
+                  if (errorMessage) {
+                    setErrorMessage(null);
+                  }
+                }}
+                rows={12}
+                spellCheck={false}
+                className="min-h-64 w-full rounded-lg border border-slate-700 bg-[#11141c] font-mono text-sm leading-6 text-slate-100 outline-none transition-colors focus:border-slate-500 p-3"
+                placeholder="API_URL=https://example.com\nNODE_ENV=development"
+              />
+            </label>
 
-              {errorMessage ? <p className="text-sm text-rose-300">{errorMessage}</p> : null}
+            {errorMessage ? <p className="text-sm text-rose-300">{errorMessage}</p> : null}
 
-              <div className="flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={closeEnvironmentModal}
-                  className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400 transition-colors hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  className="rounded bg-emerald-500 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-950 transition-colors hover:bg-emerald-400"
-                >
-                  Save
-                </button>
-              </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeEnvironmentModal}
+                className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400 transition-colors hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="rounded bg-emerald-500 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-950 transition-colors hover:bg-emerald-400"
+              >
+                Save
+              </button>
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
     </>
   );
