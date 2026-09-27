@@ -5,10 +5,12 @@ import {
   getParentWorkspacePath,
   getWorkspaceBaseName,
   inferLanguageFromPath,
+  isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetDescriptor,
   normalizeWorkspacePath,
   parseWorkspacePath,
   WorkspacePathError,
+  type WorkspaceAssetDescriptor,
   type WorkspaceFile,
   type WorkspaceFileContent,
   type WorkspaceFileEncoding,
@@ -78,6 +80,33 @@ export function getDefaultFile(project: WorkspaceProject): WorkspaceFile {
       content: "",
     }
   );
+}
+
+/** The requested (already normalized) file when the project has it, else the entry file. */
+export function resolveActiveFilePath(project: WorkspaceProject, requestedPath: string): string {
+  return project.files[requestedPath] ? requestedPath : project.entryFilePath;
+}
+
+/**
+ * `files` with each legacy v1 base64 entry that `descriptors` names replaced by
+ * its v2 content-addressed descriptor, or `files` itself when none is.
+ */
+export function withMigratedAssetDescriptors(
+  files: Record<string, WorkspaceFile>,
+  descriptors: Record<string, WorkspaceAssetDescriptor>,
+): Record<string, WorkspaceFile> {
+  let nextFiles: Record<string, WorkspaceFile> | null = null;
+
+  for (const [path, descriptor] of Object.entries(descriptors)) {
+    const file = files[path];
+
+    if (file && isLegacyWorkspaceBinaryFile(file)) {
+      nextFiles ??= { ...files };
+      nextFiles[path] = { ...file, content: descriptor, encoding: "asset" };
+    }
+  }
+
+  return nextFiles ?? files;
 }
 
 export function listProjectTreeFiles(project: WorkspaceProject): WorkspaceTreeFile[] {

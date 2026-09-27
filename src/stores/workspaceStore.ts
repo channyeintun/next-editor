@@ -44,6 +44,8 @@ import {
   projectSizeBucket,
   remapCollapsedFolders,
   replacePathPrefix,
+  resolveActiveFilePath,
+  withMigratedAssetDescriptors,
 } from "./workspaceProjectSupport";
 
 export { normalizeProject, WorkspaceProjectValidationError } from "./workspaceProjectSupport";
@@ -172,10 +174,10 @@ function loadStoredWorkspaceSnapshot(): StoredWorkspaceSnapshot | null {
 
     const parsed = JSON.parse(stored) as StoredWorkspaceSnapshot;
     const project = normalizeProject(parsed.project);
-    const requestedActiveFilePath = normalizeWorkspacePath(parsed.activeFilePath ?? "");
-    const activeFilePath = project.files[requestedActiveFilePath]
-      ? requestedActiveFilePath
-      : project.entryFilePath;
+    const activeFilePath = resolveActiveFilePath(
+      project,
+      normalizeWorkspacePath(parsed.activeFilePath ?? ""),
+    );
 
     // Sidebar width is deliberately not restored from storage; it resets to the
     // default on every reload (see sidebarLayout.ts).
@@ -542,9 +544,26 @@ function withUpdatedFileContent(
   return withRefreshedDirtyPath(nextContext, path);
 }
 
-function createUninitializedWorkspaceState(): WorkspaceState {
+/** withUpdatedFileContent, measured as one `workspace.content_update` span. */
+function withTimedContentUpdate(
+  context: InitializedWorkspaceState,
+  path: string,
+  content: string,
+  source: "incremental" | "replacement",
+): InitializedWorkspaceState {
+  const endUpdateSpan = startPerformanceSpan("workspace.content_update", {
+    project_size: projectSizeBucket(context.fileCount),
+    source,
+  });
+  const nextContext = withUpdatedFileContent(context, path, content);
+  endUpdateSpan();
+  return nextContext;
+}
+
+/** The session state a new store starts from, whether or not it has a project yet. */
+function createWorkspaceBaseState(): WorkspaceBaseState {
   return {
-    isInitialized: false,
+    // Width is session-only (see sidebarLayout.ts): every workspace starts at the default.
     sidebarWidth: DEFAULT_FILE_SIDEBAR_WIDTH,
     sidebarCollapsed: readStoredFileSidebarCollapsed(),
     collapsedFolders: [],
@@ -561,48 +580,36 @@ function createUninitializedWorkspaceState(): WorkspaceState {
   };
 }
 
-function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): WorkspaceState {
+function createUninitializedWorkspaceState(): WorkspaceState {
+  return { isInitialized: false, ...createWorkspaceBaseState() };
+}
+
+function createWorkspaceState(initialSnapshot: StoredWorkspaceSnapshot): InitializedWorkspaceState {
   // The store is also constructed directly by collaboration/agent/test
   // adapters, so enforce the same canonical project boundary here instead of
   // relying solely on the localStorage and WorkspaceProvider callers.
   const project = normalizeProject(initialSnapshot.project);
-  const requestedActiveFilePath = normalizeWorkspacePath(initialSnapshot.activeFilePath);
-  const activeFilePath = project.files[requestedActiveFilePath]
-    ? requestedActiveFilePath
-    : project.entryFilePath;
+  const activeFilePath = resolveActiveFilePath(
+    project,
+    normalizeWorkspacePath(initialSnapshot.activeFilePath),
+  );
   const savedSnapshot: StoredWorkspaceSnapshot = { ...initialSnapshot, project, activeFilePath };
-  const collapsedFolders: string[] = [];
-  const sidebarScrollTop = 0;
-  // Width is session-only (see sidebarLayout.ts): every workspace starts at the default.
-  const sidebarWidth = DEFAULT_FILE_SIDEBAR_WIDTH;
-  const sidebarCollapsed = readStoredFileSidebarCollapsed();
+  const base = createWorkspaceBaseState();
 
   return {
     isInitialized: true,
+    ...base,
     project,
     activeFilePath,
-    collapsedFolders,
-    sidebarScrollTop,
-    sidebarWidth,
-    sidebarCollapsed,
     savedSnapshot,
-    workspaceLoadVersion: 0,
-    projectVersion: 0,
-    externalProjectVersion: 0,
-    treeVersion: 0,
-    saveVersion: 0,
-    syncVersion: 0,
-    lastFileSync: null,
-    isSaving: false,
-    saveError: null,
-    editorState: createEditorState(project, activeFilePath, 0),
+    editorState: createEditorState(project, activeFilePath, base.projectVersion),
     sidebarState: createSidebarState(
       project,
       activeFilePath,
-      collapsedFolders,
-      sidebarScrollTop,
-      sidebarWidth,
-      0,
+      base.collapsedFolders,
+      base.sidebarScrollTop,
+      base.sidebarWidth,
+      base.treeVersion,
     ),
     fileCount: Object.keys(project.files).length,
     dirtyState: createDirtyState(project, savedSnapshot.project),
@@ -918,9 +925,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           context,
           {
             project: nextProject,
-            activeFilePath: nextFiles[context.activeFilePath]
-              ? context.activeFilePath
-              : nextProject.entryFilePath,
+            activeFilePath: resolveActiveFilePath(nextProject, context.activeFilePath),
           },
           { topologyChanged: true },
         );
@@ -983,13 +988,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
         });
         if (content === null || content === existingFile.content) return context;
 
-        const endUpdateSpan = startPerformanceSpan("workspace.content_update", {
-          project_size: projectSizeBucket(context.fileCount),
-          source: "incremental",
-        });
-        const nextContext = withUpdatedFileContent(context, normalizedPath, content);
-        endUpdateSpan();
-        return nextContext;
+        return withTimedContentUpdate(context, normalizedPath, content, "incremental");
       }),
       updateFileContent: whenInitialized(
         (
@@ -1010,13 +1009,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
             return context;
           }
 
-          const endUpdateSpan = startPerformanceSpan("workspace.content_update", {
-            project_size: projectSizeBucket(context.fileCount),
-            source: "replacement",
-          });
-          const nextContext = withUpdatedFileContent(context, normalizedPath, event.content);
-          endUpdateSpan();
-          return nextContext;
+          return withTimedContentUpdate(context, normalizedPath, event.content, "replacement");
         },
       ),
       updateLessonType: whenInitialized(
@@ -1052,9 +1045,9 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           sidebarScrollTop?: number;
         },
       ) => {
-        const baseContext: InitializedWorkspaceState = context.isInitialized
+        const baseContext = context.isInitialized
           ? context
-          : (createWorkspaceState(event.savedSnapshot) as InitializedWorkspaceState);
+          : createWorkspaceState(event.savedSnapshot);
         const treeVersion = areWorkspaceTopologiesEqual(baseContext.project, event.project)
           ? baseContext.treeVersion
           : baseContext.treeVersion + 1;
@@ -1083,15 +1076,11 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           return context;
         }
 
-        const activeFilePath = project.files[context.activeFilePath]
-          ? context.activeFilePath
-          : project.entryFilePath;
-
         return commitProjectChange(
           context,
           {
             project,
-            activeFilePath,
+            activeFilePath: resolveActiveFilePath(project, context.activeFilePath),
             projectVersion: context.projectVersion + 1,
             // Marks this project bump as container/collaborator-driven rather than
             // a local user action, so playback UIs can tell the two apart.
@@ -1158,36 +1147,24 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           // Replace legacy v1 base64 placeholders with v2 descriptors after their
           // bytes have migrated in IndexedDB. Both live and saved snapshots change
           // together, so startup migration does not become a dirty user edit.
-          let changed = false;
-          const nextFiles = { ...context.project.files };
-          const nextSavedFiles = { ...context.savedSnapshot.project.files };
+          const files = withMigratedAssetDescriptors(context.project.files, event.descriptors);
 
-          for (const [path, descriptor] of Object.entries(event.descriptors)) {
-            const file = nextFiles[path];
-
-            if (file && isLegacyWorkspaceBinaryFile(file)) {
-              nextFiles[path] = { ...file, content: descriptor, encoding: "asset" };
-              changed = true;
-            }
-
-            const savedFile = nextSavedFiles[path];
-
-            if (savedFile && isLegacyWorkspaceBinaryFile(savedFile)) {
-              nextSavedFiles[path] = { ...savedFile, content: descriptor, encoding: "asset" };
-            }
-          }
-
-          if (!changed) {
+          if (files === context.project.files) {
             return context;
           }
+
+          const savedProject = context.savedSnapshot.project;
 
           return commitProjectChange(
             context,
             {
-              project: { ...context.project, files: nextFiles },
+              project: { ...context.project, files },
               savedSnapshot: {
                 ...context.savedSnapshot,
-                project: { ...context.savedSnapshot.project, files: nextSavedFiles },
+                project: {
+                  ...savedProject,
+                  files: withMigratedAssetDescriptors(savedProject.files, event.descriptors),
+                },
               },
             },
             { topologyChanged: false },
@@ -1262,9 +1239,6 @@ export const selectWorkspaceActiveFilePath = (context: WorkspaceState): string =
 
 export const selectWorkspaceLessonType = (context: WorkspaceState): WorkspaceLessonType =>
   context.isInitialized ? context.project.lessonType : "html-css";
-
-export const selectWorkspaceProjectName = (context: WorkspaceState): string =>
-  context.isInitialized ? context.project.name : "Untitled";
 
 export const selectWorkspaceProjectId = (context: WorkspaceState): string =>
   context.isInitialized ? context.project.id : "";

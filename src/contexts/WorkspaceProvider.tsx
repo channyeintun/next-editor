@@ -16,15 +16,17 @@ import {
   type WorkspaceStoreInstance,
 } from "../stores/workspaceStore";
 import {
+  resolveActiveFilePath,
+  withMigratedAssetDescriptors,
+} from "../stores/workspaceProjectSupport";
+import {
   migrateLegacyWorkspaceAssets,
   persistWorkspaceAssets,
   pruneLegacyWorkspaceAssetKeys,
 } from "../storage/workspaceAssetStore";
 import {
-  isLegacyWorkspaceBinaryFile,
   isWorkspaceTextFile,
   normalizeWorkspacePath,
-  type WorkspaceFile,
   type WorkspaceFileContent,
   type WorkspaceFileEncoding,
   type WorkspaceLessonType,
@@ -59,20 +61,9 @@ async function persistWorkspace(
       project,
       savedSnapshot.assetGeneration,
     );
+    const storedFiles = withMigratedAssetDescriptors(project.files, migratedDescriptors);
     const storedProject: WorkspaceProject =
-      Object.keys(migratedDescriptors).length === 0
-        ? project
-        : {
-            ...project,
-            files: Object.fromEntries(
-              Object.entries(project.files).map(([path, file]): [string, WorkspaceFile] => {
-                const descriptor = migratedDescriptors[path];
-                return descriptor && isLegacyWorkspaceBinaryFile(file)
-                  ? [path, { ...file, content: descriptor, encoding: "asset" as const }]
-                  : [path, file];
-              }),
-            ),
-          };
+      storedFiles === project.files ? project : { ...project, files: storedFiles };
     if (Object.keys(migratedDescriptors).length > 0) {
       workspaceStore.trigger.hydrateAssetDescriptors({ descriptors: migratedDescriptors });
     }
@@ -270,10 +261,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     sidebarScrollTop?: number,
   ) => {
     const normalizedProject = normalizeProject(project);
-    const normalizedNextActiveFilePath = normalizeWorkspacePath(nextActiveFilePath ?? "");
-    const resolvedActiveFilePath = normalizedProject.files[normalizedNextActiveFilePath]
-      ? normalizedNextActiveFilePath
-      : normalizedProject.entryFilePath;
+    const resolvedActiveFilePath = resolveActiveFilePath(
+      normalizedProject,
+      normalizeWorkspacePath(nextActiveFilePath ?? ""),
+    );
 
     const savedSnapshot: StoredWorkspaceSnapshot = {
       activeFilePath: resolvedActiveFilePath,
