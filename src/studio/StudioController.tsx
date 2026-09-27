@@ -170,6 +170,15 @@ function storeSemantics(slug: string, mode: StudioRuntimeMode, semantics: Render
   }
 }
 
+/**
+ * Whether a narrator reference can condition Burmese VoxCPM2 narration: long enough
+ * to keep one speaker, and within the stored-sample limit.
+ */
+function isBurmeseReferenceReady(voice: SavedCustomVoice): boolean {
+  const durationSeconds = voice.samples.length / voice.sampleRate;
+  return durationSeconds >= MIN_VOXCPM2_REFERENCE_SECONDS && durationSeconds <= MAX_SAMPLE_SECONDS;
+}
+
 function downloadBlob(name: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -294,13 +303,8 @@ export default function StudioController() {
   }, []);
 
   const selectedVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
-  const selectedVoiceDurationSeconds = selectedVoice
-    ? selectedVoice.samples.length / selectedVoice.sampleRate
-    : 0;
   const selectedVoiceIsBurmeseReady =
-    selectedVoice !== null &&
-    selectedVoiceDurationSeconds >= MIN_VOXCPM2_REFERENCE_SECONDS &&
-    selectedVoiceDurationSeconds <= MAX_SAMPLE_SECONDS;
+    selectedVoice !== null && isBurmeseReferenceReady(selectedVoice);
   const requiredVoiceSeconds =
     narrationLanguage === "my" ? MIN_VOXCPM2_REFERENCE_SECONDS : MIN_SAMPLE_SECONDS;
 
@@ -494,14 +498,7 @@ export default function StudioController() {
       const renderVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
       let burmeseVoiceProfile: ReturnType<typeof modalVoxCpm2BurmeseProfileOf> | undefined;
       if (narrationLanguage === "my") {
-        const durationSeconds = renderVoice
-          ? renderVoice.samples.length / renderVoice.sampleRate
-          : 0;
-        if (
-          !renderVoice ||
-          durationSeconds < MIN_VOXCPM2_REFERENCE_SECONDS ||
-          durationSeconds > MAX_SAMPLE_SECONDS
-        ) {
+        if (!renderVoice || !isBurmeseReferenceReady(renderVoice)) {
           throw new Error(
             `Burmese narration requires a ${MIN_VOXCPM2_REFERENCE_SECONDS}–${MAX_SAMPLE_SECONDS}s narrator reference. Record or upload one first.`,
           );
