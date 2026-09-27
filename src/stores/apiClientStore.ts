@@ -1,5 +1,9 @@
 import { createStore } from "@xstate/store-react";
-import type { ApiClientRecordedResult, ApiClientRequestTab } from "../types/slides";
+import type {
+  ApiClientRecordedResult,
+  ApiClientReplayState,
+  ApiClientRequestTab,
+} from "../types/slides";
 import { MAX_API_CLIENT_RETAINED_BODY_BYTES, truncateUtf8 } from "../utils/apiClientBridge";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "QUERY";
@@ -207,18 +211,7 @@ export function createApiClientStore() {
       // Replay-only: replace the whole visible request/response/history at once.
       // Playback re-applies state at many timeline points, so this must be a plain
       // overwrite (unlike `receiveResult`, which appends a history entry every call).
-      applyReplayState: (
-        context,
-        event: {
-          method: HttpMethod;
-          path: string;
-          body: string;
-          headers: ApiClientHeader[];
-          sending: boolean;
-          result: ApiClientResult | null;
-          history: ApiClientHistoryEntry[];
-        },
-      ) => ({
+      applyReplayState: (context, event: ApiClientReplayPayload) => ({
         ...context,
         method: event.method,
         path: event.path,
@@ -281,6 +274,41 @@ export function recordedResultToStoreResult(recorded: ApiClientRecordedResult): 
         },
       }
     : { ok: false, error: { error: recorded.error, durationMs: recorded.durationMs } };
+}
+
+/** Everything `applyReplayState` puts on screen at once. */
+export interface ApiClientReplayPayload {
+  method: HttpMethod;
+  path: string;
+  body: string;
+  headers: ApiClientHeader[];
+  sending: boolean;
+  result: ApiClientResult | null;
+  history: ApiClientHistoryEntry[];
+}
+
+/** Maps a recording's API client state onto what `applyReplayState` shows. */
+export function recordedApiStateToReplayPayload(
+  apiState: ApiClientReplayState,
+): ApiClientReplayPayload {
+  const request = apiState.request;
+  return {
+    method: (request?.method ?? "GET") as HttpMethod,
+    path: request?.path ?? "/",
+    body: request?.body ?? "",
+    headers: request ? recordToHeaders(request.headers) : [],
+    sending: apiState.sending ?? false,
+    result: apiState.result ? recordedResultToStoreResult(apiState.result) : null,
+    history: (apiState.history ?? []).map((entry) => ({
+      id: entry.id,
+      method: (entry.request?.method ?? "GET") as HttpMethod,
+      path: entry.request?.path ?? "/",
+      headers: recordToHeaders(entry.request?.headers ?? {}),
+      body: entry.request?.body ?? "",
+      result: recordedResultToStoreResult(entry.result),
+      timestamp: 0,
+    })),
+  };
 }
 
 /** Inverse of {@link recordedResultToStoreResult}: flattens a store result for

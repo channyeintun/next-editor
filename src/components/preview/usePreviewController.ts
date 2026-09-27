@@ -51,11 +51,9 @@ import {
 import { useApiClientStoreInstance } from "../../contexts/ApiClientStoreContext";
 import {
   buildHeaderRecord,
-  recordedResultToStoreResult,
-  recordToHeaders,
+  recordedApiStateToReplayPayload,
   storeResultToRecorded,
   type ApiClientHistoryEntry,
-  type HttpMethod,
 } from "../../stores/apiClientStore";
 import { hasRrwebPreviewSeed, RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
 import { useApiClient } from "./useApiClient";
@@ -880,26 +878,7 @@ export function usePreviewController(): PreviewController {
         return;
       }
 
-      const request = apiState.request;
-      const history: ApiClientHistoryEntry[] = (apiState.history ?? []).map((entry) => ({
-        id: entry.id,
-        method: (entry.request?.method ?? "GET") as HttpMethod,
-        path: entry.request?.path ?? "/",
-        headers: recordToHeaders(entry.request?.headers ?? {}),
-        body: entry.request?.body ?? "",
-        result: recordedResultToStoreResult(entry.result),
-        timestamp: 0,
-      }));
-
-      apiClientStore.trigger.applyReplayState({
-        method: (request?.method ?? "GET") as HttpMethod,
-        path: request?.path ?? "/",
-        body: request?.body ?? "",
-        headers: request ? recordToHeaders(request.headers) : [],
-        sending: apiState.sending ?? false,
-        result: apiState.result ? recordedResultToStoreResult(apiState.result) : null,
-        history,
-      });
+      apiClientStore.trigger.applyReplayState(recordedApiStateToReplayPayload(apiState));
       lastAppliedApiStateRef.current = {
         recorded: apiState,
         storeContext: apiClientStore.getSnapshot().context,
