@@ -175,13 +175,13 @@ import { runtimeNeedsSession, type StudioPlaygroundRuntimeKind } from "../studio
 import { dockTargetIdForRuntime, STUDIO_RUN_BUTTON_TARGET_ID } from "../studio/targets";
 import { GoPlaygroundServiceError } from "../runtime/goPlayground/client";
 import { HaskellPlaygroundServiceError } from "../runtime/haskellPlayground/client";
-import AsmPlaygroundRunnerPanel from "./AsmPlaygroundRunnerPanel";
-import GoPlaygroundRunnerPanel from "./GoPlaygroundRunnerPanel";
-import HaskellPlaygroundRunnerPanel from "./HaskellPlaygroundRunnerPanel";
-import KitePlaygroundRunnerPanel from "./KitePlaygroundRunnerPanel";
-import KotlinPlaygroundRunnerPanel from "./KotlinPlaygroundRunnerPanel";
-import RustPlaygroundRunnerPanel from "./RustPlaygroundRunnerPanel";
-import ZigPlaygroundRunnerPanel from "./ZigPlaygroundRunnerPanel";
+import AsmPlaygroundRunnerPanel, { ASM_RUNNER } from "./AsmPlaygroundRunnerPanel";
+import GoPlaygroundRunnerPanel, { GO_RUNNER } from "./GoPlaygroundRunnerPanel";
+import HaskellPlaygroundRunnerPanel, { HASKELL_RUNNER } from "./HaskellPlaygroundRunnerPanel";
+import KitePlaygroundRunnerPanel, { KITE_RUNNER } from "./KitePlaygroundRunnerPanel";
+import KotlinPlaygroundRunnerPanel, { KOTLIN_RUNNER } from "./KotlinPlaygroundRunnerPanel";
+import RustPlaygroundRunnerPanel, { RUST_RUNNER } from "./RustPlaygroundRunnerPanel";
+import ZigPlaygroundRunnerPanel, { ZIG_RUNNER } from "./ZigPlaygroundRunnerPanel";
 
 const RED = "\u001b[91m";
 const YELLOW = "\u001b[93m";
@@ -210,6 +210,13 @@ interface FormatCase {
 interface PanelCase {
   kind: StudioPlaygroundRuntimeKind;
   Panel: ComponentType;
+  /** The panel's PlaygroundRunnerLanguage, as far as the studio checks it. */
+  language: {
+    dockTargetId: string;
+    scrollSurface: string;
+    signIn: { buttonLabel: string } | null;
+    format: { signedOutLines?: () => string[] } | null;
+  };
   surface: string;
   runnerTab: string;
   command: string;
@@ -226,6 +233,7 @@ const CASES: PanelCase[] = [
   {
     kind: "go-playground",
     Panel: GoPlaygroundRunnerPanel,
+    language: GO_RUNNER,
     surface: "go-runner",
     runnerTab: "Go Runner",
     command: "go run *.go",
@@ -258,6 +266,7 @@ const CASES: PanelCase[] = [
   {
     kind: "rust-playground",
     Panel: RustPlaygroundRunnerPanel,
+    language: RUST_RUNNER,
     surface: "rust-runner",
     runnerTab: "Rust Runner",
     command: "cargo run",
@@ -290,6 +299,7 @@ const CASES: PanelCase[] = [
   {
     kind: "zig-playground",
     Panel: ZigPlaygroundRunnerPanel,
+    language: ZIG_RUNNER,
     surface: "zig-runner",
     runnerTab: "Zig Runner",
     command: "zig run main.zig",
@@ -322,6 +332,7 @@ const CASES: PanelCase[] = [
   {
     kind: "kite-playground",
     Panel: KitePlaygroundRunnerPanel,
+    language: KITE_RUNNER,
     surface: "kite-runner",
     runnerTab: "Kite Runner",
     command: "kitec run main.kite",
@@ -351,6 +362,7 @@ const CASES: PanelCase[] = [
   {
     kind: "haskell-playground",
     Panel: HaskellPlaygroundRunnerPanel,
+    language: HASKELL_RUNNER,
     surface: "haskell-runner",
     runnerTab: "Haskell Runner",
     command: "runghc Main.hs",
@@ -370,6 +382,7 @@ const CASES: PanelCase[] = [
   {
     kind: "kotlin-playground",
     Panel: KotlinPlaygroundRunnerPanel,
+    language: KOTLIN_RUNNER,
     surface: "kotlin-runner",
     runnerTab: "Kotlin Runner",
     command: "kotlin *.kt",
@@ -389,6 +402,7 @@ const CASES: PanelCase[] = [
   {
     kind: "asm-playground",
     Panel: AsmPlaygroundRunnerPanel,
+    language: ASM_RUNNER,
     surface: "asm-runner",
     runnerTab: "Assembly Runner",
     command: "nasm -f elf64 main.asm && ld -o main main.o && ./main",
@@ -890,4 +904,20 @@ describe("playground runner panels", () => {
     expect(store.getSnapshot().context.terminalScrollLines).toEqual({ "other-runner": 3 });
     expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
   });
+});
+
+describe("playground runner languages", () => {
+  it.each(CASES)("$kind: agrees with the studio on its dock and its session", (panel) => {
+    expect(panel.language.dockTargetId).toBe(dockTargetIdForRuntime(panel.kind));
+    expect(panel.language.signIn !== null).toBe(runtimeNeedsSession(panel.kind));
+    expect(panel.language.scrollSurface).toBe(panel.surface);
+  });
+
+  it.each(SESSION_CASES.filter((panel) => panel.language.format !== null))(
+    "$kind: says why it will not format while signed out",
+    (panel) => {
+      // Without these lines a signed-out Format would do nothing at all.
+      expect(panel.language.format?.signedOutLines).toBeTypeOf("function");
+    },
+  );
 });

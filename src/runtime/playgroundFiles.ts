@@ -37,3 +37,11 @@ export function arePlaygroundFilesEqual(
     )
   );
 }
+
+/**
+ * Whether the sources are exactly one file, at `path`: the only lesson a
+ * playground that compiles a single source string can run.
+ */
+export function isSinglePlaygroundFile(files: readonly PlaygroundFile[], path: string): boolean {
+  return files.length === 1 && files[0].path === path;
+}

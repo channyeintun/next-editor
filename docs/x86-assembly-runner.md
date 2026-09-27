@@ -118,11 +118,11 @@ compilers are remote.
 
 `asm` is a `WorkspaceLessonType` whose `WorkspaceExecutionKind` is
 `asm-playground`, alongside Kite as the second backend that needs no service.
-It follows the same six-file shape as every other language:
+It follows the same shape as every other language:
 
 - `src/runtime/asmPlayground/{types,client,console,files}.ts`
-- `src/hooks/useAsmPlaygroundRunner.ts`
-- `src/components/AsmPlaygroundRunnerPanel.tsx`
+- `src/components/AsmPlaygroundRunnerPanel.tsx` (its `PlaygroundRunnerLanguage`,
+  which the shared `PlaygroundRunnerPanel` renders)
 - `src/monaco/asmLanguage.ts`, `src/starters/asm.ts`
 - `src/studio/plan.ts` (`asm-playground` runtime kind) and
   `src/studio/playgroundRuntime.ts` (the run adapter)
