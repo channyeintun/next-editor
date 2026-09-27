@@ -138,11 +138,7 @@ export function CollaborationVoiceProvider({
     enableAudio: () => engine?.enableAudio(),
   };
 
-  return (
-    <CollaborationVoiceContext.Provider value={value}>
-      {children}
-    </CollaborationVoiceContext.Provider>
-  );
+  return <CollaborationVoiceContext value={value}>{children}</CollaborationVoiceContext>;
 }
 
 export function useCollaborationVoice(): CollaborationVoiceContextValue {

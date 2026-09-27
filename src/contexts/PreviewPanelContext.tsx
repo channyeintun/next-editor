@@ -86,13 +86,11 @@ export function PreviewPanelProvider({ children }: PreviewPanelProviderProps) {
   };
 
   const floatPreview = () => {
-    setMode("floating");
-    setIsOpen(true);
+    openPreview("floating");
   };
 
   const dockPreview = () => {
-    setMode("docked");
-    setIsOpen(true);
+    openPreview("docked");
   };
 
   const togglePreview = () => {
@@ -135,7 +133,7 @@ export function PreviewPanelProvider({ children }: PreviewPanelProviderProps) {
     applyPreviewPanelState,
   };
 
-  return <PreviewPanelContext.Provider value={value}>{children}</PreviewPanelContext.Provider>;
+  return <PreviewPanelContext value={value}>{children}</PreviewPanelContext>;
 }
 
 export function usePreviewPanel(): PreviewPanelContextValue {

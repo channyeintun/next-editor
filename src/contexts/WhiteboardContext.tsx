@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { useWhiteboardController } from "../hooks/useWhiteboardController";
 import { useWhiteboardStore } from "./WhiteboardStoreContext";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -8,10 +8,10 @@ import type { WhiteboardEvent } from "../core/src/whiteboard";
 const WhiteboardContext = createContext<ReturnType<typeof useWhiteboardController> | null>(null);
 
 interface WhiteboardProviderProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-export const WhiteboardProvider: React.FC<WhiteboardProviderProps> = ({ children }) => {
+export function WhiteboardProvider({ children }: WhiteboardProviderProps) {
   const { handleWhiteboardEvent } = useNextEditorActions();
   const { usesPlaybackModel } = useNextEditorMetadata();
   const { store } = useWhiteboardStore();
@@ -44,8 +44,8 @@ export const WhiteboardProvider: React.FC<WhiteboardProviderProps> = ({ children
     scopeKey: usesPlaybackModel ? "playback" : collaboration?.provider,
   });
 
-  return <WhiteboardContext.Provider value={whiteboardData}>{children}</WhiteboardContext.Provider>;
-};
+  return <WhiteboardContext value={whiteboardData}>{children}</WhiteboardContext>;
+}
 
 export const useWhiteboardContext = () => {
   const context = useContext(WhiteboardContext);

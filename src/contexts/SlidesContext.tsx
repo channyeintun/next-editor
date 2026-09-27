@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { useSlidesController } from "../hooks/useSlidesController";
 import { useSlidesStore } from "./SlidesStoreContext";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
@@ -8,10 +8,10 @@ import type { SlideEvent } from "../types/slides";
 const SlidesContext = createContext<ReturnType<typeof useSlidesController> | null>(null);
 
 interface SlidesProviderProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
+export function SlidesProvider({ children }: SlidesProviderProps) {
   const { handleSlideEvent } = useNextEditorActions();
   const { store } = useSlidesStore();
   const collaboration = useOptionalCollaboration();
@@ -37,8 +37,8 @@ export const SlidesProvider: React.FC<SlidesProviderProps> = ({ children }) => {
     resetBuildStepOnOpen: Boolean(collaboration?.provider),
   });
 
-  return <SlidesContext.Provider value={slidesData}>{children}</SlidesContext.Provider>;
-};
+  return <SlidesContext value={slidesData}>{children}</SlidesContext>;
+}
 
 export const useSlidesContext = () => {
   const context = useContext(SlidesContext);
