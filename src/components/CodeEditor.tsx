@@ -52,6 +52,11 @@ import {
   type CollaborationCursorLabel,
 } from "./collaborationCursorLabels";
 import {
+  collaboratorColor,
+  collaboratorDisplayName,
+  collaboratorSelectionColor,
+} from "./collaboratorAppearance";
+import {
   acknowledgeWorkspaceModelContent,
   disposePlaybackModels,
   disposeRemovedWorkspaceModels,
@@ -95,26 +100,6 @@ const RUNNER_PANELS: Record<Exclude<WorkspaceExecutionKind, "webcontainer">, Com
   "asm-playground": AsmPlaygroundRunnerPanel,
 };
 const Y_MONACO_BINDING_ENABLED = import.meta.env.VITE_COLLABORATION_Y_MONACO !== "false";
-const COLLABORATION_CURSOR_COLORS = [
-  "#38bdf8",
-  "#34d399",
-  "#fbbf24",
-  "#e879f9",
-  "#22d3ee",
-  "#fb923c",
-  "#a78bfa",
-  "#a3e635",
-] as const;
-const COLLABORATION_SELECTION_COLORS = [
-  "rgb(56 189 248 / 28%)",
-  "rgb(52 211 153 / 28%)",
-  "rgb(251 191 36 / 28%)",
-  "rgb(232 121 249 / 28%)",
-  "rgb(34 211 238 / 28%)",
-  "rgb(251 146 60 / 28%)",
-  "rgb(167 139 250 / 28%)",
-  "rgb(163 230 53 / 28%)",
-] as const;
 
 interface CodeEditorProps {
   language?: string;
@@ -180,10 +165,6 @@ interface ActiveYMonacoBinding {
   provider: CollaborationRoomProvider;
   text: Y.Text;
   path: string;
-}
-
-function displayParticipantName(participant: { name: string | null; username: string }): string {
-  return participant.name?.trim() || participant.username;
 }
 
 /**
@@ -889,9 +870,8 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       for (const selection of selections) {
         standardParticipantKeys.add(collaborationParticipantKey(selection.participant));
         const colorIndex = collaborationParticipantColorIndex(selection.participant);
-        const color = COLLABORATION_CURSOR_COLORS[colorIndex] ?? COLLABORATION_CURSOR_COLORS[0];
-        const selectionColor =
-          COLLABORATION_SELECTION_COLORS[colorIndex] ?? COLLABORATION_SELECTION_COLORS[0];
+        const color = collaboratorColor(colorIndex);
+        const selectionColor = collaboratorSelectionColor(colorIndex);
         if (yMonacoRendersSelections) {
           styleRules.push(
             `.monaco-editor .yRemoteSelection-${selection.clientId}{background:${selectionColor};border-radius:2px}`,
@@ -909,7 +889,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               options: {
                 className: `collaboration-selection collaboration-color-${colorIndex}`,
                 hoverMessage: {
-                  value: escapeMarkdown(displayParticipantName(selection.participant)),
+                  value: escapeMarkdown(collaboratorDisplayName(selection.participant)),
                 },
               },
             });
@@ -919,14 +899,14 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
             options: {
               beforeContentClassName: `collaboration-cursor collaboration-color-${colorIndex}`,
               hoverMessage: {
-                value: escapeMarkdown(displayParticipantName(selection.participant)),
+                value: escapeMarkdown(collaboratorDisplayName(selection.participant)),
               },
             },
           });
         }
         labels.push({
           id: collaborationParticipantKey(selection.participant),
-          name: displayParticipantName(selection.participant),
+          name: collaboratorDisplayName(selection.participant),
           colorIndex,
           position: model.getPositionAt(selection.headOffset),
         });
@@ -950,7 +930,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         const start = startsBeforeHead ? anchor : head;
         const end = startsBeforeHead ? head : anchor;
         const colorIndex = collaborationParticipantColorIndex(participant);
-        const participantName = displayParticipantName(participant);
+        const participantName = collaboratorDisplayName(participant);
         if (cursor.anchorOffset !== cursor.headOffset) {
           awarenessDecorations.push({
             range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
@@ -1024,7 +1004,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       const start = startsBeforeHead ? anchor : head;
       const end = startsBeforeHead ? head : anchor;
       const color = collaborationParticipantColorIndex(participant);
-      const participantName = displayParticipantName(participant);
+      const participantName = collaboratorDisplayName(participant);
       if (cursor.anchorOffset !== cursor.headOffset) {
         decorations.push({
           range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),

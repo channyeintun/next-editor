@@ -25,6 +25,7 @@ import { collaborationParticipantKey } from "../collaboration/participantKey";
 import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
 import type { CollaborationInviteRole } from "../collaboration/protocol";
 import type { VoiceClientErrorCode } from "../voice/machine";
+import { COLLABORATOR_DOT_CLASSES, collaboratorDisplayName } from "./collaboratorAppearance";
 
 const STATUS_LABELS = {
   disconnected: "Disconnected",
@@ -34,21 +35,6 @@ const STATUS_LABELS = {
   reconnecting: "Reconnecting…",
   failed: "Connection failed",
 } as const;
-
-const PARTICIPANT_COLORS = [
-  "bg-sky-400",
-  "bg-emerald-400",
-  "bg-amber-400",
-  "bg-fuchsia-400",
-  "bg-cyan-400",
-  "bg-orange-400",
-  "bg-violet-400",
-  "bg-lime-400",
-] as const;
-
-function displayName(person: { name: string | null; username: string }): string {
-  return person.name?.trim() || person.username;
-}
 
 const VOICE_STATUS_LABELS = {
   idle: "Not in voice",
@@ -445,7 +431,7 @@ export default function CollaborationPanel() {
                     className="flex w-full items-center justify-between rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100"
                   >
                     <span className="truncate">
-                      Following {displayName(collaboration.followedParticipant)}
+                      Following {collaboratorDisplayName(collaboration.followedParticipant)}
                     </span>
                     <span className="font-semibold">Stop</span>
                   </button>
@@ -510,12 +496,12 @@ export default function CollaborationPanel() {
                               />
                             ) : (
                               <span
-                                className={`size-2.5 rounded-full ${PARTICIPANT_COLORS[color]}`}
+                                className={`size-2.5 rounded-full ${COLLABORATOR_DOT_CLASSES[color]}`}
                               />
                             )}
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-xs text-slate-200">
-                                {displayName(participant)}
+                                {collaboratorDisplayName(participant)}
                                 {isSelf ? " (you)" : ""}
                               </span>
                               <span className="block truncate text-[10px] text-slate-500">
@@ -535,7 +521,7 @@ export default function CollaborationPanel() {
                             {!isSelf ? (
                               <button
                                 type="button"
-                                aria-label={`${isFollowed ? "Stop following" : "Follow"} ${displayName(participant)}`}
+                                aria-label={`${isFollowed ? "Stop following" : "Follow"} ${collaboratorDisplayName(participant)}`}
                                 aria-pressed={isFollowed}
                                 onClick={() =>
                                   isFollowed
@@ -607,14 +593,14 @@ export default function CollaborationPanel() {
                         {collaboration.members.map((member) => (
                           <div key={member.userId} className="flex items-center gap-2 text-xs">
                             <span className="min-w-0 flex-1 truncate text-slate-300">
-                              {displayName(member)}
+                              {collaboratorDisplayName(member)}
                             </span>
                             {member.role === "owner" ? (
                               <span className="text-[10px] text-amber-300">owner · host</span>
                             ) : (
                               <>
                                 <select
-                                  aria-label={`Role for ${displayName(member)}`}
+                                  aria-label={`Role for ${collaboratorDisplayName(member)}`}
                                   value={member.role}
                                   disabled={isBusy}
                                   onChange={(event) =>
@@ -632,7 +618,7 @@ export default function CollaborationPanel() {
                                 </select>
                                 <button
                                   type="button"
-                                  aria-label={`Remove ${displayName(member)}`}
+                                  aria-label={`Remove ${collaboratorDisplayName(member)}`}
                                   disabled={isBusy}
                                   onClick={() =>
                                     void run(() => collaboration.removeMember(member.userId))

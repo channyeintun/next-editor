@@ -1,20 +1,6 @@
 import { collaborationParticipantColorIndex } from "../collaboration/relativePosition";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
-
-const FOLLOW_COLORS = [
-  "#38bdf8",
-  "#34d399",
-  "#fbbf24",
-  "#e879f9",
-  "#22d3ee",
-  "#fb923c",
-  "#a78bfa",
-  "#a3e635",
-] as const;
-
-function displayName(person: { name: string | null; username: string }): string {
-  return person.name?.trim() || person.username;
-}
+import { collaboratorColor, collaboratorDisplayName } from "./collaboratorAppearance";
 
 export default function CollaborationFollowOverlay() {
   const collaboration = useOptionalCollaboration();
@@ -28,7 +14,7 @@ export default function CollaborationFollowOverlay() {
     const path = collaboration.getPathForNodeId(target.surface.fileNodeId);
     return path?.split("/").at(-1) ?? "Editor";
   })();
-  const color = FOLLOW_COLORS[collaborationParticipantColorIndex(target)] ?? FOLLOW_COLORS[0];
+  const color = collaboratorColor(collaborationParticipantColorIndex(target));
 
   return (
     <div className="pointer-events-none fixed inset-0 z-2147483645" aria-live="polite">
@@ -40,7 +26,7 @@ export default function CollaborationFollowOverlay() {
       >
         <span className="size-2 rounded-full" style={{ backgroundColor: color }} />
         <span>
-          Following {displayName(target)} · {surface} · Esc to stop
+          Following {collaboratorDisplayName(target)} · {surface} · Esc to stop
         </span>
         <button
           type="button"
