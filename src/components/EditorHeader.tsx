@@ -147,6 +147,28 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   const activeLessonOption =
     LESSON_TYPE_OPTIONS.find((option) => option.value === lessonType) ?? LESSON_TYPE_OPTIONS[0];
 
+  // Asks before the workspace is replaced. With something to discard, the
+  // question names it and `consequence` says what replaces it; with nothing,
+  // `emptyWorkspacePrompt` is the whole question.
+  const confirmReplaceWorkspace = (consequence: string, emptyWorkspacePrompt: string) =>
+    window.confirm(
+      hasUnsavedChanges
+        ? `Discard the current workspace and unsaved changes? ${consequence}`
+        : fileCount > 0
+          ? `Discard the current workspace? ${consequence}`
+          : emptyWorkspacePrompt,
+    );
+
+  // Starter templates are split into per-framework chunks, so the starter is
+  // fetched on demand before it replaces the workspace.
+  const replaceWithStarter = async (starterLessonType: WorkspaceLessonType) => {
+    const starterProject = await createStarterWorkspaceForLessonType(starterLessonType);
+
+    reconcileExternalProject(starterProject);
+    await saveProject();
+    updateRunnerConfig({ enabled: true });
+  };
+
   const handleEditEnvironment = () => {
     setIsMenuOpen(false);
     setIsEnvironmentModalOpen(true);
@@ -226,13 +248,12 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       return;
     }
 
-    const confirmMessage = hasUnsavedChanges
-      ? `Discard the current workspace and unsaved changes? Importing will replace it with "${file.name}".`
-      : fileCount > 0
-        ? `Discard the current workspace? Importing will replace it with "${file.name}".`
-        : `Import "${file.name}"?`;
-
-    if (!window.confirm(confirmMessage)) {
+    if (
+      !confirmReplaceWorkspace(
+        `Importing will replace it with "${file.name}".`,
+        `Import "${file.name}"?`,
+      )
+    ) {
       return;
     }
 
@@ -262,27 +283,21 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     // "New Editor" starts over within the current framework, so reset to a fresh
     // starter of the active lesson type rather than always falling back to HTML/CSS.
     const currentOption = activeLessonOption;
-    const confirmMessage = hasUnsavedChanges
-      ? `Discard the current workspace and unsaved changes? This will reset the editor to a fresh ${currentOption.label} project.`
-      : fileCount > 0
-        ? `Discard the current workspace? This will reset the editor to a fresh ${currentOption.label} project.`
-        : `Create a new ${currentOption.label} project?`;
 
     setIsMenuOpen(false);
 
-    if (!window.confirm(confirmMessage)) {
+    if (
+      !confirmReplaceWorkspace(
+        `This will reset the editor to a fresh ${currentOption.label} project.`,
+        `Create a new ${currentOption.label} project?`,
+      )
+    ) {
       return;
     }
 
-    // Starter templates are split into per-framework chunks, so fetch the active
-    // one on demand before swapping it in.
-    const starterProject = await createStarterWorkspaceForLessonType(currentOption.value);
-
     // Same framework as before, so its dependencies are already installed — just
     // swap the files in (the running dev server picks them up) and keep it running.
-    reconcileExternalProject(starterProject);
-    await saveProject();
-    updateRunnerConfig({ enabled: true });
+    await replaceWithStarter(currentOption.value);
   };
 
   const handleSelectLessonType = async (nextLessonType: WorkspaceLessonType) => {
@@ -299,25 +314,19 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     }
 
     const nextLessonLabel = `a fresh ${nextOption.label} project`;
-    const confirmMessage = hasUnsavedChanges
-      ? `Discard the current workspace and unsaved changes? Switching will replace it with ${nextLessonLabel}.`
-      : fileCount > 0
-        ? `Discard the current workspace? Switching will replace it with ${nextLessonLabel}.`
-        : `Switch to ${nextLessonLabel}?`;
 
     setIsMenuOpen(false);
 
-    if (!window.confirm(confirmMessage)) {
+    if (
+      !confirmReplaceWorkspace(
+        `Switching will replace it with ${nextLessonLabel}.`,
+        `Switch to ${nextLessonLabel}?`,
+      )
+    ) {
       return;
     }
 
-    // The selected framework's starter lives in its own lazily loaded chunk;
-    // pull it in before replacing the workspace.
-    const starterProject = await createStarterWorkspaceForLessonType(nextOption.value);
-
-    reconcileExternalProject(starterProject);
-    await saveProject();
-    updateRunnerConfig({ enabled: true });
+    await replaceWithStarter(nextOption.value);
     track("lesson_type_selected", { lesson_type: nextLessonType });
     // Each framework ships different dependencies, so tear the runtime down to
     // force a fresh mount + `pnpm install` for the new project on next start.
