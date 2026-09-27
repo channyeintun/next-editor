@@ -51,11 +51,14 @@ import {
   CollaborationCursorLabelManager,
   type CollaborationCursorLabel,
 } from "./collaborationCursorLabels";
+import { collaboratorDisplayName } from "./collaboratorAppearance";
 import {
-  collaboratorColor,
-  collaboratorDisplayName,
-  collaboratorSelectionColor,
-} from "./collaboratorAppearance";
+  participantCursorDecorations,
+  remoteSelectionDecorations,
+  remoteSelectionToEditorSelection,
+  resolveRemoteSelection,
+  yMonacoSelectionStyleRules,
+} from "./remoteCursors";
 import {
   acknowledgeWorkspaceModelContent,
   disposePlaybackModels,
@@ -165,18 +168,6 @@ interface ActiveYMonacoBinding {
   provider: CollaborationRoomProvider;
   text: Y.Text;
   path: string;
-}
-
-/**
- * Monaco renders `hoverMessage.value` as Markdown. `username` is charset-safe,
- * but `name` comes straight from the Google ID token's `name` claim with only a
- * length check, so a peer whose account name contains Markdown could render a
- * link or a remote image inside another participant's editor hover — phishing
- * plus an IP beacon that fires on hovering their cursor. Escaping the syntax
- * characters keeps the name readable while making it inert.
- */
-function escapeMarkdown(value: string): string {
-  return value.replace(/[\\`*_{}[\]()#+\-.!<>|~]/g, "\\$&");
 }
 
 /**
@@ -856,39 +847,16 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       for (const selection of selections) {
         standardParticipantKeys.add(collaborationParticipantKey(selection.participant));
         const colorIndex = collaborationParticipantColorIndex(selection.participant);
-        const color = collaboratorColor(colorIndex);
-        const selectionColor = collaboratorSelectionColor(colorIndex);
         if (yMonacoRendersSelections) {
-          styleRules.push(
-            `.monaco-editor .yRemoteSelection-${selection.clientId}{background:${selectionColor};border-radius:2px}`,
-            `.monaco-editor .yRemoteSelectionHead-${selection.clientId}{display:inline-block;height:1.2em;margin-left:-1px;border-left:2px solid ${color};vertical-align:text-bottom}`,
-          );
+          styleRules.push(...yMonacoSelectionStyleRules(selection.clientId, colorIndex));
         } else {
-          const anchor = model.getPositionAt(selection.anchorOffset);
-          const head = model.getPositionAt(selection.headOffset);
-          const startsBeforeHead = selection.anchorOffset <= selection.headOffset;
-          const start = startsBeforeHead ? anchor : head;
-          const end = startsBeforeHead ? head : anchor;
-          if (selection.anchorOffset !== selection.headOffset) {
-            awarenessDecorations.push({
-              range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
-              options: {
-                className: `collaboration-selection collaboration-color-${colorIndex}`,
-                hoverMessage: {
-                  value: escapeMarkdown(collaboratorDisplayName(selection.participant)),
-                },
-              },
-            });
-          }
-          awarenessDecorations.push({
-            range: new monaco.Range(head.lineNumber, head.column, head.lineNumber, head.column),
-            options: {
-              beforeContentClassName: `collaboration-cursor collaboration-color-${colorIndex}`,
-              hoverMessage: {
-                value: escapeMarkdown(collaboratorDisplayName(selection.participant)),
-              },
-            },
-          });
+          awarenessDecorations.push(
+            ...remoteSelectionDecorations(
+              resolveRemoteSelection(model, selection.anchorOffset, selection.headOffset),
+              colorIndex,
+              collaboratorDisplayName(selection.participant),
+            ),
+          );
         }
         labels.push({
           id: collaborationParticipantKey(selection.participant),
@@ -910,35 +878,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         }
         const cursor = resolveCollaborationCursor(collaboration.doc, participant.cursor);
         if (!cursor) continue;
-        const anchor = model.getPositionAt(cursor.anchorOffset);
-        const head = model.getPositionAt(cursor.headOffset);
-        const startsBeforeHead = cursor.anchorOffset <= cursor.headOffset;
-        const start = startsBeforeHead ? anchor : head;
-        const end = startsBeforeHead ? head : anchor;
-        const colorIndex = collaborationParticipantColorIndex(participant);
-        const participantName = collaboratorDisplayName(participant);
-        if (cursor.anchorOffset !== cursor.headOffset) {
-          awarenessDecorations.push({
-            range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
-            options: {
-              className: `collaboration-selection collaboration-color-${colorIndex}`,
-              hoverMessage: { value: escapeMarkdown(participantName) },
-            },
-          });
-        }
-        awarenessDecorations.push({
-          range: new monaco.Range(head.lineNumber, head.column, head.lineNumber, head.column),
-          options: {
-            beforeContentClassName: `collaboration-cursor collaboration-color-${colorIndex}`,
-            hoverMessage: { value: escapeMarkdown(participantName) },
-          },
-        });
-        labels.push({
-          id: key,
-          name: participantName,
-          colorIndex,
-          position: head,
-        });
+        const drawn = participantCursorDecorations(model, key, participant, cursor);
+        awarenessDecorations.push(...drawn.decorations);
+        labels.push(drawn.label);
       }
       if (styleRules.length > 0) {
         let style = remoteAwarenessStyleRef.current;
@@ -984,35 +926,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       }
       const cursor = resolveCollaborationCursor(collaboration.doc, participant.cursor);
       if (!cursor) continue;
-      const anchor = model.getPositionAt(cursor.anchorOffset);
-      const head = model.getPositionAt(cursor.headOffset);
-      const startsBeforeHead = cursor.anchorOffset <= cursor.headOffset;
-      const start = startsBeforeHead ? anchor : head;
-      const end = startsBeforeHead ? head : anchor;
-      const color = collaborationParticipantColorIndex(participant);
-      const participantName = collaboratorDisplayName(participant);
-      if (cursor.anchorOffset !== cursor.headOffset) {
-        decorations.push({
-          range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
-          options: {
-            className: `collaboration-selection collaboration-color-${color}`,
-            hoverMessage: { value: escapeMarkdown(participantName) },
-          },
-        });
-      }
-      decorations.push({
-        range: new monaco.Range(head.lineNumber, head.column, head.lineNumber, head.column),
-        options: {
-          beforeContentClassName: `collaboration-cursor collaboration-color-${color}`,
-          hoverMessage: { value: escapeMarkdown(participantName) },
-        },
-      });
-      cursorLabels.push({
-        id: key,
-        name: participantName,
-        colorIndex: color,
-        position: head,
-      });
+      const drawn = participantCursorDecorations(model, key, participant, cursor);
+      decorations.push(...drawn.decorations);
+      cursorLabels.push(drawn.label);
     }
     cursorLabelManager.reconcile(editor, cursorLabels, [
       monaco.editor.ContentWidgetPositionPreference.ABOVE,
@@ -1074,24 +990,12 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
           isRecording &&
           recordedRemoteCursorSignaturesRef.current.get(key) !== signature
         ) {
-          const anchor = model.getPositionAt(anchorOffset);
-          const head = model.getPositionAt(headOffset);
-          const startsBeforeHead = anchorOffset <= headOffset;
-          const start = startsBeforeHead ? anchor : head;
-          const end = startsBeforeHead ? head : anchor;
           changedSelections.push({
             key,
             occurredAt: participant.occurredAt,
-            selection: {
-              startLineNumber: start.lineNumber,
-              startColumn: start.column,
-              endLineNumber: end.lineNumber,
-              endColumn: end.column,
-              selectionStartLineNumber: anchor.lineNumber,
-              selectionStartColumn: anchor.column,
-              positionLineNumber: head.lineNumber,
-              positionColumn: head.column,
-            },
+            selection: remoteSelectionToEditorSelection(
+              resolveRemoteSelection(model, anchorOffset, headOffset),
+            ),
           });
         }
       };
