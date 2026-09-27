@@ -1,18 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
-import {
-  AlertTriangle,
-  Bot,
-  Check,
-  Plus,
-  RotateCcw,
-  Search,
-  Send,
-  Settings,
-  ShieldCheck,
-  Square,
-  X,
-} from "lucide-react";
+import { Bot, Plus, Search, Send, Settings, Square, X } from "lucide-react";
 import { WorkspaceStoreContext } from "../../stores/workspaceStore";
 import {
   getAgentStore,
@@ -58,6 +46,9 @@ import {
 } from "../../hooks/useWebContainerRuntime";
 import { filterModelOptions } from "../../agent/modelCatalog";
 import { createChatCheckpoint } from "../../agent/chatRecording";
+import AgentErrorNotice from "./AgentErrorNotice";
+import DraftImageStrip from "./DraftImageStrip";
+import ToolConfirmationCard from "./ToolConfirmationCard";
 import { formatToolResultOutput } from "./toolResultOutput";
 import { useOpenRouterModelCatalog } from "./useOpenRouterModelCatalog";
 
@@ -444,103 +435,29 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
               </div>
             )}
             {error && !isReplayActive ? (
-              <div
-                className="mt-3 rounded-lg border border-red-500/25 bg-red-500/[0.07] p-3"
-                role="alert"
-              >
-                <div className="flex items-start gap-2.5">
-                  <AlertTriangle size={15} className="mt-0.5 shrink-0 text-red-400" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-red-200">The agent hit an error</p>
-                    <pre className="mt-1 whitespace-pre-wrap wrap-break-word font-sans text-xs leading-5 text-red-300/90">
-                      {error}
-                    </pre>
-                    <p className="mt-2 text-[11px] text-slate-500">
-                      Try again. If it keeps failing, check the provider status or choose another
-                      model.
-                    </p>
-                  </div>
-                </div>
-                {canRetry ? (
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleRetry}
-                      disabled={isBusy || !apiKey}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#173925] px-3 text-xs font-semibold text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <RotateCcw size={13} />
-                      Retry
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              <AgentErrorNotice
+                error={error}
+                canRetry={canRetry}
+                isRetryDisabled={isBusy || !apiKey}
+                onRetry={handleRetry}
+              />
             ) : null}
             <div ref={transcriptEndRef} />
           </div>
 
           {activeConfirmation ? (
-            <div className="mx-3 mb-3 rounded-lg border border-[#64a3ff]/25 bg-[#1a202a] p-3 shadow-[0_8px_20px_rgba(0,0,0,0.16)]">
-              <div className="flex items-start gap-2.5">
-                <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-[#64a3ff]/10 text-[#64a3ff]">
-                  <ShieldCheck size={15} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#64a3ff]">
-                    Permission required
-                  </p>
-                  <p className="mt-0.5 text-xs font-medium text-slate-200">
-                    Allow {activeConfirmation.request.toolName} to run this command?
-                  </p>
-                </div>
-              </div>
-              <pre className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap wrap-break-word rounded-md border border-slate-800 bg-[#0f1319] px-3 py-2 font-mono text-xs leading-5 text-slate-300">
-                {activeConfirmation.request.summary}
-              </pre>
-              <div className="mt-3 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => resolveConfirmation(activeConfirmation.id, false)}
-                  className="h-8 rounded-md border border-slate-700 bg-transparent px-3 text-xs font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
-                >
-                  Deny
-                </button>
-                <button
-                  type="button"
-                  onClick={() => resolveConfirmation(activeConfirmation.id, true)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#173925] px-3 text-xs font-semibold text-[#58d88d] transition-colors hover:bg-[#1f4a31]"
-                >
-                  <Check size={13} />
-                  Allow
-                </button>
-              </div>
-            </div>
+            <ToolConfirmationCard
+              request={activeConfirmation.request}
+              onResolve={(approved) => resolveConfirmation(activeConfirmation.id, approved)}
+            />
           ) : null}
 
           <div className="border-t border-[#11151d] bg-[#13171e] p-3">
             <div className="rounded-lg border border-slate-700/80 bg-[#0f1319] shadow-[0_8px_20px_rgba(0,0,0,0.18)] transition-colors focus-within:border-[#64a3ff]/70 focus-within:ring-1 focus-within:ring-[#64a3ff]/25">
-              {promptImages.length > 0 ? (
-                <div className="flex gap-2 overflow-x-auto border-b border-slate-800/80 p-2">
-                  {promptImages.map((image) => (
-                    <div key={image.id} className="group relative size-14 shrink-0">
-                      <img
-                        src={image.dataUrl}
-                        alt={image.name ?? "Pasted image"}
-                        className="size-full rounded border border-slate-700 object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => agentStore.trigger.removeDraftImage({ id: image.id })}
-                        className="absolute -right-1 -top-1 inline-flex size-5 items-center justify-center rounded-full bg-slate-900 text-slate-300 shadow hover:bg-red-900 hover:text-red-100"
-                        aria-label={`Remove ${image.name ?? "pasted image"}`}
-                        title="Remove image"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
+              <DraftImageStrip
+                images={promptImages}
+                onRemove={(id) => agentStore.trigger.removeDraftImage({ id })}
+              />
               <textarea
                 value={promptInput}
                 onChange={(event) => applyDraft(event.target.value)}
