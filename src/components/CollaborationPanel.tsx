@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { avatarProxyUrl, signInUrl, useAuth } from "@next-editor/infra";
-import { useCollaboration } from "../contexts/CollaborationContext";
+import { useCollaboration, type CollaborationParticipant } from "../contexts/CollaborationContext";
 import {
   useCollaborationVoice,
   useCollaborationVoiceState,
@@ -268,6 +268,64 @@ function InvitationPrompt({ isAccepting, onAccept, onDecline }: InvitationPrompt
 
 type CollaborationContextValue = ReturnType<typeof useCollaboration>;
 
+interface ParticipantRowProps {
+  participant: CollaborationParticipant;
+  /**
+   * What the participant has open. The panel works it out on every render
+   * (describeParticipantSurface) rather than this row, which is memoized.
+   */
+  surfaceLabel: string;
+  isSelf: boolean;
+  isFollowed: boolean;
+  onFollow: () => void;
+  onStopFollowing: () => void;
+}
+
+/** One person in the online list: who they are, where they are, and a follow toggle. */
+function ParticipantRow({
+  participant,
+  surfaceLabel,
+  isSelf,
+  isFollowed,
+  onFollow,
+  onStopFollowing,
+}: ParticipantRowProps) {
+  const colorIndex = collaborationParticipantColorIndex(participant);
+  const name = collaboratorDisplayName(participant);
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-white/3 px-2.5 py-2">
+      {participant.avatarUrl ? (
+        <img src={avatarProxyUrl(participant.avatarUrl)} alt="" className="size-6 rounded-full" />
+      ) : (
+        <span className={`size-2.5 rounded-full ${COLLABORATOR_DOT_CLASSES[colorIndex]}`} />
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs text-slate-200">
+          {name}
+          {isSelf ? " (you)" : ""}
+        </span>
+        <span className="block truncate text-[10px] text-slate-500">{surfaceLabel}</span>
+      </span>
+      <VoiceParticipantBadge userId={participant.actorId} sessionId={participant.sessionId} />
+      {participant.isHost ? <Crown size={13} className="text-amber-300" aria-label="Host" /> : null}
+      <span className="text-[10px] capitalize text-slate-500">{participant.role}</span>
+      {!isSelf ? (
+        <button
+          type="button"
+          aria-label={`${isFollowed ? "Stop following" : "Follow"} ${name}`}
+          aria-pressed={isFollowed}
+          onClick={() => (isFollowed ? onStopFollowing() : onFollow())}
+          className={`rounded px-2 py-1 text-[10px] font-semibold ${
+            isFollowed ? "bg-sky-400 text-slate-950" : "bg-white/5 text-slate-300 hover:bg-white/10"
+          }`}
+        >
+          {isFollowed ? "Following" : "Follow"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * What a participant has open, for their row in the online list. A file's
  * name comes from getPathForNodeId, which reads the room's current project
@@ -506,69 +564,20 @@ export default function CollaborationPanel() {
                       <p className="text-xs text-slate-500">Waiting for presence…</p>
                     ) : (
                       collaboration.participants.map((participant) => {
-                        const color = collaborationParticipantColorIndex(participant);
                         const participantKey = collaborationParticipantKey(participant);
-                        const isSelf = participantKey === collaboration.ownParticipantKey;
-                        const isFollowed = participantKey === collaboration.followedParticipantKey;
-                        const surfaceLabel = describeParticipantSurface(
-                          participant.surface,
-                          collaboration,
-                        );
                         return (
-                          <div
+                          <ParticipantRow
                             key={participantKey}
-                            className="flex items-center gap-2 rounded-lg bg-white/3 px-2.5 py-2"
-                          >
-                            {participant.avatarUrl ? (
-                              <img
-                                src={avatarProxyUrl(participant.avatarUrl)}
-                                alt=""
-                                className="size-6 rounded-full"
-                              />
-                            ) : (
-                              <span
-                                className={`size-2.5 rounded-full ${COLLABORATOR_DOT_CLASSES[color]}`}
-                              />
+                            participant={participant}
+                            surfaceLabel={describeParticipantSurface(
+                              participant.surface,
+                              collaboration,
                             )}
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-xs text-slate-200">
-                                {collaboratorDisplayName(participant)}
-                                {isSelf ? " (you)" : ""}
-                              </span>
-                              <span className="block truncate text-[10px] text-slate-500">
-                                {surfaceLabel}
-                              </span>
-                            </span>
-                            <VoiceParticipantBadge
-                              userId={participant.actorId}
-                              sessionId={participant.sessionId}
-                            />
-                            {participant.isHost ? (
-                              <Crown size={13} className="text-amber-300" aria-label="Host" />
-                            ) : null}
-                            <span className="text-[10px] capitalize text-slate-500">
-                              {participant.role}
-                            </span>
-                            {!isSelf ? (
-                              <button
-                                type="button"
-                                aria-label={`${isFollowed ? "Stop following" : "Follow"} ${collaboratorDisplayName(participant)}`}
-                                aria-pressed={isFollowed}
-                                onClick={() =>
-                                  isFollowed
-                                    ? collaboration.stopFollowing("user")
-                                    : collaboration.followParticipant(participant)
-                                }
-                                className={`rounded px-2 py-1 text-[10px] font-semibold ${
-                                  isFollowed
-                                    ? "bg-sky-400 text-slate-950"
-                                    : "bg-white/5 text-slate-300 hover:bg-white/10"
-                                }`}
-                              >
-                                {isFollowed ? "Following" : "Follow"}
-                              </button>
-                            ) : null}
-                          </div>
+                            isSelf={participantKey === collaboration.ownParticipantKey}
+                            isFollowed={participantKey === collaboration.followedParticipantKey}
+                            onFollow={() => collaboration.followParticipant(participant)}
+                            onStopFollowing={() => collaboration.stopFollowing("user")}
+                          />
                         );
                       })
                     )}
