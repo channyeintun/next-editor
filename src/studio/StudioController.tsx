@@ -21,11 +21,7 @@ import { describeDraftProvenance } from "./draftProvenance";
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
 import { parseRuntimeModeParam, type StudioPlan, type StudioRuntimeMode } from "./plan";
-import {
-  runExposedForSelection,
-  selectRepeatabilityBaseline,
-  sourceRevisionOf,
-} from "./runSelection";
+import { checkRepeatability, runExposedForSelection, sourceRevisionOf } from "./runSelection";
 import {
   DEFAULT_STUDIO_PLAN_SLUG,
   STUDIO_SOURCES,
@@ -52,12 +48,7 @@ import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
 import { synthesizePocketWav } from "./tts/pocketSynth";
 import { critiqueScript, estimateNarrationDurationMs, type CritiqueNote } from "./script/critic";
 import { extractNarration } from "./script/markers";
-import {
-  compareRenderSemantics,
-  runStudioRender,
-  type StudioRenderOptions,
-  type StudioRunResult,
-} from "./runStudioRender";
+import { runStudioRender, type StudioRenderOptions, type StudioRunResult } from "./runStudioRender";
 import type { RenderSemantics } from "./compare";
 import { validateNarrationLanguage, type StudioNarrationLanguage } from "./narrationLanguage";
 
@@ -636,33 +627,20 @@ export default function StudioController() {
       // A failed artifact may still have extractable diagnostics, but it is not
       // a repeatability baseline and must never overwrite the last passing one.
       if (result.semantics && result.report.outcome === "passed") {
-        const currentPlanHash = result.semantics.planSha256;
-        // Repeatability only means something between renders of the SAME compiled
-        // plan, so the baseline must match on plan hash — not merely runtime mode
-        // (STUDIO-04). The trailing hash guard still distinguishes "no baseline"
-        // from an edited-script reset for the note below.
-        const previous = selectRepeatabilityBaseline(
+        // Baseline selection and the same-plan rule (STUDIO-04) live in checkRepeatability.
+        const repeatability = checkRepeatability(
           runHistory.slice(0, -1).map((run) => ({
             mode: run.mode,
             outcome: run.result.report.outcome,
             semantics: run.result.semantics,
           })),
           mode,
-          currentPlanHash,
+          result.semantics,
           readStoredSemantics(plan.lesson.slug, mode),
         );
-        if (previous && previous.planSha256 === currentPlanHash) {
-          nextComparison = compareRenderSemantics(previous, result.semantics);
-          setComparison(nextComparison);
-          setBaselineNote(null);
-        } else {
-          setComparison(null);
-          setBaselineNote(
-            previous
-              ? "Script changed since the previous run — repeatability baseline reset. Render again to compare."
-              : null,
-          );
-        }
+        nextComparison = repeatability.comparison;
+        setComparison(repeatability.comparison);
+        setBaselineNote(repeatability.baselineNote);
         storeSemantics(plan.lesson.slug, mode, result.semantics);
       }
       publishWindowHandle(nextComparison, false);

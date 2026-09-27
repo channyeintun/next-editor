@@ -1,6 +1,6 @@
-import type { RenderSemantics } from "./compare";
+import { compareRenderSemantics, type RenderSemantics } from "./compare";
 import type { StudioRuntimeMode } from "./plan";
-import type { StudioRenderOutcome } from "./report";
+import type { StudioCheckResult, StudioRenderOutcome } from "./report";
 
 /**
  * Selection ↔ completed-run reconciliation for the Studio console
@@ -84,4 +84,36 @@ export function selectRepeatabilityBaseline(
         run.semantics?.planSha256 === currentPlanHash,
     )?.semantics;
   return fromHistory ?? storedBaseline;
+}
+
+export const BASELINE_RESET_NOTE =
+  "Script changed since the previous run — repeatability baseline reset. Render again to compare.";
+
+/** A passing render's repeatability result, as the studio console shows it. */
+export interface RepeatabilityOutcome {
+  /** The check-by-check comparison with the baseline, or null when there is none to compare. */
+  comparison: StudioCheckResult[] | null;
+  /** Set when the only baseline was rendered from a different plan, so none was used. */
+  baselineNote: string | null;
+}
+
+/**
+ * Compare a just-finished passing render against its baseline (see
+ * selectRepeatabilityBaseline). Repeatability only means something between renders
+ * of the SAME compiled plan, so the baseline must match on plan hash, not merely on
+ * runtime mode (STUDIO-04). A stored baseline from an edited script is not compared;
+ * it resets the baseline with a note, which is how "no baseline" and "script
+ * changed" stay distinguishable.
+ */
+export function checkRepeatability(
+  priorRuns: readonly PriorRunSemantics[],
+  mode: StudioRuntimeMode,
+  current: RenderSemantics,
+  storedBaseline: RenderSemantics | null,
+): RepeatabilityOutcome {
+  const baseline = selectRepeatabilityBaseline(priorRuns, mode, current.planSha256, storedBaseline);
+  if (baseline && baseline.planSha256 === current.planSha256) {
+    return { comparison: compareRenderSemantics(baseline, current), baselineNote: null };
+  }
+  return { comparison: null, baselineNote: baseline ? BASELINE_RESET_NOTE : null };
 }

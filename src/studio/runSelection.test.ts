@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { RenderSemantics } from "./compare";
 import {
+  BASELINE_RESET_NOTE,
+  checkRepeatability,
   runExposedForSelection,
   selectRepeatabilityBaseline,
   sourceRevisionOf,
@@ -124,7 +126,7 @@ describe("selectRepeatabilityBaseline (STUDIO-04)", () => {
   });
 
   it("returns a hash-mismatched stored baseline so callers can surface a reset", () => {
-    // The controller's trailing planSha256 guard turns this into a "script
+    // checkRepeatability's trailing planSha256 guard turns this into a "script
     // changed" reset rather than a false comparison.
     const stored = semanticsWithHash(hashB);
     expect(selectRepeatabilityBaseline([], mode, hashA, stored)).toBe(stored);
@@ -140,5 +142,68 @@ describe("selectRepeatabilityBaseline (STUDIO-04)", () => {
         null,
       ),
     ).toBeNull();
+  });
+});
+
+describe("checkRepeatability (STUDIO-04)", () => {
+  const mode = "fixture" as const;
+  const hashA = "a".repeat(64);
+  const hashB = "b".repeat(64);
+
+  it("compares against a baseline rendered from the same plan", () => {
+    const outcome = checkRepeatability(
+      [{ mode, outcome: "passed", semantics: semanticsWithHash(hashA) }],
+      mode,
+      semanticsWithHash(hashA),
+      null,
+    );
+
+    expect(outcome.baselineNote).toBeNull();
+    expect(outcome.comparison?.length).toBeGreaterThan(0);
+    expect(outcome.comparison?.every((check) => check.ok)).toBe(true);
+  });
+
+  it("reports what changed between two renders of the same plan", () => {
+    const outcome = checkRepeatability(
+      [{ mode, outcome: "passed", semantics: semanticsWithHash(hashA) }],
+      mode,
+      { ...semanticsWithHash(hashA), finalWorkspaceHash: "other" },
+      null,
+    );
+
+    const workspaceCheck = outcome.comparison?.find(
+      (check) => check.id === "repeat.finalWorkspace",
+    );
+    expect(workspaceCheck?.ok).toBe(false);
+  });
+
+  it("resets with a note when the only baseline came from an edited script", () => {
+    const outcome = checkRepeatability(
+      [],
+      mode,
+      semanticsWithHash(hashA),
+      semanticsWithHash(hashB),
+    );
+
+    expect(outcome).toEqual({ comparison: null, baselineNote: BASELINE_RESET_NOTE });
+  });
+
+  it("neither compares nor notes anything without a baseline", () => {
+    expect(checkRepeatability([], mode, semanticsWithHash(hashA), null)).toEqual({
+      comparison: null,
+      baselineNote: null,
+    });
+  });
+
+  it("uses a matching earlier render over a stored baseline from an edited script", () => {
+    const outcome = checkRepeatability(
+      [{ mode, outcome: "passed", semantics: semanticsWithHash(hashA) }],
+      mode,
+      semanticsWithHash(hashA),
+      semanticsWithHash(hashB),
+    );
+
+    expect(outcome.baselineNote).toBeNull();
+    expect(outcome.comparison).not.toBeNull();
   });
 });
