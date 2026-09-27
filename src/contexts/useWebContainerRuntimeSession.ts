@@ -39,6 +39,17 @@ interface TerminalSessionHandle extends RuntimeTerminalSessionSnapshot {
   startPromise: Promise<TerminalSessionHandle | null> | null;
 }
 
+/** Passes the user's environment variables to a spawned process, when there are any. */
+function getSpawnOptions(environmentVariables: EnvironmentVariables) {
+  return Object.keys(environmentVariables).length > 0 ? { env: environmentVariables } : undefined;
+}
+
+function toTerminalSessionSnapshots(
+  sessions: TerminalSessionHandle[],
+): RuntimeTerminalSessionSnapshot[] {
+  return sessions.map(({ id, output, title }) => ({ id, output, title }));
+}
+
 function safelyReleaseWriter(writer: WritableStreamDefaultWriter<string> | null): void {
   if (!writer) {
     return;
@@ -181,13 +192,7 @@ export function useWebContainerRuntimeSession({
   };
 
   const syncTerminalSessions = () => {
-    setTerminalSessions(
-      terminalSessionsRef.current.map(({ id, output, title }) => ({
-        id,
-        output,
-        title,
-      })),
-    );
+    setTerminalSessions(toTerminalSessionSnapshots(terminalSessionsRef.current));
   };
 
   const findTerminalSession = (sessionId: string | null) =>
@@ -427,7 +432,7 @@ export function useWebContainerRuntimeSession({
       const spawned = await instance.spawn(
         parsedCommand.command,
         parsedCommand.args,
-        Object.keys(environmentVariables).length > 0 ? { env: environmentVariables } : undefined,
+        getSpawnOptions(environmentVariables),
       );
       process = spawned;
 
@@ -541,8 +546,7 @@ export function useWebContainerRuntimeSession({
     setStatus("starting");
     appendOutput(`$ ${commandLine}\n`);
 
-    const spawnOptions =
-      Object.keys(environmentVariables).length > 0 ? { env: environmentVariables } : undefined;
+    const spawnOptions = getSpawnOptions(environmentVariables);
     let process: WebContainerProcess;
 
     try {
@@ -793,11 +797,7 @@ export function useWebContainerRuntimeSession({
     lastOutput: lastOutputRef.current,
     activeCommand: activeCommandRef.current,
     errorMessage: errorMessageRef.current,
-    terminalSessions: terminalSessionsRef.current.map(({ id, output, title }) => ({
-      id,
-      output,
-      title,
-    })),
+    terminalSessions: toTerminalSessionSnapshots(terminalSessionsRef.current),
     activeTerminalSessionId: activeTerminalSessionIdRef.current,
     latestPreviewMessage: latestPreviewMessageRef.current,
     latestLifecycleEvent: latestLifecycleEventRef.current,
