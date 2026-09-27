@@ -98,6 +98,24 @@ async function settleWithCleanup<T>(
   }
 }
 
+/**
+ * useState plus a ref that its setter writes at the moment of the change, so
+ * getRecordingSnapshot, the provider's busy checks and the async process and
+ * container callbacks read the new value before React renders it. Write the
+ * value only through the setter, which keeps the two in step.
+ */
+function useMirroredState<T>(initialValue: T) {
+  const ref = useRef(initialValue);
+  const [value, setValue] = useState(initialValue);
+
+  const set = (nextValue: T) => {
+    ref.current = nextValue;
+    setValue(nextValue);
+  };
+
+  return [value, ref, set] as const;
+}
+
 export function useWebContainerRuntimeSession({
   environmentVariables,
   onTerminalOutput,
@@ -116,34 +134,24 @@ export function useWebContainerRuntimeSession({
   const lifecycleEventIdRef = useRef(0);
   const previewMessageIdRef = useRef(0);
   const isMountedRef = useRef(true);
-  const previewUrlRef = useRef<string | null>(null);
-  const previewPortRef = useRef<number | null>(null);
-  const errorMessageRef = useRef<string | null>(null);
-  const latestPreviewMessageRef = useRef<RuntimePreviewMessage | null>(null);
-  const latestLifecycleEventRef = useRef<RuntimeLifecycleEvent | null>(null);
-  const lastOutputRef = useRef<string | null>(null);
-  const activeTerminalSessionIdRef = useRef<string | null>(null);
-  const activeCommandRef = useRef<string | null>(null);
   const onTerminalOutputRef = useRef(onTerminalOutput);
   const onServerReadyRef = useRef(onServerReady);
-  const statusRef = useRef<WebContainerRuntimeStatus>("idle");
-  const [status, setStatusState] = useState<WebContainerRuntimeStatus>("idle");
-  const [previewUrl, setPreviewUrlState] = useState<string | null>(null);
-  const [previewPort, setPreviewPortState] = useState<number | null>(null);
-  const [errorMessage, setErrorMessageState] = useState<string | null>(null);
-  const [latestPreviewMessage, setLatestPreviewMessageState] =
-    useState<RuntimePreviewMessage | null>(null);
-  const [latestLifecycleEvent, setLatestLifecycleEventState] =
-    useState<RuntimeLifecycleEvent | null>(null);
-  const [lastOutput, setLastOutputState] = useState<string | null>(null);
+  const [status, statusRef, setStatus] = useMirroredState<WebContainerRuntimeStatus>("idle");
+  const [previewUrl, previewUrlRef, setPreviewUrl] = useMirroredState<string | null>(null);
+  const [previewPort, previewPortRef, setPreviewPort] = useMirroredState<number | null>(null);
+  const [errorMessage, errorMessageRef, setErrorMessage] = useMirroredState<string | null>(null);
+  const [latestPreviewMessage, latestPreviewMessageRef, setLatestPreviewMessage] =
+    useMirroredState<RuntimePreviewMessage | null>(null);
+  const [latestLifecycleEvent, latestLifecycleEventRef, setLatestLifecycleEvent] =
+    useMirroredState<RuntimeLifecycleEvent | null>(null);
+  const [lastOutput, lastOutputRef, setLastOutput] = useMirroredState<string | null>(null);
   const [terminalSessions, setTerminalSessions] = useState<RuntimeTerminalSessionSnapshot[]>([]);
-  const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<string | null>(null);
-  const [activeCommand, setActiveCommandState] = useState<string | null>(null);
+  const [activeTerminalSessionId, activeTerminalSessionIdRef, setActiveTerminalSession] =
+    useMirroredState<string | null>(null);
+  const [activeCommand, activeCommandRef, setActiveCommand] = useMirroredState<string | null>(null);
 
-  // Each state ref above is written by its setter (setStatus and friends) at the
-  // moment of the change, so getRecordingSnapshot and the provider's busy checks
-  // see it before React renders. The callbacks are read only from async process
-  // and container events, so a layout effect keeps them current.
+  // The callbacks are read only from async process and container events, so a
+  // layout effect keeps them current.
   useLayoutEffect(() => {
     onTerminalOutputRef.current = onTerminalOutput;
     onServerReadyRef.current = onServerReady;
@@ -153,46 +161,6 @@ export function useWebContainerRuntimeSession({
     isMountedRef.current && runtimeGenerationRef.current === generation;
 
   const getRuntimeGeneration = () => runtimeGenerationRef.current;
-
-  const setStatus = (nextStatus: WebContainerRuntimeStatus) => {
-    statusRef.current = nextStatus;
-    setStatusState(nextStatus);
-  };
-
-  const setPreviewUrl = (nextPreviewUrl: string | null) => {
-    previewUrlRef.current = nextPreviewUrl;
-    setPreviewUrlState(nextPreviewUrl);
-  };
-
-  const setPreviewPort = (nextPreviewPort: number | null) => {
-    previewPortRef.current = nextPreviewPort;
-    setPreviewPortState(nextPreviewPort);
-  };
-
-  const setErrorMessage = (nextErrorMessage: string | null) => {
-    errorMessageRef.current = nextErrorMessage;
-    setErrorMessageState(nextErrorMessage);
-  };
-
-  const setLastOutput = (nextOutput: string | null) => {
-    lastOutputRef.current = nextOutput;
-    setLastOutputState(nextOutput);
-  };
-
-  const setActiveCommand = (nextCommand: string | null) => {
-    activeCommandRef.current = nextCommand;
-    setActiveCommandState(nextCommand);
-  };
-
-  const setLatestPreviewMessage = (message: RuntimePreviewMessage | null) => {
-    latestPreviewMessageRef.current = message;
-    setLatestPreviewMessageState(message);
-  };
-
-  const setLatestLifecycleEvent = (event: RuntimeLifecycleEvent | null) => {
-    latestLifecycleEventRef.current = event;
-    setLatestLifecycleEventState(event);
-  };
 
   // Runner output is mirrored to the browser console for local debugging;
   // session replay never records it (POSTHOG_REPLAY_PRIVACY_OPTIONS).
@@ -220,11 +188,6 @@ export function useWebContainerRuntimeSession({
         title,
       })),
     );
-  };
-
-  const setActiveTerminalSession = (sessionId: string | null) => {
-    activeTerminalSessionIdRef.current = sessionId;
-    setActiveTerminalSessionId(sessionId);
   };
 
   const appendTerminalOutput = (sessionId: string, chunk: string) => {
@@ -339,7 +302,6 @@ export function useWebContainerRuntimeSession({
     removeInstanceListeners();
     teardownSharedWebContainer(instanceRef.current);
     instanceRef.current = null;
-    activeTerminalSessionIdRef.current = null;
     setStatus("idle");
     setPreviewUrl(null);
     setPreviewPort(null);
@@ -348,7 +310,7 @@ export function useWebContainerRuntimeSession({
     setLatestLifecycleEvent(null);
     setLastOutput(null);
     setTerminalSessions([]);
-    setActiveTerminalSessionId(null);
+    setActiveTerminalSession(null);
     setActiveCommand(null);
   };
 
