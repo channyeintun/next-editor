@@ -13,7 +13,7 @@ update loop.
 | ---------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `workspaceStore` (`@xstate/store`) | Synchronous CRUD    | Live workspace: `project` (files/folders), `activeFilePath`, `collapsedFolders`, sidebar layout, `lessonType`, dirty/saved snapshot |
 | `editorMachine` (XState machine)   | Async orchestration | The timeline: recording/playback state, frames, cursor/preview/slide/workspace/runtime event streams, replay cursors, audio/camera  |
-| React contexts                     | Wiring/transport    | No durable state — split Actions/Metadata/Playback contexts (render perf), domain adapters, and panel-local UI only                 |
+| React contexts                     | Wiring/transport    | No durable state — an Actions context plus Metadata/Playback selector hooks (render perf), domain adapters, and panel-local UI only |
 
 A fourth, self-contained machine exists outside this table: the collaboration
 voice machine (`src/voice/machine.ts`), an XState machine owned by the
@@ -51,9 +51,10 @@ with the mode:
 
 Workspace-shaped state has exactly **one writer at a time**: the user/UI when not
 playing back, the machine during playback. The hand-off is enforced by
-`suppressWorkspaceEventsRef` in `NextEditorProvider` — while the machine writes a
-recorded snapshot into the store, store → machine `WORKSPACE_EVENT` emission is
-gated for that tick so playback writes are not recaptured as new edits.
+`suppressWorkspaceEventsRef` in `NextEditorProvider` (its
+`useWorkspaceRecordingAdapter`) — while the machine writes a recorded snapshot
+into the store, store → machine `WORKSPACE_EVENT` emission is gated for that tick
+so playback writes are not recaptured as new edits.
 
 Two corollaries that should stay true as the code evolves:
 
@@ -82,8 +83,9 @@ Defined in `src/core/src/machine/editorMachine.ts`.
 stateDiagram-v2
     [*] --> idle
 
-    idle --> recording : START_RECORDING [external audio blob provided]
-    idle --> startingRecording : START_RECORDING [enableAudioRecording, microphone path]
+    idle --> idle : START_RECORDING [not isDmpCodecReady]
+    idle --> recording : START_RECORDING [hasExternalAudioBlob]
+    idle --> startingRecording : START_RECORDING [isMicrophoneEnabled]
     idle --> recording : START_RECORDING [no audio bootstrap needed]
     idle --> loading : LOAD_RECORDING
 
@@ -97,6 +99,7 @@ stateDiagram-v2
     recording --> idle : AUDIO_PLAYBACK_ERROR [isExternalAudioRecording]
 
     stoppingRecording --> loading : AUDIO_RECORDING_STOPPED / CAMERA_STOPPED (drain complete)
+    stoppingRecording --> loading : after recorderStopWatchdog (2s)
 
     loading --> playback.ready : onDone
     loading --> idle : onError
@@ -110,8 +113,8 @@ stateDiagram-v2
         playing --> paused : WORKSPACE_EVENT
         playing --> paused : USER_INTERACTION [shouldPauseOnInteraction]
         playing --> ended : FINISHED
-        paused --> playing : PLAY [canPlay]
-        ended --> playing : PLAY [canPlay]
+        paused --> playing : PLAY
+        ended --> playing : PLAY (rewinds first when isAtPlaybackEnd)
     }
 
     playback --> idle : UNLOAD
@@ -160,7 +163,8 @@ What happens here:
 This is a drain state, not a second recording mode.
 
 - camera capture may stop before or after audio
-- the machine finalizes once the required blobs arrive (`AUDIO_RECORDING_STOPPED` / `CAMERA_STOPPED`), with a two-second timeout as a defensive fallback
+- entering it (`stopRecordingMedia`) asks the running microphone and camera recorders for their files (`getRunningRecorders`)
+- the machine finalizes once the required blobs arrive (`AUDIO_RECORDING_STOPPED` / `CAMERA_STOPPED`), or after the two-second `recorderStopWatchdog` delay. A microphone blob that lands after that is still spliced into the finalized take by the root `AUDIO_RECORDING_STOPPED` handler (`attachLateAudioBlob`)
 
 ### `loading`
 
@@ -192,8 +196,8 @@ stateDiagram-v2
         ready --> playing : PLAY [canPlay]
         playing --> paused : PAUSE / WORKSPACE_EVENT / USER_INTERACTION [shouldPauseOnInteraction]
         playing --> ended : FINISHED
-        paused --> playing : PLAY [canPlay]
-        ended --> playing : PLAY [canPlay]
+        paused --> playing : PLAY
+        ended --> playing : PLAY (rewinds first when isAtPlaybackEnd)
     }
 ```
 
@@ -201,7 +205,7 @@ Important current behavior:
 
 - `SET_SPEED` and `SET_VOLUME` are meaningful in any playback substate; they forward to `timelineActor` and, if spawned, `audioPlayer`.
 - `STOP` resets to `.ready` and seeks the timeline/audio back to `0` without unloading the recording.
-- `PLAY` from `ended` restarts from the beginning (guarded by the same `canPlay`).
+- `PLAY` from `ended` restarts from the beginning when the playhead is at the end (`isAtPlaybackEnd`), and otherwise plays on from where a seek left it. Only `ready`'s `PLAY` is guarded by `canPlay`.
 - `paused` and `ended` hand the workspace to the viewer (`SYNC_PAUSED_WORKSPACE_ACTIONS`: adopt the recorded state, detach, remember it as `learnerWorkspaceBaseline`). Before the recording takes it back — `PLAY`, a paused `SEEK`, `STOP`, `UNLOAD`, `LOAD_RECORDING`, or `PRESERVE_LEARNER_WORKSPACE` when the page is hidden — `preserveLearnerWorkspace` passes any edits (file tree or contents differing from the baseline) to `onLearnerWorkspaceSaved`, which keeps them in IndexedDB (`src/storage/learnerWorkspaceVersions.ts`). `RESTORE_LEARNER_WORKSPACE` pauses, seeks to where a saved version was made, and applies it.
 - A `WORKSPACE_EVENT` arriving while `playing` means the user manually edited the workspace — it force-pauses and calls `detachPlaybackWorkspace` so the recorded workspace snapshot stops overwriting the user's edit.
 
@@ -220,8 +224,12 @@ stateDiagram-v2
     running --> running : SEEK
     running --> running : SET_SPEED
     paused --> running : START
-    running --> stopped : FINISHED
+    running --> stopped : end reached (sends FINISHED)
 ```
+
+### Recorder actors
+
+The microphone, camera and screen recorders all take `RecorderControlEvent` (`START`, `STOP`, `PAUSE`, `RESUME`; `recorderControl.ts`). A paused MediaRecorder writes nothing, so each file skips the take's pauses (`syncRecorderPause`), including a pause that arrives before the recorder has started.
 
 ### Audio recording actor (`audioRecordingActor`)
 
@@ -235,10 +243,9 @@ stateDiagram-v2
 
 ### Audio playback actor (`audioPlaybackActor`)
 
-- Manages synchronized `HTMLAudioElement` playback in blob or stream mode.
+- Plays the narration through an `HTMLAudioElement`, from the recording's published `audioUrl` or else its audio blob, following the timeline through `SEEK` and a periodic `SYNC` (at most every `PLAYBACK_AUDIO_SYNC_INTERVAL_MS` while playing).
 - Emits role-specific `AUDIO_PLAYBACK_READY`, `AUDIO_PLAYBACK_FINISHED`, and `AUDIO_PLAYBACK_ERROR` events so media completion cannot be mistaken for timeline completion.
-- Accepts progressive audio updates by reattaching a growing blob snapshot when later prefixes extend the audio track (`syncPlaybackAudio` helper, `appendPolicy: "playing-or-finalized" | "always"`).
-- Is spawned lazily (`playbackAudioSpawned` context flag) in progressive-load scenarios when audio first becomes usable for the current prefix, not just on `LOAD_RECORDING`.
+- Is spawned once per loaded recording through `syncPlaybackAudio` (`playbackAudioSpawned` context flag): on entering playback (`spawnPlaybackAudio`) when the recording already has audio, or lazily when streamed audio first arrives (`syncStreamedRecordingGrowth`, `startPlaybackActors`).
 
 ### Screen recording actor (`screenRecordingActor`)
 
@@ -259,9 +266,11 @@ The machine keeps replay progress in context so it can apply large recordings ef
 - `lastAppliedSlideEventIndex`
 - `lastAppliedWorkspaceEventIndex`
 - `lastAppliedRuntimeEventIndex`
+- `lastAppliedWhiteboardEventIndex`
+- `lastAppliedChatEventIndex`
 - `lastAppliedPreviewState` (avoids redundant preview-state pushes)
 
-These indices are preserved across `EXTEND_RECORDING`, which is the critical detail for streaming playback.
+These indices are preserved across `EXTEND_RECORDING`, which is the critical detail for streaming playback. A seek, rewind, resume or workspace detach resets every cursor but the workspace one (`REPLAY_CURSORS_RESET` in `replayActions.ts`): panel widths replay as relative deltas, so that cursor resets only when a recording is loaded or cleared.
 
 `PREVIEW_EVENT` is the single channel for runtime-preview state, including the API client:
 its `api_client_mode`, `api_client_request`, `api_client_response`, `api_client_request_tab`,
@@ -277,82 +286,17 @@ or stream extend does not drop tracks added after load. Chapters are edited the 
 
 ## Key Events
 
-Representative machine events (`src/core/src/machine/types.ts`):
+`EditorMachineEvent` (`src/core/src/machine/types.ts`) is built from these groups:
 
-```ts
-type EditorMachineEvent =
-  | {
-      type: "START_RECORDING";
-      audioBlob?: Blob;
-      enableCamera?: boolean;
-      screenStream?: MediaStream;
-      microphoneDeviceId?: string;
-    }
-  | { type: "STOP_RECORDING" }
-  | { type: "PAUSE_RECORDING" }
-  | { type: "RESUME_RECORDING" }
-  | { type: "RETAKE_RECORDING" }
-  | { type: "ADD_CHAPTER_MARKER"; title?: string }
-  | { type: "SET_CHAPTERS"; recordingId: string; chapters: RecordingChapter[] }
-  | { type: "CAPTURE_FRAME"; isMouseMovement?: boolean; mousePosition?: MouseCursorPosition }
-  | { type: "LOAD_RECORDING"; recording: Recording }
-  | { type: "EXTEND_RECORDING"; recording: Recording }
-  | { type: "UNLOAD" }
-  | { type: "PLAY" }
-  | { type: "PAUSE" }
-  | { type: "STOP" }
-  | { type: "SEEK"; time: number }
-  | { type: "SET_SPEED"; speed: number }
-  | { type: "SET_VOLUME"; volume: number }
-  | { type: "TICK"; currentTime: number }
-  | { type: "FINISHED" }
-  | { type: "USER_INTERACTION" }
-  | { type: "PRESERVE_LEARNER_WORKSPACE" }
-  | {
-      type: "RESTORE_LEARNER_WORKSPACE";
-      recordingTime: number;
-      snapshot: WorkspaceRecordingSnapshot;
-    }
-  | { type: "APPLY_LEARNER_WORKSPACE"; snapshot: WorkspaceRecordingSnapshot } // raised by RESTORE
-  | { type: "SET_EDITOR_REF"; editor: monaco.editor.IStandaloneCodeEditor | null }
-  | { type: "SLIDE_EVENT"; event: SlideEvent }
-  | { type: "PREVIEW_EVENT"; event: PreviewEvent }
-  | { type: "PREVIEW_INITIAL_DOCUMENT"; document: PreviewInitialDocument }
-  | { type: "PREVIEW_PATCH_BATCH"; batch: PreviewDomPatchBatch }
-  | { type: "WORKSPACE_EVENT"; sidebarWidthDelta?: number; previewDockWidthDelta?: number }
-  | { type: "RUNTIME_EVENT" }
-  | { type: "ADD_CAPTION_TRACK"; recordingId: string; track: CaptionTrack }
-  | {
-      type: "AUDIO_RECORDING_STARTED";
-      mediaRecorder: MediaRecorder;
-      mimeType: string;
-      startedAtMs: number;
-      startedAtPerf: number;
-    }
-  | { type: "AUDIO_RECORDING_STOPPED"; blob: Blob }
-  | { type: "AUDIO_RECORDING_ERROR"; error: string }
-  | { type: "AUDIO_PLAYBACK_READY"; duration: number }
-  | { type: "AUDIO_PLAYBACK_FINISHED" }
-  | { type: "AUDIO_PLAYBACK_ERROR"; error: string }
-  | { type: "CAMERA_STARTED"; mimeType: string; startedAtPerf: number }
-  | { type: "CAMERA_STOPPED"; blob: Blob }
-  | { type: "CAMERA_ERROR"; error: string }
-  | {
-      type: "SCREEN_STARTED";
-      actorId: string;
-      mimeType: string;
-      hasAudio: boolean;
-      startedAtPerf: number;
-    }
-  | {
-      type: "SCREEN_STOPPED";
-      actorId: string;
-      blob: Blob;
-      mimeType: string;
-      startOffsetMs: number;
-    }
-  | { type: "SCREEN_ERROR"; actorId: string; error: string };
-```
+| Group                | Events                                                                                                                                                                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Recording controls   | `START_RECORDING` (an optional narration file `audioBlob`, `enableCamera`, `screenStream`, `microphoneDeviceId`), `STOP_RECORDING`, `PAUSE_RECORDING`, `RESUME_RECORDING`, `RETAKE_RECORDING`, `ADD_CHAPTER_MARKER`                                         |
+| Capture              | `CAPTURE_FRAME` (pointer moves, exact text edits, a collaborator's selection), `SLIDE_EVENT`, `PREVIEW_EVENT`, `PREVIEW_INITIAL_DOCUMENT`, `PREVIEW_PATCH_BATCH`, `WORKSPACE_EVENT` (panel width deltas), `RUNTIME_EVENT`, `WHITEBOARD_EVENT`, `CHAT_EVENT` |
+| The loaded recording | `LOAD_RECORDING`, `EXTEND_RECORDING`, `APPEND_RECORDING_DELTA`, `ADD_CAPTION_TRACK`, `SET_CHAPTERS`, `UNLOAD`                                                                                                                                               |
+| Playback             | `PLAY`, `PAUSE`, `STOP`, `SEEK`, `SET_SPEED`, `SET_VOLUME`, `USER_INTERACTION`, and the timeline actor's `TICK` and `FINISHED`                                                                                                                              |
+| Learner workspace    | `PRESERVE_LEARNER_WORKSPACE`, `RESTORE_LEARNER_WORKSPACE`, `APPLY_LEARNER_WORKSPACE` (raised by `RESTORE_LEARNER_WORKSPACE`)                                                                                                                                |
+| Editor               | `SET_EDITOR_REF`                                                                                                                                                                                                                                            |
+| Child actors         | `AUDIO_RECORDING_*`, `AUDIO_PLAYBACK_*`, `CAMERA_*`, `SCREEN_*`                                                                                                                                                                                             |
 
 The `AUDIO_*`, `CAMERA_*` and `SCREEN_*` members are not declared in `types.ts`. `EditorMachineEvent`
 includes each actor's own union (`AudioRecordingEmit`, `AudioPlaybackEmit`, `CameraRecordingEmit`,
@@ -361,76 +305,72 @@ includes each actor's own union (`AudioRecordingEmit`, `AudioPlaybackEmit`, `Cam
 
 ## Guards
 
-Defined in the machine's `setup({ guards: { ... } })` block:
+Defined in the machine's `setup({ guards: { ... } })` block. The state config uses them by name only.
 
-```typescript
-const guards = {
-  // Play is allowed once a recording with at least one frame is loaded
-  canPlay: ({ context }) =>
-    context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
+| Guard                                      | Used by                                                            | True when                                                                                              |
+| ------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `isDmpCodecReady`                          | `idle` `START_RECORDING` (negated)                                 | The diff-match-patch WASM codec has loaded; without it no take starts                                  |
+| `hasExternalAudioBlob`                     | `idle` `START_RECORDING`                                           | The event carries a non-empty narration file (`getExternalAudioBlob`)                                  |
+| `isMicrophoneEnabled`                      | `idle` `START_RECORDING`                                           | `enableAudioRecording` is set, so the take starts in `startingRecording`                               |
+| `isMicrophoneAudioRecording`               | `recording`                                                        | `enableAudioRecording` is set and the microphone recorder is running                                   |
+| `isExternalAudioRecording`                 | `recording`                                                        | A narration file is playing along with the take                                                        |
+| `isCameraRecording`                        | `recording`, `stoppingRecording`                                   | The camera recorder is running                                                                         |
+| `isAudioRecording`                         | `stoppingRecording` (negated)                                      | Either kind of narration is still recording; a camera stop finalizes only once it is not               |
+| `isRecordingRunning` / `isRecordingPaused` | `PAUSE_RECORDING` / `RESUME_RECORDING`                             | The take's clock is running / paused                                                                   |
+| `canRetake`                                | `RETAKE_RECORDING`                                                 | There is a safe point before now                                                                       |
+| `isLateAudioAwaitingEdit`                  | root `AUDIO_RECORDING_STOPPED`                                     | The late microphone blob's take still has a retake's cut to apply, so it goes back through `loading`   |
+| `canPlay`                                  | `ready` `PLAY`                                                     | A recording with at least one frame is loaded                                                          |
+| `shouldPauseOnInteraction`                 | `playing` `USER_INTERACTION`                                       | `pauseOnUserInteraction` is set                                                                        |
+| `shouldSyncPlaybackEditorRef`              | root `SET_EDITOR_REF`                                              | A new editor arrived while the replay owns the workspace and has a frame to re-apply, or waits for one |
+| `isCurrentScreenRecorderEvent`             | root `SCREEN_*`                                                    | The event came from the current screen recorder, not an earlier capture's                              |
+| `isForLoadedRecording`                     | root `ADD_CAPTION_TRACK`, `SET_CHAPTERS`; `playback` stream growth | The event names the loaded recording                                                                   |
+| `isPlaybackWorkspaceDetached`              | `playback` stream growth                                           | The viewer has taken the workspace over                                                                |
+| `isAtPlaybackEnd`                          | `ended` `PLAY`                                                     | The playhead is within 100 ms of the end, so `PLAY` rewinds first                                      |
 
-  // START_RECORDING carried a pre-recorded/selected audio Blob (external audio path)
-  hasExternalAudioBlob: ({ event }) =>
-    event.type === "START_RECORDING" && event.audioBlob instanceof Blob,
-
-  // Currently capturing microphone audio
-  isMicrophoneAudioRecording: ({ context }) =>
-    context.enableAudioRecording &&
-    context.audio.isRecording &&
-    context.audio.source === "microphone",
-
-  // Currently "recording" a selected/external audio file (playback used as the audio track)
-  isExternalAudioRecording: ({ context }) =>
-    context.audio.isRecording && context.audio.source === "external",
-
-  // Camera capture is active for this recording session
-  isCameraRecording: ({ context }) => shouldRecordCamera(context),
-
-  // Should USER_INTERACTION force a pause during playback
-  shouldPauseOnInteraction: ({ context }) => context.pauseOnUserInteraction,
-
-  // SET_EDITOR_REF should immediately re-apply playback state to the newly attached editor
-  shouldSyncPlaybackEditorRef: ({ context, event }) =>
-    event.type === "SET_EDITOR_REF" &&
-    event.editor !== null &&
-    !context.hasManualWorkspaceOverride &&
-    (context.pendingPlaybackEditorSync ||
-      context.currentFrame !== null ||
-      context.lastAppliedFrameIndex >= 0),
-};
-```
+Which recorders are running is answered once, by `getRunningRecorders(context)` in `captureActions.ts`; the recorder guards and the actions that pause, resume and stop the recorders all read it. The stop watchdog is the named delay `recorderStopWatchdog`.
 
 ## Actions Summary
 
-Action bodies are split by concern: capture-side actions live in `captureActions.ts`, replay-side actions in `replayActions.ts`, and both are wrapped as `assign(...)` inside `editorMachine.ts`'s `setup()` so the machine can infer exact context/event/actor types.
+Action bodies are split by concern: capture-side bodies live in `captureActions.ts` and replay-side ones in `replayActions.ts`, typed with `EditorActionArgs` / `EditorContextUpdate`, and `editorMachine.ts`'s `setup()` wraps them as `assign(...)` so the machine can infer exact context/event/actor types. Actions that spawn, message or stop child actors are named `enqueueActions` / `stopChild` actions in `setup()` itself. The state config lists action names only; the exceptions are `loading`'s `onDone`/`onError` assigns (typed by the invoke) and `RESTORE_LEARNER_WORKSPACE`'s two raises.
 
 ### Recording (capture-side) actions
 
-| Action                          | Description                                                                                  |
-| ------------------------------- | -------------------------------------------------------------------------------------------- |
-| `initRecordingSession`          | Initialize `RecordingSession` with timestamps and empty arrays                               |
-| `captureInitialFrame`           | Capture the first frame at t=0                                                               |
-| `captureFrame`                  | Capture current editor state with timestamp (incrementally delta-encoded)                    |
-| `capturePreviewRefreshFrame`    | Re-capture a frame alongside a preview event so preview state stays paired with editor state |
-| `captureSlideEvent`             | Append a `SlideEvent` to the session                                                         |
-| `capturePreviewEvent`           | Append a `PreviewEvent` to the session                                                       |
-| `capturePreviewInitialDocument` | Append a `PreviewInitialDocument` (rrweb seed) to the session                                |
-| `capturePreviewPatchBatch`      | Append a `PreviewDomPatchBatch` (rrweb incremental events) to the session                    |
-| `captureWorkspaceEvent`         | Append a timed workspace event                                                               |
-| `captureRuntimeEvent`           | Append a timed runtime event                                                                 |
-| `setCameraRecordingEnabled`     | Set `enableCameraRecording` from the `START_RECORDING` event                                 |
-| `setMicrophoneDevice`           | Set the take's `microphoneDeviceId` from the `START_RECORDING` event (null: default)         |
-| `prepareExternalAudioRecording` | Set up audio state for the external-audio-blob recording path                                |
-| `startExternalAudioPlayback`    | Start driving the external audio blob as the recording's audio track                         |
-| `storeExternalAudioDuration`    | Store known duration once external audio metadata is ready                                   |
-| `stopExternalAudioRecording`    | Stop external audio playback when recording ends                                             |
-| `storeAudioStarted`             | Store the started `MediaRecorder`/mimeType/timestamps                                        |
-| `storeAudioBlob`                | Store the finalized audio blob                                                               |
-| `storeCameraStarted`            | Store camera warmup timestamps into `cameraStartOffsetMs`                                    |
-| `storeCameraBlob`               | Store the finalized camera blob                                                              |
-| `handleCameraError`             | Record a camera recording error                                                              |
-| `resetAudioAfterRecorderStop`   | Reset audio state once the recorder actor is stopped                                         |
-| `finalizeRecording`             | Compress/assemble the session into a `Recording` object                                      |
+| Action                                                                                                  | Description                                                                                  |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `initRecordingSession`                                                                                  | Initialize `RecordingSession` with timestamps and empty arrays                               |
+| `captureInitialFrame`                                                                                   | Capture the first frame at t=0                                                               |
+| `captureFrame`                                                                                          | Capture current editor state with timestamp (incrementally delta-encoded)                    |
+| `capturePreviewRefreshFrame`                                                                            | Re-capture a frame alongside a preview event so preview state stays paired with editor state |
+| `captureSlideEvent`                                                                                     | Append a `SlideEvent` to the session                                                         |
+| `capturePreviewEvent`                                                                                   | Append a `PreviewEvent` to the session                                                       |
+| `capturePreviewInitialDocument`                                                                         | Append a `PreviewInitialDocument` (rrweb seed) to the session                                |
+| `capturePreviewPatchBatch`                                                                              | Append a `PreviewDomPatchBatch` (rrweb incremental events) to the session                    |
+| `captureWorkspaceEvent`                                                                                 | Append a timed workspace event                                                               |
+| `captureRuntimeEvent`                                                                                   | Append a timed runtime event                                                                 |
+| `captureWhiteboardEvent` / `captureChatEvent`                                                           | Append a whiteboard change / an agent-chat delta or checkpoint                               |
+| `pauseRecordingSession` / `resumeRecordingSession`                                                      | Stop / run the take's clock (a resume is a safe point)                                       |
+| `pauseRecordingMedia` / `resumeRecordingMedia`                                                          | Pause / resume every running recorder                                                        |
+| `retakeRecording`                                                                                       | Rewind the take to its last safe point, hold its recorders there, and put the editor back    |
+| `addChapterMarker`                                                                                      | Mark a chapter at the take's current moment (also a safe point)                              |
+| `startMicrophoneRecorder`                                                                               | Spawn and start the microphone recorder (entering `startingRecording`)                       |
+| `startCameraRecorder` / `startScreenRecorder`                                                           | Spawn and start the camera / screen recorder (entering `recording`)                          |
+| `stopRecordingMedia` / `stopScreenRecording`                                                            | Ask the recorders for their files (entering `stoppingRecording` / leaving `recording`)       |
+| `stopAudioRecorder` / `stopCameraRecorder` / `stopRecordingAudioPlayer` / `stopScreenRecorderFromEvent` | Stop a recorder or the narration-file player (the child actor)                               |
+| `setCameraRecordingEnabled`                                                                             | Set `enableCameraRecording` from the `START_RECORDING` event                                 |
+| `setMicrophoneDevice`                                                                                   | Set the take's `microphoneDeviceId` from the `START_RECORDING` event (null: default)         |
+| `prepareExternalAudioRecording`                                                                         | Set up audio state for the external-audio-blob recording path                                |
+| `startExternalAudioPlayback`                                                                            | Start driving the external audio blob as the recording's audio track                         |
+| `storeExternalAudioDuration`                                                                            | Store known duration once external audio metadata is ready                                   |
+| `stopExternalAudioRecording`                                                                            | Mark a narration-file take's audio as done (its player stops on leaving `recording`)         |
+| `storeAudioStarted`                                                                                     | Store the started `MediaRecorder`/mimeType/timestamps                                        |
+| `storeAudioBlob`                                                                                        | Store the finalized audio blob                                                               |
+| `storeCameraStarted`                                                                                    | Store camera warmup timestamps into `cameraStartOffsetMs`                                    |
+| `storeCameraBlob`                                                                                       | Store the finalized camera blob                                                              |
+| `handleCameraError`                                                                                     | Record a camera recording error                                                              |
+| `handleAudioRecordingError` / `handleExternalAudioError`                                                | Record a microphone failure / end a take whose narration file failed to play                 |
+| `attachLateAudioBlob`                                                                                   | Splice a microphone blob that lands after finalize into the finalized take                   |
+| `resetAudioAfterRecorderStop`                                                                           | Reset audio state once the recorder actor is stopped                                         |
+| `finalizeRecording`                                                                                     | Compress/assemble the session into a `Recording` object                                      |
 
 ### Playback (replay-side) actions
 
@@ -444,6 +384,16 @@ Action bodies are split by concern: capture-side actions live in `captureActions
 | `applySlideEventsAtTime`                                                                  | Apply slide events up to current time                                                                                                                |
 | `applyWorkspaceEventsAtTime`                                                              | Apply workspace events up to current time                                                                                                            |
 | `applyRuntimeEventsAtTime`                                                                | Apply runtime events up to current time                                                                                                              |
+| `applyWhiteboardEventsAtTime` / `applyChatEventsAtTime`                                   | Apply whiteboard events / fold the agent chat up to current time                                                                                     |
+| `storeTickTime`                                                                           | Move the playhead to the timeline actor's `TICK` (clamped)                                                                                           |
+| `moveToPlaybackEnd`                                                                       | Rest the playhead on the recording's end at `FINISHED`                                                                                               |
+| `spawnPlaybackAudio`                                                                      | Spawn the narration player on entering `playback`                                                                                                    |
+| `startPlaybackActors` / `pausePlaybackActors`                                             | Seek and start / pause the timeline and narration (entering / leaving `playing`)                                                                     |
+| `syncPlaybackAudioToTimeline`                                                             | Send the narration `SYNC`, at most every `PLAYBACK_AUDIO_SYNC_INTERVAL_MS`                                                                           |
+| `syncPlaybackActorsSpeed` / `syncPlaybackAudioVolume`                                     | Hand the stored speed / volume to the timeline and narration                                                                                         |
+| `syncStreamedRecordingGrowth`                                                             | Give the timeline a streamed recording's new length, spawning or syncing the narration                                                               |
+| `stopAudioPlayer` / `clearPlaybackAudioSpawned`                                           | Stop the narration player on leaving `playback`                                                                                                      |
+| `setChapters`                                                                             | Replace the loaded recording's chapters (normalized), outside the timeline                                                                           |
 | `seekToTime`                                                                              | Set current time and invalidate replay cursors so the next apply re-derives state                                                                    |
 | `seekPlaybackActors`                                                                      | Send the stored playhead to the timeline actor and, once spawned, the narration player                                                               |
 | `setPlaybackSpeed` / `setVolume`                                                          | Update `timeline.speed` / `timeline.volume`                                                                                                          |
@@ -459,7 +409,7 @@ Action bodies are split by concern: capture-side actions live in `captureActions
 | `setEditorRef`                                                                            | Store the live Monaco editor reference                                                                                                               |
 | `notifySeek`                                                                              | Fire the `EditorMachineInput` `onSeek` callback                                                                                                      |
 
-Timeline clock progression itself is not a named machine action — the `TICK` handler in the `playback` state directly `assign`s `timeline.currentTime` from the event, then runs the `applyXAtTime` actions above.
+Clock progression belongs to the timeline actor: on each `TICK`, `storeTickTime` moves the playhead to its time, the `applyXAtTime` actions (`APPLY_REPLAY_STATE_ACTIONS`) bring every track there, and `syncPlaybackAudioToTimeline` keeps the narration in step.
 
 ## Integration with React
 
@@ -490,7 +440,9 @@ flowchart TB
 
 1. `useNextEditorActorActions` wraps `send` in senders (`startRecording`, `play`, `syncEditorRef`, etc.). Their identities are held in `useState`, because the React Compiler skips hookless hooks and `CodeEditor` keys an unmount cleanup on `syncEditorRef`.
 2. `useNextEditorInteractionEffects` re-asserts `SET_EDITOR_REF` on mount and after every transition (a send to a stopped actor is dropped), and pauses playback on editor input or the Space key.
-3. Components read state through the context hooks, which select slices with `NextEditorActorContext.useSelector` (`useNextEditorMetadata` for flags, `useNextEditorPlayback` for speed/volume/duration, `useLiveTime` for the playhead).
+3. `useLeavePageGuards` keeps the viewer's edits on `pagehide` or when the tab is hidden, and asks before unloading while a take is in progress (`selectIsTakeInProgress`).
+4. The machine input's host hooks come from the app's stores: `useWorkspaceRecordingAdapter` supplies `getWorkspaceSnapshot` / `applyWorkspaceSnapshot` and the suppression flag, and the slide hooks come from `src/stores/slidesRecordingAdapter.ts`. They are declared once, as `EditorMachineHostHooks`, for both the input and the context.
+5. Components read state through the context hooks, which select slices with `NextEditorActorContext.useSelector` (`useNextEditorMetadata` for flags, `useNextEditorPlayback` for speed/volume/duration, `useLiveTime` for the playhead).
 
 ## Practical Summary
 
