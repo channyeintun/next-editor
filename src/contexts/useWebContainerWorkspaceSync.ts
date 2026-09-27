@@ -84,26 +84,6 @@ async function withSyncOutcome<T>(
   }
 }
 
-function cloneProjectForSync(project: WorkspaceProject): WorkspaceProject {
-  return {
-    ...project,
-    folders: [...project.folders],
-    files: { ...project.files },
-  };
-}
-
-/** Resolves or rejects the callers waiting on queued file writes as `result` settles. */
-function settleFileSyncWaiters(result: Promise<void>, waiters: FileSyncWaiter[]): void {
-  void result.then(
-    () => {
-      for (const waiter of waiters) waiter.resolve();
-    },
-    (error: unknown) => {
-      for (const waiter of waiters) waiter.reject(error);
-    },
-  );
-}
-
 function closeWatcher(watcher: IFSWatcher | null): void {
   try {
     watcher?.close();
@@ -126,6 +106,30 @@ function watchWorkdir(
   } catch {
     return null;
   }
+}
+
+/**
+ * The copy of `project` that later syncs diff against. flushQueuedFiles updates
+ * its file map in place, which must not reach the store's project.
+ */
+function cloneProjectForSync(project: WorkspaceProject): WorkspaceProject {
+  return {
+    ...project,
+    folders: [...project.folders],
+    files: { ...project.files },
+  };
+}
+
+/** Resolves or rejects the callers waiting on queued file writes as `result` settles. */
+function settleFileSyncWaiters(result: Promise<void>, waiters: FileSyncWaiter[]): void {
+  void result.then(
+    () => {
+      for (const waiter of waiters) waiter.resolve();
+    },
+    (error: unknown) => {
+      for (const waiter of waiters) waiter.reject(error);
+    },
+  );
 }
 
 export function useWebContainerWorkspaceSync({ onExternalFileChange }: WorkspaceSyncOptions = {}) {

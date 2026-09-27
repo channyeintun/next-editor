@@ -174,8 +174,8 @@ export function useWebContainerRuntimeSession({
   const getRuntimeGeneration = () => runtimeGenerationRef.current;
 
   /**
-   * Shows a failure in the runner console, unless a reset has replaced the
-   * runtime `generation` it happened in since.
+   * Returns an error handler that shows a failure in the runner console, unless
+   * a reset has since replaced the runtime `generation` the failure happened in.
    */
   const reportErrorFor = (generation: number) => (error: unknown) => {
     if (isRuntimeGenerationActive(generation)) {
@@ -665,6 +665,7 @@ export function useWebContainerRuntimeSession({
       currentSession.process = null;
       appendTerminalOutput(sessionId, message);
     };
+
     const startShell = async () => {
       let lastError: unknown = null;
 
