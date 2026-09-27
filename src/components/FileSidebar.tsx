@@ -20,6 +20,7 @@ import { useWorkspaceFileImport } from "./fileSidebar/useWorkspaceFileImport";
 import {
   buildWorkspaceTree,
   deletesEveryFile,
+  FolderIcon,
   getDefaultFileContent,
   getEditableSelectionEnd,
   getFileIcon,
@@ -355,32 +356,7 @@ function FileSidebarPanel() {
                 aria-expanded={isExpanded}
               >
                 <span className="flex size-4 shrink-0 items-center justify-center">
-                  {isExpanded || node.hasActiveFile ? (
-                    <svg
-                      width={13}
-                      height={13}
-                      viewBox="0 0 16 16"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path fill="#5c99d6" d="M1 6v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6z" />
-                      <path
-                        fill="#3d7ab5"
-                        d="m6.922 3.768-.644-.536A1 1 0 0 0 5.638 3H2a1 1 0 0 0-1 1v2h14V5a1 1 0 0 0-1-1H7.562a1 1 0 0 1-.64-.232"
-                      />
-                    </svg>
-                  ) : (
-                    <svg
-                      width={13}
-                      height={13}
-                      viewBox="0 0 16 16"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        fill="#78909c"
-                        d="m6.922 3.768-.644-.536A1 1 0 0 0 5.638 3H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H7.562a1 1 0 0 1-.64-.232"
-                      />
-                    </svg>
-                  )}
+                  <FolderIcon open={isExpanded || node.hasActiveFile} />
                 </span>
                 <span className="truncate font-medium">{node.name}</span>
               </button>

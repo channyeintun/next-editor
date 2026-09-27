@@ -1,3 +1,5 @@
+import { render } from "@testing-library/react";
+import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   FILE_SIDEBAR_COLLAPSED_STORAGE_KEY,
@@ -8,7 +10,24 @@ import {
   writeStoredFileSidebarCollapsed,
 } from "../utils/sidebarLayout";
 import type { WorkspaceTreeFile } from "../types/workspace";
-import { deletesEveryFile, getViewportClampedContextMenuPlacement } from "./fileSidebarHelpers";
+import {
+  deletesEveryFile,
+  FolderIcon,
+  getViewportClampedContextMenuPlacement,
+} from "./fileSidebarHelpers";
+
+describe("FolderIcon", () => {
+  const fills = (open: boolean) =>
+    Array.from(
+      render(createElement(FolderIcon, { open })).container.querySelectorAll("svg > path"),
+      (path) => path.getAttribute("fill"),
+    );
+
+  it("draws an open folder in two blues and a closed one in grey", () => {
+    expect(fills(true)).toEqual(["#5c99d6", "#3d7ab5"]);
+    expect(fills(false)).toEqual(["#78909c"]);
+  });
+});
 
 describe("getViewportClampedContextMenuPlacement", () => {
   it("keeps a menu opened near the bottom fully inside the viewport", () => {

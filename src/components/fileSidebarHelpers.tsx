@@ -11,10 +11,10 @@ import { isPathWithinFolder } from "../stores/workspaceProjectSupport";
 // ============================================================================
 // FileSidebar helpers
 //
-// Pure, render-free building blocks for the FileSidebar component: workspace tree
-// construction, file-type icon selection, context-menu viewport placement math,
-// new-file templates, and a small selection utility. No React state or hooks
-// here, so the component file stays focused on interaction wiring.
+// Pure building blocks for the FileSidebar component: workspace tree
+// construction, file-type and folder icons, context-menu viewport placement
+// math, new-file templates, and a small selection utility. No React state or
+// hooks here, so the component file stays focused on interaction wiring.
 // ============================================================================
 
 export type WorkspaceTreeNode =
@@ -149,6 +149,26 @@ export function removeFolderFromCollapsedState(
  */
 export function deletesEveryFile(files: readonly WorkspaceTreeFile[], path: string): boolean {
   return files.every((file) => isPathWithinFolder(file.path, path));
+}
+
+/** A folder in the tree: open (two-tone blue) or closed (grey). */
+export function FolderIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg width={13} height={13} viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#5c99d6" d="M1 6v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6z" />
+      <path
+        fill="#3d7ab5"
+        d="m6.922 3.768-.644-.536A1 1 0 0 0 5.638 3H2a1 1 0 0 0-1 1v2h14V5a1 1 0 0 0-1-1H7.562a1 1 0 0 1-.64-.232"
+      />
+    </svg>
+  ) : (
+    <svg width={13} height={13} viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+      <path
+        fill="#78909c"
+        d="m6.922 3.768-.644-.536A1 1 0 0 0 5.638 3H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H7.562a1 1 0 0 1-.64-.232"
+      />
+    </svg>
+  );
 }
 
 function langBadge(bg: string, fg: string, label: string): ReactElement {
