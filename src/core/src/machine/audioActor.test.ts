@@ -42,7 +42,7 @@ class FakeAudioMediaRecorder {
     return true;
   }
 
-  state: "inactive" | "recording" = "inactive";
+  state: "inactive" | "recording" | "paused" = "inactive";
   ondataavailable: ((event: { data: Blob }) => void) | null = null;
   onstop: (() => void) | null = null;
   onstart: (() => void) | null = null;
@@ -55,6 +55,14 @@ class FakeAudioMediaRecorder {
   start() {
     this.state = "recording";
     this.onstart?.();
+  }
+
+  pause() {
+    this.state = "paused";
+  }
+
+  resume() {
+    this.state = "recording";
   }
 
   stop() {
@@ -158,6 +166,34 @@ describe("audioRecordingActor lifecycle", () => {
 
     expect(FakeAudioMediaRecorder.instances).toHaveLength(0);
     expect(track.stopped).toBe(true);
+  });
+
+  // The take can be paused while the microphone prompt is still open; the recorder that
+  // starts afterwards must not write the paused stretch.
+  it("pauses with the take, including a pause that comes before the recorder starts", async () => {
+    let grantMicrophone!: (stream: MediaStream) => void;
+    const streamPromise = new Promise<MediaStream>((resolve) => {
+      grantMicrophone = resolve;
+    });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: () => streamPromise },
+    });
+
+    const actor = createActor(audioRecordingActor, { input: {} }).start();
+    actors.push(actor);
+    actor.send({ type: "START" });
+    actor.send({ type: "PAUSE" });
+
+    grantMicrophone(new FakeAudioStream(new FakeAudioTrack()) as unknown as MediaStream);
+    await vi.waitFor(() => expect(FakeAudioMediaRecorder.instances).toHaveLength(1));
+    const recorder = FakeAudioMediaRecorder.instances[0]!;
+    expect(recorder.state).toBe("paused");
+
+    actor.send({ type: "RESUME" });
+    expect(recorder.state).toBe("recording");
+    actor.send({ type: "PAUSE" });
+    expect(recorder.state).toBe("paused");
   });
 
   it("reports a MediaRecorder runtime error and drains the recording session", async () => {

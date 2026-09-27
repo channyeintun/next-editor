@@ -1,6 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { createActor } from "xstate";
 import { buildScreenCaptureStream, screenRecordingActor } from "./screenActor";
+
+// The duration the recorder measured reaches the WebM header through fixWebmDuration.
+const webmDuration = vi.hoisted(() => ({
+  fixWebmDuration: vi.fn<(blob: Blob, durationMs: number) => Promise<Blob>>(async (blob) => blob),
+}));
+vi.mock("../utils/webmDuration", () => webmDuration);
 
 // ---------------------------------------------------------------------------
 // Minimal WebRTC/MediaRecorder fakes (jsdom provides none of these).
@@ -88,7 +94,7 @@ class FakeMediaRecorder {
     return FakeMediaRecorder.supported;
   }
 
-  state: "inactive" | "recording" = "inactive";
+  state: "inactive" | "recording" | "paused" = "inactive";
   mimeType: string;
   ondataavailable: ((event: { data: Blob }) => void) | null = null;
   onstop: (() => void) | null = null;
@@ -103,6 +109,14 @@ class FakeMediaRecorder {
   start(_timeslice?: number) {
     this.state = "recording";
     this.onstart?.();
+  }
+
+  pause() {
+    this.state = "paused";
+  }
+
+  resume() {
+    this.state = "recording";
   }
 
   stop() {
@@ -217,6 +231,7 @@ describe("screenRecordingActor", () => {
   afterEach(() => {
     for (const actor of actors) actor.stop();
     actors = [];
+    vi.restoreAllMocks();
     if (originalMediaStream) {
       Object.defineProperty(globalThis, "MediaStream", originalMediaStream);
     } else {
@@ -268,6 +283,30 @@ describe("screenRecordingActor", () => {
     video.dispatch("ended");
     expect(FakeMediaRecorder.instances[0]?.state).toBe("inactive");
     expect(video.stopped).toBe(true);
+  });
+
+  // The recorder writes nothing while the take is paused, so the length written into the
+  // WebM header leaves those spans out too, including one still open when it stops.
+  it("leaves the take's pauses out of the recorded duration", () => {
+    let now = 1_000;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    webmDuration.fixWebmDuration.mockClear();
+    const actor = spawn(new FakeTrack("video"), null);
+
+    actor.send({ type: "START" });
+    now += 1_000;
+    actor.send({ type: "PAUSE" });
+    expect(FakeMediaRecorder.instances[0]?.state).toBe("paused");
+    now += 5_000;
+    actor.send({ type: "RESUME" });
+    expect(FakeMediaRecorder.instances[0]?.state).toBe("recording");
+    now += 500;
+    actor.send({ type: "PAUSE" });
+    now += 2_000;
+    actor.send({ type: "STOP" });
+
+    // 8.5 s from start to stop, less the 5 s pause and the 2 s one still open.
+    expect(webmDuration.fixWebmDuration).toHaveBeenCalledWith(expect.any(Blob), 1_500);
   });
 
   it("releases owned media when MediaRecorder reports a runtime error", () => {

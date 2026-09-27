@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { createActor, waitFor } from "xstate";
+import { cameraRecordingActor } from "./cameraActor";
 import { editorMachine } from "./editorMachine";
 
 class FakeCameraTrack {
@@ -29,7 +30,7 @@ class FakeCameraMediaRecorder {
     return true;
   }
 
-  state: "inactive" | "recording" = "inactive";
+  state: "inactive" | "recording" | "paused" = "inactive";
   ondataavailable: ((event: { data: Blob }) => void) | null = null;
   onstop: (() => void) | null = null;
   onstart: (() => void) | null = null;
@@ -42,6 +43,14 @@ class FakeCameraMediaRecorder {
   start() {
     this.state = "recording";
     this.onstart?.();
+  }
+
+  pause() {
+    this.state = "paused";
+  }
+
+  resume() {
+    this.state = "recording";
   }
 
   stop() {
@@ -141,5 +150,34 @@ describe("camera recorder integration", () => {
     grantCamera(new FakeCameraStream(track) as unknown as MediaStream);
     await vi.waitFor(() => expect(track.stopped).toBe(true));
     expect(FakeCameraMediaRecorder.instances).toHaveLength(0);
+  });
+
+  // The camera warms up after the take starts, so a pause can reach it before its
+  // recorder exists; the recorder must start paused rather than record the pause.
+  it("pauses with the take, including a pause that comes before the camera starts", async () => {
+    let grantCamera!: (stream: MediaStream) => void;
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: () =>
+          new Promise<MediaStream>((resolve) => {
+            grantCamera = resolve;
+          }),
+      },
+    });
+    const actor = createActor(cameraRecordingActor, { input: {} }).start();
+    actors.push(actor);
+    actor.send({ type: "START" });
+    actor.send({ type: "PAUSE" });
+
+    grantCamera(new FakeCameraStream(track) as unknown as MediaStream);
+    await vi.waitFor(() => expect(FakeCameraMediaRecorder.instances).toHaveLength(1));
+    const recorder = FakeCameraMediaRecorder.instances[0]!;
+    expect(recorder.state).toBe("paused");
+
+    actor.send({ type: "RESUME" });
+    expect(recorder.state).toBe("recording");
+    actor.send({ type: "PAUSE" });
+    expect(recorder.state).toBe("paused");
   });
 });
