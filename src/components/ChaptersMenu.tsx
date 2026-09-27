@@ -10,7 +10,7 @@ import {
   normalizeChapters,
 } from "../core/src/utils/chapters";
 import { formatPlaybackTime } from "../utils/formatPlaybackTime";
-import { copyTextToClipboard } from "./fileSidebarHelpers";
+import { copyTextToClipboard } from "../utils/clipboard";
 
 /** How long a copied-link check mark stays. */
 const COPIED_MS = 1_500;

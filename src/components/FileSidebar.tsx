@@ -24,12 +24,12 @@ import {
   MIN_FILE_SIDEBAR_WIDTH,
 } from "../utils/sidebarLayout";
 import { dispatchRecordedCursorVisibility } from "../utils/recordedCursorVisibility";
+import { copyTextToClipboard } from "../utils/clipboard";
 import { STUDIO_TARGET_ATTRIBUTE, studioTargetIdForFile } from "../studio/targets";
 import {
   buildWorkspaceTree,
   CONTEXT_MENU_FALLBACK_HEIGHT,
   CONTEXT_MENU_FALLBACK_WIDTH,
-  copyTextToClipboard,
   deletesEveryFile,
   getDefaultFileContent,
   getEditableSelectionEnd,

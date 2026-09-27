@@ -15,7 +15,7 @@ vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => actions,
   useLiveTime: () => 65_000,
 }));
-vi.mock("./fileSidebarHelpers", () => clipboard);
+vi.mock("../utils/clipboard", () => clipboard);
 
 const lesson = {
   id: "lesson",

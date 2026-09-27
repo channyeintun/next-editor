@@ -13,8 +13,8 @@ import { isPathWithinFolder } from "../stores/workspaceProjectSupport";
 //
 // Pure, render-free building blocks for the FileSidebar component: workspace tree
 // construction, file-type icon selection, context-menu viewport placement math,
-// new-file templates, and small clipboard/selection utilities. No React state or
-// hooks here, so the component file stays focused on interaction wiring.
+// new-file templates, and a small selection utility. No React state or hooks
+// here, so the component file stays focused on interaction wiring.
 // ============================================================================
 
 export type WorkspaceTreeNode =
@@ -448,23 +448,6 @@ export function getEditableSelectionEnd(name: string, kind: "file" | "folder") {
   }
 
   return extensionIndex;
-}
-
-export function copyTextToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "absolute";
-  textarea.style.left = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
 }
 
 export function buildWorkspaceTree(

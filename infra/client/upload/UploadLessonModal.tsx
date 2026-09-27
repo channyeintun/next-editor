@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { Captions, ImagePlus, X } from "lucide-react";
 import type { CaptionCue, Recording } from "@app/core/src";
-import { copyTextToClipboard } from "@app/components/fileSidebarHelpers";
+import { copyTextToClipboard } from "@app/utils/clipboard";
 import { createRecordingStorage } from "@app/storage/RecordingStorage";
 import { useAuth, signInUrl } from "../auth/useAuth";
 import { useUploadLesson, usePublishLesson, formatDuration } from "./useUploadLesson";
