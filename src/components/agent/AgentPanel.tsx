@@ -397,16 +397,18 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
       setAttachmentError(`You can attach up to ${MAX_CHAT_IMAGES} images.`);
       return;
     }
+    // Worked out before the try: the React Compiler skips a whole component
+    // that has a conditional inside a try block.
+    const truncationNotice =
+      files.length > availableSlots
+        ? `Only the first ${availableSlots} images were attached.`
+        : null;
 
     try {
       const images = await Promise.all(files.slice(0, availableSlots).map(createChatImage));
       const latestSlots = MAX_CHAT_IMAGES - agentStore.getSnapshot().context.draftImages.length;
       agentStore.trigger.addDraftImages({ images: images.slice(0, latestSlots) });
-      setAttachmentError(
-        files.length > availableSlots
-          ? `Only the first ${availableSlots} images were attached.`
-          : null,
-      );
+      setAttachmentError(truncationNotice);
     } catch (pasteError) {
       setAttachmentError(pasteError instanceof Error ? pasteError.message : String(pasteError));
     }
