@@ -31,6 +31,19 @@ const EDIT_COLORS: Record<EditKind, string> = {
   mute: "rgba(245, 158, 11, 0.35)",
 };
 
+type NarrationState = "loading" | "ready" | "none" | "failed";
+
+/** Shown over the waveform while it has no narration drawn on it. */
+const NARRATION_NOTICE: Record<Exclude<NarrationState, "ready">, string> = {
+  loading: "Reading the narration…",
+  none: "No narration: cuts still apply to everything else",
+  failed: "The narration could not be read",
+};
+
+/** The Cut, Mute and Suggest buttons under the waveform. */
+const EDIT_BUTTON_CLASS =
+  "inline-flex items-center gap-1.5 rounded-md border border-slate-600 px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-slate-700 disabled:opacity-40";
+
 /** When anything was recorded happening, for telling dead air from a quiet demo. */
 function activityTimes(recording: Recording): number[] {
   const times: number[] = [];
@@ -150,9 +163,7 @@ export default function RecordingEditPanel({
   const [edits, setEdits] = useState<EditSpan[]>([]);
   const [selection, setSelection] = useState<MediaSpan | null>(null);
   const [narration, setNarration] = useState<{ blob: Blob; peaks: AudioPeaks } | null>(null);
-  const [narrationState, setNarrationState] = useState<"loading" | "ready" | "none" | "failed">(
-    "loading",
-  );
+  const [narrationState, setNarrationState] = useState<NarrationState>("loading");
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -327,11 +338,7 @@ export default function RecordingEditPanel({
         <EditPlayhead durationMs={durationMs} cuts={cuts} mutes={mutes} />
         {narrationState !== "ready" ? (
           <span className="pointer-events-none absolute right-2 top-1.5 text-[11px] text-slate-500">
-            {narrationState === "loading"
-              ? "Reading the narration…"
-              : narrationState === "none"
-                ? "No narration: cuts still apply to everything else"
-                : "The narration could not be read"}
+            {NARRATION_NOTICE[narrationState]}
           </span>
         ) : null}
       </div>
@@ -341,7 +348,7 @@ export default function RecordingEditPanel({
           type="button"
           disabled={!selection || applying}
           onClick={() => addEdit("cut")}
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-600 px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-slate-700 disabled:opacity-40"
+          className={EDIT_BUTTON_CLASS}
         >
           <Scissors size={12} aria-hidden="true" />
           Cut selection
@@ -350,7 +357,7 @@ export default function RecordingEditPanel({
           type="button"
           disabled={!selection || applying || narrationState === "none"}
           onClick={() => addEdit("mute")}
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-600 px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-slate-700 disabled:opacity-40"
+          className={EDIT_BUTTON_CLASS}
         >
           <VolumeX size={12} aria-hidden="true" />
           Mute selection
@@ -360,7 +367,7 @@ export default function RecordingEditPanel({
           disabled={applying || !canSuggest}
           onClick={handleSuggest}
           title="Suggest cuts for long stretches where nobody spoke and nothing happened"
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-600 px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-slate-700 disabled:opacity-40"
+          className={EDIT_BUTTON_CLASS}
         >
           <Sparkles size={12} aria-hidden="true" />
           Suggest dead-air cuts

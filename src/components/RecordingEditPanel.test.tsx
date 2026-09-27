@@ -134,4 +134,31 @@ describe("RecordingEditPanel", () => {
     expect(edited.duration).toBeCloseTo(5_001, 0);
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("says while it reads the narration, and when it cannot", async () => {
+    const responses: ((response: Response) => void)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(() => new Promise<Response>((resolve) => responses.push(resolve))),
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    render(
+      <Providers>
+        <RecordingEditPanel
+          recording={{ ...take, audioUrl: "https://example.test/narration.wav" }}
+          onClose={() => {}}
+          onApplied={() => {}}
+        />
+      </Providers>,
+    );
+    expect(screen.getByText("Reading the narration…")).toBeInTheDocument();
+    // Suggestions would cut through speech they cannot see.
+    expect(screen.getByRole("button", { name: /Suggest dead-air cuts/ })).toBeDisabled();
+
+    await act(async () => responses[0](new Response(null, { status: 500 })));
+
+    expect(await screen.findByText("The narration could not be read")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Suggest dead-air cuts/ })).toBeDisabled();
+  });
 });
