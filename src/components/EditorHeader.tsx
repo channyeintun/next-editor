@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { usePostHog } from "@posthog/react";
+import type { Properties } from "posthog-js";
 import {
   ChevronRight,
   Compass,
@@ -180,6 +181,11 @@ function WhiteboardHeaderButton() {
 
 function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boolean }) {
   const posthog = usePostHog();
+  // Analytics goes through here, not `posthog?.capture` at each call: the React
+  // Compiler skips a whole component that has optional chaining inside a try.
+  const track = (event: string, properties?: Properties) => {
+    posthog?.capture(event, properties);
+  };
   const [draftValue, setDraftValue] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
@@ -235,7 +241,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       const importedRecordings = await importFromFile();
       if (importedRecordings.length > 0) {
         loadRecording(importedRecordings[0]);
-        posthog?.capture("recording_imported");
+        track("recording_imported");
       }
     } catch (error) {
       // These rejections are all descriptive and all actionable ("bad SCR3
@@ -262,7 +268,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       await exportAsFile(currentRecording);
       // The take is saved to disk now, so it no longer needs its recovery draft.
       void discardRecordingDraftFor(currentRecording.id);
-      posthog?.capture("recording_exported", {
+      track("recording_exported", {
         recording_duration: currentRecording.duration,
       });
     } catch (error) {
@@ -278,7 +284,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
     try {
       await downloadWorkspaceProjectAsZip(getProject());
-      posthog?.capture("workspace_downloaded", { lesson_type: lessonType });
+      track("workspace_downloaded", { lesson_type: lessonType });
     } catch (error) {
       console.error("Zip download failed:", error);
       window.alert(
@@ -328,7 +334,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     reconcileExternalProject(importedProject);
     await saveProject();
     updateRunnerConfig({ enabled: true });
-    posthog?.capture("project_zip_imported");
+    track("project_zip_imported");
     // Imported projects ship their own dependencies, so tear the runtime down to
     // force a fresh mount + `pnpm install` for the new project on next start.
     resetRuntime();
@@ -394,7 +400,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     reconcileExternalProject(starterProject);
     await saveProject();
     updateRunnerConfig({ enabled: true });
-    posthog?.capture("lesson_type_selected", { lesson_type: nextLessonType });
+    track("lesson_type_selected", { lesson_type: nextLessonType });
     // Each framework ships different dependencies, so tear the runtime down to
     // force a fresh mount + `pnpm install` for the new project on next start.
     resetRuntime();
