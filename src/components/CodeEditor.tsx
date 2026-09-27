@@ -105,7 +105,6 @@ const RUNNER_PANELS: Record<Exclude<WorkspaceExecutionKind, "webcontainer">, Com
 const Y_MONACO_BINDING_ENABLED = import.meta.env.VITE_COLLABORATION_Y_MONACO !== "false";
 
 interface CodeEditorProps {
-  language?: string;
   showImportExport?: boolean;
   breadcrumb?: ReactNode;
 }
@@ -175,7 +174,6 @@ interface ActiveYMonacoBinding {
  */
 
 const CodeEditorComponent: React.FC<CodeEditorProps> = ({
-  language,
   showImportExport = false,
   breadcrumb,
 }) => {
@@ -232,7 +230,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   // editor is swapped for a media preview and the editor sync paths are skipped.
   const isBinaryActiveFile = !isWorkspaceTextFile(activeFile);
   const activeTextContent = isWorkspaceTextFile(activeFile) ? activeFile.content : "";
-  const selectedLanguage = activeFile.language || language || "html";
+  const selectedLanguage = activeFile.language || "html";
   const editorModelPath = usesPlaybackModel
     ? toPlaybackModelPath(activeFile.path)
     : toMonacoModelPath(activeFile.path);
