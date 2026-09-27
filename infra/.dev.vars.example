@@ -6,13 +6,25 @@ GOOGLE_CLIENT_SECRET=
 # Random 32+ byte secret, e.g. `openssl rand -hex 32`.
 SESSION_SECRET=
 
-# Required when exercising live collaboration. Redis is reserved for the
-# collaboration/Realtime data plane; the gallery cache uses local Workers KV.
-COLLAB_REDIS_REST_URL=
-COLLAB_REDIS_REST_TOKEN=
+# Live collaboration needs nothing beyond the sign-in values above: rooms run on
+# the Durable Object bindings in infra/wrangler.toml, which `wrangler dev` runs
+# locally.
 
-# Optional locally; configure all three in production for signed background
-# compaction and delayed room/R2 cleanup.
+# Optional locally; configure all three in production. QStash runs the signed,
+# delayed purge of a closed room: its Durable Object document, R2 assets, and D1
+# rows. (Room log compaction is a Durable Object alarm and needs no secret.)
 QSTASH_TOKEN=
 QSTASH_CURRENT_SIGNING_KEY=
 QSTASH_NEXT_SIGNING_KEY=
+
+# Optional: room voice chat. Voice stays off (fails closed) unless both are set;
+# use a separate Cloudflare Realtime application per environment.
+REALTIME_SFU_APP_ID=
+REALTIME_SFU_APP_SECRET=
+
+# Optional: private Burmese Studio narration (VoxCPM2 on Modal). All three are
+# required, and the signed-in user also needs the studio.burmese-voxcpm2 D1
+# feature flag.
+VOXCPM2_MODAL_ENDPOINT=
+MODAL_PROXY_TOKEN_ID=
+MODAL_PROXY_TOKEN_SECRET=
