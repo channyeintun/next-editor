@@ -357,6 +357,174 @@ function describeParticipantSurface(
   return path?.split("/").at(-1) ?? "Editor";
 }
 
+interface RoomOwnerSectionProps {
+  isBusy: boolean;
+  /** Runs a room action under the panel's busy flag and error message. */
+  run: (operation: () => Promise<unknown>) => Promise<void>;
+  shareUrl: string | null;
+  copied: boolean;
+  onCreateShareLink: (role: CollaborationInviteRole) => Promise<void>;
+  onCopyShareUrl: () => Promise<void>;
+}
+
+/**
+ * What only the room owner manages: invitation links, members and their
+ * roles, the active invitations, and the recovery export. The last share link
+ * and its "copied" flag stay in the panel, which is always mounted, so they
+ * survive closing and reopening it.
+ */
+function RoomOwnerSection({
+  isBusy,
+  run,
+  shareUrl,
+  copied,
+  onCreateShareLink,
+  onCopyShareUrl,
+}: RoomOwnerSectionProps) {
+  const collaboration = useCollaboration();
+
+  const downloadRecoveryExport = async () => {
+    await run(async () => {
+      const blob = await collaboration.exportRoom();
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = `collaboration-${collaboration.session?.room.id ?? "room"}.json`;
+      anchor.click();
+      URL.revokeObjectURL(href);
+    });
+  };
+
+  return (
+    <>
+      <section>
+        <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Invite people
+        </h3>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={() => void onCreateShareLink("editor")}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/15 text-xs font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50 p-2"
+          >
+            <Link2 size={13} /> Editor link
+          </button>
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={() => void onCreateShareLink("viewer")}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-500/15 text-xs font-semibold text-violet-200 hover:bg-violet-500/25 disabled:opacity-50 p-2"
+          >
+            <Link2 size={13} /> Viewer link
+          </button>
+        </div>
+        {shareUrl ? (
+          <button
+            type="button"
+            onClick={() => void onCopyShareUrl()}
+            className="mt-2 flex w-full items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-2 text-left text-[11px] text-slate-300 hover:bg-white/3"
+          >
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+            <span className="min-w-0 flex-1 truncate">
+              {copied ? "Copied invitation link" : shareUrl}
+            </span>
+          </button>
+        ) : null}
+        <p className="mt-1.5 text-[10px] leading-4 text-slate-500">
+          Invitation tokens are shown only when created. Revoke unused links below.
+        </p>
+      </section>
+
+      <section>
+        <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Members
+        </h3>
+        <div className="space-y-1.5">
+          {collaboration.members.map((member) => (
+            <div key={member.userId} className="flex items-center gap-2 text-xs">
+              <span className="min-w-0 flex-1 truncate text-slate-300">
+                {collaboratorDisplayName(member)}
+              </span>
+              {member.role === "owner" ? (
+                <span className="text-[10px] text-amber-300">owner · host</span>
+              ) : (
+                <>
+                  <select
+                    aria-label={`Role for ${collaboratorDisplayName(member)}`}
+                    value={member.role}
+                    disabled={isBusy}
+                    onChange={(event) =>
+                      void run(() =>
+                        collaboration.updateMemberRole(
+                          member.userId,
+                          event.target.value as CollaborationInviteRole,
+                        ),
+                      )
+                    }
+                    className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-slate-300"
+                  >
+                    <option value="editor">Editor</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${collaboratorDisplayName(member)}`}
+                    disabled={isBusy}
+                    onClick={() => void run(() => collaboration.removeMember(member.userId))}
+                    className="rounded p-1 text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"
+                  >
+                    <UserMinus size={13} />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {collaboration.invitations.length > 0 ? (
+        <section>
+          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            Active invitation records
+          </h3>
+          <div className="space-y-1">
+            {collaboration.invitations
+              .filter((invitation) => invitation.revokedAt === null)
+              .map((invitation) => (
+                <div
+                  key={invitation.id}
+                  className="flex items-center justify-between text-[11px] text-slate-400"
+                >
+                  <span className="capitalize">
+                    {invitation.role} · {invitation.useCount}/{invitation.maxUses} used
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => void run(() => collaboration.revokeInvitation(invitation.id))}
+                    className="text-rose-300 hover:text-rose-200"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              ))}
+          </div>
+        </section>
+      ) : null}
+
+      <button
+        type="button"
+        disabled={isBusy}
+        onClick={() => void downloadRecoveryExport()}
+        className="w-full rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/3 disabled:opacity-50"
+      >
+        Export room recovery snapshot
+      </button>
+    </>
+  );
+}
+
 export default function CollaborationPanel() {
   const collaboration = useCollaboration();
   const { isSignedIn } = useAuth();
@@ -396,18 +564,6 @@ export default function CollaborationPanel() {
     await navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2_000);
-  };
-
-  const downloadRecoveryExport = async () => {
-    await run(async () => {
-      const blob = await collaboration.exportRoom();
-      const href = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = href;
-      anchor.download = `collaboration-${collaboration.session?.room.id ?? "room"}.json`;
-      anchor.click();
-      URL.revokeObjectURL(href);
-    });
   };
 
   const isInRoom = Boolean(collaboration.provider);
@@ -585,137 +741,14 @@ export default function CollaborationPanel() {
                 </section>
 
                 {collaboration.role === "owner" ? (
-                  <>
-                    <section>
-                      <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        Invite people
-                      </h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => void createShareLink("editor")}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/15 text-xs font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50 p-2"
-                        >
-                          <Link2 size={13} /> Editor link
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => void createShareLink("viewer")}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-500/15 text-xs font-semibold text-violet-200 hover:bg-violet-500/25 disabled:opacity-50 p-2"
-                        >
-                          <Link2 size={13} /> Viewer link
-                        </button>
-                      </div>
-                      {shareUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => void copyShareUrl()}
-                          className="mt-2 flex w-full items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-2 text-left text-[11px] text-slate-300 hover:bg-white/3"
-                        >
-                          {copied ? <Check size={13} /> : <Copy size={13} />}
-                          <span className="min-w-0 flex-1 truncate">
-                            {copied ? "Copied invitation link" : shareUrl}
-                          </span>
-                        </button>
-                      ) : null}
-                      <p className="mt-1.5 text-[10px] leading-4 text-slate-500">
-                        Invitation tokens are shown only when created. Revoke unused links below.
-                      </p>
-                    </section>
-
-                    <section>
-                      <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        Members
-                      </h3>
-                      <div className="space-y-1.5">
-                        {collaboration.members.map((member) => (
-                          <div key={member.userId} className="flex items-center gap-2 text-xs">
-                            <span className="min-w-0 flex-1 truncate text-slate-300">
-                              {collaboratorDisplayName(member)}
-                            </span>
-                            {member.role === "owner" ? (
-                              <span className="text-[10px] text-amber-300">owner · host</span>
-                            ) : (
-                              <>
-                                <select
-                                  aria-label={`Role for ${collaboratorDisplayName(member)}`}
-                                  value={member.role}
-                                  disabled={isBusy}
-                                  onChange={(event) =>
-                                    void run(() =>
-                                      collaboration.updateMemberRole(
-                                        member.userId,
-                                        event.target.value as CollaborationInviteRole,
-                                      ),
-                                    )
-                                  }
-                                  className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-slate-300"
-                                >
-                                  <option value="editor">Editor</option>
-                                  <option value="viewer">Viewer</option>
-                                </select>
-                                <button
-                                  type="button"
-                                  aria-label={`Remove ${collaboratorDisplayName(member)}`}
-                                  disabled={isBusy}
-                                  onClick={() =>
-                                    void run(() => collaboration.removeMember(member.userId))
-                                  }
-                                  className="rounded p-1 text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"
-                                >
-                                  <UserMinus size={13} />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-
-                    {collaboration.invitations.length > 0 ? (
-                      <section>
-                        <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                          Active invitation records
-                        </h3>
-                        <div className="space-y-1">
-                          {collaboration.invitations
-                            .filter((invitation) => invitation.revokedAt === null)
-                            .map((invitation) => (
-                              <div
-                                key={invitation.id}
-                                className="flex items-center justify-between text-[11px] text-slate-400"
-                              >
-                                <span className="capitalize">
-                                  {invitation.role} · {invitation.useCount}/{invitation.maxUses}{" "}
-                                  used
-                                </span>
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() =>
-                                    void run(() => collaboration.revokeInvitation(invitation.id))
-                                  }
-                                  className="text-rose-300 hover:text-rose-200"
-                                >
-                                  Revoke
-                                </button>
-                              </div>
-                            ))}
-                        </div>
-                      </section>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => void downloadRecoveryExport()}
-                      className="w-full rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/3 disabled:opacity-50"
-                    >
-                      Export room recovery snapshot
-                    </button>
-                  </>
+                  <RoomOwnerSection
+                    isBusy={isBusy}
+                    run={run}
+                    shareUrl={shareUrl}
+                    copied={copied}
+                    onCreateShareLink={createShareLink}
+                    onCopyShareUrl={copyShareUrl}
+                  />
                 ) : null}
 
                 {panelError || collaboration.error ? (
