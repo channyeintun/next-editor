@@ -110,13 +110,15 @@ describe("React Compiler coverage", () => {
     expect(Object.keys(NOT_COMPILED).filter((path) => !REACT_FILES.includes(path))).toEqual([]);
   });
 
-  it.each(REACT_FILES)("compiles every component and hook in %s", (path) => {
-    const failures = compileFailures(path);
-    if (path in NOT_COMPILED) {
-      // It compiles now: take it off NOT_COMPILED so it cannot fall back unnoticed.
-      expect(failures, `${path} compiles; remove it from NOT_COMPILED`).not.toEqual([]);
-    } else {
-      expect(failures).toEqual([]);
-    }
+  it.each(REACT_FILES.filter((path) => !(path in NOT_COMPILED)))(
+    "compiles every component and hook in %s",
+    (path) => {
+      expect(compileFailures(path)).toEqual([]);
+    },
+  );
+
+  // Once a listed module compiles, take it off NOT_COMPILED so it cannot fall back unnoticed.
+  it.each(Object.keys(NOT_COMPILED))("still has a reason to list %s", (path) => {
+    expect(compileFailures(path), `${path} compiles; remove it from NOT_COMPILED`).not.toEqual([]);
   });
 });
