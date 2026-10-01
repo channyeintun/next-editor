@@ -91,6 +91,17 @@ describe("segmentsToCues", () => {
     ]);
   });
 
+  it("adds no space between Burmese sentences that were written together", () => {
+    const short = "ပထမစာကြောင်းပါ။ဒုတိယစာကြောင်းပါ။";
+    expect(
+      segmentsToCues(
+        [{ start: 0, end: 10, text: `${burmeseSentence}${short}${burmeseSentence}` }],
+        0,
+        60_000,
+      ).map((cue) => cue.text),
+    ).toEqual([`${burmeseSentence}${short}`, burmeseSentence]);
+  });
+
   it("splits a long Burmese sentence at its phrase marks", () => {
     const text =
       "ပထမဆုံး context ကို သတ်မှတ်မယ်၊ နောက်တော့ event တွေကို ထည့်မယ်၊ ပြီးရင် component ထဲမှာ သုံးမယ်၊ နောက်ဆုံးမှာ စမ်းသပ်ကြည့်မယ်။";

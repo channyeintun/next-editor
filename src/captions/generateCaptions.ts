@@ -112,9 +112,33 @@ export function buildCaptionPrompt(recording: Recording): string | undefined {
 
 /**
  * Where a long cue may break: between sentences, then clauses, then words. Burmese
- * ends a sentence with ။ and a phrase with ၊, often with no space after either.
+ * ends a sentence with ။ and a phrase with ၊, often with no space after either. Each
+ * pattern captures the break, so parts joined back together keep a space only where
+ * the text had one.
  */
-const BREAKS = [/(?<=[.!?])\s+|(?<=။)\s*/, /(?<=[,;:])\s+|(?<=၊)\s*/, /\s+/];
+const BREAKS = [/((?<=[.!?])\s+|(?<=။)\s*)/, /((?<=[,;:])\s+|(?<=၊)\s*)/, /(\s+)/];
+
+/** A part of a split, and what joins it to the part before: a space, or nothing. */
+interface SplitPart {
+  text: string;
+  joiner: string;
+}
+
+/** `text` split at `pattern`, without empty parts. */
+function splitParts(text: string, pattern: RegExp): SplitPart[] {
+  // With the capture group, odd entries are the breaks between the even ones.
+  const tokens = text.split(pattern);
+  const parts: SplitPart[] = [];
+  let joiner = "";
+  for (let index = 0; index < tokens.length; index += 2) {
+    if (tokens[index]) {
+      parts.push({ text: tokens[index], joiner: parts.length > 0 ? joiner : "" });
+      joiner = "";
+    }
+    if (tokens[index + 1]) joiner = " ";
+  }
+  return parts;
+}
 
 const graphemeSegmenter =
   typeof Intl.Segmenter === "function"
@@ -134,14 +158,14 @@ function displayLength(text: string): number {
 }
 
 /** Joins parts greedily into pieces of at most `limit` characters. */
-function pack(parts: readonly string[], limit: number): string[] {
+function pack(parts: readonly SplitPart[], limit: number): string[] {
   const pieces: string[] = [];
   let current = "";
   for (const part of parts) {
-    const next = current ? `${current} ${part}` : part;
+    const next = current ? `${current}${part.joiner}${part.text}` : part.text;
     if (displayLength(next) > limit && current) {
       pieces.push(current);
-      current = part;
+      current = part.text;
     } else {
       current = next;
     }
@@ -153,7 +177,7 @@ function pack(parts: readonly string[], limit: number): string[] {
 /** Splits `text` into pieces of at most `limit` characters, at the widest break that does. */
 function splitText(text: string, limit: number, level = 0): string[] {
   if (displayLength(text) <= limit || level >= BREAKS.length) return [text];
-  const parts = text.split(BREAKS[level]).filter(Boolean);
+  const parts = splitParts(text, BREAKS[level]);
   if (parts.length < 2) return splitText(text, limit, level + 1);
   return pack(parts, limit).flatMap((piece) => splitText(piece, limit, level + 1));
 }
