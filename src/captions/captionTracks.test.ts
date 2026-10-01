@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { CaptionTrack } from "../core/src/types";
-import { selectCaptionTrack } from "./captionTracks";
+import { captionTrackLabel, selectCaptionTrack } from "./captionTracks";
 
 const studio: CaptionTrack = { id: "studio-narration", language: "en", label: "en-US", cues: [] };
 const generated: CaptionTrack = { id: "auto-en-1", language: "en", label: "EN (auto)", cues: [] };
@@ -35,5 +35,34 @@ describe("selectCaptionTrack", () => {
   it("has nothing to show without tracks", () => {
     expect(selectCaptionTrack(undefined, { trackId: "fr", language: "fr" })).toBeNull();
     expect(selectCaptionTrack([], { trackId: "fr", language: "fr" })).toBeNull();
+  });
+});
+
+describe("captionTrackLabel", () => {
+  const track = (label: string | undefined, language = "en"): CaptionTrack => ({
+    id: "track",
+    language,
+    label,
+    cues: [],
+  });
+
+  it("names a track labelled with a bare language tag", () => {
+    expect(captionTrackLabel(track("my-MM", "my"))).toMatch(/^Burmese \(Myanmar/);
+    expect(captionTrackLabel(track("en-US"))).toBe("American English");
+    expect(captionTrackLabel(track("EN"))).toBe("English");
+  });
+
+  it("keeps the (auto) of a generated track", () => {
+    expect(captionTrackLabel(track("MY (auto)", "my"))).toBe("Burmese (auto)");
+  });
+
+  it("goes by the language when there is no label", () => {
+    expect(captionTrackLabel(track(undefined, "fr"))).toBe("French");
+  });
+
+  it("leaves a written label, or a tag it cannot name, as it is", () => {
+    expect(captionTrackLabel(track("English (corrected)"))).toBe("English (corrected)");
+    expect(captionTrackLabel(track("Narration"))).toBe("Narration");
+    expect(captionTrackLabel(track("zz", "zz"))).toBe("zz");
   });
 });

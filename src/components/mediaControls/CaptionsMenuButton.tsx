@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { Captions, Check } from "lucide-react";
 import type { CaptionTrack } from "../../core/src/types";
 import { useCaptionStore, useCaptionStoreTrigger } from "../../hooks/useCaptionStore";
-import { selectCaptionTrack } from "../../captions/captionTracks";
+import { captionTrackLabel, selectCaptionTrack } from "../../captions/captionTracks";
 
 function captionsButtonTitle(hasMultipleTracks: boolean, captionsEnabled: boolean): string {
   if (hasMultipleTracks) return "Captions";
@@ -96,7 +96,7 @@ const CaptionsMenuButton = ({
                 <span className="w-4">
                   {isSelected ? <Check size={14} aria-hidden="true" /> : null}
                 </span>
-                {track.label || track.language}
+                {captionTrackLabel(track)}
               </button>
             );
           })}

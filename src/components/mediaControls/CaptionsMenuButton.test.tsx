@@ -73,13 +73,13 @@ describe("CaptionsMenuButton", () => {
       "true",
     );
 
-    // A track without a label goes by its language.
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "fr" }));
+    // A track without a label goes by its language, named in full.
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "French" }));
     expect(seen).toEqual({ enabled: true, trackId: "fr", language: "fr" });
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 
     fireEvent.click(button);
-    expect(screen.getByRole("menuitemradio", { name: "fr" })).toHaveAttribute(
+    expect(screen.getByRole("menuitemradio", { name: "French" })).toHaveAttribute(
       "aria-checked",
       "true",
     );
