@@ -109,10 +109,10 @@ uploadsRoute.put(
   handleMediaUpload,
 );
 
-// Sibling caption files: `<id>.<lang>.vtt` (uploadLesson.ts) — the one filename shape
-// that legitimately carries a dot inside the basename, so it gets its own pattern
-// instead of loosening the main allow-list. The optional middle segment is a
-// lowercase language tag; the charset still can't encode `/`, `..`, or a second
+// Sibling caption files: `<id>.<lang>.vtt`, or `<id>-N.<lang>.vtt` for a second track
+// in the same language (uploadLesson.ts) — the one filename shape that legitimately
+// carries a dot inside the basename, so it gets its own pattern instead of loosening
+// the main allow-list. The optional middle segment is a lowercase language tag; the charset still can't encode `/`, `..`, or a second
 // extension, and `.vtt` is served back as inert text (nosniff, see routes/media.ts).
 uploadsRoute.put(
   `/:id{${LESSON_ID_PATTERN}}/media/:filename{[\\w-]+(?:\\.[a-z0-9-]+)?\\.vtt}`,

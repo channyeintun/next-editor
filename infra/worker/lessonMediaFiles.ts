@@ -6,7 +6,8 @@
 // deliberately absent although it is an image type: it can carry an inline
 // <script>, and R2 objects are served back same-origin at /media/<key>
 // (routes/media.ts), so a direct navigation would run it in the app's origin.
-// Caption files (`<id>.<lang>.vtt`) have their own pattern in routes/uploads.ts.
+// Caption files (`<id>.<lang>.vtt`, `<id>-N.<lang>.vtt`) have their own pattern in
+// routes/uploads.ts.
 
 export const LESSON_MEDIA_EXTENSIONS = [
   "ne",
