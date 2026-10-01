@@ -537,6 +537,7 @@ export async function runStudioRender(
       neBytes: neBytes.byteLength,
       neHash: await sha256Hex(neBytes),
       audioFileName,
+      audioMimeType: publishedAudioBlob.type,
       recordingDurationMs: artifactRecording.duration,
       finalWorkspaceHash: await finalWorkspaceHashOf(artifactRecording),
     });

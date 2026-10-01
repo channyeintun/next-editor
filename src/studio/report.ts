@@ -64,6 +64,10 @@ export interface StudioBuildManifest {
   planHash: string;
   seed: number;
   workspaceHash: string;
+  /**
+   * SHA-256 and type of the PCM16 WAV narration the render played — the
+   * timing master, not what the bundle ships (see `artifact.audioMimeType`).
+   */
   narrationAudioHash: string;
   narrationMimeType: string;
   captionsHash: string;
@@ -89,6 +93,8 @@ export interface StudioBuildManifest {
     neBytes: number;
     neHash: string;
     audioFileName: string;
+    /** Type of the audio file the bundle actually ships (Ogg/Opus). */
+    audioMimeType: string;
     recordingDurationMs: number;
     finalWorkspaceHash: string;
   } | null;
