@@ -6,6 +6,10 @@ import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import { appendRunnerConsoleLines } from "../runtime/playgroundConsoleStore";
 import type { SlideEvent } from "../core/src/slides";
 import { applyWhiteboardEvent, type WhiteboardEvent } from "../core/src/whiteboard";
+import {
+  CURSOR_REPLAY_ROOT_TARGET_ID,
+  CURSOR_REPLAY_TARGET_ATTRIBUTE,
+} from "../core/src/utils/cursorCoordinates";
 import type { PreviewEvent, PreviewPanelMode, PreviewState } from "../types/slides";
 import { isWorkspaceTextFile } from "../types/workspace";
 import type {
@@ -160,6 +164,24 @@ function throwIfAborted(signal: AbortSignal): void {
 // what makes the recorded motion read as a hand rather than a 30fps slideshow.
 const CURSOR_STEP_MS = 16;
 
+/**
+ * The element a synthetic pointer sample at (x, y) is dispatched on.
+ *
+ * The mouse-tracking actor drops any sample whose target sits outside the
+ * cursor-replay root, and the studio console panel is fixed above the editor
+ * but mounted outside that root — so the plain topmost hit would silently lose
+ * every sample under the panel. Hit-test through the stack instead and take
+ * the topmost element inside the root, falling back to the action's target.
+ */
+export function cursorDispatchTarget(x: number, y: number, fallback: Element): Element {
+  const root = document.querySelector(
+    `[${CURSOR_REPLAY_TARGET_ATTRIBUTE}="${CURSOR_REPLAY_ROOT_TARGET_ID}"]`,
+  );
+  const stack =
+    typeof document.elementsFromPoint === "function" ? document.elementsFromPoint(x, y) : [];
+  return stack.find((candidate) => !root || root.contains(candidate)) ?? fallback;
+}
+
 // The preview.open handshake re-sends instead of waiting. A command message
 // posted before the frame's document exists lands in a window with no listener
 // and is dropped, so that request can never be answered — only time out. One
@@ -245,8 +267,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     // samples (`createCursorPositionFromClientPoint` walks up from `target`).
     // `buttons` is 0 for a plain attention move and 1 during a select drag, so
     // the recorded cursor reads as a press-drag over the highlighted range.
-    const under = document.elementFromPoint(x, y) ?? element;
-    under.dispatchEvent(
+    cursorDispatchTarget(x, y, element).dispatchEvent(
       new PointerEvent("pointermove", {
         clientX: x,
         clientY: y,
