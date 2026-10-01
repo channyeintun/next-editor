@@ -180,6 +180,16 @@ export interface ArtifactCheckOutput {
   artifactRecording: Recording;
 }
 
+/**
+ * A console line the runner, a formatter or the preview wrote to report a
+ * failure: `[<lang>-run error]`, `[<lang>-fmt error]`, `[rustfmt error]`, …,
+ * or `[preview:error]`. Program output is recorded unprefixed, so the tag has
+ * to open the line and be one of those shapes — a bare "error]" anywhere also
+ * matched a program's own output, since fmt.Println of an []error prints
+ * `[not found error]`.
+ */
+const RUNNER_ERROR_LINE = /^\[(?:[a-z0-9]+-(?:run|fmt)|[a-z0-9]+fmt) error\]|^\[preview:error\]/;
+
 export async function runArtifactChecks({
   recording,
   neBytes,
@@ -474,7 +484,7 @@ export async function runArtifactChecks({
         ? previewErrorLines.join(" | ")
         : "no preview console errors or exceptions",
   });
-  const errorLines = consoleLines.filter((line) => line.includes("error]"));
+  const errorLines = consoleLines.filter((line) => RUNNER_ERROR_LINE.test(line));
   const runtimeError =
     lastRuntimeSnapshot?.errorMessage ??
     (lastRuntimeSnapshot?.latestLifecycleEvent?.kind === "internal-error"

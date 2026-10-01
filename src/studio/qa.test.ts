@@ -372,6 +372,40 @@ describe("runArtifactChecks", () => {
     expect(failedIds(checks)).toContain("checkpoint.output.out");
   });
 
+  it("does not mistake program output that prints 'error]' for a runner error", async () => {
+    const plan = makePlan();
+    const recording = makeRecording(plan);
+    // fmt.Println of an []error prints its elements in square brackets.
+    recording.runtimeSnapshot!.consoleLines = [
+      "[go-run] go run main.go",
+      "[not found error]",
+      "retry gave [timeout error] twice",
+      "3 cubed is 27",
+      "[go-run] Program exited",
+    ];
+    const checks = await checksFor(recording, plan);
+    expect(failedIds(checks)).not.toContain("runtime.noErrors");
+  });
+
+  it("fails on every runner, formatter and preview error tag", async () => {
+    const plan = makePlan();
+    const missed: string[] = [];
+    for (const line of [
+      "[rust-run error] Build failed",
+      "[zig-fmt error] zig fmt failed",
+      "[gofmt error] Files changed while formatting",
+      "[kitefmt error] The formatter stopped",
+      "[preview:error] Uncaught TypeError",
+    ]) {
+      const recording = makeRecording(plan);
+      recording.runtimeSnapshot!.consoleLines = ["3 cubed is 27", line];
+      if (!failedIds(await checksFor(recording, plan)).includes("runtime.noErrors")) {
+        missed.push(line);
+      }
+    }
+    expect(missed).toEqual([]);
+  });
+
   it("fails when a semantic file checkpoint is missing", async () => {
     const plan = makePlan();
     const recording = makeRecording(plan);
