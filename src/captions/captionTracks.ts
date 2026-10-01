@@ -8,8 +8,9 @@ export interface CaptionTrackPreference {
 
 /**
  * The track the viewer sees: the one they picked, else one in the language they last
- * picked (a track id belongs to one lesson, the language carries to the next), else the
- * lesson's default, else its first.
+ * picked, else the lesson's default, else its first. The id only tells apart tracks in
+ * the picked language: ids repeat across lessons (every studio lesson's narration is
+ * "studio-narration"), so a matching id in another language must not beat the language.
  */
 export function selectCaptionTrack(
   tracks: readonly CaptionTrack[] | undefined,
@@ -18,7 +19,9 @@ export function selectCaptionTrack(
   if (!tracks || tracks.length === 0) return null;
   if (preference.trackId) {
     const picked = tracks.find((track) => track.id === preference.trackId);
-    if (picked) return picked;
+    if (picked && (!preference.language || picked.language === preference.language)) {
+      return picked;
+    }
   }
   if (preference.language) {
     const sameLanguage = tracks.find((track) => track.language === preference.language);

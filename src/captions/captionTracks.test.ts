@@ -22,6 +22,14 @@ describe("selectCaptionTrack", () => {
     );
   });
 
+  // Every studio lesson's narration track has the id "studio-narration".
+  it("keeps the chosen language when a track in another language shares the id", () => {
+    const burmese: CaptionTrack = { id: "lesson-5.my", language: "my", cues: [] };
+    expect(
+      selectCaptionTrack([studio, burmese], { trackId: "studio-narration", language: "my" }),
+    ).toBe(burmese);
+  });
+
   // A viewer whose preference was saved before tracks had ids keeps their language.
   it("goes by language alone when no track was chosen", () => {
     expect(selectCaptionTrack([french, studio], { trackId: null, language: "en" })).toBe(studio);
