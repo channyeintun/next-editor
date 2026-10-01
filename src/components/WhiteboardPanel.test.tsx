@@ -20,8 +20,12 @@ let whiteboardState: ReturnType<typeof makeWhiteboardState>;
 let whiteboardStore: WhiteboardStoreInstance;
 let excalidrawOnChange: (elements: unknown[], appState: unknown, files: unknown) => void;
 let excalidrawInitialData: unknown;
+// When set, the mocked canvas reports this view from its commit phase, the way
+// Excalidraw's componentDidUpdate calls onChange before the panel's effects run.
+let viewReportedOnCommit: WhiteboardView | null = null;
 
-vi.mock("@excalidraw/excalidraw", () => {
+vi.mock("@excalidraw/excalidraw", async () => {
+  const { useLayoutEffect } = await import("react");
   const Empty = () => null;
   const MainMenu = Object.assign(Empty, {
     DefaultItems: {
@@ -50,6 +54,11 @@ vi.mock("@excalidraw/excalidraw", () => {
       excalidrawAPI({ updateScene });
       excalidrawOnChange = onChange;
       excalidrawInitialData = initialData;
+      useLayoutEffect(() => {
+        if (!viewReportedOnCommit) return;
+        const { scrollX, scrollY, zoom } = viewReportedOnCommit;
+        onChange([], { scrollX, scrollY, zoom: { value: zoom } }, {});
+      });
       return null;
     },
     MainMenu,
@@ -156,8 +165,54 @@ describe("WhiteboardPanel playback viewport", () => {
     vi.clearAllMocks();
     usesPlaybackModel = true;
     isInPlaybackSession = true;
+    viewReportedOnCommit = null;
     whiteboardStore = createWhiteboardStore();
     whiteboardState = makeWhiteboardState("external", [], recordedView);
+  });
+
+  it("still follows recorded views after a pan made before PLAY", async () => {
+    // The lesson is loaded (ready): no session yet, the canvas is live.
+    usesPlaybackModel = false;
+    isInPlaybackSession = false;
+    const view = render(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+    act(() => excalidrawOnChange([], canvasAppState(recordedView), {}));
+
+    // The viewer drags the board; the controller flushes a canvas-origin scene,
+    // which the panel does not feed back to the canvas.
+    act(() => excalidrawOnChange([], canvasAppState(pinchedView), {}));
+    expect(whiteboardState.handleExcalidrawChange).toHaveBeenCalledWith([], pinchedView, false);
+    whiteboardState = makeWhiteboardState("canvas", [], pinchedView);
+    view.rerender(<WhiteboardPanel />);
+    expect(updateScene).toHaveBeenCalledTimes(1);
+
+    // PLAY: the canvas re-renders (now in view mode) and reports the pre-play pan
+    // before the panel's scene effect applies the replay's first scene.
+    viewReportedOnCommit = pinchedView;
+    usesPlaybackModel = true;
+    isInPlaybackSession = true;
+    whiteboardState = makeWhiteboardState("external", [], recordedView);
+    view.rerender(<WhiteboardPanel />);
+    viewReportedOnCommit = null;
+
+    expect(whiteboardStore.getSnapshot().context.playbackViewerView).toBeNull();
+    await waitFor(() =>
+      expect(updateScene).toHaveBeenLastCalledWith(
+        expect.objectContaining({ appState: canvasAppState(recordedView) }),
+      ),
+    );
+    act(() => excalidrawOnChange([], canvasAppState(recordedView), {}));
+
+    // A later recorded view still moves the canvas.
+    const pannedByRecording = { scrollX: 200, scrollY: 0, zoom: 1 };
+    whiteboardState = makeWhiteboardState("external", [], pannedByRecording);
+    view.rerender(<WhiteboardPanel />);
+    await waitFor(() =>
+      expect(updateScene).toHaveBeenLastCalledWith(
+        expect.objectContaining({ appState: canvasAppState(pannedByRecording) }),
+      ),
+    );
+    expect(whiteboardStore.getSnapshot().context.playbackViewerView).toBeNull();
   });
 
   it("follows recorded views until the viewer pans or zooms, then only updates content", async () => {

@@ -168,6 +168,12 @@ export default function WhiteboardPanel() {
                   view,
                   appliedView: appliedViewRef.current,
                 });
+              } else {
+                // Outside a session the canvas's own view is the baseline: a pan made
+                // before PLAY (a canvas-origin scene the effect skips) must not read as
+                // a takeover when the first in-session onChange, fired by Excalidraw's
+                // commit before the scene effect runs, still reports that pan.
+                appliedViewRef.current = view;
               }
               if (usesPlaybackModel) {
                 // View mode leaves drag/scroll panning, wheel and trackpad zoom, and touch
