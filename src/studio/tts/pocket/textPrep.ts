@@ -51,12 +51,21 @@ export function prepareTextPrompt(text: string, options: PocketTextPrepOptions):
   return { text: prompt, framesAfterEos };
 }
 
-const SENTENCE_SPLIT_RE = /[^.!?]+[.!?]+|[^.!?]+$/g;
+/**
+ * Sentence boundaries: terminal punctuation (plus any closing quotes or
+ * brackets) followed by whitespace. Upstream split at every `.`/`!`/`?`, which
+ * cut identifiers and numbers apart (`fmt.Println`, `main.tsx`, `3.14`) and the
+ * rejoin below then read them as "fmt. Println". Splitting only at whitespace
+ * keeps every token intact, and since the prompt's whitespace is already
+ * collapsed to single spaces, rejoining with " " reproduces it exactly.
+ */
+const SENTENCE_BOUNDARY_RE = /(?<=[.!?]["')\]]*)\s+/;
 
 function splitTextIntoSentences(text: string): string[] {
-  const matches = text.match(SENTENCE_SPLIT_RE);
-  if (!matches) return [];
-  return matches.map((sentence) => sentence.trim()).filter(Boolean);
+  return text
+    .split(SENTENCE_BOUNDARY_RE)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
 }
 
 function splitTokenIdsIntoChunks(
@@ -70,6 +79,42 @@ function splitTokenIdsIntoChunks(
     if (chunkText) {
       chunks.push(chunkText);
     }
+  }
+  return chunks;
+}
+
+/**
+ * Split one over-budget sentence at word boundaries, packing as many whole
+ * words per chunk as the token budget allows. Raw token-id slicing (upstream)
+ * can cut a word in half; it remains only as the fallback for a single word
+ * that alone exceeds the budget.
+ */
+function splitSentenceAtWords(
+  tokenizer: PocketTokenizer,
+  sentence: string,
+  maxTokens: number,
+): string[] {
+  const chunks: string[] = [];
+  let current = "";
+  for (const word of sentence.split(" ").filter(Boolean)) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (tokenizer.encodeIds(candidate).length <= maxTokens) {
+      current = candidate;
+      continue;
+    }
+    if (current) {
+      chunks.push(current);
+      current = "";
+    }
+    const wordTokenIds = tokenizer.encodeIds(word);
+    if (wordTokenIds.length <= maxTokens) {
+      current = word;
+    } else {
+      chunks.push(...splitTokenIdsIntoChunks(tokenizer, wordTokenIds, maxTokens));
+    }
+  }
+  if (current) {
+    chunks.push(current);
   }
   return chunks;
 }
@@ -106,9 +151,7 @@ export function splitIntoBestSentences(
         chunks.push(currentChunk.trim());
         currentChunk = "";
       }
-      chunks.push(
-        ...splitTokenIdsIntoChunks(tokenizer, sentenceTokenIds, options.maxTokenPerChunk),
-      );
+      chunks.push(...splitSentenceAtWords(tokenizer, sentenceText, options.maxTokenPerChunk));
       continue;
     }
 

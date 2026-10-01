@@ -20,6 +20,12 @@ const wordTokenizer: PocketTokenizer = {
   decodeIds: (ids) => ids.map(() => "w").join(" "),
 };
 
+/** Fake tokenizer that round-trips: one token per character. */
+const textTokenizer: PocketTokenizer = {
+  encodeIds: (text) => Array.from(text, (char) => char.charCodeAt(0)),
+  decodeIds: (ids) => String.fromCharCode(...ids),
+};
+
 describe("seeded gaussian noise", () => {
   it("reproduces the same stream for the same seed", () => {
     const first = createSeededGaussian(1234);
@@ -80,6 +86,43 @@ describe("splitIntoBestSentences", () => {
       PREP_OPTIONS,
     );
     expect(chunks.length).toBeGreaterThan(1);
+  });
+
+  it("splits sentences only where punctuation meets whitespace", () => {
+    const { chunks } = splitIntoBestSentences(
+      'Call fmt.Println in main.tsx with 3.14 and format! now. Done "here." Next',
+      textTokenizer,
+      { ...PREP_OPTIONS, maxTokenPerChunk: 1_000 },
+    );
+    expect(chunks).toEqual([
+      'Call fmt.Println in main.tsx with 3.14 and format! now. Done "here." Next.',
+    ]);
+  });
+
+  it("starts a new chunk at a sentence boundary when the budget is spent", () => {
+    const { chunks } = splitIntoBestSentences(
+      "Open main.go now. Call fmt.Println there.",
+      textTokenizer,
+      { ...PREP_OPTIONS, maxTokenPerChunk: 24 },
+    );
+    expect(chunks).toEqual(["Open main.go now.", "Call fmt.Println there."]);
+  });
+
+  it("cuts an over-budget sentence at word boundaries", () => {
+    const { chunks } = splitIntoBestSentences(
+      "Alpha beta gamma delta epsilon zeta.",
+      textTokenizer,
+      { ...PREP_OPTIONS, maxTokenPerChunk: 12 },
+    );
+    expect(chunks).toEqual(["Alpha beta", "gamma delta", "epsilon", "zeta."]);
+  });
+
+  it("falls back to token slicing only for a word longer than the budget", () => {
+    const { chunks } = splitIntoBestSentences("Go superlongidentifier ok.", textTokenizer, {
+      ...PREP_OPTIONS,
+      maxTokenPerChunk: 8,
+    });
+    expect(chunks).toEqual(["Go", "superlon", "gidentif", "ier", "ok."]);
   });
 });
 
