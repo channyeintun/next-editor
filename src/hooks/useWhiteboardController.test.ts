@@ -232,4 +232,37 @@ describe("useWhiteboardController", () => {
     expect(scene.view).toEqual({ scrollX: 40, scrollY: 0, zoom: 1.5 });
     expect(sceneUpdateSource).toBe("external");
   });
+
+  it("keeps a playback viewer view for one recording's playback only", () => {
+    const store = createWhiteboardStore();
+    const pinched = { scrollX: -80, scrollY: 30, zoom: 2 };
+    const takeOver = () =>
+      store.trigger.observePlaybackCanvasView({
+        view: pinched,
+        appliedView: { scrollX: 0, scrollY: 0, zoom: 1 },
+      });
+    const { rerender, unmount } = renderHook(
+      ({ playbackKey }: { playbackKey: string | null }) =>
+        useWhiteboardController({ store, playbackKey }),
+      { initialProps: { playbackKey: "lesson-a" as string | null } },
+    );
+
+    act(takeOver);
+    rerender({ playbackKey: "lesson-a" });
+    expect(store.getSnapshot().context.playbackViewerView).toEqual(pinched);
+
+    // A different recording loads.
+    rerender({ playbackKey: "lesson-b" });
+    expect(store.getSnapshot().context.playbackViewerView).toBeNull();
+
+    // Playback hands the canvas back to live editing.
+    act(takeOver);
+    rerender({ playbackKey: null });
+    expect(store.getSnapshot().context.playbackViewerView).toBeNull();
+
+    rerender({ playbackKey: "lesson-b" });
+    act(takeOver);
+    unmount();
+    expect(store.getSnapshot().context.playbackViewerView).toBeNull();
+  });
 });

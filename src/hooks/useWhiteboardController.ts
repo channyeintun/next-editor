@@ -18,6 +18,11 @@ interface UseWhiteboardControllerConfig {
   store: WhiteboardStoreInstance;
   onWhiteboardEvent?: (event: WhiteboardEvent) => boolean | void;
   scopeKey?: unknown;
+  /**
+   * Non-null while the playback model drives the canvas, identifying the recording (its id).
+   * See the release effect below.
+   */
+  playbackKey?: string | null;
 }
 
 interface PendingWhiteboardController {
@@ -59,6 +64,7 @@ export const useWhiteboardController = ({
   store,
   onWhiteboardEvent,
   scopeKey,
+  playbackKey = null,
 }: UseWhiteboardControllerConfig) => {
   const scene = useSelector(store, (snapshot) => selectScene(snapshot.context));
   const sceneUpdateSource = useSelector(store, (snapshot) =>
@@ -163,10 +169,23 @@ export const useWhiteboardController = ({
     [discardPendingChange, scopeKey],
   );
 
+  // The viewer's playback pan/zoom (playbackViewerView, set by WhiteboardPanel) lasts for one
+  // playback of one recording: through play, pause, seeks, the end screen and the whiteboard
+  // closing and reopening. It ends when the playback model hands the canvas back to live
+  // editing (playback stops or unloads, or the viewer edits the workspace) or a different
+  // recording loads; the canvas then shows the scene's own view again.
+  useLayoutEffect(
+    () => () => {
+      store.trigger.releasePlaybackViewerView();
+    },
+    [playbackKey, store],
+  );
+
   // Called from Excalidraw's onChange. `isContentReadOnly` must match the value passed
   // to Excalidraw's `viewModeEnabled` this render. Read-only mode still permits
   // pan/zoom, so retain the fresh view while replacing its element argument with
-  // the authoritative store scene.
+  // the authoritative store scene. Playback never calls this: the panel keeps the
+  // viewer's view out of the scene (see observePlaybackCanvasView).
   const handleExcalidrawChange = (
     elements: readonly WhiteboardElementJSON[],
     view: WhiteboardView,
