@@ -398,4 +398,13 @@ describe("lessonScriptSchema", () => {
     delete raw.scenes[1].actions[2].open;
     expect(() => parseLessonScript(raw)).toThrow(/whiteboard\.apply must open\/close/);
   });
+
+  // The Worker and Modal synthesizers reject anything above a signed 32-bit int.
+  it("caps build.seed at the synthesizers' 32-bit limit", () => {
+    const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
+    raw.build.seed = 0x7fffffff;
+    expect(parseLessonScript(raw).build.seed).toBe(0x7fffffff);
+    raw.build.seed = 0x80000000;
+    expect(() => parseLessonScript(raw)).toThrow(/build\.seed: must be at most 2147483647/);
+  });
 });

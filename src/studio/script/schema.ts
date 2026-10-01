@@ -21,6 +21,12 @@ import {
 
 export const LESSON_SCRIPT_SCHEMA_VERSION = 1;
 
+/**
+ * The Worker's TTS route and the Modal synthesizer both reject seeds above a
+ * signed 32-bit int, so a larger one would pass here and fail only at render.
+ */
+export const LESSON_SCRIPT_MAX_SEED = 0x7fffffff;
+
 /*
  * Every object a script author writes is strict: zod's default mode strips
  * unknown keys, so a typo such as `cadance: block` or `offsetMS: 400` used to
@@ -344,7 +350,13 @@ export const lessonScriptSchema = z
     build: z.strictObject({
       /** Registered voice profile id (provider + voice + settings). */
       voiceProfile: z.string().min(1),
-      seed: z.number().int().nonnegative(),
+      seed: z
+        .number()
+        .int()
+        .nonnegative()
+        .max(LESSON_SCRIPT_MAX_SEED, {
+          message: `must be at most ${LESSON_SCRIPT_MAX_SEED} — the narration synthesizers take a signed 32-bit seed`,
+        }),
     }),
     runtime: studioRuntimeSchema,
     scenes: z.array(scriptSceneSchema).min(1),
