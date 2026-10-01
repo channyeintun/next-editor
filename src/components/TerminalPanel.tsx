@@ -38,7 +38,11 @@ import type {
   RuntimeTerminalScrollLines,
 } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
-import { describeRunnerOutput, dockTabStateClassName } from "./terminalPanel/runtimeDockHelpers";
+import {
+  DOCK_TAB_STRIP_CLASS,
+  describeRunnerOutput,
+  dockTabStateClassName,
+} from "./terminalPanel/runtimeDockHelpers";
 
 const ANSI_RESET = "\u001b[0m";
 const DEFAULT_CONSOLE_LINES: string[] = [];
@@ -397,85 +401,89 @@ function TerminalPanel() {
         data-cursor-replay-target="runtime-dock"
       >
         <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
-          {DOCK_TABS.map((tab) => {
-            const isActive = tab.id === displayActiveTab;
+          {/* The tabs scroll sideways inside their own strip so the height and
+              collapse controls after it stay on screen on a narrow phone dock. */}
+          <div className={DOCK_TAB_STRIP_CLASS}>
+            {DOCK_TABS.map((tab) => {
+              const isActive = tab.id === displayActiveTab;
 
-            return (
-              <button
-                key={tab.id}
-                data-tour={tab.id === "agent" ? "agent" : undefined}
-                type="button"
-                disabled={isPlaybackSnapshotActive}
-                onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${dockTabStateClassName(
-                  isActive,
-                )} disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            );
-          })}
-
-          {effectiveTerminalSessions.map((session) => {
-            const isActiveSession =
-              displayActiveTab === "terminal" && session.id === effectiveActiveTerminalSessionId;
-
-            return (
-              <div
-                key={session.id}
-                className={`inline-flex items-center border-r border-[#11151d] text-xs font-medium transition-colors ${dockTabStateClassName(
-                  isActiveSession,
-                )}`}
-              >
+              return (
                 <button
+                  key={tab.id}
+                  data-tour={tab.id === "agent" ? "agent" : undefined}
                   type="button"
                   disabled={isPlaybackSnapshotActive}
-                  onClick={() => {
-                    setActiveTab("terminal");
-                    setActiveTerminalSession(session.id);
-                  }}
-                  className="px-4 py-3 disabled:cursor-default"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${dockTabStateClassName(
+                    isActive,
+                  )} disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
                 >
-                  {session.title}
+                  {tab.icon}
+                  {tab.label}
                 </button>
-                <button
-                  type="button"
-                  disabled={isPlaybackSnapshotActive}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    closeTerminalSession(session.id);
+              );
+            })}
 
-                    if (activeTab === "terminal" && effectiveTerminalSessions.length === 1) {
-                      setActiveTab("runner");
-                    }
-                  }}
-                  className="pr-3 text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:hover:text-slate-500"
-                  aria-label="Close terminal"
-                  title="Close terminal"
+            {effectiveTerminalSessions.map((session) => {
+              const isActiveSession =
+                displayActiveTab === "terminal" && session.id === effectiveActiveTerminalSessionId;
+
+              return (
+                <div
+                  key={session.id}
+                  className={`inline-flex items-center border-r border-[#11151d] text-xs font-medium transition-colors ${dockTabStateClassName(
+                    isActiveSession,
+                  )}`}
                 >
-                  <X size={12} />
-                </button>
-              </div>
-            );
-          })}
+                  <button
+                    type="button"
+                    disabled={isPlaybackSnapshotActive}
+                    onClick={() => {
+                      setActiveTab("terminal");
+                      setActiveTerminalSession(session.id);
+                    }}
+                    className="px-4 py-3 disabled:cursor-default"
+                  >
+                    {session.title}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isPlaybackSnapshotActive}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeTerminalSession(session.id);
 
-          <button
-            type="button"
-            disabled={isPlaybackSnapshotActive}
-            onClick={() => {
-              setIsCreatingTerminal(true);
-              setActiveTab("terminal");
-              void createTerminalSession().finally(() => {
-                setIsCreatingTerminal(false);
-              });
-            }}
-            className="inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
-            aria-label="New terminal"
-            title="New terminal"
-          >
-            <Plus size={15} />
-          </button>
+                      if (activeTab === "terminal" && effectiveTerminalSessions.length === 1) {
+                        setActiveTab("runner");
+                      }
+                    }}
+                    className="pr-3 text-slate-500 transition-colors hover:text-white disabled:cursor-default disabled:hover:text-slate-500"
+                    aria-label="Close terminal"
+                    title="Close terminal"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
+
+            <button
+              type="button"
+              disabled={isPlaybackSnapshotActive}
+              onClick={() => {
+                setIsCreatingTerminal(true);
+                setActiveTab("terminal");
+                void createTerminalSession().finally(() => {
+                  setIsCreatingTerminal(false);
+                });
+              }}
+              className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
+              aria-label="New terminal"
+              title="New terminal"
+            >
+              <Plus size={15} />
+            </button>
+          </div>
 
           <button
             type="button"
@@ -483,7 +491,7 @@ function TerminalPanel() {
             // on screen without reaching the recording (see useRuntimeDockLayout).
             disabled={displayIsCollapsed}
             onClick={toggleFullHeight}
-            className="ml-auto inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:opacity-40 disabled:hover:text-slate-500"
+            className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:opacity-40 disabled:hover:text-slate-500"
             aria-label={
               displayIsFullHeight
                 ? "Restore runtime dock height"
@@ -503,7 +511,7 @@ function TerminalPanel() {
             type="button"
             disabled={isPlaybackSnapshotActive}
             onClick={() => setIsCollapsed(!runtimePanelStore.getSnapshot().context.isCollapsed)}
-            className="inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
+            className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
             aria-label={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
             title={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
           >

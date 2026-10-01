@@ -4,6 +4,7 @@ import { Bot, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react"
 import { signInUrl, useAuth } from "@next-editor/infra";
 import AgentPanel from "./agent/AgentPanel";
 import XtermTerminal from "./XtermTerminal";
+import { DOCK_TAB_STRIP_CLASS } from "./terminalPanel/runtimeDockHelpers";
 import type { PlaygroundConsoleTags, PlaygroundRunnerLanguage } from "./playgroundRunnerLanguage";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
@@ -411,27 +412,31 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       {...{ [STUDIO_TARGET_ATTRIBUTE]: dockTargetId }}
     >
       <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
-        {dockTabs.map((tab) => {
-          const isActive = tab.id === displayActiveTab;
+        {/* The tabs scroll sideways inside their own strip so the height and
+            collapse controls after it stay on screen on a narrow phone dock. */}
+        <div className={DOCK_TAB_STRIP_CLASS}>
+          {dockTabs.map((tab) => {
+            const isActive = tab.id === displayActiveTab;
 
-          return (
-            <button
-              key={tab.id}
-              data-tour={tab.id === "agent" ? "agent" : undefined}
-              type="button"
-              disabled={isPlaybackSnapshotActive}
-              onClick={() => runtimePanelStore.trigger.setActiveTab({ tab: tab.id })}
-              className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${
-                isActive
-                  ? "border-b border-b-[#64a3ff] bg-[#171b22] text-white"
-                  : "text-slate-400 hover:bg-[#171b22] hover:text-white"
-              } disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={tab.id}
+                data-tour={tab.id === "agent" ? "agent" : undefined}
+                type="button"
+                disabled={isPlaybackSnapshotActive}
+                onClick={() => runtimePanelStore.trigger.setActiveTab({ tab: tab.id })}
+                className={`inline-flex items-center gap-2.5 border-r border-[#11151d] px-4 py-3 text-[13px] font-semibold transition-colors ${
+                  isActive
+                    ? "border-b border-b-[#64a3ff] bg-[#171b22] text-white"
+                    : "text-slate-400 hover:bg-[#171b22] hover:text-white"
+                } disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-slate-400`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
 
         <button
           type="button"
@@ -439,7 +444,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
           // on screen without reaching the recording (see useRuntimeDockLayout).
           disabled={displayIsCollapsed}
           onClick={toggleFullHeight}
-          className="ml-auto inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:opacity-40 disabled:hover:text-slate-500"
+          className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:opacity-40 disabled:hover:text-slate-500"
           aria-label={
             displayIsFullHeight
               ? "Restore runtime dock height"
@@ -462,7 +467,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
               collapsed: !runtimePanelStore.getSnapshot().context.isCollapsed,
             });
           }}
-          className="inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
+          className="inline-flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:hover:text-slate-500"
           aria-label={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
           title={displayIsCollapsed ? "Expand runtime dock" : "Collapse runtime dock"}
         >

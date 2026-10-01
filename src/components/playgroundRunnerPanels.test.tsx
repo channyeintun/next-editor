@@ -536,6 +536,25 @@ describe("playground runner panels", () => {
     );
   });
 
+  it.each(CASES)(
+    "$kind: keeps the height and collapse controls outside the scrolling tab strip",
+    async (panel) => {
+      setFiles({ [panel.entry]: SOURCE });
+      await renderPanel(panel);
+
+      // On a narrow phone dock the tabs scroll inside their own strip; the
+      // controls after it must not scroll or shrink with it, or the viewer's
+      // full-height toggle is clipped off the end of the header.
+      const tabStrip = screen.getByRole("button", { name: panel.runnerTab }).parentElement;
+      expect(tabStrip).toHaveClass("min-w-0", "overflow-x-auto");
+      for (const name of ["Expand runtime dock to full height", "Collapse runtime dock"]) {
+        const control = screen.getByRole("button", { name });
+        expect(tabStrip).not.toContainElement(control);
+        expect(control).toHaveClass("shrink-0", "size-10");
+      }
+    },
+  );
+
   it("labels a sign-in button for exactly the runtimes that need a session", () => {
     expect(CASES.map((panel) => [panel.kind, panel.signInLabel !== null])).toEqual(
       CASES.map((panel) => [panel.kind, runtimeNeedsSession(panel.kind)]),
