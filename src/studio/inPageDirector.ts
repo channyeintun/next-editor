@@ -4,7 +4,8 @@ import type { StudioPlan } from "./plan";
 import { compileLessonScript } from "./script/compile";
 import { resolveScriptSlides } from "./script/googleSlides";
 import { splitIntoDialogs } from "./script/dialogs";
-import { LEXICON_V1, speechTextOf } from "./script/lexicon";
+import { isBurmeseLocale } from "./narrationLanguage";
+import { LEXICON_V1, speechTextOf, type PronunciationLexicon } from "./script/lexicon";
 import { extractNarration } from "./script/markers";
 import { scheduleDialogs } from "./script/schedule";
 import type { LessonScript } from "./script/schema";
@@ -93,6 +94,18 @@ function providerFor(
   }
 }
 
+/**
+ * LEXICON_V1's respellings ("struckt", "funk", letter-by-letter initialisms)
+ * are tuned for the English Pocket voice. Handed to the Burmese narrator they
+ * are just misspelled English, so Burmese narration speaks (and aligns
+ * captions on) its display tokens as written.
+ */
+const NO_RESPELLINGS: PronunciationLexicon = { version: 0, entries: {} };
+
+function narrationLexiconFor(locale: string): PronunciationLexicon {
+  return isBurmeseLocale(locale) ? NO_RESPELLINGS : LEXICON_V1;
+}
+
 export async function buildPlanFromScript(
   script: LessonScript,
   { onPhase, voiceProfile }: InPageDirectorOptions = {},
@@ -104,6 +117,7 @@ export async function buildPlanFromScript(
     script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
   );
   const dialogs = splitIntoDialogs(extracted);
+  const lexicon = narrationLexiconFor(script.lesson.locale);
 
   onPhase?.("tts-model");
   await provider.preload();
@@ -115,10 +129,14 @@ export async function buildPlanFromScript(
   let synthesizedCount = 0;
   for (let i = 0; i < dialogs.length; i++) {
     onPhase?.(`synthesize ${i + 1}/${dialogs.length}`);
-    const speechText = speechTextOf(dialogs[i].tokens, LEXICON_V1);
+    const speechText = speechTextOf(dialogs[i].tokens, lexicon);
     const requestHash = await ttsRequestHash({
       profile,
       speechText,
+      // The lexicon's whole effect is the speech text, which is hashed above,
+      // so this stays the lexicon release for every language: a Burmese
+      // dialog the English respellings never touched keeps its request hash
+      // (and its paid Modal take); one they did touch re-keys by its text.
       lexiconVersion: LEXICON_V1.version,
       seed: provider.seed,
     });
@@ -141,7 +159,7 @@ export async function buildPlanFromScript(
     extracted,
     dialogs,
     durationsMs,
-    lexicon: LEXICON_V1,
+    lexicon,
   });
 
   const stitched = stitchWavSegments(

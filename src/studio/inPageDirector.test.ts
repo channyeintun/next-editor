@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { sha256HexOfJson } from "./hash";
 import { LEXICON_V1 } from "./script/lexicon";
 import { parseLessonScript } from "./script/schema";
-import { VOICE_PROFILES } from "./tts/profiles";
+import { ttsRequestHash, VOICE_PROFILES } from "./tts/profiles";
 import { encodeWavPcm16 } from "./tts/wav";
 
 const tts = vi.hoisted(() => ({
@@ -101,5 +101,33 @@ describe("buildPlanFromScript narration", () => {
     );
     expect(result.plan.lesson.locale).toBe("my-MM");
     expect(result.plan.narration.mimeType).toBe("audio/wav");
+  });
+
+  it("respells English narration only", async () => {
+    const english = loadPilot();
+    english.scenes[0].narration = english.scenes[0].narration.replace("Go functions", "A struct");
+    await buildPlanFromScript(english);
+    expect(tts.synthesizePocketWav.mock.calls[0][1]).toMatch(/^A struckt /);
+
+    tts.getCachedDialogWav.mockClear();
+    const burmese = loadPilot();
+    burmese.lesson.locale = "my-MM";
+    burmese.scenes[0].narration = burmese.scenes[0].narration.replace("Go functions", "A struct");
+    await buildPlanFromScript(burmese, {
+      voiceProfile: VOICE_PROFILES["modal-voxcpm2-burmese-v1"],
+    });
+    const speechText = tts.synthesizeModalVoxCpm2Wav.mock.calls[0][1];
+    expect(speechText).toMatch(/^A struct /);
+
+    // Untouched by the lexicon, so the request hash is the one this dialog had
+    // when the English lexicon was still applied — its cached take still hits.
+    expect(tts.getCachedDialogWav.mock.calls[0][0]).toBe(
+      await ttsRequestHash({
+        profile: VOICE_PROFILES["modal-voxcpm2-burmese-v1"],
+        speechText,
+        lexiconVersion: LEXICON_V1.version,
+        seed: burmese.build.seed,
+      }),
+    );
   });
 });
