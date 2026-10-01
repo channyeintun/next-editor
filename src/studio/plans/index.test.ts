@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import { resolveAnchorOffset } from "../async";
 import type { StudioSlide } from "../plan";
@@ -9,39 +11,16 @@ import { RECORDING_BUFFER_MS, scheduleDialogs } from "../script/schedule";
 import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_SOURCES } from "./index";
 
 describe("studio lesson registry", () => {
-  it("registers exactly the checked-in scripts (Rust course + Go + Kotlin + Next Editor + XState)", () => {
-    // Scripts auto-register by filename without any manual registry edit.
-    // Grows as the course does; keep this list in sync with the YAML files
-    // under src/studio/scripts/.
-    expect(Object.keys(STUDIO_SOURCES).sort()).toEqual([
-      "go-crash-course",
-      "go-error-values",
-      "haskell-crash-course",
-      "kite-crash-course",
-      "kotlin-crash-course",
-      "next-editor-state-machine",
-      "rust-borrow",
-      "rust-control-flow",
-      "rust-data-types",
-      "rust-enums",
-      "rust-error-handling",
-      "rust-functions",
-      "rust-generics",
-      "rust-hashmaps",
-      "rust-iterators",
-      "rust-lifetimes",
-      "rust-match",
-      "rust-ownership",
-      "rust-slices",
-      "rust-strings",
-      "rust-structs",
-      "rust-traits",
-      "rust-variables",
-      "rust-vectors",
-      "x86-64-assembly-crash-course",
-      "xstate-react-tea-shop-order-mm",
-      "zig-crash-course",
-    ]);
+  it("registers exactly the checked-in scripts", () => {
+    // Scripts auto-register by filename without any manual registry edit, so
+    // the expected list is read from the same directory — a new lesson needs
+    // no test edit, while a dropped or extra registration still fails.
+    const checkedIn = readdirSync(resolve(__dirname, "../scripts"))
+      .filter((name) => /\.ya?ml$/.test(name))
+      .map((name) => name.replace(/\.ya?ml$/, ""))
+      .sort();
+    expect(checkedIn.length).toBeGreaterThan(0);
+    expect(Object.keys(STUDIO_SOURCES).sort()).toEqual(checkedIn);
     expect(STUDIO_SOURCES[DEFAULT_STUDIO_PLAN_SLUG]?.kind).toBe("script");
   });
 
