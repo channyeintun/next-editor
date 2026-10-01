@@ -136,6 +136,7 @@ function TerminalPanel() {
     displayActiveTab,
     displayIsCollapsed,
     displayIsFullHeight,
+    toggleFullHeight,
   } = useRuntimeDockLayout();
   const isSettingsOpen = useSelector(runtimePanelStore, (s) => selectIsSettingsOpen(s.context));
   const consoleLines = useSelector(runtimePanelStore, (s) => selectConsoleLines(s.context));
@@ -145,8 +146,6 @@ function TerminalPanel() {
   const setActiveTab = (tab: RuntimeDockTab) => runtimePanelStore.trigger.setActiveTab({ tab });
   const setIsCollapsed = (collapsed: boolean) =>
     runtimePanelStore.trigger.setIsCollapsed({ collapsed });
-  const setIsFullHeight = (fullHeight: boolean) =>
-    runtimePanelStore.trigger.setIsFullHeight({ fullHeight });
   const setIsSettingsOpen = (open: boolean) =>
     runtimePanelStore.trigger.setIsSettingsOpen({ open });
   const [isCreatingTerminal, setIsCreatingTerminal] = useState(false);
@@ -480,8 +479,10 @@ function TerminalPanel() {
 
           <button
             type="button"
-            disabled={isPlaybackSnapshotActive || displayIsCollapsed}
-            onClick={() => setIsFullHeight(!runtimePanelStore.getSnapshot().context.isFullHeight)}
+            // The one dock control a viewer keeps during playback; their choice stays
+            // on screen without reaching the recording (see useRuntimeDockLayout).
+            disabled={displayIsCollapsed}
+            onClick={toggleFullHeight}
             className="ml-auto inline-flex items-center justify-center text-slate-500 transition-colors hover:text-white size-10 disabled:cursor-default disabled:opacity-40 disabled:hover:text-slate-500"
             aria-label={
               displayIsFullHeight

@@ -103,6 +103,29 @@ function useLeavePageGuards(actorRef: EditorActorRef): void {
 }
 
 /**
+ * Ends the viewer's full-height choice for the runtime dock (runtimePanelStore's
+ * viewerFullHeight) when the editor leaves playback. It lasts for as long as one
+ * recording stays loaded, through play, pause, seeking, stopping and the end; it ends
+ * when another recording is loaded, the lesson is unloaded, or a take starts, since
+ * each of those leaves `playback`. The actor is subscribed to directly rather than
+ * through a selector, so a brief `loading` between two recordings is never missed.
+ */
+function useEndViewerDockOverride(actorRef: EditorActorRef): void {
+  const { store: runtimePanelStore } = useRuntimePanelStore();
+  useEffect(() => {
+    const subscription = actorRef.subscribe((snapshot) => {
+      if (
+        !snapshot.matches("playback") &&
+        runtimePanelStore.getSnapshot().context.viewerFullHeight !== null
+      ) {
+        runtimePanelStore.trigger.clearViewerFullHeight();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [actorRef, runtimePanelStore]);
+}
+
+/**
  * The workspace side of recording and replay. getWorkspaceSnapshot reads the workspace
  * store for the machine, reusing its last snapshot while nothing it holds has changed;
  * applyWorkspaceSnapshot loads a replayed snapshot back into the store. The workspace
@@ -243,6 +266,7 @@ const NextEditorProviderContent: React.FC<NextEditorProviderContentProps> = ({
   useNextEditorInteractionEffects(actorRef, editorRef);
   useRecordingDraftJournal(actorRef, recordingDrafts);
   useLeavePageGuards(actorRef);
+  useEndViewerDockOverride(actorRef);
 
   const previewHandle = usePreviewAdapterHandle();
   const stopRecordingPromiseRef = useRef<Promise<void> | null>(null);

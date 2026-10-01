@@ -7,7 +7,7 @@ import {
   PreviewAdapterHandleProvider,
   usePreviewAdapterHandle,
 } from "./PreviewAdapterHandleContext";
-import { RuntimePanelStoreProvider } from "./RuntimePanelStoreContext";
+import { RuntimePanelStoreProvider, useRuntimePanelStore } from "./RuntimePanelStoreContext";
 import { SlidesStoreProvider } from "./SlidesStoreContext";
 import { WebContainerRuntimeProvider } from "./WebContainerRuntimeProvider";
 import { WhiteboardStoreProvider } from "./WhiteboardStoreContext";
@@ -18,6 +18,10 @@ import { WorkspaceEventRecorder } from "../components/WorkspaceEventRecorder";
 import type { NextEditorActions } from "./NextEditorContext";
 import type { EditorActorRef } from "../core/src/useNextEditor";
 import type { PreviewAdapterHandle } from "../stores/previewAdapterHandle";
+import {
+  selectViewerFullHeight,
+  type RuntimePanelStoreInstance,
+} from "../stores/runtimePanelStore";
 import type { Recording } from "../core/src/types";
 import type { WorkspaceRecordingSnapshot } from "../types/workspace";
 import type { WorkspaceActions } from "./WorkspaceContext";
@@ -261,5 +265,100 @@ describe("NextEditorProvider replayed workspace snapshots", () => {
     expect(captured.workspace?.getActiveFilePath()).toBe("styles.css");
     expect(editor.getSnapshot().matches({ playback: "playing" })).toBe(true);
     expect(editor.getSnapshot().context.hasManualWorkspaceOverride).toBe(false);
+  });
+});
+
+describe("NextEditorProvider viewer dock height", () => {
+  // The viewer's full-height choice for the runtime dock lasts while one recording
+  // stays loaded, and ends when the editor leaves playback.
+  function renderWithDockStore() {
+    const captured: { actor: EditorActorRef | null; store: RuntimePanelStoreInstance | null } = {
+      actor: null,
+      store: null,
+    };
+
+    function Capture() {
+      captured.actor = NextEditorActorContext.useActorRef();
+      captured.store = useRuntimePanelStore().store;
+      return null;
+    }
+
+    render(
+      <EditorProviders>
+        <Capture />
+      </EditorProviders>,
+    );
+    const { actor, store } = captured;
+    if (!actor || !store) throw new Error("Expected the providers to render");
+    const viewerFullHeight = () => selectViewerFullHeight(store.getSnapshot().context);
+    return { actor, store, viewerFullHeight };
+  }
+
+  function lesson(id: string): Recording {
+    return {
+      version: 4,
+      id,
+      name: id,
+      createdAt: 1,
+      duration: 1000,
+      keyframeInterval: 120,
+      frames: [
+        {
+          timestamp: 0,
+          isKeyframe: true,
+          state: {
+            content: "<h1>lesson</h1>",
+            selection: {
+              startLineNumber: 1,
+              startColumn: 1,
+              endLineNumber: 1,
+              endColumn: 1,
+              selectionStartLineNumber: 1,
+              selectionStartColumn: 1,
+              positionLineNumber: 1,
+              positionColumn: 1,
+            },
+            position: { lineNumber: 1, column: 1 },
+            viewState: null,
+            mouseCursor: { x: 0, y: 0, visible: false },
+          },
+        },
+      ],
+      runtimeSnapshot: { mode: "single-file", status: "idle", isFullHeight: false },
+    };
+  }
+
+  async function loadLesson(actor: EditorActorRef, id: string) {
+    act(() => actor.send({ type: "LOAD_RECORDING", recording: lesson(id) }));
+    await waitFor(() => expect(actor.getSnapshot().matches({ playback: "ready" })).toBe(true));
+  }
+
+  it("keeps the choice through play, pause, seeking and stop, and ends it with another recording", async () => {
+    const { actor, store, viewerFullHeight } = renderWithDockStore();
+    await loadLesson(actor, "first");
+    act(() => actor.send({ type: "PLAY" }));
+    act(() => store.trigger.setViewerFullHeight({ fullHeight: true }));
+
+    act(() => actor.send({ type: "PAUSE" }));
+    act(() => actor.send({ type: "SEEK", time: 500 }));
+    act(() => actor.send({ type: "PLAY" }));
+    act(() => actor.send({ type: "STOP" }));
+    expect(viewerFullHeight()).toBe(true);
+
+    act(() => actor.send({ type: "LOAD_RECORDING", recording: lesson("second") }));
+    expect(viewerFullHeight()).toBeNull();
+    await waitFor(() => expect(actor.getSnapshot().matches({ playback: "ready" })).toBe(true));
+    expect(viewerFullHeight()).toBeNull();
+  });
+
+  it("ends the choice when the lesson is unloaded", async () => {
+    const { actor, store, viewerFullHeight } = renderWithDockStore();
+    await loadLesson(actor, "first");
+    act(() => store.trigger.setViewerFullHeight({ fullHeight: false }));
+
+    act(() => actor.send({ type: "UNLOAD" }));
+
+    expect(actor.getSnapshot().matches("idle")).toBe(true);
+    expect(viewerFullHeight()).toBeNull();
   });
 });

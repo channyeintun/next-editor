@@ -14,6 +14,17 @@ export interface RuntimePanelContext {
   consoleLines: string[];
   terminalScrollLines: RuntimeTerminalScrollLines;
   playbackSnapshot: RuntimeRecordingSnapshot | null;
+  /**
+   * The viewer's own full-height choice for the replayed dock, or null when they
+   * have not touched the toggle. Pressing it during a replay sets this, and from
+   * then on it wins over the recording's full-height changes, across pause, resume,
+   * seeking and the end of playback. It ends (back to null) when the editor leaves
+   * playback: another recording is loaded, the lesson is unloaded, or a take starts
+   * (see useEndViewerDockOverride). It is viewer-only: selectRecordingState leaves
+   * it out, so no recording or runtime track ever captures it, and the live
+   * isFullHeight that record mode and the studio Performer drive is left untouched.
+   */
+  viewerFullHeight: boolean | null;
 }
 
 export type ConsoleAppender = (message: string) => void;
@@ -27,6 +38,7 @@ const DEFAULT_CONTEXT: RuntimePanelContext = {
   consoleLines: [],
   terminalScrollLines: {},
   playbackSnapshot: null,
+  viewerFullHeight: null,
 };
 
 export function createRuntimePanelStore() {
@@ -58,6 +70,12 @@ export function createRuntimePanelStore() {
         event.terminalScrollLines === context.terminalScrollLines
           ? context
           : { ...context, terminalScrollLines: event.terminalScrollLines },
+      setViewerFullHeight: (context, event: { fullHeight: boolean }) =>
+        event.fullHeight === context.viewerFullHeight
+          ? context
+          : { ...context, viewerFullHeight: event.fullHeight },
+      clearViewerFullHeight: (context) =>
+        context.viewerFullHeight === null ? context : { ...context, viewerFullHeight: null },
       setPlaybackSnapshot: (context, event: { snapshot: RuntimeRecordingSnapshot | null }) =>
         event.snapshot === context.playbackSnapshot
           ? context
@@ -71,6 +89,8 @@ export type RuntimePanelStoreInstance = ReturnType<typeof createRuntimePanelStor
 export const selectActiveTab = (context: RuntimePanelContext): RuntimeDockTab => context.activeTab;
 export const selectIsCollapsed = (context: RuntimePanelContext): boolean => context.isCollapsed;
 export const selectIsFullHeight = (context: RuntimePanelContext): boolean => context.isFullHeight;
+export const selectViewerFullHeight = (context: RuntimePanelContext): boolean | null =>
+  context.viewerFullHeight;
 export const selectIsSettingsOpen = (context: RuntimePanelContext): boolean =>
   context.isSettingsOpen;
 export const selectConsoleLines = (context: RuntimePanelContext): string[] => context.consoleLines;

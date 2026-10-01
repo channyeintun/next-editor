@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
 import type { ComponentType, ReactNode } from "react";
-import { useSelector } from "@xstate/store-react";
 import { MonacoBinding } from "y-monaco";
 import * as Y from "yjs";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -11,15 +10,13 @@ import {
   useWorkspaceTreeVersion,
 } from "../hooks/useWorkspace";
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
-import { useRuntimeDockRecordedSnapshot } from "../hooks/useRuntimeDockRecordedSnapshot";
-import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
+import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import {
   useOptionalCollaboration,
   type CollaborationParticipant,
 } from "../contexts/CollaborationContext";
 import type { EditorSelection } from "../core/src/types";
 import type { CollaborationRoomProvider } from "../collaboration/roomProvider";
-import { selectIsCollapsed, selectIsFullHeight } from "../stores/runtimePanelStore";
 import {
   executionKindForLessonType,
   isWorkspaceTextFile,
@@ -216,10 +213,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const { activeFile } = useWorkspaceEditorState();
   const lessonType = useWorkspaceLessonType();
   const treeVersion = useWorkspaceTreeVersion();
-  const { store: runtimePanelStore } = useRuntimePanelStore();
-  const isCollapsed = useSelector(runtimePanelStore, (s) => selectIsCollapsed(s.context));
-  const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
-  const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
+  // The dock's on-screen layout, so the editor hides behind a full-height dock
+  // exactly when the dock shows itself full height (the viewer's choice included).
+  const { displayIsCollapsed, displayIsFullHeight } = useRuntimeDockLayout();
   const collaboration = useOptionalCollaboration();
   const slidesContext = useSlidesContext();
   const whiteboardContext = useWhiteboardContext();
@@ -227,12 +223,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   // surface is that overlay (see CollaborationSurfaceBridge); the editor's
   // selection, cursor and viewport are not published over it.
   const isEditorCovered = slidesContext.previewState.isOpen || whiteboardContext.isOpen;
-  const displayIsCollapsed = isPlaybackSnapshotActive
-    ? (recordedRuntimeSnapshot?.isCollapsed ?? false)
-    : isCollapsed;
-  const displayIsFullHeight = isPlaybackSnapshotActive
-    ? (recordedRuntimeSnapshot?.isFullHeight ?? false)
-    : isFullHeight;
   const isRunnerDockFullHeight = displayIsFullHeight && !displayIsCollapsed;
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
