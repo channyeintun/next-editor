@@ -212,10 +212,13 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
           e.currentTarget.style.height = height;
           setHoverFraction(null);
         }}
+        // A progressbar, not a slider: it seeks by pointer only, and the player's own
+        // shortcuts are how a keyboard seeks. Whole seconds, read out as times.
         role="progressbar"
-        aria-valuenow={currentTime}
+        aria-valuenow={Math.floor(Math.min(currentTime, duration) / 1000)}
         aria-valuemin={0}
-        aria-valuemax={duration}
+        aria-valuemax={Math.floor(duration / 1000)}
+        aria-valuetext={`${formatPlaybackTime(Math.min(currentTime, duration))} of ${formatPlaybackTime(duration)}`}
         aria-label="Playback progress"
       >
         <div className="next-editor-progress-bar" style={progressStyle} />

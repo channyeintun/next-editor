@@ -644,6 +644,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
               <button
                 type="button"
                 onClick={() => setShowSettings(true)}
+                // Named for what it shows: a bare "40%" says nothing on its own.
+                aria-label={describeCaptionGeneration(captionGeneration.state)}
                 title={describeCaptionGeneration(captionGeneration.state)}
                 className="inline-flex shrink-0 items-center gap-1 text-[11px] text-slate-400 pointer-events-auto"
               >
@@ -656,7 +658,11 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
             <div className="relative pointer-events-auto">
               <button
+                type="button"
                 onClick={() => setShowSettings((prev) => !prev)}
+                aria-label="Settings"
+                aria-expanded={showSettings}
+                title="Settings"
                 className="flex items-center justify-center transition-colors hover:opacity-80 cursor-pointer"
               >
                 <SettingIcon size={controlIconSize} />
