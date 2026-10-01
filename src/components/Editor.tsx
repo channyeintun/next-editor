@@ -96,6 +96,12 @@ export interface EditorProps {
    * author's to lose. Defaults to on; a read-only editor records nothing either way.
    */
   recordingDrafts?: boolean;
+  /**
+   * Save the workspace to the one persisted project every tab shares. Off for
+   * studio renders, whose performed workspace is not the user's project and
+   * would overwrite it on Ctrl-S. Defaults to on.
+   */
+  persistWorkspace?: boolean;
 }
 
 function EditorLayout({
@@ -263,10 +269,11 @@ export default function Editor({
   overlay,
   runtimeAutoStart = true,
   recordingDrafts = true,
+  persistWorkspace = true,
   ...props
 }: EditorProps = {}) {
   return (
-    <WorkspaceProvider pendingRecordingUrl={props.recordingUrl}>
+    <WorkspaceProvider pendingRecordingUrl={props.recordingUrl} persist={persistWorkspace}>
       <WebContainerRuntimeProvider allowAmbientStart={runtimeAutoStart}>
         <SlidesStoreProvider>
           <WhiteboardStoreProvider>

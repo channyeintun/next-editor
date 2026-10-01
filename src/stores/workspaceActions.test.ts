@@ -104,6 +104,17 @@ describe("createWorkspaceActions", () => {
     expect(isDirty(store)).toBe(false);
   });
 
+  it("leaves the shared saved workspace alone when persistence is off", async () => {
+    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, "user project");
+    const store = createWorkspaceStore({ activeFilePath: "index.html", project: lesson() });
+    const actions = createWorkspaceActions(store, { persist: false });
+    actions.updateFileContent("index.html", "performed");
+
+    await actions.saveProject();
+    expect(assets.persist).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).toBe("user project");
+  });
+
   it("does nothing a loaded project would be needed for until one is loaded", async () => {
     const store = createWorkspaceStore(null);
     const actions = createWorkspaceActions(store);

@@ -79,8 +79,15 @@ async function persistWorkspace(
  * memoization, and the save queue is plain closure state instead of a ref.
  * It also keeps persistWorkspace out of the component: the compiler skips a
  * component whose try/catch holds conditional expressions.
+ *
+ * `persist: false` turns saveProject into a no-op, for a surface whose
+ * workspace is not the user's project (the /studio render page): every tab
+ * shares one saved workspace, so saving there would overwrite it.
  */
-export function createWorkspaceActions(workspaceStore: WorkspaceStoreInstance): WorkspaceActions {
+export function createWorkspaceActions(
+  workspaceStore: WorkspaceStoreInstance,
+  { persist = true }: { persist?: boolean } = {},
+): WorkspaceActions {
   // Saves run one at a time, in call order; each persists the project as it
   // was when it was called.
   let saveQueue: Promise<void> = Promise.resolve();
@@ -182,7 +189,7 @@ export function createWorkspaceActions(workspaceStore: WorkspaceStoreInstance): 
     },
 
     saveProject: () => {
-      if (typeof window === "undefined") {
+      if (!persist || typeof window === "undefined") {
         return Promise.resolve();
       }
 

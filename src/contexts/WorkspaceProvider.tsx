@@ -14,18 +14,22 @@ interface WorkspaceProviderProps {
    *  of `?url=` — see createInitialWorkspaceSnapshot. Start empty rather than
    *  from the persisted workspace, which the recording would only overwrite. */
   pendingRecordingUrl?: string;
+  /** Save to the shared persisted workspace. Off where the workspace is not
+   *  the user's project (see createWorkspaceActions). Defaults to on. */
+  persist?: boolean;
 }
 
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   children,
   pendingRecordingUrl,
+  persist = true,
 }) => {
   // Created once: the initial snapshot parses the whole saved workspace. The
   // actions are built over the store with it, so both are stable for the
   // provider's lifetime.
   const [{ workspaceStore, workspaceActions }] = useState(() => {
     const store = createWorkspaceStore(createInitialWorkspaceSnapshot(pendingRecordingUrl));
-    return { workspaceStore: store, workspaceActions: createWorkspaceActions(store) };
+    return { workspaceStore: store, workspaceActions: createWorkspaceActions(store, { persist }) };
   });
 
   // Convert v1 generation/path binary entries to content-addressed descriptors.

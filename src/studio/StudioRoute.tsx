@@ -10,8 +10,11 @@ import StudioController from "./StudioController";
  * Creating a draft afterwards uses the standard authenticated upload flow.
  *
  * Query params: `plan` (lesson slug), `runtime` (`fixture` | `live`),
- * `autostart=1` to render on load (subject to the browser's audio autoplay
- * policy — start via the button when in doubt).
+ * `autostart=1` to render on load — honoured only in an automation-controlled
+ * browser (scripts/studio-render.ts); everyone else starts via the button.
+ *
+ * The performed workspace is never saved: every tab shares one persisted
+ * project, and a studio tab's Ctrl-S would otherwise overwrite it.
  */
 export default function StudioRoute() {
   return (
@@ -20,6 +23,7 @@ export default function StudioRoute() {
       overlay={<StudioController />}
       runtimeAutoStart={false}
       recordingDrafts={false}
+      persistWorkspace={false}
     />
   );
 }
