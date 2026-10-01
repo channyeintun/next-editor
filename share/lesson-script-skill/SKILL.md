@@ -1,6 +1,6 @@
 ---
 name: lesson-script
-description: Author a Next Editor studio lesson — a narrated, auto-performed coding lesson defined as one LessonScript YAML file, rendered in the browser at nexteditor.dev/studio. Use when asked to create, write, draft, or fix a narrated coding lesson (Rust, Go, Kotlin, Python, JavaScript, TypeScript) for Next Editor.
+description: Author a Next Editor studio lesson — a narrated, auto-performed coding lesson defined as one LessonScript YAML file, rendered in the browser at nexteditor.dev/studio. Use when asked to create, write, draft, or fix a narrated coding lesson (Rust, Go, Kotlin, Zig, Haskell, Kite, x86-64 assembly, Python, JavaScript, TypeScript) for Next Editor.
 ---
 
 # Author a Next Editor LessonScript
@@ -29,6 +29,9 @@ Read, entirely and in order, before writing:
    sentence answers, plain words a non-native speaker knows. Place
    `[[mark:…]]` exactly where each action should begin.
 3. **Write the YAML.** Discipline points that break renders when sloppy:
+   - Every object is strict: an unknown or misspelled key is an error. An
+     anchor (`at`) names exactly one of `scene`, `mark`, or `afterAction`, and
+     only `scene` and `mark` anchors take `offsetMs`.
    - `editor.type` anchors (`after`) must match the file content
      byte-for-byte (tabs `\t`, newlines `\n`; use double-quoted YAML
      strings). Insert-only; open a file before typing into it.
@@ -46,7 +49,8 @@ Read, entirely and in order, before writing:
    - Studio automatically reserves two quiet seconds before the first dialog
      and after the final dialog/action. Do not add filler narration, blank
      scenes, or timing offsets to manufacture recording buffers.
-   - Every scene needs a `sources` entry; keep sentences under ~20 words.
+   - Every scene needs a `sources` entry. Short sentences read better out
+     loud, but no word count is enforced.
    - Always include `checks: [{ type: timing.p95Ms, max: 300 }]`
      (`max: 500` if the lesson shows Google-deck slides).
 4. **Validate and render on the website**: open https://nexteditor.dev/studio,
@@ -55,10 +59,13 @@ Read, entirely and in order, before writing:
    `register.read-aloud` (the narrator always talks, never reads). Press
    **Start render** and watch; the render passes only when the checks panel
    shows all gates green, e.g. "Checks (13/13 ok)".
-5. **Voice**: narration is synthesized in the page (pocket-tts). The voice
-   row can record or clone the author's own voice (2–20 s sample, stored
-   only in that browser) — a render-time choice; the YAML keeps a built-in
-   `voiceProfile`.
+5. **Voice**: English narration is synthesized in the page (pocket-tts).
+   The voice row can record or clone the author's own voice (2–20 s sample,
+   stored only in that browser) — a render-time choice; the YAML keeps a
+   built-in `voiceProfile`. Burmese (`locale: my-MM`) narration uses VoxCPM2
+   on a private server instead: it needs a signed-in account with the Burmese
+   narration feature enabled and a 5–20 s reference voice, which is sent with
+   each uncached dialog and not stored.
 6. **Report**: lesson slug, scenes/actions used, critic notes fixed vs kept,
    and the checks result. A human reviews the rendered lesson and decides on
    **Create draft…** (sign-in required) — never call the lesson done, only

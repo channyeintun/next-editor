@@ -11,7 +11,8 @@ available only when the signed-in user has the
    configuration. The Studio shows `မြန်မာ · VoxCPM2 (Modal)` only when all
    are present.
 2. The user records or uploads 5–20 seconds of the narrator. Each uncached
-   Burmese dialog posts the text, seed, and that same PCM16 reference WAV to
+   Burmese dialog posts the text (as written — the English pronunciation
+   lexicon is not applied), seed, and that same PCM16 reference WAV to
    `POST /api/studio/tts/voxcpm2`.
 3. The Worker rechecks the session and D1 flag, then calls the private Modal
    Web Function with Modal proxy-auth headers. It accepts only mono 24 kHz
@@ -144,5 +145,13 @@ Burmese provider paired with a non-Burmese script, or the reverse pairing. The
 provider option selects TTS; it does not translate English narration.
 
 Previously synthesized dialogs remain in the browser's content-addressed
-cache. Clear that site's IndexedDB only when intentionally forcing fresh
-Modal synthesis.
+dialog cache, which lives in Cache Storage (`next-editor-studio-tts-v1`,
+`src/studio/tts/dialogCache.ts`), not IndexedDB. Every take is validated before
+it is cached, and a cache hit is validated again: a bad entry is evicted with a
+warning and synthesized afresh, so clearing the cache is not needed to recover
+from one. Delete that cache (or the site's data) only when intentionally
+forcing fresh Modal synthesis.
+
+When Modal rejects a request, the Worker passes its reason through, for example
+`Burmese narration service failed with HTTP 400: reference audio must be a
+valid WAV`.

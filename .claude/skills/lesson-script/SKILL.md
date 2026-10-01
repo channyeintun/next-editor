@@ -21,6 +21,9 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
    exact program output for the fixture; then write narration that speaks
    _while_ each action happens, placing `[[mark:…]]` where actions begin.
 3. **Write** the YAML. Discipline points that break renders when sloppy:
+   - Every object is strict: an unknown or misspelled key is an error. An
+     anchor (`at`) names exactly one of `scene`, `mark`, or `afterAction`, and
+     only `scene` and `mark` anchors take `offsetMs`.
    - `editor.type` anchors (`after`) must match file content byte-for-byte
      (tabs `\t`, newlines `\n`; use double-quoted YAML strings).
    - Insert-only edits; open a file before typing into it.
@@ -31,8 +34,9 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      first; you author only the target, and time the `at` mark so the highlight
      lands as the narration names the code, then let it sit.
    - The fixture result is the program's exact output, every line
-     `\n`-terminated — `result.output` for Go/Kotlin, `result.stdout` for Rust
-     (WebContainer lessons pin the workspace instead of a fixture).
+     `\n`-terminated — `result.output` for Go/Kotlin/Zig, `result.stdout` for
+     Rust/Haskell/Kite/asm (WebContainer lessons pin the workspace instead of
+     a fixture).
    - Studio automatically reserves two quiet seconds before the first dialog
      and after the final dialog/action. Do not add filler narration, blank
      scenes, or timing offsets to manufacture recording buffers.
@@ -40,11 +44,17 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
    - Always include `checks: [{ type: timing.p95Ms, max: 300 }]` (`max: 500`
      if the lesson shows Google-deck slides — deck paints cost ~0.4s).
 4. **Validate**: `bun scripts/studio-director.ts src/studio/scripts/<slug>.yaml`
-   - Optional preflight (the page validates too) but always run it: fix every
-     error; address `✎` critic notes (advisory, but ALWAYS fix
+   - Optional preflight (the page validates too) but always run it. It
+     validates every script it is given, prints `✗ <file>: <message>` for each
+     failure, ends with `N of M script(s) valid`, and exits 1 if any failed.
+     Fix every error; address `✎` critic notes (advisory, but ALWAYS fix
      `sources.missing`, banned phrases, and `register.read-aloud` — the
      narrator is always conversational, never reading). It writes
      `<slug>.critique.json` next to the YAML.
+   - The CLI does not compile or schedule: overlap and narration-end errors
+     otherwise surface only in /studio after synthesis. Catch them offline
+     with `npx vp test run src/studio/plans/index.test.ts`, which compiles
+     every checked-in script against estimated dialog lengths.
    - Scripts auto-register by filename — do not edit
      `src/studio/plans/index.ts`. The YAML is the only artifact; end users can
      alternatively import it via /studio's **Import…** on the website.

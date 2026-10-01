@@ -14,9 +14,10 @@ reviewers judge drafts by.
   equally valid shape, and covers many ideas by design.
 - **Length and scene count: no caps.** Prefer the shortest version that lands
   what you set out to teach; single-concept lessons usually come in at 20–100
-  seconds. Neither duration nor scene count is a defect, and the critic no
-  longer flags either. It bands pacing instead, so narration that rushes or
-  drags is still caught.
+  seconds. Neither duration nor scene count is a defect, and the critic flags
+  neither. It does not measure pacing either — it lints the script text before
+  any audio exists — so narration that rushes or drags is caught by the human
+  reviewer watching the draft.
 
 ## Voice and pacing
 
@@ -37,14 +38,15 @@ reviewers judge drafts by.
   narrator is doing this _with_ the viewer.
 - Speak while showing: narration should describe what is on screen _as it
   changes_ (markers anchor actions to the words that explain them).
-- Numbers from measurement, not vibes: pacing bands live in the critic and were
-  seeded conservatively (110–170 wpm for the pocket-tts voice profiles); revise
-  them from pilot ratings, not taste debates.
+- Numbers from measurement, not vibes: the critic has no pacing bands, so judge
+  pacing on the rendered lesson and revise this guidance from pilot ratings, not
+  taste debates.
 
 ## Terminology and honesty
 
 - Use the language's own terms (`package`, `func`, `int`) verbatim; the
-  pronunciation lexicon handles speech, never the display text.
+  pronunciation lexicon handles speech, never the display text. It applies to
+  English narration only — Burmese narration is spoken as written.
 - Every factual claim a viewer could quote needs a source on the scene
   (`sources:` in the script — official specs, docs, or tour pages preferred).
 - Never claim the lesson is human-performed. Drafts carry the AI-production

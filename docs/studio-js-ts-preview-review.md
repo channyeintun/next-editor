@@ -2,6 +2,14 @@
 
 **Review date:** 2026-07-21
 
+> **Status 2026-10-02:** superseded. The typed WebContainer/preview adapter this review asked for
+> has landed (`runtime.start`, `runtime.waitForReady`, `preview.*`, `expect.preview`, with its
+> artifact and repeatability gates); see
+> [lesson-script-authoring.md](./lesson-script-authoring.md). JS/TS preview stays a release
+> candidate until `src/studio/script/__fixtures__/typescript-vite-preview.yaml` passes two clean
+> real-Chrome renders and a human replay review. The findings below describe the code as of the
+> review date.
+
 **Scope:** `LessonScript` authoring, compilation, performance, preview capture, QA, and
 repeatability for `javascript` and `typescript` lessons in `src/studio/`.
 

@@ -30,14 +30,18 @@ browser at render time: open https://nexteditor.dev/studio, click
 
 1. Narration is written per **scene**, with `[[mark:name]]` tokens embedded in
    the prose. Each mark is an **anchor**: the text splits at every mark into
-   **dialogs**, each dialog is synthesized to audio separately (pocket-tts, in
-   the render page), and actions fire at the mark they reference.
+   **dialogs**, each dialog is synthesized to audio separately (pocket-tts in
+   the render page for English; VoxCPM2 on Modal for Burmese), and actions
+   fire at the mark they reference.
 2. The scheduler places dialogs **around the actions**: narration waits until
    an anchored typing action finishes before the next dialog starts. You do
    not compute timings — you place marks where things should happen and let
-   the compiler schedule. It fails (before any render) on impossibilities and
-   warns when your actions force more than ~2.5s of silence ("add narration
-   here or shorten the action").
+   the compiler schedule. The compiler runs in the render page once the
+   narration is synthesized, before recording starts: it fails on
+   impossibilities (overlapping actions, an action running past the narration)
+   and warns when your actions force more than ~2.5s of silence ("add narration
+   here or shorten the action"). Import… and the Director CLI validate the
+   script but do not compile or schedule it.
 3. Studio automatically adds a **two-second quiet recording handle** before
    the first dialog and after the later of the final dialog or action. This
    gives recording and optional screen capture time to settle and keeps the
@@ -63,8 +67,9 @@ entirely local. Burmese VoxCPM2 renders require a selected 5–20s reference and
 send it transiently through the authenticated Worker to the private Modal
 function for every uncached dialog; neither service persists it. Reusing that
 reference keeps one speaker across the render. Scripts keep pinning built-in
-profiles in `build.voiceProfile` — reference selection is a render-time choice,
-and the draft description records the selected voice name.
+profiles in `build.voiceProfile` — reference selection is a render-time choice.
+The selected voice name appears in the build provenance on the **Create
+draft…** button's tooltip, not in the public draft description.
 
 The render console also offers an opt-in **Screen recording** toggle
 (desktop browsers only). When enabled, pressing **Start render** first prompts
@@ -113,7 +118,7 @@ lesson:
   whiteboardAssets: [] # optional, see Whiteboard
 build:
   voiceProfile: pocket-alba-v1 # the built-in narrator voice
-  seed: 11 # any int ≥ 0; drives typing cadence + narration noise
+  seed: 11 # integer 0–2147483647; drives typing cadence + narration noise
 runtime:
   kind: go-playground # must match lessonType (matrix below)
   defaultMode: fixture # fixture = offline deterministic; live = real service
@@ -129,6 +134,13 @@ scenes: […] # see Scenes
 checks:
   - { type: timing.p95Ms, max: 300 } # required on every script
 ```
+
+Every object in a script is **strict**: an unknown or misspelled key
+(`cadance: block`, `offsetMS: 400`) is a validation error, not a silently
+ignored field. `build.seed` is an integer from 0 to 2147483647 (the
+synthesizers take a signed 32-bit seed); both rules are checked when the
+script is parsed, so Import… and the Director CLI report them before any
+synthesis.
 
 `timing.p95Ms` is the only check a script declares, and it is mandatory. The
 artifact gates (`recording.decodes`, `runtime.noErrors`, track/caption/preview
@@ -294,9 +306,10 @@ scenes:
 ```
 
 `chapter` (optional, ≤120 characters) starts a chapter at the scene's first spoken
-word. Viewers see the chapters as notches on the progress bar and in the player's
-chapter list, and can link to them; a scene without one continues the chapter
-before it. Title the few scenes where the lesson turns to a new idea, not every one.
+word — except on the lesson's first scene, whose chapter starts at 0:00 so the
+opening seconds already belong to it. Viewers see the chapters as notches on the
+progress bar and in the player's chapter list, and can link to them; a scene
+without one continues the chapter before it. Title the few scenes where the lesson turns to a new idea, not every one.
 
 Marker rules:
 
@@ -305,23 +318,28 @@ Marker rules:
 - A mark anchors to the word that follows it. Place a mark exactly where the
   related action should begin. Marks at sentence boundaries sound best (each
   inter-mark span is synthesized as one utterance).
-- Every mark referenced by an action must exist; unreferenced marks only
-  produce a critic note.
+- Every mark referenced by an action must exist. A mark no action references
+  is fine: it still splits the dialog there and buys a breath. The critic's
+  `marker.unused` note fires only for a mark that splits nothing (at the start
+  or end of its scene, or at the same word as another split).
 
 Narration is also the caption text — write it clean (the persona guide's
-sentence-length and banned-phrase rules apply; the critic enforces them as
-advisory notes).
+banned-phrase and conversational-register rules apply; the critic flags them
+as advisory notes).
 
 ### Actions
 
 Common fields: `id` (globally unique), `at` (anchor), optional `timeoutMs`
 (default 10000; the command must acknowledge within it).
 
-Anchors (`at`) — narration-relative only, never absolute times:
+Anchors (`at`) — narration-relative only, never absolute times. An anchor names
+**exactly one** of `scene`, `mark`, or `afterAction`; `offsetMs` is allowed only
+on `scene` and `mark` anchors:
 
 - `{ mark: name }` or `{ mark: name, offsetMs: -400 }` — at a mark, optionally
   shifted (negative = start before the words are spoken; small values only).
-- `{ scene: start }` — at the scene's first spoken word.
+- `{ scene: start }` (optionally with `offsetMs`) — at the scene's first spoken
+  word.
 - `{ afterAction: other-id }` — after that action completes (use for
   `expect.*` gates that follow `runtime.run` or Python's `runtime.start`).
 
@@ -344,7 +362,7 @@ Action catalog:
 | `expect.preview`       | `target?`, `textContains?`, `value?`, `route?`, `attribute?`, `retry` | Requires a target or route. Text/value/attribute checks require a target. A passing observation is stored in the artifact as a DOM/route checkpoint; a failure aborts and captures a diagnostic screenshot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `slide.show`           | `slideId`, `maximized` (default true)                                 | `slideId` must be in `lesson.slides`. Showing a slide while another is open advances **in place** (like moving to the next slide) — do not `slide.close` between consecutive slides; close only when returning to the editor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `slide.close`          | —                                                                     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `whiteboard.apply`     | `open?`, `maximized?`, `upsertIds: []`, `clear?`, `drawMs?`           | Ids from `lesson.whiteboardAssets`. Must open, change maximize, clear, or upsert ≥1 asset. `drawMs` draws the upserts in instead of applying them at once, and `clear` wipes the board first (both under Whiteboard assets); `drawMs` must be under the action's `timeoutMs` and at most 6000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `whiteboard.apply`     | `open?`, `maximized?`, `upsertIds: []`, `clear?`, `drawMs?`           | Ids from `lesson.whiteboardAssets`. Must open/close, change maximize, clear, or upsert ≥1 asset (checked when the script is parsed). `drawMs` draws the upserts in instead of applying them at once, and `clear` wipes the board first (both under Whiteboard assets); `drawMs` must be under the action's `timeoutMs` and at most 6000.                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `expect.output`        | `contains`, `timeoutMs`                                               | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` / `[zig-run error]` / `[haskell-run error]` / `[asm-run error]` line fails it. Use with Playground runtimes after `runtime.run`, or with console-only Python after `runtime.start`; it is not a JavaScript/TypeScript preview assertion.                                                                                                                                                                                                                                                                                                                                                                                      |
 | `expect.file`          | `path`, `contains`                                                    | Asserts the final workspace file contains the string.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
@@ -368,6 +386,9 @@ Critical `editor.type` discipline:
 
 - Compute `after` against the file content **as it will be at that moment**
   (pinned content plus any earlier insertions in the same file).
+- `occurrence` defaults to 1, so the first exact match wins; an anchor that
+  repeats in the file is not an error. Add context to `after` or set
+  `occurrence` to pick a later match.
 - The anchor must match exactly — byte-for-byte, including `\n` and `\t`. In
   YAML, prefer double-quoted strings with escapes for anchors and typed text:
   `after: "\treturn value * value\n}\n"`.
@@ -412,8 +433,8 @@ Critical `editor.type` discipline:
 ### The fixture must be the truth
 
 The fixture result's program output (`output` for Go/Kotlin/Zig, `stdout` for
-Rust and Haskell) must be **exactly** what the real program prints (every line,
-`\n`-terminated). Two reasons: `expect.output` runs against it in
+Rust, Haskell, Kite, and asm) must be **exactly** what the real program prints
+(every line, `\n`-terminated). Two reasons: `expect.output` runs against it in
 fixture mode, and a later `--runtime=live` render runs the real Playground —
 if your pinned program and fixture disagree, live renders fail. Mentally
 execute the final code (pinned files + your insertions) and transcribe its
@@ -489,14 +510,20 @@ whiteboardAssets:
       width: 360,
       height: 40,
       text: "value × value × value",
-      strokeColor: "#e2e8f0",
-      fontSize: 24,
+      strokeColor: "#1e1e1e",
+      fontSize: 28,
     }
 ```
 
 Kinds: `rectangle`, `ellipse`, `text`, `freedraw`. Coordinates are canvas
 pixels; keep content roughly within (250,150)–(1100,650) so it is visible
 unzoomed.
+
+The board renders in Excalidraw's dark theme, which inverts colours:
+`strokeColor` defaults to `#1e1e1e` (paints white) and `fontSize` to `28`, the
+smallest label that stays readable in the recorded lesson. Never author a pale
+or near-white colour such as `#e2e8f0` — it paints near-black and all but
+vanishes on the dark canvas.
 
 A `freedraw` asset is a hand-drawn annotation stroke generated inside its box.
 Pick one with `stroke`: `underline`, `strike`, `circle`, `check`,
@@ -567,10 +594,12 @@ of the previous board while wiping the rest works.
 
 | Symptom                                         | Fix                                                                                                     |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `Invalid lesson script: …`                      | Schema violation; the path in the message names the field.                                              |
+| `Invalid lesson script: …`                      | Schema violation (including an unknown or misspelled key); the path in the message names the field.     |
 | `Unknown marker "x" — known markers: …`         | An action references a mark not present in narration.                                                   |
 | `Typing action "…" overlaps "…"` (compile)      | Two authored actions collide; move the later mark or add `offsetMs`.                                    |
 | `⚠ …ms of silence inserted before dialog …`     | Your action outlasts the narration around it; add a sentence there or shorten the typed text.           |
+| `… ran to the speech engine's length limit …`   | A sentence hit Pocket's ~40s cap unended; reword or split it (the warning repeats until it changes).    |
+| `Narration dialog N/M "…" ("…"): …`             | That dialog's synthesis failed or its audio is unusable; Burmese errors carry the service's reason.     |
 | `Anchor occurrence N of "…" not found` (render) | The `after` string doesn't match the file at perform time — check tabs/newlines and earlier insertions. |
 | `checkpoint.output.… never contains …`          | Fixture output and `expect.output` disagree, or the program doesn't print it.                           |
 | `runtime.waitForReady` times out                | Check the pinned install/run commands, lockfile, expected port, and server diagnostics in the receipt.  |

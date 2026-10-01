@@ -150,8 +150,8 @@ export function buildReference(canonical: string): string {
     out,
     lines(
       "SVG into the plan. Deck page ids resolve during that render build (a mismatch",
-      "lists the valid ids); the Director CLI validates the YAML but does not fetch",
-      "the deck:",
+      "lists the valid ids); the Director CLI also fetches each deck as a",
+      "best-effort early check (an unreachable deck is only a warning):",
     ),
     lines(
       "SVG into the plan. Deck page ids resolve during the render build in the",
@@ -198,9 +198,12 @@ export function buildPersona(canonical: string): string {
       "The versioned editorial contract for studio-produced lessons",
       "([agent-lesson-production.md](./agent-lesson-production.md) §8). Scripts are the",
       "highest-leverage artifact; this guide is what the advisory critic",
-      "(`src/studio/script/critic.ts`, same version number) lints against and what human",
-      "reviewers judge drafts by. Changes bump the version here and in the critic",
-      "together.",
+      "(`src/studio/script/critic.ts`) lints against and what human reviewers judge",
+      "drafts by. The two carry separate versions: the critic's notes cite this guide's",
+      "version (`PERSONA_GUIDE_VERSION`, currently 2), while the critic's own output",
+      "carries `CRITIC_VERSION` (currently 3), bumped whenever a rule is added, removed,",
+      "or changes what it reports. A change to this guide bumps the version here and",
+      "`PERSONA_GUIDE_VERSION` together.",
     ),
     lines(
       "The versioned editorial contract for studio-produced lessons. Scripts are",

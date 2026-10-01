@@ -38,7 +38,8 @@ markdown, and with humans.
 3. **Start render**, watch the lesson perform itself, and confirm
    "Checks (N/N ok)".
 4. Optionally narrate with your own cloned voice (the voice row: record or
-   upload 2–20 s; the sample never leaves your browser).
+   upload 2–20 s; for English narration the sample never leaves your
+   browser — Burmese narration sends it, unstored, to its narration service).
 5. Sign in and **Create draft…** to upload it like any recording. A human
    reviews before anything is published.
 

@@ -1,6 +1,6 @@
 # Agent Lesson Production — Architecture and Delivery Plan
 
-- **Status:** The M0–M4 baseline is implemented (2026-07-21) in `src/studio/` — see [studio-m0-runbook.md](./studio-m0-runbook.md) and [studio-persona.md](./studio-persona.md). The JavaScript/TypeScript WebContainer and preview adapter is implemented behind a versioned runtime contract, typed acknowledged actions, artifact QA, and normalized repeatability checks. Its checked-in [TypeScript/Vite interaction fixture](../src/studio/script/__fixtures__/typescript-vite-preview.yaml) is the qualification case. The path remains a **release candidate**, not production-supported, until that fixture passes two clean real-Chrome renders and a human watches the full replay. Publishing always remains a separate human decision. Post-M4 narration uses per-dialog in-page synthesis over onnxruntime-web with joint dialog/action scheduling and build-time stitching; marker timing is exact by construction and the `say`/macOS dependency is gone. Voice: **pocket-tts** (Kyutai) via KevinAHM's ONNX export, ported with seeded flow-matching noise for byte-reproducible dialogs.
+- **Status:** The M0–M4 baseline is implemented (2026-07-21) in `src/studio/` — see [studio-m0-runbook.md](./studio-m0-runbook.md) and [studio-persona.md](./studio-persona.md). The JavaScript/TypeScript WebContainer and preview adapter is implemented behind a versioned runtime contract, typed acknowledged actions, artifact QA, and normalized repeatability checks. Its checked-in [TypeScript/Vite interaction fixture](../src/studio/script/__fixtures__/typescript-vite-preview.yaml) is the qualification case. The path remains a **release candidate**, not production-supported, until that fixture passes two clean real-Chrome renders and a human watches the full replay. Publishing always remains a separate human decision. Post-M4 narration uses per-dialog in-page synthesis over onnxruntime-web with joint dialog/action scheduling and build-time stitching; marker timing is exact by construction and the `say`/macOS dependency is gone. Voice: **pocket-tts** (Kyutai) via KevinAHM's ONNX export, ported with seeded flow-matching noise for byte-reproducible dialogs. Since then (as of 2026-10-02), Burmese (`my-MM`) narration uses VoxCPM2 on Modal through the Worker instead ([modal-voxcpm2-burmese.md](./modal-voxcpm2-burmese.md)).
 - **Repository audit:** 2026-07-20 at `2a7ec794ecbc`
 - **Primary decision:** build a versioned `LessonScript`, compile it into a content-addressed plan, and run that plan through a deterministic in-app Performer while the existing recorder captures the lesson
 - **Release policy:** generated lessons remain drafts until a human reviews and publishes them
@@ -84,7 +84,7 @@ Playback already applies editor diffs to live Monaco and restores workspace, run
 2. The in-app OpenRouter agent is not a universal beat verifier. File tools work across execution kinds, while WebContainer lifecycle and preview inspection use the dedicated Studio adapter. Go, Kotlin, and Rust continue to use explicit Playground run paths.
 3. Playback uses isolated Monaco models and does not currently provide a supported “pause, fork this state into a writable workspace, and run it” learner flow. That remains a valuable product extension, not a property to claim today.
 4. The standalone Cloudflare remote runtime is implemented and reviewed, but editor integration and environment validation are still pending. V1 must work with the execution kinds available in the editor today.
-5. The repository contains one checked-in lesson, `public/lessons/introduction/introduction.ne`. The previously claimed ~41-lesson Go benchmark corpus is not present in this tree. Any external corpus must be located, licensed, inventoried, and pinned before it becomes a project dependency.
+5. The repository contains one checked-in lesson, `public/lessons/introduction/introduction.ne`. The previously claimed ~41-lesson Go benchmark corpus is not present in this tree. Any external corpus must be located, licensed, inventoried, and pinned before it becomes a project dependency. _(Status 2026-10-02: `public/lessons/` still holds only that recording, but `src/studio/scripts/` now has 27 checked-in LessonScripts that the studio renders.)_
 6. Tube's lesson model has no dedicated AI-production or provenance field. Disclosure requires a small data/API/UI decision; it is not available “for free” in current metadata.
 
 ## 3. Product hypothesis
@@ -266,6 +266,8 @@ checks:
 - Absolute wall-clock times are forbidden in source scripts. The compiled plan contains absolute recording-clock times.
 - Provider credentials and raw secrets never appear in the script or build manifest.
 
+_Status 2026-10-02 — how the shipped schema settled these rules:_ every script object is strict, so an unknown or misspelled key is an error. An anchor names exactly one of `scene`, `mark`, or `afterAction`, and `offsetMs` is allowed only on `scene` and `mark` anchors. A text target's `occurrence` defaults to 1 and the first exact match wins, so a repeated `after` anchor is not an error; a missing one still fails. Overlaps are rejected by the compiler in the render page after synthesis, not by the Director CLI, which validates schema and markers only. The authoring contract is [lesson-script-authoring.md](./lesson-script-authoring.md).
+
 ## 6. Narration, alignment, and captions
 
 Provider selection should follow a pronunciation/alignment/licensing spike, not a general “best voice” claim. Confirmed timing surfaces include:
@@ -275,6 +277,8 @@ Provider selection should follow a pronunciation/alignment/licensing spike, not 
 | ElevenLabs   | Character-level alignment from the with-timestamps endpoint; a separate forced-alignment API can return word timing | Preserve a mapping from synthesized characters back to display tokens   |
 | Cartesia     | Word and phoneme timestamp messages when timestamps are requested                                                   | Word timing maps closely to `CaptionWord`; still validate normalization |
 | Azure Speech | `WordBoundary` events in the Speech SDK                                                                             | Collect boundary events alongside the encoded audio                     |
+
+_Status 2026-10-02:_ none of these hosted providers was adopted. English narration uses pocket-tts in the render page, and Burmese uses VoxCPM2 on Modal ([modal-voxcpm2-burmese.md](./modal-voxcpm2-burmese.md)). Neither returns word timings, so `src/studio/script/alignment.ts` uses an **estimation provider**: it spreads each dialog's measured duration over its tokens by spoken length plus punctuation pauses. Latin text is weighed by its letters, and Myanmar script at 3 virtual characters per syllable rather than by code units. The pronunciation lexicon (step 3 below) applies to English narration only; Burmese narration is sent as written.
 
 The Director should:
 
@@ -363,6 +367,8 @@ Production publishing should reuse the existing authenticated flow:
 
 `tube/data/lessons.json` is the static seed catalog, not the production publishing database. Automation should not append to it for ordinary generated lessons.
 
+_Status 2026-10-02:_ the upload flow now accepts caption files: each track uploads as a sibling `<id>.<lang>.vtt`, and a second track in the same language as `<id>-2.<lang>.vtt` (then `-3`, and so on). The studio's **Create draft…** pre-fills a public-safe description — the lesson title plus "The narration is AI-generated." — because it becomes the published lesson's meta and JSON-LD text. The build provenance and the review reminder are in that button's tooltip, and the full provenance is in `build-manifest.json`. In that manifest (`manifestVersion` 2), `narrationMimeType` and `narrationAudioHash` describe the PCM16 WAV timing master the render played, and `artifact.audioMimeType` records the type of the audio the bundle ships (Ogg/Opus).
+
 ## 11. Cost and throughput measurement
 
 Do not commit to a per-lesson price before a pilot. Provider prices and model behavior change, and editorial revision is likely to dominate cash cost.
@@ -399,6 +405,8 @@ Implement the `StudioDriver` adapters for editor, cursor, workspace, current run
 
 **Exit criteria:** one pilot uses at least four surfaces, survives a retryable runtime failure, and produces no unacknowledged actions.
 
+_Status 2026-10-02:_ the render command is `scripts/studio-render.ts`. It opens `/studio?autostart=1`, and the studio honours `autostart=1` only when `navigator.webdriver` is true (the headless playwright harness). In a normal browser the plan is preselected and waits for the **Start render** click.
+
 **Current qualification:** the typed WebContainer/preview implementation and mechanical gates exist, but JS/TS preview remains release-candidate-only until the checked-in interaction fixture passes two clean real-Chrome renders and full human replay review. CI/headless evidence alone does not satisfy this gate.
 
 ### M3 — QA and draft publishing
@@ -426,7 +434,7 @@ Add the persona guide, curriculum/scriptwriter workflow, source citation require
 
 1. Does the Performer live in a dev-only main-app route or a separate `studio/` package that imports app adapters?
 2. Which execution kinds are supported in the first pilot, and what is the fallback when a runtime is unavailable?
-3. Which licensed voice and provider pass pronunciation, alignment, stability, and cost evaluation?
+3. Which licensed voice and provider pass pronunciation, alignment, stability, and cost evaluation? _(Status 2026-10-02: pocket-tts for English and VoxCPM2 on Modal for Burmese, with estimated word alignment; see §6.)_
 4. Where is the claimed handmade lesson corpus, and can it be legally checked in or fetched reproducibly?
 5. Should provenance be stored on the lesson row, in a public build manifest, inside `Recording`, or in more than one place?
 6. What human rating and correction-time threshold is good enough to continue after three pilots?
