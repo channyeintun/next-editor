@@ -2,12 +2,12 @@ import { z } from "zod";
 import {
   RUNTIME_KIND_FOR_LESSON,
   WHITEBOARD_DRAW_MAX_MS,
-  studioPreviewTargetSchema,
-  studioRetryPolicySchema,
-  studioRuntimeSchema,
-  studioSlideSchema,
-  studioWhiteboardAssetSchema,
-  studioWorkspacePinSchema,
+  studioPreviewTargetSchema as planPreviewTargetSchema,
+  studioRetryPolicySchema as planRetryPolicySchema,
+  studioRuntimeSchema as planRuntimeSchema,
+  studioSlideSchema as planSlideSchema,
+  studioWhiteboardAssetSchema as planWhiteboardAssetSchema,
+  studioWorkspacePinSchema as planWorkspacePinSchema,
 } from "../plan";
 
 /**
@@ -21,25 +21,73 @@ import {
 
 export const LESSON_SCRIPT_SCHEMA_VERSION = 1;
 
+/*
+ * Every object a script author writes is strict: zod's default mode strips
+ * unknown keys, so a typo such as `cadance: block` or `offsetMS: 400` used to
+ * parse cleanly and render with the default instead. The plan schemas the
+ * script reuses are tightened the same way here, without changing the plan.
+ */
+const studioRetryPolicySchema = planRetryPolicySchema.strict();
+const studioPreviewTargetSchema = planPreviewTargetSchema.strict();
+const studioWorkspacePinSchema = planWorkspacePinSchema.strict();
+const studioSlideSchema = planSlideSchema.strict();
+const studioWhiteboardAssetSchema = planWhiteboardAssetSchema.strict();
+// The cast only keeps LessonScript["runtime"] assignable to the plan's runtime
+// type; .strict() changes no field, so the options' shapes stay identical.
+const studioRuntimeSchema = z.discriminatedUnion(
+  "kind",
+  planRuntimeSchema.options.map((option) => option.strict()) as unknown as [
+    ...typeof planRuntimeSchema.options,
+  ],
+);
+
 const offsetMs = z.number().finite().min(-30_000).max(30_000);
 
+const ANCHOR_KINDS = ["scene", "mark", "afterAction"];
+const ANCHOR_KEYS = [...ANCHOR_KINDS, "offsetMs"];
+
+/**
+ * A plain union reports only "Invalid input" when every branch fails, which
+ * hides the cause — most often a misspelled key, or `mark` and `afterAction`
+ * written together on one anchor.
+ */
+function anchorErrorMessage(input: unknown): string {
+  const shape =
+    "an anchor is { scene: start }, { mark: <name> } or { afterAction: <id> }, and only the first two take offsetMs";
+  const keys = typeof input === "object" && input !== null ? Object.keys(input) : [];
+  const unknownKeys = keys.filter((key) => !ANCHOR_KEYS.includes(key));
+  if (unknownKeys.length > 0) {
+    return `Unrecognized anchor key${unknownKeys.length > 1 ? "s" : ""} ${unknownKeys
+      .map((key) => `"${key}"`)
+      .join(", ")}; ${shape}`;
+  }
+  const kinds = keys.filter((key) => ANCHOR_KINDS.includes(key));
+  if (kinds.length > 1) {
+    return `An anchor names exactly one of scene, mark or afterAction, got ${kinds.join(" and ")}; ${shape}`;
+  }
+  return `Invalid anchor; ${shape}`;
+}
+
 /** Narration-relative anchor. Absolute times are forbidden in source scripts. */
-export const scriptAnchorSchema = z.union([
-  z.object({ scene: z.literal("start"), offsetMs: offsetMs.default(0) }),
-  z.object({ mark: z.string().min(1), offsetMs: offsetMs.default(0) }),
-  /**
-   * After the referenced action completes. The Performer is strictly
-   * sequential. The compiler advances past deterministic typing/selection busy
-   * time; runtime/preview waits use the predecessor's planned start as a
-   * placeholder, while the receipt records the actual acknowledgement-relative
-   * start.
-   */
-  z.object({ afterAction: z.string().min(1) }),
-]);
+export const scriptAnchorSchema = z.union(
+  [
+    z.strictObject({ scene: z.literal("start"), offsetMs: offsetMs.default(0) }),
+    z.strictObject({ mark: z.string().min(1), offsetMs: offsetMs.default(0) }),
+    /**
+     * After the referenced action completes. The Performer is strictly
+     * sequential. The compiler advances past deterministic typing/selection busy
+     * time; runtime/preview waits use the predecessor's planned start as a
+     * placeholder, while the receipt records the actual acknowledgement-relative
+     * start.
+     */
+    z.strictObject({ afterAction: z.string().min(1) }),
+  ],
+  { error: (issue) => anchorErrorMessage(issue.input) },
+);
 export type ScriptAnchor = z.infer<typeof scriptAnchorSchema>;
 
 /** Text targets require file + anchor + occurrence; compilation fails on ambiguity. */
-export const scriptTextTargetSchema = z.object({
+export const scriptTextTargetSchema = z.strictObject({
   file: z.string().min(1),
   after: z.string(),
   occurrence: z.number().int().min(1).default(1),
@@ -50,13 +98,13 @@ export const scriptTextTargetSchema = z.object({
  * byte-for-byte match of `text` in the file's current content becomes the
  * selected range (same exact-substring rule as `editor.type`'s `after`).
  */
-export const scriptSelectTargetSchema = z.object({
+export const scriptSelectTargetSchema = z.strictObject({
   file: z.string().min(1),
   text: z.string().min(1),
   occurrence: z.number().int().min(1).default(1),
 });
 
-const scriptActionBase = z.object({
+const scriptActionBase = z.strictObject({
   id: z.string().min(1),
   at: scriptAnchorSchema,
   timeoutMs: z.number().finite().positive().default(10_000),
@@ -190,7 +238,7 @@ const scriptExpectPreviewSchema = scriptActionBase.extend({
   textContains: z.string().min(1).optional(),
   value: z.string().optional(),
   route: z.string().startsWith("/").min(1).optional(),
-  attribute: z.object({ name: z.string().min(1), value: z.string() }).optional(),
+  attribute: z.strictObject({ name: z.string().min(1), value: z.string() }).optional(),
   retry: studioRetryPolicySchema,
 });
 
@@ -217,12 +265,12 @@ export const scriptActionSchema = z.discriminatedUnion("type", [
 export type ScriptAction = z.infer<typeof scriptActionSchema>;
 
 /** A cited source backing the scene's claims (required by the editorial gate). */
-export const scriptSourceSchema = z.object({
+export const scriptSourceSchema = z.strictObject({
   title: z.string().min(1),
   url: z.string().url(),
 });
 
-export const scriptSceneSchema = z.object({
+export const scriptSceneSchema = z.strictObject({
   id: z.string().min(1),
   /**
    * Titles the chapter this scene starts. The rendered lesson lists its chapters and marks
@@ -243,7 +291,7 @@ export type ScriptScene = z.infer<typeof scriptSceneSchema>;
  * never reached the plan, and omitting them switched nothing off.
  */
 export const scriptCheckSchema = z.discriminatedUnion("type", [
-  z.object({
+  z.strictObject({
     type: z.literal("timing.p95Ms"),
     max: z.number().finite().positive(),
   }),
@@ -254,7 +302,7 @@ export const scriptCheckSchema = z.discriminatedUnion("type", [
  * (File → Share → Publish to web). The Director fetches the deck once at
  * compile time and pins the page's normalized SVG into the plan.
  */
-export const googleSlideRefSchema = z.object({
+export const googleSlideRefSchema = z.strictObject({
   id: z.string().min(1),
   contentType: z.literal("google"),
   deckUrl: z.string().url(),
@@ -263,13 +311,16 @@ export const googleSlideRefSchema = z.object({
 });
 export type GoogleSlideRef = z.infer<typeof googleSlideRefSchema>;
 
-export const scriptSlideSchema = z.union([studioSlideSchema, googleSlideRefSchema]);
+export const scriptSlideSchema = z.discriminatedUnion("contentType", [
+  studioSlideSchema,
+  googleSlideRefSchema,
+]);
 export type ScriptSlide = z.infer<typeof scriptSlideSchema>;
 
 export const lessonScriptSchema = z
-  .object({
+  .strictObject({
     schemaVersion: z.literal(LESSON_SCRIPT_SCHEMA_VERSION),
-    lesson: z.object({
+    lesson: z.strictObject({
       slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
       title: z.string().min(1),
       locale: z.string().min(1),
@@ -277,7 +328,7 @@ export const lessonScriptSchema = z
       slides: z.array(scriptSlideSchema).default([]),
       whiteboardAssets: z.array(studioWhiteboardAssetSchema).default([]),
     }),
-    build: z.object({
+    build: z.strictObject({
       /** Registered voice profile id (provider + voice + settings). */
       voiceProfile: z.string().min(1),
       seed: z.number().int().nonnegative(),

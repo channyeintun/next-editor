@@ -337,4 +337,56 @@ describe("lessonScriptSchema", () => {
     }
     expect(() => parseLessonScript(raw)).toThrow(/no actions/);
   });
+
+  // zod strips unknown keys by default, so each of these used to parse and
+  // render with the default (natural cadence, zero offset, the mark alone).
+  it("rejects a misspelled action key and names it", () => {
+    const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
+    raw.scenes[0].actions[1].cadance = "block";
+    expect(() => parseLessonScript(raw)).toThrow(
+      /scenes\.0\.actions\.1: Unrecognized key: "cadance"/,
+    );
+  });
+
+  it("rejects a misspelled anchor key and names it", () => {
+    const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
+    raw.scenes[0].actions[1].at = { mark: "type-cube", offsetMS: -600 };
+    expect(() => parseLessonScript(raw)).toThrow(
+      /scenes\.0\.actions\.1\.at: Unrecognized key: "offsetMS"/,
+    );
+    raw.scenes[0].actions[1].at = { mrak: "type-cube" };
+    expect(() => parseLessonScript(raw)).toThrow(
+      /scenes\.0\.actions\.1\.at: Unrecognized anchor key "mrak"/,
+    );
+  });
+
+  it("rejects an anchor that names both a mark and an afterAction", () => {
+    const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
+    raw.scenes[1].actions[3].at = { mark: "run", afterAction: "run" };
+    expect(() => parseLessonScript(raw)).toThrow(/exactly one of scene, mark or afterAction/);
+  });
+
+  it("rejects unknown keys on the lesson, build, scene, and runtime blocks", () => {
+    const cases: [string, (raw: Record<string, any>) => void][] = [
+      ["(script)", (raw) => (raw.check = raw.checks)],
+      ["lesson", (raw) => (raw.lesson.titel = "x")],
+      ["build", (raw) => (raw.build.sead = 1)],
+      ["scenes.0", (raw) => (raw.scenes[0].chapters = "x")],
+      ["runtime", (raw) => (raw.runtime.dockStartsColapsed = true)],
+      ["lesson.workspace", (raw) => (raw.lesson.workspace.sidebarCollapsed = true)],
+    ];
+    for (const [path, mutate] of cases) {
+      const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
+      mutate(raw);
+      expect(() => parseLessonScript(raw)).toThrow(
+        new RegExp(`${path.replace(/[.()]/g, "\\$&")}: Unrecognized key`),
+      );
+    }
+
+    const tour = YAML.parse(readFileSync(TOUR_PATH, "utf8"));
+    tour.lesson.slides[0].maximised = true;
+    expect(() => parseLessonScript(tour)).toThrow(
+      /lesson\.slides\.0: Unrecognized key: "maximised"/,
+    );
+  });
 });
