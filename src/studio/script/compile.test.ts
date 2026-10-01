@@ -203,6 +203,9 @@ describe("compileLessonScript", () => {
     // Repeat the payload until it cannot finish before the next authored action.
     typeCube.text = typeCube.text.repeat(6);
     expect(() => compileLessonScript(compileInputFor(script))).toThrow(CompileError);
+    expect(() => compileLessonScript(compileInputFor(script))).toThrow(
+      /adjust the script's marks\/offsets: .*Typing action "type-cube" \(\d+ms\) overlaps/,
+    );
   });
 
   it("fails before render when an action lands after the narration ends", () => {
@@ -210,6 +213,24 @@ describe("compileLessonScript", () => {
     const run = script.scenes[1].actions.find((action) => action.id === "run")!;
     run.at = { mark: "run", offsetMs: 25_000 };
     expect(() => compileLessonScript(compileInputFor(script))).toThrow(CompileError);
+    expect(() => compileLessonScript(compileInputFor(script))).toThrow(
+      /adjust the script's marks\/offsets: .*starts after the narration ends/,
+    );
+  });
+
+  // Moving marks cannot fix a plan rule the script schema let through, so the
+  // timing advice must not be attached to it.
+  it("keeps the marks/offsets advice to timeline failures", () => {
+    const raw = YAML.parse(readFileSync(TOUR_PATH, "utf8"));
+    const script = parseLessonScript(raw);
+    const closeBoard = script.scenes[1].actions.find((action) => action.id === "close-board");
+    if (closeBoard?.type !== "whiteboard.apply") throw new Error("tour lost its close action");
+    delete closeBoard.open;
+
+    const compile = () => compileLessonScript(scheduledInputFor(script));
+    expect(compile).toThrow(CompileError);
+    // Anchored, so the "— adjust the script's marks/offsets" variant fails it.
+    expect(compile).toThrow(/^Compiled plan failed validation: .*whiteboard\.apply must open/);
   });
 
   it("resolves afterAction chains and rejects cycles", () => {

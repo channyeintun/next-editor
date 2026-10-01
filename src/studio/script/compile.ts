@@ -105,6 +105,15 @@ const CURSOR_TWEEN_JITTER_MS = 200;
 const CURSOR_TWEEN_MIN_MS = 250;
 /** Consecutive moves to the same target within this window are deduped. */
 const CURSOR_DEDUPE_WINDOW_MS = 5_000;
+/**
+ * The plan schema's timeline failures: a busy action running into the next
+ * one, or the last action starting after the narration ends. It mirrors the
+ * wording of the two timeline issues in plan.ts's superRefine (the overlap
+ * and "starts after the narration ends" messages); reword those and this must
+ * follow, or the marks/offsets advice silently disappears.
+ */
+const PLAN_TIMING_ERROR =
+  /(?:Typing|Selection|Whiteboard drawing) action "[^"]*" \([\d.]+ms\) overlaps|starts after the narration ends/;
 
 function cursorTargetForAction(action: ScriptAction, script: LessonScript): StudioTargetRef | null {
   switch (action.type) {
@@ -553,10 +562,14 @@ export function compileLessonScript({
   try {
     plan = parseStudioPlan(candidate);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Marks and offsets only fix a timeline that does not fit. Any other
+    // failure is a rule the script schema let through, and moving marks
+    // would not help.
     throw new CompileError(
-      `Compiled plan failed validation — adjust the script's marks/offsets: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      PLAN_TIMING_ERROR.test(message)
+        ? `Compiled plan failed validation — adjust the script's marks/offsets: ${message}`
+        : `Compiled plan failed validation: ${message}`,
     );
   }
 
