@@ -3,6 +3,7 @@ import {
   parseRuntimeModeParam,
   parseStudioPlan,
   shouldAutostartRender,
+  studioRenderWaitMs,
   studioWhiteboardAssetSchema,
   type StudioPlan,
 } from "./plan";
@@ -250,6 +251,19 @@ describe("shouldAutostartRender", () => {
   it("ignores a missing or other autostart value", () => {
     expect(shouldAutostartRender(null, true)).toBe(false);
     expect(shouldAutostartRender("true", true)).toBe(false);
+  });
+});
+
+describe("studioRenderWaitMs", () => {
+  it("keeps the fixed budget for a lesson with no narration estimate", () => {
+    expect(studioRenderWaitMs(0)).toBe(420_000);
+  });
+
+  it("grows with the narration so a long crash course can finish", () => {
+    const twentyNineMinutes = 29 * 60_000;
+    // The narration alone plays in real time, so the wait must exceed it.
+    expect(studioRenderWaitMs(twentyNineMinutes)).toBe(420_000 + 2 * twentyNineMinutes);
+    expect(studioRenderWaitMs(twentyNineMinutes)).toBeGreaterThan(twentyNineMinutes);
   });
 });
 

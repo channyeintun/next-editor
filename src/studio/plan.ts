@@ -824,6 +824,25 @@ export function shouldAutostartRender(raw: string | null, automated: boolean): b
 }
 
 /**
+ * Fixed part of how long scripts/studio-render.ts waits for one render: a
+ * first-ever render downloads the ~125MB pocket-tts bundle into the browser
+ * cache before it synthesizes anything.
+ */
+const STUDIO_RENDER_WAIT_BASE_MS = 420_000;
+
+/**
+ * How long scripts/studio-render.ts waits for one render to finish, given the
+ * lesson's estimated narration length. The performance plays the narration in
+ * real time (one narration length), and synthesis, compilation, Opus encoding
+ * and QA get a second; the doubling also absorbs a narrator slower than the
+ * pre-synthesis wpm estimate. A fixed cap would make any long lesson — the
+ * crash courses run 8–29 minutes — impossible to render from the CLI.
+ */
+export function studioRenderWaitMs(estimatedNarrationMs: number): number {
+  return STUDIO_RENDER_WAIT_BASE_MS + 2 * Math.max(0, estimatedNarrationMs);
+}
+
+/**
  * The one runtime kind each lesson type may declare. Go, Kotlin, Rust, Zig,
  * and Haskell execute through their selective proxies, Kite on its in-page
  * WebAssembly compiler, asm on its in-page TypeScript assembler and x86-64

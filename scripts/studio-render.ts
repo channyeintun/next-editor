@@ -14,9 +14,15 @@
  * that instruction rather than spawning servers behind your back.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright-core";
+import YAML from "yaml";
+import { studioRenderWaitMs } from "../src/studio/plan.ts";
+import { estimateNarrationDurationMs } from "../src/studio/script/critic.ts";
+import { extractNarration } from "../src/studio/script/markers.ts";
+import { parseLessonScript } from "../src/studio/script/schema.ts";
 
 interface CliOptions {
   slug: string;
@@ -85,7 +91,26 @@ async function waitForRunCount(
   }
 }
 
+/**
+ * Pre-synthesis narration estimate for a checked-in LessonScript (the same
+ * one the Director's critic uses), or 0 when the slug has no script file here
+ * (an imported script) — the wait then falls back to its fixed base.
+ */
+function estimatedNarrationMsFor(slug: string): number {
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const scriptPath = join(repoRoot, "src/studio/scripts", `${slug}.yaml`);
+  if (!existsSync(scriptPath)) {
+    return 0;
+  }
+  const script = parseLessonScript(YAML.parse(readFileSync(scriptPath, "utf8")));
+  const extracted = extractNarration(
+    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
+  );
+  return estimateNarrationDurationMs(extracted.tokens.length);
+}
+
 const options = parseArgs(process.argv.slice(2));
+const renderWaitMs = studioRenderWaitMs(estimatedNarrationMsFor(options.slug));
 const outDir = resolve(
   options.outDir,
   `${options.slug}-${new Date().toISOString().replace(/[:.]/g, "-")}`,
@@ -100,7 +125,9 @@ try {
   process.exit(1);
 }
 
-console.log(`studio-render: ${options.slug} (${options.runtime}) ×${options.runs} → ${outDir}`);
+console.log(
+  `studio-render: ${options.slug} (${options.runtime}) ×${options.runs} → ${outDir} (up to ${Math.round(renderWaitMs / 60_000)} min per render)`,
+);
 
 const browser = await chromium.launch({
   channel: "chrome",
@@ -137,9 +164,10 @@ try {
       await page.getByRole("button", { name: "Render again" }).click();
     }
     try {
-      // Generous: a first-ever render also downloads the ~125MB pocket-tts
-      // bundle into the browser cache and synthesizes every dialog on WASM.
-      finalState = await waitForRunCount(page, run, 420_000);
+      // Scaled to the lesson: the narration plays in real time, and a
+      // first-ever render also downloads the ~125MB pocket-tts bundle and
+      // synthesizes every dialog on WASM (see studioRenderWaitMs).
+      finalState = await waitForRunCount(page, run, renderWaitMs);
     } catch (error) {
       await page.screenshot({ path: join(outDir, `run-${run}-timeout.png`), fullPage: true });
       throw error;
