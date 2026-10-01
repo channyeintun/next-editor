@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
@@ -140,6 +140,27 @@ describe("critiqueScript", () => {
       ["at-end", "at-start", `beside-${mark}`].sort(),
     );
     expect(unused.every((note) => note.sceneId === script.scenes[1].id)).toBe(true);
+  });
+
+  // The Director CLI writes `<slug>.critique.json` next to each script, and
+  // nothing else re-ran it when the critic changed — one sidecar kept notes
+  // from rules deleted long before. Regenerate with `bun scripts/studio-director.ts`.
+  it("keeps every checked-in critique sidecar current", () => {
+    const scriptsDir = resolve(__dirname, "../scripts");
+    const files = readdirSync(scriptsDir);
+    const yamls = files.filter((name) => name.endsWith(".yaml")).sort();
+    const sidecars = files.filter((name) => name.endsWith(".critique.json")).sort();
+    expect(sidecars).toEqual(yamls.map((name) => name.replace(/\.yaml$/, ".critique.json")));
+
+    for (const name of yamls) {
+      const script = parseLessonScript(YAML.parse(readFileSync(resolve(scriptsDir, name), "utf8")));
+      const sidecar = JSON.parse(
+        readFileSync(resolve(scriptsDir, name.replace(/\.yaml$/, ".critique.json")), "utf8"),
+      );
+      expect(sidecar, `${name} sidecar is stale`).toEqual(
+        critiqueScript(script, extractedOf(script)),
+      );
+    }
   });
 
   it("only proposes — no note carries a blocking severity", () => {
