@@ -206,12 +206,19 @@ interface CaptionTrack {
 }
 ```
 
-- A recording can carry multiple tracks. `CaptionsOverlay` picks the track matching the
-  viewer's preferred language, otherwise the `default` track, otherwise the first.
+- A recording can carry multiple tracks. `selectCaptionTrack` (`src/captions/captionTracks.ts`)
+  picks the track id the viewer last chose, but only if that track is in the saved language;
+  otherwise the first track in the saved language, otherwise the `default` track, otherwise the
+  first. Track ids repeat across lessons (every studio lesson's is `studio-narration`), which is
+  why the language decides first.
+- The captions menu shows each track's label as written, except that a label which is a bare
+  language tag in the track's own language is shown as the language name (`MY (auto)` →
+  "Burmese (auto)"); other labels ("New", "SDH") stay as they are.
 - The active cue is found by binary search over `cues` against the live timeline time, so
   caption lookup stays cheap on every tick.
-- Caption enabled-state and language preference are persisted in `localStorage` by the
-  caption store (`src/stores/captionStore.ts`), independent of any single recording.
+- Caption enabled-state and the viewer's pick are persisted in `localStorage` by the caption
+  store (`src/stores/captionStore.ts`), independent of any single recording: `caption-enabled`,
+  `caption-track` (the track id), and `caption-language` (that track's language).
 - On the container, captions are either inlined as `captions` or referenced by
   `captionFiles`; sibling files are fetched relative to the `.ne` URL during URL loading.
 - The `ADD_CAPTION_TRACK` machine event adds or replaces a track in the loaded recording's

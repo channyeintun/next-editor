@@ -113,7 +113,8 @@ next-editor-tube-media/
       <lesson-id>.ne          # SCR3 stream (small, delta-compressed)
       <lesson-id>.ogg|.weba   # externalized audio  (sibling of the .ne)
       <lesson-id>.webm        # externalized camera (optional)
-      <lesson-id>.en.vtt      # captions (optional)
+      <lesson-id>.en.vtt      # captions (optional; a second track in the same
+                              # language is <lesson-id>-2.en.vtt, then -3, …)
       <lesson-id>-thumbnail-<timestamp>.png|jpg  # a new key per replacement
   slide-images/
     <sha256-of-source-url>    # Google Slides deck images copied at import time
@@ -177,7 +178,8 @@ reaches the detail route by whichever of these got there first:
   Worker resolves the slug through the same `findPublishedLessonBySlug` the JSON
   API uses (`infra/worker/lessonCatalog.ts`, so the two can't disagree), rewrites
   the shell's generic `<title>`/OG/Twitter/canonical tags with the lesson's own,
-  appends `Course` JSON-LD, and parks a dehydrated React Query cache in a
+  appends `Course` JSON-LD (`inLanguage` is `my` when the title or description
+  contains Myanmar script, otherwise `en`), and parks a dehydrated React Query cache in a
   `<script type="application/json">`. `hydrateServerQueryState()` adopts it before
   the first render (`src/queryClient.ts`).
 

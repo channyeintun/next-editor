@@ -215,7 +215,10 @@ narration on the author's device with Whisper; the audio never leaves the browse
   prompted with the lesson's vocabulary (`buildCaptionPrompt`: its libraries from `package.json`,
   lesson type, and file names) rather than the text before it.
 - `segmentsToCues` puts the segments on the recording's clock (`audioStartOffsetMs`), clamps them
-  to its length, and splits cues that run long in text or time. The result is added with
+  to its length, and splits cues that run long in text or time — between sentences (including
+  Burmese `။`), then clauses (including `၊`), then words — keeping the source's spacing around
+  the break and measuring length in grapheme clusters, so Burmese vowel signs and stacked
+  consonants do not count as extra characters. The result is added with
   `addCaptionTrack` as an "(auto)" track and shown; "Download captions (.vtt)" saves a track for
   correction and re-import.
 - Generating is disabled while a cut is still reaching the narration (`pendingAudioEdit`), since
