@@ -110,8 +110,28 @@ export function buildCaptionPrompt(recording: Recording): string | undefined {
   }.`;
 }
 
-/** Where a long cue may break: between sentences, then clauses, then words. */
-const BREAKS = [/(?<=[.!?])\s+/, /(?<=[,;:])\s+/, /\s+/];
+/**
+ * Where a long cue may break: between sentences, then clauses, then words. Burmese
+ * ends a sentence with ။ and a phrase with ၊, often with no space after either.
+ */
+const BREAKS = [/(?<=[.!?])\s+|(?<=။)\s*/, /(?<=[,;:])\s+|(?<=၊)\s*/, /\s+/];
+
+const graphemeSegmenter =
+  typeof Intl.Segmenter === "function"
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
+
+/**
+ * Characters as a reader sees them: a Burmese syllable's vowel signs and stacked
+ * consonants are code units of their own but take no extra width on the line.
+ * ASCII is counted by length, exactly as before.
+ */
+function displayLength(text: string): number {
+  if (!graphemeSegmenter || !/[\u0080-￿]/.test(text)) return text.length;
+  let count = 0;
+  for (const _ of graphemeSegmenter.segment(text)) count++;
+  return count;
+}
 
 /** Joins parts greedily into pieces of at most `limit` characters. */
 function pack(parts: readonly string[], limit: number): string[] {
@@ -119,7 +139,7 @@ function pack(parts: readonly string[], limit: number): string[] {
   let current = "";
   for (const part of parts) {
     const next = current ? `${current} ${part}` : part;
-    if (next.length > limit && current) {
+    if (displayLength(next) > limit && current) {
       pieces.push(current);
       current = part;
     } else {
@@ -132,7 +152,7 @@ function pack(parts: readonly string[], limit: number): string[] {
 
 /** Splits `text` into pieces of at most `limit` characters, at the widest break that does. */
 function splitText(text: string, limit: number, level = 0): string[] {
-  if (text.length <= limit || level >= BREAKS.length) return [text];
+  if (displayLength(text) <= limit || level >= BREAKS.length) return [text];
   const parts = text.split(BREAKS[level]).filter(Boolean);
   if (parts.length < 2) return splitText(text, limit, level + 1);
   return pack(parts, limit).flatMap((piece) => splitText(piece, limit, level + 1));
@@ -154,13 +174,14 @@ export function segmentsToCues(
     const end = Math.min(durationMs, offsetMs + segment.end * 1000);
     if (end <= start) continue;
     // Characters that fit in MAX_CUE_MS at this segment's pace.
-    const paced = Math.floor((segment.text.length * MAX_CUE_MS) / (end - start));
+    const paced = Math.floor((displayLength(segment.text) * MAX_CUE_MS) / (end - start));
     const limit = Math.min(MAX_CUE_CHARACTERS, Math.max(MIN_SPLIT_CHARACTERS, paced));
     const pieces = splitText(segment.text, limit);
-    const characters = pieces.reduce((total, piece) => total + piece.length, 0);
+    const lengths = pieces.map(displayLength);
+    const characters = lengths.reduce((total, length) => total + length, 0);
     let cursor = start;
-    for (const piece of pieces) {
-      const pieceEnd = cursor + ((end - start) * piece.length) / characters;
+    for (const [index, piece] of pieces.entries()) {
+      const pieceEnd = cursor + ((end - start) * lengths[index]) / characters;
       cues.push({ start: Math.round(cursor), end: Math.round(pieceEnd), text: piece });
       cursor = pieceEnd;
     }

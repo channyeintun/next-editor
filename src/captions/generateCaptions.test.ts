@@ -49,6 +49,67 @@ describe("segmentsToCues", () => {
     expect(cues[cues.length - 1].end).toBe(15_000);
     for (const cue of cues) expect(cue.end - cue.start).toBeLessThanOrEqual(7_000);
   });
+
+  // Pinned from before Burmese breaks and grapheme lengths: English must split as it did.
+  it("splits English exactly as it always has", () => {
+    const text =
+      "Now we create the store with an initial context; it holds the count, the step, and the history. " +
+      "Then we add an event called increment: it reads the step, adds it to the count, and pushes the old value onto the history list so that undo works later without any extra bookkeeping in the component itself!";
+    expect(segmentsToCues([{ start: 1.2, end: 24.7, text }], 500, 60_000)).toEqual([
+      {
+        start: 1700,
+        end: 7851,
+        text: "Now we create the store with an initial context; it holds the count, the step,",
+      },
+      { start: 7851, end: 9113, text: "and the history." },
+      {
+        start: 9113,
+        end: 15343,
+        text: "Then we add an event called increment: it reads the step, adds it to the count,",
+      },
+      {
+        start: 15343,
+        end: 21888,
+        text: "and pushes the old value onto the history list so that undo works later without any",
+      },
+      { start: 21888, end: 25200, text: "extra bookkeeping in the component itself!" },
+    ]);
+  });
+
+  const burmeseSentence = "ဒီသင်ခန်းစာမှာ store တစ်ခုကို အစကနေ တည်ဆောက်ပြီး အသုံးပြုပုံကို လေ့လာကြမယ်။";
+
+  it("splits Burmese at its full stop, even with no space after it", () => {
+    const cues = segmentsToCues(
+      [{ start: 0, end: 20, text: burmeseSentence.repeat(3) }],
+      0,
+      60_000,
+    );
+    expect(cues).toEqual([
+      { start: 0, end: 6667, text: burmeseSentence },
+      { start: 6667, end: 13333, text: burmeseSentence },
+      { start: 13333, end: 20000, text: burmeseSentence },
+    ]);
+  });
+
+  it("splits a long Burmese sentence at its phrase marks", () => {
+    const text =
+      "ပထမဆုံး context ကို သတ်မှတ်မယ်၊ နောက်တော့ event တွေကို ထည့်မယ်၊ ပြီးရင် component ထဲမှာ သုံးမယ်၊ နောက်ဆုံးမှာ စမ်းသပ်ကြည့်မယ်။";
+    expect(segmentsToCues([{ start: 0, end: 12, text }], 0, 60_000).map((cue) => cue.text)).toEqual(
+      [
+        "ပထမဆုံး context ကို သတ်မှတ်မယ်၊ နောက်တော့ event တွေကို ထည့်မယ်၊",
+        "ပြီးရင် component ထဲမှာ သုံးမယ်၊ နောက်ဆုံးမှာ စမ်းသပ်ကြည့်မယ်။",
+      ],
+    );
+  });
+
+  it("measures a Burmese cue in the characters a reader sees", () => {
+    // 89 UTF-16 code units, but 60 characters on screen: it fits one cue.
+    const text = `${burmeseSentence}ပထမစာကြောင်းပါ။`;
+    expect(text.length).toBeGreaterThan(84);
+    expect(segmentsToCues([{ start: 0, end: 6, text }], 0, 60_000)).toEqual([
+      { start: 0, end: 6000, text },
+    ]);
+  });
 });
 
 function project(files: Record<string, string>): WorkspaceProject {
