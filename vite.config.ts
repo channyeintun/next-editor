@@ -102,7 +102,18 @@ export default ({ mode }: { mode: string }) => {
       // both importers land on one chunk — but the build resolves per importer
       // and shipped two react-query copies. query-core carries QueryClient
       // itself, so it has to travel with react-query.
-      dedupe: ["react", "react-dom", "@tanstack/react-query", "@tanstack/query-core"],
+      //
+      // The rest of tube's peer dependencies follow: a stale tube/node_modules
+      // otherwise hands tube its own, older lucide-react and react-virtual while
+      // the app gets the root versions.
+      dedupe: [
+        "react",
+        "react-dom",
+        "@tanstack/react-query",
+        "@tanstack/query-core",
+        "@tanstack/react-virtual",
+        "lucide-react",
+      ],
       alias: {
         // Compile the tube workspace package from source so it goes through the
         // app's JSX/Tailwind/React-Compiler pipeline (not pre-bundled from
@@ -161,10 +172,11 @@ export default ({ mode }: { mode: string }) => {
       server: {
         deps: {
           // y-monaco imports Monaco's deep editor API entrypoint (see the alias
-          // above). @tanstack/react-query is inlined so its `react` import goes
-          // through this config's resolver — externalized, Node resolves it to
-          // tube/node_modules/react and `resolve.dedupe` never sees it.
-          inline: ["y-monaco", "@tanstack/react-query"],
+          // above). tube's React-importing peers are inlined so their `react`
+          // import goes through this config's resolver — externalized, Node
+          // resolves it to tube/node_modules/react and `resolve.dedupe` never
+          // sees it (lucide-react's icons then call hooks on a second React).
+          inline: ["y-monaco", "@tanstack/react-query", "@tanstack/react-virtual", "lucide-react"],
         },
       },
     },
