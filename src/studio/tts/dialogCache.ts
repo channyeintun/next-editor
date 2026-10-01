@@ -40,3 +40,12 @@ export async function putCachedDialogWav(requestHash: string, bytes: Uint8Array)
     }),
   );
 }
+
+/** Drop one entry, e.g. a cached take that no longer passes validation. */
+export async function deleteCachedDialogWav(requestHash: string): Promise<void> {
+  if (!cacheAvailable()) {
+    return;
+  }
+  const cache = await caches.open(CACHE_NAME);
+  await cache.delete(cacheUrlFor(requestHash));
+}

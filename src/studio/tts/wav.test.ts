@@ -5,6 +5,7 @@ import {
   floatTo16BitPcm,
   stitchWavSegments,
   trimSilence,
+  validateDialogWav,
   wavDurationMs,
 } from "./wav";
 
@@ -31,6 +32,12 @@ describe("wav codec", () => {
     expect(pcm[2]).toBe(-0x8000);
     expect(pcm[3]).toBe(0x7fff);
     expect(pcm[4]).toBe(-0x8000);
+  });
+
+  it("rejects a data chunk cut short", () => {
+    expect(() => decodeWavPcm16(toneWav(100, 1).slice(0, 100))).toThrow(
+      /data chunk is truncated: declares 4800 bytes, 56 present/,
+    );
   });
 
   it("rejects non-PCM16-mono input", () => {
@@ -111,5 +118,23 @@ describe("stitchWavSegments", () => {
         RATE,
       ),
     ).toThrow(/sample rate/);
+  });
+});
+
+describe("validateDialogWav", () => {
+  it("returns the duration of voiced audio at the expected rate", () => {
+    expect(validateDialogWav(toneWav(1_500, 1_000), RATE)).toBe(1_500);
+  });
+
+  it("rejects a wrong rate, no samples, silence, and malformed bytes", () => {
+    expect(() => validateDialogWav(toneWav(500, 1_000), 48_000)).toThrow(
+      "audio is 24000Hz, expected 48000Hz",
+    );
+    expect(() => validateDialogWav(toneWav(0, 0), RATE)).toThrow("audio has no samples");
+    // Below the voiced threshold everywhere: what trimSilence treats as silence.
+    expect(() => validateDialogWav(toneWav(500, 100), RATE)).toThrow("audio is silent");
+    expect(() => validateDialogWav(new TextEncoder().encode("<html>oops</html>"), RATE)).toThrow(
+      "Not a RIFF/WAVE file",
+    );
   });
 });

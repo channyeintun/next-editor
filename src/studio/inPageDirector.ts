@@ -3,18 +3,18 @@ import { sha256Hex, sha256HexOfJson } from "./hash";
 import type { StudioPlan } from "./plan";
 import { compileLessonScript } from "./script/compile";
 import { resolveScriptSlides } from "./script/googleSlides";
-import { splitIntoDialogs } from "./script/dialogs";
+import { splitIntoDialogs, type NarrationDialog } from "./script/dialogs";
 import { isBurmeseLocale } from "./narrationLanguage";
 import { LEXICON_V1, speechTextOf, type PronunciationLexicon } from "./script/lexicon";
 import { extractNarration } from "./script/markers";
 import { scheduleDialogs } from "./script/schedule";
 import type { LessonScript } from "./script/schema";
-import { getCachedDialogWav, putCachedDialogWav } from "./tts/dialogCache";
+import { deleteCachedDialogWav, getCachedDialogWav, putCachedDialogWav } from "./tts/dialogCache";
 import { narrationNoiseSeed } from "./tts/pocket/noise";
 import { preloadPocket, synthesizePocketWav } from "./tts/pocketSynth";
 import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/profiles";
 import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
-import { stitchWavSegments, wavDurationMs } from "./tts/wav";
+import { stitchWavSegments, validateDialogWav } from "./tts/wav";
 
 /**
  * The in-page Director stage (narration + compile at render time): split the
@@ -106,6 +106,73 @@ function narrationLexiconFor(locale: string): PronunciationLexicon {
   return isBurmeseLocale(locale) ? NO_RESPELLINGS : LEXICON_V1;
 }
 
+const LABEL_PREVIEW_TOKENS = 6;
+
+/** `dialog 3/12 "intro.2" ("Go functions can return two values…")` — for errors and warnings. */
+function dialogLabelOf(dialog: NarrationDialog, index: number, count: number): string {
+  const preview = dialog.tokens.slice(0, LABEL_PREVIEW_TOKENS).join(" ");
+  const ellipsis = dialog.tokens.length > LABEL_PREVIEW_TOKENS ? "…" : "";
+  return `dialog ${index + 1}/${count} "${dialog.id}" ("${preview}${ellipsis}")`;
+}
+
+function errorMessageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+interface DialogTake {
+  wav: Uint8Array;
+  durationMs: number;
+}
+
+/**
+ * A cached take, re-validated on the way out: an entry written before takes
+ * were validated (or damaged in storage) is evicted and reported, and the
+ * caller synthesizes it again instead of every later render failing on it
+ * until site data is cleared.
+ */
+async function readCachedTake(
+  requestHash: string,
+  sampleRate: number,
+  onInvalid: (reason: string) => void,
+): Promise<DialogTake | null> {
+  const wav = await getCachedDialogWav(requestHash);
+  if (!wav) {
+    return null;
+  }
+  try {
+    return { wav, durationMs: validateDialogWav(wav, sampleRate) };
+  } catch (error) {
+    await deleteCachedDialogWav(requestHash);
+    onInvalid(errorMessageOf(error));
+    return null;
+  }
+}
+
+/**
+ * Synthesize and validate one dialog. Validation happens before the caller
+ * caches the take, so a truncated, wrong-rate, empty, or silent response fails
+ * this render only rather than being replayed by every later one.
+ */
+async function synthesizeTake(
+  provider: InPageSynthProvider,
+  speechText: string,
+  label: string,
+): Promise<DialogTake> {
+  let wav: Uint8Array;
+  try {
+    wav = await provider.synthesize(speechText);
+  } catch (error) {
+    throw new Error(`Narration ${label}: ${errorMessageOf(error)}`, { cause: error });
+  }
+  try {
+    return { wav, durationMs: validateDialogWav(wav, provider.sampleRate) };
+  } catch (error) {
+    throw new Error(`Narration ${label}: synthesized audio is unusable — ${errorMessageOf(error)}`, {
+      cause: error,
+    });
+  }
+}
+
 export async function buildPlanFromScript(
   script: LessonScript,
   { onPhase, voiceProfile }: InPageDirectorOptions = {},
@@ -126,6 +193,7 @@ export async function buildPlanFromScript(
   const segments: Uint8Array[] = [];
   const durationsMs: number[] = [];
   const dialogHashes: string[] = [];
+  const synthesisWarnings: string[] = [];
   let synthesizedCount = 0;
   for (let i = 0; i < dialogs.length; i++) {
     onPhase?.(`synthesize ${i + 1}/${dialogs.length}`);
@@ -142,14 +210,19 @@ export async function buildPlanFromScript(
     });
     dialogHashes.push(requestHash);
 
-    let wav = await getCachedDialogWav(requestHash);
-    if (!wav) {
-      wav = await provider.synthesize(speechText);
-      await putCachedDialogWav(requestHash, wav);
+    const label = dialogLabelOf(dialogs[i], i, dialogs.length);
+    let take = await readCachedTake(requestHash, provider.sampleRate, (reason) =>
+      synthesisWarnings.push(
+        `Cached audio for ${label} was unusable (${reason}) and was synthesized again`,
+      ),
+    );
+    if (!take) {
+      take = await synthesizeTake(provider, speechText, label);
+      await putCachedDialogWav(requestHash, take.wav);
       synthesizedCount += 1;
     }
-    segments.push(wav);
-    durationsMs.push(wavDurationMs(wav));
+    segments.push(take.wav);
+    durationsMs.push(take.durationMs);
   }
 
   // ---- Joint scheduling + stitch ------------------------------------------
@@ -204,6 +277,6 @@ export async function buildPlanFromScript(
     },
     dialogCount: dialogs.length,
     synthesizedCount,
-    warnings: [...schedule.warnings, ...warnings],
+    warnings: [...synthesisWarnings, ...schedule.warnings, ...warnings],
   };
 }

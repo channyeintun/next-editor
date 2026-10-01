@@ -10,6 +10,7 @@ import { encodeWavPcm16 } from "./tts/wav";
 
 const tts = vi.hoisted(() => ({
   getCachedDialogWav: vi.fn<(requestHash: string) => Promise<Uint8Array | null>>(),
+  deleteCachedDialogWav: vi.fn<(requestHash: string) => Promise<void>>(),
   preloadPocket: vi.fn<(...args: unknown[]) => Promise<void>>(),
   putCachedDialogWav: vi.fn<(...args: unknown[]) => Promise<void>>(),
   synthesizePocketWav:
@@ -20,6 +21,7 @@ const tts = vi.hoisted(() => ({
 
 vi.mock("./tts/dialogCache", () => ({
   getCachedDialogWav: tts.getCachedDialogWav,
+  deleteCachedDialogWav: tts.deleteCachedDialogWav,
   putCachedDialogWav: tts.putCachedDialogWav,
 }));
 
@@ -34,6 +36,14 @@ vi.mock("./tts/modalVoxCpm2Synth", () => ({
 
 const { buildPlanFromScript } = await import("./inPageDirector");
 
+/** A voiced (non-silent) PCM16 mono WAV of the given length. */
+function voicedWav(durationMs: number, sampleRate: number): Uint8Array {
+  return encodeWavPcm16(
+    new Int16Array(Math.ceil((sampleRate / 1000) * durationMs)).fill(1_000),
+    sampleRate,
+  );
+}
+
 function loadPilot() {
   return parseLessonScript(
     YAML.parse(readFileSync(resolve(__dirname, "./script/__fixtures__/go-swap.yaml"), "utf8")),
@@ -43,17 +53,14 @@ function loadPilot() {
 describe("buildPlanFromScript narration", () => {
   beforeEach(() => {
     tts.getCachedDialogWav.mockReset().mockResolvedValue(null);
+    tts.deleteCachedDialogWav.mockReset().mockResolvedValue();
     tts.preloadPocket.mockReset().mockResolvedValue();
     tts.putCachedDialogWav.mockReset().mockResolvedValue();
     tts.synthesizePocketWav.mockReset().mockImplementation(async (_, speechText) => {
-      const tokenCount = speechText.split(/\s+/).length;
-      const durationMs = 400 + tokenCount * 320;
-      return encodeWavPcm16(new Int16Array(Math.ceil(24 * durationMs)), 24_000);
+      return voicedWav(400 + speechText.split(/\s+/).length * 320, 24_000);
     });
     tts.synthesizeModalVoxCpm2Wav.mockReset().mockImplementation(async (_, speechText) => {
-      const tokenCount = speechText.split(/\s+/).length;
-      const durationMs = 400 + tokenCount * 320;
-      return encodeWavPcm16(new Int16Array(Math.ceil(48 * durationMs)), 48_000);
+      return voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000);
     });
   });
 
@@ -128,6 +135,49 @@ describe("buildPlanFromScript narration", () => {
         lexiconVersion: LEXICON_V1.version,
         seed: burmese.build.seed,
       }),
+    );
+  });
+
+  it("refuses to cache a take that fails validation, naming the dialog", async () => {
+    tts.synthesizePocketWav.mockResolvedValueOnce(voicedWav(800, 48_000));
+    await expect(buildPlanFromScript(loadPilot())).rejects.toThrow(
+      /^Narration dialog 1\/\d+ "[^"]+" \("Go functions can return two values…"\): synthesized audio is unusable — audio is 48000Hz, expected 24000Hz$/,
+    );
+
+    tts.synthesizePocketWav.mockResolvedValueOnce(encodeWavPcm16(new Int16Array(24_000), 24_000));
+    await expect(buildPlanFromScript(loadPilot())).rejects.toThrow(/audio is silent$/);
+
+    const truncated = voicedWav(800, 24_000).slice(0, 400);
+    tts.synthesizePocketWav.mockResolvedValueOnce(truncated);
+    await expect(buildPlanFromScript(loadPilot())).rejects.toThrow(/data chunk is truncated/);
+
+    expect(tts.putCachedDialogWav).not.toHaveBeenCalled();
+  });
+
+  it("names the dialog when its synthesis request fails", async () => {
+    tts.synthesizePocketWav.mockRejectedValueOnce(new Error("engine exploded"));
+    await expect(buildPlanFromScript(loadPilot())).rejects.toThrow(
+      /^Narration dialog 1\/\d+ "[^"]+" \("Go functions can return two values…"\): engine exploded$/,
+    );
+  });
+
+  it("evicts and re-synthesizes an invalid cached take, and reuses a valid one", async () => {
+    const script = loadPilot();
+    const cachedValid = voicedWav(1_200, 24_000);
+    tts.getCachedDialogWav
+      .mockResolvedValueOnce(voicedWav(1_200, 24_000).slice(0, 100))
+      .mockResolvedValue(cachedValid);
+
+    const result = await buildPlanFromScript(script);
+
+    const firstHash = tts.getCachedDialogWav.mock.calls[0][0];
+    expect(tts.deleteCachedDialogWav).toHaveBeenCalledExactlyOnceWith(firstHash);
+    expect(tts.synthesizePocketWav).toHaveBeenCalledOnce();
+    expect(tts.putCachedDialogWav).toHaveBeenCalledOnce();
+    expect(tts.putCachedDialogWav.mock.calls[0][0]).toBe(firstHash);
+    expect(result.synthesizedCount).toBe(1);
+    expect(result.warnings[0]).toMatch(
+      /^Cached audio for dialog 1\/\d+ .* was unusable \(WAV data chunk is truncated.*\) and was synthesized again$/,
     );
   });
 });

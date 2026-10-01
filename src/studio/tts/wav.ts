@@ -14,6 +14,9 @@ const WAVE = 0x45564157; // "WAVE" LE
 const FMT_ = 0x20746d66; // "fmt " LE
 const DATA = 0x61746164; // "data" LE
 
+/** Absolute amplitude (of full scale) above which a sample counts as voiced. */
+const VOICED_THRESHOLD = 0.004;
+
 export interface TrimSilenceOptions {
   /** Absolute amplitude below which a sample counts as silence. */
   threshold?: number;
@@ -32,7 +35,7 @@ export interface TrimSilenceOptions {
 export function trimSilence(
   samples: Float32Array,
   sampleRate: number,
-  { threshold = 0.004, headPadMs = 40, tailPadMs = 150 }: TrimSilenceOptions = {},
+  { threshold = VOICED_THRESHOLD, headPadMs = 40, tailPadMs = 150 }: TrimSilenceOptions = {},
 ): Float32Array {
   let first = -1;
   for (let i = 0; i < samples.length; i++) {
@@ -95,6 +98,11 @@ export function decodeWavPcm16(bytes: Uint8Array): DecodedWav {
         );
       }
     } else if (chunkId === DATA) {
+      if (body + chunkSize > bytes.byteLength) {
+        throw new Error(
+          `WAV data chunk is truncated: declares ${chunkSize} bytes, ${bytes.byteLength - body} present`,
+        );
+      }
       const sampleCount = Math.floor(chunkSize / 2);
       // Copy: the data chunk may start on an odd byte offset, and Int16Array
       // views require 2-byte alignment.
@@ -114,6 +122,27 @@ export function decodeWavPcm16(bytes: Uint8Array): DecodedWav {
 
 export function wavDurationMs(bytes: Uint8Array): number {
   const { pcm, sampleRate } = decodeWavPcm16(bytes);
+  return Math.round((pcm.length / sampleRate) * 1000);
+}
+
+/**
+ * Check that synthesized dialog audio is usable before it is cached or
+ * scheduled: PCM16 mono at the expected rate, with samples, and not silent
+ * throughout (no sample reaches the voiced threshold trimSilence uses).
+ * Returns the duration; throws with the reason otherwise.
+ */
+export function validateDialogWav(bytes: Uint8Array, expectedSampleRate: number): number {
+  const { pcm, sampleRate } = decodeWavPcm16(bytes);
+  if (sampleRate !== expectedSampleRate) {
+    throw new Error(`audio is ${sampleRate}Hz, expected ${expectedSampleRate}Hz`);
+  }
+  if (pcm.length === 0) {
+    throw new Error("audio has no samples");
+  }
+  const voicedFloor = VOICED_THRESHOLD * 0x8000;
+  if (!pcm.some((sample) => Math.abs(sample) > voicedFloor)) {
+    throw new Error("audio is silent");
+  }
   return Math.round((pcm.length / sampleRate) * 1000);
 }
 
