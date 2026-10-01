@@ -16,8 +16,8 @@ export interface RuntimePanelContext {
   playbackSnapshot: RuntimeRecordingSnapshot | null;
   /**
    * The viewer's own full-height choice for the replayed dock, or null when they
-   * have not touched the toggle. Pressing it during a replay sets this, and from
-   * then on it wins over the recording's full-height changes, across pause, resume,
+   * have not touched the toggle. Pressing it while a replay is loaded (playing,
+   * paused, ready or ended) sets this, and from then on it wins over the recording's full-height changes, across pause, resume,
    * seeking and the end of playback. It ends (back to null) when the editor leaves
    * playback: another recording is loaded, the lesson is unloaded, or a take starts
    * (see useEndViewerDockOverride). It is viewer-only: selectRecordingState leaves

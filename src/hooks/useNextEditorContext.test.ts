@@ -78,6 +78,7 @@ const legacyMetadata = (state: EditorMachineSnapshot) => ({
     state.context.timeline.currentTime >= state.context.timeline.duration - END_EPSILON_MS,
   usesPlaybackModel: !state.context.hasManualWorkspaceOverride && getPlaybackState(state) !== null,
   isInPlaybackSession: getPlaybackState(state) !== null,
+  isReplayLoaded: state.matches("playback"),
   currentRecording: state.context.recording,
 });
 
@@ -92,11 +93,15 @@ const pausedSession = {
 } as RecordingSession;
 
 const cases: Array<[string, EditorMachineSnapshot, Partial<ReturnType<typeof legacyMetadata>>]> = [
-  ["idle", snapshotAt("idle"), { isRecording: false, usesPlaybackModel: false }],
+  [
+    "idle",
+    snapshotAt("idle"),
+    { isRecording: false, usesPlaybackModel: false, isReplayLoaded: false },
+  ],
   [
     "recording",
     snapshotAt("recording", { session }),
-    { isRecording: true, isRecordingPaused: false },
+    { isRecording: true, isRecordingPaused: false, isReplayLoaded: false },
   ],
   [
     "recording, paused",
@@ -106,10 +111,23 @@ const cases: Array<[string, EditorMachineSnapshot, Partial<ReturnType<typeof leg
   [
     "ready",
     playbackAt("ready", 0),
-    { isPlaying: false, usesPlaybackModel: false, isInPlaybackSession: false },
+    {
+      isPlaying: false,
+      usesPlaybackModel: false,
+      isInPlaybackSession: false,
+      isReplayLoaded: true,
+    },
   ],
-  ["playing", playbackAt("playing", 400), { isPlaying: true, usesPlaybackModel: true }],
-  ["paused", playbackAt("paused", 400), { isPlaying: false, usesPlaybackModel: true }],
+  [
+    "playing",
+    playbackAt("playing", 400),
+    { isPlaying: true, usesPlaybackModel: true, isReplayLoaded: true },
+  ],
+  [
+    "paused",
+    playbackAt("paused", 400),
+    { isPlaying: false, usesPlaybackModel: true, isReplayLoaded: true },
+  ],
   [
     "ended below the epsilon",
     playbackAt("ended", DURATION_MS - END_EPSILON_MS - 1),

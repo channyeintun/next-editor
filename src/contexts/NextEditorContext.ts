@@ -35,6 +35,11 @@ export interface NextEditorMetadata {
    * true while paused or ended, where the workspace is handed to the viewer.
    */
   isInPlaybackSession: boolean;
+  /**
+   * A recording is loaded for replay (ready, playing, paused or ended), not a take. Unlike
+   * isInPlaybackSession it is already true before the first play.
+   */
+  isReplayLoaded: boolean;
   currentRecording: Recording | null;
 }
 

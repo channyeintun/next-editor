@@ -5,7 +5,12 @@ import { selectIsFullHeight, selectViewerFullHeight } from "../stores/runtimePan
 import type { RuntimeRecordingSnapshot } from "../types/runtime";
 
 const metadata = vi.hoisted(() => ({
-  current: { currentRecording: null as unknown, isPlaying: false, isRecording: false },
+  current: {
+    currentRecording: null as unknown,
+    isPlaying: false,
+    isRecording: false,
+    isReplayLoaded: false,
+  },
 }));
 
 vi.mock("./useNextEditorContext", () => ({
@@ -30,12 +35,22 @@ function renderLayout() {
 }
 
 function replaying(runtimeSnapshot: RuntimeRecordingSnapshot) {
-  metadata.current = { currentRecording: { runtimeSnapshot }, isPlaying: true, isRecording: false };
+  metadata.current = {
+    currentRecording: { runtimeSnapshot },
+    isPlaying: true,
+    isRecording: false,
+    isReplayLoaded: true,
+  };
 }
 
 describe("useRuntimeDockLayout", () => {
   beforeEach(() => {
-    metadata.current = { currentRecording: null, isPlaying: false, isRecording: false };
+    metadata.current = {
+      currentRecording: null,
+      isPlaying: false,
+      isRecording: false,
+      isReplayLoaded: false,
+    };
   });
 
   it("shows the live layout when nothing is replaying", () => {
@@ -110,6 +125,7 @@ describe("useRuntimeDockLayout", () => {
       },
       isPlaying: true,
       isRecording: true,
+      isReplayLoaded: false,
     };
 
     const { result } = renderLayout();
@@ -197,7 +213,7 @@ describe("useRuntimeDockLayout", () => {
       expect(result.current.layout.displayIsFullHeight).toBe(false);
     });
 
-    it("toggles the live height while paused when the viewer has made no choice", () => {
+    it("makes a first press while paused the viewer's choice, which survives resuming", () => {
       replaying(recorded(true));
       const { result, rerender } = renderLayout();
       paused();
@@ -206,9 +222,26 @@ describe("useRuntimeDockLayout", () => {
 
       act(() => result.current.layout.toggleFullHeight());
 
+      const context = result.current.store.getSnapshot().context;
       expect(result.current.layout.displayIsFullHeight).toBe(true);
-      expect(selectIsFullHeight(result.current.store.getSnapshot().context)).toBe(true);
-      expect(selectViewerFullHeight(result.current.store.getSnapshot().context)).toBeNull();
+      expect(selectViewerFullHeight(context)).toBe(true);
+      expect(selectIsFullHeight(context)).toBe(false);
+
+      // The recording is at full height too; switch it off to show the viewer's choice wins.
+      replaying(recorded(false));
+      rerender();
+      expect(result.current.layout.displayIsFullHeight).toBe(true);
+    });
+
+    it("flips the live height when no replay is loaded", () => {
+      const { result } = renderLayout();
+
+      act(() => result.current.layout.toggleFullHeight());
+
+      const context = result.current.store.getSnapshot().context;
+      expect(selectIsFullHeight(context)).toBe(true);
+      expect(selectViewerFullHeight(context)).toBeNull();
+      expect(result.current.layout.displayIsFullHeight).toBe(true);
     });
 
     it("follows the recording again once the choice ends", () => {
@@ -227,7 +260,12 @@ describe("useRuntimeDockLayout", () => {
     it("shows and toggles the live height while a take is being recorded", () => {
       const { result, rerender } = renderLayout();
       act(() => result.current.store.trigger.setViewerFullHeight({ fullHeight: true }));
-      metadata.current = { currentRecording: null, isPlaying: false, isRecording: true };
+      metadata.current = {
+        currentRecording: null,
+        isPlaying: false,
+        isRecording: true,
+        isReplayLoaded: false,
+      };
       rerender();
       expect(result.current.layout.displayIsFullHeight).toBe(false);
 

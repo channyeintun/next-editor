@@ -23,9 +23,9 @@ export interface RuntimeDockLayout {
   /** The height on screen: the viewer's own choice once they made one during this replay. */
   displayIsFullHeight: boolean;
   /**
-   * The full-height toggle. While a replay plays, or once the viewer has chosen a
-   * height during one, it flips the viewer's choice; otherwise it flips the live
-   * value, as record mode always has.
+   * The full-height toggle. While a replay is loaded (playing, paused, ready or
+   * ended), or once the viewer has chosen a height during one, it flips the
+   * viewer's choice; otherwise (record mode, idle) it flips the live value.
    */
   toggleFullHeight: () => void;
 }
@@ -44,7 +44,7 @@ export function useRuntimeDockLayout(): RuntimeDockLayout {
   const isFullHeight = useSelector(runtimePanelStore, (s) => selectIsFullHeight(s.context));
   const viewerFullHeight = useSelector(runtimePanelStore, (s) => selectViewerFullHeight(s.context));
   const { recordedRuntimeSnapshot, isPlaybackSnapshotActive } = useRuntimeDockRecordedSnapshot();
-  const { isRecording } = useNextEditorMetadata();
+  const { isRecording, isReplayLoaded } = useNextEditorMetadata();
 
   // A take always shows (and records) the live height, whatever a replay left behind.
   const hasViewerFullHeight = viewerFullHeight !== null && !isRecording;
@@ -55,7 +55,9 @@ export function useRuntimeDockLayout(): RuntimeDockLayout {
       : isFullHeight;
 
   const toggleFullHeight = () => {
-    if (isPlaybackSnapshotActive || hasViewerFullHeight) {
+    // Any press while a replay is loaded is the viewer's, even before the first play or
+    // while paused, so resuming keeps it rather than snapping back to the recording.
+    if ((isReplayLoaded && !isRecording) || hasViewerFullHeight) {
       runtimePanelStore.trigger.setViewerFullHeight({ fullHeight: !displayIsFullHeight });
       return;
     }
