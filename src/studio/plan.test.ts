@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { parseRuntimeModeParam, parseStudioPlan, type StudioPlan } from "./plan";
+import {
+  parseRuntimeModeParam,
+  parseStudioPlan,
+  studioWhiteboardAssetSchema,
+  type StudioPlan,
+} from "./plan";
 
 /** Even per-word interpolation inside a cue, like the compiler emits. */
 function toCue(start: number, end: number, text: string) {
@@ -214,6 +219,23 @@ describe("studio plan schema", () => {
     // Word timings inside the shifted cue no longer matter for this test; the
     // cue-overlap issue alone must reject the plan.
     expect(() => parseStudioPlan(plan)).toThrow(/overlaps cue/);
+  });
+});
+
+describe("studio whiteboard asset defaults", () => {
+  it("defaults to ink and a label size that read on the dark-theme board", () => {
+    // Excalidraw's dark theme inverts colours, so #1e1e1e is what paints white.
+    const asset = studioWhiteboardAssetSchema.parse({
+      id: "label",
+      kind: "text",
+      x: 300,
+      y: 200,
+      width: 400,
+      height: 40,
+      text: "hello",
+    });
+    expect(asset.strokeColor).toBe("#1e1e1e");
+    expect(asset.fontSize).toBe(28);
   });
 });
 

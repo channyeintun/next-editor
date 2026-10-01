@@ -362,9 +362,15 @@ export const studioWhiteboardAssetSchema = z.object({
   text: z.string().optional(),
   /** `freedraw` only: which stroke fills the asset's box. */
   stroke: studioWhiteboardStrokeSchema.default("underline"),
-  strokeColor: z.string().default("#e2e8f0"),
+  /**
+   * The whiteboard renders with Excalidraw's dark theme, which inverts
+   * colours: #1e1e1e paints white, while a pale default like #e2e8f0 would
+   * paint near-black on the dark canvas and all but vanish.
+   */
+  strokeColor: z.string().default("#1e1e1e"),
   backgroundColor: z.string().default("transparent"),
-  fontSize: z.number().finite().positive().default(20),
+  /** 28px is the smallest label that stays readable in the recorded lesson. */
+  fontSize: z.number().finite().positive().default(28),
 });
 export type StudioWhiteboardAsset = z.infer<typeof studioWhiteboardAssetSchema>;
 
