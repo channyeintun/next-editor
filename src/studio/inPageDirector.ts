@@ -9,9 +9,14 @@ import { LEXICON_V1, speechTextOf, type PronunciationLexicon } from "./script/le
 import { extractNarration } from "./script/markers";
 import { scheduleDialogs } from "./script/schedule";
 import type { LessonScript } from "./script/schema";
-import { deleteCachedDialogWav, getCachedDialogWav, putCachedDialogWav } from "./tts/dialogCache";
+import {
+  deleteCachedDialogWav,
+  getCachedDialogWav,
+  putCachedDialogWav,
+  type CachedDialogWav,
+} from "./tts/dialogCache";
 import { narrationNoiseSeed } from "./tts/pocket/noise";
-import { preloadPocket, synthesizePocketWav } from "./tts/pocketSynth";
+import { preloadPocket, synthesizePocketDialog } from "./tts/pocketSynth";
 import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/profiles";
 import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
 import { stitchWavSegments, validateDialogWav } from "./tts/wav";
@@ -59,7 +64,7 @@ interface InPageSynthProvider {
   sampleRate: number;
   mimeType: string;
   preload(): Promise<unknown>;
-  synthesize(speechText: string): Promise<Uint8Array>;
+  synthesize(speechText: string): Promise<CachedDialogWav>;
   /** Shared narration seed folded into each dialog's request hash. */
   seed: number;
 }
@@ -77,7 +82,14 @@ function providerFor(
         mimeType: profile.mimeType,
         seed: noiseSeed,
         preload: () => preloadPocket(profile, onPhase),
-        synthesize: (speechText) => synthesizePocketWav(profile, speechText, noiseSeed),
+        synthesize: async (speechText) => {
+          const { wav, cappedChunkCount } = await synthesizePocketDialog(
+            profile,
+            speechText,
+            noiseSeed,
+          );
+          return { wav, hitFrameCap: cappedChunkCount > 0 };
+        },
       };
     }
     case "voxcpm2-modal":
@@ -89,7 +101,10 @@ function providerFor(
         // cold start; a separate preload request would spend Modal credits
         // without producing reusable audio.
         preload: async () => undefined,
-        synthesize: (speechText) => synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
+        synthesize: async (speechText) => ({
+          wav: await synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
+          hitFrameCap: false,
+        }),
       };
   }
 }
@@ -115,12 +130,15 @@ function dialogLabelOf(dialog: NarrationDialog, index: number, count: number): s
   return `dialog ${index + 1}/${count} "${dialog.id}" ("${preview}${ellipsis}")`;
 }
 
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function errorMessageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-interface DialogTake {
-  wav: Uint8Array;
+interface DialogTake extends CachedDialogWav {
   durationMs: number;
 }
 
@@ -135,12 +153,12 @@ async function readCachedTake(
   sampleRate: number,
   onInvalid: (reason: string) => void,
 ): Promise<DialogTake | null> {
-  const wav = await getCachedDialogWav(requestHash);
-  if (!wav) {
+  const cached = await getCachedDialogWav(requestHash);
+  if (!cached) {
     return null;
   }
   try {
-    return { wav, durationMs: validateDialogWav(wav, sampleRate) };
+    return { ...cached, durationMs: validateDialogWav(cached.wav, sampleRate) };
   } catch (error) {
     await deleteCachedDialogWav(requestHash);
     onInvalid(errorMessageOf(error));
@@ -158,16 +176,20 @@ async function synthesizeTake(
   speechText: string,
   label: string,
 ): Promise<DialogTake> {
-  let wav: Uint8Array;
+  let synthesized: CachedDialogWav;
   try {
-    wav = await provider.synthesize(speechText);
+    synthesized = await provider.synthesize(speechText);
   } catch (error) {
     throw new Error(`Narration ${label}: ${errorMessageOf(error)}`, { cause: error });
   }
   try {
-    return { wav, durationMs: validateDialogWav(wav, provider.sampleRate) };
+    return {
+      ...synthesized,
+      durationMs: validateDialogWav(synthesized.wav, provider.sampleRate),
+    };
   } catch (error) {
-    throw new Error(`Narration ${label}: synthesized audio is unusable — ${errorMessageOf(error)}`, {
+    const reason = errorMessageOf(error);
+    throw new Error(`Narration ${label}: synthesized audio is unusable — ${reason}`, {
       cause: error,
     });
   }
@@ -218,8 +240,17 @@ export async function buildPlanFromScript(
     );
     if (!take) {
       take = await synthesizeTake(provider, speechText, label);
-      await putCachedDialogWav(requestHash, take.wav);
+      // A frame-capped take is cached too: Pocket is seeded and deterministic,
+      // so synthesizing the same request again reproduces the same audio and
+      // would only cost time. The flag travels with the entry, so the warning
+      // repeats on every render until the dialog's text changes.
+      await putCachedDialogWav(requestHash, take);
       synthesizedCount += 1;
+    }
+    if (take.hitFrameCap) {
+      synthesisWarnings.push(
+        `${capitalize(label)} ran to the speech engine's length limit without the model ending the sentence — listen for run-on or cut-off audio, and reword or split that sentence if it sounds wrong`,
+      );
     }
     segments.push(take.wav);
     durationsMs.push(take.durationMs);

@@ -8,6 +8,12 @@
 
 const CACHE_NAME = "next-editor-studio-tts-v1";
 
+/**
+ * Marks a take whose synthesis hit Pocket's per-chunk frame cap, so a cache
+ * hit repeats the Director's warning instead of silently replaying it.
+ */
+const FRAME_CAP_HEADER = "X-Studio-Tts-Frame-Cap";
+
 function cacheUrlFor(requestHash: string): string {
   return `/__studio-tts-cache/${requestHash}.wav`;
 }
@@ -16,7 +22,12 @@ function cacheAvailable(): boolean {
   return typeof caches !== "undefined";
 }
 
-export async function getCachedDialogWav(requestHash: string): Promise<Uint8Array | null> {
+export interface CachedDialogWav {
+  wav: Uint8Array;
+  hitFrameCap: boolean;
+}
+
+export async function getCachedDialogWav(requestHash: string): Promise<CachedDialogWav | null> {
   if (!cacheAvailable()) {
     return null;
   }
@@ -25,20 +36,25 @@ export async function getCachedDialogWav(requestHash: string): Promise<Uint8Arra
   if (!hit) {
     return null;
   }
-  return new Uint8Array(await hit.arrayBuffer());
+  return {
+    wav: new Uint8Array(await hit.arrayBuffer()),
+    hitFrameCap: hit.headers.get(FRAME_CAP_HEADER) === "1",
+  };
 }
 
-export async function putCachedDialogWav(requestHash: string, bytes: Uint8Array): Promise<void> {
+export async function putCachedDialogWav(
+  requestHash: string,
+  { wav, hitFrameCap }: CachedDialogWav,
+): Promise<void> {
   if (!cacheAvailable()) {
     return;
   }
   const cache = await caches.open(CACHE_NAME);
-  await cache.put(
-    cacheUrlFor(requestHash),
-    new Response(bytes.slice() as BlobPart, {
-      headers: { "Content-Type": "audio/wav" },
-    }),
-  );
+  const headers: Record<string, string> = { "Content-Type": "audio/wav" };
+  if (hitFrameCap) {
+    headers[FRAME_CAP_HEADER] = "1";
+  }
+  await cache.put(cacheUrlFor(requestHash), new Response(wav.slice() as BlobPart, { headers }));
 }
 
 /** Drop one entry, e.g. a cached take that no longer passes validation. */

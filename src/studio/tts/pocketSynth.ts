@@ -55,12 +55,18 @@ export function preloadPocket(
   return loadEngine(profile, onPhase);
 }
 
+export interface PocketDialogSynthesis {
+  wav: Uint8Array;
+  /** Text chunks that hit the engine's frame cap (see PocketSynthesisResult). */
+  cappedChunkCount: number;
+}
+
 /** Synthesize one dialog to 16-bit PCM mono WAV bytes at the profile's rate. */
-export async function synthesizePocketWav(
+export async function synthesizePocketDialog(
   profile: PocketVoiceProfile,
   speechText: string,
   noiseSeed: number,
-): Promise<Uint8Array> {
+): Promise<PocketDialogSynthesis> {
   const engine = await loadEngine(profile);
   const result = await engine.synthesize(speechText, noiseSeed);
   if (result.sampleRate !== profile.sampleRate) {
@@ -71,5 +77,17 @@ export async function synthesizePocketWav(
   // Trim the model's leading/trailing silence so speech starts where the
   // schedule (captions, mark anchors) says the dialog starts.
   const trimmed = trimSilence(result.samples, result.sampleRate);
-  return encodeWavPcm16(floatTo16BitPcm(trimmed), result.sampleRate);
+  return {
+    wav: encodeWavPcm16(floatTo16BitPcm(trimmed), result.sampleRate),
+    cappedChunkCount: result.cappedChunkCount,
+  };
+}
+
+/** synthesizePocketDialog's WAV alone, for one-off previews. */
+export async function synthesizePocketWav(
+  profile: PocketVoiceProfile,
+  speechText: string,
+  noiseSeed: number,
+): Promise<Uint8Array> {
+  return (await synthesizePocketDialog(profile, speechText, noiseSeed)).wav;
 }

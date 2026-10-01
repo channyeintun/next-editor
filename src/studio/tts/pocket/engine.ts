@@ -219,6 +219,13 @@ export interface PocketEngineConfig {
 export interface PocketSynthesisResult {
   samples: Float32Array;
   sampleRate: number;
+  /**
+   * Text chunks that ran to MAX_FRAMES (~40s) without the model signalling
+   * end of speech. Their audio is kept (synthesis is deterministic, so a retry
+   * would reproduce it) but is likely run-on babble or cut off, so callers
+   * should surface it.
+   */
+  cappedChunkCount: number;
 }
 
 export class PocketTtsEngine {
@@ -439,6 +446,7 @@ export class PocketTtsEngine {
 
     const audioParts: Float32Array[] = [];
     let totalFrames = 0;
+    let cappedChunkCount = 0;
 
     for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
       // Fresh per text chunk, as upstream configures for this export.
@@ -479,6 +487,7 @@ export class PocketTtsEngine {
         latentDim,
       ]);
       let eosStep: number | null = null;
+      let stopped = false;
 
       for (let step = 0; step < MAX_FRAMES; step++) {
         // Yield periodically so the page stays responsive during synthesis.
@@ -544,8 +553,12 @@ export class PocketTtsEngine {
         }
 
         if (shouldStop) {
+          stopped = true;
           break;
         }
+      }
+      if (!stopped) {
+        cappedChunkCount += 1;
       }
 
       // Edge fades against clicks at chunk boundaries, as upstream applies.
@@ -576,6 +589,6 @@ export class PocketTtsEngine {
       offset += part.length;
     }
 
-    return { samples, sampleRate: meta.sample_rate };
+    return { samples, sampleRate: meta.sample_rate, cappedChunkCount };
   }
 }
