@@ -179,7 +179,12 @@ export function critiqueScript(
     }
   }
 
-  // Marker hygiene: unused markers are legal but usually leftovers.
+  // Marker hygiene. A mark no action anchors to is still a dialog split, and
+  // every split buys a breath between dialogs, so authors place them on purpose
+  // (an action anchored to a missing mark is a compile error elsewhere). Only a
+  // mark that splits nothing is a leftover: one at the start or end of its
+  // scene, or at the same word as a mark already splitting there — dialogs
+  // split at the same positions with or without it.
   const referencedMarks = new Set<string>();
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
@@ -188,13 +193,28 @@ export function critiqueScript(
       }
     }
   }
-  for (const name of extracted.markers.keys()) {
-    if (!referencedMarks.has(name)) {
-      notes.push({
-        id: "marker.unused",
-        severity: "note",
-        message: `Marker "${name}" is never referenced by an action`,
-      });
+  for (const scene of extracted.scenes) {
+    const sceneEnd = scene.firstTokenIndex + scene.tokens.length;
+    const splits = new Set<number>([scene.firstTokenIndex]);
+    for (const marker of scene.markers) {
+      if (referencedMarks.has(marker.name)) {
+        splits.add(marker.beforeTokenIndex);
+      }
+    }
+    for (const marker of scene.markers) {
+      if (referencedMarks.has(marker.name)) {
+        continue;
+      }
+      if (marker.beforeTokenIndex >= sceneEnd || splits.has(marker.beforeTokenIndex)) {
+        notes.push({
+          id: "marker.unused",
+          severity: "note",
+          sceneId: scene.sceneId,
+          message: `Marker "${marker.name}" is never referenced by an action and splits no dialog — remove it`,
+        });
+      } else {
+        splits.add(marker.beforeTokenIndex);
+      }
     }
   }
 

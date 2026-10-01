@@ -114,11 +114,32 @@ describe("critiqueScript", () => {
     expect(note.message).toContain(`(persona guide v${PERSONA_GUIDE_VERSION})`);
   });
 
-  it("flags markers no action references", () => {
+  // A mark with no anchored action still splits the narration into dialogs, and
+  // the scheduler puts a breath between them — authors add them for that.
+  it("leaves an unreferenced mark alone when it splits a dialog", () => {
     const script = loadPilot("go-swap");
-    script.scenes[1].narration += " [[mark:leftover]] Done.";
+    script.scenes[1].narration += " [[mark:breath]] Done.";
     const critique = critiqueScript(script, extractedOf(script));
-    expect(critique.notes.some((note) => note.id === "marker.unused")).toBe(true);
+    expect(critique.notes.filter((note) => note.id === "marker.unused")).toEqual([]);
+  });
+
+  it("flags unreferenced marks that split nothing", () => {
+    const script = loadPilot("go-swap");
+    const anchored = script.scenes[1].actions.find((action) => "mark" in action.at);
+    if (!anchored || !("mark" in anchored.at)) throw new Error("pilot lost its marked action");
+    const mark = anchored.at.mark;
+    script.scenes[1].narration =
+      `[[mark:at-start]] ${script.scenes[1].narration} [[mark:at-end]]`.replace(
+        `[[mark:${mark}]]`,
+        `[[mark:${mark}]] [[mark:beside-${mark}]]`,
+      );
+    const unused = critiqueScript(script, extractedOf(script)).notes.filter(
+      (note) => note.id === "marker.unused",
+    );
+    expect(unused.map((note) => note.message.match(/"([^"]+)"/)?.[1]).sort()).toEqual(
+      ["at-end", "at-start", `beside-${mark}`].sort(),
+    );
+    expect(unused.every((note) => note.sceneId === script.scenes[1].id)).toBe(true);
   });
 
   it("only proposes — no note carries a blocking severity", () => {
