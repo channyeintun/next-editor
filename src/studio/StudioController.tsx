@@ -20,7 +20,12 @@ import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/display
 import { describeDraftDescription, describeDraftProvenance } from "./draftProvenance";
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
-import { parseRuntimeModeParam, type StudioPlan, type StudioRuntimeMode } from "./plan";
+import {
+  parseRuntimeModeParam,
+  shouldAutostartRender,
+  type StudioPlan,
+  type StudioRuntimeMode,
+} from "./plan";
 import { checkRepeatability, runExposedForSelection, sourceRevisionOf } from "./runSelection";
 import {
   DEFAULT_STUDIO_PLAN_SLUG,
@@ -233,7 +238,10 @@ export default function StudioController() {
   // when the caller asked for fixture (STUDIO-05).
   const runtimeModeParam = parseRuntimeModeParam(searchParams.get("runtime"));
   const requestedMode = runtimeModeParam.mode;
-  const autostart = searchParams.get("autostart") === "1";
+  const autostart = shouldAutostartRender(
+    searchParams.get("autostart"),
+    typeof navigator !== "undefined" && navigator.webdriver === true,
+  );
 
   const [phase, setPhase] = useState<string>("idle");
   const [running, setRunning] = useState(false);
@@ -660,7 +668,8 @@ export default function StudioController() {
   }, [comparison, latest]);
 
   // One-shot per page load (module flag): StrictMode remounts and later
-  // re-renders must not restart an unattended render.
+  // re-renders must not restart an unattended render. `autostart` is already
+  // false outside an automation-controlled browser (shouldAutostartRender).
   useEffect(() => {
     if (!autostart || autostartFired || authLoading) {
       return;

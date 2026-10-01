@@ -123,6 +123,12 @@ try {
 
   const url = `${options.baseUrl}/studio?plan=${encodeURIComponent(options.slug)}&runtime=${options.runtime}&autostart=1`;
   await page.goto(url, { waitUntil: "domcontentloaded" });
+  // The studio honours autostart=1 only when navigator.webdriver is true
+  // (headless Chrome driven over the DevTools pipe reports it); without it the
+  // first render would never start and the wait below would only time out.
+  if (!(await page.evaluate(() => navigator.webdriver))) {
+    throw new Error("navigator.webdriver is false — the studio will not autostart the render");
+  }
 
   let finalState: StudioWindowState | null = null;
   for (let run = 1; run <= options.runs; run++) {

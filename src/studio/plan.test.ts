@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   parseRuntimeModeParam,
   parseStudioPlan,
+  shouldAutostartRender,
   studioWhiteboardAssetSchema,
   type StudioPlan,
 } from "./plan";
@@ -236,6 +237,19 @@ describe("studio whiteboard asset defaults", () => {
     });
     expect(asset.strokeColor).toBe("#1e1e1e");
     expect(asset.fontSize).toBe(28);
+  });
+});
+
+describe("shouldAutostartRender", () => {
+  it("honours autostart=1 only in an automation-controlled browser", () => {
+    expect(shouldAutostartRender("1", true)).toBe(true);
+    // A crafted link opened in a normal signed-in browser waits for the click.
+    expect(shouldAutostartRender("1", false)).toBe(false);
+  });
+
+  it("ignores a missing or other autostart value", () => {
+    expect(shouldAutostartRender(null, true)).toBe(false);
+    expect(shouldAutostartRender("true", true)).toBe(false);
   });
 });
 

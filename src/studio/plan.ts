@@ -810,6 +810,20 @@ export function parseRuntimeModeParam(raw: string | null): RuntimeModeParam {
 }
 
 /**
+ * Whether `/studio?autostart=1` may start a render without a click.
+ *
+ * A render replaces the tab's workspace and, in live mode, makes credentialed
+ * playground calls as the signed-in user, so a crafted link must not be able to
+ * trigger one from a plain page load. Only an automation-controlled browser
+ * (`navigator.webdriver`, which headless Chrome under scripts/studio-render.ts
+ * reports) honours the flag; everyone else gets the plan preselected and waits
+ * for the Start render click.
+ */
+export function shouldAutostartRender(raw: string | null, automated: boolean): boolean {
+  return raw === "1" && automated;
+}
+
+/**
  * The one runtime kind each lesson type may declare. Go, Kotlin, Rust, Zig,
  * and Haskell execute through their selective proxies, Kite on its in-page
  * WebAssembly compiler, asm on its in-page TypeScript assembler and x86-64
