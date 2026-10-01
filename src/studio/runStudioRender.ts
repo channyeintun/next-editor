@@ -475,8 +475,12 @@ export async function runStudioRender(
   if (!finalized) {
     return failedResult("The finalized recording disappeared before encoding");
   }
-  deps.nextEditor.addCaptionTrack(finalized.id, plan.narration.captions);
-  if (plan.chapters.length > 0) deps.nextEditor.setChapters(finalized.id, plan.chapters);
+  const { captions, chapters } = narrationTimelineOnRecordingClock(
+    plan,
+    finalized.audioStartOffsetMs ?? 0,
+  );
+  deps.nextEditor.addCaptionTrack(finalized.id, captions);
+  if (chapters.length > 0) deps.nextEditor.setChapters(finalized.id, chapters);
   // Adding the track (and chapters) replaces the recording; encode the one that carries it.
   const recording: Recording | null = deps.actor.getSnapshot().context.recording;
   if (!recording) {
@@ -569,6 +573,46 @@ export async function runStudioRender(
     failed.report.checks = checks;
     return failed;
   }
+}
+
+/**
+ * The plan's captions and chapters, moved from the narration clock they were
+ * compiled on to the recording clock they are attached on. Narration starts
+ * `audioStartOffsetMs` into the recording, the same shift generateCaptions
+ * applies to transcribed cues. It is 0 for studio renders today; without the
+ * shift a non-zero offset would put every cue and chapter that far early.
+ */
+export function narrationTimelineOnRecordingClock(
+  plan: Pick<StudioPlan, "narration" | "chapters">,
+  audioStartOffsetMs: number,
+): { captions: StudioPlan["narration"]["captions"]; chapters: StudioPlan["chapters"] } {
+  const captions = plan.narration.captions;
+  if (audioStartOffsetMs === 0) {
+    return { captions, chapters: plan.chapters };
+  }
+  return {
+    captions: {
+      ...captions,
+      cues: captions.cues.map((cue) => ({
+        ...cue,
+        start: cue.start + audioStartOffsetMs,
+        end: cue.end + audioStartOffsetMs,
+        ...(cue.words
+          ? {
+              words: cue.words.map((word) => ({
+                ...word,
+                start: word.start + audioStartOffsetMs,
+                end: word.end + audioStartOffsetMs,
+              })),
+            }
+          : {}),
+      })),
+    },
+    chapters: plan.chapters.map((chapter) => ({
+      ...chapter,
+      time: chapter.time + audioStartOffsetMs,
+    })),
+  };
 }
 
 async function baseManifest(
