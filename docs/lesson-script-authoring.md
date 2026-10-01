@@ -43,8 +43,8 @@ browser at render time. Two ways it reaches the studio:
    not compute timings — you place marks where things should happen and let
    the compiler schedule. The compiler runs in the render page once the
    narration is synthesized, before recording starts: it fails on
-   impossibilities (overlapping actions, an action running past the narration)
-   and warns when your actions force more than ~2.5s of silence ("add narration
+   impossibilities (overlapping actions, an action that starts after the
+   narration ends) and warns when your actions force more than ~2.5s of silence ("add narration
    here or shorten the action"). Import… and the Director CLI validate the
    script but do not compile or schedule it.
 3. Studio automatically adds a **two-second quiet recording handle** before
@@ -323,11 +323,12 @@ scenes:
     actions: […]
 ```
 
-`chapter` (optional, ≤120 characters) starts a chapter at the scene's first spoken
-word — except on the lesson's first scene, whose chapter starts at 0:00 so the
-opening seconds already belong to it. Viewers see the chapters as notches on the
-progress bar and in the player's chapter list, and can link to them; a scene
-without one continues the chapter before it. Title the few scenes where the lesson turns to a new idea, not every one.
+`chapter` (optional, ≤120 characters) starts a chapter at the scene's first
+spoken word — except on the lesson's first scene, whose chapter starts at 0:00
+so the opening seconds already belong to it. Viewers see the chapters as notches
+on the progress bar and in the player's chapter list, and can link to them; a
+scene without one continues the chapter before it. Title the few scenes where
+the lesson turns to a new idea, not every one.
 
 Marker rules:
 

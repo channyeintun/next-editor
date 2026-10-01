@@ -35,10 +35,12 @@ A passing render's **Create draft…** button opens the standard authenticated
 upload flow (`UploadLessonModal`): media to the lesson's R2 prefix, a D1
 **draft** row via `/api/lessons`, captions as sibling `.vtt` tracks. The
 description becomes the lesson's public meta and JSON-LD text once published, so
-it pre-fills only the title plus "The narration is AI-generated." The build
-provenance (plan slug, plan hash, runtime mode, narration provider, cloned voice)
-and the review reminder are in the **Create draft…** button's tooltip, and the
-full provenance is in `build-manifest.json`. Publishing remains a separate
+it pre-fills only "<title> — a narrated coding lesson. The narration is
+AI-generated." The build provenance (plan slug, plan hash, runtime mode,
+narration provider, cloned voice) and the review reminder are in the **Create
+draft…** button's tooltip. `build-manifest.json` holds the full plan hash, seed,
+runtime contract, and artifact hashes; the narration provider and cloned-voice
+name appear only in the tooltip. Publishing remains a separate
 owner action in the lessons UI — the studio has no publish path. Requires
 `bun run dev:worker` and a signed-in session.
 
@@ -90,7 +92,9 @@ The Go pilot scripts now live as test fixtures under
 
 Track in the pilot log (spreadsheet or issue): authoring/critic tokens, TTS
 seconds synthesized (cache hits are free), render wall time (`wallDurationMs`
-in the report), retries, artifact bytes, human review minutes, script
+in the report — measured from the **Start render** click since 2026-10-02, so
+it includes narration synthesis and compilation; earlier pilot numbers cover
+only the performance), retries, artifact bytes, human review minutes, script
 revisions, and brief→draft lead time. Report p50/p95 across pilots before
 scaling. The remaining M4 exit criterion is human: watch all three pilots,
 rate them, log correction time, and decide scale / revise / stop.
@@ -119,11 +123,12 @@ Script objects are strict — an unknown or misspelled key is an error — and
 `build.seed` must be 0–2147483647. An anchor names exactly one of `scene`,
 `mark`, or `afterAction`, with `offsetMs` only on the first two. A
 `whiteboard.apply` that neither opens/closes, changes maximize, clears, nor
-upserts is rejected. All of these fail when the script is parsed, in the CLI and in the
-page. The CLI does not compile or schedule: overlaps and actions that run past
-the narration surface in `/studio` only after synthesis, or offline for
-checked-in scripts with `npx vp test run src/studio/plans/index.test.ts`, which
-compiles every script against estimated dialog lengths.
+upserts is rejected. All of these fail when the script is parsed, in the CLI
+and in the page. The CLI does not compile or schedule: overlaps and an action
+that starts after the narration ends surface in `/studio` only after synthesis,
+or offline for checked-in scripts with
+`npx vp test run src/studio/plans/index.test.ts`, which compiles every script
+against estimated dialog lengths.
 
 **Agents author lessons too**: the complete authoring contract is
 [lesson-script-authoring.md](./lesson-script-authoring.md), and Claude Code
@@ -222,8 +227,8 @@ browser, as above).
 
 - `fixture`: Playground kinds (Go, Kotlin, Rust, Zig, Haskell, Kite, asm)
   replay the script's pinned result through the same console formatting/store
-  path as a live run, after a fixed planned latency. It works signed-out and offline; the manifest records
-  `runtimeMode: "fixture"`.
+  path as a live run, after a fixed planned latency. It works signed-out and
+  offline; the manifest records `runtimeMode: "fixture"`.
 - `live`: Go/Kotlin/Rust/Zig/Haskell call their authenticated Playground
   proxy, while Kite and asm run their in-page compiler/assembler. JavaScript,
   TypeScript, and console-only Python run their pinned commands in the
