@@ -1,4 +1,5 @@
 import { sha256HexOfJson } from "../hash";
+import { POCKET_TEXT_PREP_VERSION } from "./pocket/textPrep";
 
 /**
  * TTS provider surface (docs/agent-lesson-production.md §6). A voice profile
@@ -180,5 +181,12 @@ export function ttsRequestHash(request: TtsRequest): Promise<string> {
     lexiconVersion: request.lexiconVersion,
     seed: request.seed,
     pipelineVersion: TTS_PIPELINE_VERSION,
+    // Pocket turns speech text into its prompt in the page, so a prompt change
+    // there must re-key only Pocket dialogs. Omitted (and so absent from the
+    // canonical JSON) for every other provider: bumping the shared pipeline
+    // version instead would discard paid VoxCPM2 takes whose request is
+    // unchanged.
+    pocketTextPrepVersion:
+      request.profile.providerId === "pocket-tts-web" ? POCKET_TEXT_PREP_VERSION : undefined,
   });
 }

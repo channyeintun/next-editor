@@ -4,6 +4,19 @@
  * tokenizer is injected so this stays pure and testable.
  */
 
+/**
+ * Version of the prompt text this module hands the model for a given speech
+ * text. The dialog cache keys on speech text, not on the prompt, so any change
+ * here that alters the prompt must bump this or cached dialogs keep replaying
+ * audio synthesized from the old prompt (profiles.ts folds it into the
+ * request hash of Pocket dialogs only).
+ *
+ * v1: upstream port (split at every `.`/`!`/`?`, token-id slicing)
+ * v2: sentence boundaries only before whitespace; over-budget sentences cut
+ *     at word boundaries
+ */
+export const POCKET_TEXT_PREP_VERSION = 2;
+
 export interface PocketTokenizer {
   encodeIds(text: string): number[];
   decodeIds(ids: number[]): string;
