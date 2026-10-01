@@ -142,20 +142,43 @@ describe("compileLessonScript", () => {
 
   it("starts a chapter at the first spoken word of each scene that titles one", () => {
     const script = loadPilotScript();
-    const [first, ...rest] = script.scenes;
+    const [first, second] = script.scenes;
     const titled: LessonScript = {
       ...script,
-      scenes: [{ ...first, chapter: "The cube" }, ...rest],
+      scenes: [first, { ...second, chapter: "Calling it" }],
     };
     const input = scheduledInputFor(titled);
     const { plan } = compileLessonScript(input);
 
     expect(plan.chapters).toHaveLength(1);
-    expect(plan.chapters[0].title).toBe("The cube");
+    expect(plan.chapters[0].title).toBe("Calling it");
     // At the scene's first spoken word.
-    expect(plan.chapters[0].time).toBe(sceneStartMs(input.alignment, input.extracted, first.id));
+    expect(plan.chapters[0].time).toBe(sceneStartMs(input.alignment, input.extracted, second.id));
     // An untitled lesson has none.
     expect(compileLessonScript(scheduledInputFor(script)).plan.chapters).toEqual([]);
+  });
+
+  // The player's current chapter is the last one starting at or before the
+  // playhead, so an opening chapter at the first word (after the recording's
+  // lead-in) left the first seconds with none.
+  it("starts the opening scene's chapter at the very beginning", () => {
+    const script = loadPilotScript();
+    const [first, second] = script.scenes;
+    const titled: LessonScript = {
+      ...script,
+      scenes: [
+        { ...first, chapter: "The cube" },
+        { ...second, chapter: "Calling it" },
+      ],
+    };
+    const input = scheduledInputFor(titled);
+    const { plan } = compileLessonScript(input);
+
+    expect(sceneStartMs(input.alignment, input.extracted, first.id)).toBeGreaterThan(0);
+    expect(plan.chapters).toEqual([
+      { time: 0, title: "The cube" },
+      { time: sceneStartMs(input.alignment, input.extracted, second.id), title: "Calling it" },
+    ]);
   });
 
   it("compiles the checked-in pilot script into a valid plan", () => {

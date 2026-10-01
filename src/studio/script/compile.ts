@@ -547,9 +547,17 @@ export function compileLessonScript({
         label: script.lesson.locale,
       }),
     },
-    chapters: script.scenes.flatMap((scene) =>
+    chapters: script.scenes.flatMap((scene, index) =>
       scene.chapter
-        ? [{ time: sceneStartMs(alignment, extracted, scene.id), title: scene.chapter }]
+        ? [
+            {
+              // The opening scene's chapter covers the quiet lead-in before its
+              // first word too; starting it at that word left the player with no
+              // current chapter for the recording's first seconds.
+              time: index === 0 ? 0 : sceneStartMs(alignment, extracted, scene.id),
+              title: scene.chapter,
+            },
+          ]
         : [],
     ),
     runtime: script.runtime,
