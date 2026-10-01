@@ -55,6 +55,20 @@ describe("uploadsRoute caption filenames", () => {
     );
   });
 
+  // uploadLesson.ts numbers a second track in one language before the tag.
+  it("accepts a numbered caption file for a second track in a language", async () => {
+    const { env, put } = createEnv();
+
+    const response = await uploadsRoute.request(...putRequest("/l1/media/l1-2.en.vtt"), env);
+
+    expect(response.status).toBe(200);
+    expect(put).toHaveBeenCalledWith(
+      "lessons/l1/l1-2.en.vtt",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it("accepts a plain .vtt filename without a language segment", async () => {
     const { env } = createEnv();
 

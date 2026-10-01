@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "@app/core/src";
+import { inferLanguageFromFilename } from "@app/captions/parseCaptions";
 import { apiClient } from "../apiClient";
 import { formatDuration, uploadLesson } from "./uploadLesson";
 
@@ -227,12 +228,8 @@ describe("uploadLesson", () => {
         tags: [],
         captions: [
           { language: "en", cues: [{ start: 0, end: 1000, text: "Hello" }] },
-          // Uppercase tags normalize into the filename; last-in wins per language.
-          { language: "MY", cues: [{ start: 0, end: 1000, text: "old" }] },
-          {
-            language: "my",
-            cues: [{ start: 0, end: 1000, text: "မင်္ဂလာပါ" }],
-          },
+          // Uppercase tags normalize into the filename.
+          { language: "MY", cues: [{ start: 0, end: 1000, text: "မင်္ဂလာပါ" }] },
         ],
       },
       () => {},
@@ -249,6 +246,43 @@ describe("uploadLesson", () => {
     expect(englishVtt.type).toBe("text/vtt");
     expect(await blobText(englishVtt)).toContain("WEBVTT");
     expect(await blobText(putBodies[2] as Blob)).toContain("မင်္ဂလာပါ");
+  });
+
+  // Keyed by language alone, a second track in a language overwrote the first on R2.
+  it("keeps every caption track, numbering a second one in the same language", async () => {
+    const putBodies: unknown[] = [];
+    mockedPut.mockImplementation((url, body) => {
+      putBodies.push(body);
+      return Promise.resolve({
+        data: { path: `lessons/lesson-5/${(url as string).split("/").pop()}` },
+      });
+    });
+    mockedPost.mockResolvedValueOnce({ data: { id: "lesson-5", slug: "test-lesson-5" } });
+
+    await uploadLesson(
+      "lesson-5",
+      {
+        recording: createRecording(),
+        title: "Two English tracks",
+        description: "",
+        tags: [],
+        captions: [
+          { language: "en", cues: [{ start: 0, end: 1000, text: "Studio" }] },
+          { language: "EN", cues: [{ start: 0, end: 1000, text: "Corrected" }] },
+        ],
+      },
+      () => {},
+    );
+
+    expect(mockedPut.mock.calls.map((call) => call[0])).toEqual([
+      "/uploads/lesson-5/media/lesson-5.ne",
+      "/uploads/lesson-5/media/lesson-5.en.vtt",
+      "/uploads/lesson-5/media/lesson-5-2.en.vtt",
+    ]);
+    expect(await blobText(putBodies[1] as Blob)).toContain("Studio");
+    expect(await blobText(putBodies[2] as Blob)).toContain("Corrected");
+    // The second name still says its language to the loader.
+    expect(inferLanguageFromFilename("lesson-5-2.en.vtt")).toBe("en");
   });
 
   it("propagates an upload failure without creating the draft", async () => {

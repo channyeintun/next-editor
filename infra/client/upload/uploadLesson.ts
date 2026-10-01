@@ -94,18 +94,19 @@ export async function uploadLesson(
   onProgress(0);
 
   // Captions are canonicalized to WebVTT and named `<id>.<lang>.vtt` so the URL
-  // loader can infer each track's language from the filename. Keyed by language —
-  // duplicate tags would collide on the same R2 key, so the last one wins.
-  const captionsByLanguage = new Map<string, UploadCaptionInput>();
-  for (const caption of input.captions ?? []) {
-    captionsByLanguage.set(caption.language.toLowerCase(), caption);
-  }
-  const captionTargets: UploadTarget[] = [...captionsByLanguage.entries()].map(
-    ([language, caption]) => ({
-      filename: `${lessonId}.${language}.vtt`,
+  // loader can infer each track's language from the filename. A second track in a
+  // language becomes `<id>-2.<lang>.vtt`: the number goes before the tag, where it
+  // leaves the language readable, and every track keeps its own R2 key.
+  const tracksPerLanguage = new Map<string, number>();
+  const captionTargets: UploadTarget[] = (input.captions ?? []).map((caption) => {
+    const language = caption.language.toLowerCase();
+    const count = (tracksPerLanguage.get(language) ?? 0) + 1;
+    tracksPerLanguage.set(language, count);
+    return {
+      filename: `${lessonId}${count > 1 ? `-${count}` : ""}.${language}.vtt`,
       blob: new Blob([serializeCuesToVtt(caption.cues)], { type: "text/vtt" }),
-    }),
-  );
+    };
+  });
 
   const files = await buildRecordingFiles(
     input.recording,
