@@ -107,7 +107,11 @@ function useLeavePageGuards(actorRef: EditorActorRef): void {
  * viewerFullHeight) when the editor leaves playback. It lasts for as long as one
  * recording stays loaded, through play, pause, seeking, stopping and the end; it ends
  * when another recording is loaded, the lesson is unloaded, or a take starts, since
- * each of those leaves `playback`. The actor is subscribed to directly rather than
+ * each of those leaves `playback`. Any reload of the same lesson ends it too: the URL
+ * loader's whole-file retry after a dropped stream, and a late narration blob that
+ * sends a finished take back through `loading`. Each of those restarts the replay at
+ * `ready` and ends the whiteboard's playback session as well, so the dock starting
+ * over with them is deliberate. The actor is subscribed to directly rather than
  * through a selector, so a brief `loading` between two recordings is never missed.
  */
 function useEndViewerDockOverride(actorRef: EditorActorRef): void {

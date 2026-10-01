@@ -35,7 +35,8 @@ export interface RuntimeDockLayout {
  * shows the recorded tab, collapse and height; the live values are still what
  * a recording captures, so both are returned. Full height is the exception: the
  * viewer may toggle it mid-replay, and their choice (the store's
- * viewerFullHeight) then stays on screen until the editor leaves playback.
+ * viewerFullHeight) then stays on screen until the editor leaves playback,
+ * including a reload of the same lesson (see useEndViewerDockOverride).
  */
 export function useRuntimeDockLayout(): RuntimeDockLayout {
   const { store: runtimePanelStore } = useRuntimePanelStore();
