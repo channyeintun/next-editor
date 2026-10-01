@@ -487,7 +487,6 @@ export class PocketTtsEngine {
         latentDim,
       ]);
       let eosStep: number | null = null;
-      let stopped = false;
 
       for (let step = 0; step < MAX_FRAMES; step++) {
         // Yield periodically so the page stays responsive during synthesis.
@@ -553,11 +552,12 @@ export class PocketTtsEngine {
         }
 
         if (shouldStop) {
-          stopped = true;
           break;
         }
       }
-      if (!stopped) {
+      // Only a chunk the model never ended counts as capped: EOS arriving in
+      // the last framesAfterEos steps still ends the sentence, just at the cap.
+      if (eosStep === null) {
         cappedChunkCount += 1;
       }
 
