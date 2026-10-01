@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
-import { describeDraftProvenance, type DraftProvenanceRun } from "./draftProvenance";
+import {
+  describeDraftDescription,
+  describeDraftProvenance,
+  type DraftProvenanceRun,
+} from "./draftProvenance";
 
 function run(overrides: Partial<DraftProvenanceRun>): DraftProvenanceRun {
   return {
+    title: "Rust borrowing",
     result: {
       manifest: {
         planSlug: "rust-borrow",
@@ -37,6 +42,27 @@ describe("describeDraftProvenance", () => {
     );
     expect(describeDraftProvenance(run({ narrationProvider: "", voiceName: "" }))).toContain(
       "fixture runtime).",
+    );
+  });
+});
+
+describe("describeDraftDescription", () => {
+  it("pre-fills the title and the AI-narration disclosure only", () => {
+    expect(describeDraftDescription(run({}))).toBe(
+      "Rust borrowing — a narrated coding lesson. The narration is AI-generated.",
+    );
+  });
+
+  it("keeps build provenance and the review reminder out of the public text", () => {
+    const description = describeDraftDescription(
+      run({ narrationProvider: "Pocket-TTS", voiceName: "My voice" }),
+    );
+    expect(description).not.toMatch(/sha256|rust-borrow|fixture|Pocket-TTS|My voice|Review/);
+  });
+
+  it("falls back to a generic lead when the title is blank", () => {
+    expect(describeDraftDescription(run({ title: "  " }))).toBe(
+      "A narrated coding lesson. The narration is AI-generated.",
     );
   });
 });

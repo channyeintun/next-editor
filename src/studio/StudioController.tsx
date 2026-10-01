@@ -17,7 +17,7 @@ import { usePreviewAdapterHandle } from "../contexts/PreviewAdapterHandleContext
 import { markTourSeen } from "../components/tour/productTour";
 import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
 import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/displayCapture";
-import { describeDraftProvenance } from "./draftProvenance";
+import { describeDraftDescription, describeDraftProvenance } from "./draftProvenance";
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
 import { parseRuntimeModeParam, type StudioPlan, type StudioRuntimeMode } from "./plan";
@@ -717,8 +717,10 @@ export default function StudioController() {
   if (showDraftModal && artifacts && activeRun) {
     // The standard authenticated upload flow: R2 media + a D1 draft row.
     // Publishing remains a separate owner action in the lessons UI
-    // (docs/agent-lesson-production.md §10). The description pre-fills the
-    // AI-production disclosure + build provenance for the reviewer. Every field
+    // (docs/agent-lesson-production.md §10). The description pre-fills only
+    // public-safe text (title + AI-narration disclosure): it becomes the
+    // published page's meta description, so the build provenance and review
+    // reminder stay on the "Create draft…" button instead. Every field
     // is read off the completed run entry — never the live selection — so the
     // recording, title, and voice always describe the same render (STUDIO-02).
     return (
@@ -726,7 +728,7 @@ export default function StudioController() {
         recording={artifacts.recording}
         onClose={() => setShowDraftModal(false)}
         initialTitle={activeRun.title}
-        initialDescription={describeDraftProvenance(activeRun)}
+        initialDescription={describeDraftDescription(activeRun)}
         initialTags="studio, ai-produced"
       />
     );
@@ -993,7 +995,9 @@ export default function StudioController() {
             type="button"
             onClick={() => setShowDraftModal(true)}
             className="rounded-md bg-[#2b2340] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#c4b0f5] transition-colors hover:bg-[#382e52]"
-            title="Upload through the standard lesson flow — creates a draft only; publishing stays a separate human action"
+            title={`Upload through the standard lesson flow — creates a draft only; publishing stays a separate human action.${
+              activeRun ? ` ${describeDraftProvenance(activeRun)}` : ""
+            }`}
           >
             Create draft…
           </button>
