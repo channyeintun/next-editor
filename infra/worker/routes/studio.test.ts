@@ -312,4 +312,21 @@ describe("studioRoute VoxCPM2 proxy", () => {
       error: "Burmese narration service failed with HTTP 503",
     });
   });
+
+  it("releases an upstream error body refused by its Content-Length", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    stubUpstream(
+      () =>
+        new Response(body, {
+          status: 500,
+          headers: { "Content-Type": "text/plain", "Content-Length": "5000" },
+        }),
+    );
+
+    expect(await (await postSynthesis(makeEnv())).json()).toEqual({
+      error: "Burmese narration service failed with HTTP 500",
+    });
+    expect(cancel).toHaveBeenCalled();
+  });
 });

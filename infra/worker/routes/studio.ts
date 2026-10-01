@@ -98,7 +98,12 @@ async function upstreamErrorDetail(upstream: Response, modal: ModalConfig): Prom
     return null;
   }
   const body = await readBodyWithLimit(upstream, MAX_UPSTREAM_ERROR_BYTES);
-  if (body.status !== "ok") return null;
+  if (body.status !== "ok") {
+    // A declared Content-Length over the limit is refused before any read, so
+    // release that untouched body too.
+    await upstream.body?.cancel().catch(() => undefined);
+    return null;
+  }
   if (!isJson) return sanitizeUpstreamText(body.text, modal);
 
   let payload: unknown;
