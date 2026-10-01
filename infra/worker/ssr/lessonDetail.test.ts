@@ -156,7 +156,19 @@ describe("lesson detail SSR", () => {
       datePublished: "2026-07-20",
       author: { "@type": "Person", name: "Chan Nyein Tun" },
       hasCourseInstance: { courseMode: "online", courseWorkload: "PT12M30S" },
+      inLanguage: "en",
     });
+  });
+
+  it("says a lesson titled or described in Burmese is taught in Burmese", () => {
+    const titled = { ...LESSON, title: "React မှာ XState — လက်ဖက်ရည်ဆိုင် အော်ဒါစနစ်" };
+    const described = { ...LESSON, description: "XState ကို React နဲ့ ချိတ်ဆက်ပုံ" };
+
+    for (const lesson of [titled, described]) {
+      expect(
+        buildLessonJsonLd(lesson, "https://nexteditor.dev", "https://nexteditor.dev/x"),
+      ).toMatchObject({ inLanguage: "my" });
+    }
   });
 
   it("converts clock durations and drops unparseable ones", () => {

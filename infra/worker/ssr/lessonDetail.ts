@@ -144,6 +144,15 @@ function absoluteMediaUrl(origin: string, path: string): string {
   return `${origin}/${path.replace(/^\/+/, "")}`;
 }
 
+/**
+ * The language a lesson is taught in, as far as its row can say: the row has no
+ * language column, but a Burmese lesson is titled or described in Myanmar script,
+ * which no English lesson is. Everything else is English, the site's language.
+ */
+function lessonLanguage(lesson: Pick<Lesson, "title" | "description">): string {
+  return /\p{Script=Myanmar}/u.test(`${lesson.title} ${lesson.description ?? ""}`) ? "my" : "en";
+}
+
 export function buildLessonJsonLd(lesson: Lesson, origin: string, canonicalUrl: string) {
   const workload = toIsoDuration(lesson.duration);
 
@@ -155,7 +164,7 @@ export function buildLessonJsonLd(lesson: Lesson, origin: string, canonicalUrl: 
     description: lesson.description,
     url: canonicalUrl,
     image: absoluteMediaUrl(origin, lesson.thumbnail),
-    inLanguage: "en",
+    inLanguage: lessonLanguage(lesson),
     isAccessibleForFree: true,
     ...(lesson.tags?.length ? { keywords: lesson.tags.join(", ") } : {}),
     ...(lesson.publishedAt ? { datePublished: lesson.publishedAt } : {}),
