@@ -46,7 +46,7 @@ import {
 import { customVoiceProfileOf, modalVoxCpm2BurmeseProfileOf } from "./tts/profiles";
 import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
 import { synthesizePocketWav } from "./tts/pocketSynth";
-import { critiqueScript, estimateNarrationDurationMs, type CritiqueNote } from "./script/critic";
+import { critiqueScript, type CritiqueNote } from "./script/critic";
 import { extractNarration } from "./script/markers";
 import { runStudioRender, type StudioRenderOptions, type StudioRunResult } from "./runStudioRender";
 import type { RenderSemantics } from "./compare";
@@ -447,11 +447,7 @@ export default function StudioController() {
       const extracted = extractNarration(
         script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
       );
-      const critique = critiqueScript(
-        script,
-        extracted,
-        estimateNarrationDurationMs(extracted.tokens.length),
-      );
+      const critique = critiqueScript(script, extracted);
       setCriticNotes(critique.notes);
 
       const slug = script.lesson.slug;

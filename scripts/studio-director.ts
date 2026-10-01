@@ -23,7 +23,7 @@ import YAML from "yaml";
 import { parseLessonScript } from "../src/studio/script/schema.ts";
 import { extractNarration, requireMarker } from "../src/studio/script/markers.ts";
 import { splitIntoDialogs } from "../src/studio/script/dialogs.ts";
-import { critiqueScript, estimateNarrationDurationMs } from "../src/studio/script/critic.ts";
+import { critiqueScript } from "../src/studio/script/critic.ts";
 import { deckUrlsOf, resolveSlidesFromDecks } from "../src/studio/script/googleSlides.ts";
 import { fetchPublishedDeck } from "../src/googleSlides/index.ts";
 import type { ParsedDeck } from "../src/googleSlides/types.ts";
@@ -64,10 +64,9 @@ async function directScript(scriptPath: string): Promise<void> {
     );
   }
 
-  // Advisory critic (proposes notes; never blocks — §8). Duration estimated;
-  // real pacing lands in the render report once audio exists.
-  const estimatedDurationMs = estimateNarrationDurationMs(extracted.tokens.length);
-  const critique = critiqueScript(script, extracted, estimatedDurationMs);
+  // Advisory critic (proposes notes; never blocks — §8). It lints the script
+  // text only; nothing here measures pacing, which needs the synthesized audio.
+  const critique = critiqueScript(script, extracted);
   for (const note of critique.notes) {
     console.log(`  ✎ [${note.severity}] ${note.message}`);
   }
@@ -98,7 +97,7 @@ async function directScript(scriptPath: string): Promise<void> {
   }
 
   console.log(
-    `  ${extracted.tokens.length} tokens across ${dialogs.length} dialogs (${script.scenes.length} scenes); ~${Math.round(estimatedDurationMs / 1000)}s estimated`,
+    `  ${extracted.tokens.length} tokens across ${dialogs.length} dialogs (${script.scenes.length} scenes)`,
   );
   console.log(`  voice profile ${profile.id} (${profile.providerId}) — valid`);
 }

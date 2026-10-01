@@ -6,10 +6,17 @@ import type { LessonScript } from "./schema";
  * mechanical lint notes against the versioned persona guide
  * (docs/studio-persona.md). Advisory by construction — the critic can propose
  * structured notes but has no blocking power and no approve verdict; a human
- * remains the editorial gate. Version-locked to the persona guide.
+ * remains the editorial gate. Lints against the persona guide version below.
  */
 
-export const CRITIC_VERSION = 2;
+/**
+ * Version of the critic's output. Bumped whenever a rule is added, removed, or
+ * changes what it reports, so a checked-in sidecar shows which rules wrote it.
+ */
+export const CRITIC_VERSION = 3;
+
+/** The docs/studio-persona.md version the notes cite. */
+export const PERSONA_GUIDE_VERSION = 2;
 
 export type CritiqueSeverity = "note" | "suggestion";
 
@@ -97,47 +104,23 @@ function escapeForRegExp(literal: string): string {
   return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const MIN_WPM = 110;
-const MAX_WPM = 170;
-/** Pre-synthesis pacing estimate (~140 spoken wpm for the current profile). */
-const ESTIMATED_WPM = 140;
-
-/** Rough narration length before any audio exists — critic input only. */
-export function estimateNarrationDurationMs(tokenCount: number): number {
-  return Math.round((tokenCount / ESTIMATED_WPM) * 60_000);
-}
-
 export function critiqueScript(
   script: LessonScript,
   extracted: ExtractedNarration,
-  narrationDurationMs: number,
 ): ScriptCritique {
   const notes: CritiqueNote[] = [];
 
-  // Pacing: words per minute across the measured narration.
-  const words = extracted.tokens.length;
-  const minutes = narrationDurationMs / 60_000;
-  const wpm = minutes > 0 ? Math.round(words / minutes) : 0;
-  if (wpm > MAX_WPM) {
-    notes.push({
-      id: "pacing.fast",
-      severity: "suggestion",
-      message: `Narration averages ${wpm} wpm (band ${MIN_WPM}–${MAX_WPM}); consider trimming words or slowing the voice profile`,
-    });
-  } else if (wpm < MIN_WPM) {
-    notes.push({
-      id: "pacing.slow",
-      severity: "suggestion",
-      message: `Narration averages ${wpm} wpm (band ${MIN_WPM}–${MAX_WPM}); consider tightening pauses or the voice profile rate`,
-    });
-  }
+  // No pacing band. The critic runs before any audio exists, so its only
+  // duration was the token count over a fixed words-per-minute rate, and the
+  // rate it then measured was always that same constant — the check could never
+  // fire. Pacing can only be judged from the synthesized narration.
 
   // No scope limits. Scene count and narration length are shape, not defects: a
   // survey lesson that tours a whole language legitimately runs to fourteen
   // scenes and several minutes, and flagging that taught nothing while making
   // every crash course look broken. What remains below lints narration quality —
-  // pacing, sentence length, banned filler, register, missing sources — none of
-  // which penalize a lesson for covering a lot.
+  // banned filler, register, missing sources — none of which penalize a lesson
+  // for covering a lot.
 
   for (const scene of script.scenes) {
     const sceneTokens =
@@ -161,7 +144,7 @@ export function critiqueScript(
         id: `phrase.${phrase.replace(/\s+/g, "-")}`,
         severity: "note",
         sceneId: scene.id,
-        message: `Banned phrase "${phrase}" in scene "${scene.id}" (persona guide v${CRITIC_VERSION})`,
+        message: `Banned phrase "${phrase}" in scene "${scene.id}" (persona guide v${PERSONA_GUIDE_VERSION})`,
       });
     }
 
@@ -178,13 +161,12 @@ export function critiqueScript(
         id: "register.read-aloud",
         severity: "note",
         sceneId: scene.id,
-        message: `Scene "${scene.id}" reads instead of talks — contract: ${readAloud.join(", ")} (persona guide v${CRITIC_VERSION})`,
+        message: `Scene "${scene.id}" reads instead of talks — contract: ${readAloud.join(", ")} (persona guide v${PERSONA_GUIDE_VERSION})`,
       });
     }
 
     // No sentence-length ceiling either — a word count says nothing about
-    // whether a sentence is clear, and the pacing band already catches
-    // narration that outruns the voice.
+    // whether a sentence is clear.
 
     // Claim sourcing.
     if (scene.sources.length === 0) {
