@@ -22,6 +22,12 @@ const RIFF = 0x46464952;
 const WAVE = 0x45564157;
 const FMT_ = 0x20746d66;
 const DATA = 0x61746164;
+// An upstream error body is read only to quote its message; FastAPI's
+// {"detail": "..."} errors are far below this.
+const MAX_UPSTREAM_ERROR_BYTES = 4 * 1024;
+const MAX_UPSTREAM_DETAIL_CHARS = 200;
+// Anything shaped like a Modal proxy-auth token id or secret (wk-…, ws-…).
+const MODAL_TOKEN_PATTERN = /\b(?:wk|ws)-[A-Za-z0-9]{10,}\b/g;
 
 interface ModalConfig {
   endpoint: string;
@@ -53,6 +59,58 @@ function modalConfigOf(env: Env): ModalConfig | null {
   }
 
   return { endpoint: url.toString(), tokenId, tokenSecret };
+}
+
+/**
+ * Make upstream text safe to hand back to the browser: the configured
+ * credentials and endpoint host are redacted wherever they appear, anything
+ * shaped like a Modal token too, control characters are flattened, and the
+ * result is length-bounded.
+ */
+function sanitizeUpstreamText(text: string, modal: ModalConfig): string | null {
+  let cleaned = text;
+  for (const secret of [modal.tokenSecret, modal.tokenId, new URL(modal.endpoint).hostname]) {
+    cleaned = cleaned.split(secret).join("[redacted]");
+  }
+  cleaned = cleaned
+    .replace(MODAL_TOKEN_PATTERN, "[redacted]")
+    // eslint-disable-next-line no-control-regex -- intentionally flattens control characters (newlines, ANSI escapes) out of quoted upstream text
+    .replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return null;
+  return cleaned.length > MAX_UPSTREAM_DETAIL_CHARS
+    ? `${cleaned.slice(0, MAX_UPSTREAM_DETAIL_CHARS - 1)}…`
+    : cleaned;
+}
+
+/**
+ * The message from a failed Modal response, when it carries one: FastAPI's
+ * `{"detail": "..."}` (what the endpoint raises for rejected input) or a short
+ * plain-text body. HTML error pages and oversized bodies yield nothing; no
+ * upstream header is ever read into the message.
+ */
+async function upstreamErrorDetail(upstream: Response, modal: ModalConfig): Promise<string | null> {
+  const contentType = upstream.headers.get("content-type")?.toLowerCase() ?? "";
+  const isJson = contentType.startsWith("application/json");
+  if (!isJson && !contentType.startsWith("text/plain")) {
+    await upstream.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  const body = await readBodyWithLimit(upstream, MAX_UPSTREAM_ERROR_BYTES);
+  if (body.status !== "ok") return null;
+  if (!isJson) return sanitizeUpstreamText(body.text, modal);
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body.text);
+  } catch {
+    return null;
+  }
+  if (typeof payload !== "object" || payload === null) return null;
+  const { detail, error } = payload as Record<string, unknown>;
+  const message = typeof detail === "string" ? detail : typeof error === "string" ? error : null;
+  return message === null ? null : sanitizeUpstreamText(message, modal);
 }
 
 async function hasBurmeseTtsAccess(env: Env, userId: string): Promise<boolean> {
@@ -246,13 +304,36 @@ studioRoute.post("/tts/voxcpm2", requireUser, async (c) => {
     return c.json({ error: "Burmese narration service is unavailable" }, 502);
   }
 
+  // Every upstream failure stays a 502 (the client only distinguishes ok from
+  // not ok); the message says what went wrong so a failed render is actionable.
+  if (!upstream.ok) {
+    const detail = await upstreamErrorDetail(upstream, modal);
+    console.error("VoxCPM2 Modal request was rejected", { status: upstream.status, detail });
+    return c.json(
+      {
+        error: `Burmese narration service failed with HTTP ${upstream.status}${detail ? `: ${detail}` : ""}`,
+      },
+      502,
+    );
+  }
   const contentType = upstream.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!upstream.ok || !contentType.startsWith("audio/wav") || !upstream.body) {
+  if (!contentType.startsWith("audio/wav") || !upstream.body) {
+    await upstream.body?.cancel().catch(() => undefined);
     console.error("VoxCPM2 Modal returned an unexpected response", {
       status: upstream.status,
       contentType: contentType || null,
     });
-    return c.json({ error: "Burmese narration service returned an invalid response" }, 502);
+    const received = contentType
+      ? `"${sanitizeUpstreamText(contentType, modal) ?? "unknown"}"`
+      : "no content type";
+    return c.json(
+      {
+        error: upstream.body
+          ? `Burmese narration service returned ${received} instead of audio/wav`
+          : "Burmese narration service returned an empty response",
+      },
+      502,
+    );
   }
 
   return new Response(upstream.body, {

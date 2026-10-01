@@ -237,5 +237,79 @@ describe("studioRoute VoxCPM2 proxy", () => {
 
     const badUpstream = await postSynthesis(makeEnv());
     expect(badUpstream.status).toBe(502);
+    expect(await badUpstream.json()).toEqual({
+      error: 'Burmese narration service returned "application/json" instead of audio/wav',
+    });
+  });
+
+  function stubUpstream(response: () => Response) {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async () =>
+        response(),
+      ),
+    );
+  }
+
+  it("forwards Modal's FastAPI error detail with the upstream status", async () => {
+    stubUpstream(
+      () =>
+        new Response(JSON.stringify({ detail: "reference audio must be a valid WAV" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", "Set-Cookie": "modal=1" },
+        }),
+    );
+
+    const response = await postSynthesis(makeEnv());
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(await response.json()).toEqual({
+      error: "Burmese narration service failed with HTTP 400: reference audio must be a valid WAV",
+    });
+  });
+
+  it("redacts credentials and bounds a plain-text upstream error", async () => {
+    stubUpstream(
+      () =>
+        new Response(
+          `boom\n\tModal-Secret ws-test from owner--next-editor-voxcpm2-synthesize.modal.run ws-abcdefghijkl ${"x".repeat(500)}`,
+          { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+        ),
+    );
+
+    const { error } = (await (await postSynthesis(makeEnv())).json()) as { error: string };
+
+    expect(error).toMatch(
+      /^Burmese narration service failed with HTTP 500: boom Modal-Secret \[redacted\] from \[redacted\] \[redacted\] x+…$/,
+    );
+    expect(error).not.toContain("ws-");
+    expect(error).not.toContain("modal.run");
+    expect(error.length).toBeLessThan(300);
+  });
+
+  it("reports only the status for an HTML or oversized upstream error", async () => {
+    stubUpstream(
+      () =>
+        new Response("<html><body>524: A timeout occurred</body></html>", {
+          status: 524,
+          headers: { "Content-Type": "text/html" },
+        }),
+    );
+    expect(await (await postSynthesis(makeEnv())).json()).toEqual({
+      error: "Burmese narration service failed with HTTP 524",
+    });
+
+    stubUpstream(
+      () =>
+        new Response("y".repeat(5_000), {
+          status: 503,
+          headers: { "Content-Type": "text/plain" },
+        }),
+    );
+    expect(await (await postSynthesis(makeEnv())).json()).toEqual({
+      error: "Burmese narration service failed with HTTP 503",
+    });
   });
 });
