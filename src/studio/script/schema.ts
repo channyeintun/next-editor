@@ -92,7 +92,12 @@ export const scriptAnchorSchema = z.union(
 );
 export type ScriptAnchor = z.infer<typeof scriptAnchorSchema>;
 
-/** Text targets require file + anchor + occurrence; compilation fails on ambiguity. */
+/**
+ * Text targets name file + anchor + occurrence. `occurrence` defaults to 1 and
+ * the first exact match of `after` wins, so an anchor that occurs more than
+ * once is not an error — add context to `after` or set `occurrence` to pick a
+ * later match.
+ */
 export const scriptTextTargetSchema = z.strictObject({
   file: z.string().min(1),
   after: z.string(),
