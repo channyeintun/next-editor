@@ -123,6 +123,12 @@ export interface StudioRenderOptions {
    * enters the `Recording`, the `.ne` bundle, or any publish path.
    */
   screenStream?: MediaStream;
+  /**
+   * When the caller's render began, if earlier than this call — the studio
+   * synthesizes and compiles narration first, and the report's start time and
+   * wall duration should cover that too. Defaults to now.
+   */
+  startedAt?: { iso: string; performanceNowMs: number };
 }
 
 export async function runStudioRender(
@@ -131,8 +137,8 @@ export async function runStudioRender(
   deps: StudioRunDeps,
   options: StudioRenderOptions = {},
 ): Promise<StudioRunResult> {
-  const startedAtIso = new Date().toISOString();
-  const wallStart = performance.now();
+  const startedAtIso = options.startedAt?.iso ?? new Date().toISOString();
+  const wallStart = options.startedAt?.performanceNowMs ?? performance.now();
   const abortController = new AbortController();
   const signal = abortController.signal;
   const receipts: ActionReceipt[] = [];

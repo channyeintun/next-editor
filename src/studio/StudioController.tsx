@@ -477,6 +477,8 @@ export default function StudioController() {
       return;
     }
     runningRef.current = true;
+    // The report's wall time covers synthesis and compilation, not just the performance.
+    const startedAt = { iso: new Date().toISOString(), performanceNowMs: performance.now() };
     setRunning(true);
     setFatal(null);
     setReceipts([]);
@@ -515,7 +517,7 @@ export default function StudioController() {
       let plan: StudioPlan;
       let voiceName: string | null = null;
       let narrationProvider: string | null = null;
-      const renderOptions: StudioRenderOptions = {};
+      const renderOptions: StudioRenderOptions = { startedAt };
       setBuildWarnings([]);
 
       // Opt-in screen capture must be acquired here — the FIRST await in the

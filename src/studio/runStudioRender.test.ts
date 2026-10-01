@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { narrationTimelineOnRecordingClock } from "./runStudioRender";
+import type { StudioPlan } from "./plan";
+import {
+  narrationTimelineOnRecordingClock,
+  runStudioRender,
+  type StudioRunDeps,
+} from "./runStudioRender";
 
 vi.mock("../monaco", () => ({
   monaco: {},
@@ -56,5 +61,33 @@ describe("narrationTimelineOnRecordingClock", () => {
     expect(result.chapters).toEqual([{ time: 1_450, title: "Ending" }]);
     // The plan itself stays on the narration clock.
     expect(plan.narration.captions.cues[0]?.start).toBe(0);
+  });
+});
+
+describe("runStudioRender report timing", () => {
+  it("times the report from the caller's start, so it covers synthesis", async () => {
+    const startedAt = {
+      iso: "2026-10-01T00:00:00.000Z",
+      performanceNowMs: performance.now() - 5_000,
+    };
+    // A live proxied-playground render without a session fails at preflight,
+    // before any dependency is touched.
+    const result = await runStudioRender(
+      {
+        ...plan,
+        lesson: { slug: "rust-borrow", title: "Borrowing", locale: "en" },
+        seed: 1,
+        workspace: { files: {} },
+        runtime: { kind: "rust-playground" },
+        dependencies: {},
+      } as unknown as StudioPlan,
+      "live",
+      { isSignedIn: false } as StudioRunDeps,
+      { startedAt },
+    );
+
+    expect(result.report.outcome).toBe("failed");
+    expect(result.report.startedAtIso).toBe(startedAt.iso);
+    expect(result.report.wallDurationMs).toBeGreaterThanOrEqual(5_000);
   });
 });
