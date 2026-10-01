@@ -217,6 +217,19 @@ const scriptWhiteboardApplySchema = scriptActionBase
      */
     drawMs: z.number().finite().nonnegative().max(WHITEBOARD_DRAW_MAX_MS).default(0),
   })
+  // Mirrors the plan schema's rule, so an apply that does nothing fails when the
+  // script is parsed instead of at compile time, after narration is synthesized.
+  .refine(
+    (action) =>
+      action.open !== undefined ||
+      action.maximized !== undefined ||
+      action.upsertIds.length > 0 ||
+      action.clear,
+    {
+      message:
+        "whiteboard.apply must open/close, change maximize, clear the board, or upsert at least one asset",
+    },
+  )
   .refine((action) => action.drawMs < action.timeoutMs, {
     message: "whiteboard.apply drawMs must be shorter than the action's timeoutMs",
   });

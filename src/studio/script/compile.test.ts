@@ -389,4 +389,13 @@ describe("lessonScriptSchema", () => {
       /lesson\.slides\.0: Unrecognized key: "maximised"/,
     );
   });
+
+  // The plan schema already rejects an apply that does nothing; without the
+  // same rule here the script passed the CLI and Import and only failed at
+  // compile time, after every dialog was synthesized.
+  it("rejects a whiteboard.apply that changes nothing", () => {
+    const raw = YAML.parse(readFileSync(TOUR_PATH, "utf8"));
+    delete raw.scenes[1].actions[2].open;
+    expect(() => parseLessonScript(raw)).toThrow(/whiteboard\.apply must open\/close/);
+  });
 });
