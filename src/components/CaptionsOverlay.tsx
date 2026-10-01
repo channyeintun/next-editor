@@ -1,7 +1,7 @@
-import { useMemo } from "react";
 import { useNextEditorMetadata, useLiveTime } from "../hooks/useNextEditorContext";
 import { useCaptionStore } from "../hooks/useCaptionStore";
-import type { CaptionCue, CaptionTrack } from "../core/src/types";
+import { selectCaptionTrack } from "../captions/captionTracks";
+import type { CaptionCue } from "../core/src/types";
 
 const RTL_LANGUAGES = new Set(["ar", "he", "fa", "ur"]);
 
@@ -22,29 +22,12 @@ function findActiveCue(cues: CaptionCue[], time: number): CaptionCue | null {
   return null;
 }
 
-function selectTrack(
-  tracks: CaptionTrack[],
-  preferredLanguage: string | null,
-): CaptionTrack | null {
-  if (tracks.length === 0) return null;
-  if (preferredLanguage) {
-    const match = tracks.find((t) => t.language === preferredLanguage);
-    if (match) return match;
-  }
-  const defaultTrack = tracks.find((t) => t.default);
-  return defaultTrack ?? tracks[0];
-}
-
 const CaptionsOverlay: React.FC = () => {
   const { currentRecording } = useNextEditorMetadata();
-  const { enabled, language } = useCaptionStore();
+  const { enabled, trackId, language } = useCaptionStore();
   const currentTime = useLiveTime();
 
-  const tracks = currentRecording?.captions;
-  const activeTrack = useMemo(
-    () => (tracks && tracks.length > 0 ? selectTrack(tracks, language) : null),
-    [tracks, language],
-  );
+  const activeTrack = selectCaptionTrack(currentRecording?.captions, { trackId, language });
 
   if (!enabled || !activeTrack) return null;
 

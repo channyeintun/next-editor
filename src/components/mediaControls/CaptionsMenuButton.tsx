@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { Captions, Check } from "lucide-react";
 import type { CaptionTrack } from "../../core/src/types";
 import { useCaptionStore, useCaptionStoreTrigger } from "../../hooks/useCaptionStore";
+import { selectCaptionTrack } from "../../captions/captionTracks";
 
 function captionsButtonTitle(hasMultipleTracks: boolean, captionsEnabled: boolean): string {
   if (hasMultipleTracks) return "Captions";
@@ -25,9 +26,11 @@ const CaptionsMenuButton = ({
   iconSize: number;
   className: string;
 }) => {
-  const { enabled: captionsEnabled, language: captionLanguage } = useCaptionStore();
+  const { enabled: captionsEnabled, trackId, language } = useCaptionStore();
   const captionTrigger = useCaptionStoreTrigger();
   const hasMultipleTracks = tracks.length > 1;
+  // By id: a studio track and a generated one can share a language.
+  const activeTrackId = selectCaptionTrack(tracks, { trackId, language })?.id;
 
   return (
     <div className="relative pointer-events-auto">
@@ -74,9 +77,7 @@ const CaptionsMenuButton = ({
             Off
           </button>
           {tracks.map((track) => {
-            const isSelected =
-              captionsEnabled &&
-              (captionLanguage === track.language || (!captionLanguage && track.default));
+            const isSelected = captionsEnabled && track.id === activeTrackId;
             return (
               <button
                 key={track.id}
@@ -84,7 +85,7 @@ const CaptionsMenuButton = ({
                 role="menuitemradio"
                 aria-checked={isSelected}
                 onClick={() => {
-                  captionTrigger.setLanguage({ language: track.language });
+                  captionTrigger.selectTrack({ trackId: track.id, language: track.language });
                   if (!captionsEnabled) captionTrigger.toggleEnabled();
                   setMenuOpen(false);
                 }}

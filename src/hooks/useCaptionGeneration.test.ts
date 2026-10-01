@@ -18,7 +18,7 @@ const actions = vi.hoisted(() => ({
   addCaptionTrack: vi.fn<(recordingId: string, track: CaptionTrack) => void>(),
 }));
 const captionStore = vi.hoisted(() => ({
-  setLanguage: vi.fn<(event: { language: string | null }) => void>(),
+  selectTrack: vi.fn<(event: { trackId: string; language: string }) => void>(),
   setEnabled: vi.fn<(event: { enabled: boolean }) => void>(),
 }));
 
@@ -72,7 +72,10 @@ describe("useCaptionGeneration", () => {
       cues: hello,
       default: true,
     });
-    expect(captionStore.setLanguage).toHaveBeenCalledWith({ language: "de" });
+    expect(captionStore.selectTrack).toHaveBeenCalledWith({
+      trackId: actions.addCaptionTrack.mock.calls[0][1].id,
+      language: "de",
+    });
     expect(captionStore.setEnabled).toHaveBeenCalledWith({ enabled: true });
     expect(result.current.state).toEqual({ status: "idle" });
   });

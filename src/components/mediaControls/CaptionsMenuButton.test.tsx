@@ -9,12 +9,13 @@ import type { CaptionTrack } from "../../core/src/types";
 const english: CaptionTrack = { id: "en", language: "en", label: "English", cues: [] };
 const french: CaptionTrack = { id: "fr", language: "fr", cues: [] };
 
-const seen = { enabled: false, language: null as string | null };
+const seen = { enabled: false, trackId: null as string | null, language: null as string | null };
 
 function Player({ tracks }: { tracks: readonly CaptionTrack[] }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const captions = useCaptionStore();
   seen.enabled = captions.enabled;
+  seen.trackId = captions.trackId;
   seen.language = captions.language;
   return (
     <CaptionsMenuButton
@@ -74,7 +75,7 @@ describe("CaptionsMenuButton", () => {
 
     // A track without a label goes by its language.
     fireEvent.click(screen.getByRole("menuitemradio", { name: "fr" }));
-    expect(seen).toEqual({ enabled: true, language: "fr" });
+    expect(seen).toEqual({ enabled: true, trackId: "fr", language: "fr" });
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 
     fireEvent.click(button);
@@ -86,6 +87,34 @@ describe("CaptionsMenuButton", () => {
       "aria-checked",
       "false",
     );
+  });
+
+  it("tells apart two tracks in the same language", () => {
+    const generated: CaptionTrack = {
+      id: "auto-en-1",
+      language: "en",
+      label: "Generated",
+      cues: [],
+    };
+    renderPlayer([english, generated]);
+    const button = screen.getByRole("button", { name: "Captions" });
+
+    fireEvent.click(button);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Generated" }));
+    expect(seen).toEqual({ enabled: true, trackId: "auto-en-1", language: "en" });
+
+    fireEvent.click(button);
+    expect(screen.getByRole("menuitemradio", { name: "Generated" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("menuitemradio", { name: "English" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "English" }));
+    expect(seen.trackId).toBe("en");
   });
 
   it("turns captions off from the menu", () => {

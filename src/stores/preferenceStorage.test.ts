@@ -43,11 +43,15 @@ describe("preference stores without usable storage", () => {
       volume: 1,
     });
     expect(recordingSettingsStore.getSnapshot().context.screenRecordingEnabled).toBe(false);
-    expect(captionStore.getSnapshot().context).toEqual({ enabled: false, language: null });
+    expect(captionStore.getSnapshot().context).toEqual({
+      enabled: false,
+      trackId: null,
+      language: null,
+    });
 
     playbackSettingsStore.trigger.setVolume({ volume: 0.5 });
     recordingSettingsStore.trigger.setScreenRecordingEnabled({ enabled: true });
-    captionStore.trigger.setLanguage({ language: "en" });
+    captionStore.trigger.selectTrack({ trackId: "en", language: "en" });
     expect(playbackSettingsStore.getSnapshot().context.volume).toBe(0.5);
     expect(recordingSettingsStore.getSnapshot().context.screenRecordingEnabled).toBe(true);
     expect(captionStore.getSnapshot().context.language).toBe("en");

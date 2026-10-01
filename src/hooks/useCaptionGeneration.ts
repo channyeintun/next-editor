@@ -84,14 +84,16 @@ export function useCaptionGeneration() {
     await runCaptionJob(recording, controller, {
       update: setState,
       onCaptions: (language, cues) => {
+        const trackId = `auto-${language}-${Date.now()}`;
         addCaptionTrack(recording.id, {
-          id: `auto-${language}-${Date.now()}`,
+          id: trackId,
           language,
           label: `${language.toUpperCase()} (auto)`,
           cues,
           default: !recording.captions?.length,
         });
-        captionTrigger.setLanguage({ language });
+        // By id: the lesson may already have a track in this language.
+        captionTrigger.selectTrack({ trackId, language });
         captionTrigger.setEnabled({ enabled: true });
       },
       onSettled: () => {

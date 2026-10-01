@@ -61,6 +61,7 @@ import PlayerShortcutsHelp, { PlayerShortcutFeedback } from "./PlayerShortcutsHe
 import { usePlayerShortcuts } from "../hooks/usePlayerShortcuts";
 import { describeCaptionGeneration, useCaptionGeneration } from "../hooks/useCaptionGeneration";
 import { serializeCuesToVtt } from "../captions/serializeVtt";
+import { selectCaptionTrack } from "../captions/captionTracks";
 import { downloadBlob } from "../utils/downloadBlob";
 import { discardRecordingDraftFor } from "../storage/recordingDrafts/recordingDraftJournal";
 
@@ -203,7 +204,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
 
   const { durationMs: timelineDurationMs, editorActor } = useNextEditorPlayback();
 
-  const { language: captionLanguage } = useCaptionStore();
+  const captionPreference = useCaptionStore();
   const { autoplay, continueToNext } = usePlaybackSettings();
   const playbackSettingsTrigger = usePlaybackSettingsTrigger();
   const { screenRecordingEnabled, microphoneDeviceId } = useRecordingSettings();
@@ -392,11 +393,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   // Until a cut reaches the narration, its audio runs on the old clock.
   const isNarrationBeingEdited = Boolean(currentRecording?.pendingAudioEdit);
   const isGeneratingCaptions = captionGeneration.state.status === "running";
-  // The track the viewer would see: their language, the default, or the first.
-  const activeCaptionTrack =
-    captionTracks?.find((track) => track.language === captionLanguage) ??
-    captionTracks?.find((track) => track.default) ??
-    captionTracks?.[0];
+  // The track the viewer would see: the one they picked, their language, the default, or the first.
+  const activeCaptionTrack = selectCaptionTrack(captionTracks, captionPreference);
 
   const handleDownloadCaptions = () => {
     if (!activeCaptionTrack || !currentRecording) return;
