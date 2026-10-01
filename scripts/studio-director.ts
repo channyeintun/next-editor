@@ -16,7 +16,7 @@
  */
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
@@ -58,9 +58,11 @@ async function directScript(scriptPath: string): Promise<void> {
   }
   const dialogs = splitIntoDialogs(extracted);
   const profile = requireVoiceProfile(script.build.voiceProfile);
-  if (profile.providerId !== "pocket-tts-web") {
+  if (profile.providerId === "voxcpm2-modal") {
+    // /studio renders it, but through the authenticated Worker proxy, which
+    // only answers accounts with the Burmese VoxCPM2 feature enabled.
     console.warn(
-      `  ⚠ profile "${profile.id}" is not in-page synthesizable; /studio will reject this script`,
+      `  ⚠ profile "${profile.id}" synthesizes on Modal; /studio renders it only for a signed-in account with the Burmese VoxCPM2 feature enabled`,
     );
   }
 
@@ -116,7 +118,23 @@ if (targets.length === 0) {
   fail(`no scripts found in ${scriptsDir}`);
 }
 
+// One bad script must not hide the state of the rest: report each failure as
+// "<file>: <message>", keep going, and fail the run at the end.
+let failed = 0;
 for (const target of targets) {
-  await directScript(target);
+  try {
+    await directScript(target);
+  } catch (error) {
+    const file = target.startsWith(`${repoRoot}/`) ? relative(repoRoot, target) : target;
+    console.error(`\n✗ ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    failed += 1;
+  }
 }
-console.log("\nDone.");
+
+const passed = targets.length - failed;
+console.log(`\n${passed} of ${targets.length} script(s) valid.`);
+if (failed > 0) {
+  // Each failure was already printed as it happened; the summary only counts.
+  fail(`${failed} script(s) failed`);
+}
+console.log("Done.");
