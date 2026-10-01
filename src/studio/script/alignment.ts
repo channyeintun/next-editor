@@ -57,10 +57,37 @@ function pauseWeightOf(token: string): number {
   return 0;
 }
 
+const MYANMAR_SCRIPT_PATTERN = /\p{Script=Myanmar}/u;
+// A Burmese syllable starts at each consonant, independent vowel, or digit that is not
+// killed by an asat (U+103A) or stacked under the next one by a virama (U+1039).
+// ဿ (U+103F) is the one letter that reads as two.
+const MYANMAR_SYLLABLE_PATTERN = /[က-အဣ-ဪ၀-၉](?![်္])/gu;
+const MYANMAR_DOUBLE_SYLLABLE_PATTERN = /ဿ/gu;
+/**
+ * Virtual characters per Burmese syllable: about what an English syllable spans in
+ * letters, so Burmese words, Latin identifiers, and pause weights share one scale.
+ */
+const MYANMAR_SYLLABLE_WEIGHT = 3;
+
+/**
+ * Spoken length in virtual characters. Latin text is weighed by its letters. Burmese
+ * is weighed by syllables: its code points (medials, vowel signs, asat, stacked
+ * consonants) vary from one to seven per syllable while the syllables take about
+ * the same time to say.
+ */
+function spokenLengthOf(spoken: string): number {
+  if (!MYANMAR_SCRIPT_PATTERN.test(spoken)) return spoken.length;
+  const latin = spoken.replace(/\p{Script=Myanmar}/gu, "").length;
+  const syllables =
+    (spoken.match(MYANMAR_SYLLABLE_PATTERN)?.length ?? 0) +
+    2 * (spoken.match(MYANMAR_DOUBLE_SYLLABLE_PATTERN)?.length ?? 0);
+  return latin + syllables * MYANMAR_SYLLABLE_WEIGHT;
+}
+
 function speechWeightOf(token: string, lexicon: PronunciationLexicon): number {
   const spoken = spokenFormOf(token, lexicon).replace(/[^\p{L}\p{M}\p{N}]/gu, "");
   // Even a bare punctuation token costs a beat.
-  return Math.max(spoken.length, 2) + pauseWeightOf(token);
+  return Math.max(spokenLengthOf(spoken), 2) + pauseWeightOf(token);
 }
 
 /**

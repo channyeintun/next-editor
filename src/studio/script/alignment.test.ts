@@ -51,6 +51,52 @@ describe("estimateAlignment", () => {
 
     expect(firstDuration).toBeGreaterThan(shortLatinDuration);
   });
+
+  it("weighs Burmese by syllables, not by the marks stacked on them", () => {
+    // ကို and ကြောင်း are one syllable each, though one is 3 code points and the
+    // other 7; မင်္ဂလာပါ (4 syllables, 9 code points) is four times either.
+    const extracted = extractNarration([{ sceneId: "my", narration: "ကို ကြောင်း မင်္ဂလာပါ" }]);
+    const alignment = estimateAlignment(extracted.tokens, 6_000, LEXICON_V1, {
+      leadMs: 0,
+      tailMs: 0,
+    });
+    const durations = alignment.tokens.map((token) => token.endMs - token.startMs);
+
+    expect(durations).toEqual([1_000, 1_000, 4_000]);
+  });
+
+  // Weighing Burmese by syllables must leave every English timing where it was.
+  it("keeps English token spans exactly as they were", () => {
+    const extracted = extractNarration(NARRATION);
+    const spans = estimateAlignment(extracted.tokens, 12_000, LEXICON_V1).tokens.map((token) => [
+      token.text,
+      token.startMs,
+      token.endMs,
+    ]);
+
+    expect(spans).toEqual([
+      ["Go", 150, 362],
+      ["functions", 362, 1316],
+      ["live", 1316, 1739],
+      ["at", 1739, 1951],
+      ["the", 1951, 2269],
+      ["package", 2269, 3011],
+      ["level.", 3011, 4283],
+      ["Run", 4283, 4600],
+      ["it", 4600, 4812],
+      ["now.", 4812, 5872],
+      ["The", 5872, 6190],
+      ["five", 6190, 6614],
+      ["squares", 6614, 7356],
+      ["print", 7356, 7885],
+      ["first,", 7885, 8733],
+      ["and", 8733, 9051],
+      ["then", 9051, 9475],
+      ["the", 9475, 9793],
+      ["cube", 9793, 10217],
+      ["appears.", 10217, 11700],
+    ]);
+  });
 });
 
 describe("validateAlignment", () => {
