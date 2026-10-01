@@ -90,6 +90,7 @@ export const selectNextEditorMetadata = (state: EditorMachineSnapshot) => {
     isPlaying: playbackState === "playing",
     hasEnded: playbackState === "ended" && isAtPlaybackEnd(state.context.timeline),
     usesPlaybackModel: !state.context.hasManualWorkspaceOverride && playbackState !== null,
+    isInPlaybackSession: playbackState !== null,
     currentRecording: state.context.recording,
   };
 };

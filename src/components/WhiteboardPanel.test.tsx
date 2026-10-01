@@ -15,6 +15,7 @@ import {
 const updateScene = vi.fn();
 const stopFollowing = vi.fn();
 let usesPlaybackModel = false;
+let isInPlaybackSession = false;
 let whiteboardState: ReturnType<typeof makeWhiteboardState>;
 let whiteboardStore: WhiteboardStoreInstance;
 let excalidrawOnChange: (elements: unknown[], appState: unknown, files: unknown) => void;
@@ -61,7 +62,7 @@ vi.mock("../contexts/WhiteboardStoreContext", () => ({
   useWhiteboardStore: () => ({ store: whiteboardStore }),
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
-  useNextEditorMetadata: () => ({ usesPlaybackModel }),
+  useNextEditorMetadata: () => ({ usesPlaybackModel, isInPlaybackSession }),
 }));
 vi.mock("../contexts/CollaborationContext", () => ({
   useOptionalCollaboration: () => ({
@@ -102,6 +103,7 @@ describe("WhiteboardPanel scene projection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     usesPlaybackModel = false;
+    isInPlaybackSession = false;
     whiteboardState = makeWhiteboardState("external");
     whiteboardStore = createWhiteboardStore();
   });
@@ -133,6 +135,7 @@ describe("WhiteboardPanel scene projection", () => {
   it("continues applying playback scenes regardless of their store origin", async () => {
     whiteboardState = makeWhiteboardState("canvas", [element("recorded", [[0, 0]])]);
     usesPlaybackModel = true;
+    isInPlaybackSession = true;
 
     render(<WhiteboardPanel />);
 
@@ -152,6 +155,7 @@ describe("WhiteboardPanel playback viewport", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     usesPlaybackModel = true;
+    isInPlaybackSession = true;
     whiteboardStore = createWhiteboardStore();
     whiteboardState = makeWhiteboardState("external", [], recordedView);
   });
@@ -206,14 +210,69 @@ describe("WhiteboardPanel playback viewport", () => {
     expect(whiteboardState.handleExcalidrawChange).not.toHaveBeenCalled();
   });
 
-  it("shows the recorded view again when the viewer's view is released", async () => {
+  it("keeps the viewer's view through a pause and the resume after it", async () => {
     const view = render(<WhiteboardPanel />);
     await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
     act(() => excalidrawOnChange([], canvasAppState(pinchedView), {}));
     updateScene.mockClear();
 
-    // Playback hands the canvas back to live editing (the controller releases the view).
+    // PAUSE hands the workspace to the viewer (usesPlaybackModel goes false) while the
+    // session goes on. The last replay write left the scene external.
     usesPlaybackModel = false;
+    view.rerender(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+    expect(updateScene.mock.calls[0]?.[0]).not.toHaveProperty("appState");
+
+    // Paused, the canvas is editable: onChange takes the live path as before, and a pan
+    // still belongs to the viewer.
+    const pannedWhilePaused = { scrollX: -400, scrollY: 90, zoom: 3 };
+    act(() => excalidrawOnChange([], canvasAppState(pannedWhilePaused), {}));
+    expect(whiteboardState.handleExcalidrawChange).toHaveBeenCalledWith(
+      [],
+      pannedWhilePaused,
+      false,
+    );
+    expect(whiteboardStore.getSnapshot().context.playbackViewerView).toEqual(pannedWhilePaused);
+
+    // PLAY reattaches and the replay writes the recorded scene again.
+    usesPlaybackModel = true;
+    whiteboardState = makeWhiteboardState("external", [element("stroke", [[0, 0]])], recordedView);
+    view.rerender(<WhiteboardPanel />);
+    await waitFor(() =>
+      expect(updateScene).toHaveBeenLastCalledWith(
+        expect.objectContaining({ elements: [expect.objectContaining({ id: "stroke" })] }),
+      ),
+    );
+    for (const [update] of updateScene.mock.calls) expect(update).not.toHaveProperty("appState");
+  });
+
+  it("lets a pan made while paused outlast the resume", async () => {
+    const view = render(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+    act(() => excalidrawOnChange([], canvasAppState(recordedView), {}));
+
+    usesPlaybackModel = false;
+    view.rerender(<WhiteboardPanel />);
+    act(() => excalidrawOnChange([], canvasAppState(pinchedView), {}));
+    expect(whiteboardStore.getSnapshot().context.playbackViewerView).toEqual(pinchedView);
+    updateScene.mockClear();
+
+    usesPlaybackModel = true;
+    whiteboardState = makeWhiteboardState("external", [], { scrollX: 700, scrollY: 0, zoom: 1 });
+    view.rerender(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalled());
+    for (const [update] of updateScene.mock.calls) expect(update).not.toHaveProperty("appState");
+  });
+
+  it("shows the recorded view again when the playback session ends", async () => {
+    const view = render(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+    act(() => excalidrawOnChange([], canvasAppState(pinchedView), {}));
+    updateScene.mockClear();
+
+    // STOP ends the session (the controller releases the view in a layout effect).
+    usesPlaybackModel = false;
+    isInPlaybackSession = false;
     act(() => whiteboardStore.trigger.releasePlaybackViewerView());
     view.rerender(<WhiteboardPanel />);
 

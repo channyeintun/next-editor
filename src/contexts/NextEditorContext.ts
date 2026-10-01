@@ -30,6 +30,11 @@ export interface NextEditorMetadata {
   isPlaying: boolean;
   hasEnded: boolean;
   usesPlaybackModel: boolean;
+  /**
+   * A loaded recording is playing, paused or at its end. Unlike usesPlaybackModel it stays
+   * true while paused or ended, where the workspace is handed to the viewer.
+   */
+  isInPlaybackSession: boolean;
   currentRecording: Recording | null;
 }
 

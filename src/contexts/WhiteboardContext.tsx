@@ -13,7 +13,7 @@ interface WhiteboardProviderProps {
 
 export function WhiteboardProvider({ children }: WhiteboardProviderProps) {
   const { handleWhiteboardEvent } = useNextEditorActions();
-  const { usesPlaybackModel, currentRecording } = useNextEditorMetadata();
+  const { usesPlaybackModel, isInPlaybackSession, currentRecording } = useNextEditorMetadata();
   const { store } = useWhiteboardStore();
   const collaboration = useOptionalCollaboration();
 
@@ -42,7 +42,7 @@ export function WhiteboardProvider({ children }: WhiteboardProviderProps) {
     store,
     onWhiteboardEvent: handleEvent,
     scopeKey: usesPlaybackModel ? "playback" : collaboration?.provider,
-    playbackKey: usesPlaybackModel ? (currentRecording?.id ?? "") : null,
+    playbackKey: isInPlaybackSession ? (currentRecording?.id ?? "") : null,
   });
 
   return <WhiteboardContext value={whiteboardData}>{children}</WhiteboardContext>;

@@ -19,8 +19,8 @@ interface UseWhiteboardControllerConfig {
   onWhiteboardEvent?: (event: WhiteboardEvent) => boolean | void;
   scopeKey?: unknown;
   /**
-   * Non-null while the playback model drives the canvas, identifying the recording (its id).
-   * See the release effect below.
+   * Non-null during a playback session (playing, paused or ended), identifying the recording
+   * (its id). See the release effect below.
    */
   playbackKey?: string | null;
 }
@@ -170,10 +170,12 @@ export const useWhiteboardController = ({
   );
 
   // The viewer's playback pan/zoom (playbackViewerView, set by WhiteboardPanel) lasts for one
-  // playback of one recording: through play, pause, seeks, the end screen and the whiteboard
-  // closing and reopening. It ends when the playback model hands the canvas back to live
-  // editing (playback stops or unloads, or the viewer edits the workspace) or a different
-  // recording loads; the canvas then shows the scene's own view again.
+  // playback session of one recording: through play, pause, seeks, the end screen (and
+  // replaying from it), the viewer editing the workspace (which only pauses the lesson) and
+  // the whiteboard closing and reopening. It ends when the session does: STOP rewinds to the
+  // ready state, the recording unloads, or a different recording loads. The canvas then
+  // shows the scene's own view again. A followed participant's view also replaces it (see
+  // applyView).
   useLayoutEffect(
     () => () => {
       store.trigger.releasePlaybackViewerView();
@@ -184,8 +186,8 @@ export const useWhiteboardController = ({
   // Called from Excalidraw's onChange. `isContentReadOnly` must match the value passed
   // to Excalidraw's `viewModeEnabled` this render. Read-only mode still permits
   // pan/zoom, so retain the fresh view while replacing its element argument with
-  // the authoritative store scene. Playback never calls this: the panel keeps the
-  // viewer's view out of the scene (see observePlaybackCanvasView).
+  // the authoritative store scene. A playing lesson never calls this: the panel keeps
+  // the viewer's view out of the scene (see observePlaybackCanvasView).
   const handleExcalidrawChange = (
     elements: readonly WhiteboardElementJSON[],
     view: WhiteboardView,
@@ -224,6 +226,9 @@ export const useWhiteboardController = ({
     const viewChanged = !areWhiteboardViewsEqual(current.view, view);
     const maximizedChanged = current.isMaximized !== isMaximized;
     if (!viewChanged && !maximizedChanged) return;
+    // Following someone (possible while a lesson is paused) shows their view, not the pan
+    // the viewer kept from playback; their own next pan stops following and takes it back.
+    if (viewChanged) store.trigger.releasePlaybackViewerView();
     store.trigger.setScene({
       scene: {
         ...current,

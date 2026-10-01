@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useSelector } from "@xstate/store-react";
 import { Maximize2, Minimize2, X } from "lucide-react";
 import { CaptureUpdateAction, Excalidraw, MainMenu } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
@@ -11,7 +10,7 @@ import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import type { WhiteboardElementJSON, WhiteboardView } from "../core/src/whiteboard";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
-import { planWhiteboardCanvasView, selectHasPlaybackViewerView } from "../stores/whiteboardStore";
+import { planWhiteboardCanvasView } from "../stores/whiteboardStore";
 
 // Image embeds are out of scope for v1 (binary files aren't recorded into the
 // .ne, see whiteboard-plan.md §4) — this also gates paste/drag-drop of images,
@@ -40,14 +39,13 @@ function toExcalidrawView(view: WhiteboardView) {
 export default function WhiteboardPanel() {
   const { scene, sceneUpdateSource, isOpen, setOpen, setMaximized, handleExcalidrawChange } =
     useWhiteboardContext();
-  const { usesPlaybackModel } = useNextEditorMetadata();
+  const { usesPlaybackModel, isInPlaybackSession } = useNextEditorMetadata();
   const collaboration = useOptionalCollaboration();
+  // The viewer's playback view is read without subscribing: a pan fires onChange every frame,
+  // and nothing needs to re-render when it is taken over. It is released only when the
+  // session ends (isInPlaybackSession), a followed view replaces it (a new scene) or the
+  // controller unmounts, each of which re-runs the scene effect below or unmounts the panel.
   const { store } = useWhiteboardStore();
-  // The viewer's playback view itself is read without subscribing (a pan fires onChange every
-  // frame); only taking over and releasing the viewport re-render the panel.
-  const hasPlaybackViewerView = useSelector(store, (snapshot) =>
-    selectHasPlaybackViewerView(snapshot.context),
-  );
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const contentReadOnly =
     usesPlaybackModel || Boolean(collaboration?.provider && !collaboration.canWrite);
@@ -56,25 +54,27 @@ export default function WhiteboardPanel() {
       planWhiteboardCanvasView(
         scene.view,
         store.getSnapshot().context.playbackViewerView,
-        usesPlaybackModel,
+        isInPlaybackSession,
       ).view,
   );
-  // The view this canvas was last given (initialData, then each scene update). During
-  // playback an onChange reporting any other view is the viewer panning or zooming.
+  // The view this canvas was last given (initialData, then each scene update). During a
+  // playback session an onChange reporting any other view is the viewer panning or zooming.
   const appliedViewRef = useRef<WhiteboardView | null>(initialView);
 
   // External state (remote room projection, followed viewport, playback, or a
   // restored store) drives the mounted canvas. A canvas-origin scene is the
   // controller's throttled snapshot of the gesture already in progress; feeding
   // it back through updateScene would rewind that gesture to the last 100 ms
-  // checkpoint. During playback, once the viewer has panned or zoomed, recorded
-  // scenes update only the elements (planWhiteboardCanvasView).
+  // checkpoint. Once the viewer has panned or zoomed during a playback session
+  // (playing, paused or ended), scenes update only the elements
+  // (planWhiteboardCanvasView), so neither a recorded view nor the hand-over to
+  // the viewer on pause moves the canvas.
   useEffect(() => {
     if (!apiRef.current || (!usesPlaybackModel && sceneUpdateSource === "canvas")) return;
     const { view, applyView } = planWhiteboardCanvasView(
       scene.view,
       store.getSnapshot().context.playbackViewerView,
-      usesPlaybackModel,
+      isInPlaybackSession,
     );
     appliedViewRef.current = view;
     apiRef.current.updateScene({
@@ -82,7 +82,7 @@ export default function WhiteboardPanel() {
       ...(applyView ? { appState: toExcalidrawView(view) } : {}),
       captureUpdate: CaptureUpdateAction.NEVER,
     });
-  }, [scene, sceneUpdateSource, usesPlaybackModel, hasPlaybackViewerView, store]);
+  }, [scene, sceneUpdateSource, usesPlaybackModel, isInPlaybackSession, store]);
 
   if (!isOpen) return null;
 
@@ -163,14 +163,19 @@ export default function WhiteboardPanel() {
                 scrollY: appState.scrollY,
                 zoom: appState.zoom.value,
               };
-              if (usesPlaybackModel) {
-                // View mode leaves drag/scroll panning, wheel and trackpad zoom, and touch
-                // pinch to the viewer. Their view stays viewer-only: it is never written to
-                // the scene or the recording, and a playback canvas has no edits to capture.
+              if (isInPlaybackSession) {
                 store.trigger.observePlaybackCanvasView({
                   view,
                   appliedView: appliedViewRef.current,
                 });
+              }
+              if (usesPlaybackModel) {
+                // View mode leaves drag/scroll panning, wheel and trackpad zoom, and touch
+                // pinch to the viewer. While the lesson plays their view stays viewer-only:
+                // it is never written to the scene or the recording, and a playback canvas
+                // has no edits to capture. Paused or ended, the canvas is the viewer's to
+                // edit, so it goes through the live path below as before; the machine
+                // records whiteboard events only while recording.
                 return;
               }
               handleExcalidrawChange(

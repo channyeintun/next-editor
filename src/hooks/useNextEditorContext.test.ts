@@ -77,6 +77,7 @@ const legacyMetadata = (state: EditorMachineSnapshot) => ({
     state.matches({ playback: "ended" }) &&
     state.context.timeline.currentTime >= state.context.timeline.duration - END_EPSILON_MS,
   usesPlaybackModel: !state.context.hasManualWorkspaceOverride && getPlaybackState(state) !== null,
+  isInPlaybackSession: getPlaybackState(state) !== null,
   currentRecording: state.context.recording,
 });
 
@@ -102,7 +103,11 @@ const cases: Array<[string, EditorMachineSnapshot, Partial<ReturnType<typeof leg
     snapshotAt("recording", { session: pausedSession }),
     { isRecording: true, isRecordingPaused: true },
   ],
-  ["ready", playbackAt("ready", 0), { isPlaying: false, usesPlaybackModel: false }],
+  [
+    "ready",
+    playbackAt("ready", 0),
+    { isPlaying: false, usesPlaybackModel: false, isInPlaybackSession: false },
+  ],
   ["playing", playbackAt("playing", 400), { isPlaying: true, usesPlaybackModel: true }],
   ["paused", playbackAt("paused", 400), { isPlaying: false, usesPlaybackModel: true }],
   [
@@ -118,7 +123,7 @@ const cases: Array<[string, EditorMachineSnapshot, Partial<ReturnType<typeof leg
   [
     "manual workspace override",
     playbackAt("paused", 400, { hasManualWorkspaceOverride: true }),
-    { usesPlaybackModel: false },
+    { usesPlaybackModel: false, isInPlaybackSession: true },
   ],
 ];
 

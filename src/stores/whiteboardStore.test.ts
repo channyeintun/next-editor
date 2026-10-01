@@ -18,7 +18,7 @@ describe("whiteboard playback viewer view", () => {
     });
   });
 
-  it("never lets a playback viewer view steer live editing", () => {
+  it("never lets a playback viewer view steer live editing after the session", () => {
     expect(planWhiteboardCanvasView(recorded, pinched, false)).toEqual({
       view: recorded,
       applyView: true,
@@ -37,6 +37,22 @@ describe("whiteboard playback viewer view", () => {
 
     store.trigger.observePlaybackCanvasView({ view: pinched, appliedView: recorded });
     expect(store.getSnapshot().context.playbackViewerView).toEqual(pinched);
+  });
+
+  it("tracks every later view change once the viewer owns the viewport", () => {
+    const store = createWhiteboardStore();
+    store.trigger.observePlaybackCanvasView({ view: pinched, appliedView: recorded });
+
+    // Panning back onto the view the panel last applied is still the viewer's view.
+    store.trigger.observePlaybackCanvasView({ view: { ...recorded }, appliedView: recorded });
+    expect(store.getSnapshot().context.playbackViewerView).toEqual(recorded);
+  });
+
+  it("follows the viewer's view through a pause, where the session goes on", () => {
+    expect(planWhiteboardCanvasView(recorded, pinched, true)).toEqual({
+      view: pinched,
+      applyView: false,
+    });
   });
 
   it("keeps the viewer view out of the scene that recorded data shares", () => {

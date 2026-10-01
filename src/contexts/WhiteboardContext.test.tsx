@@ -13,13 +13,14 @@ const mocks = vi.hoisted(() => ({
 
 let whiteboardStore: WhiteboardStoreInstance;
 let collaborationState: Record<string, unknown>;
+let metadata: Record<string, unknown>;
 
 vi.mock("./WhiteboardStoreContext", () => ({
   useWhiteboardStore: () => ({ store: whiteboardStore }),
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => ({ handleWhiteboardEvent: mocks.recordWhiteboardEvent }),
-  useNextEditorMetadata: () => ({ usesPlaybackModel: false }),
+  useNextEditorMetadata: () => metadata,
 }));
 vi.mock("./CollaborationContext", () => ({
   useOptionalCollaboration: () => collaborationState,
@@ -36,6 +37,7 @@ describe("WhiteboardContext live-room ownership", () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     whiteboardStore = createWhiteboardStore();
+    metadata = { usesPlaybackModel: false };
     mocks.publishWhiteboardDelta.mockReturnValue(true);
     collaborationState = {
       provider: {},
@@ -79,5 +81,47 @@ describe("WhiteboardContext live-room ownership", () => {
       view: { scrollX: 20, scrollY: -10, zoom: 2 },
       isMaximized: true,
     });
+  });
+});
+
+describe("WhiteboardContext playback viewer view", () => {
+  const recording = { id: "lesson-a" };
+  const pinched = { scrollX: -80, scrollY: 30, zoom: 2 };
+
+  beforeEach(() => {
+    whiteboardStore = createWhiteboardStore();
+    collaborationState = {};
+  });
+
+  it("keeps the viewer's view across pause and resume and releases it when playback stops", () => {
+    metadata = { usesPlaybackModel: true, isInPlaybackSession: true, currentRecording: recording };
+    const { rerender } = renderHook(() => useWhiteboardContext(), {
+      wrapper: WhiteboardProvider,
+    });
+    act(() =>
+      whiteboardStore.trigger.observePlaybackCanvasView({
+        view: pinched,
+        appliedView: { scrollX: 0, scrollY: 0, zoom: 1 },
+      }),
+    );
+
+    // Paused or ended: the workspace is the viewer's (usesPlaybackModel false), the session
+    // goes on.
+    metadata = { usesPlaybackModel: false, isInPlaybackSession: true, currentRecording: recording };
+    rerender();
+    expect(whiteboardStore.getSnapshot().context.playbackViewerView).toEqual(pinched);
+
+    metadata = { usesPlaybackModel: true, isInPlaybackSession: true, currentRecording: recording };
+    rerender();
+    expect(whiteboardStore.getSnapshot().context.playbackViewerView).toEqual(pinched);
+
+    // STOP returns to the ready state, which is not a playback session.
+    metadata = {
+      usesPlaybackModel: false,
+      isInPlaybackSession: false,
+      currentRecording: recording,
+    };
+    rerender();
+    expect(whiteboardStore.getSnapshot().context.playbackViewerView).toBeNull();
   });
 });

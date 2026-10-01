@@ -233,6 +233,26 @@ describe("useWhiteboardController", () => {
     expect(sceneUpdateSource).toBe("external");
   });
 
+  it("lets a followed participant's view replace a playback viewer view", () => {
+    const store = createWhiteboardStore();
+    const { result } = renderHook(() =>
+      useWhiteboardController({ store, playbackKey: "lesson-a" }),
+    );
+    act(() =>
+      store.trigger.observePlaybackCanvasView({
+        view: { scrollX: -80, scrollY: 30, zoom: 2 },
+        appliedView: { scrollX: 0, scrollY: 0, zoom: 1 },
+      }),
+    );
+
+    act(() => result.current.applyView({ scrollX: 20, scrollY: -10, zoom: 1.5 }, false));
+
+    expect(store.getSnapshot().context).toMatchObject({
+      playbackViewerView: null,
+      scene: { view: { scrollX: 20, scrollY: -10, zoom: 1.5 } },
+    });
+  });
+
   it("keeps a playback viewer view for one recording's playback only", () => {
     const store = createWhiteboardStore();
     const pinched = { scrollX: -80, scrollY: 30, zoom: 2 };
@@ -255,7 +275,7 @@ describe("useWhiteboardController", () => {
     rerender({ playbackKey: "lesson-b" });
     expect(store.getSnapshot().context.playbackViewerView).toBeNull();
 
-    // Playback hands the canvas back to live editing.
+    // The playback session ends (STOP or UNLOAD).
     act(takeOver);
     rerender({ playbackKey: null });
     expect(store.getSnapshot().context.playbackViewerView).toBeNull();
