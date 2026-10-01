@@ -88,6 +88,9 @@ describe("splitIntoBestSentences", () => {
     expect(chunks.length).toBeGreaterThan(1);
   });
 
+  // fmt.Println, main.tsx and 3.14 would split under a boundary at any . ! ?;
+  // "format! " is a real boundary on purpose (punctuation before whitespace),
+  // so it splits and rejoins to the same text.
   it("splits sentences only where punctuation meets whitespace", () => {
     const { chunks } = splitIntoBestSentences(
       'Call fmt.Println in main.tsx with 3.14 and format! now. Done "here." Next',

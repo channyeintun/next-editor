@@ -314,7 +314,7 @@ describe("studioRoute VoxCPM2 proxy", () => {
   });
 
   it("releases an upstream error body refused by its Content-Length", async () => {
-    const cancel = vi.fn();
+    const cancel = vi.fn<() => void>();
     const body = new ReadableStream<Uint8Array>({ cancel });
     stubUpstream(
       () =>

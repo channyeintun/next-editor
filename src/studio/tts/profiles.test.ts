@@ -39,7 +39,7 @@ describe("pocket voice profiles", () => {
 
   // Text prep v2 changed the prompt for the same speech text, so the v1 key
   // (this exact request before the bump) must no longer hit the cache.
-  it("key cached dialogs on the text-prep version", async () => {
+  it("keys cached dialogs on the text-prep version", async () => {
     const profile = requireVoiceProfile("pocket-alba-v1");
     const request = { profile, speechText: "Hello there.", lexiconVersion: 1, seed: 7 };
 
