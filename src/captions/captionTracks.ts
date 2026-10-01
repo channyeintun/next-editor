@@ -53,14 +53,18 @@ function languageName(tag: string): string | undefined {
   }
 }
 
+const primarySubtag = (tag: string) => tag.split("-")[0].toLowerCase();
+
 /**
  * The name to show for a track: its label, with a bare language tag ("my-MM",
- * "EN (auto)") read out as the language's name. What is stored stays as it is.
+ * "EN (auto)") read out as the language's name. Only a tag in the track's own language
+ * counts, so a short written label ("New", "SDH") is not read as some other language's
+ * code. What is stored stays as it is.
  */
 export function captionTrackLabel(track: CaptionTrack): string {
   const label = track.label || track.language;
   const tagged = TAGGED_LABEL.exec(label);
-  if (!tagged) return label;
+  if (!tagged || primarySubtag(tagged[1]) !== primarySubtag(track.language)) return label;
   const name = languageName(tagged[1]);
   return name ? `${name}${tagged[2] ?? ""}` : label;
 }

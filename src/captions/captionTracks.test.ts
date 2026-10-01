@@ -73,4 +73,10 @@ describe("captionTrackLabel", () => {
     expect(captionTrackLabel(track("Narration"))).toBe("Narration");
     expect(captionTrackLabel(track("zz", "zz"))).toBe("zz");
   });
+
+  it("does not read a short written label as another language's code", () => {
+    expect(captionTrackLabel(track("New"))).toBe("New");
+    expect(captionTrackLabel(track("SDH"))).toBe("SDH");
+    expect(captionTrackLabel(track("Pro", "my"))).toBe("Pro");
+  });
 });
