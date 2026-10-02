@@ -271,8 +271,8 @@ const didCursorPositionChange = (
 };
 
 /**
- * Pushes in place — `cursorEvents` keeps its identity for the whole session (see the
- * mutable capture buffer invariant on {@link RecordingSession}). Returns `false` when
+ * Pushes in place, so `cursorEvents` keeps its identity until a retake replaces it (see
+ * the mutable capture buffer invariant on {@link RecordingSession}). Returns `false` when
  * the position deduplicates against the last event (no push happened) so callers know
  * whether to bump `sessionRevision`.
  */

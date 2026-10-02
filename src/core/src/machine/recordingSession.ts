@@ -147,8 +147,9 @@ function isNonZeroWidthDelta(value: unknown): boolean {
 /**
  * Returns `false` when the snapshot deduplicates against the last recorded event (no
  * push happened) so callers know whether to bump `sessionRevision`. A snapshot that
- * carries a non-zero panel width delta is always recorded. `session` itself is always
- * the same reference — array identity never changes.
+ * carries a non-zero panel width delta is always recorded. It pushes in place, so
+ * `session` and its `workspaceEvents` array keep their identity (only a retake replaces
+ * the array, see {@link RecordingSession}).
  */
 export function appendWorkspaceRecordingEvent(
   session: RecordingSession,
