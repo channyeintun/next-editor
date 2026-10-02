@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
-import { createEmptyRecordingTracks } from "../../core/src/machine/recordingAssembly";
+import {
+  createEmptyRecordingTracks,
+  type RecordingTrackName,
+} from "../../core/src/machine/recordingAssembly";
 import type { WorkspaceFile, WorkspaceRecordingEvent } from "../../types/workspace";
 import type { Slide } from "../../core/src/slides";
 import { RecordingDraftTrackWriter, rebuildRecordingDraftTracks } from "./recordingDraftTracks";
@@ -104,6 +107,42 @@ describe("journaling a take's tracks", () => {
     expect(rebuilt[1].snapshot.project.files["b.ts"]).toBe(
       rebuilt[0].snapshot.project.files["b.ts"],
     );
+  });
+
+  // Read off the empty tracks rather than RECORDING_TRACK_NAMES, so a track that
+  // list ever missed would still get a case here, and that case would fail.
+  const everyTrack = Object.keys(createEmptyRecordingTracks()) as RecordingTrackName[];
+
+  /**
+   * An entry of `track` at `time`. The writer reads only workspace events; it
+   * passes the rest on as they are.
+   */
+  const entryAt = (track: RecordingTrackName, time: number): unknown =>
+    track === "workspaceEvents"
+      ? workspaceEvent(time, { "a.ts": file("a.ts", `at ${time}`) })
+      : { timestamp: time, time, track };
+
+  it.each(everyTrack)("reads %s back after appends and a retake", (track) => {
+    const tracks = createEmptyRecordingTracks();
+    const writer = new RecordingDraftTrackWriter();
+    const records: RecordingDraftRecord[] = [];
+    const entries = (): unknown[] => tracks[track];
+    const flush = () => {
+      records.push(...writer.collect(tracks));
+      expect(rebuildRecordingDraftTracks(records).tracks).toEqual(tracks);
+    };
+
+    entries().push(entryAt(track, 0), entryAt(track, 100));
+    flush();
+    entries().push(entryAt(track, 200));
+    flush();
+    // A retake replaces the track with a shorter copy, and the take goes on.
+    (tracks as Record<RecordingTrackName, unknown[]>)[track] = entries().slice(0, 1);
+    entries().push(entryAt(track, 300));
+    flush();
+
+    expect(records.map((record) => record.kind)).toEqual(["append", "append", "reset"]);
+    expect(rebuildRecordingDraftTracks(records).tracks[track]).toHaveLength(2);
   });
 
   it("journals the deck only when it changes", () => {
