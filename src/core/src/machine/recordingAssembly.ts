@@ -46,19 +46,6 @@ export interface RecordingTracks {
 
 export type RecordingTrackName = keyof RecordingTracks;
 
-export const RECORDING_TRACK_NAMES = [
-  "frames",
-  "slideEvents",
-  "previewEvents",
-  "previewInitialDocuments",
-  "previewPatchBatches",
-  "workspaceEvents",
-  "runtimeEvents",
-  "cursorEvents",
-  "whiteboardEvents",
-  "chatEvents",
-] as const satisfies readonly RecordingTrackName[];
-
 export const createEmptyRecordingTracks = (): RecordingTracks => ({
   frames: [],
   slideEvents: [],
@@ -71,6 +58,17 @@ export const createEmptyRecordingTracks = (): RecordingTracks => ({
   whiteboardEvents: [],
   chatEvents: [],
 });
+
+/**
+ * Every track, in the order the draft journal writes them.
+ *
+ * Read off the empty tracks rather than kept by hand: the typecheck holds that
+ * literal to name every track, while a hand-kept list with a track left out
+ * still compiles, and the journal then drops that track with no error.
+ */
+export const RECORDING_TRACK_NAMES = Object.keys(
+  createEmptyRecordingTracks(),
+) as readonly RecordingTrackName[];
 
 interface RecordingMediaInput<Source> {
   blob?: Blob;
