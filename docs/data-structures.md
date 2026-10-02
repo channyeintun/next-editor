@@ -413,7 +413,7 @@ interface TimelineState {
 
 ### RecordingSession
 
-`RecordingSession` is a mutable, append-only capture buffer: its object identity — and the identity of every array field — stays stable for the whole recording so appenders can push in place (O(1) per sample) instead of spreading into new arrays. `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-equality selectors can still detect a change.
+`RecordingSession` is a mutable capture buffer: its object identity stays stable for the whole recording, and appenders push into its track arrays in place (O(1) per sample) instead of spreading into new arrays. Each track array is append-only until a retake, which replaces every track array with a shorter copy. So a reader that follows a session while it records keeps a cursor per track, made of the array it read and the length it saw, as `RecordingDraftTrackWriter` does. `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-equality selectors can still detect a change.
 
 ```typescript
 interface RecordingSession {

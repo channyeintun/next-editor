@@ -94,12 +94,14 @@ export interface CapturedViewStateRef {
 /**
  * Recording session state.
  *
- * This is a mutable capture buffer: its object identity — and the identity of every
- * array field below — stays stable for the whole recording. Appenders push in place
- * rather than spreading into a new array/object, so capture cost is O(1) instead of
- * O(session-so-far) per sample. Arrays are append-only during a session; only indices
- * `<= length` observed at read time are stable, so code that reads a session while it
- * records must keep its own read cursor; snapshots share these arrays and cannot be diffed.
+ * This is a mutable capture buffer: its object identity stays stable for the whole
+ * recording. Appenders push into its track arrays in place rather than spreading into
+ * a new array/object, so capture cost is O(1) instead of O(session-so-far) per sample.
+ * Each track array is append-only until a retake, which replaces every track array
+ * with a shorter copy (see retake.ts). So code that reads a session while it records
+ * must keep its own read cursor per track: the array it read and the length it saw
+ * (see RecordingDraftTrackWriter). A new array means the track was cut back and must
+ * be read again from the start. Snapshots share these arrays and cannot be diffed.
  * `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-
  * equality selectors can still detect a change.
  */
