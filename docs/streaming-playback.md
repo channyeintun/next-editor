@@ -243,8 +243,10 @@ a faster way to reach the same state. These are the cursor rules that keep it, i
   clearing a recording resets it. Resetting it on a seek added every offset again, and the panels
   grew without bound.
 - **Streamed appends** push records into the same arrays. Every cache on a track (the chat and
-  runtime folds, the preview and whiteboard states, the keyframe index) is keyed on its array and
-  only grows, so an append never makes a cached state wrong.
+  runtime folds, the preview and whiteboard states, the keyframe index) is keyed on its array, and
+  the array only grows in place, so an append never makes a cached state wrong. The chat and
+  runtime caches hold one fold point, and a backward seek replaces it with an earlier one. Only the
+  preview and whiteboard state lists and the keyframe index grow.
 - **Checkpoints are only for seeking.** The delta log alone defines every state, and a checkpoint
   equals the fold at its index. So a resolver may restart from the nearest checkpoint at or before
   T instead of applying every delta before it.
