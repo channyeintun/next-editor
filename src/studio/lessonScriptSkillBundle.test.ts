@@ -4,12 +4,8 @@ import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
 import { buildBundle, zipDrift } from "../../scripts/build-lesson-script-skill";
 import { parseLessonScript } from "./script/schema";
-import {
-  RUNTIME_KIND_FOR_LESSON,
-  studioPlanActionSchema,
-  type StudioLessonType,
-  type StudioRuntimeKind,
-} from "./plan";
+import { studioPlanActionSchema, type StudioLessonType, type StudioRuntimeKind } from "./plan";
+import { RUNTIME_KIND_FOR_LESSON } from "./runtimeContract";
 
 /**
  * The distributed `share/lesson-script-skill/` bundle is a self-contained

@@ -5,9 +5,10 @@ import { lessonScriptSchema } from "./script/schema";
 /**
  * The runtime contract — which actions each runtime kind allows, and how a
  * WebContainer runtime must be set up — is checked by the script schema and
- * again by the plan schema. Every case below runs through both, so the two
- * cannot give different answers without a test failing. Each case lists every
- * issue the schema reports, in order, so a reworded message fails here too.
+ * again by the plan schema, both through runtimeContract.ts. Every case below
+ * runs through both schemas, so they cannot give different answers without a
+ * test failing. Each case lists every issue the schema reports, in order, so a
+ * reworded message fails here too.
  */
 
 type CaseAction = { id: string; type: StudioPlanActionType } & Record<string, unknown>;
@@ -134,12 +135,13 @@ const CASES: ContractCase[] = [
     name: "rejects runnable actions on runtime kind none",
     workspace: GO_WORKSPACE,
     runtime: NO_RUNTIME,
-    actions: [run, start, waitForReady, openPreview, expectPreview, expectOutput],
+    actions: [run, start, waitForReady, collapseDock, openPreview, expectPreview, expectOutput],
     issues: [
       'Lesson type "go" requires runtime kind "go-playground", got "none"',
       'Action "run" (runtime.run) needs a runnable runtime, but lesson type "go" has none in the studio yet',
       'Action "start" (runtime.start) needs a runnable runtime, but lesson type "go" has none in the studio yet',
       'Action "wait" (runtime.waitForReady) needs a runnable runtime, but lesson type "go" has none in the studio yet',
+      'Action "collapse" (runtime.collapseDock) needs a runnable runtime, but lesson type "go" has none in the studio yet',
       'Action "open-preview" (preview.open) needs a runnable runtime, but lesson type "go" has none in the studio yet',
       'Action "expect-preview" (expect.preview) needs a runnable runtime, but lesson type "go" has none in the studio yet',
       'Action "expect-output" (expect.output) needs a runnable runtime, but lesson type "go" has none in the studio yet',
@@ -334,16 +336,5 @@ describe.each([
 ])("$schema schema runtime contract", ({ issuesFor }) => {
   it.each(CASES)("$name", ({ workspace, runtime, actions, issues }) => {
     expect(issuesFor(workspace, runtime, actions)).toEqual(issues);
-  });
-});
-
-// Only the script schema has this rule today; the plan schema's copy of the
-// runtime-"none" list lacks runtime.collapseDock.
-describe("script schema runtime contract", () => {
-  it("rejects runtime.collapseDock on runtime kind none", () => {
-    expect(scriptIssues(GO_WORKSPACE, NO_RUNTIME, [collapseDock])).toEqual([
-      'Lesson type "go" requires runtime kind "go-playground", got "none"',
-      'Action "collapse" (runtime.collapseDock) needs a runnable runtime, but lesson type "go" has none in the studio yet',
-    ]);
   });
 });

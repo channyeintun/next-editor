@@ -1,6 +1,5 @@
 import { z } from "zod";
 import {
-  RUNTIME_KIND_FOR_LESSON,
   WHITEBOARD_DRAW_MAX_MS,
   studioPreviewTargetSchema as planPreviewTargetSchema,
   studioRetryPolicySchema as planRetryPolicySchema,
@@ -9,6 +8,7 @@ import {
   studioWhiteboardAssetSchema as planWhiteboardAssetSchema,
   studioWorkspacePinSchema as planWorkspacePinSchema,
 } from "../plan";
+import { actionContractIssues, runtimeContractIssues } from "../runtimeContract";
 
 /**
  * `LessonScript` — the authored, reviewable source of a lesson
@@ -368,123 +368,9 @@ export const lessonScriptSchema = z
     checks: z.array(scriptCheckSchema).default([]),
   })
   .superRefine((script, ctx) => {
-    const expectedKind = RUNTIME_KIND_FOR_LESSON[script.lesson.workspace.lessonType];
-    if (script.runtime.kind !== expectedKind) {
-      ctx.addIssue({
-        code: "custom",
-        message: `Lesson type "${script.lesson.workspace.lessonType}" requires runtime kind "${expectedKind}", got "${script.runtime.kind}"`,
-      });
-    }
-    if (script.runtime.kind === "none") {
-      for (const scene of script.scenes) {
-        for (const action of scene.actions) {
-          if (
-            action.type === "runtime.run" ||
-            action.type === "runtime.start" ||
-            action.type === "runtime.waitForReady" ||
-            // A lesson with no runtime never renders a runner dock to collapse.
-            action.type === "runtime.collapseDock" ||
-            action.type.startsWith("preview.") ||
-            action.type === "expect.preview" ||
-            action.type === "expect.output"
-          ) {
-            ctx.addIssue({
-              code: "custom",
-              message: `Action "${action.id}" (${action.type}) needs a runnable runtime, but lesson type "${script.lesson.workspace.lessonType}" has none in the studio yet`,
-            });
-          }
-        }
-      }
-    }
-    if (script.runtime.kind === "webcontainer") {
-      // Python runs one-shot on the WebContainer's WASI `python3`: no package
-      // install (so no lockfile), no dev server, no preview. JS/TS drive a dev
-      // server + preview and must pin a lockfile for a reproducible install.
-      const isPython = script.lesson.workspace.lessonType === "python";
-      if (script.runtime.lockfilePath === undefined) {
-        if (!isPython) {
-          ctx.addIssue({
-            code: "custom",
-            message: `A ${script.lesson.workspace.lessonType} WebContainer lesson must pin a lockfilePath for a reproducible install`,
-          });
-        }
-      } else if (!(script.runtime.lockfilePath in script.lesson.workspace.files)) {
-        ctx.addIssue({
-          code: "custom",
-          message: `WebContainer lockfile "${script.runtime.lockfilePath}" is not in the pinned workspace`,
-        });
-      }
-      if (isPython) {
-        if (script.runtime.lockfilePath !== undefined) {
-          ctx.addIssue({
-            code: "custom",
-            message: "A Python WebContainer lesson must omit lockfilePath (nothing is installed)",
-          });
-        }
-        if (script.runtime.expectedPort !== undefined) {
-          ctx.addIssue({
-            code: "custom",
-            message: "A Python WebContainer lesson must omit expectedPort (it has no server)",
-          });
-        }
-        if (script.runtime.initCommand.trim() !== "") {
-          ctx.addIssue({
-            code: "custom",
-            message: "A Python WebContainer lesson must use an empty initCommand",
-          });
-        }
-        if (!/^python3(?:\s|$)/.test(script.runtime.runCommand.trim())) {
-          ctx.addIssue({
-            code: "custom",
-            message: 'A Python WebContainer lesson runCommand must invoke "python3"',
-          });
-        }
-      }
-      for (const scene of script.scenes) {
-        for (const action of scene.actions) {
-          if (action.type === "runtime.run") {
-            ctx.addIssue({
-              code: "custom",
-              message: `Action "${action.id}" (runtime.run) is a Playground command; a WebContainer lesson runs via runtime.start`,
-            });
-          }
-          if (isPython) {
-            // WASI Python cannot bind a socket — no server to wait for, no preview
-            // to drive; it asserts through console expect.output.
-            if (
-              action.type === "runtime.waitForReady" ||
-              action.type.startsWith("preview.") ||
-              action.type === "expect.preview"
-            ) {
-              ctx.addIssue({
-                code: "custom",
-                message: `Action "${action.id}" (${action.type}) needs a preview server; Python runs one-shot to the console — assert with expect.output`,
-              });
-            }
-          } else if (action.type === "expect.output") {
-            ctx.addIssue({
-              code: "custom",
-              message: `Action "${action.id}" (expect.output) is for console runtimes; a ${script.lesson.workspace.lessonType} preview lesson asserts with expect.preview`,
-            });
-          }
-        }
-      }
-    } else if (script.runtime.kind !== "none") {
-      for (const scene of script.scenes) {
-        for (const action of scene.actions) {
-          if (
-            action.type === "runtime.start" ||
-            action.type === "runtime.waitForReady" ||
-            action.type.startsWith("preview.") ||
-            action.type === "expect.preview"
-          ) {
-            ctx.addIssue({
-              code: "custom",
-              message: `Action "${action.id}" (${action.type}) requires runtime kind "webcontainer"`,
-            });
-          }
-        }
-      }
+    const actions = script.scenes.flatMap((scene) => scene.actions);
+    for (const message of runtimeContractIssues(script.lesson.workspace, script.runtime, actions)) {
+      ctx.addIssue({ code: "custom", message });
     }
 
     // The timing gate is the one QA threshold a script owns, and it only exists
@@ -509,43 +395,10 @@ export const lessonScriptSchema = z
       });
     }
 
-    const actionIds = new Set<string>();
-    for (const scene of script.scenes) {
-      for (const action of scene.actions) {
-        if (action.type === "preview.click" && action.retry.maxAttempts !== 1) {
-          ctx.addIssue({
-            code: "custom",
-            message: `Action "${action.id}" is non-idempotent and must use retry.maxAttempts: 1`,
-          });
-        }
-        if (
-          action.type === "expect.preview" &&
-          action.target === undefined &&
-          action.route === undefined
-        ) {
-          ctx.addIssue({
-            code: "custom",
-            message: `Action "${action.id}" must declare a preview target or route expectation`,
-          });
-        }
-        if (
-          action.type === "expect.preview" &&
-          action.target === undefined &&
-          (action.textContains !== undefined ||
-            action.value !== undefined ||
-            action.attribute !== undefined)
-        ) {
-          ctx.addIssue({
-            code: "custom",
-            message: `Action "${action.id}" needs a stable target for text, value, or attribute checks`,
-          });
-        }
-        if (actionIds.has(action.id)) {
-          ctx.addIssue({ code: "custom", message: `Duplicate action id "${action.id}"` });
-        }
-        actionIds.add(action.id);
-      }
+    for (const message of actionContractIssues(actions)) {
+      ctx.addIssue({ code: "custom", message });
     }
+    const actionIds = new Set(actions.map((action) => action.id));
 
     const sceneIds = new Set<string>();
     for (const scene of script.scenes) {
