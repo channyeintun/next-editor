@@ -110,7 +110,7 @@ describe("retaking", () => {
     actor.send({ type: "RETAKE_RECORDING" });
 
     const session = sessionOf(actor);
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     expect(selectNextEditorMetadata(actor.getSnapshot()).isRecordingPaused).toBe(true);
     expect(getRecordingTimestamp(session)).toBe(0);
     expect(session.frames).toHaveLength(1);

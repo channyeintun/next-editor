@@ -105,7 +105,7 @@ const cases: Array<[string, EditorMachineSnapshot, Partial<ReturnType<typeof leg
   ],
   [
     "recording, paused",
-    snapshotAt("recording", { session: pausedSession }),
+    snapshotAt({ recording: "paused" }, { session: pausedSession }),
     { isRecording: true, isRecordingPaused: true },
   ],
   [
@@ -256,7 +256,7 @@ describe("recording selectors", () => {
     ["idle", snapshotAt("idle"), false],
     ["startingRecording", snapshotAt("startingRecording"), true],
     ["recording", snapshotAt("recording", { session: takeSession }), true],
-    ["recording, paused", snapshotAt("recording", { session: pausedSession }), true],
+    ["recording, paused", snapshotAt({ recording: "paused" }, { session: pausedSession }), true],
     ["stoppingRecording", snapshotAt("stoppingRecording", { session: takeSession }), true],
     ["loading", snapshotAt("loading"), false],
     ["playing", playbackAt("playing", 400), false],

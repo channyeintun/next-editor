@@ -826,7 +826,7 @@ describe("editorMachine actor lifecycle", () => {
     }).start();
 
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
     actor.send({ type: "STOP_RECORDING" });
     await waitFor(actor, (snapshot) => snapshot.value === "idle");
 
@@ -837,7 +837,7 @@ describe("editorMachine actor lifecycle", () => {
     );
 
     actor.send({ type: "START_RECORDING" });
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     actor.stop();
   });
 
@@ -858,7 +858,7 @@ describe("editorMachine actor lifecycle", () => {
     }).start();
 
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
 
     expect(actor.getSnapshot().children.mouseTracker).toBeDefined();
 
@@ -910,7 +910,7 @@ describe("editorMachine actor lifecycle", () => {
       audioBlob: new Blob(["audio"], { type: "audio/webm" }),
       enableCamera: true,
     });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
     expect(actor.getSnapshot().children.cameraRecorder).toBeDefined();
 
     failAudio();
@@ -937,7 +937,7 @@ describe("editorMachine actor lifecycle", () => {
       type: "START_RECORDING",
       audioBlob: new Blob(["audio"], { type: "audio/webm" }),
     });
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     expect(actor.getSnapshot().context.error).toBeNull();
     actor.stop();
   });
@@ -952,7 +952,7 @@ describe("editorMachine actor lifecycle", () => {
     }).start();
 
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
 
     const initialWorkspaceEvent = actor.getSnapshot().context.session?.workspaceEvents[0];
 
@@ -990,7 +990,7 @@ describe("editorMachine actor lifecycle", () => {
     }).start();
 
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
 
     const workspaceEvents = () => actor.getSnapshot().context.session?.workspaceEvents ?? [];
     expect(workspaceEvents()).toHaveLength(1);
@@ -1018,7 +1018,7 @@ describe("editorMachine actor lifecycle", () => {
     }).start();
 
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
 
     actor.send({
       type: "WHITEBOARD_EVENT",
@@ -2721,7 +2721,7 @@ describe("audioPlaybackActor", () => {
       type: "START_RECORDING",
       audioBlob: new Blob(["audio"], { type: "audio/webm" }),
     });
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     await settle();
 
     const aborted = actor.getSnapshot();
@@ -2739,7 +2739,7 @@ describe("audioPlaybackActor", () => {
     });
     await settle();
 
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     expect(actor.getSnapshot().context.error).toBeNull();
     expect(onError).toHaveBeenCalledTimes(1);
   });
@@ -2776,7 +2776,7 @@ describe("audioPlaybackActor", () => {
       type: "START_RECORDING",
       audioBlob: new Blob(["audio"], { type: "audio/webm" }),
     });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
     const audio = MockAudio.instances[0]!;
     audio.duration = 3.2;
     audio.oncanplay?.();
@@ -2807,7 +2807,7 @@ describe("audioPlaybackActor", () => {
       type: "START_RECORDING",
       audioBlob: new Blob(["audio"], { type: "audio/webm" }),
     });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
     const audio = MockAudio.instances[0]!;
     const sessionRevision = actor.getSnapshot().context.sessionRevision;
     audio.duration = Number.POSITIVE_INFINITY;
@@ -2835,7 +2835,7 @@ describe("audioPlaybackActor", () => {
     const narration = new Blob(["audio"], { type: "audio/webm" });
 
     actor.send({ type: "START_RECORDING", audioBlob: narration });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
     actor.send({ type: "STOP_RECORDING" });
     await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
     expect(actor.getSnapshot().context.recording!.audioBlob).toBe(narration);
@@ -2844,7 +2844,7 @@ describe("audioPlaybackActor", () => {
     expect(actor.getSnapshot().context.audio.blob).toBeNull();
 
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
     actor.send({ type: "STOP_RECORDING" });
     await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
 
@@ -3081,7 +3081,7 @@ describe("editorMachine stoppingRecording join", () => {
     const take = startTake();
     actors.push(take);
     take.actor.send({ type: "START_RECORDING", enableCamera: true, ...event });
-    await waitFor(take.actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(take.actor, (snapshot) => snapshot.matches("recording"));
     take.actor.send({ type: "STOP_RECORDING" });
     expect(take.actor.getSnapshot().value).toBe("stoppingRecording");
     return take;
@@ -3262,7 +3262,7 @@ describe("editorMachine stoppingRecording join", () => {
     take.actor.send({ type: "UNLOAD" });
 
     take.actor.send({ type: "START_RECORDING" });
-    await waitFor(take.actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(take.actor, (snapshot) => snapshot.matches("recording"));
 
     expect(take.actor.getSnapshot().context.enableCameraRecording).toBe(false);
     expect(take.actor.getSnapshot().children.cameraRecorder).toBeUndefined();
@@ -3273,7 +3273,7 @@ describe("editorMachine stoppingRecording join", () => {
     actors.push(take);
 
     take.actor.send({ type: "START_RECORDING" });
-    await waitFor(take.actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(take.actor, (snapshot) => snapshot.matches("recording"));
 
     expect(take.actor.getSnapshot().context.enableCameraRecording).toBe(true);
     expect(take.actor.getSnapshot().children.cameraRecorder).toBeDefined();
@@ -3339,7 +3339,7 @@ describe("editorMachine stoppingRecording join", () => {
 
     try {
       actor.send({ type: "START_RECORDING" });
-      await waitFor(actor, (snapshot) => snapshot.value === "recording");
+      await waitFor(actor, (snapshot) => snapshot.matches("recording"));
       actor.send({ type: "STOP_RECORDING" });
       vi.advanceTimersByTime(2000);
       await waitFor(actor, (snapshot) => snapshot.value === "idle");
@@ -3626,7 +3626,7 @@ describe("editorMachine local screen recording", () => {
   it("does not spawn a screen actor when no screenStream is provided", async () => {
     const actor = start();
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.matches("recording"));
 
     expect(
       Object.keys(actor.getSnapshot().children).some((id) => id.startsWith("screenRecorder-")),
@@ -3637,7 +3637,7 @@ describe("editorMachine local screen recording", () => {
   it("spawns the screen actor and records the start offset on SCREEN_STARTED", async () => {
     const actor = start();
     actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
-    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.matches("recording"));
 
     const screen = actor.getSnapshot().context.screen;
     expect(screen.actorId).toMatch(/^screenRecorder-/);
@@ -3658,7 +3658,7 @@ describe("editorMachine local screen recording", () => {
     const actor = start({ onScreenRecordingReady: (payload) => ready.push(payload) });
 
     actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
-    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.matches("recording"));
     const screenActorId = actor.getSnapshot().context.screen.actorId!;
 
     actor.send({ type: "STOP_RECORDING" });
@@ -3682,7 +3682,7 @@ describe("editorMachine local screen recording", () => {
     const actor = start({ onScreenRecordingReady: (payload) => ready.push(payload.blob) });
 
     actor.send({ type: "START_RECORDING", screenStream: display as unknown as MediaStream });
-    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.matches("recording"));
     const screenActorId = actor.getSnapshot().context.screen.actorId!;
 
     // User clicks the browser's native "Stop sharing".
@@ -3690,7 +3690,7 @@ describe("editorMachine local screen recording", () => {
     await waitFor(actor, (s) => s.context.screen.isRecording === false);
 
     expect(ready).toHaveLength(1);
-    expect(actor.getSnapshot().value).toBe("recording"); // session unaffected
+    expect(actor.getSnapshot().matches("recording")).toBe(true); // session unaffected
     expect(actor.getSnapshot().children[screenActorId]).toBeUndefined();
   });
 
@@ -3711,7 +3711,7 @@ describe("editorMachine local screen recording", () => {
     const actor = start({ enableAudioRecording: true });
 
     actor.send({ type: "START_RECORDING", screenStream: display as unknown as MediaStream });
-    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.matches("recording"));
     // The microphone is the only audio source, so this shows it reached the mix.
     expect(actor.getSnapshot().context.screen.hasAudio).toBe(true);
 
@@ -3720,7 +3720,7 @@ describe("editorMachine local screen recording", () => {
     await waitFor(actor, (s) => s.context.screen.isRecording === false);
 
     expect(micTrack.stopped).toBe(false);
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     expect(actor.getSnapshot().children.audioRecorder).toBeDefined();
   });
 
@@ -3794,7 +3794,7 @@ describe("editorMachine local screen recording", () => {
   it("releases the display stream of a start sent during playback", async () => {
     const actor = start();
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.matches("recording"));
     actor.send({ type: "STOP_RECORDING" });
     await waitFor(actor, (s) => s.matches({ playback: "ready" }));
     const display = new FakeScreenStream([new FakeScreenTrack("video")]);
@@ -3856,11 +3856,11 @@ describe("editorMachine local screen recording", () => {
     const actor = start({ onScreenRecordingReady: (payload) => ready.push(payload.blob) });
 
     actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
-    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.matches("recording"));
     await waitFor(actor, (s) => s.context.screen.isRecording === false);
 
     expect(ready).toHaveLength(0);
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     expect(actor.getSnapshot().context.screenStream).toBeNull();
     expect(
       Object.keys(actor.getSnapshot().children).some((id) => id.startsWith("screenRecorder-")),
@@ -3873,7 +3873,7 @@ describe("editorMachine local screen recording", () => {
     const actor = start({ onScreenRecordingReady: (payload) => ready.push(payload.blob) });
 
     actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
-    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.matches("recording"));
     const firstActorId = actor.getSnapshot().context.screen.actorId!;
     const firstRecorder = FakeScreenMediaRecorder.instances[0]!;
 
@@ -3883,7 +3883,7 @@ describe("editorMachine local screen recording", () => {
     await waitFor(actor, (s) => s.value === "idle");
 
     actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
-    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.matches("recording"));
     const secondActorId = actor.getSnapshot().context.screen.actorId!;
     const secondRecorder = FakeScreenMediaRecorder.instances[1]!;
     expect(secondActorId).not.toBe(firstActorId);
@@ -3894,7 +3894,7 @@ describe("editorMachine local screen recording", () => {
     await waitFor(actor, (s) => s.children[firstActorId] === undefined);
 
     expect(ready).toHaveLength(1);
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     expect(actor.getSnapshot().context.screen.actorId).toBe(secondActorId);
     expect(actor.getSnapshot().context.screen.isRecording).toBe(true);
     expect(actor.getSnapshot().children[secondActorId]).toBeDefined();
@@ -3906,7 +3906,7 @@ describe("editorMachine local screen recording", () => {
     const actor = start({ onRecordingStop: (recording) => (stopped.value = recording) });
 
     actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
-    await waitFor(actor, (s) => s.value === "recording");
+    await waitFor(actor, (s) => s.matches("recording"));
     actor.send({ type: "STOP_RECORDING" });
     await waitFor(actor, (s) => s.matches({ playback: "ready" }));
 
@@ -3989,7 +3989,7 @@ describe("editorMachine pointer captures while recording", () => {
       },
     ).start();
     actor.send({ type: "START_RECORDING" });
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     const session = () => actor.getSnapshot().context.session!;
     expect(session().frames).toHaveLength(1);
 
@@ -4037,7 +4037,7 @@ describe("editorMachine pointer captures while recording", () => {
       },
     ).start();
     actor.send({ type: "START_RECORDING" });
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     return actor;
   };
 

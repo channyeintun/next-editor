@@ -22,7 +22,7 @@ import type { ChatRecordingEvent } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";
 import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "../../types/workspace";
 import { isAtPlaybackEnd } from "./machine/playbackValues";
-import { isRecordingClockPaused, type RecordingClock } from "./machine/recordingClock";
+import type { RecordingClock } from "./machine/recordingClock";
 
 // ============================================================================
 // Type for machine snapshot
@@ -83,10 +83,9 @@ const getRunningSession = (state: EditorMachineSnapshot): RecordingSession | nul
  */
 export const selectNextEditorMetadata = (state: EditorMachineSnapshot) => {
   const playbackState = getPlaybackState(state);
-  const runningSession = getRunningSession(state);
   return {
     isRecording: state.matches("recording"),
-    isRecordingPaused: runningSession !== null && isRecordingClockPaused(runningSession.clock),
+    isRecordingPaused: state.matches({ recording: "paused" }),
     isPlaying: playbackState === "playing",
     hasEnded: playbackState === "ended" && isAtPlaybackEnd(state.context.timeline),
     usesPlaybackModel: !state.context.hasManualWorkspaceOverride && playbackState !== null,

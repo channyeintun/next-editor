@@ -211,7 +211,7 @@ describe("audioRecordingActor lifecycle", () => {
     actors.push(actor);
 
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
     const errorEvent = Object.assign(new Event("error"), {
       error: new Error("microphone failed"),
     });
@@ -245,7 +245,7 @@ describe("audioRecordingActor lifecycle", () => {
     actors.push(actor);
 
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
 
     expect(requests).toEqual([
       { audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true } },
@@ -288,7 +288,7 @@ describe("audioRecordingActor lifecycle", () => {
       const actor = startMachine();
 
       actor.send({ type: "START_RECORDING", microphoneDeviceId: "usb-mic" });
-      await waitFor(actor, (snapshot) => snapshot.value === "recording");
+      await waitFor(actor, (snapshot) => snapshot.matches("recording"));
 
       expect(requests).toEqual([{ audio: { ...defaults, deviceId: { exact: "usb-mic" } } }]);
     });
@@ -301,7 +301,7 @@ describe("audioRecordingActor lifecycle", () => {
       const actor = startMachine();
 
       actor.send({ type: "START_RECORDING", microphoneDeviceId: "unplugged" });
-      await waitFor(actor, (snapshot) => snapshot.value === "recording");
+      await waitFor(actor, (snapshot) => snapshot.matches("recording"));
 
       expect(requests).toEqual([
         { audio: { ...defaults, deviceId: { exact: "unplugged" } } },
@@ -360,7 +360,7 @@ describe("audioRecordingActor lifecycle", () => {
       FakeAudioMediaRecorder.deferStops = true;
       FakeAudioMediaRecorder.finalChunk = narration;
       actor.send({ type: "START_RECORDING" });
-      await waitFor(actor, (snapshot) => snapshot.value === "recording");
+      await waitFor(actor, (snapshot) => snapshot.matches("recording"));
       actor.send({ type: "STOP_RECORDING" });
       expect(actor.getSnapshot().value).toBe("stoppingRecording");
     };
@@ -458,11 +458,11 @@ describe("audioRecordingActor lifecycle", () => {
 
       // The first take's straggler finally flushes during the next take.
       actor.send({ type: "START_RECORDING" });
-      await waitFor(actor, (snapshot) => snapshot.value === "recording");
+      await waitFor(actor, (snapshot) => snapshot.matches("recording"));
       FakeAudioMediaRecorder.instances[0]!.finishStop();
 
       const snapshot = actor.getSnapshot();
-      expect(snapshot.value).toBe("recording");
+      expect(snapshot.matches("recording")).toBe(true);
       expect(snapshot.context.audio.isRecording).toBe(true);
       expect(snapshot.context.audio.blob).toBeNull();
       expect(snapshot.children.audioRecorder).toBeDefined();
@@ -508,14 +508,14 @@ describe("audioRecordingActor lifecycle", () => {
     actors.push(actor);
 
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
     const recorder = actor.getSnapshot().children.audioRecorder;
     expect(recorder).toBeDefined();
 
     FakeAudioMediaRecorder.instances[0]!.stop();
 
     const snapshot = actor.getSnapshot();
-    expect(snapshot.value).toBe("recording");
+    expect(snapshot.matches("recording")).toBe(true);
     expect(snapshot.context.audio.isRecording).toBe(false);
     expect(snapshot.context.audio.blob).toBeInstanceOf(Blob);
     expect(snapshot.children.audioRecorder).toBeUndefined();

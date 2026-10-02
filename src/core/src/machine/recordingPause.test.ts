@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import fc from "fast-check";
 import { createActor, fromCallback } from "xstate";
 import type * as monaco from "monaco-editor";
 import { editorMachine } from "./editorMachine";
+import { isRecordingClockPaused } from "./recordingClock";
 import type {
   AudioPlaybackEmit,
   AudioPlaybackEvent,
@@ -101,7 +103,7 @@ function startTake(editor: RecordingEditor = new RecordingEditor()) {
     },
   }).start();
   actor.send({ type: "START_RECORDING" });
-  expect(actor.getSnapshot().value).toBe("recording");
+  expect(actor.getSnapshot().matches("recording")).toBe(true);
   return actor;
 }
 
@@ -193,6 +195,40 @@ describe("pausing a take", () => {
     actor.stop();
   });
 
+  // The `paused` substate and the clock's pausedAt say the same thing in two places. The
+  // transitions that move one move the other, whatever the author presses and when.
+  it("keeps the paused substate and the paused clock in step", () => {
+    const { advance } = pinClocks();
+    const step = fc.oneof(
+      fc.constantFrom(
+        { type: "PAUSE_RECORDING" } as const,
+        { type: "RESUME_RECORDING" } as const,
+        { type: "RETAKE_RECORDING" } as const,
+        { type: "ADD_CHAPTER_MARKER" } as const,
+        { type: "CAPTURE_FRAME" } as const,
+      ),
+      fc.integer({ min: 0, max: 2_000 }),
+    );
+
+    fc.assert(
+      fc.property(fc.array(step, { maxLength: 30 }), (steps) => {
+        const actor = startTake();
+        try {
+          for (const item of steps) {
+            if (typeof item === "number") advance(item);
+            else actor.send(item);
+            const snapshot = actor.getSnapshot();
+            expect(snapshot.matches({ recording: "paused" })).toBe(
+              isRecordingClockPaused(snapshot.context.session!.clock),
+            );
+          }
+        } finally {
+          actor.stop();
+        }
+      }),
+    );
+  });
+
   it("takes the pause out of the preview's wall-clock stamps", () => {
     const { advance } = pinClocks();
     const actor = startTake();
@@ -258,7 +294,7 @@ describe("pausing a take's recorders", () => {
     }).start();
 
     actor.send({ type: "START_RECORDING" });
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     actor.send({ type: "PAUSE_RECORDING" });
     actor.send({ type: "RESUME_RECORDING" });
 
@@ -284,7 +320,7 @@ describe("pausing a take's recorders", () => {
       type: "START_RECORDING",
       audioBlob: new Blob(["narration"], { type: "audio/webm" }),
     });
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     actor.send({ type: "PAUSE_RECORDING" });
     actor.send({ type: "RESUME_RECORDING" });
 
@@ -316,7 +352,7 @@ describe("pausing a take's recorders", () => {
     const actor = createActor(machine, { input: { editorRef: { current: null } } }).start();
 
     actor.send({ type: "START_RECORDING", enableCamera: true });
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     actor.send({ type: "PAUSE_RECORDING" });
     actor.send({ type: "RESUME_RECORDING" });
 
@@ -333,7 +369,7 @@ describe("pausing a take's recorders", () => {
     const actor = createActor(machine, { input: { editorRef: { current: null } } }).start();
 
     actor.send({ type: "START_RECORDING", screenStream: displayStream() });
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     actor.send({ type: "PAUSE_RECORDING" });
     actor.send({ type: "RESUME_RECORDING" });
 

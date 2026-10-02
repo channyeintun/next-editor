@@ -63,7 +63,6 @@ import {
   resumeRecordingSession,
   addChapterMarker,
 } from "./captureActions";
-import { isRecordingClockPaused } from "./recordingClock";
 import { findRetakeTarget, rewindSessionToSafePoint } from "./retake";
 import { appendRuntimeRecordingEvent, getRecordingTimestamp } from "./recordingSession";
 import { editRecordedAudio, hasAudioEdit } from "../utils/audioEdit";
@@ -247,10 +246,6 @@ export const editorMachine = setup({
       context.enableAudioRecording && getRunningRecorders(context).microphone,
     isExternalAudioRecording: ({ context }) => getRunningRecorders(context).externalAudio,
     isCameraRecording: ({ context }) => getRunningRecorders(context).camera,
-    isRecordingRunning: ({ context }) =>
-      context.session !== null && !isRecordingClockPaused(context.session.clock),
-    isRecordingPaused: ({ context }) =>
-      context.session !== null && isRecordingClockPaused(context.session.clock),
     canRetake: ({ context }) =>
       context.session !== null &&
       findRetakeTarget(context.session.safePoints, getRecordingTimestamp(context.session)) !== null,
@@ -830,6 +825,7 @@ export const editorMachine = setup({
     },
 
     recording: {
+      initial: "running",
       invoke: {
         src: "mouseTracking",
         id: "mouseTracker",
@@ -849,18 +845,13 @@ export const editorMachine = setup({
         CAPTURE_FRAME: {
           actions: "captureFrame",
         },
-        // A pause stays inside `recording`: every capture handler below keeps running,
-        // stamped with the paused instant, so edits made while paused are part of the take.
-        PAUSE_RECORDING: {
-          guard: "isRecordingRunning",
-          actions: ["pauseRecordingSession", "pauseRecordingMedia"],
-        },
-        RESUME_RECORDING: {
-          guard: "isRecordingPaused",
-          actions: ["resumeRecordingSession", "resumeRecordingMedia"],
-        },
+        // A retake from either substate lands in `paused`: retakeRecording puts the clock
+        // back to a safe point and holds it paused there (rewindRecordingClock). It looks
+        // for that safe point at the same or a later time than canRetake did, so it always
+        // finds one, and the clock and the substate stay in step.
         RETAKE_RECORDING: {
           guard: "canRetake",
+          target: ".paused",
           actions: "retakeRecording",
         },
         ADD_CHAPTER_MARKER: {
@@ -949,6 +940,29 @@ export const editorMachine = setup({
             actions: ["finalizeRecording", "notifyRecordingStop"],
           },
         ],
+      },
+      // A pause stays inside `recording`: every capture handler above keeps running in
+      // `paused`, stamped with the paused instant, so edits made while paused are part of
+      // the take. The substate and the clock's pausedAt change in the same transitions:
+      // every way in starts a new, running clock (initRecordingSession), and only the
+      // pause, resume and retake transitions move it.
+      states: {
+        running: {
+          on: {
+            PAUSE_RECORDING: {
+              target: "paused",
+              actions: ["pauseRecordingSession", "pauseRecordingMedia"],
+            },
+          },
+        },
+        paused: {
+          on: {
+            RESUME_RECORDING: {
+              target: "running",
+              actions: ["resumeRecordingSession", "resumeRecordingMedia"],
+            },
+          },
+        },
       },
     },
 

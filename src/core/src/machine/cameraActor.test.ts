@@ -112,7 +112,7 @@ describe("camera recorder integration", () => {
     const errorEvent = Object.assign(new Event("error"), { error: new Error("camera failed") });
     FakeCameraMediaRecorder.instances[0]!.onerror?.(errorEvent);
 
-    expect(actor.getSnapshot().value).toBe("recording");
+    expect(actor.getSnapshot().matches("recording")).toBe(true);
     expect(actor.getSnapshot().children.cameraRecorder).toBeUndefined();
     expect(actor.getSnapshot().context.camera.isRecording).toBe(false);
     expect(track.stopped).toBe(true);
@@ -138,7 +138,7 @@ describe("camera recorder integration", () => {
     actors.push(actor);
 
     actor.send({ type: "START_RECORDING" });
-    await waitFor(actor, (snapshot) => snapshot.value === "recording");
+    await waitFor(actor, (snapshot) => snapshot.matches("recording"));
     actor.send({ type: "STOP_RECORDING" });
 
     expect(actor.getSnapshot().value).toBe("loading");
