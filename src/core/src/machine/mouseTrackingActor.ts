@@ -18,8 +18,8 @@ import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../../../utils/iframeInteractio
 // host document and every (same-origin) preview iframe, normalizes each point to
 // the recording root's coordinate space, and reports it via `input.onMouseMove`.
 // Cross-origin iframes can't be listened to directly, so they report through
-// postMessage (see `handleIframeInteractionMessage`). All listeners and observers
-// are torn down in the returned cleanup function.
+// postMessage (see `handleIframeInteractionMessage`). Every listener is added
+// with an AbortSignal, so the returned cleanup removes them all by aborting.
 // ============================================================================
 
 interface MouseTrackingInput {
@@ -51,6 +51,12 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
   ({ input }) => {
     let forceRecordedCursorHidden = false;
     const supportsPointerEvents = typeof window !== "undefined" && "PointerEvent" in window;
+    // Move, down and up. A browser without pointer events sends the mouse events.
+    const pointerEventTypes = supportsPointerEvents
+      ? (["pointermove", "pointerdown", "pointerup"] as const)
+      : (["mousemove", "mousedown", "mouseup"] as const);
+    // Aborting it removes the host document and window listeners.
+    const lifetime = new AbortController();
 
     // Each handler looks the root up once and passes it on as `rootElement`.
     // Without it createCursorPositionFromClientPoint finds the root again by
@@ -124,33 +130,14 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
     };
 
     // Handle iframe mouse tracking
-    type IframeMouseListeners = {
-      document: Document;
-      move: (e: MouseEvent) => void;
-      down: (e: MouseEvent) => void;
-      up: (e: MouseEvent) => void;
-      leave: (e: Event) => void;
-    };
+    // `frame` holds the iframe's load listener. `doc` holds the listeners on the
+    // document the iframe shows now; a newly loaded document replaces it.
+    type IframeScopes = { frame: AbortController; doc?: AbortController };
 
-    const iframeListeners = new Map<HTMLIFrameElement, IframeMouseListeners>();
-    const iframeLoadHandlers = new Map<HTMLIFrameElement, () => void>();
+    const iframeScopes = new Map<HTMLIFrameElement, IframeScopes>();
     const iframeWindowMap = new Map<Window, HTMLIFrameElement>();
     const iframeWindows = new Map<HTMLIFrameElement, Window>();
     const directlyTrackedIframes = new Set<HTMLIFrameElement>();
-
-    const removeIframeDocumentListeners = (handlers: IframeMouseListeners) => {
-      if (supportsPointerEvents) {
-        handlers.document.removeEventListener("pointermove", handlers.move, true);
-        handlers.document.removeEventListener("pointerdown", handlers.down, true);
-        handlers.document.removeEventListener("pointerup", handlers.up, true);
-      } else {
-        handlers.document.removeEventListener("mousemove", handlers.move, true);
-        handlers.document.removeEventListener("mousedown", handlers.down, true);
-        handlers.document.removeEventListener("mouseup", handlers.up, true);
-      }
-
-      handlers.document.removeEventListener("mouseleave", handlers.leave, true);
-    };
 
     const getIframeViewportSize = (
       iframe: HTMLIFrameElement,
@@ -214,6 +201,8 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
     const setupIframeListeners = (iframe: HTMLIFrameElement) => {
       removeIframeListeners(iframe);
       rememberIframeWindow(iframe);
+      const scopes: IframeScopes = { frame: new AbortController() };
+      iframeScopes.set(iframe, scopes);
 
       const onIframePointerEvent = (e: MouseEvent) => {
         const viewport = getIframeViewportSize(iframe);
@@ -248,11 +237,9 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
       };
 
       const attachToDocument = () => {
-        const existing = iframeListeners.get(iframe);
-        if (existing) {
-          removeIframeDocumentListeners(existing);
-          iframeListeners.delete(iframe);
-        }
+        scopes.doc?.abort();
+        scopes.doc = new AbortController();
+        const { signal } = scopes.doc;
 
         try {
           const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -261,26 +248,11 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
             return;
           }
 
-          if (supportsPointerEvents) {
-            iframeDoc.addEventListener("pointermove", onIframePointerEvent, true);
-            iframeDoc.addEventListener("pointerdown", onIframePointerEvent, true);
-            iframeDoc.addEventListener("pointerup", onIframePointerEvent, true);
-          } else {
-            iframeDoc.addEventListener("mousemove", onIframePointerEvent, true);
-            iframeDoc.addEventListener("mousedown", onIframePointerEvent, true);
-            iframeDoc.addEventListener("mouseup", onIframePointerEvent, true);
+          for (const type of pointerEventTypes) {
+            iframeDoc.addEventListener(type, onIframePointerEvent, { capture: true, signal });
           }
-
-          iframeDoc.addEventListener("mouseleave", onIframeMouseLeave, true);
+          iframeDoc.addEventListener("mouseleave", onIframeMouseLeave, { capture: true, signal });
           directlyTrackedIframes.add(iframe);
-
-          iframeListeners.set(iframe, {
-            document: iframeDoc,
-            move: onIframePointerEvent,
-            down: onIframePointerEvent,
-            up: onIframePointerEvent,
-            leave: onIframeMouseLeave,
-          });
         } catch (err) {
           // Cross-origin iframes can't be accessed directly; this is expected.
           // They are tracked instead via postMessage (see handleIframeInteractionMessage),
@@ -292,12 +264,7 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
         }
       };
 
-      const handleLoad = () => {
-        attachToDocument();
-      };
-
-      iframe.addEventListener("load", handleLoad);
-      iframeLoadHandlers.set(iframe, handleLoad);
+      iframe.addEventListener("load", attachToDocument, { signal: scopes.frame.signal });
       attachToDocument();
     };
 
@@ -305,22 +272,10 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
       directlyTrackedIframes.delete(iframe);
       forgetIframeWindow(iframe);
 
-      const handlers = iframeListeners.get(iframe);
-      const loadHandler = iframeLoadHandlers.get(iframe);
-
-      if (loadHandler) {
-        iframe.removeEventListener("load", loadHandler);
-        iframeLoadHandlers.delete(iframe);
-      }
-
-      if (handlers) {
-        try {
-          removeIframeDocumentListeners(handlers);
-        } catch (err) {
-          console.error("Error removing iframe listeners:", err);
-        }
-        iframeListeners.delete(iframe);
-      }
+      const scopes = iframeScopes.get(iframe);
+      scopes?.frame.abort();
+      scopes?.doc?.abort();
+      iframeScopes.delete(iframe);
     };
 
     const handleIframeInteractionMessage = (event: MessageEvent) => {
@@ -405,53 +360,34 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
 
     // Initial setup
     document.querySelectorAll("iframe").forEach(setupIframeListeners);
-    if (supportsPointerEvents) {
-      document.addEventListener("pointermove", handlePointerEvent, true);
-      document.addEventListener("pointerdown", handlePointerEvent, true);
-      document.addEventListener("pointerup", handlePointerEvent, true);
-    } else {
-      document.addEventListener("mousemove", handlePointerEvent, true);
-      document.addEventListener("mousedown", handlePointerEvent, true);
-      document.addEventListener("mouseup", handlePointerEvent, true);
+    for (const type of pointerEventTypes) {
+      document.addEventListener(type, handlePointerEvent, {
+        capture: true,
+        signal: lifetime.signal,
+      });
     }
-
-    document.addEventListener("mouseleave", handleMouseLeave, true);
-    window.addEventListener(RECORDED_CURSOR_VISIBILITY_EVENT, handleRecordedCursorVisibility);
-    window.addEventListener("message", handleIframeInteractionMessage);
+    document.addEventListener("mouseleave", handleMouseLeave, {
+      capture: true,
+      signal: lifetime.signal,
+    });
+    window.addEventListener(RECORDED_CURSOR_VISIBILITY_EVENT, handleRecordedCursorVisibility, {
+      signal: lifetime.signal,
+    });
+    window.addEventListener("message", handleIframeInteractionMessage, {
+      signal: lifetime.signal,
+    });
 
     return () => {
       observer.disconnect();
-      if (supportsPointerEvents) {
-        document.removeEventListener("pointermove", handlePointerEvent, true);
-        document.removeEventListener("pointerdown", handlePointerEvent, true);
-        document.removeEventListener("pointerup", handlePointerEvent, true);
-      } else {
-        document.removeEventListener("mousemove", handlePointerEvent, true);
-        document.removeEventListener("mousedown", handlePointerEvent, true);
-        document.removeEventListener("mouseup", handlePointerEvent, true);
-      }
-
-      document.removeEventListener("mouseleave", handleMouseLeave, true);
-      window.removeEventListener(RECORDED_CURSOR_VISIBILITY_EVENT, handleRecordedCursorVisibility);
-      window.removeEventListener("message", handleIframeInteractionMessage);
-
-      // Clean up load listeners
-      iframeLoadHandlers.forEach((handler, iframe) => {
-        iframe.removeEventListener("load", handler);
+      lifetime.abort();
+      iframeScopes.forEach((scopes) => {
+        scopes.frame.abort();
+        scopes.doc?.abort();
       });
-      iframeLoadHandlers.clear();
+      iframeScopes.clear();
       iframeWindowMap.clear();
       iframeWindows.clear();
       directlyTrackedIframes.clear();
-
-      iframeListeners.forEach((handlers) => {
-        try {
-          removeIframeDocumentListeners(handlers);
-        } catch (err) {
-          console.error("Failed to cleanup iframe listeners:", err);
-        }
-      });
-      iframeListeners.clear();
     };
   },
 );

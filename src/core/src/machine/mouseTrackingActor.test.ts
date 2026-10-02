@@ -44,6 +44,7 @@ describe("mouseTrackingActor", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   const renderApp = () => {
@@ -62,10 +63,19 @@ describe("mouseTrackingActor", () => {
 
   // jsdom gives an attached iframe a same-origin about:blank document and a
   // 1024x768 window, so the frame below shows it at half size.
+  //
+  // The actor adds the frame's listeners with an AbortSignal. Vitest swaps the
+  // page's AbortController for Node's and patches only the top window's
+  // addEventListener to accept Node signals, so the frame's document rejects
+  // them. A browser accepts a signal from any window, and jsdom does too when
+  // the signal is its own, so jsdom's AbortController from the frame stands in.
   const renderFrame = () => {
     const iframe = document.createElement("iframe");
     document.body.appendChild(iframe);
     mockRect(iframe, { left: 100, top: 75, width: 512, height: 384 });
+    const frameWindow = iframe.contentWindow as (Window & typeof globalThis) | null;
+    if (!frameWindow) throw new Error("the iframe has no window");
+    vi.stubGlobal("AbortController", frameWindow.AbortController);
     return iframe;
   };
 
