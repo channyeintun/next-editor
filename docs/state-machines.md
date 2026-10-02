@@ -93,7 +93,7 @@ diagram (`recordingPaused`, `playbackPaused`, ...) because mermaid state ids are
 stateDiagram-v2
     [*] --> idle
 
-    idle --> idle : START_RECORDING [not isDmpCodecReady]
+    idle --> idle : START_RECORDING [isDmpCodecMissing]
     idle --> recording : START_RECORDING [hasExternalAudioBlob]
     idle --> startingRecording : START_RECORDING [isMicrophoneEnabled]
     idle --> recording : START_RECORDING [no audio bootstrap needed]
@@ -356,24 +356,24 @@ includes each actor's own union (`AudioRecordingEmit`, `AudioPlaybackEmit`, `Cam
 
 Defined in the machine's `setup({ guards: { ... } })` block. The state config uses them by name only.
 
-| Guard                          | Used by                                                            | True when                                                                                              |
-| ------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `isDmpCodecReady`              | `idle` `START_RECORDING` (negated)                                 | The diff-match-patch WASM codec has loaded; without it no take starts                                  |
-| `hasExternalAudioBlob`         | `idle` `START_RECORDING`                                           | The event carries a non-empty narration file (`getExternalAudioBlob`)                                  |
-| `isMicrophoneEnabled`          | `idle` `START_RECORDING`                                           | `enableAudioRecording` is set, so the take starts in `startingRecording`                               |
-| `isMicrophoneAudioRecording`   | `recording` `STOP_RECORDING`, `AUDIO_RECORDING_ERROR`              | `enableAudioRecording` is set and the microphone recorder is running                                   |
-| `isExternalAudioRecording`     | `recording` `AUDIO_PLAYBACK_FINISHED`, `AUDIO_PLAYBACK_ERROR`      | A narration file is playing along with the take                                                        |
-| `isCameraRecording`            | `recording` `STOP_RECORDING`, `AUDIO_PLAYBACK_FINISHED`            | The camera recorder is running                                                                         |
-| `areRecordersDrained`          | `stoppingRecording` `always` (the finalize join)                   | No narration and no camera is still recording, so the take has every file it waits for                 |
-| `canRetake`                    | `recording` `RETAKE_RECORDING`                                     | There is a safe point before now                                                                       |
-| `isLateAudioAwaitingEdit`      | root `AUDIO_RECORDING_STOPPED`                                     | The late microphone blob's take still has a retake's cut to apply, so it goes back through `loading`   |
-| `canPlay`                      | `ready` `PLAY`                                                     | A recording with at least one frame is loaded                                                          |
-| `shouldPauseOnInteraction`     | `playing` `USER_INTERACTION`                                       | `pauseOnUserInteraction` is set                                                                        |
-| `shouldSyncPlaybackEditorRef`  | root `SET_EDITOR_REF`                                              | A new editor arrived while the replay owns the workspace and has a frame to re-apply, or waits for one |
-| `isCurrentScreenRecorderEvent` | root `SCREEN_*`                                                    | The event came from the current screen recorder, not an earlier capture's                              |
-| `isForLoadedRecording`         | root `ADD_CAPTION_TRACK`, `SET_CHAPTERS`; `playback` stream growth | The event names the loaded recording                                                                   |
-| `isPlaybackWorkspaceDetached`  | `playback` stream growth                                           | The viewer has taken the workspace over                                                                |
-| `isAtPlaybackEnd`              | `ended` `PLAY`                                                     | The playhead is within 100 ms of the end, so `PLAY` rewinds first                                      |
+| Guard                              | Used by                                                            | True when                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `isDmpCodecMissing`                | `idle` `START_RECORDING`                                           | The diff-match-patch WASM codec has not loaded, so no take starts                                      |
+| `hasExternalAudioBlob`             | `idle` `START_RECORDING`                                           | The event carries a non-empty narration file (`getExternalAudioBlob`)                                  |
+| `isMicrophoneEnabled`              | `idle` `START_RECORDING`                                           | `enableAudioRecording` is set, so the take starts in `startingRecording`                               |
+| `isMicrophoneAudioRecording`       | `recording` `STOP_RECORDING`, `AUDIO_RECORDING_ERROR`              | `enableAudioRecording` is set and the microphone recorder is running                                   |
+| `isExternalAudioRecording`         | `recording` `AUDIO_PLAYBACK_FINISHED`, `AUDIO_PLAYBACK_ERROR`      | A narration file is playing along with the take                                                        |
+| `isCameraRecording`                | `recording` `STOP_RECORDING`, `AUDIO_PLAYBACK_FINISHED`            | The camera recorder is running                                                                         |
+| `areRecordersDrained`              | `stoppingRecording` `always` (the finalize join)                   | No narration and no camera is still recording, so the take has every file it waits for                 |
+| `canRetake`                        | `recording` `RETAKE_RECORDING`                                     | There is a safe point before now                                                                       |
+| `isLateAudioAwaitingEdit`          | root `AUDIO_RECORDING_STOPPED`                                     | The late microphone blob's take still has a retake's cut to apply, so it goes back through `loading`   |
+| `canPlay`                          | `ready` `PLAY`                                                     | A recording with at least one frame is loaded                                                          |
+| `shouldPauseOnInteraction`         | `playing` `USER_INTERACTION`                                       | `pauseOnUserInteraction` is set                                                                        |
+| `shouldSyncPlaybackEditorRef`      | root `SET_EDITOR_REF`                                              | A new editor arrived while the replay owns the workspace and has a frame to re-apply, or waits for one |
+| `isCurrentScreenRecorderEvent`     | root `SCREEN_*`                                                    | The event came from the current screen recorder, not an earlier capture's                              |
+| `isForLoadedRecording`             | root `ADD_CAPTION_TRACK`, `SET_CHAPTERS`; `playback` stream growth | The event names the loaded recording                                                                   |
+| `isGrowthWhileViewerOwnsWorkspace` | `playback` stream growth                                           | The event grows the loaded recording, and the viewer has taken the workspace over                      |
+| `isAtPlaybackEnd`                  | `ended` `PLAY`                                                     | The playhead is within 100 ms of the end, so `PLAY` rewinds first                                      |
 
 Which recorders are running is answered once, by `getRunningRecorders(context)` in `captureActions.ts`; the recorder guards and the actions that pause, resume and stop the recorders all read it. The stop watchdog is the named delay `recorderStopWatchdog`.
 

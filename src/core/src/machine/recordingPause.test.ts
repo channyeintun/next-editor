@@ -196,7 +196,8 @@ describe("pausing a take", () => {
   });
 
   // The `paused` substate and the clock's pausedAt say the same thing in two places. The
-  // transitions that move one move the other, whatever the author presses and when.
+  // transitions that move one move the other, whatever the author presses and when. A new
+  // event that changes the take's clock belongs in the list below, or this check cannot see it.
   it("keeps the paused substate and the paused clock in step", () => {
     const { advance } = pinClocks();
     const step = fc.oneof(

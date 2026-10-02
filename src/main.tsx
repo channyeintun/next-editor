@@ -31,7 +31,7 @@ installPerformanceMetricsReporter((metrics) => {
 // Warm the diff-match-patch WASM codec that the recording encode/decode/replay
 // paths require, so it's ready before the user starts recording. A failure here
 // is not silent: `START_RECORDING` refuses to start without the codec (see
-// editorMachine's isDmpCodecReady guard), because building a content delta
+// editorMachine's isDmpCodecMissing guard), because building a content delta
 // without it throws inside an xstate assign, which stops the actor and loses the
 // whole in-progress session.
 void loadDmpCodec().catch((error: unknown) => {

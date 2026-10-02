@@ -1,14 +1,4 @@
-import {
-  setup,
-  assign,
-  and,
-  not,
-  raise,
-  stateIn,
-  stopChild,
-  enqueueActions,
-  fromPromise,
-} from "xstate";
+import { setup, assign, raise, stateIn, stopChild, enqueueActions, fromPromise } from "xstate";
 import type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./types";
 import { createIdleCameraState, createInitialContext } from "./types";
 import type { MouseCursorPosition, Recording } from "../types";
@@ -141,6 +131,33 @@ const SYNC_PAUSED_WORKSPACE_ACTIONS = [
   "captureLearnerWorkspaceBaseline",
 ] as const;
 
+/** Ends a take: turn the session into the recording, then tell the host it stopped. */
+const FINALIZE_TAKE_ACTIONS = ["finalizeRecording", "notifyRecordingStop"] as const;
+
+/**
+ * Streamed prefixes and late out-of-band media (external audio/camera, sibling captions)
+ * must only reach the recording they were fetched for. useUrlLoader guards staleness only
+ * against its own loads (the `?url=` lesson and drops), so a lesson opened another way (the
+ * header import) could otherwise be replaced mid-playback by the previous lesson's late
+ * download, or be given its subtitles.
+ */
+function isEventForLoadedRecording({
+  context,
+  event,
+}: {
+  context: EditorMachineContext;
+  event: EditorMachineEvent;
+}): boolean {
+  if (!context.recording) return false;
+  if (event.type === "EXTEND_RECORDING") return event.recording.id === context.recording.id;
+  if (event.type === "APPEND_RECORDING_DELTA") {
+    return event.delta.recordingId === context.recording.id;
+  }
+  if (event.type === "ADD_CAPTION_TRACK") return event.recordingId === context.recording.id;
+  if (event.type === "SET_CHAPTERS") return event.recordingId === context.recording.id;
+  return false;
+}
+
 // ============================================================================
 // Editor State Machine
 // ============================================================================
@@ -231,7 +248,7 @@ export const editorMachine = setup({
     // whole in-progress session is lost with only a console message. Refusing to
     // start is the honest outcome — the take would not be encodable at save time
     // either.
-    isDmpCodecReady: () => isDmpCodecLoaded(),
+    isDmpCodecMissing: () => !isDmpCodecLoaded(),
     canPlay: ({ context }) =>
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
     hasExternalAudioBlob: ({ event }) => getExternalAudioBlob(event) !== null,
@@ -266,22 +283,10 @@ export const editorMachine = setup({
         event.type === "SCREEN_STOPPED" ||
         event.type === "SCREEN_ERROR") &&
       context.screen.actorId === event.actorId,
-    // Streamed prefixes and late out-of-band media (external audio/camera, sibling captions)
-    // must only reach the recording they were fetched for. useUrlLoader guards staleness only
-    // against its own loads (the `?url=` lesson and drops), so a lesson opened another way (the
-    // header import) could otherwise be replaced mid-playback by the previous lesson's late
-    // download, or be given its subtitles.
-    isForLoadedRecording: ({ context, event }) => {
-      if (!context.recording) return false;
-      if (event.type === "EXTEND_RECORDING") return event.recording.id === context.recording.id;
-      if (event.type === "APPEND_RECORDING_DELTA") {
-        return event.delta.recordingId === context.recording.id;
-      }
-      if (event.type === "ADD_CAPTION_TRACK") return event.recordingId === context.recording.id;
-      if (event.type === "SET_CHAPTERS") return event.recordingId === context.recording.id;
-      return false;
-    },
-    isPlaybackWorkspaceDetached: ({ context }) => context.hasManualWorkspaceOverride,
+    isForLoadedRecording: isEventForLoadedRecording,
+    // Stream growth for the loaded recording after the viewer has taken the workspace over.
+    isGrowthWhileViewerOwnsWorkspace: (args) =>
+      isEventForLoadedRecording(args) && args.context.hasManualWorkspaceOverride,
     isAtPlaybackEnd: ({ context }) => isAtPlaybackEnd(context.timeline),
   },
   delays: {
@@ -748,7 +753,7 @@ export const editorMachine = setup({
       on: {
         START_RECORDING: [
           {
-            guard: not("isDmpCodecReady"),
+            guard: "isDmpCodecMissing",
             actions: [
               "releaseUnacceptedScreenStream",
               "setDmpCodecUnavailableError",
@@ -884,7 +889,7 @@ export const editorMachine = setup({
           {
             target: "loading",
             guard: "isExternalAudioRecording",
-            actions: ["finalizeRecording", "notifyRecordingStop"],
+            actions: FINALIZE_TAKE_ACTIONS,
           },
         ],
         AUDIO_PLAYBACK_ERROR: {
@@ -938,7 +943,7 @@ export const editorMachine = setup({
           },
           {
             target: "loading",
-            actions: ["finalizeRecording", "notifyRecordingStop"],
+            actions: FINALIZE_TAKE_ACTIONS,
           },
         ],
       },
@@ -993,17 +998,21 @@ export const editorMachine = setup({
           actions: ["handleAudioRecordingError", "notifyError"],
         },
       },
-      // The finalize join. xstate checks it after every event this state takes. Every way in
-      // has the microphone or the camera still recording, so it never passes on entry.
+      // The finalize join. xstate checks it on entry and after every event this state takes.
+      // Today every way in has the microphone or the camera still recording, so it does not
+      // pass on entry; if a later way in arrives already drained, finalizing at once is right.
+      // A recorder this state waits for must be in areRecordersDrained, and a failed one keeps
+      // its isRecording flag so the watchdog, not the join, ends the take. Read only context
+      // here: the join is also checked after root events such as SET_EDITOR_REF.
       always: {
         guard: "areRecordersDrained",
         target: "loading",
-        actions: ["finalizeRecording", "notifyRecordingStop"],
+        actions: FINALIZE_TAKE_ACTIONS,
       },
       after: {
         recorderStopWatchdog: {
           target: "loading",
-          actions: ["finalizeRecording", "notifyRecordingStop"],
+          actions: FINALIZE_TAKE_ACTIONS,
         },
       },
     },
@@ -1078,7 +1087,7 @@ export const editorMachine = setup({
         // recording on top of the viewer's edits. PLAY/SEEK reattach and pick up the new data.
         EXTEND_RECORDING: [
           {
-            guard: and(["isForLoadedRecording", "isPlaybackWorkspaceDetached"]),
+            guard: "isGrowthWhileViewerOwnsWorkspace",
             actions: ["extendRecording", "syncStreamedRecordingGrowth"],
           },
           {
@@ -1092,7 +1101,7 @@ export const editorMachine = setup({
         ],
         APPEND_RECORDING_DELTA: [
           {
-            guard: and(["isForLoadedRecording", "isPlaybackWorkspaceDetached"]),
+            guard: "isGrowthWhileViewerOwnsWorkspace",
             actions: ["appendRecordingDelta", "syncStreamedRecordingGrowth"],
           },
           {
