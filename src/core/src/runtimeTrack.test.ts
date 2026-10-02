@@ -7,6 +7,7 @@ import {
 import {
   applyTerminalOutputDelta,
   createRuntimeRecordingEvent,
+  diffRuntimeSnapshot,
   diffTerminalOutput,
   resolveLatestRuntimeSnapshot,
   resolveRuntimeSnapshotAt,
@@ -151,6 +152,27 @@ describe("runtime track checkpoints and resolution", () => {
     ];
     expect(resolveRuntimeSnapshotAt(events, 1)).toBe(events[1].snapshot);
     expect(resolveRuntimeSnapshotAt(events, 0)).toBe(events[0].snapshot);
+  });
+
+  // The load resolves index 0, so the first forward seek starts from a fold at the very
+  // start. It used to apply every delta up to a checkpoint in the range and then throw
+  // the result away. The event before the checkpoint here is damaged (no snapshot and no
+  // delta), so applying it throws: the seek must never touch it.
+  it("a forward seek from a retained fold restarts at the checkpoint it passes", () => {
+    const boot = snapshot("boot\n");
+    const ready = snapshot("ready\n", { status: "ready" });
+    const prompt = snapshot("ready\n$ ", { status: "ready" });
+    const events: RuntimeRecordingEvent[] = [
+      { timestamp: 0, snapshot: boot },
+      { timestamp: 10, delta: diffRuntimeSnapshot(boot, snapshot("boot\nnpm i\n")) },
+      { timestamp: 20 } as RuntimeRecordingEvent,
+      { timestamp: 30, snapshot: ready },
+      { timestamp: 40, delta: diffRuntimeSnapshot(ready, prompt) },
+    ];
+
+    expect(resolveRuntimeSnapshotAt(events, 0)).toBe(boot);
+    expect(resolveRuntimeSnapshotAt(events, 4)).toEqual(prompt);
+    expect(resolveRuntimeSnapshotAt([...events], 4)).toEqual(prompt);
   });
 
   it("round-trips the delta track through the SCR3 stream", async () => {

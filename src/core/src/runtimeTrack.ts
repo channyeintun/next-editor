@@ -177,10 +177,10 @@ const EMPTY_RUNTIME_SNAPSHOT: RuntimeRecordingSnapshot = { mode: "single-file", 
 
 /**
  * Resolves the runtime state at `index`. Folds forward from the last resolved
- * index when playback moves ahead (the common case: one event per tick), and
- * otherwise from the nearest checkpoint at or before `index`. The cache is per
- * events array, which only ever grows in place (streamed playback appends), so
- * a cached state stays valid.
+ * index when playback moves ahead (the common case: one event per tick) and no
+ * checkpoint lies in between, and otherwise from the nearest checkpoint at or
+ * before `index`. The cache is per events array, which only ever grows in place
+ * (streamed playback appends), so a cached state stays valid.
  *
  * A delta with no state before it — a track whose first event is not a
  * checkpoint, which no writer produces — resolves against an empty state rather
@@ -203,8 +203,19 @@ export function resolveRuntimeSnapshotAt(
   let snapshot: RuntimeRecordingSnapshot;
 
   if (cached && cached.index <= index) {
-    startIndex = cached.index + 1;
-    snapshot = cached.snapshot;
+    // Moving forward: continue from the last fold, unless a checkpoint lies in
+    // between. Then start from that checkpoint, so no delta before it is applied
+    // only to be thrown away. A playback tick usually moves one event, so this
+    // usually scans one event.
+    let checkpointIndex = index;
+    while (checkpointIndex > cached.index && !events[checkpointIndex].snapshot) checkpointIndex--;
+    if (checkpointIndex > cached.index) {
+      startIndex = checkpointIndex + 1;
+      snapshot = events[checkpointIndex].snapshot!;
+    } else {
+      startIndex = cached.index + 1;
+      snapshot = cached.snapshot;
+    }
   } else {
     let checkpointIndex = index;
     while (checkpointIndex >= 0 && !events[checkpointIndex].snapshot) checkpointIndex--;
