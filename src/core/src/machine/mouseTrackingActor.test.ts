@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createActor } from "xstate";
 import type { MouseCursorPosition } from "../types";
+import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../../../utils/iframeInteractionCapture";
+import { RECORDED_CURSOR_VISIBILITY_EVENT } from "../../../utils/recordedCursorVisibility";
 import { mouseTrackingActor } from "./mouseTrackingActor";
 
 function mockRect(
@@ -20,7 +22,23 @@ function mockRect(
   });
 }
 
-const pointerMoveType = "PointerEvent" in window ? "pointermove" : "mousemove";
+const pointerEventTypes =
+  "PointerEvent" in window
+    ? ["pointermove", "pointerdown", "pointerup"]
+    : ["mousemove", "mousedown", "mouseup"];
+const [pointerMoveType] = pointerEventTypes;
+
+function firePointer(target: EventTarget, type = pointerMoveType): void {
+  target.dispatchEvent(new MouseEvent(type, { clientX: 64, clientY: 48, bubbles: true }));
+}
+
+function fireMouseLeave(target: EventTarget): void {
+  target.dispatchEvent(new MouseEvent("mouseleave"));
+}
+
+// The actor finds added and removed iframes with a MutationObserver, whose
+// callback runs in a microtask.
+const flushMutations = () => Promise.resolve();
 
 describe("mouseTrackingActor", () => {
   afterEach(() => {
@@ -40,6 +58,33 @@ describe("mouseTrackingActor", () => {
     mockRect(app, { left: 50, top: 25, width: 900, height: 600 });
     mockRect(editor, { left: 150, top: 75, width: 400, height: 300 });
     return { line };
+  };
+
+  // jsdom gives an attached iframe a same-origin about:blank document and a
+  // 1024x768 window, so the frame below shows it at half size.
+  const renderFrame = () => {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    mockRect(iframe, { left: 100, top: 75, width: 512, height: 384 });
+    return iframe;
+  };
+
+  const getFrameDocument = (iframe: HTMLIFrameElement): Document => {
+    const frameDocument = iframe.contentDocument;
+    if (!frameDocument) throw new Error("the iframe has no document");
+    return frameDocument;
+  };
+
+  // jsdom clears every listener on a frame's own document when the frame is
+  // removed or navigates. A document jsdom does not own keeps its listeners, so
+  // only the actor can detach from it.
+  const giveFrameDocument = (iframe: HTMLIFrameElement): Document => {
+    const frameDocument = document.implementation.createHTMLDocument("");
+    Object.defineProperty(iframe, "contentDocument", {
+      configurable: true,
+      get: () => frameDocument,
+    });
+    return frameDocument;
   };
 
   it("looks the app root up once per pointer move", () => {
@@ -80,5 +125,196 @@ describe("mouseTrackingActor", () => {
 
     expect(onMouseMove).not.toHaveBeenCalled();
     actor.stop();
+  });
+
+  it("reports a pointer move inside a same-origin iframe once, in page coordinates", () => {
+    renderApp();
+    const iframe = renderFrame();
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+
+    firePointer(getFrameDocument(iframe).body);
+
+    // (100 + 64 / 2, 75 + 48 / 2), relative to the app root at (50, 25).
+    expect(onMouseMove).toHaveBeenCalledTimes(1);
+    expect(onMouseMove.mock.calls[0][0]).toMatchObject({ x: 82, y: 74, visible: true });
+    actor.stop();
+  });
+
+  it("tracks an iframe added after the actor starts", async () => {
+    renderApp();
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+    const iframe = renderFrame();
+    await flushMutations();
+
+    firePointer(getFrameDocument(iframe).body);
+
+    expect(onMouseMove).toHaveBeenCalledTimes(1);
+    actor.stop();
+  });
+
+  it("still reports a move once after the iframe fires load again", () => {
+    renderApp();
+    const iframe = renderFrame();
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+
+    iframe.dispatchEvent(new Event("load"));
+    iframe.dispatchEvent(new Event("load"));
+    firePointer(getFrameDocument(iframe).body);
+
+    expect(onMouseMove).toHaveBeenCalledTimes(1);
+    actor.stop();
+  });
+
+  it("moves its listeners to the new document when the iframe loads one", () => {
+    renderApp();
+    const iframe = renderFrame();
+    const firstDocument = giveFrameDocument(iframe);
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+
+    const nextDocument = giveFrameDocument(iframe);
+    iframe.dispatchEvent(new Event("load"));
+    firePointer(firstDocument.body);
+    fireMouseLeave(firstDocument.documentElement);
+
+    expect(onMouseMove).not.toHaveBeenCalled();
+
+    firePointer(nextDocument.body);
+
+    expect(onMouseMove).toHaveBeenCalledTimes(1);
+    actor.stop();
+  });
+
+  it("drops the old listeners when the iframe's src changes", async () => {
+    renderApp();
+    const iframe = renderFrame();
+    const frameDocument = giveFrameDocument(iframe);
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+
+    // jsdom does not load srcdoc, so the frame keeps its document; the actor
+    // still sets the frame up again with new handlers. A load listener left from
+    // the first setup would attach the old handler again here.
+    iframe.setAttribute("srcdoc", "<p>next</p>");
+    await flushMutations();
+    iframe.dispatchEvent(new Event("load"));
+    firePointer(frameDocument.body);
+
+    expect(onMouseMove).toHaveBeenCalledTimes(1);
+    actor.stop();
+  });
+
+  it("stops reporting moves from an iframe removed from the page", async () => {
+    renderApp();
+    const iframe = renderFrame();
+    const frameDocument = giveFrameDocument(iframe);
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+
+    firePointer(frameDocument.body);
+    iframe.remove();
+    await flushMutations();
+    firePointer(frameDocument.body);
+    fireMouseLeave(frameDocument.documentElement);
+
+    expect(onMouseMove).toHaveBeenCalledTimes(1);
+    actor.stop();
+  });
+
+  it("stops reporting iframe events after the actor stops", () => {
+    renderApp();
+    const iframe = renderFrame();
+    const frameDocument = getFrameDocument(iframe);
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+    const fireFrameEvents = () => {
+      for (const type of pointerEventTypes) firePointer(frameDocument.body, type);
+    };
+
+    fireFrameEvents();
+
+    expect(onMouseMove).toHaveBeenCalledTimes(3);
+
+    actor.stop();
+    fireFrameEvents();
+    iframe.dispatchEvent(new Event("load"));
+    fireFrameEvents();
+
+    expect(onMouseMove).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops reporting page and window events after the actor stops", () => {
+    const { line } = renderApp();
+    // A cross-origin frame: reading its document throws, so it reports moves by
+    // postMessage instead.
+    const crossOriginFrame = renderFrame();
+    Object.defineProperty(crossOriginFrame, "contentDocument", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Blocked a cross-origin frame", "SecurityError");
+      },
+    });
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+    const firePageEvents = () => {
+      for (const type of pointerEventTypes) firePointer(line, type);
+      fireMouseLeave(document.documentElement);
+      window.dispatchEvent(
+        new CustomEvent(RECORDED_CURSOR_VISIBILITY_EVENT, {
+          detail: { x: 300, y: 200, visible: true },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: crossOriginFrame.contentWindow,
+          data: {
+            type: IFRAME_INTERACTION_MESSAGE_TYPE,
+            payload: { type: "mousemove", data: { clientX: 64, clientY: 48 } },
+          },
+        }),
+      );
+    };
+
+    firePageEvents();
+
+    expect(onMouseMove).toHaveBeenCalledTimes(6);
+
+    actor.stop();
+    firePageEvents();
+
+    expect(onMouseMove).toHaveBeenCalledTimes(6);
+  });
+
+  it("listens to mouse events instead when the browser has no pointer events", () => {
+    const pointerEvent = Object.getOwnPropertyDescriptor(window, "PointerEvent");
+    Reflect.deleteProperty(window, "PointerEvent");
+    try {
+      const { line } = renderApp();
+      const frameDocument = getFrameDocument(renderFrame());
+      const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+      const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+      const fireMouseEvents = () => {
+        for (const type of ["mousemove", "mousedown", "mouseup"]) {
+          firePointer(line, type);
+          firePointer(frameDocument.body, type);
+        }
+      };
+
+      fireMouseEvents();
+      firePointer(line, "pointermove");
+      firePointer(frameDocument.body, "pointermove");
+
+      expect(onMouseMove).toHaveBeenCalledTimes(6);
+
+      actor.stop();
+      fireMouseEvents();
+
+      expect(onMouseMove).toHaveBeenCalledTimes(6);
+    } finally {
+      if (pointerEvent) Object.defineProperty(window, "PointerEvent", pointerEvent);
+    }
   });
 });
