@@ -98,7 +98,7 @@ export interface CapturedViewStateRef {
  * recording. Appenders push into its track arrays in place rather than spreading into
  * a new array/object, so capture cost is O(1) instead of O(session-so-far) per sample.
  * Each track array is append-only until a retake, which replaces every track array
- * with a shorter copy (see retake.ts). So code that reads a session while it records
+ * with a copy cut back to the safe point (see retake.ts). So code that reads a session while it records
  * must keep its own read cursor per track: the array it read and the length it saw
  * (see RecordingDraftTrackWriter). A new array means the track was cut back and must
  * be read again from the start. Snapshots share these arrays and cannot be diffed.
@@ -146,7 +146,8 @@ export interface RecordingSession {
   previewCheckpointWall?: number;
   /**
    * Already-compressed frames built incrementally during capture. Append-only, except
-   * that a retake replaces it (and every other track) with a shorter copy.
+   * that a retake replaces it (and every other track) with a copy cut back to the
+   * safe point.
    */
   frames: DeltaFrame[];
   /** Incremental encoder state (input count, last stored frame, last full frame) */

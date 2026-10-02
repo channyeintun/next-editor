@@ -413,7 +413,7 @@ interface TimelineState {
 
 ### RecordingSession
 
-`RecordingSession` is a mutable capture buffer: its object identity stays stable for the whole recording, and appenders push into its track arrays in place (O(1) per sample) instead of spreading into new arrays. Each track array is append-only until a retake, which replaces every track array with a shorter copy. So a reader that follows a session while it records keeps a cursor per track, made of the array it read and the length it saw, as `RecordingDraftTrackWriter` does. `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-equality selectors can still detect a change.
+`RecordingSession` is a mutable capture buffer: its object identity stays stable for the whole recording, and appenders push into its track arrays in place (O(1) per sample) instead of spreading into new arrays. Each track array is append-only until a retake, which replaces every track array with a copy cut back to the safe point. So a reader that follows a session while it records keeps a cursor per track, made of the array it read and the length it saw, as `RecordingDraftTrackWriter` does. `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-equality selectors can still detect a change.
 
 ```typescript
 interface RecordingSession {
@@ -422,6 +422,9 @@ interface RecordingSession {
   clock: RecordingClock; // Pauses recorded time skips (recordingClock.ts); read it via getRecordingTimestamp
   safePoints: RecordingSafePoint[]; // Where a retake can rewind to: the start and each resume
   mediaCuts: MediaSpan[]; // What retakes discarded from the recorders' files, in media time
+  chapters: RecordingChapter[]; // Chapter markers; finalize hands them to the recording
+  previewAwaitingCheckpoint?: boolean; // After a retake: drop patch batches until a fresh full snapshot
+  previewCheckpointWall?: number; // That snapshot's wall stamp; earlier-stamped patches are dropped too
   frames: DeltaFrame[]; // Already-compressed frames, built incrementally
   encoder: FrameStreamEncoderState; // Incremental keyframe/delta encoder state
   slideEvents: SlideEvent[];
@@ -433,6 +436,8 @@ interface RecordingSession {
   lastRuntimeSnapshot?: RuntimeRecordingSnapshot; // Resolved state of the last runtime event (diff base)
   runtimeCheckpointProgress?: RuntimeCheckpointProgress; // Places the next checkpoint
   cursorEvents: CursorRecordingEvent[]; // High-cadence fake cursor samples
+  whiteboardEvents: WhiteboardEvent[];
+  chatEvents: ChatRecordingEvent[]; // Coding-agent chat: dmp content deltas + sparse checkpoints
   lastMousePosition: MouseCursorPosition;
   lastCapturedViewStateRef?: CapturedViewStateRef; // Perf: reuse saveViewState() result and, by its versionId + modelUri, the content string when unchanged
 }

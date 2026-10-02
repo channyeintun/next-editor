@@ -12,7 +12,8 @@ import type {
  * runtime kind a lesson type uses, how a WebContainer runtime must be set up,
  * and which actions each runtime kind can perform. It lives here once so the
  * two schemas cannot drift apart. When each schema had its own copy, they did:
- * only the script's runtime-"none" list had runtime.collapseDock.
+ * only the script's runtime-"none" list had runtime.collapseDock. It also holds
+ * the per-action checks both schemas share (`actionContractIssues`).
  */
 
 /**
@@ -154,7 +155,7 @@ export function runtimeContractIssues(
 }
 
 /**
- * The checks on single actions that do not depend on the runtime: a click must
+ * The per-action checks that do not depend on the runtime: a click must
  * not retry, a preview expectation needs something stable to check, and every
  * action id is unique.
  */

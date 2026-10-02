@@ -492,8 +492,9 @@ describe("audioRecordingActor lifecycle", () => {
   });
 
   // MediaRecorder stops by itself when its track ends (device unplugged, permission
-  // revoked). STOP_RECORDING then skips `stoppingRecording`, so nothing else would
-  // stop the actor, and the next take's spawn under the same id would orphan it.
+  // revoked). Its file is stored then, and `stoppingRecording` does not wait for a
+  // microphone that already stopped, so nothing else would stop the actor, and the
+  // next take's spawn under the same id would orphan it.
   it("stops a recorder that ends by itself mid-take", async () => {
     const track = new FakeAudioTrack();
     Object.defineProperty(navigator, "mediaDevices", {

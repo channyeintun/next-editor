@@ -80,13 +80,14 @@ flowchart LR
 Defined in `src/core/src/machine/editorMachine.ts`.
 
 The diagram draws every transition that has a target, plus the codec refusal that stays in
-`idle`. A transition defined on a compound state (`recording`'s `RETAKE_RECORDING`,
-`playback`'s `STOP` and `RESTORE_LEARNER_WORKSPACE`) is drawn from each substate it can
-leave. The root late-blob handler is drawn from `loading` and `playback`, the states a
+`idle`. A transition on a compound state that targets one of its own substates
+(`recording`'s `RETAKE_RECORDING`, `playback`'s `STOP` and `RESTORE_LEARNER_WORKSPACE`) is
+drawn from each substate it can leave; the others are drawn once, from the compound state's
+edge. The root late-blob handler is drawn from `loading` and `playback`, the states a
 finalized take's late microphone blob can reach. Handlers without a target (the captures,
-`TICK`, `SEEK`, `SET_SPEED` and the like) are listed in the sections below. The substates
-have their own ids in the diagram (`recordingPaused`, `playbackPaused`, ...) because mermaid
-state ids are global.
+`TICK`, `SEEK`, `SET_SPEED` and the like) are mostly described in the sections below, and
+all are listed in the action and event tables. The substates have their own ids in the
+diagram (`recordingPaused`, `playbackPaused`, ...) because mermaid state ids are global.
 
 ```mermaid
 stateDiagram-v2
@@ -202,8 +203,7 @@ What happens here:
 - an invoked `mouseTracking` actor drives `CAPTURE_FRAME` for cursor movement
 - camera capture spawns conditionally on entry if `enableCameraRecording`
 - `CAPTURE_FRAME`, `SLIDE_EVENT`, `PREVIEW_EVENT`, `PREVIEW_INITIAL_DOCUMENT`, `PREVIEW_PATCH_BATCH`, `WORKSPACE_EVENT`, `RUNTIME_EVENT`, `WHITEBOARD_EVENT`, and `CHAT_EVENT` are all captured into the session
-- `recording` has two substates, `running` (where every take starts) and `paused`. `PAUSE_RECORDING` (handled only in `running`) and `RESUME_RECORDING` (handled only in `paused`) move between them, so a second pause or a resume while running is dropped. The substate and the clock's `pausedAt` change in the same transitions, and the UI's `isRecordingPaused` reads the substate (`state.matches({ recording: "paused" })`). Every capture handler sits on `recording` itself, so it runs in both
-- `PAUSE_RECORDING` / `RESUME_RECORDING` stop and restart the take without leaving `recording`: the session clock (`recordingClock.ts`) stands still, and the microphone, camera and screen recorders (or a selected narration file) pause with it. Everything captured while paused is stamped at the pause, so edits made then replay as one jump; pointer samples are dropped until the resume records where the pointer ended up. Preview rrweb stamps have the pauses taken out on the wall clock, so replay's single preview offset stays valid
+- `recording` has two substates, `running` (where every take starts) and `paused`. `PAUSE_RECORDING` (handled only in `running`) and `RESUME_RECORDING` (handled only in `paused`) move between them, so a second pause or a resume while running is dropped. The substate and the clock's `pausedAt` change in the same transitions, and the UI's `isRecordingPaused` reads the substate (`state.matches({ recording: "paused" })`). Every capture handler sits on `recording` itself, so it runs in both. Pausing never leaves `recording`: the session clock (`recordingClock.ts`) stands still, and the microphone, camera and screen recorders (or a selected narration file) pause with it. Everything captured while paused is stamped at the pause, so edits made then replay as one jump; pointer samples are dropped until the resume records where the pointer ended up. Preview rrweb stamps have the pauses taken out on the wall clock, so replay's single preview offset stays valid
 - `RETAKE_RECORDING` rewinds the take to its last safe point (its start, or the last resume; `retake.ts`) and holds it paused there: from either substate it moves to `paused`, and `rewindRecordingClock` leaves the clock paused. Only the tail is discarded: every track is cut back to the entries at or before that point (new arrays), the frame encoder is re-based on the last kept frame, and the clock is rewound. The recorders keep their files, so the stretch they recorded since is added to `session.mediaCuts` (microphone narration is cut when the take loads, via `pendingAudioEdit`; the camera is mapped around `cameraCuts`), while a selected narration file is sought back instead. The live workspace, whiteboard, slides and preview panel are put back through their appliers; the live terminal and agent chat, which cannot be rewound, are recorded whole at the safe point; and the preview's rrweb stream drops patches until a fresh full snapshot re-bases it
 - `ADD_CHAPTER_MARKER` marks a chapter at the take's current moment (one per moment); it is also a safe point a retake can rewind to, anchored at the pause when marked while paused. A retake drops the chapters it discards, and finalize hands the rest to the recording
 - camera lifecycle events are folded into camera state

@@ -125,7 +125,8 @@ export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
  *
  * A `Record` keyed by the track union rather than a hand-kept array: a track
  * with no segment kind fails the typecheck. A hand-kept array with a track left
- * out still compiles, and the exporter then never writes that track.
+ * out still compiles, and the exporter then never writes that track. The key
+ * order is the order the exporter writes the tracks in.
  */
 const EVENT_TRACK_SEGMENT_KINDS: Record<Exclude<RecordingTrackName, "frames">, SegmentKind> = {
   slideEvents: SEGMENT_KIND.slide,
@@ -140,12 +141,15 @@ const EVENT_TRACK_SEGMENT_KINDS: Record<Exclude<RecordingTrackName, "frames">, S
 };
 
 /**
- * Canonical mapping between Recording event arrays and SCR3 segment kinds; the
- * exporter writes one segment track per entry, in this order.
+ * The table above as a list: the exporter writes one segment track per entry,
+ * in this order.
  */
-export const RECORDING_EVENT_SEGMENTS = (
-  Object.keys(EVENT_TRACK_SEGMENT_KINDS) as (keyof typeof EVENT_TRACK_SEGMENT_KINDS)[]
-).map((key) => ({ kind: EVENT_TRACK_SEGMENT_KINDS[key], key }));
+export const RECORDING_EVENT_SEGMENTS: ReadonlyArray<{
+  kind: SegmentKind;
+  key: keyof typeof EVENT_TRACK_SEGMENT_KINDS;
+}> = (Object.keys(EVENT_TRACK_SEGMENT_KINDS) as (keyof typeof EVENT_TRACK_SEGMENT_KINDS)[]).map(
+  (key) => ({ kind: EVENT_TRACK_SEGMENT_KINDS[key], key }),
+);
 
 export interface RecordingStreamMeta {
   version: 4;
