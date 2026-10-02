@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vite-plus/test";
+import type { UnknownAction } from "xstate";
 import type {
   ChatCheckpoint,
   ChatDelta,
@@ -14,13 +15,13 @@ import type {
   RuntimeTerminalSessionSnapshot,
 } from "../../../../types/runtime";
 import {
-  areWorkspaceSnapshotsEqual,
   toWorkspaceDeltaSnapshot,
   type WorkspaceRecordingEvent,
   type WorkspaceRecordingSnapshot,
 } from "../../../../types/workspace";
 import { diffRuntimeSnapshot, resolveRuntimeSnapshotAt } from "../../runtimeTrack";
-import type { PreviewEvent, PreviewState, Slide, SlideEvent } from "../../slides";
+import type { PreviewEvent, Slide, SlideEvent } from "../../slides";
+import type { Recording, RecordingStreamDelta } from "../../types";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "../../utils/chatDelta";
 import { createContentDelta } from "../../utils/frameDelta";
 import type {
@@ -28,67 +29,85 @@ import type {
   WhiteboardEvent,
   WhiteboardSceneState,
 } from "../../whiteboard";
+import { editorMachine } from "../editorMachine";
+import {
+  adoptPlaybackWorkspaceAtPause,
+  appendRecordingDelta,
+  applyChatEventsAtTime,
+  applyFrameAtTime,
+  applyPreviewEventsAtTime,
+  applyPreviewPatchBatchesAtTime,
+  applyRuntimeEventsAtTime,
+  applySlideEventsAtTime,
+  applyWhiteboardEventsAtTime,
+  applyWorkspaceEventsAtTime,
+  captureLearnerWorkspaceBaseline,
+  detachPlaybackWorkspace,
+  extendRecording,
+  invalidateAppliedPlaybackState,
+  notifySeek,
+  reattachPlaybackWorkspace,
+  seekToTime,
+  setRecording,
+  storeTickTime,
+} from "../replayActions";
+import {
+  createInitialContext,
+  type EditorActionArgs,
+  type EditorContextUpdate,
+  type EditorMachineContext,
+  type EditorMachineEvent,
+  type EditorMachineHostHooks,
+} from "../types";
 import { getChatReplayResult } from "./chat";
-import { isReplayResync } from "./cursor";
 import { getPreviewReplayResult } from "./preview";
 import { getRuntimeReplayResult } from "./runtime";
 import { getSlideReplayResult, type SlideReplayApplication } from "./slide";
 import { getWhiteboardReplayResult } from "./whiteboard";
-import { getWorkspaceReplayResult } from "./workspace";
 
 // ============================================================================
 // Seeking lands where playing does.
 //
 // Whatever path of ticks, seeks, resumes and streamed appends brings playback
 // to time T, a track must show what a cold resolve at T shows. Each test below
-// generates a time-sorted event log and a walk, and checks this after every
-// move of the walk.
+// generates a time-sorted event log and a walk, and checks this after the load
+// and after every move of the walk.
 //
-// The walk follows the machine's cursor protocol (replayActions.ts):
-//   * TICK advances from the track's cursor.
-//   * SEEK runs REPLAY_CURSORS_RESET, then resyncs at the new time.
-//   * PLAY after a pause runs invalidateAppliedPlaybackState, then resyncs.
-//   * APPEND_RECORDING_DELTA pushes records into the same array, then applies.
-// Each track has its own adapter, because each one keeps its cursor and shows
-// its state a little differently.
+// The walk runs the machine's real replay actions (replayActions.ts) on a small
+// context made by createInitialContext. For each trigger it runs the actions
+// editorMachine.ts runs, in the same order, and merges each returned patch into
+// the context the way `assign` does (MACHINE_STEPS below). So the cursor resets
+// (REPLAY_CURSORS_RESET), the resync rule (isReplayResync), the replay time and
+// every apply action under test are the real ones. Only the host hooks are
+// fakes: they record what the track shows, and before a PLAY the viewer may
+// change it, as a paused viewer can. PLAY must then show the recording again.
+//
+// Each track adapter says which recording field it replays, which host hook
+// shows it, and how to resolve it cold.
 // ============================================================================
 
 /** Enough runs to find a broken cursor rule, few enough to keep the suite fast. */
 const NUM_RUNS = 150;
 
-/** The event a track's apply action runs for. "LOAD" is the playback entry after a load. */
-type ReplayTrigger = "LOAD" | "TICK" | "SEEK" | "PLAY" | "APPEND_RECORDING_DELTA";
-
 /**
- * Tracks with transient interactions (slide hops, preview clicks) replay every
- * event a tick or a streamed append crosses. A load, a seek or a resume lands on
- * one state and must never fire the recorded interactions again.
+ * A walk the machine can take once a recording is loaded. A new trigger, or a new
+ * transition that resets replay cursors, must be added here and to MACHINE_STEPS,
+ * or the property cannot see it.
  */
-function expectAtMostOneState(trigger: ReplayTrigger, applied: readonly unknown[]): void {
-  if (trigger === "LOAD" || trigger === "SEEK" || trigger === "PLAY") {
-    expect(applied.length, `states applied on ${trigger}`).toBeLessThanOrEqual(1);
-  }
-}
-
 type Move =
   | { kind: "tick"; dt: number }
   /** Seek near a recorded stamp: `pick` chooses the event, `offset` moves off its stamp. */
   | { kind: "seek"; pick: number; offset: number }
-  | { kind: "resume" }
-  | { kind: "append"; count: number };
-
-interface TrackWalk {
-  /** The track's apply action (applyChatEventsAtTime and the others) at `time`. */
-  apply(time: number, trigger: ReplayTrigger): void;
-  /** What SEEK (seekToTime) or PLAY (invalidateAppliedPlaybackState) resets for this track. */
-  invalidate(trigger: "SEEK" | "PLAY"): void;
-  /** The next `count` records of the log, pushed into the array the walk replays. */
-  append(count: number): void;
-  /** What the track shows now. */
-  shown(): unknown;
-  /** What a cold resolve at `time` shows, from a copy that shares no cache with the walk. */
-  cold(time: number): unknown;
-}
+  /**
+   * PLAY: the first one from ready, later ones after a PAUSE at the same moment.
+   * Before it the viewer may change what the track shows (`viewerEdits`).
+   */
+  | { kind: "resume"; viewerEdits: boolean }
+  /**
+   * The next `count` records stream in: pushed into the loaded arrays in place
+   * (APPEND_RECORDING_DELTA), or as a longer copy of the recording (EXTEND_RECORDING).
+   */
+  | { kind: "append"; count: number; extend: boolean };
 
 const arbMove: fc.Arbitrary<Move> = fc.oneof(
   {
@@ -111,10 +130,17 @@ const arbMove: fc.Arbitrary<Move> = fc.oneof(
       offset: fc.constantFrom(-100, -1, 0, 1, 500),
     }),
   },
-  { weight: 1, arbitrary: fc.constant({ kind: "resume" } as const) },
+  {
+    weight: 1,
+    arbitrary: fc.record({ kind: fc.constant("resume"), viewerEdits: fc.boolean() }),
+  },
   {
     weight: 2,
-    arbitrary: fc.record({ kind: fc.constant("append"), count: fc.integer({ min: 1, max: 4 }) }),
+    arbitrary: fc.record({
+      kind: fc.constant("append"),
+      count: fc.integer({ min: 1, max: 4 }),
+      extend: fc.boolean(),
+    }),
   },
 );
 
@@ -135,41 +161,352 @@ const arbGap = fc.oneof(
   { weight: 3, arbitrary: fc.integer({ min: 1, max: 400 }) },
 );
 
-/**
- * Plays `moves` on `track`, checking it against a cold resolve after the load and
- * after each move. Returns how many states it compared.
- */
-function walk(track: TrackWalk, moves: Move[], stamps: number[]): number {
-  let time = 0;
-  track.apply(time, "LOAD");
-  expect(track.shown(), "after the load").toEqual(track.cold(time));
+// ============================================================================
+// The machine's side of the walk.
+// ============================================================================
 
+/**
+ * The machine's actions by name, wired as editorMachine.ts wires them: `assign`
+ * actions return a patch, plain ones only call host hooks. A name the walk meets
+ * but does not know stops it, because a new action may move a replay cursor.
+ */
+const ASSIGN_ACTIONS: Record<string, (args: EditorActionArgs) => EditorContextUpdate> = {
+  storeTickTime,
+  seekToTime,
+  appendRecordingDelta,
+  extendRecording,
+  invalidateAppliedPlaybackState,
+  detachPlaybackWorkspace,
+  reattachPlaybackWorkspace,
+  captureLearnerWorkspaceBaseline,
+  applyWorkspaceEventsAtTime,
+  applyRuntimeEventsAtTime,
+  applyFrameAtTime,
+  applyPreviewEventsAtTime,
+  applySlideEventsAtTime,
+  applyWhiteboardEventsAtTime,
+  applyChatEventsAtTime,
+};
+
+const PLAIN_ACTIONS: Record<string, (args: EditorActionArgs) => void> = {
+  adoptPlaybackWorkspaceAtPause,
+  applyPreviewPatchBatchesAtTime,
+  notifySeek,
+};
+
+/**
+ * Actions that change no replay state: they drive the timeline and narration
+ * actors, or keep the viewer's own edits (the walk makes none).
+ */
+const SKIPPED_ACTIONS = new Set([
+  "spawnPlaybackAudio",
+  "startPlaybackActors",
+  "pausePlaybackActors",
+  "seekPlaybackActors",
+  "syncPlaybackAudioToTimeline",
+  "syncStreamedRecordingGrowth",
+  "preserveLearnerWorkspace",
+]);
+
+const { playback } = editorMachine.root.states;
+const { ready, playing, paused } = playback.states;
+
+/** The actions of `node`'s own `type` transition: its only branch, or the one `guard` guards. */
+function transitionActions(
+  node: typeof playback,
+  type: string,
+  guard?: string,
+): readonly UnknownAction[] {
+  const branches = node.transitions.get(type) ?? [];
+  const branch = guard ? branches.find((each) => each.guard === guard) : branches[0];
+  if (!branch) {
+    throw new Error(`editorMachine.ts no longer has the ${type} transition the walk takes`);
+  }
+  return branch.actions;
+}
+
+/** A transition of `playback` itself, which the walk takes from ready and from playing. */
+function playbackActions(type: string, guard?: string): readonly UnknownAction[] {
+  if (ready.transitions.has(type) || playing.transitions.has(type)) {
+    throw new Error(`ready or playing now handles ${type} itself; walk that transition instead`);
+  }
+  return transitionActions(playback, type, guard);
+}
+
+/**
+ * The actions the machine runs for each step of the walk. They are read from the
+ * machine itself (editorMachine.ts: `loading`'s onDone near line 1026, and the
+ * `playback` state near lines 1067-1265), so the walk follows the machine's lists
+ * and order: the source state's exit, the transition's own actions, then the
+ * target's entry. Only which transition each step takes is kept by hand here.
+ *
+ * The walk never stays paused (a resume is PAUSE then PLAY at once), so paused's
+ * own TICK and SEEK, and growth while the viewer owns the workspace, are not
+ * walked. Neither are STOP, the end (FINISHED, ended), WORKSPACE_EVENT and
+ * SET_EDITOR_REF.
+ */
+const MACHINE_STEPS = {
+  // loading's onDone runs setRecording (see `load`), then enters playback.ready.
+  LOAD: [...playback.entry, ...ready.entry],
+  TICK: playbackActions("TICK"),
+  SEEK: playbackActions("SEEK"),
+  // The first PLAY: ready -> playing.
+  PLAY: [...ready.exit, ...transitionActions(ready, "PLAY"), ...playing.entry],
+  // playing -> paused hands the workspace to the viewer (detachPlaybackWorkspace) ...
+  PAUSE: [...playing.exit, ...transitionActions(playing, "PAUSE"), ...paused.entry],
+  // ... and paused -> playing takes it back (reattachPlaybackWorkspace).
+  RESUME: [...paused.exit, ...transitionActions(paused, "PLAY"), ...playing.entry],
+  // Growth while the replay owns the workspace.
+  APPEND_RECORDING_DELTA: playbackActions("APPEND_RECORDING_DELTA", "isForLoadedRecording"),
+  EXTEND_RECORDING: playbackActions("EXTEND_RECORDING", "isForLoadedRecording"),
+};
+
+/** The editor machine during playback, as far as the walk takes it. */
+interface PlaybackMachine {
+  context: EditorMachineContext;
+  state: "ready" | "playing";
+}
+
+/** Runs `actions` for `event`. Like `assign`, each action sees what the ones before it changed. */
+function run(
+  machine: PlaybackMachine,
+  event: EditorMachineEvent,
+  actions: readonly UnknownAction[],
+): void {
+  for (const action of actions) {
+    if (typeof action !== "string") throw new Error("The walk cannot run an inline action");
+    if (SKIPPED_ACTIONS.has(action)) continue;
+    const args = { context: machine.context, event };
+    if (Object.hasOwn(ASSIGN_ACTIONS, action)) {
+      machine.context = { ...machine.context, ...ASSIGN_ACTIONS[action](args) };
+    } else if (Object.hasOwn(PLAIN_ACTIONS, action)) {
+      PLAIN_ACTIONS[action](args);
+    } else {
+      throw new Error(`The walk does not know the action "${action}"; add it above`);
+    }
+  }
+}
+
+/** Longer than any walk, so the timeline never clamps the playhead. */
+const DURATION = 60_000;
+
+/**
+ * The recording around one track's log. Its one frame makes it playable (canPlay).
+ * The context has no editor, so applyFrameAtTime applies nothing: the frame track
+ * needs Monaco and is left out.
+ */
+const RECORDING: Recording = {
+  version: 4,
+  id: "walk",
+  name: "Walk",
+  createdAt: 0,
+  duration: DURATION,
+  keyframeInterval: 120,
+  frames: [
+    {
+      timestamp: 0,
+      isKeyframe: true,
+      state: {
+        content: "",
+        selection: {
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: 1,
+          endColumn: 1,
+          selectionStartLineNumber: 1,
+          selectionStartColumn: 1,
+          positionLineNumber: 1,
+          positionColumn: 1,
+        },
+        position: { lineNumber: 1, column: 1 },
+        viewState: null,
+      },
+    },
+  ],
+};
+
+/** loading's onDone: setRecording, then playback's entry. */
+function load(recording: Recording, hooks: EditorMachineHostHooks): PlaybackMachine {
+  const initial = createInitialContext({
+    editorRef: { current: null },
+    ...hooks,
+    // A replay action reports a damaged track here, and the walk's tracks are whole.
+    onError: (error) => {
+      throw error;
+    },
+  });
+  const loaded = { recording, duration: DURATION };
+  const machine: PlaybackMachine = {
+    context: { ...initial, ...setRecording({ context: initial }, loaded) },
+    state: "ready",
+  };
+  // The loadRecording invoke's done event. The replay actions read only its type,
+  // which is neither TICK nor SEEK.
+  const done = { type: "xstate.done.actor.0.editor.loading", output: loaded };
+  run(machine, done as unknown as EditorMachineEvent, MACHINE_STEPS.LOAD);
+  return machine;
+}
+
+/** Where each track's records are, in a recording and in a streamed delta. */
+const TRACK_FIELDS = {
+  chatEvents: "newChatEvents",
+  runtimeEvents: "newRuntimeEvents",
+  workspaceEvents: "newWorkspaceEvents",
+  whiteboardEvents: "newWhiteboardEvents",
+  slideEvents: "newSlideEvents",
+  previewEvents: "newPreviewEvents",
+} as const satisfies { [F in keyof Recording]?: keyof RecordingStreamDelta };
+
+type TrackField = keyof typeof TRACK_FIELDS;
+
+const NO_NEW_RECORDS: Omit<RecordingStreamDelta, "cursor" | "recordingId" | "duration"> = {
+  streamFinalized: false,
+  newFrames: [],
+  newSlideEvents: [],
+  newPreviewEvents: [],
+  newPreviewInitialDocuments: [],
+  newPreviewPatchBatches: [],
+  newWorkspaceEvents: [],
+  newRuntimeEvents: [],
+  newCursorEvents: [],
+  newWhiteboardEvents: [],
+  newChatEvents: [],
+};
+
+/** Streams `records` of one track in, in place (a delta) or as a longer copy (`extend`). */
+function grow(
+  machine: PlaybackMachine,
+  field: TrackField,
+  records: readonly unknown[],
+  extend: boolean,
+): void {
+  const recording = machine.context.recording!;
+  if (extend) {
+    const longer = { ...recording, [field]: [...(recording[field] ?? []), ...records] };
+    run(machine, { type: "EXTEND_RECORDING", recording: longer }, MACHINE_STEPS.EXTEND_RECORDING);
+    return;
+  }
+  const delta: RecordingStreamDelta = {
+    ...NO_NEW_RECORDS,
+    cursor: machine.context.recordingStreamCursor + 1,
+    recordingId: recording.id,
+    duration: DURATION,
+    [TRACK_FIELDS[field]]: records,
+  };
+  run(machine, { type: "APPEND_RECORDING_DELTA", delta }, MACHINE_STEPS.APPEND_RECORDING_DELTA);
+}
+
+// ============================================================================
+// The walk.
+// ============================================================================
+
+interface ReplayTrack<Event extends { timestamp: number }> {
+  /** The recording field the track replays. */
+  field: TrackField;
+  /** Anything else the recording needs (the slide deck). */
+  recording?: Partial<Recording>;
+  /**
+   * The host hooks that show the track, made fresh for each walk, and what they
+   * show now. A track that lands on one state pushes each state its hook is
+   * given into `applied`.
+   */
+  host(applied: unknown[]): {
+    hooks: EditorMachineHostHooks;
+    shown(context: EditorMachineContext): unknown;
+    /** The viewer changes what the track shows, as they may before PLAY. */
+    viewerEdit?(): void;
+  };
+  /** What a cold resolve at `time` shows. `events` is a copy that shares no cache with the walk. */
+  cold(events: Event[], time: number): unknown;
+  /**
+   * Tracks with transient interactions (slide hops, preview clicks) replay every
+   * event a tick or a streamed append crosses. A load, a seek or a resume lands on
+   * one state and must never fire the recorded interactions again.
+   */
+  landsOnOneState?: true;
+  /** What the host does on its own once playing starts. */
+  onPlaying?(context: EditorMachineContext): void;
+}
+
+/**
+ * Loads the first `initialCount` records of `all`, plays `moves`, and checks the
+ * track against a cold resolve after the load and after each move. Returns how
+ * many states it compared.
+ */
+function walk<Event extends { timestamp: number }>(
+  track: ReplayTrack<Event>,
+  all: Event[],
+  initialCount: number,
+  moves: Move[],
+): number {
+  const stamps = all.map((event) => event.timestamp);
+  const applied: unknown[] = [];
+  const host = track.host(applied);
+  const machine = load(
+    { ...RECORDING, ...track.recording, [track.field]: all.slice(0, initialCount) },
+    host.hooks,
+  );
+  let time = 0;
+
+  const loaded = (): Event[] => (machine.context.recording?.[track.field] ?? []) as Event[];
+  const check = (label: string, landsOnOneState: boolean) => {
+    if (track.landsOnOneState && landsOnOneState) {
+      expect(applied.length, `states applied ${label}`).toBeLessThanOrEqual(1);
+    }
+    expect(machine.context.timeline.currentTime, `the playhead ${label}`).toBe(time);
+    expect(host.shown(machine.context), `what the track shows ${label}`).toEqual(
+      track.cold([...loaded()], time),
+    );
+    applied.length = 0;
+  };
+
+  check("after the load", true);
   moves.forEach((move, index) => {
     if (move.kind === "tick") {
+      // The timeline ticks only once playing, but a TICK in ready runs the same
+      // playback.TICK, so the walk also ticks from the cursors the load left.
       time += move.dt;
-      track.apply(time, "TICK");
+      run(machine, { type: "TICK", currentTime: time }, MACHINE_STEPS.TICK);
     } else if (move.kind === "seek") {
       const stamp = stamps.length ? stamps[move.pick % stamps.length] : 0;
       time = Math.max(0, stamp + move.offset);
-      track.invalidate("SEEK");
-      track.apply(time, "SEEK");
+      run(machine, { type: "SEEK", time }, MACHINE_STEPS.SEEK);
     } else if (move.kind === "resume") {
-      track.invalidate("PLAY");
-      track.apply(time, "PLAY");
+      const wasPlaying = machine.state === "playing";
+      if (wasPlaying) run(machine, { type: "PAUSE" }, MACHINE_STEPS.PAUSE);
+      // Paused, or not yet playing, the app is the viewer's. With no records
+      // loaded the machine has nothing to put back, so the viewer's state stays.
+      if (move.viewerEdits && loaded().length) host.viewerEdit?.();
+      run(machine, { type: "PLAY" }, wasPlaying ? MACHINE_STEPS.RESUME : MACHINE_STEPS.PLAY);
+      machine.state = "playing";
+      track.onPlaying?.(machine.context);
     } else {
-      track.append(move.count);
-      track.apply(time, "APPEND_RECORDING_DELTA");
+      const next = all.slice(loaded().length, loaded().length + move.count);
+      grow(machine, track.field, next, move.extend);
     }
-    expect(track.shown(), `after move ${index} (${move.kind}) at ${time}ms`).toEqual(
-      track.cold(time),
-    );
+    const landsOnOneState = move.kind === "seek" || move.kind === "resume";
+    check(`after move ${index} (${move.kind}) at ${time}ms`, landsOnOneState);
   });
   return moves.length + 1;
 }
 
-/** Pushes the next `count` records of `all` into `events`, in place. */
-function appendInPlace<T>(events: T[], all: readonly T[], count: number): void {
-  events.push(...all.slice(events.length, events.length + count));
+/**
+ * Generates event logs from `arbSteps` and walks over each one. Returns how many
+ * states were compared, so a test can see that its walks really ran.
+ */
+function checkWalks<Step, Event extends { timestamp: number }>(
+  arbSteps: fc.Arbitrary<Step[]>,
+  record: (steps: Step[]) => Event[],
+  track: ReplayTrack<Event>,
+): number {
+  let compared = 0;
+  fc.assert(
+    fc.property(arbSteps, arbInitialCount, arbMoves, (steps, initialCount, moves) => {
+      compared += walk(track, record(steps), initialCount, moves);
+    }),
+    { numRuns: NUM_RUNS },
+  );
+  return compared;
 }
 
 // ============================================================================
@@ -290,42 +627,32 @@ function recordChat(steps: Array<[gap: number, op: ChatOp]>): ChatRecordingEvent
   return events;
 }
 
-function chatWalk(all: ChatRecordingEvent[], initialCount: number): TrackWalk {
-  const events = all.slice(0, initialCount);
-  let lastAppliedIndex = -1;
-  // setRecording applies the empty transcript before the chat track replays.
-  let shown: ChatCheckpoint = { items: [], status: "idle" };
-
-  return {
-    apply(time, trigger) {
-      if (!events.length) return;
-      const result = getChatReplayResult({
-        chatEvents: events,
-        currentTime: time,
-        lastAppliedIndex,
-        isResync: isReplayResync({ type: trigger }, lastAppliedIndex),
-      });
-      if (result.snapshotToApply) shown = result.snapshotToApply;
-      lastAppliedIndex = result.nextIndex;
-    },
-    invalidate() {
-      lastAppliedIndex = -1;
-    },
-    append(count) {
-      appendInPlace(events, all, count);
-    },
-    shown: () => shown,
-    // A cold resolve is a resync, which shows the empty transcript before the
-    // first chat event.
-    cold: (time) =>
-      getChatReplayResult({
-        chatEvents: [...events],
-        currentTime: time,
-        lastAppliedIndex: -1,
-        isResync: true,
-      }).snapshotToApply,
-  };
-}
+const chatTrack: ReplayTrack<ChatRecordingEvent> = {
+  field: "chatEvents",
+  host() {
+    let shown: ChatCheckpoint | undefined;
+    return {
+      hooks: {
+        applyChatSnapshot: (snapshot) => {
+          shown = snapshot;
+        },
+      },
+      shown: () => shown,
+      viewerEdit: () => {
+        shown = { items: [], status: "idle", draft: "my own question" };
+      },
+    };
+  },
+  // A cold resolve is a resync, which shows the empty transcript before the
+  // first chat event (setRecording shows it too, before any chat event loads).
+  cold: (events, time) =>
+    getChatReplayResult({
+      chatEvents: events,
+      currentTime: time,
+      lastAppliedIndex: -1,
+      isResync: true,
+    }).snapshotToApply,
+};
 
 // ============================================================================
 // Runtime: terminal output as deltas between checkpoints, resolved through a
@@ -427,44 +754,36 @@ function recordRuntime(
   return events;
 }
 
-function runtimeWalk(all: RuntimeRecordingEvent[], initialCount: number): TrackWalk {
-  const events = all.slice(0, initialCount);
-  // setRecording applies the state at index 0 and starts the cursor there.
-  let shown = resolveRuntimeSnapshotAt(events, 0) ?? undefined;
-  let lastAppliedIndex = shown ? 0 : -1;
-
-  return {
-    apply(time) {
-      if (!events.length) return;
-      const result = getRuntimeReplayResult({
-        runtimeEvents: events,
-        currentTime: time,
-        lastAppliedIndex,
-      });
-      if (result.snapshotToApply) shown = result.snapshotToApply;
-      lastAppliedIndex = result.nextIndex;
-    },
-    invalidate(trigger) {
-      lastAppliedIndex = -1;
-      // When playing starts, the runtime dock also resolves index 0 on its own
-      // (useRuntimeDockRecordedSnapshot). That moves the shared fold cache back to
-      // the start, and the cache must not change any result.
-      if (trigger === "PLAY") resolveRuntimeSnapshotAt(events, 0);
-    },
-    append(count) {
-      appendInPlace(events, all, count);
-    },
-    shown: () => shown,
-    cold: (time) =>
-      events.length
-        ? getRuntimeReplayResult({
-            runtimeEvents: [...events],
-            currentTime: time,
-            lastAppliedIndex: -1,
-          }).snapshotToApply
-        : undefined,
-  };
-}
+const runtimeTrack: ReplayTrack<RuntimeRecordingEvent> = {
+  field: "runtimeEvents",
+  host() {
+    let shown: RuntimeRecordingSnapshot | undefined;
+    return {
+      hooks: {
+        applyRuntimeSnapshot: (snapshot) => {
+          shown = snapshot;
+        },
+      },
+      shown: () => shown,
+      viewerEdit: () => {
+        shown = {
+          mode: "webcontainer",
+          status: "ready",
+          terminalSessions: [{ id: "t1", title: "t1", output: "$ my own command" }],
+        };
+      },
+    };
+  },
+  cold: (events, time) =>
+    getRuntimeReplayResult({ runtimeEvents: events, currentTime: time, lastAppliedIndex: -1 })
+      .snapshotToApply,
+  // When playing starts, the runtime dock also resolves index 0 on its own
+  // (useRuntimeDockRecordedSnapshot). That moves the shared fold cache back to
+  // the start, and the cache must not change any result.
+  onPlaying: ({ recording }) => {
+    if (recording?.runtimeEvents) resolveRuntimeSnapshotAt(recording.runtimeEvents, 0);
+  },
+};
 
 // ============================================================================
 // Workspace: whole snapshots, but panel widths replay as relative offsets that
@@ -546,74 +865,58 @@ function describeWorkspace(snapshot: WorkspaceRecordingSnapshot) {
   };
 }
 
-function workspaceWalk(all: WorkspaceRecordingEvent[], initialCount: number): TrackWalk {
-  const events = all.slice(0, initialCount);
-  const live = {
-    snapshot: VIEWER_WORKSPACE,
-    sidebarWidth: BASE_SIDEBAR_WIDTH,
-    previewDockWidth: BASE_PREVIEW_DOCK_WIDTH,
-  };
-
-  // NextEditorProvider's applyWorkspaceSnapshot: the files are replaced, and a
-  // non-zero width delta is added to the width the viewer has now.
-  const applyWorkspaceSnapshot = (snapshot: WorkspaceRecordingSnapshot) => {
-    const { sidebarWidthDelta, previewDockWidthDelta, ...files } = snapshot;
-    live.snapshot = files;
-    live.sidebarWidth += sidebarWidthDelta ?? 0;
-    live.previewDockWidth += previewDockWidthDelta ?? 0;
-  };
-
-  // setRecording applies the first event and starts the cursor there.
-  let lastAppliedIndex = -1;
-  if (events.length) {
-    if (!areWorkspaceSnapshotsEqual(live.snapshot, events[0].snapshot)) {
-      applyWorkspaceSnapshot(events[0].snapshot);
+// The machine keeps the workspace cursor through seeks and pauses (it is not in
+// REPLAY_CURSORS_RESET): the widths are relative, so the replay must know which
+// offsets it has already added. Resetting the cursor to -1 would add them all a
+// second time. A pause also hands the workspace to the viewer (it detaches and
+// sets hasManualWorkspaceOverride) and the PLAY after it takes it back, and the
+// walk's resume runs both. The viewer edits no files here: PLAY keeps their
+// edits on purpose until the recording changes the workspace again (see the
+// "learner workspace" tests in editorMachine.test.ts).
+const workspaceTrack: ReplayTrack<WorkspaceRecordingEvent> = {
+  field: "workspaceEvents",
+  host() {
+    const live = {
+      snapshot: VIEWER_WORKSPACE,
+      sidebarWidth: BASE_SIDEBAR_WIDTH,
+      previewDockWidth: BASE_PREVIEW_DOCK_WIDTH,
+    };
+    return {
+      hooks: {
+        getWorkspaceSnapshot: () => live.snapshot,
+        // NextEditorProvider's applyWorkspaceSnapshot: the files are replaced, and a
+        // non-zero width delta is added to the width the viewer has now.
+        applyWorkspaceSnapshot: (snapshot) => {
+          const { sidebarWidthDelta, previewDockWidthDelta, ...files } = snapshot;
+          live.snapshot = files;
+          live.sidebarWidth += sidebarWidthDelta ?? 0;
+          live.previewDockWidth += previewDockWidthDelta ?? 0;
+        },
+      },
+      shown: () => ({
+        sidebarWidth: live.sidebarWidth,
+        previewDockWidth: live.previewDockWidth,
+        ...describeWorkspace(live.snapshot),
+      }),
+    };
+  },
+  // The law: each width is the viewer's width plus every offset recorded at or
+  // before `time`, and the files are those of the latest event.
+  cold: (events, time) => {
+    const index = events.findLastIndex((event) => event.timestamp <= time);
+    let sidebarWidth = BASE_SIDEBAR_WIDTH;
+    let previewDockWidth = BASE_PREVIEW_DOCK_WIDTH;
+    for (const { snapshot } of events.slice(0, index + 1)) {
+      sidebarWidth += snapshot.sidebarWidthDelta ?? 0;
+      previewDockWidth += snapshot.previewDockWidthDelta ?? 0;
     }
-    lastAppliedIndex = 0;
-  }
-
-  return {
-    apply(time) {
-      if (!events.length) return;
-      const result = getWorkspaceReplayResult({
-        workspaceEvents: events,
-        currentTime: time,
-        getCurrentSnapshot: () => live.snapshot,
-        lastAppliedIndex,
-      });
-      if (result.snapshotToApply) applyWorkspaceSnapshot(result.snapshotToApply);
-      lastAppliedIndex = result.nextIndex;
-    },
-    // REPLAY_CURSORS_RESET leaves the workspace cursor alone. The widths are
-    // relative, so the replay must know which offsets it has already added:
-    // resetting the cursor to -1 here would add them all a second time.
-    invalidate() {},
-    append(count) {
-      appendInPlace(events, all, count);
-    },
-    shown: () => ({
-      sidebarWidth: live.sidebarWidth,
-      previewDockWidth: live.previewDockWidth,
-      ...describeWorkspace(live.snapshot),
-    }),
-    // The law: each width is the viewer's width plus every offset recorded at or
-    // before `time`, and the files are those of the latest event.
-    cold: (time) => {
-      const index = events.findLastIndex((event) => event.timestamp <= time);
-      let sidebarWidth = BASE_SIDEBAR_WIDTH;
-      let previewDockWidth = BASE_PREVIEW_DOCK_WIDTH;
-      for (const { snapshot } of events.slice(0, index + 1)) {
-        sidebarWidth += snapshot.sidebarWidthDelta ?? 0;
-        previewDockWidth += snapshot.previewDockWidthDelta ?? 0;
-      }
-      return {
-        sidebarWidth,
-        previewDockWidth,
-        ...describeWorkspace(index >= 0 ? events[index].snapshot : VIEWER_WORKSPACE),
-      };
-    },
-  };
-}
+    return {
+      sidebarWidth,
+      previewDockWidth,
+      ...describeWorkspace(index >= 0 ? events[index].snapshot : VIEWER_WORKSPACE),
+    };
+  },
+};
 
 // ============================================================================
 // Whiteboard: element deltas folded into a retained scene per event, with
@@ -665,41 +968,39 @@ function recordWhiteboard(steps: Array<ValueOf<typeof arbWhiteboardStep>>): Whit
   return steps.map(({ gap, ...change }) => ({ timestamp: (time += gap), ...change }));
 }
 
-function whiteboardWalk(all: WhiteboardEvent[], initialCount: number): TrackWalk {
-  const events = all.slice(0, initialCount);
-  let lastAppliedIndex = -1;
-  let shown: WhiteboardSceneState | undefined;
-
-  return {
-    apply(time) {
-      if (!events.length) return;
-      const result = getWhiteboardReplayResult({
-        whiteboardEvents: events,
-        currentTime: time,
-        lastAppliedIndex,
-      });
-      if (result.stateToApply) shown = result.stateToApply;
-      lastAppliedIndex = result.nextIndex;
-    },
-    invalidate() {
-      lastAppliedIndex = -1;
-    },
-    append(count) {
-      appendInPlace(events, all, count);
-    },
-    shown: () => shown,
-    // An interpolated scene depends only on the time and the events around it,
-    // and ticks only move forward, so the walk matches inside animation windows too.
-    cold: (time) =>
-      events.length
-        ? getWhiteboardReplayResult({
-            whiteboardEvents: [...events],
-            currentTime: time,
-            lastAppliedIndex: -1,
-          }).stateToApply
-        : undefined,
-  };
-}
+const whiteboardTrack: ReplayTrack<WhiteboardEvent> = {
+  field: "whiteboardEvents",
+  host() {
+    let shown: WhiteboardSceneState | undefined;
+    return {
+      hooks: {
+        applyWhiteboardState: (state) => {
+          shown = state;
+        },
+      },
+      shown: () => shown,
+      viewerEdit: () => {
+        shown = {
+          elements: [],
+          view: { scrollX: 0, scrollY: 0, zoom: 3 },
+          isOpen: true,
+          isMaximized: true,
+        };
+      },
+    };
+  },
+  // An interpolated scene depends only on the time and the events around it,
+  // and ticks only move forward, so the walk matches inside animation windows too.
+  // Without whiteboard events the machine applies nothing.
+  cold: (events, time) =>
+    events.length
+      ? getWhiteboardReplayResult({
+          whiteboardEvents: events,
+          currentTime: time,
+          lastAppliedIndex: -1,
+        }).stateToApply
+      : undefined,
+};
 
 // ============================================================================
 // Slides: forward ticks apply every crossed event, a resync applies one state.
@@ -754,45 +1055,41 @@ function recordSlides(steps: Array<ValueOf<typeof arbSlideStep>>): SlideEvent[] 
   });
 }
 
-function slideWalk(all: SlideEvent[], initialCount: number): TrackWalk {
-  const events = all.slice(0, initialCount);
-  let lastAppliedIndex = -1;
-  let shown: SlideReplayApplication | undefined;
-
-  return {
-    apply(time, trigger) {
-      if (!events.length) return;
-      const result = getSlideReplayResult({
-        slideEvents: events,
-        slides: SLIDES,
-        currentTime: time,
-        lastAppliedIndex,
-        isResync: isReplayResync({ type: trigger }, lastAppliedIndex),
-      });
-      expectAtMostOneState(trigger, result.applications);
-      shown = result.applications.at(-1) ?? shown;
-      lastAppliedIndex = result.nextIndex;
-    },
-    invalidate() {
-      lastAppliedIndex = -1;
-    },
-    append(count) {
-      appendInPlace(events, all, count);
-    },
-    shown: () => shown,
-    // A resync applies exactly one state: before the first event, the closed deck.
-    cold: (time) =>
-      events.length
-        ? getSlideReplayResult({
-            slideEvents: [...events],
-            slides: SLIDES,
-            currentTime: time,
-            lastAppliedIndex: -1,
-            isResync: true,
-          }).applications.at(-1)
-        : undefined,
-  };
-}
+const slideTrack: ReplayTrack<SlideEvent> = {
+  field: "slideEvents",
+  recording: { slides: SLIDES },
+  host(applied) {
+    let shown: SlideReplayApplication | undefined;
+    return {
+      hooks: {
+        applySlideState: (slideState, slideIndex) => {
+          shown = { slideState, slideIndex };
+          applied.push(shown);
+        },
+      },
+      shown: () => shown,
+      viewerEdit: () => {
+        shown = {
+          slideIndex: 2,
+          slideState: { isOpen: true, isMaximized: true, currentSlideId: "three", indexv: 7 },
+        };
+      },
+    };
+  },
+  // A resync applies exactly one state: before the first event, the closed deck.
+  // Without slide events the machine applies nothing.
+  cold: (events, time) =>
+    events.length
+      ? getSlideReplayResult({
+          slideEvents: events,
+          slides: SLIDES,
+          currentTime: time,
+          lastAppliedIndex: -1,
+          isResync: true,
+        }).applications.at(-1)
+      : undefined,
+  landsOnOneState: true,
+};
 
 // ============================================================================
 // Preview: forward ticks re-emit transient interactions on purpose, so only the
@@ -869,73 +1166,34 @@ function recordPreview(steps: Array<ValueOf<typeof arbPreviewStep>>): PreviewEve
   });
 }
 
-function previewWalk(all: PreviewEvent[], initialCount: number): TrackWalk {
-  const events = all.slice(0, initialCount);
-  let lastAppliedIndex = -1;
-  let lastAppliedState: PreviewState | undefined;
-
-  return {
-    apply(time, trigger) {
-      if (!events.length) return;
-      const result = getPreviewReplayResult({
-        previewEvents: events,
-        currentTime: time,
-        lastAppliedIndex,
-        lastAppliedState,
-        isResync: isReplayResync({ type: trigger }, lastAppliedIndex),
-      });
-      expectAtMostOneState(trigger, result.appliedStates);
-      lastAppliedIndex = result.nextIndex;
-      lastAppliedState = result.retainedState;
-    },
-    // seekToTime resets only the index; invalidateAppliedPlaybackState drops the
-    // retained state too.
-    invalidate(trigger) {
-      lastAppliedIndex = -1;
-      if (trigger === "PLAY") lastAppliedState = undefined;
-    },
-    append(count) {
-      appendInPlace(events, all, count);
-    },
-    shown: () => lastAppliedState,
-    cold: (time) =>
-      events.length
-        ? getPreviewReplayResult({
-            previewEvents: [...events],
-            currentTime: time,
-            lastAppliedIndex: -1,
-            isResync: true,
-          }).retainedState
-        : undefined,
-  };
-}
-
-// ============================================================================
-
-/**
- * Generates event logs from `arbSteps` and walks over each one. Returns how many
- * states were compared, so a test can see that its walks really ran.
- */
-function checkWalks<Step, Event extends { timestamp: number }>(
-  arbSteps: fc.Arbitrary<Step[]>,
-  record: (steps: Step[]) => Event[],
-  startWalk: (events: Event[], initialCount: number) => TrackWalk,
-): number {
-  let compared = 0;
-  fc.assert(
-    fc.property(arbSteps, arbInitialCount, arbMoves, (steps, initialCount, moves) => {
-      const events = record(steps);
-      const stamps = events.map((event) => event.timestamp);
-      compared += walk(startWalk(events, initialCount), moves, stamps);
-    }),
-    { numRuns: NUM_RUNS },
-  );
-  return compared;
-}
+const previewTrack: ReplayTrack<PreviewEvent> = {
+  field: "previewEvents",
+  host(applied) {
+    return {
+      hooks: {
+        applyPreviewState: (state) => {
+          applied.push(state);
+        },
+      },
+      // The retained state the machine keeps (lastAppliedPreviewState), not the
+      // last state the hook was given, which carries the transient parts. So a
+      // viewer's change to the live preview is not what the walk compares.
+      shown: (context) => context.lastAppliedPreviewState,
+    };
+  },
+  cold: (events, time) =>
+    getPreviewReplayResult({
+      previewEvents: events,
+      currentTime: time,
+      lastAppliedIndex: -1,
+      isResync: true,
+    }).retainedState,
+  landsOnOneState: true,
+};
 
 describe("seeking lands where playing does", () => {
   it("chat", () => {
-    const compared = checkWalks(fc.array(fc.tuple(arbGap, arbChatOp), SIZE), recordChat, chatWalk);
+    const compared = checkWalks(fc.array(fc.tuple(arbGap, arbChatOp), SIZE), recordChat, chatTrack);
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
@@ -943,13 +1201,13 @@ describe("seeking lands where playing does", () => {
     const compared = checkWalks(
       fc.array(fc.tuple(arbGap, arbRuntimeOp, fc.boolean()), SIZE),
       recordRuntime,
-      runtimeWalk,
+      runtimeTrack,
     );
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
   it("workspace panel widths and files", () => {
-    const compared = checkWalks(fc.array(arbWorkspaceStep, SIZE), recordWorkspace, workspaceWalk);
+    const compared = checkWalks(fc.array(arbWorkspaceStep, SIZE), recordWorkspace, workspaceTrack);
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
@@ -957,18 +1215,18 @@ describe("seeking lands where playing does", () => {
     const compared = checkWalks(
       fc.array(arbWhiteboardStep, SIZE),
       recordWhiteboard,
-      whiteboardWalk,
+      whiteboardTrack,
     );
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
   it("slides", () => {
-    const compared = checkWalks(fc.array(arbSlideStep, SIZE), recordSlides, slideWalk);
+    const compared = checkWalks(fc.array(arbSlideStep, SIZE), recordSlides, slideTrack);
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 
   it("preview retained state", () => {
-    const compared = checkWalks(fc.array(arbPreviewStep, SIZE), recordPreview, previewWalk);
+    const compared = checkWalks(fc.array(arbPreviewStep, SIZE), recordPreview, previewTrack);
     expect(compared).toBeGreaterThan(NUM_RUNS);
   });
 });
