@@ -256,7 +256,13 @@ The tests that check the rule:
 - [pathIndependence.test.ts](../src/core/src/machine/replayState/pathIndependence.test.ts):
   fast-check walks of ticks, seeks, resumes and appends for chat, runtime, workspace (widths and
   files), whiteboard, slides and preview. The state is compared with a cold resolve after every
-  move. Its per-track adapters copy the cursor rules above.
+  move. The walk runs the real actions from replayActions.ts on a context made by
+  `createInitialContext`, with fake host hooks that record what each track shows. For each
+  trigger it runs the actions in the order editorMachine.ts runs them, read from the machine's
+  own state nodes. So the cursor rules above are tested as they are, not as a copy. Each track
+  adapter only names the recording field, the host hook that shows the track, and the cold
+  resolve. A new trigger, or a new transition that resets replay cursors, must be added to the
+  test's `Move` union and `MACHINE_STEPS`, or the property cannot see it.
 - [timedIndex.test.ts](../src/core/src/utils/timedIndex.test.ts): the "last event at or before
   T" search that every track uses, checked against a linear scan from every hint.
 - [recordingClock.test.ts](../src/core/src/machine/recordingClock.test.ts),
