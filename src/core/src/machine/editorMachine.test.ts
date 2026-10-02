@@ -3420,6 +3420,27 @@ describe("editorMachine stoppingRecording join", () => {
     expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
     expect(mic.disposals).toBe(1);
   });
+
+  // A microphone that fails mid-take still counts as recording, so the take waits for the
+  // file it may still send instead of finalizing as it enters stoppingRecording.
+  it("drains a take whose microphone fails mid-take", async () => {
+    const take = startTake();
+    actors.push(take);
+    take.actor.send({ type: "START_RECORDING", enableCamera: false });
+    await waitFor(take.actor, (snapshot) => snapshot.matches("recording"));
+
+    mic.emitError("microphone failed");
+    expect(take.actor.getSnapshot().value).toBe("stoppingRecording");
+    expect(mic.stopRequests).toBe(1);
+    expect(take.onRecordingStop).not.toHaveBeenCalled();
+
+    mic.emitStopped(micBlob);
+    expect(take.actor.getSnapshot().value).toBe("loading");
+
+    const recording = await expectFinalizedOnce(take);
+    expect(recording.audioBlob).toBe(micBlob);
+    expect(take.actor.getSnapshot().children.audioRecorder).toBeUndefined();
+  });
 });
 
 // ===========================================================================

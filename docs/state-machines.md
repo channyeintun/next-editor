@@ -98,7 +98,7 @@ stateDiagram-v2
     recording --> loading : STOP_RECORDING [no async drain]
     recording --> idle : AUDIO_PLAYBACK_ERROR [isExternalAudioRecording]
 
-    stoppingRecording --> loading : AUDIO_RECORDING_STOPPED / CAMERA_STOPPED (drain complete)
+    stoppingRecording --> loading : [areRecordersDrained] (drain complete)
     stoppingRecording --> loading : after recorderStopWatchdog (2s)
 
     loading --> playback.ready : onDone
@@ -164,7 +164,8 @@ This is a drain state, not a second recording mode.
 
 - camera capture may stop before or after audio
 - entering it (`stopRecordingMedia`) asks the running microphone and camera recorders for their files (`getRunningRecorders`)
-- the machine finalizes once the required blobs arrive (`AUDIO_RECORDING_STOPPED` / `CAMERA_STOPPED`), or after the two-second `recorderStopWatchdog` delay. A microphone blob that lands after that is still spliced into the finalized take by the root `AUDIO_RECORDING_STOPPED` handler (`attachLateAudioBlob`)
+- `AUDIO_RECORDING_STOPPED`, `CAMERA_STOPPED` and `CAMERA_ERROR` each only store what that recorder sent and stop it; storing clears the recorder's `isRecording` flag
+- the machine finalizes through one eventless join, `always` with `areRecordersDrained`: once no narration and no camera is still recording. xstate checks it after every event the state takes, and every way in has the microphone or the camera still recording, so it never passes on entry. Otherwise the two-second `recorderStopWatchdog` delay finalizes without the missing files. A microphone blob that lands after that is still spliced into the finalized take by the root `AUDIO_RECORDING_STOPPED` handler (`attachLateAudioBlob`)
 
 ### `loading`
 
@@ -314,8 +315,8 @@ Defined in the machine's `setup({ guards: { ... } })` block. The state config us
 | `isMicrophoneEnabled`                      | `idle` `START_RECORDING`                                           | `enableAudioRecording` is set, so the take starts in `startingRecording`                               |
 | `isMicrophoneAudioRecording`               | `recording`                                                        | `enableAudioRecording` is set and the microphone recorder is running                                   |
 | `isExternalAudioRecording`                 | `recording`                                                        | A narration file is playing along with the take                                                        |
-| `isCameraRecording`                        | `recording`, `stoppingRecording`                                   | The camera recorder is running                                                                         |
-| `isAudioRecording`                         | `stoppingRecording` (negated)                                      | Either kind of narration is still recording; a camera stop finalizes only once it is not               |
+| `isCameraRecording`                        | `recording`                                                        | The camera recorder is running                                                                         |
+| `areRecordersDrained`                      | `stoppingRecording` `always` (the finalize join)                   | No narration and no camera is still recording, so the take has every file it waits for                 |
 | `isRecordingRunning` / `isRecordingPaused` | `PAUSE_RECORDING` / `RESUME_RECORDING`                             | The take's clock is running / paused                                                                   |
 | `canRetake`                                | `RETAKE_RECORDING`                                                 | There is a safe point before now                                                                       |
 | `isLateAudioAwaitingEdit`                  | root `AUDIO_RECORDING_STOPPED`                                     | The late microphone blob's take still has a retake's cut to apply, so it goes back through `loading`   |

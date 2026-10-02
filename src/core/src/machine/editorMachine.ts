@@ -237,9 +237,12 @@ export const editorMachine = setup({
       context.recording !== null && (context.recording.frames?.length ?? 0) > 0,
     hasExternalAudioBlob: ({ event }) => getExternalAudioBlob(event) !== null,
     isMicrophoneEnabled: ({ context }) => context.enableAudioRecording,
-    // Either kind of narration is still being recorded; stoppingRecording finalizes only
-    // once it is not.
-    isAudioRecording: ({ context }) => context.audio.isRecording,
+    // The finalize join: no narration and no camera is still recording, so every file the
+    // take waits for has arrived (or will never come). stoppingRecording finalizes on it.
+    areRecordersDrained: ({ context }) => {
+      const running = getRunningRecorders(context);
+      return !running.microphone && !running.externalAudio && !running.camera;
+    },
     isMicrophoneAudioRecording: ({ context }) =>
       context.enableAudioRecording && getRunningRecorders(context).microphone,
     isExternalAudioRecording: ({ context }) => getRunningRecorders(context).externalAudio,
@@ -956,55 +959,31 @@ export const editorMachine = setup({
       // late-blob handler. It is stopped where its blob is consumed instead, or when the
       // take is unloaded or replaced.
       exit: "stopCameraRecorder",
+      // Each handler only stores what its recorder sent and stops that recorder. Storing a
+      // file (or a camera failure) clears that recorder's isRecording flag, and the join
+      // below decides when the take has everything.
       on: {
-        AUDIO_RECORDING_STOPPED: [
-          {
-            guard: "isCameraRecording",
-            actions: ["storeAudioBlob", "stopAudioRecorder"],
-          },
-          {
-            target: "loading",
-            actions: [
-              "storeAudioBlob",
-              "stopAudioRecorder",
-              "finalizeRecording",
-              "notifyRecordingStop",
-            ],
-          },
-        ],
-        CAMERA_STOPPED: [
-          {
-            target: "loading",
-            guard: not("isAudioRecording"),
-            actions: [
-              "storeCameraBlob",
-              "stopCameraRecorder",
-              "finalizeRecording",
-              "notifyRecordingStop",
-            ],
-          },
-          {
-            actions: ["storeCameraBlob", "stopCameraRecorder"],
-          },
-        ],
-        CAMERA_ERROR: [
-          {
-            target: "loading",
-            guard: not("isAudioRecording"),
-            actions: [
-              "handleCameraError",
-              "stopCameraRecorder",
-              "finalizeRecording",
-              "notifyRecordingStop",
-            ],
-          },
-          {
-            actions: ["handleCameraError", "stopCameraRecorder"],
-          },
-        ],
+        AUDIO_RECORDING_STOPPED: {
+          actions: ["storeAudioBlob", "stopAudioRecorder"],
+        },
+        CAMERA_STOPPED: {
+          actions: ["storeCameraBlob", "stopCameraRecorder"],
+        },
+        CAMERA_ERROR: {
+          actions: ["handleCameraError", "stopCameraRecorder"],
+        },
+        // A failed microphone keeps its isRecording flag, so such a take ends by the
+        // watchdog unless the recorder still sends its file.
         AUDIO_RECORDING_ERROR: {
           actions: ["handleAudioRecordingError", "notifyError"],
         },
+      },
+      // The finalize join. xstate checks it after every event this state takes. Every way in
+      // has the microphone or the camera still recording, so it never passes on entry.
+      always: {
+        guard: "areRecordersDrained",
+        target: "loading",
+        actions: ["finalizeRecording", "notifyRecordingStop"],
       },
       after: {
         recorderStopWatchdog: {
