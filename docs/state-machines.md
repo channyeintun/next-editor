@@ -95,7 +95,7 @@ stateDiagram-v2
 
     recording --> stoppingRecording : STOP_RECORDING [isMicrophoneAudioRecording]
     recording --> stoppingRecording : STOP_RECORDING [isCameraRecording]
-    recording --> loading : STOP_RECORDING [isExternalAudioRecording, or no async drain]
+    recording --> loading : STOP_RECORDING [no async drain]
     recording --> idle : AUDIO_PLAYBACK_ERROR [isExternalAudioRecording]
 
     stoppingRecording --> loading : AUDIO_RECORDING_STOPPED / CAMERA_STOPPED (drain complete)
@@ -156,7 +156,7 @@ What happens here:
 - `RETAKE_RECORDING` rewinds the take to its last safe point (its start, or the last resume; `retake.ts`) and holds it paused there. Only the tail is discarded: every track is cut back to the entries at or before that point (new arrays), the frame encoder is re-based on the last kept frame, and the clock is rewound. The recorders keep their files, so the stretch they recorded since is added to `session.mediaCuts` (microphone narration is cut when the take loads, via `pendingAudioEdit`; the camera is mapped around `cameraCuts`), while a selected narration file is sought back instead. The live workspace, whiteboard, slides and preview panel are put back through their appliers; the live terminal and agent chat, which cannot be rewound, are recorded whole at the safe point; and the preview's rrweb stream drops patches until a fresh full snapshot re-bases it
 - `ADD_CHAPTER_MARKER` marks a chapter at the take's current moment (one per moment); it is also a safe point a retake can rewind to, anchored at the pause when marked while paused. A retake drops the chapters it discards, and finalize hands the rest to the recording
 - camera lifecycle events are folded into camera state
-- `STOP_RECORDING` branches on `isMicrophoneAudioRecording` / `isCameraRecording` / `isExternalAudioRecording` to decide whether a drain (`stoppingRecording`) is needed before finalizing
+- `STOP_RECORDING` branches on `isMicrophoneAudioRecording` / `isCameraRecording` to decide whether a drain (`stoppingRecording`) is needed before finalizing
 
 ### `stoppingRecording`
 

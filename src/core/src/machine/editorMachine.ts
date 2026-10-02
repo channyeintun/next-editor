@@ -943,11 +943,6 @@ export const editorMachine = setup({
           },
           {
             target: "loading",
-            guard: "isExternalAudioRecording",
-            actions: ["finalizeRecording", "notifyRecordingStop"],
-          },
-          {
-            target: "loading",
             actions: ["finalizeRecording", "notifyRecordingStop"],
           },
         ],
