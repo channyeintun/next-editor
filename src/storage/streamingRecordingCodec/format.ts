@@ -8,6 +8,7 @@ import type {
   RecordingTrackMeta,
 } from "../../core/src/types";
 import type { Slide } from "../../core/src/slides";
+import type { RecordingTrackName } from "../../core/src/machine/recordingAssembly";
 import type { RuntimeRecordingSnapshot } from "../../types/runtime";
 import {
   isWorkspaceAssetDescriptor,
@@ -119,20 +120,32 @@ export const SEGMENT_KIND = {
 export type SegmentKind = (typeof SEGMENT_KIND)[keyof typeof SEGMENT_KIND];
 
 /**
- * Canonical mapping between Recording event arrays and SCR3 segment kinds; the
- * exporter writes one segment track per entry.
+ * The segment kind of each event track. Frames are not an event track: the
+ * exporter writes them per cluster.
+ *
+ * A `Record` keyed by the track union rather than a hand-kept array: a track
+ * with no segment kind fails the typecheck. A hand-kept array with a track left
+ * out still compiles, and the exporter then never writes that track.
  */
-export const RECORDING_EVENT_SEGMENTS = [
-  { kind: SEGMENT_KIND.slide, key: "slideEvents" },
-  { kind: SEGMENT_KIND.preview, key: "previewEvents" },
-  { kind: SEGMENT_KIND.previewDoc, key: "previewInitialDocuments" },
-  { kind: SEGMENT_KIND.previewPatch, key: "previewPatchBatches" },
-  { kind: SEGMENT_KIND.workspace, key: "workspaceEvents" },
-  { kind: SEGMENT_KIND.runtime, key: "runtimeEvents" },
-  { kind: SEGMENT_KIND.cursor, key: "cursorEvents" },
-  { kind: SEGMENT_KIND.whiteboard, key: "whiteboardEvents" },
-  { kind: SEGMENT_KIND.chat, key: "chatEvents" },
-] as const;
+const EVENT_TRACK_SEGMENT_KINDS: Record<Exclude<RecordingTrackName, "frames">, SegmentKind> = {
+  slideEvents: SEGMENT_KIND.slide,
+  previewEvents: SEGMENT_KIND.preview,
+  previewInitialDocuments: SEGMENT_KIND.previewDoc,
+  previewPatchBatches: SEGMENT_KIND.previewPatch,
+  workspaceEvents: SEGMENT_KIND.workspace,
+  runtimeEvents: SEGMENT_KIND.runtime,
+  cursorEvents: SEGMENT_KIND.cursor,
+  whiteboardEvents: SEGMENT_KIND.whiteboard,
+  chatEvents: SEGMENT_KIND.chat,
+};
+
+/**
+ * Canonical mapping between Recording event arrays and SCR3 segment kinds; the
+ * exporter writes one segment track per entry, in this order.
+ */
+export const RECORDING_EVENT_SEGMENTS = (
+  Object.keys(EVENT_TRACK_SEGMENT_KINDS) as (keyof typeof EVENT_TRACK_SEGMENT_KINDS)[]
+).map((key) => ({ kind: EVENT_TRACK_SEGMENT_KINDS[key], key }));
 
 export interface RecordingStreamMeta {
   version: 4;
