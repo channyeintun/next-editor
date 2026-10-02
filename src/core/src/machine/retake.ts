@@ -10,6 +10,7 @@ import { addMediaCut, totalMediaSpanLength } from "../utils/mediaSpans";
 import { RUNTIME_CHECKPOINT_MAX_EVENTS, resolveLatestRuntimeSnapshot } from "../runtimeTrack";
 import { getRecordingTimestamp } from "./recordingSession";
 import { rewindRecordingClock } from "./recordingClock";
+import type { RecordingTracks } from "./recordingAssembly";
 import type { RecordingSafePoint, RecordingSession } from "./types";
 
 // ============================================================================
@@ -120,16 +121,21 @@ export function rewindSessionToSafePoint(
   const previewStreamed =
     session.previewInitialDocuments.length > 0 || session.previewPatchBatches.length > 0;
 
-  session.frames = keptUntil(session.frames, time, byTimestamp);
-  session.cursorEvents = keptUntil(session.cursorEvents, time, byTimestamp);
-  session.slideEvents = keptUntil(session.slideEvents, time, byTimestamp);
-  session.previewEvents = keptUntil(session.previewEvents, time, byTimestamp);
-  session.previewInitialDocuments = keptUntil(session.previewInitialDocuments, time, byTime);
-  session.previewPatchBatches = keptUntil(session.previewPatchBatches, time, byTime);
-  session.workspaceEvents = keptUntil(session.workspaceEvents, time, byTimestamp);
-  session.runtimeEvents = keptUntil(session.runtimeEvents, time, byTimestamp);
-  session.whiteboardEvents = keptUntil(session.whiteboardEvents, time, byTimestamp);
-  session.chatEvents = keptUntil(session.chatEvents, time, byTimestamp);
+  // Typed as every track, so a track left out here fails the typecheck instead of
+  // keeping what was recorded after the safe point.
+  const kept: RecordingTracks = {
+    frames: keptUntil(session.frames, time, byTimestamp),
+    slideEvents: keptUntil(session.slideEvents, time, byTimestamp),
+    previewEvents: keptUntil(session.previewEvents, time, byTimestamp),
+    previewInitialDocuments: keptUntil(session.previewInitialDocuments, time, byTime),
+    previewPatchBatches: keptUntil(session.previewPatchBatches, time, byTime),
+    workspaceEvents: keptUntil(session.workspaceEvents, time, byTimestamp),
+    runtimeEvents: keptUntil(session.runtimeEvents, time, byTimestamp),
+    cursorEvents: keptUntil(session.cursorEvents, time, byTimestamp),
+    whiteboardEvents: keptUntil(session.whiteboardEvents, time, byTimestamp),
+    chatEvents: keptUntil(session.chatEvents, time, byTimestamp),
+  };
+  Object.assign(session, kept);
 
   // The next frame is diffed against the last kept one, as if nothing came after it.
   const frame =
