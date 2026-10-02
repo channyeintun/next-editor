@@ -114,3 +114,73 @@ describe("slide replay before the first event", () => {
     ).toEqual({ applications: [closedDeck], nextIndex: -1 });
   });
 });
+
+describe("slide replay of a slide deleted during the take", () => {
+  // The deck is saved at finalize, so "gone" is no longer in it.
+  const slideEvents: SlideEvent[] = [
+    { type: "slide_open", timestamp: 0, slideId: "one", indexv: 0 },
+    { type: "slide_change", timestamp: 100, slideId: "gone", indexv: 0 },
+    { type: "slide_close", timestamp: 200, slideId: "one" },
+  ];
+  const openOnOne = {
+    slideIndex: 0,
+    slideState: {
+      isOpen: true,
+      isMaximized: false,
+      currentSlideId: "one",
+      indexv: 0,
+      currentInteraction: undefined,
+    },
+  };
+
+  it("keeps the last placed slide on a tick across the deleted slide", () => {
+    const opened = getSlideReplayResult({
+      slideEvents,
+      slides,
+      currentTime: 0,
+      lastAppliedIndex: -1,
+      isResync: true,
+    });
+    expect(opened.applications).toEqual([openOnOne]);
+    expect(
+      getSlideReplayResult({
+        slideEvents,
+        slides,
+        currentTime: 150,
+        lastAppliedIndex: opened.nextIndex,
+        isResync: false,
+      }),
+    ).toEqual({ applications: [], nextIndex: 1 });
+  });
+
+  it("shows the same slide when a seek lands on the deleted slide", () => {
+    // Before the fix, a seek from 250 back to 150 applied nothing and left the
+    // deck closed, while playing from 0 to 150 showed slide "one".
+    expect(
+      getSlideReplayResult({
+        slideEvents,
+        slides,
+        currentTime: 150,
+        lastAppliedIndex: -1,
+        isResync: true,
+      }),
+    ).toEqual({ applications: [openOnOne], nextIndex: 1 });
+  });
+
+  it("closes the deck on a seek when no earlier event can be placed", () => {
+    expect(
+      getSlideReplayResult({
+        slideEvents: [{ type: "slide_open", timestamp: 0, slideId: "gone", indexv: 0 }],
+        slides,
+        currentTime: 50,
+        lastAppliedIndex: -1,
+        isResync: true,
+      }).applications,
+    ).toEqual([
+      {
+        slideIndex: -1,
+        slideState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
+      },
+    ]);
+  });
+});

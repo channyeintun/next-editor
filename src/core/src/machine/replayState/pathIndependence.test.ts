@@ -711,8 +711,9 @@ const SLIDES: Slide[] = [
   { id: "three", order: 2, content: "three", contentType: "html" },
 ];
 
-// Every event names a slide in the deck, so each one resolves to a state. An
-// event the deck cannot place applies nothing, on a tick and on a seek alike.
+// "gone" is a slide deleted during the take: the deck is saved at finalize, so
+// events can name a slide it no longer has. A tick applies nothing for such an
+// event, and a seek must keep the same last placed state.
 const arbSlideStep = fc.record(
   {
     gap: arbGap,
@@ -724,7 +725,7 @@ const arbSlideStep = fc.record(
       "slide_minimize",
       "slide_interaction",
     ),
-    slideId: fc.constantFrom("one", "two", "three"),
+    slideId: fc.constantFrom("one", "two", "three", "gone"),
     isMaximized: fc.boolean(),
     indexv: fc.nat({ max: 2 }),
     clickX: fc.nat({ max: 100 }),

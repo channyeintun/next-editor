@@ -27,7 +27,7 @@ const SLIDE_STRUCTURAL_EVENT_TYPES = new Set<SlideEvent["type"]>([
 ]);
 
 /**
- * The deck before the first slide event. No visibility event yet means closed (see
+ * The deck before the first slide event it can place. No visibility event yet means closed (see
  * `buildSlideStateAtEvent`), and the recorder writes a t=0 `slide_open` only when
  * the deck was already open when recording started.
  */
@@ -135,16 +135,22 @@ export function getSlideReplayResult({
 }): SlideReplayResult {
   if (isResync) {
     const nextIndex = findTimedEventIndexAtOrBefore(slideEvents, currentTime, -1);
-    // Before the first slide event the deck is closed. Applying nothing there left a
-    // deck opened later in the recording on screen after a backward seek, STOP or
-    // restart.
-    const application =
-      nextIndex >= 0
-        ? createSlideReplayApplication(slideEvents, slides, nextIndex)
-        : CLOSED_SLIDE_APPLICATION;
+    // Show what forward playback shows at `currentTime`: the last event the deck can
+    // place. An event whose slide was deleted during the take applies nothing on a
+    // tick, so it must not change the deck on a seek either. Before the first such
+    // event the deck is closed. Applying nothing there left a deck opened later in
+    // the recording on screen after a backward seek, STOP or restart.
+    let application = CLOSED_SLIDE_APPLICATION;
+    for (let index = nextIndex; index >= 0; index -= 1) {
+      const placed = createSlideReplayApplication(slideEvents, slides, index);
+      if (placed) {
+        application = placed;
+        break;
+      }
+    }
 
     return {
-      applications: application ? [application] : [],
+      applications: [application],
       nextIndex,
     };
   }
