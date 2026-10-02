@@ -3,6 +3,7 @@ import type {
   WorkspaceRecordingEvent,
   WorkspaceRecordingSnapshot,
 } from "../../types/workspace";
+import { findCommonPrefixJS, findCommonSuffixJS } from "../../core/src/utils/stringAffix";
 
 // ============================================================================
 // Workspace-event content dedup (stream-only representation)
@@ -48,17 +49,14 @@ type DedupedWorkspaceFile = WorkspaceFile & {
 /** A splice header costs a few msgpack bytes; below this saving, keep the full text. */
 const MIN_SPLICE_SAVING_CHARS = 16;
 
+/**
+ * The splice keeps the common prefix and suffix whole code points: a cut inside a
+ * surrogate pair would leave a lone half in `insert`, which msgpack's TextEncoder
+ * path writes as U+FFFD.
+ */
 function createContentSplice(previous: string, next: string): ContentSplice | null {
-  const maxAffix = Math.min(previous.length, next.length);
-  let prefix = 0;
-  while (prefix < maxAffix && previous.charCodeAt(prefix) === next.charCodeAt(prefix)) prefix++;
-  let suffix = 0;
-  while (
-    suffix < maxAffix - prefix &&
-    previous.charCodeAt(previous.length - 1 - suffix) === next.charCodeAt(next.length - 1 - suffix)
-  ) {
-    suffix++;
-  }
+  const prefix = findCommonPrefixJS(previous, next);
+  const suffix = findCommonSuffixJS(previous.slice(prefix), next.slice(prefix));
   const insert = next.slice(prefix, next.length - suffix);
   if (insert.length + MIN_SPLICE_SAVING_CHARS >= next.length) return null;
   return [prefix, previous.length - prefix - suffix, insert];

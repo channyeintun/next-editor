@@ -181,6 +181,28 @@ describe("workspace event content dedup", () => {
     expect(decoded.workspaceEvents).toEqual(events);
   });
 
+  it("keeps an emoji whole when an edit starts or ends inside it", async () => {
+    // 😀 (D83D DE00) and 😁 (D83D DE01) share a high surrogate, so an edit
+    // between them starts after it; 😀 and U+1FA00 (D83E DE00) share a low
+    // surrogate, so an edit between them ends before it. A splice cut between
+    // the two halves of a pair carries a lone surrogate, and msgpack writes long
+    // strings through TextEncoder, which turns that half into U+FFFD.
+    const body = "<p>filler</p>\n".repeat(40);
+    const inserted = "<p>a changed paragraph long enough to go through TextEncoder</p>";
+    const before = `${body}<h1>😀</h1>\n${body}`;
+    const afterStart = `${body}<h1>😁${inserted}</h1>\n${body}`;
+    const afterEnd = `${body}<h1>${inserted}\u{1FA00}</h1>\n${body}`;
+    const events = [
+      makeWorkspaceEvent(0, "index.html", ASSET_CONTENT, before),
+      makeWorkspaceEvent(1_000, "index.html", ASSET_CONTENT, afterStart),
+      makeWorkspaceEvent(2_000, "index.html", ASSET_CONTENT, before),
+      makeWorkspaceEvent(3_000, "index.html", ASSET_CONTENT, afterEnd),
+    ];
+
+    const decoded = decodeRecordingStream(await encodeRecordingToStream(makeRecording(events)));
+    expect(decoded.workspaceEvents).toEqual(events);
+  });
+
   it("keeps a short file's change as full content", () => {
     const events = [
       makeWorkspaceEvent(0, "index.html", ASSET_CONTENT, "<h1>one</h1>"),
