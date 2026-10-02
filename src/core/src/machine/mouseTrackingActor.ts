@@ -38,6 +38,8 @@ interface MouseTrackingInput {
  * Worst case the pointer is stationary when the node under it is removed, so no
  * `pointermove` corrects it and the replayed cursor stays hidden for the rest of
  * that stretch. Leaving the viewport for real does target the root element.
+ * Only the host page uses it. Preview iframes have no mouseleave listener (see
+ * `attachToDocument`).
  */
 function isPageBoundaryLeave(event: Event, doc: Document): boolean {
   return event.target === doc.documentElement || event.target === doc.body;
@@ -228,14 +230,6 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
         );
       };
 
-      const onIframeMouseLeave = (event: Event) => {
-        const target = event.target;
-        const ownerDocument =
-          target instanceof Node ? (target.ownerDocument ?? (target as Document)) : null;
-        if (!ownerDocument || !isPageBoundaryLeave(event, ownerDocument)) return;
-        input.onMouseMove({ x: 0, y: 0, visible: false });
-      };
-
       const attachToDocument = () => {
         scopes.doc?.abort();
         scopes.doc = new AbortController();
@@ -251,7 +245,12 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
           for (const type of pointerEventTypes) {
             iframeDoc.addEventListener(type, onIframePointerEvent, { capture: true, signal });
           }
-          iframeDoc.addEventListener("mouseleave", onIframeMouseLeave, { capture: true, signal });
+          // No mouseleave listener on the frame. When the pointer leaves the
+          // window from inside the frame, the page's root gets a mouseleave
+          // too, and handleMouseLeave hides the cursor. The frame's root also
+          // gets one when the pointer only moves on to the page, and its body
+          // gets one when the pointer moves below a short body. Both would
+          // hide a cursor that is still on screen.
           directlyTrackedIframes.add(iframe);
         } catch (err) {
           // Cross-origin iframes can't be accessed directly; this is expected.

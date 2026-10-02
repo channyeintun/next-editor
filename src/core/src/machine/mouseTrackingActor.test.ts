@@ -137,6 +137,23 @@ describe("mouseTrackingActor", () => {
     actor.stop();
   });
 
+  it("hides the cursor only when the pointer leaves the page", () => {
+    const { line } = renderApp();
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+
+    // The capture listener on the document also sees leaves from its elements.
+    fireMouseLeave(line);
+
+    expect(onMouseMove).not.toHaveBeenCalled();
+
+    fireMouseLeave(document.documentElement);
+
+    expect(onMouseMove).toHaveBeenCalledTimes(1);
+    expect(onMouseMove).toHaveBeenLastCalledWith({ x: 0, y: 0, visible: false });
+    actor.stop();
+  });
+
   it("reports a pointer move inside a same-origin iframe once, in page coordinates", () => {
     renderApp();
     const iframe = renderFrame();
@@ -148,6 +165,31 @@ describe("mouseTrackingActor", () => {
     // (100 + 64 / 2, 75 + 48 / 2), relative to the app root at (50, 25).
     expect(onMouseMove).toHaveBeenCalledTimes(1);
     expect(onMouseMove.mock.calls[0][0]).toMatchObject({ x: 82, y: 74, visible: true });
+    actor.stop();
+  });
+
+  it("leaves hiding the cursor to the page when the pointer leaves a same-origin iframe", () => {
+    renderApp();
+    const frameDocument = getFrameDocument(renderFrame());
+    const button = frameDocument.createElement("button");
+    frameDocument.body.appendChild(button);
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+
+    // The frame's root also gets a mouseleave when the pointer only moves on
+    // to the page, and its body when the pointer moves below a short body.
+    fireMouseLeave(button);
+    fireMouseLeave(frameDocument.body);
+    fireMouseLeave(frameDocument.documentElement);
+
+    expect(onMouseMove).not.toHaveBeenCalled();
+
+    // Leaving the window from inside the frame sends the page's root a
+    // mouseleave too.
+    fireMouseLeave(document.documentElement);
+
+    expect(onMouseMove).toHaveBeenCalledTimes(1);
+    expect(onMouseMove).toHaveBeenLastCalledWith({ x: 0, y: 0, visible: false });
     actor.stop();
   });
 
@@ -188,7 +230,6 @@ describe("mouseTrackingActor", () => {
     const nextDocument = giveFrameDocument(iframe);
     iframe.dispatchEvent(new Event("load"));
     firePointer(firstDocument.body);
-    fireMouseLeave(firstDocument.documentElement);
 
     expect(onMouseMove).not.toHaveBeenCalled();
 
@@ -228,7 +269,6 @@ describe("mouseTrackingActor", () => {
     iframe.remove();
     await flushMutations();
     firePointer(frameDocument.body);
-    fireMouseLeave(frameDocument.documentElement);
 
     expect(onMouseMove).toHaveBeenCalledTimes(1);
     actor.stop();
