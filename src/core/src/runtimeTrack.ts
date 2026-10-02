@@ -198,33 +198,23 @@ export function resolveRuntimeSnapshotAt(
     return target.snapshot;
   }
 
+  // Where the fold may start: just after the cached fold when moving forward,
+  // otherwise the start of the track.
   const cached = runtimeResolverCache.get(events);
-  let startIndex: number;
-  let snapshot: RuntimeRecordingSnapshot;
+  const resumed = cached && cached.index <= index ? cached : null;
+  const floor = resumed ? resumed.index : -1;
+  let startIndex = floor + 1;
+  let snapshot = resumed ? resumed.snapshot : EMPTY_RUNTIME_SNAPSHOT;
 
-  if (cached && cached.index <= index) {
-    // Moving forward: continue from the last fold, unless a checkpoint lies in
-    // between. Then start from that checkpoint, so no delta before it is applied
-    // only to be thrown away. A playback tick usually moves one event, so this
-    // usually scans one event.
-    let checkpointIndex = index;
-    while (checkpointIndex > cached.index && !events[checkpointIndex].snapshot) checkpointIndex--;
-    if (checkpointIndex > cached.index) {
-      startIndex = checkpointIndex + 1;
-      snapshot = events[checkpointIndex].snapshot!;
-    } else {
-      startIndex = cached.index + 1;
-      snapshot = cached.snapshot;
-    }
-  } else {
-    let checkpointIndex = index;
-    while (checkpointIndex >= 0 && !events[checkpointIndex].snapshot) checkpointIndex--;
-    if (checkpointIndex < 0) {
-      startIndex = 0;
-      snapshot = EMPTY_RUNTIME_SNAPSHOT;
-    } else {
-      startIndex = checkpointIndex + 1;
-      snapshot = events[checkpointIndex].snapshot!;
+  // A checkpoint after the floor is a better start, so no delta before it is
+  // applied only to be thrown away. A playback tick usually moves one event, so
+  // this usually scans one event.
+  for (let cursor = index; cursor > floor; cursor--) {
+    const checkpoint = events[cursor].snapshot;
+    if (checkpoint) {
+      startIndex = cursor + 1;
+      snapshot = checkpoint;
+      break;
     }
   }
 
