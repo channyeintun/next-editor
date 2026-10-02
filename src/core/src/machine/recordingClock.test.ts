@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vite-plus/test";
 import {
   createRecordingClock,
@@ -118,5 +119,112 @@ describe("recording clock", () => {
         toRecordingWallTime(clock, 58_000) - recordingTimeAtPerf(clock, START_PERF, 9_000);
       expect(leadAfter).toBe(leadBefore);
     });
+  });
+});
+
+describe("recording clock laws", () => {
+  // A take that runs and pauses in turn, with the wall clock moving with `performance.now()`.
+  // Each step runs for `run` ms and then pauses for `pause` ms. The last pause may stay open.
+  const START_WALL = 50_000;
+
+  interface Take {
+    steps: Array<{ run: number; pause: number }>;
+    endsPaused: boolean;
+  }
+
+  const arbTake: fc.Arbitrary<Take> = fc.record({
+    steps: fc.array(fc.record({ run: fc.nat({ max: 3_000 }), pause: fc.nat({ max: 3_000 }) }), {
+      maxLength: 8,
+    }),
+    endsPaused: fc.boolean(),
+  });
+
+  const wallAt = (perf: number) => perf - START_PERF + START_WALL;
+
+  function playTake({ steps, endsPaused }: Take) {
+    let clock = createRecordingClock();
+    let perf = START_PERF;
+    /** The perf stretches the clock ran for. */
+    const running: Array<{ start: number; end: number }> = [];
+    /** Every perf reading at which the clock paused or ran again. */
+    const edges: number[] = [];
+
+    steps.forEach(({ run, pause }, index) => {
+      running.push({ start: perf, end: perf + run });
+      perf += run;
+      clock = pauseRecordingClock(clock, perf, wallAt(perf));
+      edges.push(perf);
+      if (endsPaused && index === steps.length - 1) return;
+      perf += pause;
+      clock = resumeRecordingClock(clock, perf, wallAt(perf));
+      edges.push(perf);
+    });
+    if (!isRecordingClockPaused(clock)) {
+      running.push({ start: perf, end: Number.POSITIVE_INFINITY });
+    }
+
+    return { clock, running, edges };
+  }
+
+  /** The time the clock ran for between the take's start and `perf`. */
+  function runningTimeBefore(running: Array<{ start: number; end: number }>, perf: number) {
+    let total = 0;
+    for (const { start, end } of running) total += Math.max(0, Math.min(end, perf) - start);
+    return total;
+  }
+
+  type Reading = { offset: number } | { edge: number; nudge: number };
+
+  // A reading anywhere in the take, or right next to a pause or a resume, where an
+  // off-by-one would show.
+  const arbReading: fc.Arbitrary<Reading> = fc.oneof(
+    fc.record({ offset: fc.nat({ max: 60_000 }) }),
+    fc.record({ edge: fc.nat(), nudge: fc.integer({ min: -2, max: 2 }) }),
+  );
+
+  function perfOf(reading: Reading, edges: number[]): number {
+    if ("offset" in reading) return START_PERF + reading.offset;
+    const edge = edges.length ? edges[reading.edge % edges.length] : START_PERF;
+    return Math.max(START_PERF, edge + reading.nudge);
+  }
+
+  it("reads exactly the time the take was running", () => {
+    fc.assert(
+      fc.property(arbTake, arbReading, (take, reading) => {
+        const { clock, running, edges } = playTake(take);
+        const perf = perfOf(reading, edges);
+        expect(recordingTimeAtPerf(clock, START_PERF, perf)).toBe(runningTimeBefore(running, perf));
+      }),
+    );
+  });
+
+  it("never runs backward or faster than real time", () => {
+    fc.assert(
+      fc.property(arbTake, arbReading, arbReading, (take, first, second) => {
+        const { clock, edges } = playTake(take);
+        const [earlier, later] = [perfOf(first, edges), perfOf(second, edges)].sort(
+          (left, right) => left - right,
+        );
+        const gained =
+          recordingTimeAtPerf(clock, START_PERF, later) -
+          recordingTimeAtPerf(clock, START_PERF, earlier);
+        expect(gained).toBeGreaterThanOrEqual(0);
+        expect(gained).toBeLessThanOrEqual(later - earlier);
+      }),
+    );
+  });
+
+  // The rrweb preview events are placed by one constant offset from their wall stamps
+  // (buildRrwebReplayEvents), so no number of pauses may change that offset.
+  it("keeps the stamp-to-recorded-time lead the same after any number of pauses", () => {
+    fc.assert(
+      fc.property(arbTake, arbReading, (take, reading) => {
+        const { clock, edges } = playTake(take);
+        const perf = perfOf(reading, edges);
+        const lead =
+          toRecordingWallTime(clock, wallAt(perf)) - recordingTimeAtPerf(clock, START_PERF, perf);
+        expect(lead).toBe(START_WALL);
+      }),
+    );
   });
 });

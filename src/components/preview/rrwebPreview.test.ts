@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   loadRrwebRecorderBundle,
@@ -118,6 +119,63 @@ describe("buildRrwebReplayEvents", () => {
 
     // Batch anchored at its recording time (500); seed events clamp at 0.
     expect(events.map((entry) => entry.timestamp)).toEqual([0, 0, 500, 510]);
+  });
+
+  // An event's true recording time is its segment's `time` plus its distance from the
+  // segment's first event. Events inside a segment need not be sorted: a batch can
+  // carry stamps [5, 2].
+  it("never places an event after its true recording time and keeps the gaps it does not clamp", () => {
+    const PREVIEW_BASE = 1_700_000_000_000;
+    const arbSegment = fc.record({
+      time: fc.nat({ max: 5_000 }),
+      firstStamp: fc.nat({ max: 5_000 }),
+      offsets: fc.array(fc.integer({ min: -50, max: 400 }), { maxLength: 4 }),
+      isSeed: fc.boolean(),
+    });
+
+    fc.assert(
+      fc.property(fc.array(arbSegment, { maxLength: 6 }), (segments) => {
+        // Each event carries its index as a tag, to find it again after the sort.
+        const trueTimes: number[] = [];
+        const rawStamps: number[] = [];
+        const seeds: PreviewInitialDocument[] = [];
+        const batches: PreviewDomPatchBatch[] = [];
+        for (const { time, firstStamp, offsets, isSeed } of segments) {
+          const first = PREVIEW_BASE + firstStamp;
+          const events = [first, ...offsets.map((offset) => first + offset)].map((timestamp) => {
+            const tag = rawStamps.length;
+            trueTimes.push(time + timestamp - first);
+            rawStamps.push(timestamp);
+            return { type: 3, timestamp, data: { tag } };
+          });
+          if (isSeed) {
+            seeds.push({ version: 2, time, documentId: "doc-1", events });
+          } else {
+            batches.push({
+              version: 2,
+              time,
+              source: "runtime-preview",
+              documentId: "doc-1",
+              events,
+            });
+          }
+        }
+
+        const replayed = buildRrwebReplayEvents(seeds, batches);
+
+        expect(replayed).toHaveLength(rawStamps.length);
+        const placed = replayed.map((entry) => entry.timestamp);
+        expect(placed).toEqual([...placed].sort((left, right) => left - right));
+        const shifts = new Set<number>();
+        for (const entry of replayed) {
+          const { tag } = entry.data as { tag: number };
+          expect(entry.timestamp).toBeLessThanOrEqual(Math.max(0, trueTimes[tag]));
+          if (entry.timestamp > 0) shifts.add(rawStamps[tag] - entry.timestamp);
+        }
+        // Every event that was not clamped at 0 moved back by the same lead.
+        expect(shifts.size).toBeLessThanOrEqual(1);
+      }),
+    );
   });
 });
 
