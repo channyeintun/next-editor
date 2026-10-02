@@ -222,6 +222,53 @@ operate on growing arrays.
 
 ---
 
+## Seeking lands where playing does
+
+Every replay track keeps one rule: whatever path of ticks, seeks, resumes and streamed appends
+brings playback to time T, the track shows what a cold resolve at T shows. Playing forward is only
+a faster way to reach the same state. These are the cursor rules that keep it, in
+[replayActions.ts](../src/core/src/machine/replayActions.ts):
+
+- **TICK** moves each track forward from its cursor (`lastApplied…EventIndex`). Tracks with
+  transient interactions (slide hops, preview clicks) replay every event the tick crosses.
+- **SEEK**, **PLAY** after a pause, a rewind and a workspace detach reset the cursors together
+  with `REPLAY_CURSORS_RESET`. The next apply is then a resync (`isReplayResync` in
+  [cursor.ts](../src/core/src/machine/replayState/cursor.ts)). It lands on one state at T and
+  never fires a recorded interaction again. Before their first event, the tracks that have a
+  baseline apply it on a resync: a closed deck, an empty transcript, an empty board.
+- **The workspace cursor is the one exception.** Panel widths replay as offsets added to the
+  viewer's own widths, so the replay must know which offsets it has already added.
+  `REPLAY_CURSORS_RESET` leaves `lastAppliedWorkspaceEventIndex` alone, and the workspace
+  resolver adds or takes away exactly the offsets between that index and T. Only loading or
+  clearing a recording resets it. Resetting it on a seek added every offset again, and the panels
+  grew without bound.
+- **Streamed appends** push records into the same arrays. Every cache on a track (the chat and
+  runtime folds, the preview and whiteboard states, the keyframe index) is keyed on its array and
+  only grows, so an append never makes a cached state wrong.
+- **Checkpoints are only for seeking.** The delta log alone defines every state, and a checkpoint
+  equals the fold at its index. So a resolver may restart from the nearest checkpoint at or before
+  T instead of applying every delta before it.
+
+The tests that check the rule:
+
+- [pathIndependence.test.ts](../src/core/src/machine/replayState/pathIndependence.test.ts):
+  fast-check walks of ticks, seeks, resumes and appends for chat, runtime, workspace (widths and
+  files), whiteboard, slides and preview. The state is compared with a cold resolve after every
+  move. Its per-track adapters copy the cursor rules above.
+- [timedIndex.test.ts](../src/core/src/utils/timedIndex.test.ts): the "last event at or before
+  T" search that every track uses, checked against a linear scan from every hint.
+- [recordingClock.test.ts](../src/core/src/machine/recordingClock.test.ts),
+  [mediaSpans.test.ts](../src/core/src/utils/mediaSpans.test.ts) and
+  [rrwebPreview.test.ts](../src/components/preview/rrwebPreview.test.ts): the times events are
+  placed at. The clock skips pauses exactly, and rrweb events are never placed after their true
+  recording time.
+
+Editor frames keep the same rule in `applyFrameAtTime`, but the property test leaves them out,
+because that fold needs a Monaco editor. Their reconstruction is checked in
+[frameStreamEncoder.test.ts](../src/core/src/utils/frameStreamEncoder.test.ts).
+
+---
+
 ## API reference
 
 | Function / type                      | Module                                                                                | Purpose                                                                |
