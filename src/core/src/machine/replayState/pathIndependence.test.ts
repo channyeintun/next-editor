@@ -30,27 +30,7 @@ import type {
   WhiteboardSceneState,
 } from "../../whiteboard";
 import { editorMachine } from "../editorMachine";
-import {
-  adoptPlaybackWorkspaceAtPause,
-  appendRecordingDelta,
-  applyChatEventsAtTime,
-  applyFrameAtTime,
-  applyPreviewEventsAtTime,
-  applyPreviewPatchBatchesAtTime,
-  applyRuntimeEventsAtTime,
-  applySlideEventsAtTime,
-  applyWhiteboardEventsAtTime,
-  applyWorkspaceEventsAtTime,
-  captureLearnerWorkspaceBaseline,
-  detachPlaybackWorkspace,
-  extendRecording,
-  invalidateAppliedPlaybackState,
-  notifySeek,
-  reattachPlaybackWorkspace,
-  seekToTime,
-  setRecording,
-  storeTickTime,
-} from "../replayActions";
+import { setRecording } from "../replayActions";
 import {
   createInitialContext,
   type EditorActionArgs,
@@ -166,37 +146,30 @@ const arbGap = fc.oneof(
 // ============================================================================
 
 /**
- * The machine's actions by name, wired as editorMachine.ts wires them: `assign`
- * actions return a patch, plain ones only call host hooks. A name the walk meets
- * but does not know stops it, because a new action may move a replay cursor.
+ * An action as editorMachine's setup() holds it. xstate 5.33.2's `assign(fn)`
+ * keeps `fn` as `assignment`; a plain action is the function itself, with no
+ * `type`. Other built-ins (enqueueActions, sendTo, ...) carry their own `type`.
  */
-const ASSIGN_ACTIONS: Record<string, (args: EditorActionArgs) => EditorContextUpdate> = {
-  storeTickTime,
-  seekToTime,
-  appendRecordingDelta,
-  extendRecording,
-  invalidateAppliedPlaybackState,
-  detachPlaybackWorkspace,
-  reattachPlaybackWorkspace,
-  captureLearnerWorkspaceBaseline,
-  applyWorkspaceEventsAtTime,
-  applyRuntimeEventsAtTime,
-  applyFrameAtTime,
-  applyPreviewEventsAtTime,
-  applySlideEventsAtTime,
-  applyWhiteboardEventsAtTime,
-  applyChatEventsAtTime,
+type MachineAction = ((args: EditorActionArgs) => void) & {
+  type?: string;
+  assignment?: (args: EditorActionArgs) => EditorContextUpdate;
 };
 
-const PLAIN_ACTIONS: Record<string, (args: EditorActionArgs) => void> = {
-  adoptPlaybackWorkspaceAtPause,
-  applyPreviewPatchBatchesAtTime,
-  notifySeek,
-};
+/** The machine's own actions and guards, so the walk runs exactly what it runs. */
+const MACHINE_ACTIONS = editorMachine.implementations.actions as unknown as Record<
+  string,
+  MachineAction | undefined
+>;
+const MACHINE_GUARDS = editorMachine.implementations.guards as unknown as Record<
+  string,
+  ((args: EditorActionArgs) => boolean) | undefined
+>;
 
 /**
  * Actions that change no replay state: they drive the timeline and narration
- * actors, or keep the viewer's own edits (the walk makes none).
+ * actors, or keep the viewer's own workspace files (the walk edits none). Any
+ * other action that is not an assign or a plain action stops the walk, because
+ * it may move a replay cursor.
  */
 const SKIPPED_ACTIONS = new Set([
   "spawnPlaybackAudio",
@@ -211,34 +184,56 @@ const SKIPPED_ACTIONS = new Set([
 const { playback } = editorMachine.root.states;
 const { ready, playing, paused } = playback.states;
 
-/** The actions of `node`'s own `type` transition: its only branch, or the one `guard` guards. */
-function transitionActions(
+/** The editor machine during playback, as far as the walk takes it. */
+interface PlaybackMachine {
+  context: EditorMachineContext;
+  state: "ready" | "playing";
+}
+
+/** One step of the walk: the actions the machine runs for `event` from where it is now. */
+type MachineStep = (
+  machine: PlaybackMachine,
+  event: EditorMachineEvent,
+) => readonly UnknownAction[];
+
+/**
+ * The actions of the `node` transition the machine takes for `event`: like xstate,
+ * the first branch whose guard holds, checked against the context before the step.
+ */
+function takenActions(
   node: typeof playback,
-  type: string,
-  guard?: string,
+  machine: PlaybackMachine,
+  event: EditorMachineEvent,
 ): readonly UnknownAction[] {
-  const branches = node.transitions.get(type) ?? [];
-  const branch = guard ? branches.find((each) => each.guard === guard) : branches[0];
+  const branch = (node.transitions.get(event.type) ?? []).find((each) => {
+    if (each.guard === undefined) return true;
+    const guard = typeof each.guard === "string" ? MACHINE_GUARDS[each.guard] : undefined;
+    if (!guard) throw new Error(`The walk cannot check the guard of ${node.key}.${event.type}`);
+    return guard({ context: machine.context, event });
+  });
   if (!branch) {
-    throw new Error(`editorMachine.ts no longer has the ${type} transition the walk takes`);
+    throw new Error(`No branch of ${node.key}.${event.type} holds where the walk sends it`);
   }
   return branch.actions;
 }
 
 /** A transition of `playback` itself, which the walk takes from ready and from playing. */
-function playbackActions(type: string, guard?: string): readonly UnknownAction[] {
-  if (ready.transitions.has(type) || playing.transitions.has(type)) {
-    throw new Error(`ready or playing now handles ${type} itself; walk that transition instead`);
+const playbackStep: MachineStep = (machine, event) => {
+  if (ready.transitions.has(event.type) || playing.transitions.has(event.type)) {
+    throw new Error(`ready or playing now handles ${event.type} itself; walk that transition`);
   }
-  return transitionActions(playback, type, guard);
-}
+  return takenActions(playback, machine, event);
+};
 
 /**
  * The actions the machine runs for each step of the walk. They are read from the
  * machine itself (editorMachine.ts: `loading`'s onDone near line 1026, and the
- * `playback` state near lines 1067-1265), so the walk follows the machine's lists
- * and order: the source state's exit, the transition's own actions, then the
- * target's entry. Only which transition each step takes is kept by hand here.
+ * `playback` state near lines 1067-1265), so the walk follows the machine's lists,
+ * guards and order: the source state's exit, the actions of the branch whose guard
+ * holds, then the target's entry. Kept by hand here: which transition each step
+ * takes, and loading's onDone, whose setRecording is an inline assign (see `load`).
+ * A new trigger, or a new transition that resets replay cursors, belongs here and
+ * in the Move union, or the walk cannot see it.
  *
  * The walk never stays paused (a resume is PAUSE then PLAY at once), so paused's
  * own TICK and SEEK, and growth while the viewer owns the workspace, are not
@@ -246,43 +241,52 @@ function playbackActions(type: string, guard?: string): readonly UnknownAction[]
  * SET_EDITOR_REF.
  */
 const MACHINE_STEPS = {
-  // loading's onDone runs setRecording (see `load`), then enters playback.ready.
-  LOAD: [...playback.entry, ...ready.entry],
-  TICK: playbackActions("TICK"),
-  SEEK: playbackActions("SEEK"),
+  LOAD: () => [...playback.entry, ...ready.entry],
+  TICK: playbackStep,
+  SEEK: playbackStep,
   // The first PLAY: ready -> playing.
-  PLAY: [...ready.exit, ...transitionActions(ready, "PLAY"), ...playing.entry],
+  PLAY: (machine, event) => [
+    ...ready.exit,
+    ...takenActions(ready, machine, event),
+    ...playing.entry,
+  ],
   // playing -> paused hands the workspace to the viewer (detachPlaybackWorkspace) ...
-  PAUSE: [...playing.exit, ...transitionActions(playing, "PAUSE"), ...paused.entry],
+  PAUSE: (machine, event) => [
+    ...playing.exit,
+    ...takenActions(playing, machine, event),
+    ...paused.entry,
+  ],
   // ... and paused -> playing takes it back (reattachPlaybackWorkspace).
-  RESUME: [...paused.exit, ...transitionActions(paused, "PLAY"), ...playing.entry],
-  // Growth while the replay owns the workspace.
-  APPEND_RECORDING_DELTA: playbackActions("APPEND_RECORDING_DELTA", "isForLoadedRecording"),
-  EXTEND_RECORDING: playbackActions("EXTEND_RECORDING", "isForLoadedRecording"),
-};
+  RESUME: (machine, event) => [
+    ...paused.exit,
+    ...takenActions(paused, machine, event),
+    ...playing.entry,
+  ],
+  // Streamed growth. The replay owns the workspace here, so the branch that
+  // catches the replay up is the one that holds.
+  APPEND_RECORDING_DELTA: playbackStep,
+  EXTEND_RECORDING: playbackStep,
+} satisfies Record<string, MachineStep>;
 
-/** The editor machine during playback, as far as the walk takes it. */
-interface PlaybackMachine {
-  context: EditorMachineContext;
-  state: "ready" | "playing";
-}
-
-/** Runs `actions` for `event`. Like `assign`, each action sees what the ones before it changed. */
-function run(
-  machine: PlaybackMachine,
-  event: EditorMachineEvent,
-  actions: readonly UnknownAction[],
-): void {
-  for (const action of actions) {
+/**
+ * Takes `step` for `event`. Like `assign`, each action sees what the ones before
+ * it changed; a plain action only calls host hooks.
+ */
+function run(machine: PlaybackMachine, event: EditorMachineEvent, step: MachineStep): void {
+  for (const action of step(machine, event)) {
     if (typeof action !== "string") throw new Error("The walk cannot run an inline action");
     if (SKIPPED_ACTIONS.has(action)) continue;
+    const implementation = MACHINE_ACTIONS[action];
     const args = { context: machine.context, event };
-    if (Object.hasOwn(ASSIGN_ACTIONS, action)) {
-      machine.context = { ...machine.context, ...ASSIGN_ACTIONS[action](args) };
-    } else if (Object.hasOwn(PLAIN_ACTIONS, action)) {
-      PLAIN_ACTIONS[action](args);
+    if (implementation?.type === "xstate.assign" && implementation.assignment) {
+      machine.context = { ...machine.context, ...implementation.assignment(args) };
+    } else if (implementation && implementation.type === undefined) {
+      implementation(args);
     } else {
-      throw new Error(`The walk does not know the action "${action}"; add it above`);
+      throw new Error(
+        `The walk cannot run "${action}" (${implementation?.type ?? "unknown"}); ` +
+          "add it to SKIPPED_ACTIONS if it changes no replay state",
+      );
     }
   }
 }
@@ -292,8 +296,9 @@ const DURATION = 60_000;
 
 /**
  * The recording around one track's log. Its one frame makes it playable (canPlay).
- * The context has no editor, so applyFrameAtTime applies nothing: the frame track
- * needs Monaco and is left out.
+ * The context has no editor, so applyFrameAtTime applies nothing (the frame track
+ * needs Monaco and is left out), and with no current frame
+ * adoptPlaybackWorkspaceAtPause adopts nothing at a pause either.
  */
 const RECORDING: Recording = {
   version: 4,
@@ -423,7 +428,7 @@ interface ReplayTrack<Event extends { timestamp: number }> {
    * event a tick or a streamed append crosses. A load, a seek or a resume lands on
    * one state and must never fire the recorded interactions again.
    */
-  landsOnOneState?: true;
+  replaysTransients?: true;
   /** What the host does on its own once playing starts. */
   onPlaying?(context: EditorMachineContext): void;
 }
@@ -450,7 +455,7 @@ function walk<Event extends { timestamp: number }>(
 
   const loaded = (): Event[] => (machine.context.recording?.[track.field] ?? []) as Event[];
   const check = (label: string, landsOnOneState: boolean) => {
-    if (track.landsOnOneState && landsOnOneState) {
+    if (track.replaysTransients && landsOnOneState) {
       expect(applied.length, `states applied ${label}`).toBeLessThanOrEqual(1);
     }
     expect(machine.context.timeline.currentTime, `the playhead ${label}`).toBe(time);
@@ -1088,7 +1093,7 @@ const slideTrack: ReplayTrack<SlideEvent> = {
           isResync: true,
         }).applications.at(-1)
       : undefined,
-  landsOnOneState: true,
+  replaysTransients: true,
 };
 
 // ============================================================================
@@ -1188,7 +1193,7 @@ const previewTrack: ReplayTrack<PreviewEvent> = {
       lastAppliedIndex: -1,
       isResync: true,
     }).retainedState,
-  landsOnOneState: true,
+  replaysTransients: true,
 };
 
 describe("seeking lands where playing does", () => {
