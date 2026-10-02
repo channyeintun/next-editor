@@ -79,6 +79,15 @@ flowchart LR
 
 Defined in `src/core/src/machine/editorMachine.ts`.
 
+The diagram draws every transition that has a target, plus the codec refusal that stays in
+`idle`. A transition defined on a compound state (`recording`'s `RETAKE_RECORDING`,
+`playback`'s `STOP` and `RESTORE_LEARNER_WORKSPACE`) is drawn from each substate it can
+leave. The root late-blob handler is drawn from `loading` and `playback`, the states a
+finalized take's late microphone blob can reach. Handlers without a target (the captures,
+`TICK`, `SEEK`, `SET_SPEED` and the like) are listed in the sections below. The substates
+have their own ids in the diagram (`recordingPaused`, `playbackPaused`, ...) because mermaid
+state ids are global.
+
 ```mermaid
 stateDiagram-v2
     [*] --> idle
@@ -93,33 +102,74 @@ stateDiagram-v2
     startingRecording --> idle : AUDIO_RECORDING_ERROR
     startingRecording --> idle : STOP_RECORDING
 
+    state recording {
+        state "running" as recordingRunning
+        state "paused" as recordingPaused
+        [*] --> recordingRunning
+        recordingRunning --> recordingPaused : PAUSE_RECORDING
+        recordingPaused --> recordingRunning : RESUME_RECORDING
+        recordingRunning --> recordingPaused : RETAKE_RECORDING [canRetake]
+        recordingPaused --> recordingPaused : RETAKE_RECORDING [canRetake]
+    }
+
     recording --> stoppingRecording : STOP_RECORDING [isMicrophoneAudioRecording]
     recording --> stoppingRecording : STOP_RECORDING [isCameraRecording]
     recording --> loading : STOP_RECORDING [no async drain]
+    recording --> stoppingRecording : AUDIO_PLAYBACK_FINISHED [isCameraRecording]
+    recording --> loading : AUDIO_PLAYBACK_FINISHED [isExternalAudioRecording]
+    recording --> stoppingRecording : AUDIO_RECORDING_ERROR [isMicrophoneAudioRecording]
     recording --> idle : AUDIO_PLAYBACK_ERROR [isExternalAudioRecording]
 
-    stoppingRecording --> loading : [areRecordersDrained] (drain complete)
+    stoppingRecording --> loading : always [areRecordersDrained] (after AUDIO_RECORDING_STOPPED / CAMERA_STOPPED / CAMERA_ERROR)
     stoppingRecording --> loading : after recorderStopWatchdog (2s)
 
-    loading --> playback.ready : onDone
+    loading --> playbackReady : onDone
     loading --> idle : onError
     loading --> idle : UNLOAD
     loading --> loading : LOAD_RECORDING (re-enter)
+    loading --> loading : AUDIO_RECORDING_STOPPED [isLateAudioAwaitingEdit] (root handler, re-enter)
 
     state playback {
-        [*] --> ready
-        ready --> playing : PLAY [canPlay]
-        playing --> paused : PAUSE
-        playing --> paused : WORKSPACE_EVENT
-        playing --> paused : USER_INTERACTION [shouldPauseOnInteraction]
-        playing --> ended : FINISHED
-        paused --> playing : PLAY
-        ended --> playing : PLAY (rewinds first when isAtPlaybackEnd)
+        state "ready" as playbackReady
+        state "playing" as playbackPlaying
+        state "paused" as playbackPaused
+        state "ended" as playbackEnded
+        [*] --> playbackReady
+        playbackReady --> playbackPlaying : PLAY [canPlay]
+        playbackPlaying --> playbackPaused : PAUSE
+        playbackPlaying --> playbackPaused : WORKSPACE_EVENT
+        playbackPlaying --> playbackPaused : USER_INTERACTION [shouldPauseOnInteraction]
+        playbackPlaying --> playbackEnded : FINISHED
+        playbackPaused --> playbackPlaying : PLAY
+        playbackEnded --> playbackPlaying : PLAY (rewinds first when isAtPlaybackEnd)
+        playbackReady --> playbackReady : STOP
+        playbackPlaying --> playbackReady : STOP
+        playbackPaused --> playbackReady : STOP
+        playbackEnded --> playbackReady : STOP
+        playbackReady --> playbackPaused : RESTORE_LEARNER_WORKSPACE
+        playbackPlaying --> playbackPaused : RESTORE_LEARNER_WORKSPACE
+        playbackPaused --> playbackPaused : RESTORE_LEARNER_WORKSPACE
+        playbackEnded --> playbackPaused : RESTORE_LEARNER_WORKSPACE
     }
 
     playback --> idle : UNLOAD
     playback --> loading : LOAD_RECORDING
+    playback --> loading : AUDIO_RECORDING_STOPPED [isLateAudioAwaitingEdit] (root handler)
 ```
+
+These events are handled at the machine root, so they apply in every state that has no
+handler of its own for them:
+
+- `SET_EDITOR_REF` stores the live editor, and re-applies the replay when `shouldSyncPlaybackEditorRef`.
+- `AUDIO_RECORDING_STOPPED` splices a microphone blob that arrived after its take was
+  finalized (`attachLateAudioBlob`). When that take still has a retake's cut to apply
+  (`isLateAudioAwaitingEdit`), it goes back through `loading`, re-entering it if it is
+  already there. `recording` and `stoppingRecording` have their own handlers.
+- `START_RECORDING` releases the display stream of a start that no state accepted (only
+  `idle` accepts one).
+- `ADD_CAPTION_TRACK` and `SET_CHAPTERS` change the loaded recording (`isForLoadedRecording`).
+- `SCREEN_STARTED`, `SCREEN_STOPPED` and `SCREEN_ERROR` follow the screen recorder, which is
+  independent of the take's finalize join.
 
 ## Core States
 
@@ -151,13 +201,15 @@ What happens here:
 - a `RecordingSession` is initialized (`initRecordingSession`) and the first frame is captured (`captureInitialFrame`)
 - an invoked `mouseTracking` actor drives `CAPTURE_FRAME` for cursor movement
 - camera capture spawns conditionally on entry if `enableCameraRecording`
-- `CAPTURE_FRAME`, `SLIDE_EVENT`, `PREVIEW_EVENT`, `PREVIEW_INITIAL_DOCUMENT`, `PREVIEW_PATCH_BATCH`, `WORKSPACE_EVENT`, and `RUNTIME_EVENT` are all captured into the session
+- `CAPTURE_FRAME`, `SLIDE_EVENT`, `PREVIEW_EVENT`, `PREVIEW_INITIAL_DOCUMENT`, `PREVIEW_PATCH_BATCH`, `WORKSPACE_EVENT`, `RUNTIME_EVENT`, `WHITEBOARD_EVENT`, and `CHAT_EVENT` are all captured into the session
 - `recording` has two substates, `running` (where every take starts) and `paused`. `PAUSE_RECORDING` (handled only in `running`) and `RESUME_RECORDING` (handled only in `paused`) move between them, so a second pause or a resume while running is dropped. The substate and the clock's `pausedAt` change in the same transitions, and the UI's `isRecordingPaused` reads the substate (`state.matches({ recording: "paused" })`). Every capture handler sits on `recording` itself, so it runs in both
 - `PAUSE_RECORDING` / `RESUME_RECORDING` stop and restart the take without leaving `recording`: the session clock (`recordingClock.ts`) stands still, and the microphone, camera and screen recorders (or a selected narration file) pause with it. Everything captured while paused is stamped at the pause, so edits made then replay as one jump; pointer samples are dropped until the resume records where the pointer ended up. Preview rrweb stamps have the pauses taken out on the wall clock, so replay's single preview offset stays valid
 - `RETAKE_RECORDING` rewinds the take to its last safe point (its start, or the last resume; `retake.ts`) and holds it paused there: from either substate it moves to `paused`, and `rewindRecordingClock` leaves the clock paused. Only the tail is discarded: every track is cut back to the entries at or before that point (new arrays), the frame encoder is re-based on the last kept frame, and the clock is rewound. The recorders keep their files, so the stretch they recorded since is added to `session.mediaCuts` (microphone narration is cut when the take loads, via `pendingAudioEdit`; the camera is mapped around `cameraCuts`), while a selected narration file is sought back instead. The live workspace, whiteboard, slides and preview panel are put back through their appliers; the live terminal and agent chat, which cannot be rewound, are recorded whole at the safe point; and the preview's rrweb stream drops patches until a fresh full snapshot re-bases it
 - `ADD_CHAPTER_MARKER` marks a chapter at the take's current moment (one per moment); it is also a safe point a retake can rewind to, anchored at the pause when marked while paused. A retake drops the chapters it discards, and finalize hands the rest to the recording
 - camera lifecycle events are folded into camera state
 - `STOP_RECORDING` branches on `isMicrophoneAudioRecording` / `isCameraRecording` to decide whether a drain (`stoppingRecording`) is needed before finalizing
+- a selected narration file ends the take by itself: its `AUDIO_PLAYBACK_FINISHED` goes to `stoppingRecording` when the camera is on (after `stopExternalAudioRecording` marks the narration done), and otherwise finalizes straight to `loading`. If the file fails to play (`AUDIO_PLAYBACK_ERROR`), the take is dropped and the machine returns to `idle` with the error
+- a microphone that fails mid-take (`AUDIO_RECORDING_ERROR` with `isMicrophoneAudioRecording`) reports the error and drains through `stoppingRecording` like a stop. A microphone that ends by itself (`AUDIO_RECORDING_STOPPED`) only has its file stored; the take goes on
 
 ### `stoppingRecording`
 
@@ -166,7 +218,8 @@ This is a drain state, not a second recording mode.
 - camera capture may stop before or after audio
 - entering it (`stopRecordingMedia`) asks the running microphone and camera recorders for their files (`getRunningRecorders`)
 - `AUDIO_RECORDING_STOPPED`, `CAMERA_STOPPED` and `CAMERA_ERROR` each only store what that recorder sent and stop it; storing clears the recorder's `isRecording` flag
-- the machine finalizes through one eventless join, `always` with `areRecordersDrained`: once no narration and no camera is still recording. xstate checks it after every event the state takes, and every way in has the microphone or the camera still recording, so it never passes on entry. Otherwise the two-second `recorderStopWatchdog` delay finalizes without the missing files. A microphone blob that lands after that is still spliced into the finalized take by the root `AUDIO_RECORDING_STOPPED` handler (`attachLateAudioBlob`)
+- the machine finalizes through one eventless join, `always` with `areRecordersDrained`: once no narration and no camera is still recording. xstate checks it after every event the state takes, and every way in has the microphone or the camera still recording, so it never passes on entry. Otherwise the two-second `recorderStopWatchdog` delay finalizes without the missing files. A microphone blob that lands after that is still spliced into the finalized take by the root `AUDIO_RECORDING_STOPPED` handler (`attachLateAudioBlob`); when the take still has a retake's cut to apply (`isLateAudioAwaitingEdit`), that handler sends it back through `loading`
+- a microphone that fails while stopping (`AUDIO_RECORDING_ERROR`) keeps its `isRecording` flag, so the join waits and the watchdog ends the take unless the recorder still sends its file
 
 ### `loading`
 
@@ -187,21 +240,11 @@ recorder the finalize watchdog overtook, as `playback`'s `UNLOAD` and `LOAD_RECO
 
 Playback is a compound state with `ready`, `playing`, `paused`, and `ended` substates. It invokes the `timeline` child actor (`timelineActor`) for the whole compound state's lifetime.
 
-The parent `playback` state also handles `APPEND_RECORDING_DELTA`, `EXTEND_RECORDING`, `TICK`, `SEEK`, `SET_SPEED`, `SET_VOLUME`, `STOP`, `UNLOAD`, and `LOAD_RECORDING` (re-entering `loading` for an unrelated file import while a recording is open) — which is what makes copy-bounded progressive streaming and mid-session recording swaps possible.
+The parent `playback` state also handles `APPEND_RECORDING_DELTA`, `EXTEND_RECORDING`, `TICK`, `SEEK`, `SET_SPEED`, `SET_VOLUME`, `WORKSPACE_EVENT`, `STOP`, `UNLOAD`, `PRESERVE_LEARNER_WORKSPACE`, `RESTORE_LEARNER_WORKSPACE`, and `LOAD_RECORDING` (re-entering `loading` for an unrelated file import while a recording is open) — which is what makes copy-bounded progressive streaming and mid-session recording swaps possible. `playing` and `paused` override some of these (`WORKSPACE_EVENT` pauses `playing`; `paused` has its own `TICK` and `SEEK`).
 
 ## Playback Substates
 
-```mermaid
-stateDiagram-v2
-    state playback {
-        [*] --> ready
-        ready --> playing : PLAY [canPlay]
-        playing --> paused : PAUSE / WORKSPACE_EVENT / USER_INTERACTION [shouldPauseOnInteraction]
-        playing --> ended : FINISHED
-        paused --> playing : PLAY
-        ended --> playing : PLAY (rewinds first when isAtPlaybackEnd)
-    }
-```
+The overview diagram above draws the `playback` substates and every transition between them.
 
 Important current behavior:
 
@@ -222,12 +265,16 @@ stateDiagram-v2
     [*] --> stopped
     stopped --> running : START
     running --> paused : PAUSE
-    paused --> paused : SEEK
-    running --> running : SEEK
-    running --> running : SET_SPEED
     paused --> running : START
-    running --> stopped : end reached (sends FINISHED)
+    running --> running : PULSE (sends TICK) / SEEK / SET_SPEED (restart the count)
+    running --> stopped : STOP (raised by PULSE at the end, which also sends FINISHED)
+    paused --> stopped : STOP
+    note right of stopped : SEEK, SET_DURATION and SET_SPEED are handled at the machine root, in every state
 ```
+
+- `running` invokes a `requestAnimationFrame` ticker that sends `PULSE`. Each pulse moves the playhead and sends the editor `TICK`; once the playhead reaches the end, it raises `STOP` and sends `FINISHED`.
+- `SEEK`, `SET_DURATION` and `SET_SPEED` are handled at the machine root, so they work in every state. `running` has its own `SEEK` and `SET_SPEED`, which also restart the count, so the next pulse measures from there.
+- The editor only sends `START`, `PAUSE`, `SEEK`, `SET_SPEED` and `SET_DURATION`. `STOP` is only raised by the timeline itself, from `running`, so nothing sends `paused` its `STOP` today.
 
 ### Recorder actors
 
@@ -314,11 +361,11 @@ Defined in the machine's `setup({ guards: { ... } })` block. The state config us
 | `isDmpCodecReady`              | `idle` `START_RECORDING` (negated)                                 | The diff-match-patch WASM codec has loaded; without it no take starts                                  |
 | `hasExternalAudioBlob`         | `idle` `START_RECORDING`                                           | The event carries a non-empty narration file (`getExternalAudioBlob`)                                  |
 | `isMicrophoneEnabled`          | `idle` `START_RECORDING`                                           | `enableAudioRecording` is set, so the take starts in `startingRecording`                               |
-| `isMicrophoneAudioRecording`   | `recording`                                                        | `enableAudioRecording` is set and the microphone recorder is running                                   |
-| `isExternalAudioRecording`     | `recording`                                                        | A narration file is playing along with the take                                                        |
-| `isCameraRecording`            | `recording`                                                        | The camera recorder is running                                                                         |
+| `isMicrophoneAudioRecording`   | `recording` `STOP_RECORDING`, `AUDIO_RECORDING_ERROR`              | `enableAudioRecording` is set and the microphone recorder is running                                   |
+| `isExternalAudioRecording`     | `recording` `AUDIO_PLAYBACK_FINISHED`, `AUDIO_PLAYBACK_ERROR`      | A narration file is playing along with the take                                                        |
+| `isCameraRecording`            | `recording` `STOP_RECORDING`, `AUDIO_PLAYBACK_FINISHED`            | The camera recorder is running                                                                         |
 | `areRecordersDrained`          | `stoppingRecording` `always` (the finalize join)                   | No narration and no camera is still recording, so the take has every file it waits for                 |
-| `canRetake`                    | `RETAKE_RECORDING`                                                 | There is a safe point before now                                                                       |
+| `canRetake`                    | `recording` `RETAKE_RECORDING`                                     | There is a safe point before now                                                                       |
 | `isLateAudioAwaitingEdit`      | root `AUDIO_RECORDING_STOPPED`                                     | The late microphone blob's take still has a retake's cut to apply, so it goes back through `loading`   |
 | `canPlay`                      | `ready` `PLAY`                                                     | A recording with at least one frame is loaded                                                          |
 | `shouldPauseOnInteraction`     | `playing` `USER_INTERACTION`                                       | `pauseOnUserInteraction` is set                                                                        |

@@ -869,8 +869,9 @@ export const editorMachine = setup({
         AUDIO_PLAYBACK_READY: {
           actions: "storeExternalAudioDuration",
         },
-        // The recorder ended by itself (device unplugged, permission revoked). STOP_RECORDING
-        // will then skip `stoppingRecording`, so this is the last place its actor is stopped.
+        // The recorder ended by itself (device unplugged, permission revoked). Its file is
+        // stored now and `stoppingRecording` will not wait for it, so this is the last place
+        // its actor is stopped.
         AUDIO_RECORDING_STOPPED: {
           actions: ["storeAudioBlob", "stopAudioRecorder"],
         },
