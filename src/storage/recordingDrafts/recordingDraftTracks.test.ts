@@ -136,13 +136,15 @@ describe("journaling a take's tracks", () => {
     flush();
     entries().push(entryAt(track, 200));
     flush();
-    // A retake replaces the track with a shorter copy, and the take goes on.
+    // A retake replaces the track with a copy cut back to the safe point, and the
+    // take goes on. By the next flush the new array is as long as the old one, so
+    // only its identity tells the writer to read it again from the start.
     (tracks as Record<RecordingTrackName, unknown[]>)[track] = entries().slice(0, 1);
-    entries().push(entryAt(track, 300));
+    entries().push(entryAt(track, 300), entryAt(track, 400));
     flush();
 
     expect(records.map((record) => record.kind)).toEqual(["append", "append", "reset"]);
-    expect(rebuildRecordingDraftTracks(records).tracks[track]).toHaveLength(2);
+    expect(rebuildRecordingDraftTracks(records).tracks[track]).toHaveLength(3);
   });
 
   it("journals the deck only when it changes", () => {
