@@ -185,6 +185,11 @@ runtime:
   environment: {} # non-secret, pinned values only
 ```
 
+Install with pnpm: `initCommand: pnpm install --frozen-lockfile`, `runCommand: pnpm dev`, and a
+pinned `pnpm-lock.yaml` (generate it outside the repo with `pnpm install --lockfile-only` against
+the lesson's `package.json`). The WebContainer runs native pnpm; an `npm ci` install of the same
+packages was slow enough to miss `runtime.start`'s acknowledgement window.
+
 `lockfilePath` must name a file in `lesson.workspace.files`. The preflight
 replaces the editor's ambient run configuration with these commands, disables
 run-on-startup/run-on-save, runs the nonempty init command, waits for the

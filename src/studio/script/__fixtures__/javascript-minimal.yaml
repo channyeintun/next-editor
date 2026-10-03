@@ -21,8 +21,16 @@ lesson:
             "dev": "node server.js"
           }
         }
-      package-lock.json: |
-        {"name":"studio-javascript-minimal","version":"1.0.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"studio-javascript-minimal","version":"1.0.0"}}}
+      pnpm-lock.yaml: |
+        lockfileVersion: '9.0'
+
+        settings:
+          autoInstallPeers: true
+          excludeLinksFromLockfile: false
+
+        importers:
+
+          .: {}
       server.js: |
         import { createServer } from "node:http";
 
@@ -41,10 +49,10 @@ runtime:
   kind: webcontainer
   adapterVersion: 1
   defaultMode: live
-  initCommand: npm ci --ignore-scripts --no-audit --no-fund
-  runCommand: npm run dev
+  initCommand: pnpm install --frozen-lockfile --ignore-scripts
+  runCommand: pnpm dev
   expectedPort: 4173
-  lockfilePath: package-lock.json
+  lockfilePath: pnpm-lock.yaml
   environment: {}
 
 scenes:

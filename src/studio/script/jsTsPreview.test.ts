@@ -49,7 +49,7 @@ describe("JavaScript and TypeScript Studio fixtures", () => {
     expect(plan.runtime).toMatchObject({
       kind: "webcontainer",
       adapterVersion: 1,
-      lockfilePath: "package-lock.json",
+      lockfilePath: "pnpm-lock.yaml",
     });
     expect(
       plan.actions.filter((action) => action.type !== "cursor.moveTo").map((action) => action.type),
@@ -59,22 +59,24 @@ describe("JavaScript and TypeScript Studio fixtures", () => {
   it("compiles the pinned TypeScript/Vite interaction fixture end to end", () => {
     const script = loadFixture("typescript-vite-preview.yaml");
     const packageJson = JSON.parse(script.lesson.workspace.files["package.json"]);
-    const packageLock = JSON.parse(script.lesson.workspace.files["package-lock.json"]);
+    const pnpmLock = YAML.parse(script.lesson.workspace.files["pnpm-lock.yaml"]);
     const { plan } = compileLessonScript(scheduledInputFor(script));
 
     expect(packageJson.devDependencies).toEqual({ vite: "5.4.21" });
-    expect(packageLock.dependencies.vite).toMatchObject({
+    expect(pnpmLock.lockfileVersion).toBe("9.0");
+    expect(pnpmLock.importers["."].devDependencies.vite).toMatchObject({
+      specifier: "5.4.21",
       version: "5.4.21",
-      integrity: expect.stringMatching(/^sha512-/),
     });
+    expect(pnpmLock.packages["vite@5.4.21"].resolution.integrity).toMatch(/^sha512-/);
     expect(plan.runtime).toEqual({
       kind: "webcontainer",
       adapterVersion: 1,
       defaultMode: "live",
-      initCommand: "npm ci --no-audit --no-fund",
-      runCommand: "npm run dev",
+      initCommand: "pnpm install --frozen-lockfile",
+      runCommand: "pnpm dev",
       expectedPort: 5173,
-      lockfilePath: "package-lock.json",
+      lockfilePath: "pnpm-lock.yaml",
       environment: {},
     });
     expect(plan.actions.map((action) => action.type)).toEqual([
