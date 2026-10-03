@@ -1,16 +1,41 @@
-# One idea: a trait is shared behavior many types implement (like an
-# interface), and it can supply default methods a type uses as-is or overrides.
-# Slides introduce traits + defaults; the editor has Dog use the default hello
-# and Robot override it, then runs.
-# NOTE: slides are interim inline markdown — to be swapped to the branded
-# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Rust from zero, lesson 17: traits.
+#
+# The arc: the deck page "Traits" names the idea (shared behavior, like an
+# interface) with the Greet trait the whole lesson uses, and links it to the
+# traits the learner already met (Debug via derive, PartialOrd as a bound).
+# A whiteboard draws why: structs can't inherit, so one trait with a required
+# name() is implemented by Dog and Robot, each its own way; a Cat that writes
+# an empty impl gets E0046. The editor then builds it: the trait (signature
+# only), impl Greet for Dog, impl Greet for Robot. The deck page "Default
+# methods" introduces hello() with a body; the editor adds it to the trait
+# (Dog uses it as-is) and Robot overrides it. Then `&impl Greet` as a
+# parameter type in introduce(); a second board shows who can be passed, the
+# compiler's answer for a type without the trait (E0277), and that impl Greet
+# is shorthand for a generic bound <T: Greet> (no runtime cost). main
+# introduces both. One run.
+#
+# Every compiler message on the boards or in the narration was confirmed with
+# rustc 1.98 (edition 2024) on broken variants of the final program:
+#   struct Cat; impl Greet for Cat {}
+#     error[E0046]: not all trait items implemented, missing: `name`
+#   struct Cat; let cat = Cat; introduce(&cat);   (no impl Greet for Cat)
+#     error[E0277]: the trait bound `Cat: Greet` is not satisfied
+#     help: the trait `Greet` is not implemented for `Cat`
+#   fn introduce<T: Greet>(guest: &T)  compiles and prints the same output.
+# The final program compiles with zero warnings.
+#
+# Board colours: blue = the trait being named (Greet, &impl Greet), green =
+# types that implement it / calls that work, violet = the name each type
+# returns (the result), red = the errors, orange = the caveat (impl Greet is
+# a generic in disguise). #1e1e1e paints white on the dark board.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-traits.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-traits
-  title: "Rust traits: shared behavior"
+  title: "Rust from zero: Traits"
   locale: en-US
   workspace:
     lessonType: rust
@@ -18,24 +43,13 @@ lesson:
     entryFilePath: main.rs
     files:
       main.rs: |
-        trait Greet {
-            fn name(&self) -> String;
-            fn hello(&self) -> String {
-                format!("Hello, {}!", self.name())
-            }
-        }
-
         struct Dog;
 
-        impl Greet for Dog {
-            fn name(&self) -> String {
-                String::from("Rex")
-            }
+        struct Robot {
+            id: u32,
         }
 
         fn main() {
-            let d = Dog;
-            println!("{}", d.hello());
         }
   slides:
     - id: trait-slide
@@ -48,6 +62,315 @@ lesson:
       name: Default methods
       deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_97
+  whiteboardAssets:
+    # ---- Board 1: one trait, many types (and E0046) ------------------------
+    - {
+        id: b1-title,
+        kind: text,
+        x: 280,
+        y: 150,
+        width: 420,
+        height: 48,
+        text: "One trait, many types",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: b1-trait-box,
+        kind: rectangle,
+        x: 440,
+        y: 208,
+        width: 400,
+        height: 96,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-trait-name,
+        kind: text,
+        x: 549,
+        y: 216,
+        width: 190,
+        height: 40,
+        text: "trait Greet",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: b1-trait-sig,
+        kind: text,
+        x: 488,
+        y: 260,
+        width: 310,
+        height: 36,
+        text: "name(&self) -> String",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-arrow-dog,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 450,
+        y: 310,
+        width: 50,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b1-dog-box,
+        kind: rectangle,
+        x: 290,
+        y: 376,
+        width: 340,
+        height: 96,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-dog-impl,
+        kind: text,
+        x: 306,
+        y: 386,
+        width: 270,
+        height: 36,
+        text: "impl Greet for Dog",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-dog-name,
+        kind: text,
+        x: 326,
+        y: 428,
+        width: 190,
+        height: 36,
+        text: 'name → "Rex"',
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b1-arrow-robot,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 780,
+        y: 310,
+        width: 50,
+        height: 60,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b1-robot-box,
+        kind: rectangle,
+        x: 670,
+        y: 376,
+        width: 400,
+        height: 96,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-robot-impl,
+        kind: text,
+        x: 686,
+        y: 386,
+        width: 300,
+        height: 36,
+        text: "impl Greet for Robot",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-robot-name,
+        kind: text,
+        x: 706,
+        y: 428,
+        width: 230,
+        height: 36,
+        text: 'name → "Unit-7"',
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b1-cat-code,
+        kind: text,
+        x: 290,
+        y: 506,
+        width: 310,
+        height: 36,
+        text: "impl Greet for Cat {}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-cat-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 556,
+        y: 498,
+        width: 52,
+        height: 52,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-cat-err1,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 680,
+        height: 36,
+        text: "error[E0046]: not all trait items implemented,",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b1-cat-err2,
+        kind: text,
+        x: 290,
+        y: 598,
+        width: 230,
+        height: 36,
+        text: "missing: `name`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # ---- Board 2: who can be introduced? (E0277, and <T: Greet>) -----------
+    - {
+        id: b2-title,
+        kind: text,
+        x: 280,
+        y: 150,
+        width: 460,
+        height: 48,
+        text: "Who can be introduced?",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: b2-sig,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 480,
+        height: 36,
+        text: "fn introduce(guest: &impl Greet)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-sig-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 588,
+        y: 232,
+        width: 152,
+        height: 26,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b2-sig-label,
+        kind: text,
+        x: 588,
+        y: 266,
+        width: 300,
+        height: 36,
+        text: "any type with Greet",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b2-dog,
+        kind: text,
+        x: 300,
+        y: 336,
+        width: 240,
+        height: 36,
+        text: "introduce(&dog);",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-dog-check,
+        kind: freedraw,
+        stroke: check,
+        x: 552,
+        y: 330,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-robot,
+        kind: text,
+        x: 640,
+        y: 336,
+        width: 270,
+        height: 36,
+        text: "introduce(&robot);",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-robot-check,
+        kind: freedraw,
+        stroke: check,
+        x: 918,
+        y: 330,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-cat,
+        kind: text,
+        x: 300,
+        y: 404,
+        width: 240,
+        height: 36,
+        text: "introduce(&cat);",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-cat-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 443,
+        y: 414,
+        width: 62,
+        height: 26,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-err1,
+        kind: text,
+        x: 300,
+        y: 456,
+        width: 620,
+        height: 36,
+        text: "error[E0277]: the trait bound `Cat: Greet`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-err2,
+        kind: text,
+        x: 300,
+        y: 494,
+        width: 240,
+        height: 36,
+        text: "is not satisfied",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-same,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 620,
+        height: 36,
+        text: "same as: fn introduce<T: Greet>(guest: &T)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -64,25 +387,187 @@ runtime:
       stderr: ""
 
 scenes:
-  - id: traits
+  - id: traits-slide
+    chapter: Shared behavior
     narration: >
-      [[mark:show-trait]] A trait is shared behavior that many types can
-      implement, a bit like an interface. Greet says any type that greets must
-      provide a name. Then Dog, Robot, anything, can implement it in its own way.
+      You've already used traits. Debug, which you added to structs with
+      derive, is one. So is PartialOrd, the bound you saw with generics. A
+      trait describes behavior that many types can share. It's a bit like an
+      interface in other languages. Here's our own trait, called Greet. It
+      says every type that greets must have a method called name, which
+      returns a String. Each type provides its own name.
     sources:
       - title: "The Rust Book — Defining a Trait"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#defining-a-trait"
+      - title: "The Rust Book — Derivable Traits"
+        url: "https://doc.rust-lang.org/book/appendix-03-derivable-traits.html"
+      - title: "std::cmp::PartialOrd"
+        url: "https://doc.rust-lang.org/std/cmp/trait.PartialOrd.html"
     actions:
+      # Opens in the quiet handle before the first word.
       - id: show-trait
         type: slide.show
-        at: { mark: show-trait }
+        at: { scene: start, offsetMs: -1500 }
         slideId: trait-slide
 
-  - id: defaults
+  - id: contract
     narration: >
-      [[mark:show-default]] Traits can also give a default method. Greet's hello
-      is written once, in terms of name. A type can use that default as-is, or
-      override it with its own version.
+      Why traits? In Rust, one struct can't inherit from another. Traits are
+      how different types share behavior.
+      [[mark:draw-trait]] At the top, the trait Greet, with one required
+      method, name.
+      [[mark:draw-impls]] Below it, two types implement Greet. Dog's name is
+      Rex, and Robot's name is Unit-7. Code that only needs a name can now
+      work with both. The trait is a promise, and the compiler checks it.
+      [[mark:draw-cat]] Say we write impl Greet for a type called Cat, with
+      nothing inside.
+      [[mark:draw-cat-error]] The compiler stops you, with error E0046: not
+      all trait items implemented, missing name.
+    sources:
+      - title: "The Rust Book — Inheritance as a Type System and as Code Sharing"
+        url: "https://doc.rust-lang.org/book/ch18-01-what-is-oo.html#inheritance-as-a-type-system-and-as-code-sharing"
+      - title: "The Rust Book — Implementing a Trait on a Type"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#implementing-a-trait-on-a-type"
+      - title: "Rust error codes — E0046"
+        url: "https://doc.rust-lang.org/error_codes/E0046.html"
+    actions:
+      - id: close-trait-slide
+        type: slide.close
+        at: { scene: start }
+      - id: open-board-contract
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: 300 }
+        open: true
+        upsertIds: [b1-title]
+      - id: draw-trait
+        type: whiteboard.apply
+        at: { mark: draw-trait }
+        upsertIds: [b1-trait-box, b1-trait-name, b1-trait-sig]
+        drawMs: 1800
+      - id: draw-impls
+        type: whiteboard.apply
+        at: { mark: draw-impls }
+        upsertIds:
+          [
+            b1-arrow-dog,
+            b1-dog-box,
+            b1-dog-impl,
+            b1-dog-name,
+            b1-arrow-robot,
+            b1-robot-box,
+            b1-robot-impl,
+            b1-robot-name,
+          ]
+        drawMs: 3600
+      - id: draw-cat
+        type: whiteboard.apply
+        at: { mark: draw-cat }
+        upsertIds: [b1-cat-code, b1-cat-circle]
+        drawMs: 2000
+      - id: draw-cat-error
+        type: whiteboard.apply
+        at: { mark: draw-cat-error }
+        upsertIds: [b1-cat-err1, b1-cat-err2]
+        drawMs: 2000
+
+  - id: define
+    chapter: Implementing a trait
+    narration: >
+      Now let's write it. Dog is a struct with no fields, and Robot holds an
+      id.
+      [[mark:type-trait]] First, the trait: the trait keyword, its name, and
+      the method signatures in curly braces.
+      [[mark:select-sig]] name borrows the value through ampersand self, and
+      returns a String. There's no body, only a semicolon. So every type that
+      implements Greet has to write that body itself.
+    sources:
+      - title: "The Rust Book — Defining a Trait"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#defining-a-trait"
+      - title: "The Rust Book — Unit-Like Structs Without Any Fields"
+        url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html#unit-like-structs-without-any-fields"
+      - title: "The Rust Reference — Traits"
+        url: "https://doc.rust-lang.org/reference/items/traits.html"
+    actions:
+      - id: close-board-contract
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { scene: start, offsetMs: 500 }
+        path: main.rs
+      - id: type-trait
+        type: editor.type
+        at: { mark: type-trait }
+        target:
+          file: main.rs
+          after: ""
+          occurrence: 1
+        cadence: line-by-line
+        text: "trait Greet {\n    fn name(&self) -> String;\n}\n\n"
+      - id: select-sig
+        type: editor.select
+        at: { mark: select-sig }
+        target:
+          file: main.rs
+          text: "fn name(&self) -> String;"
+          occurrence: 1
+
+  - id: impl-dog
+    narration: >
+      [[mark:type-dog]] To implement a trait, write impl, the trait's name,
+      the word for, and the type.
+      [[mark:select-impl-dog]] So this block is impl Greet for Dog. Inside it
+      goes the body of name, and Dog returns Rex.
+    sources:
+      - title: "The Rust Book — Implementing a Trait on a Type"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#implementing-a-trait-on-a-type"
+      - title: "The Rust Reference — Trait Implementations"
+        url: "https://doc.rust-lang.org/reference/items/implementations.html#trait-implementations"
+    actions:
+      - id: type-dog
+        type: editor.type
+        at: { mark: type-dog }
+        target:
+          file: main.rs
+          after: "struct Dog;\n\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "impl Greet for Dog {\n    fn name(&self) -> String {\n        String::from(\"Rex\")\n    }\n}\n\n"
+      - id: select-impl-dog
+        type: editor.select
+        at: { mark: select-impl-dog }
+        target:
+          file: main.rs
+          text: "impl Greet for Dog"
+          occurrence: 1
+
+  - id: impl-robot
+    narration: >
+      [[mark:type-robot]] Robot implements Greet in its own way. It builds
+      its name from its id, with format. Now both types keep the promise.
+    sources:
+      - title: "The Rust Book — Implementing a Trait on a Type"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#implementing-a-trait-on-a-type"
+      - title: "std::format!"
+        url: "https://doc.rust-lang.org/std/macro.format.html"
+    actions:
+      - id: type-robot
+        type: editor.type
+        at: { mark: type-robot }
+        target:
+          file: main.rs
+          after: "    id: u32,\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\nimpl Greet for Robot {\n    fn name(&self) -> String {\n        format!(\"Unit-{}\", self.id)\n    }\n}\n"
+
+  - id: defaults-slide
+    chapter: Default methods
+    narration: >
+      [[mark:show-default]] A trait can also supply a default: a method with
+      a body. Here, hello builds a greeting from name. A type can use the
+      default as it is, or override it with its own version.
     sources:
       - title: "The Rust Book — Default Implementations"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#default-implementations"
@@ -92,75 +577,174 @@ scenes:
         at: { mark: show-default }
         slideId: default-slide
 
-  - id: dog-uses-default
+  - id: default-code
     narration: >
-      [[mark:open]] Here's the Greet trait.
-      [[mark:select-default-hello]] Its hello method is already defined once.
-      Dog implements only name, returning Rex. So Dog uses that default, and
-      calling it gives Hello, Rex.
+      Back to the code. [[mark:type-default]] Let's add hello to the trait.
+      [[mark:select-call-name]] Inside, the default calls name on self. That
+      always works, because every type that implements Greet must have name.
+      Dog writes nothing more, so Dog uses this default.
     sources:
-      - title: "The Rust Book — Implementing a Trait on a Type"
-        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#implementing-a-trait-on-a-type"
+      - title: "The Rust Book — Default Implementations"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#default-implementations"
     actions:
-      - id: close-slide
+      - id: close-default-slide
         type: slide.close
         at: { scene: start }
-      - id: open-main
-        type: workspace.openFile
-        at: { mark: open }
-        path: main.rs
-      - id: select-default-hello
-        type: editor.select
-        at: { mark: select-default-hello }
+      - id: type-default
+        type: editor.type
+        at: { mark: type-default }
         target:
           file: main.rs
-          text: "    fn hello(&self) -> String {\n        format!(\"Hello, {}!\", self.name())\n    }"
+          after: "    fn name(&self) -> String;\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    fn hello(&self) -> String {\n        format!(\"Hello, {}!\", self.name())\n    }\n"
+      - id: select-call-name
+        type: editor.select
+        at: { mark: select-call-name }
+        target:
+          file: main.rs
+          text: "self.name()"
           occurrence: 1
 
-  - id: robot-overrides
+  - id: override
     narration: >
-      [[mark:type-robot]] Now Robot. It implements name, returning Unit-7.
-      [[mark:select-robot-hello]] This time it overrides hello with its own
-      beeping version.
-      [[mark:type-call]] We create a Robot and call hello on it.
+      [[mark:type-override]] Robot wants a different greeting, so it
+      overrides hello, with a beep. When a type writes its own version, Rust
+      uses that one instead of the default.
+    sources:
+      - title: "The Rust Book — Default Implementations"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#default-implementations"
+    actions:
+      - id: type-override
+        type: editor.type
+        at: { mark: type-override }
+        target:
+          file: main.rs
+          after: "        format!(\"Unit-{}\", self.id)\n    }\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    fn hello(&self) -> String {\n        format!(\"BEEP. I am {}.\", self.name())\n    }\n"
+
+  - id: impl-param
+    chapter: Traits as parameters
+    narration: >
+      Now, a function that works with any type that greets.
+      [[mark:type-introduce]] It's called introduce, and it prints the
+      greeting.
+      [[mark:select-impl-greet]] Look at the parameter type: ampersand impl
+      Greet. It means a reference to any type that implements Greet. Inside
+      the function, you can only use what Greet promises, like hello.
     sources:
       - title: "The Rust Book — Traits as Parameters"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters"
     actions:
-      - id: type-robot
+      - id: type-introduce
         type: editor.type
-        at: { mark: type-robot, offsetMs: -400 }
+        at: { mark: type-introduce }
         target:
           file: main.rs
-          after: "    println!(\"{}\", d.hello());\n}\n"
+          after: "        format!(\"BEEP. I am {}.\", self.name())\n    }\n}\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\nstruct Robot;\n\nimpl Greet for Robot {\n    fn name(&self) -> String {\n        String::from(\"Unit-7\")\n    }\n    fn hello(&self) -> String {\n        format!(\"BEEP. I am {}.\", self.name())\n    }\n}\n"
-      - id: select-robot-hello
+        text: "\nfn introduce(guest: &impl Greet) {\n    println!(\"{}\", guest.hello());\n}\n"
+      - id: select-impl-greet
         type: editor.select
-        at: { mark: select-robot-hello }
+        at: { mark: select-impl-greet }
         target:
           file: main.rs
-          text: "    fn hello(&self) -> String {\n        format!(\"BEEP. I am {}.\", self.name())\n    }"
+          text: "&impl Greet"
           occurrence: 1
-      - id: type-call
+
+  - id: not-greet
+    narration: >
+      So which types can you pass?
+      [[mark:draw-sig]] introduce takes ampersand impl Greet, which means
+      any type with Greet.
+      [[mark:draw-ok]] A Dog works, and so does a Robot.
+      [[mark:draw-cat-call]] Now say Cat has no impl Greet at all, and you
+      pass a Cat.
+      [[mark:draw-cat-err]] The compiler refuses, with error E0277: the trait
+      bound isn't satisfied. That means Cat doesn't implement Greet. You find
+      this when you compile, not while the program runs.
+      [[mark:draw-same]] Why a trait bound? Because impl Greet is short for a
+      generic with a trait bound: T must implement Greet. As with generics,
+      the compiler builds a version of introduce for each type, so there's
+      no runtime cost.
+    sources:
+      - title: "Rust error codes — E0277"
+        url: "https://doc.rust-lang.org/error_codes/E0277.html"
+      - title: "The Rust Book — Trait Bound Syntax"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#trait-bound-syntax"
+      - title: "The Rust Book — Performance of Code Using Generics"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#performance-of-code-using-generics"
+    actions:
+      - id: open-board-introduce
+        type: whiteboard.apply
+        at: { scene: start }
+        open: true
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-sig
+        type: whiteboard.apply
+        at: { mark: draw-sig }
+        upsertIds: [b2-sig, b2-sig-line, b2-sig-label]
+        drawMs: 1800
+      - id: draw-ok
+        type: whiteboard.apply
+        at: { mark: draw-ok }
+        upsertIds: [b2-dog, b2-dog-check, b2-robot, b2-robot-check]
+        drawMs: 2000
+      - id: draw-cat-call
+        type: whiteboard.apply
+        at: { mark: draw-cat-call }
+        upsertIds: [b2-cat, b2-cat-line]
+        drawMs: 1800
+      - id: draw-cat-err
+        type: whiteboard.apply
+        at: { mark: draw-cat-err }
+        upsertIds: [b2-err1, b2-err2]
+        drawMs: 2200
+      - id: draw-same
+        type: whiteboard.apply
+        at: { mark: draw-same }
+        upsertIds: [b2-same]
+        drawMs: 1600
+
+  - id: main-calls
+    narration: >
+      Back to main. [[mark:type-main]] Let's make a Dog. It has no fields, so
+      writing Dog is enough. Then a Robot with id seven, and we introduce
+      both. We pass each one with an ampersand, so introduce only borrows
+      them.
+    sources:
+      - title: "The Rust Book — Traits as Parameters"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters"
+      - title: "The Rust Book — References and Borrowing"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
+    actions:
+      - id: close-board-introduce
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-main
         type: editor.type
-        at: { mark: type-call }
+        at: { mark: type-main }
         target:
           file: main.rs
-          after: "    println!(\"{}\", d.hello());\n"
+          after: "fn main() {\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let r = Robot;\n    println!(\"{}\", r.hello());\n"
+        text: "    let dog = Dog;\n    let robot = Robot { id: 7 };\n    introduce(&dog);\n    introduce(&robot);\n"
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Dog uses the default — Hello, Rex. Robot uses
-      its override — BEEP, I am Unit-7. Traits define shared behavior; defaults
-      save repetition, and each type can still be itself.
+      [[mark:run]] Let's run it. Hello, Rex. Dog used the default hello.
+      Then, BEEP. I am Unit-7. Robot used its own. One function greeted
+      both types.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — Traits: Defining Shared Behavior"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html"
     actions:
       - id: run
         type: runtime.run
@@ -175,7 +759,22 @@ scenes:
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "impl Greet for Robot {"
+        contains: "fn introduce(guest: &impl Greet) {"
+
+  - id: wrap
+    narration: >
+      So a trait names behavior that types promise to have. A default
+      method saves repeated code, and impl Greet accepts any type that keeps
+      the promise. Next, lifetimes:
+      how Rust checks that a reference is never used after its value is gone.
+    sources:
+      - title: "The Rust Book — Traits: Defining Shared Behavior"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html"
+      - title: "The Rust Book — Validating References with Lifetimes"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html"
+    actions: []
 
 checks:
+  # 500 (not 300): google-svg deck slides embed per-slide font data whose
+  # paint briefly stalls the main thread at each show/close.
   - { type: timing.p95Ms, max: 500 }
