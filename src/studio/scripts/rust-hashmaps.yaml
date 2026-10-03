@@ -42,8 +42,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-hashmaps
-  title: "Rust from zero: Hash maps"
-  locale: en-US
+  title: "Rust from zero: HashMap"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -61,7 +61,7 @@ lesson:
         y: 152,
         width: 780,
         height: 48,
-        text: "HashMap: find a value by its key",
+        text: "HashMap: key နဲ့ value ကို ရှာတယ်",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -190,7 +190,7 @@ lesson:
         y: 500,
         width: 700,
         height: 36,
-        text: "straight to the slot: no search",
+        text: "အကွက်ဆီ တန်းသွားတယ်: ရှာစရာ မလို",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
@@ -201,7 +201,7 @@ lesson:
         y: 572,
         width: 760,
         height: 36,
-        text: "slots follow the hash → no fixed order",
+        text: "အကွက်က hash အတိုင်း → ပုံသေ အစီအစဉ် မရှိ",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -213,7 +213,7 @@ lesson:
         y: 152,
         width: 780,
         height: 48,
-        text: "get gives back an Option",
+        text: "get က Option ပြန်ပေးတယ်",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -256,7 +256,7 @@ lesson:
         y: 226,
         width: 240,
         height: 36,
-        text: "the key is there",
+        text: "key ရှိတယ်",
         strokeColor: "#1971c2",
         fontSize: 28,
       }
@@ -299,7 +299,7 @@ lesson:
         y: 286,
         width: 220,
         height: 36,
-        text: "no such key",
+        text: "key မရှိဘူး",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -353,13 +353,16 @@ lesson:
         y: 566,
         width: 640,
         height: 36,
-        text: "the fix: handle Some and None",
+        text: "ပြင်နည်း: Some နဲ့ None ကို handle လုပ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 40
 
 runtime:
@@ -369,25 +372,31 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "red has 2 votes\n3 colors\nblue: Some(3)\npink: None\n"
+      stdout: "red has 2 votes
+
+        3 colors
+
+        blue: Some(3)
+
+        pink: None\n"
       stderr: ""
 
 scenes:
   - id: what-is-a-map
-    chapter: Look up by key
-    narration: >
-      You've seen a Vec. It finds a value by its position: zero, one, two.
-      [[mark:draw-key]] A HashMap finds a value by a key instead, like a name
-      or a word. Here, the key is red.
-      [[mark:draw-hash]] The map runs the key through a hash function. That
-      turns it into a number, and the number picks a slot.
-      [[mark:draw-slots]] So the map goes straight to the right slot, and
-      finds the value two. It doesn't search every entry.
-      [[mark:draw-blue]] Other keys, like blue, land in other slots. Each key
-      has one value. All the keys share one type, and so do all the values.
-      [[mark:draw-order]] That's also why a HashMap has no fixed order. The
-      slots follow the hash, not the order you inserted. If you loop over a
-      map, the order can change from one run to the next.
+    chapter: key နဲ့ ရှာခြင်း
+    narration: >-
+      Vec ကို အရင် lesson တွေမှာ တွေ့ခဲ့ပြီးပါပြီ။ Vec က တန်ဖိုး တစ်ခုကို သူ့ နေရာနဲ့ ရှာပါတယ်၊
+      index 0၊ 1၊ 2 ဆိုပြီး အစဉ်လိုက်ပါ။ [[mark:draw-key]] HashMap ကတော့ နေရာနဲ့ မဟုတ်ဘဲ key
+      တစ်ခုနဲ့ ရှာပါတယ်။ key ဆိုတာ နာမည် တစ်ခု၊ ဒါမှမဟုတ် စကားလုံး တစ်လုံးလိုမျိုးပါ။ ဒီမှာ key က
+      red ပါ။ [[mark:draw-hash]] map က အဲဒီ key ကို hash function တစ်ခုထဲ ထည့်လိုက်ပါတယ်။ hash
+      function က key ကို ကိန်းဂဏန်း တစ်ခု အဖြစ် ပြောင်းပေးပြီး၊ အဲဒီ ကိန်းဂဏန်းက ဘယ် အကွက်လဲ
+      ဆိုတာကို ရွေးပေးပါတယ်။ [[mark:draw-slots]] ဒါကြောင့် map က မှန်တဲ့ အကွက်ဆီ တန်းသွားပြီး၊ 2
+      ဆိုတဲ့ value ကို တွေ့ပါတယ်။ အကွက် တစ်ကွက်ချင်း လိုက်ရှာစရာ မလိုပါဘူး။ [[mark:draw-blue]] blue
+      လို တခြား key တွေကတော့ တခြား အကွက်တွေထဲ ရောက်သွားပါတယ်။ key တစ်ခုစီမှာ value တစ်ခုစီ ရှိပါတယ်။
+      ပြီးတော့ key အားလုံးက type တစ်မျိုးတည်း ဖြစ်ရပြီး၊ value အားလုံးကလည်း type တစ်မျိုးတည်း
+      ဖြစ်ရပါတယ်။ [[mark:draw-order]] ဒါကြောင့်ပဲ HashMap မှာ ပုံသေ အစီအစဉ် ဆိုတာ မရှိပါဘူး။
+      အကွက်တွေက hash အတိုင်း လိုက်တာ ဖြစ်ပြီး၊ ကိုယ် ထည့်လိုက်တဲ့ အစဉ်အတိုင်း မဟုတ်ပါဘူး။ map
+      တစ်ခုကို loop နဲ့ ပတ်ကြည့်ရင်၊ run တစ်ကြိမ်နဲ့ တစ်ကြိမ် အစီအစဉ် ပြောင်းသွားနိုင်ပါတယ်။
     sources:
       - title: "The Rust Book — Storing Keys with Associated Values in Hash Maps"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html"
@@ -429,18 +438,18 @@ scenes:
         drawMs: 1600
 
   - id: make-a-map
-    chapter: Making a HashMap
-    narration: >
-      Let's build one. Vec and String are always in scope, because they're in
-      the prelude: the names every program gets automatically.
-      [[mark:type-use]] HashMap isn't, so we bring it in with use. It lives in
-      the collections module of the standard library.
-      [[mark:type-new]] HashMap::new makes an empty map, and insert adds a
-      key with its value. Like push on a Vec, insert changes the map, so votes
-      needs mut.
-      [[mark:select-insert]] We never wrote the types. From these inserts, the
-      compiler works out that the keys are string slices, and the values are
-      i32, the default for whole numbers.
+    chapter: HashMap တစ်ခု တည်ဆောက်ခြင်း
+    narration: >-
+      ကဲ၊ HashMap တစ်ခု တည်ဆောက်ကြည့်ရအောင်။ Vec နဲ့ String ကတော့ အမြဲတမ်း scope ထဲမှာ ရှိနေပါတယ်။
+      ဘာကြောင့်လဲဆိုတော့ သူတို့က prelude ထဲမှာ ပါလို့ပါ။ prelude ဆိုတာ program တိုင်း အလိုအလျောက်
+      ရသွားတဲ့ နာမည် အစုအဝေးပါ။ [[mark:type-use]] HashMap ကတော့ prelude ထဲမှာ မပါတဲ့အတွက်၊ use နဲ့
+      ခေါ်သွင်းရပါတယ်။ HashMap က standard library ရဲ့ collections module ထဲမှာ ရှိတာပါ။
+      [[mark:type-new]] HashMap ရဲ့ new က map အလွတ် တစ်ခု လုပ်ပေးပြီး၊ insert က key တစ်ခုကို သူ့
+      value နဲ့အတူ ထည့်ပေးပါတယ်။ Vec ရဲ့ push လိုပဲ insert ကလည်း map ကို ပြောင်းလိုက်တာ
+      ဖြစ်တဲ့အတွက်၊ votes မှာ mut လိုပါတယ်။ [[mark:select-insert]] type တွေကို ဘယ်နေရာမှာမှ
+      မရေးခဲ့တာ သတိထား ကြည့်ပါ။ ဒီ insert တွေကို ကြည့်ပြီး compiler က key တွေက string slice
+      ဖြစ်ပြီး၊ value တွေကတော့ integer တွေအတွက် default ဖြစ်တဲ့ i32 ဖြစ်တယ်လို့ ကိုယ့်အစား
+      တွက်ထုတ်ပေးပါတယ်။
     sources:
       - title: "The Rust Book — Creating a New Hash Map"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#creating-a-new-hash-map"
@@ -476,7 +485,11 @@ scenes:
           after: "fn main() {\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let mut votes = HashMap::new();\n    votes.insert(\"red\", 2);\n    votes.insert(\"blue\", 1);\n"
+        text: "    let mut votes = HashMap::new();
+
+          \    votes.insert(\"red\", 2);
+
+          \    votes.insert(\"blue\", 1);\n"
       - id: select-insert
         type: editor.select
         at: { mark: select-insert }
@@ -486,21 +499,19 @@ scenes:
           occurrence: 1
 
   - id: get-option
-    chapter: get returns an Option
-    narration: >
-      So how do we read a value back? With get, like on a Vec, but with a
-      key.
-      [[mark:draw-some]] Asking for red gives Some, with a reference to the
-      two inside the map.
-      [[mark:draw-none]] But asking for pink gives None, because there's no
-      such key. Any key can be missing, so get returns an Option.
-      [[mark:draw-err-code]] What if you treat the result as a plain number,
-      like this i32?
-      [[mark:draw-err-msg]] The compiler stops you, with error E0308:
-      mismatched types. It expected an i32, but found an Option.
-      [[mark:draw-fix]] The fix is to handle both Some and None. In many
-      languages, a missing key gives you null, or an error while the program
-      runs. With get, Rust makes you handle it before the program runs.
+    chapter: get က Option ပြန်ပေးတယ်
+    narration: >-
+      ဒါဆို value တစ်ခုကို ဘယ်လို ပြန်ဖတ်မလဲ။ Vec မှာလိုပဲ get နဲ့ ဖတ်ပါတယ်၊ ဒါပေမဲ့ index အစား key
+      နဲ့ ဖတ်တာပါ။ [[mark:draw-some]] red ကို တောင်းကြည့်ရင် Some ရပါတယ်၊ သူ့အထဲမှာ map ထဲက 2 ကို
+      ညွှန်တဲ့ reference တစ်ခု ပါပါတယ်။ [[mark:draw-none]] ဒါပေမဲ့ pink ကို တောင်းကြည့်ရင်တော့ None
+      ရပါတယ်။ ဘာကြောင့်လဲဆိုတော့ အဲဒီလို key တစ်ခု မရှိလို့ပါ။ ဘယ် key မဆို မရှိနိုင်တဲ့အတွက်၊ get က
+      Option တစ်ခုကို ပြန်ပေးပါတယ်။ [[mark:draw-err-code]] ဒါဆို အဲဒီ ရလဒ်ကို သာမန် ကိန်းဂဏန်း
+      တစ်ခုလို၊ ဥပမာအားဖြင့် ဒီမှာလို i32 တစ်ခုအနေနဲ့ သုံးကြည့်ရင် ဘာဖြစ်မလဲ။ [[mark:draw-err-msg]]
+      compiler က E0308 error၊ mismatched types နဲ့ ရပ်သွားပါတယ်။ သူ မျှော်လင့်ထားတာက i32 ဖြစ်ပြီး၊
+      တွေ့တာက Option ဖြစ်နေလို့ပါ။ [[mark:draw-fix]] ပြင်နည်းကတော့ Some ရော None ရော နှစ်ခုလုံးကို
+      handle လုပ်ဖို့ပါ။ တခြား ဘာသာစကား အများစုမှာ key မရှိရင် null ရတာမျိုး၊ ဒါမှမဟုတ် program run
+      နေချိန်ကျမှ error တက်တာမျိုး ဖြစ်ပါတယ်။ Rust မှာတော့ get ကို သုံးရင်၊ program run
+      မလုပ်ခင်ကတည်းက အဲဒီ အခြေအနေကို handle လုပ်ဖို့ ကိုယ့်ကို ခိုင်းပါတယ်။
     sources:
       - title: "The Rust Book — Accessing Values in a Hash Map"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#accessing-values-in-a-hash-map"
@@ -509,7 +520,9 @@ scenes:
       - title: "Rust error codes — E0308"
         url: "https://doc.rust-lang.org/error_codes/E0308.html"
       - title: "The Rust Book — The Option Enum and Its Advantages Over Null Values"
-        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantages-over-null-values"
+        url:
+          "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantag\
+          es-over-null-values"
     actions:
       - id: open-board-get
         type: whiteboard.apply
@@ -544,11 +557,11 @@ scenes:
         drawMs: 1200
 
   - id: match-get
-    narration: >
-      [[mark:type-match]] So let's handle both cases with match. You've
-      matched on an Option before. This one works the same way.
-      [[mark:select-get]] get returns the Option, and each arm handles one
-      case. Some gives us the count. None runs if the key is missing.
+    narration: >-
+      [[mark:type-match]] ဒါဆို နှစ်ခုလုံးကို match နဲ့ handle လုပ်ကြည့်ရအောင်။ Option တစ်ခုကို
+      match လုပ်တာ အရင်က လုပ်ဖူးပြီးသားပါ။ ဒီတစ်ခါလည်း အဲဒီအတိုင်းပဲ အလုပ်လုပ်ပါတယ်။
+      [[mark:select-get]] get က Option ကို ပြန်ပေးပြီး၊ arm တစ်ခုစီက case တစ်ခုစီကို handle
+      လုပ်ပါတယ်။ Some ဆိုရင် count ကို ရပြီး၊ key မရှိရင်တော့ None arm က run ပါတယ်။
     sources:
       - title: "The Rust Book — The match Control Flow Construct"
         url: "https://doc.rust-lang.org/book/ch06-02-match.html"
@@ -567,7 +580,15 @@ scenes:
           after: "    votes.insert(\"blue\", 1);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    match votes.get(\"red\") {\n        Some(count) => println!(\"red has {count} votes\"),\n        None => println!(\"no votes for red\"),\n    }\n"
+        text: "
+
+          \    match votes.get(\"red\") {
+
+          \        Some(count) => println!(\"red has {count} votes\"),
+
+          \        None => println!(\"no votes for red\"),
+
+          \    }\n"
       - id: select-get
         type: editor.select
         at: { mark: select-get }
@@ -577,20 +598,19 @@ scenes:
           occurrence: 1
 
   - id: count
-    chapter: Counting with entry
-    narration: >
-      Now let's count more votes. insert won't help here. If the key is
-      already there, insert replaces the old value. To add one, we need the
-      old count first.
-      [[mark:type-ballots]] Here are three ballots: blue, green, and blue
-      again. The loop takes them one at a time.
-      [[mark:select-entry]] entry looks up the color. or_insert puts in a zero
-      if the color is new. Either way, it gives back a mutable reference to
-      the count inside the map.
-      [[mark:select-star]] The star gives you the count the reference points
-      at, like in the Vec loop, so plus-equals one adds to the number inside
-      the map. Without it, you'd get error E0368: you can't use plus-equals
-      on the reference itself.
+    chapter: entry နဲ့ ရေတွက်ခြင်း
+    narration: >-
+      အခု မဲတွေ ထပ်ရေတွက်ကြည့်ရအောင်။ ဒီနေရာမှာ insert က အဆင်မပြေပါဘူး။ ဘာကြောင့်လဲဆိုတော့ key က
+      ရှိပြီးသား ဆိုရင်၊ insert က value အဟောင်းကို အသစ်နဲ့ အစားထိုးလိုက်လို့ပါ။ မဲ တစ်မဲ
+      ထပ်တိုးချင်ရင် count အဟောင်းကို အရင် သိထားဖို့ လိုပါတယ်။ [[mark:type-ballots]] ဒီမှာ မဲလက်မှတ်
+      သုံးစောင် ရှိပါတယ်၊ blue၊ green၊ ပြီးတော့ blue ထပ်ပြီး တစ်စောင်ပါ။ loop က သူတို့ကို
+      တစ်စောင်ချင်း ယူပါတယ်။ [[mark:select-entry]] entry က အဲဒီ color ကို map ထဲမှာ ရှာပါတယ်။ or
+      insert ကတော့ color က အသစ် ဖြစ်နေရင် 0 ကို ထည့်ပေးပါတယ်။ ရှိပြီးသား ဖြစ်ဖြစ်၊ အသစ် ဖြစ်ဖြစ်၊
+      နှစ်မျိုးလုံးမှာ map ထဲက count ကို ညွှန်တဲ့ mutable reference တစ်ခုကို ပြန်ပေးပါတယ်။
+      [[mark:select-star]] star က reference ညွှန်ထားတဲ့ count ကို ပေးပါတယ်၊ Vec lesson ထဲက loop
+      တုန်းကလိုပါပဲ။ ဒါကြောင့် plus equal 1 က map ထဲက ကိန်းဂဏန်းကို တိုက်ရိုက် ပေါင်းထည့်ပေးပါတယ်။
+      star မပါရင်တော့ E0368 error တက်ပါလိမ့်မယ်။ ဘာကြောင့်လဲဆိုတော့ reference ကိုယ်တိုင်ပေါ်မှာ plus
+      equal ကို သုံးလို့ မရလို့ပါ။
     sources:
       - title: "The Rust Book — Overwriting a Value"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#overwriting-a-value"
@@ -606,10 +626,22 @@ scenes:
         at: { mark: type-ballots, offsetMs: -200 }
         target:
           file: main.rs
-          after: "        None => println!(\"no votes for red\"),\n    }\n"
+          after: "        None => println!(\"no votes for red\"),
+
+            \    }\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let ballots = [\"blue\", \"green\", \"blue\"];\n    for color in ballots {\n        let count = votes.entry(color).or_insert(0);\n        *count += 1;\n    }\n"
+        text: "
+
+          \    let ballots = [\"blue\", \"green\", \"blue\"];
+
+          \    for color in ballots {
+
+          \        let count = votes.entry(color).or_insert(0);
+
+          \        *count += 1;
+
+          \    }\n"
       - id: select-entry
         type: editor.select
         at: { mark: select-entry }
@@ -626,13 +658,13 @@ scenes:
           occurrence: 1
 
   - id: run
-    narration: >
-      [[mark:type-print]] Last, let's print how many colors there are, and ask
-      for blue and pink. An Option can't print with plain braces, so we use
-      the Debug format, with a colon and a question mark.
-      [[mark:run]] Let's run it. Red has two votes. There are three colors
-      now, because green was new. Blue went from one to three, so get gives
-      Some three. Pink was never added, so it's None.
+    narration: >-
+      [[mark:type-print]] နောက်ဆုံး len နဲ့ color ဘယ်နှစ်မျိုး ရှိလဲ ဆိုတာကို print ထုတ်ပြီး၊ blue
+      နဲ့ pink ကိုလည်း တောင်းကြည့်ပါမယ်။ Option တစ်ခုကို တွန့်ကွင်း အလွတ်နဲ့ print ထုတ်လို့
+      မရတဲ့အတွက်၊ Debug format ကို သုံးပါတယ်၊ ဆိုလိုတာက တွန့်ကွင်းထဲမှာ colon နဲ့ question mark
+      ထည့်တာပါ။ [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ red မှာ မဲ 2 မဲ ရှိပါတယ်။ green က အသစ်
+      ဖြစ်တဲ့အတွက်၊ အခု color 3 မျိုး ဖြစ်သွားပါပြီ။ blue က 1 ကနေ 3 ဖြစ်သွားတဲ့အတွက်၊ get က Some 3
+      ကို ပေးပါတယ်။ pink ကိုတော့ ဘယ်တုန်းကမှ မထည့်ခဲ့တဲ့အတွက် None ပါ။
     sources:
       - title: "std::collections::HashMap::len"
         url: "https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.len"
@@ -649,7 +681,13 @@ scenes:
           after: "        *count += 1;\n    }\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    println!(\"{} colors\", votes.len());\n    println!(\"blue: {:?}\", votes.get(\"blue\"));\n    println!(\"pink: {:?}\", votes.get(\"pink\"));\n"
+        text: "
+
+          \    println!(\"{} colors\", votes.len());
+
+          \    println!(\"blue: {:?}\", votes.get(\"blue\"));
+
+          \    println!(\"pink: {:?}\", votes.get(\"pink\"));\n"
       - id: run
         type: runtime.run
         at: { mark: run, offsetMs: 200 }
@@ -666,12 +704,13 @@ scenes:
         contains: "let count = votes.entry(color).or_insert(0);"
 
   - id: wrap
-    narration: >
-      So a HashMap stores values by key. insert adds or replaces a value, get
-      returns an Option because a key can be missing, and entry with
-      or_insert updates a value, adding it first if the key is new. Next,
-      error handling: what your program does when something can
-      fail.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ HashMap က value တွေကို key နဲ့ သိမ်းပါတယ်။ insert က value တစ်ခုကို
+      ထည့်ပေးပြီး၊ ရှိပြီးသား ဆိုရင်တော့ အစားထိုးပေးပါတယ်။ get က Option ပြန်ပေးပါတယ်၊
+      ဘာကြောင့်လဲဆိုတော့ key က မရှိတာမျိုး ဖြစ်နိုင်လို့ပါ။ ပြီးတော့ entry နဲ့ or insert ကတော့ value
+      တစ်ခုကို ပြောင်းပေးပြီး၊ key က အသစ် ဆိုရင် အရင် ထည့်ပေးပါတယ်။ နောက် lesson မှာတော့ error
+      handling၊ ဆိုလိုတာက တစ်ခုခု မှားယွင်းသွားနိုင်တဲ့အခါ ကိုယ့် program က ဘာ လုပ်မလဲ ဆိုတာကို
+      ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Storing Keys with Associated Values in Hash Maps"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html"

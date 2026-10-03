@@ -36,8 +36,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-vectors
-  title: "Rust from zero: Vectors"
-  locale: en-US
+  title: "Rust from zero: Vec"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -55,7 +55,7 @@ lesson:
         y: 152,
         width: 780,
         height: 48,
-        text: "Vec<T>: a list that can grow",
+        text: "Vec<T>: ကြီးလာနိုင်တဲ့ စာရင်း",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -66,7 +66,7 @@ lesson:
         y: 232,
         width: 300,
         height: 40,
-        text: "on the heap",
+        text: "heap ပေါ်မှာ",
         strokeColor: "#1e1e1e",
         fontSize: 28,
       }
@@ -146,7 +146,7 @@ lesson:
         y: 446,
         width: 760,
         height: 40,
-        text: "Vec<i32>: every element is an i32",
+        text: "Vec<i32>: element တိုင်း i32 ပါ",
         strokeColor: "#1971c2",
         fontSize: 28,
       }
@@ -218,7 +218,7 @@ lesson:
         y: 506,
         width: 780,
         height: 40,
-        text: "room runs out → it moves to a bigger block",
+        text: "နေရာ ကုန်ရင် → block အကြီးဆီ ရွှေ့တယ်",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -230,7 +230,7 @@ lesson:
         y: 152,
         width: 780,
         height: 48,
-        text: "Reading past the end",
+        text: "အဆုံး ကျော်ပြီး ဖတ်ရင်",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -272,7 +272,7 @@ lesson:
         y: 230,
         width: 500,
         height: 40,
-        text: "panics when it runs",
+        text: "run မှ panic ဖြစ်တယ်",
         strokeColor: "#e03131",
         fontSize: 28,
       }
@@ -369,7 +369,7 @@ lesson:
         y: 556,
         width: 780,
         height: 40,
-        text: "an Option: no panic, you handle None",
+        text: "Option: panic မဖြစ်၊ None ကို handle လုပ်ရ",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -381,7 +381,7 @@ lesson:
         y: 152,
         width: 780,
         height: 48,
-        text: "Hold a reference, then push",
+        text: "Reference ကိုင်ထားရင်း push",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -496,7 +496,7 @@ lesson:
         y: 444,
         width: 280,
         height: 40,
-        text: "a bigger block",
+        text: "block အကြီး",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -517,7 +517,7 @@ lesson:
         y: 444,
         width: 300,
         height: 40,
-        text: "old block: freed",
+        text: "အဟောင်း: ပြန်လွှတ်ပြီ",
         strokeColor: "#e03131",
         fontSize: 28,
       }
@@ -550,13 +550,16 @@ lesson:
         y: 606,
         width: 790,
         height: 40,
-        text: "many readers, or one writer",
+        text: "ဖတ်သူ အများ၊ ဒါမှမဟုတ် ရေးသူ တစ်ယောက်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 38
 
 runtime:
@@ -566,23 +569,36 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "[90, 80, 70] has 3 scores\nAna got 90\nnobody at index 5\ntotal: 240\nwith bonus: [95, 85, 75]\n"
+      stdout: "[90, 80, 70] has 3 scores
+
+        Ana got 90
+
+        nobody at index 5
+
+        total: 240
+
+        with bonus: [95, 85, 75]\n"
       stderr: ""
 
 scenes:
   - id: what-is-a-vec
-    chapter: A list that can grow
-    narration: >
-      You've seen arrays. Their length is fixed when you write the code. When
-      you don't know how many items you'll have, you use a Vec.
-      [[mark:draw-heap]] A Vec keeps its elements next to each other on the
-      heap, and every element has the same type: the T in Vec of T. Each one
-      has an index, starting at zero.
-      [[mark:draw-var]] The variable holds a pointer to them, the length,
-      and the capacity: how many elements fit before it needs more room.
-      [[mark:draw-push]] push adds a new element at the end, into that room.
-      [[mark:draw-grow]] When the room runs out, the Vec moves everything to
-      a bigger block. You'll see why that matters.
+    chapter: ကြီးလာနိုင်တဲ့ စာရင်း
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson တွေမှာ array ကို တွေ့ခဲ့ပြီး ဖြစ်ပါတယ်။ array ရဲ့ အရှည်က code
+      ရေးတဲ့အချိန်ကတည်းက သတ်မှတ်ထားပြီးသား ဖြစ်တဲ့အတွက်၊ နောက်ပိုင်း ပြောင်းလို့ မရပါဘူး။ ဒါပေမဲ့
+      တကယ့် program တွေမှာ element ဘယ်နှစ်ခု လာမလဲ ဆိုတာ ကြိုမသိတဲ့ အခြေအနေမျိုး အများကြီး ရှိပါတယ်။
+      အဲဒီလို အခါမျိုးအတွက် Rust မှာ Vec ဆိုတာ ရှိပါတယ်။ Vec ဆိုတာ ကြီးလာနိုင်တဲ့ စာရင်း တစ်ခုပါ။
+      [[mark:draw-heap]] Vec တစ်ခုက သူ့ element တွေကို heap ပေါ်မှာ တစ်ခုနဲ့ တစ်ခု ကပ်လျက်
+      သိမ်းထားပါတယ်။ ပြီးတော့ element တိုင်းက type တစ်မျိုးတည်း ဖြစ်ရပါမယ်။ Vec of T ဆိုတဲ့ နာမည်ထဲက
+      T က အဲဒီ element type ကို ပြောတာပါ။ ဒီဥပမာမှာဆိုရင် element တိုင်းက i32 ဖြစ်လို့၊ Vec of i32
+      ပါ။ element တစ်ခုစီမှာ index တစ်ခုစီ ရှိပြီး၊ array မှာလိုပဲ သုညကနေ စရေတွက်ပါတယ်။
+      [[mark:draw-var]] scores ဆိုတဲ့ variable ထဲမှာ element တွေ ကိုယ်တိုင် မရှိဘဲ၊ အချက် သုံးချက်ပဲ
+      ရှိပါတယ်။ heap ပေါ်က element တွေဆီ ညွှန်ထားတဲ့ pointer တစ်ခု၊ အခု element ဘယ်နှစ်ခု ရှိလဲ
+      ဆိုတဲ့ အရှည်၊ ပြီးတော့ capacity ပါ။ capacity ဆိုတာ နေရာ ထပ်မတောင်းခင် element ဘယ်နှစ်ခုအထိ
+      ဆန့်လဲ ဆိုတာပါ။ [[mark:draw-push]] push က element အသစ် တစ်ခုကို စာရင်းရဲ့ အဆုံးမှာ ထည့်ပေးတာ
+      ဖြစ်ပြီး၊ ဒီ နေရာလွတ်ထဲကို ဝင်သွားတာပါ။ [[mark:draw-grow]] နေရာလွတ် ကုန်သွားတဲ့အခါကျတော့၊ Vec
+      က element အားလုံးကို ပိုကြီးတဲ့ memory block အသစ် တစ်ခုဆီ ရွှေ့လိုက်ပါတယ်။ ဒါ ဘာကြောင့်
+      အရေးကြီးလဲ ဆိုတာ ခဏနေရင် တွေ့ရပါလိမ့်မယ်။
     sources:
       - title: "The Rust Book — Storing Lists of Values with Vectors"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html"
@@ -620,15 +636,18 @@ scenes:
         drawMs: 1600
 
   - id: new-and-push
-    narration: >
-      Let's make one in the editor. [[mark:type-new]] We'll call it scores.
-      Vec::new gives you a new, empty Vec, and we'll fill it in a moment.
-      [[mark:select-mut]] Notice the mut. push changes the Vec, so the
-      variable has to be mutable. Without mut, the compiler rejects every
-      push, with error E0596: can't borrow scores as mutable.
-      [[mark:type-push]] Now let's push three scores. We never wrote the
-      element type. From these numbers, the compiler works out it's a Vec of
-      i32. The debug placeholder prints the whole Vec.
+    narration: >-
+      ကဲ၊ editor ထဲမှာ Vec တစ်ခု တကယ် တည်ဆောက်ကြည့်ရအောင်။ [[mark:type-new]] scores ဆိုတဲ့ နာမည်
+      ပေးလိုက်ပါမယ်။ Vec ရဲ့ new က ဘာမှ မပါသေးတဲ့ Vec အလွတ် တစ်ခု ပြန်ပေးပြီး၊ သူ့ထဲကို ခဏနေရင်
+      ဖြည့်ပါမယ်။ [[mark:select-mut]] ဒီနေရာမှာ mut ကို သတိထား ကြည့်ပါ။ push လုပ်လိုက်တိုင်း Vec က
+      ပြောင်းသွားတဲ့အတွက်၊ variable က mutable ဖြစ်ရပါမယ်၊ ဆိုလိုတာက ပြောင်းလို့ ရရပါမယ်။ mut မပါဘဲ
+      ရေးကြည့်ရင်၊ compiler က push တစ်ခုချင်းစီကို E0596 error နဲ့ ပယ်ပါလိမ့်မယ်။ error က ပြောတာက
+      scores ကို mutable အနေနဲ့ borrow လုပ်လို့ မရပါဘူးတဲ့၊ borrow ဆိုတာ ငှားသုံးတာပါ။
+      [[mark:type-push]] အခု score သုံးခုကို push လုပ်ကြည့်ရအောင်။ element type ကို ဘယ်နေရာမှာမှ
+      မရေးထားတာ သတိထား ကြည့်ပါ။ ထည့်လိုက်တဲ့ ကိန်းဂဏန်းတွေကို ကြည့်ပြီး၊ ဒါ Vec of i32 ပဲလို့
+      compiler က ကိုယ့်အစား တွက်ပေးလိုက်တာပါ။ နောက်ဆုံး စာကြောင်းက println ထဲမှာ Debug format
+      placeholder သုံးထားတဲ့အတွက်၊ Vec တစ်ခုလုံးကို print ထုတ်ပြပါလိမ့်မယ်။ ပြီးတော့ len က element
+      အရေအတွက်ကို ပြန်ပေးပါတယ်။
     sources:
       - title: "The Rust Book — Creating a New Vector"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#creating-a-new-vector"
@@ -669,14 +688,21 @@ scenes:
           after: "    let mut scores = Vec::new();\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    scores.push(90);\n    scores.push(80);\n    scores.push(70);\n    println!(\"{scores:?} has {} scores\", scores.len());\n"
+        text: "    scores.push(90);
+
+          \    scores.push(80);
+
+          \    scores.push(70);
+
+          \    println!(\"{scores:?} has {} scores\", scores.len());\n"
 
   - id: vec-macro
-    narration: >
-      [[mark:type-names]] When you already know the values, vec! is shorter.
-      [[mark:select-vec]] The exclamation mark means it's a macro, like
-      print line. It makes the Vec and fills it in one step. names never
-      changes, so it doesn't need mut.
+    narration: >-
+      [[mark:type-names]] တန်ဖိုးတွေကို အစကတည်းက သိပြီးသားဆိုရင်တော့၊ vec macro နဲ့ ရေးတာက
+      ပိုတိုပါတယ်။ ဒီမှာ names ဆိုတဲ့ Vec တစ်ခုကို နာမည် သုံးခုနဲ့ တန်းလုပ်လိုက်တာပါ။
+      [[mark:select-vec]] vec နောက်က exclamation mark က println မှာလိုပဲ၊ ဒါ macro တစ်ခု ဖြစ်တယ်လို့
+      ပြောတာပါ။ vec macro က Vec ကို လုပ်တာရော၊ ထဲကို တန်ဖိုး ဖြည့်တာရော၊ တစ်ဆင့်တည်းနဲ့
+      ပြီးသွားပါတယ်။ names ကို နောက်ပိုင်း ဘယ်တော့မှ မပြောင်းတော့တဲ့အတွက်၊ ဒီတစ်ခါ mut မလိုပါဘူး။
     sources:
       - title: "The Rust Book — Creating a New Vector (vec!)"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#creating-a-new-vector"
@@ -691,7 +717,9 @@ scenes:
           after: "scores.len());\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let names = vec![\"Ana\", \"Ben\", \"Cho\"];\n"
+        text: "
+
+          \    let names = vec![\"Ana\", \"Ben\", \"Cho\"];\n"
       - id: select-vec
         type: editor.select
         at: { mark: select-vec }
@@ -701,11 +729,12 @@ scenes:
           occurrence: 1
 
   - id: index
-    chapter: Index or get
-    narration: >
-      [[mark:type-index]] To read one element, put its index in square
-      brackets. [[mark:select-index]] names at zero is the first name. But
-      what happens when the index is past the end?
+    chapter: Index လား get လား
+    narration: >-
+      [[mark:type-index]] element တစ်ခုကို ဖတ်ချင်ရင်၊ array မှာလိုပဲ သူ့ index ကို
+      လေးထောင့်ကွင်းထဲမှာ ရေးပါတယ်။ [[mark:select-index]] names ရဲ့ index 0 ဆိုတာ ပထမဆုံး နာမည်
+      ဖြစ်ပြီး၊ scores ရဲ့ index 0 ကတော့ ပထမဆုံး score ပါ။ ဒါဆို index က စာရင်းရဲ့ အဆုံးကို
+      ကျော်သွားရင်ရော ဘာဖြစ်မလဲ။
     sources:
       - title: "The Rust Book — Reading Elements of Vectors"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#reading-elements-of-vectors"
@@ -728,16 +757,17 @@ scenes:
           occurrence: 1
 
   - id: past-the-end
-    narration: >
-      With an array, the compiler caught a bad index, because it knew the
-      length. [[mark:draw-index]] A Vec's length is only known when the
-      program runs, so names at five compiles.
-      [[mark:draw-panic]] Then the program panics and stops: index out of
-      bounds, the len is three but the index is five.
-      [[mark:draw-get]] get is the safer way. It returns an
-      Option: Some with a reference to the element, or None when there's
-      nothing at that index.
-      [[mark:draw-safe]] No panic, and the compiler makes you handle None.
+    narration: >-
+      array မှာတုန်းက အရှည်ကို compiler က ကြိုသိနေတဲ့အတွက်၊ index မှားရင် compile လုပ်ချိန်မှာတင်
+      ဖမ်းမိခဲ့ပါတယ်။ [[mark:draw-index]] Vec ရဲ့ အရှည်ကတော့ program run နေချိန်ကျမှ သိရတာ ဖြစ်လို့၊
+      names ရဲ့ index 5 ဆိုတာ compile လုပ်လို့ ရသွားပါတယ်။ [[mark:draw-panic]] ဒါပေမဲ့ run
+      လိုက်တဲ့အခါ၊ ဒီ စာကြောင်း ရောက်တာနဲ့ program က panic ဖြစ်ပြီး ရပ်သွားပါတယ်။ message ကတော့
+      index out of bounds ပါ၊ အရှည်က 3 ပဲ ရှိပြီး index က 5 ဖြစ်နေပါတယ်တဲ့။ [[mark:draw-get]] ဒီထက်
+      ပိုလုံခြုံတဲ့ နည်းက get ပါ။ get က တန်ဖိုးကို တိုက်ရိုက် ပြန်မပေးဘဲ၊ Option တစ်ခု ပြန်ပေးပါတယ်။
+      အဲဒီ index မှာ element ရှိရင် Some ထဲမှာ အဲဒီ element ရဲ့ reference ပါလာပြီး၊ ဥပမာအားဖြင့်
+      index 0 ဆိုရင် Some Ana ပါ။ index 5 မှာလို ဘာမှ မရှိရင်တော့ None ပြန်ပေးပါတယ်။
+      [[mark:draw-safe]] ဒါကြောင့် panic မဖြစ်တော့သလို၊ None ဖြစ်နိုင်တယ် ဆိုတာကိုလည်း compiler က
+      ကိုယ့်ကို handle လုပ်ခိုင်းပါတယ်။
     sources:
       - title: "The Rust Book — Reading Elements of Vectors"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#reading-elements-of-vectors"
@@ -774,10 +804,11 @@ scenes:
         drawMs: 1400
 
   - id: get-and-match
-    narration: >
-      [[mark:type-match]] Let's ask for index five with get, and match on the
-      answer. [[mark:select-none]] The None arm runs when the index is past the
-      end, and the program keeps going.
+    narration: >-
+      [[mark:type-match]] ဒါဆို editor ထဲမှာ index 5 ကို get နဲ့ တောင်းကြည့်ပြီး၊ ပြန်ရလာတဲ့ အဖြေကို
+      match နဲ့ စစ်ကြည့်ရအောင်။ Some ဆိုရင် တွေ့တဲ့ နာမည်ကို print ထုတ်ပြီး၊ None ဆိုရင်တော့ တခြား
+      စာသား တစ်ခု print ထုတ်ပါမယ်။ [[mark:select-none]] index က အဆုံးကို ကျော်သွားတဲ့အခါ ဒီ None arm
+      က run ပြီး၊ program ကတော့ မရပ်ဘဲ ဆက်သွားပါတယ်။
     sources:
       - title: "The Rust Book — The match Control Flow Construct"
         url: "https://doc.rust-lang.org/book/ch06-02-match.html"
@@ -796,7 +827,13 @@ scenes:
           after: "names[0], scores[0]);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    match names.get(5) {\n        Some(name) => println!(\"found {name}\"),\n        None => println!(\"nobody at index 5\"),\n    }\n"
+        text: "    match names.get(5) {
+
+          \        Some(name) => println!(\"found {name}\"),
+
+          \        None => println!(\"nobody at index 5\"),
+
+          \    }\n"
       - id: select-none
         type: editor.select
         at: { mark: select-none }
@@ -806,21 +843,21 @@ scenes:
           occurrence: 1
 
   - id: reference-then-push
-    chapter: A reference, then a push
-    narration: >
-      Here's something the compiler won't allow with a Vec.
-      [[mark:draw-code]] Say you keep a reference to the first score, push,
-      and then use the reference.
-      [[mark:draw-old]] first points into the block that holds the elements.
-      [[mark:draw-move]] If that block is full, push moves every element to a
-      bigger block, and frees the old one.
-      [[mark:draw-strike]] Now first points at freed memory.
-      [[mark:draw-error]] So the compiler refuses, with error E0502: can't
-      borrow scores as mutable, because it's also borrowed as immutable. It
-      doesn't check whether there's room, because any push might move the
-      elements.
-      [[mark:draw-rule]] It's the borrowing rule you already know: many
-      readers, or one writer. first is still reading, so push can't write.
+    chapter: Reference ကိုင်ထားရင်း push
+    narration: >-
+      Vec နဲ့ ပတ်သက်ပြီး compiler က လုံးဝ ခွင့်မပြုတဲ့ အရာ တစ်ခု ရှိပါတယ်၊ အဲဒါကို ကြည့်ရအောင်။
+      [[mark:draw-code]] ပထမဆုံး score ရဲ့ reference ကို first ဆိုတဲ့ နာမည်နဲ့ ကိုင်ထားပြီး၊ scores
+      ထဲကို push တစ်ခု လုပ်ပြီးမှ၊ အဲဒီ first ကို ပြန်သုံးတယ်လို့ ဆိုပါစို့။ [[mark:draw-old]] first
+      က element တွေ ရှိနေတဲ့ memory block ထဲကို ညွှန်ထားတာပါ။ [[mark:draw-move]] အဲဒီ block က
+      ပြည့်နေပြီဆိုရင်၊ push က element အားလုံးကို ပိုကြီးတဲ့ block အသစ်ဆီ ရွှေ့ပြီး၊ block
+      အဟောင်းကို ပြန်လွှတ်လိုက်ပါတယ်။ [[mark:draw-strike]] အဲဒီအခါ first က ပြန်လွှတ်ပြီးသား memory
+      ကို ညွှန်နေတဲ့ သဘော ဖြစ်သွားပါပြီ။ [[mark:draw-error]] ဒါကြောင့် compiler က ဒီ code ကို E0502
+      error နဲ့ ငြင်းလိုက်ပါတယ်။ scores ကို first က immutable အနေနဲ့၊ ဆိုလိုတာက ဖတ်ရုံ ဖတ်ဖို့
+      borrow လုပ်ထားဆဲ ဖြစ်နေလို့၊ mutable အနေနဲ့ ထပ် borrow လုပ်လို့ မရပါဘူးတဲ့။ ဒီနေရာမှာ
+      သတိထားရမှာက၊ block ထဲမှာ နေရာလွတ် ကျန်သေးလား ဆိုတာကို compiler က လိုက်မစစ်ပါဘူး။
+      ဘာကြောင့်လဲဆိုတော့၊ push တိုင်းက element တွေကို ရွှေ့နိုင်ခြေ ရှိနေလို့ပါ။ [[mark:draw-rule]]
+      တကယ်တော့ ဒါက ကိုယ် သိပြီးသား borrowing စည်းကမ်းပါပဲ။ ဖတ်တဲ့သူ အများကြီး၊ ဒါမှမဟုတ် ရေးတဲ့သူ
+      တစ်ယောက်တည်းပါ။ first က ဖတ်နေဆဲ ဖြစ်တဲ့အတွက်၊ push က ဝင်ရေးလို့ မရတာပါ။
     sources:
       - title: "The Rust Book — Reading Elements of Vectors (why a reference blocks push)"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#reading-elements-of-vectors"
@@ -867,14 +904,15 @@ scenes:
         drawMs: 1200
 
   - id: loop-read
-    chapter: Looping over a Vec
-    narration: >
-      [[mark:type-sum]] To visit every element, let's loop over a reference
-      to the Vec, and add up the scores. [[mark:select-ref]] The ampersand
-      borrows scores, so the loop only reads it. Without it, the loop would
-      take ownership, and you couldn't use scores again.
-      [[mark:select-star]] Each score is a reference too, so the star reads
-      the number it points at.
+    chapter: Vec ကို loop ပတ်ခြင်း
+    narration: >-
+      [[mark:type-sum]] element တိုင်းကို တစ်ခုချင်း သွားချင်ရင် for loop ကို သုံးပါတယ်။ ဒီမှာ Vec
+      ရဲ့ reference ကို loop ပတ်ပြီး၊ score အားလုံးကို total ထဲ ပေါင်းထည့်သွားပါမယ်။
+      [[mark:select-ref]] scores ရှေ့က ampersand က scores ကို borrow လုပ်တာ ဖြစ်လို့၊ loop က
+      ဖတ်ရုံပဲ ဖတ်ပါတယ်။ ampersand မပါဘဲ ရေးမိရင်တော့၊ loop က scores ရဲ့ ownership ကို ယူသွားပြီး၊
+      loop ပြီးတဲ့နောက် scores ကို ပြန်သုံးလို့ မရတော့ပါဘူး။ [[mark:select-star]] ဒီလို reference
+      ကို loop ပတ်တဲ့အခါ၊ loop တစ်ကြိမ်ချင်းစီမှာ ရတဲ့ score ကလည်း reference တစ်ခု ဖြစ်တဲ့အတွက်၊
+      ရှေ့က star က အဲဒီ reference ညွှန်ထားတဲ့ ကိန်းဂဏန်းကို ဖတ်ပေးတာပါ။
     sources:
       - title: "The Rust Book — Iterating Over the Values in a Vector"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#iterating-over-the-values-in-a-vector"
@@ -890,10 +928,22 @@ scenes:
         at: { mark: type-sum }
         target:
           file: main.rs
-          after: "        None => println!(\"nobody at index 5\"),\n    }\n"
+          after: "        None => println!(\"nobody at index 5\"),
+
+            \    }\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let mut total = 0;\n    for score in &scores {\n        total += *score;\n    }\n    println!(\"total: {total}\");\n"
+        text: "
+
+          \    let mut total = 0;
+
+          \    for score in &scores {
+
+          \        total += *score;
+
+          \    }
+
+          \    println!(\"total: {total}\");\n"
       - id: select-ref
         type: editor.select
         at: { mark: select-ref }
@@ -910,11 +960,12 @@ scenes:
           occurrence: 1
 
   - id: loop-write
-    narration: >
-      [[mark:type-bonus]] To change every element, let's loop over a mutable
-      reference instead. [[mark:select-mut-ref]] With ampersand mut, each
-      score is a mutable reference. So the star writes through it, and adds
-      five to the score inside the Vec.
+    narration: >-
+      [[mark:type-bonus]] element တိုင်းကို ပြောင်းချင်ရင်တော့၊ ဒီတစ်ခါ mutable reference ကို loop
+      ပတ်ပါမယ်။ score တိုင်းကို bonus 5 စီ ပေါင်းပေးကြည့်ရအောင်။ [[mark:select-mut-ref]] ampersand
+      mut ဖြစ်သွားတော့၊ loop တစ်ကြိမ်ချင်းစီမှာ ရတဲ့ score က mutable reference တစ်ခု ဖြစ်သွားပါတယ်။
+      ဒါကြောင့် ဒီတစ်ခါ star က ဖတ်ရုံ မဟုတ်ဘဲ၊ reference ကနေ တစ်ဆင့် ပြန်ရေးပေးတာ ဖြစ်ပြီး၊ Vec ထဲက
+      score ကိုယ်တိုင်ကို 5 ပေါင်းပေးလိုက်တာပါ။
     sources:
       - title: "The Rust Book — Iterating Over the Values in a Vector"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#iterating-over-the-values-in-a-vector"
@@ -927,7 +978,15 @@ scenes:
           after: "    println!(\"total: {total}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    for score in &mut scores {\n        *score += 5;\n    }\n    println!(\"with bonus: {scores:?}\");\n"
+        text: "
+
+          \    for score in &mut scores {
+
+          \        *score += 5;
+
+          \    }
+
+          \    println!(\"with bonus: {scores:?}\");\n"
       - id: select-mut-ref
         type: editor.select
         at: { mark: select-mut-ref }
@@ -937,10 +996,11 @@ scenes:
           occurrence: 1
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. Three scores, and Ana got ninety. Index five
-      gave us None, with no panic. The total is two hundred forty, and with
-      the bonus, every score went up by five.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ ပထမ စာကြောင်းမှာ Vec တစ်ခုလုံးကို ပြပြီး၊ score 3 ခု
+      ရှိတယ်လို့ ပြောပါတယ်။ နောက်တစ်ကြောင်းက Ana က 90 ရပါတယ်။ index 5 ကိုတော့ None ပြန်ရလို့၊ panic
+      မဖြစ်ဘဲ index 5 မှာ ဘယ်သူမှ မရှိဘူး ဆိုတဲ့ စာကြောင်း ထွက်လာပါတယ်။ total ကတော့ 240 ဖြစ်ပြီး၊
+      bonus ပေါင်းပြီးတဲ့ နောက်မှာ score တိုင်း 5 စီ တက်သွားတာကို နောက်ဆုံး စာကြောင်းမှာ မြင်ရပါတယ်။
     sources:
       - title: "The Rust Book — Iterating Over the Values in a Vector"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#iterating-over-the-values-in-a-vector"
@@ -961,11 +1021,13 @@ scenes:
         contains: "for score in &mut scores {"
 
   - id: wrap
-    narration: >
-      So a Vec is a list of one type that can grow. Use push with mut, vec!
-      when you know the values, get when an index might be missing, and a
-      reference in the for loop. But don't push while you're still using a
-      reference into it. Next, strings. A String is built on a Vec of bytes.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ Vec ဆိုတာ type တစ်မျိုးတည်း ထည့်ထားတဲ့၊ ကြီးလာနိုင်တဲ့ စာရင်း တစ်ခုပါ။
+      push လုပ်မယ်ဆိုရင် mut လိုပါတယ်။ တန်ဖိုးတွေကို ကြိုသိပြီးသားဆိုရင် vec macro နဲ့ တန်းလုပ်လို့
+      ရပါတယ်။ index မှာ element ရှိချင်မှ ရှိမယ်ဆိုရင် get ကို သုံးပြီး၊ for loop ပတ်တဲ့အခါ
+      reference ကို ပတ်ပါ။ ဒါပေမဲ့ Vec ထဲက reference တစ်ခုကို သုံးနေဆဲ အချိန်မှာတော့ push
+      မလုပ်ပါနဲ့။ နောက် lesson မှာတော့ String တွေကို ကြည့်သွားပါမယ်။ String ဆိုတာလည်း byte တွေ
+      ထည့်ထားတဲ့ Vec တစ်ခုပေါ်မှာ တည်ဆောက်ထားတာပါ။
     sources:
       - title: "The Rust Book — Storing Lists of Values with Vectors"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html"

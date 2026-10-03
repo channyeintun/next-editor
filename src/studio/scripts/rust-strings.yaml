@@ -49,8 +49,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-strings
-  title: "Rust from zero: Strings"
-  locale: en-US
+  title: "Rust from zero: String တွေ"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -70,7 +70,7 @@ lesson:
         y: 152,
         width: 440,
         height: 48,
-        text: "String vs &str",
+        text: "String နဲ့ &str",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -152,7 +152,7 @@ lesson:
         y: 254,
         width: 76,
         height: 36,
-        text: "spare",
+        text: "အပို",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -163,7 +163,7 @@ lesson:
         y: 326,
         width: 400,
         height: 36,
-        text: "on the heap: owned, can grow",
+        text: "heap ပေါ်: ပိုင်တယ်၊ ကြီးလာနိုင်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -236,7 +236,7 @@ lesson:
         y: 452,
         width: 220,
         height: 36,
-        text: "in the program",
+        text: "program ထဲမှာ",
         strokeColor: "#1e1e1e",
         fontSize: 28,
       }
@@ -247,7 +247,7 @@ lesson:
         y: 524,
         width: 400,
         height: 36,
-        text: "borrowed: read, can't grow",
+        text: "borrow: ဖတ်ရုံ၊ ကြီးလို့ မရ",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -258,7 +258,7 @@ lesson:
         y: 600,
         width: 640,
         height: 36,
-        text: "only read → &str     build text → String",
+        text: "ဖတ်ရုံ → &str     စာသား ဆောက် → String",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
@@ -270,7 +270,7 @@ lesson:
         y: 152,
         width: 620,
         height: 48,
-        text: "Why place[0] doesn't compile",
+        text: "place[0] ဘာကြောင့် compile မရလဲ",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -441,7 +441,7 @@ lesson:
         y: 256,
         width: 140,
         height: 36,
-        text: "5 bytes",
+        text: "5 byte",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
@@ -452,7 +452,7 @@ lesson:
         y: 296,
         width: 200,
         height: 36,
-        text: "4 characters",
+        text: "စာလုံး 4 လုံး",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
@@ -485,7 +485,7 @@ lesson:
         y: 392,
         width: 300,
         height: 36,
-        text: "place[3] → half of é",
+        text: "place[3] → é တစ်ဝက်",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -518,7 +518,7 @@ lesson:
         y: 556,
         width: 420,
         height: 36,
-        text: "&place[0..4] cuts é → panic",
+        text: "&place[0..4]: é ကို ဖြတ် → panic",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -529,13 +529,16 @@ lesson:
         y: 600,
         width: 470,
         height: 36,
-        text: "whole characters → place.chars()",
+        text: "စာလုံး အပြည့် → place.chars()",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 39
 
 runtime:
@@ -545,26 +548,39 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "Hello, world!\nHello, world! Meet me at the café.\ncafé: 5 bytes, 4 characters\nc\na\nf\né\n"
+      stdout: "Hello, world!
+
+        Hello, world! Meet me at the café.
+
+        café: 5 bytes, 4 characters
+
+        c
+
+        a
+
+        f
+
+        é\n"
       stderr: ""
 
 scenes:
   - id: two-types
-    chapter: Two kinds of string
-    narration: >
-      Rust has two main string types, and most programs use both.
-      [[mark:draw-string]] First, String. Like a Vec, it holds three things:
-      a pointer to its text on the heap, a length, and a capacity. The String
-      owns that text, so it can change and grow it. The capacity can
-      include spare room. When that's full, the String moves its text to a
-      bigger block on the heap.
-      [[mark:draw-str]] The other type is the string slice, written ampersand
-      str. It's only a pointer and a length. It borrows text that something
-      else owns: part of a String, or a literal stored in your program. It
-      can read that text, but it can't grow it.
-      [[mark:draw-why]] So why two types? Owning text needs a heap
-      allocation, and reading text doesn't. That's why functions that only
-      read take a string slice, and code that builds text uses a String.
+    chapter: String အမျိုးအစား နှစ်မျိုး
+    narration: >-
+      Rust မှာ အဓိက string type နှစ်မျိုး ရှိပြီး၊ program အများစုက နှစ်မျိုးလုံးကို သုံးပါတယ်။
+      [[mark:draw-string]] ပထမ တစ်မျိုးက String ပါ။ Vec လိုပဲ သူ့ထဲမှာ အချက် သုံးချက် ရှိပါတယ်၊ heap
+      ပေါ်က စာသားဆီ ညွှန်ထားတဲ့ pointer တစ်ခု၊ အရှည် တစ်ခုနဲ့ capacity တစ်ခုပါ။ String က အဲဒီ
+      စာသားကို ပိုင်ဆိုင်တဲ့အတွက်၊ ပြောင်းလို့ရော ထပ်ဖြည့်လို့ပါ ရပါတယ်။ capacity ထဲမှာ အပို
+      နေရာလွတ် ပါနေနိုင်ပြီး၊ အဲဒီ နေရာလွတ် ပြည့်သွားတဲ့အခါ String က သူ့ စာသားကို heap ပေါ်က
+      ပိုကြီးတဲ့ block တစ်ခုဆီ ရွှေ့လိုက်ပါတယ်။ [[mark:draw-str]] နောက် တစ်မျိုးကတော့ string slice
+      ပါ၊ ampersand str လို့ ရေးပါတယ်။ သူ့ထဲမှာ pointer တစ်ခုနဲ့ အရှည် တစ်ခုပဲ ရှိပါတယ်။ သူက တခြား
+      တစ်ခုခုက ပိုင်ဆိုင်ထားတဲ့ စာသားကို borrow လုပ်ထားတာပါ၊ borrow ဆိုတာ ငှားသုံးတာပါ။ အဲဒီ စာသားက
+      String တစ်ခုရဲ့ အပိုင်း တစ်ပိုင်း ဖြစ်နိုင်သလို၊ ကိုယ့် program ထဲမှာ သိမ်းထားတဲ့ literal
+      တစ်ခုလည်း ဖြစ်နိုင်ပါတယ်။ အဲဒီ စာသားကို ဖတ်လို့တော့ ရပေမယ့်၊ ထပ်ဖြည့်လို့တော့ မရပါဘူး။
+      [[mark:draw-why]] ဒါဆို ဘာကြောင့် type နှစ်မျိုး လိုရတာလဲ။ စာသားကို ပိုင်ဆိုင်ဖို့ဆိုရင် heap
+      ပေါ်မှာ allocation တစ်ခု လုပ်ရပြီး၊ ဖတ်ရုံ ဖတ်ဖို့ဆိုရင်တော့ အဲဒါ မလိုပါဘူး။ ဒါကြောင့်
+      စာသားကို ဖတ်ရုံပဲ ဖတ်တဲ့ function တွေက string slice ကို လက်ခံပြီး၊ စာသား တည်ဆောက်တဲ့ code
+      ကတော့ String ကို သုံးပါတယ်။
     sources:
       - title: "The Rust Book — Defining Strings"
         url: "https://doc.rust-lang.org/book/ch08-02-strings.html#defining-strings"
@@ -619,17 +635,17 @@ scenes:
         drawMs: 1600
 
   - id: build
-    chapter: Building a String
-    narration: >
-      Let's build a String in code. [[mark:open-main]] Our program starts
-      with one, called message.
-      [[mark:select-from]] String::from takes a literal, which is a string
-      slice, and copies its text into a new String on the heap. Now message
-      owns that text. It's declared with mut, so we can change it.
-      [[mark:type-push-str]] push_str adds a string slice to the end. If
-      there's no spare room, the String grows for you.
-      [[mark:type-push]] push adds one character. The exclamation mark is in
-      single quotes, because it's a char, not a string.
+    chapter: String တစ်ခု တည်ဆောက်ခြင်း
+    narration: >-
+      ဒါဆို code ထဲမှာ String တစ်ခု တည်ဆောက်ကြည့်ရအောင်။ [[mark:open-main]] ကိုယ့် program က message
+      ဆိုတဲ့ String တစ်ခုနဲ့ စထားပါတယ်။ [[mark:select-from]] String ရဲ့ from က literal တစ်ခုကို
+      လက်ခံပါတယ်၊ literal ဆိုတာ string slice တစ်ခုပါ။ ပြီးတော့ အဲဒီ literal ထဲက စာသားကို heap ပေါ်က
+      String အသစ် တစ်ခုထဲ ကူးထည့်ပေးပါတယ်။ အခု message က အဲဒီ စာသားကို ပိုင်ဆိုင်သွားပါပြီ။ mut နဲ့
+      ကြေညာထားတဲ့အတွက် ပြောင်းလို့လည်း ရပါတယ်။ [[mark:type-push-str]] push str က String ရဲ့ အဆုံးမှာ
+      string slice တစ်ခု ထပ်ဖြည့်ပေးပါတယ်။ အပို နေရာလွတ် မရှိတော့ရင် String က ကိုယ့်အစား သူ့ဘာသာ
+      ကြီးလာပါတယ်။ [[mark:type-push]] push ကတော့ စာလုံး တစ်လုံးတည်း ထပ်ဖြည့်ပေးတာပါ။ exclamation
+      mark ကို single quote ထဲမှာ ရေးထားတာ သတိထား ကြည့်ပါ၊ ဘာကြောင့်လဲဆိုတော့ သူက string မဟုတ်ဘဲ
+      char တစ်လုံး ဖြစ်လို့ပါ။
     sources:
       - title: "The Rust Book — Creating a New String"
         url: "https://doc.rust-lang.org/book/ch08-02-strings.html#creating-a-new-string"
@@ -675,14 +691,13 @@ scenes:
         text: "    message.push('!');\n"
 
   - id: join
-    narration: >
-      [[mark:type-format]] Now let's join some text. place is a literal, so
-      its type is a string slice.
-      [[mark:select-format]] The format macro works like print line, but
-      instead of printing, it returns a new String. It only borrows message
-      and place, so you can still use both. A plus sign can join strings
-      too, but it takes ownership of the String on its left. So format is
-      usually the clearer choice.
+    narration: >-
+      [[mark:type-format]] အခု စာသား နှစ်ခုကို တစ်ခုတည်း ပေါင်းကြည့်ရအောင်။ place က literal တစ်ခု
+      ဖြစ်တဲ့အတွက်၊ သူ့ type က string slice ပါ။ [[mark:select-format]] format macro က println နဲ့
+      အလုပ်လုပ်ပုံ အတူတူပါပဲ၊ ဒါပေမဲ့ print မထုတ်ဘဲ String အသစ် တစ်ခုကို ပြန်ပေးပါတယ်။ သူက message
+      နဲ့ place ကို borrow လုပ်ရုံပဲ လုပ်တာ ဖြစ်လို့၊ နှစ်ခုလုံးကို ဆက်သုံးလို့ ရပါသေးတယ်။ plus sign
+      နဲ့လည်း string တွေကို ပေါင်းလို့ ရပါတယ်၊ ဒါပေမဲ့ သူက ဘယ်ဘက်က String ရဲ့ ownership ကို
+      ယူသွားပါတယ်။ ဒါကြောင့် format နဲ့ ရေးတာက အများအားဖြင့် ပိုရှင်းပါတယ်။
     sources:
       - title: "The Rust Book — Concatenating with + or format!"
         url: "https://doc.rust-lang.org/book/ch08-02-strings.html#concatenating-with--or-format"
@@ -697,7 +712,13 @@ scenes:
           after: "    println!(\"{message}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let place: &str = \"café\";\n    let invite = format!(\"{message} Meet me at the {place}.\");\n    println!(\"{invite}\");\n"
+        text: "
+
+          \    let place: &str = \"café\";
+
+          \    let invite = format!(\"{message} Meet me at the {place}.\");
+
+          \    println!(\"{invite}\");\n"
       - id: select-format
         type: editor.select
         at: { mark: select-format }
@@ -707,27 +728,24 @@ scenes:
           occurrence: 1
 
   - id: indexing
-    chapter: Why place[0] doesn't compile
-    narration: >
-      In many languages, you'd get the first letter with a zero in square
-      brackets. In Rust, that doesn't compile. Let's see why.
-      [[mark:draw-bytes]] Strings in Rust are stored as UTF-8 bytes. Each box
-      is one byte. Plain English letters take one byte each, but the e with
-      an accent takes two. Other characters can take three or four.
-      That's how a string stores its text. A char value on its own is still
-      four bytes, as you saw with data types.
-      [[mark:draw-counts]] So café is five bytes long, but it's only four
-      characters.
-      [[mark:draw-code]] Now, what should index zero give you? A byte? Then
-      index three would give you half of that e. A character? Then Rust
-      would have to read from the start to find it, and indexing should
-      always be fast.
-      [[mark:draw-error]] So Rust doesn't guess. The compiler stops with
-      error E0277: the type str can't be indexed by an integer. str is the
-      text a string slice points to. A String gives the same error.
-      [[mark:draw-panic]] You can still slice with a byte range. But a range
-      that cuts that e in half panics when the program runs.
-      [[mark:draw-chars]] To get whole characters, ask for them with chars.
+    chapter: place[0] ဘာကြောင့် compile မရလဲ
+    narration: >-
+      တခြား ဘာသာစကား အများစုမှာ ပထမ စာလုံးကို ယူချင်ရင် လေးထောင့်ကွင်းထဲမှာ 0 ထည့်ပြီး ယူလို့
+      ရပါတယ်။ Rust မှာတော့ အဲဒီလို ရေးရင် compile လုပ်လို့ မရပါဘူး။ ဘာကြောင့်လဲ ဆိုတာ ကြည့်ရအောင်။
+      [[mark:draw-bytes]] Rust မှာ string တွေကို UTF-8 byte တွေအနေနဲ့ သိမ်းထားပါတယ်။ ဒီမှာ အကွက်
+      တစ်ကွက်က byte တစ်ခုပါ။ ရိုးရိုး English စာလုံး တစ်လုံးက 1 byte ပဲ ယူပေမယ့်၊ accent ပါတဲ့ e
+      ကတော့ 2 byte ယူပါတယ်။ တခြား စာလုံးတွေဆိုရင် 3 byte၊ 4 byte အထိ ယူနိုင်ပါတယ်။ ဒါက string တစ်ခုက
+      သူ့ စာသားကို သိမ်းထားတဲ့ ပုံစံပါ။ char တန်ဖိုး တစ်ခုတည်းကိုတော့ data type တွေ lesson မှာ
+      မြင်ခဲ့သလိုပဲ 4 byte နဲ့ သိမ်းပါတယ်။ [[mark:draw-counts]] ဒါကြောင့် café က 5 byte ရှည်ပေမယ့်၊
+      စာလုံးကတော့ 4 လုံးပဲ ရှိပါတယ်။ [[mark:draw-code]] ဒါဆို index 0 က ဘာကို ပြန်ပေးသင့်လဲ။ byte
+      တစ်ခုလား။ အဲဒီလိုဆိုရင် index 3 က အဲဒီ e ရဲ့ တစ်ဝက်ကို ပြန်ပေးမှာပါ။ စာလုံး တစ်လုံးလား။
+      အဲဒီလိုဆိုရင်တော့ Rust က အဲဒီ စာလုံးကို ရှာဖို့ အစကနေ ဖတ်လာရမှာ ဖြစ်ပြီး၊ index နဲ့
+      ယူတာမျိုးကတော့ အမြဲ မြန်နေသင့်တဲ့ အလုပ်ပါ။ [[mark:draw-error]] ဒါကြောင့် Rust က ခန့်မှန်းပြီး
+      မလုပ်ပါဘူး။ compiler က E0277 error နဲ့ ရပ်သွားပါတယ်၊ str type ကို integer နဲ့ index လုပ်လို့
+      မရပါဘူးတဲ့။ str ဆိုတာ string slice က ညွှန်ထားတဲ့ စာသားပါ။ String မှာလည်း ဒီ error ပဲ တက်ပါတယ်။
+      [[mark:draw-panic]] byte range နဲ့တော့ slice လုပ်လို့ ရပါသေးတယ်။ ဒါပေမဲ့ အဲဒီ range က e ကို
+      တစ်ဝက် ဖြတ်မိရင် program run နေချိန်မှာ panic ဖြစ်သွားပါလိမ့်မယ်။ [[mark:draw-chars]] စာလုံး
+      အပြည့်အစုံတွေ လိုချင်ရင် chars နဲ့ တောင်းရပါတယ်။
     sources:
       - title: "The Rust Book — Indexing into Strings"
         url: "https://doc.rust-lang.org/book/ch08-02-strings.html#indexing-into-strings"
@@ -797,15 +815,14 @@ scenes:
         drawMs: 1400
 
   - id: chars
-    chapter: Walking the characters
-    narration: >
-      [[mark:type-counts]] Back in the code, let's measure café both ways.
-      [[mark:select-len]] len gives you the length in bytes, because bytes
-      are what a string stores.
-      [[mark:select-chars]] chars gives you the characters one at a time, and
-      count counts them.
-      [[mark:type-loop]] And a for loop over chars prints each character on
-      its own line.
+    chapter: စာလုံး တစ်လုံးချင်း သွားခြင်း
+    narration: >-
+      [[mark:type-counts]] editor ထဲ ပြန်သွားပြီး၊ café ကို နည်းလမ်း နှစ်မျိုးလုံးနဲ့
+      တိုင်းကြည့်ရအောင်။ [[mark:select-len]] len က အရှည်ကို byte အရေအတွက်နဲ့ ပြန်ပေးပါတယ်၊
+      ဘာကြောင့်လဲဆိုတော့ string တစ်ခုက သိမ်းထားတာက byte တွေ ဖြစ်လို့ပါ။ [[mark:select-chars]] chars
+      ကတော့ စာလုံးတွေကို တစ်လုံးချင်း ထုတ်ပေးပြီး၊ count က အဲဒါတွေကို ရေတွက်ပေးပါတယ်။
+      [[mark:type-loop]] ပြီးတော့ chars ပေါ်မှာ for loop တစ်ခု ပတ်လိုက်ရင်၊ စာလုံး တစ်လုံးချင်းစီကို
+      သူ့ စာကြောင်းနဲ့သူ print ထုတ်ပေးပါတယ်။
     sources:
       - title: "The Rust Book — Iterating Over Strings"
         url: "https://doc.rust-lang.org/book/ch08-02-strings.html#iterating-over-strings"
@@ -826,7 +843,13 @@ scenes:
           after: "    println!(\"{invite}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let bytes = place.len();\n    let characters = place.chars().count();\n    println!(\"{place}: {bytes} bytes, {characters} characters\");\n"
+        text: "
+
+          \    let bytes = place.len();
+
+          \    let characters = place.chars().count();
+
+          \    println!(\"{place}: {bytes} bytes, {characters} characters\");\n"
       - id: select-len
         type: editor.select
         at: { mark: select-len }
@@ -849,14 +872,18 @@ scenes:
           after: "{characters} characters\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    for c in place.chars() {\n        println!(\"{c}\");\n    }\n"
+        text: "    for c in place.chars() {
+
+          \        println!(\"{c}\");
+
+          \    }\n"
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. Hello, world, with the exclamation mark from
-      push. Then the invite that format built. The word café is five bytes,
-      but four characters. And the loop prints each character whole, even
-      the e with the accent.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ ပထမ စာကြောင်းက Hello, world ဖြစ်ပြီး၊ အဆုံးက exclamation
+      mark က push နဲ့ ထည့်လိုက်တာပါ။ နောက် စာကြောင်းကတော့ format က တည်ဆောက်ပေးလိုက်တဲ့ invite ပါ။
+      café ဆိုတဲ့ စကားလုံးက 5 byte ရှိပေမယ့်၊ စာလုံးကတော့ 4 လုံးပါ။ ပြီးတော့ loop က စာလုံး
+      တစ်လုံးချင်းစီကို အပြည့်အစုံ print ထုတ်ပေးပြီး၊ accent ပါတဲ့ e ကိုတောင် အပြည့် ထုတ်ပေးပါတယ်။
     sources:
       - title: "The Rust Book — Storing UTF-8 Encoded Text with Strings"
         url: "https://doc.rust-lang.org/book/ch08-02-strings.html"
@@ -877,11 +904,11 @@ scenes:
         contains: 'message.push_str(", world");'
 
   - id: wrap
-    narration: >
-      So a String owns its text and can grow it, and a string slice borrows
-      text to read it. Both are UTF-8, so you don't index them by number. You
-      ask for chars instead. Next, hash maps: values you store and look up by
-      a key.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ String က သူ့ စာသားကို ပိုင်ဆိုင်ပြီး ထပ်ဖြည့်လို့ ရပါတယ်၊ string slice
+      ကတော့ စာသားကို ဖတ်ဖို့ borrow လုပ်ထားတာပါ။ နှစ်မျိုးလုံးက UTF-8 ဖြစ်တဲ့အတွက်၊ ကိန်းဂဏန်း index
+      နဲ့ မယူဘဲ chars နဲ့ တောင်းရပါတယ်။ နောက် lesson မှာတော့ HashMap၊ ဆိုလိုတာက key တစ်ခုနဲ့
+      သိမ်းပြီး key နဲ့ပဲ ပြန်ရှာလို့ ရတဲ့ တန်ဖိုးတွေကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Handling the Complexities of Strings"
         url: "https://doc.rust-lang.org/book/ch08-02-strings.html#handling-the-complexities-of-strings"

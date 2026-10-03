@@ -42,7 +42,7 @@ schemaVersion: 1
 lesson:
   slug: rust-error-handling
   title: "Rust from zero: Error handling"
-  locale: en-US
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -57,12 +57,16 @@ lesson:
     - id: result-slide
       contentType: google
       name: Result<T, E>
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_42
     - id: question-slide
       contentType: google
       name: The ? operator
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_53
   whiteboardAssets:
     # ---- Board 1: two kinds of errors -------------------------------------
@@ -73,7 +77,7 @@ lesson:
         y: 152,
         width: 520,
         height: 48,
-        text: "Two kinds of errors",
+        text: "Error နှစ်မျိုး",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -93,7 +97,7 @@ lesson:
         y: 240,
         width: 240,
         height: 36,
-        text: "a bug: v[99]",
+        text: "bug: v[99]",
         strokeColor: "#1e1e1e",
         fontSize: 28,
       }
@@ -134,7 +138,7 @@ lesson:
         y: 240,
         width: 200,
         height: 36,
-        text: "it stops",
+        text: "ရပ်သွားတယ်",
         strokeColor: "#e03131",
         fontSize: 28,
       }
@@ -165,7 +169,7 @@ lesson:
         y: 438,
         width: 250,
         height: 36,
-        text: 'bad input: "oops"',
+        text: 'input မှား: "oops"',
         strokeColor: "#1e1e1e",
         fontSize: 28,
       }
@@ -206,7 +210,7 @@ lesson:
         y: 438,
         width: 200,
         height: 36,
-        text: "you decide",
+        text: "ကိုယ် ဆုံးဖြတ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -228,7 +232,7 @@ lesson:
         y: 590,
         width: 640,
         height: 36,
-        text: "no exceptions: an expected error is a value",
+        text: "exception မရှိ: ကြိုသိတဲ့ error က တန်ဖိုး",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
@@ -240,7 +244,7 @@ lesson:
         y: 152,
         width: 620,
         height: 48,
-        text: "A Result is not a number",
+        text: "Result က ကိန်းဂဏန်း မဟုတ်ဘူး",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -316,7 +320,7 @@ lesson:
         y: 530,
         width: 640,
         height: 36,
-        text: "handle Ok and Err first → then use the i32",
+        text: "Ok နဲ့ Err ကို အရင် handle → ပြီးမှ i32 သုံး",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -328,7 +332,7 @@ lesson:
         y: 152,
         width: 620,
         height: 48,
-        text: "? needs a Result to return",
+        text: "? သုံးဖို့ Result ပြန်ပေးရမယ်",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -371,7 +375,7 @@ lesson:
         y: 222,
         width: 220,
         height: 36,
-        text: "returns `()`",
+        text: "`()` ပြန်ပေးတယ်",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -414,7 +418,7 @@ lesson:
         y: 476,
         width: 560,
         height: 36,
-        text: "works: add returns a Result",
+        text: "ရတယ်: add က Result ပြန်ပေးတယ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -431,7 +435,10 @@ lesson:
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 44
 
 runtime:
@@ -441,26 +448,32 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "42 is the number 42\noops failed: invalid digit found in string\nOk(42)\nErr(ParseIntError { kind: InvalidDigit })\n"
+      stdout: "42 is the number 42
+
+        oops failed: invalid digit found in string
+
+        Ok(42)
+
+        Err(ParseIntError { kind: InvalidDigit })\n"
       stderr: ""
 
 scenes:
   - id: two-kinds
-    chapter: Two kinds of errors
-    narration: >
-      Programs fail. A file is missing, or someone types letters where you
-      wanted a number. Rust has no exceptions. It sorts errors into two kinds.
-      [[mark:draw-bug]] The first kind is a bug, like reading index
-      ninety-nine of a vector that only has three items.
-      [[mark:draw-panic]] Reading past the end isn't safe, so Rust panics. It
-      prints this message, and the program stops. You can call the panic
-      macro yourself, too.
-      [[mark:draw-input]] The second kind is a failure you expect, like bad
-      input.
-      [[mark:draw-result]] For those, a function returns a Result, and its
-      caller decides what to do.
-      [[mark:draw-values]] So an expected error isn't a crash. It's a value in
-      the return type, so you can see which calls can fail.
+    chapter: Error နှစ်မျိုး
+    narration: >-
+      program တွေဆိုတာ တစ်ခါတစ်လေ အမှား ဖြစ်တတ်ပါတယ်။ ဖွင့်ချင်တဲ့ ဖိုင်က မရှိနေတာမျိုး၊ ဒါမှမဟုတ်
+      ကိန်းဂဏန်း လိုချင်တဲ့ နေရာမှာ တစ်ယောက်ယောက်က စာလုံးတွေ ရိုက်ထည့်လိုက်တာမျိုးပါ။ Rust မှာ
+      exception ဆိုတာ မရှိပါဘူး။ အဲဒီအစား error တွေကို နှစ်မျိုး ခွဲထားပါတယ်။ [[mark:draw-bug]] ပထမ
+      တစ်မျိုးက bug ပါ။ ဥပမာအားဖြင့်၊ element သုံးခုပဲ ရှိတဲ့ Vec တစ်ခုမှာ index 99 ကို
+      ဖတ်ကြည့်တာမျိုးပါ။ [[mark:draw-panic]] Vec ရဲ့ အဆုံးကို ကျော်ပြီး ဖတ်တာက ဘေးကင်းတဲ့ အလုပ်
+      မဟုတ်လို့၊ Rust က panic ဖြစ်ပါတယ်။ ဒီ message ကို print ထုတ်ပြီး၊ program က ရပ်သွားပါတယ်။
+      panic macro ကို ကိုယ်တိုင်လည်း ခေါ်လို့ ရပါတယ်။ [[mark:draw-input]] ဒုတိယ တစ်မျိုးကတော့
+      ဖြစ်လာနိုင်တယ်လို့ ကြိုသိထားတဲ့ အမှားမျိုးပါ၊ ဥပမာအားဖြင့် မှားနေတဲ့ input ပါ။
+      [[mark:draw-result]] ဒီလို အခြေအနေအတွက်ကတော့ function က Result တစ်ခု ပြန်ပေးပြီး၊ အဲဒီ
+      function ကို ခေါ်တဲ့သူက ဘာ ဆက်လုပ်မလဲ ဆိုတာကို ဆုံးဖြတ်ပါတယ်။ [[mark:draw-values]] ဆိုတော့
+      ကြိုမျှော်လင့်ထားတဲ့ error ဆိုတာ crash မဟုတ်ပါဘူး။ return type ထဲမှာ ပါနေတဲ့ တန်ဖိုး တစ်ခုပါ။
+      ဒါကြောင့် ဘယ် function ကို ခေါ်တဲ့အခါ အမှား ဖြစ်နိုင်လဲ ဆိုတာကို return type ကနေပဲ
+      မြင်နိုင်ပါတယ်။
     sources:
       - title: "The Rust Book — Error Handling"
         url: "https://doc.rust-lang.org/book/ch09-00-error-handling.html"
@@ -502,11 +515,12 @@ scenes:
         drawMs: 1400
 
   - id: result-type
-    narration: >
-      [[mark:show-result]] Result is an enum for errors you can recover from.
-      Ok holds the value when things work, and Err holds the error when they
-      don't. T and E are placeholders for those two types. Like Option, you
-      must handle both cases to use the value.
+    narration: >-
+      [[mark:show-result]] Result ဆိုတာ handle လုပ်ပြီး ဆက်သွားလို့ ရတဲ့ error တွေအတွက် enum
+      တစ်ခုပါ။ အလုပ် ဖြစ်သွားရင် Ok ထဲမှာ တန်ဖိုးကို သိမ်းထားပြီး၊ အလုပ် မဖြစ်ရင်တော့ Err ထဲမှာ
+      error ကို သိမ်းထားပါတယ်။ T နဲ့ E ကတော့ အဲဒီ type နှစ်ခုအတွက် placeholder တွေပါ။ ဆိုလိုတာက T က
+      အောင်မြင်ရင် ရမယ့် တန်ဖိုးရဲ့ type ဖြစ်ပြီး၊ E ကတော့ error ရဲ့ type ပါ။ Option နဲ့ အတူတူပါပဲ၊
+      ထဲက တန်ဖိုးကို သုံးချင်ရင် case နှစ်ခုလုံးကို handle လုပ်ရပါမယ်။
     sources:
       - title: "The Rust Book — Recoverable Errors with Result"
         url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"
@@ -523,13 +537,13 @@ scenes:
         slideId: result-slide
 
   - id: parse
-    chapter: Parsing a number
-    narration: >
-      Here's a loop over two pieces of text: forty-two, and the word oops.
-      [[mark:type-parse]] Let's turn each one into a number with parse. The
-      i32 in angle brackets tells parse which type to make.
-      [[mark:select-parse]] So what does parse give back? Not an i32. Text
-      like oops can't become a number, so parse returns a Result.
+    chapter: ကိန်းဂဏန်း parse လုပ်ခြင်း
+    narration: >-
+      ဒီမှာ စာသား နှစ်ခုကို တစ်ခုချင်း သွားတဲ့ loop တစ်ခု ရှိပါတယ်။ တစ်ခုက 42 ဖြစ်ပြီး၊ နောက်တစ်ခုက
+      oops ဆိုတဲ့ စကားလုံးပါ။ [[mark:type-parse]] ဒီ စာသား တစ်ခုချင်းစီကို parse နဲ့ ကိန်းဂဏန်း
+      ပြောင်းကြည့်ရအောင်။ angle bracket ထဲက i32 က parse ကို ဘယ် type ထုတ်ရမလဲ ပြောတာပါ။
+      [[mark:select-parse]] ဒါဆို parse က ဘာကို ပြန်ပေးလဲ။ i32 တော့ မဟုတ်ပါဘူး။ oops လို စာသားက
+      ကိန်းဂဏန်း ဖြစ်လို့ မရတဲ့အတွက်၊ parse က Result တစ်ခုကို ပြန်ပေးပါတယ်။
     sources:
       - title: "std — str::parse"
         url: "https://doc.rust-lang.org/std/primitive.str.html#method.parse"
@@ -561,13 +575,12 @@ scenes:
           occurrence: 1
 
   - id: not-a-number
-    narration: >
-      [[mark:draw-e1-code]] What if you multiply parsed by two anyway?
-      [[mark:draw-e1-msg]] The compiler stops you with error E0369. It can't
-      multiply a Result by an integer.
-      [[mark:draw-e1-type]] It also shows you the real type of parsed.
-      [[mark:draw-e1-fix]] To get the number out, you have to handle both
-      cases first.
+    narration: >-
+      [[mark:draw-e1-code]] ဒါပေမဲ့ parsed ကို သာမန် ကိန်းဂဏန်း တစ်ခုလိုပဲ သဘောထားပြီး 2 နဲ့
+      မြှောက်ကြည့်ရင် ဘာဖြစ်မလဲ။ [[mark:draw-e1-msg]] compiler က E0369 error နဲ့ ရပ်သွားပါတယ်။
+      Result တစ်ခုကို integer နဲ့ မြှောက်လို့ မရပါဘူးတဲ့။ [[mark:draw-e1-type]] ပြီးတော့ parsed ရဲ့
+      type အစစ်ကိုလည်း ပြပေးပါတယ်၊ Result of i32 နဲ့ ParseIntError ပါ။ [[mark:draw-e1-fix]] ထဲက
+      ကိန်းဂဏန်းကို ထုတ်ယူချင်ရင်၊ case နှစ်ခုလုံးကို အရင် handle လုပ်ရပါမယ်။
     sources:
       - title: "Rust error codes — E0369"
         url: "https://doc.rust-lang.org/error_codes/E0369.html"
@@ -602,13 +615,12 @@ scenes:
         drawMs: 1400
 
   - id: match
-    narration: >
-      [[mark:type-match]] Let's handle it with a match: one arm for Ok, and
-      one for Err.
-      [[mark:select-ok]] In the Ok arm, n is the i32 itself.
-      [[mark:select-err]] In the Err arm, e is the error, and printing it says
-      what went wrong. Leave out either arm, and it's error E0004: the match
-      doesn't cover every case.
+    narration: >-
+      [[mark:type-match]] ဒါကို match နဲ့ handle လုပ်ကြည့်ရအောင်။ Ok အတွက် arm တစ်ခု၊ Err အတွက် arm
+      တစ်ခုပါ။ [[mark:select-ok]] Ok arm ထဲမှာ n ဆိုတာ i32 တန်ဖိုး အစစ်ပါ၊ ဒါကြောင့် သာမန်
+      ကိန်းဂဏန်း တစ်ခုလို တန်းသုံးလို့ ရပါတယ်။ [[mark:select-err]] Err arm ထဲမှာတော့ e က error
+      ဖြစ်ပြီး၊ သူ့ကို print ထုတ်လိုက်ရင် ဘာ မှားသွားလဲ ဆိုတာကို ပြောပြပါတယ်။ arm တစ်ခုခုကို
+      ချန်ထားခဲ့ရင်တော့ E0004 error တက်ပါလိမ့်မယ်၊ match ထဲမှာ case အကုန် မပါသေးပါဘူးတဲ့။
     sources:
       - title: "The Rust Book — Recoverable Errors with Result"
         url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"
@@ -627,7 +639,13 @@ scenes:
           after: "        let parsed = input.parse::<i32>();\n"
           occurrence: 1
         cadence: line-by-line
-        text: "        match parsed {\n            Ok(n) => println!(\"{input} is the number {n}\"),\n            Err(e) => println!(\"{input} failed: {e}\"),\n        }\n"
+        text: "        match parsed {
+
+          \            Ok(n) => println!(\"{input} is the number {n}\"),
+
+          \            Err(e) => println!(\"{input} failed: {e}\"),
+
+          \        }\n"
       - id: select-ok
         type: editor.select
         at: { mark: select-ok }
@@ -644,29 +662,42 @@ scenes:
           occurrence: 1
 
   - id: question-mark
-    chapter: The question-mark operator
-    narration: >
-      [[mark:select-match]] Writing a match every time gets long. One
-      shortcut is unwrap. It gives you the value on Ok, but it panics on Err.
-      That's fine in a quick test, but not for user input.
-      [[mark:show-q]] A better one is the question-mark operator. Put it after
-      a call that returns a Result. On Ok, it unwraps the value, and your code
-      keeps going. On Err, it returns that error from the function right away,
-      and the caller decides what to do.
+    chapter: Question mark operator
+    narration: >-
+      [[mark:select-match]] ဒါပေမဲ့ Result တစ်ခု ရတိုင်း match တစ်ခု ရေးနေရရင် code က ရှည်လာပါတယ်။
+      အတိုကောက် နည်းလမ်း တစ်ခုက unwrap ပါ။ Ok ဆိုရင် ထဲက တန်ဖိုးကို ထုတ်ပေးပြီး၊ Err ဆိုရင်တော့
+      panic ဖြစ်သွားပါတယ်။ ခဏ စမ်းကြည့်တဲ့ code မှာတော့ အဆင်ပြေပေမယ့်၊ user ဆီက input အတွက်တော့
+      မသင့်တော်ပါဘူး။ [[mark:show-q]] ဒီထက် ပိုကောင်းတဲ့ နည်းလမ်းကတော့ question mark operator ပါ။
+      Result ပြန်ပေးတဲ့ function ကို ခေါ်ထားတဲ့ နေရာရဲ့ နောက်မှာ question mark ထည့်လိုက်တာပါ။ Ok
+      ဆိုရင် ထဲက တန်ဖိုးကို ထုတ်ပေးပြီး၊ code က ပုံမှန်အတိုင်း ဆက်သွားပါတယ်။ Err ဆိုရင်တော့ အဲဒီ
+      error ကို function ကနေ ချက်ချင်း return ပြန်လုပ်ပေးပြီး၊ ခေါ်တဲ့သူက ဘာ ဆက်လုပ်မလဲ ဆိုတာကို
+      ဆုံးဖြတ်ပါတယ်။
     sources:
       - title: "The Rust Book — Shortcuts for Panic on Error: unwrap and expect"
-        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#shortcuts-for-panic-on-error"
+        url:
+          "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#shortcuts-for-pani\
+          c-on-error"
       - title: "The Rust Book — The ? Operator Shortcut"
-        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#the--operator-shortcut"
+        url:
+          "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#the--operator-shor\
+          tcut"
       - title: "The Rust Reference — The try propagation expression"
-        url: "https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-try-propagation-expression"
+        url:
+          "https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-try-propagation-expres\
+          sion"
     actions:
       - id: select-match
         type: editor.select
         at: { mark: select-match }
         target:
           file: main.rs
-          text: "match parsed {\n            Ok(n) => println!(\"{input} is the number {n}\"),\n            Err(e) => println!(\"{input} failed: {e}\"),\n        }"
+          text: "match parsed {
+
+            \            Ok(n) => println!(\"{input} is the number {n}\"),
+
+            \            Err(e) => println!(\"{input} failed: {e}\"),
+
+            \        }"
           occurrence: 1
       - id: show-q
         type: slide.show
@@ -674,14 +705,14 @@ scenes:
         slideId: question-slide
 
   - id: add
-    narration: >
-      [[mark:type-add]] Let's write a function called add. It parses two
-      pieces of text and adds them. The use line at the top brings in parse's
-      error type for whole numbers.
-      [[mark:select-q]] Here's the question mark, after the first parse. If
-      that text isn't a number, add stops right here and returns the Err.
-      [[mark:select-sum]] If both parse, we wrap the sum in Ok, because add
-      returns a Result.
+    narration: >-
+      [[mark:type-add]] ကဲ၊ add ဆိုတဲ့ function တစ်ခု ရေးကြည့်ရအောင်။ စာသား နှစ်ခုကို parse လုပ်ပြီး
+      ပေါင်းပေးတဲ့ function ပါ။ အပေါ်ဆုံးက use စာကြောင်းကတော့ integer တွေကို parse လုပ်တဲ့အခါ
+      ထွက်လာနိုင်တဲ့ error type ဖြစ်တဲ့ ParseIntError ကို ခေါ်သွင်းပေးတာပါ။ [[mark:select-q]] ဒီမှာ
+      ပထမ parse ရဲ့ နောက်က question mark ကို ကြည့်ပါ။ အဲဒီ စာသားက ကိန်းဂဏန်း မဟုတ်ဘူးဆိုရင်၊ add က
+      ဒီနေရာမှာပဲ ရပ်ပြီး Err ကို ပြန်ပေးလိုက်ပါတယ်။ [[mark:select-sum]] နှစ်ခုလုံး parse လုပ်လို့
+      ရသွားရင်တော့၊ ပေါင်းလဒ်ကို Ok ထဲ ထည့်ပြီး ပြန်ပေးပါတယ်။ ဘာကြောင့်လဲဆိုတော့ add က Result တစ်ခု
+      ပြန်ပေးရမှာ ဖြစ်လို့ပါ။
     sources:
       - title: "The Rust Book — Propagating Errors"
         url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#propagating-errors"
@@ -699,7 +730,20 @@ scenes:
           after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "use std::num::ParseIntError;\n\nfn add(a: &str, b: &str) -> Result<i32, ParseIntError> {\n    let x = a.parse::<i32>()?;\n    let y = b.parse::<i32>()?;\n    Ok(x + y)\n}\n\n"
+        text: "use std::num::ParseIntError;
+
+
+          fn add(a: &str, b: &str) -> Result<i32, ParseIntError> {
+
+          \    let x = a.parse::<i32>()?;
+
+          \    let y = b.parse::<i32>()?;
+
+          \    Ok(x + y)
+
+          }
+
+          \n"
       - id: select-q
         type: editor.select
         at: { mark: select-q }
@@ -716,17 +760,18 @@ scenes:
           occurrence: 1
 
   - id: needs-result
-    narration: >
-      [[mark:select-ret]] Look at add's return type: a Result. That gives the
-      question mark a place to send the error.
-      [[mark:draw-e2-code]] What if you use it in main instead? main returns
-      unit, written as empty parentheses.
-      [[mark:draw-e2-msg]] You get error E0277: the question-mark operator can
-      only be used in a function that returns Result or Option.
-      [[mark:draw-e2-works]] That's why it works in add.
+    narration: >-
+      [[mark:select-ret]] add ရဲ့ return type ကို ကြည့်ပါ၊ Result တစ်ခုပါ။ ဒါကြောင့် question mark က
+      error ကို ပို့စရာ နေရာ ရှိသွားတာပါ။ [[mark:draw-e2-code]] ဒါဆို main ထဲမှာ question mark ကို
+      သုံးကြည့်ရင်ရော။ main က unit type ကို ပြန်ပေးပါတယ်၊ ကွင်းအလွတ်နဲ့ ရေးတဲ့ type ပါ။
+      [[mark:draw-e2-msg]] အဲဒီအခါ compiler က E0277 error နဲ့ ရပ်သွားပါတယ်။ question mark operator
+      ကို Result ဒါမှမဟုတ် Option ပြန်ပေးတဲ့ function ထဲမှာပဲ သုံးလို့ ရပါတယ်တဲ့။
+      [[mark:draw-e2-works]] ဒါကြောင့်ပဲ add ထဲမှာတော့ အလုပ်လုပ်တာပါ။
     sources:
       - title: "The Rust Book — Where to Use the ? Operator"
-        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#where-to-use-the--operator"
+        url:
+          "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#where-to-use-the--\
+          operator"
       - title: "Rust error codes — E0277"
         url: "https://doc.rust-lang.org/error_codes/E0277.html"
       - title: "std — The unit type ()"
@@ -762,10 +807,11 @@ scenes:
         drawMs: 1600
 
   - id: calls
-    narration: >
-      [[mark:type-calls]] Let's call add from main, with twenty and
-      twenty-two, then with oops. We print each Result with the Debug
-      placeholder you've seen with structs.
+    narration: >-
+      [[mark:type-calls]] အခု main ထဲကနေ add ကို ခေါ်ကြည့်ရအောင်။ ပထမ တစ်ကြိမ်မှာ 20 နဲ့ 22 ကို
+      ပေးပြီး၊ ဒုတိယ တစ်ကြိမ်မှာတော့ 20 နဲ့ oops ကို ပေးပါမယ်။ ရလာတဲ့ Result တစ်ခုချင်းစီကိုတော့
+      struct တွေ လေ့လာတုန်းက တွေ့ခဲ့တဲ့ Debug placeholder နဲ့ print ထုတ်ပါမယ်၊ ဆိုလိုတာက
+      တွန့်ကွင်းထဲမှာ colon နဲ့ question mark ထည့်တာပါ။
     sources:
       - title: "std::fmt::Debug"
         url: "https://doc.rust-lang.org/std/fmt/trait.Debug.html"
@@ -779,17 +825,26 @@ scenes:
         at: { mark: type-calls, offsetMs: 400 }
         target:
           file: main.rs
-          after: "            Err(e) => println!(\"{input} failed: {e}\"),\n        }\n    }\n"
+          after: "            Err(e) => println!(\"{input} failed: {e}\"),
+
+            \        }
+
+            \    }\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    println!(\"{:?}\", add(\"20\", \"22\"));\n    println!(\"{:?}\", add(\"20\", \"oops\"));\n"
+        text: "
+
+          \    println!(\"{:?}\", add(\"20\", \"22\"));
+
+          \    println!(\"{:?}\", add(\"20\", \"oops\"));\n"
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. Forty-two became a number. The word oops
-      failed, and the error says why: invalid digit found in string. add gives Ok,
-      forty-two. With oops, it's an Err. The question mark returned it early,
-      so the addition never ran, and nothing panicked.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ ပထမ စာကြောင်းမှာ 42 က ကိန်းဂဏန်း ဖြစ်သွားပါတယ်။ oops ကတော့
+      အလုပ် မဖြစ်ပါဘူး၊ ပြီးတော့ error က ဘာကြောင့်လဲ ဆိုတာကိုပါ ပြောပြပါတယ်၊ invalid digit found in
+      string တဲ့။ add ကတော့ Ok 42 ပြန်ပေးပါတယ်။ oops နဲ့ ခေါ်တဲ့အခါမှာတော့ Err တစ်ခု ထွက်လာပါတယ်။
+      question mark က အဲဒီ error ကို စောစော return ပြန်လုပ်လိုက်တဲ့အတွက်၊ ပေါင်းတဲ့ အဆင့်ကို လုံးဝ
+      မရောက်တော့ဘဲ၊ ဘာမှလည်း panic မဖြစ်ပါဘူး။
     sources:
       - title: "The Rust Book — Recoverable Errors with Result"
         url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"
@@ -810,11 +865,11 @@ scenes:
         contains: "let x = a.parse::<i32>()?;"
 
   - id: wrap
-    narration: >
-      So panic is for bugs, and it stops the program. Result is for errors you
-      expect: handle it with match, or send it to the caller with the
-      question mark.
-      Next, generics: one function for many types.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ panic ဆိုတာ bug တွေအတွက် ဖြစ်ပြီး၊ program ကို ရပ်ပစ်ပါတယ်။ Result ကတော့
+      ကြိုမျှော်လင့်ထားတဲ့ error တွေအတွက်ပါ။ match နဲ့ handle လုပ်လို့ ရသလို၊ question mark နဲ့
+      ခေါ်တဲ့သူဆီ ပြန်ပို့လို့လည်း ရပါတယ်။ နောက် lesson မှာတော့ generic တွေ၊ ဆိုလိုတာက type
+      အမျိုးမျိုးအတွက် function တစ်ခုတည်းနဲ့ ဘယ်လို ရေးလဲ ဆိုတာကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — To panic! or Not to panic!"
         url: "https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html"
