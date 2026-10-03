@@ -1,13 +1,42 @@
-# One idea: a Vec<T> is a growable, heap-allocated list of one type — you push
-# to add, index to read, and loop over a reference to sum without consuming it.
-# A whiteboard sketch, then a Vec of scores built and totaled, run.
+# Rust from zero, lesson 12: vectors.
+#
+# The arc: a whiteboard shows what a Vec is (elements side by side on the
+# heap, all one type, indexed from 0; the variable holds pointer, length and
+# capacity; push fills the spare room, and a full Vec moves to a bigger
+# block). The editor then builds one with Vec::new + push (why it needs mut,
+# how the element type is inferred), a second with vec!, reads by index, and
+# a second board compares names[5] (compiles, panics when it runs) with
+# names.get(5) (an Option — None). The editor handles the Option with match.
+# A third board explains WHY you can't push while holding a reference to an
+# element (push may move the elements and free the old block) and shows the
+# compiler's E0502. The lesson is insert-only with one run, so no broken
+# program is ever typed. Last, for loops over &scores (read) and &mut scores
+# (write through `*`), and one run.
+#
+# Every message on a board or in the narration was confirmed with rustc 1.98
+# (edition 2024) on the broken variants:
+#   `let scores = Vec::new();` then the three pushes:
+#     error[E0596]: cannot borrow `scores` as mutable, as it is not declared as mutable
+#     (one error: `let` marked "not mutable", every push "cannot borrow as mutable")
+#   `names[5]` on a 3-element Vec compiles, then panics when it runs:
+#     index out of bounds: the len is 3 but the index is 5
+#   `let first = &scores[0]; scores.push(60); println!("{first}");`
+#     error[E0502]: cannot borrow `scores` as mutable because it is also borrowed as immutable
+#   `for score in scores { … }` then using scores:
+#     error[E0382]: borrow of moved value: `scores` (moved by the implicit .into_iter())
+#
+# Board colours: blue = the Vec / the reference being named, orange = what
+# changes (push, the spare room, growing), green = the safe way / valid,
+# red = the panic and the error, violet = the results get returns.
+# #1e1e1e paints white on the dark board.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-vectors.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-vectors
-  title: "Rust vectors: a list that grows"
+  title: "Rust from zero: Vectors"
   locale: en-US
   workspace:
     lessonType: rust
@@ -16,133 +45,515 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let mut scores = Vec::new();
-            scores.push(90);
-            scores.push(80);
-            scores.push(70);
-            println!("count: {}", scores.len());
         }
-  # Diagram: the Vec drawn as a row of indexed value boxes, with a green
-  # "push" box showing it grows on the end.
   whiteboardAssets:
-    - id: vec-title
-      kind: text
-      x: 300
-      y: 170
-      width: 700
-      height: 44
-      text: "Vec<T> — a growable list"
-      strokeColor: "#1e1e1e"
-      fontSize: 34
-    - id: vec-arrlabel
-      kind: text
-      x: 360
-      y: 252
-      width: 400
-      height: 34
-      text: "scores: Vec<i32>"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: vec-box0
-      kind: rectangle
-      x: 360
-      y: 300
-      width: 92
-      height: 84
-      strokeColor: "#1e1e1e"
-    - id: vec-box1
-      kind: rectangle
-      x: 460
-      y: 300
-      width: 92
-      height: 84
-      strokeColor: "#1e1e1e"
-    - id: vec-box2
-      kind: rectangle
-      x: 560
-      y: 300
-      width: 92
-      height: 84
-      strokeColor: "#1e1e1e"
-    - id: vec-val0
-      kind: text
-      x: 386
-      y: 324
-      width: 60
-      height: 40
-      text: "90"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: vec-val1
-      kind: text
-      x: 486
-      y: 324
-      width: 60
-      height: 40
-      text: "80"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: vec-val2
-      kind: text
-      x: 586
-      y: 324
-      width: 60
-      height: 40
-      text: "70"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: vec-idx0
-      kind: text
-      x: 400
-      y: 398
-      width: 30
-      height: 26
-      text: "0"
-      strokeColor: "#80868b"
-      fontSize: 20
-    - id: vec-idx1
-      kind: text
-      x: 500
-      y: 398
-      width: 30
-      height: 26
-      text: "1"
-      strokeColor: "#80868b"
-      fontSize: 20
-    - id: vec-idx2
-      kind: text
-      x: 600
-      y: 398
-      width: 30
-      height: 26
-      text: "2"
-      strokeColor: "#80868b"
-      fontSize: 20
-    - id: vec-boxnext
-      kind: rectangle
-      x: 672
-      y: 300
-      width: 92
-      height: 84
-      strokeColor: "#2f9e44"
-    - id: vec-pushlabel
-      kind: text
-      x: 690
-      y: 326
-      width: 90
-      height: 34
-      text: "push"
-      strokeColor: "#2f9e44"
-      fontSize: 26
-    - id: vec-note
-      kind: text
-      x: 340
-      y: 448
-      width: 740
-      height: 36
-      text: "grows on the heap · index from 0 · len() = 3"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
+    # ---- Board 1: what a Vec is ------------------------------------------
+    - {
+        id: v-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 780,
+        height: 48,
+        text: "Vec<T>: a list that can grow",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: v-heap,
+        kind: text,
+        x: 690,
+        y: 232,
+        width: 300,
+        height: 40,
+        text: "on the heap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: v-box0, kind: rectangle, x: 690, y: 286, width: 80, height: 70, strokeColor: "#1e1e1e" }
+    - { id: v-box1, kind: rectangle, x: 770, y: 286, width: 80, height: 70, strokeColor: "#1e1e1e" }
+    - { id: v-box2, kind: rectangle, x: 850, y: 286, width: 80, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: v-val0,
+        kind: text,
+        x: 710,
+        y: 302,
+        width: 50,
+        height: 40,
+        text: "90",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-val1,
+        kind: text,
+        x: 790,
+        y: 302,
+        width: 50,
+        height: 40,
+        text: "80",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-val2,
+        kind: text,
+        x: 870,
+        y: 302,
+        width: 50,
+        height: 40,
+        text: "70",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-idx0,
+        kind: text,
+        x: 722,
+        y: 366,
+        width: 30,
+        height: 40,
+        text: "0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-idx1,
+        kind: text,
+        x: 802,
+        y: 366,
+        width: 30,
+        height: 40,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-idx2,
+        kind: text,
+        x: 882,
+        y: 366,
+        width: 30,
+        height: 40,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-type,
+        kind: text,
+        x: 290,
+        y: 446,
+        width: 760,
+        height: 40,
+        text: "Vec<i32>: every element is an i32",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: v-var-box,
+        kind: rectangle,
+        x: 290,
+        y: 270,
+        width: 290,
+        height: 104,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: v-var-name,
+        kind: text,
+        x: 310,
+        y: 280,
+        width: 250,
+        height: 40,
+        text: "scores",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: v-var-parts,
+        kind: text,
+        x: 310,
+        y: 324,
+        width: 260,
+        height: 40,
+        text: "ptr, len, cap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 590,
+        y: 300,
+        width: 90,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: v-spare,
+        kind: rectangle,
+        x: 930,
+        y: 286,
+        width: 80,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: v-push,
+        kind: text,
+        x: 928,
+        y: 366,
+        width: 120,
+        height: 40,
+        text: "push",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: v-grow,
+        kind: text,
+        x: 290,
+        y: 506,
+        width: 780,
+        height: 40,
+        text: "room runs out → it moves to a bigger block",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board 2: reading past the end -----------------------------------
+    - {
+        id: r-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 780,
+        height: 48,
+        text: "Reading past the end",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: r-index,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 160,
+        height: 40,
+        text: "names[5]",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-index-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 240,
+        width: 120,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: r-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 450,
+        y: 228,
+        width: 100,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r-panic,
+        kind: text,
+        x: 570,
+        y: 230,
+        width: 500,
+        height: 40,
+        text: "panics when it runs",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: r-msg1,
+        kind: text,
+        x: 300,
+        y: 288,
+        width: 780,
+        height: 40,
+        text: "index out of bounds:",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: r-msg2,
+        kind: text,
+        x: 300,
+        y: 328,
+        width: 780,
+        height: 40,
+        text: "the len is 3 but the index is 5",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: r-get0,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 200,
+        height: 40,
+        text: "names.get(0)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 500,
+        y: 418,
+        width: 90,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r-some,
+        kind: text,
+        x: 610,
+        y: 420,
+        width: 300,
+        height: 40,
+        text: 'Some("Ana")',
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: r-get5,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 200,
+        height: 40,
+        text: "names.get(5)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-arrow3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 500,
+        y: 478,
+        width: 90,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r-none,
+        kind: text,
+        x: 610,
+        y: 480,
+        width: 200,
+        height: 40,
+        text: "None",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: r-safe,
+        kind: text,
+        x: 300,
+        y: 556,
+        width: 780,
+        height: 40,
+        text: "an Option: no panic, you handle None",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board 3: a reference, then a push (E0502) -------------------------
+    - {
+        id: e-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 780,
+        height: 48,
+        text: "Hold a reference, then push",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: e-code1,
+        kind: text,
+        x: 300,
+        y: 218,
+        width: 500,
+        height: 40,
+        text: "let first = &scores[0];",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-code2,
+        kind: text,
+        x: 300,
+        y: 262,
+        width: 500,
+        height: 40,
+        text: "scores.push(60);",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-code3,
+        kind: text,
+        x: 300,
+        y: 306,
+        width: 500,
+        height: 40,
+        text: 'println!("{first}");',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-first,
+        kind: text,
+        x: 300,
+        y: 384,
+        width: 80,
+        height: 40,
+        text: "first",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-first-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 376,
+        y: 378,
+        width: 76,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-old-box,
+        kind: rectangle,
+        x: 460,
+        y: 368,
+        width: 220,
+        height: 64,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-old-text,
+        kind: text,
+        x: 480,
+        y: 384,
+        width: 190,
+        height: 40,
+        text: "90  80  70",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-move-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 694,
+        y: 378,
+        width: 92,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-new-box,
+        kind: rectangle,
+        x: 800,
+        y: 368,
+        width: 290,
+        height: 64,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-new-text,
+        kind: text,
+        x: 818,
+        y: 384,
+        width: 260,
+        height: 40,
+        text: "90  80  70  60",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-new-label,
+        kind: text,
+        x: 800,
+        y: 444,
+        width: 280,
+        height: 40,
+        text: "a bigger block",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 460,
+        y: 368,
+        width: 220,
+        height: 64,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-old-label,
+        kind: text,
+        x: 460,
+        y: 444,
+        width: 300,
+        height: 40,
+        text: "old block: freed",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-err1,
+        kind: text,
+        x: 300,
+        y: 518,
+        width: 790,
+        height: 40,
+        text: "error[E0502]: cannot borrow `scores` as mutable",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-err2,
+        kind: text,
+        x: 300,
+        y: 558,
+        width: 790,
+        height: 40,
+        text: "because it is also borrowed as immutable",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-rule,
+        kind: text,
+        x: 300,
+        y: 606,
+        width: 790,
+        height: 40,
+        text: "many readers, or one writer",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -155,108 +566,384 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "count: 3\nfirst: 90\ntotal: 240\n"
+      stdout: "[90, 80, 70] has 3 scores\nAna got 90\nnobody at index 5\ntotal: 240\nwith bonus: [95, 85, 75]\n"
       stderr: ""
 
 scenes:
   - id: what-is-a-vec
+    chapter: A list that can grow
     narration: >
-      [[mark:board]] A Vec is a list that grows as you need it, all one type.
-      [[mark:show-vec]] Here are three scores, at indices zero, one, and two.
-      [[mark:show-push]] push adds a new value onto the end — the Vec just
-      grows. [[mark:show-note]] It lives on the heap; read any slot by index, or
-      ask its length. [[mark:board-close]] Let's fill one.
+      You've seen arrays. Their length is fixed when you write the code. When
+      you don't know how many items you'll have, you use a Vec.
+      [[mark:draw-heap]] A Vec keeps its elements next to each other on the
+      heap, and every element has the same type: the T in Vec of T. Each one
+      has an index, starting at zero.
+      [[mark:draw-var]] The variable holds a pointer to them, the length,
+      and the capacity: how many elements fit before it needs more room.
+      [[mark:draw-push]] push adds a new element at the end, into that room.
+      [[mark:draw-grow]] When the room runs out, the Vec moves everything to
+      a bigger block. You'll see why that matters.
     sources:
       - title: "The Rust Book — Storing Lists of Values with Vectors"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html"
+      - title: "std::vec::Vec — Capacity and reallocation"
+        url: "https://doc.rust-lang.org/std/vec/struct.Vec.html#capacity-and-reallocation"
+      - title: "The Rust Book — The Array Type"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#the-array-type"
     actions:
-      - id: open-board
+      # Opens in the quiet handle before the first word, already titled.
+      - id: open-board-vec
         type: whiteboard.apply
-        at: { mark: board }
+        at: { scene: start, offsetMs: -1500 }
         open: true
-        upsertIds: [vec-title, vec-arrlabel]
-      - id: show-vec
+        upsertIds: [v-title]
+      - id: draw-heap
         type: whiteboard.apply
-        at: { mark: show-vec }
+        at: { mark: draw-heap }
         upsertIds:
-          [vec-box0, vec-box1, vec-box2, vec-val0, vec-val1, vec-val2, vec-idx0, vec-idx1, vec-idx2]
-      - id: show-push
+          [v-heap, v-box0, v-val0, v-box1, v-val1, v-box2, v-val2, v-type, v-idx0, v-idx1, v-idx2]
+        drawMs: 3000
+      - id: draw-var
         type: whiteboard.apply
-        at: { mark: show-push }
-        upsertIds: [vec-boxnext, vec-pushlabel]
-      - id: show-note
+        at: { mark: draw-var }
+        upsertIds: [v-var-box, v-var-name, v-var-parts, v-arrow]
+        drawMs: 1800
+      - id: draw-push
         type: whiteboard.apply
-        at: { mark: show-note }
-        upsertIds: [vec-note]
-      - id: close-board
+        at: { mark: draw-push }
+        upsertIds: [v-spare, v-push]
+        drawMs: 1000
+      - id: draw-grow
         type: whiteboard.apply
-        at: { mark: board-close }
-        open: false
+        at: { mark: draw-grow }
+        upsertIds: [v-grow]
+        drawMs: 1600
 
-  - id: build-and-index
+  - id: new-and-push
     narration: >
-      [[mark:open]] Here we make an empty Vec and push three scores onto it.
-      Length is three. [[mark:type-index]] Add one indexed read.
-      [[mark:select-index]] Scores at zero is the first element, ninety.
+      Let's make one in the editor. [[mark:type-new]] We'll call it scores.
+      Vec::new gives you a new, empty Vec, and we'll fill it in a moment.
+      [[mark:select-mut]] Notice the mut. push changes the Vec, so the
+      variable has to be mutable. Without mut, the compiler rejects every
+      push, with error E0596: can't borrow scores as mutable.
+      [[mark:type-push]] Now let's push three scores. We never wrote the
+      element type. From these numbers, the compiler works out it's a Vec of
+      i32. The debug placeholder prints the whole Vec.
+    sources:
+      - title: "The Rust Book — Creating a New Vector"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#creating-a-new-vector"
+      - title: "The Rust Book — Updating a Vector"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#updating-a-vector"
+      - title: "Rust error codes — E0596"
+        url: "https://doc.rust-lang.org/error_codes/E0596.html"
+    actions:
+      - id: close-board-vec
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { scene: start, offsetMs: 900 }
+        path: main.rs
+      - id: type-new
+        type: editor.type
+        at: { mark: type-new, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "fn main() {\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: "    let mut scores = Vec::new();\n"
+      - id: select-mut
+        type: editor.select
+        at: { mark: select-mut }
+        target:
+          file: main.rs
+          text: "mut"
+          occurrence: 1
+      - id: type-push
+        type: editor.type
+        at: { mark: type-push }
+        target:
+          file: main.rs
+          after: "    let mut scores = Vec::new();\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    scores.push(90);\n    scores.push(80);\n    scores.push(70);\n    println!(\"{scores:?} has {} scores\", scores.len());\n"
+
+  - id: vec-macro
+    narration: >
+      [[mark:type-names]] When you already know the values, vec! is shorter.
+      [[mark:select-vec]] The exclamation mark means it's a macro, like
+      print line. It makes the Vec and fills it in one step. names never
+      changes, so it doesn't need mut.
+    sources:
+      - title: "The Rust Book — Creating a New Vector (vec!)"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#creating-a-new-vector"
+      - title: "std::vec! macro"
+        url: "https://doc.rust-lang.org/std/macro.vec.html"
+    actions:
+      - id: type-names
+        type: editor.type
+        at: { mark: type-names, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "scores.len());\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    let names = vec![\"Ana\", \"Ben\", \"Cho\"];\n"
+      - id: select-vec
+        type: editor.select
+        at: { mark: select-vec }
+        target:
+          file: main.rs
+          text: "vec!"
+          occurrence: 1
+
+  - id: index
+    chapter: Index or get
+    narration: >
+      [[mark:type-index]] To read one element, put its index in square
+      brackets. [[mark:select-index]] names at zero is the first name. But
+      what happens when the index is past the end?
     sources:
       - title: "The Rust Book — Reading Elements of Vectors"
         url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#reading-elements-of-vectors"
     actions:
-      - id: open-main
-        type: workspace.openFile
-        at: { mark: open }
-        path: main.rs
       - id: type-index
         type: editor.type
-        at: { mark: type-index, offsetMs: -400 }
+        at: { mark: type-index, offsetMs: -200 }
         target:
           file: main.rs
-          after: "    println!(\"count: {}\", scores.len());\n"
+          after: "    let names = vec![\"Ana\", \"Ben\", \"Cho\"];\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    println!(\"first: {}\", scores[0]);\n"
+        text: "    println!(\"{} got {}\", names[0], scores[0]);\n"
       - id: select-index
         type: editor.select
         at: { mark: select-index }
         target:
           file: main.rs
-          text: "scores[0]"
+          text: "names[0]"
           occurrence: 1
 
-  - id: iterate
+  - id: past-the-end
     narration: >
-      [[mark:type-loop]] To add them up, we loop over a reference to the Vec
-      and sum each score. [[mark:select-borrowed-loop]] The ampersands show that
-      we borrow the Vec and each score. The Vec stays ours after the loop.
+      With an array, the compiler caught a bad index, because it knew the
+      length. [[mark:draw-index]] A Vec's length is only known when the
+      program runs, so names at five compiles.
+      [[mark:draw-panic]] Then the program panics and stops: index out of
+      bounds, the len is three but the index is five.
+      [[mark:draw-get]] get is the safer way. It returns an
+      Option: Some with a reference to the element, or None when there's
+      nothing at that index.
+      [[mark:draw-safe]] No panic, and the compiler makes you handle None.
     sources:
-      - title: "The Rust Book — Iterating over the Values in a Vector"
-        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#iterating-over-the-values-in-a-vector"
+      - title: "The Rust Book — Reading Elements of Vectors"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#reading-elements-of-vectors"
+      - title: "std::vec::Vec::get (slice method)"
+        url: "https://doc.rust-lang.org/std/primitive.slice.html#method.get"
+      - title: "The Rust Book — Invalid Array Element Access"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#invalid-array-element-access"
     actions:
-      - id: type-loop
+      - id: open-board-end
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -300 }
+        open: true
+        clear: true
+        upsertIds: [r-title]
+      - id: draw-index
+        type: whiteboard.apply
+        at: { mark: draw-index }
+        upsertIds: [r-index, r-index-line]
+        drawMs: 1200
+      - id: draw-panic
+        type: whiteboard.apply
+        at: { mark: draw-panic }
+        upsertIds: [r-arrow1, r-panic, r-msg1, r-msg2]
+        drawMs: 2400
+      - id: draw-get
+        type: whiteboard.apply
+        at: { mark: draw-get }
+        upsertIds: [r-get0, r-arrow2, r-some, r-get5, r-arrow3, r-none]
+        drawMs: 2600
+      - id: draw-safe
+        type: whiteboard.apply
+        at: { mark: draw-safe }
+        upsertIds: [r-safe]
+        drawMs: 1400
+
+  - id: get-and-match
+    narration: >
+      [[mark:type-match]] Let's ask for index five with get, and match on the
+      answer. [[mark:select-none]] The None arm runs when the index is past the
+      end, and the program keeps going.
+    sources:
+      - title: "The Rust Book — The match Control Flow Construct"
+        url: "https://doc.rust-lang.org/book/ch06-02-match.html"
+      - title: "std::option::Option"
+        url: "https://doc.rust-lang.org/std/option/enum.Option.html"
+    actions:
+      - id: close-board-end
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -400 }
+        open: false
+      - id: type-match
         type: editor.type
-        at: { mark: type-loop, offsetMs: -400 }
+        at: { mark: type-match }
         target:
           file: main.rs
-          after: "    println!(\"first: {}\", scores[0]);\n"
+          after: "names[0], scores[0]);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let mut total = 0;\n    for &s in &scores {\n        total += s;\n    }\n    println!(\"total: {total}\");\n"
-      - id: select-borrowed-loop
+        text: "    match names.get(5) {\n        Some(name) => println!(\"found {name}\"),\n        None => println!(\"nobody at index 5\"),\n    }\n"
+      - id: select-none
         type: editor.select
-        at: { mark: select-borrowed-loop }
+        at: { mark: select-none }
         target:
           file: main.rs
-          text: "for &s in &scores {"
+          text: "None"
+          occurrence: 1
+
+  - id: reference-then-push
+    chapter: A reference, then a push
+    narration: >
+      Here's something the compiler won't allow with a Vec.
+      [[mark:draw-code]] Say you keep a reference to the first score, push,
+      and then use the reference.
+      [[mark:draw-old]] first points into the block that holds the elements.
+      [[mark:draw-move]] If that block is full, push moves every element to a
+      bigger block, and frees the old one.
+      [[mark:draw-strike]] Now first points at freed memory.
+      [[mark:draw-error]] So the compiler refuses, with error E0502: can't
+      borrow scores as mutable, because it's also borrowed as immutable. It
+      doesn't check whether there's room, because any push might move the
+      elements.
+      [[mark:draw-rule]] It's the borrowing rule you already know: many
+      readers, or one writer. first is still reading, so push can't write.
+    sources:
+      - title: "The Rust Book — Reading Elements of Vectors (why a reference blocks push)"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#reading-elements-of-vectors"
+      - title: "Rust error codes — E0502"
+        url: "https://doc.rust-lang.org/error_codes/E0502.html"
+      - title: "The Rust Book — Mutable References"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references"
+    actions:
+      - id: open-board-ref
+        type: whiteboard.apply
+        at: { scene: start }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-code
+        type: whiteboard.apply
+        at: { mark: draw-code }
+        upsertIds: [e-code1, e-code2, e-code3]
+        drawMs: 2000
+      - id: draw-old
+        type: whiteboard.apply
+        at: { mark: draw-old }
+        upsertIds: [e-first, e-first-arrow, e-old-box, e-old-text]
+        drawMs: 1800
+      - id: draw-move
+        type: whiteboard.apply
+        at: { mark: draw-move }
+        upsertIds: [e-move-arrow, e-new-box, e-new-text, e-new-label]
+        drawMs: 2200
+      - id: draw-strike
+        type: whiteboard.apply
+        at: { mark: draw-strike }
+        upsertIds: [e-strike, e-old-label]
+        drawMs: 1400
+      - id: draw-error
+        type: whiteboard.apply
+        at: { mark: draw-error }
+        upsertIds: [e-err1, e-err2]
+        drawMs: 2400
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [e-rule]
+        drawMs: 1200
+
+  - id: loop-read
+    chapter: Looping over a Vec
+    narration: >
+      [[mark:type-sum]] To visit every element, let's loop over a reference
+      to the Vec, and add up the scores. [[mark:select-ref]] The ampersand
+      borrows scores, so the loop only reads it. Without it, the loop would
+      take ownership, and you couldn't use scores again.
+      [[mark:select-star]] Each score is a reference too, so the star reads
+      the number it points at.
+    sources:
+      - title: "The Rust Book — Iterating Over the Values in a Vector"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#iterating-over-the-values-in-a-vector"
+      - title: "The Rust Reference — Dereference expressions"
+        url: "https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-dereference-operator"
+    actions:
+      - id: close-board-ref
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -400 }
+        open: false
+      - id: type-sum
+        type: editor.type
+        at: { mark: type-sum }
+        target:
+          file: main.rs
+          after: "        None => println!(\"nobody at index 5\"),\n    }\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    let mut total = 0;\n    for score in &scores {\n        total += *score;\n    }\n    println!(\"total: {total}\");\n"
+      - id: select-ref
+        type: editor.select
+        at: { mark: select-ref }
+        target:
+          file: main.rs
+          text: "&scores"
+          occurrence: 1
+      - id: select-star
+        type: editor.select
+        at: { mark: select-star }
+        target:
+          file: main.rs
+          text: "*score"
+          occurrence: 1
+
+  - id: loop-write
+    narration: >
+      [[mark:type-bonus]] To change every element, let's loop over a mutable
+      reference instead. [[mark:select-mut-ref]] With ampersand mut, each
+      score is a mutable reference. So the star writes through it, and adds
+      five to the score inside the Vec.
+    sources:
+      - title: "The Rust Book — Iterating Over the Values in a Vector"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#iterating-over-the-values-in-a-vector"
+    actions:
+      - id: type-bonus
+        type: editor.type
+        at: { mark: type-bonus, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "    println!(\"total: {total}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    for score in &mut scores {\n        *score += 5;\n    }\n    println!(\"with bonus: {scores:?}\");\n"
+      - id: select-mut-ref
+        type: editor.select
+        at: { mark: select-mut-ref }
+        target:
+          file: main.rs
+          text: "&mut scores"
           occurrence: 1
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Three scores, the first is ninety, and they
-      total two hundred forty. A Vec is the list you reach for when the size
-      isn't fixed.
+      [[mark:run]] Let's run it. Three scores, and Ana got ninety. Index five
+      gave us None, with no panic. The total is two hundred forty, and with
+      the bonus, every score went up by five.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — Iterating Over the Values in a Vector"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#iterating-over-the-values-in-a-vector"
     actions:
       - id: run
         type: runtime.run
@@ -265,13 +952,26 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "total: 240"
+        contains: "with bonus: [95, 85, 75]"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "for &s in &scores {"
+        contains: "for score in &mut scores {"
+
+  - id: wrap
+    narration: >
+      So a Vec is a list of one type that can grow. Use push with mut, vec!
+      when you know the values, get when an index might be missing, and a
+      reference in the for loop. But don't push while you're still using a
+      reference into it. Next, strings. A String is built on a Vec of bytes.
+    sources:
+      - title: "The Rust Book — Storing Lists of Values with Vectors"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html"
+      - title: "The Rust Book — What Is a String?"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#what-is-a-string"
+    actions: []
 
 checks:
   - { type: timing.p95Ms, max: 300 }
