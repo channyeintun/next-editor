@@ -214,7 +214,7 @@ Go, Kotlin, Rust, Zig and Haskell remain limited to their Playground services.
 Two lesson types need **no service at all**, for two different reasons. `kitec` is a Rust
 program — normally a native binary you install — and Rust builds for WebAssembly
 too, so Run and Format instantiate a Wasm build of that same compiler in the
-page: no proxy, no sign-in, no rate limit, and no lesson that stops working
+page: no proxy, no rate limit, and no lesson that stops working
 because a public playground is down. (Note for narration: the compiler is not
 "made of" WebAssembly — Wasm is what Kite _compiles to_, and separately what
 this page's build of the compiler runs as.) Its fixture `transientErrorKinds` therefore admits only

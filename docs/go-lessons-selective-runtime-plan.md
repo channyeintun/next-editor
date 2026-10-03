@@ -4,6 +4,11 @@
 > Live Go tool requests are guarded by `GO_PLAYGROUND_ENABLED` in `infra/wrangler.toml`; keep the
 > flag disabled until the Phase 0 upstream-contact checklist below is complete.
 >
+> Since 2026-10-03, Run and Format no longer require sign-in, which replaces locked choice 8, §5.2
+> steps 4–5, and the authentication items below. Signed-out learners are rate-limited by client IP
+> and signed-in learners by user id, with the same budgets (see the `[[ratelimits]]` block in
+> `infra/wrangler.toml`).
+>
 > This plan adds pure Go lessons to Next Editor by calling the official Go Playground compile and
 > formatting APIs.
 > It does not use Cloudflare Containers and does not integrate, modify, copy, replace, or depend on

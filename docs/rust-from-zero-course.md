@@ -55,8 +55,9 @@ deck. Every other visual is a whiteboard diagram drawn in as the narration expla
   way in every lesson. Listen once in lesson 1 and decide whether that's the sound you want.
 - **Pacing.** Every lesson compiles without inserted silence against estimated dialog lengths; the
   real voice can still run longer or shorter than the estimate.
-- **Run in the published lesson.** Learners must be signed in to press Run in a Rust lesson (the
-  Rust Playground proxy requires a session). The recorded run replays for everyone.
+- **Run in the published lesson.** Learners can press Run in a Rust lesson without signing in (the
+  Rust Playground proxy rate-limits signed-out learners by IP). The recorded run replays for
+  everyone.
 
 ## Replacing the July borrowing lesson
 

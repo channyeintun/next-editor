@@ -229,8 +229,8 @@ browser, as above).
   replay the script's pinned result through the same console formatting/store
   path as a live run, after a fixed planned latency. It works signed-out and
   offline; the manifest records `runtimeMode: "fixture"`.
-- `live`: Go/Kotlin/Rust/Zig/Haskell call their authenticated Playground
-  proxy, while Kite and asm run their in-page compiler/assembler. JavaScript,
+- `live`: Go/Kotlin/Rust/Zig/Haskell call their Playground proxy, which needs
+  no sign-in, while Kite and asm run their in-page compiler/assembler. JavaScript,
   TypeScript, and console-only Python run their pinned commands in the
   WebContainer and therefore require `live`; JS/TS additionally wait for the
   declared preview server and acknowledged iframe bridge.
