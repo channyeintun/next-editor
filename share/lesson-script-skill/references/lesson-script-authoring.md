@@ -624,5 +624,5 @@ of the previous board while wiping the rest works.
 
 `examples/rust-borrow.yaml` (bundled beside this document) is the canonical
 example: eleven scenes, published-deck slides, keystroke and line-by-line
-typing, run + gates, in the conversational persona register. Start from a copy
-of it.
+typing, run + gates. Its narration is Burmese: copy its structure, and write
+English narration by the persona guide.

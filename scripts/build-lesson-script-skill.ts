@@ -165,8 +165,9 @@ export function buildReference(canonical: string): string {
     out,
     lines(
       "`src/studio/scripts/rust-borrow.yaml` is the canonical example: eleven scenes,",
-      "published-deck slides, keystroke and line-by-line typing, run + gates, in the",
-      "conversational persona register. Start from a copy of it. Smaller historical",
+      "published-deck slides, keystroke and line-by-line typing, run + gates. Its narration",
+      "is Burmese (it is lesson 7 of the Burmese Rust from zero course): copy its structure,",
+      "and write English narration by studio-persona.md. Smaller historical",
       "pilots (Go, incl. whiteboard + retry-fixture usage) live as test fixtures",
       "under `src/studio/script/__fixtures__/`.",
       "",
@@ -182,8 +183,8 @@ export function buildReference(canonical: string): string {
     lines(
       "`examples/rust-borrow.yaml` (bundled beside this document) is the canonical",
       "example: eleven scenes, published-deck slides, keystroke and line-by-line",
-      "typing, run + gates, in the conversational persona register. Start from a copy",
-      "of it.",
+      "typing, run + gates. Its narration is Burmese: copy its structure, and write",
+      "English narration by the persona guide.",
     ),
   );
 
