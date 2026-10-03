@@ -1,13 +1,41 @@
-# One idea: a slice is a borrowed view into part of a collection — a pointer
-# plus a length, no copy — spelled &str for strings and &[T] for arrays. A
-# whiteboard sketch, then an array slice and a slice-taking function, run.
+# Rust from zero, lesson 8: slices.
+#
+# The arc: a whiteboard draws the String "hello world" as eleven numbered
+# bytes, frames &s[0..5] over "hello", and shows what the slice really is (a
+# pointer to the first byte plus a length, borrowing s — no copy). The editor
+# then builds string slices with range syntax (0..5, then the open-ended 6..),
+# an array slice typed &[i32] (len and index from the slice's own start), a
+# string literal annotated &str, and first_word, a function that returns a
+# slice of its input. With &text[..i] highlighted, the narration asks WHY a
+# returned slice beats a returned position; a second board answers it:
+# clearing s while word is still in use is E0502, its three rustc labels drawn
+# one per clause — the lesson is insert-only with one run, so the broken
+# program is never typed.
+# One run at the end.
+#
+# The E0502 text on board 2 was confirmed with rustc 1.98 (edition 2024) on
+# the broken variant `let mut s = …; let word = first_word(&s); s.clear();
+# println!("{word}");`:
+#   error[E0502]: cannot borrow `s` as mutable because it is also borrowed as immutable
+#   -- immutable borrow occurs here        (on &s)
+#   ^^ mutable borrow occurs here          (on s.clear())
+#   -- immutable borrow later used here    (on word)
+# Without `mut` the same lines give E0596 instead, which is why the board's
+# first line declares `let mut s`. The position-returning version
+# (first_word_end -> usize) compiles and keeps a stale 5 after s.clear().
+#
+# Board colours: orange = the String's bytes (the data that can change, and
+# the shared borrows of it), blue = the slice (frame, range, pointer + length),
+# violet = what the slice sees, green = safe (no copy, caught at compile
+# time), red = the error and the writer it rejects. #1e1e1e paints white.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-slices.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-slices
-  title: "Rust slices: a borrowed view of your data"
+  title: "Rust from zero: Slices"
   locale: en-US
   workspace:
     lessonType: rust
@@ -16,172 +44,603 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let text = String::from("borrow checker");
-            let word = &text[0..6];
-            println!("slice: {word}");
+            let s = String::from("hello world");
         }
-  # Diagram: the array [10,20,30,40,50] drawn as 5 indexed boxes, with a
-  # highlighted frame over indices 1..4 (the slice) and its value + note.
   whiteboardAssets:
-    - id: sl-title
-      kind: text
-      x: 320
-      y: 175
-      width: 760
-      height: 44
-      text: "A slice — a window into an array"
-      strokeColor: "#1e1e1e"
-      fontSize: 34
-    - id: sl-box0
-      kind: rectangle
-      x: 340
-      y: 300
-      width: 92
-      height: 84
-      strokeColor: "#1e1e1e"
-    - id: sl-box1
-      kind: rectangle
-      x: 440
-      y: 300
-      width: 92
-      height: 84
-      strokeColor: "#1e1e1e"
-    - id: sl-box2
-      kind: rectangle
-      x: 540
-      y: 300
-      width: 92
-      height: 84
-      strokeColor: "#1e1e1e"
-    - id: sl-box3
-      kind: rectangle
-      x: 640
-      y: 300
-      width: 92
-      height: 84
-      strokeColor: "#1e1e1e"
-    - id: sl-box4
-      kind: rectangle
-      x: 740
-      y: 300
-      width: 92
-      height: 84
-      strokeColor: "#1e1e1e"
-    - id: sl-val0
-      kind: text
-      x: 368
-      y: 324
-      width: 60
-      height: 40
-      text: "10"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: sl-val1
-      kind: text
-      x: 468
-      y: 324
-      width: 60
-      height: 40
-      text: "20"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: sl-val2
-      kind: text
-      x: 568
-      y: 324
-      width: 60
-      height: 40
-      text: "30"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: sl-val3
-      kind: text
-      x: 668
-      y: 324
-      width: 60
-      height: 40
-      text: "40"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: sl-val4
-      kind: text
-      x: 768
-      y: 324
-      width: 60
-      height: 40
-      text: "50"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: sl-idx0
-      kind: text
-      x: 380
-      y: 398
-      width: 30
-      height: 26
-      text: "0"
-      strokeColor: "#80868b"
-      fontSize: 20
-    - id: sl-idx1
-      kind: text
-      x: 480
-      y: 398
-      width: 30
-      height: 26
-      text: "1"
-      strokeColor: "#80868b"
-      fontSize: 20
-    - id: sl-idx2
-      kind: text
-      x: 580
-      y: 398
-      width: 30
-      height: 26
-      text: "2"
-      strokeColor: "#80868b"
-      fontSize: 20
-    - id: sl-idx3
-      kind: text
-      x: 680
-      y: 398
-      width: 30
-      height: 26
-      text: "3"
-      strokeColor: "#80868b"
-      fontSize: 20
-    - id: sl-idx4
-      kind: text
-      x: 780
-      y: 398
-      width: 30
-      height: 26
-      text: "4"
-      strokeColor: "#80868b"
-      fontSize: 20
-    - id: sl-frame
-      kind: rectangle
-      x: 430
-      y: 288
-      width: 312
-      height: 108
-      strokeColor: "#1971c2"
-    - id: sl-slicelabel
-      kind: text
-      x: 430
-      y: 414
-      width: 560
-      height: 40
-      text: "&numbers[1..4]  =  [20, 30, 40]"
-      strokeColor: "#1971c2"
-      fontSize: 28
-    - id: sl-note
-      kind: text
-      x: 340
-      y: 472
-      width: 700
-      height: 36
-      text: "borrows a pointer + a length — no copy"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
+    # ---- Board 1: a slice is a view into data -----------------------------
+    - {
+        id: b-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 700,
+        height: 48,
+        text: "A slice is a view into data",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: b-s-label,
+        kind: text,
+        x: 420,
+        y: 336,
+        width: 200,
+        height: 40,
+        text: "s: String",
+        strokeColor: "#f08c00",
+        fontSize: 30,
+      }
+    # The bytes of "hello world": 11 boxes, 58px each, from x=330.
+    - {
+        id: b-byte0,
+        kind: rectangle,
+        x: 330,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-byte1,
+        kind: rectangle,
+        x: 388,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-byte2,
+        kind: rectangle,
+        x: 446,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-byte3,
+        kind: rectangle,
+        x: 504,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-byte4,
+        kind: rectangle,
+        x: 562,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-byte5,
+        kind: rectangle,
+        x: 620,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-byte6,
+        kind: rectangle,
+        x: 678,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-byte7,
+        kind: rectangle,
+        x: 736,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-byte8,
+        kind: rectangle,
+        x: 794,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-byte9,
+        kind: rectangle,
+        x: 852,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-byte10,
+        kind: rectangle,
+        x: 910,
+        y: 390,
+        width: 58,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    # Byte 5 is the space, so its box stays empty.
+    - {
+        id: b-ch0,
+        kind: text,
+        x: 350,
+        y: 402,
+        width: 24,
+        height: 36,
+        text: "h",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ch1,
+        kind: text,
+        x: 408,
+        y: 402,
+        width: 24,
+        height: 36,
+        text: "e",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ch2,
+        kind: text,
+        x: 468,
+        y: 402,
+        width: 24,
+        height: 36,
+        text: "l",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ch3,
+        kind: text,
+        x: 526,
+        y: 402,
+        width: 24,
+        height: 36,
+        text: "l",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ch4,
+        kind: text,
+        x: 582,
+        y: 402,
+        width: 24,
+        height: 36,
+        text: "o",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ch6,
+        kind: text,
+        x: 696,
+        y: 402,
+        width: 24,
+        height: 36,
+        text: "w",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ch7,
+        kind: text,
+        x: 756,
+        y: 402,
+        width: 24,
+        height: 36,
+        text: "o",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ch8,
+        kind: text,
+        x: 815,
+        y: 402,
+        width: 24,
+        height: 36,
+        text: "r",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ch9,
+        kind: text,
+        x: 874,
+        y: 402,
+        width: 24,
+        height: 36,
+        text: "l",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ch10,
+        kind: text,
+        x: 930,
+        y: 402,
+        width: 24,
+        height: 36,
+        text: "d",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix0,
+        kind: text,
+        x: 350,
+        y: 470,
+        width: 24,
+        height: 36,
+        text: "0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix1,
+        kind: text,
+        x: 408,
+        y: 470,
+        width: 24,
+        height: 36,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix2,
+        kind: text,
+        x: 466,
+        y: 470,
+        width: 24,
+        height: 36,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix3,
+        kind: text,
+        x: 524,
+        y: 470,
+        width: 24,
+        height: 36,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix4,
+        kind: text,
+        x: 582,
+        y: 470,
+        width: 24,
+        height: 36,
+        text: "4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix5,
+        kind: text,
+        x: 640,
+        y: 470,
+        width: 24,
+        height: 36,
+        text: "5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix6,
+        kind: text,
+        x: 698,
+        y: 470,
+        width: 24,
+        height: 36,
+        text: "6",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix7,
+        kind: text,
+        x: 756,
+        y: 470,
+        width: 24,
+        height: 36,
+        text: "7",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix8,
+        kind: text,
+        x: 814,
+        y: 470,
+        width: 24,
+        height: 36,
+        text: "8",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix9,
+        kind: text,
+        x: 872,
+        y: 470,
+        width: 24,
+        height: 36,
+        text: "9",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ix10,
+        kind: text,
+        x: 922,
+        y: 470,
+        width: 36,
+        height: 36,
+        text: "10",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # The slice: a frame over bytes 0..5, its range, and what it sees.
+    - {
+        id: b-frame,
+        kind: rectangle,
+        x: 322,
+        y: 382,
+        width: 306,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-range,
+        kind: text,
+        x: 322,
+        y: 522,
+        width: 150,
+        height: 40,
+        text: "&s[0..5]",
+        strokeColor: "#1971c2",
+        fontSize: 30,
+      }
+    - {
+        id: b-result,
+        kind: text,
+        x: 490,
+        y: 522,
+        width: 200,
+        height: 40,
+        text: '= "hello"',
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    # What the slice holds: a pointer to the first byte, and a length.
+    - {
+        id: b-var-box,
+        kind: rectangle,
+        x: 300,
+        y: 214,
+        width: 320,
+        height: 104,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-var-name,
+        kind: text,
+        x: 318,
+        y: 224,
+        width: 280,
+        height: 40,
+        text: "hello: &str",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-var-parts,
+        kind: text,
+        x: 318,
+        y: 270,
+        width: 280,
+        height: 40,
+        text: "ptr | len = 5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 334,
+        y: 322,
+        width: 46,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-nocopy,
+        kind: text,
+        x: 322,
+        y: 584,
+        width: 520,
+        height: 40,
+        text: "no copy: it borrows s",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board 2: the compiler's answer (E0502) ----------------------------
+    - {
+        id: e-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 780,
+        height: 48,
+        text: "Clear s while word is in use",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: e-line1,
+        kind: text,
+        x: 300,
+        y: 220,
+        width: 660,
+        height: 40,
+        text: 'let mut s = String::from("hello world");',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-line2,
+        kind: text,
+        x: 300,
+        y: 266,
+        width: 420,
+        height: 40,
+        text: "let word = first_word(&s);",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-line3,
+        kind: text,
+        x: 300,
+        y: 312,
+        width: 180,
+        height: 40,
+        text: "s.clear();",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-line4,
+        kind: text,
+        x: 300,
+        y: 358,
+        width: 320,
+        height: 40,
+        text: 'println!("{word}");',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-msg1,
+        kind: text,
+        x: 300,
+        y: 432,
+        width: 700,
+        height: 40,
+        text: "error[E0502]: cannot borrow `s` as mutable",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-msg2,
+        kind: text,
+        x: 300,
+        y: 474,
+        width: 700,
+        height: 40,
+        text: "because it is also borrowed as immutable",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Underlines sit on the exact spans rustc marks (offsets measured in
+    # Virgil 28px): &s at x 616-652, s.clear() at 300-411, word at 426-487.
+    - {
+        id: e-u2,
+        kind: freedraw,
+        stroke: underline,
+        x: 610,
+        y: 276,
+        width: 48,
+        height: 24,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-l2,
+        kind: text,
+        x: 760,
+        y: 266,
+        width: 300,
+        height: 40,
+        text: "immutable borrow",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-u3,
+        kind: freedraw,
+        stroke: underline,
+        x: 296,
+        y: 322,
+        width: 120,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-l3,
+        kind: text,
+        x: 760,
+        y: 312,
+        width: 300,
+        height: 40,
+        text: "mutable borrow",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-u4,
+        kind: freedraw,
+        stroke: underline,
+        x: 420,
+        y: 368,
+        width: 72,
+        height: 24,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-l4,
+        kind: text,
+        x: 760,
+        y: 358,
+        width: 300,
+        height: 40,
+        text: "later used here",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-safe,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 600,
+        height: 40,
+        text: "caught before the program runs",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -194,146 +653,373 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "slice: borrow\nmiddle: [20, 30, 40]\nsum: 90\n"
+      stdout: "hello and world\nmiddle: 3 numbers, first 20\nfirst words: hello, slices\n"
       stderr: ""
 
 scenes:
-  - id: what-is-a-slice
+  - id: view
+    chapter: A view into data
     narration: >
-      [[mark:board]] A slice is a borrowed window into part of a collection.
-      [[mark:show-array]] Here's an array of five numbers, at indices zero
-      through four. [[mark:show-slice]] A slice from index one up to four takes
-      the three middle values — twenty, thirty, forty. [[mark:show-note]] It
-      borrows them through a pointer and a length; nothing is copied.
-      [[mark:board-close]] The same idea works on strings. Let's build it.
+      Often you need only part of some data, like the first word of a
+      sentence. Copying it out costs time and memory, so Rust gives you a
+      slice instead.
+      [[mark:draw-bytes]] Here's a String, s, holding hello world. Each box is
+      one byte of its text, numbered from zero.
+      [[mark:draw-frame]] A slice is a view of a range of those bytes. This
+      one starts at zero and stops before five, so it sees hello.
+      [[mark:draw-parts]] Its type is ampersand str, a string slice. It
+      doesn't copy the text. It holds only a pointer to the first byte, and a
+      length.
+      [[mark:draw-borrow]] It's also a reference, so it borrows s, and the
+      borrowing rules apply to it.
     sources:
       - title: "The Rust Book — The Slice Type"
-        url: "https://doc.rust-lang.org/book/ch04-03-slices.html"
-    actions:
-      - id: open-board
-        type: whiteboard.apply
-        at: { mark: board }
-        open: true
-        upsertIds: [sl-title]
-      - id: show-array
-        type: whiteboard.apply
-        at: { mark: show-array }
-        upsertIds:
-          [
-            sl-box0,
-            sl-box1,
-            sl-box2,
-            sl-box3,
-            sl-box4,
-            sl-val0,
-            sl-val1,
-            sl-val2,
-            sl-val3,
-            sl-val4,
-            sl-idx0,
-            sl-idx1,
-            sl-idx2,
-            sl-idx3,
-            sl-idx4,
-          ]
-      - id: show-slice
-        type: whiteboard.apply
-        at: { mark: show-slice }
-        upsertIds: [sl-frame, sl-slicelabel]
-      - id: show-note
-        type: whiteboard.apply
-        at: { mark: show-note }
-        upsertIds: [sl-note]
-      - id: close-board
-        type: whiteboard.apply
-        at: { mark: board-close }
-        open: false
-
-  - id: string-and-array
-    narration: >
-      [[mark:open]] Here's a String. [[mark:select-string-slice]] Word borrows
-      the first six bytes. That's a string slice, written &str.
-      [[mark:type-arr]] Now an array. [[mark:select-array-slice]] We slice index
-      one up to four and print it. Middle is a view of three numbers borrowed
-      from the array. Nothing was copied.
-    sources:
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#the-slice-type"
       - title: "The Rust Book — String Slices"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices"
     actions:
+      # Opens in the quiet handle before the first word, already titled.
+      - id: open-board-view
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1500 }
+        open: true
+        upsertIds: [b-title]
+      - id: draw-bytes
+        type: whiteboard.apply
+        at: { mark: draw-bytes }
+        upsertIds:
+          [
+            b-s-label,
+            b-byte0,
+            b-byte1,
+            b-byte2,
+            b-byte3,
+            b-byte4,
+            b-byte5,
+            b-byte6,
+            b-byte7,
+            b-byte8,
+            b-byte9,
+            b-byte10,
+            b-ch0,
+            b-ch1,
+            b-ch2,
+            b-ch3,
+            b-ch4,
+            b-ch6,
+            b-ch7,
+            b-ch8,
+            b-ch9,
+            b-ch10,
+            b-ix0,
+            b-ix1,
+            b-ix2,
+            b-ix3,
+            b-ix4,
+            b-ix5,
+            b-ix6,
+            b-ix7,
+            b-ix8,
+            b-ix9,
+            b-ix10,
+          ]
+        drawMs: 3200
+      - id: draw-frame
+        type: whiteboard.apply
+        at: { mark: draw-frame }
+        upsertIds: [b-frame, b-range, b-result]
+        drawMs: 1600
+      - id: draw-parts
+        type: whiteboard.apply
+        at: { mark: draw-parts }
+        upsertIds: [b-var-box, b-var-name, b-var-parts, b-arrow]
+        drawMs: 2000
+      - id: draw-borrow
+        type: whiteboard.apply
+        at: { mark: draw-borrow }
+        upsertIds: [b-nocopy]
+        drawMs: 1200
+
+  - id: string-slices
+    chapter: Slicing strings and arrays
+    narration: >
+      Let's write that in code. [[mark:open-main]] Here's s, our String.
+      [[mark:type-hello]] To make a slice, write an ampersand, the variable,
+      and a range in square brackets.
+      [[mark:select-range]] Zero dot dot five starts at index zero and stops
+      before five. The end isn't included, so this slice is five bytes long.
+      [[mark:type-world]] You can leave out either end of a range.
+      [[mark:select-open-end]] Six dot dot, with nothing after it, runs to the
+      end. Leave out the start, and it begins at zero. Leave out both, and you
+      get the whole string.
+    sources:
+      - title: "The Rust Book — String Slices"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices"
+      - title: "The Rust Reference — Range expressions"
+        url: "https://doc.rust-lang.org/reference/expressions/range-expr.html"
+    actions:
+      - id: close-board-view
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: open-main
         type: workspace.openFile
-        at: { mark: open }
+        at: { mark: open-main }
         path: main.rs
-      - id: select-string-slice
-        type: editor.select
-        at: { mark: select-string-slice }
-        target:
-          file: main.rs
-          text: "&text[0..6]"
-          occurrence: 1
-      - id: type-arr
+      - id: type-hello
         type: editor.type
-        at: { mark: type-arr, offsetMs: -400 }
+        at: { mark: type-hello }
         target:
           file: main.rs
-          after: "    println!(\"slice: {word}\");\n"
+          after: "    let s = String::from(\"hello world\");\n"
+          occurrence: 1
+        cadence: natural
+        text: "    let hello = &s[0..5];\n"
+      - id: select-range
+        type: editor.select
+        at: { mark: select-range }
+        target:
+          file: main.rs
+          text: "0..5"
+          occurrence: 1
+      - id: type-world
+        type: editor.type
+        at: { mark: type-world }
+        target:
+          file: main.rs
+          after: "    let hello = &s[0..5];\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let numbers = [10, 20, 30, 40, 50];\n    let middle = &numbers[1..4];\n    println!(\"middle: {middle:?}\");\n"
-      - id: select-array-slice
+        text: "    let world = &s[6..];\n    println!(\"{hello} and {world}\");\n"
+      - id: select-open-end
         type: editor.select
-        at: { mark: select-array-slice }
+        at: { mark: select-open-end }
         target:
           file: main.rs
-          text: "&numbers[1..4]"
+          text: "6.."
           occurrence: 1
 
-  - id: slice-parameter
+  - id: array-slices
     narration: >
-      [[mark:type-sum]] Why are slices useful? Let's add sum.
-      [[mark:select-slice-parameter]] It takes a slice of i32 and works on any
-      length. It adds whatever it gets and returns the total.
-      [[mark:type-call]] We pass middle to it directly.
+      [[mark:type-array]] Slices work on arrays too. Here's an array, and a
+      slice of it from index one, stopping before four.
+      [[mark:select-array-type]] An array slice's type is an ampersand, then
+      the element type in square brackets. There's no length in it. The slice
+      carries its length, so one type fits any length.
+      [[mark:select-middle-zero]] Indexes count from the start of the slice,
+      so middle at zero is twenty.
     sources:
-      - title: "The Rust Book — Slices as Parameters"
+      - title: "The Rust Book — Other Slices"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#other-slices"
+      - title: "std — primitive type slice"
+        url: "https://doc.rust-lang.org/std/primitive.slice.html"
     actions:
-      - id: type-sum
+      - id: type-array
         type: editor.type
-        at: { mark: type-sum, offsetMs: -400 }
+        at: { mark: type-array, offsetMs: -400 }
         target:
           file: main.rs
-          after: "    println!(\"middle: {middle:?}\");\n}\n"
+          after: "    println!(\"{hello} and {world}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\nfn sum(slice: &[i32]) -> i32 {\n    let mut total = 0;\n    for &n in slice {\n        total += n;\n    }\n    total\n}\n"
-      - id: select-slice-parameter
+        text: "\n    let numbers = [10, 20, 30, 40, 50];\n    let middle: &[i32] = &numbers[1..4];\n    println!(\"middle: {} numbers, first {}\", middle.len(), middle[0]);\n"
+      - id: select-array-type
         type: editor.select
-        at: { mark: select-slice-parameter }
+        at: { mark: select-array-type }
         target:
           file: main.rs
           text: "&[i32]"
           occurrence: 1
-      - id: type-call
-        type: editor.type
-        at: { mark: type-call }
+      - id: select-middle-zero
+        type: editor.select
+        at: { mark: select-middle-zero }
         target:
           file: main.rs
-          after: "    println!(\"middle: {middle:?}\");\n"
+          text: "middle[0]"
+          occurrence: 1
+
+  - id: literals
+    narration: >
+      [[mark:type-phrase]] Now a string literal, like the ones in your first
+      program. [[mark:select-literal-type]] Its type is ampersand str,
+      so a literal is a string slice, too. The text is stored inside your
+      compiled program, and phrase points at it. A shared reference can only read, so
+      a literal can't change.
+    sources:
+      - title: "The Rust Book — String Literals as Slices"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-literals-as-slices"
+      - title: "std — primitive type str"
+        url: "https://doc.rust-lang.org/std/primitive.str.html"
+    actions:
+      - id: type-phrase
+        type: editor.type
+        at: { mark: type-phrase, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "middle.len(), middle[0]);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    println!(\"sum: {}\", sum(middle));\n"
+        text: "\n    let phrase: &str = \"slices borrow data\";\n"
+      - id: select-literal-type
+        type: editor.select
+        at: { mark: select-literal-type }
+        target:
+          file: main.rs
+          text: "&str"
+          occurrence: 1
+
+  - id: first-word
+    chapter: Returning a slice
+    narration: >
+      [[mark:type-fn]] Now let's use slices in a function, first_word. It
+      takes a string slice, and it returns one.
+      [[mark:select-indices]] char_indices gives you each character, with its
+      byte position, as a tuple. When the loop finds a space, it returns the
+      slice up to that position. With no space, the whole text is one word,
+      so it returns all of it.
+      [[mark:select-return]] The return type is a string slice as well. So
+      the result isn't a new String. It's a view into the text you passed in.
+    sources:
+      - title: "The Rust Book — String Slices as Parameters"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices-as-parameters"
+      - title: "std — str::char_indices"
+        url: "https://doc.rust-lang.org/std/primitive.str.html#method.char_indices"
+    actions:
+      - id: type-fn
+        type: editor.type
+        at: { mark: type-fn, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: ""
+          occurrence: 1
+        cadence: line-by-line
+        text: "fn first_word(text: &str) -> &str {\n    for (i, c) in text.char_indices() {\n        if c == ' ' {\n            return &text[..i];\n        }\n    }\n    text\n}\n\n"
+      - id: select-indices
+        type: editor.select
+        at: { mark: select-indices }
+        target:
+          file: main.rs
+          text: "text.char_indices()"
+          occurrence: 1
+      - id: select-return
+        type: editor.select
+        at: { mark: select-return }
+        target:
+          file: main.rs
+          text: "-> &str"
+          occurrence: 1
+
+  - id: call
+    narration: >
+      [[mark:type-calls]] Let's call it with s, and with phrase.
+      [[mark:select-ref-s]] For s, we pass a reference to a
+      String. Rust converts it to a string slice for you, so first_word
+      accepts both.
+    sources:
+      - title: "The Rust Book — String Slices as Parameters"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices-as-parameters"
+      - title: "The Rust Book — Implicit Deref Coercions with Functions and Methods"
+        url: "https://doc.rust-lang.org/book/ch15-02-deref.html#implicit-deref-coercions-with-functions-and-methods"
+    actions:
+      - id: type-calls
+        type: editor.type
+        at: { mark: type-calls }
+        target:
+          file: main.rs
+          after: "    let phrase: &str = \"slices borrow data\";\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let word = first_word(&s);\n    let other = first_word(phrase);\n    println!(\"first words: {word}, {other}\");\n"
+      - id: select-ref-s
+        type: editor.select
+        at: { mark: select-ref-s }
+        target:
+          file: main.rs
+          text: "first_word(&s)"
+          occurrence: 1
+
+  - id: compiler-check
+    chapter: What the compiler checks
+    narration: >
+      Why return a slice here, and not the position of the space, like five?
+      That number isn't connected to s. Call clear to empty s, and you still
+      have five, but the text is gone. Nothing warns you.
+      [[mark:draw-code]] A slice is a borrow, so the compiler can check it.
+      Let's make s mutable, and clear it while word is still in use.
+      [[mark:draw-error]] The compiler stops with error E0502. It says s
+      can't be borrowed as mutable, because it's also borrowed as immutable.
+      [[mark:draw-reader]] First, word borrows s to read it.
+      [[mark:draw-writer]] Then clear needs to change s.
+      [[mark:draw-later]] And word is still used after that. A reader and a
+      writer at the same time: the borrowing rules don't allow it.
+      [[mark:draw-safe]] So the bug is caught before your program runs.
+    sources:
+      - title: "Rust error codes — E0502"
+        url: "https://doc.rust-lang.org/error_codes/E0502.html"
+      - title: "The Rust Book — String Slices"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices"
+    actions:
+      # The question is asked over the code it is about: the slice first_word
+      # returns. The board opens only when its code is spoken.
+      - id: select-slice-return
+        type: editor.select
+        at: { scene: start }
+        target:
+          file: main.rs
+          text: "&text[..i]"
+          occurrence: 1
+      - id: open-board-error
+        type: whiteboard.apply
+        at: { mark: draw-code }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-code
+        type: whiteboard.apply
+        at: { mark: draw-code }
+        upsertIds: [e-line1, e-line2, e-line3, e-line4]
+        drawMs: 2400
+      - id: draw-error
+        type: whiteboard.apply
+        at: { mark: draw-error }
+        upsertIds: [e-msg1, e-msg2]
+        drawMs: 2400
+      # One rustc label per clause, each underline on the exact span rustc
+      # marks (&s, s.clear(), word).
+      - id: draw-reader
+        type: whiteboard.apply
+        at: { mark: draw-reader }
+        upsertIds: [e-u2, e-l2]
+        drawMs: 1200
+      - id: draw-writer
+        type: whiteboard.apply
+        at: { mark: draw-writer }
+        upsertIds: [e-u3, e-l3]
+        drawMs: 1200
+      - id: draw-later
+        type: whiteboard.apply
+        at: { mark: draw-later }
+        upsertIds: [e-u4, e-l4]
+        drawMs: 1200
+      - id: draw-safe
+        type: whiteboard.apply
+        at: { mark: draw-safe }
+        upsertIds: [e-safe]
+        drawMs: 1200
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. The string slice prints borrow. The array
-      slice prints its three numbers, and sum returns ninety. Slices let you
-      pass parts of data safely, without copying — and the borrow checker keeps
-      every view valid.
+      Back to the code. [[mark:run]] Let's run it. Hello and world, two views
+      into one String. The array slice has three numbers, and the first is
+      twenty. And the first words are hello, and slices.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — The Slice Type"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html"
     actions:
+      - id: close-board-error
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: run
         type: runtime.run
         at: { mark: run, offsetMs: 200 }
@@ -341,13 +1027,25 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "sum: 90"
+        contains: "first words: hello, slices"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "fn sum(slice: &[i32]) -> i32 {"
+        contains: "return &text[..i];"
+
+  - id: wrap
+    narration: >
+      So a slice is a borrowed view into a String or an array: a pointer and
+      a length, with no copy, and the compiler keeps it valid. Next, structs:
+      your own types that group related data.
+    sources:
+      - title: "The Rust Book — The Slice Type"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#summary"
+      - title: "The Rust Book — Using Structs to Structure Related Data"
+        url: "https://doc.rust-lang.org/book/ch05-00-structs.html"
+    actions: []
 
 checks:
   - { type: timing.p95Ms, max: 300 }
