@@ -1,0 +1,572 @@
+# Rust from zero, lesson 1: your first program. A whiteboard shows what
+# happens between writing Rust and running it (the compiler checks the whole
+# file first); then fn main, println! and why it's a macro, the semicolon, a
+# comment, and the two kinds of placeholder ({} and {name}) are built live.
+# A second board shows two real compiler errors (E0423 for a missing `!`, and
+# the format-string argument count check), and one run ends the lesson.
+#
+# Every error quoted on the board or in the narration was confirmed with
+# `rustc --edition 2024` (rustc 1.98); the fixture is the final program's
+# exact stdout. Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-hello.yaml
+#
+# Narration says "print line" for println and "f n" for fn: the voice has no
+# lexicon entry for either token and would try to read them as words.
+schemaVersion: 1
+
+lesson:
+  slug: rust-hello
+  title: "Rust from zero: Your first program"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+        }
+  whiteboardAssets:
+    # Board 1 — how a Rust program goes from source to output.
+    # blue = the code you write, orange = the compiler (it changes code into a
+    # program), red = the error path, green = the program that works,
+    # violet = the result it prints.
+    - id: h-title
+      kind: text
+      x: 280
+      y: 160
+      width: 600
+      height: 48
+      text: "How Rust runs your code"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: h-src-box
+      kind: rectangle
+      x: 270
+      y: 250
+      width: 200
+      height: 100
+      strokeColor: "#1971c2"
+    - id: h-src-t
+      kind: text
+      x: 322
+      y: 280
+      width: 140
+      height: 40
+      text: "main.rs"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: h-src-l
+      kind: text
+      x: 290
+      y: 366
+      width: 200
+      height: 36
+      text: "you write it"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: h-arr-1
+      kind: freedraw
+      stroke: arrow-right
+      x: 482
+      y: 278
+      width: 66
+      height: 44
+      strokeColor: "#1e1e1e"
+    - id: h-cmp-box
+      kind: rectangle
+      x: 560
+      y: 250
+      width: 200
+      height: 100
+      strokeColor: "#f08c00"
+    - id: h-cmp-t
+      kind: text
+      x: 605
+      y: 280
+      width: 150
+      height: 40
+      text: "compiler"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: h-cmp-l
+      kind: text
+      x: 575
+      y: 366
+      width: 210
+      height: 36
+      text: "checks it all"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: h-arr-err
+      kind: freedraw
+      stroke: arrow-down
+      x: 636
+      y: 412
+      width: 48
+      height: 78
+      strokeColor: "#e03131"
+    - id: h-err-t
+      kind: text
+      x: 535
+      y: 506
+      width: 300
+      height: 36
+      text: "error: nothing runs"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: h-arr-2
+      kind: freedraw
+      stroke: arrow-right
+      x: 772
+      y: 278
+      width: 66
+      height: 44
+      strokeColor: "#1e1e1e"
+    - id: h-prog-box
+      kind: rectangle
+      x: 850
+      y: 250
+      width: 200
+      height: 100
+      strokeColor: "#2f9e44"
+    - id: h-prog-t
+      kind: text
+      x: 894
+      y: 280
+      width: 140
+      height: 40
+      text: "program"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: h-arr-out
+      kind: freedraw
+      stroke: arrow-down
+      x: 926
+      y: 366
+      width: 48
+      height: 124
+      strokeColor: "#6741d9"
+    - id: h-out-t
+      kind: text
+      x: 871
+      y: 506
+      width: 220
+      height: 36
+      text: "Hello, world!"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: h-rule
+      kind: text
+      x: 280
+      y: 586
+      width: 440
+      height: 44
+      text: "Checked before it runs"
+      strokeColor: "#2f9e44"
+      fontSize: 34
+    # Board 2 — two broken programs and what the compiler answers.
+    # white = the code, red = the mistake and the error, green = the fix the
+    # compiler suggests, orange = the caveat (nothing ran). The first
+    # underline sits under `println` only, where rustc's caret points ("not a
+    # function"); the second spans the whole call (the placeholders and the
+    # single value). Widths measured in Virgil at 30px.
+    - id: e-title
+      kind: text
+      x: 280
+      y: 160
+      width: 620
+      height: 48
+      text: "When the compiler says no"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: e-code1
+      kind: text
+      x: 280
+      y: 232
+      width: 520
+      height: 40
+      text: 'println("Hello, world!");'
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: e-mark1
+      kind: freedraw
+      stroke: underline
+      x: 278
+      y: 256
+      width: 92
+      height: 22
+      strokeColor: "#e03131"
+    - id: e-err1
+      kind: text
+      x: 280
+      y: 292
+      width: 720
+      height: 36
+      text: "error[E0423]: expected function, found macro"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: e-help1
+      kind: text
+      x: 280
+      y: 336
+      width: 560
+      height: 36
+      text: "help: use `!` to invoke the macro"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: e-code2
+      kind: text
+      x: 280
+      y: 418
+      width: 520
+      height: 40
+      text: 'println!("{} plus {}", 2);'
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: e-mark2
+      kind: freedraw
+      stroke: underline
+      x: 280
+      y: 442
+      width: 342
+      height: 22
+      strokeColor: "#e03131"
+    - id: e-err2a
+      kind: text
+      x: 280
+      y: 478
+      width: 760
+      height: 36
+      text: "error: 2 positional arguments in format string,"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: e-err2b
+      kind: text
+      x: 280
+      y: 518
+      width: 420
+      height: 36
+      text: "but there is 1 argument"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: e-note
+      kind: text
+      x: 280
+      y: 590
+      width: 620
+      height: 44
+      text: "Nothing runs until it compiles"
+      strokeColor: "#f08c00"
+      fontSize: 32
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 101
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  # One run at the very end: keep the empty dock shut until there's output.
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    result:
+      status: success
+      stdout: "Hello, world!\n2 + 3 = 5\nHello, Ferris!\n"
+      stderr: ""
+
+scenes:
+  - id: big-picture
+    chapter: From code to a running program
+    narration: >
+      [[mark:board]] Welcome to Rust from zero. Let's write your first Rust
+      program, and see what happens between writing it and running it.
+      [[mark:draw-source]] First, you write your code in a source file.
+      [[mark:draw-compiler]] Then the Rust compiler reads the whole file, and
+      checks it before anything runs. [[mark:draw-error]] If it finds a
+      mistake, it stops and shows you an error. Nothing runs.
+      [[mark:draw-program]] If the code is fine, the compiler builds a
+      program, and that program prints your output. [[mark:draw-rule]] So a
+      lot of mistakes are caught before your program ever starts. In
+      languages like Python or JavaScript, many mistakes only show up while
+      the program is running. Think of the compiler as a helper that reads
+      your code first.
+    sources:
+      - title: "The Rust Book — Compiling and Running Are Separate Steps"
+        url: "https://doc.rust-lang.org/book/ch01-02-hello-world.html#compiling-and-running-are-separate-steps"
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: board }
+        open: true
+        upsertIds: [h-title]
+      - id: draw-source
+        type: whiteboard.apply
+        at: { mark: draw-source }
+        upsertIds: [h-src-box, h-src-t, h-src-l]
+        drawMs: 1200
+      - id: draw-compiler
+        type: whiteboard.apply
+        at: { mark: draw-compiler }
+        upsertIds: [h-arr-1, h-cmp-box, h-cmp-t, h-cmp-l]
+        drawMs: 1600
+      - id: draw-error
+        type: whiteboard.apply
+        at: { mark: draw-error }
+        upsertIds: [h-arr-err, h-err-t]
+        drawMs: 1300
+      - id: draw-program
+        type: whiteboard.apply
+        at: { mark: draw-program }
+        upsertIds: [h-arr-2, h-prog-box, h-prog-t, h-arr-out, h-out-t]
+        drawMs: 2000
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [h-rule]
+        drawMs: 1000
+
+  - id: main-fn
+    chapter: Your first lines of Rust
+    narration: >
+      Now let's write it. [[mark:open-main]] Here's our file, with one empty
+      function. [[mark:select-main]] f n is short for function, and this
+      function is called main. main is special. It's where every Rust program
+      starts running. Its body goes between the curly braces, and right now
+      it's empty. [[mark:type-hello]] Let's give it something to do. Print
+      line prints some text, then moves to a new line. We'll print the classic
+      first message: Hello, world. [[mark:select-macro]] See the exclamation
+      mark after print line? It tells you that print line isn't a normal
+      function. It's a macro. A macro is code that writes more code for you,
+      while your program compiles. Why does that matter? A normal Rust
+      function always takes the same number of values. A macro can take any
+      number, and print line checks them before anything runs.
+      [[mark:select-semi]] And the line ends with a semicolon. In Rust, a
+      semicolon ends a statement, one step of your program. If you forget it
+      and another line follows, the compiler stops and tells you it expected a
+      semicolon.
+    sources:
+      - title: "The Rust Book — Anatomy of a Rust Program"
+        url: "https://doc.rust-lang.org/book/ch01-02-hello-world.html#anatomy-of-a-rust-program"
+      - title: "The Rust Book — Macros"
+        url: "https://doc.rust-lang.org/book/ch20-05-macros.html"
+      - title: "std::println"
+        url: "https://doc.rust-lang.org/std/macro.println.html"
+    actions:
+      - id: close-board-1
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: main.rs
+      - id: select-main
+        type: editor.select
+        at: { mark: select-main }
+        target:
+          file: main.rs
+          text: "fn main()"
+          occurrence: 1
+      - id: type-hello
+        type: editor.type
+        at: { mark: type-hello, offsetMs: -300 }
+        target:
+          file: main.rs
+          after: "fn main() {\n"
+          occurrence: 1
+        text: "    println!(\"Hello, world!\");\n"
+      - id: select-macro
+        type: editor.select
+        at: { mark: select-macro }
+        target:
+          file: main.rs
+          text: "println!"
+          occurrence: 1
+      - id: select-semi
+        type: editor.select
+        at: { mark: select-semi }
+        target:
+          file: main.rs
+          text: ";"
+          occurrence: 1
+
+  - id: comment
+    narration: >
+      [[mark:type-comment]] Now let's add a note at the top of the file. Two
+      slashes start a comment. The compiler ignores everything after them, up
+      to the end of the line, so a comment is only for the people who read
+      your code. Use it to explain things a reader might not know yet, like
+      where a Rust program starts.
+    sources:
+      - title: "The Rust Book — Comments"
+        url: "https://doc.rust-lang.org/book/ch03-04-comments.html"
+      - title: "Rust by Example — Comments"
+        url: "https://doc.rust-lang.org/rust-by-example/hello/comment.html"
+    actions:
+      - id: type-comment
+        type: editor.type
+        at: { mark: type-comment, offsetMs: -300 }
+        target:
+          file: main.rs
+          after: ""
+          occurrence: 1
+        text: "// Every Rust program starts at main.\n"
+
+  - id: placeholders
+    chapter: "Placeholders: printing values"
+    narration: >
+      [[mark:type-sum]] Fixed text is a good start. But most of the time,
+      you'll want to print values that your program calculates. Let's print a
+      small sum. [[mark:select-braces]] These curly braces are a placeholder.
+      Print line fills it with the first value after the text. Here, the
+      program adds two plus three, and five goes where the braces are. Add
+      more braces, and the values fill them in order.
+      [[mark:type-name]] There's a shorter way, too, when a value has a name.
+      Let's give a value a name with let. You'll learn let properly in the
+      next lesson. [[mark:select-name]] Now you can write that name right
+      inside the braces, and print line fills in its value. You can't put a
+      calculation there, though. For that, use empty braces and pass the value
+      after the text.
+    sources:
+      - title: "std::fmt — Positional parameters"
+        url: "https://doc.rust-lang.org/std/fmt/index.html#positional-parameters"
+      - title: "std::fmt — Named parameters"
+        url: "https://doc.rust-lang.org/std/fmt/index.html#named-parameters"
+      - title: "Rust by Example — Formatted print"
+        url: "https://doc.rust-lang.org/rust-by-example/hello/print.html"
+    actions:
+      - id: type-sum
+        type: editor.type
+        at: { mark: type-sum, offsetMs: -300 }
+        target:
+          file: main.rs
+          after: "    println!(\"Hello, world!\");\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: "    println!(\"2 + 3 = {}\", 2 + 3);\n"
+      - id: select-braces
+        type: editor.select
+        at: { mark: select-braces }
+        target:
+          file: main.rs
+          text: "{}"
+          occurrence: 1
+      - id: type-name
+        type: editor.type
+        at: { mark: type-name }
+        target:
+          file: main.rs
+          after: "    println!(\"2 + 3 = {}\", 2 + 3);\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let name = \"Ferris\";\n    println!(\"Hello, {name}!\");\n"
+      - id: select-name
+        type: editor.select
+        at: { mark: select-name }
+        target:
+          file: main.rs
+          text: "{name}"
+          occurrence: 1
+
+  - id: compiler-errors
+    chapter: When the compiler says no
+    narration: >
+      [[mark:board-errors]] So what happens when you get something wrong?
+      [[mark:draw-nobang]] Say you forget the exclamation mark.
+      [[mark:draw-e0423]] The compiler stops with error E0423: expected
+      function, found macro. [[mark:draw-help]] And look at the help line. It
+      tells you the fix: use the exclamation mark. [[mark:draw-args]] Here's
+      another one: two placeholders, but only one value.
+      [[mark:draw-args-error]] Because print line is a macro, the compiler
+      checks this too. Two positional arguments in the format string, but
+      there's only one argument. [[mark:draw-note]] Neither program runs until
+      you fix it. So read these messages closely. They point at the exact
+      spot, and they often tell you the fix.
+    sources:
+      - title: "Error code E0423"
+        url: "https://doc.rust-lang.org/error_codes/E0423.html"
+      - title: "std::fmt — a format string must use all of its arguments"
+        url: "https://doc.rust-lang.org/std/fmt/index.html#positional-parameters"
+    actions:
+      - id: board-errors
+        type: whiteboard.apply
+        at: { mark: board-errors }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-nobang
+        type: whiteboard.apply
+        at: { mark: draw-nobang }
+        upsertIds: [e-code1, e-mark1]
+        drawMs: 1200
+      - id: draw-e0423
+        type: whiteboard.apply
+        at: { mark: draw-e0423 }
+        upsertIds: [e-err1]
+        drawMs: 1500
+      - id: draw-help
+        type: whiteboard.apply
+        at: { mark: draw-help }
+        upsertIds: [e-help1]
+        drawMs: 1100
+      - id: draw-args
+        type: whiteboard.apply
+        at: { mark: draw-args }
+        upsertIds: [e-code2, e-mark2]
+        drawMs: 1200
+      - id: draw-args-error
+        type: whiteboard.apply
+        at: { mark: draw-args-error }
+        upsertIds: [e-err2a, e-err2b]
+        drawMs: 1800
+      - id: draw-note
+        type: whiteboard.apply
+        at: { mark: draw-note }
+        upsertIds: [e-note]
+        drawMs: 1000
+
+  - id: run
+    narration: >
+      Back in the editor, our program is correct. [[mark:run]] Let's run it.
+      Three lines. Hello, world. Then two plus three equals five. And Hello,
+      Ferris, with the name filled into the braces.
+    sources:
+      - title: "Rust by Example — Hello World"
+        url: "https://doc.rust-lang.org/rust-by-example/hello.html"
+    actions:
+      - id: close-board-2
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 200 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "Hello, Ferris!"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: 'let name = "Ferris";'
+
+  - id: wrap
+    narration: >
+      So, your program starts at main, and print line is a macro that fills
+      its placeholders with values. And the compiler checks the whole file
+      before anything runs. Next, we'll look at variables: how let works, and
+      why a Rust variable can't change unless you allow it.
+    sources:
+      - title: "The Rust Book — Hello, World!"
+        url: "https://doc.rust-lang.org/book/ch01-02-hello-world.html"
+      - title: "The Rust Book — Variables and Mutability"
+        url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
