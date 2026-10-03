@@ -35,8 +35,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-slices
-  title: "Rust from zero: Slices"
-  locale: en-US
+  title: "Rust from zero: Slice တွေ"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -55,7 +55,7 @@ lesson:
         y: 152,
         width: 700,
         height: 48,
-        text: "A slice is a view into data",
+        text: "Slice ဆိုတာ data ရဲ့ view တစ်ခုပါ",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -483,7 +483,7 @@ lesson:
         y: 584,
         width: 520,
         height: 40,
-        text: "no copy: it borrows s",
+        text: "copy မကူး: s ကို borrow လုပ်တယ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -495,7 +495,7 @@ lesson:
         y: 152,
         width: 780,
         height: 48,
-        text: "Clear s while word is in use",
+        text: "word သုံးနေတုန်း s ကို clear လုပ်ရင်",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -637,13 +637,16 @@ lesson:
         y: 560,
         width: 600,
         height: 40,
-        text: "caught before the program runs",
+        text: "program run မလုပ်ခင် ဖမ်းမိတယ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 35
 
 runtime:
@@ -653,25 +656,29 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "hello and world\nmiddle: 3 numbers, first 20\nfirst words: hello, slices\n"
+      stdout: "hello and world
+
+        middle: 3 numbers, first 20
+
+        first words: hello, slices\n"
       stderr: ""
 
 scenes:
   - id: view
-    chapter: A view into data
-    narration: >
-      Often you need only part of some data, like the first word of a
-      sentence. Copying it out costs time and memory, so Rust gives you a
-      slice instead.
-      [[mark:draw-bytes]] Here's a String, s, holding hello world. Each box is
-      one byte of its text, numbered from zero.
-      [[mark:draw-frame]] A slice is a view of a range of those bytes. This
-      one starts at zero and stops before five, so it sees hello.
-      [[mark:draw-parts]] Its type is ampersand str, a string slice. It
-      doesn't copy the text. It holds only a pointer to the first byte, and a
-      length.
-      [[mark:draw-borrow]] It's also a reference, so it borrows s, and the
-      borrowing rules apply to it.
+    chapter: Data ထဲကို ကြည့်တဲ့ view
+    narration: >-
+      တစ်ခါတစ်လေ data တစ်ခုလုံးကို မလိုဘဲ၊ သူ့ရဲ့ အပိုင်း တစ်ပိုင်းပဲ လိုတာမျိုး ရှိပါတယ်။
+      ဥပမာအားဖြင့် ဝါကျ တစ်ကြောင်းထဲက ပထမ စကားလုံးပဲ လိုချင်တာမျိုးပါ။ အဲဒီ အပိုင်းကို copy
+      ကူးထုတ်မယ်ဆိုရင် အချိန်ရော memory ပါ ကုန်တဲ့အတွက်၊ Rust က အဲဒီအစား slice ဆိုတာကို ပေးထားပါတယ်။
+      [[mark:draw-bytes]] ဒီမှာ hello world ဆိုတဲ့ စာသားကို ကိုင်ထားတဲ့ s ဆိုတဲ့ String တစ်ခု
+      ရှိပါတယ်။ အကွက် တစ်ကွက်စီက အဲဒီ စာသားရဲ့ byte တစ်လုံးစီ ဖြစ်ပြီး၊ 0 ကနေ စပြီး နံပါတ်
+      တပ်ထားပါတယ်။ [[mark:draw-frame]] slice ဆိုတာ အဲဒီ byte တွေထဲက range တစ်ခုကို ကြည့်တဲ့ view
+      တစ်ခုပါ။ ဒီ slice က 0 ကနေ စပြီး 5 မရောက်ခင်မှာ ရပ်တဲ့အတွက်၊ သူ မြင်တာက hello ပါ။
+      [[mark:draw-parts]] သူ့ type ကတော့ string slice ဖြစ်ပြီး၊ code ထဲမှာ ampersand str လို့
+      ရေးပါတယ်။ slice က စာသားကို copy မကူးပါဘူး။ သူ့ထဲမှာ ပထမ byte ကို ညွှန်ထားတဲ့ pointer တစ်ခုနဲ့
+      အရှည် တစ်ခုပဲ ရှိပါတယ်။ [[mark:draw-borrow]] ပြီးတော့ slice ဆိုတာ reference တစ်မျိုးလည်း
+      ဖြစ်တဲ့အတွက်၊ s ကို borrow လုပ်ထားတာပါ၊ borrow ဆိုတာ ငှားသုံးတာပါ။ ဒါကြောင့် borrowing ရဲ့
+      စည်းမျဉ်းတွေက slice အပေါ်မှာလည်း အတူတူပဲ သက်ရောက်ပါတယ်။
     sources:
       - title: "The Rust Book — The Slice Type"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#the-slice-type"
@@ -741,17 +748,16 @@ scenes:
         drawMs: 1200
 
   - id: string-slices
-    chapter: Slicing strings and arrays
-    narration: >
-      Let's write that in code. [[mark:open-main]] Here's s, our String.
-      [[mark:type-hello]] To make a slice, write an ampersand, the variable,
-      and a range in square brackets.
-      [[mark:select-range]] Zero dot dot five starts at index zero and stops
-      before five. The end isn't included, so this slice is five bytes long.
-      [[mark:type-world]] You can leave out either end of a range.
-      [[mark:select-open-end]] Six dot dot, with nothing after it, runs to the
-      end. Leave out the start, and it begins at zero. Leave out both, and you
-      get the whole string.
+    chapter: String နဲ့ array ကို slice လုပ်ခြင်း
+    narration: >-
+      ဒါကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:open-main]] ဒီမှာ ခုနက s ဆိုတဲ့ String ရှိပါတယ်။
+      [[mark:type-hello]] slice တစ်ခု လုပ်ဖို့ဆိုရင်၊ ampersand၊ ပြီးတော့ variable နာမည်၊ ပြီးတော့
+      လေးထောင့်ကွင်းထဲမှာ range တစ်ခု ရေးရပါတယ်။ [[mark:select-range]] ဒီ 0 dot dot 5 ဆိုတဲ့ range က
+      index 0 ကနေ စပြီး 5 မရောက်ခင်မှာ ရပ်ပါတယ်။ အဆုံးဖက်က 5 ကိုတော့ ထည့်မတွက်တဲ့အတွက်၊ ဒီ slice ရဲ့
+      အရှည်က byte 5 လုံးပါ။ [[mark:type-world]] range တစ်ခုရဲ့ အစ ဒါမှမဟုတ် အဆုံးကို ချန်ထားလို့လည်း
+      ရပါတယ်။ [[mark:select-open-end]] ဒီ 6 dot dot လို နောက်မှာ ဘာမှ မပါရင်၊ စာသားရဲ့ အဆုံးအထိ
+      သွားပါတယ်။ အစကို ချန်ထားရင် 0 ကနေ စပြီး၊ နှစ်ဖက်လုံး ချန်ထားရင်တော့ String တစ်ခုလုံးကို
+      ရပါတယ်။
     sources:
       - title: "The Rust Book — String Slices"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices"
@@ -773,7 +779,7 @@ scenes:
           file: main.rs
           after: "    let s = String::from(\"hello world\");\n"
           occurrence: 1
-        cadence: natural
+        cadence: fast-explainer
         text: "    let hello = &s[0..5];\n"
       - id: select-range
         type: editor.select
@@ -790,7 +796,9 @@ scenes:
           after: "    let hello = &s[0..5];\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let world = &s[6..];\n    println!(\"{hello} and {world}\");\n"
+        text: "    let world = &s[6..];
+
+          \    println!(\"{hello} and {world}\");\n"
       - id: select-open-end
         type: editor.select
         at: { mark: select-open-end }
@@ -800,14 +808,14 @@ scenes:
           occurrence: 1
 
   - id: array-slices
-    narration: >
-      [[mark:type-array]] Slices work on arrays too. Here's an array, and a
-      slice of it from index one, stopping before four.
-      [[mark:select-array-type]] An array slice's type is an ampersand, then
-      the element type in square brackets. There's no length in it. The slice
-      carries its length, so one type fits any length.
-      [[mark:select-middle-zero]] Indexes count from the start of the slice,
-      so middle at zero is twenty.
+    narration: >-
+      [[mark:type-array]] slice ကို array တွေမှာလည်း သုံးလို့ ရပါတယ်။ ဒီမှာ array တစ်ခု ရှိပြီး၊
+      သူ့ရဲ့ index 1 ကနေ စပြီး 4 မရောက်ခင်အထိ slice လုပ်ထားပါတယ်။ [[mark:select-array-type]] array
+      slice ရဲ့ type ကတော့ ampersand၊ ပြီးတော့ လေးထောင့်ကွင်းထဲမှာ element type ပါ၊ ဒီမှာဆိုရင် i32
+      slice ပါ။ အဲဒီ type ထဲမှာ အရှည် မပါတာ သတိထား ကြည့်ပါ။ slice က သူ့ အရှည်ကို သူ့ထဲမှာ ကိုယ်တိုင်
+      သယ်ထားတဲ့အတွက်၊ အရှည် ဘယ်လောက်ပဲ ဖြစ်ဖြစ် type တစ်ခုတည်းနဲ့ ကိုက်ပါတယ်။
+      [[mark:select-middle-zero]] index တွေကို slice ရဲ့ အစကနေ စပြီး ရေတွက်တဲ့အတွက်၊ middle ရဲ့
+      index 0 က 20 ဖြစ်ပါတယ်။
     sources:
       - title: "The Rust Book — Other Slices"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#other-slices"
@@ -822,7 +830,13 @@ scenes:
           after: "    println!(\"{hello} and {world}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let numbers = [10, 20, 30, 40, 50];\n    let middle: &[i32] = &numbers[1..4];\n    println!(\"middle: {} numbers, first {}\", middle.len(), middle[0]);\n"
+        text: "
+
+          \    let numbers = [10, 20, 30, 40, 50];
+
+          \    let middle: &[i32] = &numbers[1..4];
+
+          \    println!(\"middle: {} numbers, first {}\", middle.len(), middle[0]);\n"
       - id: select-array-type
         type: editor.select
         at: { mark: select-array-type }
@@ -839,12 +853,12 @@ scenes:
           occurrence: 1
 
   - id: literals
-    narration: >
-      [[mark:type-phrase]] Now a string literal, like the ones in your first
-      program. [[mark:select-literal-type]] Its type is ampersand str,
-      so a literal is a string slice, too. The text is stored inside your
-      compiled program, and phrase points at it. A shared reference can only read, so
-      a literal can't change.
+    narration: >-
+      [[mark:type-phrase]] အခု string literal တစ်ခု ကြည့်ရအောင်၊ ကိုယ့် ပထမဆုံး program ထဲမှာ
+      ရေးခဲ့တဲ့ double quote ထဲက စာသားမျိုးပါ။ [[mark:select-literal-type]] သူ့ type ကို ampersand
+      str လို့ ရေးထားတာကို ကြည့်ပါ။ ဆိုလိုတာက string literal ဆိုတာလည်း string slice တစ်ခုပါပဲ။ စာသား
+      အစစ်ကတော့ compile လုပ်ထားတဲ့ program ထဲမှာ သိမ်းထားပြီး၊ phrase က အဲဒီ စာသားကို ညွှန်ထားတာပါ။
+      shared reference က ဖတ်ရုံပဲ ဖတ်လို့ ရတဲ့အတွက်၊ literal ကို ပြောင်းလို့ မရပါဘူး။
     sources:
       - title: "The Rust Book — String Literals as Slices"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-literals-as-slices"
@@ -859,7 +873,9 @@ scenes:
           after: "middle.len(), middle[0]);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let phrase: &str = \"slices borrow data\";\n"
+        text: "
+
+          \    let phrase: &str = \"slices borrow data\";\n"
       - id: select-literal-type
         type: editor.select
         at: { mark: select-literal-type }
@@ -869,16 +885,16 @@ scenes:
           occurrence: 1
 
   - id: first-word
-    chapter: Returning a slice
-    narration: >
-      [[mark:type-fn]] Now let's use slices in a function, first_word. It
-      takes a string slice, and it returns one.
-      [[mark:select-indices]] char_indices gives you each character, with its
-      byte position, as a tuple. When the loop finds a space, it returns the
-      slice up to that position. With no space, the whole text is one word,
-      so it returns all of it.
-      [[mark:select-return]] The return type is a string slice as well. So
-      the result isn't a new String. It's a view into the text you passed in.
+    chapter: Slice တစ်ခု ပြန်ပေးခြင်း
+    narration: >-
+      [[mark:type-fn]] အခု slice ကို function တစ်ခုထဲမှာ သုံးကြည့်ရအောင်၊ first word ဆိုတဲ့ function
+      ပါ။ သူက string slice တစ်ခုကို လက်ခံပြီး၊ string slice တစ်ခုကိုပဲ ပြန်ပေးပါတယ်။
+      [[mark:select-indices]] char indices က စာလုံး တစ်လုံးချင်းစီကို သူ့ byte နေရာနဲ့ တွဲပြီး tuple
+      အနေနဲ့ ပေးပါတယ်။ loop က space တစ်လုံး တွေ့တဲ့အခါ၊ အစကနေ အဲဒီ နေရာအထိ slice ကို
+      ပြန်ပေးလိုက်ပါတယ်။ space လုံးဝ မပါဘူးဆိုရင်တော့ စာသား တစ်ခုလုံးက စကားလုံး တစ်လုံးတည်း
+      ဖြစ်တဲ့အတွက်၊ စာသား တစ်ခုလုံးကို ပြန်ပေးပါတယ်။ [[mark:select-return]] return type ကလည်း string
+      slice ပါပဲ။ ဒါကြောင့် ပြန်ရလာတဲ့ ရလဒ်က String အသစ် တစ်ခု မဟုတ်ဘဲ၊ ကိုယ် ထည့်ပေးလိုက်တဲ့
+      စာသားထဲကိုပဲ ကြည့်တဲ့ view တစ်ခုပါ။
     sources:
       - title: "The Rust Book — String Slices as Parameters"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices-as-parameters"
@@ -893,7 +909,23 @@ scenes:
           after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "fn first_word(text: &str) -> &str {\n    for (i, c) in text.char_indices() {\n        if c == ' ' {\n            return &text[..i];\n        }\n    }\n    text\n}\n\n"
+        text: "fn first_word(text: &str) -> &str {
+
+          \    for (i, c) in text.char_indices() {
+
+          \        if c == ' ' {
+
+          \            return &text[..i];
+
+          \        }
+
+          \    }
+
+          \    text
+
+          }
+
+          \n"
       - id: select-indices
         type: editor.select
         at: { mark: select-indices }
@@ -910,16 +942,18 @@ scenes:
           occurrence: 1
 
   - id: call
-    narration: >
-      [[mark:type-calls]] Let's call it with s, and with phrase.
-      [[mark:select-ref-s]] For s, we pass a reference to a
-      String. Rust converts it to a string slice for you, so first_word
-      accepts both.
+    narration: >-
+      [[mark:type-calls]] ကဲ၊ first word ကို s နဲ့ တစ်ခါ၊ phrase နဲ့ တစ်ခါ ခေါ်ကြည့်ရအောင်။
+      [[mark:select-ref-s]] s အတွက်ကတော့ String reference တစ်ခုကို ထည့်ပေးလိုက်တာပါ။ first word က
+      string slice ကို လက်ခံတာ ဖြစ်ပေမဲ့၊ Rust က String reference ကို string slice အဖြစ် ကိုယ့်အစား
+      ပြောင်းပေးတဲ့အတွက်၊ first word က နှစ်မျိုးလုံးကို လက်ခံနိုင်ပါတယ်။
     sources:
       - title: "The Rust Book — String Slices as Parameters"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices-as-parameters"
       - title: "The Rust Book — Implicit Deref Coercions with Functions and Methods"
-        url: "https://doc.rust-lang.org/book/ch15-02-deref.html#implicit-deref-coercions-with-functions-and-methods"
+        url:
+          "https://doc.rust-lang.org/book/ch15-02-deref.html#implicit-deref-coercions-with-functions-and\
+          -methods"
     actions:
       - id: type-calls
         type: editor.type
@@ -929,7 +963,11 @@ scenes:
           after: "    let phrase: &str = \"slices borrow data\";\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let word = first_word(&s);\n    let other = first_word(phrase);\n    println!(\"first words: {word}, {other}\");\n"
+        text: "    let word = first_word(&s);
+
+          \    let other = first_word(phrase);
+
+          \    println!(\"first words: {word}, {other}\");\n"
       - id: select-ref-s
         type: editor.select
         at: { mark: select-ref-s }
@@ -939,20 +977,22 @@ scenes:
           occurrence: 1
 
   - id: compiler-check
-    chapter: What the compiler checks
-    narration: >
-      Why return a slice here, and not the position of the space, like five?
-      That number isn't connected to s. Call clear to empty s, and you still
-      have five, but the text is gone. Nothing warns you.
-      [[mark:draw-code]] A slice is a borrow, so the compiler can check it.
-      Let's make s mutable, and clear it while word is still in use.
-      [[mark:draw-error]] The compiler stops with error E0502. It says s
-      can't be borrowed as mutable, because it's also borrowed as immutable.
-      [[mark:draw-reader]] First, word borrows s to read it.
-      [[mark:draw-writer]] Then clear needs to change s.
-      [[mark:draw-later]] And word is still used after that. A reader and a
-      writer at the same time: the borrowing rules don't allow it.
-      [[mark:draw-safe]] So the bug is caught before your program runs.
+    chapter: Compiler က ဘာ စစ်လဲ
+    narration: >-
+      ဒီနေရာမှာ မေးစရာ တစ်ခု ရှိပါတယ်။ slice ကို ပြန်ပေးမယ့်အစား space ရဲ့ နေရာ၊ ဥပမာအားဖြင့် 5 လို
+      ကိန်းဂဏန်း တစ်ခုကို ပြန်ပေးရင် မရဘူးလား။ ပြဿနာက အဲဒီ ကိန်းဂဏန်းက s နဲ့ ဘာမှ ဆက်စပ်မှု
+      မရှိတာပါ။ s ကို clear လုပ်ပြီး အလွတ် ဖြစ်သွားရင်တောင်၊ ကိုယ့်လက်ထဲမှာ 5 က ရှိနေဦးမှာ ဖြစ်ပြီး၊
+      စာသားကတော့ ပျောက်သွားပါပြီ။ ဘာကမှ သတိပေးမှာ မဟုတ်ပါဘူး။ [[mark:draw-code]] slice ကတော့ borrow
+      တစ်ခု ဖြစ်တဲ့အတွက်၊ compiler က စစ်ပေးနိုင်ပါတယ်။ ကြည့်ရအောင်၊ s ကို let mut နဲ့ ကြေညာပြီး
+      mutable ဖြစ်အောင် လုပ်ပါမယ်၊ ဆိုလိုတာက ပြောင်းလို့ ရအောင်ပါ။ ပြီးတော့ word ကို
+      သုံးနေတုန်းမှာပဲ s ကို clear လုပ်ကြည့်ပါမယ်။ [[mark:draw-error]] compiler က E0502 error နဲ့
+      ရပ်သွားပါတယ်။ s ကို immutable အနေနဲ့၊ ဆိုလိုတာက ပြောင်းလို့ မရတဲ့ ဖတ်ဖို့သက်သက် borrow
+      လုပ်ထားပြီးသား ဖြစ်နေလို့၊ mutable အနေနဲ့ ထပ် borrow လုပ်လို့ မရပါဘူးတဲ့။ [[mark:draw-reader]]
+      အရင်ဆုံး word က s ကို ဖတ်ဖို့ borrow လုပ်ထားပါတယ်။ [[mark:draw-writer]] ပြီးတော့ clear ကတော့ s
+      ကို ပြောင်းဖို့ လိုပါတယ်။ [[mark:draw-later]] အဲဒီနောက်မှာ word ကို ထပ်သုံးနေပါသေးတယ်။ ဆိုတော့
+      ဖတ်တဲ့သူ တစ်ယောက်နဲ့ ရေးတဲ့သူ တစ်ယောက် တစ်ချိန်တည်းမှာ ရှိနေတာ ဖြစ်ပြီး၊ borrowing ရဲ့
+      စည်းမျဉ်းက ဒါကို ခွင့်မပြုပါဘူး။ [[mark:draw-safe]] ဒါကြောင့် ဒီ bug ကို program run
+      မလုပ်ခင်မှာပဲ ဖမ်းမိသွားတာပါ။
     sources:
       - title: "Rust error codes — E0502"
         url: "https://doc.rust-lang.org/error_codes/E0502.html"
@@ -1008,10 +1048,11 @@ scenes:
         drawMs: 1200
 
   - id: run
-    narration: >
-      Back to the code. [[mark:run]] Let's run it. Hello and world, two views
-      into one String. The array slice has three numbers, and the first is
-      twenty. And the first words are hello, and slices.
+    narration: >-
+      editor ထဲ ပြန်သွားရအောင်။ [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ ပထမ စာကြောင်းက hello and world
+      ဖြစ်ပြီး၊ String တစ်ခုတည်းထဲကို ကြည့်ထားတဲ့ view နှစ်ခုပါ။ array slice ထဲမှာ ကိန်းဂဏန်း 3 လုံး
+      ပါပြီး၊ ပထမ တစ်လုံးက 20 ပါ။ နောက်ဆုံး စာကြောင်းမှာတော့ ပထမ စကားလုံးတွေက hello နဲ့ slices
+      ဖြစ်နေပါတယ်။
     sources:
       - title: "The Rust Book — The Slice Type"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html"
@@ -1036,10 +1077,12 @@ scenes:
         contains: "return &text[..i];"
 
   - id: wrap
-    narration: >
-      So a slice is a borrowed view into a String or an array: a pointer and
-      a length, with no copy, and the compiler keeps it valid. Next, structs:
-      your own types that group related data.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ slice ဆိုတာ String တစ်ခု ဒါမှမဟုတ် array တစ်ခုထဲကို borrow လုပ်ပြီး
+      ကြည့်ထားတဲ့ view တစ်ခုပါ။ သူ့ထဲမှာ pointer တစ်ခုနဲ့ အရှည် တစ်ခုပဲ ရှိပြီး၊ data ကို copy
+      မကူးပါဘူး။ ပြီးတော့ အဲဒီ slice ကို အမြဲ သုံးလို့ ရနေအောင် compiler က စစ်ပေးပါတယ်။ နောက် lesson
+      မှာတော့ struct တွေ၊ ဆိုလိုတာက ဆက်စပ်နေတဲ့ data တွေကို အုပ်စုဖွဲ့ပေးတဲ့ ကိုယ်ပိုင် type တွေကို
+      ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — The Slice Type"
         url: "https://doc.rust-lang.org/book/ch04-03-slices.html#summary"

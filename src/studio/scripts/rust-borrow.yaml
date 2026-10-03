@@ -37,8 +37,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-borrow
-  title: "Rust from zero: References and borrowing"
-  locale: en-US
+  title: "Rust from zero: Reference နဲ့ borrowing"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -55,17 +55,23 @@ lesson:
     - id: ownership-rules
       contentType: google
       name: The three ownership rules
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTyXMb7TYBURwgEV2HpO1J4n0wRj8npiTABfbt8ZfMiljNlHsfoSO7VlVLvv40AUkRGW4OoHbsYwZVw/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vTyXMb7TYBURwgEV2HpO1J4n0wRj8npiTABfbt8Zf\
+        MiljNlHsfoSO7VlVLvv40AUkRGW4OoHbsYwZVw/pub"
       pageId: SLIDES_API1441186920_0
     - id: move-error
       contentType: google
       name: What a move breaks
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTyXMb7TYBURwgEV2HpO1J4n0wRj8npiTABfbt8ZfMiljNlHsfoSO7VlVLvv40AUkRGW4OoHbsYwZVw/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vTyXMb7TYBURwgEV2HpO1J4n0wRj8npiTABfbt8Zf\
+        MiljNlHsfoSO7VlVLvv40AUkRGW4OoHbsYwZVw/pub"
       pageId: SLIDES_API1441186920_20
     - id: borrow-rules
       contentType: google
       name: The borrowing rules
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTyXMb7TYBURwgEV2HpO1J4n0wRj8npiTABfbt8ZfMiljNlHsfoSO7VlVLvv40AUkRGW4OoHbsYwZVw/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vTyXMb7TYBURwgEV2HpO1J4n0wRj8npiTABfbt8Zf\
+        MiljNlHsfoSO7VlVLvv40AUkRGW4OoHbsYwZVw/pub"
       pageId: SLIDES_API1441186920_34
   whiteboardAssets:
     # ---- Board 1: what a reference is -------------------------------------
@@ -76,7 +82,7 @@ lesson:
         y: 152,
         width: 400,
         height: 48,
-        text: "A reference borrows",
+        text: "reference က borrow လုပ်တယ်",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -148,7 +154,7 @@ lesson:
         y: 476,
         width: 300,
         height: 36,
-        text: "owner owns the text",
+        text: "owner က စာသားကို ပိုင်တယ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -189,7 +195,7 @@ lesson:
         y: 239,
         width: 380,
         height: 36,
-        text: "reference: read through it",
+        text: "reference: သူ့ကနေ ဖတ်တယ်",
         strokeColor: "#1971c2",
         fontSize: 28,
       }
@@ -200,7 +206,7 @@ lesson:
         y: 556,
         width: 470,
         height: 36,
-        text: "borrow ends → nothing is dropped",
+        text: "borrow ကုန် → ဘာမှ drop မဖြစ်ဘူး",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
@@ -212,7 +218,7 @@ lesson:
         y: 152,
         width: 400,
         height: 48,
-        text: "A reader still in use",
+        text: "ဖတ်တဲ့သူကို သုံးနေတုန်း",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -341,7 +347,7 @@ lesson:
         y: 530,
         width: 640,
         height: 36,
-        text: "two &mut at the same time → error[E0499]",
+        text: "&mut နှစ်ခု တစ်ပြိုင်နက် → error[E0499]",
         strokeColor: "#e03131",
         fontSize: 28,
       }
@@ -352,13 +358,16 @@ lesson:
         y: 596,
         width: 530,
         height: 36,
-        text: "works: last use of first before &mut",
+        text: "ရတယ်: first နောက်ဆုံး သုံးတာ &mut မတိုင်ခင်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 21
 
 runtime:
@@ -368,21 +377,25 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "Rust has 4 bytes\nreaders: Rust and Rust\nowner: Rust!\n"
+      stdout: "Rust has 4 bytes
+
+        readers: Rust and Rust
+
+        owner: Rust!\n"
       stderr: ""
 
 scenes:
   - id: recap
-    chapter: Why borrow?
-    narration: >
-      You've seen the three ownership rules. Every value has an owner.
-      There's only one owner at a time. When the owner goes out of scope,
-      the value is dropped.
-      [[mark:show-move]] You've also seen a move. Once s1 is assigned to s2,
-      using s1 again is error E0382. The message says borrow, because
-      printing s1 only borrows it. But passing a String to a function moves
-      it, just like assignment. So how can a function use your String without
-      taking it? It borrows it.
+    chapter: ဘာကြောင့် borrow လုပ်ရလဲ
+    narration: >-
+      ownership ရဲ့ စည်းမျဉ်း သုံးချက်ကို အရင် lesson မှာ မြင်ခဲ့ပြီးပါပြီ။ တန်ဖိုး တိုင်းမှာ owner
+      တစ်ယောက် ရှိပြီး၊ တစ်ချိန်မှာ owner တစ်ယောက်ပဲ ရှိနိုင်ပါတယ်။ ပြီးတော့ owner က scope
+      ကုန်သွားတဲ့အခါ၊ အဲဒီ တန်ဖိုးကို drop လုပ်ပါတယ်။ [[mark:show-move]] move ဆိုတာကိုလည်း
+      မြင်ခဲ့ပြီးပါပြီ။ s1 ကို s2 ထဲ ထည့်လိုက်ပြီးတဲ့နောက် s1 ကို ထပ်သုံးရင်၊ E0382 error တက်ပါတယ်။
+      error message ထဲမှာ borrow လို့ ပါနေတာက၊ s1 ကို print ထုတ်တာဟာ s1 ကို borrow လုပ်ရုံပဲ လုပ်တာ
+      ဖြစ်လို့ပါ။ borrow ဆိုတာ ငှားသုံးတာပါ။ ဒါပေမဲ့ String တစ်ခုကို function တစ်ခုဆီ
+      ပေးလိုက်ရင်တော့၊ variable အသစ်ထဲ ထည့်လိုက်သလိုပဲ move ဖြစ်သွားပါတယ်။ ဒါဆို function တစ်ခုက
+      ကိုယ့် String ကို မယူဘဲ ဘယ်လို သုံးနိုင်မလဲ။ အဖြေကတော့ borrow လုပ်လိုက်တာပါပဲ။
     sources:
       - title: "The Rust Book — Ownership Rules"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#ownership-rules"
@@ -403,14 +416,13 @@ scenes:
         slideId: move-error
 
   - id: reference
-    narration: >
-      A reference is how you borrow.
-      [[mark:draw-owner]] Here's a String called owner. It owns the text
-      Rust, on the heap.
-      [[mark:draw-ref]] Put an ampersand before owner, and you get a
-      reference. It points at owner, so you can read through it.
-      [[mark:draw-drop]] But it doesn't own the value. When the borrow ends,
-      nothing is dropped. The text stays with owner.
+    narration: >-
+      reference ဆိုတာ borrow လုပ်တဲ့ နည်းလမ်းပါ။ [[mark:draw-owner]] ဒီမှာ owner ဆိုတဲ့ နာမည်နဲ့
+      String တစ်ခု ရှိပါတယ်။ သူက Rust ဆိုတဲ့ စာသားကို ပိုင်ဆိုင်ပြီး၊ အဲဒီ စာသားက heap ပေါ်မှာ
+      ရှိပါတယ်။ [[mark:draw-ref]] owner ရှေ့မှာ ampersand ထည့်လိုက်ရင် reference တစ်ခု ရပါတယ်။ ဒီ
+      reference က owner ဆီကို ညွှန်ထားတဲ့အတွက်၊ သူ့ကနေ တစ်ဆင့် စာသားကို ဖတ်လို့ ရပါတယ်။
+      [[mark:draw-drop]] ဒါပေမဲ့ reference က အဲဒီ တန်ဖိုးကို မပိုင်ဆိုင်ပါဘူး။ ဒါကြောင့် borrow
+      ကုန်သွားတဲ့အခါ ဘာမှ drop မဖြစ်ပါဘူး။ စာသားက owner ဆီမှာပဲ ဆက်ရှိနေပါတယ်။
     sources:
       - title: "The Rust Book — References and Borrowing"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
@@ -449,14 +461,14 @@ scenes:
         drawMs: 1600
 
   - id: measure
-    chapter: Borrowing in a function
-    narration: >
-      Let's put that in code. Here, owner holds the text Rust.
-      [[mark:type-measure]] Let's add a function called measure. It returns
-      the length of a String, in bytes.
-      [[mark:select-ref-type]] Look at the parameter's type: ampersand String,
-      a reference to a String. So measure borrows the String. It reads it,
-      but never owns it.
+    chapter: Function ထဲမှာ borrow လုပ်ခြင်း
+    narration: >-
+      ဒါကို code နဲ့ ရေးကြည့်ရအောင်။ ဒီမှာ owner ဆိုတဲ့ variable ထဲမှာ Rust ဆိုတဲ့ စာသား ရှိနေပါတယ်။
+      [[mark:type-measure]] measure ဆိုတဲ့ function တစ်ခု ထည့်ကြည့်ရအောင်။ ဒီ function က String
+      တစ်ခုရဲ့ အရှည်ကို byte အရေအတွက်နဲ့ ပြန်ပေးပါတယ်။ [[mark:select-ref-type]] parameter ရဲ့ type
+      ကို ကြည့်ပါ။ ampersand String၊ ဆိုလိုတာက String တစ်ခုကို ညွှန်ထားတဲ့ reference တစ်ခုပါ။
+      ဒါကြောင့် measure က String ကို borrow လုပ်ရုံပဲ လုပ်ပါတယ်။ ဖတ်တော့ ဖတ်ပါတယ်၊ ဒါပေမဲ့ ဘယ်တော့မှ
+      မပိုင်ဆိုင်ပါဘူး။
     sources:
       - title: "The Rust Book — References and Borrowing"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
@@ -479,7 +491,13 @@ scenes:
           after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "fn measure(text: &String) -> usize {\n    text.len()\n}\n\n"
+        text: "fn measure(text: &String) -> usize {
+
+          \    text.len()
+
+          }
+
+          \n"
       - id: select-ref-type
         type: editor.select
         at: { mark: select-ref-type }
@@ -489,13 +507,12 @@ scenes:
           occurrence: 1
 
   - id: call
-    narration: >
-      [[mark:type-call]] Now let's call it. We write the ampersand at the call
-      too, so we lend owner instead of moving it.
-      [[mark:select-call]] The borrow starts here, and it ends when measure
-      returns.
-      [[mark:type-print-length]] So owner is still valid. Let's print it
-      with its length.
+    narration: >-
+      [[mark:type-call]] အခု အဲဒီ function ကို ခေါ်ကြည့်ရအောင်။ ခေါ်တဲ့နေရာမှာလည်း owner ရှေ့မှာ
+      ampersand ထည့်ရေးပါတယ်။ ဒါမှ owner ကို move မဖြစ်စေဘဲ ငှားပေးလိုက်တာ ဖြစ်မှာပါ။
+      [[mark:select-call]] borrow က ဒီနေရာမှာ စပြီး၊ measure က အလုပ်ပြီးလို့ ပြန်ထွက်လာတဲ့အခါ
+      ကုန်သွားပါတယ်။ [[mark:type-print-length]] ဒါကြောင့် owner ကို ဆက်သုံးလို့ ရနေပါသေးတယ်။ owner
+      ကို သူ့ အရှည်နဲ့အတူ print ထုတ်ကြည့်ရအောင်။
     sources:
       - title: "The Rust Book — References and Borrowing"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
@@ -527,10 +544,11 @@ scenes:
         text: "    println!(\"{owner} has {length} bytes\");\n"
 
   - id: readers
-    narration: >
-      A plain ampersand makes a shared, or immutable, reference. Shared
-      references only read, so you can have as many as you want at once.
-      [[mark:type-readers]] Let's make two, first and second, and print both.
+    narration: >-
+      ampersand သက်သက်ပဲ ထည့်ထားရင် shared reference တစ်ခု ရပါတယ်၊ immutable reference လို့လည်း
+      ခေါ်ပါတယ်။ immutable ဆိုတာ ပြောင်းလို့ မရဘူး ဆိုတဲ့ သဘောပါ။ shared reference တွေက ဖတ်ရုံပဲ
+      ဖတ်တဲ့အတွက်၊ တစ်ချိန်တည်းမှာ ကြိုက်သလောက် အများကြီး ရှိလို့ ရပါတယ်။ [[mark:type-readers]]
+      first နဲ့ second ဆိုပြီး နှစ်ခု လုပ်ပြီး၊ နှစ်ခုလုံးကို print ထုတ်ကြည့်ရအောင်။
     sources:
       - title: "The Rust Book — Mutable References"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references"
@@ -543,21 +561,24 @@ scenes:
           after: "    println!(\"{owner} has {length} bytes\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let first = &owner;\n    let second = &owner;\n    println!(\"readers: {first} and {second}\");\n"
+        text: "    let first = &owner;
+
+          \    let second = &owner;
+
+          \    println!(\"readers: {first} and {second}\");\n"
 
   - id: mutable
-    chapter: Mutable references
-    narration: >
-      What if a function needs to change the String? Then it needs a mutable
-      reference. [[mark:type-mut]] First, the owner must allow changes, so
-      let's add mut. Without it, you'd get error E0596: owner isn't declared
-      as mutable.
-      [[mark:type-exclaim]] Now a function called exclaim. It adds an
-      exclamation mark to the end.
-      [[mark:select-mut-type]] Its parameter is ampersand mut String: a
-      reference that can change what it borrows.
-      [[mark:type-exclaim-call]] We call it with ampersand mut owner, and the
-      last line prints the result.
+    chapter: Mutable reference တွေ
+    narration: >-
+      ဒါဆို function တစ်ခုက String ကို ပြောင်းဖို့ လိုလာရင်ရော။ အဲဒီအခါ mutable reference တစ်ခု
+      လိုပါတယ်။ mutable ဆိုလိုတာက ပြောင်းလို့ ရတယ် ဆိုတဲ့ သဘောပါ။ [[mark:type-mut]] အရင်ဆုံး owner
+      ကိုယ်တိုင်က ပြောင်းခွင့် ပေးထားရမှာ ဖြစ်လို့၊ owner ရှေ့မှာ mut ထည့်ကြည့်ရအောင်။ mut မပါရင်
+      E0596 error တက်ပါလိမ့်မယ်၊ owner ကို mutable အဖြစ် မကြေညာထားပါဘူးတဲ့။ [[mark:type-exclaim]]
+      အခု exclaim ဆိုတဲ့ function တစ်ခု ထည့်ပါမယ်။ သူက String ရဲ့ အဆုံးမှာ exclamation mark တစ်လုံး
+      ထပ်ဖြည့်ပေးပါတယ်။ [[mark:select-mut-type]] သူ့ parameter ကတော့ ampersand mut String ပါ။
+      ဆိုလိုတာက သူ borrow လုပ်ထားတဲ့ တန်ဖိုးကို ပြောင်းလို့ ရတဲ့ reference တစ်ခုပါ။
+      [[mark:type-exclaim-call]] ခေါ်တဲ့အခါ ampersand mut owner နဲ့ ခေါ်ပြီး၊ နောက်ဆုံး
+      စာကြောင်းကတော့ ရလဒ်ကို print ထုတ်ပေးပါတယ်။
     sources:
       - title: "The Rust Book — Mutable References"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references"
@@ -583,7 +604,13 @@ scenes:
           after: "    text.len()\n}\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\nfn exclaim(text: &mut String) {\n    text.push_str(\"!\");\n}\n"
+        text: "
+
+          fn exclaim(text: &mut String) {
+
+          \    text.push_str(\"!\");
+
+          }\n"
       - id: select-mut-type
         type: editor.select
         at: { mark: select-mut-type }
@@ -598,18 +625,20 @@ scenes:
           file: main.rs
           after: "    println!(\"readers: {first} and {second}\");\n"
           occurrence: 1
-        cadence: natural
+        cadence: fast-explainer
         text: "    exclaim(&mut owner);\n"
 
   - id: rule
-    chapter: Many readers or one writer
-    narration: >
-      [[mark:show-borrow-rules]] Now, the rule that keeps this safe. At any
-      time, you can have many shared references, the readers. Or exactly one
-      mutable reference, the writer, with no readers beside it. Never both at
-      once. And a reference must never live longer than the value it borrows.
-      Why so strict? Changing a String can move its text to new memory. A
-      reference into the old text would then point at freed memory.
+    chapter: ဖတ်တဲ့သူ အများ ဒါမှမဟုတ် ရေးတဲ့သူ တစ်ယောက်
+    narration: >-
+      [[mark:show-borrow-rules]] အခု ဒါတွေအားလုံးကို ဘေးကင်းအောင် ထိန်းပေးတဲ့ စည်းမျဉ်းကို
+      ကြည့်ရအောင်။ ဘယ်အချိန်မှာမဆို shared reference တွေ၊ ဆိုလိုတာက ဖတ်တဲ့သူတွေ၊ အများကြီး ရှိလို့
+      ရပါတယ်။ ဒါမှမဟုတ် mutable reference၊ ဆိုလိုတာက ရေးတဲ့သူ၊ တစ်ယောက်တည်း ရှိလို့ ရပြီး၊ သူ့ဘေးမှာ
+      ဖတ်တဲ့သူ တစ်ယောက်မှ မရှိရပါဘူး။ နှစ်မျိုးလုံး တစ်ပြိုင်နက်ကတော့ ဘယ်တော့မှ မရပါဘူး။ ပြီးတော့
+      reference တစ်ခုဟာ သူ borrow လုပ်ထားတဲ့ တန်ဖိုးထက် ပိုကြာကြာ ရှိနေလို့ မရပါဘူး။ ဘာကြောင့်
+      ဒီလောက် တင်းကျပ်ရလဲဆိုတော့၊ String တစ်ခုကို ပြောင်းလိုက်တဲ့အခါ သူ့ စာသားက memory နေရာ အသစ်ဆီ
+      ရွှေ့သွားနိုင်လို့ပါ။ အဲဒီအခါ စာသား အဟောင်းကို ညွှန်ထားတဲ့ reference က ပြန်လွှတ်လိုက်ပြီးသား
+      memory ကို ညွှန်နေမှာ ဖြစ်ပါတယ်။
     sources:
       - title: "The Rust Book — The Rules of References"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#the-rules-of-references"
@@ -622,16 +651,15 @@ scenes:
         slideId: borrow-rules
 
   - id: error
-    narration: >
-      So what if a reader is still in use when the writer starts?
-      [[mark:draw-err-code]] Here, first borrows owner, exclaim borrows it as
-      mutable, then first is printed.
-      [[mark:draw-err-msg]] The compiler refuses with error E0502. You can't
-      borrow owner as mutable, because it's also borrowed as immutable.
-      [[mark:draw-err-labels]] It marks the immutable borrow, the mutable
-      borrow, and the later use of first.
-      [[mark:draw-err-two]] Two mutable borrows at once fail too, with error
-      E0499.
+    narration: >-
+      ဒါဆို ဖတ်တဲ့သူ တစ်ယောက်ကို သုံးနေတုန်း ရေးတဲ့သူ စဝင်လာရင် ဘာဖြစ်မလဲ။ [[mark:draw-err-code]]
+      ဒီမှာ first က owner ကို borrow လုပ်ထားပါတယ်။ ပြီးတော့ exclaim က owner ကို mutable အနေနဲ့
+      borrow လုပ်ပြီး၊ အဲဒီနောက်မှ first ကို print ထုတ်ပါတယ်။ [[mark:draw-err-msg]] compiler က E0502
+      error နဲ့ ရပ်သွားပါတယ်။ owner ကို immutable အနေနဲ့ borrow လုပ်ထားတုန်း ဖြစ်လို့၊ mutable
+      အနေနဲ့ ထပ် borrow လုပ်လို့ မရပါဘူးတဲ့။ [[mark:draw-err-labels]] compiler က immutable borrow
+      ဖြစ်တဲ့ နေရာ၊ mutable borrow ဖြစ်တဲ့ နေရာ၊ ပြီးတော့ first ကို နောက်မှ ပြန်သုံးတဲ့ နေရာ၊
+      သုံးနေရာလုံးကို ညွှန်ပြထားပါတယ်။ [[mark:draw-err-two]] mutable borrow နှစ်ခုကို တစ်ပြိုင်နက်
+      လုပ်ကြည့်ရင်လည်း ရမှာ မဟုတ်ပါဘူး၊ အဲဒါကတော့ E0499 error ပါ။
     sources:
       - title: "Rust error codes — E0502"
         url: "https://doc.rust-lang.org/error_codes/E0502.html"
@@ -669,12 +697,13 @@ scenes:
         drawMs: 1600
 
   - id: last-use
-    narration: >
-      So why does our program compile? [[mark:draw-fix]] Because a borrow
-      lasts only until its last use. If the reader's last use comes before
-      the mutable borrow, it works.
-      [[mark:select-readers-use]] Our readers are last used on this line,
-      before exclaim. So when the writer starts, they're already done.
+    narration: >-
+      ဒါဆို ကိုယ့် program ကျတော့ ဘာကြောင့် compile လုပ်လို့ ရနေတာလဲ။ [[mark:draw-fix]]
+      ဘာကြောင့်လဲဆိုတော့၊ borrow တစ်ခုဟာ သူ့ကို နောက်ဆုံး သုံးတဲ့ နေရာအထိပဲ ကြာလို့ပါ။ ဖတ်တဲ့သူကို
+      နောက်ဆုံး သုံးတဲ့ နေရာက mutable borrow မတိုင်ခင်မှာ ရှိနေရင်၊ အဆင်ပြေပါတယ်။
+      [[mark:select-readers-use]] ကိုယ့် ဖတ်တဲ့သူ နှစ်ယောက်ကို နောက်ဆုံး သုံးထားတာက ဒီ စာကြောင်းမှာ
+      ဖြစ်ပြီး၊ exclaim ကို မခေါ်ခင်ပါ။ ဒါကြောင့် ရေးတဲ့သူ စဝင်လာတဲ့အချိန်မှာ သူတို့ အလုပ်
+      ပြီးနေပါပြီ။
     sources:
       - title: "The Rust Book — Mutable References"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references"
@@ -697,11 +726,11 @@ scenes:
           occurrence: 1
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. The first line says Rust has four bytes,
-      measured through a borrow. Both readers see Rust. And the last line
-      shows Rust with an exclamation mark. It changed through a mutable
-      reference, and owner still owns it.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ ပထမ စာကြောင်းက Rust မှာ 4 byte ရှိတယ်လို့ ပြောပါတယ်၊ ဒါက
+      borrow တစ်ခုကနေ တစ်ဆင့် တိုင်းထားတာပါ။ ဖတ်တဲ့သူ နှစ်ယောက်လုံးက Rust ကို မြင်ရပါတယ်။ ပြီးတော့
+      နောက်ဆုံး စာကြောင်းမှာ Rust နောက်မှာ exclamation mark တစ်လုံး ပါလာပါပြီ။ ဒါက mutable reference
+      ကနေ တစ်ဆင့် ပြောင်းလိုက်တာ ဖြစ်ပြီး၊ owner ကတော့ အဲဒီ စာသားကို ဆက်ပိုင်ဆိုင်နေတုန်းပါပဲ။
     sources:
       - title: "The Rust Book — References and Borrowing"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
@@ -722,11 +751,12 @@ scenes:
         contains: "exclaim(&mut owner);"
 
   - id: wrap
-    narration: >
-      A reference lets you use a value without owning it. Shared
-      references read, mutable ones change, and it's many readers or one
-      writer, never both. Next, slices: references to part of a String or an
-      array.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ reference ဆိုတာ တန်ဖိုး တစ်ခုကို မပိုင်ဆိုင်ဘဲ သုံးနိုင်အောင်
+      လုပ်ပေးတာပါ။ shared reference က ဖတ်ဖို့ ဖြစ်ပြီး၊ mutable reference ကတော့ ပြောင်းဖို့ပါ။
+      ပြီးတော့ ဖတ်တဲ့သူ အများကြီး ဒါမှမဟုတ် ရေးတဲ့သူ တစ်ယောက်တည်းပဲ ရပြီး၊ နှစ်မျိုးလုံး
+      တစ်ပြိုင်နက်တော့ ဘယ်တော့မှ မရပါဘူး။ နောက် lesson မှာတော့ slice တွေ၊ ဆိုလိုတာက String တစ်ခု
+      ဒါမှမဟုတ် array တစ်ခုရဲ့ အစိတ်အပိုင်း တစ်ခုကို ညွှန်တဲ့ reference တွေကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — References and Borrowing"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"

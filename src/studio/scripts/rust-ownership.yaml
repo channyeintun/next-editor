@@ -31,7 +31,7 @@ schemaVersion: 1
 lesson:
   slug: rust-ownership
   title: "Rust from zero: Ownership"
-  locale: en-US
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -48,12 +48,16 @@ lesson:
     - id: move-slide
       contentType: google
       name: Ownership moves
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_0
     - id: copy-slide
       contentType: google
       name: Copy vs. clone
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_11
   whiteboardAssets:
     # ---- Board 1: where values live --------------------------------------
@@ -64,7 +68,7 @@ lesson:
         y: 152,
         width: 780,
         height: 48,
-        text: "Where values live",
+        text: "တန်ဖိုးတွေ ဘယ်မှာ ရှိလဲ",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -208,7 +212,7 @@ lesson:
         y: 506,
         width: 500,
         height: 40,
-        text: "one owner: s1",
+        text: "owner တစ်ယောက်: s1",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -219,7 +223,7 @@ lesson:
         y: 566,
         width: 780,
         height: 40,
-        text: "owner leaves scope → dropped, memory freed",
+        text: "owner scope ကုန် → drop၊ memory ပြန်လွှတ်",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
@@ -332,7 +336,7 @@ lesson:
         y: 500,
         width: 280,
         height: 40,
-        text: "freed twice?",
+        text: "နှစ်ကြိမ် ပြန်လွှတ်မိမလား",
         strokeColor: "#e03131",
         fontSize: 28,
       }
@@ -363,7 +367,7 @@ lesson:
         y: 520,
         width: 480,
         height: 40,
-        text: "only s2 owns it now",
+        text: "အခု s2 ပဲ ပိုင်တယ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -375,7 +379,7 @@ lesson:
         y: 152,
         width: 780,
         height: 48,
-        text: "Use s1 after the move",
+        text: "move ပြီးမှ s1 ကို သုံးရင်",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -500,7 +504,10 @@ lesson:
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 42
 
 runtime:
@@ -510,28 +517,28 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "inside the braces\ns2 = hello, s3 = hello world\nn = 5, m = 5\n"
+      stdout: "inside the braces
+
+        s2 = hello, s3 = hello world
+
+        n = 5, m = 5\n"
       stderr: ""
 
 scenes:
   - id: memory
-    chapter: Who frees the memory?
-    narration: >
-      Every program has to give back memory it no longer needs. Some
-      languages use a garbage collector. In C, you call free yourself. Rust
-      uses a third way, called ownership, and the compiler checks it before
-      your program runs.
-      [[mark:draw-stack]] An i32 like n has a fixed size, so it's stored on
-      the stack.
-      [[mark:draw-string]] A String can grow, so s1 on the stack holds only a
-      pointer, a length, and a capacity.
-      [[mark:draw-heap]] The text itself lives on the heap, and the pointer
-      points to it.
-      [[mark:draw-owner]] s1 is the owner of that text. A value has only one
-      owner at a time.
-      [[mark:draw-drop]] When the owner goes out of scope, Rust drops the
-      value and frees its memory. No garbage collector, and no free call to
-      forget.
+    chapter: memory ကို ဘယ်သူ ပြန်လွှတ်လဲ
+    narration: >-
+      program တိုင်းဟာ သူ မလိုတော့တဲ့ memory ကို ပြန်လွှတ်ပေးရပါတယ်။ တချို့ ဘာသာစကားတွေကတော့ ဒါအတွက်
+      garbage collector ကို သုံးပါတယ်။ C language မှာဆိုရင် free ကို ကိုယ်တိုင် ခေါ်ရပါတယ်။ Rust
+      ကတော့ တတိယ နည်းလမ်း တစ်ခုကို သုံးပြီး၊ အဲဒီ နည်းလမ်းကို ownership လို့ ခေါ်ပါတယ်။ ဒီ ownership
+      ကို ကိုယ့် program run မလုပ်ခင် compiler က ကြိုစစ်ပေးပါတယ်။ [[mark:draw-stack]] n လို i32
+      တစ်ခုက အရွယ်အစား ပုံသေ ရှိတဲ့အတွက်၊ stack ပေါ်မှာ သိမ်းထားပါတယ်။ [[mark:draw-string]] String
+      ကတော့ ကြီးလာနိုင်တဲ့အတွက်၊ stack ပေါ်က s1 ထဲမှာ pointer တစ်ခု၊ အရှည် တစ်ခုနဲ့ capacity တစ်ခုပဲ
+      ထည့်ထားပါတယ်။ [[mark:draw-heap]] စာသား အစစ်ကတော့ heap ပေါ်မှာ ရှိပြီး၊ pointer က အဲဒီ
+      စာသားဆီကို ညွှန်ထားတာပါ။ [[mark:draw-owner]] s1 က အဲဒီ စာသားကို ပိုင်ဆိုင်တယ်၊ s1 က owner ပါ။
+      တန်ဖိုး တစ်ခုမှာ တစ်ချိန်မှာ owner တစ်ယောက်ပဲ ရှိနိုင်ပါတယ်။ [[mark:draw-drop]] owner က scope
+      ကုန်သွားတဲ့အခါ၊ Rust က အဲဒီ တန်ဖိုးကို drop လုပ်ပြီး memory ကို ပြန်လွှတ်ပါတယ်။ ဒါကြောင့်
+      garbage collector လည်း မလိုသလို၊ free ကို ခေါ်ဖို့ မေ့သွားစရာလည်း မရှိတော့ပါဘူး။
     sources:
       - title: "The Rust Book — What Is Ownership? (The Stack and the Heap)"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#the-stack-and-the-heap"
@@ -575,16 +582,14 @@ scenes:
         drawMs: 1500
 
   - id: scope
-    chapter: Scope and drop
-    narration: >
-      Let's see that in code.
-      [[mark:select-from]] String::from builds a String from the text in
-      quotes.
-      [[mark:select-scope]] These inner curly braces make a scope. The
-      variable inner is valid from where it's declared, down to the closing
-      brace.
-      [[mark:type-drop]] At that brace, inner goes out of scope. Rust calls
-      drop for you right there, and the heap memory is freed.
+    chapter: Scope နဲ့ drop
+    narration: >-
+      ဒါကို code နဲ့ ကြည့်ရအောင်။ [[mark:select-from]] ဒီ String ရဲ့ from က double quote ထဲက
+      စာသားကနေ String တစ်ခု တည်ဆောက်ပေးတာပါ။ [[mark:select-scope]] ဒီ အတွင်းဘက်က တွန့်ကွင်း တစ်စုံက
+      scope တစ်ခုကို သတ်မှတ်ပေးတာပါ။ inner ဆိုတဲ့ variable ကို ကြေညာထားတဲ့ နေရာကနေ စပြီး၊ တွန့်ကွင်း
+      ပိတ်တဲ့ နေရာအထိ သုံးလို့ ရပါတယ်။ [[mark:type-drop]] အဲဒီ တွန့်ကွင်း ပိတ်တဲ့ နေရာ ရောက်တော့
+      inner က scope ကုန်သွားပါတယ်၊ ဒါကို comment လေးနဲ့ မှတ်ထားလိုက်ရအောင်။ အဲဒီနေရာမှာပဲ Rust က
+      drop ကို ကိုယ့်အစား ခေါ်ပေးပြီး၊ heap ပေါ်က memory ကို ပြန်လွှတ်လိုက်ပါတယ်။
     sources:
       - title: "The Rust Book — Variable Scope"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variable-scope"
@@ -614,7 +619,13 @@ scenes:
         at: { mark: select-scope }
         target:
           file: main.rs
-          text: "{\n        let inner = String::from(\"inside the braces\");\n        println!(\"{inner}\");\n    }"
+          text: "{
+
+            \        let inner = String::from(\"inside the braces\");
+
+            \        println!(\"{inner}\");
+
+            \    }"
           occurrence: 1
       - id: type-drop
         type: editor.type
@@ -627,16 +638,18 @@ scenes:
         text: " // inner is dropped here"
 
   - id: move
-    chapter: Moving a String
-    narration: >
-      [[mark:type-s1]] Now let's make a String called s1.
-      [[mark:type-move]] Then let's assign it to a new variable, s2. In many
-      languages, you'd now have two names for the same text.
-      [[mark:show-move]] Not in Rust. The String moves to s2, and s1 isn't
-      valid anymore. Use it again, and you get error E0382.
+    chapter: String တစ်ခု move ဖြစ်ခြင်း
+    narration: >-
+      [[mark:type-s1]] အခု s1 ဆိုတဲ့ String တစ်ခု လုပ်ကြည့်ရအောင်။ [[mark:type-move]] ပြီးတော့ အဲဒီ
+      s1 ကို s2 ဆိုတဲ့ variable အသစ် တစ်ခုထဲ ထည့်လိုက်ပါမယ်။ တခြား ဘာသာစကား အများစုမှာဆိုရင်
+      ဒီအချိန်မှာ စာသား တစ်ခုတည်းအတွက် နာမည် နှစ်ခု ရသွားမှာပါ။ [[mark:show-move]] Rust မှာတော့
+      ဒီလို မဟုတ်ပါဘူး။ String က s2 ဆီ move ဖြစ်သွားပြီး၊ s1 ကို ဆက်သုံးလို့ မရတော့ပါဘူး။ s1 ကို
+      ထပ်သုံးကြည့်ရင် compiler က E0382 error နဲ့ ရပ်သွားပါလိမ့်မယ်။
     sources:
       - title: "The Rust Book — Variables and Data Interacting with Move"
-        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-move"
+        url:
+          "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-\
+          with-move"
     actions:
       - id: type-s1
         type: editor.type
@@ -646,7 +659,9 @@ scenes:
           after: "    } // inner is dropped here\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let s1 = String::from(\"hello\");\n"
+        text: "
+
+          \    let s1 = String::from(\"hello\");\n"
       - id: type-move
         type: editor.type
         at: { mark: type-move }
@@ -662,17 +677,19 @@ scenes:
         slideId: move-slide
 
   - id: why-move
-    narration: >
-      So why does Rust do this? [[mark:draw-copy]] The assignment copies the
-      pointer, the length, and the capacity into s2, but not the heap text.
-      [[mark:draw-twice]] Now two variables point at the same memory. At the
-      end of main, Rust would free it twice. That bug is called a double
-      free.
-      [[mark:draw-strike]] So Rust makes s1 invalid instead. Only s2 owns the
-      text, and only s2 frees it.
+    narration: >-
+      ဒါဆို Rust က ဘာကြောင့် ဒီလို လုပ်ရတာလဲ။ [[mark:draw-copy]] s1 ကို s2 ထဲ ထည့်လိုက်တဲ့အခါ၊ s2
+      ထဲကို ကူးသွားတာက pointer၊ အရှည်နဲ့ capacity ပဲ ဖြစ်ပြီး၊ heap ပေါ်က စာသားကိုတော့ မကူးပါဘူး။
+      [[mark:draw-twice]] အဲဒီအခါ variable နှစ်ခုက memory တစ်နေရာတည်းကို ညွှန်နေပါပြီ။ main
+      အဆုံးရောက်တဲ့အခါ Rust က အဲဒီ memory ကို နှစ်ကြိမ် ပြန်လွှတ်မိမှာပါ။ အဲဒီ bug ကို double free
+      လို့ ခေါ်ပါတယ်။ [[mark:draw-strike]] ဒါကြောင့် Rust က အဲဒီအစား s1 ကို သုံးလို့ မရအောင်
+      လုပ်လိုက်တာပါ။ စာသားကို s2 တစ်ခုတည်းက ပိုင်ဆိုင်ပြီး၊ memory ကိုလည်း s2 တစ်ခုတည်းကပဲ
+      ပြန်လွှတ်ပါတယ်။
     sources:
       - title: "The Rust Book — Variables and Data Interacting with Move"
-        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-move"
+        url:
+          "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-\
+          with-move"
     actions:
       - id: close-move-slide
         type: slide.close
@@ -712,15 +729,16 @@ scenes:
         drawMs: 2200
 
   - id: compiler-error
-    narration: >
-      What does the compiler say if you try?
-      [[mark:draw-error-code]] Here's a print of s1, after the move.
-      [[mark:draw-error-msg]] The answer is error E0382, borrow of moved value
-      s1. Printing reads s1, and Rust calls that kind of read a borrow.
-      [[mark:draw-error-note]] The message points at the move, and says why.
-      String doesn't implement the Copy trait. A trait names something a type
-      can do.
-      [[mark:draw-error-help]] It even suggests a fix. Clone the value.
+    narration: >-
+      ဒါဆို s1 ကို တကယ် ထပ်သုံးကြည့်ရင် compiler က ဘာ ပြောမလဲ ကြည့်ရအောင်။ [[mark:draw-error-code]]
+      ဒီမှာ move ဖြစ်ပြီးမှ s1 ကို print ထုတ်တဲ့ စာကြောင်း တစ်ကြောင်း ရှိပါတယ်။
+      [[mark:draw-error-msg]] compiler ရဲ့ အဖြေက E0382 error ပါ၊ move ဖြစ်သွားပြီးသား တန်ဖိုး s1 ကို
+      borrow လုပ်နေတယ်တဲ့။ print ထုတ်ဖို့ s1 ကို ဖတ်ရပြီး၊ အဲဒီလို ဖတ်တာမျိုးကို Rust က borrow လို့
+      ခေါ်ပါတယ်၊ borrow ဆိုတာ ငှားသုံးတာပါ။ [[mark:draw-error-note]] error message က move
+      ဖြစ်သွားတဲ့ နေရာကို ညွှန်ပြပြီး၊ ဘာကြောင့်လဲ ဆိုတာကိုပါ ပြောပြထားပါတယ်။ String က Copy trait
+      ကို implement မလုပ်ထားလို့ပါတဲ့။ trait ဆိုတာ type တစ်ခု လုပ်နိုင်တဲ့ စွမ်းရည်တွေကို
+      နာမည်ပေးထားတာပါ။ [[mark:draw-error-help]] ပြင်နည်းကိုတောင် help စာကြောင်းမှာ
+      အကြံပေးထားပါသေးတယ်။ တန်ဖိုးကို clone လုပ်လိုက်ပါတဲ့။
     sources:
       - title: "Rust error codes — E0382"
         url: "https://doc.rust-lang.org/error_codes/E0382.html"
@@ -754,14 +772,14 @@ scenes:
         drawMs: 1800
 
   - id: copy-clone
-    chapter: Copy and clone
-    narration: >
-      [[mark:show-copy]] So which types copy instead of moving? Types like
-      i32, bool, and char are Copy. They're small and live only on the stack,
-      so copying them costs almost nothing. Assigning one duplicates it, and
-      both names stay valid. Heap types like String and Vec move instead. A
-      Vec is a growable list. When you really want a second String, call
-      clone.
+    chapter: Copy နဲ့ clone
+    narration: >-
+      [[mark:show-copy]] ဒါဆို ဘယ် type တွေက move မဖြစ်ဘဲ copy ကူးသွားလဲ။ i32၊ bool နဲ့ char လို
+      type တွေက Copy type တွေပါ။ ဒီ type တွေက သေးသေးလေးတွေ ဖြစ်ပြီး stack ပေါ်မှာပဲ ရှိတဲ့အတွက်၊
+      ကူးရတာ ဘာမှ မကုန်သလောက်ပါပဲ။ ဒါကြောင့် ဒီလို တန်ဖိုး တစ်ခုကို variable အသစ်ထဲ ထည့်လိုက်ရင်
+      copy တစ်ခု ထပ်ရသွားပြီး၊ နာမည် နှစ်ခုလုံး ဆက်သုံးလို့ ရပါတယ်။ String နဲ့ Vec လို heap ကို
+      သုံးတဲ့ type တွေကတော့ copy မကူးဘဲ move ဖြစ်သွားပါတယ်။ Vec ဆိုတာ ကြီးလာနိုင်တဲ့ စာရင်း တစ်ခုပါ။
+      String တစ်ခုကို တကယ် နှစ်ခု လိုချင်ရင်တော့ clone ကို ခေါ်ရပါတယ်။
     sources:
       - title: "The Rust Book — Stack-Only Data: Copy"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy"
@@ -780,15 +798,18 @@ scenes:
         slideId: copy-slide
 
   - id: clone
-    narration: >
-      [[mark:type-clone]] Back in the editor, let's make s3 a clone of s2,
-      then change it. push_str adds text to the end of a String. That changes
-      s3, so s3 needs mut. [[mark:select-clone]] clone copies the heap text
-      too, so s3 gets its own memory. And s2 stays valid, because clone only
-      reads it. Copying takes real work, so Rust only does it when you ask.
+    narration: >-
+      [[mark:type-clone]] editor ထဲ ပြန်သွားရအောင်။ s3 ကို s2 ရဲ့ clone အဖြစ် လုပ်ပြီး၊ အဲဒီ s3 ကို
+      ပြောင်းကြည့်ပါမယ်။ push str က String ရဲ့ အဆုံးမှာ စာသား ထပ်ဖြည့်ပေးတာပါ။ ဒါက s3 ကို
+      ပြောင်းလိုက်တာ ဖြစ်လို့၊ s3 မှာ mut လိုပါတယ်။ [[mark:select-clone]] clone က heap ပေါ်က
+      စာသားကိုပါ ကူးပေးတဲ့အတွက်၊ s3 မှာ သူ့ကိုယ်ပိုင် memory ရှိသွားပါတယ်။ s2 ကလည်း ဆက်သုံးလို့
+      ရနေပါသေးတယ်၊ ဘာကြောင့်လဲဆိုတော့ clone က s2 ကို ဖတ်ရုံပဲ ဖတ်တာ ဖြစ်လို့ပါ။ ဒီလို ကူးရတာက တကယ်
+      အလုပ် ကုန်တာ ဖြစ်လို့၊ ကိုယ် တောင်းမှပဲ Rust က လုပ်ပေးပါတယ်။
     sources:
       - title: "The Rust Book — Variables and Data Interacting with Clone"
-        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-clone"
+        url:
+          "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-\
+          with-clone"
       - title: "std::string::String::push_str"
         url: "https://doc.rust-lang.org/std/string/struct.String.html#method.push_str"
     actions:
@@ -803,7 +824,13 @@ scenes:
           after: "    let s2 = s1;\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let mut s3 = s2.clone();\n    s3.push_str(\" world\");\n    println!(\"s2 = {s2}, s3 = {s3}\");\n"
+        text: "
+
+          \    let mut s3 = s2.clone();
+
+          \    s3.push_str(\" world\");
+
+          \    println!(\"s2 = {s2}, s3 = {s3}\");\n"
       - id: select-clone
         type: editor.select
         at: { mark: select-clone }
@@ -813,11 +840,11 @@ scenes:
           occurrence: 1
 
   - id: copy
-    narration: >
-      [[mark:type-copy]] Now let's assign an i32 the same way.
-      [[mark:select-copy]] m gets a copy of n. There's no heap memory here, so
-      nothing can be freed twice. That's why i32 is Copy. And n stays valid,
-      so we can still print it.
+    narration: >-
+      [[mark:type-copy]] အခု i32 တစ်ခုကိုလည်း အဲဒီနည်းအတိုင်း ထည့်ကြည့်ရအောင်။ [[mark:select-copy]]
+      m က n ရဲ့ copy တစ်ခု ရသွားပါတယ်။ ဒီမှာ heap memory ဆိုတာ မရှိတဲ့အတွက်၊ နှစ်ကြိမ်
+      ပြန်လွှတ်မိစရာလည်း ဘာမှ မရှိပါဘူး။ ဒါကြောင့် i32 က Copy type ဖြစ်တာပါ။ n ကလည်း ဆက်သုံးလို့
+      ရနေတဲ့အတွက်၊ print ထုတ်လို့ ရပါသေးတယ်။
     sources:
       - title: "The Rust Book — Stack-Only Data: Copy"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy"
@@ -830,7 +857,13 @@ scenes:
           after: "    println!(\"s2 = {s2}, s3 = {s3}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let n = 5;\n    let m = n;\n    println!(\"n = {n}, m = {m}\");\n"
+        text: "
+
+          \    let n = 5;
+
+          \    let m = n;
+
+          \    println!(\"n = {n}, m = {m}\");\n"
       - id: select-copy
         type: editor.select
         at: { mark: select-copy }
@@ -840,10 +873,10 @@ scenes:
           occurrence: 1
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. The first line comes from inside the braces,
-      before inner was dropped. s2 still says hello, and its clone says hello
-      world. And n and m are both five.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ ပထမ စာကြောင်းက တွန့်ကွင်းထဲက println ကနေ ထွက်လာတာ ဖြစ်ပြီး၊
+      inner ကို drop မလုပ်ခင် print ထုတ်ထားတာပါ။ s2 က hello အတိုင်း ရှိနေပြီး၊ သူ့ clone ဖြစ်တဲ့ s3
+      ကတော့ hello world ဖြစ်နေပါတယ်။ n နဲ့ m ကတော့ နှစ်ခုလုံး 5 ပါ။
     sources:
       - title: "The Rust Book — What Is Ownership?"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
@@ -864,11 +897,12 @@ scenes:
         contains: "let mut s3 = s2.clone();"
 
   - id: wrap
-    narration: >
-      So a value has one owner at a time, and it's dropped when its owner goes
-      out of scope. Assigning a String moves it, Copy types are duplicated, and
-      clone makes a real copy. Next, borrowing: how a function can use a value
-      without taking it.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ တန်ဖိုး တစ်ခုမှာ တစ်ချိန်မှာ owner တစ်ယောက်ပဲ ရှိပြီး၊ owner က scope
+      ကုန်သွားတဲ့အခါ အဲဒီ တန်ဖိုးကို drop လုပ်ပါတယ်။ String တစ်ခုကို တခြား variable ထဲ ထည့်လိုက်ရင်
+      move ဖြစ်သွားပြီး၊ Copy type တွေကတော့ copy ထပ်ရသွားပြီး၊ clone ကတော့ တကယ့် copy တစ်ခု
+      ကူးပေးပါတယ်။ နောက် lesson မှာတော့ reference နဲ့ borrowing၊ ဆိုလိုတာက function တစ်ခုက တန်ဖိုး
+      တစ်ခုကို မယူဘဲ ဘယ်လို သုံးနိုင်လဲ ဆိုတာကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Understanding Ownership"
         url: "https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html"
