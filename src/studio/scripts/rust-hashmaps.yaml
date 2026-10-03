@@ -1,14 +1,48 @@
-# One idea: a HashMap<K,V> stores values you look up by key; get returns an
-# Option (the key might be missing), and entry updates a key or sets a default.
-# A whiteboard sketch, then insert / get+match / entry on team scores, run.
-# Output avoids iteration (HashMap order is nondeterministic).
+# Rust from zero, lesson 14: hash maps.
+#
+# The arc: a whiteboard draws how a HashMap finds a value — the key goes
+# through a hash function, the number picks a slot, and the map goes straight
+# to it without searching — and why that leaves no fixed order. The editor
+# then brings HashMap into scope with `use` (it isn't in the prelude, unlike
+# Vec and String), makes a map with HashMap::new and two inserts (mut, types
+# inferred). A second board shows that get returns an Option (Some for a key
+# that's there, None for one that's missing) and the compiler's answer when
+# the result is used as a plain number (E0308). The editor handles both
+# cases with match, then counts ballots with entry().or_insert(0) and
+# `*count += 1` — insert would replace the old count, entry keeps it — and
+# names the E0368 you get without the star. Last, it prints len and two
+# Options with {:?}, and one run. The lesson is insert-only with one run, so
+# no broken program is ever typed, and the output never iterates the map
+# (its order changes from run to run).
+#
+# Every message on a board or in the narration was confirmed with rustc 1.98
+# (edition 2024) on the broken variants:
+#   `let red: i32 = votes.get("red");`
+#     error[E0308]: mismatched types
+#       expected `i32`, found `Option<&{integer}>`
+#   `count += 1;` (no star) inside the entry loop
+#     error[E0368]: binary assignment operation `+=` cannot be applied to
+#       type `&mut {integer}`
+#   no `use std::collections::HashMap;` (not shown, only the why is said)
+#     error[E0433]: cannot find type `HashMap` in this scope
+#   `println!("blue: {}", votes.get("blue"));` (not shown; backs "an Option
+#     can't print with plain braces")
+#     error[E0277]: `Option<&{integer}>` doesn't implement `std::fmt::Display`
+#   `votes["pink"]` compiles and panics ("no entry found for key"), which is
+#     why the narration says "With get, Rust makes you handle it".
+#
+# Board colours: blue = the key being named, orange = the caveat (no fixed
+# order; a key can be missing), violet = the result (the value found, Some
+# and None), red = the error and its spotlight, green = the way that works.
+# #1e1e1e paints white on the dark board.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-hashmaps.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-hashmaps
-  title: "Rust hash maps: look up by key"
+  title: "Rust from zero: Hash maps"
   locale: en-US
   workspace:
     lessonType: rust
@@ -16,117 +50,313 @@ lesson:
     entryFilePath: main.rs
     files:
       main.rs: |
-        use std::collections::HashMap;
-
         fn main() {
-            let mut scores = HashMap::new();
-            scores.insert("blue", 10);
-            scores.insert("red", 50);
-            println!("teams: {}", scores.len());
         }
-  # Diagram: two key -> value pairs drawn as boxes joined by arrows
-  # ("blue" -> 10, "red" -> 50), plus the get-returns-Option note.
   whiteboardAssets:
-    - id: hm-title
-      kind: text
-      x: 300
-      y: 165
-      width: 760
-      height: 44
-      text: "HashMap<K, V> — look up by key"
-      strokeColor: "#1e1e1e"
-      fontSize: 34
-    - id: hm-kbox0
-      kind: rectangle
-      x: 370
-      y: 275
-      width: 170
-      height: 66
-      strokeColor: "#1e1e1e"
-    - id: hm-key0
-      kind: text
-      x: 398
-      y: 298
-      width: 140
-      height: 34
-      text: '"blue"'
-      strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: hm-arrow0
-      kind: text
-      x: 558
-      y: 292
-      width: 44
-      height: 40
-      text: "→"
-      strokeColor: "#80868b"
-      fontSize: 34
-    - id: hm-vbox0
-      kind: rectangle
-      x: 616
-      y: 275
-      width: 120
-      height: 66
-      strokeColor: "#1971c2"
-    - id: hm-val0
-      kind: text
-      x: 656
-      y: 298
-      width: 60
-      height: 34
-      text: "10"
-      strokeColor: "#1971c2"
-      fontSize: 30
-    - id: hm-kbox1
-      kind: rectangle
-      x: 370
-      y: 365
-      width: 170
-      height: 66
-      strokeColor: "#1e1e1e"
-    - id: hm-key1
-      kind: text
-      x: 398
-      y: 388
-      width: 140
-      height: 34
-      text: '"red"'
-      strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: hm-arrow1
-      kind: text
-      x: 558
-      y: 382
-      width: 44
-      height: 40
-      text: "→"
-      strokeColor: "#80868b"
-      fontSize: 34
-    - id: hm-vbox1
-      kind: rectangle
-      x: 616
-      y: 365
-      width: 120
-      height: 66
-      strokeColor: "#1971c2"
-    - id: hm-val1
-      kind: text
-      x: 656
-      y: 388
-      width: 60
-      height: 34
-      text: "50"
-      strokeColor: "#1971c2"
-      fontSize: 30
-    - id: hm-note
-      kind: text
-      x: 360
-      y: 470
-      width: 740
-      height: 36
-      text: "get(key) → Option — Some(value), or None if missing"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
+    # ---- Board 1: how a HashMap finds a value ------------------------------
+    - {
+        id: m-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 780,
+        height: 48,
+        text: "HashMap: find a value by its key",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: m-key-box,
+        kind: rectangle,
+        x: 380,
+        y: 236,
+        width: 150,
+        height: 72,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-key-text,
+        kind: text,
+        x: 418,
+        y: 254,
+        width: 80,
+        height: 36,
+        text: '"red"',
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: m-arrow-hash,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 542,
+        y: 252,
+        width: 136,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-hash-ring,
+        kind: ellipse,
+        x: 690,
+        y: 230,
+        width: 150,
+        height: 84,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-hash-text,
+        kind: text,
+        x: 732,
+        y: 254,
+        width: 70,
+        height: 36,
+        text: "hash",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-arrow-slot,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 740,
+        y: 320,
+        width: 50,
+        height: 72,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-slot0,
+        kind: rectangle,
+        x: 290,
+        y: 400,
+        width: 190,
+        height: 72,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-slot1,
+        kind: rectangle,
+        x: 480,
+        y: 400,
+        width: 190,
+        height: 72,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-slot2,
+        kind: rectangle,
+        x: 670,
+        y: 400,
+        width: 190,
+        height: 72,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: m-slot3,
+        kind: rectangle,
+        x: 860,
+        y: 400,
+        width: 190,
+        height: 72,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-pair-red,
+        kind: text,
+        x: 696,
+        y: 418,
+        width: 150,
+        height: 36,
+        text: '"red" → 2',
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: m-pair-blue,
+        kind: text,
+        x: 308,
+        y: 418,
+        width: 160,
+        height: 36,
+        text: '"blue" → 1',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-direct,
+        kind: text,
+        x: 290,
+        y: 500,
+        width: 700,
+        height: 36,
+        text: "straight to the slot: no search",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: m-order,
+        kind: text,
+        x: 290,
+        y: 572,
+        width: 760,
+        height: 36,
+        text: "slots follow the hash → no fixed order",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board 2: get returns an Option (and E0308) ------------------------
+    - {
+        id: g-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 780,
+        height: 48,
+        text: "get gives back an Option",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: g-red-call,
+        kind: text,
+        x: 300,
+        y: 226,
+        width: 240,
+        height: 36,
+        text: 'votes.get("red")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-red-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 552,
+        y: 222,
+        width: 90,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: g-some,
+        kind: text,
+        x: 656,
+        y: 226,
+        width: 140,
+        height: 36,
+        text: "Some(&2)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: g-red-note,
+        kind: text,
+        x: 820,
+        y: 226,
+        width: 240,
+        height: 36,
+        text: "the key is there",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: g-pink-call,
+        kind: text,
+        x: 300,
+        y: 286,
+        width: 250,
+        height: 36,
+        text: 'votes.get("pink")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-pink-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 552,
+        y: 282,
+        width: 90,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: g-none,
+        kind: text,
+        x: 656,
+        y: 286,
+        width: 80,
+        height: 36,
+        text: "None",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: g-pink-note,
+        kind: text,
+        x: 820,
+        y: 286,
+        width: 220,
+        height: 36,
+        text: "no such key",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-code,
+        kind: text,
+        x: 300,
+        y: 382,
+        width: 480,
+        height: 36,
+        text: 'let red: i32 = votes.get("red");',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-code-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 506,
+        y: 392,
+        width: 214,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: g-err1,
+        kind: text,
+        x: 300,
+        y: 446,
+        width: 480,
+        height: 36,
+        text: "error[E0308]: mismatched types",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: g-err2,
+        kind: text,
+        x: 300,
+        y: 486,
+        width: 640,
+        height: 36,
+        text: "expected `i32`, found `Option<&{integer}>`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: g-fix,
+        kind: text,
+        x: 300,
+        y: 566,
+        width: 640,
+        height: 36,
+        text: "the fix: handle Some and None",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -139,117 +369,287 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "teams: 2\nred has 50\nblue now: 15\n"
+      stdout: "red has 2 votes\n3 colors\nblue: Some(3)\npink: None\n"
       stderr: ""
 
 scenes:
   - id: what-is-a-map
+    chapter: Look up by key
     narration: >
-      [[mark:board]] A HashMap stores values you look up by key, not by
-      position. [[mark:show-map]] Here, the key blue maps to ten, and red maps
-      to fifty. [[mark:show-note]] Looking a key up returns an Option — Some
-      with the value, or None if it's missing. [[mark:board-close]] Let's build
-      it.
+      You've seen a Vec. It finds a value by its position: zero, one, two.
+      [[mark:draw-key]] A HashMap finds a value by a key instead, like a name
+      or a word. Here, the key is red.
+      [[mark:draw-hash]] The map runs the key through a hash function. That
+      turns it into a number, and the number picks a slot.
+      [[mark:draw-slots]] So the map goes straight to the right slot, and
+      finds the value two. It doesn't search every entry.
+      [[mark:draw-blue]] Other keys, like blue, land in other slots. Each key
+      has one value. All the keys share one type, and so do all the values.
+      [[mark:draw-order]] That's also why a HashMap has no fixed order. The
+      slots follow the hash, not the order you inserted. If you loop over a
+      map, the order can change from one run to the next.
     sources:
       - title: "The Rust Book — Storing Keys with Associated Values in Hash Maps"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html"
+      - title: "The Rust Book — Hashing Functions"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#hashing-functions"
+      - title: "std::collections::HashMap (randomly seeded hashing; iter visits pairs in arbitrary order)"
+        url: "https://doc.rust-lang.org/std/collections/struct.HashMap.html"
     actions:
-      - id: open-board
+      # Opens in the quiet handle before the first word, already titled.
+      - id: open-board-map
         type: whiteboard.apply
-        at: { mark: board }
+        at: { scene: start, offsetMs: -1500 }
         open: true
-        upsertIds: [hm-title]
-      - id: show-map
+        upsertIds: [m-title]
+      - id: draw-key
         type: whiteboard.apply
-        at: { mark: show-map }
-        upsertIds:
-          [
-            hm-kbox0,
-            hm-key0,
-            hm-arrow0,
-            hm-vbox0,
-            hm-val0,
-            hm-kbox1,
-            hm-key1,
-            hm-arrow1,
-            hm-vbox1,
-            hm-val1,
-          ]
-      - id: show-note
+        at: { mark: draw-key }
+        upsertIds: [m-key-box, m-key-text]
+        drawMs: 1000
+      - id: draw-hash
         type: whiteboard.apply
-        at: { mark: show-note }
-        upsertIds: [hm-note]
-      - id: close-board
+        at: { mark: draw-hash }
+        upsertIds: [m-arrow-hash, m-hash-ring, m-hash-text, m-arrow-slot]
+        drawMs: 2400
+      - id: draw-slots
         type: whiteboard.apply
-        at: { mark: board-close }
-        open: false
+        at: { mark: draw-slots }
+        upsertIds: [m-slot0, m-slot1, m-slot2, m-slot3, m-pair-red, m-direct]
+        drawMs: 3000
+      - id: draw-blue
+        type: whiteboard.apply
+        at: { mark: draw-blue }
+        upsertIds: [m-pair-blue]
+        drawMs: 800
+      - id: draw-order
+        type: whiteboard.apply
+        at: { mark: draw-order }
+        upsertIds: [m-order]
+        drawMs: 1600
 
-  - id: insert-and-get
+  - id: make-a-map
+    chapter: Making a HashMap
     narration: >
-      [[mark:open]] Here we insert two team scores, so the map holds two keys.
-      [[mark:type-get]] Now we look up red. [[mark:select-get]] get returns an
-      Option, so we match: Some means we found points, while None means the key
-      is missing. Red is there, with fifty.
+      Let's build one. Vec and String are always in scope, because they're in
+      the prelude: the names every program gets automatically.
+      [[mark:type-use]] HashMap isn't, so we bring it in with use. It lives in
+      the collections module of the standard library.
+      [[mark:type-new]] HashMap::new makes an empty map, and insert adds a
+      key with its value. Like push on a Vec, insert changes the map, so votes
+      needs mut.
+      [[mark:select-insert]] We never wrote the types. From these inserts, the
+      compiler works out that the keys are string slices, and the values are
+      i32, the default for whole numbers.
+    sources:
+      - title: "The Rust Book — Creating a New Hash Map"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#creating-a-new-hash-map"
+      - title: "The Rust Book — Bringing Paths into Scope with the use Keyword"
+        url: "https://doc.rust-lang.org/book/ch07-04-bringing-paths-into-scope-with-the-use-keyword.html"
+      - title: "std::prelude (Vec and String are in it; HashMap isn't)"
+        url: "https://doc.rust-lang.org/std/prelude/index.html"
+      - title: "std::collections::HashMap::insert"
+        url: "https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.insert"
+    actions:
+      - id: close-board-map
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { scene: start, offsetMs: 800 }
+        path: main.rs
+      - id: type-use
+        type: editor.type
+        at: { mark: type-use }
+        target:
+          file: main.rs
+          after: ""
+          occurrence: 1
+        cadence: fast-explainer
+        text: "use std::collections::HashMap;\n\n"
+      - id: type-new
+        type: editor.type
+        at: { mark: type-new, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "fn main() {\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let mut votes = HashMap::new();\n    votes.insert(\"red\", 2);\n    votes.insert(\"blue\", 1);\n"
+      - id: select-insert
+        type: editor.select
+        at: { mark: select-insert }
+        target:
+          file: main.rs
+          text: '("red", 2)'
+          occurrence: 1
+
+  - id: get-option
+    chapter: get returns an Option
+    narration: >
+      So how do we read a value back? With get, like on a Vec, but with a
+      key.
+      [[mark:draw-some]] Asking for red gives Some, with a reference to the
+      two inside the map.
+      [[mark:draw-none]] But asking for pink gives None, because there's no
+      such key. Any key can be missing, so get returns an Option.
+      [[mark:draw-err-code]] What if you treat the result as a plain number,
+      like this i32?
+      [[mark:draw-err-msg]] The compiler stops you, with error E0308:
+      mismatched types. It expected an i32, but found an Option.
+      [[mark:draw-fix]] The fix is to handle both Some and None. In many
+      languages, a missing key gives you null, or an error while the program
+      runs. With get, Rust makes you handle it before the program runs.
     sources:
       - title: "The Rust Book — Accessing Values in a Hash Map"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#accessing-values-in-a-hash-map"
+      - title: "std::collections::HashMap::get"
+        url: "https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.get"
+      - title: "Rust error codes — E0308"
+        url: "https://doc.rust-lang.org/error_codes/E0308.html"
+      - title: "The Rust Book — The Option Enum and Its Advantages Over Null Values"
+        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantages-over-null-values"
     actions:
-      - id: open-main
-        type: workspace.openFile
-        at: { mark: open }
-        path: main.rs
-      - id: type-get
+      - id: open-board-get
+        type: whiteboard.apply
+        at: { scene: start }
+        open: true
+        clear: true
+        upsertIds: [g-title]
+      - id: draw-some
+        type: whiteboard.apply
+        at: { mark: draw-some }
+        upsertIds: [g-red-call, g-red-arrow, g-some, g-red-note]
+        drawMs: 2200
+      - id: draw-none
+        type: whiteboard.apply
+        at: { mark: draw-none }
+        upsertIds: [g-pink-call, g-pink-arrow, g-none, g-pink-note]
+        drawMs: 2200
+      - id: draw-err-code
+        type: whiteboard.apply
+        at: { mark: draw-err-code }
+        upsertIds: [g-code, g-code-line]
+        drawMs: 1600
+      - id: draw-err-msg
+        type: whiteboard.apply
+        at: { mark: draw-err-msg }
+        upsertIds: [g-err1, g-err2]
+        drawMs: 2400
+      - id: draw-fix
+        type: whiteboard.apply
+        at: { mark: draw-fix }
+        upsertIds: [g-fix]
+        drawMs: 1200
+
+  - id: match-get
+    narration: >
+      [[mark:type-match]] So let's handle both cases with match. You've
+      matched on an Option before. This one works the same way.
+      [[mark:select-get]] get returns the Option, and each arm handles one
+      case. Some gives us the count. None runs if the key is missing.
+    sources:
+      - title: "The Rust Book — The match Control Flow Construct"
+        url: "https://doc.rust-lang.org/book/ch06-02-match.html"
+      - title: "std::option::Option"
+        url: "https://doc.rust-lang.org/std/option/enum.Option.html"
+    actions:
+      - id: close-board-get
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -400 }
+        open: false
+      - id: type-match
         type: editor.type
-        at: { mark: type-get, offsetMs: -400 }
+        at: { mark: type-match }
         target:
           file: main.rs
-          after: "    println!(\"teams: {}\", scores.len());\n"
+          after: "    votes.insert(\"blue\", 1);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let team = \"red\";\n    match scores.get(team) {\n        Some(points) => println!(\"{team} has {points}\"),\n        None => println!(\"{team} not found\"),\n    }\n"
+        text: "\n    match votes.get(\"red\") {\n        Some(count) => println!(\"red has {count} votes\"),\n        None => println!(\"no votes for red\"),\n    }\n"
       - id: select-get
         type: editor.select
         at: { mark: select-get }
         target:
           file: main.rs
-          text: "scores.get(team)"
+          text: 'votes.get("red")'
           occurrence: 1
 
-  - id: entry-update
+  - id: count
+    chapter: Counting with entry
     narration: >
-      [[mark:type-entry]] Now update blue. [[mark:select-entry]] entry finds the
-      key, and or_insert gives us a mutable reference: the existing ten, or zero
-      if blue were new. We add five, so blue becomes fifteen.
+      Now let's count more votes. insert won't help here. If the key is
+      already there, insert replaces the old value. To add one, we need the
+      old count first.
+      [[mark:type-ballots]] Here are three ballots: blue, green, and blue
+      again. The loop takes them one at a time.
+      [[mark:select-entry]] entry looks up the color. or_insert puts in a zero
+      if the color is new. Either way, it gives back a mutable reference to
+      the count inside the map.
+      [[mark:select-star]] The star gives you the count the reference points
+      at, like in the Vec loop, so plus-equals one adds to the number inside
+      the map. Without it, you'd get error E0368: you can't use plus-equals
+      on the reference itself.
     sources:
+      - title: "The Rust Book — Overwriting a Value"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#overwriting-a-value"
       - title: "The Rust Book — Updating a Value Based on the Old Value"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#updating-a-value-based-on-the-old-value"
+      - title: "std::collections::hash_map::Entry::or_insert"
+        url: "https://doc.rust-lang.org/std/collections/hash_map/enum.Entry.html#method.or_insert"
+      - title: "Rust error codes — E0368"
+        url: "https://doc.rust-lang.org/error_codes/E0368.html"
     actions:
-      - id: type-entry
+      - id: type-ballots
         type: editor.type
-        at: { mark: type-entry, offsetMs: -400 }
+        at: { mark: type-ballots, offsetMs: -200 }
         target:
           file: main.rs
-          after: "        None => println!(\"{team} not found\"),\n    }\n"
+          after: "        None => println!(\"no votes for red\"),\n    }\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    *scores.entry(\"blue\").or_insert(0) += 5;\n    println!(\"blue now: {}\", scores[\"blue\"]);\n"
+        text: "\n    let ballots = [\"blue\", \"green\", \"blue\"];\n    for color in ballots {\n        let count = votes.entry(color).or_insert(0);\n        *count += 1;\n    }\n"
       - id: select-entry
         type: editor.select
         at: { mark: select-entry }
         target:
           file: main.rs
-          text: 'scores.entry("blue").or_insert(0)'
+          text: "entry(color).or_insert(0)"
+          occurrence: 1
+      - id: select-star
+        type: editor.select
+        at: { mark: select-star }
+        target:
+          file: main.rs
+          text: "*count += 1"
           occurrence: 1
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Two teams, red has fifty, and blue climbed to
-      fifteen. A HashMap is how you store and find data by a key instead of an
-      index.
+      [[mark:type-print]] Last, let's print how many colors there are, and ask
+      for blue and pink. An Option can't print with plain braces, so we use
+      the Debug format, with a colon and a question mark.
+      [[mark:run]] Let's run it. Red has two votes. There are three colors
+      now, because green was new. Blue went from one to three, so get gives
+      Some three. Pink was never added, so it's None.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "std::collections::HashMap::len"
+        url: "https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.len"
+      - title: "std::fmt — Debug formatting ({:?})"
+        url: "https://doc.rust-lang.org/std/fmt/index.html#fmtdisplay-vs-fmtdebug"
+      - title: "std::option::Option (implements Debug, not Display)"
+        url: "https://doc.rust-lang.org/std/option/enum.Option.html"
     actions:
+      - id: type-print
+        type: editor.type
+        at: { mark: type-print }
+        target:
+          file: main.rs
+          after: "        *count += 1;\n    }\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    println!(\"{} colors\", votes.len());\n    println!(\"blue: {:?}\", votes.get(\"blue\"));\n    println!(\"pink: {:?}\", votes.get(\"pink\"));\n"
       - id: run
         type: runtime.run
         at: { mark: run, offsetMs: 200 }
@@ -257,13 +657,27 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "blue now: 15"
+        contains: "blue: Some(3)"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: 'scores.entry("blue")'
+        contains: "let count = votes.entry(color).or_insert(0);"
+
+  - id: wrap
+    narration: >
+      So a HashMap stores values by key. insert adds or replaces a value, get
+      returns an Option because a key can be missing, and entry with
+      or_insert updates a value, adding it first if the key is new. Next,
+      error handling: what your program does when something can
+      fail.
+    sources:
+      - title: "The Rust Book — Storing Keys with Associated Values in Hash Maps"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html"
+      - title: "The Rust Book — Error Handling"
+        url: "https://doc.rust-lang.org/book/ch09-00-error-handling.html"
+    actions: []
 
 checks:
   - { type: timing.p95Ms, max: 300 }
