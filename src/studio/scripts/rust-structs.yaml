@@ -1,13 +1,44 @@
-# One idea: a struct groups related data under named, typed fields, and an
-# impl block gives it methods that borrow the instance through &self. A
-# whiteboard sketch, then an area method built on a Rectangle and run.
+# Rust from zero, lesson 9: structs.
+#
+# The arc: a whiteboard shows WHY a struct exists (a tuple (30, 50) can't say
+# which number is the width; a struct names every field) and how Rust splits
+# a "class" in two: the struct holds the data, an impl block holds the
+# methods. The editor then builds a Rectangle: the definition, one instance
+# (every field needs a value), field access with a dot, an area method that
+# borrows through &self (and the dot call that borrows for you), and an
+# associated function `new` with the field init shorthand, called with ::.
+# A second board shows what happens when you print the whole struct: the two
+# E0277 errors for {} (Display) and {:?} (Debug), and the compiler's help line
+# that names the fix. The editor adds #[derive(Debug)] and prints with {:?}.
+# One run at the end, then a short recap and a pointer to enums.
+#
+# Every compiler message on the board or in the narration was confirmed with
+# rustc 1.98 (edition 2024) on the broken variants of the final program:
+#   println!("{square}");   (no Display)
+#     error[E0277]: `Rectangle` doesn't implement `std::fmt::Display`
+#   println!("{square:?}"); (without #[derive(Debug)])
+#     error[E0277]: `Rectangle` doesn't implement `Debug`
+#     help: consider annotating `Rectangle` with `#[derive(Debug)]`
+#   Rectangle { width: 30 } (a field left out)
+#     error[E0063]: missing field `height` in initializer of `Rectangle`
+#   println!("width {rect.width}");
+#     error: invalid format string: field access isn't supported
+# The final program is rustfmt-clean, compiles with no warnings, and its
+# output is the fixture byte for byte.
+#
+# Board colours: blue = the thing being named (the struct, the impl block,
+# which format a placeholder asks for), green = what works (named fields, the
+# compiler's fix), orange = the caveat (the tuple can't say which number is
+# which), red = the error, violet = the result a method gives back. #1e1e1e
+# paints white on the dark board.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-structs.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-structs
-  title: "Rust structs: data plus behavior"
+  title: "Rust from zero: Structs"
   locale: en-US
   workspace:
     lessonType: rust
@@ -15,102 +46,280 @@ lesson:
     entryFilePath: main.rs
     files:
       main.rs: |
-        struct Rectangle {
-            width: u32,
-            height: u32,
-        }
-
         fn main() {
-            let rect = Rectangle { width: 4, height: 5 };
-            println!("width {}, height {}", rect.width, rect.height);
         }
   whiteboardAssets:
-    - id: st-title
+    # Board 1 — why a struct: a tuple can't name its values; a struct can,
+    # and an impl block adds the methods.
+    - id: b1-title
       kind: text
       x: 300
-      y: 165
-      width: 780
-      height: 44
-      text: "A struct groups fields; impl adds methods"
+      y: 160
+      width: 300
+      height: 48
+      text: "Why a struct?"
       strokeColor: "#1e1e1e"
-      fontSize: 34
-    - id: st-structbox
+      fontSize: 38
+    - id: b1-tuple-box
       kind: rectangle
-      x: 340
-      y: 268
-      width: 320
-      height: 156
-      strokeColor: "#1971c2"
-    - id: st-structlabel
-      kind: text
-      x: 362
-      y: 282
-      width: 280
-      height: 32
-      text: "Rectangle"
-      strokeColor: "#1971c2"
-      fontSize: 26
-    - id: st-field0
-      kind: text
-      x: 366
-      y: 330
-      width: 280
-      height: 34
-      text: "width:  4"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: st-field1
-      kind: text
-      x: 366
-      y: 378
-      width: 280
-      height: 34
-      text: "height: 5"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: st-implbox
-      kind: rectangle
-      x: 710
-      y: 268
-      width: 350
-      height: 156
+      x: 300
+      y: 250
+      width: 240
+      height: 100
       strokeColor: "#f08c00"
-    - id: st-impllabel
+    - id: b1-tuple-t
       kind: text
-      x: 732
-      y: 282
-      width: 320
-      height: 32
-      text: "impl Rectangle"
-      strokeColor: "#f08c00"
-      fontSize: 24
-    - id: st-method
-      kind: text
-      x: 736
-      y: 330
-      width: 320
-      height: 34
-      text: "fn area(&self)"
+      x: 348
+      y: 280
+      width: 150
+      height: 40
+      text: "(30, 50)"
       strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: st-methodbody
+      fontSize: 32
+    - id: b1-tuple-q
       kind: text
-      x: 736
-      y: 374
-      width: 320
-      height: 34
-      text: "→ width × height"
-      strokeColor: "#1e1e1e"
-      fontSize: 22
-    - id: st-note
-      kind: text
-      x: 340
-      y: 452
-      width: 760
+      x: 300
+      y: 365
+      width: 310
       height: 36
-      text: "area(&self) borrows the rectangle → 4 × 5 = 20"
+      text: "which is the width?"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b1-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 565
+      y: 280
+      width: 95
+      height: 40
       strokeColor: "#1e1e1e"
-      fontSize: 26
+    - id: b1-struct-box
+      kind: rectangle
+      x: 680
+      y: 230
+      width: 390
+      height: 180
+      strokeColor: "#1971c2"
+    - id: b1-struct-name
+      kind: text
+      x: 705
+      y: 242
+      width: 300
+      height: 40
+      text: "struct Rectangle"
+      strokeColor: "#1971c2"
+      fontSize: 32
+    - id: b1-field-w
+      kind: text
+      x: 730
+      y: 296
+      width: 180
+      height: 38
+      text: "width: 30"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b1-field-h
+      kind: text
+      x: 730
+      y: 346
+      width: 190
+      height: 38
+      text: "height: 50"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b1-check
+      kind: freedraw
+      stroke: check
+      x: 985
+      y: 312
+      width: 50
+      height: 44
+      strokeColor: "#2f9e44"
+    - id: b1-arrow-down
+      kind: freedraw
+      stroke: arrow-down
+      x: 855
+      y: 420
+      width: 40
+      height: 60
+      strokeColor: "#1e1e1e"
+    - id: b1-impl-box
+      kind: rectangle
+      x: 680
+      y: 490
+      width: 390
+      height: 130
+      strokeColor: "#1971c2"
+    - id: b1-impl-name
+      kind: text
+      x: 705
+      y: 502
+      width: 270
+      height: 40
+      text: "impl Rectangle"
+      strokeColor: "#1971c2"
+      fontSize: 32
+    - id: b1-impl-area
+      kind: text
+      x: 730
+      y: 560
+      width: 190
+      height: 38
+      text: "area(&self)"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b1-impl-result
+      kind: text
+      x: 935
+      y: 560
+      width: 115
+      height: 38
+      text: "→ 1500"
+      strokeColor: "#6741d9"
+      fontSize: 30
+    - id: b1-methods
+      kind: text
+      x: 460
+      y: 540
+      width: 130
+      height: 38
+      text: "methods"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b1-methods-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 595
+      y: 538
+      width: 70
+      height: 40
+      strokeColor: "#1e1e1e"
+
+    # Board 2 — printing a whole struct: two E0277 errors, and the help line
+    # that names the fix.
+    - id: b2-title
+      kind: text
+      x: 300
+      y: 160
+      width: 360
+      height: 48
+      text: "Printing a struct"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: b2-bad1
+      kind: text
+      x: 300
+      y: 232
+      width: 340
+      height: 36
+      text: 'println!("{square}");'
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b2-bad1-line
+      kind: freedraw
+      stroke: underline
+      x: 295
+      y: 240
+      width: 275
+      height: 32
+      strokeColor: "#e03131"
+    - id: b2-label1
+      kind: text
+      x: 700
+      y: 232
+      width: 290
+      height: 36
+      text: "Display: for users"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: b2-err1a
+      kind: text
+      x: 330
+      y: 282
+      width: 680
+      height: 36
+      text: "error[E0277]: `Rectangle` doesn't implement"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b2-err1b
+      kind: text
+      x: 330
+      y: 320
+      width: 300
+      height: 36
+      text: "`std::fmt::Display`"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b2-bad2
+      kind: text
+      x: 300
+      y: 382
+      width: 370
+      height: 36
+      text: 'println!("{square:?}");'
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b2-bad2-line
+      kind: freedraw
+      stroke: underline
+      x: 295
+      y: 390
+      width: 295
+      height: 32
+      strokeColor: "#e03131"
+    - id: b2-label2
+      kind: text
+      x: 700
+      y: 382
+      width: 340
+      height: 36
+      text: "Debug: for developers"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: b2-err2a
+      kind: text
+      x: 330
+      y: 432
+      width: 680
+      height: 36
+      text: "error[E0277]: `Rectangle` doesn't implement"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b2-err2b
+      kind: text
+      x: 330
+      y: 470
+      width: 120
+      height: 36
+      text: "`Debug`"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b2-help-a
+      kind: text
+      x: 300
+      y: 532
+      width: 670
+      height: 36
+      text: "help: consider annotating `Rectangle` with"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: b2-help-b
+      kind: text
+      x: 330
+      y: 572
+      width: 340
+      height: 40
+      text: "`#[derive(Debug)]`"
+      strokeColor: "#2f9e44"
+      fontSize: 32
+    - id: b2-check
+      kind: freedraw
+      stroke: check
+      x: 645
+      y: 568
+      width: 50
+      height: 44
+      strokeColor: "#2f9e44"
 
 build:
   voiceProfile: pocket-alba-v1
@@ -123,78 +332,164 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "width 4, height 5\narea 20\n"
+      stdout: "width 30, height 50\narea 1500\nsquare area 400\nRectangle { width: 20, height: 20 }\n"
       stderr: ""
 
 scenes:
-  - id: anatomy
+  - id: why-structs
+    chapter: Why structs
     narration: >
-      [[mark:board]] A struct groups related data under one name.
-      [[mark:show-struct]] Rectangle holds two fields — a width and a height,
-      here four and five. [[mark:show-impl]] An impl block adds methods. area
-      takes a reference to self, and multiplies width by height.
-      [[mark:show-note]] So area reads the rectangle without owning it, and
-      returns twenty. [[mark:board-close]] Let's write it.
+      [[mark:open-board]] A rectangle has two parts: a width and a height.
+      [[mark:draw-tuple]] You could keep the two numbers in a tuple: thirty
+      and fifty. But which one is the width? The tuple doesn't say.
+      [[mark:draw-struct]] A struct fixes that. It's your own type, and each
+      field has a name and a type, so the code says what every value means.
+      [[mark:draw-impl]] Then an impl block gives the struct its behavior:
+      functions that work on it, called methods. Here, area multiplies the two
+      fields. If you know classes, it's a bit like a class split in two. The data goes in the struct, and the methods go in
+      impl.
     sources:
       - title: "The Rust Book — Defining and Instantiating Structs"
         url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html"
-    actions:
-      - id: open-board
-        type: whiteboard.apply
-        at: { mark: board }
-        open: true
-        upsertIds: [st-title]
-      - id: show-struct
-        type: whiteboard.apply
-        at: { mark: show-struct }
-        upsertIds: [st-structbox, st-structlabel, st-field0, st-field1]
-      - id: show-impl
-        type: whiteboard.apply
-        at: { mark: show-impl }
-        upsertIds: [st-implbox, st-impllabel, st-method, st-methodbody]
-      - id: show-note
-        type: whiteboard.apply
-        at: { mark: show-note }
-        upsertIds: [st-note]
-      - id: close-board
-        type: whiteboard.apply
-        at: { mark: board-close }
-        open: false
-
-  - id: fields
-    narration: >
-      [[mark:open]] Here's the struct, and one Rectangle, four by five.
-      [[mark:select-fields]] We read its fields with a dot: rect.width and
-      rect.height. Fields are named pieces of the value.
-    sources:
-      - title: "The Rust Book — Using Structs"
-        url: "https://doc.rust-lang.org/book/ch05-02-example-structs.html"
-    actions:
-      - id: open-main
-        type: workspace.openFile
-        at: { mark: open }
-        path: main.rs
-      - id: select-fields
-        type: editor.select
-        at: { mark: select-fields }
-        target:
-          file: main.rs
-          text: "rect.width, rect.height"
-          occurrence: 1
-
-  - id: methods
-    narration: >
-      [[mark:type-impl]] Now the behavior. Inside impl Rectangle, area borrows
-      self and multiplies width by height. [[mark:select-self]] Because it takes
-      &self, it can read the rectangle without taking ownership.
-      [[mark:type-call]] Then we call it with rect.area().
-    sources:
+      - title: "The Rust Book — Refactoring with Tuples"
+        url: "https://doc.rust-lang.org/book/ch05-02-example-structs.html#refactoring-with-tuples"
       - title: "The Rust Book — Method Syntax"
         url: "https://doc.rust-lang.org/book/ch05-03-method-syntax.html"
     actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { mark: open-board }
+        open: true
+        upsertIds: [b1-title]
+      - id: draw-tuple
+        type: whiteboard.apply
+        at: { mark: draw-tuple }
+        upsertIds: [b1-tuple-box, b1-tuple-t, b1-tuple-q]
+        drawMs: 1800
+      - id: draw-struct
+        type: whiteboard.apply
+        at: { mark: draw-struct }
+        upsertIds: [b1-arrow, b1-struct-box, b1-struct-name, b1-field-w, b1-field-h, b1-check]
+        drawMs: 3200
+      - id: draw-impl
+        type: whiteboard.apply
+        at: { mark: draw-impl }
+        upsertIds:
+          [
+            b1-arrow-down,
+            b1-impl-box,
+            b1-impl-name,
+            b1-impl-area,
+            b1-impl-result,
+            b1-methods,
+            b1-methods-arrow,
+          ]
+        drawMs: 3400
+
+  - id: define
+    chapter: Defining a struct
+    narration: >
+      Let's build it. [[mark:open-main]] Our main is empty for now.
+      [[mark:type-struct]] The struct goes outside main, at the top of the
+      file. [[mark:select-field]] Each field is a name, a colon, and a type.
+      Both are u32, an unsigned integer. On its own, the struct is only a
+      description. It doesn't hold any values yet.
+    sources:
+      - title: "The Rust Book — Defining and Instantiating Structs"
+        url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html"
+      - title: "The Rust Reference — Structs"
+        url: "https://doc.rust-lang.org/reference/items/structs.html"
+    actions:
+      - id: close-board1
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: main.rs
+      - id: type-struct
+        type: editor.type
+        at: { mark: type-struct, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: ""
+          occurrence: 1
+        cadence: line-by-line
+        text: "struct Rectangle {\n    width: u32,\n    height: u32,\n}\n\n"
+      - id: select-field
+        type: editor.select
+        at: { mark: select-field }
+        target:
+          file: main.rs
+          text: "width: u32"
+          occurrence: 1
+
+  - id: instance
+    narration: >
+      [[mark:type-instance]] Now let's make an instance: one real rectangle.
+      We write the struct's name, then each field and its value, inside curly
+      braces. [[mark:select-instance]] Every field needs a value. Leave one
+      out, and the compiler stops with a missing field error.
+      [[mark:type-print-fields]] To read a field, we use a dot: rect dot
+      width. Inline names in braces only work for plain variables, not for
+      fields, so here we use empty braces.
+    sources:
+      - title: "The Rust Book — Defining and Instantiating Structs"
+        url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html"
+      - title: "Rust error codes — E0063"
+        url: "https://doc.rust-lang.org/error_codes/E0063.html"
+      - title: "std::fmt — Formatting"
+        url: "https://doc.rust-lang.org/std/fmt/index.html"
+    actions:
+      - id: type-instance
+        type: editor.type
+        at: { mark: type-instance, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "fn main() {\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let rect = Rectangle {\n        width: 30,\n        height: 50,\n    };\n"
+      - id: select-instance
+        type: editor.select
+        at: { mark: select-instance }
+        target:
+          file: main.rs
+          text: "width: 30,\n        height: 50,"
+          occurrence: 1
+      - id: type-print-fields
+        type: editor.type
+        at: { mark: type-print-fields, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "        height: 50,\n    };\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    println!(\"width {}, height {}\", rect.width, rect.height);\n"
+
+  - id: methods
+    chapter: Methods with impl
+    narration: >
+      [[mark:type-impl]] Let's add the impl block, with one method: area. The
+      multiplication has no semicolon, so it's the value area returns.
+      [[mark:select-self]] Its first parameter is self, the rectangle you call
+      it on. The ampersand means area only borrows it. It reads the fields
+      without taking ownership, so you can still use rect after the call.
+      [[mark:type-call-area]] Let's call it on rect, with a dot.
+      [[mark:select-call]] There's no ampersand in the call. When you call a
+      method, Rust borrows rect for you.
+    sources:
+      - title: "The Rust Book — Method Syntax"
+        url: "https://doc.rust-lang.org/book/ch05-03-method-syntax.html"
+      - title: "The Rust Reference — Implementations"
+        url: "https://doc.rust-lang.org/reference/items/implementations.html"
+      - title: "Rust by Example — Associated functions & Methods"
+        url: "https://doc.rust-lang.org/rust-by-example/fn/methods.html"
+    actions:
       - id: type-impl
         type: editor.type
-        at: { mark: type-impl, offsetMs: -400 }
+        at: { mark: type-impl, offsetMs: -200 }
         target:
           file: main.rs
           after: "    height: u32,\n}\n"
@@ -208,24 +503,170 @@ scenes:
           file: main.rs
           text: "&self"
           occurrence: 1
-      - id: type-call
+      - id: type-call-area
         type: editor.type
-        at: { mark: type-call }
+        at: { mark: type-call-area, offsetMs: -200 }
         target:
           file: main.rs
-          after: "    println!(\"width {}, height {}\", rect.width, rect.height);\n"
+          after: "rect.width, rect.height);\n"
           occurrence: 1
         cadence: line-by-line
         text: "    println!(\"area {}\", rect.area());\n"
+      - id: select-call
+        type: editor.select
+        at: { mark: select-call }
+        target:
+          file: main.rs
+          text: "rect.area()"
+          occurrence: 1
+
+  - id: associated-new
+    narration: >
+      [[mark:type-new]] Rust has no special constructor. Instead, a type
+      usually gets an ordinary function called new. [[mark:select-new]] Every
+      function in impl is an associated function. new has no self, so it isn't
+      a method. It belongs to the type, not to one rectangle.
+      [[mark:select-shorthand]] The
+      parameters have the same names as the fields, so you write width once,
+      instead of width colon width. That's the field init shorthand.
+      [[mark:type-square]] To call new, we write the type name, two colons,
+      and new. You've already used one of these: String::from.
+    sources:
+      - title: "The Rust Book — Associated Functions"
+        url: "https://doc.rust-lang.org/book/ch05-03-method-syntax.html#associated-functions"
+      - title: "The Rust Book — Using the Field Init Shorthand"
+        url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html#using-the-field-init-shorthand"
+    actions:
+      - id: type-new
+        type: editor.type
+        at: { mark: type-new, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "impl Rectangle {\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    fn new(width: u32, height: u32) -> Rectangle {\n        Rectangle { width, height }\n    }\n\n"
+      - id: select-new
+        type: editor.select
+        at: { mark: select-new }
+        target:
+          file: main.rs
+          text: "new(width: u32, height: u32)"
+          occurrence: 1
+      - id: select-shorthand
+        type: editor.select
+        at: { mark: select-shorthand }
+        target:
+          file: main.rs
+          text: "Rectangle { width, height }"
+          occurrence: 1
+      - id: type-square
+        type: editor.type
+        at: { mark: type-square, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "    println!(\"area {}\", rect.area());\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    let square = Rectangle::new(20, 20);\n    println!(\"square area {}\", square.area());\n"
+
+  - id: print-errors
+    chapter: Printing a struct
+    narration: >
+      [[mark:open-errors]] What about printing the whole rectangle?
+      [[mark:draw-display]] Plain braces ask for Display, the format for your
+      users. Rust doesn't guess how your type should look, so this fails with
+      error E0277: Rectangle doesn't implement Display. [[mark:draw-debug]] Add
+      a colon and a question mark, and you ask for Debug, a format for
+      developers. That's E0277 too: Rectangle doesn't implement Debug.
+      [[mark:draw-help]] But read the help line. The compiler names the fix:
+      add derive Debug to the struct.
+    sources:
+      - title: "Rust error codes — E0277"
+        url: "https://doc.rust-lang.org/error_codes/E0277.html"
+      - title: "The Rust Book — Adding Useful Functionality with Derived Traits"
+        url: "https://doc.rust-lang.org/book/ch05-02-example-structs.html#adding-useful-functionality-with-derived-traits"
+      - title: "std::fmt::Display"
+        url: "https://doc.rust-lang.org/std/fmt/trait.Display.html"
+      - title: "std::fmt::Debug"
+        url: "https://doc.rust-lang.org/std/fmt/trait.Debug.html"
+    actions:
+      - id: open-errors
+        type: whiteboard.apply
+        at: { mark: open-errors }
+        open: true
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-display
+        type: whiteboard.apply
+        at: { mark: draw-display }
+        upsertIds: [b2-bad1, b2-bad1-line, b2-label1, b2-err1a, b2-err1b]
+        drawMs: 3000
+      - id: draw-debug
+        type: whiteboard.apply
+        at: { mark: draw-debug }
+        upsertIds: [b2-bad2, b2-bad2-line, b2-label2, b2-err2a, b2-err2b]
+        drawMs: 3000
+      - id: draw-help
+        type: whiteboard.apply
+        at: { mark: draw-help }
+        upsertIds: [b2-help-a, b2-help-b, b2-check]
+        drawMs: 2200
+
+  - id: derive-debug
+    narration: >
+      Let's take the compiler's advice. [[mark:type-derive]] It goes on the
+      line above the struct. [[mark:select-derive]] This is an attribute: an
+      instruction to the compiler about the item below it. derive asks the
+      compiler to write the Debug code for you. [[mark:type-debug-print]] Now
+      we can print square, with a colon and a question mark inside the braces.
+    sources:
+      - title: "The Rust Reference — Derive"
+        url: "https://doc.rust-lang.org/reference/attributes/derive.html"
+      - title: "Rust by Example — Debug"
+        url: "https://doc.rust-lang.org/rust-by-example/hello/print/print_debug.html"
+    actions:
+      - id: close-board2
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-derive
+        type: editor.type
+        at: { mark: type-derive, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: ""
+          occurrence: 1
+        cadence: fast-explainer
+        text: "#[derive(Debug)]\n"
+      - id: select-derive
+        type: editor.select
+        at: { mark: select-derive }
+        target:
+          file: main.rs
+          text: "#[derive(Debug)]"
+          occurrence: 1
+      - id: type-debug-print
+        type: editor.type
+        at: { mark: type-debug-print, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "    println!(\"square area {}\", square.area());\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: "    println!(\"{square:?}\");\n"
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. The fields print four and five, and area
-      returns twenty. A struct bundles data; impl gives it behavior — together
-      they're how you model things in Rust.
+      [[mark:run]] Let's run it. [[mark:read-output]] The fields print thirty
+      and fifty, and area gives fifteen hundred. The square from new has an
+      area of four hundred. And the last line is the Debug format: the
+      struct's name, then every field with its value.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "Rust by Example — Structures"
+        url: "https://doc.rust-lang.org/rust-by-example/custom_types/structs.html"
+      - title: "Rust by Example — Debug"
+        url: "https://doc.rust-lang.org/rust-by-example/hello/print/print_debug.html"
     actions:
       - id: run
         type: runtime.run
@@ -234,13 +675,26 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "area 20"
+        contains: "Rectangle { width: 20, height: 20 }"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
         contains: "fn area(&self) -> u32 {"
+
+  - id: wrap
+    narration: >
+      So, a struct groups named fields into one type. An impl block gives it
+      methods like area and associated functions like new, and derive Debug
+      lets you print it. Next, we'll look at enums: a type whose value is one of a fixed set of
+      variants.
+    sources:
+      - title: "The Rust Book — Using Structs to Structure Related Data"
+        url: "https://doc.rust-lang.org/book/ch05-00-structs.html"
+      - title: "The Rust Book — Defining an Enum"
+        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"
+    actions: []
 
 checks:
   - { type: timing.p95Ms, max: 300 }
