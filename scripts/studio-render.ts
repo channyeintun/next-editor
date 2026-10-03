@@ -19,8 +19,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright-core";
 import YAML from "yaml";
-import { studioRenderWaitMs } from "../src/studio/plan.ts";
-import { estimateNarrationDurationMs } from "../src/studio/script/critic.ts";
+import { estimateNarrationMsForRenderWait, studioRenderWaitMs } from "../src/studio/plan.ts";
 import { extractNarration } from "../src/studio/script/markers.ts";
 import { parseLessonScript } from "../src/studio/script/schema.ts";
 
@@ -92,8 +91,8 @@ async function waitForRunCount(
 }
 
 /**
- * Pre-synthesis narration estimate for a checked-in LessonScript (the same
- * one the Director's critic uses), or 0 when the slug has no script file here
+ * Pre-synthesis narration estimate for a checked-in LessonScript, used only to
+ * size the render wait, or 0 when the slug has no script file here
  * (an imported script) — the wait then falls back to its fixed base.
  */
 function estimatedNarrationMsFor(slug: string): number {
@@ -106,7 +105,7 @@ function estimatedNarrationMsFor(slug: string): number {
   const extracted = extractNarration(
     script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
   );
-  return estimateNarrationDurationMs(extracted.tokens.length);
+  return estimateNarrationMsForRenderWait(extracted.tokens.length);
 }
 
 const options = parseArgs(process.argv.slice(2));

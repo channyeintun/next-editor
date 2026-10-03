@@ -52,5 +52,13 @@
   // (`tsc -b tsconfig.json infra/worker/tsconfig.json`) rather than a
   // reference, since neither project is composite and neither emits.
   // vitest.setup.ts loads jest-dom's matcher types for every test file.
-  "include": ["src", "vite.config.ts", "vitest.setup.ts", "tube/src", "infra/client", "api"]
+  "include": [
+    "src",
+    "vite.config.ts",
+    "vitest.setup.ts",
+    "tube/src",
+    "infra/client",
+    "api",
+    "scripts"
+  ]
 }

@@ -844,6 +844,18 @@ export function studioRenderWaitMs(estimatedNarrationMs: number): number {
   return STUDIO_RENDER_WAIT_BASE_MS + 2 * Math.max(0, estimatedNarrationMs);
 }
 
+/** The speaking rate the render-wait budget assumes before any audio exists. */
+const RENDER_WAIT_WORDS_PER_MINUTE = 140;
+
+/**
+ * A rough narration length for `studioRenderWaitMs`, from the script's word
+ * count. It only sizes a timeout: it says nothing about real pacing, which
+ * exists only once the narration is synthesized.
+ */
+export function estimateNarrationMsForRenderWait(wordCount: number): number {
+  return (Math.max(0, wordCount) / RENDER_WAIT_WORDS_PER_MINUTE) * 60_000;
+}
+
 export const studioPlanSchema = z
   .object({
     schemaVersion: z.literal(STUDIO_PLAN_SCHEMA_VERSION),

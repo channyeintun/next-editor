@@ -3,6 +3,7 @@ import {
   parseRuntimeModeParam,
   parseStudioPlan,
   shouldAutostartRender,
+  estimateNarrationMsForRenderWait,
   studioRenderWaitMs,
   studioWhiteboardAssetSchema,
   type StudioPlan,
@@ -264,6 +265,12 @@ describe("studioRenderWaitMs", () => {
     // The narration alone plays in real time, so the wait must exceed it.
     expect(studioRenderWaitMs(twentyNineMinutes)).toBe(420_000 + 2 * twentyNineMinutes);
     expect(studioRenderWaitMs(twentyNineMinutes)).toBeGreaterThan(twentyNineMinutes);
+  });
+
+  it("estimates the narration it waits for at 140 words a minute", () => {
+    expect(estimateNarrationMsForRenderWait(0)).toBe(0);
+    expect(estimateNarrationMsForRenderWait(140)).toBe(60_000);
+    expect(estimateNarrationMsForRenderWait(-5)).toBe(0);
   });
 });
 
