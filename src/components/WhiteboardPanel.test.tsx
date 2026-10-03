@@ -13,6 +13,11 @@ import {
 } from "../stores/whiteboardStore";
 
 const updateScene = vi.fn();
+// What the canvas holds after updateScene, as Excalidraw tidied it.
+let canvasElements: unknown[] = [];
+const getSceneElementsIncludingDeleted = vi.fn(() => canvasElements);
+// Excalidraw hands over one API object per mounted canvas.
+const excalidrawApi = { updateScene, getSceneElementsIncludingDeleted };
 const stopFollowing = vi.fn();
 let usesPlaybackModel = false;
 let isInPlaybackSession = false;
@@ -51,7 +56,7 @@ vi.mock("@excalidraw/excalidraw", async () => {
       onChange: typeof excalidrawOnChange;
       initialData: unknown;
     }) => {
-      excalidrawAPI({ updateScene });
+      excalidrawAPI(excalidrawApi);
       excalidrawOnChange = onChange;
       excalidrawInitialData = initialData;
       useLayoutEffect(() => {
@@ -105,12 +110,14 @@ function makeWhiteboardState(
     setOpen: vi.fn(),
     setMaximized: vi.fn(),
     handleExcalidrawChange: vi.fn(),
+    markCanvasSynced: vi.fn(),
   };
 }
 
 describe("WhiteboardPanel scene projection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    canvasElements = [];
     usesPlaybackModel = false;
     isInPlaybackSession = false;
     whiteboardState = makeWhiteboardState("external");
@@ -150,6 +157,53 @@ describe("WhiteboardPanel scene projection", () => {
 
     await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
   });
+
+  it("tells the controller what the canvas holds after each scene it is given", async () => {
+    const authored = element("box", [[0, 0]]);
+    // Excalidraw gives an authored element a z-order index and bumps its version.
+    const tidied = { ...authored, version: 2, versionNonce: 7, index: "a0" };
+    canvasElements = [tidied];
+    whiteboardState = makeWhiteboardState("external", [authored]);
+
+    render(<WhiteboardPanel />);
+
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+    expect(whiteboardState.markCanvasSynced).toHaveBeenCalledExactlyOnceWith(
+      [tidied],
+      whiteboardState.scene.elements,
+    );
+  });
+
+  it("treats the first report of a new canvas as its loaded scene, not an edit", async () => {
+    const appState = { scrollX: 0, scrollY: 0, zoom: { value: 1 } };
+    render(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+    vi.mocked(whiteboardState.markCanvasSynced).mockClear();
+
+    const loaded = [element("box", [[0, 0]])];
+    act(() => excalidrawOnChange(loaded, appState, {}));
+    expect(whiteboardState.markCanvasSynced).toHaveBeenCalledExactlyOnceWith(loaded);
+    expect(whiteboardState.handleExcalidrawChange).not.toHaveBeenCalled();
+
+    const drawn = [element("box", [[0, 0]]), element("stroke", [[0, 0]])];
+    act(() => excalidrawOnChange(drawn, appState, {}));
+    expect(whiteboardState.handleExcalidrawChange).toHaveBeenCalledExactlyOnceWith(
+      drawn,
+      { scrollX: 0, scrollY: 0, zoom: 1 },
+      false,
+    );
+  });
+
+  it("does not copy the canvas on every playback frame", async () => {
+    usesPlaybackModel = true;
+    isInPlaybackSession = true;
+
+    render(<WhiteboardPanel />);
+
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+    expect(getSceneElementsIncludingDeleted).not.toHaveBeenCalled();
+    expect(whiteboardState.markCanvasSynced).not.toHaveBeenCalled();
+  });
 });
 
 describe("WhiteboardPanel playback viewport", () => {
@@ -163,6 +217,7 @@ describe("WhiteboardPanel playback viewport", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    canvasElements = [];
     usesPlaybackModel = true;
     isInPlaybackSession = true;
     viewReportedOnCommit = null;

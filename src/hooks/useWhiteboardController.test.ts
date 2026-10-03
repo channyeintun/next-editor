@@ -1,6 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { WhiteboardEvent } from "../core/src/whiteboard";
+import {
+  applyWhiteboardEvent,
+  EMPTY_WHITEBOARD_SCENE,
+  type WhiteboardEvent,
+} from "../core/src/whiteboard";
 import { createWhiteboardStore } from "../stores/whiteboardStore";
 import {
   discardPendingWhiteboardChange,
@@ -121,6 +125,87 @@ describe("useWhiteboardController", () => {
 
     act(() => result.current.applyView({ scrollX: 10, scrollY: 20, zoom: 2 }, false));
     expect(store.getSnapshot().context.sceneUpdateSource).toBe("external");
+  });
+
+  // The next-editor-intro-mm lesson recorded 416 of these: Excalidraw adding an
+  // `index` (and a version bump) to a scene the studio pushed in, often one 50 ms
+  // draw step behind the store. Replayed, each piece jumped back a step and its
+  // label flashed behind the filled box around it.
+  it("does not record the canvas reporting back a scene it was given", () => {
+    vi.useFakeTimers();
+    const store = createWhiteboardStore();
+    const onWhiteboardEvent = vi.fn<(event: WhiteboardEvent) => boolean | void>();
+    const { result } = renderHook(() => useWhiteboardController({ store, onWhiteboardEvent }));
+    const view = { scrollX: 0, scrollY: 0, zoom: 1 };
+    // Authored studio steps: no `index`, the box grows.
+    const step = (width: number, version: number) => ({
+      id: "box",
+      version,
+      versionNonce: 5,
+      isDeleted: false,
+      updated: 1,
+      width,
+    });
+    // What Excalidraw makes of a step it is given.
+    const tidied = (width: number, version: number) => ({
+      ...step(width, version),
+      version: version + 1,
+      versionNonce: 900 + version,
+      updated: 1791046571329,
+      index: "a0",
+    });
+
+    act(() => {
+      const given = [step(10, 1)];
+      store.trigger.setScene({ scene: { ...store.getSnapshot().context.scene, elements: given } });
+      result.current.markCanvasSynced([tidied(10, 1)], given);
+      result.current.handleExcalidrawChange([tidied(10, 1)], view, false);
+      // The next step reaches the store before the canvas reports again.
+      store.trigger.setScene({
+        scene: { ...store.getSnapshot().context.scene, elements: [step(20, 2)] },
+      });
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(onWhiteboardEvent).not.toHaveBeenCalled();
+    expect(store.getSnapshot().context.scene.elements).toEqual([step(20, 2)]);
+  });
+
+  it("records a real edit of an authored board with every element's canvas index", () => {
+    vi.useFakeTimers();
+    const store = createWhiteboardStore();
+    const onWhiteboardEvent = vi.fn<(event: WhiteboardEvent) => boolean | void>();
+    const { result } = renderHook(() => useWhiteboardController({ store, onWhiteboardEvent }));
+    // A label drawn over a box, both authored, so neither has an index.
+    const box = { id: "box", version: 1, versionNonce: 5, isDeleted: false };
+    const label = { id: "label", version: 1, versionNonce: 6, isDeleted: false };
+    const given = [box, label];
+    const canvas = [
+      { ...box, version: 2, versionNonce: 50, index: "a0" },
+      { ...label, version: 2, versionNonce: 60, index: "a1" },
+    ];
+
+    act(() => {
+      store.trigger.setScene({ scene: { ...store.getSnapshot().context.scene, elements: given } });
+      result.current.markCanvasSynced(canvas, given);
+      result.current.handleExcalidrawChange(
+        [{ ...canvas[0]!, version: 3, versionNonce: 51, x: 40 }, canvas[1]!],
+        { scrollX: 0, scrollY: 0, zoom: 1 },
+        false,
+      );
+      vi.advanceTimersByTime(100);
+    });
+
+    // Recording only the moved box would index it while the label has none, and
+    // replay sorts unindexed elements first, so the box would cover the label.
+    const event = onWhiteboardEvent.mock.calls[0]![0];
+    expect(event.upserts).toContainEqual(expect.objectContaining({ id: "box", x: 40 }));
+    const replayed = applyWhiteboardEvent({ ...EMPTY_WHITEBOARD_SCENE, elements: given }, event);
+    expect(replayed.elements.map(({ id }) => id)).toEqual(["box", "label"]);
+    expect(store.getSnapshot().context.scene.elements.map(({ id }) => id)).toEqual([
+      "box",
+      "label",
+    ]);
   });
 
   it("rebases a pending local stroke over a remote element that arrived during capture", () => {

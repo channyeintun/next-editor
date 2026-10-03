@@ -37,8 +37,15 @@ function toExcalidrawView(view: WhiteboardView) {
 }
 
 export default function WhiteboardPanel() {
-  const { scene, sceneUpdateSource, isOpen, setOpen, setMaximized, handleExcalidrawChange } =
-    useWhiteboardContext();
+  const {
+    scene,
+    sceneUpdateSource,
+    isOpen,
+    setOpen,
+    setMaximized,
+    handleExcalidrawChange,
+    markCanvasSynced,
+  } = useWhiteboardContext();
   const { usesPlaybackModel, isInPlaybackSession } = useNextEditorMetadata();
   const collaboration = useOptionalCollaboration();
   // The viewer's playback view is read without subscribing: a pan fires onChange every frame,
@@ -47,6 +54,9 @@ export default function WhiteboardPanel() {
   // controller unmounts, each of which re-runs the scene effect below or unmounts the panel.
   const { store } = useWhiteboardStore();
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  // False until a newly mounted canvas sends its first onChange. That first
+  // report is the scene it loaded from initialData, not an edit.
+  const canvasLoadedRef = useRef(false);
   const contentReadOnly =
     usesPlaybackModel || Boolean(collaboration?.provider && !collaboration.canWrite);
   const [initialView] = useState(
@@ -82,7 +92,17 @@ export default function WhiteboardPanel() {
       ...(applyView ? { appState: toExcalidrawView(view) } : {}),
       captureUpdate: CaptureUpdateAction.NEVER,
     });
-  }, [scene, sceneUpdateSource, usesPlaybackModel, isInPlaybackSession, store]);
+    // updateScene has already tidied the elements (z-order indexes) by the time
+    // it returns. The onChange that follows reports this same scene back, and it
+    // must not be recorded as an edit. A playing lesson sends no onChange to the
+    // controller, so there is nothing to compare while it plays.
+    if (!usesPlaybackModel) {
+      markCanvasSynced(
+        apiRef.current.getSceneElementsIncludingDeleted() as unknown as WhiteboardElementJSON[],
+        scene.elements,
+      );
+    }
+  }, [scene, sceneUpdateSource, usesPlaybackModel, isInPlaybackSession, store, markCanvasSynced]);
 
   if (!isOpen) return null;
 
@@ -144,6 +164,9 @@ export default function WhiteboardPanel() {
         >
           <Excalidraw
             excalidrawAPI={(api) => {
+              // Excalidraw hands over a new API each time the canvas mounts
+              // (the board was closed and opened again).
+              if (apiRef.current !== api) canvasLoadedRef.current = false;
               apiRef.current = api;
             }}
             theme="dark"
@@ -163,6 +186,8 @@ export default function WhiteboardPanel() {
                 scrollY: appState.scrollY,
                 zoom: appState.zoom.value,
               };
+              const isLoadReport = !canvasLoadedRef.current;
+              canvasLoadedRef.current = true;
               if (isInPlaybackSession) {
                 store.trigger.observePlaybackCanvasView({
                   view,
@@ -182,6 +207,12 @@ export default function WhiteboardPanel() {
                 // has no edits to capture. Paused or ended, the canvas is the viewer's to
                 // edit, so it goes through the live path below as before; the machine
                 // records whiteboard events only while recording.
+                return;
+              }
+              if (isLoadReport) {
+                // Loading tidies the scene the same way updateScene does (see
+                // markCanvasSynced), so it is the baseline, not an edit.
+                markCanvasSynced(elements as unknown as WhiteboardElementJSON[]);
                 return;
               }
               handleExcalidrawChange(
