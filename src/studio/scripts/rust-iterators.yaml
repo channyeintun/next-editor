@@ -1,13 +1,50 @@
-# One idea: iterator adapters (filter, map) describe a lazy pipeline over a
-# sequence, using closures (|n| ...), and nothing runs until a consumer like
-# collect or sum. A whiteboard sketch, then a filter/map/collect chain + sum.
+# Rust from zero, lesson 19: iterators and closures.
+#
+# The arc: a whiteboard shows what an iterator is (iter() on a Vec gives an
+# iterator; each next() hands out Some(&item), then None; a for loop calls
+# next for you; map, filter and sum are built on next). The editor then
+# builds a closure (`let double = |x| x * 2;` — bars hold the parameters, no
+# fn, types inferred) and a chain: iter → map → filter → collect into a
+# Vec<i32>. The star in filter is explained against map: both closures get a
+# reference, times two works on one, a comparison needs the same type on both
+# sides. A select on `limit` inside the filter closure leads to the second
+# board: a closure captures the variables around it, a fn can't (E0434), and
+# why — a closure is a value, like a struct holding what it captures (drawn
+# as a box holding &limit), a fn is only code. The
+# third board shows laziness: map with nothing after it only earns the
+# compiler's "unused `Map` that must be used / iterators are lazy and do
+# nothing unless consumed" warning; adapters describe steps, a consumer runs
+# them, one item at a time. Back in the editor a map whose closure prints
+# proves it: "nothing doubled yet" prints before any "doubling", because the
+# closure only runs when sum asks for items. One run.
+#
+# Every compiler message on a board or in the narration was confirmed with
+# rustc 1.98 (edition 2024) on the broken variants:
+#   let limit = 5; fn is_big(x: i32) -> bool { x > limit }
+#     error[E0434]: can't capture dynamic environment in a fn item
+#     help: use the `|| { ... }` closure form instead
+#   numbers.iter().map(|x| x * 2);   (nothing consumes it)
+#     warning: unused `Map` that must be used
+#     = note: iterators are lazy and do nothing unless consumed
+#   .filter(|x| x > limit)   (no star) — not shown, but it is why the star
+#     is there: error[E0308]: mismatched types, expected `&_`, found integer
+#     (while .map(|x| x * 2) on the same &i32 items compiles, and
+#     .filter(|x| x > &limit) compiles too: the two sides just have to match)
+# The final program compiles with zero warnings and is rustfmt-clean.
+#
+# Board colours: blue = the thing being named (the numbers and is_big
+# names, the iterator, the captured variable, the adapters), violet = the
+# results next() hands out, orange = the caveat (None ends it; the unused Map
+# warning), red = the error, green = what works (the for loop, the closure
+# and its value box, the consumer). #1e1e1e paints white on the dark board.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-iterators.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-iterators
-  title: "Rust iterators: lazy pipelines with closures"
+  title: "Rust from zero: Iterators and closures"
   locale: en-US
   workspace:
     lessonType: rust
@@ -16,112 +53,527 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let numbers = [1, 2, 3, 4, 5, 6];
+            let numbers = vec![1, 2, 3, 4, 5, 6];
             println!("numbers: {numbers:?}");
         }
   whiteboardAssets:
-    - id: it-title
-      kind: text
-      x: 300
-      y: 165
-      width: 720
-      height: 44
-      text: "Iterators — a lazy pipeline"
-      strokeColor: "#1e1e1e"
-      fontSize: 34
-    - id: it-inbox
-      kind: rectangle
-      x: 300
-      y: 300
-      width: 230
-      height: 74
-      strokeColor: "#1e1e1e"
-    - id: it-inval
-      kind: text
-      x: 318
-      y: 326
-      width: 210
-      height: 34
-      text: "[1,2,3,4,5,6]"
-      strokeColor: "#1e1e1e"
-      fontSize: 24
-    - id: it-op1
-      kind: text
-      x: 548
-      y: 286
-      width: 90
-      height: 30
-      text: "filter"
-      strokeColor: "#1971c2"
-      fontSize: 22
-    - id: it-arrow1
-      kind: text
-      x: 556
-      y: 320
-      width: 44
-      height: 40
-      text: "→"
-      strokeColor: "#80868b"
-      fontSize: 32
-    - id: it-midbox
-      kind: rectangle
-      x: 610
-      y: 300
-      width: 150
-      height: 74
-      strokeColor: "#1971c2"
-    - id: it-midval
-      kind: text
-      x: 632
-      y: 326
-      width: 130
-      height: 34
-      text: "[2, 4, 6]"
-      strokeColor: "#1971c2"
-      fontSize: 24
-    - id: it-op2
-      kind: text
-      x: 782
-      y: 286
-      width: 90
-      height: 30
-      text: "map"
-      strokeColor: "#f08c00"
-      fontSize: 22
-    - id: it-arrow2
-      kind: text
-      x: 786
-      y: 320
-      width: 44
-      height: 40
-      text: "→"
-      strokeColor: "#80868b"
-      fontSize: 32
-    - id: it-outbox
-      kind: rectangle
-      x: 840
-      y: 300
-      width: 195
-      height: 74
-      strokeColor: "#2f9e44"
-    - id: it-outval
-      kind: text
-      x: 858
-      y: 326
-      width: 175
-      height: 34
-      text: "[20, 40, 60]"
-      strokeColor: "#2f9e44"
-      fontSize: 24
-    - id: it-note
-      kind: text
-      x: 340
-      y: 440
-      width: 760
-      height: 36
-      text: "lazy — nothing runs until collect or sum"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
+    # ---- Board 1: what an iterator is ------------------------------------
+    - {
+        id: i-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 540,
+        height: 48,
+        text: "An iterator gives you items",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: i-name,
+        kind: text,
+        x: 290,
+        y: 232,
+        width: 110,
+        height: 36,
+        text: "numbers",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: i-box0, kind: rectangle, x: 290, y: 276, width: 64, height: 64, strokeColor: "#1e1e1e" }
+    - { id: i-box1, kind: rectangle, x: 354, y: 276, width: 64, height: 64, strokeColor: "#1e1e1e" }
+    - { id: i-box2, kind: rectangle, x: 418, y: 276, width: 64, height: 64, strokeColor: "#1e1e1e" }
+    - {
+        id: i-val0,
+        kind: text,
+        x: 318,
+        y: 290,
+        width: 20,
+        height: 36,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-val1,
+        kind: text,
+        x: 376,
+        y: 290,
+        width: 24,
+        height: 36,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-val2,
+        kind: text,
+        x: 440,
+        y: 290,
+        width: 24,
+        height: 36,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-iter-label,
+        kind: text,
+        x: 506,
+        y: 236,
+        width: 84,
+        height: 36,
+        text: ".iter()",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: i-iter-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 494,
+        y: 284,
+        width: 104,
+        height: 48,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: i-iter-box,
+        kind: rectangle,
+        x: 610,
+        y: 272,
+        width: 180,
+        height: 72,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: i-iter-text,
+        kind: text,
+        x: 644,
+        y: 290,
+        width: 116,
+        height: 36,
+        text: "iterator",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: i-next-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 675,
+        y: 352,
+        width: 50,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: i-next-label,
+        kind: text,
+        x: 735,
+        y: 368,
+        width: 90,
+        height: 36,
+        text: "next()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-some1,
+        kind: text,
+        x: 440,
+        y: 436,
+        width: 120,
+        height: 36,
+        text: "Some(&1)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: i-some2,
+        kind: text,
+        x: 584,
+        y: 436,
+        width: 132,
+        height: 36,
+        text: "Some(&2)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: i-some3,
+        kind: text,
+        x: 741,
+        y: 436,
+        width: 132,
+        height: 36,
+        text: "Some(&3)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: i-none,
+        kind: text,
+        x: 896,
+        y: 436,
+        width: 70,
+        height: 36,
+        text: "None",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: i-for,
+        kind: text,
+        x: 290,
+        y: 520,
+        width: 470,
+        height: 36,
+        text: "a for loop calls next() until None",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: i-adapt,
+        kind: text,
+        x: 290,
+        y: 580,
+        width: 440,
+        height: 36,
+        text: "map, filter, sum: built on next()",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # ---- Board 2: a closure captures, a fn can't (E0434) -------------------
+    - {
+        id: c-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 430,
+        height: 48,
+        text: "A closure can capture",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: c-let,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 180,
+        height: 36,
+        text: "let limit = 5;",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-fn1,
+        kind: text,
+        x: 300,
+        y: 276,
+        width: 365,
+        height: 36,
+        text: "fn is_big(x: i32) -> bool {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-fn2,
+        kind: text,
+        x: 350,
+        y: 316,
+        width: 115,
+        height: 36,
+        text: "x > limit",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-fn3,
+        kind: text,
+        x: 300,
+        y: 356,
+        width: 20,
+        height: 36,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-fn-u,
+        kind: freedraw,
+        stroke: underline,
+        x: 403,
+        y: 326,
+        width: 62,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-err1,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 515,
+        height: 36,
+        text: "error[E0434]: can't capture dynamic",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-err2,
+        kind: text,
+        x: 300,
+        y: 448,
+        width: 330,
+        height: 36,
+        text: "environment in a fn item",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-cl,
+        kind: text,
+        x: 300,
+        y: 518,
+        width: 340,
+        height: 36,
+        text: "let is_big = |x| x > limit;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-cl-u,
+        kind: freedraw,
+        stroke: underline,
+        x: 569,
+        y: 528,
+        width: 62,
+        height: 24,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-works,
+        kind: text,
+        x: 300,
+        y: 574,
+        width: 455,
+        height: 36,
+        text: "works: the closure captures limit",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # The closure as a value: a box (like a struct) holding what it captures.
+    - {
+        id: c-hold-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 660,
+        y: 512,
+        width: 150,
+        height: 44,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-hold-name,
+        kind: text,
+        x: 830,
+        y: 450,
+        width: 80,
+        height: 36,
+        text: "is_big",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-hold-box,
+        kind: rectangle,
+        x: 830,
+        y: 490,
+        width: 200,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-hold-ref,
+        kind: text,
+        x: 893,
+        y: 517,
+        width: 74,
+        height: 36,
+        text: "&limit",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # ---- Board 3: iterators are lazy ---------------------------------------
+    - {
+        id: l-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 370,
+        height: 48,
+        text: "Iterators are lazy",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: l-code,
+        kind: text,
+        x: 290,
+        y: 222,
+        width: 390,
+        height: 36,
+        text: "numbers.iter().map(|x| x * 2);",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-code-u,
+        kind: freedraw,
+        stroke: underline,
+        x: 475,
+        y: 232,
+        width: 196,
+        height: 24,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-warn,
+        kind: text,
+        x: 290,
+        y: 276,
+        width: 580,
+        height: 36,
+        text: "warning: unused `Map` that must be used",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-note,
+        kind: text,
+        x: 290,
+        y: 316,
+        width: 790,
+        height: 36,
+        text: "note: iterators are lazy and do nothing unless consumed",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-map-box,
+        kind: rectangle,
+        x: 290,
+        y: 410,
+        width: 130,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-map-text,
+        kind: text,
+        x: 330,
+        y: 424,
+        width: 56,
+        height: 36,
+        text: "map",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 430,
+        y: 418,
+        width: 90,
+        height: 48,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-filter-box,
+        kind: rectangle,
+        x: 530,
+        y: 410,
+        width: 140,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-filter-text,
+        kind: text,
+        x: 565,
+        y: 424,
+        width: 76,
+        height: 36,
+        text: "filter",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l-adapters,
+        kind: text,
+        x: 418,
+        y: 484,
+        width: 130,
+        height: 36,
+        text: "adapters",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 680,
+        y: 418,
+        width: 90,
+        height: 48,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-sum-box,
+        kind: rectangle,
+        x: 780,
+        y: 410,
+        width: 130,
+        height: 64,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-sum-text,
+        kind: text,
+        x: 820,
+        y: 424,
+        width: 56,
+        height: 36,
+        text: "sum",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l-consumer,
+        kind: text,
+        x: 786,
+        y: 484,
+        width: 124,
+        height: 36,
+        text: "consumer",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l-pass,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 550,
+        height: 36,
+        text: "one item at a time, through every step",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -134,114 +586,347 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "numbers: [1, 2, 3, 4, 5, 6]\nevens doubled: [20, 40, 60]\nsum: 21\n"
+      stdout: "numbers: [1, 2, 3, 4, 5, 6]\ndouble(4) = 8\ndoubled, over 5: [6, 8, 10, 12]\nnothing doubled yet\ndoubling 1\ndoubling 2\ndoubling 3\ndoubling 4\ndoubling 5\ndoubling 6\nsum: 42\n"
       stderr: ""
 
 scenes:
-  - id: the-pipeline
+  - id: what-is-an-iterator
+    chapter: What an iterator is
     narration: >
-      [[mark:board]] Iterators describe a pipeline over a sequence, and it's
-      lazy. [[mark:show-in]] Start with six numbers. [[mark:show-filter]] filter
-      keeps the even ones — two, four, six. [[mark:show-map]] map multiplies
-      each by ten — twenty, forty, sixty. [[mark:show-note]] Nothing actually
-      runs until collect gathers the result, or sum adds it up.
-      [[mark:board-close]] Let's chain them.
+      You've looped over a Vec with for. That loop uses an iterator.
+      [[mark:draw-vec]] Here's a Vec of numbers.
+      [[mark:draw-iter]] Call iter on it, and you get an iterator.
+      [[mark:draw-next]] An iterator has one main method, next. Each call
+      gives you Some with the next item. With iter, that's a reference to it.
+      [[mark:draw-none]] When the items run out, next returns None.
+      [[mark:draw-for]] A for loop calls next for you, until it gets None.
+      [[mark:draw-adapt]] Methods like map, filter and sum are built on next.
+      Most take a closure, so let's start there.
     sources:
-      - title: "The Rust Book — Processing a Series of Items with Iterators"
-        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html"
+      - title: "The Rust Book — The Iterator Trait and the next Method"
+        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#the-iterator-trait-and-the-next-method"
+      - title: "std::iter — for loops and IntoIterator"
+        url: "https://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator"
+      - title: "std::iter::Iterator::next"
+        url: "https://doc.rust-lang.org/std/iter/trait.Iterator.html#tymethod.next"
     actions:
-      - id: open-board
+      # Opens in the quiet handle before the first word, already titled.
+      - id: open-board-iter
         type: whiteboard.apply
-        at: { mark: board }
+        at: { scene: start, offsetMs: -1500 }
         open: true
-        upsertIds: [it-title]
-      - id: show-in
+        upsertIds: [i-title]
+      - id: draw-vec
         type: whiteboard.apply
-        at: { mark: show-in }
-        upsertIds: [it-inbox, it-inval]
-      - id: show-filter
+        at: { mark: draw-vec }
+        upsertIds: [i-name, i-box0, i-val0, i-box1, i-val1, i-box2, i-val2]
+        drawMs: 1600
+      - id: draw-iter
         type: whiteboard.apply
-        at: { mark: show-filter }
-        upsertIds: [it-op1, it-arrow1, it-midbox, it-midval]
-      - id: show-map
+        at: { mark: draw-iter }
+        upsertIds: [i-iter-label, i-iter-arrow, i-iter-box, i-iter-text]
+        drawMs: 2000
+      - id: draw-next
         type: whiteboard.apply
-        at: { mark: show-map }
-        upsertIds: [it-op2, it-arrow2, it-outbox, it-outval]
-      - id: show-note
+        at: { mark: draw-next }
+        upsertIds: [i-next-arrow, i-next-label, i-some1, i-some2, i-some3]
+        drawMs: 3000
+      - id: draw-none
         type: whiteboard.apply
-        at: { mark: show-note }
-        upsertIds: [it-note]
-      - id: close-board
+        at: { mark: draw-none }
+        upsertIds: [i-none]
+        drawMs: 800
+      - id: draw-for
         type: whiteboard.apply
-        at: { mark: board-close }
-        open: false
+        at: { mark: draw-for }
+        upsertIds: [i-for]
+        drawMs: 1600
+      - id: draw-adapt
+        type: whiteboard.apply
+        at: { mark: draw-adapt }
+        upsertIds: [i-adapt]
+        drawMs: 1600
 
-  - id: the-chain
+  - id: closures
+    chapter: Closures
     narration: >
-      [[mark:open]] Here are six numbers. [[mark:type-chain]] We build a
-      pipeline. iter goes through them, and copied gives plain values.
-      [[mark:select-transform-chain]] filter keeps the even ones, map multiplies
-      each by ten, and collect gathers the results into a Vec: twenty, forty,
-      sixty.
+      A closure is a small function with no name.
+      [[mark:type-double]] Let's store one in a variable called double. A
+      closure is a value, so it can go in a variable like a number can.
+      [[mark:select-bars]] The parameters go between the two bars. Here
+      there's one, x. Then comes the body, x times two. There's no f n
+      keyword, and no types. The compiler works them out from how you use it.
+      [[mark:type-call-double]] You call it like any other function. Let's
+      call it with four.
     sources:
-      - title: "The Rust Book — Iterator Adaptors"
-        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-produce-other-iterators"
+      - title: "The Rust Book — Closures"
+        url: "https://doc.rust-lang.org/book/ch13-01-closures.html"
+      - title: "The Rust Book — Closure Type Inference and Annotation"
+        url: "https://doc.rust-lang.org/book/ch13-01-closures.html#closure-type-inference-and-annotation"
+      - title: "The Rust Reference — Closure expressions"
+        url: "https://doc.rust-lang.org/reference/expressions/closure-expr.html"
     actions:
+      - id: close-board-iter
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: open-main
         type: workspace.openFile
-        at: { mark: open }
+        at: { scene: start, offsetMs: 900 }
         path: main.rs
-      - id: type-chain
+      - id: type-double
         type: editor.type
-        at: { mark: type-chain, offsetMs: -400 }
+        at: { mark: type-double, offsetMs: -200 }
         target:
           file: main.rs
           after: "    println!(\"numbers: {numbers:?}\");\n"
           occurrence: 1
-        cadence: line-by-line
-        text: "    let evens_doubled: Vec<i32> = numbers\n        .iter()\n        .copied()\n        .filter(|n| n % 2 == 0)\n        .map(|n| n * 10)\n        .collect();\n    println!(\"evens doubled: {evens_doubled:?}\");\n"
-      - id: select-transform-chain
+        cadence: fast-explainer
+        text: "\n    let double = |x| x * 2;\n"
+      - id: select-bars
         type: editor.select
-        at: { mark: select-transform-chain }
+        at: { mark: select-bars }
         target:
           file: main.rs
-          text: "        .filter(|n| n % 2 == 0)\n        .map(|n| n * 10)\n        .collect();"
+          text: "|x|"
+          occurrence: 1
+      - id: type-call-double
+        type: editor.type
+        at: { mark: type-call-double }
+        target:
+          file: main.rs
+          after: "    let double = |x| x * 2;\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    println!(\"double(4) = {}\", double(4));\n"
+
+  - id: chain
+    chapter: Map, filter, collect
+    narration: >
+      Let's give closures to an iterator.
+      [[mark:type-chain]] We set a limit of five. Then we build a chain of
+      steps on our numbers: iter, then map, then filter, and last, collect.
+      [[mark:select-map]] map calls its closure on every item and passes on
+      the result: each number, doubled.
+      [[mark:select-filter]] filter keeps an item only when its closure
+      returns true. It only looks at each item, so x is a reference. Math
+      like times two works on a reference, but a comparison needs the same
+      type on both sides. So the star reads the number behind x.
+      [[mark:select-vec-type]] collect gathers the results into a new
+      collection. It can build many kinds, so we name the one we want: a Vec
+      of i32.
+    sources:
+      - title: "The Rust Book — Methods that Produce Other Iterators"
+        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-produce-other-iterators"
+      - title: "std::iter::Iterator::map"
+        url: "https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"
+      - title: "std::iter::Iterator::filter"
+        url: "https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"
+      - title: "i32 — impl Mul<i32> for &i32 (times two works on a reference)"
+        url: "https://doc.rust-lang.org/std/primitive.i32.html#impl-Mul%3Ci32%3E-for-%26i32"
+      - title: "i32 — impl PartialOrd for i32 (an i32 compares with an i32)"
+        url: "https://doc.rust-lang.org/std/primitive.i32.html#impl-PartialOrd-for-i32"
+      - title: "std::iter::Iterator::collect"
+        url: "https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect"
+    actions:
+      - id: type-chain
+        type: editor.type
+        at: { mark: type-chain, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "double(4));\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    let limit = 5;\n    let big: Vec<i32> = numbers\n        .iter()\n        .map(|x| x * 2)\n        .filter(|x| *x > limit)\n        .collect();\n    println!(\"doubled, over {limit}: {big:?}\");\n"
+      - id: select-map
+        type: editor.select
+        at: { mark: select-map }
+        target:
+          file: main.rs
+          text: ".map(|x| x * 2)"
+          occurrence: 1
+      - id: select-filter
+        type: editor.select
+        at: { mark: select-filter }
+        target:
+          file: main.rs
+          text: ".filter(|x| *x > limit)"
+          occurrence: 1
+      - id: select-vec-type
+        type: editor.select
+        at: { mark: select-vec-type }
+        target:
+          file: main.rs
+          text: "Vec<i32>"
           occurrence: 1
 
-  - id: the-consumer
+  - id: capture
     narration: >
-      [[mark:type-sum]] Not every chain ends in collect.
-      [[mark:select-sum]] sum is a consumer too. It goes through the numbers and
-      adds them into one total, twenty-one.
+      [[mark:select-limit]] Look at limit, inside the filter closure. It
+      isn't a parameter. It's a variable from main, and the closure can use
+      it. That's called capturing.
+      [[mark:open-capture]] A function can't do that.
+      [[mark:draw-fn]] Here's the same check, written as a normal function
+      inside main.
+      [[mark:draw-err]] The compiler stops with error E0434: can't capture
+      dynamic environment in an f n item. The environment means the variables
+      around it.
+      [[mark:draw-closure]] As a closure, the same check works.
+      [[mark:draw-holds]] A closure is a value, a bit like a struct that
+      holds what it captures. A normal function is only code, with nowhere to
+      keep limit.
+    sources:
+      - title: "The Rust Book — Capturing References or Moving Ownership"
+        url: "https://doc.rust-lang.org/book/ch13-01-closures.html#capturing-references-or-moving-ownership"
+      - title: "The Rust Book — Using Closures that Capture Their Environment"
+        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#using-closures-that-capture-their-environment"
+      - title: "Rust error codes — E0434"
+        url: "https://doc.rust-lang.org/error_codes/E0434.html"
+      - title: "The Rust Reference — Closure types (like a struct holding the captured values)"
+        url: "https://doc.rust-lang.org/reference/types/closure.html#r-type.closure.intro"
+    actions:
+      - id: select-limit
+        type: editor.select
+        at: { mark: select-limit }
+        target:
+          file: main.rs
+          text: "limit"
+          occurrence: 2
+      - id: open-board-capture
+        type: whiteboard.apply
+        at: { mark: open-capture }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-fn
+        type: whiteboard.apply
+        at: { mark: draw-fn }
+        upsertIds: [c-let, c-fn1, c-fn2, c-fn3]
+        drawMs: 2400
+      - id: draw-err
+        type: whiteboard.apply
+        at: { mark: draw-err }
+        upsertIds: [c-fn-u, c-err1, c-err2]
+        drawMs: 2600
+      - id: draw-closure
+        type: whiteboard.apply
+        at: { mark: draw-closure }
+        upsertIds: [c-cl, c-cl-u, c-works]
+        drawMs: 2200
+      - id: draw-holds
+        type: whiteboard.apply
+        at: { mark: draw-holds }
+        upsertIds: [c-hold-arrow, c-hold-name, c-hold-box, c-hold-ref]
+        drawMs: 2400
+
+  - id: lazy
+    chapter: Lazy until consumed
+    narration: >
+      One more thing about map and filter.
+      [[mark:draw-lazy-code]] Say you call map, with nothing after it.
+      [[mark:draw-warning]] It compiles, but you get a warning: unused Map
+      that must be used. The note says why. Iterators are lazy, and do
+      nothing unless consumed.
+      [[mark:draw-adapters]] map and filter are adapters. Each one returns a
+      new iterator that only describes a step. Nothing runs yet.
+      [[mark:draw-consumer]] A consumer, like sum, collect, or a for loop,
+      runs the chain.
+      [[mark:draw-pass]] It asks for one item at a time, and each item goes
+      through every step. No extra Vec is built in between. And the chain
+      runs about as fast as a loop you'd write by hand.
+    sources:
+      - title: "The Rust Book — Methods that Produce Other Iterators (the lazy warning)"
+        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-produce-other-iterators"
+      - title: "std::iter — Laziness"
+        url: "https://doc.rust-lang.org/std/iter/index.html#laziness"
+      - title: "The Rust Book — Comparing Performance: Loops vs. Iterators"
+        url: "https://doc.rust-lang.org/book/ch13-04-performance.html"
+    actions:
+      - id: open-board-lazy
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -300 }
+        clear: true
+        upsertIds: [l-title]
+      - id: draw-lazy-code
+        type: whiteboard.apply
+        at: { mark: draw-lazy-code }
+        upsertIds: [l-code]
+        drawMs: 1400
+      - id: draw-warning
+        type: whiteboard.apply
+        at: { mark: draw-warning }
+        upsertIds: [l-code-u, l-warn, l-note]
+        drawMs: 3000
+      - id: draw-adapters
+        type: whiteboard.apply
+        at: { mark: draw-adapters }
+        upsertIds: [l-map-box, l-map-text, l-arrow1, l-filter-box, l-filter-text, l-adapters]
+        drawMs: 2800
+      - id: draw-consumer
+        type: whiteboard.apply
+        at: { mark: draw-consumer }
+        upsertIds: [l-arrow2, l-sum-box, l-sum-text, l-consumer]
+        drawMs: 2000
+      - id: draw-pass
+        type: whiteboard.apply
+        at: { mark: draw-pass }
+        upsertIds: [l-pass]
+        drawMs: 1800
+
+  - id: lazy-code
+    narration: >
+      Let's watch that happen.
+      [[mark:type-lazy]] Here's map again. This closure's body is a block,
+      so it can print each number, then return it doubled.
+      [[mark:type-sum]] Then we print a line, and only after that, we call
+      sum.
+      [[mark:select-sum]] sum is the consumer here. Like collect, it needs
+      the result type, so total is an i32.
     sources:
       - title: "The Rust Book — Methods that Consume the Iterator"
         url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-consume-the-iterator"
+      - title: "std::iter::Iterator::sum"
+        url: "https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.sum"
     actions:
-      - id: type-sum
+      - id: close-board-lazy
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -400 }
+        open: false
+      - id: type-lazy
         type: editor.type
-        at: { mark: type-sum, offsetMs: -400 }
+        at: { mark: type-lazy, offsetMs: -200 }
         target:
           file: main.rs
-          after: "    println!(\"evens doubled: {evens_doubled:?}\");\n"
+          after: "{big:?}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let total: i32 = numbers.iter().sum();\n    println!(\"sum: {total}\");\n"
+        text: "\n    let doubled = numbers.iter().map(|x| {\n        println!(\"doubling {x}\");\n        x * 2\n    });\n"
+      - id: type-sum
+        type: editor.type
+        at: { mark: type-sum, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "        x * 2\n    });\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    println!(\"nothing doubled yet\");\n    let total: i32 = doubled.sum();\n    println!(\"sum: {total}\");\n"
       - id: select-sum
         type: editor.select
         at: { mark: select-sum }
         target:
           file: main.rs
-          text: ".sum()"
+          text: "doubled.sum()"
           occurrence: 1
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. The pipeline gives twenty, forty, sixty, and
-      sum returns twenty-one. Iterators let you say what you want, step by
-      step, and Rust runs it in one efficient pass.
+      [[mark:run]] Let's run it. Double of four is eight. The chain keeps
+      six, eight, ten and twelve. Now look at the order. The line that says
+      nothing doubled yet comes before every doubling line. The closure only
+      ran when sum asked for the items. And the sum is forty-two.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — Processing a Series of Items with Iterators"
+        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html"
     actions:
       - id: run
         type: runtime.run
@@ -250,13 +935,26 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "evens doubled: [20, 40, 60]"
+        contains: "doubled, over 5: [6, 8, 10, 12]"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: ".filter(|n| n % 2 == 0)"
+        contains: ".filter(|x| *x > limit)"
+
+  - id: wrap
+    narration: >
+      So a closure is a small function that can use the variables around it.
+      Adapters like map and filter describe the steps, and a consumer like
+      collect or sum runs them. Next, we'll put it all together in a word
+      counter.
+    sources:
+      - title: "The Rust Book — Functional Language Features: Iterators and Closures"
+        url: "https://doc.rust-lang.org/book/ch13-00-functional-features.html"
+      - title: "The Rust Book — Updating a Value Based on the Old Value (counting words)"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#updating-a-value-based-on-the-old-value"
+    actions: []
 
 checks:
   - { type: timing.p95Ms, max: 300 }
