@@ -15,7 +15,7 @@ import { compareRenderSemantics, extractRenderSemantics, type RenderSemantics } 
 import { StudioActionError, waitUntil } from "./async";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
 import { sha256Hex, sha256HexOfJson, hashWorkspaceFiles } from "./hash";
-import { runtimeDockStartsCollapsed, runtimeNeedsSession } from "./plan";
+import { runtimeDockStartsCollapsed } from "./plan";
 import type { StudioPlan, StudioRuntimeMode } from "./plan";
 import { performPlan } from "./performer";
 import { runArtifactChecks, finalWorkspaceHashOf } from "./qa";
@@ -63,7 +63,6 @@ export interface StudioRunDeps {
   whiteboardStore: WhiteboardStoreInstance;
   webContainerRuntime: StudioDriverDeps["webContainerRuntime"];
   preview: StudioDriverDeps["preview"];
-  isSignedIn: boolean;
   onProgress?: (receipt: ActionReceipt) => void;
   onPhase?: (phase: string) => void;
 }
@@ -186,15 +185,8 @@ export async function runStudioRender(
 
   // ---- Preflight -----------------------------------------------------------
   phase("preflight");
-  // Only the *proxied* playgrounds, which is deliberately not every playground:
-  // `runtimeNeedsSession` keeps that classification beside the runtime schema
-  // so a language added later is gated (or exempted) by one decision the
-  // typecheck forces, rather than by a chain here that would silently omit it.
-  if (runtimeMode === "live" && runtimeNeedsSession(plan.runtime.kind) && !deps.isSignedIn) {
-    return failedResult(
-      `Live runtime mode needs a signed-in session for /api/${plan.runtime.kind}; sign in or render with runtime=fixture`,
-    );
-  }
+  // No session check: a live Playground render works signed out, because the
+  // proxies serve signed-out callers too.
   if (plan.runtime.kind === "webcontainer" && runtimeMode !== "live") {
     return failedResult('WebContainer Studio renders require runtime mode "live"');
   }

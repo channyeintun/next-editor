@@ -220,7 +220,7 @@ export default function StudioController() {
   const getWebContainerRuntimeSnapshot = useWebContainerRuntimeSnapshotGetter();
   const previewPanel = usePreviewPanel();
   const previewHandle = usePreviewAdapterHandle();
-  const { user, isSignedIn, isLoading: authLoading } = useAuth();
+  const { user } = useAuth();
   const { capabilities: studioCapabilities, isLoading: studioCapabilitiesLoading } =
     useStudioCapabilities(user?.id ?? null);
   const webContainerRuntimeActionsRef = useRef(webContainerRuntimeActions);
@@ -606,7 +606,6 @@ export default function StudioController() {
               return capture();
             },
           },
-          isSignedIn,
           onPhase: setPhase,
           onProgress: (receipt) => setReceipts((current) => [...current, receipt]),
         },
@@ -673,12 +672,12 @@ export default function StudioController() {
   // re-renders must not restart an unattended render. `autostart` is already
   // false outside an automation-controlled browser (shouldAutostartRender).
   useEffect(() => {
-    if (!autostart || autostartFired || authLoading) {
+    if (!autostart || autostartFired) {
       return;
     }
     autostartFired = true;
     void runRender();
-  }, [autostart, authLoading, runRender]);
+  }, [autostart, runRender]);
 
   const source = sources[planSlug];
   // A completed run's bundle/report/draft are exposed only while the current
@@ -975,7 +974,6 @@ export default function StudioController() {
           }}
           disabled={
             running ||
-            authLoading ||
             voiceBusy !== null ||
             voiceRecording ||
             (narrationLanguage === "my" && !selectedVoiceIsBurmeseReady)

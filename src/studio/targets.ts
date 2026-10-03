@@ -16,9 +16,9 @@ export function studioTargetIdForFile(path: string): string {
 export const STUDIO_RUN_BUTTON_TARGET_ID = "runtime-run";
 
 /**
- * Runner dock containers, one per playground kind. Unattended fixture renders
- * point the attention cursor here instead of the Run button, which is replaced
- * by a sign-in button for signed-out sessions and would otherwise be a
+ * Runner dock containers, one per playground kind. Unattended renders point the
+ * attention cursor here instead of the Run button, which is not rendered while
+ * the dock is collapsed or showing the Agent tab and would otherwise be a
  * missing-target failure.
  */
 export const STUDIO_GO_DOCK_TARGET_ID = "go-runner-dock";

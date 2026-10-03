@@ -245,7 +245,7 @@ describe("studio whiteboard asset defaults", () => {
 describe("shouldAutostartRender", () => {
   it("honours autostart=1 only in an automation-controlled browser", () => {
     expect(shouldAutostartRender("1", true)).toBe(true);
-    // A crafted link opened in a normal signed-in browser waits for the click.
+    // A crafted link opened in a normal browser waits for the click.
     expect(shouldAutostartRender("1", false)).toBe(false);
   });
 

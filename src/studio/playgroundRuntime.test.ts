@@ -7,8 +7,8 @@ import {
   runErrorPrefixFor,
 } from "./playgroundRuntime";
 import {
+  isPlaygroundRuntimeKind,
   runtimeDockStartsCollapsed,
-  runtimeNeedsSession,
   studioRuntimeSchema,
   type StudioPlaygroundRuntimeKind,
   type StudioRuntime,
@@ -370,10 +370,8 @@ describe("run fixture schemas", () => {
   });
 });
 
-describe("runtimeNeedsSession", () => {
-  it("gates the proxied playgrounds and only those", () => {
-    // Kite and asm run in the page: gating them would lock a lesson behind a
-    // sign-in for a service it never calls.
+describe("isPlaygroundRuntimeKind", () => {
+  it("names every Playground kind and nothing else", () => {
     const kinds = [
       "go-playground",
       "kotlin-playground",
@@ -387,14 +385,14 @@ describe("runtimeNeedsSession", () => {
     ] as const;
 
     // One table so a wrong answer names the kind in the diff.
-    expect(Object.fromEntries(kinds.map((kind) => [kind, runtimeNeedsSession(kind)]))).toEqual({
+    expect(Object.fromEntries(kinds.map((kind) => [kind, isPlaygroundRuntimeKind(kind)]))).toEqual({
       "go-playground": true,
       "kotlin-playground": true,
       "rust-playground": true,
       "zig-playground": true,
       "haskell-playground": true,
-      "kite-playground": false,
-      "asm-playground": false,
+      "kite-playground": true,
+      "asm-playground": true,
       webcontainer: false,
       none: false,
     });

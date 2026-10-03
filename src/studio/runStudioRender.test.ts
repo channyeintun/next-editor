@@ -70,23 +70,26 @@ describe("runStudioRender report timing", () => {
       iso: "2026-10-01T00:00:00.000Z",
       performanceNowMs: performance.now() - 5_000,
     };
-    // A live proxied-playground render without a session fails at preflight,
+    // A WebContainer render asked to replay a fixture fails at preflight,
     // before any dependency is touched.
     const result = await runStudioRender(
       {
         ...plan,
-        lesson: { slug: "rust-borrow", title: "Borrowing", locale: "en" },
+        lesson: { slug: "react-counter", title: "Counter", locale: "en" },
         seed: 1,
         workspace: { files: {} },
-        runtime: { kind: "rust-playground" },
+        runtime: { kind: "webcontainer" },
         dependencies: {},
       } as unknown as StudioPlan,
-      "live",
-      { isSignedIn: false } as StudioRunDeps,
+      "fixture",
+      {} as StudioRunDeps,
       { startedAt },
     );
 
     expect(result.report.outcome).toBe("failed");
+    expect(result.report.errors).toEqual([
+      'WebContainer Studio renders require runtime mode "live"',
+    ]);
     expect(result.report.startedAtIso).toBe(startedAt.iso);
     expect(result.report.wallDurationMs).toBeGreaterThanOrEqual(5_000);
   });

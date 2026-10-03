@@ -607,9 +607,9 @@ export const kiteRunFixtureSchema = z.object({
 
 /**
  * Execution-kind-specific runtime declaration. "live" calls the real
- * /api/<kind> proxy (requires a signed-in session); "fixture" replays the
- * pinned result. Unattended renders default to the plan's declared mode; the
- * manifest records which one ran. Kind "webcontainer" is the versioned JS/TS
+ * /api/<kind> proxy (no sign-in needed) or the in-page compiler; "fixture"
+ * replays the pinned result. Unattended renders default to the plan's declared
+ * mode; the manifest records which one ran. Kind "webcontainer" is the versioned JS/TS
  * lifecycle and preview contract. Kind "none" remains reserved for future
  * lesson types that narrate, edit, and use slides/whiteboard without a
  * Studio-owned execution surface.
@@ -722,29 +722,26 @@ export type StudioPlaygroundRuntime = Extract<StudioRuntime, { fixture: unknown 
 export type StudioPlaygroundRuntimeKind = StudioPlaygroundRuntime["kind"];
 
 /**
- * Whether a Playground kind executes through a proxied `/api/<kind>` route,
- * which a live render needs a signed-in session for. Kite and asm compile and
- * run in the page, so they call nothing and must stay `false` — gating them
- * would lock a lesson behind a sign-in it has no service to authenticate with.
+ * Every Playground kind, named once. A `Record` over the kinds rather than a
+ * plain list: a Playground language added to `studioRuntimeSchema` without
+ * being named here fails the typecheck, instead of quietly failing
+ * `isPlaygroundRuntimeKind` and dying mid-performance at `runtime.run`.
  *
- * A `Record` over every kind rather than a chain or a `Set`: a Playground
- * language added to `studioRuntimeSchema` without a decision here fails the
- * typecheck, instead of quietly passing preflight and dying mid-performance at
- * `runtime.run` — the same failure shape `isPlaygroundRuntimeKind` exists to
- * prevent one layer up. It doubles as the list of Playground kinds, so there is
- * one place a new language has to be named rather than two that can disagree.
+ * None of these needs a signed-in session for a live render. Go, Kotlin, Rust,
+ * Zig and Haskell call their `/api/<kind>` proxy, which needs no sign-in; Kite
+ * and asm compile and run in the page.
  */
-const PLAYGROUND_RUNTIME_NEEDS_SESSION: Record<StudioPlaygroundRuntimeKind, boolean> = {
+const PLAYGROUND_RUNTIME_KIND_TABLE: Record<StudioPlaygroundRuntimeKind, true> = {
   "go-playground": true,
   "kotlin-playground": true,
   "rust-playground": true,
   "zig-playground": true,
   "haskell-playground": true,
-  "kite-playground": false,
-  "asm-playground": false,
+  "kite-playground": true,
+  "asm-playground": true,
 };
 
-const PLAYGROUND_RUNTIME_KINDS = new Set<string>(Object.keys(PLAYGROUND_RUNTIME_NEEDS_SESSION));
+const PLAYGROUND_RUNTIME_KINDS = new Set<string>(Object.keys(PLAYGROUND_RUNTIME_KIND_TABLE));
 
 /**
  * Whether a runtime kind runs code on a Playground engine.
@@ -757,11 +754,6 @@ const PLAYGROUND_RUNTIME_KINDS = new Set<string>(Object.keys(PLAYGROUND_RUNTIME_
  */
 export function isPlaygroundRuntimeKind(kind: string): kind is StudioPlaygroundRuntimeKind {
   return PLAYGROUND_RUNTIME_KINDS.has(kind);
-}
-
-/** Whether a live render of this runtime kind needs a signed-in session. */
-export function runtimeNeedsSession(kind: string): boolean {
-  return isPlaygroundRuntimeKind(kind) && PLAYGROUND_RUNTIME_NEEDS_SESSION[kind];
 }
 
 /**
@@ -814,12 +806,12 @@ export function parseRuntimeModeParam(raw: string | null): RuntimeModeParam {
 /**
  * Whether `/studio?autostart=1` may start a render without a click.
  *
- * A render replaces the tab's workspace and, in live mode, makes credentialed
- * playground calls as the signed-in user, so a crafted link must not be able to
- * trigger one from a plain page load. Only an automation-controlled browser
- * (`navigator.webdriver`, which headless Chrome under scripts/studio-render.ts
- * reports) honours the flag; everyone else gets the plan preselected and waits
- * for the Start render click.
+ * A render replaces the tab's workspace and, in live mode, makes playground
+ * calls that spend the viewer's run budget against third-party services, so a
+ * crafted link must not be able to trigger one from a plain page load. Only an
+ * automation-controlled browser (`navigator.webdriver`, which headless Chrome
+ * under scripts/studio-render.ts reports) honours the flag; everyone else gets
+ * the plan preselected and waits for the Start render click.
  */
 export function shouldAutostartRender(raw: string | null, automated: boolean): boolean {
   return raw === "1" && automated;
