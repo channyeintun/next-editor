@@ -1,13 +1,23 @@
-# One idea: in Rust a `let` binding is immutable by default; `mut` opts into
-# change, and a second `let` with the same name shadows (a new binding). An
-# Excalidraw sketch contrasts the three, then each is built live and run.
+# Rust from zero, lesson 2: variables. let binds a name to a value and is
+# immutable by default (the E0384 error and the reason behind it are drawn on
+# the whiteboard, since an insert-only lesson can't run broken code); mut opts
+# in to change; shadowing makes a new variable with the same name, even with
+# a new type (contrasted with mut on a second board); const needs an upper-case
+# name and a type; and a let can carry a type annotation instead of relying on
+# inference. One run at the end.
+#
+# Every error quoted in the narration or on the board (E0384 and its help
+# line, E0308, "missing type for `const` item", and the non_upper_case_globals
+# warning for a lower-case const name) was confirmed with
+# rustc 1.98 --edition 2024. The fixture is the exact output of the final
+# program, which compiles with no warnings.
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-variables.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-variables
-  title: "Variables in Rust: immutable by default"
+  title: "Rust from zero: Variables and mutability"
   locale: en-US
   workspace:
     lessonType: rust
@@ -16,94 +26,289 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let count = 3;
-            println!("count is {count}");
+            let lives = 3;
+            println!("lives: {lives}");
         }
+  # Colour jobs: blue = the name being bound, green = safe / what the
+  # compiler accepts, orange = what changes (and the caveat), red = the error,
+  # violet = the new value that shadowing produces. Text is #1e1e1e (white on
+  # the dark board).
   whiteboardAssets:
-    - id: vars-title
+    # Board 1 — let, immutable by default, and the E0384 error.
+    - id: b1-title
+      kind: text
+      x: 280
+      y: 160
+      width: 620
+      height: 48
+      text: "let: immutable by default"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: b1-code
       kind: text
       x: 300
-      y: 180
-      width: 640
+      y: 236
+      width: 300
       height: 40
-      text: "let — bind a name to a value"
+      text: "let lives = 3;"
+      strokeColor: "#1971c2"
+      fontSize: 32
+    - id: b1-name
+      kind: text
+      x: 300
+      y: 322
+      width: 100
+      height: 40
+      text: "lives"
+      strokeColor: "#1971c2"
+      fontSize: 32
+    - id: b1-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 410
+      y: 324
+      width: 120
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: b1-box
+      kind: rectangle
+      x: 548
+      y: 302
+      width: 110
+      height: 80
+      strokeColor: "#1e1e1e"
+    - id: b1-value
+      kind: text
+      x: 592
+      y: 318
+      width: 30
+      height: 46
+      text: "3"
       strokeColor: "#1e1e1e"
       fontSize: 36
-    - id: card-immut
-      kind: rectangle
-      x: 300
-      y: 260
-      width: 240
-      height: 170
-      strokeColor: "#1971c2"
-    - id: immut-code
+    - id: b1-stays
       kind: text
-      x: 320
-      y: 300
-      width: 210
-      height: 30
-      text: "let count = 3"
-      strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: immut-label
-      kind: text
-      x: 320
-      y: 372
-      width: 210
-      height: 36
-      text: "immutable"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: card-mut
-      kind: rectangle
-      x: 585
-      y: 260
-      width: 240
-      height: 170
-      strokeColor: "#f08c00"
-    - id: mut-code
-      kind: text
-      x: 605
-      y: 300
-      width: 210
-      height: 30
-      text: "let mut total"
-      strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: mut-label
-      kind: text
-      x: 605
-      y: 372
-      width: 210
-      height: 36
-      text: "you can change it"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: card-shadow
-      kind: rectangle
-      x: 870
-      y: 260
-      width: 240
-      height: 170
+      x: 690
+      y: 322
+      width: 330
+      height: 40
+      text: "immutable: stays 3"
       strokeColor: "#2f9e44"
-    - id: shadow-code
+      fontSize: 30
+    - id: b1-trust
+      kind: freedraw
+      stroke: underline
+      x: 686
+      y: 330
+      width: 300
+      height: 40
+      strokeColor: "#2f9e44"
+    - id: b1-broken
       kind: text
-      x: 890
-      y: 300
-      width: 210
-      height: 30
-      text: "let count = …"
-      strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: shadow-label
+      x: 300
+      y: 420
+      width: 200
+      height: 40
+      text: "lives = 2;"
+      strokeColor: "#e03131"
+      fontSize: 32
+    - id: b1-strike
+      kind: freedraw
+      stroke: strike
+      x: 294
+      y: 418
+      width: 180
+      height: 44
+      strokeColor: "#e03131"
+    - id: b1-err1
       kind: text
-      x: 890
-      y: 372
-      width: 210
+      x: 300
+      y: 484
+      width: 620
       height: 36
-      text: "new binding (shadow)"
+      text: "error[E0384]: cannot assign twice"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b1-err2
+      kind: text
+      x: 300
+      y: 522
+      width: 620
+      height: 36
+      text: "to immutable variable `lives`"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b1-help
+      kind: text
+      x: 300
+      y: 584
+      width: 760
+      height: 36
+      text: "help: consider making this binding mutable"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    # Board 2 — mut (one box, value replaced) vs. shadowing (a second box).
+    - id: b2-title
+      kind: text
+      x: 280
+      y: 160
+      width: 520
+      height: 48
+      text: "mut vs. shadowing"
       strokeColor: "#1e1e1e"
-      fontSize: 26
+      fontSize: 38
+    - id: b2-mut-code
+      kind: text
+      x: 290
+      y: 248
+      width: 230
+      height: 40
+      text: "let mut score"
+      strokeColor: "#f08c00"
+      fontSize: 30
+    - id: b2-mut-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 520
+      y: 250
+      width: 90
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: b2-mut-box
+      kind: rectangle
+      x: 625
+      y: 228
+      width: 180
+      height: 80
+      strokeColor: "#1e1e1e"
+    - id: b2-mut-old
+      kind: text
+      x: 647
+      y: 244
+      width: 26
+      height: 46
+      text: "0"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: b2-mut-strike
+      kind: freedraw
+      stroke: strike
+      x: 640
+      y: 244
+      width: 40
+      height: 46
+      strokeColor: "#f08c00"
+    - id: b2-mut-new
+      kind: text
+      x: 705
+      y: 244
+      width: 80
+      height: 46
+      text: "250"
+      strokeColor: "#f08c00"
+      fontSize: 36
+    - id: b2-mut-note
+      kind: text
+      x: 290
+      y: 322
+      width: 420
+      height: 36
+      text: "one variable, same type"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b2-sh-code1
+      kind: text
+      x: 290
+      y: 412
+      width: 170
+      height: 40
+      text: "let spaces"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: b2-sh-arrow1
+      kind: freedraw
+      stroke: arrow-right
+      x: 470
+      y: 414
+      width: 90
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: b2-sh-box1
+      kind: rectangle
+      x: 575
+      y: 392
+      width: 160
+      height: 80
+      strokeColor: "#1e1e1e"
+    - id: b2-sh-val1
+      kind: text
+      x: 610
+      y: 408
+      width: 90
+      height: 46
+      text: '"    "'
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: b2-sh-hidden
+      kind: text
+      x: 760
+      y: 412
+      width: 260
+      height: 36
+      text: "old one: hidden"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b2-sh-code2
+      kind: text
+      x: 290
+      y: 512
+      width: 170
+      height: 40
+      text: "let spaces"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: b2-sh-arrow2
+      kind: freedraw
+      stroke: arrow-right
+      x: 470
+      y: 514
+      width: 90
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: b2-sh-box2
+      kind: rectangle
+      x: 575
+      y: 492
+      width: 160
+      height: 80
+      strokeColor: "#6741d9"
+    - id: b2-sh-val2
+      kind: text
+      x: 643
+      y: 508
+      width: 30
+      height: 46
+      text: "4"
+      strokeColor: "#6741d9"
+      fontSize: 36
+    - id: b2-sh-note1
+      kind: text
+      x: 760
+      y: 496
+      width: 260
+      height: 36
+      text: "new variable,"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: b2-sh-note2
+      kind: text
+      x: 760
+      y: 534
+      width: 260
+      height: 36
+      text: "new type"
+      strokeColor: "#6741d9"
+      fontSize: 28
 
 build:
   voiceProfile: pocket-alba-v1
@@ -116,105 +321,298 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "count is 3\ntotal is now 13\ncount shadowed to 4\n"
+      stdout: "lives: 3\nscore: 250 of 1000\nspaces: 4\n"
       stderr: ""
 
 scenes:
-  - id: sketch
+  - id: let-binding
+    chapter: "let: immutable by default"
     narration: >
-      [[mark:board]] In Rust, variables don't change by default. Three ways a
-      name meets a value. [[mark:card-immut]] Plain let binds a value — reassign
-      it and the compiler stops you. [[mark:card-mut]] Add mut, and now it can
-      change. [[mark:card-shadow]] Or write let again, same name — a brand-new
-      binding. That's shadowing. [[mark:board-close]] Let's build all three.
+      [[mark:open-main]] Here's a small Rust program with one variable.
+      [[mark:select-let]] You make a variable with let. This line binds the
+      name lives to the value three. Notice there's no type written here. Rust
+      looks at the three and picks the type for you. That's called type
+      inference.
     sources:
       - title: "The Rust Book — Variables and Mutability"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"
-    actions:
-      - id: open-board
-        type: whiteboard.apply
-        at: { mark: board }
-        open: true
-        upsertIds: [vars-title]
-      - id: show-immut
-        type: whiteboard.apply
-        at: { mark: card-immut }
-        upsertIds: [card-immut, immut-code, immut-label]
-      - id: show-mut
-        type: whiteboard.apply
-        at: { mark: card-mut }
-        upsertIds: [card-mut, mut-code, mut-label]
-      - id: show-shadow
-        type: whiteboard.apply
-        at: { mark: card-shadow }
-        upsertIds: [card-shadow, shadow-code, shadow-label]
-      - id: close-board
-        type: whiteboard.apply
-        at: { mark: board-close }
-        open: false
-
-  - id: mutate
-    narration: >
-      [[mark:open]] Count is three, printed. [[mark:type-mut]] Now bind total
-      and add ten in place. [[mark:select-mut]] The mut keyword allows that
-      change. Remove mut, and the compiler rejects the assignment.
-    sources:
-      - title: "The Rust Reference — Variables"
-        url: "https://doc.rust-lang.org/reference/variables.html"
+      - title: "The Rust Reference — let statements"
+        url: "https://doc.rust-lang.org/reference/statements.html#let-statements"
     actions:
       - id: open-main
         type: workspace.openFile
-        at: { mark: open }
+        at: { mark: open-main }
         path: main.rs
-      - id: type-mut
-        type: editor.type
-        at: { mark: type-mut, offsetMs: -400 }
+      - id: select-let
+        type: editor.select
+        at: { mark: select-let }
         target:
           file: main.rs
-          after: "    println!(\"count is {count}\");\n"
+          text: "let lives = 3;"
+          occurrence: 1
+
+  - id: immutable
+    narration: >
+      [[mark:board-title]] So what does let really make?
+      [[mark:draw-binding]] Think of the name lives pointing at a box that
+      holds three. [[mark:draw-stays]] By default, a variable is immutable. Once
+      lives is three, it stays three. [[mark:draw-broken]] So what happens if
+      you add a line that assigns two to lives? [[mark:draw-error]] The
+      program doesn't compile. You get error E0384, and the message says you
+      can't assign twice to an immutable variable. [[mark:why]] Why is this the
+      default? Say one part of your code expects lives to stay three, and
+      another part changes it. That kind of bug is hard to find.
+      [[mark:draw-trust]] When values can't change, you can read a line and
+      trust what it says, because the compiler checks it for you.
+      [[mark:draw-help]] And look at the help line. The compiler tells you how
+      to allow the change: make the binding mutable.
+    sources:
+      - title: "The Rust Book — Variables and Mutability"
+        url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"
+      - title: "Rust error codes — E0384"
+        url: "https://doc.rust-lang.org/error_codes/E0384.html"
+    actions:
+      - id: board1-open
+        type: whiteboard.apply
+        at: { mark: board-title }
+        open: true
+        upsertIds: [b1-title]
+      - id: draw-binding
+        type: whiteboard.apply
+        at: { mark: draw-binding }
+        upsertIds: [b1-code, b1-name, b1-arrow, b1-box, b1-value]
+        drawMs: 2200
+      - id: draw-stays
+        type: whiteboard.apply
+        at: { mark: draw-stays }
+        upsertIds: [b1-stays]
+        drawMs: 900
+      - id: draw-broken
+        type: whiteboard.apply
+        at: { mark: draw-broken }
+        upsertIds: [b1-broken, b1-strike]
+        drawMs: 1200
+      - id: draw-error
+        type: whiteboard.apply
+        at: { mark: draw-error }
+        upsertIds: [b1-err1, b1-err2]
+        drawMs: 1800
+      - id: draw-trust
+        type: whiteboard.apply
+        at: { mark: draw-trust }
+        upsertIds: [b1-trust]
+        drawMs: 900
+      - id: draw-help
+        type: whiteboard.apply
+        at: { mark: draw-help }
+        upsertIds: [b1-help]
+        drawMs: 1200
+
+  - id: mut
+    chapter: Changing a value with mut
+    narration: >
+      [[mark:type-mut]] Let's add a score, which does need to change.
+      [[mark:select-mut]] The mut keyword makes this binding mutable. Score
+      starts at zero, and the plus-equals line adds two hundred fifty to it.
+      mut is also a note to anyone reading your code: this value is going to
+      change. Take mut away, and the plus-equals line gets the same E0384
+      error.
+    sources:
+      - title: "The Rust Book — Variables and Mutability"
+        url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"
+      - title: "The Rust Reference — Compound assignment expressions"
+        url: "https://doc.rust-lang.org/reference/expressions/operator-expr.html#compound-assignment-expressions"
+    actions:
+      - id: close-board1
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -600 }
+        open: false
+      - id: type-mut
+        type: editor.type
+        at: { mark: type-mut }
+        target:
+          file: main.rs
+          after: "    println!(\"lives: {lives}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let mut total = count;\n    total += 10;\n    println!(\"total is now {total}\");\n"
+        text: "\n    let mut score = 0;\n    score += 250;\n    println!(\"score: {score}\");\n"
       - id: select-mut
         type: editor.select
         at: { mark: select-mut }
         target:
           file: main.rs
-          text: "let mut total = count;"
+          text: "mut"
           occurrence: 1
 
-  - id: shadow
+  - id: shadow-board
+    chapter: Shadowing
     narration: >
-      [[mark:type-shadow]] Shadowing is different.
-      [[mark:select-shadow]] This second let uses the same name, count. The old
-      value doesn't change. You get a new variable that hides it. Count was
-      three; now it's four. Same name, brand-new binding.
+      [[mark:board2]] There's a second way to reuse a name, and it's called
+      shadowing. Let's compare it with mut. [[mark:draw-mut]] With mut,
+      there's one variable. You put a new value in the same box, and it has to
+      be the same type. [[mark:draw-shadow1]] With shadowing, you start with a
+      variable, like spaces, that holds some text. [[mark:draw-shadow2]] Then
+      you write let again, with the same name. That makes a brand-new
+      variable, in a new box. From that line on, the old one is hidden.
+      [[mark:draw-shadow-type]] And since it's a new variable, it can even
+      have a different type. Here, it's a number.
     sources:
       - title: "The Rust Book — Shadowing"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html#shadowing"
     actions:
+      - id: board2-open
+        type: whiteboard.apply
+        at: { mark: board2 }
+        open: true
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-mut
+        type: whiteboard.apply
+        at: { mark: draw-mut }
+        upsertIds:
+          [
+            b2-mut-code,
+            b2-mut-arrow,
+            b2-mut-box,
+            b2-mut-old,
+            b2-mut-strike,
+            b2-mut-new,
+            b2-mut-note,
+          ]
+        drawMs: 2800
+      - id: draw-shadow1
+        type: whiteboard.apply
+        at: { mark: draw-shadow1 }
+        upsertIds: [b2-sh-code1, b2-sh-arrow1, b2-sh-box1, b2-sh-val1]
+        drawMs: 1600
+      - id: draw-shadow2
+        type: whiteboard.apply
+        at: { mark: draw-shadow2 }
+        upsertIds: [b2-sh-code2, b2-sh-arrow2, b2-sh-box2, b2-sh-val2, b2-sh-hidden]
+        drawMs: 2200
+      - id: draw-shadow-type
+        type: whiteboard.apply
+        at: { mark: draw-shadow-type }
+        upsertIds: [b2-sh-note1, b2-sh-note2]
+        drawMs: 1000
+
+  - id: shadow-code
+    narration: >
+      [[mark:type-shadow]] Let's try it. spaces starts as text, four spaces
+      between quotes. [[mark:select-shadow]] Then the second let takes its
+      length, which is a number, and keeps the name spaces. You don't need a
+      second name, like space count. If spaces were mut instead, assigning
+      the length to it would fail with error E0308, mismatched types.
+    sources:
+      - title: "The Rust Book — Shadowing"
+        url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html#shadowing"
+      - title: "Rust error codes — E0308"
+        url: "https://doc.rust-lang.org/error_codes/E0308.html"
+      - title: "std — str::len"
+        url: "https://doc.rust-lang.org/std/primitive.str.html#method.len"
+    actions:
+      - id: close-board2
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -600 }
+        open: false
       - id: type-shadow
         type: editor.type
-        at: { mark: type-shadow, offsetMs: -400 }
+        at: { mark: type-shadow }
         target:
           file: main.rs
-          after: "    println!(\"total is now {total}\");\n"
+          after: "    println!(\"score: {score}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let count = count + 1;\n    println!(\"count shadowed to {count}\");\n"
+        text: "\n    let spaces = \"    \";\n    let spaces = spaces.len();\n    println!(\"spaces: {spaces}\");\n"
       - id: select-shadow
         type: editor.select
         at: { mark: select-shadow }
         target:
           file: main.rs
-          text: "let count = count + 1;"
+          text: "let spaces = spaces.len();"
           occurrence: 1
+
+  - id: constants
+    chapter: Constants and type annotations
+    narration: >
+      [[mark:type-const]] Some values are fixed for the whole program, like a
+      top score. For those, Rust has const. You can put it outside any
+      function, so all of your code can use it. [[mark:select-const]] A
+      constant's name is upper case, with underscores between words. The
+      compiler warns you if it isn't. And the type is required. Here it's u32,
+      an unsigned 32-bit integer, so it can't be negative. Leave the type out,
+      and the compiler stops with the error: missing type for const item. A
+      const can't be mut, and its value must be known when the program
+      compiles.
+    sources:
+      - title: "The Rust Book — Constants"
+        url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html#constants"
+      - title: "The Rust Reference — Constant items"
+        url: "https://doc.rust-lang.org/reference/items/constant-items.html"
+      - title: "rustc lints — non_upper_case_globals"
+        url: "https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#non-upper-case-globals"
+    actions:
+      - id: type-const
+        type: editor.type
+        at: { mark: type-const }
+        target:
+          file: main.rs
+          after: ""
+          occurrence: 1
+        cadence: fast-explainer
+        text: "const MAX_SCORE: u32 = 1000;\n\n"
+      - id: select-const
+        type: editor.select
+        at: { mark: select-const }
+        target:
+          file: main.rs
+          text: "MAX_SCORE: u32"
+          occurrence: 1
+
+  - id: annotate
+    narration: >
+      [[mark:select-score]] A let can have its type written out too. Rust
+      picked i32 for score, the default for whole numbers. But a score never
+      goes below zero. [[mark:type-annotation]] So let's write u32, after a
+      colon. That's a type annotation. [[mark:type-max]] Now let's print the
+      score next to the constant.
+    sources:
+      - title: "The Rust Book — Data Types"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html"
+      - title: "The Rust Reference — Type inference"
+        url: "https://doc.rust-lang.org/reference/type-inference.html"
+    actions:
+      - id: select-score
+        type: editor.select
+        at: { mark: select-score }
+        target:
+          file: main.rs
+          text: "let mut score = 0;"
+          occurrence: 1
+      - id: type-annotation
+        type: editor.type
+        at: { mark: type-annotation }
+        target:
+          file: main.rs
+          after: "    let mut score"
+          occurrence: 1
+        cadence: natural
+        text: ": u32"
+      - id: type-max
+        type: editor.type
+        at: { mark: type-max }
+        target:
+          file: main.rs
+          after: '    println!("score: {score}'
+          occurrence: 1
+        cadence: natural
+        text: " of {MAX_SCORE}"
 
   - id: run
     narration: >
-      [[mark:run]] Run it. Count, three. Total, thirteen — changed through mut.
-      Count, shadowed, four. Immutable by default is the rule; mut and shadowing
-      are how you opt in.
+      [[mark:run]] Let's run it. [[mark:read-output]] Lives is three. The
+      score is two hundred fifty, out of a thousand. And spaces is now the
+      number four, not the text.
     sources:
       - title: "Rust Playground"
         url: "https://play.rust-lang.org/"
@@ -226,13 +624,24 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "count shadowed to 4"
+        contains: "score: 250 of 1000"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "let count = count + 1;"
+        contains: "let spaces = spaces.len();"
+
+  - id: wrap
+    narration: >
+      So, let makes a variable that can't change, unless you add mut.
+      Shadowing makes a new variable with the same name, and const is a fixed
+      value with a type. Next, we'll look at Rust's data types, like the i32
+      and u32 you met here.
+    sources:
+      - title: "The Rust Book — Variables and Mutability"
+        url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"
+    actions: []
 
 checks:
   - { type: timing.p95Ms, max: 300 }
