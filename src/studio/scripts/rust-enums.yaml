@@ -35,8 +35,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-enums
-  title: "Rust from zero: Enums and Option"
-  locale: en-US
+  title: "Rust from zero: Enum နဲ့ Option"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -51,12 +51,16 @@ lesson:
     - id: enum-slide
       contentType: google
       name: Enums
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_20
     - id: option-slide
       contentType: google
       name: Option<T> — no null
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_31
   whiteboardAssets:
     # ---- Board 1: a Status is exactly one variant ---------------------------
@@ -67,7 +71,7 @@ lesson:
         y: 152,
         width: 760,
         height: 48,
-        text: "A Status value is one of:",
+        text: "Status တစ်ခုက ဒီထဲက တစ်ခု:",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -98,7 +102,7 @@ lesson:
         y: 266,
         width: 50,
         height: 40,
-        text: "or",
+        text: "(သို့)",
         strokeColor: "#1e1e1e",
         fontSize: 32,
       }
@@ -149,7 +153,7 @@ lesson:
         y: 362,
         width: 200,
         height: 40,
-        text: "no data",
+        text: "data မပါ",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -160,7 +164,7 @@ lesson:
         y: 362,
         width: 320,
         height: 40,
-        text: "holds the minutes",
+        text: "မိနစ်ကို သိမ်းထားတယ်",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -171,7 +175,7 @@ lesson:
         y: 432,
         width: 760,
         height: 40,
-        text: "always exactly one variant at a time",
+        text: "အမြဲ တစ်ချိန်မှာ variant တစ်ခုတည်း",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -225,7 +229,7 @@ lesson:
         y: 152,
         width: 780,
         height: 48,
-        text: "Use an Option as a u32?",
+        text: "Option ကို u32 လို သုံးလို့ ရလား",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -310,7 +314,7 @@ lesson:
         y: 438,
         width: 50,
         height: 40,
-        text: "or",
+        text: "(သို့)",
         strokeColor: "#1e1e1e",
         fontSize: 28,
       }
@@ -341,7 +345,7 @@ lesson:
         y: 438,
         width: 260,
         height: 40,
-        text: "no number!",
+        text: "ကိန်းဂဏန်း မပါ!",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -379,7 +383,10 @@ lesson:
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 43
 
 runtime:
@@ -389,19 +396,28 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "ana is Active\nben is Away(15)\nben == Away(20)? false\nNone and Some(15)\nana: 0 min away\n"
+      stdout: "ana is Active
+
+        ben is Away(15)
+
+        ben == Away(20)? false
+
+        None and Some(15)
+
+        ana: 0 min away\n"
       stderr: ""
 
 scenes:
   - id: enum-slide
-    chapter: One of a fixed set
-    narration: >
-      [[mark:show-enum]] A user in a chat app is either active, or away. In
-      many languages, you'd store that as a string, plus a separate number
-      for the minutes. Rust has a better tool, the enum. It's a type that's
-      one of a fixed set of variants. Here, a Status is Active, or it's Away.
-      And a variant can carry data. Away holds a u32, the minutes the user's
-      been away.
+    chapter: သတ်မှတ်ထားတဲ့ variant တွေထဲက တစ်ခု
+    narration: >-
+      [[mark:show-enum]] chat app တစ်ခုမှာ user တစ်ယောက်က active ဖြစ်နေတာ ဒါမှမဟုတ် away ဖြစ်နေတာ၊
+      ဒီ နှစ်မျိုးထဲက တစ်မျိုးပဲ ဖြစ်နိုင်ပါတယ်။ တခြား ဘာသာစကား အများစုမှာဆိုရင် ဒီ အခြေအနေကို စာသား
+      တစ်ခုအနေနဲ့ သိမ်းပြီး၊ away ဖြစ်နေတဲ့ မိနစ်အတွက်ကတော့ သီးသန့် ကိန်းဂဏန်း တစ်ခု
+      ထပ်သိမ်းရတတ်ပါတယ်။ Rust မှာတော့ ဒါထက် ပိုကောင်းတဲ့ နည်းလမ်း တစ်ခု ရှိပါတယ်၊ အဲဒါက enum ပါ။
+      enum ဆိုတာ ကြိုတင် သတ်မှတ်ထားတဲ့ variant တွေထဲက တစ်ခုပဲ ဖြစ်နိုင်တဲ့ type တစ်ခုပါ။ ဒီမှာဆိုရင်
+      Status တစ်ခုက Active ဒါမှမဟုတ် Away ဖြစ်ပါတယ်။ ပြီးတော့ variant တစ်ခုက data ကိုပါ သယ်ထားလို့
+      ရပါတယ်။ Away က u32 တစ်ခု သိမ်းထားပြီး၊ အဲဒါက user away ဖြစ်နေတဲ့ မိနစ် အရေအတွက်ပါ။
     sources:
       - title: "The Rust Book — Defining an Enum"
         url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"
@@ -413,16 +429,16 @@ scenes:
         slideId: enum-slide
 
   - id: one-of
-    narration: >
-      Let's draw it. [[mark:draw-variants]] A Status value is always exactly
-      one of these two. [[mark:draw-data]] And only Away has minutes, so an
-      active user can't have minutes by mistake. [[mark:draw-one]] That's the
-      difference from a struct. A struct holds all its fields at once. An
-      enum holds one variant at a time. [[mark:draw-busy]] The list is also
-      fixed. Try a variant that isn't in the list, like Busy, and the
-      compiler stops you with error E0599: there's no variant named Busy. A
-      string would accept any text, even a typo, and you'd only find the bug
-      while the program runs.
+    narration: >-
+      ဒါကို ပုံ ဆွဲပြီး ကြည့်ရအောင်။ [[mark:draw-variants]] Status တန်ဖိုး တစ်ခုက အမြဲတမ်း ဒီ
+      နှစ်ခုထဲက တစ်ခုတည်းပဲ ဖြစ်ပါတယ်။ [[mark:draw-data]] ပြီးတော့ မိနစ်က Away မှာပဲ ပါတဲ့အတွက်၊
+      active ဖြစ်နေတဲ့ user မှာ မိနစ် မှားပါသွားစရာ မရှိပါဘူး။ [[mark:draw-one]] ဒါက struct နဲ့
+      ကွာတဲ့ အချက်ပါ။ struct တစ်ခုမှာ သူ့ field အားလုံး တစ်ပြိုင်နက် ရှိနေပေမဲ့၊ enum တစ်ခုမှာတော့
+      တစ်ချိန်မှာ variant တစ်ခုပဲ ရှိပါတယ်။ [[mark:draw-busy]] ပြီးတော့ ဒီ variant စာရင်းက ပုံသေပါ။
+      စာရင်းထဲ မပါတဲ့ variant တစ်ခု၊ ဥပမာအားဖြင့် Busy ကို သုံးကြည့်ရင်၊ compiler က E0599 error နဲ့
+      ရပ်သွားပြီး၊ Busy ဆိုတဲ့ variant မရှိဘူးလို့ ပြောပါတယ်။ စာသားနဲ့ သိမ်းထားမယ်ဆိုရင်တော့ ဘယ်
+      စာသားမဆို လက်ခံမှာ ဖြစ်လို့၊ စာလုံးပေါင်း မှားရိုက်ထားတာတောင် ဝင်သွားပြီး၊ program run
+      နေချိန်ကျမှ bug ကို တွေ့ရမှာပါ။
     sources:
       - title: "The Rust Book — Defining an Enum"
         url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"
@@ -461,14 +477,14 @@ scenes:
         drawMs: 2400
 
   - id: define
-    chapter: Writing an enum
-    narration: >
-      Now let's write it. [[mark:type-enum]] The enum keyword, the name, then
-      the variants in curly braces, with commas between them. The derive line
-      adds two abilities. Debug, which you saw with structs, lets us print a
-      Status. PartialEq lets us compare two of them with double equals.
-      [[mark:select-away]] And Away(u32) says this variant carries one u32.
-      Active carries nothing.
+    chapter: Enum တစ်ခု ရေးခြင်း
+    narration: >-
+      ကဲ၊ အခု ရေးကြည့်ရအောင်။ [[mark:type-enum]] enum keyword နဲ့ စပြီး၊ နောက်မှာ နာမည်၊ ပြီးတော့
+      variant တွေကို တွန့်ကွင်းထဲမှာ comma နဲ့ ခြားပြီး ရေးပါတယ်။ အပေါ်က derive စာကြောင်းကတော့
+      စွမ်းရည် နှစ်ခု ထပ်ပေးပါတယ်။ Debug ကတော့ struct lesson မှာ တွေ့ခဲ့ပြီးသားပါ၊ သူ့ကြောင့် Status
+      တစ်ခုကို print ထုတ်လို့ ရပါတယ်။ PartialEq ကတော့ Status နှစ်ခုကို double equal နဲ့
+      နှိုင်းယှဉ်လို့ ရအောင် လုပ်ပေးပါတယ်။ [[mark:select-away]] ပြီးတော့ Away u32 ဆိုတာက ဒီ variant
+      မှာ u32 တစ်ခု ပါတယ်လို့ ပြောတာပါ။ Active မှာတော့ ဘာမှ မပါပါဘူး။
     sources:
       - title: "The Rust Book — Defining an Enum"
         url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"
@@ -491,7 +507,17 @@ scenes:
           after: "// Who's online in a chat app?\n\n"
           occurrence: 1
         cadence: line-by-line
-        text: "#[derive(Debug, PartialEq)]\nenum Status {\n    Active,\n    Away(u32),\n}\n\n"
+        text: "#[derive(Debug, PartialEq)]
+
+          enum Status {
+
+          \    Active,
+
+          \    Away(u32),
+
+          }
+
+          \n"
       - id: select-away
         type: editor.select
         at: { mark: select-away }
@@ -501,14 +527,13 @@ scenes:
           occurrence: 1
 
   - id: values
-    narration: >
-      [[mark:type-values]] To make a value, write the enum's name, two colons,
-      and the variant. [[mark:select-ben]] For Away, you pass the minutes in
-      parentheses, like a function call. In fact, Away really is a function:
-      it takes a u32 and builds a Status. Then we print both.
-      [[mark:type-compare]] The minutes are part of the value, too. So ben,
-      which is Away(15), isn't equal to Away(20). Same variant, different
-      data.
+    narration: >-
+      [[mark:type-values]] တန်ဖိုး တစ်ခု လုပ်ချင်ရင် enum ရဲ့ နာမည်၊ colon နှစ်ခု၊ ပြီးတော့ variant
+      နာမည်ကို ရေးပါတယ်။ [[mark:select-ben]] Away အတွက်ကတော့ function တစ်ခု ခေါ်သလိုပဲ မိနစ်ကို
+      ကွင်းထဲမှာ ထည့်ပေးရပါတယ်။ တကယ်တော့ Away ဆိုတာ function အစစ် တစ်ခုပါ၊ u32 တစ်ခု လက်ခံပြီး
+      Status တစ်ခု တည်ဆောက်ပေးပါတယ်။ ပြီးတော့ နှစ်ခုလုံးကို print ထုတ်ပါမယ်။ [[mark:type-compare]]
+      မိနစ်ကလည်း တန်ဖိုးရဲ့ အစိတ်အပိုင်း တစ်ခုပါ။ ဒါကြောင့် Away 15 ဖြစ်တဲ့ ben က Away 20 နဲ့
+      မတူပါဘူး။ variant က အတူတူပဲ ဖြစ်ပေမဲ့၊ data က မတူလို့ပါ။
     sources:
       - title: "The Rust Book — Enum Values"
         url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#enum-values"
@@ -523,7 +548,13 @@ scenes:
           after: "fn main() {\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let ana = Status::Active;\n    let ben = Status::Away(15);\n    println!(\"ana is {ana:?}\");\n    println!(\"ben is {ben:?}\");\n"
+        text: "    let ana = Status::Active;
+
+          \    let ben = Status::Away(15);
+
+          \    println!(\"ana is {ana:?}\");
+
+          \    println!(\"ben is {ben:?}\");\n"
       - id: select-ben
         type: editor.select
         at: { mark: select-ben }
@@ -542,20 +573,22 @@ scenes:
         text: "    println!(\"ben == Away(20)? {}\", ben == Status::Away(20));\n"
 
   - id: option-slide
-    chapter: Option instead of null
-    narration: >
-      [[mark:show-option]] Now, an enum you'll use very often: Option. Rust
-      has no null. In many languages, a value can be null, and if you forget
-      to check, the program crashes while it's running. Rust puts the missing
-      case into the type instead. An Option is either Some, holding a value,
-      or None, holding nothing. That's the same shape as our Status.
-      [[mark:option-t]] The T is a placeholder for any type, so an Option of
-      u32 is a u32 that might be missing. And the compiler makes you handle
-      both cases. You can write Some and None on their own, without Option
-      in front.
+    chapter: null အစား Option
+    narration: >-
+      [[mark:show-option]] အခု ကိုယ် အသုံးအများဆုံး ဖြစ်လာမယ့် enum တစ်ခုကို ကြည့်ရအောင်၊ အဲဒါက
+      Option ပါ။ Rust မှာ null ဆိုတာ မရှိပါဘူး။ တခြား ဘာသာစကား အများစုမှာ တန်ဖိုး တစ်ခုက null
+      ဖြစ်နေနိုင်ပြီး၊ စစ်ဖို့ မေ့သွားရင် program run နေချိန်ကျမှ crash ဖြစ်သွားပါတယ်။ Rust ကတော့
+      တန်ဖိုး မရှိတဲ့ အခြေအနေကို type ထဲမှာပဲ ထည့်ထားလိုက်ပါတယ်။ Option တစ်ခုက တန်ဖိုး တစ်ခု
+      သိမ်းထားတဲ့ Some၊ ဒါမှမဟုတ် ဘာမှ မသိမ်းထားတဲ့ None၊ ဒီ နှစ်ခုထဲက တစ်ခု ဖြစ်ပါတယ်။ ဒါက ခုနက
+      Status နဲ့ ပုံစံ အတူတူပါပဲ။ T ဆိုတာကတော့ ဘယ် type မဆို ထည့်လို့ ရတဲ့ placeholder တစ်ခု
+      ဖြစ်ပြီး၊ ဒါကြောင့် Option of u32 ဆိုတာ ရှိချင်မှ ရှိမယ့် u32 တစ်ခုပါ။ ပြီးတော့ အဲဒီ အခြေအနေ
+      နှစ်ခုလုံးကို handle လုပ်ဖို့ compiler က ကိုယ့်ကို ခိုင်းပါတယ်။ Some နဲ့ None ကို ရေးတဲ့အခါ
+      ရှေ့မှာ Option မပါဘဲ တန်းရေးလို့ ရပါတယ်။
     sources:
       - title: "The Rust Book — The Option Enum and Its Advantages Over Null Values"
-        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantages-over-null-values"
+        url:
+          "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantag\
+          es-over-null-values"
       - title: "std::option::Option"
         url: "https://doc.rust-lang.org/std/option/enum.Option.html"
       - title: "std::prelude"
@@ -567,11 +600,11 @@ scenes:
         slideId: option-slide
 
   - id: options-code
-    narration: >
-      Back in the editor. [[mark:type-options]] Ana's active, so she hasn't
-      been away at all. That's None. Ben's been away fifteen minutes, so
-      that's Some(15). [[mark:select-option-type]] Both have the type Option
-      of u32, and we print them too.
+    narration: >-
+      editor ထဲ ပြန်သွားရအောင်။ [[mark:type-options]] ana က active ဖြစ်နေတဲ့အတွက် away ဖြစ်ခဲ့တာ
+      လုံးဝ မရှိပါဘူး၊ ဒါကြောင့် None ပါ။ ben ကတော့ 15 မိနစ် away ဖြစ်နေတာ ဖြစ်လို့ Some 15 ပါ။
+      [[mark:select-option-type]] နှစ်ခုလုံးရဲ့ type က Option of u32 ဖြစ်ပြီး၊ ဒီ နှစ်ခုကိုလည်း
+      print ထုတ်ပါမယ်။
     sources:
       - title: "std::option::Option"
         url: "https://doc.rust-lang.org/std/option/enum.Option.html"
@@ -587,7 +620,13 @@ scenes:
           after: "    println!(\"ben == Away(20)? {}\", ben == Status::Away(20));\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let ana_away: Option<u32> = None;\n    let ben_away: Option<u32> = Some(15);\n    println!(\"{ana_away:?} and {ben_away:?}\");\n"
+        text: "
+
+          \    let ana_away: Option<u32> = None;
+
+          \    let ben_away: Option<u32> = Some(15);
+
+          \    println!(\"{ana_away:?} and {ben_away:?}\");\n"
       - id: select-option-type
         type: editor.select
         at: { mark: select-option-type }
@@ -597,20 +636,22 @@ scenes:
           occurrence: 1
 
   - id: compiler
-    chapter: The compiler's answer
-    narration: >
-      So can you use Ana's Option as a plain number? [[mark:draw-broken]]
-      Let's say you put it in a u32. [[mark:draw-error]] The compiler refuses,
-      with error E0308, mismatched types. It expected a u32, and found an
-      Option of u32. [[mark:draw-cases]] Here's why. An Option might be
-      None, and None has no number inside. [[mark:draw-fix]] So you have to
-      say what happens in the None case. One way is unwrap_or. It gives you
-      the value inside Some, or the default you pass it.
+    chapter: Compiler ရဲ့ အဖြေ
+    narration: >-
+      ဒါဆို ana ရဲ့ Option ကို သာမန် ကိန်းဂဏန်း တစ်ခုလို သုံးလို့ ရမလား။ [[mark:draw-broken]] u32
+      တစ်ခုထဲ ထည့်ကြည့်တယ် ဆိုပါစို့။ [[mark:draw-error]] compiler က လက်မခံပါဘူး၊ E0308 error၊
+      mismatched types နဲ့ ရပ်သွားပါတယ်။ သူ မျှော်လင့်ထားတာက u32 ဖြစ်ပြီး၊ တွေ့တာက Option of u32
+      ဖြစ်နေလို့ပါ။ [[mark:draw-cases]] ဘာကြောင့်လဲဆိုတော့၊ Option တစ်ခုက None ဖြစ်နေနိုင်ပြီး၊ None
+      ထဲမှာ ကိန်းဂဏန်း ဘာမှ မပါလို့ပါ။ [[mark:draw-fix]] ဒါကြောင့် None ဖြစ်နေရင် ဘာလုပ်ရမလဲ
+      ဆိုတာကို ကိုယ်တိုင် ပြောပေးရပါမယ်။ နည်းလမ်း တစ်ခုက unwrap or ပါ။ Some ထဲမှာ တန်ဖိုး ရှိရင်
+      အဲဒီ တန်ဖိုးကို ပေးပြီး၊ None ဆိုရင်တော့ ကိုယ် ထည့်ပေးလိုက်တဲ့ default တန်ဖိုးကို ပေးပါတယ်။
     sources:
       - title: "Rust error codes — E0308"
         url: "https://doc.rust-lang.org/error_codes/E0308.html"
       - title: "The Rust Book — The Option Enum and Its Advantages Over Null Values"
-        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantages-over-null-values"
+        url:
+          "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantag\
+          es-over-null-values"
       - title: "std::option::Option::unwrap_or"
         url: "https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap_or"
     actions:
@@ -642,11 +683,11 @@ scenes:
         drawMs: 2000
 
   - id: fix
-    narration: >
-      [[mark:type-fix]] Let's do that in code. Again, minutes is a u32,
-      but this time we call unwrap_or on Ana's Option, with a default of zero.
-      [[mark:select-unwrap]] unwrap_or handles both cases, so minutes is a
-      plain u32. [[mark:type-print]] Then we print it.
+    narration: >-
+      [[mark:type-fix]] ဒါကို code ထဲမှာ လုပ်ကြည့်ရအောင်။ minutes က အရင်လိုပဲ u32 ပါ၊ ဒါပေမဲ့
+      ဒီတစ်ခါ ana ရဲ့ Option ပေါ်မှာ unwrap or ကို ခေါ်ပြီး၊ default အနေနဲ့ 0 ထည့်ပေးလိုက်ပါတယ်။
+      [[mark:select-unwrap]] unwrap or က Some ရော None ရော နှစ်ခုလုံးကို handle လုပ်ပေးတဲ့အတွက်၊
+      minutes က သာမန် u32 တစ်ခု ဖြစ်သွားပါပြီ။ [[mark:type-print]] ပြီးတော့ အဲဒါကို print ထုတ်ပါမယ်။
     sources:
       - title: "std::option::Option::unwrap_or"
         url: "https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap_or"
@@ -663,7 +704,9 @@ scenes:
           after: "    println!(\"{ana_away:?} and {ben_away:?}\");\n"
           occurrence: 1
         cadence: fast-explainer
-        text: "\n    let minutes: u32 = ana_away.unwrap_or(0);\n"
+        text: "
+
+          \    let minutes: u32 = ana_away.unwrap_or(0);\n"
       - id: select-unwrap
         type: editor.select
         at: { mark: select-unwrap }
@@ -682,10 +725,10 @@ scenes:
         text: "    println!(\"ana: {minutes} min away\");\n"
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. ana is Active, and ben is Away(15).
-      Comparing ben with Away(20) gives false. Then None, and Some(15). And
-      unwrap_or turned Ana's None into zero minutes.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ ana က Active ဖြစ်ပြီး၊ ben က Away 15 ပါ။ ben ကို Away 20 နဲ့
+      နှိုင်းယှဉ်တော့ false ထွက်ပါတယ်။ ပြီးတော့ None နဲ့ Some 15 ပါ။ နောက်ဆုံး စာကြောင်းမှာတော့
+      unwrap or က ana ရဲ့ None ကို 0 မိနစ် ဖြစ်သွားအောင် ပြောင်းပေးလိုက်တာကို မြင်ရပါတယ်။
     sources:
       - title: "The Rust Book — Defining an Enum"
         url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"
@@ -708,11 +751,12 @@ scenes:
         contains: "let minutes: u32 = ana_away.unwrap_or(0);"
 
   - id: wrap
-    narration: >
-      So an enum is a type that's one of a fixed set of variants, and a
-      variant can carry data. Option is the enum Rust uses instead of null,
-      and the compiler makes you handle None. Next, match: how to run
-      different code for each variant, and get the data back out.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ enum ဆိုတာ ကြိုတင် သတ်မှတ်ထားတဲ့ variant တွေထဲက တစ်ခု ဖြစ်တဲ့ type တစ်ခု
+      ဖြစ်ပြီး၊ variant တစ်ခုက data ကိုပါ သယ်ထားလို့ ရပါတယ်။ Option ကတော့ null အစား Rust က သုံးတဲ့
+      enum ဖြစ်ပြီး၊ None ကို handle လုပ်ဖို့ compiler က ကိုယ့်ကို ခိုင်းပါတယ်။ နောက် lesson မှာတော့
+      pattern matching၊ ဆိုလိုတာက match နဲ့ variant တစ်ခုချင်းစီအတွက် မတူတဲ့ code ကို ဘယ်လို run လဲ၊
+      ပြီးတော့ အထဲက data ကို ဘယ်လို ပြန်ထုတ်ယူလဲ ဆိုတာကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Enums and Pattern Matching"
         url: "https://doc.rust-lang.org/book/ch06-00-enums.html"

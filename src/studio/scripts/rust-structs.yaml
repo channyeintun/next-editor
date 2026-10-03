@@ -38,8 +38,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-structs
-  title: "Rust from zero: Structs"
-  locale: en-US
+  title: "Rust from zero: Struct တွေ"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -57,7 +57,7 @@ lesson:
       y: 160
       width: 300
       height: 48
-      text: "Why a struct?"
+      text: "Struct ဘာလို့ လိုလဲ"
       strokeColor: "#1e1e1e"
       fontSize: 38
     - id: b1-tuple-box
@@ -82,7 +82,7 @@ lesson:
       y: 365
       width: 310
       height: 36
-      text: "which is the width?"
+      text: "ဘယ်ဟာက width လဲ"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: b1-arrow
@@ -203,7 +203,7 @@ lesson:
       y: 160
       width: 360
       height: 48
-      text: "Printing a struct"
+      text: "Struct ကို print ထုတ်ရင်"
       strokeColor: "#1e1e1e"
       fontSize: 38
     - id: b2-bad1
@@ -229,7 +229,7 @@ lesson:
       y: 232
       width: 290
       height: 36
-      text: "Display: for users"
+      text: "Display: သုံးသူအတွက်"
       strokeColor: "#1971c2"
       fontSize: 28
     - id: b2-err1a
@@ -273,7 +273,7 @@ lesson:
       y: 382
       width: 340
       height: 36
-      text: "Debug: for developers"
+      text: "Debug: developer အတွက်"
       strokeColor: "#1971c2"
       fontSize: 28
     - id: b2-err2a
@@ -322,7 +322,10 @@ lesson:
       strokeColor: "#2f9e44"
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 36
 
 runtime:
@@ -332,22 +335,34 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "width 30, height 50\narea 1500\nsquare area 400\nRectangle { width: 20, height: 20 }\n"
+      stdout: "width 30, height 50
+
+        area 1500
+
+        square area 400
+
+        Rectangle { width: 20, height: 20 }\n"
       stderr: ""
 
 scenes:
   - id: why-structs
-    chapter: Why structs
-    narration: >
-      [[mark:open-board]] A rectangle has two parts: a width and a height.
-      [[mark:draw-tuple]] You could keep the two numbers in a tuple: thirty
-      and fifty. But which one is the width? The tuple doesn't say.
-      [[mark:draw-struct]] A struct fixes that. It's your own type, and each
-      field has a name and a type, so the code says what every value means.
-      [[mark:draw-impl]] Then an impl block gives the struct its behavior:
-      functions that work on it, called methods. Here, area multiplies the two
-      fields. If you know classes, it's a bit like a class split in two. The data goes in the struct, and the methods go in
-      impl.
+    chapter: Struct ဘာကြောင့် လိုလဲ
+    narration: >-
+      [[mark:open-board]] ဒီ lesson မှာ struct တွေအကြောင်း လေ့လာမှာ ဖြစ်လို့၊ struct ဆိုတာ ဘာကြောင့်
+      လိုလဲ ဆိုတာကနေ စကြည့်ရအောင်။ လေးထောင့်ပုံ တစ်ခုကို စဉ်းစားကြည့်ပါ။ လေးထောင့်ပုံ တစ်ခုမှာ
+      အတိုင်းအတာ နှစ်ခု ရှိပါတယ်၊ အကျယ် ဖြစ်တဲ့ width နဲ့ အမြင့် ဖြစ်တဲ့ height ပါ။
+      [[mark:draw-tuple]] ဒီ ကိန်းဂဏန်း နှစ်ခုကို tuple တစ်ခုထဲမှာ 30 နဲ့ 50 ဆိုပြီး ထည့်ထားလို့
+      ရပါတယ်။ ဒါပေမဲ့ ဒီ နှစ်ခုထဲက ဘယ်ဟာက width လဲ။ tuple က အဲဒါကို မပြောပေးပါဘူး။ ကိန်းဂဏန်း
+      နှစ်ခုပဲ ရှိပြီး၊ ဘယ်ဟာက ဘာကို ဆိုလိုလဲ ဆိုတာ ဘယ်နေရာမှာမှ မရေးထားပါဘူး။ [[mark:draw-struct]]
+      struct က အဲဒီ ပြဿနာကို ဖြေရှင်းပေးပါတယ်။ struct ဆိုတာ ကိုယ်တိုင် သတ်မှတ်ထားတဲ့ ကိုယ်ပိုင် type
+      တစ်ခု ဖြစ်ပြီး၊ သူ့ထဲက field တစ်ခုစီမှာ နာမည် တစ်ခုနဲ့ type တစ်ခု ရှိပါတယ်။ ဒါကြောင့် 30 က
+      width ဖြစ်ပြီး 50 က height ဖြစ်တယ် ဆိုတာ code ကိုယ်တိုင်က ပြောပြနေပါတယ်။ တန်ဖိုး တစ်ခုစီက
+      ဘာကို ဆိုလိုလဲ ဆိုတာ ရှင်းရှင်းလင်းလင်း မြင်ရပါတယ်။ [[mark:draw-impl]] ပြီးတော့ impl block
+      ကတော့ ဒီ struct ကို လုပ်ဆောင်ချက်တွေ ပေးပါတယ်။ ဆိုလိုတာက struct ပေါ်မှာ အလုပ်လုပ်တဲ့ function
+      တွေ ဖြစ်ပြီး၊ အဲဒီ function တွေကို method လို့ ခေါ်ပါတယ်။ ဒီမှာ area ဆိုတဲ့ method က field
+      နှစ်ခုကို မြှောက်ပြီး 1500 ကို ပြန်ပေးပါတယ်။ class တွေအကြောင်း သိပြီးသားဆိုရင်၊ ဒါက class
+      တစ်ခုကို နှစ်ပိုင်း ခွဲထားသလိုမျိုးပါ။ data က struct ထဲမှာ ရှိပြီး၊ method တွေကတော့ impl ထဲမှာ
+      ရှိပါတယ်။
     sources:
       - title: "The Rust Book — Defining and Instantiating Structs"
         url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html"
@@ -387,13 +402,15 @@ scenes:
         drawMs: 3400
 
   - id: define
-    chapter: Defining a struct
-    narration: >
-      Let's build it. [[mark:open-main]] Our main is empty for now.
-      [[mark:type-struct]] The struct goes outside main, at the top of the
-      file. [[mark:select-field]] Each field is a name, a colon, and a type.
-      Both are u32, an unsigned integer. On its own, the struct is only a
-      description. It doesn't hold any values yet.
+    chapter: Struct တစ်ခု သတ်မှတ်ခြင်း
+    narration: >-
+      ကဲ၊ editor ထဲမှာ တကယ် ရေးကြည့်ရအောင်။ [[mark:open-main]] ဒီမှာ main function ရှိပါတယ်၊ အခုတော့
+      အလွတ်ပဲ ရှိပါသေးတယ်။ [[mark:type-struct]] struct ကို main ရဲ့ အပြင်ဘက်၊ ဖိုင်ရဲ့ အပေါ်ဆုံးမှာ
+      ရေးပါတယ်။ struct keyword နောက်မှာ Rectangle ဆိုတဲ့ နာမည် လာပြီး၊ တွန့်ကွင်းထဲမှာ field တွေ
+      လာပါတယ်။ [[mark:select-field]] field တစ်ခုစီက နာမည် တစ်ခု၊ colon တစ်ခု၊ ပြီးတော့ type တစ်ခုပါ။
+      ဒီမှာ width ရော height ရော နှစ်ခုလုံးက u32 ဖြစ်ပြီး၊ u32 ဆိုတာ အနုတ်ကိန်း မပါတဲ့ unsigned
+      integer ပါ။ ဒီအဆင့်မှာတော့ struct က ပုံစံ တစ်ခုကို ဖော်ပြထားရုံပဲ ရှိပါသေးတယ်။ သူ့ထဲမှာ
+      တန်ဖိုး ဘာမှ မရှိသေးပါဘူး။
     sources:
       - title: "The Rust Book — Defining and Instantiating Structs"
         url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html"
@@ -416,7 +433,15 @@ scenes:
           after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "struct Rectangle {\n    width: u32,\n    height: u32,\n}\n\n"
+        text: "struct Rectangle {
+
+          \    width: u32,
+
+          \    height: u32,
+
+          }
+
+          \n"
       - id: select-field
         type: editor.select
         at: { mark: select-field }
@@ -426,14 +451,17 @@ scenes:
           occurrence: 1
 
   - id: instance
-    narration: >
-      [[mark:type-instance]] Now let's make an instance: one real rectangle.
-      We write the struct's name, then each field and its value, inside curly
-      braces. [[mark:select-instance]] Every field needs a value. Leave one
-      out, and the compiler stops with a missing field error.
-      [[mark:type-print-fields]] To read a field, we use a dot: rect dot
-      width. Inline names in braces only work for plain variables, not for
-      fields, so here we use empty braces.
+    narration: >-
+      [[mark:type-instance]] အခု instance တစ်ခု လုပ်ကြည့်ရအောင်။ instance ဆိုတာ ဒီ struct ကနေ တကယ်
+      ဖန်တီးလိုက်တဲ့ လေးထောင့်ပုံ တစ်ခုပါ။ ရေးပုံကတော့ struct ရဲ့ နာမည်ကို အရင် ရေးပြီး၊
+      တွန့်ကွင်းထဲမှာ field တစ်ခုစီကို သူ့ တန်ဖိုးနဲ့ တွဲပြီး ရေးပါတယ်။ ဒီမှာ rect ဆိုတဲ့ နာမည်နဲ့
+      width ကို 30၊ height ကို 50 ထားလိုက်ပါတယ်။ [[mark:select-instance]] field တိုင်းမှာ တန်ဖိုး
+      ရှိရပါမယ်။ field တစ်ခု ချန်ထားမိရင်၊ compiler က missing field error နဲ့ ရပ်သွားပါလိမ့်မယ်။
+      [[mark:type-print-fields]] field တစ်ခုကို ဖတ်ဖို့ dot ကို သုံးပါတယ်၊ rect dot width ဆိုပြီး
+      ရေးပါတယ်။ ဒီနေရာမှာ သတိထားရမှာ တစ်ခုက၊ format string ရဲ့ တွန့်ကွင်းထဲမှာ နာမည်ကို တန်းရေးတဲ့
+      နည်းက ရိုးရိုး variable တွေအတွက်ပဲ အလုပ်လုပ်ပြီး၊ field တွေအတွက် အလုပ် မလုပ်ပါဘူး။ ဒါကြောင့်
+      ဒီမှာ တွန့်ကွင်း အလွတ်ကို သုံးပြီး၊ rect ရဲ့ width နဲ့ height ကို argument အနေနဲ့ နောက်မှာ
+      ထည့်ပေးလိုက်တာပါ။
     sources:
       - title: "The Rust Book — Defining and Instantiating Structs"
         url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html"
@@ -450,7 +478,13 @@ scenes:
           after: "fn main() {\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let rect = Rectangle {\n        width: 30,\n        height: 50,\n    };\n"
+        text: "    let rect = Rectangle {
+
+          \        width: 30,
+
+          \        height: 50,
+
+          \    };\n"
       - id: select-instance
         type: editor.select
         at: { mark: select-instance }
@@ -469,16 +503,18 @@ scenes:
         text: "    println!(\"width {}, height {}\", rect.width, rect.height);\n"
 
   - id: methods
-    chapter: Methods with impl
-    narration: >
-      [[mark:type-impl]] Let's add the impl block, with one method: area. The
-      multiplication has no semicolon, so it's the value area returns.
-      [[mark:select-self]] Its first parameter is self, the rectangle you call
-      it on. The ampersand means area only borrows it. It reads the fields
-      without taking ownership, so you can still use rect after the call.
-      [[mark:type-call-area]] Let's call it on rect, with a dot.
-      [[mark:select-call]] There's no ampersand in the call. When you call a
-      method, Rust borrows rect for you.
+    chapter: impl နဲ့ method တွေ
+    narration: >-
+      [[mark:type-impl]] အခု impl block ကို ထည့်ကြည့်ရအောင်။ သူ့ထဲမှာ area ဆိုတဲ့ method တစ်ခုတည်း
+      ထည့်ပါမယ်။ area ရဲ့ body ထဲမှာ width နဲ့ height ကို မြှောက်တဲ့ expression တစ်ခုပဲ ရှိပြီး၊
+      semicolon မပါပါဘူး။ ဒါကြောင့် အဲဒီ မြှောက်ရလဒ်ကပဲ area က ပြန်ပေးတဲ့ တန်ဖိုး ဖြစ်ပါတယ်။
+      [[mark:select-self]] area ရဲ့ ပထမ parameter က self ပါ။ self ဆိုတာ ဒီ method ကို ဘယ်
+      လေးထောင့်ပုံပေါ်မှာ ခေါ်လဲ၊ အဲဒီ လေးထောင့်ပုံ ကိုယ်တိုင်ပါ။ self ရှေ့က ampersand ကတော့ area က
+      အဲဒီ လေးထောင့်ပုံကို borrow လုပ်ရုံပဲ လုပ်တယ်လို့ ပြောတာပါ။ borrow ဆိုတာ ငှားသုံးတာပါ။
+      ဆိုလိုတာက ownership ကို မယူဘဲ field တွေကို ဖတ်ရုံပဲ ဖတ်တာ ဖြစ်လို့၊ ခေါ်ပြီးတဲ့ နောက်မှာလည်း
+      rect ကို ဆက်သုံးလို့ ရပါတယ်။ [[mark:type-call-area]] ဒါဆို rect ပေါ်မှာ area ကို dot နဲ့
+      ခေါ်ကြည့်ရအောင်။ [[mark:select-call]] ခေါ်တဲ့ နေရာမှာ ampersand မပါတာကို သတိထား ကြည့်ပါ။
+      method တစ်ခုကို ခေါ်တဲ့အခါ၊ Rust က rect ကို ကိုယ့်အစား borrow လုပ်ပေးလိုက်တာပါ။
     sources:
       - title: "The Rust Book — Method Syntax"
         url: "https://doc.rust-lang.org/book/ch05-03-method-syntax.html"
@@ -495,7 +531,17 @@ scenes:
           after: "    height: u32,\n}\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\nimpl Rectangle {\n    fn area(&self) -> u32 {\n        self.width * self.height\n    }\n}\n"
+        text: "
+
+          impl Rectangle {
+
+          \    fn area(&self) -> u32 {
+
+          \        self.width * self.height
+
+          \    }
+
+          }\n"
       - id: select-self
         type: editor.select
         at: { mark: select-self }
@@ -521,16 +567,18 @@ scenes:
           occurrence: 1
 
   - id: associated-new
-    narration: >
-      [[mark:type-new]] Rust has no special constructor. Instead, a type
-      usually gets an ordinary function called new. [[mark:select-new]] Every
-      function in impl is an associated function. new has no self, so it isn't
-      a method. It belongs to the type, not to one rectangle.
-      [[mark:select-shorthand]] The
-      parameters have the same names as the fields, so you write width once,
-      instead of width colon width. That's the field init shorthand.
-      [[mark:type-square]] To call new, we write the type name, two colons,
-      and new. You've already used one of these: String::from.
+    narration: >-
+      [[mark:type-new]] Rust မှာ constructor အတွက် အထူး syntax မရှိပါဘူး။ အဲဒီအစား type တစ်ခုမှာ new
+      ဆိုတဲ့ ရိုးရိုး function တစ်ခု ထားလေ့ ရှိပါတယ်။ ဒီ new က width နဲ့ height ကို လက်ခံပြီး၊
+      Rectangle တစ်ခု ပြန်ပေးပါတယ်။ [[mark:select-new]] impl ထဲက function တိုင်းကို associated
+      function လို့ ခေါ်ပါတယ်။ new မှာ self မပါတဲ့အတွက်၊ သူက method တော့ မဟုတ်ပါဘူး။ သူက
+      လေးထောင့်ပုံ တစ်ခုချင်းနဲ့ ဆိုင်တာ မဟုတ်ဘဲ၊ Rectangle ဆိုတဲ့ type နဲ့ ဆိုင်တာပါ။
+      [[mark:select-shorthand]] ဒီနေရာမှာ parameter တွေရဲ့ နာမည်က field တွေရဲ့ နာမည်နဲ့ အတူတူပဲ
+      ဖြစ်တဲ့အတွက်၊ width colon width လို့ ရေးစရာ မလိုဘဲ width လို့ တစ်ခါပဲ ရေးလို့ ရပါတယ်။ ဒါကို
+      field init shorthand လို့ ခေါ်ပါတယ်။ [[mark:type-square]] new ကို ခေါ်ဖို့ကတော့ type နာမည်၊
+      colon နှစ်ခု၊ ပြီးတော့ new လို့ ရေးပါတယ်။ ဒီ ပုံစံကို အရင် lesson တွေမှာ သုံးဖူးပြီးသားပါ၊
+      String ရဲ့ from ဆိုတာပါ။ ဒီမှာ 20 နဲ့ 20 ဆိုတဲ့ စတုရန်း တစ်ခု လုပ်ပြီး၊ သူ့ area ကိုပါ print
+      ထုတ်လိုက်ပါမယ်။
     sources:
       - title: "The Rust Book — Associated Functions"
         url: "https://doc.rust-lang.org/book/ch05-03-method-syntax.html#associated-functions"
@@ -545,7 +593,13 @@ scenes:
           after: "impl Rectangle {\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    fn new(width: u32, height: u32) -> Rectangle {\n        Rectangle { width, height }\n    }\n\n"
+        text: "    fn new(width: u32, height: u32) -> Rectangle {
+
+          \        Rectangle { width, height }
+
+          \    }
+
+          \n"
       - id: select-new
         type: editor.select
         at: { mark: select-new }
@@ -568,24 +622,31 @@ scenes:
           after: "    println!(\"area {}\", rect.area());\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let square = Rectangle::new(20, 20);\n    println!(\"square area {}\", square.area());\n"
+        text: "
+
+          \    let square = Rectangle::new(20, 20);
+
+          \    println!(\"square area {}\", square.area());\n"
 
   - id: print-errors
-    chapter: Printing a struct
-    narration: >
-      [[mark:open-errors]] What about printing the whole rectangle?
-      [[mark:draw-display]] Plain braces ask for Display, the format for your
-      users. Rust doesn't guess how your type should look, so this fails with
-      error E0277: Rectangle doesn't implement Display. [[mark:draw-debug]] Add
-      a colon and a question mark, and you ask for Debug, a format for
-      developers. That's E0277 too: Rectangle doesn't implement Debug.
-      [[mark:draw-help]] But read the help line. The compiler names the fix:
-      add derive Debug to the struct.
+    chapter: Struct ကို print ထုတ်ခြင်း
+    narration: >-
+      [[mark:open-errors]] ဒါဆို လေးထောင့်ပုံ တစ်ခုလုံးကို print ထုတ်ချင်ရင်ရော။
+      [[mark:draw-display]] တွန့်ကွင်း အလွတ်နဲ့ print ထုတ်ရင် Display format ကို တောင်းတာပါ။ Display
+      ဆိုတာ program ကို သုံးမယ့် သူတွေအတွက် ပြတဲ့ ပုံစံပါ။ ကိုယ်ပိုင် type တစ်ခုကို ဘယ်လို ပုံစံနဲ့
+      ပြရမလဲ ဆိုတာကို Rust က ကိုယ့်အစား ခန့်မှန်းမပေးပါဘူး။ ဒါကြောင့် compiler က E0277 error နဲ့
+      ရပ်သွားပါတယ်၊ Rectangle က Display ကို implement မလုပ်ထားဘူးတဲ့။ [[mark:draw-debug]]
+      တွန့်ကွင်းထဲမှာ colon နဲ့ question mark ထည့်လိုက်ရင်တော့ Debug format ကို တောင်းတာပါ။ Debug
+      ကတော့ developer တွေအတွက် ပုံစံပါ။ ဒါလည်း E0277 error ပါပဲ၊ Rectangle က Debug ကိုလည်း implement
+      မလုပ်ထားဘူးတဲ့။ [[mark:draw-help]] ဒါပေမဲ့ help စာကြောင်းကို ဖတ်ကြည့်ပါ။ compiler က
+      ပြင်နည်းကို တိတိကျကျ ပြောထားပါတယ်။ struct အပေါ်မှာ derive Debug ထည့်လိုက်ပါတဲ့။
     sources:
       - title: "Rust error codes — E0277"
         url: "https://doc.rust-lang.org/error_codes/E0277.html"
       - title: "The Rust Book — Adding Useful Functionality with Derived Traits"
-        url: "https://doc.rust-lang.org/book/ch05-02-example-structs.html#adding-useful-functionality-with-derived-traits"
+        url:
+          "https://doc.rust-lang.org/book/ch05-02-example-structs.html#adding-useful-functionality-with-\
+          derived-traits"
       - title: "std::fmt::Display"
         url: "https://doc.rust-lang.org/std/fmt/trait.Display.html"
       - title: "std::fmt::Debug"
@@ -614,12 +675,13 @@ scenes:
         drawMs: 2200
 
   - id: derive-debug
-    narration: >
-      Let's take the compiler's advice. [[mark:type-derive]] It goes on the
-      line above the struct. [[mark:select-derive]] This is an attribute: an
-      instruction to the compiler about the item below it. derive asks the
-      compiler to write the Debug code for you. [[mark:type-debug-print]] Now
-      we can print square, with a colon and a question mark inside the braces.
+    narration: >-
+      ဒါဆို compiler ရဲ့ အကြံအတိုင်း လုပ်ကြည့်ရအောင်။ [[mark:type-derive]] derive Debug ကို struct
+      ရဲ့ အပေါ် စာကြောင်းမှာ ထည့်ပါတယ်။ [[mark:select-derive]] ဒီလို စာကြောင်းမျိုးကို attribute
+      လို့ ခေါ်ပါတယ်။ attribute ဆိုတာ သူ့အောက်က code အကြောင်း compiler ကို ပြောတဲ့ ညွှန်ကြားချက်
+      တစ်ခုပါ။ ဒီ derive ကတော့ Debug အတွက် လိုအပ်တဲ့ code ကို ကိုယ့်အစား ရေးပေးဖို့ compiler ကို
+      ခိုင်းလိုက်တာပါ။ [[mark:type-debug-print]] အခုတော့ square ကို print ထုတ်လို့ ရပါပြီ။
+      တွန့်ကွင်းထဲမှာ square နောက်က colon နဲ့ question mark ထည့်ပြီး ရေးလိုက်ပါမယ်။
     sources:
       - title: "The Rust Reference — Derive"
         url: "https://doc.rust-lang.org/reference/attributes/derive.html"
@@ -657,11 +719,11 @@ scenes:
         text: "    println!(\"{square:?}\");\n"
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. [[mark:read-output]] The fields print thirty
-      and fifty, and area gives fifteen hundred. The square from new has an
-      area of four hundred. And the last line is the Debug format: the
-      struct's name, then every field with its value.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ [[mark:read-output]] ပထမ စာကြောင်းမှာ field နှစ်ခုက 30 နဲ့
+      50 ဆိုပြီး ထွက်လာပြီး၊ area ကတော့ 1500 ပေးပါတယ်။ new နဲ့ လုပ်ထားတဲ့ စတုရန်းရဲ့ area က 400 ပါ။
+      နောက်ဆုံး စာကြောင်းကတော့ Debug format ပါ။ struct ရဲ့ နာမည်ကို အရင် ပြပြီး၊ နောက်မှာ field
+      တစ်ခုစီကို သူ့ တန်ဖိုးနဲ့ တွဲပြီး ပြထားပါတယ်။
     sources:
       - title: "Rust by Example — Structures"
         url: "https://doc.rust-lang.org/rust-by-example/custom_types/structs.html"
@@ -684,11 +746,12 @@ scenes:
         contains: "fn area(&self) -> u32 {"
 
   - id: wrap
-    narration: >
-      So, a struct groups named fields into one type. An impl block gives it
-      methods like area and associated functions like new, and derive Debug
-      lets you print it. Next, we'll look at enums: a type whose value is one of a fixed set of
-      variants.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ struct ဆိုတာ နာမည် ပါတဲ့ field တွေကို type တစ်ခုတည်းအဖြစ် စုစည်းထားတာပါ။
+      impl block ကတော့ အဲဒီ struct ကို area လို method တွေနဲ့ new လို associated function တွေ
+      ပေးပြီး၊ derive Debug ကတော့ struct ကို print ထုတ်လို့ ရအောင် လုပ်ပေးပါတယ်။ နောက် lesson
+      မှာတော့ Enum နဲ့ Option ကို ကြည့်သွားပါမယ်။ enum ဆိုတာ ကြိုတင် သတ်မှတ်ထားတဲ့ variant တွေထဲက
+      တစ်ခုပဲ ဖြစ်နိုင်တဲ့ type တစ်ခုပါ။
     sources:
       - title: "The Rust Book — Using Structs to Structure Related Data"
         url: "https://doc.rust-lang.org/book/ch05-00-structs.html"

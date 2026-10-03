@@ -20,7 +20,7 @@ schemaVersion: 1
 lesson:
   slug: rust-match
   title: "Rust from zero: Pattern matching"
-  locale: en-US
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -48,11 +48,11 @@ lesson:
     # Board 1 — one value tried against each pattern, top to bottom.
     - id: b1-title
       kind: text
-      x: 300
+      x: 270
       y: 160
       width: 690
       height: 46
-      text: "match tries each pattern, in order"
+      text: "match က pattern တွေကို အစဉ်လိုက် တိုက်စစ်တယ်"
       strokeColor: "#1e1e1e"
       fontSize: 36
     - id: b1-value
@@ -77,7 +77,7 @@ lesson:
       y: 250
       width: 145
       height: 36
-      text: "the value"
+      text: "တန်ဖိုး"
       strokeColor: "#1971c2"
       fontSize: 28
     - id: b1-arrow-in
@@ -150,7 +150,7 @@ lesson:
       y: 389
       width: 190
       height: 36
-      text: "no fit: skip"
+      text: "မကိုက်: ကျော်"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: b1-check
@@ -167,7 +167,7 @@ lesson:
       y: 539
       width: 180
       height: 36
-      text: "not checked"
+      text: "မစစ်တော့"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: b1-arrow-bind
@@ -219,7 +219,7 @@ lesson:
       y: 160
       width: 530
       height: 46
-      text: "Every case must be covered"
+      text: "case တိုင်း ပါရမယ်"
       strokeColor: "#1e1e1e"
       fontSize: 36
     - id: b2-code1
@@ -290,7 +290,7 @@ lesson:
       y: 548
       width: 320
       height: 36
-      text: "Add a variant later?"
+      text: "နောက်မှ variant ထပ်ထည့်ရင်ရော"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: b2-why2
@@ -299,7 +299,7 @@ lesson:
       y: 588
       width: 630
       height: 36
-      text: "the compiler finds every match to update"
+      text: "ပြင်ရမယ့် match တိုင်းကို compiler က ရှာပေးတယ်"
       strokeColor: "#2f9e44"
       fontSize: 28
     - id: b2-fix
@@ -327,7 +327,7 @@ lesson:
       y: 160
       width: 490
       height: 46
-      text: "Pattern matching in Rust"
+      text: "Rust ရဲ့ pattern matching"
       strokeColor: "#1e1e1e"
       fontSize: 36
     - id: b3-match-box
@@ -360,7 +360,7 @@ lesson:
       y: 253
       width: 410
       height: 36
-      text: "every case, first fit wins"
+      text: "case တိုင်း ပါ၊ အရင် ကိုက်တာ အနိုင်ရ"
       strokeColor: "#2f9e44"
       fontSize: 28
     - id: b3-bind-box
@@ -393,7 +393,7 @@ lesson:
       y: 338
       width: 400
       height: 36
-      text: "pulls out the data inside"
+      text: "အထဲက data ကို ဆွဲထုတ်တယ်"
       strokeColor: "#6741d9"
       fontSize: 28
     - id: b3-any-box
@@ -426,7 +426,7 @@ lesson:
       y: 423
       width: 410
       height: 36
-      text: "everything else, goes last"
+      text: "ကျန်တာ အကုန်၊ နောက်ဆုံး ထား"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: b3-iflet-box
@@ -459,12 +459,15 @@ lesson:
       y: 508
       width: 410
       height: 36
-      text: "one pattern, skip the rest"
+      text: "pattern တစ်ခုပဲ၊ ကျန်တာ ကျော်"
       strokeColor: "#1e1e1e"
       fontSize: 28
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 37
 
 runtime:
@@ -474,23 +477,30 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "area 9: small\narea 10: large\nrect is 2 by 5\narea 0: empty\n"
+      stdout: "area 9: small
+
+        area 10: large
+
+        rect is 2 by 5
+
+        area 0: empty\n"
       stderr: ""
 
 scenes:
   - id: how-match-works
-    chapter: How match works
-    narration: >
-      [[mark:open-board]] You've seen enums: a value that's one of several
-      variants. So how do you find out which variant you have, and get the
-      data inside? You use match. [[mark:draw-value]] Here's a value: a Rect
-      that's two by five. [[mark:draw-arms]] match compares it with each
-      pattern, from top to bottom. [[mark:draw-skip]] Square doesn't fit, so
-      it's skipped. [[mark:draw-fit]] Rect fits, so that arm runs. The first
-      fit wins, and the arms below it aren't checked. [[mark:draw-bind]] The
-      pattern also gives names to the data inside the variant. w gets two,
-      and h gets five. [[mark:draw-result]] And match is an expression, like
-      an if. The arm that runs gives back a value: here, the area, ten.
+    chapter: match က ဘယ်လို အလုပ်လုပ်လဲ
+    narration: >-
+      [[mark:open-board]] ပြီးခဲ့တဲ့ lesson မှာ enum ကို တွေ့ခဲ့ပြီးပါပြီ။ enum တန်ဖိုး တစ်ခုဆိုတာ
+      သတ်မှတ်ထားတဲ့ variant တွေထဲက တစ်ခု ဖြစ်ပါတယ်။ ဒါဆို ကိုယ့်လက်ထဲက တန်ဖိုးက ဘယ် variant လဲ ဆိုတာ
+      ဘယ်လို သိမလဲ၊ ပြီးတော့ အထဲက data ကို ဘယ်လို ထုတ်ယူမလဲ။ ဒါအတွက် match ကို သုံးပါတယ်။
+      [[mark:draw-value]] ဒီမှာ Rect 2 နဲ့ 5 ဆိုတဲ့ တန်ဖိုး တစ်ခု ရှိပါတယ်။ [[mark:draw-arms]] match
+      က ဒီ တန်ဖိုးကို pattern တစ်ခုချင်းစီနဲ့ အပေါ်ကနေ အောက်ကို အစဉ်လိုက် တိုက်စစ်ပါတယ်။
+      [[mark:draw-skip]] Square နဲ့ မကိုက်တဲ့အတွက် ဒီ arm ကို ကျော်သွားပါတယ်။ [[mark:draw-fit]] Rect
+      နဲ့တော့ ကိုက်တဲ့အတွက် အဲဒီ arm က run ပါတယ်။ အရင်ဆုံး ကိုက်တဲ့ arm က အနိုင်ရပြီး၊ သူ့အောက်က arm
+      တွေကို ဆက်မစစ်တော့ပါဘူး။ [[mark:draw-bind]] ပြီးတော့ pattern က variant ထဲက data တွေကို နာမည်
+      ပေးလိုက်ပါတယ်။ w က 2 ကို ရပြီး၊ h က 5 ကို ရသွားပါတယ်။ [[mark:draw-result]] နောက်တစ်ခုက၊ match
+      က if လိုပဲ expression တစ်ခု ဖြစ်ပါတယ်။ run သွားတဲ့ arm က တန်ဖိုး တစ်ခု ပြန်ပေးပါတယ်။
+      ဒီမှာဆိုရင် area ဖြစ်တဲ့ 10 ကို ပြန်ပေးတာပါ။
     sources:
       - title: "The Rust Book — The match Control Flow Construct"
         url: "https://doc.rust-lang.org/book/ch06-02-match.html"
@@ -534,21 +544,23 @@ scenes:
         drawMs: 1600
 
   - id: build-area
-    narration: >
-      Let's write it. [[mark:open-main]] Here's a Shape enum. Square and
-      Rect carry numbers, and Dot carries nothing. The loop goes through
-      three shapes. [[mark:type-area]] Let's match on shape, and store the
-      result in area. There's one arm for each variant.
-      [[mark:select-arm]] Each arm is a pattern, then an arrow, then the
-      value it gives back. [[mark:select-bind]] In this pattern, w and h are new variables. They take the two numbers
-      inside the Rect, so this arm can multiply them. [[mark:select-dot]] Dot
-      has no data, so its area is zero. Every arm must give back the same
-      type, because area can only have one.
+    narration: >-
+      ဒါကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:open-main]] ဒီမှာ Shape ဆိုတဲ့ enum တစ်ခု ရှိပါတယ်။
+      Square နဲ့ Rect က ကိန်းဂဏန်းတွေ သယ်ထားပြီး၊ Dot ကတော့ ဘာမှ မသယ်ပါဘူး။ အောက်က loop ကတော့ shape
+      သုံးခုကို တစ်ခုချင်း သွားပါတယ်။ [[mark:type-area]] အခု shape ကို match လုပ်ပြီး၊ ရလဒ်ကို area
+      ထဲ ထည့်ကြည့်ပါမယ်။ variant တစ်ခုစီအတွက် arm တစ်ခုစီ ရှိပါတယ်။ [[mark:select-arm]] arm တစ်ခုကို
+      ကြည့်ရင်၊ pattern၊ ပြီးတော့ arrow၊ ပြီးတော့ ပြန်ပေးမယ့် တန်ဖိုး၊ ဒီအစဉ်အတိုင်း ရေးထားပါတယ်။
+      [[mark:select-bind]] ဒီ pattern ထဲမှာ w နဲ့ h က variable အသစ်တွေပါ။ Rect ထဲက ကိန်းဂဏန်း
+      နှစ်ခုကို သူတို့က လက်ခံလိုက်တဲ့အတွက်၊ ဒီ arm ထဲမှာ အဲဒီ နှစ်ခုကို မြှောက်လို့ ရသွားပါတယ်။
+      [[mark:select-dot]] Dot မှာ data မပါတဲ့အတွက် သူ့ area က 0 ပါ။ arm တိုင်းက type တစ်မျိုးတည်း
+      ပြန်ပေးရပါမယ်။ ဘာကြောင့်လဲဆိုတော့ area မှာ type တစ်ခုပဲ ရှိနိုင်လို့ပါ။
     sources:
       - title: "The Rust Book — Patterns That Bind to Values"
         url: "https://doc.rust-lang.org/book/ch06-02-match.html#patterns-that-bind-to-values"
       - title: "Rust by Example — Destructuring enums"
-        url: "https://doc.rust-lang.org/rust-by-example/flow_control/match/destructuring/destructure_enum.html"
+        url:
+          "https://doc.rust-lang.org/rust-by-example/flow_control/match/destructuring/destructure_enum.h\
+          tml"
     actions:
       - id: close-board1
         type: whiteboard.apply
@@ -566,7 +578,15 @@ scenes:
           after: "    for shape in shapes {\n"
           occurrence: 1
         cadence: line-by-line
-        text: "        let area = match shape {\n            Shape::Square(side) => side * side,\n            Shape::Rect(w, h) => w * h,\n            Shape::Dot => 0,\n        };\n"
+        text: "        let area = match shape {
+
+          \            Shape::Square(side) => side * side,
+
+          \            Shape::Rect(w, h) => w * h,
+
+          \            Shape::Dot => 0,
+
+          \        };\n"
       - id: select-arm
         type: editor.select
         at: { mark: select-arm }
@@ -590,19 +610,19 @@ scenes:
           occurrence: 1
 
   - id: exhaustive
-    chapter: Every case must be covered
-    narration: >
-      [[mark:open-rules]] What if you forget an arm? [[mark:draw-broken]]
-      Say the match handles Square and Rect, but there's no arm for Dot.
-      [[mark:draw-error]] Then it doesn't compile. You get error E0004:
-      non-exhaustive patterns. It names the missing case: Dot isn't covered.
-      Exhaustive means every possible value is handled. [[mark:draw-why]]
-      That helps. Say you add a new variant later, like Circle.
-      The compiler then shows you every match that doesn't handle it yet,
-      unless that match has a catch-all arm. You'll meet the catch-all next. In
-      many languages, a missing case still compiles, and the bug shows up
-      when the program runs. [[mark:draw-fix]] The fix is to add the missing
-      arm.
+    chapter: case တိုင်း ပါရမယ်
+    narration: >-
+      [[mark:open-rules]] ဒါဆို arm တစ်ခု ထည့်ဖို့ မေ့သွားရင် ဘာဖြစ်မလဲ။ [[mark:draw-broken]]
+      ဥပမာအားဖြင့်၊ match ထဲမှာ Square နဲ့ Rect ကိုတော့ handle လုပ်ထားပြီး၊ Dot အတွက် arm မပါဘူး
+      ဆိုပါစို့။ [[mark:draw-error]] အဲဒီအခါ compile လုပ်လို့ မရတော့ပါဘူး။ compiler က E0004 error၊
+      non-exhaustive patterns နဲ့ ရပ်သွားပါတယ်။ လွတ်နေတဲ့ case ကိုလည်း နာမည်နဲ့ တန်းပြောပြပါတယ်၊ Dot
+      ကို handle မလုပ်ထားဘူးတဲ့။ exhaustive ဆိုတာ ဖြစ်နိုင်တဲ့ တန်ဖိုး တိုင်းကို handle လုပ်ထားတယ်
+      ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ [[mark:draw-why]] ဒီ စည်းကမ်းက တကယ် အသုံးဝင်ပါတယ်။ နောက်ပိုင်းမှာ Circle
+      လို variant အသစ် တစ်ခု ထပ်ထည့်လိုက်တယ် ဆိုပါစို့။ အဲဒီအခါ အဲဒီ variant ကို handle မလုပ်ရသေးတဲ့
+      match တိုင်းကို compiler က လိုက်ပြပေးပါတယ်။ catch-all arm ပါတဲ့ match ကတော့ ချွင်းချက်ပါ၊
+      catch-all ကို ခဏနေရင် တွေ့ရပါမယ်။ တခြား ဘာသာစကား အများစုမှာတော့ case တစ်ခု လွတ်နေရင်လည်း
+      compile လုပ်လို့ ရနေပြီး၊ program run နေချိန်ကျမှ bug က ပေါ်လာတာမျိုးပါ။ [[mark:draw-fix]]
+      ပြင်နည်းကတော့ လွတ်နေတဲ့ arm ကို ထပ်ထည့်လိုက်ရုံပါပဲ။
     sources:
       - title: "Rust error codes — E0004"
         url: "https://doc.rust-lang.org/error_codes/E0004.html"
@@ -637,17 +657,19 @@ scenes:
         drawMs: 1400
 
   - id: catch-all
-    chapter: "The _ catch-all"
-    narration: >
-      Now let's match on a number. [[mark:type-size]] We'll turn each area
-      into a size word. [[mark:select-range]] A pattern can be one number,
-      like zero, or a range, like one to nine. But a u32 has over four
-      billion values, and you can't list them all. [[mark:select-underscore]]
-      So the last arm is an underscore. It's the
-      catch-all pattern: it matches any value that's left. It goes last,
-      because the arms are checked in order, and an arm after it would never
-      run. Without it, you'd get E0004 again, because ten and up aren't
-      covered. [[mark:type-print]] Then we print the area and its size.
+    chapter: "_ ဆိုတဲ့ catch-all"
+    narration: >-
+      အခု ကိန်းဂဏန်း တစ်ခုကို match လုပ်ကြည့်ရအောင်။ [[mark:type-size]] area တစ်ခုချင်းစီကို
+      အရွယ်အစား ပြောတဲ့ စကားလုံး တစ်လုံးအဖြစ် ပြောင်းပေးပါမယ်။ [[mark:select-range]] pattern တစ်ခုက
+      0 လို ကိန်းဂဏန်း တစ်ခုတည်း ဖြစ်နိုင်သလို၊ 1 ကနေ 9 အထိ ဆိုတာမျိုး range တစ်ခုလည်း
+      ဖြစ်နိုင်ပါတယ်။ ဒါပေမဲ့ u32 တစ်ခုမှာ ဖြစ်နိုင်တဲ့ တန်ဖိုးက သန်းပေါင်း လေးထောင်ကျော်
+      ရှိတဲ့အတွက်၊ အကုန်လုံးကို တစ်ခုချင်း ရေးလို့ မရပါဘူး။ [[mark:select-underscore]] ဒါကြောင့်
+      နောက်ဆုံး arm မှာ underscore ကို သုံးပါတယ်။ ဒါက catch-all pattern ပါ၊ ဆိုလိုတာက ကျန်တာ အကုန်
+      ဖမ်းတဲ့ arm ပါ။ အပေါ်က arm တွေနဲ့ မကိုက်တဲ့ တန်ဖိုး ဘာပဲ ဖြစ်ဖြစ် သူနဲ့ ကိုက်ပါတယ်။ သူ့ကို
+      နောက်ဆုံးမှာ ထားရပါတယ်။ ဘာကြောင့်လဲဆိုတော့ arm တွေကို အစဉ်လိုက် စစ်တာ ဖြစ်လို့၊ underscore
+      နောက်မှာ arm တစ်ခု ထပ်ထည့်ရင် အဲဒီ arm က ဘယ်တော့မှ run မဖြစ်တော့မှာပါ။ underscore မပါရင်တော့
+      10 နဲ့ အထက် တန်ဖိုးတွေကို handle မလုပ်ရသေးတဲ့အတွက်၊ E0004 error ပြန်တက်ပါလိမ့်မယ်။
+      [[mark:type-print]] ပြီးရင် area နဲ့ သူ့ size ကို print ထုတ်ပါမယ်။
     sources:
       - title: "The Rust Book — Catch-All Patterns and the _ Placeholder"
         url: "https://doc.rust-lang.org/book/ch06-02-match.html#catch-all-patterns-and-the-_-placeholder"
@@ -665,10 +687,20 @@ scenes:
         at: { mark: type-size, offsetMs: -200 }
         target:
           file: main.rs
-          after: "            Shape::Dot => 0,\n        };\n"
+          after: "            Shape::Dot => 0,
+
+            \        };\n"
           occurrence: 1
         cadence: line-by-line
-        text: "        let size = match area {\n            0 => \"empty\",\n            1..=9 => \"small\",\n            _ => \"large\",\n        };\n"
+        text: "        let size = match area {
+
+          \            0 => \"empty\",
+
+          \            1..=9 => \"small\",
+
+          \            _ => \"large\",
+
+          \        };\n"
       - id: select-range
         type: editor.select
         at: { mark: select-range }
@@ -688,23 +720,26 @@ scenes:
         at: { mark: type-print }
         target:
           file: main.rs
-          after: "            _ => \"large\",\n        };\n"
+          after: "            _ => \"large\",
+
+            \        };\n"
           occurrence: 1
         cadence: line-by-line
         text: "        println!(\"area {area}: {size}\");\n"
 
   - id: if-let
-    chapter: if let for one case
-    narration: >
-      [[mark:type-iflet]] Sometimes only one variant matters. Let's print the
-      sides, but only for a Rect. [[mark:select-iflet]] if let takes one
-      pattern, an equals sign, and a value. If it fits, w and h get the
-      numbers, and the block runs. If it doesn't, the block is skipped. A match
-      would need an underscore arm that does nothing, so this is shorter. But
-      if let isn't exhaustive, so use it only when the other cases don't
-      matter. And shape is still usable here: the first match only copied
-      numbers out of it. [[mark:option-note]] You'll often see if let with
-      Option, too: if let Some uses a value only when there's one.
+    chapter: case တစ်ခုအတွက် if let
+    narration: >-
+      [[mark:type-iflet]] တစ်ခါတစ်လေ variant တစ်ခုတည်းပဲ အရေးကြီးတာမျိုး ရှိပါတယ်။ ဥပမာအားဖြင့်၊
+      Rect ဖြစ်မှသာ သူ့ အနားတွေကို print ထုတ်ချင်တယ် ဆိုပါစို့။ [[mark:select-iflet]] if let မှာ
+      pattern တစ်ခု၊ ပြီးတော့ equal sign၊ ပြီးတော့ တန်ဖိုး တစ်ခု၊ ဒီအစဉ်အတိုင်း ရေးပါတယ်။ ကိုက်ရင် w
+      နဲ့ h က ကိန်းဂဏန်းတွေကို ရသွားပြီး၊ block က run ပါတယ်။ မကိုက်ရင်တော့ block ကို ကျော်သွားပါတယ်။
+      ဒါကို match နဲ့ ရေးမယ်ဆိုရင် ဘာမှ မလုပ်တဲ့ underscore arm တစ်ခု ထပ်လိုမှာ ဖြစ်လို့၊ if let က
+      ပိုတိုပါတယ်။ ဒါပေမဲ့ if let က exhaustive မဟုတ်ပါဘူး။ ဒါကြောင့် ကျန်တဲ့ case တွေ
+      အရေးမကြီးတဲ့အခါမှပဲ သုံးသင့်ပါတယ်။ ပြီးတော့ ဒီနေရာမှာ shape ကို ဆက်သုံးလို့ ရနေသေးတာ သတိထား
+      ကြည့်ပါ။ ဘာကြောင့်လဲဆိုတော့ ပထမ match က shape ထဲက ကိန်းဂဏန်းတွေကိုပဲ copy ကူးယူသွားတာ
+      ဖြစ်လို့ပါ။ if let ကို Option နဲ့ တွဲသုံးတာကိုလည်း မကြာခဏ တွေ့ရပါလိမ့်မယ်။ if let Some ဆိုတာ
+      တန်ဖိုး တစ်ခု ရှိမှသာ အဲဒီ တန်ဖိုးကို သုံးတာပါ။
     sources:
       - title: "The Rust Book — Concise Control Flow with if let"
         url: "https://doc.rust-lang.org/book/ch06-03-if-let.html"
@@ -719,7 +754,11 @@ scenes:
           after: "        println!(\"area {area}: {size}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "        if let Shape::Rect(w, h) = shape {\n            println!(\"rect is {w} by {h}\");\n        }\n"
+        text: "        if let Shape::Rect(w, h) = shape {
+
+          \            println!(\"rect is {w} by {h}\");
+
+          \        }\n"
       - id: select-iflet
         type: editor.select
         at: { mark: select-iflet }
@@ -729,11 +768,11 @@ scenes:
           occurrence: 1
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. [[mark:read-output]] The square's area is
-      nine, so it's small. The rectangle's area is ten. That's past nine, so
-      the underscore arm gives large, and if let prints its sides, two by
-      five. And the dot's area is zero, so it's empty.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ Square ရဲ့ area က 9 ဖြစ်တဲ့အတွက် small ဖြစ်ပါတယ်။ Rect ရဲ့
+      area ကတော့ 10 ပါ။ 9 ကို ကျော်သွားတဲ့အတွက် underscore arm က large ကို ပြန်ပေးပြီး၊ if let ကလည်း
+      သူ့ အနားတွေ ဖြစ်တဲ့ 2 နဲ့ 5 ကို print ထုတ်ပေးပါတယ်။ နောက်ဆုံး Dot ရဲ့ area က 0 ဖြစ်လို့ empty
+      ဖြစ်ပါတယ်။
     sources:
       - title: "Rust by Example — match"
         url: "https://doc.rust-lang.org/rust-by-example/flow_control/match.html"
@@ -754,13 +793,13 @@ scenes:
         contains: "if let Shape::Rect(w, h) = shape {"
 
   - id: wrap
-    narration: >
-      [[mark:recap-match]] So, a match must cover every case, and the first
-      pattern that fits wins. [[mark:recap-bind]] A pattern can pull out the data
-      inside a variant. [[mark:recap-any]] The underscore catches everything
-      else, so it goes last. [[mark:recap-iflet]] And if let handles one
-      pattern, and skips the rest. Next, we'll look at vectors: lists of
-      values that can grow.
+    narration: >-
+      [[mark:recap-match]] ဒါဆို ပြန်ချုပ်ရရင်၊ match တစ်ခုမှာ ဖြစ်နိုင်တဲ့ case တိုင်း ပါရပြီး၊
+      အရင်ဆုံး ကိုက်တဲ့ pattern က အနိုင်ရပါတယ်။ [[mark:recap-bind]] pattern တစ်ခုက variant ထဲက data
+      ကို ဆွဲထုတ်ပေးနိုင်ပါတယ်။ [[mark:recap-any]] underscore က ကျန်တာ အကုန် ဖမ်းတဲ့အတွက်၊
+      နောက်ဆုံးမှာ ထားရပါတယ်။ [[mark:recap-iflet]] ပြီးတော့ if let က pattern တစ်ခုတည်းကို handle
+      လုပ်ပြီး၊ ကျန်တာကို ကျော်သွားပါတယ်။ နောက် lesson မှာတော့ Vec၊ ဆိုလိုတာက ကြီးလာနိုင်တဲ့ တန်ဖိုး
+      စာရင်းတွေကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Enums and Pattern Matching"
         url: "https://doc.rust-lang.org/book/ch06-00-enums.html"
