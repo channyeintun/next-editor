@@ -1,13 +1,25 @@
-# One idea: control flow in Rust, where `if` is an expression that produces a
-# value, paired with the two loops you reach for (for over a range, while on a
-# condition). A whiteboard of the three forms, then each built live and run.
+# Rust from zero, lesson 5: control flow. if checks a condition that must be
+# a bool, and if is an expression, so a `let` can take its value (a flow
+# diagram is drawn in on the whiteboard). The two rules the compiler checks
+# about if, and its E0308 answers, go on a second board, since an
+# insert-only lesson can't run broken code. Then the three loops, built live:
+# loop (break carries a value out), while (a countdown), and for (over an
+# inclusive range and over an array). One run, and a recap board.
+#
+# Both errors quoted on the board and in the narration ("mismatched types /
+# expected `bool`, found integer" and "`if` and `else` have incompatible
+# types") were confirmed with rustc 1.98 --edition 2024, as were the two
+# spoken-only claims: parentheses around an if condition raise the
+# unused_parens warning, and `break` with a value inside while is E0571. The
+# fixture is the exact output of the final program, which compiles with no
+# warnings.
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-control-flow.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-control-flow
-  title: "Rust control flow: if is an expression"
+  title: "Rust from zero: Control flow"
   locale: en-US
   workspace:
     lessonType: rust
@@ -16,66 +28,425 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let n = 7;
-            println!("n starts at {n}");
+            let today = 30;
+            println!("today is {today} degrees");
         }
+  # Colour jobs: blue = the thing being named (the condition, the rule, the
+  # keyword), green = the true branch / what the compiler accepts / the safe
+  # loop, orange = the else branch, red = the error, violet = the value an
+  # expression gives back. Text is #1e1e1e (white on the dark board) unless it
+  # has one of those jobs. Text x positions were centred against Virgil
+  # widths measured in Chrome.
   whiteboardAssets:
-    - id: cf-title
+    # Board 1 — if is an expression: condition → two branches → one value.
+    - id: b1-title
       kind: text
-      x: 320
-      y: 185
-      width: 640
-      height: 40
-      text: "Control flow — three forms"
+      x: 300
+      y: 160
+      width: 420
+      height: 48
+      text: "if is an expression"
       strokeColor: "#1e1e1e"
-      fontSize: 36
-    - id: cf-if-card
+      fontSize: 38
+    - id: b1-cond
       kind: rectangle
-      x: 320
-      y: 250
-      width: 640
-      height: 70
+      x: 470
+      y: 235
+      width: 400
+      height: 72
       strokeColor: "#1971c2"
-    - id: cf-if-text
+    - id: b1-cond-t
       kind: text
-      x: 342
-      y: 272
-      width: 600
-      height: 30
-      text: "if … { } else { }   →   a value"
+      x: 560
+      y: 252
+      width: 240
+      height: 40
+      text: "if today > 25"
       strokeColor: "#1e1e1e"
-      fontSize: 28
-    - id: cf-loop-card
-      kind: rectangle
-      x: 320
-      y: 340
-      width: 640
-      height: 70
-      strokeColor: "#f08c00"
-    - id: cf-for-text
+      fontSize: 32
+    - id: b1-bool
       kind: text
-      x: 342
-      y: 362
-      width: 600
-      height: 30
-      text: "for i in 1..=n { }   →   step a range"
-      strokeColor: "#1e1e1e"
+      x: 890
+      y: 256
+      width: 110
+      height: 36
+      text: "a bool"
+      strokeColor: "#1971c2"
       fontSize: 28
-    - id: cf-while-card
-      kind: rectangle
-      x: 320
-      y: 430
-      width: 640
+    - id: b1-arrow-true
+      kind: freedraw
+      stroke: arrow-down
+      x: 505
+      y: 316
+      width: 40
       height: 70
       strokeColor: "#2f9e44"
-    - id: cf-while-text
+    - id: b1-true
       kind: text
-      x: 342
-      y: 452
-      width: 600
-      height: 30
-      text: "while cond { }   →   repeat while true"
+      x: 555
+      y: 334
+      width: 70
+      height: 36
+      text: "true"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: b1-hot
+      kind: rectangle
+      x: 400
+      y: 395
+      width: 250
+      height: 72
+      strokeColor: "#2f9e44"
+    - id: b1-hot-t
+      kind: text
+      x: 488
+      y: 412
+      width: 90
+      height: 40
+      text: '"hot"'
       strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: b1-arrow-false
+      kind: freedraw
+      stroke: arrow-down
+      x: 795
+      y: 316
+      width: 40
+      height: 70
+      strokeColor: "#f08c00"
+    - id: b1-false
+      kind: text
+      x: 705
+      y: 334
+      width: 80
+      height: 36
+      text: "false"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b1-mild
+      kind: rectangle
+      x: 690
+      y: 395
+      width: 250
+      height: 72
+      strokeColor: "#f08c00"
+    - id: b1-mild-t
+      kind: text
+      x: 777
+      y: 412
+      width: 110
+      height: 40
+      text: '"mild"'
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: b1-arrow-hot
+      kind: freedraw
+      stroke: arrow-down
+      x: 505
+      y: 476
+      width: 40
+      height: 62
+      strokeColor: "#6741d9"
+    - id: b1-arrow-mild
+      kind: freedraw
+      stroke: arrow-down
+      x: 795
+      y: 476
+      width: 40
+      height: 62
+      strokeColor: "#6741d9"
+    - id: b1-result
+      kind: rectangle
+      x: 400
+      y: 546
+      width: 540
+      height: 76
+      strokeColor: "#6741d9"
+    - id: b1-result-t
+      kind: text
+      x: 488
+      y: 566
+      width: 400
+      height: 38
+      text: "label = the chosen value"
+      strokeColor: "#6741d9"
+      fontSize: 30
+
+    # Board 2 — the two rules the compiler checks, with the E0308 answers.
+    - id: b2-title
+      kind: text
+      x: 300
+      y: 160
+      width: 520
+      height: 48
+      text: "What the compiler checks"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: b2-rule1
+      kind: text
+      x: 300
+      y: 228
+      width: 520
+      height: 40
+      text: "1. The condition must be a bool"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: b2-bad1
+      kind: text
+      x: 330
+      y: 278
+      width: 250
+      height: 36
+      text: "if today { ... }"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b2-bad1-line
+      kind: freedraw
+      stroke: underline
+      x: 325
+      y: 286
+      width: 220
+      height: 32
+      strokeColor: "#e03131"
+    - id: b2-err1a
+      kind: text
+      x: 330
+      y: 332
+      width: 470
+      height: 36
+      text: "error[E0308]: mismatched types"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b2-err1b
+      kind: text
+      x: 330
+      y: 370
+      width: 440
+      height: 36
+      text: "expected bool, found integer"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b2-good1
+      kind: text
+      x: 680
+      y: 278
+      width: 330
+      height: 36
+      text: "if today > 25 { ... }"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: b2-check1
+      kind: freedraw
+      stroke: check
+      x: 985
+      y: 272
+      width: 48
+      height: 44
+      strokeColor: "#2f9e44"
+    - id: b2-rule2
+      kind: text
+      x: 300
+      y: 440
+      width: 660
+      height: 40
+      text: "2. Both branches must give the same type"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: b2-bad2
+      kind: text
+      x: 330
+      y: 490
+      width: 540
+      height: 36
+      text: 'if today > 25 { "hot" } else { 0 }'
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b2-bad2-line
+      kind: freedraw
+      stroke: underline
+      x: 325
+      y: 498
+      width: 495
+      height: 32
+      strokeColor: "#e03131"
+    - id: b2-err2a
+      kind: text
+      x: 330
+      y: 544
+      width: 450
+      height: 36
+      text: "error[E0308]: `if` and `else`"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b2-err2b
+      kind: text
+      x: 330
+      y: 582
+      width: 360
+      height: 36
+      text: "have incompatible types"
+      strokeColor: "#e03131"
+      fontSize: 28
+
+    # Board 3 — recap: one way to choose, three ways to repeat.
+    - id: b3-title
+      kind: text
+      x: 300
+      y: 160
+      width: 420
+      height: 48
+      text: "Control flow in Rust"
+      strokeColor: "#1e1e1e"
+      fontSize: 38
+    - id: b3-if-box
+      kind: rectangle
+      x: 300
+      y: 235
+      width: 160
+      height: 64
+      strokeColor: "#1971c2"
+    - id: b3-if-k
+      kind: text
+      x: 368
+      y: 247
+      width: 40
+      height: 40
+      text: "if"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: b3-if-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 475
+      y: 247
+      width: 70
+      height: 40
+      strokeColor: "#1e1e1e"
+    - id: b3-if-d
+      kind: text
+      x: 560
+      y: 250
+      width: 240
+      height: 36
+      text: "picks a branch,"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b3-if-v
+      kind: text
+      x: 835
+      y: 250
+      width: 210
+      height: 36
+      text: "gives a value"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: b3-loop-box
+      kind: rectangle
+      x: 300
+      y: 320
+      width: 160
+      height: 64
+      strokeColor: "#1971c2"
+    - id: b3-loop-k
+      kind: text
+      x: 350
+      y: 332
+      width: 80
+      height: 40
+      text: "loop"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: b3-loop-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 475
+      y: 332
+      width: 70
+      height: 40
+      strokeColor: "#1e1e1e"
+    - id: b3-loop-d
+      kind: text
+      x: 560
+      y: 335
+      width: 270
+      height: 36
+      text: "runs until break,"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b3-loop-v
+      kind: text
+      x: 835
+      y: 335
+      width: 210
+      height: 36
+      text: "gives a value"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: b3-while-box
+      kind: rectangle
+      x: 300
+      y: 405
+      width: 160
+      height: 64
+      strokeColor: "#1971c2"
+    - id: b3-while-k
+      kind: text
+      x: 346
+      y: 417
+      width: 100
+      height: 40
+      text: "while"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: b3-while-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 475
+      y: 417
+      width: 70
+      height: 40
+      strokeColor: "#1e1e1e"
+    - id: b3-while-d
+      kind: text
+      x: 560
+      y: 420
+      width: 440
+      height: 36
+      text: "checks a condition each time"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b3-for-box
+      kind: rectangle
+      x: 300
+      y: 490
+      width: 160
+      height: 64
+      strokeColor: "#1971c2"
+    - id: b3-for-k
+      kind: text
+      x: 356
+      y: 502
+      width: 60
+      height: 40
+      text: "for"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: b3-for-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 475
+      y: 502
+      width: 70
+      height: 40
+      strokeColor: "#1e1e1e"
+    - id: b3-for-d
+      kind: text
+      x: 560
+      y: 505
+      width: 450
+      height: 36
+      text: "each item of a range or array"
+      strokeColor: "#2f9e44"
       fontSize: 28
 
 build:
@@ -89,135 +460,304 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "n starts at 7\n7 is odd\nsum to 7 is 28\nt-minus 3\nt-minus 2\nt-minus 1\nliftoff\n"
+      stdout: "today is 30 degrees\nit feels hot\ndoubled past 100: 128\n3...\n2...\n1...\nlap 1\nlap 2\nlap 3\n12 degrees\n21 degrees\n30 degrees\n"
       stderr: ""
 
 scenes:
-  - id: forms
+  - id: if-expression
+    chapter: if is an expression
     narration: >
-      [[mark:board]] Control flow, with one Rust surprise. [[mark:if-form]] if is
-      an expression — it produces a value you can bind to a name.
-      [[mark:loop-form]] for steps through a range or a collection.
-      [[mark:while-form]] while repeats while a condition holds.
-      [[mark:board-close]] Let's use all three.
+      [[mark:open-board]] Programs make choices, and they repeat work. That's
+      control flow. We'll use if to choose, and three kinds of loop to repeat.
+      [[mark:draw-cond]] An if checks a condition that's a bool: is today
+      greater than twenty-five? [[mark:draw-branches]] When it's true, the
+      first branch runs. When it's false, the else branch runs.
+      [[mark:draw-result]] Now here's what's different in Rust. if is an
+      expression, so it gives back a value. The branch that runs gives its
+      value to label. Many languages need a separate operator for this, with a
+      question mark and a colon. Rust doesn't have one. if does that job.
     sources:
-      - title: "The Rust Book — Control Flow"
-        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html"
+      - title: "The Rust Book — if Expressions"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#if-expressions"
+      - title: "The Rust Reference — if expressions"
+        url: "https://doc.rust-lang.org/reference/expressions/if-expr.html"
     actions:
       - id: open-board
         type: whiteboard.apply
-        at: { mark: board }
+        at: { mark: open-board }
         open: true
-        upsertIds: [cf-title]
-      - id: show-if
+        upsertIds: [b1-title]
+      - id: draw-cond
         type: whiteboard.apply
-        at: { mark: if-form }
-        upsertIds: [cf-if-card, cf-if-text]
-      - id: show-loop
+        at: { mark: draw-cond }
+        upsertIds: [b1-cond, b1-cond-t, b1-bool]
+        drawMs: 1400
+      - id: draw-branches
         type: whiteboard.apply
-        at: { mark: loop-form }
-        upsertIds: [cf-loop-card, cf-for-text]
-      - id: show-while
+        at: { mark: draw-branches }
+        upsertIds:
+          [b1-arrow-true, b1-true, b1-hot, b1-hot-t, b1-arrow-false, b1-false, b1-mild, b1-mild-t]
+        drawMs: 3200
+      - id: draw-result
         type: whiteboard.apply
-        at: { mark: while-form }
-        upsertIds: [cf-while-card, cf-while-text]
-      - id: close-board
-        type: whiteboard.apply
-        at: { mark: board-close }
-        open: false
+        at: { mark: draw-result }
+        upsertIds: [b1-arrow-hot, b1-arrow-mild, b1-result, b1-result-t]
+        drawMs: 2000
 
-  - id: if-expression
+  - id: build-if
     narration: >
-      [[mark:open]] n is seven. [[mark:type-if]] Let's bind parity.
-      [[mark:select-if-expression]] The whole if-else sits on the right of the
-      equals sign. An even n gives "even"; otherwise it gives "odd". Parity
-      takes that result because Rust's if returns a value.
+      Let's write it. [[mark:open-main]] So far, today is thirty.
+      [[mark:type-if]] We name the result label. Then, on the right of the
+      equals sign, we write the whole if, with a value in each branch: hot, or
+      mild. [[mark:select-cond]] The condition needs no parentheses. Add them,
+      and the compiler warns you. [[mark:select-branches]] There's no
+      semicolon after hot, or after mild. You saw this with functions: a
+      block's value is its last expression. The semicolon comes once, at the
+      end of the whole let.
+      [[mark:type-print]] Then we print label.
     sources:
-      - title: "The Rust Book — if in a let Statement"
+      - title: "The Rust Book — Using if in a let Statement"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#using-if-in-a-let-statement"
+      - title: "The Rust Book — Statements and Expressions"
+        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#statements-and-expressions"
+      - title: "The Rust Reference — if expressions"
+        url: "https://doc.rust-lang.org/reference/expressions/if-expr.html"
+      - title: "The rustc book — unused_parens lint"
+        url: "https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#unused-parens"
     actions:
+      - id: close-board1
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: open-main
         type: workspace.openFile
-        at: { mark: open }
+        at: { mark: open-main }
         path: main.rs
       - id: type-if
         type: editor.type
-        at: { mark: type-if, offsetMs: -400 }
+        at: { mark: type-if, offsetMs: -200 }
         target:
           file: main.rs
-          after: "    println!(\"n starts at {n}\");\n"
+          after: "    println!(\"today is {today} degrees\");\n"
           occurrence: 1
-        cadence: line-by-line
-        text: "    let parity = if n % 2 == 0 { \"even\" } else { \"odd\" };\n    println!(\"{n} is {parity}\");\n"
-      - id: select-if-expression
+        cadence: fast-explainer
+        text: "    let label = if today > 25 { \"hot\" } else { \"mild\" };\n"
+      - id: select-cond
         type: editor.select
-        at: { mark: select-if-expression }
+        at: { mark: select-cond }
         target:
           file: main.rs
-          text: 'if n % 2 == 0 { "even" } else { "odd" }'
+          text: "today > 25"
           occurrence: 1
-
-  - id: for-loop
-    narration: >
-      [[mark:type-for]] Now a for loop. [[mark:select-range]] The range one to
-      n, inclusive, hands you each number in turn. We add each one to sum. Rust
-      loops over a range or any iterator, with no manual counter.
-    sources:
-      - title: "The Rust Book — Looping Through a Collection with for"
-        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#looping-through-a-collection-with-for"
-    actions:
-      - id: type-for
+      - id: select-branches
+        type: editor.select
+        at: { mark: select-branches }
+        target:
+          file: main.rs
+          text: '{ "hot" } else { "mild" }'
+          occurrence: 1
+      - id: type-print
         type: editor.type
-        at: { mark: type-for, offsetMs: -400 }
+        at: { mark: type-print }
         target:
           file: main.rs
-          after: "    println!(\"{n} is {parity}\");\n"
+          after: "{ \"mild\" };\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let mut sum = 0;\n    for i in 1..=n {\n        sum += i;\n    }\n    println!(\"sum to {n} is {sum}\");\n"
-      - id: select-range
-        type: editor.select
-        at: { mark: select-range }
+        text: "    println!(\"it feels {label}\");\n"
+
+  - id: compiler-rules
+    chapter: What the compiler checks
+    narration: >
+      [[mark:open-rules]] Before the program runs, the compiler checks two
+      rules about if. [[mark:draw-rule-one]] First, the condition must be a
+      bool. In some languages, a number works as a condition, and zero means
+      false. Rust won't guess. [[mark:draw-error-one]] Write if today, and the
+      compiler stops with error E0308, mismatched types. It expected a bool,
+      and found an integer. [[mark:draw-fix-one]] So you write the comparison
+      yourself, and the code says exactly what it checks.
+      [[mark:draw-rule-two]] Second, both branches must give the same type,
+      because label needs one type, known at compile time.
+      [[mark:draw-error-two]] So a string in one branch and a number in
+      the other is also E0308: if and else have incompatible types.
+    sources:
+      - title: "Rust error codes — E0308"
+        url: "https://doc.rust-lang.org/error_codes/E0308.html"
+      - title: "The Rust Book — if Expressions"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#if-expressions"
+      - title: "The Rust Book — Using if in a let Statement"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#using-if-in-a-let-statement"
+    actions:
+      - id: open-rules
+        type: whiteboard.apply
+        at: { mark: open-rules }
+        open: true
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-rule-one
+        type: whiteboard.apply
+        at: { mark: draw-rule-one }
+        upsertIds: [b2-rule1]
+        drawMs: 1000
+      - id: draw-error-one
+        type: whiteboard.apply
+        at: { mark: draw-error-one }
+        upsertIds: [b2-bad1, b2-bad1-line, b2-err1a, b2-err1b]
+        drawMs: 2600
+      - id: draw-fix-one
+        type: whiteboard.apply
+        at: { mark: draw-fix-one }
+        upsertIds: [b2-good1, b2-check1]
+        drawMs: 1400
+      - id: draw-rule-two
+        type: whiteboard.apply
+        at: { mark: draw-rule-two }
+        upsertIds: [b2-rule2]
+        drawMs: 1200
+      - id: draw-error-two
+        type: whiteboard.apply
+        at: { mark: draw-error-two }
+        upsertIds: [b2-bad2, b2-bad2-line, b2-err2a, b2-err2b]
+        drawMs: 2800
+
+  - id: loop-break
+    chapter: Three kinds of loop
+    narration: >
+      Now, repeating work. The first loop is called loop.
+      [[mark:type-loop]] It repeats forever, until you tell it to stop.
+      Here, n starts at one and doubles each time.
+      [[mark:select-if-no-else]] This if has no else. That's fine, because we
+      don't use its value. It only decides when to stop.
+      [[mark:select-break]] break stops the loop, and it can carry a value
+      out. So loop is an expression too, like if. Its value goes into big, and
+      big doesn't need mut, because it never changes. Only loop can do this,
+      since while and for can end without any break.
+    sources:
+      - title: "The Rust Book — Returning Values from Loops"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#returning-values-from-loops"
+      - title: "The Rust Reference — break and loop values"
+        url: "https://doc.rust-lang.org/reference/expressions/loop-expr.html#break-and-loop-values"
+      - title: "Rust error codes — E0571"
+        url: "https://doc.rust-lang.org/error_codes/E0571.html"
+    actions:
+      - id: close-rules
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop, offsetMs: -200 }
         target:
           file: main.rs
-          text: "1..=n"
+          after: "    println!(\"it feels {label}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    let mut n = 1;\n    let big = loop {\n        n *= 2;\n        if n > 100 {\n            break n;\n        }\n    };\n    println!(\"doubled past 100: {big}\");\n"
+      - id: select-if-no-else
+        type: editor.select
+        at: { mark: select-if-no-else }
+        target:
+          file: main.rs
+          text: "if n > 100 {"
+          occurrence: 1
+      - id: select-break
+        type: editor.select
+        at: { mark: select-break }
+        target:
+          file: main.rs
+          text: "break n;"
           occurrence: 1
 
   - id: while-loop
     narration: >
-      [[mark:type-while]] Now add a countdown. [[mark:select-while]] Use while
-      when you don't know the count up front. It starts at three; each pass
-      prints and subtracts one. At zero, the condition is false and the loop
-      ends.
+      [[mark:type-while]] The second is while. Let's use it for a countdown
+      from three. [[mark:select-while]] while checks its condition before each
+      pass, and stops as soon as it's false. Here, that's when countdown
+      reaches zero. while is most useful when you don't know in advance how
+      many passes you'll need.
     sources:
       - title: "The Rust Book — Conditional Loops with while"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#conditional-loops-with-while"
     actions:
       - id: type-while
         type: editor.type
-        at: { mark: type-while, offsetMs: -400 }
+        at: { mark: type-while, offsetMs: -200 }
         target:
           file: main.rs
-          after: "    println!(\"sum to {n} is {sum}\");\n"
+          after: "    println!(\"doubled past 100: {big}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let mut countdown = 3;\n    while countdown > 0 {\n        println!(\"t-minus {countdown}\");\n        countdown -= 1;\n    }\n    println!(\"liftoff\");\n"
+        text: "\n    let mut countdown = 3;\n    while countdown > 0 {\n        println!(\"{countdown}...\");\n        countdown -= 1;\n    }\n"
       - id: select-while
         type: editor.select
         at: { mark: select-while }
         target:
           file: main.rs
-          text: "while countdown > 0 {"
+          text: "while countdown > 0"
+          occurrence: 1
+
+  - id: for-loop
+    narration: >
+      [[mark:type-range]] The third is for, and it's the loop you'll use
+      most. It runs once for each value in a range. [[mark:select-range]] Two
+      dots and an equals sign make the range include its end, so this gives
+      one, two, and three. Without the equals sign, the range stops just
+      before three. [[mark:type-array]] for also works on an array. Here's
+      an array of three temperatures.
+      [[mark:select-for-array]] Each pass gives you the next element, temp.
+      There's no index to manage, so you can't read past the end. That's why
+      for is usually safer than while with a counter.
+    sources:
+      - title: "The Rust Book — Looping Through a Collection with for"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#looping-through-a-collection-with-for"
+      - title: "The Rust Reference — Range expressions"
+        url: "https://doc.rust-lang.org/reference/expressions/range-expr.html"
+    actions:
+      - id: type-range
+        type: editor.type
+        at: { mark: type-range, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "        countdown -= 1;\n    }\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    for lap in 1..=3 {\n        println!(\"lap {lap}\");\n    }\n"
+      - id: select-range
+        type: editor.select
+        at: { mark: select-range }
+        target:
+          file: main.rs
+          text: "1..=3"
+          occurrence: 1
+      - id: type-array
+        type: editor.type
+        at: { mark: type-array, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "        println!(\"lap {lap}\");\n    }\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    let temps = [12, 21, 30];\n    for temp in temps {\n        println!(\"{temp} degrees\");\n    }\n"
+      - id: select-for-array
+        type: editor.select
+        at: { mark: select-for-array }
+        target:
+          file: main.rs
+          text: "for temp in temps"
           occurrence: 1
 
   - id: run
+    chapter: Run it
     narration: >
-      [[mark:run]] Run it. Seven is odd. Sum one to seven, twenty-eight.
-      Countdown — three, two, one — liftoff. One expression, one range loop, one
-      condition loop. That's control flow in Rust.
+      [[mark:run]] Let's run it. [[mark:read-output]] Thirty degrees, so it
+      feels hot. Doubling passed one hundred at one hundred twenty-eight. Then
+      the countdown: three, two, one. Three laps from the range. And each
+      temperature from the array.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "Rust by Example — for loops"
+        url: "https://doc.rust-lang.org/rust-by-example/flow_control/for.html"
+      - title: "Rust by Example — Returning from loops"
+        url: "https://doc.rust-lang.org/rust-by-example/flow_control/loop/return.html"
     actions:
       - id: run
         type: runtime.run
@@ -226,13 +766,54 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "sum to 7 is 28"
+        contains: "doubled past 100: 128"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "while countdown > 0 {"
+        contains: "let big = loop {"
+
+  - id: wrap
+    narration: >
+      [[mark:recap-if]] So, if picks a branch and gives back a value.
+      [[mark:recap-loop]] loop runs until break, and can give back a value
+      too. [[mark:recap-while]] while repeats as long as its condition is
+      true. [[mark:recap-for]] And for goes through each item of a range or an
+      array. Next, we'll look at ownership: how Rust manages memory without a
+      garbage collector.
+    sources:
+      - title: "The Rust Book — Control Flow"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html"
+      - title: "The Rust Book — What Is Ownership?"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
+    actions:
+      - id: open-recap
+        type: whiteboard.apply
+        at: { mark: recap-if, offsetMs: -300 }
+        open: true
+        clear: true
+        upsertIds: [b3-title]
+      - id: recap-if
+        type: whiteboard.apply
+        at: { mark: recap-if }
+        upsertIds: [b3-if-box, b3-if-k, b3-if-arrow, b3-if-d, b3-if-v]
+        drawMs: 1600
+      - id: recap-loop
+        type: whiteboard.apply
+        at: { mark: recap-loop }
+        upsertIds: [b3-loop-box, b3-loop-k, b3-loop-arrow, b3-loop-d, b3-loop-v]
+        drawMs: 1600
+      - id: recap-while
+        type: whiteboard.apply
+        at: { mark: recap-while }
+        upsertIds: [b3-while-box, b3-while-k, b3-while-arrow, b3-while-d]
+        drawMs: 1400
+      - id: recap-for
+        type: whiteboard.apply
+        at: { mark: recap-for }
+        upsertIds: [b3-for-box, b3-for-k, b3-for-arrow, b3-for-d]
+        drawMs: 1400
 
 checks:
   - { type: timing.p95Ms, max: 300 }
