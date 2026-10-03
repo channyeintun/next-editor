@@ -1,0 +1,1689 @@
+# Burmese introduction to Next Editor for learners who have never seen it.
+# Narration is the owner-approved voice script, word for word; only the
+# [[mark:…]] anchors were added where its on-screen notes place each action.
+# Two whiteboards explain the idea (a coding video is only pictures; a lesson
+# is one timeline of event tracks), a small Vite page is built in the real
+# editor (HTML -> CSS -> JavaScript -> a click in the preview), and three more
+# boards cover the learner's pause-edit-run loop, what else a lesson can carry,
+# and where to start. The close says the lesson was made with Studio.
+#
+# Typing into a running Vite server: index.html changes reload the page, so the
+# HTML lands line by line (every intermediate file is valid HTML); plain CSS is
+# hot-updated on every keystroke without a reload, so the heading colour is a
+# name with no valid shorter prefix (royalblue: the heading stays as it was
+# until the word is complete, where a hex value would flash #197, #1971, ...)
+# and the button lines land whole; main.js changes reload the page and a
+# half-typed script would throw in the preview, so the JavaScript lands as one
+# block. The final scene closes the board on style.css with the button's green
+# selected, so a learner who pauses as told sees the code, not a diagram.
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/next-editor-intro-mm.yaml
+schemaVersion: 1
+
+lesson:
+  slug: next-editor-intro-mm
+  title: "Next Editor ကို မိတ်ဆက်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Next Editor Intro
+    entryFilePath: index.html
+    files:
+      package.json: |
+        {
+          "name": "next-editor-intro-mm",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      package-lock.json: |
+        {"name":"next-editor-intro-mm","version":"1.0.0","lockfileVersion":1,"requires":true,"dependencies":{"@esbuild/aix-ppc64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.21.5.tgz","integrity":"sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==","dev":true,"optional":true},"@esbuild/android-arm":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.21.5.tgz","integrity":"sha512-vCPvzSjpPHEi1siZdlvAlsPxXl7WbOVUBBAowWug4rJHb68Ox8KualB+1ocNvT5fjv6wpkX6o/iEpbDrf68zcg==","dev":true,"optional":true},"@esbuild/android-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.21.5.tgz","integrity":"sha512-c0uX9VAUBQ7dTDCjq+wdyGLowMdtR/GoC2U5IYk/7D1H1JYC0qseD7+11iMP2mRLN9RcCMRcjC4YMclCzGwS/A==","dev":true,"optional":true},"@esbuild/android-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.21.5.tgz","integrity":"sha512-D7aPRUUNHRBwHxzxRvp856rjUHRFW1SdQATKXH2hqA0kAZb1hKmi02OpYRacl0TxIGz/ZmXWlbZgjwWYaCakTA==","dev":true,"optional":true},"@esbuild/darwin-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.21.5.tgz","integrity":"sha512-DwqXqZyuk5AiWWf3UfLiRDJ5EDd49zg6O9wclZ7kUMv2WRFr4HKjXp/5t8JZ11QbQfUS6/cRCKGwYhtNAY88kQ==","dev":true,"optional":true},"@esbuild/darwin-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.21.5.tgz","integrity":"sha512-se/JjF8NlmKVG4kNIuyWMV/22ZaerB+qaSi5MdrXtd6R08kvs2qCN4C09miupktDitvh8jRFflwGFBQcxZRjbw==","dev":true,"optional":true},"@esbuild/freebsd-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.21.5.tgz","integrity":"sha512-5JcRxxRDUJLX8JXp/wcBCy3pENnCgBR9bN6JsY4OmhfUtIHe3ZW0mawA7+RDAcMLrMIZaf03NlQiX9DGyB8h4g==","dev":true,"optional":true},"@esbuild/freebsd-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.21.5.tgz","integrity":"sha512-J95kNBj1zkbMXtHVH29bBriQygMXqoVQOQYA+ISs0/2l3T9/kj42ow2mpqerRBxDJnmkUDCaQT/dfNXWX/ZZCQ==","dev":true,"optional":true},"@esbuild/linux-arm":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.21.5.tgz","integrity":"sha512-bPb5AHZtbeNGjCKVZ9UGqGwo8EUu4cLq68E95A53KlxAPRmUyYv2D6F0uUI65XisGOL1hBP5mTronbgo+0bFcA==","dev":true,"optional":true},"@esbuild/linux-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.21.5.tgz","integrity":"sha512-ibKvmyYzKsBeX8d8I7MH/TMfWDXBF3db4qM6sy+7re0YXya+K1cem3on9XgdT2EQGMu4hQyZhan7TeQ8XkGp4Q==","dev":true,"optional":true},"@esbuild/linux-ia32":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.21.5.tgz","integrity":"sha512-YvjXDqLRqPDl2dvRODYmmhz4rPeVKYvppfGYKSNGdyZkA01046pLWyRKKI3ax8fbJoK5QbxblURkwK/MWY18Tg==","dev":true,"optional":true},"@esbuild/linux-loong64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.21.5.tgz","integrity":"sha512-uHf1BmMG8qEvzdrzAqg2SIG/02+4/DHB6a9Kbya0XDvwDEKCoC8ZRWI5JJvNdUjtciBGFQ5PuBlpEOXQj+JQSg==","dev":true,"optional":true},"@esbuild/linux-mips64el":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.21.5.tgz","integrity":"sha512-IajOmO+KJK23bj52dFSNCMsz1QP1DqM6cwLUv3W1QwyxkyIWecfafnI555fvSGqEKwjMXVLokcV5ygHW5b3Jbg==","dev":true,"optional":true},"@esbuild/linux-ppc64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.21.5.tgz","integrity":"sha512-1hHV/Z4OEfMwpLO8rp7CvlhBDnjsC3CttJXIhBi+5Aj5r+MBvy4egg7wCbe//hSsT+RvDAG7s81tAvpL2XAE4w==","dev":true,"optional":true},"@esbuild/linux-riscv64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.21.5.tgz","integrity":"sha512-2HdXDMd9GMgTGrPWnJzP2ALSokE/0O5HhTUvWIbD3YdjME8JwvSCnNGBnTThKGEB91OZhzrJ4qIIxk/SBmyDDA==","dev":true,"optional":true},"@esbuild/linux-s390x":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.21.5.tgz","integrity":"sha512-zus5sxzqBJD3eXxwvjN1yQkRepANgxE9lgOW2qLnmr8ikMTphkjgXu1HR01K4FJg8h1kEEDAqDcZQtbrRnB41A==","dev":true,"optional":true},"@esbuild/linux-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.21.5.tgz","integrity":"sha512-1rYdTpyv03iycF1+BhzrzQJCdOuAOtaqHTWJZCWvijKD2N5Xu0TtVC8/+1faWqcP9iBCWOmjmhoH94dH82BxPQ==","dev":true,"optional":true},"@esbuild/netbsd-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.21.5.tgz","integrity":"sha512-Woi2MXzXjMULccIwMnLciyZH4nCIMpWQAs049KEeMvOcNADVxo0UBIQPfSmxB3CWKedngg7sWZdLvLczpe0tLg==","dev":true,"optional":true},"@esbuild/openbsd-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.21.5.tgz","integrity":"sha512-HLNNw99xsvx12lFBUwoT8EVCsSvRNDVxNpjZ7bPn947b8gJPzeHWyNVhFsaerc0n3TsbOINvRP2byTZ5LKezow==","dev":true,"optional":true},"@esbuild/sunos-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.21.5.tgz","integrity":"sha512-6+gjmFpfy0BHU5Tpptkuh8+uw3mnrvgs+dSPQXQOv3ekbordwnzTVEb4qnIvQcYXq6gzkyTnoZ9dZG+D4garKg==","dev":true,"optional":true},"@esbuild/win32-arm64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.21.5.tgz","integrity":"sha512-Z0gOTd75VvXqyq7nsl93zwahcTROgqvuAcYDUr+vOv8uHhNSKROyU961kgtCD1e95IqPKSQKH7tBTslnS3tA8A==","dev":true,"optional":true},"@esbuild/win32-ia32":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.21.5.tgz","integrity":"sha512-SWXFF1CL2RVNMaVs+BBClwtfZSvDgtL//G/smwAc5oVK/UPu2Gu9tIaRgFmYFFKrmg3SyAjSrElf0TiJ1v8fYA==","dev":true,"optional":true},"@esbuild/win32-x64":{"version":"0.21.5","resolved":"https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.21.5.tgz","integrity":"sha512-tQd/1efJuzPC6rCFwEvLtci/xNFcTZknmXs98FYDfGE4wP9ClFV98nyKrzJKVPMhdDnjzLhdUyMX4PsQAPjwIw==","dev":true,"optional":true},"@rollup/rollup-android-arm-eabi":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-android-arm-eabi/-/rollup-android-arm-eabi-4.62.2.tgz","integrity":"sha512-6o7ZLZK+BeenkZCFNDXqpbjw9bD6nuWonvS/lwQJp7NoVVxm6p3qE7qQ5jGuBjiFsgvqjD8mZAU5oWxTmbOeOg==","dev":true,"optional":true},"@rollup/rollup-android-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-android-arm64/-/rollup-android-arm64-4.62.2.tgz","integrity":"sha512-BaH7BllCACHoH1LguOU56UItGfUWjujlO65kS9LAodViaN4bwIKd7oeW/ZHJ/4ljr/7MIiENnNy3HJ0zXv8Zkw==","dev":true,"optional":true},"@rollup/rollup-darwin-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-darwin-arm64/-/rollup-darwin-arm64-4.62.2.tgz","integrity":"sha512-v39RCCvj4He82I9sFmk+M1VZ0PLM9sfsLVikjfx2hYBNALhrrOR2D3JjQA6AhlaSOgcR+RzrKY7e1+bT6SUO/A==","dev":true,"optional":true},"@rollup/rollup-darwin-x64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-darwin-x64/-/rollup-darwin-x64-4.62.2.tgz","integrity":"sha512-yl0y2vq3S3lHeuXhEdss6TWfKW8vkujImO12tn4ZkG/4oghr09LvdYm2RElVjokTQiUvDUGXLGsYeLqUMCKpGA==","dev":true,"optional":true},"@rollup/rollup-freebsd-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-freebsd-arm64/-/rollup-freebsd-arm64-4.62.2.tgz","integrity":"sha512-tT4pvt4qXD+vEoezupCWi+a1F0vvDiksiHc+PxRlYTOH1I6/X4id9jPxTP+Fg+545euaFT1jJVs4CEdHZAU1vw==","dev":true,"optional":true},"@rollup/rollup-freebsd-x64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-freebsd-x64/-/rollup-freebsd-x64-4.62.2.tgz","integrity":"sha512-6nU5F2wCW+qvCBhTn1pdIU3bzsIoF7EUwsCDRxilWGprQR6yd508YnH9+OKFCwpfS8pjZqDUmnCAr7exax0XCg==","dev":true,"optional":true},"@rollup/rollup-linux-arm-gnueabihf":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm-gnueabihf/-/rollup-linux-arm-gnueabihf-4.62.2.tgz","integrity":"sha512-n1GJHPOvpIfhi3TmrCeh6S6URt9BFCt0KQE3qvexyGCTAKpR4Lg+eWvNZEqu7epxwus/8ElT3hacYEucm49SZg==","dev":true,"optional":true},"@rollup/rollup-linux-arm-musleabihf":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm-musleabihf/-/rollup-linux-arm-musleabihf-4.62.2.tgz","integrity":"sha512-JqgflS8wEB+UXV/vS1RpRbifGBeN4D5lz8D8oOFbFZw4vedvdOgCFAjfBmIMdW3yL10XpQQ0Ambepw6MXrhOnA==","dev":true,"optional":true},"@rollup/rollup-linux-arm64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm64-gnu/-/rollup-linux-arm64-gnu-4.62.2.tgz","integrity":"sha512-wnFJkogWvN4jm/hQRF2UBaeUmk20j5+DmHvoyWii2b8HJDyvz1MF2OU/6ynXt2KR63rbZLWkFpoytpdc/yBuSA==","dev":true,"optional":true},"@rollup/rollup-linux-arm64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-arm64-musl/-/rollup-linux-arm64-musl-4.62.2.tgz","integrity":"sha512-HVu2bp0zhvJ8xHEV9+UUs7S90VadmBSY3LcIMvozbPo4AuMGDWlz3ymHLHZPX4hR67TKTt8Qp5PJ5RBg/i+RMQ==","dev":true,"optional":true},"@rollup/rollup-linux-loong64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-loong64-gnu/-/rollup-linux-loong64-gnu-4.62.2.tgz","integrity":"sha512-mQqqAV8QaoSgr9I2fKDLY2BAVvmKjWoGiu/cSYQonsLvtqwEn1E4QYfnCOcp5zoEqNhsDYin1s6jx/VJmrxlZg==","dev":true,"optional":true},"@rollup/rollup-linux-loong64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-loong64-musl/-/rollup-linux-loong64-musl-4.62.2.tgz","integrity":"sha512-IxKLoxCQ2IWi6bT2akyDUBGsOImDKB+sPp4EsTmwFQ/fMwpCKm8uLSSgP/Kx/QYUgKis6SEZ5/Nlhup0DIA0PQ==","dev":true,"optional":true},"@rollup/rollup-linux-ppc64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-ppc64-gnu/-/rollup-linux-ppc64-gnu-4.62.2.tgz","integrity":"sha512-Mk5ha2RQSgyFfmYYLkBpPnUk8D8FriBxesO1u9O75X0mHgXL1UQcH5Itl2lurWL2tj0RxV9b9tJgipac0hRY9A==","dev":true,"optional":true},"@rollup/rollup-linux-ppc64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-ppc64-musl/-/rollup-linux-ppc64-musl-4.62.2.tgz","integrity":"sha512-CjvEnqJL/0/TQ3TXX3OPIJ/kmBellrWd4heXUmHeJlTnmwjKpSJzoehLaL6Xk0ZnMHBu9dZuFADNOrtjF4v+2w==","dev":true,"optional":true},"@rollup/rollup-linux-riscv64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-riscv64-gnu/-/rollup-linux-riscv64-gnu-4.62.2.tgz","integrity":"sha512-1SiZbzwdkaDURsew/tSOrooKiYy7EQGT6m8ufavAi9NEyQb/6VuIxFXAL1fqa4iZe3g4NbNk4P7J32z2tw5Mgg==","dev":true,"optional":true},"@rollup/rollup-linux-riscv64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-riscv64-musl/-/rollup-linux-riscv64-musl-4.62.2.tgz","integrity":"sha512-nQts12zJ3NQRoE6uYljOH89v7szzLDvG2JD/vsX+vGXU8w/At1GowTZ5/7qeFQ8m7L55rpR8Okugnuo5bgjy2Q==","dev":true,"optional":true},"@rollup/rollup-linux-s390x-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-s390x-gnu/-/rollup-linux-s390x-gnu-4.62.2.tgz","integrity":"sha512-E9/ll019jhPIJgpzfZoIkBGhcz+kKNgVWYRY0zr9srBdPPFVpvOKW8VaJKUbeK+eZXyQF9ltME+Kk6affeaPgg==","dev":true,"optional":true},"@rollup/rollup-linux-x64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.62.2.tgz","integrity":"sha512-5BqxR/pshjey51iliyzTD5Xi3EN0aLmQ2lZ3lvefVV9c82BvrLo2/6OT55iifpWBufs6kdwWbuOKS841DrmK9A==","dev":true,"optional":true},"@rollup/rollup-linux-x64-musl":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-linux-x64-musl/-/rollup-linux-x64-musl-4.62.2.tgz","integrity":"sha512-uNN83XxQrRAh/w0/pmAfibcwyb6YWt4gP+dpnQKPVJshAloQ785ii8CT8ZCIxkGg9opVsvAlGhFitSm6D1Jjpg==","dev":true,"optional":true},"@rollup/rollup-openbsd-x64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-openbsd-x64/-/rollup-openbsd-x64-4.62.2.tgz","integrity":"sha512-srjEIxSH3LRnJN6THczDHWQplqEMFiAJrTab0msUryh9kwNpkICf3Ea6q6MN/2cZwRFUNx5w+h6Hpi4QuHS6Zg==","dev":true,"optional":true},"@rollup/rollup-openharmony-arm64":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-openharmony-arm64/-/rollup-openharmony-arm64-4.62.2.tgz","integrity":"sha512-8hOJnxgbyObnCm5AlRA3A931xX19xq80RjVTKgJOvEKWqJruP/Uf12IbAOaDjjEXYRewwHLfmF0YRIdK3OwKWA==","dev":true,"optional":true},"@rollup/rollup-win32-arm64-msvc":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-arm64-msvc/-/rollup-win32-arm64-msvc-4.62.2.tgz","integrity":"sha512-mmF4AY1i0hG/bLWUctUq59gtmgaSIRa3cu/A3JFRp/sCNEme2bgDEiDS22P9FbnJB8NJNF4jPJiSP5RHQpUTDg==","dev":true,"optional":true},"@rollup/rollup-win32-ia32-msvc":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-ia32-msvc/-/rollup-win32-ia32-msvc-4.62.2.tgz","integrity":"sha512-DZgkknc6jhHrk46V25vbAM0zZkyP0nSDkJB8/dRkLTxv470dOmWDqGoEJl/9A0dFfS7yE3REOwNDxpHwSLSt0Q==","dev":true,"optional":true},"@rollup/rollup-win32-x64-gnu":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-x64-gnu/-/rollup-win32-x64-gnu-4.62.2.tgz","integrity":"sha512-T6xr6ucWSFto+VGajA8YH26LdpHRuP4YLHEKAtCWvJDOlnmWcDZVCI2Jmjr+IFHDlt2zRaTAKE4tfjTaWLgJBg==","dev":true,"optional":true},"@rollup/rollup-win32-x64-msvc":{"version":"4.62.2","resolved":"https://registry.npmjs.org/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.62.2.tgz","integrity":"sha512-BfzEnDJOt9T8M989/lA37EcJgat01wLRnoi5dQf3QzOH7jzpqTAzdDbVfRljVr5r+jzKqpbHeyOfAaXxAd0PAA==","dev":true,"optional":true},"@types/estree":{"version":"1.0.9","resolved":"https://registry.npmjs.org/@types/estree/-/estree-1.0.9.tgz","integrity":"sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==","dev":true},"esbuild":{"version":"0.21.5","resolved":"https://registry.npmjs.org/esbuild/-/esbuild-0.21.5.tgz","integrity":"sha512-mg3OPMV4hXywwpoDxu3Qda5xCKQi+vCTZq8S9J/EpkhB2HzKXq4SNFZE3+NK93JYxc8VMSep+lOUSC/RVKaBqw==","dev":true,"requires":{"@esbuild/aix-ppc64":"0.21.5","@esbuild/android-arm":"0.21.5","@esbuild/android-arm64":"0.21.5","@esbuild/android-x64":"0.21.5","@esbuild/darwin-arm64":"0.21.5","@esbuild/darwin-x64":"0.21.5","@esbuild/freebsd-arm64":"0.21.5","@esbuild/freebsd-x64":"0.21.5","@esbuild/linux-arm":"0.21.5","@esbuild/linux-arm64":"0.21.5","@esbuild/linux-ia32":"0.21.5","@esbuild/linux-loong64":"0.21.5","@esbuild/linux-mips64el":"0.21.5","@esbuild/linux-ppc64":"0.21.5","@esbuild/linux-riscv64":"0.21.5","@esbuild/linux-s390x":"0.21.5","@esbuild/linux-x64":"0.21.5","@esbuild/netbsd-x64":"0.21.5","@esbuild/openbsd-x64":"0.21.5","@esbuild/sunos-x64":"0.21.5","@esbuild/win32-arm64":"0.21.5","@esbuild/win32-ia32":"0.21.5","@esbuild/win32-x64":"0.21.5"}},"fsevents":{"version":"2.3.3","resolved":"https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz","integrity":"sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==","dev":true,"optional":true},"nanoid":{"version":"3.3.16","resolved":"https://registry.npmjs.org/nanoid/-/nanoid-3.3.16.tgz","integrity":"sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==","dev":true},"picocolors":{"version":"1.1.1","resolved":"https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz","integrity":"sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==","dev":true},"postcss":{"version":"8.5.21","resolved":"https://registry.npmjs.org/postcss/-/postcss-8.5.21.tgz","integrity":"sha512-v4sDNP3fdNiWMfabO7OwOQdOX8TiQSztKyT1Wj0w+j7LDallJThJRBBBmzVGyYj0crMh7jlV4zepPkiNu9UwDQ==","dev":true,"requires":{"nanoid":"^3.3.16","picocolors":"^1.1.1","source-map-js":"^1.2.1"}},"rollup":{"version":"4.62.2","resolved":"https://registry.npmjs.org/rollup/-/rollup-4.62.2.tgz","integrity":"sha512-RFnrW4lhXA3s3eqHDZvN654g8OTjzRfqpIRJYczCGB6HzphckVAi/Qh4tbPUbRuDi7s1Llv8g/NspLkttY3gTA==","dev":true,"requires":{"@rollup/rollup-android-arm-eabi":"4.62.2","@rollup/rollup-android-arm64":"4.62.2","@rollup/rollup-darwin-arm64":"4.62.2","@rollup/rollup-darwin-x64":"4.62.2","@rollup/rollup-freebsd-arm64":"4.62.2","@rollup/rollup-freebsd-x64":"4.62.2","@rollup/rollup-linux-arm-gnueabihf":"4.62.2","@rollup/rollup-linux-arm-musleabihf":"4.62.2","@rollup/rollup-linux-arm64-gnu":"4.62.2","@rollup/rollup-linux-arm64-musl":"4.62.2","@rollup/rollup-linux-loong64-gnu":"4.62.2","@rollup/rollup-linux-loong64-musl":"4.62.2","@rollup/rollup-linux-ppc64-gnu":"4.62.2","@rollup/rollup-linux-ppc64-musl":"4.62.2","@rollup/rollup-linux-riscv64-gnu":"4.62.2","@rollup/rollup-linux-riscv64-musl":"4.62.2","@rollup/rollup-linux-s390x-gnu":"4.62.2","@rollup/rollup-linux-x64-gnu":"4.62.2","@rollup/rollup-linux-x64-musl":"4.62.2","@rollup/rollup-openbsd-x64":"4.62.2","@rollup/rollup-openharmony-arm64":"4.62.2","@rollup/rollup-win32-arm64-msvc":"4.62.2","@rollup/rollup-win32-ia32-msvc":"4.62.2","@rollup/rollup-win32-x64-gnu":"4.62.2","@rollup/rollup-win32-x64-msvc":"4.62.2","@types/estree":"1.0.9","fsevents":"~2.3.2"}},"source-map-js":{"version":"1.2.1","resolved":"https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz","integrity":"sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==","dev":true},"vite":{"version":"5.4.21","resolved":"https://registry.npmjs.org/vite/-/vite-5.4.21.tgz","integrity":"sha512-o5a9xKjbtuhY6Bi5S3+HvbRERmouabWbyUcpXXUA1u+GNUKoROi9byOJ8M0nHbHYHkYICiMlqxkg1KkYmm25Sw==","dev":true,"requires":{"esbuild":"^0.21.3","fsevents":"~2.3.3","postcss":"^8.4.43","rollup":"^4.20.0"}}}}
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Next Editor ကို မိတ်ဆက်ခြင်း</title>
+          </head>
+          <body>
+            <main class="card" data-testid="card">
+            </main>
+            <script type="module" src="/main.js"></script>
+          </body>
+        </html>
+      main.js: |
+        import "./style.css";
+      style.css: |
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Padauk", system-ui, sans-serif;
+          font-size: 20px;
+          line-height: 1.8;
+          color: #1e1e1e;
+          background: #f1f3f5;
+        }
+
+        .card {
+          min-width: 260px;
+          min-height: 120px;
+          padding: 32px 48px;
+          border-radius: 16px;
+          background: white;
+          text-align: center;
+          box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
+        }
+
+        button {
+          font: inherit;
+        }
+  whiteboardAssets:
+    # Board 1 — a coding video is only pictures; Next Editor records what happened.
+    - id: hook-title
+      kind: text
+      x: 300
+      y: 160
+      width: 509
+      height: 46
+      text: "Next Editor ကို မိတ်ဆက်ခြင်း"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: hook-video-frame
+      kind: rectangle
+      x: 280
+      y: 240
+      width: 300
+      height: 190
+      strokeColor: "#1e1e1e"
+    - id: hook-video-line-1
+      kind: rectangle
+      x: 305
+      y: 262
+      width: 170
+      height: 10
+      strokeColor: "#1e1e1e"
+      backgroundColor: "#1e1e1e"
+    - id: hook-video-line-2
+      kind: rectangle
+      x: 305
+      y: 284
+      width: 230
+      height: 10
+      strokeColor: "#1e1e1e"
+      backgroundColor: "#1e1e1e"
+    - id: hook-video-line-3
+      kind: rectangle
+      x: 305
+      y: 306
+      width: 130
+      height: 10
+      strokeColor: "#1e1e1e"
+      backgroundColor: "#1e1e1e"
+    - id: hook-video-play
+      kind: text
+      x: 410
+      y: 330
+      width: 47
+      height: 56
+      text: "▶"
+      strokeColor: "#1e1e1e"
+      fontSize: 44
+    - id: hook-video-bar
+      kind: rectangle
+      x: 300
+      y: 402
+      width: 260
+      height: 10
+      strokeColor: "#1e1e1e"
+    - id: hook-video-progress
+      kind: rectangle
+      x: 300
+      y: 402
+      width: 110
+      height: 10
+      strokeColor: "#e03131"
+      backgroundColor: "#e03131"
+    - id: hook-video-label
+      kind: text
+      x: 285
+      y: 445
+      width: 190
+      height: 36
+      text: "ဗီဒီယို = ပုံတွေ"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: hook-no-copy
+      kind: text
+      x: 300
+      y: 500
+      width: 120
+      height: 36
+      text: "copy ကူး"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: hook-no-copy-strike
+      kind: freedraw
+      stroke: strike
+      x: 292
+      y: 500
+      width: 128
+      height: 36
+      strokeColor: "#e03131"
+    - id: hook-no-edit
+      kind: text
+      x: 300
+      y: 550
+      width: 121
+      height: 36
+      text: "ပြင်ကြည့်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: hook-no-edit-strike
+      kind: freedraw
+      stroke: strike
+      x: 292
+      y: 550
+      width: 129
+      height: 36
+      strokeColor: "#e03131"
+    - id: hook-no-run
+      kind: text
+      x: 300
+      y: 600
+      width: 132
+      height: 36
+      text: "run ကြည့်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: hook-no-run-strike
+      kind: freedraw
+      stroke: strike
+      x: 292
+      y: 600
+      width: 140
+      height: 36
+      strokeColor: "#e03131"
+    - id: hook-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 600
+      y: 315
+      width: 90
+      height: 40
+      strokeColor: "#f08c00"
+    - id: hook-ne-box
+      kind: rectangle
+      x: 710
+      y: 240
+      width: 380
+      height: 190
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: hook-ne-heading
+      kind: text
+      x: 735
+      y: 258
+      width: 218
+      height: 46
+      text: "Next Editor"
+      strokeColor: "#1971c2"
+      fontSize: 36
+    - id: hook-ne-body
+      kind: text
+      x: 735
+      y: 322
+      width: 231
+      height: 80
+      text: "ဖြစ်သွားတာတွေကို\nမှတ်တမ်းတင်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: hook-rec-check-1
+      kind: freedraw
+      stroke: check
+      x: 715
+      y: 500
+      width: 34
+      height: 32
+      strokeColor: "#2f9e44"
+    - id: hook-rec-file
+      kind: text
+      x: 762
+      y: 500
+      width: 141
+      height: 36
+      text: "ဖိုင် ဖွင့်တာ"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: hook-rec-check-2
+      kind: freedraw
+      stroke: check
+      x: 715
+      y: 550
+      width: 34
+      height: 32
+      strokeColor: "#2f9e44"
+    - id: hook-rec-code
+      kind: text
+      x: 762
+      y: 550
+      width: 178
+      height: 36
+      text: "code ရိုက်တာ"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: hook-rec-check-3
+      kind: freedraw
+      stroke: check
+      x: 715
+      y: 600
+      width: 34
+      height: 32
+      strokeColor: "#2f9e44"
+    - id: hook-rec-preview
+      kind: text
+      x: 762
+      y: 600
+      width: 244
+      height: 36
+      text: "preview ပြောင်းတာ"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+
+    # Board 2 — one timeline, one track per kind of event, and a red playhead.
+    - id: tl-title
+      kind: text
+      x: 300
+      y: 160
+      width: 510
+      height: 46
+      text: "lesson တစ်ခု = timeline တစ်ခု"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: tl-voice-label
+      kind: text
+      x: 270
+      y: 225
+      width: 70
+      height: 36
+      text: "အသံ"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: tl-voice-bar
+      kind: rectangle
+      x: 460
+      y: 225
+      width: 620
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: tl-voice-clip
+      kind: rectangle
+      x: 472
+      y: 233
+      width: 596
+      height: 20
+      strokeColor: "#1971c2"
+      backgroundColor: "#a5d8ff"
+    - id: tl-code-label
+      kind: text
+      x: 270
+      y: 280
+      width: 69
+      height: 36
+      text: "code"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: tl-code-bar
+      kind: rectangle
+      x: 460
+      y: 280
+      width: 620
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: tl-file-label
+      kind: text
+      x: 270
+      y: 335
+      width: 46
+      height: 36
+      text: "ဖိုင်"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: tl-file-bar
+      kind: rectangle
+      x: 460
+      y: 335
+      width: 620
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: tl-preview-label
+      kind: text
+      x: 270
+      y: 390
+      width: 103
+      height: 36
+      text: "preview"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: tl-preview-bar
+      kind: rectangle
+      x: 460
+      y: 390
+      width: 620
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: tl-board-label
+      kind: text
+      x: 270
+      y: 445
+      width: 153
+      height: 36
+      text: "whiteboard"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: tl-board-bar
+      kind: rectangle
+      x: 460
+      y: 445
+      width: 620
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: tl-slide-label
+      kind: text
+      x: 270
+      y: 500
+      width: 68
+      height: 36
+      text: "slide"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: tl-slide-bar
+      kind: rectangle
+      x: 460
+      y: 500
+      width: 620
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: tl-code-event-1
+      kind: rectangle
+      x: 500
+      y: 288
+      width: 22
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-code-event-2
+      kind: rectangle
+      x: 560
+      y: 288
+      width: 22
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-code-event-3
+      kind: rectangle
+      x: 690
+      y: 288
+      width: 22
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-code-event-4
+      kind: rectangle
+      x: 900
+      y: 288
+      width: 22
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-file-event-1
+      kind: rectangle
+      x: 520
+      y: 343
+      width: 28
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-file-event-2
+      kind: rectangle
+      x: 860
+      y: 343
+      width: 28
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-preview-event-1
+      kind: rectangle
+      x: 600
+      y: 398
+      width: 28
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-preview-event-2
+      kind: rectangle
+      x: 712
+      y: 398
+      width: 28
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-preview-event-3
+      kind: rectangle
+      x: 960
+      y: 398
+      width: 28
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-board-event-1
+      kind: rectangle
+      x: 545
+      y: 453
+      width: 80
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-board-event-2
+      kind: rectangle
+      x: 1000
+      y: 453
+      width: 40
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-slide-event-1
+      kind: rectangle
+      x: 820
+      y: 508
+      width: 60
+      height: 20
+      strokeColor: "#f08c00"
+      backgroundColor: "#ffd8a8"
+    - id: tl-playhead
+      kind: rectangle
+      x: 760
+      y: 213
+      width: 5
+      height: 335
+      strokeColor: "#e03131"
+      backgroundColor: "#e03131"
+    - id: tl-playhead-label
+      kind: text
+      x: 774
+      y: 548
+      width: 125
+      height: 36
+      text: "playhead"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: tl-rule
+      kind: text
+      x: 270
+      y: 600
+      width: 628
+      height: 40
+      text: "ဗီဒီယို မဟုတ်ဘဲ တကယ့် editor ထဲမှာ ပြန်ဖြစ်တာ"
+      strokeColor: "#6741d9"
+      fontSize: 28
+
+    # Board 3 — the learner's loop: Pause → edit → Run → continue, kept as versions.
+    - id: loop-title
+      kind: text
+      x: 300
+      y: 160
+      width: 493
+      height: 46
+      text: "ကြည့်ရင်း စမ်း၊ စမ်းရင်း ကြည့်"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: loop-track
+      kind: ellipse
+      x: 340
+      y: 255
+      width: 460
+      height: 330
+      strokeColor: "#1e1e1e"
+    - id: loop-pause-box
+      kind: rectangle
+      x: 480
+      y: 225
+      width: 180
+      height: 60
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: loop-pause-label
+      kind: text
+      x: 528
+      y: 236
+      width: 92
+      height: 36
+      text: "Pause"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: loop-arrow-edit
+      kind: freedraw
+      stroke: arrow-right
+      x: 680
+      y: 262
+      width: 70
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: loop-edit-box
+      kind: rectangle
+      x: 705
+      y: 390
+      width: 190
+      height: 60
+      strokeColor: "#f08c00"
+      backgroundColor: "#fff4e6"
+    - id: loop-edit-label
+      kind: text
+      x: 741
+      y: 401
+      width: 127
+      height: 36
+      text: "code ပြင်"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: loop-arrow-run
+      kind: freedraw
+      stroke: arrow-down
+      x: 752
+      y: 468
+      width: 34
+      height: 70
+      strokeColor: "#1e1e1e"
+    - id: loop-run-box
+      kind: rectangle
+      x: 480
+      y: 555
+      width: 180
+      height: 60
+      strokeColor: "#2f9e44"
+      backgroundColor: "#ebfbee"
+    - id: loop-run-label
+      kind: text
+      x: 546
+      y: 566
+      width: 56
+      height: 36
+      text: "Run"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: loop-continue-box
+      kind: rectangle
+      x: 250
+      y: 390
+      width: 190
+      height: 60
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: loop-continue-label
+      kind: text
+      x: 279
+      y: 401
+      width: 140
+      height: 36
+      text: "ဆက်ကြည့်"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: loop-version-1
+      kind: rectangle
+      x: 930
+      y: 300
+      width: 130
+      height: 80
+      strokeColor: "#6741d9"
+      backgroundColor: "#f3f0ff"
+    - id: loop-version-2
+      kind: rectangle
+      x: 945
+      y: 315
+      width: 130
+      height: 80
+      strokeColor: "#6741d9"
+      backgroundColor: "#f3f0ff"
+    - id: loop-version-3
+      kind: rectangle
+      x: 960
+      y: 330
+      width: 130
+      height: 80
+      strokeColor: "#6741d9"
+      backgroundColor: "#f3f0ff"
+    - id: loop-version-label
+      kind: text
+      x: 979
+      y: 352
+      width: 100
+      height: 36
+      text: "version"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: loop-version-note
+      kind: text
+      x: 945
+      y: 430
+      width: 139
+      height: 36
+      text: "၁၀ ခုအထိ"
+      strokeColor: "#6741d9"
+      fontSize: 28
+
+    # Board 4 — what else a lesson can carry, and the languages it runs.
+    - id: feat-title
+      kind: text
+      x: 300
+      y: 160
+      width: 573
+      height: 46
+      text: "lesson ထဲမှာ ဘာတွေ ထည့်လို့ ရလဲ"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: feat-teach-card
+      kind: rectangle
+      x: 270
+      y: 225
+      width: 400
+      height: 105
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: feat-teach-heading
+      kind: text
+      x: 292
+      y: 234
+      width: 100
+      height: 36
+      text: "ရှင်းပြဖို့"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: feat-teach-items
+      kind: text
+      x: 292
+      y: 282
+      width: 250
+      height: 36
+      text: "slide · whiteboard"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: feat-side-card
+      kind: rectangle
+      x: 690
+      y: 225
+      width: 400
+      height: 105
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: feat-side-heading
+      kind: text
+      x: 712
+      y: 234
+      width: 173
+      height: 36
+      text: "code ဘေးမှာ"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: feat-side-items
+      kind: text
+      x: 712
+      y: 282
+      width: 276
+      height: 36
+      text: "terminal · AI agent"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: feat-viewer-card
+      kind: rectangle
+      x: 270
+      y: 345
+      width: 400
+      height: 105
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: feat-viewer-heading
+      kind: text
+      x: 292
+      y: 354
+      width: 233
+      height: 36
+      text: "ကြည့်တဲ့သူအတွက်"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: feat-viewer-items
+      kind: text
+      x: 292
+      y: 402
+      width: 246
+      height: 36
+      text: "chapter · caption"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: feat-room-card
+      kind: rectangle
+      x: 690
+      y: 345
+      width: 400
+      height: 105
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: feat-room-heading
+      kind: text
+      x: 712
+      y: 354
+      width: 178
+      height: 36
+      text: "အတူတူ ပြင်ဖို့"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: feat-room-items
+      kind: text
+      x: 712
+      y: 402
+      width: 306
+      height: 36
+      text: "live room · voice chat"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: feat-lang-box
+      kind: rectangle
+      x: 270
+      y: 468
+      width: 820
+      height: 172
+      strokeColor: "#1e1e1e"
+    - id: feat-lang-browser-head
+      kind: text
+      x: 292
+      y: 478
+      width: 242
+      height: 36
+      text: "browser ထဲမှာ run"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: feat-lang-browser-names
+      kind: text
+      x: 292
+      y: 524
+      width: 359
+      height: 72
+      text: "HTML · CSS · JavaScript\nReact · Node.js · Python"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: feat-lang-online-head
+      kind: text
+      x: 712
+      y: 478
+      width: 232
+      height: 36
+      text: "online playground"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: feat-lang-online-names
+      kind: text
+      x: 712
+      y: 524
+      width: 261
+      height: 72
+      text: "Go · Rust · Kotlin\nZig · Haskell"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+
+    # Board 5 — where to start, and how this lesson was made.
+    - id: end-title
+      kind: text
+      x: 300
+      y: 160
+      width: 280
+      height: 46
+      text: "ဘယ်ကနေ စမလဲ"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: end-learn
+      kind: text
+      x: 300
+      y: 220
+      width: 269
+      height: 60
+      text: "Learn page"
+      strokeColor: "#1971c2"
+      fontSize: 48
+    - id: end-learn-underline
+      kind: freedraw
+      stroke: underline
+      x: 296
+      y: 262
+      width: 277
+      height: 30
+      strokeColor: "#e03131"
+    - id: end-learn-url
+      kind: text
+      x: 601
+      y: 238
+      width: 283
+      height: 36
+      text: "nexteditor.dev/learn"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: end-try-pause-box
+      kind: rectangle
+      x: 300
+      y: 322
+      width: 170
+      height: 60
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: end-try-pause-label
+      kind: text
+      x: 343
+      y: 333
+      width: 92
+      height: 36
+      text: "Pause"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: end-try-arrow-edit
+      kind: freedraw
+      stroke: arrow-right
+      x: 482
+      y: 334
+      width: 58
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: end-try-edit-box
+      kind: rectangle
+      x: 552
+      y: 322
+      width: 190
+      height: 60
+      strokeColor: "#f08c00"
+      backgroundColor: "#fff4e6"
+    - id: end-try-edit-label
+      kind: text
+      x: 588
+      y: 333
+      width: 127
+      height: 36
+      text: "code ပြင်"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: end-try-arrow-run
+      kind: freedraw
+      stroke: arrow-right
+      x: 754
+      y: 334
+      width: 58
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: end-try-run-box
+      kind: rectangle
+      x: 824
+      y: 322
+      width: 150
+      height: 60
+      strokeColor: "#2f9e44"
+      backgroundColor: "#ebfbee"
+    - id: end-try-run-label
+      kind: text
+      x: 875
+      y: 333
+      width: 56
+      height: 36
+      text: "Run"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: end-script-box
+      kind: rectangle
+      x: 270
+      y: 440
+      width: 210
+      height: 100
+      strokeColor: "#1971c2"
+      backgroundColor: "#e7f5ff"
+    - id: end-script-label
+      kind: text
+      x: 289
+      y: 472
+      width: 181
+      height: 36
+      text: "lesson script"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: end-arrow-studio
+      kind: freedraw
+      stroke: arrow-right
+      x: 490
+      y: 472
+      width: 50
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: end-studio-box
+      kind: rectangle
+      x: 550
+      y: 440
+      width: 230
+      height: 100
+      strokeColor: "#6741d9"
+      backgroundColor: "#f3f0ff"
+    - id: end-studio-label
+      kind: text
+      x: 616
+      y: 450
+      width: 107
+      height: 40
+      text: "Studio"
+      strokeColor: "#6741d9"
+      fontSize: 32
+    - id: end-studio-sub
+      kind: text
+      x: 569
+      y: 494
+      width: 200
+      height: 36
+      text: "အလိုအလျောက်"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: end-arrow-lesson
+      kind: freedraw
+      stroke: arrow-right
+      x: 790
+      y: 472
+      width: 50
+      height: 36
+      strokeColor: "#1e1e1e"
+    - id: end-lesson-box
+      kind: rectangle
+      x: 850
+      y: 440
+      width: 230
+      height: 100
+      strokeColor: "#2f9e44"
+      backgroundColor: "#ebfbee"
+    - id: end-lesson-label
+      kind: text
+      x: 878
+      y: 472
+      width: 183
+      height: 36
+      text: "သာမန် lesson"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+
+build:
+  # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+  # profile at render time when the signed-in user has the D1 capability.
+  voiceProfile: pocket-alba-v1
+  seed: 207
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: npm ci --no-audit --no-fund
+  runCommand: npm run dev
+  expectedPort: 5173
+  lockfilePath: package-lock.json
+  environment: {}
+
+scenes:
+  - id: video-vs-next-editor
+    chapter: "သာမန် ဗီဒီယိုနဲ့ ဘာကွာလဲ"
+    narration: >
+      မင်္ဂလာပါ ခင်ဗျာ။ ဒီ lesson မှာ Next Editor ဆိုတာ ဘာလဲ၊ သာမန် ဗီဒီယိုနဲ့
+      ဘာကွာလဲ ဆိုတာကို ရှင်းပြသွားပါမယ်။ Coding ကို ဗီဒီယိုကနေ
+      လေ့လာဖူးတဲ့သူတိုင်း ဒီအတွေ့အကြုံကို သိကြမှာပါ။ [[mark:draw-video-frame]]
+      ဗီဒီယိုထဲက ဆရာက code ရိုက်ပြနေတော့၊ ကိုယ်ကလည်း ဗီဒီယိုကို pause လုပ်၊ ကိုယ့် editor ဘက်ကို
+      ပြောင်း၊ မြင်ရတဲ့ code ကို တစ်လုံးချင်း ပြန်ရိုက်၊ ပြီးမှ ဗီဒီယိုကို
+      ပြန်ဖွင့်၊ ဒီလိုပဲ ထပ်ခါထပ်ခါ လုပ်နေရပါတယ်။ တစ်လုံး မှားရိုက်မိတာနဲ့ error
+      တက်ပြီး၊ အမှား ရှာရင်းနဲ့ ဗီဒီယို ဘယ်ရောက်နေပြီလဲတောင်
+      ပြန်မသိတော့တာမျိုးလည်း ကြုံဖူးကြမှာပါ။ [[mark:label-video-pictures]] ဘာလို့
+      ဒီလို ဖြစ်ရလဲဆိုတော့၊ ဗီဒီယိုဆိုတာ မျက်နှာပြင်ကို ရိုက်ထားတဲ့ ပုံတွေပဲ
+      ဖြစ်လို့ပါ။ ကိုယ်က code လို့ မြင်နေရပေမယ့်၊ ကွန်ပျူတာအတွက်ကတော့
+      ပုံတစ်ပုံပါပဲ။ [[mark:cross-out-video-limits]] ဒါကြောင့် အဲဒီ code ကို
+      copy ကူးလို့ မရသလို၊ ပြင်ကြည့်လို့လည်း မရ၊ run ကြည့်လို့လည်း မရပါဘူး။
+      [[mark:draw-next-editor-box]] Next Editor ကတော့ မျက်နှာပြင်ကို ဗီဒီယို
+      ရိုက်မယ့်အစား၊ lesson အတွင်းမှာ တကယ် ဖြစ်သွားတဲ့ အရာတွေကို
+      မှတ်တမ်းတင်ထားပါတယ်။ [[mark:list-recorded-events]] ဘယ်ဖိုင်ကို
+      ဖွင့်လိုက်လဲ၊ ဘာ code ရိုက်ထည့်လိုက်လဲ၊ preview ထဲမှာ ဘာ ပြောင်းသွားလဲ
+      ဆိုတာတွေကို တစ်ခုချင်းစီ မှတ်ထားတဲ့အတွက်၊ ပြန်ကြည့်တဲ့အခါ ပုံ ပြန်ပြတာ
+      မဟုတ်ဘဲ၊ ဖြစ်ခဲ့တာတွေကို တကယ့် editor ထဲမှာ အဲဒီအတိုင်း
+      ပြန်လုပ်ပြနိုင်တာပါ။
+    sources:
+      - title: "Next Editor"
+        url: "https://nexteditor.dev/"
+      - title: "Next Editor — Architecture"
+        url: "https://nexteditor.dev/architecture"
+    actions:
+      - id: open-hook-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: []
+      - id: draw-hook-title
+        type: whiteboard.apply
+        at: { scene: start }
+        upsertIds: [hook-title]
+        drawMs: 1200
+      # The player is drawn while the pause / switch / retype / play story is
+      # told, so that long opening is not spent on a title alone; the red label
+      # lands on the words that say a video is only pictures.
+      - id: draw-video-frame
+        type: whiteboard.apply
+        at: { mark: draw-video-frame }
+        upsertIds:
+          [
+            hook-video-frame,
+            hook-video-line-1,
+            hook-video-line-2,
+            hook-video-line-3,
+            hook-video-play,
+            hook-video-bar,
+            hook-video-progress,
+          ]
+        drawMs: 2600
+      - id: label-video-pictures
+        type: whiteboard.apply
+        at: { mark: label-video-pictures }
+        upsertIds: [hook-video-label]
+        drawMs: 800
+      - id: cross-out-video-limits
+        type: whiteboard.apply
+        at: { mark: cross-out-video-limits }
+        upsertIds:
+          [
+            hook-no-copy,
+            hook-no-copy-strike,
+            hook-no-edit,
+            hook-no-edit-strike,
+            hook-no-run,
+            hook-no-run-strike,
+          ]
+        drawMs: 2700
+      - id: draw-next-editor-box
+        type: whiteboard.apply
+        at: { mark: draw-next-editor-box }
+        upsertIds: [hook-arrow, hook-ne-box, hook-ne-heading, hook-ne-body]
+        drawMs: 2200
+      - id: list-recorded-events
+        type: whiteboard.apply
+        at: { mark: list-recorded-events }
+        upsertIds:
+          [
+            hook-rec-check-1,
+            hook-rec-file,
+            hook-rec-check-2,
+            hook-rec-code,
+            hook-rec-check-3,
+            hook-rec-preview,
+          ]
+        drawMs: 2700
+
+  - id: one-timeline
+    chapter: "lesson တစ်ခုကို ဘယ်လို သိမ်းထားလဲ"
+    narration: >
+      ဒါဆို lesson တစ်ခုကို ဘယ်လို သိမ်းထားလဲ ဆိုတာ ပုံနဲ့ ကြည့်ရအောင်။
+      [[mark:draw-timeline-title]] Next Editor မှာ lesson တစ်ခုဆိုတာ
+      အခြေခံအားဖြင့် timeline တစ်ခုပါ။ [[mark:draw-voice-track]] ဒီ timeline
+      ပေါ်မှာ track တွေ အလွှာလိုက် ရှိပြီး၊ အပေါ်ဆုံး track ကတော့ ရှင်းပြနေတဲ့
+      အသံပါ။ [[mark:draw-code-file-tracks]] သူ့အောက်မှာ code ပြင်တာအတွက် track
+      တစ်ခု၊ ဖိုင် ဖွင့်တာ ပိတ်တာအတွက် track တစ်ခု ရှိပါတယ်။
+      [[mark:draw-view-tracks]] ပြီးတော့ preview၊ whiteboard နဲ့ slide
+      တွေအတွက်လည်း track တွေ ကိုယ်စီ ရှိပါတယ်။ [[mark:mark-track-events]] track
+      တွေပေါ်က အကွက်လေးတွေကတော့ event တွေပါ။ စာလုံးတစ်လုံး ရိုက်လိုက်တာ၊
+      ဖိုင်တစ်ခု ဖွင့်လိုက်တာ၊ preview ထဲက ခလုတ်ကို နှိပ်လိုက်တာ၊ ဒါတွေ
+      တစ်ခုချင်းစီက event တစ်ခုစီ ဖြစ်ပြီး၊ ဘယ်အချိန်မှာ ဘာ ဖြစ်သွားလဲ ဆိုတာကို
+      timeline ပေါ်မှာ အတိအကျ မှတ်ထားတာပါ။ [[mark:draw-playhead]] ဒီ အနီရောင်
+      မျဉ်းကတော့ playhead ပါ။ lesson ကို ဖွင့်လိုက်ရင် playhead က timeline
+      အတိုင်း ရွေ့သွားပြီး၊ သူ ရောက်သွားတဲ့ နေရာက event တွေကို editor က
+      တစ်ခုချင်း ပြန်လုပ်ပြပါတယ်။ [[mark:write-replay-rule]] ဒါကြောင့်
+      ပြန်ကြည့်နေချိန်မှာ ကိုယ် မြင်နေရတာတွေဟာ ဗီဒီယို မဟုတ်ဘဲ၊ တကယ့် editor
+      ထဲမှာ တကယ့် ဖိုင်တွေနဲ့ အစကနေ ပြန်ဖြစ်နေတာပါ။
+    sources:
+      - title: "Next Editor — Architecture"
+        url: "https://nexteditor.dev/architecture"
+      - title: "rrweb — record and replay the web"
+        url: "https://github.com/rrweb-io/rrweb"
+    actions:
+      - id: draw-timeline-title
+        type: whiteboard.apply
+        at: { mark: draw-timeline-title }
+        clear: true
+        upsertIds: [tl-title]
+        drawMs: 1000
+      - id: draw-voice-track
+        type: whiteboard.apply
+        at: { mark: draw-voice-track }
+        upsertIds: [tl-voice-label, tl-voice-bar, tl-voice-clip]
+        drawMs: 1500
+      - id: draw-code-file-tracks
+        type: whiteboard.apply
+        at: { mark: draw-code-file-tracks }
+        upsertIds: [tl-code-label, tl-code-bar, tl-file-label, tl-file-bar]
+        drawMs: 2000
+      - id: draw-view-tracks
+        type: whiteboard.apply
+        at: { mark: draw-view-tracks }
+        upsertIds:
+          [
+            tl-preview-label,
+            tl-preview-bar,
+            tl-board-label,
+            tl-board-bar,
+            tl-slide-label,
+            tl-slide-bar,
+          ]
+        drawMs: 2700
+      - id: mark-track-events
+        type: whiteboard.apply
+        at: { mark: mark-track-events }
+        upsertIds:
+          [
+            tl-code-event-1,
+            tl-file-event-1,
+            tl-board-event-1,
+            tl-code-event-2,
+            tl-preview-event-1,
+            tl-code-event-3,
+            tl-preview-event-2,
+            tl-slide-event-1,
+            tl-file-event-2,
+            tl-code-event-4,
+            tl-preview-event-3,
+            tl-board-event-2,
+          ]
+        drawMs: 3000
+      - id: draw-playhead
+        type: whiteboard.apply
+        at: { mark: draw-playhead }
+        upsertIds: [tl-playhead, tl-playhead-label]
+        drawMs: 1200
+      - id: write-replay-rule
+        type: whiteboard.apply
+        at: { mark: write-replay-rule }
+        upsertIds: [tl-rule]
+        drawMs: 1800
+
+  - id: demo-dev-server
+    chapter: "တကယ့် editor ထဲမှာ လက်တွေ့ ကြည့်ရအောင်"
+    narration: >
+      [[mark:close-concept-board]] ပြောရုံနဲ့တော့ မြင်သာမှာ မဟုတ်လို့၊ တကယ့်
+      editor ထဲမှာ လက်တွေ့ ကြည့်ရအောင်။ [[mark:open-index-html]] ဒီမှာ ဖိုင်
+      သုံးဖိုင်ပဲ ပါတဲ့ project သေးသေးလေး တစ်ခု ရှိပါတယ်။ page ကိုယ်တိုင်
+      ဖြစ်မယ့် HTML ဖိုင် တစ်ဖိုင်၊ အဲဒီ page ကို အလှဆင်ပေးမယ့် CSS ဖိုင်
+      တစ်ဖိုင်နဲ့၊ page ကို အလုပ်လုပ်စေမယ့် JavaScript ဖိုင် တစ်ဖိုင်ပါ။ အခု
+      ဖွင့်ထားတာက HTML ဖိုင် ဖြစ်ပြီး၊ page ရဲ့ အဓိက အပိုင်းက အလွတ်ပဲ
+      ရှိပါသေးတယ်။ [[mark:start-dev-server]] အရင်ဆုံး dev server ကို စ run
+      ကြည့်ရအောင်။ အောက်က terminal ထဲမှာ လိုအပ်တဲ့ package တွေ install
+      လုပ်နေတာကို မြင်ရပါလိမ့်မယ်။ ဒီနေရာမှာ အရေးကြီးတာ တစ်ခုက၊ အခု run နေတဲ့
+      Node.js ဟာ အဝေးက server တစ်ခုခုပေါ်မှာ run နေတာ မဟုတ်ဘဲ၊ ကိုယ့် browser
+      tab ထဲမှာပဲ အကုန် အလုပ်လုပ်နေတာပါ။ ဒါကြောင့် lesson ကြည့်မယ့်သူက ကိုယ့်
+      ကွန်ပျူတာမှာ ဘာမှ install လုပ်စရာ မလိုဘဲ၊ browser ထဲမှာ lesson ကို
+      ဖွင့်လိုက်ရုံနဲ့ အကုန် အသင့် ဖြစ်နေပါတယ်။ [[mark:preview-opens]] install
+      ပြီးသွားတော့ dev server စသွားပြီး၊ ညာဘက်မှာ preview ပွင့်လာပါပြီ။ အခုတော့
+      ဘာမှ မပါသေးတဲ့ အကွက်အလွတ်လေး တစ်ခုပဲ မြင်ရပါသေးတယ်။ ဒီ preview က ဖိုင်ထဲက
+      HTML ကို browser က တကယ် ဖတ်ပြီး ပြနေတာ ဖြစ်တဲ့အတွက်၊ ဖိုင်ကို
+      ပြင်လိုက်တိုင်း ဒီနေရာမှာ လိုက်ပြောင်းသွားမှာပါ။
+    sources:
+      - title: "WebContainers — Introduction"
+        url: "https://webcontainers.io/guides/introduction"
+      - title: "Vite — Getting Started"
+        url: "https://vite.dev/guide/"
+    actions:
+      - id: close-concept-board
+        type: whiteboard.apply
+        at: { mark: close-concept-board }
+        open: false
+      - id: open-index-html
+        type: workspace.openFile
+        at: { mark: open-index-html }
+        path: index.html
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-dev-server }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { afterAction: start-dev-server }
+        timeoutMs: 20000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      # Opened on the words that announce it; the Performer runs actions in
+      # order, so it also waits for the server to be ready.
+      - id: open-preview
+        type: preview.open
+        at: { mark: preview-opens }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-empty-card
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: card }
+        retry: { maxAttempts: 3, delayMs: 150 }
+      # The install output has been read; give the editor the room for the three
+      # files that follow.
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-empty-card }
+
+  - id: page-content
+    narration: >
+      ကဲ၊ page ထဲကို အကြောင်းအရာ ထည့်ကြည့်ရအောင်။ [[mark:type-page-content]]
+      ထည့်မှာက ခေါင်းစဉ် တစ်ခု၊ စာပိုဒ် အတို တစ်ခုနဲ့ ခလုတ် တစ်ခုပါ။ စာသားတွေကို
+      မြန်မာလို ရေးထားတဲ့အတွက်၊ preview ထဲမှာ မြန်မာစာ ပေါ်လာတာကိုပါ
+      တွဲမြင်ရပါလိမ့်မယ်။ ရိုက်နေတုန်း ဘေးက preview ကို လိုက်ကြည့်ပါ။ HTML
+      ဖိုင်ကို ပြင်လိုက်တိုင်း dev server က page ကို အလိုအလျောက်
+      ပြန်ဖွင့်ပေးတဲ့အတွက်၊ ထည့်လိုက်တဲ့ အရာတွေက preview ထဲမှာ တန်းပေါ်လာပါတယ်။
+      [[mark:preview-shows-content]] ဒီမှာ ခေါင်းစဉ်၊ စာပိုဒ်နဲ့ ခလုတ်၊
+      သုံးခုလုံး ရောက်နေပါပြီ။ ဒီအဆင့်မှာ ခလုတ်ကို နှိပ်ရင်တော့ ဘာမှ
+      မဖြစ်သေးပါဘူး။ ဘာကြောင့်လဲဆိုတော့၊ ခလုတ်ကို နှိပ်ရင် ဘာလုပ်ရမလဲ ဆိုတာကို
+      JavaScript နဲ့ မပြောထားသေးလို့ပါ။ ဒီ preview ကို Next Editor က ပုံအနေနဲ့
+      မှတ်ထားတာ မဟုတ်ဘဲ၊ page ထဲမှာ ဖြစ်သွားတဲ့ ပြောင်းလဲမှုတွေကိုပဲ
+      မှတ်ထားတာပါ။ ဒါကြောင့် နောက်မှ ပြန်ကြည့်တဲ့အခါ၊ page အစစ်ကို
+      ပြန်တည်ဆောက်ပြီး ဒီအတိုင်း ပြန်ပြတာ ဖြစ်ပါတယ်။
+    sources:
+      - title: "MDN — <button>: The Button element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button"
+      - title: "Vite — index.html and Project Root"
+        url: "https://vite.dev/guide/#index-html-and-project-root"
+      - title: "rrweb — record and replay the web"
+        url: "https://github.com/rrweb-io/rrweb"
+    actions:
+      # index.html changes make Vite reload the page, so the HTML lands one whole
+      # line at a time: every intermediate file is valid HTML.
+      - id: type-page-content
+        type: editor.type
+        at: { mark: type-page-content }
+        cadence: line-by-line
+        target:
+          file: index.html
+          after: "    <main class=\"card\" data-testid=\"card\">\n"
+          occurrence: 1
+        text: "      <h1 data-testid=\"title\">မင်္ဂလာပါ</h1>\n      <p data-testid=\"message\">အောက်က ခလုတ်ကို နှိပ်ကြည့်ပါ။</p>\n      <button type=\"button\" data-testid=\"hello-button\">နှိပ်ကြည့်ပါ</button>\n"
+      - id: expect-heading-shown
+        type: expect.preview
+        at: { mark: preview-shows-content }
+        timeoutMs: 4000
+        target: { by: testId, value: title }
+        textContains: "မင်္ဂလာပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-paragraph-shown
+        type: expect.preview
+        at: { afterAction: expect-heading-shown }
+        timeoutMs: 4000
+        target: { by: testId, value: message }
+        textContains: "အောက်က ခလုတ်ကို နှိပ်ကြည့်ပါ။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-button-shown
+        type: expect.preview
+        at: { afterAction: expect-paragraph-shown }
+        timeoutMs: 4000
+        target: { by: testId, value: hello-button }
+        textContains: "နှိပ်ကြည့်ပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: page-styles
+    narration: >
+      အခု page ကို နည်းနည်း လှအောင် လုပ်ကြည့်ရအောင်။ [[mark:open-style-css]]
+      ဒါအတွက် CSS ဖိုင်ကို ဖွင့်ပါမယ်။ [[mark:type-heading-colour]] ပထမဆုံး
+      ခေါင်းစဉ်ကို အပြာရောင် ပေးကြည့်ပါမယ်။ အရောင်ကို ရိုက်နေတုန်းမှာပဲ preview
+      ထဲက ခေါင်းစဉ် လိုက်ပြောင်းနေတာကို သတိထား ကြည့်ပါ။ ဒီတစ်ခါ page တစ်ခုလုံး
+      ပြန်ပွင့်တာ မဟုတ်ဘဲ၊ ပြောင်းသွားတဲ့ style လေးကိုပဲ browser က
+      အစားထိုးလိုက်တာပါ။ CSS ကို ပြင်တဲ့အခါ dev server က ဒီလိုပဲ လုပ်ပေးပါတယ်။
+      [[mark:type-button-shape]] နောက်တစ်ဆင့်က ခလုတ်ပါ။ အခု ခလုတ်က browser ရဲ့
+      မူလ ပုံစံအတိုင်း ရိုးရိုးပဲ ရှိနေတဲ့အတွက်၊ စာသားနဲ့ ဘောင်ကြားမှာ နေရာလွတ်
+      ပိုရအောင်၊ ထောင့်တွေကိုလည်း ဝိုင်းဝိုင်းလေး ဖြစ်အောင် style ပေးလိုက်ပါမယ်။
+      [[mark:type-button-colours]] နောက်ဆုံး နောက်ခံကို အစိမ်းရောင်၊ စာလုံးကို
+      အဖြူရောင် ပေးလိုက်တော့၊ နှိပ်ချင်စရာ ကောင်းတဲ့ ခလုတ်လေး ဖြစ်သွားပါပြီ။
+      [[mark:styles-done]] ဒီလို code တစ်ကြောင်း ရိုက်လိုက်တိုင်း သူ့ရလဒ်ကို
+      ဘေးမှာ တန်းမြင်ရတာက သင်ယူတဲ့သူအတွက် တကယ် အရေးကြီးပါတယ်။ CSS ကို
+      စလေ့လာတဲ့အခါ အခက်ဆုံးက syntax မဟုတ်ဘဲ၊ ဘယ်စာကြောင်းက ဘာကို ပြောင်းပေးလဲ
+      ဆိုတာကို စိတ်ထဲမှာ မြင်နိုင်ဖို့ပါ။ code နဲ့ ရလဒ်ကို ဒီလို တွဲမြင်ရတော့၊
+      ဖတ်ရုံနဲ့ မှတ်ရတာ မဟုတ်ဘဲ မျက်စိနဲ့ပါ မှတ်မိသွားပါတယ်။
+    sources:
+      - title: "Vite — Features: CSS"
+        url: "https://vite.dev/guide/features.html#css"
+      - title: "Vite — Features: Hot Module Replacement"
+        url: "https://vite.dev/guide/features.html#hot-module-replacement"
+      - title: "MDN — border-radius"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/border-radius"
+    actions:
+      - id: open-style-css
+        type: workspace.openFile
+        at: { mark: open-style-css }
+        path: style.css
+      # Plain CSS reaches the page untouched (no PostCSS config, @import or
+      # url()) and the preview updates without a reload on every keystroke.
+      # The browser closes the unfinished rule at the end of the file, so every
+      # prefix of the value is applied: a hex colour would flash #197 (teal),
+      # #1971 (almost transparent) and then black before #1971c2. No prefix of
+      # "royalblue" is a colour, so the heading turns blue in one step.
+      - id: type-heading-colour
+        type: editor.type
+        at: { mark: type-heading-colour }
+        target:
+          file: style.css
+          after: "button {\n  font: inherit;\n}\n"
+          occurrence: 1
+        text: "\nh1 {\n  color: royalblue;\n}\n"
+      - id: type-button-shape
+        type: editor.type
+        at: { mark: type-button-shape }
+        cadence: fast-explainer
+        target:
+          file: style.css
+          after: "  font: inherit;\n"
+          occurrence: 1
+        text: "  padding: 12px 28px;\n  border-radius: 999px;\n"
+      # The colour lines land one at a time: keystrokes here would outlast the
+      # one short sentence that announces them.
+      - id: type-button-colours
+        type: editor.type
+        at: { mark: type-button-colours }
+        cadence: line-by-line
+        target:
+          file: style.css
+          after: "  border-radius: 999px;\n"
+          occurrence: 1
+        text: "  background: #2f9e44;\n  color: white;\n  border: 0;\n"
+      - id: expect-button-styles
+        type: expect.file
+        at: { mark: styles-done }
+        path: style.css
+        contains: "  background: #2f9e44;\n  color: white;\n  border: 0;\n}"
+
+  - id: button-script
+    chapter: "ခလုတ်ကို အလုပ်လုပ်အောင် လုပ်ကြည့်ရအောင်"
+    narration: >
+      ကဲ၊ အခု ခလုတ်ကို အလုပ်လုပ်အောင် လုပ်ကြည့်ရအောင်။ [[mark:open-main-js]]
+      ဒါအတွက် JavaScript ဖိုင်ကို ဖွင့်ပါမယ်။ [[mark:type-click-handler]]
+      ထည့်မယ့် code က အကြောင်း နည်းနည်းပဲ ရှိပါတယ်။ သဘောကတော့၊ page ထဲက ခလုတ်နဲ့
+      စာပိုဒ်ကို အရင် ရှာထားပြီး၊ ခလုတ်ကို နှိပ်လိုက်တဲ့အခါ စာပိုဒ်ထဲက စာသားကို
+      အသစ်တစ်ခုနဲ့ လဲပေးဖို့ ရေးထားတာပါ။ code တစ်ကြောင်းချင်းစီကိုတော့ ဒီ lesson
+      မှာ အသေးစိတ် မရှင်းတော့ပါဘူး။ ဒီ lesson က JavaScript သင်တာ မဟုတ်ဘဲ Next
+      Editor ကို မိတ်ဆက်တာ ဖြစ်လို့ပါ။ [[mark:page-reloads]] JavaScript ဖိုင်ကို
+      ပြင်လိုက်တော့ dev server က page ကို ပြန်ဖွင့်ပြီး၊ code အသစ်ကို run
+      ပေးပါပြီ။ [[mark:click-button]] ဒါဆို preview ထဲက ခလုတ်ကို
+      နှိပ်ကြည့်ရအောင်။ [[mark:after-click]] ကြည့်ပါ၊ စာပိုဒ်ထဲက စာသား
+      ပြောင်းသွားပါပြီ။ အခု ဖြစ်သွားတာက ဗီဒီယိုထဲက ပုံ ပြောင်းသွားတာ မဟုတ်ပါဘူး။
+      ခုနက ရေးလိုက်တဲ့ code က browser ထဲမှာ တကယ် run နေပြီး၊ ခလုတ်
+      နှိပ်လိုက်တာကို တကယ် လက်ခံပြီး၊ စာပိုဒ်ကို တကယ် ပြောင်းပေးလိုက်တာပါ။
+    sources:
+      - title: "MDN — Document.querySelector()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelector"
+      - title: "MDN — EventTarget.addEventListener()"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener"
+      - title: "MDN — Node.textContent"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent"
+    actions:
+      - id: open-main-js
+        type: workspace.openFile
+        at: { mark: open-main-js }
+        path: main.js
+      # main.js changes reload the page and a half-typed script would throw in
+      # the preview, so the lines land as one block.
+      - id: type-click-handler
+        type: editor.type
+        at: { mark: type-click-handler }
+        cadence: block
+        target:
+          file: main.js
+          after: "import \"./style.css\";\n"
+          occurrence: 1
+        text: "\nconst button = document.querySelector('[data-testid=\"hello-button\"]');\nconst message = document.querySelector('[data-testid=\"message\"]');\n\nbutton.addEventListener(\"click\", () => {\n  message.textContent = \"ဗီဒီယို မဟုတ်ပါဘူး၊ တကယ် run နေတဲ့ code ပါ။\";\n});\n"
+      # The reload has settled: the page is back with its first paragraph.
+      - id: expect-page-reloaded
+        type: expect.preview
+        at: { mark: page-reloads }
+        timeoutMs: 4000
+        target: { by: testId, value: message }
+        textContains: "အောက်က ခလုတ်ကို နှိပ်ကြည့်ပါ။"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-hello-button
+        type: preview.click
+        at: { mark: click-button }
+        timeoutMs: 5000
+        target: { by: testId, value: hello-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-paragraph-changed
+        type: expect.preview
+        at: { mark: after-click }
+        timeoutMs: 5000
+        target: { by: testId, value: message }
+        textContains: "ဗီဒီယို မဟုတ်ပါဘူး၊ တကယ် run နေတဲ့ code ပါ။"
+        retry: { maxAttempts: 3, delayMs: 150 }
+      - id: expect-final-script
+        type: expect.file
+        at: { afterAction: expect-paragraph-changed }
+        path: main.js
+        contains: 'button.addEventListener("click"'
+
+  - id: learner-loop
+    chapter: "ကြည့်ရင်း စမ်း၊ စမ်းရင်း ကြည့်"
+    narration: >
+      ဒါဆို ဒီအချက်တွေက lesson ကြည့်နေတဲ့သူအတွက် ဘာ ထူးသွားလဲ ဆိုတာ ကြည့်ရအောင်။
+      အစမှာ ပြောခဲ့တဲ့ ဗီဒီယို pause လုပ်၊ editor ပြောင်း၊ code ပြန်ရိုက်၊
+      ဗီဒီယို ပြန်ဖွင့် ဆိုတဲ့ အဆင့်တွေ ဒီမှာ မလိုတော့ပါဘူး။
+      [[mark:draw-pause-step]] lesson ကို ကြိုက်တဲ့ နေရာမှာ pause လုပ်ထားလို့
+      ရပါတယ်။ [[mark:draw-edit-step]] pause လုပ်ထားတဲ့အချိန်မှာ မျက်နှာပြင်ပေါ်က
+      editor ဟာ တကယ့် editor ဖြစ်နေတဲ့အတွက်၊ ထဲက code ကို ဘယ်ကမှ ကူးစရာ မလိုဘဲ
+      ဒီအတိုင်းပဲ ဝင်ပြင်လို့ ရပါတယ်။ ဥပမာအားဖြင့် ခုနက ခလုတ်ရဲ့ အစိမ်းရောင်ကို
+      ကိုယ်ကြိုက်တဲ့ အရောင် ပြောင်းကြည့်လို့ ရပါတယ်။ [[mark:draw-run-step]]
+      ပြင်ပြီးရင် run ကြည့်လိုက်ရုံပါပဲ၊ ရလဒ်ကို preview ထဲမှာ ချက်ချင်း
+      မြင်ရပါလိမ့်မယ်။ [[mark:draw-continue-step]] စိတ်ကျေနပ်သွားရင် Play ကို
+      ပြန်နှိပ်ပြီး lesson ကို ဆက်ကြည့်လို့ ရပါတယ်။ ဘယ်နေရာ ရောက်နေပြီလဲ
+      ပြန်ရှာစရာ မလိုဘဲ၊ lesson က ရပ်ထားတဲ့ နေရာကနေ သူ့ code နဲ့သူ
+      ဆက်သွားပါလိမ့်မယ်။ [[mark:draw-versions]] ကိုယ် ပြင်ထားတာတွေကလည်း
+      ပျောက်မသွားပါဘူး။ lesson ကို ပြန်ဆက်လိုက်တဲ့အခါ၊ ဒါမှမဟုတ် တခြား နေရာကို
+      ခုန်သွားတဲ့အခါမှာ၊ ကိုယ် ပြင်ထားတဲ့ code ကို version တစ်ခုအနေနဲ့
+      သိမ်းထားပေးပြီး၊ နောက်မှ ပြန်ယူလို့ ရပါတယ်။ lesson တစ်ခုအတွက် version
+      ဆယ်ခုအထိ သိမ်းထားနိုင်ပါတယ်။ ဒီလို ကြည့်ရင်း စမ်း၊ စမ်းရင်း ကြည့်တာက
+      ကိုယ့်လက်နဲ့ ပြင်ပြီး ရလဒ်ကို ကိုယ်တိုင် မြင်ရတဲ့အတွက်၊ ကြည့်ရုံ
+      ကြည့်တာထက် အများကြီး ပိုမှတ်မိစေပါတယ်။
+    sources:
+      - title: "Next Editor — Learn"
+        url: "https://nexteditor.dev/learn"
+      - title: "Next Editor — Architecture"
+        url: "https://nexteditor.dev/architecture"
+    actions:
+      - id: open-loop-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        maximized: true
+        clear: true
+        upsertIds: []
+      - id: draw-loop-track
+        type: whiteboard.apply
+        at: { scene: start }
+        upsertIds: [loop-title, loop-track]
+        drawMs: 1500
+      - id: draw-pause-step
+        type: whiteboard.apply
+        at: { mark: draw-pause-step }
+        upsertIds: [loop-pause-box, loop-pause-label]
+        drawMs: 900
+      - id: draw-edit-step
+        type: whiteboard.apply
+        at: { mark: draw-edit-step }
+        upsertIds: [loop-arrow-edit, loop-edit-box, loop-edit-label]
+        drawMs: 1300
+      - id: draw-run-step
+        type: whiteboard.apply
+        at: { mark: draw-run-step }
+        upsertIds: [loop-arrow-run, loop-run-box, loop-run-label]
+        drawMs: 1300
+      - id: draw-continue-step
+        type: whiteboard.apply
+        at: { mark: draw-continue-step }
+        upsertIds: [loop-continue-box, loop-continue-label]
+        drawMs: 900
+      - id: draw-versions
+        type: whiteboard.apply
+        at: { mark: draw-versions }
+        upsertIds:
+          [loop-version-1, loop-version-2, loop-version-3, loop-version-label, loop-version-note]
+        drawMs: 2000
+
+  - id: what-a-lesson-carries
+    chapter: "lesson ထဲမှာ ဘာတွေ ထည့်လို့ ရလဲ"
+    narration: >
+      Next Editor lesson တစ်ခုထဲမှာ code နဲ့ preview တင် ပါတာ မဟုတ်ပါဘူး။
+      [[mark:draw-teaching-card]] ရှင်းပြဖို့အတွက် slide တွေနဲ့ whiteboard ပါ
+      ထည့်လို့ ရပါတယ်။ အခု မြင်နေရတဲ့ ပုံတွေကိုယ်တိုင်က whiteboard ပေါ်မှာ
+      ဆွဲထားတာ ဖြစ်ပြီး၊ ပြန်ကြည့်တဲ့အခါ မျဉ်းကြောင်း တစ်ကြောင်းချင်း
+      ပြန်ဆွဲပြပါတယ်။ [[mark:draw-side-card]] code ဘေးမှာ terminal ထဲက output
+      တွေရော၊ code ရေးရာမှာ ကူညီပေးတဲ့ AI coding agent နဲ့ ပြောထားတဲ့ chat ကိုပါ
+      lesson ထဲ တွဲမှတ်ထားလို့ ရပါတယ်။ [[mark:draw-viewer-card]]
+      ကြည့်တဲ့သူအတွက်ကတော့ chapter တွေနဲ့ လိုချင်တဲ့ အပိုင်းကို တန်းသွားလို့
+      ရသလို၊ caption စာတန်းတွေကိုလည်း ကိုယ့် ကွန်ပျူတာပေါ်မှာပဲ အလိုအလျောက်
+      ထုတ်ပြီး ထည့်လို့ ရပါတယ်။ [[mark:draw-live-room-card]] ပြီးတော့ live room
+      တစ်ခု ဖွင့်ပြီး၊ သူငယ်ချင်းတွေနဲ့ code တစ်ခုတည်းကို အတူတူ ပြင်ရင်း voice
+      chat နဲ့ စကားပြောလို့လည်း ရပါတယ်။ [[mark:draw-languages]] ဘာသာစကား
+      အနေနဲ့လည်း HTML၊ CSS၊ JavaScript တင် မကဘဲ၊ React၊ Node.js၊ Python တို့က
+      browser ထဲမှာပဲ run ပြီး၊ Go၊ Rust၊ Kotlin၊ Zig၊ Haskell တို့ကတော့ online
+      playground တွေကနေ တစ်ဆင့် run ပေးပါတယ်။ ဘယ်ဘာသာစကား ဖြစ်ဖြစ် ဘာမှ install
+      လုပ်စရာ မလိုသလို၊ code run ဖို့ အကောင့် ဝင်စရာလည်း မလိုပါဘူး။ တစ်ခု
+      သိထားရမှာက၊ browser ထဲမှာ run တဲ့ web lesson တွေကတော့ ကွန်ပျူတာပေါ်က
+      browser လိုပါတယ်။ ဖုန်းကနေဆိုရင် code ကို run လို့ မရပေမယ့်၊ lesson ထဲက
+      မှတ်တမ်းတင်ထားတဲ့ preview တွေကိုတော့ ပုံမှန်အတိုင်း ပြန်ကြည့်လို့ ရပါတယ်။
+    sources:
+      - title: "Next Editor — Architecture"
+        url: "https://nexteditor.dev/architecture"
+      - title: "Next Editor — Learn"
+        url: "https://nexteditor.dev/learn"
+      - title: "WebContainers — Introduction"
+        url: "https://webcontainers.io/guides/introduction"
+    actions:
+      - id: draw-features-title
+        type: whiteboard.apply
+        at: { scene: start }
+        clear: true
+        upsertIds: [feat-title]
+        drawMs: 900
+      - id: draw-teaching-card
+        type: whiteboard.apply
+        at: { mark: draw-teaching-card }
+        upsertIds: [feat-teach-card, feat-teach-heading, feat-teach-items]
+        drawMs: 1500
+      - id: draw-side-card
+        type: whiteboard.apply
+        at: { mark: draw-side-card }
+        upsertIds: [feat-side-card, feat-side-heading, feat-side-items]
+        drawMs: 1500
+      - id: draw-viewer-card
+        type: whiteboard.apply
+        at: { mark: draw-viewer-card }
+        upsertIds: [feat-viewer-card, feat-viewer-heading, feat-viewer-items]
+        drawMs: 1500
+      - id: draw-live-room-card
+        type: whiteboard.apply
+        at: { mark: draw-live-room-card }
+        upsertIds: [feat-room-card, feat-room-heading, feat-room-items]
+        drawMs: 1500
+      - id: draw-languages
+        type: whiteboard.apply
+        at: { mark: draw-languages }
+        upsertIds:
+          [
+            feat-lang-box,
+            feat-lang-browser-head,
+            feat-lang-browser-names,
+            feat-lang-online-head,
+            feat-lang-online-names,
+          ]
+        drawMs: 3000
+
+  - id: where-to-start
+    chapter: "ဘယ်ကနေ စမလဲ"
+    narration: >
+      [[mark:write-learn-page]] ဒါဆို ဘယ်ကနေ စမလဲ။ Next Editor website ရဲ့ Learn
+      page မှာ တင်ထားတဲ့ lesson တွေကို ရှာကြည့်လို့ ရပါတယ်။
+      [[mark:draw-try-steps]] ကြိုက်တဲ့ lesson တစ်ခုကို ဖွင့်ပြီးရင် ကြည့်ရုံ
+      မကြည့်ဘဲ၊ ရှင်းပြနေတုန်း pause လုပ်လိုက်ပါ၊ code ကို ကိုယ်ကြိုက်သလို
+      ပြင်ကြည့်ပါ၊ ပြီးရင် run ကြည့်ပါ။ [[mark:draw-studio-note]] နောက်ဆုံး
+      တစ်ခု ပြောချင်ပါတယ်။ အခု ကြည့်နေတဲ့ ဒီ lesson ကိုယ်တိုင်ကို Next Editor
+      Studio နဲ့ ဖန်တီးထားတာပါ။ Studio ဆိုတာ ကြိုရေးထားတဲ့ lesson script
+      တစ်ခုကို ယူပြီး၊ code ရိုက်တာ၊ ခလုတ် နှိပ်တာ၊ whiteboard ပေါ်
+      ပုံဆွဲတာတွေကို editor ထဲမှာ အလိုအလျောက် လုပ်ပြပြီး၊ အသံနဲ့အတူ lesson အဖြစ်
+      မှတ်တမ်းတင်ပေးတဲ့ စနစ်ပါ။ [[mark:draw-ordinary-lesson]] ဒါပေမဲ့ ထွက်လာတဲ့
+      ရလဒ်ကတော့ သာမန် lesson တစ်ခုနဲ့ အတူတူပါပဲ။ [[mark:try-it-now]] ဒါကြောင့်
+      ဒီ lesson ကိုပဲ အခု pause လုပ်ပြီး၊ ခုနက ခလုတ်ရဲ့ အရောင်ကို ကိုယ်ကြိုက်တဲ့
+      အရောင် ပြောင်းကြည့်ပါ။ ကိုယ့်လက်နဲ့ စမ်းကြည့်မှ Next Editor ရဲ့ သဘောကို
+      အရှင်းဆုံး နားလည်သွားပါလိမ့်မယ်။ ကျေးဇူးတင်ပါတယ် ခင်ဗျာ။
+    sources:
+      - title: "Next Editor — Learn"
+        url: "https://nexteditor.dev/learn"
+      - title: "Next Editor Studio"
+        url: "https://nexteditor.dev/studio"
+    actions:
+      - id: write-learn-page
+        type: whiteboard.apply
+        at: { mark: write-learn-page }
+        clear: true
+        upsertIds: [end-title, end-learn, end-learn-underline, end-learn-url]
+        drawMs: 2400
+      - id: draw-try-steps
+        type: whiteboard.apply
+        at: { mark: draw-try-steps }
+        upsertIds:
+          [
+            end-try-pause-box,
+            end-try-pause-label,
+            end-try-arrow-edit,
+            end-try-edit-box,
+            end-try-edit-label,
+            end-try-arrow-run,
+            end-try-run-box,
+            end-try-run-label,
+          ]
+        drawMs: 2400
+      - id: draw-studio-note
+        type: whiteboard.apply
+        at: { mark: draw-studio-note }
+        upsertIds:
+          [
+            end-script-box,
+            end-script-label,
+            end-arrow-studio,
+            end-studio-box,
+            end-studio-label,
+            end-studio-sub,
+          ]
+        drawMs: 2600
+      - id: draw-ordinary-lesson
+        type: whiteboard.apply
+        at: { mark: draw-ordinary-lesson }
+        upsertIds: [end-arrow-lesson, end-lesson-box, end-lesson-label]
+        drawMs: 1500
+      # The lesson ends by telling the learner to pause and change the button's
+      # colour, so the last frame is the code with that colour selected and the
+      # live preview beside it, not the board. The file opens on an offset, not
+      # afterAction: chained after the close it would get no time for its
+      # cursor move.
+      - id: close-final-board
+        type: whiteboard.apply
+        at: { mark: try-it-now }
+        open: false
+      - id: show-button-styles
+        type: workspace.openFile
+        at: { mark: try-it-now, offsetMs: 900 }
+        path: style.css
+      - id: point-at-button-colour
+        type: editor.select
+        at: { afterAction: show-button-styles }
+        target: { file: style.css, text: "#2f9e44", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
