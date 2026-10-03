@@ -1,17 +1,41 @@
-# One idea: generics let you write one definition that works for many types —
-# functions and structs take a type placeholder <T>, and a trait bound
-# (T: PartialOrd) says what T must support; no runtime cost. Slides introduce
-# generics + bounds; the editor reuses one largest() on numbers and words and a
-# generic Pair, then runs.
-# NOTE: slides are interim inline markdown — to be swapped to the branded
-# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Rust from zero, lesson 16: generics.
+#
+# The arc: a whiteboard draws the problem generics solve (largest_i32 and
+# largest_char are the same function with only the types changed). The deck's
+# "Generics" page shows the one generic signature, and the editor types it,
+# without a bound, so it matches the slide exactly. A second board shows the
+# compiler's answer (E0369: `>` can't be applied to `&T`, and its help:
+# restrict T with PartialOrd). The deck's "Trait bounds" page names the fix and
+# why it costs nothing at runtime (a version is built per type: the two copies
+# from the first board). Back in the editor, `: PartialOrd` is inserted and
+# largest is called with i32s and chars. Then a generic struct Point<T>, and a
+# third board on what one T means: x and y share a type (E0308 when they
+# don't; Point<T, U> when you need two). One run at the end. Traits are the
+# NEXT lesson, so PartialOrd gets a one-sentence explanation of "trait".
+#
+# Every compiler message on a board or in the narration was confirmed with
+# rustc 1.98 (edition 2024) on broken variants of the final program:
+#   fn largest<T>(list: &[T]) -> &T { … if item > biggest { … } … }
+#     error[E0369]: binary operation `>` cannot be applied to type `&T`
+#     help: consider restricting type parameter `T` with trait `PartialOrd`
+#   let ints = Point { x: 5, y: 4.0 };   (struct Point<T> { x: T, y: T })
+#     error[E0308]: mismatched types
+#     expected integer, found floating-point number
+#   struct Point<T, U> { x: T, y: U } with Point { x: 5, y: 4.0 } compiles.
+#
+# Board colours: blue = the thing being named (the functions, T and what it
+# becomes, with arrows from each Point to its T), orange = what changes (the
+# types in the copies), red = the errors (and the arrow from the circled `>`
+# down to E0369), green = what works (the compiler's fix, two placeholders).
+# #1e1e1e paints white on the dark board.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-generics.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-generics
-  title: "Rust generics: one definition, many types"
+  title: "Rust from zero: Generics"
   locale: en-US
   workspace:
     lessonType: rust
@@ -19,24 +43,9 @@ lesson:
     entryFilePath: main.rs
     files:
       main.rs: |
-        struct Pair<T> {
-            first: T,
-            second: T,
-        }
-
-        fn largest<T: PartialOrd>(list: &[T]) -> &T {
-            let mut biggest = &list[0];
-            for item in list {
-                if item > biggest {
-                    biggest = item;
-                }
-            }
-            biggest
-        }
-
         fn main() {
-            let numbers = [3, 7, 2, 9, 4];
-            println!("largest number: {}", largest(&numbers));
+            let numbers = [34, 50, 25, 100, 65];
+            let letters = ['y', 'm', 'a', 'q'];
         }
   slides:
     - id: generics-slide
@@ -49,6 +58,402 @@ lesson:
       name: Trait bounds
       deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_75
+  whiteboardAssets:
+    # ---- Board 1: the same function, copied for a second type ---------------
+    - {
+        id: b1-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 420,
+        height: 48,
+        text: "Same code, two types",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: b1-box-i32,
+        kind: rectangle,
+        x: 300,
+        y: 222,
+        width: 600,
+        height: 120,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-sig-i32,
+        kind: text,
+        x: 320,
+        y: 236,
+        width: 510,
+        height: 36,
+        text: "fn largest_i32(list: &[i32]) -> &i32",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-body-i32,
+        kind: text,
+        x: 320,
+        y: 288,
+        width: 350,
+        height: 36,
+        text: "{ … if item > biggest … }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-box-char,
+        kind: rectangle,
+        x: 300,
+        y: 372,
+        width: 600,
+        height: 120,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-sig-char,
+        kind: text,
+        x: 320,
+        y: 386,
+        width: 550,
+        height: 36,
+        text: "fn largest_char(list: &[char]) -> &char",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-body-char,
+        kind: text,
+        x: 320,
+        y: 438,
+        width: 350,
+        height: 36,
+        text: "{ … if item > biggest … }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-ring-1,
+        kind: freedraw,
+        stroke: circle,
+        x: 594,
+        y: 228,
+        width: 114,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-ring-2,
+        kind: freedraw,
+        stroke: circle,
+        x: 750,
+        y: 228,
+        width: 86,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-ring-3,
+        kind: freedraw,
+        stroke: circle,
+        x: 608,
+        y: 378,
+        width: 126,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-ring-4,
+        kind: freedraw,
+        stroke: circle,
+        x: 777,
+        y: 378,
+        width: 100,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-note,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 460,
+        height: 36,
+        text: "same body, only the type changes",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board 2: the compiler's answer without a bound (E0369) ------------
+    - {
+        id: b2-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 500,
+        height: 48,
+        text: "Can every T be compared?",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: b2-code,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 260,
+        height: 36,
+        text: "if item > biggest {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-types,
+        kind: text,
+        x: 610,
+        y: 232,
+        width: 350,
+        height: 36,
+        text: "item and biggest are &T",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b2-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 389,
+        y: 226,
+        width: 42,
+        height: 48,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 395,
+        y: 280,
+        width: 30,
+        height: 46,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-err1,
+        kind: text,
+        x: 300,
+        y: 334,
+        width: 480,
+        height: 36,
+        text: "error[E0369]: binary operation `>`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-err2,
+        kind: text,
+        x: 300,
+        y: 376,
+        width: 440,
+        height: 36,
+        text: "cannot be applied to type `&T`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-help1,
+        kind: text,
+        x: 300,
+        y: 464,
+        width: 620,
+        height: 36,
+        text: "help: consider restricting type parameter `T`",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-help2,
+        kind: text,
+        x: 300,
+        y: 506,
+        width: 320,
+        height: 36,
+        text: "with trait `PartialOrd`",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-help-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 410,
+        y: 518,
+        width: 200,
+        height: 30,
+        strokeColor: "#2f9e44",
+      }
+    # ---- Board 3: one T means one type (E0308) -----------------------------
+    - {
+        id: b3-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 310,
+        height: 48,
+        text: "One T, one type",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: b3-ints,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 280,
+        height: 36,
+        text: "Point { x: 5, y: 10 }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-ints-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 635,
+        y: 235,
+        width: 65,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b3-ints-t,
+        kind: text,
+        x: 715,
+        y: 232,
+        width: 120,
+        height: 36,
+        text: "T = i32",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-floats,
+        kind: text,
+        x: 300,
+        y: 288,
+        width: 320,
+        height: 36,
+        text: "Point { x: 1.5, y: 2.5 }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-floats-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 635,
+        y: 291,
+        width: 65,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b3-floats-t,
+        kind: text,
+        x: 715,
+        y: 288,
+        width: 120,
+        height: 36,
+        text: "T = f64",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b3-mixed,
+        kind: text,
+        x: 300,
+        y: 364,
+        width: 300,
+        height: 36,
+        text: "Point { x: 5, y: 4.0 }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b3-mixed-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 518,
+        y: 374,
+        width: 56,
+        height: 30,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-mixed-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 635,
+        y: 367,
+        width: 65,
+        height: 30,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b3-mixed-t,
+        kind: text,
+        x: 715,
+        y: 364,
+        width: 90,
+        height: 36,
+        text: "T = ?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-err1,
+        kind: text,
+        x: 300,
+        y: 432,
+        width: 460,
+        height: 36,
+        text: "error[E0308]: mismatched types",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-err2,
+        kind: text,
+        x: 300,
+        y: 474,
+        width: 630,
+        height: 36,
+        text: "expected integer, found floating-point number",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b3-two,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 480,
+        height: 36,
+        text: "struct Point<T, U> { x: T, y: U }",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b3-two-label,
+        kind: text,
+        x: 820,
+        y: 560,
+        width: 180,
+        height: 36,
+        text: "two types",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -61,110 +466,314 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "largest number: 9\nlargest word: pear\npair: 1, 2\n"
+      stdout: "largest number: 100\nlargest letter: y\nints: (5, 10)\nfloats: (1.5, 2.5)\n"
       stderr: ""
 
 scenes:
-  - id: generics
+  - id: why
+    chapter: Why generics?
     narration: >
-      [[mark:show-gen]] Generics let you write code once and use it with many
-      types. A function or a struct takes a type placeholder, written T in angle
-      brackets. Largest works on a slice of any T; Pair holds two values of the
-      same T.
+      Say you need the largest number in a list. [[mark:draw-i32]] You write
+      a function that takes a slice of i32 values, and returns the largest
+      one. [[mark:draw-char]] Later, you need the largest letter in a list of
+      chars. So you copy the function, and change i32 to char.
+      [[mark:draw-types]] The bodies are exactly the same. Only the type is
+      different. And with copied code, every fix has to be made twice.
+      Generics solve this.
     sources:
-      - title: "The Rust Book — Generic Data Types"
-        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html"
-    actions:
-      - id: show-gen
-        type: slide.show
-        at: { mark: show-gen }
-        slideId: generics-slide
-
-  - id: bounds
-    narration: >
-      [[mark:show-bounds]] But if T could be anything, what can you do with it? A
-      trait bound says what T must support. largest needs T to be comparable, so
-      we write T, colon, PartialOrd. And there's no runtime cost — the compiler
-      builds a fast version for each real type.
-    sources:
-      - title: "The Rust Book — Trait Bound Syntax"
-        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#trait-bound-syntax"
-    actions:
-      - id: show-bounds
-        type: slide.show
-        at: { mark: show-bounds }
-        slideId: bounds-slide
-
-  - id: one-function-many-types
-    narration: >
-      [[mark:open]] Here's largest, already finding the biggest number in a
-      slice. [[mark:select-generic-bound]] Its T must support PartialOrd, so the
-      function can compare values. [[mark:type-words]] The same function,
-      unchanged, works on words too. Rust compares strings alphabetically and
-      returns the largest. One function, two types.
-    sources:
+      - title: "The Rust Book — Removing Duplication by Extracting a Function"
+        url: "https://doc.rust-lang.org/book/ch10-00-generics.html#removing-duplication-by-extracting-a-function"
       - title: "The Rust Book — In Function Definitions"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
     actions:
-      - id: close-slide
+      # Opens in the quiet handle before the first word.
+      - id: open-board-copies
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1200 }
+        open: true
+        upsertIds: [b1-title]
+      - id: draw-i32
+        type: whiteboard.apply
+        at: { mark: draw-i32 }
+        upsertIds: [b1-box-i32, b1-sig-i32, b1-body-i32]
+        drawMs: 2400
+      - id: draw-char
+        type: whiteboard.apply
+        at: { mark: draw-char }
+        upsertIds: [b1-box-char, b1-sig-char, b1-body-char]
+        drawMs: 2400
+      - id: draw-types
+        type: whiteboard.apply
+        at: { mark: draw-types }
+        upsertIds: [b1-ring-1, b1-ring-2, b1-ring-3, b1-ring-4, b1-note]
+        drawMs: 3000
+
+  - id: generics-slide
+    chapter: A generic function
+    narration: >
+      With generics, you write the function once, for many types. Look at
+      the angle brackets after its name. T is a type placeholder. So list is
+      a slice of T, and the function returns a reference to a T. Call it
+      with i32 values, and T is i32. Call it with chars, and T is char. By
+      convention, it's one capital letter, and T is short for type.
+    sources:
+      - title: "The Rust Book — In Function Definitions"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
+      - title: "Rust By Example — Generics"
+        url: "https://doc.rust-lang.org/rust-by-example/generics.html"
+    actions:
+      - id: close-board-copies
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: show-generics
+        type: slide.show
+        at: { scene: start, offsetMs: 300 }
+        slideId: generics-slide
+
+  - id: write
+    narration: >
+      Let's write it. Here's an array of numbers, and an array of letters.
+      [[mark:type-largest]] Now the function, with T in angle brackets. It
+      starts with the first item as the biggest so far. Then it goes through
+      the list, and keeps any item that's bigger.
+      [[mark:select-compare]] Everything depends on this comparison:
+      item greater than biggest. So, will it compile?
+    sources:
+      - title: "The Rust Book — In Function Definitions"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
+      - title: "The Rust Book — Other Slices"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#other-slices"
+    actions:
+      - id: close-generics
         type: slide.close
         at: { scene: start }
       - id: open-main
         type: workspace.openFile
-        at: { mark: open }
+        at: { scene: start, offsetMs: 500 }
         path: main.rs
-      - id: select-generic-bound
+      - id: type-largest
+        type: editor.type
+        at: { mark: type-largest }
+        target:
+          file: main.rs
+          after: ""
+          occurrence: 1
+        cadence: line-by-line
+        text: "fn largest<T>(list: &[T]) -> &T {\n    let mut biggest = &list[0];\n    for item in list {\n        if item > biggest {\n            biggest = item;\n        }\n    }\n    biggest\n}\n\n"
+      - id: select-compare
         type: editor.select
-        at: { mark: select-generic-bound }
+        at: { mark: select-compare }
+        target:
+          file: main.rs
+          text: "item > biggest"
+          occurrence: 1
+
+  - id: error
+    chapter: Trait bounds
+    narration: >
+      Not yet. Rust checks a generic function for every possible T, not
+      only for the types you call it with. [[mark:draw-err-code]] And not
+      every type can be compared with greater than.
+      [[mark:draw-err-msg]] So the compiler stops you, with error E0369. The
+      greater-than operation can't be applied to a reference to T.
+      [[mark:draw-err-help]] It also suggests a fix: restrict T with the
+      trait PartialOrd. A trait is a named set of abilities that a type can
+      have. PartialOrd is the ability to be compared, with less than and
+      greater than.
+    sources:
+      - title: "The Rust Book — In Function Definitions"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
+      - title: "Rust error codes — E0369"
+        url: "https://doc.rust-lang.org/error_codes/E0369.html"
+      - title: "The Rust Book — Traits: Defining Shared Behavior"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html"
+      - title: "std::cmp::PartialOrd"
+        url: "https://doc.rust-lang.org/std/cmp/trait.PartialOrd.html"
+    actions:
+      - id: open-board-error
+        type: whiteboard.apply
+        at: { scene: start }
+        open: true
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-err-code
+        type: whiteboard.apply
+        at: { mark: draw-err-code }
+        upsertIds: [b2-code, b2-types, b2-ring]
+        drawMs: 2400
+      - id: draw-err-msg
+        type: whiteboard.apply
+        at: { mark: draw-err-msg }
+        upsertIds: [b2-arrow, b2-err1, b2-err2]
+        drawMs: 2800
+      - id: draw-err-help
+        type: whiteboard.apply
+        at: { mark: draw-err-help }
+        upsertIds: [b2-help1, b2-help2, b2-help-line]
+        drawMs: 2600
+
+  - id: bounds-slide
+    narration: >
+      So we add a trait bound. You write it after T, with a colon. T colon
+      PartialOrd says T must be comparable. Now largest accepts only types
+      that can be compared, like numbers and chars. And there's no runtime
+      cost. When you compile, Rust builds a separate, fast version of largest
+      for each type you use. One for i32, and one for char. They're the
+      same two copies you saw at the start, and the compiler writes them for
+      you.
+    sources:
+      - title: "The Rust Book — Trait Bound Syntax"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#trait-bound-syntax"
+      - title: "The Rust Book — Performance of Code Using Generics"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#performance-of-code-using-generics"
+    actions:
+      - id: close-board-error
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: show-bounds
+        type: slide.show
+        at: { scene: start, offsetMs: 300 }
+        slideId: bounds-slide
+
+  - id: add-bound
+    narration: >
+      Back in the editor. [[mark:type-bound]] Let's add the bound: a colon,
+      then PartialOrd. [[mark:select-bound]] With T colon PartialOrd, every T
+      that reaches the comparison can be compared. So now it compiles.
+      [[mark:type-calls]] Let's call largest twice, once with the numbers,
+      and once with the letters. The ampersand lends each array as a slice.
+    sources:
+      - title: "The Rust Book — Trait Bound Syntax"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html#trait-bound-syntax"
+      - title: "The Rust Book — In Function Definitions"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
+      - title: "The Rust Reference — Unsized coercions (array to slice)"
+        url: "https://doc.rust-lang.org/reference/type-coercions.html#unsized-coercions"
+    actions:
+      - id: close-bounds
+        type: slide.close
+        at: { scene: start }
+      - id: type-bound
+        type: editor.type
+        at: { mark: type-bound }
+        target:
+          file: main.rs
+          after: "fn largest<T"
+          occurrence: 1
+        cadence: natural
+        text: ": PartialOrd"
+      - id: select-bound
+        type: editor.select
+        at: { mark: select-bound }
         target:
           file: main.rs
           text: "T: PartialOrd"
           occurrence: 1
-      - id: type-words
+      - id: type-calls
         type: editor.type
-        at: { mark: type-words, offsetMs: -400 }
+        at: { mark: type-calls }
         target:
           file: main.rs
-          after: "    println!(\"largest number: {}\", largest(&numbers));\n"
+          after: "    let letters = ['y', 'm', 'a', 'q'];\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let words = [\"pear\", \"apple\", \"fig\"];\n    println!(\"largest word: {}\", largest(&words));\n"
+        text: "    println!(\"largest number: {}\", largest(&numbers));\n    println!(\"largest letter: {}\", largest(&letters));\n"
 
-  - id: generic-struct
+  - id: struct
+    chapter: Generic structs
     narration: >
-      [[mark:type-pair]] Structs can be generic too. Pair holds two values of
-      the same type. [[mark:select-pair]] Here we make a Pair of integers and
-      read both fields. Swap in strings, and the same definition still works.
+      Structs can be generic too. [[mark:type-struct]] Here's a Point, with a
+      type placeholder T. [[mark:select-fields]] Both x and y have the type
+      T. [[mark:type-points]] So one Point can hold integers, and another can
+      hold floats. Then we print their fields.
     sources:
       - title: "The Rust Book — In Struct Definitions"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-struct-definitions"
     actions:
-      - id: type-pair
+      - id: type-struct
         type: editor.type
-        at: { mark: type-pair, offsetMs: -400 }
+        at: { mark: type-struct }
         target:
           file: main.rs
-          after: "    println!(\"largest word: {}\", largest(&words));\n"
+          after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "    let p = Pair { first: 1, second: 2 };\n    println!(\"pair: {}, {}\", p.first, p.second);\n"
-      - id: select-pair
+        text: "struct Point<T> {\n    x: T,\n    y: T,\n}\n\n"
+      - id: select-fields
         type: editor.select
-        at: { mark: select-pair }
+        at: { mark: select-fields }
         target:
           file: main.rs
-          text: "Pair { first: 1, second: 2 }"
+          text: "x: T,\n    y: T,"
           occurrence: 1
+      - id: type-points
+        type: editor.type
+        at: { mark: type-points }
+        target:
+          file: main.rs
+          after: "    println!(\"largest letter: {}\", largest(&letters));\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    let ints = Point { x: 5, y: 10 };\n    let floats = Point { x: 1.5, y: 2.5 };\n    println!(\"ints: ({}, {})\", ints.x, ints.y);\n    println!(\"floats: ({}, {})\", floats.x, floats.y);\n"
+
+  - id: one-type
+    narration: >
+      Let's see what T becomes. [[mark:draw-ok]] For the first point, T is
+      i32. For the second, it's f64. [[mark:draw-mixed]] But what if x is an
+      integer, and y is a float? [[mark:draw-mixed-err]] That's error E0308,
+      mismatched types. The five makes T an integer, so the compiler
+      expected an integer for y too, and found a floating-point number. One
+      T means one type for both fields.
+      [[mark:draw-two]] If you really need two types, give Point two
+      placeholders, like T and U.
+    sources:
+      - title: "The Rust Book — In Struct Definitions"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-struct-definitions"
+      - title: "Rust error codes — E0308"
+        url: "https://doc.rust-lang.org/error_codes/E0308.html"
+    actions:
+      - id: open-board-one-type
+        type: whiteboard.apply
+        at: { scene: start }
+        open: true
+        clear: true
+        upsertIds: [b3-title]
+      - id: draw-ok
+        type: whiteboard.apply
+        at: { mark: draw-ok }
+        upsertIds: [b3-ints, b3-ints-arrow, b3-ints-t, b3-floats, b3-floats-arrow, b3-floats-t]
+        drawMs: 3000
+      - id: draw-mixed
+        type: whiteboard.apply
+        at: { mark: draw-mixed }
+        upsertIds: [b3-mixed, b3-mixed-line, b3-mixed-arrow, b3-mixed-t]
+        drawMs: 2200
+      - id: draw-mixed-err
+        type: whiteboard.apply
+        at: { mark: draw-mixed-err }
+        upsertIds: [b3-err1, b3-err2]
+        drawMs: 2400
+      - id: draw-two
+        type: whiteboard.apply
+        at: { mark: draw-two }
+        upsertIds: [b3-two, b3-two-label]
+        drawMs: 2000
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Nine is the largest number, pear the largest
-      word, and the Pair holds one and two. Generics give you one definition
-      that serves many types, all checked at compile time.
+      Back to the code. [[mark:run]] Let's run it. The largest number is one
+      hundred, and the largest letter is y. Then the integer point, five and
+      ten, and the float point, one point five and two point five.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — Generic Data Types"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html"
     actions:
+      - id: close-board-one-type
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: run
         type: runtime.run
         at: { mark: run, offsetMs: 200 }
@@ -172,7 +781,7 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "largest word: pear"
+        contains: "largest letter: y"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
@@ -180,5 +789,20 @@ scenes:
         path: main.rs
         contains: "fn largest<T: PartialOrd>(list: &[T]) -> &T {"
 
+  - id: wrap
+    narration: >
+      So generics let you write code once, for many types. A trait bound,
+      like PartialOrd, says what T must be able to do. And the compiler
+      builds a fast version for each type you use. Next, traits: how to
+      define shared behavior of your own, and implement it for your types.
+    sources:
+      - title: "The Rust Book — Generic Types, Traits, and Lifetimes"
+        url: "https://doc.rust-lang.org/book/ch10-00-generics.html"
+      - title: "The Rust Book — Traits: Defining Shared Behavior"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html"
+    actions: []
+
 checks:
+  # 500 (not 300): google-svg deck slides embed per-slide font data whose
+  # paint briefly stalls the main thread at each show/close.
   - { type: timing.p95Ms, max: 500 }
