@@ -148,11 +148,11 @@ const CASES: ContractCase[] = [
     ],
   },
   {
-    name: "rejects a JavaScript lesson without a lockfile",
+    name: "accepts a JavaScript lesson without a lockfile",
     workspace: JS_WORKSPACE,
     runtime: { ...JS_RUNTIME, lockfilePath: undefined },
     actions: [start],
-    issues: ["A javascript WebContainer lesson must pin a lockfilePath for a reproducible install"],
+    issues: [],
   },
   {
     name: "rejects a lockfile that is not pinned",

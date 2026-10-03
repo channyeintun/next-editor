@@ -90,15 +90,11 @@ export function runtimeContractIssues(
   if (runtime.kind === "webcontainer") {
     // Python runs one-shot on the WebContainer's WASI `python3`: no package
     // install (so no lockfile), no dev server, no preview. JS/TS drive a dev
-    // server + preview and must pin a lockfile for a reproducible install.
+    // server + preview. A lockfile is optional for them: the WebContainer's
+    // built-in pnpm is older than current pnpm and rejects a lockfile a newer
+    // pnpm wrote, so lessons pin exact versions in package.json instead.
     const isPython = workspace.lessonType === "python";
-    if (runtime.lockfilePath === undefined) {
-      if (!isPython) {
-        issues.push(
-          `A ${workspace.lessonType} WebContainer lesson must pin a lockfilePath for a reproducible install`,
-        );
-      }
-    } else if (!(runtime.lockfilePath in workspace.files)) {
+    if (runtime.lockfilePath !== undefined && !(runtime.lockfilePath in workspace.files)) {
       issues.push(`WebContainer lockfile "${runtime.lockfilePath}" is not in the pinned workspace`);
     }
     if (isPython) {

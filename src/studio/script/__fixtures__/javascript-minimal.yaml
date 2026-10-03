@@ -21,16 +21,6 @@ lesson:
             "dev": "node server.js"
           }
         }
-      pnpm-lock.yaml: |
-        lockfileVersion: '9.0'
-
-        settings:
-          autoInstallPeers: true
-          excludeLinksFromLockfile: false
-
-        importers:
-
-          .: {}
       server.js: |
         import { createServer } from "node:http";
 
@@ -49,10 +39,9 @@ runtime:
   kind: webcontainer
   adapterVersion: 1
   defaultMode: live
-  initCommand: pnpm install --frozen-lockfile --ignore-scripts
+  initCommand: pnpm install --ignore-scripts
   runCommand: pnpm dev
   expectedPort: 4173
-  lockfilePath: pnpm-lock.yaml
   environment: {}
 
 scenes:

@@ -172,28 +172,29 @@ the schema rejects an omitted block or a mismatch:
 
 A `javascript` (Node.js) or `typescript` lesson pins whatever WebContainer
 workspace it needs — a bare server, an Express app, React, Vue, Vite, or
-another deterministic workspace. It must include a pinned lockfile and this
-versioned runtime declaration (commands are exact strings and never inherited
-from ambient editor settings):
+another deterministic workspace. It pins exact dependency versions in
+`package.json` and declares this versioned runtime (commands are exact strings
+and never inherited from ambient editor settings):
 
 ```yaml
 runtime:
   kind: webcontainer
   adapterVersion: 1
   defaultMode: live
-  initCommand: pnpm install --frozen-lockfile
+  initCommand: pnpm install
   runCommand: pnpm dev
   expectedPort: 5173 # optional only when the server port truly is not fixed
-  lockfilePath: pnpm-lock.yaml
   environment: {} # non-secret, pinned values only
 ```
 
-Install with pnpm: `initCommand: pnpm install --frozen-lockfile`, `runCommand: pnpm dev`, and a
-pinned `pnpm-lock.yaml` (generate it outside the repo with `pnpm install --lockfile-only` against
-the lesson's `package.json`). The WebContainer runs native pnpm; an `npm ci` install of the same
-packages was slow enough to miss `runtime.start`'s acknowledgement window.
+Install with pnpm (`initCommand: pnpm install`, `runCommand: pnpm dev`) and leave out the
+lockfile. An `npm ci` install was slow enough to miss `runtime.start`'s acknowledgement window,
+and the WebContainer's built-in pnpm is older than current pnpm, so a `pnpm-lock.yaml` written by a
+newer pnpm fails with `ERR_PNPM_LOCKFILE_BREAKING_CHANGE`. Pin exact versions in `package.json`
+(`"vite": "5.4.21"`, not `"^5.4.21"`) so the install stays repeatable.
 
-`lockfilePath` must name a file in `lesson.workspace.files`. The preflight
+`lockfilePath` is optional; when a lesson declares one, it must name a file in
+`lesson.workspace.files`. The preflight
 replaces the editor's ambient run configuration with these commands, disables
 run-on-startup/run-on-save, runs the nonempty init command, waits for the
 declared server, and fails closed on dependency, process, port, or iframe
@@ -450,7 +451,7 @@ execute the final code (pinned files + your insertions) and transcribe its
 output.
 
 For WebContainer lessons, the pinned workspace is the truth instead of a
-synthetic result. Pin `package.json`, the declared lockfile, every source
+synthetic result. Pin `package.json` (exact versions), every source
 file, the exact init/run commands, expected port, and non-secret environment.
 The rendered application must expose stable `data-testid` targets for every
 authored interaction or DOM assertion.
@@ -601,23 +602,23 @@ of the previous board while wiping the rest works.
 
 ## Failure → fix table
 
-| Symptom                                         | Fix                                                                                                     |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `Invalid lesson script: …`                      | Schema violation (including an unknown or misspelled key); the path in the message names the field.     |
-| `Unknown marker "x" — known markers: …`         | An action references a mark not present in narration.                                                   |
-| `Typing action "…" overlaps "…"` (compile)      | Two authored actions collide; move the later mark or add `offsetMs`.                                    |
-| `⚠ …ms of silence inserted before dialog …`     | Your action outlasts the narration around it; add a sentence there or shorten the typed text.           |
-| `… ran to the speech engine's length limit …`   | A sentence hit Pocket's ~40s cap unended; reword or split it (the warning repeats until it changes).    |
-| `Narration dialog N/M "…" ("…"): …`             | That dialog's synthesis failed or its audio is unusable; Burmese errors carry the service's reason.     |
-| `… stays N dB quieter than the rest …`          | Too quiet or too peaky for leveling to match the others; listen, and reword that dialog for a new take. |
-| `Anchor occurrence N of "…" not found` (render) | The `after` string doesn't match the file at perform time — check tabs/newlines and earlier insertions. |
-| `checkpoint.output.… never contains …`          | Fixture output and `expect.output` disagree, or the program doesn't print it.                           |
-| `runtime.waitForReady` times out                | Check the pinned install/run commands, lockfile, expected port, and server diagnostics in the receipt.  |
-| `Preview … command failed`                      | The iframe bridge did not acknowledge, the target's `data-testid` is missing, or the preview crashed.   |
-| `checkpoint.preview.…` failure                  | The recorded route/DOM differs from `expect.preview`; inspect the attached diagnostic screenshot.       |
-| `preview.replayData` failure                    | The artifact lacks an rrweb seed or the mutation patches required for the authored interactions.        |
-| `timing.p95 — … (max 300ms)` failure            | Usually a squeezed action; check the receipts in the render report for the late action.                 |
-| Repeatability FAIL on `repeat.audio`            | Should not happen (synthesis is seeded); report it as a bug rather than working around it.              |
+| Symptom                                         | Fix                                                                                                            |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `Invalid lesson script: …`                      | Schema violation (including an unknown or misspelled key); the path in the message names the field.            |
+| `Unknown marker "x" — known markers: …`         | An action references a mark not present in narration.                                                          |
+| `Typing action "…" overlaps "…"` (compile)      | Two authored actions collide; move the later mark or add `offsetMs`.                                           |
+| `⚠ …ms of silence inserted before dialog …`     | Your action outlasts the narration around it; add a sentence there or shorten the typed text.                  |
+| `… ran to the speech engine's length limit …`   | A sentence hit Pocket's ~40s cap unended; reword or split it (the warning repeats until it changes).           |
+| `Narration dialog N/M "…" ("…"): …`             | That dialog's synthesis failed or its audio is unusable; Burmese errors carry the service's reason.            |
+| `… stays N dB quieter than the rest …`          | Too quiet or too peaky for leveling to match the others; listen, and reword that dialog for a new take.        |
+| `Anchor occurrence N of "…" not found` (render) | The `after` string doesn't match the file at perform time — check tabs/newlines and earlier insertions.        |
+| `checkpoint.output.… never contains …`          | Fixture output and `expect.output` disagree, or the program doesn't print it.                                  |
+| `runtime.waitForReady` times out                | Check the pinned install/run commands, package versions, expected port, and server diagnostics in the receipt. |
+| `Preview … command failed`                      | The iframe bridge did not acknowledge, the target's `data-testid` is missing, or the preview crashed.          |
+| `checkpoint.preview.…` failure                  | The recorded route/DOM differs from `expect.preview`; inspect the attached diagnostic screenshot.              |
+| `preview.replayData` failure                    | The artifact lacks an rrweb seed or the mutation patches required for the authored interactions.               |
+| `timing.p95 — … (max 300ms)` failure            | Usually a squeezed action; check the receipts in the render report for the late action.                        |
+| Repeatability FAIL on `repeat.audio`            | Should not happen (synthesis is seeded); report it as a bug rather than working around it.                     |
 
 ## A complete example
 

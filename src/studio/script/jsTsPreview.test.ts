@@ -46,11 +46,8 @@ describe("JavaScript and TypeScript Studio fixtures", () => {
     const { plan } = compileLessonScript(scheduledInputFor(script));
 
     expect(plan.workspace.lessonType).toBe("javascript");
-    expect(plan.runtime).toMatchObject({
-      kind: "webcontainer",
-      adapterVersion: 1,
-      lockfilePath: "pnpm-lock.yaml",
-    });
+    expect(plan.runtime).toMatchObject({ kind: "webcontainer", adapterVersion: 1 });
+    expect(plan.runtime).not.toHaveProperty("lockfilePath");
     expect(
       plan.actions.filter((action) => action.type !== "cursor.moveTo").map((action) => action.type),
     ).toEqual(["workspace.openFile", "editor.type", "expect.file"]);
@@ -59,24 +56,16 @@ describe("JavaScript and TypeScript Studio fixtures", () => {
   it("compiles the pinned TypeScript/Vite interaction fixture end to end", () => {
     const script = loadFixture("typescript-vite-preview.yaml");
     const packageJson = JSON.parse(script.lesson.workspace.files["package.json"]);
-    const pnpmLock = YAML.parse(script.lesson.workspace.files["pnpm-lock.yaml"]);
     const { plan } = compileLessonScript(scheduledInputFor(script));
 
     expect(packageJson.devDependencies).toEqual({ vite: "5.4.21" });
-    expect(pnpmLock.lockfileVersion).toBe("9.0");
-    expect(pnpmLock.importers["."].devDependencies.vite).toMatchObject({
-      specifier: "5.4.21",
-      version: "5.4.21",
-    });
-    expect(pnpmLock.packages["vite@5.4.21"].resolution.integrity).toMatch(/^sha512-/);
     expect(plan.runtime).toEqual({
       kind: "webcontainer",
       adapterVersion: 1,
       defaultMode: "live",
-      initCommand: "pnpm install --frozen-lockfile",
+      initCommand: "pnpm install",
       runCommand: "pnpm dev",
       expectedPort: 5173,
-      lockfilePath: "pnpm-lock.yaml",
       environment: {},
     });
     expect(plan.actions.map((action) => action.type)).toEqual([
@@ -198,12 +187,15 @@ describe("JavaScript and TypeScript Studio fixtures", () => {
     }
   });
 
-  it("rejects a JS/TS WebContainer lesson without a lockfile", () => {
-    const noLock = YAML.parse(
+  it("accepts a JS/TS WebContainer lesson without a lockfile, but not a missing one", () => {
+    const fixture = YAML.parse(
       readFileSync(resolve(FIXTURE_ROOT, "typescript-vite-preview.yaml"), "utf8"),
     );
-    delete noLock.runtime.lockfilePath;
-    expect(() => parseLessonScript(noLock)).toThrow(/must pin a lockfilePath/);
+    expect(fixture.runtime.lockfilePath).toBeUndefined();
+    expect(() => parseLessonScript(fixture)).not.toThrow();
+
+    fixture.runtime.lockfilePath = "pnpm-lock.yaml";
+    expect(() => parseLessonScript(fixture)).toThrow(/is not in the pinned workspace/);
   });
 
   it("rejects omitted runtimes and retryable clicks before render", () => {
