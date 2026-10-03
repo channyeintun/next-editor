@@ -1,12 +1,27 @@
-# One idea: every Rust value has a fixed type, in two families — scalars (one
-# value: integer, float, bool, char) and compound types (tuple, array). A
-# whiteboard type-map, then each family is built live and run. Validate with:
+# Rust from zero, lesson 3: data types. Every value has one fixed type, and
+# the type decides its size. Board 1 draws the integer family as bars sized by
+# their bits (i/u, 8 to 64, i32 the default) and the u8 range, then the
+# "literal out of range for `u8`" error for 256. In the editor: score (an
+# inferred i32) and lives (a u8) are pinned; f64, bool and char are added.
+# Board 2 draws a tuple (parts of different types, read by .0 and .1) and an
+# array (one type, fixed length, [i32; 3], indexes from zero); the code builds
+# both, with destructuring, .0, indexing and len (usize). The board is then
+# re-opened to show reading past the end ("this operation will panic at
+# runtime"). One run at the end.
+#
+# Every error shown or spoken was confirmed with rustc 1.98 --edition 2024:
+#   let lives: u8 = 256;          → error: literal out of range for `u8`
+#   println!("{}", laps[3]);      → error: this operation will panic at runtime
+#                                   (index out of bounds: the length is 3 but
+#                                   the index is 3)
+# The fixture is the exact output of the final program, which compiles with no
+# warnings. Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-data-types.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-data-types
-  title: "Rust data types: scalars and compounds"
+  title: "Rust from zero: Data types"
   locale: en-US
   workspace:
     lessonType: rust
@@ -15,122 +30,503 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let year: i32 = 2015;
-            let pi = 3.14159;
-            println!("year {year}, pi {pi}");
+            let score = 1250;
+            let lives: u8 = 3;
+            println!("score {score}, lives {lives}");
         }
-  # Tree diagram: a "Type" root branching to the Scalar and Compound families.
+  # Colour jobs: blue = the type being named (integer bars, tuple and array
+  # cells), green = the safe default, orange = the limit (u8's range, the
+  # fixed length), red = the error, violet = how you read a part (.0, [0]).
+  # Text is #1e1e1e (white on the dark board).
   whiteboardAssets:
-    - id: dt-title
+    # Board 1 — the integer family, sized by bits; u8's range; the error.
+    - id: int-title
       kind: text
-      x: 300
-      y: 158
-      width: 720
-      height: 44
-      text: "Every value has a type"
-      strokeColor: "#1e1e1e"
-      fontSize: 34
-    - id: dt-rootbox
-      kind: rectangle
-      x: 590
-      y: 214
-      width: 160
-      height: 54
-      strokeColor: "#1e1e1e"
-    - id: dt-rootlabel
-      kind: text
-      x: 638
-      y: 228
-      width: 120
-      height: 32
-      text: "Type"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
-    - id: dt-branchL
-      kind: text
-      x: 520
-      y: 278
-      width: 44
-      height: 40
-      text: "↙"
-      strokeColor: "#80868b"
-      fontSize: 34
-    - id: dt-branchR
-      kind: text
-      x: 770
-      y: 278
-      width: 44
-      height: 40
-      text: "↘"
-      strokeColor: "#80868b"
-      fontSize: 34
-    - id: scalar-card
-      kind: rectangle
       x: 290
-      y: 330
-      width: 350
-      height: 210
-      strokeColor: "#1971c2"
-    - id: scalar-head
+      y: 160
+      width: 470
+      height: 46
+      text: "Integers come in sizes"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - {
+        id: int-i8,
+        kind: text,
+        x: 290,
+        y: 232,
+        width: 50,
+        height: 36,
+        text: "i8",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: int-u8,
+        kind: text,
+        x: 370,
+        y: 232,
+        width: 50,
+        height: 36,
+        text: "u8",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: int-bar8,
+        kind: rectangle,
+        x: 470,
+        y: 228,
+        width: 64,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: int-i16,
+        kind: text,
+        x: 290,
+        y: 288,
+        width: 60,
+        height: 36,
+        text: "i16",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: int-u16,
+        kind: text,
+        x: 370,
+        y: 288,
+        width: 60,
+        height: 36,
+        text: "u16",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: int-bar16,
+        kind: rectangle,
+        x: 470,
+        y: 284,
+        width: 128,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: int-i32,
+        kind: text,
+        x: 290,
+        y: 344,
+        width: 60,
+        height: 36,
+        text: "i32",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: int-u32,
+        kind: text,
+        x: 370,
+        y: 344,
+        width: 60,
+        height: 36,
+        text: "u32",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: int-bar32,
+        kind: rectangle,
+        x: 470,
+        y: 340,
+        width: 256,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: int-i64,
+        kind: text,
+        x: 290,
+        y: 400,
+        width: 60,
+        height: 36,
+        text: "i64",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: int-u64,
+        kind: text,
+        x: 370,
+        y: 400,
+        width: 60,
+        height: 36,
+        text: "u64",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: int-bar64,
+        kind: rectangle,
+        x: 470,
+        y: 396,
+        width: 512,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - id: int-signed
       kind: text
-      x: 312
-      y: 346
-      width: 320
-      height: 32
-      text: "Scalar — one value"
-      strokeColor: "#1971c2"
-      fontSize: 28
-    - id: scalar-row1
-      kind: text
-      x: 318
-      y: 404
+      x: 290
+      y: 462
       width: 300
-      height: 34
-      text: "i32        f64"
+      height: 36
+      text: "i: can be negative"
       strokeColor: "#1e1e1e"
       fontSize: 28
-    - id: scalar-row2
+    - id: int-unsigned
       kind: text
-      x: 318
-      y: 464
-      width: 300
-      height: 34
-      text: "bool       char"
+      x: 640
+      y: 462
+      width: 260
+      height: 36
+      text: "u: zero and up"
       strokeColor: "#1e1e1e"
       fontSize: 28
-    - id: compound-card
-      kind: rectangle
-      x: 700
-      y: 330
-      width: 370
-      height: 210
+    - {
+        id: int-default-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 274,
+        y: 334,
+        width: 84,
+        height: 56,
+        strokeColor: "#2f9e44",
+      }
+    - id: int-default
+      kind: text
+      x: 752
+      y: 344
+      width: 200
+      height: 36
+      text: "the default"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: int-range
+      kind: text
+      x: 560
+      y: 232
+      width: 300
+      height: 36
+      text: "u8 holds 0 to 255"
       strokeColor: "#f08c00"
-    - id: compound-head
+      fontSize: 28
+    - id: int-err-code
       kind: text
-      x: 722
-      y: 346
+      x: 290
+      y: 526
       width: 340
-      height: 32
-      text: "Compound — many values"
-      strokeColor: "#f08c00"
-      fontSize: 28
-    - id: compound-row1
-      kind: text
-      x: 728
-      y: 404
-      width: 330
-      height: 34
-      text: "tuple — mixed types"
+      height: 36
+      text: "let lives: u8 = 256;"
       strokeColor: "#1e1e1e"
       fontSize: 28
-    - id: compound-row2
+    # Under the literal 256 only (it starts 215px into the line at 28px
+    # Virgil), where the compiler's caret points.
+    - {
+        id: int-err-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 502,
+        y: 552,
+        width: 62,
+        height: 16,
+        strokeColor: "#e03131",
+      }
+    - id: int-err-msg
       kind: text
-      x: 728
-      y: 464
-      width: 330
-      height: 34
-      text: "array — same type"
+      x: 290
+      y: 580
+      width: 620
+      height: 36
+      text: "error: literal out of range for `u8`"
+      strokeColor: "#e03131"
+      fontSize: 28
+    # Board 2 — a tuple (mixed types, read by position) and an array (one
+    # type, fixed length, indexed from zero); later, index 3 and its error.
+    - id: cmp-title
+      kind: text
+      x: 290
+      y: 160
+      width: 580
+      height: 46
+      text: "Compound types group values"
       strokeColor: "#1e1e1e"
+      fontSize: 36
+    - {
+        id: cmp-tuple-name,
+        kind: text,
+        x: 290,
+        y: 228,
+        width: 100,
+        height: 36,
+        text: "tuple",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-tuple-type,
+        kind: text,
+        x: 290,
+        y: 268,
+        width: 180,
+        height: 36,
+        text: "(i32, f64)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-t-cell0,
+        kind: rectangle,
+        x: 600,
+        y: 226,
+        width: 100,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: cmp-t-cell1,
+        kind: rectangle,
+        x: 700,
+        y: 226,
+        width: 200,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: cmp-t-val0,
+        kind: text,
+        x: 640,
+        y: 240,
+        width: 30,
+        height: 36,
+        text: "7",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-t-val1,
+        kind: text,
+        x: 768,
+        y: 240,
+        width: 80,
+        height: 36,
+        text: "92.5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-t-idx0,
+        kind: text,
+        x: 634,
+        y: 298,
+        width: 40,
+        height: 36,
+        text: ".0",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-t-idx1,
+        kind: text,
+        x: 784,
+        y: 298,
+        width: 40,
+        height: 36,
+        text: ".1",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-array-name,
+        kind: text,
+        x: 290,
+        y: 384,
+        width: 100,
+        height: 36,
+        text: "array",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-a-cell0,
+        kind: rectangle,
+        x: 600,
+        y: 378,
+        width: 100,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: cmp-a-cell1,
+        kind: rectangle,
+        x: 700,
+        y: 378,
+        width: 100,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: cmp-a-cell2,
+        kind: rectangle,
+        x: 800,
+        y: 378,
+        width: 100,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: cmp-a-val0,
+        kind: text,
+        x: 634,
+        y: 392,
+        width: 40,
+        height: 36,
+        text: "40",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-a-val1,
+        kind: text,
+        x: 734,
+        y: 392,
+        width: 40,
+        height: 36,
+        text: "25",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-a-val2,
+        kind: text,
+        x: 834,
+        y: 392,
+        width: 40,
+        height: 36,
+        text: "60",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-a-idx0,
+        kind: text,
+        x: 627,
+        y: 450,
+        width: 50,
+        height: 36,
+        text: "[0]",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-a-idx1,
+        kind: text,
+        x: 727,
+        y: 450,
+        width: 50,
+        height: 36,
+        text: "[1]",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-a-idx2,
+        kind: text,
+        x: 827,
+        y: 450,
+        width: 50,
+        height: 36,
+        text: "[2]",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-array-type,
+        kind: text,
+        x: 290,
+        y: 422,
+        width: 140,
+        height: 36,
+        text: "[i32; 3]",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-fixed-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 287,
+        y: 450,
+        width: 120,
+        height: 16,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: cmp-b-idx3,
+        kind: text,
+        x: 927,
+        y: 450,
+        width: 50,
+        height: 36,
+        text: "[3]",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: cmp-b-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 908,
+        y: 440,
+        width: 88,
+        height: 56,
+        strokeColor: "#e03131",
+      }
+    - id: cmp-b-code
+      kind: text
+      x: 290
+      y: 520
+      width: 440
+      height: 36
+      text: 'println!("{}", laps[3]);'
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    # Under laps[3] only (it starts 171px into the line), like the caret.
+    - {
+        id: cmp-b-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 458,
+        y: 543,
+        width: 108,
+        height: 16,
+        strokeColor: "#e03131",
+      }
+    - id: cmp-b-err1
+      kind: text
+      x: 290
+      y: 568
+      width: 720
+      height: 36
+      text: "error: this operation will panic at runtime"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: cmp-b-err2
+      kind: text
+      x: 290
+      y: 608
+      width: 580
+      height: 36
+      text: "the length is 3 but the index is 3"
+      strokeColor: "#e03131"
       fontSize: 28
 
 build:
@@ -144,113 +540,359 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "year 2015, pi 3.14159\nstable true, grade A\ntuple parts: 1, 2.5, x\nfirst score 90, count 3\n"
+      stdout: "score 1250, lives 3\nspeed 2.5, alive true, heart ♥\nlevel 7, health 92.5, player.0 = 7\nfirst 40, last 60, count 3\n"
       stderr: ""
 
 scenes:
-  - id: type-map
+  - id: integer-sizes
+    chapter: Integers come in sizes
     narration: >
-      [[mark:board]] Every value in Rust has a type. Two families.
-      [[mark:show-scalar]] Scalars hold one value — integers, floats, true or
-      false, single characters. [[mark:show-compound]] Compound types hold
-      several — a tuple mixes types, an array holds many of one.
-      [[mark:board-close]] Let's code them.
+      Every value in Rust has a type, and the compiler knows it before your
+      program runs. You've met i32 and u32, so let's start with
+      integers. [[mark:draw-bars]] There are several integer types, and the
+      name tells you the size. The number is how many bits it uses, like 8, 16, 32 or 64.
+      [[mark:draw-signs]] The letter matters too. i means signed, so it can be
+      negative. u means unsigned: zero and up.
+      [[mark:draw-default]] When you don't write a type, Rust picks i32.
     sources:
-      - title: "The Rust Book — Data Types"
-        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html"
+      - title: "The Rust Book — Data Types: Integer Types"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#integer-types"
+      - title: "The Rust Reference — Integer types"
+        url: "https://doc.rust-lang.org/reference/types/numeric.html#integer-types"
     actions:
-      - id: open-board
+      # Opens in the quiet handle before the first dialog, so the title is up
+      # when the voice starts.
+      - id: open-int-board
         type: whiteboard.apply
-        at: { mark: board }
+        at: { scene: start, offsetMs: -1500 }
         open: true
-        upsertIds: [dt-title, dt-rootbox, dt-rootlabel]
-      - id: show-scalars
+        upsertIds: [int-title]
+      - id: draw-bars
         type: whiteboard.apply
-        at: { mark: show-scalar }
-        upsertIds: [dt-branchL, scalar-card, scalar-head, scalar-row1, scalar-row2]
-      - id: show-compound
+        at: { mark: draw-bars }
+        upsertIds:
+          [
+            int-i8,
+            int-u8,
+            int-bar8,
+            int-i16,
+            int-u16,
+            int-bar16,
+            int-i32,
+            int-u32,
+            int-bar32,
+            int-i64,
+            int-u64,
+            int-bar64,
+          ]
+        drawMs: 3600
+      - id: draw-signs
         type: whiteboard.apply
-        at: { mark: show-compound }
-        upsertIds: [dt-branchR, compound-card, compound-head, compound-row1, compound-row2]
-      - id: close-board
+        at: { mark: draw-signs }
+        upsertIds: [int-signed, int-unsigned]
+        drawMs: 1600
+      - id: draw-default
         type: whiteboard.apply
-        at: { mark: board-close }
-        open: false
+        at: { mark: draw-default }
+        upsertIds: [int-default-circle, int-default]
+        drawMs: 1400
+
+  - id: integer-limits
+    narration: >
+      Why does the size matter? [[mark:draw-range]] A smaller type uses less
+      memory, but it holds a smaller range. A u8 is one byte, so it only holds
+      zero to 255. [[mark:draw-error]] Try to put 256 in it, and the program
+      doesn't compile. The error says: literal out of range for u8. A literal
+      is a value written in your code, like this 256. [[mark:after-error]] So
+      you pick a size that fits your data.
+    sources:
+      - title: "The Rust Book — Data Types: Integer Overflow"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#integer-overflow"
+      - title: "The Rust Reference — Integer literal expressions"
+        url: "https://doc.rust-lang.org/reference/expressions/literal-expr.html#integer-literal-expressions"
+      - title: "The rustc book — overflowing_literals (deny by default)"
+        url: "https://doc.rust-lang.org/rustc/lints/listing/deny-by-default.html#overflowing-literals"
+    actions:
+      - id: draw-range
+        type: whiteboard.apply
+        at: { mark: draw-range }
+        upsertIds: [int-range]
+        drawMs: 1000
+      - id: draw-error
+        type: whiteboard.apply
+        at: { mark: draw-error }
+        upsertIds: [int-err-code, int-err-underline, int-err-msg]
+        drawMs: 2600
 
   - id: scalars
+    chapter: Floats, booleans and characters
     narration: >
-      [[mark:open]] Two scalars already. [[mark:select-year-type]] year is
-      annotated i32, a 32-bit signed integer. pi has no annotation, so Rust
-      infers f64, the default float.
-      [[mark:type-scalars]] Add the other two. A bool: true or false. A char:
-      one Unicode character, in single quotes.
+      [[mark:open-main]] Here's our program. [[mark:select-score]] score has
+      no type written, so Rust makes it an i32. [[mark:select-u8]] lives has
+      its type after the colon: u8. Three is between zero and 255, so it fits.
+      Integers are one of four scalar types, which hold a single value.
+      [[mark:type-scalars]] Let's add the other three. A number with a
+      decimal point is a float. The default is f64. On modern CPUs it's about
+      as fast as f32, and more precise. A bool is true or false. And a
+      char goes in single quotes. Double quotes make a string.
+      [[mark:char-size]] A char is four bytes, so it can hold one Unicode
+      character, not only an English letter. [[mark:select-heart]] Here,
+      it's a heart.
     sources:
-      - title: "The Rust Book — Scalar Types"
-        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#scalar-types"
+      - title: "The Rust Book — Data Types: Floating-Point, Boolean and Character Types"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#floating-point-types"
+      - title: "std — primitive type char"
+        url: "https://doc.rust-lang.org/std/primitive.char.html"
     actions:
+      - id: close-int-board
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: open-main
         type: workspace.openFile
-        at: { mark: open }
+        # Clear of the board closing at the scene's first word, so the cursor
+        # has time to glide to the file row.
+        at: { mark: open-main, offsetMs: 700 }
         path: main.rs
-      - id: select-year-type
+      - id: select-score
         type: editor.select
-        at: { mark: select-year-type }
+        at: { mark: select-score }
         target:
           file: main.rs
-          text: "year: i32"
+          text: "score = 1250"
+          occurrence: 1
+      - id: select-u8
+        type: editor.select
+        at: { mark: select-u8 }
+        target:
+          file: main.rs
+          text: "lives: u8"
           occurrence: 1
       - id: type-scalars
         type: editor.type
-        at: { mark: type-scalars, offsetMs: -400 }
+        at: { mark: type-scalars, offsetMs: -300 }
         target:
           file: main.rs
-          after: "    println!(\"year {year}, pi {pi}\");\n"
+          after: "    println!(\"score {score}, lives {lives}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let stable = true;\n    let grade = 'A';\n    println!(\"stable {stable}, grade {grade}\");\n"
+        text: "\n    let speed = 2.5;\n    let alive = true;\n    let heart = '♥';\n    println!(\"speed {speed}, alive {alive}, heart {heart}\");\n"
+      # '♥' (U+2665) is one UTF-16 unit, so Monaco's offsets and the drag
+      # endpoints line up with the characters on screen.
+      - id: select-heart
+        type: editor.select
+        at: { mark: select-heart }
+        target:
+          file: main.rs
+          text: "'♥'"
+          occurrence: 1
 
-  - id: compound
+  - id: compound-board
+    chapter: Tuples and arrays
     narration: >
-      [[mark:type-compound]] Now compound types. [[mark:select-tuple]] A tuple
-      packs a fixed group: an integer, a float, and a char. A pattern unpacks
-      and names each part. [[mark:select-array]] An array has a fixed count, all
-      one type. Read one by index from zero; its length is known at compile time.
+      [[mark:open-compound]] Compound types group several values into one.
+      [[mark:draw-tuple]] A tuple has a fixed number of parts, and each part
+      can have its own type. This one holds an i32 and an f64. The f64 box is
+      twice as wide, because it's 64 bits. You read a part by its position:
+      dot zero, dot one. [[mark:draw-array]] An array is stricter.
+      Every element has the same type, and the length can't change. Indexes
+      go in square brackets, and they start at zero. [[mark:draw-fixed]] So
+      an array's type names both: i32, and three of them. For a list that can
+      grow, you'll use a vector, later in the course.
     sources:
-      - title: "The Rust Book — Compound Types"
+      - title: "The Rust Book — Data Types: Compound Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#compound-types"
     actions:
-      - id: type-compound
+      # The integer board is wiped; this diagram reuses its canvas.
+      - id: open-compound
+        type: whiteboard.apply
+        at: { mark: open-compound }
+        open: true
+        clear: true
+        upsertIds: [cmp-title]
+      - id: draw-tuple
+        type: whiteboard.apply
+        at: { mark: draw-tuple }
+        upsertIds:
+          [
+            cmp-tuple-name,
+            cmp-tuple-type,
+            cmp-t-cell0,
+            cmp-t-cell1,
+            cmp-t-val0,
+            cmp-t-val1,
+            cmp-t-idx0,
+            cmp-t-idx1,
+          ]
+        drawMs: 3200
+      - id: draw-array
+        type: whiteboard.apply
+        at: { mark: draw-array }
+        upsertIds:
+          [
+            cmp-array-name,
+            cmp-a-cell0,
+            cmp-a-cell1,
+            cmp-a-cell2,
+            cmp-a-val0,
+            cmp-a-val1,
+            cmp-a-val2,
+            cmp-a-idx0,
+            cmp-a-idx1,
+            cmp-a-idx2,
+          ]
+        drawMs: 3600
+      - id: draw-fixed
+        type: whiteboard.apply
+        at: { mark: draw-fixed }
+        upsertIds: [cmp-array-type, cmp-fixed-underline]
+        drawMs: 1400
+
+  - id: tuple
+    narration: >
+      [[mark:to-code]] Let's write both. [[mark:type-tuple]] First, a player
+      tuple, in parentheses: a level of seven, and a health of 92.5.
+      [[mark:type-destructure]] Then let's take it apart. [[mark:select-destructure]] The pattern on the left has
+      the same shape as the tuple. So level gets the first part, and health
+      gets the second. That's called destructuring. [[mark:select-dot]] And
+      player dot zero reads the first part by its position. Braces in the
+      string can only name a plain variable, so player dot zero goes after the
+      string, into empty braces.
+    sources:
+      - title: "The Rust Book — Data Types: The Tuple Type"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#the-tuple-type"
+      - title: "std — fmt: Named parameters"
+        url: "https://doc.rust-lang.org/std/fmt/index.html#named-parameters"
+    actions:
+      - id: close-compound
+        type: whiteboard.apply
+        at: { mark: to-code }
+        open: false
+      - id: type-tuple
         type: editor.type
-        at: { mark: type-compound, offsetMs: -400 }
+        at: { mark: type-tuple, offsetMs: -300 }
         target:
           file: main.rs
-          after: "    println!(\"stable {stable}, grade {grade}\");\n"
+          after: "    println!(\"speed {speed}, alive {alive}, heart {heart}\");\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: "\n    let player = (7, 92.5);\n"
+      - id: type-destructure
+        type: editor.type
+        at: { mark: type-destructure }
+        target:
+          file: main.rs
+          after: "    let player = (7, 92.5);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let point = (1, 2.5, 'x');\n    let (a, b, c) = point;\n    println!(\"tuple parts: {a}, {b}, {c}\");\n    let scores = [90, 80, 70];\n    println!(\"first score {}, count {}\", scores[0], scores.len());\n"
-      - id: select-tuple
+        text: "    let (level, health) = player;\n    println!(\"level {level}, health {health}, player.0 = {}\", player.0);\n"
+      - id: select-destructure
         type: editor.select
-        at: { mark: select-tuple }
+        at: { mark: select-destructure }
         target:
           file: main.rs
-          text: "    let point = (1, 2.5, 'x');\n    let (a, b, c) = point;"
+          text: "(level, health)"
           occurrence: 1
-      - id: select-array
+      # Occurrence 2: the first "player.0" is inside the format string.
+      - id: select-dot
         type: editor.select
-        at: { mark: select-array }
+        at: { mark: select-dot }
         target:
           file: main.rs
-          text: "let scores = [90, 80, 70];"
+          text: "player.0"
+          occurrence: 2
+
+  - id: array
+    narration: >
+      [[mark:type-array]] Now an array of three lap times, and a line that
+      prints the first, the last, and the count.
+      [[mark:select-array-type]] Its type says i32, then a semicolon and the
+      length, three. [[mark:select-last]] So the last index is two.
+      [[mark:select-len]] And len gives the number of elements. Lengths and
+      indexes use usize, an unsigned integer that's as wide as a memory
+      address. On most machines, that's 64 bits.
+    sources:
+      - title: "The Rust Book — Data Types: The Array Type"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#the-array-type"
+      - title: "std — primitive type usize"
+        url: "https://doc.rust-lang.org/std/primitive.usize.html"
+    actions:
+      - id: type-array
+        type: editor.type
+        at: { mark: type-array, offsetMs: -300 }
+        target:
+          file: main.rs
+          after: "    println!(\"level {level}, health {health}, player.0 = {}\", player.0);\n"
           occurrence: 1
+        cadence: line-by-line
+        text: "\n    let laps: [i32; 3] = [40, 25, 60];\n    println!(\"first {}, last {}, count {}\", laps[0], laps[2], laps.len());\n"
+      - id: select-array-type
+        type: editor.select
+        at: { mark: select-array-type }
+        target:
+          file: main.rs
+          text: "[i32; 3]"
+          occurrence: 1
+      - id: select-last
+        type: editor.select
+        at: { mark: select-last }
+        target:
+          file: main.rs
+          text: "laps[2]"
+          occurrence: 1
+      - id: select-len
+        type: editor.select
+        at: { mark: select-len }
+        target:
+          file: main.rs
+          text: "laps.len()"
+          occurrence: 1
+
+  - id: out-of-bounds
+    chapter: Reading past the end
+    narration: >
+      What if we asked for index three? [[mark:open-bounds]] There's no
+      fourth element. [[mark:draw-bounds]] The compiler knows the length and
+      the index, so it stops with an error: this operation will panic at
+      runtime. The length is 3 but the index is 3. [[mark:bounds-why]] And
+      when the index is only known while the program runs, Rust still checks
+      it. If it's too big, the program stops with an error called a panic. In
+      C, that read could return whatever is next in memory.
+      [[mark:close-bounds]] Rust never reads past the end of an array.
+    sources:
+      - title: "The Rust Book — Data Types: Invalid Array Element Access"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#invalid-array-element-access"
+      - title: "The rustc book — unconditional_panic (deny by default)"
+        url: "https://doc.rust-lang.org/rustc/lints/listing/deny-by-default.html#unconditional-panic"
+    actions:
+      # Re-opens board 2 as it was left; the missing slot and the error are
+      # added under the array the viewer already saw.
+      - id: open-bounds
+        type: whiteboard.apply
+        at: { mark: open-bounds }
+        open: true
+        upsertIds: [cmp-b-idx3, cmp-b-circle]
+        drawMs: 1200
+      - id: draw-bounds
+        type: whiteboard.apply
+        at: { mark: draw-bounds }
+        upsertIds: [cmp-b-code, cmp-b-underline, cmp-b-err1, cmp-b-err2]
+        drawMs: 3600
+      # Closed a sentence before the run, so the cursor has time to glide to
+      # the Run button.
+      - id: close-bounds
+        type: whiteboard.apply
+        at: { mark: close-bounds }
+        open: false
 
   - id: run
     narration: >
-      [[mark:run]] Run it. Two scalars, then bool and char. The tuple splits
-      into three parts. The array gives its first value and its length. Types
-      are fixed, checked before the program runs — no runtime surprises.
+      [[mark:run]] Let's run it. Score 1250 and three lives. Then the float,
+      the bool and the heart. Level 7, health 92.5, and player dot zero is 7
+      too. Then first 40, last 60, and a count of 3.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "Rust by Example — Primitives"
+        url: "https://doc.rust-lang.org/rust-by-example/primitives.html"
     actions:
       - id: run
         type: runtime.run
@@ -259,13 +901,24 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "first score 90, count 3"
+        contains: "first 40, last 60, count 3"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "let scores = [90, 80, 70];"
+        contains: "let laps: [i32; 3] = [40, 25, 60];"
+
+  - id: wrap
+    narration: >
+      So every value has one fixed type, and the type decides its size. Scalars
+      hold one value, and tuples and arrays group a fixed number of them.
+      Next, we'll write functions of our own, with typed parameters and a
+      return type.
+    sources:
+      - title: "The Rust Book — Data Types"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html"
+    actions: []
 
 checks:
   - { type: timing.p95Ms, max: 300 }
