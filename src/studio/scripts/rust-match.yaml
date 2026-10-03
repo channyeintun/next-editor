@@ -1,13 +1,25 @@
-# One idea: match compares one value against patterns in order and must be
-# exhaustive (an underscore catches the rest), and if let is the short form
-# for a single pattern. A whiteboard sketch, then a grade match and an if let.
+# Rust from zero, lesson 11: pattern matching. match compares one value with
+# each pattern in order, the first pattern that fits runs, a pattern can bind
+# the data inside a variant, and match is an expression (a diagram is drawn in
+# on the whiteboard). A missing arm is a compile error, so the E0004 answer
+# goes on a second board, since an insert-only lesson can't run broken code.
+# Then, built live in a loop over three shapes: a match that computes each
+# area, a match on that number with ranges and the _ catch-all, and if let for
+# the one variant we care about. One run, and a recap board.
+#
+# Both E0004 messages in the lesson ("non-exhaustive patterns: `Shape::Dot`
+# not covered" on the board, and "`10_u32..=u32::MAX` not covered" for the
+# area match without `_`, said as "ten and up aren't covered") were confirmed
+# with rustc 1.98 --edition 2024 by removing that arm from the final program.
+# The fixture is the exact output of the final program, which compiles with
+# no warnings.
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-match.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-match
-  title: "Rust match: patterns, exhaustively"
+  title: "Rust from zero: Pattern matching"
   locale: en-US
   workspace:
     lessonType: rust
@@ -15,59 +27,439 @@ lesson:
     entryFilePath: main.rs
     files:
       main.rs: |
-        fn main() {
-            let score = 85;
-            println!("score is {score}");
+        enum Shape {
+            Square(u32),
+            Rect(u32, u32),
+            Dot,
         }
+
+        fn main() {
+            let shapes = [Shape::Square(3), Shape::Rect(2, 5), Shape::Dot];
+            for shape in shapes {
+            }
+        }
+  # Colour jobs: blue = the thing being named (the value, the names a pattern
+  # binds, the recap keywords), green = the pattern that fits / what the
+  # compiler accepts, orange = what changes (a skipped arm, a variant added
+  # later, the arm that must go last), red = the error, violet = the value a
+  # match gives back. Text is #1e1e1e (white on the dark board) unless it has
+  # one of those jobs. x positions are centred on Virgil widths (~0.56 em).
   whiteboardAssets:
-    - id: mt-title
+    # Board 1 — one value tried against each pattern, top to bottom.
+    - id: b1-title
       kind: text
       x: 300
-      y: 185
-      width: 700
-      height: 40
-      text: "match — one value, many patterns"
+      y: 160
+      width: 690
+      height: 46
+      text: "match tries each pattern, in order"
       strokeColor: "#1e1e1e"
       fontSize: 36
-    - id: mt-match-card
+    - id: b1-value
       kind: rectangle
       x: 300
-      y: 255
-      width: 680
-      height: 66
+      y: 232
+      width: 260
+      height: 68
       strokeColor: "#1971c2"
-    - id: mt-match-text
+    - id: b1-value-t
       kind: text
-      x: 322
-      y: 277
-      width: 640
-      height: 30
-      text: "match n { 1 => …, 2 => …, _ => … }"
+      x: 348
+      y: 246
+      width: 185
+      height: 40
+      text: "Rect(2, 5)"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: b1-value-label
+      kind: text
+      x: 580
+      y: 250
+      width: 145
+      height: 36
+      text: "the value"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: b1-arrow-in
+      kind: freedraw
+      stroke: arrow-down
+      x: 410
+      y: 308
+      width: 40
+      height: 60
+      strokeColor: "#1e1e1e"
+    - id: b1-arm1
+      kind: rectangle
+      x: 280
+      y: 376
+      width: 300
+      height: 60
+      strokeColor: "#1e1e1e"
+    - id: b1-arm1-t
+      kind: text
+      x: 340
+      y: 387
+      width: 205
+      height: 38
+      text: "Square(side)"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b1-arm2
+      kind: rectangle
+      x: 280
+      y: 451
+      width: 300
+      height: 60
+      strokeColor: "#2f9e44"
+    - id: b1-arm2-t
+      kind: text
+      x: 356
+      y: 462
+      width: 170
+      height: 38
+      text: "Rect(w, h)"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b1-arm3
+      kind: rectangle
+      x: 280
+      y: 526
+      width: 300
+      height: 60
+      strokeColor: "#1e1e1e"
+    - id: b1-arm3-t
+      kind: text
+      x: 401
+      y: 537
+      width: 55
+      height: 38
+      text: "Dot"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b1-skip
+      kind: freedraw
+      stroke: strike
+      x: 334
+      y: 385
+      width: 192
+      height: 42
+      strokeColor: "#f08c00"
+    - id: b1-skip-t
+      kind: text
+      x: 600
+      y: 389
+      width: 190
+      height: 36
+      text: "no fit: skip"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b1-check
+      kind: freedraw
+      stroke: check
+      x: 596
+      y: 456
+      width: 46
+      height: 46
+      strokeColor: "#2f9e44"
+    - id: b1-rest-t
+      kind: text
+      x: 600
+      y: 539
+      width: 180
+      height: 36
+      text: "not checked"
       strokeColor: "#1e1e1e"
       fontSize: 28
-    - id: mt-note
+    - id: b1-arrow-bind
+      kind: freedraw
+      stroke: arrow-right
+      x: 655
+      y: 459
+      width: 130
+      height: 40
+      strokeColor: "#1e1e1e"
+    - id: b1-bind-t
+      kind: text
+      x: 800
+      y: 462
+      width: 205
+      height: 38
+      text: "w = 2, h = 5"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: b1-arrow-result
+      kind: freedraw
+      stroke: arrow-down
+      x: 900
+      y: 508
+      width: 36
+      height: 44
+      strokeColor: "#6741d9"
+    - id: b1-result
+      kind: rectangle
+      x: 810
+      y: 558
+      width: 220
+      height: 64
+      strokeColor: "#6741d9"
+    - id: b1-result-t
+      kind: text
+      x: 846
+      y: 571
+      width: 155
+      height: 38
+      text: "area = 10"
+      strokeColor: "#6741d9"
+      fontSize: 30
+
+    # Board 2 — a missing arm, the E0004 answer, and why that helps.
+    - id: b2-title
+      kind: text
+      x: 300
+      y: 160
+      width: 530
+      height: 46
+      text: "Every case must be covered"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: b2-code1
       kind: text
       x: 320
-      y: 336
-      width: 680
-      height: 30
-      text: "must be exhaustive — _ catches the rest"
+      y: 232
+      width: 210
+      height: 36
+      text: "match shape {"
       strokeColor: "#1e1e1e"
       fontSize: 28
-    - id: mt-iflet-card
+    - id: b2-code2
+      kind: text
+      x: 360
+      y: 272
+      width: 555
+      height: 36
+      text: "Shape::Square(side) => side * side,"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b2-code3
+      kind: text
+      x: 360
+      y: 312
+      width: 430
+      height: 36
+      text: "Shape::Rect(w, h) => w * h,"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b2-code4
+      kind: text
+      x: 320
+      y: 392
+      width: 20
+      height: 36
+      text: "}"
+      strokeColor: "#1e1e1e"
+      fontSize: 28
+    - id: b2-underline
+      kind: freedraw
+      stroke: underline
+      x: 316
+      y: 236
+      width: 210
+      height: 34
+      strokeColor: "#e03131"
+    - id: b2-err1
+      kind: text
+      x: 320
+      y: 446
+      width: 600
+      height: 36
+      text: "error[E0004]: non-exhaustive patterns:"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b2-err2
+      kind: text
+      x: 320
+      y: 484
+      width: 380
+      height: 36
+      text: "`Shape::Dot` not covered"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: b2-why1
+      kind: text
+      x: 320
+      y: 548
+      width: 320
+      height: 36
+      text: "Add a variant later?"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b2-why2
+      kind: text
+      x: 320
+      y: 588
+      width: 630
+      height: 36
+      text: "the compiler finds every match to update"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: b2-fix
+      kind: text
+      x: 360
+      y: 352
+      width: 260
+      height: 36
+      text: "Shape::Dot => 0,"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: b2-fix-check
+      kind: freedraw
+      stroke: check
+      x: 606
+      y: 346
+      width: 44
+      height: 44
+      strokeColor: "#2f9e44"
+
+    # Board 3 — recap: four tools, one line each.
+    - id: b3-title
+      kind: text
+      x: 300
+      y: 160
+      width: 490
+      height: 46
+      text: "Pattern matching in Rust"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: b3-match-box
       kind: rectangle
       x: 300
-      y: 386
-      width: 680
-      height: 66
-      strokeColor: "#f08c00"
-    - id: mt-iflet-text
+      y: 240
+      width: 210
+      height: 60
+      strokeColor: "#1971c2"
+    - id: b3-match-k
       kind: text
-      x: 322
-      y: 408
-      width: 640
-      height: 30
-      text: "if let Some(x) = opt { … }   → one pattern"
+      x: 362
+      y: 252
+      width: 90
+      height: 38
+      text: "match"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b3-match-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 525
+      y: 250
+      width: 60
+      height: 40
+      strokeColor: "#1e1e1e"
+    - id: b3-match-d
+      kind: text
+      x: 600
+      y: 253
+      width: 410
+      height: 36
+      text: "every case, first fit wins"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    - id: b3-bind-box
+      kind: rectangle
+      x: 300
+      y: 325
+      width: 210
+      height: 60
+      strokeColor: "#1971c2"
+    - id: b3-bind-k
+      kind: text
+      x: 331
+      y: 337
+      width: 170
+      height: 38
+      text: "Rect(w, h)"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b3-bind-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 525
+      y: 335
+      width: 60
+      height: 40
+      strokeColor: "#1e1e1e"
+    - id: b3-bind-d
+      kind: text
+      x: 600
+      y: 338
+      width: 400
+      height: 36
+      text: "pulls out the data inside"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: b3-any-box
+      kind: rectangle
+      x: 300
+      y: 410
+      width: 210
+      height: 60
+      strokeColor: "#1971c2"
+    - id: b3-any-k
+      kind: text
+      x: 392
+      y: 420
+      width: 20
+      height: 38
+      text: "_"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b3-any-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 525
+      y: 420
+      width: 60
+      height: 40
+      strokeColor: "#1e1e1e"
+    - id: b3-any-d
+      kind: text
+      x: 600
+      y: 423
+      width: 410
+      height: 36
+      text: "everything else, goes last"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: b3-iflet-box
+      kind: rectangle
+      x: 300
+      y: 495
+      width: 210
+      height: 60
+      strokeColor: "#1971c2"
+    - id: b3-iflet-k
+      kind: text
+      x: 366
+      y: 507
+      width: 105
+      height: 38
+      text: "if let"
+      strokeColor: "#1e1e1e"
+      fontSize: 30
+    - id: b3-iflet-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 525
+      y: 505
+      width: 60
+      height: 40
+      strokeColor: "#1e1e1e"
+    - id: b3-iflet-d
+      kind: text
+      x: 600
+      y: 508
+      width: 410
+      height: 36
+      text: "one pattern, skip the rest"
       strokeColor: "#1e1e1e"
       fontSize: 28
 
@@ -82,110 +474,269 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "score is 85\ngrade B\nfound 7\n"
+      stdout: "area 9: small\narea 10: large\nrect is 2 by 5\narea 0: empty\n"
       stderr: ""
 
 scenes:
   - id: how-match-works
+    chapter: How match works
     narration: >
-      [[mark:board]] Match compares one value against a list of patterns, in
-      order. [[mark:match-card]] The first pattern that fits wins, and match
-      returns its result. [[mark:note]] It has to be exhaustive — an underscore
-      catches everything you didn't list. [[mark:iflet]] When you only care
-      about one pattern, if let is the short form. [[mark:board-close]] Let's
-      use both.
+      [[mark:open-board]] You've seen enums: a value that's one of several
+      variants. So how do you find out which variant you have, and get the
+      data inside? You use match. [[mark:draw-value]] Here's a value: a Rect
+      that's two by five. [[mark:draw-arms]] match compares it with each
+      pattern, from top to bottom. [[mark:draw-skip]] Square doesn't fit, so
+      it's skipped. [[mark:draw-fit]] Rect fits, so that arm runs. The first
+      fit wins, and the arms below it aren't checked. [[mark:draw-bind]] The
+      pattern also gives names to the data inside the variant. w gets two,
+      and h gets five. [[mark:draw-result]] And match is an expression, like
+      an if. The arm that runs gives back a value: here, the area, ten.
     sources:
       - title: "The Rust Book — The match Control Flow Construct"
         url: "https://doc.rust-lang.org/book/ch06-02-match.html"
+      - title: "The Rust Reference — match expressions"
+        url: "https://doc.rust-lang.org/reference/expressions/match-expr.html"
     actions:
       - id: open-board
         type: whiteboard.apply
-        at: { mark: board }
+        at: { mark: open-board }
         open: true
-        upsertIds: [mt-title]
-      - id: show-match
+        upsertIds: [b1-title]
+      - id: draw-value
         type: whiteboard.apply
-        at: { mark: match-card }
-        upsertIds: [mt-match-card, mt-match-text]
-      - id: show-note
+        at: { mark: draw-value }
+        upsertIds: [b1-value, b1-value-t, b1-value-label]
+        drawMs: 1200
+      - id: draw-arms
         type: whiteboard.apply
-        at: { mark: note }
-        upsertIds: [mt-note]
-      - id: show-iflet
+        at: { mark: draw-arms }
+        upsertIds: [b1-arrow-in, b1-arm1, b1-arm1-t, b1-arm2, b1-arm2-t, b1-arm3, b1-arm3-t]
+        drawMs: 2400
+      - id: draw-skip
         type: whiteboard.apply
-        at: { mark: iflet }
-        upsertIds: [mt-iflet-card, mt-iflet-text]
-      - id: close-board
+        at: { mark: draw-skip }
+        upsertIds: [b1-skip, b1-skip-t]
+        drawMs: 1000
+      - id: draw-fit
         type: whiteboard.apply
-        at: { mark: board-close }
-        open: false
+        at: { mark: draw-fit }
+        upsertIds: [b1-check, b1-rest-t]
+        drawMs: 1200
+      - id: draw-bind
+        type: whiteboard.apply
+        at: { mark: draw-bind }
+        upsertIds: [b1-arrow-bind, b1-bind-t]
+        drawMs: 1400
+      - id: draw-result
+        type: whiteboard.apply
+        at: { mark: draw-result }
+        upsertIds: [b1-arrow-result, b1-result, b1-result-t]
+        drawMs: 1600
 
-  - id: the-match
+  - id: build-area
     narration: >
-      [[mark:open]] Here's a score. [[mark:type-match]] Now match it. Ranges
-      like ninety to one hundred map to a letter grade.
-      [[mark:select-grade-arm]] Eighty-five falls in the second arm, so grade
-      becomes B. The
-      underscore is the catch-all, and match hands its result to grade.
+      Let's write it. [[mark:open-main]] Here's a Shape enum. Square and
+      Rect carry numbers, and Dot carries nothing. The loop goes through
+      three shapes. [[mark:type-area]] Let's match on shape, and store the
+      result in area. There's one arm for each variant.
+      [[mark:select-arm]] Each arm is a pattern, then an arrow, then the
+      value it gives back. [[mark:select-bind]] In this pattern, w and h are new variables. They take the two numbers
+      inside the Rect, so this arm can multiply them. [[mark:select-dot]] Dot
+      has no data, so its area is zero. Every arm must give back the same
+      type, because area can only have one.
     sources:
       - title: "The Rust Book — Patterns That Bind to Values"
         url: "https://doc.rust-lang.org/book/ch06-02-match.html#patterns-that-bind-to-values"
+      - title: "Rust by Example — Destructuring enums"
+        url: "https://doc.rust-lang.org/rust-by-example/flow_control/match/destructuring/destructure_enum.html"
     actions:
+      - id: close-board1
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: open-main
         type: workspace.openFile
-        at: { mark: open }
+        at: { mark: open-main }
         path: main.rs
-      - id: type-match
+      - id: type-area
         type: editor.type
-        at: { mark: type-match, offsetMs: -400 }
+        at: { mark: type-area, offsetMs: -200 }
         target:
           file: main.rs
-          after: "    println!(\"score is {score}\");\n"
+          after: "    for shape in shapes {\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let grade = match score {\n        90..=100 => 'A',\n        80..=89 => 'B',\n        _ => 'C',\n    };\n    println!(\"grade {grade}\");\n"
-      - id: select-grade-arm
+        text: "        let area = match shape {\n            Shape::Square(side) => side * side,\n            Shape::Rect(w, h) => w * h,\n            Shape::Dot => 0,\n        };\n"
+      - id: select-arm
         type: editor.select
-        at: { mark: select-grade-arm }
+        at: { mark: select-arm }
         target:
           file: main.rs
-          text: "80..=89 => 'B'"
+          text: "Shape::Square(side) => side * side"
+          occurrence: 1
+      - id: select-bind
+        type: editor.select
+        at: { mark: select-bind }
+        target:
+          file: main.rs
+          text: "Shape::Rect(w, h)"
+          occurrence: 1
+      - id: select-dot
+        type: editor.select
+        at: { mark: select-dot }
+        target:
+          file: main.rs
+          text: "Shape::Dot => 0"
           occurrence: 1
 
-  - id: if-let
+  - id: exhaustive
+    chapter: Every case must be covered
     narration: >
-      [[mark:type-iflet]] Sometimes you only want one case. Found holds Some
-      seven. [[mark:select-if-let]] If let checks for the Some pattern and
-      pulls out the seven, binding it to x. One line, no full match needed.
+      [[mark:open-rules]] What if you forget an arm? [[mark:draw-broken]]
+      Say the match handles Square and Rect, but there's no arm for Dot.
+      [[mark:draw-error]] Then it doesn't compile. You get error E0004:
+      non-exhaustive patterns. It names the missing case: Dot isn't covered.
+      Exhaustive means every possible value is handled. [[mark:draw-why]]
+      That helps. Say you add a new variant later, like Circle.
+      The compiler then shows you every match that doesn't handle it yet,
+      unless that match has a catch-all arm. You'll meet the catch-all next. In
+      many languages, a missing case still compiles, and the bug shows up
+      when the program runs. [[mark:draw-fix]] The fix is to add the missing
+      arm.
+    sources:
+      - title: "Rust error codes — E0004"
+        url: "https://doc.rust-lang.org/error_codes/E0004.html"
+      - title: "The Rust Book — Matches Are Exhaustive"
+        url: "https://doc.rust-lang.org/book/ch06-02-match.html#matches-are-exhaustive"
+    actions:
+      - id: open-rules
+        type: whiteboard.apply
+        at: { mark: open-rules }
+        open: true
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-broken
+        type: whiteboard.apply
+        at: { mark: draw-broken }
+        upsertIds: [b2-code1, b2-code2, b2-code3, b2-code4]
+        drawMs: 2400
+      - id: draw-error
+        type: whiteboard.apply
+        at: { mark: draw-error }
+        upsertIds: [b2-underline, b2-err1, b2-err2]
+        drawMs: 2400
+      - id: draw-why
+        type: whiteboard.apply
+        at: { mark: draw-why }
+        upsertIds: [b2-why1, b2-why2]
+        drawMs: 2200
+      - id: draw-fix
+        type: whiteboard.apply
+        at: { mark: draw-fix }
+        upsertIds: [b2-fix, b2-fix-check]
+        drawMs: 1400
+
+  - id: catch-all
+    chapter: "The _ catch-all"
+    narration: >
+      Now let's match on a number. [[mark:type-size]] We'll turn each area
+      into a size word. [[mark:select-range]] A pattern can be one number,
+      like zero, or a range, like one to nine. But a u32 has over four
+      billion values, and you can't list them all. [[mark:select-underscore]]
+      So the last arm is an underscore. It's the
+      catch-all pattern: it matches any value that's left. It goes last,
+      because the arms are checked in order, and an arm after it would never
+      run. Without it, you'd get E0004 again, because ten and up aren't
+      covered. [[mark:type-print]] Then we print the area and its size.
+    sources:
+      - title: "The Rust Book — Catch-All Patterns and the _ Placeholder"
+        url: "https://doc.rust-lang.org/book/ch06-02-match.html#catch-all-patterns-and-the-_-placeholder"
+      - title: "The Rust Reference — Range patterns"
+        url: "https://doc.rust-lang.org/reference/patterns.html#range-patterns"
+      - title: "std — u32::MAX"
+        url: "https://doc.rust-lang.org/std/primitive.u32.html#associatedconstant.MAX"
+    actions:
+      - id: close-rules
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-size
+        type: editor.type
+        at: { mark: type-size, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "            Shape::Dot => 0,\n        };\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "        let size = match area {\n            0 => \"empty\",\n            1..=9 => \"small\",\n            _ => \"large\",\n        };\n"
+      - id: select-range
+        type: editor.select
+        at: { mark: select-range }
+        target:
+          file: main.rs
+          text: "1..=9"
+          occurrence: 1
+      - id: select-underscore
+        type: editor.select
+        at: { mark: select-underscore }
+        target:
+          file: main.rs
+          text: '_ => "large"'
+          occurrence: 1
+      - id: type-print
+        type: editor.type
+        at: { mark: type-print }
+        target:
+          file: main.rs
+          after: "            _ => \"large\",\n        };\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "        println!(\"area {area}: {size}\");\n"
+
+  - id: if-let
+    chapter: if let for one case
+    narration: >
+      [[mark:type-iflet]] Sometimes only one variant matters. Let's print the
+      sides, but only for a Rect. [[mark:select-iflet]] if let takes one
+      pattern, an equals sign, and a value. If it fits, w and h get the
+      numbers, and the block runs. If it doesn't, the block is skipped. A match
+      would need an underscore arm that does nothing, so this is shorter. But
+      if let isn't exhaustive, so use it only when the other cases don't
+      matter. And shape is still usable here: the first match only copied
+      numbers out of it. [[mark:option-note]] You'll often see if let with
+      Option, too: if let Some uses a value only when there's one.
     sources:
       - title: "The Rust Book — Concise Control Flow with if let"
         url: "https://doc.rust-lang.org/book/ch06-03-if-let.html"
+      - title: "Rust by Example — if let"
+        url: "https://doc.rust-lang.org/rust-by-example/flow_control/if_let.html"
     actions:
       - id: type-iflet
         type: editor.type
-        at: { mark: type-iflet, offsetMs: -400 }
+        at: { mark: type-iflet, offsetMs: -200 }
         target:
           file: main.rs
-          after: "    println!(\"grade {grade}\");\n"
+          after: "        println!(\"area {area}: {size}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let found = Some(7);\n    if let Some(x) = found {\n        println!(\"found {x}\");\n    }\n"
-      - id: select-if-let
+        text: "        if let Shape::Rect(w, h) = shape {\n            println!(\"rect is {w} by {h}\");\n        }\n"
+      - id: select-iflet
         type: editor.select
-        at: { mark: select-if-let }
+        at: { mark: select-iflet }
         target:
           file: main.rs
-          text: "if let Some(x) = found {"
+          text: "if let Shape::Rect(w, h) = shape"
           occurrence: 1
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. The score is eighty-five, the grade is B, and
-      if let found the seven inside. Match forces you to handle every case; if
-      let keeps the simple ones short.
+      [[mark:run]] Let's run it. [[mark:read-output]] The square's area is
+      nine, so it's small. The rectangle's area is ten. That's past nine, so
+      the underscore arm gives large, and if let prints its sides, two by
+      five. And the dot's area is zero, so it's empty.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "Rust by Example — match"
+        url: "https://doc.rust-lang.org/rust-by-example/flow_control/match.html"
     actions:
       - id: run
         type: runtime.run
@@ -194,13 +745,54 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "grade B"
+        contains: "area 10: large"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "if let Some(x) = found {"
+        contains: "if let Shape::Rect(w, h) = shape {"
+
+  - id: wrap
+    narration: >
+      [[mark:recap-match]] So, a match must cover every case, and the first
+      pattern that fits wins. [[mark:recap-bind]] A pattern can pull out the data
+      inside a variant. [[mark:recap-any]] The underscore catches everything
+      else, so it goes last. [[mark:recap-iflet]] And if let handles one
+      pattern, and skips the rest. Next, we'll look at vectors: lists of
+      values that can grow.
+    sources:
+      - title: "The Rust Book — Enums and Pattern Matching"
+        url: "https://doc.rust-lang.org/book/ch06-00-enums.html"
+      - title: "The Rust Book — Storing Lists of Values with Vectors"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html"
+    actions:
+      - id: open-recap
+        type: whiteboard.apply
+        at: { mark: recap-match, offsetMs: -300 }
+        open: true
+        clear: true
+        upsertIds: [b3-title]
+      - id: recap-match
+        type: whiteboard.apply
+        at: { mark: recap-match }
+        upsertIds: [b3-match-box, b3-match-k, b3-match-arrow, b3-match-d]
+        drawMs: 1600
+      - id: recap-bind
+        type: whiteboard.apply
+        at: { mark: recap-bind }
+        upsertIds: [b3-bind-box, b3-bind-k, b3-bind-arrow, b3-bind-d]
+        drawMs: 1600
+      - id: recap-any
+        type: whiteboard.apply
+        at: { mark: recap-any }
+        upsertIds: [b3-any-box, b3-any-k, b3-any-arrow, b3-any-d]
+        drawMs: 1400
+      - id: recap-iflet
+        type: whiteboard.apply
+        at: { mark: recap-iflet }
+        upsertIds: [b3-iflet-box, b3-iflet-k, b3-iflet-arrow, b3-iflet-d]
+        drawMs: 1400
 
 checks:
   - { type: timing.p95Ms, max: 300 }
