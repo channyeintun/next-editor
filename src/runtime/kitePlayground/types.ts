@@ -1,14 +1,15 @@
 /**
  * Contracts for the Kite Playground runner.
  *
- * Unlike the Go, Kotlin and Rust Playgrounds, **there is no Worker proxy and no
- * upstream service.** `kitec` is a Rust program, and Rust builds for
+ * Unlike the Go, Kotlin, Rust, Zig and Haskell Playgrounds, **there is no Worker
+ * proxy and no upstream service.** `kitec` is a Rust program, and Rust builds for
  * WebAssembly, so a Wasm build of the whole toolchain — check, format, run —
- * instantiates in the browser and answers without a network round trip. That removes a whole class of failure the other
- * three have to model: no authentication, no rate limit, no upstream outage,
- * and no lesson that stops working because a public playground is down.
+ * instantiates in the browser and answers without a network round trip. That
+ * removes a whole class of failure the proxied languages have to model: no rate
+ * limit, no upstream outage, and no lesson that stops working because a public
+ * playground is down.
  *
- * The result types below deliberately mirror the other three anyway, so
+ * The result types below deliberately mirror the proxied languages anyway, so
  * `playgroundRuntime.ts`, the runner panel and the console helpers treat every
  * language the same way. Only the transport differs.
  */

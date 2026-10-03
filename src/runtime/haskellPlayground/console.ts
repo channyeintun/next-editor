@@ -63,7 +63,6 @@ export function haskellRunResultToConsoleLines(result: HaskellPlaygroundRunResul
 }
 
 const SERVICE_ERROR_LINES: Record<Exclude<HaskellPlaygroundServiceErrorKind, "aborted">, string> = {
-  unauthenticated: "[haskell-run error] Sign in to run Haskell code. Your edits are kept",
   disabled: "[haskell-run error] Live Run is currently disabled. Editing and playback still work",
   "rate-limited": "[haskell-run error] Too many runs — wait a minute and try again",
   timeout: "[haskell-run error] The program took too long to compile and run",

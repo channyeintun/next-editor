@@ -20,12 +20,11 @@ import { STUDIO_ASM_DOCK_TARGET_ID } from "../studio/targets";
  * x86-64 assembly lessons. Like Kite's and unlike the proxied languages,
  * **there is no service** and not even a compiler to load: the assembler and
  * the machine are TypeScript in `src/core/x86`, so Run assembles and executes
- * in this page and answers without a network round trip — no proxy, no sign-in
- * button, no rate limit, and no lesson that breaks because a public playground
- * went down. That is why assembly has no sign-in where the proxied languages
- * have one, and why cancelling disposes of the pending run instead of aborting
- * a request. It has no Format either, for the plainer reason that assembly has
- * no formatter to run.
+ * in this page and answers without a network round trip — no proxy, no rate
+ * limit, and no lesson that breaks because a public playground went down. That
+ * is also why cancelling disposes of the pending run instead of aborting a
+ * request. It has no Format either, for the plainer reason that assembly has no
+ * formatter to run.
  *
  * There is no linker here, so a run assembles `main.asm` alone (the client says
  * so plainly when several files exist and none is named that). After a run the
@@ -46,7 +45,6 @@ export const ASM_RUNNER: PlaygroundRunnerLanguage<
   dockTargetId: STUDIO_ASM_DOCK_TARGET_ID,
   runnerTab: { label: "Assembly Runner", icon: Cpu },
   consoleTags: { pattern: ASM_CONSOLE_TAG_PATTERN },
-  signIn: null,
   client: {
     create: () => new AsmPlaygroundClient(),
     stop: (client) => client.dispose(),

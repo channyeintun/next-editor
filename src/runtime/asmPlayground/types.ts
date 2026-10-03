@@ -1,12 +1,12 @@
 /**
  * Contracts for the x86-64 assembly runner.
  *
- * Like the Kite Playground and unlike Go, Kotlin, Rust and Zig, **there is no
- * service.** The assembler and the machine are TypeScript in `src/core/x86`,
- * so a run never leaves the page: no proxy, no sign-in, no rate limit, and no
+ * Like the Kite Playground and unlike Go, Kotlin, Rust, Zig and Haskell, **there
+ * is no service.** The assembler and the machine are TypeScript in
+ * `src/core/x86`, so a run never leaves the page: no proxy, no rate limit, and no
  * lesson that stops working because a public playground went down. What that
- * removes from this file is the whole authentication and throttling vocabulary
- * the four proxied languages have to model.
+ * removes from this file is the whole throttling and outage vocabulary the five
+ * proxied languages have to model.
  *
  * What it adds is `registers` and `flags`. Every other language's result is
  * what the program printed; an assembly lesson is usually *about* the register

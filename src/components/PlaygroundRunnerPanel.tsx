@@ -1,7 +1,6 @@
 import { useEffect, useEffectEvent, useRef } from "react";
 import { useSelector } from "@xstate/store-react";
 import { Bot, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
-import { signInUrl, useAuth } from "@next-editor/infra";
 import AgentPanel from "./agent/AgentPanel";
 import XtermTerminal from "./XtermTerminal";
 import { DOCK_TAB_STRIP_CLASS } from "./terminalPanel/runtimeDockHelpers";
@@ -81,7 +80,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
 }: {
   language: PlaygroundRunnerLanguage<Client, ErrorKind, RunResult>;
 }) {
-  const { scrollSurface, dockTargetId, runnerTab, consoleTags, signIn, collectFiles, run, format } =
+  const { scrollSurface, dockTargetId, runnerTab, consoleTags, collectFiles, run, format } =
     language;
   const { store: runtimePanelStore } = useRuntimePanelStore();
   const {
@@ -101,14 +100,8 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   );
   const { editorRef, handleRuntimeEvent } = useNextEditorActions();
   const { currentRecording, isRecording } = useNextEditorMetadata();
-  const { getProject, saveProject, updateFileContent } = useWorkspaceActions();
+  const { getProject, updateFileContent } = useWorkspaceActions();
   const projectVersion = useWorkspaceProjectVersion();
-  // A language that runs in the page has no session to wait for or sign in to.
-  // Its query is disabled, so it never fetches, but a disabled query stays
-  // pending: its loading and signed-out states mean nothing here.
-  const auth = useAuth({ enabled: signIn !== null });
-  const isAuthLoading = signIn !== null && auth.isLoading;
-  const isSignedIn = signIn === null || auth.isSignedIn;
   const collaboration = useOptionalCollaboration();
   const { activeOperation, request, cancel } = usePlaygroundRunner<
     Client,
@@ -162,15 +155,11 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   const formatProject = async (
     activeModel: monaco.editor.ITextModel | null = null,
   ): Promise<monaco.languages.TextEdit[]> => {
-    if (!format || isPlaybackSnapshotActive || isAuthLoading) {
+    if (!format || isPlaybackSnapshotActive) {
       return [];
     }
     if (!canFormatWorkspace) {
       appendConsoleLines([format.readOnlyLine]);
-      return [];
-    }
-    if (!isSignedIn) {
-      appendConsoleLines(format.signedOutLines?.() ?? []);
       return [];
     }
 
@@ -357,16 +346,6 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     );
   };
 
-  const handleSignIn = async () => {
-    // Persist edits before the full-page OAuth navigation so Run-after-sign-in
-    // resumes with the same sources.
-    await saveProject();
-    window.location.assign(signInUrl(`${window.location.pathname}${window.location.search}`));
-  };
-
-  // Stands in for Run while signed out; isSignedIn is always true for a
-  // language with no sign-in.
-  const signInPrompt = !isPlaybackSnapshotActive && !isAuthLoading && !isSignedIn ? signIn : null;
   const consoleContent = effectiveConsoleLines
     .map((line) => decorateConsoleLine(line, consoleTags))
     .join("\n");
@@ -396,7 +375,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       onClick={() => {
         void handleRun();
       }}
-      disabled={isPlaybackSnapshotActive || isAuthLoading}
+      disabled={isPlaybackSnapshotActive}
       className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6] disabled:cursor-not-allowed disabled:bg-[#17241e] disabled:text-[#4f8e68]"
     >
       Run
@@ -505,24 +484,14 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
               >
                 Clear
               </button>
-              {signInPrompt ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleSignIn();
-                  }}
-                  className="rounded-md bg-[#173925] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] hover:text-[#75efa6]"
-                >
-                  {signInPrompt.buttonLabel}
-                </button>
-              ) : format ? (
+              {format ? (
                 <>
                   <button
                     type="button"
                     onClick={() => {
                       void handleFormat();
                     }}
-                    disabled={isPlaybackSnapshotActive || isAuthLoading || !canFormatWorkspace}
+                    disabled={isPlaybackSnapshotActive || !canFormatWorkspace}
                     className="rounded-md bg-[#222d3b] px-3 py-1.5 text-[13px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] hover:text-[#b5d5ff] disabled:cursor-not-allowed disabled:bg-[#1d232c] disabled:text-[#5c6a7c]"
                     title={format.buttonTitle}
                   >

@@ -59,7 +59,6 @@ describe("KotlinPlaygroundClient", () => {
   });
 
   it.each([
-    [401, "unauthenticated"],
     [503, "disabled"],
     [429, "rate-limited"],
     [504, "timeout"],
@@ -67,6 +66,9 @@ describe("KotlinPlaygroundClient", () => {
     [413, "invalid-source"],
     [422, "invalid-source"],
     [502, "unavailable"],
+    // Run needs no sign-in, so the proxy never answers 401; one that arrives
+    // anyway is a service failure like any other unexpected status.
+    [401, "unavailable"],
   ] as const)("maps HTTP %d to a %s service error", async (status, kind) => {
     vi.stubGlobal(
       "fetch",

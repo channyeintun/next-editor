@@ -8,8 +8,8 @@ import { serviceErrorConsoleLines, splitOutputLines } from "../playgroundConsole
  * implementation-neutral shape recordings capture and playback replays — no
  * compiler-specific detail leaks into the recorded lines.
  *
- * The service-error table is three entries rather than six because a Kite
- * lesson has no service to be signed out of, throttled by, or cut off from.
+ * The service-error table is two entries rather than five because a Kite
+ * lesson has no service to be throttled by, switched off at, or cut off from.
  */
 
 /**

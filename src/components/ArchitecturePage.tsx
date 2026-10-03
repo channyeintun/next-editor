@@ -399,7 +399,7 @@ const storageChips: ChipSpec[] = [
   },
   {
     title: "Rate Limiting",
-    lines: ["per-user playground budgets,", "fail closed without a binding"],
+    lines: ["per-user or per-IP playground", "budgets, fail closed"],
     tag: 30,
   },
 ];
@@ -598,7 +598,7 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
     n: "22",
     title: "Playground proxies",
     detail:
-      "Go, Kotlin, Rust, Zig, and Haskell runs for signed-in users, each behind a kill switch, a per-user rate limit, and a one-hour result cache.",
+      "Go, Kotlin, Rust, Zig, and Haskell runs with no sign-in needed, each behind a kill switch, a rate limit (per user, or per IP when signed out), and a one-hour result cache.",
   },
   {
     n: "23",
@@ -646,7 +646,7 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
     n: "30",
     title: "Rate Limiting",
     detail:
-      "per-user budgets for the playground proxies; a route whose binding is missing answers 502 instead of proxying.",
+      "budgets for the playground proxies, per user or per IP when signed out; a route whose binding is missing answers 502 instead of proxying.",
   },
   {
     n: "31",

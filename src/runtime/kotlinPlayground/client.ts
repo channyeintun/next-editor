@@ -11,7 +11,6 @@ import {
  * that request rather than surface an error.
  */
 export type KotlinPlaygroundServiceErrorKind =
-  | "unauthenticated"
   | "disabled"
   | "rate-limited"
   | "timeout"
@@ -31,8 +30,6 @@ export class KotlinPlaygroundServiceError extends Error {
 
 function errorKindForStatus(status: number): KotlinPlaygroundServiceErrorKind {
   switch (status) {
-    case 401:
-      return "unauthenticated";
     case 503:
       return "disabled";
     case 429:

@@ -24,6 +24,8 @@ const harness = vi.hoisted(() => {
     },
   };
   const state = {
+    // No panel reads the session any more. The mock below stays so that a
+    // sign-in gate added back to the dock would see these states in tests.
     auth: { isSignedIn: true, isLoading: false },
     metadata: { currentRecording: null as unknown, isRecording: false, isPlaying: false },
     project: { id: "project-1", files: {} as Record<string, { path: string; content: string }> },
@@ -51,7 +53,6 @@ const harness = vi.hoisted(() => {
     };
   const workspace = {
     getProject: () => state.project,
-    saveProject: vi.fn(async () => {}),
     updateFileContent: vi.fn(),
   };
   const actions = { editorRef: { current: null }, handleRuntimeEvent: vi.fn() };
@@ -71,7 +72,6 @@ vi.mock("@next-editor/infra", async () => {
       useSyncExternalStore(harness.reactive.subscribe, harness.reactive.getVersion);
       return harness.state.auth;
     },
-    signInUrl: (returnTo: string) => `/api/auth/google/login?returnTo=${returnTo}`,
   };
 });
 vi.mock("../hooks/useNextEditorContext", async () => {
@@ -171,7 +171,7 @@ import {
   useRuntimePanelStore,
 } from "../contexts/RuntimePanelStoreContext";
 import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
-import { runtimeNeedsSession, type StudioPlaygroundRuntimeKind } from "../studio/plan";
+import type { StudioPlaygroundRuntimeKind } from "../studio/plan";
 import { dockTargetIdForRuntime, STUDIO_RUN_BUTTON_TARGET_ID } from "../studio/targets";
 import { GoPlaygroundServiceError } from "../runtime/goPlayground/client";
 import { HaskellPlaygroundServiceError } from "../runtime/haskellPlayground/client";
@@ -202,8 +202,6 @@ interface FormatCase {
   /** What Format prints when it changes the lesson file. */
   formattedLines: string[];
   readOnlyLine: string;
-  /** What Format prints signed out; null where there is no service to sign in to. */
-  signedOutLine: string | null;
   refused: { files: Record<string, string>; line: string };
 }
 
@@ -211,16 +209,10 @@ interface PanelCase {
   kind: StudioPlaygroundRuntimeKind;
   Panel: ComponentType;
   /** The panel's PlaygroundRunnerLanguage, as far as the studio checks it. */
-  language: {
-    dockTargetId: string;
-    scrollSurface: string;
-    signIn: { buttonLabel: string } | null;
-    format: { signedOutLines?: () => string[] } | null;
-  };
+  language: { dockTargetId: string; scrollSurface: string };
   surface: string;
   runnerTab: string;
   command: string;
-  signInLabel: string | null;
   entry: string;
   /** The console lines a Run of `entry` prints before and after `result`. */
   run: { result: unknown; lines: string[] };
@@ -237,7 +229,6 @@ const CASES: PanelCase[] = [
     surface: "go-runner",
     runnerTab: "Go Runner",
     command: "go run *.go",
-    signInLabel: "Sign in for Go tools",
     entry: "main.go",
     run: {
       result: { status: "success", output: "hello\n", exitCode: 0 },
@@ -256,7 +247,6 @@ const CASES: PanelCase[] = [
       title: "Format every Go file with gofmt (Shift+Alt+F)",
       formattedLines: ["[gofmt] gofmt main.go", "[gofmt] Formatted main.go"],
       readOnlyLine: "[gofmt error] This shared lesson is read-only",
-      signedOutLine: "[gofmt error] Sign in to format Go code. Your edits are kept",
       refused: {
         files: { "README.md": "# Lesson" },
         line: "[gofmt error] Add at least one .go file to format this lesson",
@@ -270,7 +260,6 @@ const CASES: PanelCase[] = [
     surface: "rust-runner",
     runnerTab: "Rust Runner",
     command: "cargo run",
-    signInLabel: "Sign in for Rust tools",
     entry: "main.rs",
     run: {
       result: { status: "success", stdout: "hi\n", stderr: "" },
@@ -289,7 +278,6 @@ const CASES: PanelCase[] = [
       title: "Format main.rs with rustfmt (Shift+Alt+F)",
       formattedLines: ["[rustfmt] rustfmt main.rs", "[rustfmt] Formatted main.rs"],
       readOnlyLine: "[rustfmt error] This shared lesson is read-only",
-      signedOutLine: "[rustfmt error] Sign in to format Rust code. Your edits are kept",
       refused: {
         files: { "lib.rs": "pub fn x() {}\n" },
         line: "[rustfmt error] Rust lessons format a single main.rs file",
@@ -303,7 +291,6 @@ const CASES: PanelCase[] = [
     surface: "zig-runner",
     runnerTab: "Zig Runner",
     command: "zig run main.zig",
-    signInLabel: "Sign in for Zig tools",
     entry: "main.zig",
     run: {
       result: { status: "success", output: "hi\n" },
@@ -322,7 +309,6 @@ const CASES: PanelCase[] = [
       title: "Format main.zig with zig fmt (Shift+Alt+F)",
       formattedLines: ["[zig-fmt] zig fmt main.zig", "[zig-fmt] Formatted main.zig"],
       readOnlyLine: "[zig-fmt error] This shared lesson is read-only",
-      signedOutLine: "[zig-fmt error] Sign in to format Zig code. Your edits are kept",
       refused: {
         files: { "main.zig": "pub fn main() void {}\n", "lib.zig": "pub fn x() void {}\n" },
         line: "[zig-fmt error] Zig lessons format a single main.zig file",
@@ -336,7 +322,6 @@ const CASES: PanelCase[] = [
     surface: "kite-runner",
     runnerTab: "Kite Runner",
     command: "kitec run main.kite",
-    signInLabel: null,
     entry: "main.kite",
     run: {
       result: { status: "success", stdout: "hi\n", stderr: "" },
@@ -352,7 +337,6 @@ const CASES: PanelCase[] = [
       title: "Format main.kite with kitec fmt (Shift+Alt+F)",
       formattedLines: ["[kitefmt] kitec fmt main.kite", "[kitefmt] Formatted main.kite"],
       readOnlyLine: "[kitefmt error] This shared lesson is read-only",
-      signedOutLine: null,
       refused: {
         files: { "README.md": "# Lesson" },
         line: "[kitefmt error] Add a .kite file to format this lesson",
@@ -366,7 +350,6 @@ const CASES: PanelCase[] = [
     surface: "haskell-runner",
     runnerTab: "Haskell Runner",
     command: "runghc Main.hs",
-    signInLabel: "Sign in to run Haskell",
     entry: "Main.hs",
     run: {
       result: { status: "success", stdout: "[1,2,3]\n", stderr: "" },
@@ -386,7 +369,6 @@ const CASES: PanelCase[] = [
     surface: "kotlin-runner",
     runnerTab: "Kotlin Runner",
     command: "kotlin *.kt",
-    signInLabel: "Sign in to run Kotlin",
     entry: "Main.kt",
     run: {
       result: { status: "success", output: "[1, 2]\n" },
@@ -406,7 +388,6 @@ const CASES: PanelCase[] = [
     surface: "asm-runner",
     runnerTab: "Assembly Runner",
     command: "nasm -f elf64 main.asm && ld -o main main.o && ./main",
-    signInLabel: null,
     entry: "main.asm",
     run: {
       result: {
@@ -432,10 +413,6 @@ const CASES: PanelCase[] = [
 const FORMAT_CASES = CASES.filter(
   (panel): panel is PanelCase & { format: FormatCase } => panel.format !== null,
 );
-/** Languages whose code runs through a proxied service, behind a signed-in session. */
-const SESSION_CASES = CASES.filter((panel) => runtimeNeedsSession(panel.kind));
-/** Kite and assembly: compiled and run in the page, so there is nothing to sign in to. */
-const IN_PAGE_CASES = CASES.filter((panel) => !runtimeNeedsSession(panel.kind));
 
 const SOURCE = "unformatted  source\n";
 const FORMATTED = "unformatted source\n";
@@ -502,8 +479,6 @@ const consoleLines = () => store.getSnapshot().context.consoleLines;
 const activeProviders = () => harness.providers.filter((provider) => !provider.disposed);
 
 describe("playground runner panels", () => {
-  const originalLocation = window.location;
-
   beforeEach(() => {
     vi.clearAllMocks();
     harness.providers.length = 0;
@@ -516,7 +491,6 @@ describe("playground runner panels", () => {
 
   afterEach(() => {
     cleanup();
-    Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
   });
 
   it.each(CASES)("$kind: names its dock, runner tab, command and console", async (panel) => {
@@ -555,52 +529,23 @@ describe("playground runner panels", () => {
     },
   );
 
-  it("labels a sign-in button for exactly the runtimes that need a session", () => {
-    expect(CASES.map((panel) => [panel.kind, panel.signInLabel !== null])).toEqual(
-      CASES.map((panel) => [panel.kind, runtimeNeedsSession(panel.kind)]),
-    );
-  });
-
-  it.each(SESSION_CASES)("$kind: replaces Run with sign-in while signed out", async (panel) => {
-    const assign = vi.fn();
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: { pathname: "/code/lesson", search: "?step=2", assign },
-    });
+  // Run needs no sign-in for any language: the proxied ones (Go, Rust, Zig,
+  // Haskell, Kotlin) are rate-limited by IP when signed out, and Kite and
+  // assembly never call a service at all.
+  it.each(CASES)("$kind: runs signed out, with no sign-in button", async (panel) => {
     setFiles({ [panel.entry]: SOURCE });
+    harness.client.run.mockResolvedValue(panel.run.result);
     harness.state.auth = { isSignedIn: false, isLoading: false };
     await renderPanel(panel);
 
-    expect(screen.queryByRole("button", { name: "Run" })).toBeNull();
-    await click(screen.getByRole("button", { name: panel.signInLabel ?? "" }));
+    expect(screen.queryByRole("button", { name: /sign in/i })).toBeNull();
+    await click(screen.getByRole("button", { name: "Run" }));
 
-    // The edits are saved before the full-page navigation away.
-    expect(harness.workspace.saveProject).toHaveBeenCalledTimes(1);
-    expect(assign).toHaveBeenCalledWith("/api/auth/google/login?returnTo=/code/lesson?step=2");
-    expect(harness.workspace.saveProject.mock.invocationCallOrder[0]).toBeLessThan(
-      assign.mock.invocationCallOrder[0],
-    );
+    expect(harness.client.run).toHaveBeenCalledTimes(1);
+    expect(consoleLines()).toEqual(panel.run.lines);
   });
 
-  it.each(SESSION_CASES)("$kind: waits for the session before it runs", async (panel) => {
-    setFiles({ [panel.entry]: SOURCE });
-    harness.state.auth = { isSignedIn: false, isLoading: true };
-    await renderPanel(panel);
-
-    expect(screen.getByRole("button", { name: "Run" })).toBeDisabled();
-    expect(screen.queryByRole("button", { name: /^sign in/i })).toBeNull();
-  });
-
-  it.each(IN_PAGE_CASES)("$kind: runs signed out, with no service to sign in to", async (panel) => {
-    setFiles({ [panel.entry]: SOURCE });
-    harness.state.auth = { isSignedIn: false, isLoading: false };
-    await renderPanel(panel);
-
-    expect(screen.getByRole("button", { name: "Run" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: /^sign in/i })).toBeNull();
-  });
-
-  it.each(IN_PAGE_CASES)("$kind: never waits for a session", async (panel) => {
+  it.each(CASES)("$kind: never waits for a session", async (panel) => {
     setFiles({ [panel.entry]: SOURCE });
     harness.state.auth = { isSignedIn: false, isLoading: true };
     await renderPanel(panel);
@@ -799,7 +744,7 @@ describe("playground runner panels", () => {
     expect(consoleLines()).toEqual([panel.format.readOnlyLine]);
   });
 
-  it.each(FORMAT_CASES)("$kind: formats signed out only without a service", async (panel) => {
+  it.each(FORMAT_CASES)("$kind: formats signed out", async (panel) => {
     setFiles({ [panel.entry]: SOURCE });
     formatEveryFile();
     harness.state.auth = { isSignedIn: false, isLoading: false };
@@ -815,9 +760,8 @@ describe("playground runner panels", () => {
       );
     });
 
-    expect(consoleLines()).toEqual(
-      panel.format.signedOutLine ? [panel.format.signedOutLine] : panel.format.formattedLines,
-    );
+    expect(harness.client.format).toHaveBeenCalledTimes(1);
+    expect(consoleLines()).toEqual(panel.format.formattedLines);
   });
 
   it("zig: tells a build.zig.zon model it is not the lesson file rather than stale", async () => {
@@ -926,17 +870,8 @@ describe("playground runner panels", () => {
 });
 
 describe("playground runner languages", () => {
-  it.each(CASES)("$kind: agrees with the studio on its dock and its session", (panel) => {
+  it.each(CASES)("$kind: agrees with the studio on its dock", (panel) => {
     expect(panel.language.dockTargetId).toBe(dockTargetIdForRuntime(panel.kind));
-    expect(panel.language.signIn !== null).toBe(runtimeNeedsSession(panel.kind));
     expect(panel.language.scrollSurface).toBe(panel.surface);
   });
-
-  it.each(SESSION_CASES.filter((panel) => panel.language.format !== null))(
-    "$kind: says why it will not format while signed out",
-    (panel) => {
-      // Without these lines a signed-out Format would do nothing at all.
-      expect(panel.language.format?.signedOutLines).toBeTypeOf("function");
-    },
-  );
 });

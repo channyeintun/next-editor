@@ -54,7 +54,6 @@ export function zigRunResultToConsoleLines(result: ZigPlaygroundRunResult): stri
 }
 
 const SERVICE_ERROR_LINES: Record<Exclude<ZigPlaygroundServiceErrorKind, "aborted">, string> = {
-  unauthenticated: "[zig-run error] Sign in to run Zig code. Your edits are kept",
   disabled: "[zig-run error] Live Run is currently disabled. Editing and playback still work",
   "rate-limited": "[zig-run error] Too many runs — wait a minute and try again",
   timeout: "[zig-run error] The program took too long to compile and run",
@@ -74,7 +73,6 @@ const FORMAT_SERVICE_ERROR_LINES: Record<
   Exclude<ZigPlaygroundServiceErrorKind, "aborted">,
   string
 > = {
-  unauthenticated: "[zig-fmt error] Sign in to format Zig code. Your edits are kept",
   disabled: "[zig-fmt error] Zig formatting is currently disabled. Your code is unchanged",
   "rate-limited": "[zig-fmt error] Too many format requests — wait a minute and try again",
   timeout: "[zig-fmt error] Formatting took too long. Your code is unchanged",

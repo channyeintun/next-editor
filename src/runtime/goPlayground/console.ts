@@ -70,7 +70,6 @@ export function goRunResultToConsoleLines(result: GoPlaygroundRunResult): string
 }
 
 const SERVICE_ERROR_LINES: Record<Exclude<GoPlaygroundServiceErrorKind, "aborted">, string> = {
-  unauthenticated: "[go-run error] Sign in to run Go code. Your edits are kept",
   disabled: "[go-run error] Live Run is currently disabled. Editing and playback still work",
   "rate-limited": "[go-run error] Too many runs — wait a minute and try again",
   timeout: "[go-run error] The program took too long to compile and run",
@@ -90,7 +89,6 @@ const FORMAT_SERVICE_ERROR_LINES: Record<
   Exclude<GoPlaygroundServiceErrorKind, "aborted">,
   string
 > = {
-  unauthenticated: "[gofmt error] Sign in to format Go code. Your edits are kept",
   disabled: "[gofmt error] Go formatting is currently disabled. Your code is unchanged",
   "rate-limited": "[gofmt error] Too many format requests — wait a minute and try again",
   timeout: "[gofmt error] Formatting took too long. Your code is unchanged",

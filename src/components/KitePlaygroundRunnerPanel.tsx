@@ -25,9 +25,8 @@ import { STUDIO_KITE_DOCK_TARGET_ID } from "../studio/targets";
  * normally a native binary, and Rust builds for WebAssembly too — so Run and
  * Format instantiate a Wasm build of that same compiler in this page (cached by
  * the client across runs, so only the first Run pays for the load) and answer
- * without a network round trip: no proxy, no sign-in button, no rate limit, and
- * no lesson that breaks because a public playground is down. That is why Kite
- * has no sign-in where the proxied languages have one, and why cancelling
+ * without a network round trip: no proxy, no rate limit, and no lesson that
+ * breaks because a public playground is down. That is also why cancelling
  * disposes of the pending run instead of aborting a request.
  *
  * A Kite module is a directory, so every `.kite` file in the workspace is part
@@ -44,7 +43,6 @@ export const KITE_RUNNER: PlaygroundRunnerLanguage<
   dockTargetId: STUDIO_KITE_DOCK_TARGET_ID,
   runnerTab: { label: "Kite Runner", icon: Cog },
   consoleTags: { pattern: KITE_CONSOLE_TAG_PATTERN },
-  signIn: null,
   client: {
     create: () => new KitePlaygroundClient(),
     stop: (client) => client.dispose(),

@@ -25,8 +25,8 @@ const SINGLE_FILE_FORMAT_LINE = "[zig-fmt error] Zig lessons format a single mai
 
 /**
  * Zig lessons: Run and Format (`zig fmt`) remotely through the Zig Playground
- * proxy, behind sign-in. The upstream compiles one root source file from a
- * single text body, so lessons run exactly one main.zig.
+ * proxy, with no sign-in needed. The upstream compiles one root source file
+ * from a single text body, so lessons run exactly one main.zig.
  */
 export const ZIG_RUNNER: PlaygroundRunnerLanguage<
   ZigPlaygroundClient,
@@ -37,7 +37,6 @@ export const ZIG_RUNNER: PlaygroundRunnerLanguage<
   dockTargetId: STUDIO_ZIG_DOCK_TARGET_ID,
   runnerTab: { label: "Zig Runner", icon: Cog },
   consoleTags: { pattern: ZIG_CONSOLE_TAG_PATTERN },
-  signIn: { buttonLabel: "Sign in for Zig tools" },
   client: {
     create: () => new ZigPlaygroundClient(),
     stop: (client) => client.abort(),
@@ -62,7 +61,6 @@ export const ZIG_RUNNER: PlaygroundRunnerLanguage<
     busyLabel: "main.zig is formatting",
     buttonTitle: "Format main.zig with zig fmt (Shift+Alt+F)",
     readOnlyLine: "[zig-fmt error] This shared lesson is read-only",
-    signedOutLines: () => zigFormatServiceErrorToConsoleLines("unauthenticated"),
     rejectFiles: (files) =>
       isSinglePlaygroundFile(files, "main.zig") ? null : SINGLE_FILE_FORMAT_LINE,
     // `.zon` files are Zig-highlighted (inferLanguageFromPath maps them), so

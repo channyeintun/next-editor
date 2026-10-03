@@ -18,8 +18,8 @@ import { STUDIO_KOTLIN_DOCK_TARGET_ID } from "../studio/targets";
 
 /**
  * Kotlin lessons: Run every .kt file remotely through the Kotlin Playground
- * proxy, behind sign-in. There is no Format, because the upstream service has
- * no formatter endpoint.
+ * proxy, with no sign-in needed. There is no Format, because the upstream
+ * service has no formatter endpoint.
  */
 export const KOTLIN_RUNNER: PlaygroundRunnerLanguage<
   KotlinPlaygroundClient,
@@ -30,7 +30,6 @@ export const KOTLIN_RUNNER: PlaygroundRunnerLanguage<
   dockTargetId: STUDIO_KOTLIN_DOCK_TARGET_ID,
   runnerTab: { label: "Kotlin Runner", icon: Hexagon },
   consoleTags: { pattern: KOTLIN_CONSOLE_TAG_PATTERN, warningPrefix: "[kotlin-warn" },
-  signIn: { buttonLabel: "Sign in to run Kotlin" },
   client: {
     create: () => new KotlinPlaygroundClient(),
     stop: (client) => client.abort(),

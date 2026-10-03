@@ -23,8 +23,8 @@ import { STUDIO_RUST_DOCK_TARGET_ID } from "../studio/targets";
 
 /**
  * Rust lessons: Run and Format (`rustfmt`) remotely through the Rust
- * Playground proxy, behind sign-in. The upstream compiles one crate from a
- * single source string, so lessons run exactly one main.rs.
+ * Playground proxy, with no sign-in needed. The upstream compiles one crate
+ * from a single source string, so lessons run exactly one main.rs.
  */
 export const RUST_RUNNER: PlaygroundRunnerLanguage<
   RustPlaygroundClient,
@@ -35,7 +35,6 @@ export const RUST_RUNNER: PlaygroundRunnerLanguage<
   dockTargetId: STUDIO_RUST_DOCK_TARGET_ID,
   runnerTab: { label: "Rust Runner", icon: Cog },
   consoleTags: { pattern: RUST_CONSOLE_TAG_PATTERN },
-  signIn: { buttonLabel: "Sign in for Rust tools" },
   client: {
     create: () => new RustPlaygroundClient(),
     stop: (client) => client.abort(),
@@ -60,7 +59,6 @@ export const RUST_RUNNER: PlaygroundRunnerLanguage<
     busyLabel: "main.rs is formatting",
     buttonTitle: "Format main.rs with rustfmt (Shift+Alt+F)",
     readOnlyLine: "[rustfmt error] This shared lesson is read-only",
-    signedOutLines: () => rustFormatServiceErrorToConsoleLines("unauthenticated"),
     rejectFiles: (files) =>
       isSinglePlaygroundFile(files, "main.rs")
         ? null

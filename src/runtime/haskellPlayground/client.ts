@@ -11,7 +11,6 @@ import {
  * that request rather than surface an error.
  */
 export type HaskellPlaygroundServiceErrorKind =
-  | "unauthenticated"
   | "disabled"
   | "rate-limited"
   | "timeout"
@@ -31,8 +30,6 @@ export class HaskellPlaygroundServiceError extends Error {
 
 function errorKindForStatus(status: number): HaskellPlaygroundServiceErrorKind {
   switch (status) {
-    case 401:
-      return "unauthenticated";
     case 503:
       return "disabled";
     case 429:

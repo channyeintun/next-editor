@@ -13,7 +13,7 @@ import {
  *
  * Three of the kinds the other Playground clients carry are missing, and their
  * absence is the point: **there is no service**, so a Kite lesson cannot be
- * unauthenticated, rate-limited or disabled. What is left is a source the
+ * rate-limited, disabled or timed out by one. What is left is a source the
  * compiler will not take, a compiler that would not load, and a request a newer
  * one superseded.
  */

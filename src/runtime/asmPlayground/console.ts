@@ -11,8 +11,8 @@ import { splitOutputLines } from "../playgroundConsole";
  * The started line names `nasm` and `ld` because that is the command a person
  * would run to do the same thing on their own computer, and it is the pair the
  * lesson is teaching them to reach for. The service-error table is two entries
- * rather than six: an assembly lesson has no service to be signed out of,
- * throttled by, or cut off from.
+ * rather than five: an assembly lesson has no service to be throttled by,
+ * switched off at, or cut off from.
  */
 
 /**

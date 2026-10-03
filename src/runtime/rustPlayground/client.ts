@@ -14,7 +14,6 @@ import {
  * that request rather than surface an error.
  */
 export type RustPlaygroundServiceErrorKind =
-  | "unauthenticated"
   | "disabled"
   | "rate-limited"
   | "timeout"
@@ -34,8 +33,6 @@ export class RustPlaygroundServiceError extends Error {
 
 function errorKindForStatus(status: number): RustPlaygroundServiceErrorKind {
   switch (status) {
-    case 401:
-      return "unauthenticated";
     case 503:
       return "disabled";
     case 429:

@@ -14,7 +14,6 @@ import {
  * that request rather than surface an error.
  */
 export type ZigPlaygroundServiceErrorKind =
-  | "unauthenticated"
   | "disabled"
   | "rate-limited"
   | "timeout"
@@ -34,8 +33,6 @@ export class ZigPlaygroundServiceError extends Error {
 
 function errorKindForStatus(status: number): ZigPlaygroundServiceErrorKind {
   switch (status) {
-    case 401:
-      return "unauthenticated";
     case 503:
       return "disabled";
     case 429:

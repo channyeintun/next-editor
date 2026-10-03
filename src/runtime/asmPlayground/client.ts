@@ -12,7 +12,7 @@ import {
  *
  * Three kinds rather than the six the proxied languages carry, and their
  * absence is the point: **there is no service**, so an assembly lesson cannot
- * be unauthenticated, rate-limited or disabled. What is left is a workspace the
+ * be rate-limited, disabled or timed out by one. What is left is a workspace the
  * assembler cannot take, a machine that could not start, and a request a newer
  * one superseded.
  */

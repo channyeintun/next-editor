@@ -132,7 +132,6 @@ describe("zig console labels", () => {
   // edited together — would otherwise reach the console unnoticed.
   it("tags every format failure as zig-fmt, never zig-run", () => {
     for (const kind of [
-      "unauthenticated",
       "disabled",
       "rate-limited",
       "timeout",
@@ -152,8 +151,8 @@ describe("zig console labels", () => {
       "[zig-fmt error] zig fmt could not format this program",
       "main.zig:2:1: error: expected ')'",
     ]);
-    expect(zigFormatServiceErrorToConsoleLines("unauthenticated", "ignored")).toEqual([
-      "[zig-fmt error] Sign in to format Zig code. Your edits are kept",
+    expect(zigFormatServiceErrorToConsoleLines("timeout", "ignored")).toEqual([
+      "[zig-fmt error] Formatting took too long. Your code is unchanged",
     ]);
   });
 });

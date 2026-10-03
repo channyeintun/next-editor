@@ -54,7 +54,6 @@ export function rustRunResultToConsoleLines(result: RustPlaygroundRunResult): st
 }
 
 const SERVICE_ERROR_LINES: Record<Exclude<RustPlaygroundServiceErrorKind, "aborted">, string> = {
-  unauthenticated: "[rust-run error] Sign in to run Rust code. Your edits are kept",
   disabled: "[rust-run error] Live Run is currently disabled. Editing and playback still work",
   "rate-limited": "[rust-run error] Too many runs — wait a minute and try again",
   timeout: "[rust-run error] The program took too long to compile and run",
@@ -74,7 +73,6 @@ const FORMAT_SERVICE_ERROR_LINES: Record<
   Exclude<RustPlaygroundServiceErrorKind, "aborted">,
   string
 > = {
-  unauthenticated: "[rustfmt error] Sign in to format Rust code. Your edits are kept",
   disabled: "[rustfmt error] Rust formatting is currently disabled. Your code is unchanged",
   "rate-limited": "[rustfmt error] Too many format requests — wait a minute and try again",
   timeout: "[rustfmt error] Formatting took too long. Your code is unchanged",

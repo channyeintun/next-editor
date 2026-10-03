@@ -14,7 +14,6 @@ import {
  * request rather than surface an error.
  */
 export type GoPlaygroundServiceErrorKind =
-  | "unauthenticated"
   | "disabled"
   | "rate-limited"
   | "timeout"
@@ -34,8 +33,6 @@ export class GoPlaygroundServiceError extends Error {
 
 function errorKindForStatus(status: number): GoPlaygroundServiceErrorKind {
   switch (status) {
-    case 401:
-      return "unauthenticated";
     case 503:
       return "disabled";
     case 429:

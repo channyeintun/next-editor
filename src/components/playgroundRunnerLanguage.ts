@@ -19,12 +19,6 @@ export interface PlaygroundRunnerLanguage<Client, ErrorKind extends string, RunR
   dockTargetId: string;
   runnerTab: { label: string; icon: LucideIcon };
   consoleTags: PlaygroundConsoleTags;
-  /**
-   * The button that stands in for Run while signed out, for a language whose
-   * code runs through a proxied service. Null for Kite and assembly, which
-   * compile and run in the page: there is nothing to sign in to.
-   */
-  signIn: { buttonLabel: string } | null;
   client: PlaygroundClientBinding<Client, ErrorKind>;
   /** The sources Run and Format submit, read from the workspace at click time. */
   collectFiles: (project: Pick<WorkspaceProject, "files">) => PlaygroundFile[];
@@ -66,8 +60,6 @@ export interface PlaygroundFormat<Client, ErrorKind extends string> {
   buttonTitle: string;
   /** What Format prints in a shared lesson this viewer cannot edit. */
   readOnlyLine: string;
-  /** What Format prints while signed out; only a language behind sign-in has it. */
-  signedOutLines?: () => string[];
   /** The console line refusing sources the formatter cannot take, or null to format them. */
   rejectFiles: (files: readonly PlaygroundFile[]) => string | null;
   /**

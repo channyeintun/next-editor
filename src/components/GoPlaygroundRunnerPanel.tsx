@@ -22,7 +22,8 @@ import { STUDIO_GO_DOCK_TARGET_ID } from "../studio/targets";
 
 /**
  * Go lessons: Run (`go run`) and Format (`gofmt`) every .go file together,
- * remotely through the Go Playground proxy, behind sign-in.
+ * remotely through the Go Playground proxy. Neither needs sign-in; the proxy
+ * rate-limits signed-out learners by IP instead.
  */
 export const GO_RUNNER: PlaygroundRunnerLanguage<
   GoPlaygroundClient,
@@ -33,7 +34,6 @@ export const GO_RUNNER: PlaygroundRunnerLanguage<
   dockTargetId: STUDIO_GO_DOCK_TARGET_ID,
   runnerTab: { label: "Go Runner", icon: Diamond },
   consoleTags: { pattern: GO_CONSOLE_TAG_PATTERN, warningPrefix: "[go-vet" },
-  signIn: { buttonLabel: "Sign in for Go tools" },
   client: {
     create: () => new GoPlaygroundClient(),
     stop: (client) => client.abort(),
@@ -56,7 +56,6 @@ export const GO_RUNNER: PlaygroundRunnerLanguage<
     busyLabel: "Go files are formatting",
     buttonTitle: "Format every Go file with gofmt (Shift+Alt+F)",
     readOnlyLine: "[gofmt error] This shared lesson is read-only",
-    signedOutLines: () => goFormatServiceErrorToConsoleLines("unauthenticated"),
     rejectFiles: (files) =>
       files.length === 0 ? "[gofmt error] Add at least one .go file to format this lesson" : null,
     execute: (client, files) => client.format(files),

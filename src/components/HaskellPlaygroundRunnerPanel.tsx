@@ -18,12 +18,12 @@ import { isSinglePlaygroundFile } from "../runtime/playgroundFiles";
 import { STUDIO_HASKELL_DOCK_TARGET_ID } from "../studio/targets";
 
 /**
- * Haskell lessons: Run remotely through the play.haskell.org proxy, behind
- * sign-in. There is no Format, because the upstream service exposes a single
- * /submit route and no formatter endpoint. The upstream compiles one module
- * from a single source string, so lessons run exactly one Main.hs — capital M,
- * because GHC's diagnostics name the file Main.hs and the editor file has to
- * match what the errors point at.
+ * Haskell lessons: Run remotely through the play.haskell.org proxy, with no
+ * sign-in needed. There is no Format, because the upstream service exposes a
+ * single /submit route and no formatter endpoint. The upstream compiles one
+ * module from a single source string, so lessons run exactly one Main.hs —
+ * capital M, because GHC's diagnostics name the file Main.hs and the editor
+ * file has to match what the errors point at.
  */
 export const HASKELL_RUNNER: PlaygroundRunnerLanguage<
   HaskellPlaygroundClient,
@@ -37,7 +37,6 @@ export const HASKELL_RUNNER: PlaygroundRunnerLanguage<
   // the [haskell-warn] tag gets its own color rather than reading as a success
   // line.
   consoleTags: { pattern: HASKELL_CONSOLE_TAG_PATTERN, warningPrefix: "[haskell-warn" },
-  signIn: { buttonLabel: "Sign in to run Haskell" },
   client: {
     create: () => new HaskellPlaygroundClient(),
     stop: (client) => client.abort(),

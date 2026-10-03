@@ -170,9 +170,6 @@ describe("haskell console labels", () => {
   });
 
   it("keeps every failure kind's copy pointed at what the learner should do next", () => {
-    expect(haskellRunServiceErrorToConsoleLines("unauthenticated")).toEqual([
-      "[haskell-run error] Sign in to run Haskell code. Your edits are kept",
-    ]);
     expect(haskellRunServiceErrorToConsoleLines("disabled")).toEqual([
       "[haskell-run error] Live Run is currently disabled. Editing and playback still work",
     ]);

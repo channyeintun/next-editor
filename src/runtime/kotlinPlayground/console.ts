@@ -61,7 +61,6 @@ export function kotlinRunResultToConsoleLines(result: KotlinPlaygroundRunResult)
 }
 
 const SERVICE_ERROR_LINES: Record<Exclude<KotlinPlaygroundServiceErrorKind, "aborted">, string> = {
-  unauthenticated: "[kotlin-run error] Sign in to run Kotlin code. Your edits are kept",
   disabled: "[kotlin-run error] Live Run is currently disabled. Editing and playback still work",
   "rate-limited": "[kotlin-run error] Too many runs — wait a minute and try again",
   timeout: "[kotlin-run error] The program took too long to compile and run",
