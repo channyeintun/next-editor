@@ -21,7 +21,7 @@ VOICE_CHAT_ENABLED = "true"
 # Fails closed. Flip to "true" only after completing the Phase 0 upstream
 # checklist in docs/go-lessons-selective-runtime-plan.md — contacting the Go
 # Playground maintainers and confirming the user agent — since enabling it
-# sends authenticated users' Run requests to play.golang.org. Go editing and
+# sends learners' Run and Format requests to play.golang.org. Go editing and
 # recorded playback work regardless of this flag.
 GO_PLAYGROUND_ENABLED = "true"
 # Kill switch for live Haskell lesson execution (worker/routes/haskellPlayground.ts).
@@ -29,7 +29,7 @@ GO_PLAYGROUND_ENABLED = "true"
 # pinned to GHC 9.12.4 — there is no formatter upstream, so this is the only
 # route. That service deadlines a running program at 5 seconds and answers 503
 # "Service busy" when its shared community worker pool saturates, so the route
-# caches deterministic outcomes and holds a modest per-user ceiling. Haskell
+# caches deterministic outcomes and holds a modest per-caller ceiling. Haskell
 # editing and recorded playback work regardless of this flag.
 HASKELL_PLAYGROUND_ENABLED = "true"
 # Kill switch for live Kotlin lesson execution (worker/routes/kotlinPlayground.ts).
@@ -46,7 +46,7 @@ RUST_PLAYGROUND_ENABLED = "true"
 # Fails closed. Run and Format proxy to zig-play.dev's public run and fmt
 # endpoints, pinned to Zig 0.16.0. That service rate-limits at 5 requests per
 # minute per client IP, which every user of this Worker shares, so the route
-# caches deterministic outcomes and holds a lower per-user ceiling. Zig editing
+# caches deterministic outcomes and holds a lower per-caller ceiling. Zig editing
 # and recorded playback work regardless of this flag.
 ZIG_PLAYGROUND_ENABLED = "true"
 # Required for authentication — auth fails at runtime without these. Set them with:
@@ -188,11 +188,16 @@ bucket_name = "next-editor-tube-media"
 [[kv_namespaces]]
 binding = "CACHE"
 
-# Per-user budgets for the playground proxies (worker/routes/*Playground.ts),
-# enforced by Workers Rate Limiting and keyed by user id. Each budget is its
-# own binding: Go and Rust give /run and /format one each, and Zig charges both
-# to one because its upstream counts them together. Cached results are served
-# before a budget is charged, so these count upstream calls, not button presses.
+# Per-caller budgets for the playground proxies (worker/routes/*Playground.ts),
+# enforced by Workers Rate Limiting. Run and Format need no sign-in, so the key
+# is "user:<id>" for a signed-in learner and "ip:<client IP>" (an IPv6 address
+# cut to its /64) for a signed-out one; callers without a CF-Connecting-IP
+# header share one "ip:unknown" budget (playgroundRateLimitKey in
+# worker/playgroundProxy.ts). The IP is only a rate-limit key: never logged,
+# sent upstream, or stored. Each budget is its own binding: Go and Rust give
+# /run and /format one each, and Zig charges both to one because its upstream
+# counts them together. Cached results are served before a budget is charged,
+# so these count upstream calls, not button presses.
 # Counters live per Cloudflare location and are approximate by design, which
 # is enough for a courtesy ceiling in front of a community service, and they
 # cost no KV writes. A route whose binding is missing answers 502 rather than

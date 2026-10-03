@@ -28,7 +28,8 @@ export interface Env {
   // Same kill-switch contract for Zig lessons via the Zig Playground proxy
   // (routes/zigPlayground.ts).
   ZIG_PLAYGROUND_ENABLED?: string;
-  // Per-user playground budgets (Workers Rate Limiting, see the [[ratelimits]]
+  // Per-caller playground budgets, keyed by user id when signed in and by
+  // client IP when signed out (Workers Rate Limiting, see the [[ratelimits]]
   // section of infra/wrangler.toml). Like the kill switches above they fail
   // closed: a route whose binding is missing answers 502 instead of proxying.
   GO_RUN_RATE_LIMITER?: RateLimit;

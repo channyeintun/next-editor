@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
-import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
   checkPlaygroundRateLimit,
   contentCacheKey,
+  playgroundRateLimitKey,
   readCachedValue,
   readMultiFileLessonRequest,
   truncateOutput,
@@ -22,15 +22,16 @@ import {
 // the same service JetBrains' embeddable kotlin-playground widget uses) for
 // pure Kotlin lessons, mirroring routes/goPlayground.ts. The browser never
 // calls the upstream service directly: this route owns the kill switch,
-// authentication, file/program-size checks, per-user rate limiting,
-// content-hash caching, the unique user agent, the upstream timeout, and
-// normalization of the upstream response into the app's
-// KotlinPlaygroundRunResult contract.
+// file/program-size checks, rate limiting, content-hash caching, the unique
+// user agent, the upstream timeout, and normalization of the upstream response
+// into the app's KotlinPlaygroundRunResult contract. Run needs no sign-in: a
+// signed-in learner is rate-limited by user id, a signed-out one by client IP
+// (playgroundRateLimitKey in ../playgroundProxy.ts).
 //
 // Privacy invariant: user sources, filenames, program output, and diagnostics
 // must never be logged — telemetry is aggregate fields only (see logRun
-// below). Nothing application-specific (cookies, tokens, user identity) is
-// sent upstream.
+// below). Nothing application-specific (cookies, tokens, user identity, the
+// client IP) is sent upstream, and the client IP is never logged.
 
 // The compiler version is pinned in the URL and folded into the cache-key
 // prefix so a version bump can never serve results produced by a different
@@ -398,11 +399,6 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Kotlin Playground execution is disabled" }, 503);
   }
 
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
-
   const request = await validateKotlinLessonRequest(c.req.raw);
   if (!request.ok) {
     return c.json({ error: request.error }, request.status);
@@ -436,7 +432,7 @@ kotlinPlaygroundRoute.post("/run", async (c) => {
 
   // The run budget is KOTLIN_RUN_RATE_LIMITER's, set in infra/wrangler.toml.
   const rateLimitDecision = await checkPlaygroundRateLimit(c.env.KOTLIN_RUN_RATE_LIMITER, {
-    userId: user.id,
+    key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {

@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
-import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
   checkPlaygroundRateLimit,
   contentCacheKey,
+  playgroundRateLimitKey,
   readCachedValue,
   truncateOutput,
   validateSingleFileLessonRequest,
@@ -20,10 +20,11 @@ import {
 // front of the community Haskell Playground submit API (play.haskell.org) for
 // pure Haskell lessons, mirroring the Go, Kotlin, Rust, and Zig routes. The
 // browser never calls the upstream service directly: this route owns the kill
-// switch, authentication, program-size checks, per-user rate limiting,
-// content-hash caching, the unique user agent, the upstream timeout, and
-// normalization of the upstream response into the app's
-// HaskellPlaygroundRunResult contract.
+// switch, program-size checks, rate limiting, content-hash caching, the unique
+// user agent, the upstream timeout, and normalization of the upstream response
+// into the app's HaskellPlaygroundRunResult contract. Run needs no sign-in: a
+// signed-in learner is rate-limited by user id, a signed-out one by client IP
+// (playgroundRateLimitKey in ../playgroundProxy.ts).
 //
 // Three upstream properties shape everything below:
 //
@@ -40,12 +41,13 @@ import {
 //  3. The service is a small shared community pool. It deadlines a running
 //     program at 5 seconds, truncates each of ghcout/sout/serr at 100,000
 //     bytes itself, and answers HTTP 503 "Service busy" when every worker in
-//     the pool is occupied. Our per-user ceiling and the deterministic-result
+//     the pool is occupied. Our per-caller ceiling and the deterministic-result
 //     cache below exist so one lesson's repeated runs do not push it there.
 //
 // Privacy invariant: user sources, program output, and diagnostics must never
 // be logged — telemetry is aggregate fields only (see logRun below). Nothing
-// application-specific (cookies, tokens, user identity) is sent upstream.
+// application-specific (cookies, tokens, user identity, the client IP) is sent
+// upstream, and the client IP is never logged.
 
 const UPSTREAM_URL = "https://play.haskell.org/submit";
 // The compiler version is pinned and folded into the cache-key prefix so a
@@ -223,11 +225,6 @@ haskellPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Haskell Playground execution is disabled" }, 503);
   }
 
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
-
   const request = await validateSingleFileLessonRequest(c.req.raw, {
     requiredPath: REQUIRED_FILE_PATH,
     language: "Haskell",
@@ -267,7 +264,7 @@ haskellPlaygroundRoute.post("/run", async (c) => {
 
   // The run budget is HASKELL_RUN_RATE_LIMITER's, set in infra/wrangler.toml.
   const rateLimitDecision = await checkPlaygroundRateLimit(c.env.HASKELL_RUN_RATE_LIMITER, {
-    userId: user.id,
+    key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {
@@ -311,7 +308,7 @@ haskellPlaygroundRoute.post("/run", async (c) => {
   // Backpressure: 503 "Service busy, please try again later" means every
   // worker in the shared pool is occupied. Reported as a 502 rather than a
   // 429, because a 429 tells the learner THEY ran too often — this is somebody
-  // else's load, and our own per-user budget is what polices their rate. The
+  // else's load, and our own per-caller budget is what polices their rate. The
   // 502 copy ("unavailable right now — your code is unchanged, try again
   // shortly") is the accurate thing to show, and the distinction stays visible
   // in telemetry through the upstream-busy outcome.

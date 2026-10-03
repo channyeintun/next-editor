@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
-import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
   checkPlaygroundRateLimit,
   contentCacheKey,
+  playgroundRateLimitKey,
   readCachedValue,
   readMultiFileLessonRequest,
   truncateOutput,
@@ -22,13 +22,16 @@ import {
 // front of the official Go Playground compile and format APIs for pure Go lessons
 // (docs/go-lessons-selective-runtime-plan.md §7.2). The browser never calls
 // the upstream service directly: this route owns the kill switch,
-// authentication, file/program-size checks, per-user rate limiting, content-hash
-// caching, the unique user agent, the upstream timeout, and normalization of
-// the upstream response into the app's GoPlaygroundRunResult contract.
+// file/program-size checks, rate limiting, content-hash caching, the unique
+// user agent, the upstream timeout, and normalization of the upstream response
+// into the app's GoPlaygroundRunResult contract. Run and Format need no
+// sign-in: a signed-in learner is rate-limited by user id, a signed-out one by
+// client IP (playgroundRateLimitKey in ../playgroundProxy.ts).
 //
 // Privacy invariant: user sources, filenames, program output, and diagnostics must never
 // be logged — telemetry is aggregate fields only (see logRun below). Nothing
-// application-specific (cookies, tokens, user identity) is sent upstream.
+// application-specific (cookies, tokens, user identity, the client IP) is sent
+// upstream, and the client IP is never logged.
 
 const UPSTREAM_COMPILE_URL = "https://play.golang.org/compile";
 const UPSTREAM_FORMAT_URL = "https://play.golang.org/fmt";
@@ -493,11 +496,6 @@ goPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Go Playground execution is disabled" }, 503);
   }
 
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
-
   const request = await validateGoLessonRequest(c.req.raw);
   if (!request.ok) {
     return c.json({ error: request.error }, request.status);
@@ -531,7 +529,7 @@ goPlaygroundRoute.post("/run", async (c) => {
 
   // The run budget is GO_RUN_RATE_LIMITER's, set in infra/wrangler.toml.
   const rateLimitDecision = await checkPlaygroundRateLimit(c.env.GO_RUN_RATE_LIMITER, {
-    userId: user.id,
+    key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {
@@ -618,11 +616,6 @@ goPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: "Go Playground tools are disabled" }, 503);
   }
 
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
-
   const request = await validateGoLessonRequest(c.req.raw);
   if (!request.ok) {
     return c.json({ error: request.error }, request.status);
@@ -630,7 +623,7 @@ goPlaygroundRoute.post("/format", async (c) => {
 
   // The format budget is GO_FORMAT_RATE_LIMITER's, set in infra/wrangler.toml.
   const rateLimitDecision = await checkPlaygroundRateLimit(c.env.GO_FORMAT_RATE_LIMITER, {
-    userId: user.id,
+    key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {

@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
-import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
   checkPlaygroundRateLimit,
   contentCacheKey,
+  playgroundRateLimitKey,
   readCachedValue,
   truncateOutput,
   validateSingleFileLessonRequest,
@@ -22,9 +22,11 @@ import {
 // front of the community Zig Playground run and fmt APIs (zig-play.dev) for
 // pure Zig lessons, mirroring the Go, Kotlin, and Rust routes. The browser
 // never calls the upstream service directly: this route owns the kill switch,
-// authentication, program-size checks, per-user rate limiting, content-hash
-// caching, the unique user agent, the upstream timeout, and normalization of
-// the upstream response into the app's ZigPlaygroundRunResult contract.
+// program-size checks, rate limiting, content-hash caching, the unique user
+// agent, the upstream timeout, and normalization of the upstream response into
+// the app's ZigPlaygroundRunResult contract. Run and Format need no sign-in: a
+// signed-in learner is rate-limited by user id, a signed-out one by client IP
+// (playgroundRateLimitKey in ../playgroundProxy.ts).
 //
 // Two upstream properties shape everything below:
 //
@@ -40,14 +42,15 @@ import {
 //
 // The upstream also rate-limits at 5 requests per minute per client IP, and
 // /server/run and /server/fmt share that one counter. Runs and formats are
-// therefore charged against a single per-user budget set below it
+// therefore charged against a single per-caller budget set below it
 // (ZIG_UPSTREAM_RATE_LIMITER in infra/wrangler.toml), and deterministic
 // outcomes of both are cached, so one lesson's repeated work does not spend
 // the shared budget.
 //
 // Privacy invariant: user sources, program output, and diagnostics must never
 // be logged — telemetry is aggregate fields only (see logRun below). Nothing
-// application-specific (cookies, tokens, user identity) is sent upstream.
+// application-specific (cookies, tokens, user identity, the client IP) is sent
+// upstream, and the client IP is never logged.
 
 const UPSTREAM_RUN_URL = "https://zig-play.dev/server/run";
 const UPSTREAM_FORMAT_URL = "https://zig-play.dev/server/fmt";
@@ -305,11 +308,6 @@ zigPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Zig Playground execution is disabled" }, 503);
   }
 
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
-
   const request = await validateSingleFileLessonRequest(c.req.raw, {
     requiredPath: REQUIRED_FILE_PATH,
     language: "Zig",
@@ -344,7 +342,7 @@ zigPlaygroundRoute.post("/run", async (c) => {
   // unchanged source never spends a slot a Format may need. The budget, shared
   // with /format, is ZIG_UPSTREAM_RATE_LIMITER's, set in infra/wrangler.toml.
   const rateLimitDecision = await checkPlaygroundRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
-    userId: user.id,
+    key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {
@@ -433,11 +431,6 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: "Zig Playground tools are disabled" }, 503);
   }
 
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
-
   const request = await validateSingleFileLessonRequest(c.req.raw, {
     requiredPath: REQUIRED_FILE_PATH,
     language: "Zig",
@@ -473,7 +466,7 @@ zigPlaygroundRoute.post("/format", async (c) => {
   // The budget, shared with /run, is ZIG_UPSTREAM_RATE_LIMITER's, set in
   // infra/wrangler.toml.
   const rateLimitDecision = await checkPlaygroundRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
-    userId: user.id,
+    key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {

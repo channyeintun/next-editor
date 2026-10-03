@@ -37,7 +37,7 @@ export function playlistSlugKey(slug: string): string {
 // its cache without it: `cached()` below degrades to its loader for the lesson
 // and playlist reads, and the playground routes
 // (routes/{go,kotlin,rust,zig,haskell}Playground.ts) run uncached against their
-// upstream. Their per-user rate limit never touches KV: the *_RATE_LIMITER
+// upstream. Their per-caller rate limit never touches KV: the *_RATE_LIMITER
 // bindings (see env.d.ts) enforce it.
 export function getCache(env: Env): KVNamespace | null {
   return env.CACHE ?? null;

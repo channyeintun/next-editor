@@ -286,7 +286,7 @@ deletes the stored copy along with the intent.
 | `GET /media/*`                                                     | —                   | Stream public R2 objects (`lessons/`, `slide-images/`) with Range and ETag revalidation                               |
 | `POST /api/slide-images`                                           | cookie              | Ingest Google Slides images into content-addressed R2 keys                                                            |
 | `GET /api/proxy?url=`, `POST /api/openrouter/responses`            | route-specific      | Guarded same-origin external-service proxies                                                                          |
-| `POST /api/<language>-playground/run`, `/format`                   | cookie              | Kill-switched, rate-limited, cached proxies for Go, Kotlin, Rust, Zig and Haskell (`/format`: Go, Rust, Zig)          |
+| `POST /api/<language>-playground/run`, `/format`                   | —                   | Kill-switched, cached proxies, limited per user or IP: Go, Kotlin, Rust, Zig, Haskell (`/format`: Go, Rust, Zig)      |
 | `GET /api/studio/capabilities`, `POST /api/studio/tts/voxcpm2`     | cookie + D1 flag    | Studio capability discovery and private Burmese narration                                                             |
 
 ## Upload & publish sequence

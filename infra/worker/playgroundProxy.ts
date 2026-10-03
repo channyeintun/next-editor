@@ -1,11 +1,14 @@
+import type { Context } from "hono";
 import { sha256Hex } from "../../src/shared/sha256Hex";
+import { getCurrentUser } from "./auth/session";
+import type { Env } from "./env";
 import { readBodyWithLimit } from "./httpBody";
 
 // Plumbing shared by the language playground proxy routes (routes/{go,kotlin,
 // rust,zig,haskell}Playground.ts), alongside httpBody.ts's readBodyWithLimit.
 //
 // Only the parts that are genuinely identical across upstreams live here: the
-// per-user rate-limit check, the content-addressed cache key, the KV result
+// rate-limit key and check, the content-addressed cache key, the KV result
 // cache, the output bound, and reading the `{ files: [...] }` request body
 // (whole for single-file upstreams, up to the per-language policy for Go and
 // Kotlin). Everything that encodes a particular service's behaviour — its file
@@ -32,31 +35,94 @@ export async function contentCacheKey(prefix: string, content: string): Promise<
   return `${prefix}:${await sha256Hex(content)}`;
 }
 
-// Per-user limit through a Workers Rate Limiting binding. Approximate by design
-// (Cloudflare counts per location), but fail closed when the binding is missing
-// or unavailable so a configuration outage cannot turn a route into an
+// Per-caller limit through a Workers Rate Limiting binding. Approximate by
+// design (Cloudflare counts per location), but fail closed when the binding is
+// missing or unavailable so a configuration outage cannot turn a route into an
 // unlimited proxy.
 export type RateLimitDecision = "allowed" | "limited" | "unavailable";
 
+/** The key every signed-out caller without a CF-Connecting-IP header shares. */
+const UNKNOWN_CLIENT_KEY = "ip:unknown";
+
 /**
- * Charge one call against `userId`'s budget on `limiter`.
+ * The first 64 bits of an IPv6 address, written as a /64 prefix, or null when
+ * `address` is not an IPv6 address this can read.
+ */
+function ipv6Slash64(address: string): string | null {
+  const halves = address.toLowerCase().split("::");
+  if (halves.length > 2) {
+    return null;
+  }
+  const groupsOf = (half: string | undefined) => (half ? half.split(":") : []);
+  // A dotted IPv4 ending ("::ffff:192.0.2.1") fills the last two groups.
+  const widthOf = (groups: string[]) =>
+    groups.reduce((width, group) => width + (group.includes(".") ? 2 : 1), 0);
+  const head = groupsOf(halves[0]);
+  const tail = groupsOf(halves[1]);
+  // How many zero groups "::" stands for; without "::" there must be none.
+  const missing = 8 - widthOf(head) - widthOf(tail);
+  if (halves.length === 1 ? missing !== 0 : missing < 1) {
+    return null;
+  }
+  const prefix = [...head, ...Array<string>(missing).fill("0"), ...tail].slice(0, 4);
+  if (!prefix.every((group) => /^[0-9a-f]{1,4}$/.test(group))) {
+    return null;
+  }
+  return `${prefix.map((group) => Number.parseInt(group, 16).toString(16)).join(":")}::/64`;
+}
+
+/**
+ * The key a playground call is charged to on its route's rate limiter.
+ *
+ * A signed-in learner is charged as "user:<id>". A signed-out learner is
+ * charged by the client address Cloudflare puts in CF-Connecting-IP, as
+ * "ip:<address>". An IPv6 address is cut to its /64, because one IPv6 client
+ * usually holds a whole /64 and could otherwise take a fresh budget for every
+ * address in it. Without the header (local dev, tests) every signed-out
+ * caller shares the one "ip:unknown" key, so a missing header can only make the
+ * limit stricter, never lift it.
+ *
+ * The address is only ever this key: it is never logged, never sent upstream,
+ * and never stored by this Worker.
+ */
+export async function playgroundRateLimitKey<E extends { Bindings: Env }>(
+  c: Context<E>,
+): Promise<string> {
+  const user = await getCurrentUser(c);
+  if (user) {
+    return `user:${user.id}`;
+  }
+  const address = c.req.header("CF-Connecting-IP")?.trim();
+  if (!address) {
+    return UNKNOWN_CLIENT_KEY;
+  }
+  if (!address.includes(":")) {
+    return `ip:${address}`;
+  }
+  const prefix = ipv6Slash64(address);
+  return prefix ? `ip:${prefix}` : UNKNOWN_CLIENT_KEY;
+}
+
+/**
+ * Charge one call against `key`'s budget on `limiter`. The key comes from
+ * playgroundRateLimitKey, so every route charges callers the same way.
  *
  * Each budget is its own binding, declared with its limit and period in
  * infra/wrangler.toml. A route that serves both /run and /format passes a
  * different binding for each so the two get their own budgets — except where
  * the upstream itself counts them together (zigPlayground.ts), which passes
- * one binding for both. `label` only ever reaches console.error; user sources
- * and output must never be logged.
+ * one binding for both. `label` only ever reaches console.error; user sources,
+ * output and the key itself must never be logged.
  */
 export async function checkPlaygroundRateLimit(
   limiter: RateLimit | undefined,
-  options: { userId: string; label: string },
+  options: { key: string; label: string },
 ): Promise<RateLimitDecision> {
   if (!limiter) {
     return "unavailable";
   }
   try {
-    const { success } = await limiter.limit({ key: options.userId });
+    const { success } = await limiter.limit({ key: options.key });
     return success ? "allowed" : "limited";
   } catch {
     console.error(`${options.label} rate-limit check failed`);

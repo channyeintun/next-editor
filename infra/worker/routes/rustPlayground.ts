@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
-import { getCurrentUser } from "../auth/session";
 import { getCache } from "../cache";
 import { readBodyWithLimit } from "../httpBody";
 import {
   checkPlaygroundRateLimit,
   contentCacheKey,
+  playgroundRateLimitKey,
   readCachedValue,
   truncateOutput,
   validateSingleFileLessonRequest,
@@ -21,14 +21,17 @@ import {
 // front of the official Rust Playground execute and format APIs
 // (play.rust-lang.org) for pure Rust lessons, mirroring the Go and Kotlin
 // routes. The browser never calls the upstream service directly: this route
-// owns the kill switch, authentication, program-size checks, per-user rate
-// limiting, content-hash caching, the unique user agent, the upstream
-// timeout, and normalization of the upstream response into the app's
-// RustPlaygroundRunResult contract.
+// owns the kill switch, program-size checks, rate limiting, content-hash
+// caching, the unique user agent, the upstream timeout, and normalization of
+// the upstream response into the app's RustPlaygroundRunResult contract. Run
+// and Format need no sign-in: a signed-in learner is rate-limited by user id,
+// a signed-out one by client IP (playgroundRateLimitKey in
+// ../playgroundProxy.ts).
 //
 // Privacy invariant: user sources, program output, and diagnostics must never
 // be logged — telemetry is aggregate fields only (see logRun below). Nothing
-// application-specific (cookies, tokens, user identity) is sent upstream.
+// application-specific (cookies, tokens, user identity, the client IP) is sent
+// upstream, and the client IP is never logged.
 
 const UPSTREAM_EXECUTE_URL = "https://play.rust-lang.org/execute";
 const UPSTREAM_FORMAT_URL = "https://play.rust-lang.org/format";
@@ -216,11 +219,6 @@ rustPlaygroundRoute.post("/run", async (c) => {
     return c.json({ error: "Rust Playground execution is disabled" }, 503);
   }
 
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
-
   const request = await validateSingleFileLessonRequest(c.req.raw, {
     requiredPath: REQUIRED_FILE_PATH,
     language: "Rust",
@@ -259,7 +257,7 @@ rustPlaygroundRoute.post("/run", async (c) => {
 
   // The run budget is RUST_RUN_RATE_LIMITER's, set in infra/wrangler.toml.
   const rateLimitDecision = await checkPlaygroundRateLimit(c.env.RUST_RUN_RATE_LIMITER, {
-    userId: user.id,
+    key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {
@@ -362,11 +360,6 @@ rustPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: "Rust Playground tools are disabled" }, 503);
   }
 
-  const user = await getCurrentUser(c);
-  if (!user) {
-    return c.json({ error: "not signed in" }, 401);
-  }
-
   const request = await validateSingleFileLessonRequest(c.req.raw, {
     requiredPath: REQUIRED_FILE_PATH,
     language: "Rust",
@@ -379,7 +372,7 @@ rustPlaygroundRoute.post("/format", async (c) => {
 
   // The format budget is RUST_FORMAT_RATE_LIMITER's, set in infra/wrangler.toml.
   const rateLimitDecision = await checkPlaygroundRateLimit(c.env.RUST_FORMAT_RATE_LIMITER, {
-    userId: user.id,
+    key: await playgroundRateLimitKey(c),
     label: LOG_LABEL,
   });
   if (rateLimitDecision === "limited") {

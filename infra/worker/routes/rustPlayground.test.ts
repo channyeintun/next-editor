@@ -15,6 +15,7 @@ afterEach(() => {
 
 const SOURCE = 'fn main() {\n    println!("hi");\n}\n';
 const FILES = [{ path: "main.rs", content: SOURCE }];
+const CLIENT_IP = "203.0.113.7";
 
 const USER: UserRow = {
   id: "user-1",
@@ -60,24 +61,32 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
   } as Env;
 }
 
-function runRequest(env: Env, body: BodyInit | null = JSON.stringify({ files: FILES })) {
+function runRequest(
+  env: Env,
+  body: BodyInit | null = JSON.stringify({ files: FILES }),
+  headers: Record<string, string> = {},
+) {
   return rustPlaygroundRoute.request(
     "http://localhost/run",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: "ne_session=session-1" },
+      headers: { "Content-Type": "application/json", Cookie: "ne_session=session-1", ...headers },
       body,
     },
     env,
   );
 }
 
-function formatRequest(env: Env, body: BodyInit | null = JSON.stringify({ files: FILES })) {
+function formatRequest(
+  env: Env,
+  body: BodyInit | null = JSON.stringify({ files: FILES }),
+  headers: Record<string, string> = {},
+) {
   return rustPlaygroundRoute.request(
     "http://localhost/format",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: "ne_session=session-1" },
+      headers: { "Content-Type": "application/json", Cookie: "ne_session=session-1", ...headers },
       body,
     },
     env,
@@ -115,12 +124,75 @@ describe("rustPlaygroundRoute", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("requires a signed-in user", async () => {
+  // Run needs no sign-in. The budget still applies: a signed-in learner is
+  // charged by user id, a signed-out one by client IP.
+  it("runs for a signed-out learner and charges the run to their IP", async () => {
     const spy = stubUpstream(UPSTREAM_SUCCESS);
-    const response = await runRequest(makeEnv({ DB: dbWithSessionUser(null) }));
+    const limiter = countingRateLimiter(Infinity);
+    const response = await runRequest(
+      makeEnv({ DB: dbWithSessionUser(null), RUST_RUN_RATE_LIMITER: limiter }),
+      undefined,
+      { "CF-Connecting-IP": CLIENT_IP },
+    );
 
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(limiter.keys).toEqual([`ip:${CLIENT_IP}`]);
+  });
+
+  it("charges a signed-in learner's run to their user id, not their IP", async () => {
+    stubUpstream(UPSTREAM_SUCCESS);
+    const limiter = countingRateLimiter(Infinity);
+    const response = await runRequest(makeEnv({ RUST_RUN_RATE_LIMITER: limiter }), undefined, {
+      "CF-Connecting-IP": CLIENT_IP,
+    });
+
+    expect(response.status).toBe(200);
+    expect(limiter.keys).toEqual([`user:${USER.id}`]);
+  });
+
+  it("charges signed-out callers with no CF-Connecting-IP to one shared key", async () => {
+    stubUpstream(UPSTREAM_SUCCESS);
+    const limiter = countingRateLimiter(Infinity);
+    const env = makeEnv({
+      DB: dbWithSessionUser(null),
+      CACHE: undefined,
+      RUST_RUN_RATE_LIMITER: limiter,
+    });
+
+    await runRequest(env);
+    await runRequest(env);
+
+    expect(limiter.keys).toEqual(["ip:unknown", "ip:unknown"]);
+  });
+
+  it("returns 429 once a signed-out caller's budget is spent", async () => {
+    const spy = stubUpstream(UPSTREAM_SUCCESS);
+    const response = await runRequest(
+      makeEnv({ DB: dbWithSessionUser(null), RUST_RUN_RATE_LIMITER: refusingRateLimiter() }),
+      undefined,
+      { "CF-Connecting-IP": CLIENT_IP },
+    );
+
+    expect(response.status).toBe(429);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("never logs the caller's IP or sends it upstream", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const spy = stubUpstream(UPSTREAM_SUCCESS);
+
+    const response = await runRequest(makeEnv({ DB: dbWithSessionUser(null) }), undefined, {
+      "CF-Connecting-IP": CLIENT_IP,
+    });
+
+    expect(response.status).toBe(200);
+    expect(log).toHaveBeenCalledWith("rust-playground-run", expect.any(Object));
+    expect(JSON.stringify([...log.mock.calls, ...error.mock.calls])).not.toContain(CLIENT_IP);
+    const [, init] = spy.mock.calls[0];
+    expect([...new Headers(init?.headers).values()].join("\n")).not.toContain(CLIENT_IP);
+    expect(String(init?.body)).not.toContain(CLIENT_IP);
   });
 
   it("rejects an invalid JSON body", async () => {
@@ -344,7 +416,7 @@ describe("rustPlaygroundRoute", () => {
 
     expect(statuses.every((status) => status === 200)).toBe(true);
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(limiter.keys).toEqual([USER.id]);
+    expect(limiter.keys).toEqual([`user:${USER.id}`]);
   });
 
   it("does not cache runtime errors", async () => {
@@ -388,15 +460,33 @@ describe("rustPlaygroundRoute", () => {
     });
   });
 
-  it("applies the kill switch and authentication boundary to formatting", async () => {
+  it("applies the kill switch to formatting", async () => {
     const spy = stubUpstream({ success: true, code: SOURCE, stdout: "", stderr: "" });
 
     const disabled = await formatRequest(makeEnv({ RUST_PLAYGROUND_ENABLED: undefined }));
-    const signedOut = await formatRequest(makeEnv({ DB: dbWithSessionUser(null) }));
 
     expect(disabled.status).toBe(503);
-    expect(signedOut.status).toBe(401);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("formats for a signed-out learner and charges the format budget to their IP", async () => {
+    const spy = stubUpstream({ success: true, code: SOURCE, stdout: "", stderr: "" });
+    const formatLimiter = countingRateLimiter(Infinity);
+    const runLimiter = countingRateLimiter(Infinity);
+    const response = await formatRequest(
+      makeEnv({
+        DB: dbWithSessionUser(null),
+        RUST_FORMAT_RATE_LIMITER: formatLimiter,
+        RUST_RUN_RATE_LIMITER: runLimiter,
+      }),
+      undefined,
+      { "CF-Connecting-IP": CLIENT_IP },
+    );
+
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(formatLimiter.keys).toEqual([`ip:${CLIENT_IP}`]);
+    expect(runLimiter.keys).toEqual([]);
   });
 
   it("returns rustfmt syntax diagnostics without changing them into a service failure", async () => {
