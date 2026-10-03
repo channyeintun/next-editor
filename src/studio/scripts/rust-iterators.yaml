@@ -44,8 +44,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-iterators
-  title: "Rust from zero: Iterators and closures"
-  locale: en-US
+  title: "Rust from zero: Iterator နဲ့ closure"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -65,7 +65,7 @@ lesson:
         y: 152,
         width: 540,
         height: 48,
-        text: "An iterator gives you items",
+        text: "Iterator က item တွေ ပေးတယ်",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -229,7 +229,7 @@ lesson:
         y: 520,
         width: 470,
         height: 36,
-        text: "a for loop calls next() until None",
+        text: "for loop က None ထိ next() ခေါ်တယ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -240,7 +240,7 @@ lesson:
         y: 580,
         width: 440,
         height: 36,
-        text: "map, filter, sum: built on next()",
+        text: "map, filter, sum: next() ပေါ်မှာ ဆောက်ထား",
         strokeColor: "#1971c2",
         fontSize: 28,
       }
@@ -252,7 +252,7 @@ lesson:
         y: 152,
         width: 430,
         height: 48,
-        text: "A closure can capture",
+        text: "Closure က capture လုပ်နိုင်တယ်",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -360,7 +360,7 @@ lesson:
         y: 574,
         width: 455,
         height: 36,
-        text: "works: the closure captures limit",
+        text: "ရတယ်: closure က limit ကို capture လုပ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -414,7 +414,7 @@ lesson:
         y: 152,
         width: 370,
         height: 48,
-        text: "Iterators are lazy",
+        text: "Iterator တွေက lazy",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -570,13 +570,16 @@ lesson:
         y: 560,
         width: 550,
         height: 36,
-        text: "one item at a time, through every step",
+        text: "item တစ်ခုချင်း၊ အဆင့်တိုင်း ဖြတ်သွားတယ်",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 41
 
 runtime:
@@ -586,22 +589,43 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "numbers: [1, 2, 3, 4, 5, 6]\ndouble(4) = 8\ndoubled, over 5: [6, 8, 10, 12]\nnothing doubled yet\ndoubling 1\ndoubling 2\ndoubling 3\ndoubling 4\ndoubling 5\ndoubling 6\nsum: 42\n"
+      stdout: "numbers: [1, 2, 3, 4, 5, 6]
+
+        double(4) = 8
+
+        doubled, over 5: [6, 8, 10, 12]
+
+        nothing doubled yet
+
+        doubling 1
+
+        doubling 2
+
+        doubling 3
+
+        doubling 4
+
+        doubling 5
+
+        doubling 6
+
+        sum: 42\n"
       stderr: ""
 
 scenes:
   - id: what-is-an-iterator
-    chapter: What an iterator is
-    narration: >
-      You've looped over a Vec with for. That loop uses an iterator.
-      [[mark:draw-vec]] Here's a Vec of numbers.
-      [[mark:draw-iter]] Call iter on it, and you get an iterator.
-      [[mark:draw-next]] An iterator has one main method, next. Each call
-      gives you Some with the next item. With iter, that's a reference to it.
-      [[mark:draw-none]] When the items run out, next returns None.
-      [[mark:draw-for]] A for loop calls next for you, until it gets None.
-      [[mark:draw-adapt]] Methods like map, filter and sum are built on next.
-      Most take a closure, so let's start there.
+    chapter: Iterator ဆိုတာ ဘာလဲ
+    narration: >-
+      Vec တစ်ခုကို for loop နဲ့ ပတ်ဖူးပြီးသားပါ။ အဲဒီ for loop ရဲ့ နောက်ကွယ်မှာ အလုပ်လုပ်နေတာက
+      iterator တစ်ခုပါ။ [[mark:draw-vec]] ဒီမှာ ကိန်းဂဏန်းတွေ ထည့်ထားတဲ့ Vec တစ်ခု ရှိပါတယ်။
+      [[mark:draw-iter]] သူ့ပေါ်မှာ iter ကို ခေါ်လိုက်ရင် iterator တစ်ခု ရပါတယ်။ [[mark:draw-next]]
+      iterator တစ်ခုမှာ အဓိက method ဆိုလို့ next တစ်ခုပဲ ရှိပါတယ်။ next ကို ခေါ်လိုက်တိုင်း နောက်
+      item တစ်ခုကို Some ထဲ ထည့်ပြီး ပြန်ပေးပါတယ်။ iter နဲ့ ရတဲ့ iterator ဆိုရင်၊ Some ထဲမှာ ပါလာတာက
+      item ကိုယ်တိုင် မဟုတ်ဘဲ၊ item ကို ညွှန်တဲ့ reference တစ်ခုပါ။ [[mark:draw-none]] item တွေ
+      ကုန်သွားတဲ့အခါမှာတော့ next က None ကို ပြန်ပေးပါတယ်။ [[mark:draw-for]] for loop ဆိုတာ None
+      မရမချင်း next ကို ကိုယ့်အစား ထပ်ခါထပ်ခါ ခေါ်ပေးနေတာပါပဲ။ [[mark:draw-adapt]] ပြီးတော့ map၊
+      filter၊ sum လို method တွေကလည်း ဒီ next ပေါ်မှာပဲ တည်ဆောက်ထားတာပါ။ အဲဒီ method အများစုက
+      closure တစ်ခုကို လက်ခံတဲ့အတွက်၊ closure ကနေ စကြည့်ရအောင်။
     sources:
       - title: "The Rust Book — The Iterator Trait and the next Method"
         url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#the-iterator-trait-and-the-next-method"
@@ -648,16 +672,16 @@ scenes:
         drawMs: 1600
 
   - id: closures
-    chapter: Closures
-    narration: >
-      A closure is a small function with no name.
-      [[mark:type-double]] Let's store one in a variable called double. A
-      closure is a value, so it can go in a variable like a number can.
-      [[mark:select-bars]] The parameters go between the two bars. Here
-      there's one, x. Then comes the body, x times two. There's no f n
-      keyword, and no types. The compiler works them out from how you use it.
-      [[mark:type-call-double]] You call it like any other function. Let's
-      call it with four.
+    chapter: Closure တွေ
+    narration: >-
+      closure ဆိုတာ နာမည် မပါတဲ့ function သေးသေးလေး တစ်ခုပါ။ [[mark:type-double]] closure တစ်ခုကို
+      double ဆိုတဲ့ variable ထဲ ထည့်သိမ်းကြည့်ရအောင်။ closure ဆိုတာ တန်ဖိုး တစ်ခု ဖြစ်တဲ့အတွက်၊
+      ကိန်းဂဏန်း တစ်ခုကို variable ထဲ ထည့်သလိုပဲ closure ကိုလည်း variable ထဲ ထည့်လို့ ရပါတယ်။
+      [[mark:select-bars]] parameter တွေကို pipe နှစ်ခုကြားမှာ ရေးပါတယ်။ ဒီမှာတော့ x ဆိုတဲ့
+      parameter တစ်ခုပဲ ရှိပါတယ်။ သူ့နောက်က body ကတော့ x ကို 2 နဲ့ မြှောက်တာပါ။ f n keyword လည်း
+      မပါသလို၊ type လည်း ဘယ်နေရာမှာမှ မရေးထားပါဘူး။ ကိုယ် ဘယ်လို သုံးလဲ ဆိုတာကို ကြည့်ပြီး compiler
+      က type တွေကို ကိုယ့်အစား ရွေးပေးပါတယ်။ [[mark:type-call-double]] ခေါ်တဲ့အခါကျတော့ သာမန်
+      function တစ်ခုကို ခေါ်သလိုပဲ ခေါ်ပါတယ်။ 4 နဲ့ ခေါ်ကြည့်ရအောင်။
     sources:
       - title: "The Rust Book — Closures"
         url: "https://doc.rust-lang.org/book/ch13-01-closures.html"
@@ -701,20 +725,20 @@ scenes:
         text: "    println!(\"double(4) = {}\", double(4));\n"
 
   - id: chain
-    chapter: Map, filter, collect
-    narration: >
-      Let's give closures to an iterator.
-      [[mark:type-chain]] We set a limit of five. Then we build a chain of
-      steps on our numbers: iter, then map, then filter, and last, collect.
-      [[mark:select-map]] map calls its closure on every item and passes on
-      the result: each number, doubled.
-      [[mark:select-filter]] filter keeps an item only when its closure
-      returns true. It only looks at each item, so x is a reference. Math
-      like times two works on a reference, but a comparison needs the same
-      type on both sides. So the star reads the number behind x.
-      [[mark:select-vec-type]] collect gathers the results into a new
-      collection. It can build many kinds, so we name the one we want: a Vec
-      of i32.
+    chapter: map၊ filter နဲ့ collect
+    narration: >-
+      အခု closure တွေကို iterator တစ်ခုဆီ ပေးကြည့်ရအောင်။ [[mark:type-chain]] အရင်ဆုံး limit ကို 5
+      လို့ သတ်မှတ်ထားပါမယ်။ ပြီးတော့ numbers ပေါ်မှာ အဆင့်တွေကို chain အနေနဲ့ ဆက်တွဲ တည်ဆောက်ပါမယ်။
+      iter၊ ပြီးတော့ map၊ ပြီးတော့ filter၊ နောက်ဆုံးမှာ collect ပါ။ [[mark:select-map]] map က item
+      တိုင်းအတွက် သူ့ closure ကို တစ်ကြိမ်စီ ခေါ်ပြီး၊ ထွက်လာတဲ့ ရလဒ်ကို နောက်အဆင့်ဆီ ဆက်ပေးပါတယ်။
+      ဒီမှာဆိုရင် ကိန်းဂဏန်း တစ်ခုချင်းစီကို နှစ်ဆ လုပ်ပေးတာပါ။ [[mark:select-filter]] filter ကတော့
+      သူ့ closure က true ပြန်ပေးတဲ့ item တွေကိုပဲ ချန်ထားပါတယ်။ filter က item တစ်ခုချင်းစီကို
+      ကြည့်ရုံပဲ ကြည့်တာ ဖြစ်လို့၊ သူ့ closure ထဲက x က reference တစ်ခုပါ။ 2 နဲ့ မြှောက်တာလို
+      တွက်ချက်မှုမျိုးကတော့ reference ပေါ်မှာ တန်းလုပ်လို့ ရပါတယ်။ ဒါပေမဲ့ နှိုင်းယှဉ်မယ်ဆိုရင်တော့
+      ဘယ်ဘက်ရော ညာဘက်ရော type တူဖို့ လိုပါတယ်။ ဒါကြောင့် x ရှေ့က star က x ညွှန်ထားတဲ့ ကိန်းဂဏန်းကို
+      ဖတ်ယူပေးတာပါ။ [[mark:select-vec-type]] collect ကတော့ ရလဒ်တွေကို စုပြီး collection အသစ် တစ်ခု
+      တည်ဆောက်ပေးပါတယ်။ collection အမျိုးအစား အများကြီး တည်ဆောက်နိုင်တဲ့အတွက်၊ ဘယ်ဟာ လိုချင်လဲ
+      ဆိုတာကို ကိုယ်က type နဲ့ ပြောပေးရပါတယ်။ ဒီမှာတော့ Vec of i32 ပါ။
     sources:
       - title: "The Rust Book — Methods that Produce Other Iterators"
         url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-produce-other-iterators"
@@ -737,7 +761,21 @@ scenes:
           after: "double(4));\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let limit = 5;\n    let big: Vec<i32> = numbers\n        .iter()\n        .map(|x| x * 2)\n        .filter(|x| *x > limit)\n        .collect();\n    println!(\"doubled, over {limit}: {big:?}\");\n"
+        text: "
+
+          \    let limit = 5;
+
+          \    let big: Vec<i32> = numbers
+
+          \        .iter()
+
+          \        .map(|x| x * 2)
+
+          \        .filter(|x| *x > limit)
+
+          \        .collect();
+
+          \    println!(\"doubled, over {limit}: {big:?}\");\n"
       - id: select-map
         type: editor.select
         at: { mark: select-map }
@@ -761,25 +799,25 @@ scenes:
           occurrence: 1
 
   - id: capture
-    narration: >
-      [[mark:select-limit]] Look at limit, inside the filter closure. It
-      isn't a parameter. It's a variable from main, and the closure can use
-      it. That's called capturing.
-      [[mark:open-capture]] A function can't do that.
-      [[mark:draw-fn]] Here's the same check, written as a normal function
-      inside main.
-      [[mark:draw-err]] The compiler stops with error E0434: can't capture
-      dynamic environment in an f n item. The environment means the variables
-      around it.
-      [[mark:draw-closure]] As a closure, the same check works.
-      [[mark:draw-holds]] A closure is a value, a bit like a struct that
-      holds what it captures. A normal function is only code, with nowhere to
-      keep limit.
+    narration: >-
+      [[mark:select-limit]] filter ရဲ့ closure ထဲက limit ကို ကြည့်ပါ။ limit က closure ရဲ့ parameter
+      မဟုတ်ပါဘူး။ main ထဲက variable တစ်ခု ဖြစ်ပြီး၊ closure က သူ့ကို ဒီအတိုင်း ယူသုံးလို့ ရနေတာပါ။
+      ဒါကို capture လုပ်တယ်လို့ ခေါ်ပါတယ်။ [[mark:open-capture]] သာမန် function တစ်ခုကတော့ ဒီလို
+      လုပ်လို့ မရပါဘူး။ [[mark:draw-fn]] ဒီမှာ x က limit ထက် ကြီးလား ဆိုတဲ့ ခုနက စစ်ဆေးချက်ကိုပဲ၊
+      main ထဲမှာ သာမန် function တစ်ခု အနေနဲ့ ရေးထားပါတယ်။ [[mark:draw-err]] အဲဒီအခါ compiler က E0434
+      error နဲ့ ရပ်သွားပါတယ်။ error စာသားက၊ f n item တစ်ခုထဲမှာ dynamic environment ကို capture
+      လုပ်လို့ မရဘူးတဲ့။ environment ဆိုတာ သူ့ပတ်ဝန်းကျင်မှာ ရှိတဲ့ variable တွေကို ပြောတာပါ။
+      [[mark:draw-closure]] အဲဒီ စစ်ဆေးချက်ကိုပဲ closure အနေနဲ့ ရေးလိုက်ရင်တော့ အဆင်ပြေသွားပါတယ်။
+      [[mark:draw-holds]] ဘာကြောင့်လဲဆိုတော့၊ closure ဆိုတာ တန်ဖိုး တစ်ခု ဖြစ်ပြီး၊ သူ capture
+      လုပ်ထားတာတွေကို သူ့ထဲမှာ သိမ်းထားတဲ့ struct တစ်ခုနဲ့ သဘော ဆင်လို့ပါ။ သာမန် function ကတော့ code
+      သက်သက်ပဲ ဖြစ်တဲ့အတွက်၊ limit ကို သိမ်းထားစရာ နေရာ မရှိပါဘူး။
     sources:
       - title: "The Rust Book — Capturing References or Moving Ownership"
         url: "https://doc.rust-lang.org/book/ch13-01-closures.html#capturing-references-or-moving-ownership"
       - title: "The Rust Book — Using Closures that Capture Their Environment"
-        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#using-closures-that-capture-their-environment"
+        url:
+          "https://doc.rust-lang.org/book/ch13-02-iterators.html#using-closures-that-capture-their-envir\
+          onment"
       - title: "Rust error codes — E0434"
         url: "https://doc.rust-lang.org/error_codes/E0434.html"
       - title: "The Rust Reference — Closure types (like a struct holding the captured values)"
@@ -820,20 +858,19 @@ scenes:
         drawMs: 2400
 
   - id: lazy
-    chapter: Lazy until consumed
-    narration: >
-      One more thing about map and filter.
-      [[mark:draw-lazy-code]] Say you call map, with nothing after it.
-      [[mark:draw-warning]] It compiles, but you get a warning: unused Map
-      that must be used. The note says why. Iterators are lazy, and do
-      nothing unless consumed.
-      [[mark:draw-adapters]] map and filter are adapters. Each one returns a
-      new iterator that only describes a step. Nothing runs yet.
-      [[mark:draw-consumer]] A consumer, like sum, collect, or a for loop,
-      runs the chain.
-      [[mark:draw-pass]] It asks for one item at a time, and each item goes
-      through every step. No extra Vec is built in between. And the chain
-      runs about as fast as a loop you'd write by hand.
+    chapter: Iterator တွေက lazy
+    narration: >-
+      map နဲ့ filter အကြောင်း နောက်ထပ် တစ်ချက် ပြောစရာ ရှိပါသေးတယ်။ [[mark:draw-lazy-code]] map ကို
+      ခေါ်ပြီး၊ သူ့နောက်မှာ ဘာမှ ဆက်မရေးဘူး ဆိုပါစို့။ [[mark:draw-warning]] compile လုပ်လို့တော့
+      ရပါတယ်၊ ဒါပေမဲ့ warning တစ်ခု တက်လာပါတယ်။ unused Map that must be used တဲ့။ သူ့အောက်က note
+      စာကြောင်းက အကြောင်းရင်းကို ပြောပြပါတယ်။ iterator တွေက lazy ဖြစ်တဲ့အတွက်၊ မခိုင်းမချင်း ဘာမှ
+      မလုပ်ဘူးတဲ့။ [[mark:draw-adapters]] map နဲ့ filter ကို adapter လို့ ခေါ်ပါတယ်။ adapter တစ်ခုက
+      iterator အသစ် တစ်ခု ပြန်ပေးပြီး၊ အဲဒီ iterator က လုပ်ရမယ့် အဆင့် တစ်ဆင့်ကို ဖော်ပြထားရုံပါပဲ။
+      ဒီအချိန်မှာ ဘာမှ run မသွားသေးပါဘူး။ [[mark:draw-consumer]] sum၊ collect၊ ဒါမှမဟုတ် for loop
+      လို consumer တစ်ခု ရောက်လာမှ chain တစ်ခုလုံး run ပါတယ်။ [[mark:draw-pass]] consumer က item
+      တွေကို တစ်ခုချင်း တောင်းပြီး၊ item တစ်ခုချင်းစီက အဆင့်တိုင်းကို ဖြတ်သွားပါတယ်။ ဒါကြောင့်
+      အဆင့်တွေကြားမှာ Vec အပို တစ်ခုမှ တည်ဆောက်စရာ မလိုသလို၊ ဒီ chain က ကိုယ်တိုင် လက်နဲ့ ရေးတဲ့
+      loop တစ်ခုနဲ့ အမြန်နှုန်း သိပ်မကွာပါဘူး။
     sources:
       - title: "The Rust Book — Methods that Produce Other Iterators (the lazy warning)"
         url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-produce-other-iterators"
@@ -874,14 +911,13 @@ scenes:
         drawMs: 1800
 
   - id: lazy-code
-    narration: >
-      Let's watch that happen.
-      [[mark:type-lazy]] Here's map again. This closure's body is a block,
-      so it can print each number, then return it doubled.
-      [[mark:type-sum]] Then we print a line, and only after that, we call
-      sum.
-      [[mark:select-sum]] sum is the consumer here. Like collect, it needs
-      the result type, so total is an i32.
+    narration: >-
+      အဲဒါကို လက်တွေ့ ကြည့်ရအောင်။ [[mark:type-lazy]] ဒီမှာ map ကို ထပ်သုံးထားပါတယ်။ ဒီတစ်ခါတော့
+      closure ရဲ့ body က block တစ်ခု ဖြစ်တဲ့အတွက်၊ ကိန်းဂဏန်း တစ်ခုချင်းစီကို အရင် print ထုတ်ပြီးမှ၊
+      နှစ်ဆ လုပ်ထားတဲ့ တန်ဖိုးကို ပြန်ပေးနိုင်ပါတယ်။ [[mark:type-sum]] ပြီးတော့ စာကြောင်း တစ်ကြောင်း
+      print ထုတ်ပြီး၊ အဲဒီနောက်မှ sum ကို ခေါ်ပါမယ်။ [[mark:select-sum]] ဒီနေရာမှာ consumer က sum
+      ပါ။ collect လိုပဲ sum ကလည်း ရလဒ် type ကို သိဖို့ လိုတဲ့အတွက်၊ total ကို i32 လို့
+      ကြေညာထားပါတယ်။
     sources:
       - title: "The Rust Book — Methods that Consume the Iterator"
         url: "https://doc.rust-lang.org/book/ch13-02-iterators.html#methods-that-consume-the-iterator"
@@ -900,7 +936,15 @@ scenes:
           after: "{big:?}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let doubled = numbers.iter().map(|x| {\n        println!(\"doubling {x}\");\n        x * 2\n    });\n"
+        text: "
+
+          \    let doubled = numbers.iter().map(|x| {
+
+          \        println!(\"doubling {x}\");
+
+          \        x * 2
+
+          \    });\n"
       - id: type-sum
         type: editor.type
         at: { mark: type-sum, offsetMs: -200 }
@@ -909,7 +953,11 @@ scenes:
           after: "        x * 2\n    });\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    println!(\"nothing doubled yet\");\n    let total: i32 = doubled.sum();\n    println!(\"sum: {total}\");\n"
+        text: "    println!(\"nothing doubled yet\");
+
+          \    let total: i32 = doubled.sum();
+
+          \    println!(\"sum: {total}\");\n"
       - id: select-sum
         type: editor.select
         at: { mark: select-sum }
@@ -919,11 +967,11 @@ scenes:
           occurrence: 1
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. Double of four is eight. The chain keeps
-      six, eight, ten and twelve. Now look at the order. The line that says
-      nothing doubled yet comes before every doubling line. The closure only
-      ran when sum asked for the items. And the sum is forty-two.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ 4 ကို double လုပ်လိုက်တော့ 8 ရပါတယ်။ chain ကတော့ 6၊ 8၊ 10
+      နဲ့ 12 ကို ချန်ထားပေးပါတယ်။ အခု output ရဲ့ အစီအစဉ်ကို ကြည့်ပါ။ nothing doubled yet ဆိုတဲ့
+      စာကြောင်းက doubling စာကြောင်း အားလုံးရဲ့ ရှေ့မှာ ရောက်နေပါတယ်။ ဆိုလိုတာက၊ sum က item တွေကို
+      တောင်းမှ closure က run သွားတာပါ။ နောက်ဆုံး sum ကတော့ 42 ပါ။
     sources:
       - title: "The Rust Book — Processing a Series of Items with Iterators"
         url: "https://doc.rust-lang.org/book/ch13-02-iterators.html"
@@ -944,11 +992,11 @@ scenes:
         contains: ".filter(|x| *x > limit)"
 
   - id: wrap
-    narration: >
-      So a closure is a small function that can use the variables around it.
-      Adapters like map and filter describe the steps, and a consumer like
-      collect or sum runs them. Next, we'll put it all together in a word
-      counter.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ closure ဆိုတာ သူ့ပတ်ဝန်းကျင်က variable တွေကို ယူသုံးနိုင်တဲ့ function
+      သေးသေးလေး တစ်ခုပါ။ map နဲ့ filter လို adapter တွေက လုပ်ရမယ့် အဆင့်တွေကို ဖော်ပြပေးပြီး၊
+      collect ဒါမှမဟုတ် sum လို consumer တစ်ခုက အဲဒီ အဆင့်တွေကို run ပေးပါတယ်။ နောက် lesson မှာတော့
+      အခုထိ လေ့လာခဲ့တာ အားလုံးကို ပေါင်းစပ်ပြီး၊ စကားလုံး ရေတွက်တဲ့ program တစ်ခု ရေးကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Functional Language Features: Iterators and Closures"
         url: "https://doc.rust-lang.org/book/ch13-00-functional-features.html"

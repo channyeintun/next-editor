@@ -49,8 +49,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-lifetimes
-  title: "Rust from zero: Lifetimes"
-  locale: en-US
+  title: "Rust from zero: Lifetime တွေ"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -67,12 +67,16 @@ lesson:
     - id: lifetimes-slide
       contentType: google
       name: Lifetimes
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_108
     - id: param-slide
       contentType: google
       name: The lifetime parameter
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_117
   whiteboardAssets:
     # ---- Board 1: a dangling reference (E0597) -------------------------------
@@ -83,7 +87,7 @@ lesson:
         y: 152,
         width: 420,
         height: 48,
-        text: "A dangling reference",
+        text: "Dangling reference",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -169,7 +173,7 @@ lesson:
         y: 222,
         width: 200,
         height: 36,
-        text: "lifetime of r",
+        text: "r ရဲ့ lifetime",
         strokeColor: "#1971c2",
         fontSize: 28,
       }
@@ -189,7 +193,7 @@ lesson:
         y: 306,
         width: 200,
         height: 36,
-        text: "lifetime of x",
+        text: "x ရဲ့ lifetime",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -210,7 +214,7 @@ lesson:
         y: 390,
         width: 220,
         height: 36,
-        text: "x dropped here",
+        text: "x ဒီမှာ drop ဖြစ်တယ်",
         strokeColor: "#e03131",
         fontSize: 28,
       }
@@ -231,7 +235,7 @@ lesson:
         y: 496,
         width: 600,
         height: 36,
-        text: "r → freed memory: a dangling reference",
+        text: "r → ပြန်လွှတ်ပြီး memory: dangling reference",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -254,7 +258,7 @@ lesson:
         y: 152,
         width: 520,
         height: 48,
-        text: "Which input is borrowed?",
+        text: "ဘယ် input ကို borrow လုပ်ထားလဲ",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -339,7 +343,7 @@ lesson:
         y: 478,
         width: 660,
         height: 36,
-        text: "one reference in → the output gets its lifetime",
+        text: "reference တစ်ခု ဝင် → output က သူ့ lifetime ရတယ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
@@ -350,7 +354,7 @@ lesson:
         y: 532,
         width: 600,
         height: 36,
-        text: "two references in → the compiler won't guess",
+        text: "reference နှစ်ခု ဝင် → compiler က မမှန်းဘူး",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -362,7 +366,7 @@ lesson:
         y: 152,
         width: 640,
         height: 48,
-        text: "Use the result after inner is gone?",
+        text: "inner မရှိတော့မှ result ကို သုံးရင်",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -510,7 +514,7 @@ lesson:
         y: 432,
         width: 260,
         height: 36,
-        text: "inner dropped here",
+        text: "inner ဒီမှာ drop ဖြစ်တယ်",
         strokeColor: "#e03131",
         fontSize: 28,
       }
@@ -542,13 +546,16 @@ lesson:
         y: 594,
         width: 620,
         height: 36,
-        text: "'a = the shorter span, so the result ends with inner",
+        text: "'a = ပိုတိုတဲ့ ကာလ၊ result က inner နဲ့အတူ ကုန်တယ်",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 47
 
 runtime:
@@ -563,12 +570,13 @@ runtime:
 
 scenes:
   - id: lifetimes
-    chapter: What a lifetime is
-    narration: >
-      Every reference in Rust is valid for some span of your program. That
-      span is its lifetime. The compiler usually figures it out for you. But
-      when references go into a function and come back out, it can need a
-      hint. Let's see why, and how to write it.
+    chapter: Lifetime ဆိုတာ ဘာလဲ
+    narration: >-
+      Rust မှာ reference တိုင်းဟာ program ရဲ့ အပိုင်း တစ်ပိုင်းအတွင်းမှာပဲ သုံးလို့ ရပါတယ်။ အဲဒီ
+      သုံးလို့ ရနေတဲ့ ကာလကို reference ရဲ့ lifetime လို့ ခေါ်ပါတယ်။ အများအားဖြင့်တော့ compiler က
+      အဲဒီ lifetime ကို ကိုယ့်အစား တွက်ပေးပါတယ်။ ဒါပေမဲ့ reference တွေက function တစ်ခုထဲ ဝင်သွားပြီး
+      ပြန်ထွက်လာတဲ့အခါမျိုးမှာတော့၊ compiler က ကိုယ့်ဆီကနေ အချက်အလက် တစ်ခု ထပ်တောင်းတတ်ပါတယ်။
+      ဘာကြောင့် လိုတာလဲ၊ ပြီးတော့ အဲဒီ အချက်အလက်ကို ဘယ်လို ရေးရလဲ ဆိုတာ ကြည့်ရအောင်။
     sources:
       - title: "The Rust Book — Validating References with Lifetimes"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html"
@@ -580,17 +588,17 @@ scenes:
         slideId: lifetimes-slide
 
   - id: dangling
-    narration: >
-      First, why does Rust track lifetimes?
-      [[mark:draw-code]] Here, r is declared with no value yet. x lives in an
-      inner scope, and r borrows x.
-      [[mark:draw-spans]] r's lifetime runs to the last line, where r is
-      used. x's lifetime is shorter. It ends at the closing brace.
-      [[mark:draw-drop]] There, x is dropped, and its memory is freed. But the
-      last line still uses r, so r would point at memory that's gone. That's
-      a dangling reference.
-      [[mark:draw-err]] Rust refuses. It's error E0597: x doesn't live long
-      enough. A reference can never last longer than the value it points at.
+    narration: >-
+      အရင်ဆုံး Rust က lifetime တွေကို ဘာကြောင့် လိုက်စစ်နေရလဲ ဆိုတာ ကြည့်ရအောင်။ [[mark:draw-code]]
+      ဒီမှာ r ဆိုတဲ့ variable ကို တန်ဖိုး မထည့်သေးဘဲ ကြေညာထားပါတယ်။ x ကတော့ အတွင်းဘက် scope
+      တစ်ခုထဲမှာ ရှိပြီး၊ r က x ကို borrow လုပ်ထားပါတယ်၊ borrow ဆိုတာ ငှားသုံးတာပါ။
+      [[mark:draw-spans]] r ရဲ့ lifetime က r ကို သုံးတဲ့ နောက်ဆုံး စာကြောင်းအထိ ရောက်ပါတယ်။ x ရဲ့
+      lifetime ကတော့ အဲဒီထက် တိုပြီး၊ scope ပိတ်တဲ့ တွန့်ကွင်းမှာ ကုန်သွားပါတယ်။ [[mark:draw-drop]]
+      အဲဒီနေရာမှာ x က drop ဖြစ်သွားပြီး၊ သူ့ memory ကို ပြန်လွှတ်လိုက်ပါတယ်။ ဒါပေမဲ့ နောက်ဆုံး
+      စာကြောင်းက r ကို သုံးနေတုန်း ဖြစ်တဲ့အတွက်၊ r က မရှိတော့တဲ့ memory ကို ညွှန်နေမှာ ဖြစ်ပါတယ်။
+      ဒါကို dangling reference လို့ ခေါ်ပါတယ်။ [[mark:draw-err]] Rust က ဒါကို လက်မခံပါဘူး။ compiler
+      က E0597 error နဲ့ ရပ်သွားပါတယ်၊ x က လိုအပ်သလောက် ကြာကြာ မရှိနေဘူးတဲ့။ reference တစ်ခုဟာ သူ
+      ညွှန်ထားတဲ့ တန်ဖိုးထက် ဘယ်တော့မှ ပိုကြာကြာ ရှိနေလို့ မရပါဘူး။
     sources:
       - title: "The Rust Book — Dangling References"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#dangling-references"
@@ -629,15 +637,15 @@ scenes:
         drawMs: 1600
 
   - id: write-longest
-    chapter: References in and out of a function
-    narration: >
-      Now let's add a function.
-      [[mark:open]] Here's main. outer lives in main, and inner lives in an
-      inner scope.
-      [[mark:type-longest]] Let's write longest. It takes two string slices
-      and returns the longer one. We'll leave out any hints for now.
-      [[mark:select-ret]] Look at the return type. It's a reference, but to
-      what? To x, or to y? The body only decides that while the program runs.
+    chapter: Function ထဲ ဝင်ထွက်တဲ့ reference တွေ
+    narration: >-
+      အခု function တစ်ခု ထည့်ကြည့်ရအောင်။ [[mark:open]] ဒီမှာ main function ရှိပါတယ်။ outer ဆိုတဲ့
+      String က main ထဲမှာ ရှိပြီး၊ inner ကတော့ အတွင်းဘက် scope တစ်ခုထဲမှာ ရှိပါတယ်။
+      [[mark:type-longest]] longest ဆိုတဲ့ function ကို ရေးကြည့်ရအောင်။ သူက string slice နှစ်ခုကို
+      လက်ခံပြီး၊ ပိုရှည်တဲ့ တစ်ခုကို ပြန်ပေးပါတယ်။ compiler အတွက် အချက်အလက် ဘာမှ မထည့်သေးဘဲ အရင်
+      ရေးကြည့်ပါမယ်။ [[mark:select-ret]] return type ကို ကြည့်ပါ။ reference တစ်ခု ဖြစ်တာတော့
+      သေချာပါတယ်။ ဒါပေမဲ့ ဘာကို ညွှန်တဲ့ reference လဲ။ x ကိုလား၊ y ကိုလား။ အဲဒါကို function ရဲ့ body
+      က program run နေချိန်မှာမှ ဆုံးဖြတ်ပါတယ်။
     sources:
       - title: "The Rust Book — Generic Lifetimes in Functions"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#generic-lifetimes-in-functions"
@@ -658,7 +666,13 @@ scenes:
           after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "fn longest(x: &str, y: &str) -> &str {\n    if x.len() > y.len() { x } else { y }\n}\n\n"
+        text: "fn longest(x: &str, y: &str) -> &str {
+
+          \    if x.len() > y.len() { x } else { y }
+
+          }
+
+          \n"
       - id: select-ret
         type: editor.select
         at: { mark: select-ret }
@@ -668,18 +682,19 @@ scenes:
           occurrence: 1
 
   - id: missing
-    narration: >
-      [[mark:draw-sig]] The compiler won't accept this signature. Two
-      references go in, and one comes out.
-      [[mark:draw-e0106]] It's error E0106: missing lifetime specifier.
-      [[mark:draw-help]] The help line says the signature doesn't say whether
-      the result is borrowed from x or y. Why does that matter? When you
-      call longest, the compiler checks the call using only the signature,
-      not the body. So the signature has to say what the result borrows.
-      [[mark:draw-elision]] But first_word, from the slices lesson, needed no
-      hint. It takes only one reference, so the compiler gives the output that
-      same lifetime. That's a lifetime elision rule. With two references, it
-      won't guess.
+    narration: >-
+      [[mark:draw-sig]] compiler က ဒီ signature ကို လက်မခံပါဘူး။ reference နှစ်ခု ဝင်သွားပြီး၊ တစ်ခု
+      ပြန်ထွက်လာတဲ့ ပုံစံပါ။ [[mark:draw-e0106]] compiler က E0106 error နဲ့ ရပ်သွားပါတယ်၊ lifetime
+      ကို သတ်မှတ်ထားတာ မပါဘူးတဲ့။ [[mark:draw-help]] help စာကြောင်းမှာတော့ ပြန်ပေးတဲ့ ရလဒ်က x ဆီက
+      borrow လုပ်ထားတာလား၊ y ဆီက borrow လုပ်ထားတာလား ဆိုတာ signature မှာ မပြောထားဘူးလို့ ဆိုပါတယ်။
+      ဒါက ဘာကြောင့် အရေးကြီးလဲဆိုတော့၊ longest ကို ခေါ်တဲ့အခါ compiler က အဲဒီ ခေါ်တဲ့ နေရာကို
+      signature တစ်ခုတည်းနဲ့ပဲ စစ်ပြီး၊ function ရဲ့ body ကို ဝင်မကြည့်လို့ပါ။ ဒါကြောင့် ရလဒ်က ဘာကို
+      borrow လုပ်ထားလဲ ဆိုတာ signature ကိုယ်တိုင်က ပြောထားဖို့ လိုပါတယ်။ [[mark:draw-elision]]
+      ဒါပေမဲ့ slice lesson တုန်းက ရေးခဲ့တဲ့ first word function မှာတော့ ဒီလို အချက်အလက် ဘာမှ ထည့်စရာ
+      မလိုခဲ့ပါဘူး။ ဘာကြောင့်လဲဆိုတော့၊ သူက reference တစ်ခုတည်းကိုပဲ လက်ခံတဲ့အတွက်၊ compiler က
+      ပြန်ပေးတဲ့ ရလဒ်ကိုလည်း အဲဒီ reference ရဲ့ lifetime အတိုင်းပဲ ပေးလိုက်လို့ပါ။ ဒါကို lifetime
+      elision လို့ ခေါ်ပြီး၊ compiler က lifetime ကို ကိုယ့်အစား ဖြည့်ပေးတဲ့ စည်းမျဉ်း တစ်ခုပါ။
+      reference နှစ်ခု ဝင်လာရင်တော့ compiler က မမှန်းပါဘူး။
     sources:
       - title: "Rust error codes — E0106"
         url: "https://doc.rust-lang.org/error_codes/E0106.html"
@@ -716,14 +731,14 @@ scenes:
         drawMs: 2400
 
   - id: param
-    chapter: The lifetime parameter
-    narration: >
-      [[mark:show-param]] The hint is a lifetime parameter. Its name starts
-      with an apostrophe. You declare it in angle brackets, like a generic
-      type, and then write it after each ampersand. That ties the returned
-      reference to the inputs. It doesn't change how long anything lives.
-      It's a promise the compiler checks: the result never lasts longer
-      than what it borrows.
+    chapter: Lifetime parameter
+    narration: >-
+      [[mark:show-param]] compiler တောင်းနေတဲ့ အဲဒီ အချက်အလက်ကတော့ lifetime parameter ပါ။ သူ့ နာမည်က
+      apostrophe နဲ့ စပါတယ်။ generic type တစ်ခုလိုပဲ angle bracket ထဲမှာ ကြေညာပြီး၊ ပြီးတော့
+      ampersand တိုင်းရဲ့ နောက်မှာ ထည့်ရေးပါတယ်။ ဒီလို ရေးလိုက်တာက ပြန်ပေးတဲ့ reference ကို input
+      တွေနဲ့ ချိတ်ပေးလိုက်တာပါ။ ဒါက ဘယ် တန်ဖိုးရဲ့ lifetime ကိုမှ ပြောင်းသွားတာ မဟုတ်ပါဘူး။ ဒါက
+      compiler က စစ်ပေးမယ့် ကတိ တစ်ခုပါ။ ဆိုလိုတာက၊ ရလဒ်ဟာ သူ borrow လုပ်ထားတဲ့ တန်ဖိုးထက် ဘယ်တော့မှ
+      ပိုကြာကြာ မရှိနေဘူး ဆိုတဲ့ ကတိပါ။
     sources:
       - title: "The Rust Book — Lifetime Annotation Syntax"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-annotation-syntax"
@@ -740,16 +755,13 @@ scenes:
         slideId: param-slide
 
   - id: annotate
-    narration: >
-      Back in the editor.
-      [[mark:type-decl]] First, we declare the lifetime after the function's
-      name.
-      [[mark:type-x]] Then x gets it.
-      [[mark:type-y]] Then y gets it.
-      [[mark:type-ret]] And the return type.
-      [[mark:select-sig]] So what's this lifetime? It's the span where both
-      x and y are valid, so it's the shorter of their two lifetimes. And the
-      result is valid only for that span.
+    narration: >-
+      editor ထဲ ပြန်သွားရအောင်။ [[mark:type-decl]] အရင်ဆုံး function နာမည်ရဲ့ နောက်မှာ lifetime
+      parameter ကို ကြေညာပါမယ်။ [[mark:type-x]] ပြီးတော့ x မှာ ထည့်ပါမယ်။ [[mark:type-y]] y မှာလည်း
+      ထည့်ပါမယ်။ [[mark:type-ret]] နောက်ဆုံး return type မှာပါ ထည့်လိုက်ပါမယ်။ [[mark:select-sig]]
+      ဒါဆို ဒီ lifetime ဆိုတာ ဘာလဲ။ x ရော y ရော နှစ်ခုလုံး သုံးလို့ ရနေတဲ့ ကာလ ဖြစ်တဲ့အတွက်၊ သူတို့
+      နှစ်ခုရဲ့ lifetime ထဲက ပိုတိုတဲ့ တစ်ခုပါ။ ပြီးတော့ ရလဒ်ကိုလည်း အဲဒီ ကာလအတွင်းမှာပဲ သုံးလို့
+      ရပါတယ်။
     sources:
       - title: "The Rust Book — Lifetime Annotations in Function Signatures"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#in-function-signatures"
@@ -802,18 +814,19 @@ scenes:
           occurrence: 1
 
   - id: call
-    chapter: Calling longest
-    narration: >
-      [[mark:type-call]] Now let's call longest inside the inner scope, and
-      print the result. The ampersands borrow each String, and Rust converts them to
-      string slices.
-      [[mark:select-call]] Here, outer and inner are both still valid, so the
-      result is safe to use.
+    chapter: longest ကို ခေါ်ခြင်း
+    narration: >-
+      [[mark:type-call]] အခု အတွင်းဘက် scope ထဲမှာ longest ကို ခေါ်ပြီး၊ ရလဒ်ကို print
+      ထုတ်ကြည့်ရအောင်။ ampersand တွေက String တစ်ခုစီကို borrow လုပ်ပြီး၊ Rust က အဲဒီ reference
+      တွေကို string slice အဖြစ် ကိုယ့်အစား ပြောင်းပေးပါတယ်။ [[mark:select-call]] ဒီနေရာမှာ outer ရော
+      inner ရော နှစ်ခုလုံး သုံးလို့ ရနေတုန်း ဖြစ်တဲ့အတွက်၊ ရလဒ်ကို သုံးတာ ဘေးကင်းပါတယ်။
     sources:
       - title: "The Rust Book — Lifetime Annotations in Function Signatures"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#in-function-signatures"
       - title: "The Rust Book — Using Deref Coercion in Functions and Methods"
-        url: "https://doc.rust-lang.org/book/ch15-02-deref.html#using-deref-coercion-in-functions-and-methods"
+        url:
+          "https://doc.rust-lang.org/book/ch15-02-deref.html#using-deref-coercion-in-functions-and-metho\
+          ds"
     actions:
       - id: type-call
         type: editor.type
@@ -823,7 +836,9 @@ scenes:
           after: "        let inner = String::from(\"rust\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "        let result = longest(&outer, &inner);\n        println!(\"longest: {result}\");\n"
+        text: "        let result = longest(&outer, &inner);
+
+          \        println!(\"longest: {result}\");\n"
       - id: select-call
         type: editor.select
         at: { mark: select-call }
@@ -833,17 +848,17 @@ scenes:
           occurrence: 1
 
   - id: outlive
-    narration: >
-      What if we use the result after the inner scope ends?
-      [[mark:draw-moved]] Here, result is printed after the closing brace.
-      [[mark:draw-spans-b]] outer lives to the last line. inner lives only
-      inside the braces.
-      [[mark:draw-drop-b]] inner is borrowed in the call, and dropped at the
-      brace, before result is printed.
-      [[mark:draw-e0597b]] It's error E0597 again: inner doesn't live long
-      enough. But the result really points at outer, and outer is still
-      valid! The compiler goes by the signature, and the signature says the
-      result may borrow from inner. So it can't be used after inner is gone.
+    narration: >-
+      ဒါဆို အတွင်းဘက် scope ကုန်သွားပြီးမှ result ကို သုံးရင် ဘာဖြစ်မလဲ။ [[mark:draw-moved]] ဒီမှာ
+      result ကို scope ပိတ်တဲ့ တွန့်ကွင်း နောက်မှ print ထုတ်ထားပါတယ်။ [[mark:draw-spans-b]] outer က
+      နောက်ဆုံး စာကြောင်းအထိ ရှိနေပြီး၊ inner ကတော့ တွန့်ကွင်း အတွင်းမှာပဲ ရှိပါတယ်။
+      [[mark:draw-drop-b]] inner ကို function ခေါ်တဲ့နေရာမှာ borrow လုပ်ထားပြီး၊ result ကို print
+      မထုတ်ခင် တွန့်ကွင်း ပိတ်တဲ့နေရာမှာ drop ဖြစ်သွားပါတယ်။ [[mark:draw-e0597b]] E0597 error
+      ထပ်တက်ပါတယ်၊ inner က လိုအပ်သလောက် ကြာကြာ မရှိနေဘူးတဲ့။ ဒါပေမဲ့ တကယ်တမ်းကျတော့ result က outer
+      ကို ညွှန်နေတာ ဖြစ်ပြီး၊ outer ကလည်း သုံးလို့ ရနေတုန်းပါ။ ဒီလို ဖြစ်နေပေမဲ့ error တက်တာက၊
+      compiler က signature ကိုပဲ အားကိုးပြီး၊ signature ကတော့ result က inner ဆီက borrow
+      လုပ်ထားနိုင်တယ်လို့ ပြောထားလို့ပါ။ ဒါကြောင့် inner မရှိတော့တဲ့နောက်မှာ result ကို သုံးလို့
+      မရတော့ပါဘူး။
     sources:
       - title: "The Rust Book — Lifetime Annotations in Function Signatures"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#in-function-signatures"
@@ -878,10 +893,10 @@ scenes:
         drawMs: 2400
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it.
-      [[mark:read-out]] It prints lifetimes, the text in outer. It's longer
-      than rust, so longest gave back a reference to outer.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ [[mark:read-out]] lifetimes ဆိုတဲ့ စာသား ထွက်လာပါတယ်၊ outer
+      ထဲက စာသားပါ။ rust ဆိုတဲ့ စာသားထက် ပိုရှည်တဲ့အတွက်၊ longest က outer ကို ညွှန်တဲ့ reference ကို
+      ပြန်ပေးလိုက်တာပါ။
     sources:
       - title: "The Rust Book — Generic Lifetimes in Functions"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#generic-lifetimes-in-functions"
@@ -906,12 +921,13 @@ scenes:
         contains: "fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {"
 
   - id: wrap
-    narration: >
-      So a lifetime is the span where a reference is valid, and Rust refuses
-      any reference that would last longer than its value. The elision rules
-      usually fill lifetimes in. When a function returns one of several
-      references, a lifetime parameter ties the result to its inputs. Next,
-      iterators and closures: transforming a whole list in a few short steps.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ lifetime ဆိုတာ reference တစ်ခုကို သုံးလို့ ရနေတဲ့ ကာလ ဖြစ်ပြီး၊ သူ
+      ညွှန်ထားတဲ့ တန်ဖိုးထက် ပိုကြာကြာ ရှိနေမယ့် reference မှန်သမျှကို Rust က လက်မခံပါဘူး။
+      အများအားဖြင့်တော့ lifetime elision စည်းမျဉ်းတွေက lifetime တွေကို ကိုယ့်အစား ဖြည့်ပေးပါတယ်။
+      function တစ်ခုက reference အများထဲက တစ်ခုကို ပြန်ပေးတဲ့အခါမှာတော့၊ lifetime parameter က ရလဒ်ကို
+      သူ့ input တွေနဲ့ ချိတ်ပေးပါတယ်။ နောက် lesson မှာတော့ iterator နဲ့ closure၊ ဆိုလိုတာက စာရင်း
+      တစ်ခုလုံးကို အဆင့် အနည်းငယ်နဲ့ ပြောင်းလဲပေးနိုင်တဲ့ နည်းလမ်းတွေကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Validating References with Lifetimes"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html"

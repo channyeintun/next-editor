@@ -35,8 +35,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-generics
-  title: "Rust from zero: Generics"
-  locale: en-US
+  title: "Rust from zero: Generic တွေ"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -51,12 +51,16 @@ lesson:
     - id: generics-slide
       contentType: google
       name: Generics
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_64
     - id: bounds-slide
       contentType: google
       name: Trait bounds
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_75
   whiteboardAssets:
     # ---- Board 1: the same function, copied for a second type ---------------
@@ -67,7 +71,7 @@ lesson:
         y: 152,
         width: 420,
         height: 48,
-        text: "Same code, two types",
+        text: "code အတူတူ၊ type နှစ်မျိုး",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -180,7 +184,7 @@ lesson:
         y: 530,
         width: 460,
         height: 36,
-        text: "same body, only the type changes",
+        text: "body တူတူ၊ type ပဲ ပြောင်းတယ်",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -192,7 +196,7 @@ lesson:
         y: 152,
         width: 500,
         height: 48,
-        text: "Can every T be compared?",
+        text: "T တိုင်း နှိုင်းယှဉ်လို့ ရလား",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -214,7 +218,7 @@ lesson:
         y: 232,
         width: 350,
         height: 36,
-        text: "item and biggest are &T",
+        text: "item နဲ့ biggest က &T",
         strokeColor: "#1971c2",
         fontSize: 28,
       }
@@ -300,7 +304,7 @@ lesson:
         y: 152,
         width: 310,
         height: 48,
-        text: "One T, one type",
+        text: "T တစ်ခု၊ type တစ်ခု",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -450,13 +454,16 @@ lesson:
         y: 560,
         width: 180,
         height: 36,
-        text: "two types",
+        text: "type နှစ်မျိုး",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 45
 
 runtime:
@@ -466,23 +473,31 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "largest number: 100\nlargest letter: y\nints: (5, 10)\nfloats: (1.5, 2.5)\n"
+      stdout: "largest number: 100
+
+        largest letter: y
+
+        ints: (5, 10)
+
+        floats: (1.5, 2.5)\n"
       stderr: ""
 
 scenes:
   - id: why
-    chapter: Why generics?
-    narration: >
-      Say you need the largest number in a list. [[mark:draw-i32]] You write
-      a function that takes a slice of i32 values, and returns the largest
-      one. [[mark:draw-char]] Later, you need the largest letter in a list of
-      chars. So you copy the function, and change i32 to char.
-      [[mark:draw-types]] The bodies are exactly the same. Only the type is
-      different. And with copied code, every fix has to be made twice.
-      Generics solve this.
+    chapter: Generic တွေ ဘာကြောင့် လိုလဲ
+    narration: >-
+      စာရင်း တစ်ခုထဲက အကြီးဆုံး ကိန်းဂဏန်းကို လိုချင်တယ် ဆိုပါစို့။ [[mark:draw-i32]] ဒါဆို i32
+      slice တစ်ခု လက်ခံပြီး၊ သူ့ထဲက အကြီးဆုံး တန်ဖိုးကို ပြန်ပေးတဲ့ function တစ်ခု ရေးလိုက်ပါမယ်။
+      [[mark:draw-char]] နောက်ပိုင်းမှာ char တွေ ပါတဲ့ စာရင်း တစ်ခုထဲက အကြီးဆုံး စာလုံးကိုလည်း
+      လိုလာတဲ့အခါ၊ ခုနက function ကို copy ကူးပြီး i32 နေရာမှာ char လို့ ပြောင်းရေးလိုက်ရပါတယ်။
+      [[mark:draw-types]] function နှစ်ခုရဲ့ body က အတိအကျ တူနေပြီး၊ ကွာသွားတာက type တစ်ခုပဲ ဆိုတာ
+      သတိထား ကြည့်ပါ။ ဒီလို copy ကူးထားတဲ့ code မှာဆိုရင် ပြင်စရာ တစ်ခု ရှိလာတိုင်း နှစ်နေရာ
+      ပြင်ရပါတယ်။ ဒီ ပြဿနာကို generic တွေက ဖြေရှင်းပေးပါတယ်။
     sources:
       - title: "The Rust Book — Removing Duplication by Extracting a Function"
-        url: "https://doc.rust-lang.org/book/ch10-00-generics.html#removing-duplication-by-extracting-a-function"
+        url:
+          "https://doc.rust-lang.org/book/ch10-00-generics.html#removing-duplication-by-extracting-a-fun\
+          ction"
       - title: "The Rust Book — In Function Definitions"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
     actions:
@@ -509,13 +524,14 @@ scenes:
         drawMs: 3000
 
   - id: generics-slide
-    chapter: A generic function
-    narration: >
-      With generics, you write the function once, for many types. Look at
-      the angle brackets after its name. T is a type placeholder. So list is
-      a slice of T, and the function returns a reference to a T. Call it
-      with i32 values, and T is i32. Call it with chars, and T is char. By
-      convention, it's one capital letter, and T is short for type.
+    chapter: Generic function တစ်ခု
+    narration: >-
+      generic တွေနဲ့ဆိုရင် function ကို တစ်ကြိမ်တည်း ရေးပြီး၊ type အများကြီးအတွက် သုံးလို့ ရပါတယ်။
+      function နာမည် နောက်က angle bracket ကို ကြည့်ပါ။ အဲဒီထဲက T က type တစ်ခုအတွက် placeholder ပါ။
+      ဆိုတော့ list က T slice တစ်ခု ဖြစ်ပြီး၊ function ကလည်း T reference တစ်ခု ပြန်ပေးပါတယ်။ i32
+      တန်ဖိုးတွေနဲ့ ခေါ်ရင် T က i32 ဖြစ်သွားပြီး၊ char တွေနဲ့ ခေါ်ရင် T က char ဖြစ်သွားပါတယ်။
+      ထုံးစံအရ placeholder ကို စာလုံးကြီး တစ်လုံးတည်းနဲ့ ရေးလေ့ ရှိပြီး၊ T ဆိုတာ type ရဲ့
+      အတိုကောက်ပါ။
     sources:
       - title: "The Rust Book — In Function Definitions"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
@@ -532,13 +548,13 @@ scenes:
         slideId: generics-slide
 
   - id: write
-    narration: >
-      Let's write it. Here's an array of numbers, and an array of letters.
-      [[mark:type-largest]] Now the function, with T in angle brackets. It
-      starts with the first item as the biggest so far. Then it goes through
-      the list, and keeps any item that's bigger.
-      [[mark:select-compare]] Everything depends on this comparison:
-      item greater than biggest. So, will it compile?
+    narration: >-
+      ကဲ၊ ရေးကြည့်ရအောင်။ ဒီမှာ ကိန်းဂဏန်း array တစ်ခုနဲ့ စာလုံး array တစ်ခု ရှိပါတယ်။
+      [[mark:type-largest]] အခု function ကို ရေးပါမယ်။ နာမည်ရဲ့ နောက်မှာ angle bracket ထဲက T ကို
+      တွေ့ရပါလိမ့်မယ်။ အစမှာ ပထမ item ကို လောလောဆယ် အကြီးဆုံး အဖြစ် ယူထားပါတယ်။ ပြီးတော့ list ကို
+      တစ်ခုချင်း သွားရင်း၊ ပိုကြီးတဲ့ item တွေ့တိုင်း အဲဒါကို အကြီးဆုံး အဖြစ် ပြောင်းသိမ်းပါတယ်။
+      [[mark:select-compare]] အကုန်လုံးက ဒီ နှိုင်းယှဉ်မှု တစ်ခုပေါ်မှာ မူတည်နေပါတယ်၊ item က biggest
+      ထက် ကြီးလား ဆိုတာပါ။ ဒါဆို compile လုပ်လို့ ရမလား။
     sources:
       - title: "The Rust Book — In Function Definitions"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
@@ -560,7 +576,25 @@ scenes:
           after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "fn largest<T>(list: &[T]) -> &T {\n    let mut biggest = &list[0];\n    for item in list {\n        if item > biggest {\n            biggest = item;\n        }\n    }\n    biggest\n}\n\n"
+        text: "fn largest<T>(list: &[T]) -> &T {
+
+          \    let mut biggest = &list[0];
+
+          \    for item in list {
+
+          \        if item > biggest {
+
+          \            biggest = item;
+
+          \        }
+
+          \    }
+
+          \    biggest
+
+          }
+
+          \n"
       - id: select-compare
         type: editor.select
         at: { mark: select-compare }
@@ -570,17 +604,17 @@ scenes:
           occurrence: 1
 
   - id: error
-    chapter: Trait bounds
-    narration: >
-      Not yet. Rust checks a generic function for every possible T, not
-      only for the types you call it with. [[mark:draw-err-code]] And not
-      every type can be compared with greater than.
-      [[mark:draw-err-msg]] So the compiler stops you, with error E0369. The
-      greater-than operation can't be applied to a reference to T.
-      [[mark:draw-err-help]] It also suggests a fix: restrict T with the
-      trait PartialOrd. A trait is a named set of abilities that a type can
-      have. PartialOrd is the ability to be compared, with less than and
-      greater than.
+    chapter: Trait bound တွေ
+    narration: >-
+      မရသေးပါဘူး။ Rust က generic function တစ်ခုကို ကိုယ် ခေါ်တဲ့ type တွေအတွက်တင် မဟုတ်ဘဲ၊
+      ဖြစ်နိုင်တဲ့ T တိုင်းအတွက် စစ်ပါတယ်။ [[mark:draw-err-code]] ဒီ စာကြောင်းမှာ item နဲ့ biggest က
+      T reference တွေ ဖြစ်နေပါတယ်။ ဒါပေမဲ့ type တိုင်းကို ဘယ်ဟာက ပိုကြီးလဲ ဆိုပြီး နှိုင်းယှဉ်လို့
+      ရတာ မဟုတ်ပါဘူး။ [[mark:draw-err-msg]] ဒါကြောင့် compiler က E0369 error နဲ့ ရပ်သွားပါတယ်။
+      ဆိုလိုတာက၊ ထက် ကြီးလား ဆိုတဲ့ နှိုင်းယှဉ်မှုကို T reference ပေါ်မှာ သုံးလို့ မရဘူးတဲ့။
+      [[mark:draw-err-help]] ပြီးတော့ help စာကြောင်းမှာ ပြင်နည်းကိုပါ ပြောထားပါတယ်၊ T ကို PartialOrd
+      ဆိုတဲ့ trait နဲ့ ကန့်သတ်လိုက်ပါတဲ့။ trait ဆိုတာ type တစ်ခု လုပ်နိုင်တဲ့ စွမ်းရည်တွေကို
+      နာမည်ပေးထားတာပါ။ PartialOrd ကတော့ တန်ဖိုး နှစ်ခုကို ဘယ်ဟာက ပိုငယ်လဲ၊ ဘယ်ဟာက ပိုကြီးလဲ ဆိုပြီး
+      နှိုင်းယှဉ်လို့ ရတဲ့ စွမ်းရည်ပါ။
     sources:
       - title: "The Rust Book — In Function Definitions"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions"
@@ -614,14 +648,14 @@ scenes:
         drawMs: 2600
 
   - id: bounds-slide
-    narration: >
-      So we add a trait bound. You write it after T, with a colon. T colon
-      PartialOrd says T must be comparable. Now largest accepts only types
-      that can be compared, like numbers and chars. And there's no runtime
-      cost. When you compile, Rust builds a separate, fast version of largest
-      for each type you use. One for i32, and one for char. They're the
-      same two copies you saw at the start, and the compiler writes them for
-      you.
+    narration: >-
+      ဒါကြောင့် trait bound တစ်ခု ထည့်ပါမယ်။ trait bound ကို T နောက်မှာ colon ခံပြီး ရေးပါတယ်။ T
+      colon PartialOrd ဆိုတာ T ဟာ နှိုင်းယှဉ်လို့ ရတဲ့ type ဖြစ်ရမယ်လို့ ပြောတာပါ။ အဲဒီအခါ largest က
+      နှိုင်းယှဉ်လို့ ရတဲ့ type တွေကိုပဲ လက်ခံတော့ပါတယ်၊ ဥပမာအားဖြင့် ကိန်းဂဏန်းတွေနဲ့ char တွေပါ။
+      ပြီးတော့ ဒါကြောင့် program run နေချိန်မှာ ဘာမှ ပိုနှေးမသွားပါဘူး။ compile လုပ်ချိန်မှာ Rust က
+      ကိုယ် သုံးတဲ့ type တစ်ခုချင်းစီအတွက် largest ရဲ့ သီးသန့် မြန်ဆန်တဲ့ version တစ်ခုစီ
+      တည်ဆောက်ပေးပါတယ်။ i32 အတွက် တစ်ခု၊ char အတွက် တစ်ခုပါ။ ဒါက အစမှာ မြင်ခဲ့တဲ့ copy နှစ်ခု
+      အတိုင်းပါပဲ၊ ကွာတာက အခု compiler က ကိုယ့်အစား ရေးပေးတာပါ။
     sources:
       - title: "The Rust Book — Trait Bound Syntax"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#trait-bound-syntax"
@@ -638,12 +672,13 @@ scenes:
         slideId: bounds-slide
 
   - id: add-bound
-    narration: >
-      Back in the editor. [[mark:type-bound]] Let's add the bound: a colon,
-      then PartialOrd. [[mark:select-bound]] With T colon PartialOrd, every T
-      that reaches the comparison can be compared. So now it compiles.
-      [[mark:type-calls]] Let's call largest twice, once with the numbers,
-      and once with the letters. The ampersand lends each array as a slice.
+    narration: >-
+      editor ထဲ ပြန်သွားရအောင်။ [[mark:type-bound]] bound ကို ထည့်ကြည့်ရအောင်၊ colon တစ်ခု၊ ပြီးတော့
+      PartialOrd ပါ။ [[mark:select-bound]] T colon PartialOrd ဖြစ်သွားတော့၊ ဒီ နှိုင်းယှဉ်မှုဆီ
+      ရောက်လာမယ့် T တိုင်းဟာ နှိုင်းယှဉ်လို့ ရတဲ့ type ဖြစ်မှာ သေချာသွားပါပြီ။ ဒါကြောင့် အခု compile
+      လုပ်လို့ ရပါပြီ။ [[mark:type-calls]] largest ကို နှစ်ကြိမ် ခေါ်ကြည့်ရအောင်၊ တစ်ကြိမ်က
+      ကိန်းဂဏန်းတွေနဲ့၊ နောက်တစ်ကြိမ်က စာလုံးတွေနဲ့ပါ။ array ရှေ့က ampersand က array တစ်ခုချင်းစီကို
+      slice အနေနဲ့ ငှားပေးလိုက်တာပါ။
     sources:
       - title: "The Rust Book — Trait Bound Syntax"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#trait-bound-syntax"
@@ -679,15 +714,17 @@ scenes:
           after: "    let letters = ['y', 'm', 'a', 'q'];\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    println!(\"largest number: {}\", largest(&numbers));\n    println!(\"largest letter: {}\", largest(&letters));\n"
+        text: "    println!(\"largest number: {}\", largest(&numbers));
+
+          \    println!(\"largest letter: {}\", largest(&letters));\n"
 
   - id: struct
-    chapter: Generic structs
-    narration: >
-      Structs can be generic too. [[mark:type-struct]] Here's a Point, with a
-      type placeholder T. [[mark:select-fields]] Both x and y have the type
-      T. [[mark:type-points]] So one Point can hold integers, and another can
-      hold floats. Then we print their fields.
+    chapter: Generic struct တွေ
+    narration: >-
+      struct တွေလည်း generic ဖြစ်လို့ ရပါတယ်။ [[mark:type-struct]] ဒီမှာ Point struct တစ်ခု ရှိပြီး၊
+      type placeholder အနေနဲ့ T ပါပါတယ်။ [[mark:select-fields]] x ရော y ရော နှစ်ခုလုံးရဲ့ type က T
+      ပါ။ [[mark:type-points]] ဒါကြောင့် Point တစ်ခုမှာ integer တွေ သိမ်းပြီး၊ နောက် Point
+      တစ်ခုမှာတော့ float တွေ သိမ်းလို့ ရပါတယ်။ ပြီးတော့ သူတို့ရဲ့ field တွေကို print ထုတ်ပါမယ်။
     sources:
       - title: "The Rust Book — In Struct Definitions"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-struct-definitions"
@@ -700,7 +737,15 @@ scenes:
           after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "struct Point<T> {\n    x: T,\n    y: T,\n}\n\n"
+        text: "struct Point<T> {
+
+          \    x: T,
+
+          \    y: T,
+
+          }
+
+          \n"
       - id: select-fields
         type: editor.select
         at: { mark: select-fields }
@@ -716,18 +761,25 @@ scenes:
           after: "    println!(\"largest letter: {}\", largest(&letters));\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let ints = Point { x: 5, y: 10 };\n    let floats = Point { x: 1.5, y: 2.5 };\n    println!(\"ints: ({}, {})\", ints.x, ints.y);\n    println!(\"floats: ({}, {})\", floats.x, floats.y);\n"
+        text: "
+
+          \    let ints = Point { x: 5, y: 10 };
+
+          \    let floats = Point { x: 1.5, y: 2.5 };
+
+          \    println!(\"ints: ({}, {})\", ints.x, ints.y);
+
+          \    println!(\"floats: ({}, {})\", floats.x, floats.y);\n"
 
   - id: one-type
-    narration: >
-      Let's see what T becomes. [[mark:draw-ok]] For the first point, T is
-      i32. For the second, it's f64. [[mark:draw-mixed]] But what if x is an
-      integer, and y is a float? [[mark:draw-mixed-err]] That's error E0308,
-      mismatched types. The five makes T an integer, so the compiler
-      expected an integer for y too, and found a floating-point number. One
-      T means one type for both fields.
-      [[mark:draw-two]] If you really need two types, give Point two
-      placeholders, like T and U.
+    narration: >-
+      ဒါဆို T က ဘာ ဖြစ်သွားလဲ ဆိုတာ ကြည့်ရအောင်။ [[mark:draw-ok]] ပထမ Point အတွက် T က i32 ဖြစ်ပြီး၊
+      ဒုတိယ Point အတွက်ကတော့ f64 ပါ။ [[mark:draw-mixed]] ဒါပေမဲ့ x က integer ဖြစ်ပြီး y က float
+      ဖြစ်နေရင်ရော။ [[mark:draw-mixed-err]] အဲဒါဆိုရင် E0308 error၊ mismatched types ပါ။ 5 ကြောင့် T
+      က integer ဖြစ်သွားတဲ့အတွက်၊ compiler က y အတွက်လည်း integer ကို မျှော်လင့်ထားပေမဲ့၊ တွေ့တာက
+      float ဖြစ်နေလို့ပါ။ T တစ်ခုတည်း ဆိုတာ field နှစ်ခုလုံးအတွက် type တစ်ခုတည်းလို့ ဆိုလိုတာပါ။
+      [[mark:draw-two]] တကယ်ပဲ type နှစ်မျိုး လိုတယ်ဆိုရင်တော့၊ Point ကို placeholder နှစ်ခု
+      ပေးလိုက်ပါ၊ ဥပမာအားဖြင့် T နဲ့ U ပါ။
     sources:
       - title: "The Rust Book — In Struct Definitions"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html#in-struct-definitions"
@@ -762,10 +814,9 @@ scenes:
         drawMs: 2000
 
   - id: run
-    narration: >
-      Back to the code. [[mark:run]] Let's run it. The largest number is one
-      hundred, and the largest letter is y. Then the integer point, five and
-      ten, and the float point, one point five and two point five.
+    narration: >-
+      code ဆီ ပြန်သွားရအောင်။ [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ အကြီးဆုံး ကိန်းဂဏန်းက 100 ဖြစ်ပြီး၊
+      အကြီးဆုံး စာလုံးက y ပါ။ ပြီးတော့ integer Point က 5 နဲ့ 10၊ float Point ကတော့ 1.5 နဲ့ 2.5 ပါ။
     sources:
       - title: "The Rust Book — Generic Data Types"
         url: "https://doc.rust-lang.org/book/ch10-01-syntax.html"
@@ -790,11 +841,13 @@ scenes:
         contains: "fn largest<T: PartialOrd>(list: &[T]) -> &T {"
 
   - id: wrap
-    narration: >
-      So generics let you write code once, for many types. A trait bound,
-      like PartialOrd, says what T must be able to do. And the compiler
-      builds a fast version for each type you use. Next, traits: how to
-      define shared behavior of your own, and implement it for your types.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ generic တွေကြောင့် code ကို တစ်ကြိမ်တည်း ရေးပြီး type အများကြီးအတွက်
+      သုံးလို့ ရပါတယ်။ PartialOrd လို trait bound တစ်ခုကတော့ T က ဘာတွေ လုပ်နိုင်ရမယ် ဆိုတာ
+      ပြောပေးပါတယ်။ ပြီးတော့ compiler က ကိုယ် သုံးတဲ့ type တစ်ခုချင်းစီအတွက် မြန်ဆန်တဲ့ version
+      တစ်ခုစီ တည်ဆောက်ပေးပါတယ်။ နောက် lesson မှာတော့ trait တွေ၊ ဆိုလိုတာက type အများကြီးက
+      မျှဝေသုံးနိုင်တဲ့ စွမ်းရည်တွေကို ကိုယ်တိုင် ဘယ်လို သတ်မှတ်ပြီး၊ ကိုယ့် type တွေအတွက် ဘယ်လို
+      implement လုပ်လဲ ဆိုတာကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Generic Types, Traits, and Lifetimes"
         url: "https://doc.rust-lang.org/book/ch10-00-generics.html"

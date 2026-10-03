@@ -51,8 +51,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-word-count
-  title: "Rust from zero: Putting it together"
-  locale: en-US
+  title: "Rust from zero: အားလုံးကို ပေါင်းစပ်ခြင်း"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -71,7 +71,7 @@ lesson:
         y: 152,
         width: 420,
         height: 48,
-        text: "A small word counter",
+        text: "စကားလုံး ရေတွက်တဲ့ program",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -123,7 +123,7 @@ lesson:
         y: 300,
         width: 520,
         height: 36,
-        text: "split_whitespace, then to_lowercase",
+        text: "split_whitespace၊ ပြီးတော့ to_lowercase",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -161,11 +161,11 @@ lesson:
     - {
         id: p-no-order,
         kind: text,
-        x: 966,
-        y: 416,
+        x: 870,
+        y: 426,
         width: 130,
         height: 36,
-        text: "no order",
+        text: "အစီအစဉ် မရှိ",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -186,7 +186,7 @@ lesson:
         y: 442,
         width: 470,
         height: 36,
-        text: "collect into a Vec, then sort_by",
+        text: "Vec ထဲ collect၊ ပြီးတော့ sort_by",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -217,7 +217,7 @@ lesson:
         y: 514,
         width: 90,
         height: 36,
-        text: "top 3",
+        text: "ထိပ်ဆုံး 3",
         strokeColor: "#6741d9",
         fontSize: 28,
       }
@@ -231,7 +231,7 @@ lesson:
         y: 152,
         width: 340,
         height: 48,
-        text: "Why String keys?",
+        text: "ဘာကြောင့် String key လဲ",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -338,7 +338,7 @@ lesson:
         y: 390,
         width: 290,
         height: 36,
-        text: "word is dropped here",
+        text: "word ဒီမှာ drop ဖြစ်တယ်",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -402,13 +402,16 @@ lesson:
         y: 590,
         width: 640,
         height: 36,
-        text: "HashMap<String, u32>: the map owns its keys",
+        text: "HashMap<String, u32>: map က key တွေကို ပိုင်တယ်",
         strokeColor: "#2f9e44",
         fontSize: 28,
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 120
 
 runtime:
@@ -418,24 +421,30 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "7 different words\nthe: 3\ncat: 2\nhappy: 1\n"
+      stdout: "7 different words
+
+        the: 3
+
+        cat: 2
+
+        happy: 1\n"
       stderr: ""
 
 scenes:
   - id: plan
-    chapter: The plan
-    narration: >
-      In this last lesson, let's use what you've learned in one program: a
-      small word counter that prints the words a text uses most.
-      [[mark:draw-text]] It starts with the text, a string slice.
-      [[mark:draw-split]] split_whitespace breaks the text into words. Then
-      to_lowercase makes them all lowercase, so The and the count as one
-      word.
-      [[mark:draw-map]] A HashMap counts each word. Look at the order: there
-      isn't one. A HashMap doesn't keep any.
-      [[mark:draw-sort]] So we collect the pairs into a Vec, and sort it,
-      biggest count first.
-      [[mark:draw-top]] Then we print the top three.
+    chapter: ဘာ တည်ဆောက်မလဲ
+    narration: >-
+      ဒါက ဒီ course ရဲ့ နောက်ဆုံး lesson ဖြစ်တဲ့အတွက်၊ အခုထိ လေ့လာခဲ့သမျှကို program တစ်ခုတည်းထဲမှာ
+      ပေါင်းသုံးကြည့်ရအောင်။ ရေးမှာက စကားလုံး ရေတွက်တဲ့ program သေးသေးလေး တစ်ခုပါ။ စာသား တစ်ခုထဲမှာ
+      ဘယ် စကားလုံးတွေကို အများဆုံး သုံးထားလဲ ဆိုတာကို ရှာပြီး print ထုတ်ပေးမှာပါ။ [[mark:draw-text]]
+      ပထမဆုံး စာသားကနေ စပါတယ်၊ အဲဒါက string slice တစ်ခုပါ။ [[mark:draw-split]] split whitespace က
+      အဲဒီ စာသားကို စကားလုံး တစ်လုံးချင်း ခွဲထုတ်ပေးပါတယ်။ ပြီးတော့ to lowercase က စကားလုံး
+      အားလုံးကို စာလုံးသေး ပြောင်းပေးတဲ့အတွက်၊ စာလုံးကြီးနဲ့ စတဲ့ The နဲ့ စာလုံးသေး the ကို စကားလုံး
+      တစ်လုံးတည်းအဖြစ် ရေတွက်သွားမှာပါ။ [[mark:draw-map]] စကားလုံး တစ်လုံးချင်းစီကို HashMap
+      တစ်ခုနဲ့ ရေတွက်ပါမယ်။ map ထဲမှာ စကားလုံးတွေ ဘယ်လို အစီအစဉ်နဲ့ ရှိနေလဲ ကြည့်ပါ။ ဘာ အစီအစဉ်မှ
+      မရှိပါဘူး။ HashMap က အစီအစဉ် ဆိုတာကို လုံးဝ မသိမ်းထားလို့ပါ။ [[mark:draw-sort]] ဒါကြောင့် key
+      နဲ့ value အတွဲတွေကို Vec တစ်ခုထဲ collect လုပ်ပြီး၊ အရေအတွက် အများဆုံးက အပေါ်ဆုံး ရောက်အောင်
+      စီပါမယ်။ [[mark:draw-top]] ပြီးရင် ထိပ်ဆုံး သုံးလုံးကို print ထုတ်ပါမယ်။
     sources:
       - title: "The Rust Book — Updating a Value Based on the Old Value (a word count)"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#updating-a-value-based-on-the-old-value"
@@ -479,18 +488,17 @@ scenes:
         drawMs: 1600
 
   - id: function
-    chapter: Counting the words
-    narration: >
-      Let's build it. Here's the text.
-      [[mark:select-capital]] Notice that one The has a capital.
-      [[mark:type-use]] HashMap isn't in the prelude, so we bring it in with
-      use, as you did in the hash maps lesson.
-      [[mark:type-fn]] The counting goes in its own function, count_words. It
-      borrows the text as a string slice, and returns a HashMap.
-      [[mark:select-sig]] The keys are Strings, and each count is a u32, a
-      number that's never negative.
-      [[mark:select-return]] The last line, counts, has no semicolon, so it's
-      the value the function returns.
+    chapter: စကားလုံးတွေကို ရေတွက်ခြင်း
+    narration: >-
+      ကဲ၊ တည်ဆောက်ကြည့်ရအောင်။ ဒီမှာ ရေတွက်မယ့် စာသား ရှိပါတယ်။ [[mark:select-capital]] the ဆိုတဲ့
+      စကားလုံး တစ်လုံးက စာလုံးကြီးနဲ့ စထားတာ သတိထား ကြည့်ပါ။ [[mark:type-use]] HashMap က prelude
+      ထဲမှာ မပါတဲ့အတွက်၊ HashMap lesson တုန်းက လုပ်ခဲ့သလိုပဲ use နဲ့ ခေါ်သွင်းရပါတယ်။
+      [[mark:type-fn]] ရေတွက်တဲ့ အပိုင်းကိုတော့ count words ဆိုတဲ့ သီးသန့် function တစ်ခုထဲမှာ
+      ရေးပါမယ်။ ဒီ function က စာသားကို string slice အနေနဲ့ borrow လုပ်ပါတယ်၊ ဆိုလိုတာက ပိုင်ဆိုင်တာ
+      မဟုတ်ဘဲ ငှားသုံးတာပါ။ ပြီးတော့ HashMap တစ်ခု ပြန်ပေးပါတယ်။ [[mark:select-sig]] key တွေက String
+      တွေ ဖြစ်ပြီး၊ count တစ်ခုချင်းစီကတော့ u32 ပါ။ u32 ဆိုတာ ဘယ်တော့မှ အနုတ်ကိန်း မဖြစ်တဲ့
+      ကိန်းဂဏန်းပါ။ [[mark:select-return]] နောက်ဆုံး စာကြောင်း ဖြစ်တဲ့ counts မှာ semicolon
+      မပါတဲ့အတွက်၊ အဲဒါက ဒီ function ပြန်ပေးတဲ့ တန်ဖိုး ဖြစ်သွားပါတယ်။
     sources:
       - title: "The Rust Book — Bringing Paths into Scope with the use Keyword"
         url: "https://doc.rust-lang.org/book/ch07-04-bringing-paths-into-scope-with-the-use-keyword.html"
@@ -531,7 +539,15 @@ scenes:
           after: "use std::collections::HashMap;\n\n"
           occurrence: 1
         cadence: line-by-line
-        text: "fn count_words(text: &str) -> HashMap<String, u32> {\n    let mut counts = HashMap::new();\n    counts\n}\n\n"
+        text: "fn count_words(text: &str) -> HashMap<String, u32> {
+
+          \    let mut counts = HashMap::new();
+
+          \    counts
+
+          }
+
+          \n"
       - id: select-sig
         type: editor.select
         at: { mark: select-sig }
@@ -548,18 +564,17 @@ scenes:
           occurrence: 2
 
   - id: loop
-    narration: >
-      [[mark:type-loop]] Now the loop. It runs once for every word in the
-      text.
-      [[mark:select-split]] split_whitespace gives us the words one at a time.
-      Each word is a slice of the text, so nothing is copied.
-      [[mark:select-lower]] to_lowercase makes a new String, in lowercase. We
-      shadow word with it, so from here on, word is that String.
-      [[mark:select-entry]] Then the counting you've seen before. entry takes
-      the String, and or_insert puts it in the map with a zero if it's new.
-      Either way, you get back a mutable reference to the count.
-      [[mark:select-star]] The star follows that reference, so plus-equals one
-      changes the count inside the map.
+    narration: >-
+      [[mark:type-loop]] အခု loop ပါ။ ဒီ loop က စာသားထဲက စကားလုံး တစ်လုံးစီအတွက် တစ်ကြိမ်စီ
+      ပတ်ပါတယ်။ [[mark:select-split]] split whitespace က စကားလုံးတွေကို တစ်လုံးချင်း ထုတ်ပေးပါတယ်။
+      စကားလုံး တစ်လုံးချင်းစီက မူလ စာသားရဲ့ slice တစ်ခုစီ ဖြစ်တဲ့အတွက်၊ ဘာမှ copy ကူးစရာ မလိုပါဘူး။
+      [[mark:select-lower]] to lowercase ကတော့ စာလုံးသေး ပြောင်းထားတဲ့ String အသစ် တစ်ခု
+      လုပ်ပေးပါတယ်။ အဲဒီ String အသစ်နဲ့ word ကို shadow လုပ်လိုက်တဲ့အတွက်၊ ဒီနေရာကစပြီး word ဆိုတာ
+      အဲဒီ String ပါ။ [[mark:select-entry]] ပြီးတော့ အရင်က မြင်ဖူးတဲ့ ရေတွက်နည်းပါပဲ။ entry က အဲဒီ
+      String ကို လက်ခံပြီး၊ or insert ကတော့ key က အသစ် ဖြစ်နေရင် 0 နဲ့ map ထဲ ထည့်ပေးပါတယ်။ အသစ်
+      ဖြစ်ဖြစ်၊ ရှိပြီးသား ဖြစ်ဖြစ်၊ ပြန်ရတာကတော့ map ထဲက count ကို ညွှန်တဲ့ mutable reference
+      တစ်ခုပါ။ [[mark:select-star]] star က အဲဒီ reference ညွှန်ထားတဲ့ နေရာကို လိုက်သွားပေးတဲ့အတွက်၊
+      plus equal 1 က map ထဲက count ကိုယ်တိုင်ကို ပြောင်းပေးလိုက်တာပါ။
     sources:
       - title: "str::split_whitespace"
         url: "https://doc.rust-lang.org/std/primitive.str.html#method.split_whitespace"
@@ -578,7 +593,15 @@ scenes:
           after: "    let mut counts = HashMap::new();\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    for word in text.split_whitespace() {\n        let word = word.to_lowercase();\n        let count = counts.entry(word).or_insert(0);\n        *count += 1;\n    }\n"
+        text: "    for word in text.split_whitespace() {
+
+          \        let word = word.to_lowercase();
+
+          \        let count = counts.entry(word).or_insert(0);
+
+          \        *count += 1;
+
+          \    }\n"
       - id: select-split
         type: editor.select
         at: { mark: select-split }
@@ -609,23 +632,22 @@ scenes:
           occurrence: 1
 
   - id: owned-keys
-    chapter: Why the map owns its keys
-    narration: >
-      Why does the map hold Strings? Couldn't it borrow its keys?
-      [[mark:draw-err-sig]] Let's say the keys are string slices instead,
-      ampersand str.
-      [[mark:draw-err-borrow]] Then each key is a slice of word, the new
-      lowercase String. as_str makes that slice.
-      [[mark:draw-err-msg]] The compiler refuses, with error E0515. It can't
-      return a value that references the local variable word.
-      [[mark:draw-err-drop]] word is made inside the loop, and it's dropped at
-      the end of each pass.
-      [[mark:draw-err-return]] But the map is returned, so its keys would
-      point at freed memory.
-      [[mark:draw-text-ok]] Slices of text would be fine, because text comes
-      from outside the function. Our lowercase Strings are made inside it.
-      [[mark:draw-fix]] So the map takes each String itself. It owns its keys,
-      so they live as long as it does.
+    chapter: Map က key ကို ဘာကြောင့် ပိုင်လဲ
+    narration: >-
+      ဒါဆို map က key တွေကို ဘာကြောင့် String အနေနဲ့ သိမ်းထားရလဲ။ key တွေကို borrow လုပ်ရုံနဲ့
+      မရဘူးလား။ [[mark:draw-err-sig]] key တွေကို String အစား string slice၊ ဆိုလိုတာက ampersand str
+      နဲ့ ထားကြည့်ရအောင်။ [[mark:draw-err-borrow]] အဲဒီအခါ key တစ်ခုချင်းစီက word ရဲ့ slice
+      ဖြစ်သွားပါတယ်၊ ဆိုလိုတာက စာလုံးသေး ပြောင်းထားတဲ့ String အသစ်ရဲ့ slice ပါ။ အဲဒီ slice ကို as
+      str က လုပ်ပေးတာပါ။ [[mark:draw-err-msg]] compiler ကတော့ E0515 error နဲ့ ရပ်သွားပါတယ်။ local
+      variable ဖြစ်တဲ့ word ကို ညွှန်ထားတဲ့ တန်ဖိုးကို ပြန်ပေးလို့ မရပါဘူးတဲ့။
+      [[mark:draw-err-drop]] ဘာကြောင့်လဲဆိုတော့၊ word ကို loop အထဲမှာ လုပ်ထားတာ ဖြစ်ပြီး၊ loop
+      တစ်ကြိမ် ပတ်ပြီးတိုင်း အဆုံးမှာ drop ဖြစ်သွားလို့ပါ။ [[mark:draw-err-return]] ဒါပေမဲ့ map
+      ကတော့ function ကနေ ပြန်ထွက်သွားမှာ ဖြစ်တဲ့အတွက်၊ သူ့ key တွေက ပြန်လွှတ်လိုက်ပြီးသား memory ကို
+      ညွှန်နေမှာ ဖြစ်ပါတယ်။ [[mark:draw-text-ok]] text ရဲ့ slice တွေ ဆိုရင်တော့ ရပါတယ်။
+      ဘာကြောင့်လဲဆိုတော့ text က function ရဲ့ အပြင်ကနေ ဝင်လာတာ ဖြစ်လို့ပါ။ ကိုယ့် စာလုံးသေး String
+      တွေကတော့ function အထဲမှာ လုပ်ထားတာပါ။ [[mark:draw-fix]] ဒါကြောင့် map က String တစ်ခုချင်းစီကို
+      ကိုယ်တိုင် ယူထားလိုက်ပါတယ်။ map က သူ့ key တွေကို ပိုင်ဆိုင်တဲ့အတွက်၊ map ရှိနေသရွေ့ key
+      တွေလည်း ရှိနေပါတယ်။
     sources:
       - title: "Rust error codes — E0515"
         url: "https://doc.rust-lang.org/error_codes/E0515.html"
@@ -679,18 +701,20 @@ scenes:
         drawMs: 1400
 
   - id: collect
-    chapter: Sorting and printing
-    narration: >
-      [[mark:type-collect]] Back in main, let's call count_words, and turn the
-      map into a Vec of pairs.
-      [[mark:select-into]] into_iter moves each key and value out of the map,
-      as a pair, and collect builds the Vec.
-      [[mark:select-pairs-type]] The type we wrote tells collect what to
-      build: a Vec of String and u32 tuples. pairs needs mut, because sorting
-      changes it in place.
+    chapter: စီပြီး print ထုတ်ခြင်း
+    narration: >-
+      [[mark:type-collect]] main ထဲ ပြန်သွားပြီး count words ကို ခေါ်ပါမယ်။ ပြီးတော့ ရလာတဲ့ map ကို
+      key နဲ့ value အတွဲတွေ ပါတဲ့ Vec တစ်ခု အဖြစ် ပြောင်းပါမယ်။ [[mark:select-into]] into iter
+      ကြောင့် key နဲ့ value တစ်တွဲချင်းစီက map ထဲကနေ tuple တစ်ခုအနေနဲ့ move ဖြစ်သွားပြီး၊ collect
+      ကတော့ အဲဒီ tuple တွေနဲ့ Vec ကို တည်ဆောက်ပေးပါတယ်။ [[mark:select-pairs-type]] ကိုယ် ရေးထားတဲ့
+      type က collect ကို ဘာ တည်ဆောက်ရမလဲ ပြောပေးတာပါ။ ဒီမှာတော့ String နဲ့ u32 tuple တွေ ထည့်ထားတဲ့
+      Vec ပါ။ pairs မှာ mut လိုပါတယ်။ ဘာကြောင့်လဲဆိုတော့ စီတဲ့အခါ Vec အသစ် မလုပ်ဘဲ ဒီ Vec ထဲမှာပဲ
+      နေရာ ပြောင်းပေးတာ ဖြစ်လို့ပါ။
     sources:
       - title: "std::collections::HashMap (IntoIterator: moves out each key-value pair)"
-        url: "https://doc.rust-lang.org/std/collections/struct.HashMap.html#impl-IntoIterator-for-HashMap%3CK,+V,+S%3E"
+        url:
+          "https://doc.rust-lang.org/std/collections/struct.HashMap.html#impl-IntoIterator-for-HashMap%3\
+          CK,+V,+S%3E"
       - title: "std::iter::Iterator::collect"
         url: "https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect"
       - title: "slice::sort_by (takes &mut self)"
@@ -708,7 +732,9 @@ scenes:
           after: "    let text = \"the cat sat on the mat The cat was happy\";\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let counts = count_words(text);\n    let mut pairs: Vec<(String, u32)> = counts.into_iter().collect();\n"
+        text: "    let counts = count_words(text);
+
+          \    let mut pairs: Vec<(String, u32)> = counts.into_iter().collect();\n"
       - id: select-into
         type: editor.select
         at: { mark: select-into }
@@ -725,19 +751,18 @@ scenes:
           occurrence: 1
 
   - id: sort
-    narration: >
-      [[mark:type-sort]] Now sort_by.
-      [[mark:select-closure]] It takes a closure that compares two pairs, a
-      and b. In each pair, dot zero is the word, and dot one is the count. cmp
-      compares two values and returns less, equal, or greater.
-      [[mark:select-count-cmp]] Here we compare b's count with a's. b comes
-      first, so the biggest count goes to the top.
-      [[mark:select-then]] When two counts are equal, the method called then
-      compares the words, in alphabetical order. Without it, equal counts
-      could come out in a different order on each run, because the map has no
-      order.
-      [[mark:type-print]] Last, we print the number of different words, and
-      take three keeps only the first three pairs to print.
+    narration: >-
+      [[mark:type-sort]] အခု စီဖို့ sort by ကို သုံးပါမယ်။ [[mark:select-closure]] sort by က closure
+      တစ်ခုကို လက်ခံပြီး၊ အဲဒီ closure က အတွဲ နှစ်တွဲ ဖြစ်တဲ့ a နဲ့ b ကို နှိုင်းယှဉ်ပေးပါတယ်။ အတွဲ
+      တစ်တွဲချင်းစီမှာ dot 0 က စကားလုံး ဖြစ်ပြီး၊ dot 1 ကတော့ count ပါ။ cmp ကတော့ တန်ဖိုး နှစ်ခုကို
+      နှိုင်းယှဉ်ပြီး၊ ငယ်တာလား၊ တူတာလား၊ ကြီးတာလား ဆိုတဲ့ အဖြေ တစ်ခု ပြန်ပေးပါတယ်။
+      [[mark:select-count-cmp]] ဒီမှာ b ရဲ့ count ကို a ရဲ့ count နဲ့ နှိုင်းယှဉ်ပါတယ်။ b ကို
+      ရှေ့မှာ ထားတဲ့အတွက်၊ count အများဆုံးက အပေါ်ဆုံး ရောက်သွားပါတယ်။ [[mark:select-then]] count
+      နှစ်ခု တူနေတဲ့အခါကျတော့ then ဆိုတဲ့ method က စကားလုံးတွေကို အက္ခရာစဉ်အတိုင်း
+      နှိုင်းယှဉ်ပေးပါတယ်။ ဒါ မပါရင် count တူတဲ့ စကားလုံးတွေက run တစ်ကြိမ်နဲ့ တစ်ကြိမ် အစီအစဉ်
+      ပြောင်းသွားနိုင်ပါတယ်။ ဘာကြောင့်လဲဆိုတော့ map မှာ အစီအစဉ် မရှိလို့ပါ။ [[mark:type-print]]
+      နောက်ဆုံးမှာ စကားလုံး မတူတာ ဘယ်နှစ်လုံး ရှိလဲ ဆိုတာကို print ထုတ်ပြီး၊ take 3 ကတော့ ပထမ
+      သုံးတွဲကိုပဲ ချန်ထားပေးတဲ့အတွက်၊ အဲဒီ သုံးတွဲကို print ထုတ်ပါတယ်။
     sources:
       - title: "slice::sort_by (a stable sort with a comparison closure)"
         url: "https://doc.rust-lang.org/std/primitive.slice.html#method.sort_by"
@@ -788,14 +813,20 @@ scenes:
           after: "    pairs.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    println!(\"{} different words\", pairs.len());\n    for (word, count) in pairs.iter().take(3) {\n        println!(\"{word}: {count}\");\n    }\n"
+        text: "    println!(\"{} different words\", pairs.len());
+
+          \    for (word, count) in pairs.iter().take(3) {
+
+          \        println!(\"{word}: {count}\");
+
+          \    }\n"
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. Seven different words. The word the comes
-      first, three times, because the capital The counts too. Then cat, with
-      two. Five words appear once. They're sorted by word, so happy comes
-      third.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ စကားလုံး မတူတာ 7 လုံး ရှိပါတယ်။ the က 3 ကြိမ်နဲ့ ထိပ်ဆုံးမှာ
+      ရောက်နေပါတယ်။ ဘာကြောင့်လဲဆိုတော့ စာလုံးကြီးနဲ့ စတဲ့ The ကိုပါ ထည့်ရေတွက်လိုက်လို့ပါ။ ပြီးတော့
+      cat က 2 ကြိမ်ပါ။ ကျန်တဲ့ စကားလုံး ငါးလုံးကတော့ တစ်ကြိမ်စီပဲ ပါပါတယ်။ သူတို့ကို စကားလုံး
+      အက္ခရာစဉ်အတိုင်း စီထားတဲ့အတွက်၊ happy က တတိယ နေရာမှာ ရောက်လာတာပါ။
     sources:
       - title: "The Rust Book — Updating a Value Based on the Old Value"
         url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#updating-a-value-based-on-the-old-value"
@@ -818,11 +849,12 @@ scenes:
         contains: "pairs.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));"
 
   - id: wrap
-    narration: >
-      That program used many ideas from this course. Ownership and borrowing
-      keep memory safe without a garbage collector. Option and Result make you
-      handle missing values and errors, and collections and iterators store
-      and process your data. You're ready to write your own Rust programs.
+    narration: >-
+      ဒီ program တစ်ခုထဲမှာ ဒီ course တစ်လျှောက် လေ့လာခဲ့တဲ့ အယူအဆ အများကြီး ပါသွားပါတယ်။ ownership
+      နဲ့ borrowing က garbage collector မလိုဘဲ memory ကို ဘေးကင်းအောင် ထိန်းပေးပါတယ်။ Option နဲ့
+      Result က မရှိတဲ့ တန်ဖိုးတွေနဲ့ error တွေကို handle လုပ်ဖို့ ကိုယ့်ကို ခိုင်းပါတယ်။ ပြီးတော့
+      collection တွေနဲ့ iterator တွေကတော့ ကိုယ့် data ကို သိမ်းပေးပြီး ကိုင်တွယ်ပေးပါတယ်။ အခုဆိုရင်
+      ကိုယ်ပိုင် Rust program တွေ ရေးဖို့ အသင့် ဖြစ်နေပါပြီ။ ကျေးဇူးတင်ပါတယ် ခင်ဗျာ။
     sources:
       - title: "The Rust Book — Understanding Ownership"
         url: "https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html"

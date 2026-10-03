@@ -35,8 +35,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-traits
-  title: "Rust from zero: Traits"
-  locale: en-US
+  title: "Rust from zero: Trait တွေ"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -55,12 +55,16 @@ lesson:
     - id: trait-slide
       contentType: google
       name: Traits
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_86
     - id: default-slide
       contentType: google
       name: Default methods
-      deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
+      deckUrl:
+        "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33av\
+        KOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_97
   whiteboardAssets:
     # ---- Board 1: one trait, many types (and E0046) ------------------------
@@ -71,7 +75,7 @@ lesson:
         y: 150,
         width: 420,
         height: 48,
-        text: "One trait, many types",
+        text: "trait တစ်ခု၊ type အများ",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -239,7 +243,7 @@ lesson:
         y: 150,
         width: 460,
         height: 48,
-        text: "Who can be introduced?",
+        text: "ဘယ် type ပေးလို့ ရလဲ",
         strokeColor: "#1e1e1e",
         fontSize: 38,
       }
@@ -271,7 +275,7 @@ lesson:
         y: 266,
         width: 300,
         height: 36,
-        text: "any type with Greet",
+        text: "Greet ပါတဲ့ type တိုင်း",
         strokeColor: "#1971c2",
         fontSize: 28,
       }
@@ -367,13 +371,16 @@ lesson:
         y: 570,
         width: 620,
         height: 36,
-        text: "same as: fn introduce<T: Greet>(guest: &T)",
+        text: "အတူတူပဲ: fn introduce<T: Greet>(guest: &T)",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 46
 
 runtime:
@@ -388,14 +395,16 @@ runtime:
 
 scenes:
   - id: traits-slide
-    chapter: Shared behavior
-    narration: >
-      You've already used traits. Debug, which you added to structs with
-      derive, is one. So is PartialOrd, the bound you saw with generics. A
-      trait describes behavior that many types can share. It's a bit like an
-      interface in other languages. Here's our own trait, called Greet. It
-      says every type that greets must have a method called name, which
-      returns a String. Each type provides its own name.
+    chapter: Trait နဲ့ မျှဝေသုံးတဲ့ စွမ်းရည်
+    narration: >-
+      trait တွေကို တကယ်တော့ ကိုယ် သုံးဖူးပြီးသားပါ။ struct တွေ လေ့လာတုန်းက derive နဲ့ ထည့်ခဲ့တဲ့
+      Debug ဟာ trait တစ်ခုပါ။ generic တွေ လေ့လာတုန်းက trait bound အနေနဲ့ တွေ့ခဲ့တဲ့ PartialOrd ကလည်း
+      trait တစ်ခုပါပဲ။ trait ဆိုတာ type အများကြီးက မျှဝေသုံးနိုင်တဲ့ စွမ်းရည်တွေကို နာမည်
+      ပေးထားတာပါ။ တခြား ဘာသာစကား အများစုမှာ ရှိတဲ့ interface နဲ့ နည်းနည်း ဆင်ပါတယ်။ ဒီမှာ ကိုယ်ပိုင်
+      trait တစ်ခု ရှိပါတယ်၊ နာမည်က Greet ပါ။ Greet က ပြောထားတာက၊ နှုတ်ဆက်နိုင်တဲ့ type တိုင်းမှာ
+      name ဆိုတဲ့ method တစ်ခု ရှိရမယ်၊ ပြီးတော့ အဲဒီ name က String တစ်ခု ပြန်ပေးရမယ် ဆိုတာပါ။
+      ဒါပေမဲ့ name ထဲမှာ ဘာ ပြန်ပေးမလဲ ဆိုတာကိုတော့ type တစ်ခုချင်းစီက ကိုယ့်ဟာကိုယ်
+      သတ်မှတ်ပေးရပါတယ်။
     sources:
       - title: "The Rust Book — Defining a Trait"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#defining-a-trait"
@@ -411,21 +420,23 @@ scenes:
         slideId: trait-slide
 
   - id: contract
-    narration: >
-      Why traits? In Rust, one struct can't inherit from another. Traits are
-      how different types share behavior.
-      [[mark:draw-trait]] At the top, the trait Greet, with one required
-      method, name.
-      [[mark:draw-impls]] Below it, two types implement Greet. Dog's name is
-      Rex, and Robot's name is Unit-7. Code that only needs a name can now
-      work with both. The trait is a promise, and the compiler checks it.
-      [[mark:draw-cat]] Say we write impl Greet for a type called Cat, with
-      nothing inside.
-      [[mark:draw-cat-error]] The compiler stops you, with error E0046: not
-      all trait items implemented, missing name.
+    narration: >-
+      ဘာကြောင့် trait လိုလဲ ဆိုတာ ပုံနဲ့ ကြည့်ရအောင်။ Rust မှာ struct တစ်ခုက တခြား struct တစ်ခုဆီကနေ
+      inherit လုပ်လို့ မရပါဘူး။ ဒါကြောင့် မတူတဲ့ type တွေကြားမှာ စွမ်းရည် တစ်ခုကို မျှဝေသုံးချင်ရင်၊
+      trait နဲ့ လုပ်ရပါတယ်။ [[mark:draw-trait]] အပေါ်ဆုံးမှာ Greet trait ရှိပြီး၊ သူ့ထဲမှာ မဖြစ်မနေ
+      ရေးရမယ့် method တစ်ခုတည်း ပါပါတယ်၊ အဲဒါက name ပါ။ [[mark:draw-impls]] သူ့အောက်မှာတော့ Greet
+      ကို implement လုပ်ထားတဲ့ type နှစ်ခု ရှိပါတယ်။ Dog ရဲ့ name က Rex ကို ပြန်ပေးပြီး၊ Robot ရဲ့
+      name ကတော့ Unit 7 ကို ပြန်ပေးပါတယ်။ ဒီတော့ name တစ်ခုပဲ လိုတဲ့ code ဆိုရင်၊ Dog နဲ့ရော Robot
+      နဲ့ရော နှစ်ခုလုံးနဲ့ အလုပ်လုပ်လို့ ရသွားပါပြီ။ trait ဆိုတာ ကတိ တစ်ခုပါ၊ ပြီးတော့ အဲဒီ ကတိကို
+      တည်မတည် compiler က စစ်ပေးပါတယ်။ [[mark:draw-cat]] ဥပမာအားဖြင့်၊ Cat ဆိုတဲ့ type အတွက် impl
+      Greet ကို ရေးပြီး၊ သူ့ထဲမှာ ဘာမှ မထည့်ဘူး ဆိုပါစို့။ [[mark:draw-cat-error]] အဲဒီအခါ compiler
+      က E0046 error နဲ့ ရပ်သွားပါတယ်။ trait ထဲက item တွေ အကုန် implement မလုပ်ရသေးဘူး၊ name
+      ကျန်နေတယ်လို့ ပြောတာပါ။
     sources:
       - title: "The Rust Book — Inheritance as a Type System and as Code Sharing"
-        url: "https://doc.rust-lang.org/book/ch18-01-what-is-oo.html#inheritance-as-a-type-system-and-as-code-sharing"
+        url:
+          "https://doc.rust-lang.org/book/ch18-01-what-is-oo.html#inheritance-as-a-type-system-and-as-co\
+          de-sharing"
       - title: "The Rust Book — Implementing a Trait on a Type"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#implementing-a-trait-on-a-type"
       - title: "Rust error codes — E0046"
@@ -471,20 +482,22 @@ scenes:
         drawMs: 2000
 
   - id: define
-    chapter: Implementing a trait
-    narration: >
-      Now let's write it. Dog is a struct with no fields, and Robot holds an
-      id.
-      [[mark:type-trait]] First, the trait: the trait keyword, its name, and
-      the method signatures in curly braces.
-      [[mark:select-sig]] name borrows the value through ampersand self, and
-      returns a String. There's no body, only a semicolon. So every type that
-      implements Greet has to write that body itself.
+    chapter: Trait တစ်ခုကို implement လုပ်ခြင်း
+    narration: >-
+      ကဲ၊ အခု code နဲ့ ရေးကြည့်ရအောင်။ ဖိုင်ထဲမှာ struct နှစ်ခု ရှိပါတယ်။ Dog က field ဘာမှ မပါတဲ့
+      struct ဖြစ်ပြီး၊ Robot ကတော့ id တစ်ခု သိမ်းထားပါတယ်။ [[mark:type-trait]] အရင်ဆုံး trait ကို
+      ရေးပါမယ်။ trait keyword နဲ့ စပြီး၊ နောက်မှာ trait ရဲ့ နာမည်၊ ပြီးတော့ method signature တွေကို
+      တွန့်ကွင်းထဲမှာ ရေးပါတယ်။ [[mark:select-sig]] ဒီ signature ကို ကြည့်ပါ။ name က တန်ဖိုးကို
+      ampersand self နဲ့ borrow လုပ်ပါတယ်၊ borrow ဆိုတာ ငှားသုံးတာပါ။ ပြီးတော့ String တစ်ခု
+      ပြန်ပေးပါတယ်။ body မပါဘဲ semicolon နဲ့ပဲ ဆုံးထားတာ သတိထား ကြည့်ပါ။ ဒါကြောင့် Greet ကို
+      implement လုပ်မယ့် type တိုင်းက အဲဒီ body ကို ကိုယ့်ဟာကိုယ် ရေးပေးရပါတယ်။
     sources:
       - title: "The Rust Book — Defining a Trait"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#defining-a-trait"
       - title: "The Rust Book — Unit-Like Structs Without Any Fields"
-        url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html#unit-like-structs-without-any-fields"
+        url:
+          "https://doc.rust-lang.org/book/ch05-01-defining-structs.html#unit-like-structs-without-any-fi\
+          elds"
       - title: "The Rust Reference — Traits"
         url: "https://doc.rust-lang.org/reference/items/traits.html"
     actions:
@@ -504,7 +517,13 @@ scenes:
           after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "trait Greet {\n    fn name(&self) -> String;\n}\n\n"
+        text: "trait Greet {
+
+          \    fn name(&self) -> String;
+
+          }
+
+          \n"
       - id: select-sig
         type: editor.select
         at: { mark: select-sig }
@@ -514,11 +533,10 @@ scenes:
           occurrence: 1
 
   - id: impl-dog
-    narration: >
-      [[mark:type-dog]] To implement a trait, write impl, the trait's name,
-      the word for, and the type.
-      [[mark:select-impl-dog]] So this block is impl Greet for Dog. Inside it
-      goes the body of name, and Dog returns Rex.
+    narration: >-
+      [[mark:type-dog]] trait တစ်ခုကို implement လုပ်ဖို့ကတော့ impl၊ trait ရဲ့ နာမည်၊ for၊ ပြီးတော့
+      type ရဲ့ နာမည် ဆိုပြီး အစဉ်လိုက် ရေးပါတယ်။ [[mark:select-impl-dog]] ဒါကြောင့် ဒီ block က impl
+      Greet for Dog ပါ။ သူ့ထဲမှာ name ရဲ့ body ကို ရေးပြီး၊ Dog ကတော့ Rex ကို ပြန်ပေးပါတယ်။
     sources:
       - title: "The Rust Book — Implementing a Trait on a Type"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#implementing-a-trait-on-a-type"
@@ -533,7 +551,17 @@ scenes:
           after: "struct Dog;\n\n"
           occurrence: 1
         cadence: line-by-line
-        text: "impl Greet for Dog {\n    fn name(&self) -> String {\n        String::from(\"Rex\")\n    }\n}\n\n"
+        text: "impl Greet for Dog {
+
+          \    fn name(&self) -> String {
+
+          \        String::from(\"Rex\")
+
+          \    }
+
+          }
+
+          \n"
       - id: select-impl-dog
         type: editor.select
         at: { mark: select-impl-dog }
@@ -543,9 +571,10 @@ scenes:
           occurrence: 1
 
   - id: impl-robot
-    narration: >
-      [[mark:type-robot]] Robot implements Greet in its own way. It builds
-      its name from its id, with format. Now both types keep the promise.
+    narration: >-
+      [[mark:type-robot]] Robot ကလည်း Greet ကို implement လုပ်ပါတယ်၊ ဒါပေမဲ့ သူ့နည်းနဲ့သူပါ။ သူက
+      name ကို သူ့ id ကနေ format macro နဲ့ တည်ဆောက်ပေးပါတယ်။ အခုတော့ type နှစ်ခုလုံးက Greet ရဲ့
+      ကတိကို တည်သွားပါပြီ။
     sources:
       - title: "The Rust Book — Implementing a Trait on a Type"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#implementing-a-trait-on-a-type"
@@ -560,14 +589,25 @@ scenes:
           after: "    id: u32,\n}\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\nimpl Greet for Robot {\n    fn name(&self) -> String {\n        format!(\"Unit-{}\", self.id)\n    }\n}\n"
+        text: "
+
+          impl Greet for Robot {
+
+          \    fn name(&self) -> String {
+
+          \        format!(\"Unit-{}\", self.id)
+
+          \    }
+
+          }\n"
 
   - id: defaults-slide
-    chapter: Default methods
-    narration: >
-      [[mark:show-default]] A trait can also supply a default: a method with
-      a body. Here, hello builds a greeting from name. A type can use the
-      default as it is, or override it with its own version.
+    chapter: Default method တွေ
+    narration: >-
+      [[mark:show-default]] trait တစ်ခုက default method ကိုလည်း ပေးထားလို့ ရပါတယ်။ ဆိုလိုတာက
+      signature တင် မကဘဲ body ပါ ထည့်ရေးထားတဲ့ method ပါ။ ဒီမှာ hello ဆိုတဲ့ method က name ကို
+      သုံးပြီး နှုတ်ဆက်စကား တစ်ခု တည်ဆောက်ပေးပါတယ်။ type တစ်ခုက ဒီ default ကို ဒီအတိုင်း ယူသုံးလို့
+      ရသလို၊ ကိုယ်ပိုင် version နဲ့ override လုပ်လို့လည်း ရပါတယ်။
     sources:
       - title: "The Rust Book — Default Implementations"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#default-implementations"
@@ -578,11 +618,12 @@ scenes:
         slideId: default-slide
 
   - id: default-code
-    narration: >
-      Back to the code. [[mark:type-default]] Let's add hello to the trait.
-      [[mark:select-call-name]] Inside, the default calls name on self. That
-      always works, because every type that implements Greet must have name.
-      Dog writes nothing more, so Dog uses this default.
+    narration: >-
+      editor ထဲ ပြန်သွားရအောင်။ [[mark:type-default]] trait ထဲ hello ကို ထည့်ကြည့်ရအောင်။
+      [[mark:select-call-name]] သူ့ body ထဲမှာ self ရဲ့ name ကို ခေါ်ထားပါတယ်။ ဒီလို ခေါ်တာ အမြဲ
+      အဆင်ပြေပါတယ်။ ဘာကြောင့်လဲဆိုတော့၊ Greet ကို implement လုပ်ထားတဲ့ type တိုင်းမှာ name မဖြစ်မနေ
+      ရှိရမှာ ဖြစ်လို့ပါ။ Dog ကတော့ ဒီထက် ဘာမှ ထပ်မရေးတဲ့အတွက်၊ ဒီ default hello ကိုပဲ
+      သုံးသွားပါလိမ့်မယ်။
     sources:
       - title: "The Rust Book — Default Implementations"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#default-implementations"
@@ -598,7 +639,13 @@ scenes:
           after: "    fn name(&self) -> String;\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    fn hello(&self) -> String {\n        format!(\"Hello, {}!\", self.name())\n    }\n"
+        text: "
+
+          \    fn hello(&self) -> String {
+
+          \        format!(\"Hello, {}!\", self.name())
+
+          \    }\n"
       - id: select-call-name
         type: editor.select
         at: { mark: select-call-name }
@@ -608,10 +655,10 @@ scenes:
           occurrence: 1
 
   - id: override
-    narration: >
-      [[mark:type-override]] Robot wants a different greeting, so it
-      overrides hello, with a beep. When a type writes its own version, Rust
-      uses that one instead of the default.
+    narration: >-
+      [[mark:type-override]] Robot ကတော့ နှုတ်ဆက်ပုံ မတူချင်လို့၊ hello ကို သူ့ impl block ထဲမှာ
+      override လုပ်ပြီး၊ BEEP နဲ့ စတဲ့ စာသား ပြန်ပေးပါတယ်။ type တစ်ခုက ကိုယ်ပိုင် version ရေးထားရင်၊
+      Rust က default အစား အဲဒီ version ကို သုံးပါတယ်။
     sources:
       - title: "The Rust Book — Default Implementations"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#default-implementations"
@@ -621,20 +668,27 @@ scenes:
         at: { mark: type-override }
         target:
           file: main.rs
-          after: "        format!(\"Unit-{}\", self.id)\n    }\n"
+          after: "        format!(\"Unit-{}\", self.id)
+
+            \    }\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    fn hello(&self) -> String {\n        format!(\"BEEP. I am {}.\", self.name())\n    }\n"
+        text: "
+
+          \    fn hello(&self) -> String {
+
+          \        format!(\"BEEP. I am {}.\", self.name())
+
+          \    }\n"
 
   - id: impl-param
-    chapter: Traits as parameters
-    narration: >
-      Now, a function that works with any type that greets.
-      [[mark:type-introduce]] It's called introduce, and it prints the
-      greeting.
-      [[mark:select-impl-greet]] Look at the parameter type: ampersand impl
-      Greet. It means a reference to any type that implements Greet. Inside
-      the function, you can only use what Greet promises, like hello.
+    chapter: Trait ကို parameter အဖြစ် သုံးခြင်း
+    narration: >-
+      အခု နှုတ်ဆက်နိုင်တဲ့ ဘယ် type နဲ့မဆို အလုပ်လုပ်တဲ့ function တစ်ခု ရေးကြည့်ရအောင်။
+      [[mark:type-introduce]] နာမည်က introduce ဖြစ်ပြီး၊ သူက နှုတ်ဆက်စကားကို print ထုတ်ပေးပါတယ်။
+      [[mark:select-impl-greet]] parameter ရဲ့ type ကို ကြည့်ပါ၊ ampersand impl Greet ပါ။ ဆိုလိုတာက
+      Greet ကို implement လုပ်ထားတဲ့ ဘယ် type ရဲ့ reference ကိုမဆို လက်ခံတယ် ဆိုတာပါ။ function
+      ထဲမှာတော့ Greet က ကတိပေးထားတဲ့ အရာတွေကိုပဲ သုံးလို့ ရပါတယ်၊ ဥပမာအားဖြင့် hello လိုမျိုးပါ။
     sources:
       - title: "The Rust Book — Traits as Parameters"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters"
@@ -644,10 +698,20 @@ scenes:
         at: { mark: type-introduce }
         target:
           file: main.rs
-          after: "        format!(\"BEEP. I am {}.\", self.name())\n    }\n}\n"
+          after: "        format!(\"BEEP. I am {}.\", self.name())
+
+            \    }
+
+            }\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\nfn introduce(guest: &impl Greet) {\n    println!(\"{}\", guest.hello());\n}\n"
+        text: "
+
+          fn introduce(guest: &impl Greet) {
+
+          \    println!(\"{}\", guest.hello());
+
+          }\n"
       - id: select-impl-greet
         type: editor.select
         at: { mark: select-impl-greet }
@@ -657,20 +721,19 @@ scenes:
           occurrence: 1
 
   - id: not-greet
-    narration: >
-      So which types can you pass?
-      [[mark:draw-sig]] introduce takes ampersand impl Greet, which means
-      any type with Greet.
-      [[mark:draw-ok]] A Dog works, and so does a Robot.
-      [[mark:draw-cat-call]] Now say Cat has no impl Greet at all, and you
-      pass a Cat.
-      [[mark:draw-cat-err]] The compiler refuses, with error E0277: the trait
-      bound isn't satisfied. That means Cat doesn't implement Greet. You find
-      this when you compile, not while the program runs.
-      [[mark:draw-same]] Why a trait bound? Because impl Greet is short for a
-      generic with a trait bound: T must implement Greet. As with generics,
-      the compiler builds a version of introduce for each type, so there's
-      no runtime cost.
+    narration: >-
+      ဒါဆို introduce ကို ဘယ် type တွေ ပေးလို့ ရလဲ ဆိုတာ ပုံနဲ့ ကြည့်ရအောင်။ [[mark:draw-sig]]
+      introduce က ampersand impl Greet ကို လက်ခံပါတယ်။ ဆိုလိုတာက Greet ပါတဲ့ type တိုင်းကို ပေးလို့
+      ရတယ် ဆိုတာပါ။ [[mark:draw-ok]] Dog ဆိုရင် ရပါတယ်၊ Robot ဆိုရင်လည်း ရပါတယ်။
+      [[mark:draw-cat-call]] ဒါပေမဲ့ Cat အတွက် impl Greet လုံးဝ မရေးထားဘဲ၊ Cat တစ်ခုကို ပေးလိုက်တယ်
+      ဆိုပါစို့။ [[mark:draw-cat-err]] အဲဒီအခါ compiler က လက်မခံဘဲ E0277 error နဲ့ ရပ်သွားပါတယ်။
+      trait bound က မပြည့်မီဘူးတဲ့။ ဆိုလိုတာက Cat က Greet ကို implement မလုပ်ထားဘူး ဆိုတာပါ။ ဒီ
+      အမှားကို program run နေချိန်မှာ တွေ့တာ မဟုတ်ဘဲ၊ compile လုပ်ချိန်မှာတင် ဖမ်းမိသွားတာပါ။
+      [[mark:draw-same]] ဘာကြောင့် trait bound လို့ ပြောလဲဆိုတော့၊ impl Greet ဆိုတာ တကယ်တော့ trait
+      bound ပါတဲ့ generic တစ်ခုရဲ့ အတိုကောက် ဖြစ်လို့ပါ။ ဆိုလိုတာက T က Greet ကို implement
+      လုပ်ထားရမယ် ဆိုတဲ့ သဘောပါ။ generic တွေမှာလိုပဲ၊ compiler က ကိုယ် သုံးတဲ့ type
+      တစ်ခုချင်းစီအတွက် introduce ရဲ့ version တစ်ခုစီ တည်ဆောက်ပေးတဲ့အတွက်၊ program run နေချိန်မှာ
+      ဘာမှ ပိုနှေးမသွားပါဘူး။
     sources:
       - title: "Rust error codes — E0277"
         url: "https://doc.rust-lang.org/error_codes/E0277.html"
@@ -712,11 +775,12 @@ scenes:
         drawMs: 1600
 
   - id: main-calls
-    narration: >
-      Back to main. [[mark:type-main]] Let's make a Dog. It has no fields, so
-      writing Dog is enough. Then a Robot with id seven, and we introduce
-      both. We pass each one with an ampersand, so introduce only borrows
-      them.
+    narration: >-
+      main ထဲ ပြန်သွားရအောင်။ [[mark:type-main]] အရင်ဆုံး Dog တစ်ခု လုပ်ပါမယ်။ Dog မှာ field
+      မပါတဲ့အတွက် Dog လို့ ရေးလိုက်ရုံနဲ့ လုံလောက်ပါတယ်။ ပြီးတော့ id က 7 ဖြစ်တဲ့ Robot တစ်ခု
+      လုပ်ပြီး၊ နှစ်ခုလုံးကို introduce နဲ့ မိတ်ဆက်ပေးပါမယ်။ ပေးတဲ့အခါ တစ်ခုချင်းစီရဲ့ ရှေ့မှာ
+      ampersand ထည့်ပြီး ပေးတာ သတိထား ကြည့်ပါ။ ဒါကြောင့် introduce က အဲဒီ တန်ဖိုးတွေကို borrow
+      လုပ်ရုံပဲ လုပ်ပါတယ်။
     sources:
       - title: "The Rust Book — Traits as Parameters"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters"
@@ -735,13 +799,19 @@ scenes:
           after: "fn main() {\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let dog = Dog;\n    let robot = Robot { id: 7 };\n    introduce(&dog);\n    introduce(&robot);\n"
+        text: "    let dog = Dog;
+
+          \    let robot = Robot { id: 7 };
+
+          \    introduce(&dog);
+
+          \    introduce(&robot);\n"
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. Hello, Rex. Dog used the default hello.
-      Then, BEEP. I am Unit-7. Robot used its own. One function greeted
-      both types.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ ပထမ စာကြောင်းက Hello, Rex ပါ။ Dog က default hello ကို
+      သုံးသွားတာပါ။ နောက် စာကြောင်းကတော့ BEEP၊ I am Unit 7 ပါ။ Robot ကတော့ သူ့ ကိုယ်ပိုင် hello ကို
+      သုံးသွားတာပါ။ function တစ်ခုတည်းနဲ့ type နှစ်မျိုးလုံးကို နှုတ်ဆက်လိုက်တာပါ။
     sources:
       - title: "The Rust Book — Traits: Defining Shared Behavior"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html"
@@ -762,11 +832,12 @@ scenes:
         contains: "fn introduce(guest: &impl Greet) {"
 
   - id: wrap
-    narration: >
-      So a trait names behavior that types promise to have. A default
-      method saves repeated code, and impl Greet accepts any type that keeps
-      the promise. Next, lifetimes:
-      how Rust checks that a reference is never used after its value is gone.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ trait ဆိုတာ type တွေမှာ ရှိမယ်လို့ ကတိပေးထားတဲ့ စွမ်းရည်တွေကို နာမည်
+      ပေးထားတာပါ။ default method က ထပ်ခါထပ်ခါ ရေးရမယ့် code ကို သက်သာစေပြီး၊ impl Greet ကတော့ အဲဒီ
+      ကတိကို တည်တဲ့ ဘယ် type ကိုမဆို လက်ခံပါတယ်။ နောက် lesson မှာတော့ lifetime တွေ၊ ဆိုလိုတာက
+      reference တစ်ခုကို သူ ညွှန်ထားတဲ့ တန်ဖိုး ပျောက်သွားပြီးနောက် ဘယ်တော့မှ မသုံးမိအောင် Rust က
+      ဘယ်လို စစ်ပေးလဲ ဆိုတာကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Traits: Defining Shared Behavior"
         url: "https://doc.rust-lang.org/book/ch10-02-traits.html"
