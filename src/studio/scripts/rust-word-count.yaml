@@ -1,0 +1,836 @@
+# Rust from zero, lesson 20 (the last one): putting it together.
+#
+# The arc: a whiteboard draws the plan for a small word counter — a string
+# slice of text, split_whitespace and to_lowercase to get the words, a
+# HashMap to count them (it has no order), collect into a Vec and sort_by,
+# then the top three. The editor builds it: `use` for HashMap, a function
+# count_words(&str) -> HashMap<String, u32> whose last expression is the
+# return value, then the loop (split_whitespace gives borrowed slices,
+# to_lowercase makes a new String that shadows `word`, entry() takes it and
+# or_insert(0) hands back a &mut to the count, which `*count += 1` follows).
+# A second board answers "why String keys and not &str?": it shows the loop,
+# the borrow, the loop's closing brace where `word` is dropped, and the
+# returned `counts` — the map would point into Strings that die inside the
+# loop, and the compiler says E0515. Slices of `text` itself would be fine
+# (they come from outside), so the problem is only the lowercase copies.
+# Back in main, into_iter + collect
+# move the pairs into a Vec (it needs mut to sort), sort_by compares counts
+# biggest first and `.then` breaks ties by word — without that tie-break the
+# third line changes from run to run, because the map's order is random. One
+# run, then a short recap of the whole course (no "next" line: it's the last
+# lesson).
+#
+# Every compiler message on the board or in the narration was confirmed with
+# rustc 1.98 (edition 2024) on the broken variants:
+#   return type HashMap<&str, u32> and counts.entry(word.as_str())
+#     error[E0515]: cannot return value referencing local variable `word`
+#       `word` is borrowed here / returns a value referencing data owned by
+#       the current function
+#   keys borrowed from `text` instead (no to_lowercase, entry(word)) with
+#   the same HashMap<&str, u32> signature: compiles and runs (8 keys) —
+#   backs "slices of text would be fine".
+#   `let pairs` (no mut) before pairs.sort_by(…) — backs "pairs needs mut";
+#   the code isn't said aloud:
+#     error[E0596]: cannot borrow `pairs` as mutable, as it is not declared
+#       as mutable
+#   sort_by(|a, b| b.1.cmp(&a.1)) with no tie-break: eight runs printed the
+#   third line as was, sat, mat, on, happy, mat, on, happy — so the
+#   narration's claim that ties can change order between runs is observed,
+#   not assumed.
+#
+# Board colours: blue = the thing being named (the text, HashMap, the &str
+# keys), orange = what changes or the caveat (the steps that transform the
+# data, "no order", the borrow, where `word` is dropped), red = the error and
+# its spotlight, green = the way that works (the `text: &str` parameter, the
+# String-keyed map), violet = the result (the top three). #1e1e1e paints
+# white on the dark board.
+#
+# Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/rust-word-count.yaml
+schemaVersion: 1
+
+lesson:
+  slug: rust-word-count
+  title: "Rust from zero: Putting it together"
+  locale: en-US
+  workspace:
+    lessonType: rust
+    name: Rust Lesson
+    entryFilePath: main.rs
+    files:
+      main.rs: |
+        fn main() {
+            let text = "the cat sat on the mat The cat was happy";
+        }
+  whiteboardAssets:
+    # ---- Board 1: the plan, from text to the top three ---------------------
+    - {
+        id: p-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 420,
+        height: 48,
+        text: "A small word counter",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: p-text-box,
+        kind: rectangle,
+        x: 280,
+        y: 216,
+        width: 670,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-text,
+        kind: text,
+        x: 296,
+        y: 230,
+        width: 640,
+        height: 36,
+        text: '"the cat sat on the mat The cat was happy"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-text-type,
+        kind: text,
+        x: 966,
+        y: 230,
+        width: 80,
+        height: 36,
+        text: "&str",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: p-arrow1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 315,
+        y: 288,
+        width: 50,
+        height: 62,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-split,
+        kind: text,
+        x: 384,
+        y: 300,
+        width: 520,
+        height: 36,
+        text: "split_whitespace, then to_lowercase",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: p-map-box,
+        kind: rectangle,
+        x: 280,
+        y: 358,
+        width: 670,
+        height: 64,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-map,
+        kind: text,
+        x: 296,
+        y: 372,
+        width: 560,
+        height: 36,
+        text: "sat: 1   the: 3   was: 1   cat: 2   …",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-map-type,
+        kind: text,
+        x: 966,
+        y: 372,
+        width: 120,
+        height: 36,
+        text: "HashMap",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: p-no-order,
+        kind: text,
+        x: 966,
+        y: 416,
+        width: 130,
+        height: 36,
+        text: "no order",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: p-arrow2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 315,
+        y: 430,
+        width: 50,
+        height: 62,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-sort,
+        kind: text,
+        x: 384,
+        y: 442,
+        width: 470,
+        height: 36,
+        text: "collect into a Vec, then sort_by",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: p-top-box,
+        kind: rectangle,
+        x: 280,
+        y: 500,
+        width: 670,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-top,
+        kind: text,
+        x: 296,
+        y: 514,
+        width: 400,
+        height: 36,
+        text: "the: 3   cat: 2   happy: 1",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: p-top-type,
+        kind: text,
+        x: 966,
+        y: 514,
+        width: 90,
+        height: 36,
+        text: "top 3",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board 2: why the map owns String keys (E0515) ---------------------
+    # The broken variant, shortened: signature, loop, the borrow, the loop's
+    # closing brace (where `word` is dropped) and the returned `counts`.
+    - {
+        id: w-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 340,
+        height: 48,
+        text: "Why String keys?",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: w-code1,
+        kind: text,
+        x: 290,
+        y: 214,
+        width: 760,
+        height: 36,
+        text: "fn count_words(text: &str) -> HashMap<&str, u32> {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-u-str,
+        kind: freedraw,
+        stroke: underline,
+        x: 857,
+        y: 224,
+        width: 66,
+        height: 24,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-code-for,
+        kind: text,
+        x: 326,
+        y: 258,
+        width: 520,
+        height: 36,
+        text: "for word in text.split_whitespace() {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-code2,
+        kind: text,
+        x: 362,
+        y: 302,
+        width: 450,
+        height: 36,
+        text: "let word = word.to_lowercase();",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-code3,
+        kind: text,
+        x: 362,
+        y: 346,
+        width: 380,
+        height: 36,
+        text: "counts.entry(word.as_str())",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-u-borrow,
+        kind: freedraw,
+        stroke: underline,
+        x: 538,
+        y: 356,
+        width: 192,
+        height: 24,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: w-l-borrow,
+        kind: text,
+        x: 762,
+        y: 346,
+        width: 330,
+        height: 36,
+        text: "`word` is borrowed here",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: w-code-end,
+        kind: text,
+        x: 326,
+        y: 390,
+        width: 20,
+        height: 36,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-c-drop,
+        kind: freedraw,
+        stroke: circle,
+        x: 312,
+        y: 386,
+        width: 44,
+        height: 44,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: w-l-drop,
+        kind: text,
+        x: 368,
+        y: 390,
+        width: 290,
+        height: 36,
+        text: "word is dropped here",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: w-code4,
+        kind: text,
+        x: 326,
+        y: 434,
+        width: 90,
+        height: 36,
+        text: "counts",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-u-counts,
+        kind: freedraw,
+        stroke: underline,
+        x: 322,
+        y: 444,
+        width: 98,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-err1,
+        kind: text,
+        x: 290,
+        y: 494,
+        width: 660,
+        height: 36,
+        text: "error[E0515]: cannot return value referencing",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: w-err2,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 330,
+        height: 36,
+        text: "local variable `word`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: w-u-text,
+        kind: freedraw,
+        stroke: underline,
+        x: 513,
+        y: 224,
+        width: 150,
+        height: 24,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: w-fix,
+        kind: text,
+        x: 290,
+        y: 590,
+        width: 640,
+        height: 36,
+        text: "HashMap<String, u32>: the map owns its keys",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 120
+
+runtime:
+  kind: rust-playground
+  defaultMode: fixture
+  fixture:
+    latencyMs: 600
+    result:
+      status: success
+      stdout: "7 different words\nthe: 3\ncat: 2\nhappy: 1\n"
+      stderr: ""
+
+scenes:
+  - id: plan
+    chapter: The plan
+    narration: >
+      In this last lesson, let's use what you've learned in one program: a
+      small word counter that prints the words a text uses most.
+      [[mark:draw-text]] It starts with the text, a string slice.
+      [[mark:draw-split]] split_whitespace breaks the text into words. Then
+      to_lowercase makes them all lowercase, so The and the count as one
+      word.
+      [[mark:draw-map]] A HashMap counts each word. Look at the order: there
+      isn't one. A HashMap doesn't keep any.
+      [[mark:draw-sort]] So we collect the pairs into a Vec, and sort it,
+      biggest count first.
+      [[mark:draw-top]] Then we print the top three.
+    sources:
+      - title: "The Rust Book — Updating a Value Based on the Old Value (a word count)"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#updating-a-value-based-on-the-old-value"
+      - title: "str::split_whitespace"
+        url: "https://doc.rust-lang.org/std/primitive.str.html#method.split_whitespace"
+      - title: "str::to_lowercase"
+        url: "https://doc.rust-lang.org/std/primitive.str.html#method.to_lowercase"
+      - title: "std::collections::HashMap (iteration visits pairs in arbitrary order)"
+        url: "https://doc.rust-lang.org/std/collections/struct.HashMap.html"
+    actions:
+      # Opens in the quiet handle before the first word, already titled.
+      - id: open-board-plan
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1500 }
+        open: true
+        upsertIds: [p-title]
+      - id: draw-text
+        type: whiteboard.apply
+        at: { mark: draw-text }
+        upsertIds: [p-text-box, p-text, p-text-type]
+        drawMs: 1800
+      - id: draw-split
+        type: whiteboard.apply
+        at: { mark: draw-split }
+        upsertIds: [p-arrow1, p-split]
+        drawMs: 1800
+      - id: draw-map
+        type: whiteboard.apply
+        at: { mark: draw-map }
+        upsertIds: [p-map-box, p-map, p-map-type, p-no-order]
+        drawMs: 2400
+      - id: draw-sort
+        type: whiteboard.apply
+        at: { mark: draw-sort }
+        upsertIds: [p-arrow2, p-sort]
+        drawMs: 1800
+      - id: draw-top
+        type: whiteboard.apply
+        at: { mark: draw-top }
+        upsertIds: [p-top-box, p-top, p-top-type]
+        drawMs: 1600
+
+  - id: function
+    chapter: Counting the words
+    narration: >
+      Let's build it. Here's the text.
+      [[mark:select-capital]] Notice that one The has a capital.
+      [[mark:type-use]] HashMap isn't in the prelude, so we bring it in with
+      use, as you did in the hash maps lesson.
+      [[mark:type-fn]] The counting goes in its own function, count_words. It
+      borrows the text as a string slice, and returns a HashMap.
+      [[mark:select-sig]] The keys are Strings, and each count is a u32, a
+      number that's never negative.
+      [[mark:select-return]] The last line, counts, has no semicolon, so it's
+      the value the function returns.
+    sources:
+      - title: "The Rust Book — Bringing Paths into Scope with the use Keyword"
+        url: "https://doc.rust-lang.org/book/ch07-04-bringing-paths-into-scope-with-the-use-keyword.html"
+      - title: "The Rust Book — Functions with Return Values"
+        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#functions-with-return-values"
+      - title: "The Rust Book — Integer Types (unsigned u32)"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#integer-types"
+    actions:
+      - id: close-board-plan
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { scene: start, offsetMs: 800 }
+        path: main.rs
+      - id: select-capital
+        type: editor.select
+        at: { mark: select-capital }
+        target:
+          file: main.rs
+          text: "The"
+          occurrence: 1
+      - id: type-use
+        type: editor.type
+        at: { mark: type-use }
+        target:
+          file: main.rs
+          after: ""
+          occurrence: 1
+        cadence: fast-explainer
+        text: "use std::collections::HashMap;\n\n"
+      - id: type-fn
+        type: editor.type
+        at: { mark: type-fn, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "use std::collections::HashMap;\n\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "fn count_words(text: &str) -> HashMap<String, u32> {\n    let mut counts = HashMap::new();\n    counts\n}\n\n"
+      - id: select-sig
+        type: editor.select
+        at: { mark: select-sig }
+        target:
+          file: main.rs
+          text: "HashMap<String, u32>"
+          occurrence: 1
+      - id: select-return
+        type: editor.select
+        at: { mark: select-return }
+        target:
+          file: main.rs
+          text: "counts"
+          occurrence: 2
+
+  - id: loop
+    narration: >
+      [[mark:type-loop]] Now the loop. It runs once for every word in the
+      text.
+      [[mark:select-split]] split_whitespace gives us the words one at a time.
+      Each word is a slice of the text, so nothing is copied.
+      [[mark:select-lower]] to_lowercase makes a new String, in lowercase. We
+      shadow word with it, so from here on, word is that String.
+      [[mark:select-entry]] Then the counting you've seen before. entry takes
+      the String, and or_insert puts it in the map with a zero if it's new.
+      Either way, you get back a mutable reference to the count.
+      [[mark:select-star]] The star follows that reference, so plus-equals one
+      changes the count inside the map.
+    sources:
+      - title: "str::split_whitespace"
+        url: "https://doc.rust-lang.org/std/primitive.str.html#method.split_whitespace"
+      - title: "str::to_lowercase (returns a new String)"
+        url: "https://doc.rust-lang.org/std/primitive.str.html#method.to_lowercase"
+      - title: "The Rust Book — Shadowing"
+        url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html#shadowing"
+      - title: "std::collections::hash_map::Entry::or_insert"
+        url: "https://doc.rust-lang.org/std/collections/hash_map/enum.Entry.html#method.or_insert"
+    actions:
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "    let mut counts = HashMap::new();\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    for word in text.split_whitespace() {\n        let word = word.to_lowercase();\n        let count = counts.entry(word).or_insert(0);\n        *count += 1;\n    }\n"
+      - id: select-split
+        type: editor.select
+        at: { mark: select-split }
+        target:
+          file: main.rs
+          text: "text.split_whitespace()"
+          occurrence: 1
+      - id: select-lower
+        type: editor.select
+        at: { mark: select-lower }
+        target:
+          file: main.rs
+          text: "let word = word.to_lowercase();"
+          occurrence: 1
+      - id: select-entry
+        type: editor.select
+        at: { mark: select-entry }
+        target:
+          file: main.rs
+          text: "counts.entry(word).or_insert(0)"
+          occurrence: 1
+      - id: select-star
+        type: editor.select
+        at: { mark: select-star }
+        target:
+          file: main.rs
+          text: "*count += 1"
+          occurrence: 1
+
+  - id: owned-keys
+    chapter: Why the map owns its keys
+    narration: >
+      Why does the map hold Strings? Couldn't it borrow its keys?
+      [[mark:draw-err-sig]] Let's say the keys are string slices instead,
+      ampersand str.
+      [[mark:draw-err-borrow]] Then each key is a slice of word, the new
+      lowercase String. as_str makes that slice.
+      [[mark:draw-err-msg]] The compiler refuses, with error E0515. It can't
+      return a value that references the local variable word.
+      [[mark:draw-err-drop]] word is made inside the loop, and it's dropped at
+      the end of each pass.
+      [[mark:draw-err-return]] But the map is returned, so its keys would
+      point at freed memory.
+      [[mark:draw-text-ok]] Slices of text would be fine, because text comes
+      from outside the function. Our lowercase Strings are made inside it.
+      [[mark:draw-fix]] So the map takes each String itself. It owns its keys,
+      so they live as long as it does.
+    sources:
+      - title: "Rust error codes — E0515"
+        url: "https://doc.rust-lang.org/error_codes/E0515.html"
+      - title: "The Rust Book — Hash Maps and Ownership"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#hash-maps-and-ownership"
+      - title: "The Rust Book — Dangling References"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#dangling-references"
+      - title: "The Rust Book — Lifetime Elision (a returned reference borrows from the &str parameter)"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-elision"
+    actions:
+      - id: open-board-keys
+        type: whiteboard.apply
+        at: { scene: start }
+        open: true
+        clear: true
+        upsertIds: [w-title]
+      - id: draw-err-sig
+        type: whiteboard.apply
+        at: { mark: draw-err-sig }
+        upsertIds: [w-code1, w-u-str, w-code-for]
+        drawMs: 2200
+      - id: draw-err-borrow
+        type: whiteboard.apply
+        at: { mark: draw-err-borrow }
+        upsertIds: [w-code2, w-code3, w-u-borrow, w-l-borrow, w-code-end, w-code4]
+        drawMs: 3000
+      - id: draw-err-msg
+        type: whiteboard.apply
+        at: { mark: draw-err-msg }
+        upsertIds: [w-err1, w-err2]
+        drawMs: 2400
+      - id: draw-err-drop
+        type: whiteboard.apply
+        at: { mark: draw-err-drop }
+        upsertIds: [w-c-drop, w-l-drop]
+        drawMs: 1600
+      - id: draw-err-return
+        type: whiteboard.apply
+        at: { mark: draw-err-return }
+        upsertIds: [w-u-counts]
+        drawMs: 600
+      - id: draw-text-ok
+        type: whiteboard.apply
+        at: { mark: draw-text-ok }
+        upsertIds: [w-u-text]
+        drawMs: 700
+      - id: draw-fix
+        type: whiteboard.apply
+        at: { mark: draw-fix }
+        upsertIds: [w-fix]
+        drawMs: 1400
+
+  - id: collect
+    chapter: Sorting and printing
+    narration: >
+      [[mark:type-collect]] Back in main, let's call count_words, and turn the
+      map into a Vec of pairs.
+      [[mark:select-into]] into_iter moves each key and value out of the map,
+      as a pair, and collect builds the Vec.
+      [[mark:select-pairs-type]] The type we wrote tells collect what to
+      build: a Vec of String and u32 tuples. pairs needs mut, because sorting
+      changes it in place.
+    sources:
+      - title: "std::collections::HashMap (IntoIterator: moves out each key-value pair)"
+        url: "https://doc.rust-lang.org/std/collections/struct.HashMap.html#impl-IntoIterator-for-HashMap%3CK,+V,+S%3E"
+      - title: "std::iter::Iterator::collect"
+        url: "https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect"
+      - title: "slice::sort_by (takes &mut self)"
+        url: "https://doc.rust-lang.org/std/primitive.slice.html#method.sort_by"
+    actions:
+      - id: close-board-keys
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -400 }
+        open: false
+      - id: type-collect
+        type: editor.type
+        at: { mark: type-collect }
+        target:
+          file: main.rs
+          after: "    let text = \"the cat sat on the mat The cat was happy\";\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let counts = count_words(text);\n    let mut pairs: Vec<(String, u32)> = counts.into_iter().collect();\n"
+      - id: select-into
+        type: editor.select
+        at: { mark: select-into }
+        target:
+          file: main.rs
+          text: "counts.into_iter().collect()"
+          occurrence: 1
+      - id: select-pairs-type
+        type: editor.select
+        at: { mark: select-pairs-type }
+        target:
+          file: main.rs
+          text: "mut pairs: Vec<(String, u32)>"
+          occurrence: 1
+
+  - id: sort
+    narration: >
+      [[mark:type-sort]] Now sort_by.
+      [[mark:select-closure]] It takes a closure that compares two pairs, a
+      and b. In each pair, dot zero is the word, and dot one is the count. cmp
+      compares two values and returns less, equal, or greater.
+      [[mark:select-count-cmp]] Here we compare b's count with a's. b comes
+      first, so the biggest count goes to the top.
+      [[mark:select-then]] When two counts are equal, the method called then
+      compares the words, in alphabetical order. Without it, equal counts
+      could come out in a different order on each run, because the map has no
+      order.
+      [[mark:type-print]] Last, we print the number of different words, and
+      take three keeps only the first three pairs to print.
+    sources:
+      - title: "slice::sort_by (a stable sort with a comparison closure)"
+        url: "https://doc.rust-lang.org/std/primitive.slice.html#method.sort_by"
+      - title: "std::cmp::Ord::cmp"
+        url: "https://doc.rust-lang.org/std/cmp/trait.Ord.html#tymethod.cmp"
+      - title: "std::cmp::Ordering::then"
+        url: "https://doc.rust-lang.org/std/cmp/enum.Ordering.html#method.then"
+      - title: "std::iter::Iterator::take"
+        url: "https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.take"
+      - title: "The Rust Book — Closures"
+        url: "https://doc.rust-lang.org/book/ch13-01-closures.html"
+    actions:
+      - id: type-sort
+        type: editor.type
+        at: { mark: type-sort, offsetMs: -200 }
+        target:
+          file: main.rs
+          after: "    let mut pairs: Vec<(String, u32)> = counts.into_iter().collect();\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    pairs.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));\n"
+      - id: select-closure
+        type: editor.select
+        at: { mark: select-closure }
+        target:
+          file: main.rs
+          text: "|a, b|"
+          occurrence: 1
+      - id: select-count-cmp
+        type: editor.select
+        at: { mark: select-count-cmp }
+        target:
+          file: main.rs
+          text: "b.1.cmp(&a.1)"
+          occurrence: 1
+      - id: select-then
+        type: editor.select
+        at: { mark: select-then }
+        target:
+          file: main.rs
+          text: ".then(a.0.cmp(&b.0))"
+          occurrence: 1
+      - id: type-print
+        type: editor.type
+        at: { mark: type-print }
+        target:
+          file: main.rs
+          after: "    pairs.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    println!(\"{} different words\", pairs.len());\n    for (word, count) in pairs.iter().take(3) {\n        println!(\"{word}: {count}\");\n    }\n"
+
+  - id: run
+    narration: >
+      [[mark:run]] Let's run it. Seven different words. The word the comes
+      first, three times, because the capital The counts too. Then cat, with
+      two. Five words appear once. They're sorted by word, so happy comes
+      third.
+    sources:
+      - title: "The Rust Book — Updating a Value Based on the Old Value"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html#updating-a-value-based-on-the-old-value"
+      - title: "std::cmp::Ordering::then"
+        url: "https://doc.rust-lang.org/std/cmp/enum.Ordering.html#method.then"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 200 }
+        timeoutMs: 30000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "happy: 1"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.rs
+        contains: "pairs.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));"
+
+  - id: wrap
+    narration: >
+      That program used many ideas from this course. Ownership and borrowing
+      keep memory safe without a garbage collector. Option and Result make you
+      handle missing values and errors, and collections and iterators store
+      and process your data. You're ready to write your own Rust programs.
+    sources:
+      - title: "The Rust Book — Understanding Ownership"
+        url: "https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html"
+      - title: "The Rust Book — Error Handling"
+        url: "https://doc.rust-lang.org/book/ch09-00-error-handling.html"
+      - title: "The Rust Book — Functional Language Features: Iterators and Closures"
+        url: "https://doc.rust-lang.org/book/ch13-00-functional-features.html"
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
