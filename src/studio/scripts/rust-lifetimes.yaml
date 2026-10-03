@@ -1,16 +1,55 @@
-# One idea: every reference is valid for some span (its lifetime); the compiler
-# usually infers it, but when references flow in and out of a function you add a
-# lifetime parameter ('a) tying the output to the inputs so the result can't
-# outlast what it borrows. Slides explain it; the editor builds longest(), runs.
-# NOTE: slides are interim inline markdown — to be swapped to the branded
-# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Rust from zero, lesson 18: lifetimes.
+#
+# The arc: the deck page "Lifetimes" says every reference is valid for some
+# span (its lifetime), the compiler usually works it out, and references in
+# and out of a function can need a hint. A first board draws WHY Rust cares:
+# r borrows x, x is dropped at the inner brace while r is still used — a
+# dangling reference — and the compiler's answer (E0597). The editor then
+# writes longest() with no lifetimes, and a second board shows the
+# compiler's answer (E0106, with its help line "the signature does not say
+# whether it is borrowed from `x` or `y`") plus the one-sentence elision rule
+# (one reference in → the output gets its lifetime, which is why first_word
+# in the slices lesson needed no hint). The deck page "The lifetime
+# parameter" introduces 'a; the editor inserts <'a> and the three 'a
+# annotations (insert-only, so the signature is typed first and annotated
+# after). main calls longest inside an inner scope where both Strings are
+# valid; a third board shows the broken variant that prints the result after
+# inner's scope ends, drawn like the first board (code, then the two lifetime
+# bars, then the drop and the late use), and E0597 again — the compiler
+# trusts the signature, not the body. One run, its output read out after it
+# appears.
+#
+# TTS note: the narration never speaks 'a or a variable named `a` — the voice
+# reads a lone "a" as the article. It says "the lifetime parameter" instead,
+# and the Strings are named outer and inner (which also matches their scopes).
+#
+# Every compiler message on a board or in the narration was confirmed with
+# rustc 1.98 (edition 2024) on the broken variants:
+#   let r; { let x = 5; r = &x; } println!("{r}");
+#     error[E0597]: `x` does not live long enough
+#     - `x` dropped here while still borrowed
+#   fn longest(x: &str, y: &str) -> &str { … }   (rest of the final program)
+#     error[E0106]: missing lifetime specifier
+#     = help: this function's return type contains a borrowed value, but the
+#       signature does not say whether it is borrowed from `x` or `y`
+#   let result; { let inner = …; result = longest(&outer, &inner); }
+#   println!("{result}");
+#     error[E0597]: `inner` does not live long enough
+#     - `inner` dropped here while still borrowed
+#
+# Board colours: blue = the reference and the inputs (the things being
+# named), orange = the shorter-lived value / the caveat, green = valid (the
+# long-lived value, the elision rule), red = the drop point and the errors,
+# violet = the result (the lifetime is the shorter span). #1e1e1e paints
+# white on the dark board.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-lifetimes.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-lifetimes
-  title: "Rust lifetimes: references that stay valid"
+  title: "Rust from zero: Lifetimes"
   locale: en-US
   workspace:
     lessonType: rust
@@ -19,10 +58,10 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let a = String::from("borrow checker");
-            let b = String::from("rust");
-            let result = longest(&a, &b);
-            println!("longest: {result}");
+            let outer = String::from("lifetimes");
+            {
+                let inner = String::from("rust");
+            }
         }
   slides:
     - id: lifetimes-slide
@@ -30,11 +69,483 @@ lesson:
       name: Lifetimes
       deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_108
-    - id: annotation-slide
+    - id: param-slide
       contentType: google
-      name: The 'a annotation
+      name: The lifetime parameter
       deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_117
+  whiteboardAssets:
+    # ---- Board 1: a dangling reference (E0597) -------------------------------
+    - {
+        id: d-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 420,
+        height: 48,
+        text: "A dangling reference",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: d-c1,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 100,
+        height: 36,
+        text: "let r;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-c2,
+        kind: text,
+        x: 300,
+        y: 264,
+        width: 20,
+        height: 36,
+        text: "{",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-c3,
+        kind: text,
+        x: 340,
+        y: 306,
+        width: 160,
+        height: 36,
+        text: "let x = 5;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-c4,
+        kind: text,
+        x: 340,
+        y: 348,
+        width: 120,
+        height: 36,
+        text: "r = &x;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-c5,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 20,
+        height: 36,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-c6,
+        kind: text,
+        x: 300,
+        y: 432,
+        width: 240,
+        height: 36,
+        text: 'println!("{r}");',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-r-bar,
+        kind: rectangle,
+        x: 620,
+        y: 226,
+        width: 16,
+        height: 240,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-r-label,
+        kind: text,
+        x: 700,
+        y: 222,
+        width: 200,
+        height: 36,
+        text: "lifetime of r",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-x-bar,
+        kind: rectangle,
+        x: 660,
+        y: 310,
+        width: 16,
+        height: 112,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-x-label,
+        kind: text,
+        x: 700,
+        y: 306,
+        width: 200,
+        height: 36,
+        text: "lifetime of x",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-drop-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 286,
+        y: 382,
+        width: 44,
+        height: 52,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-drop-label,
+        kind: text,
+        x: 346,
+        y: 390,
+        width: 220,
+        height: 36,
+        text: "x dropped here",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-use-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 408,
+        y: 444,
+        width: 46,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-dangle,
+        kind: text,
+        x: 300,
+        y: 496,
+        width: 600,
+        height: 36,
+        text: "r → freed memory: a dangling reference",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-err,
+        kind: text,
+        x: 300,
+        y: 562,
+        width: 660,
+        height: 36,
+        text: "error[E0597]: `x` does not live long enough",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # ---- Board 2: no hint in the signature (E0106) + the elision rule -------
+    - {
+        id: m-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 520,
+        height: 48,
+        text: "Which input is borrowed?",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: m-sig,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 560,
+        height: 36,
+        text: "fn longest(x: &str, y: &str) -> &str",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-ux,
+        kind: freedraw,
+        stroke: underline,
+        x: 485,
+        y: 240,
+        width: 63,
+        height: 24,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-uy,
+        kind: freedraw,
+        stroke: underline,
+        x: 603,
+        y: 240,
+        width: 63,
+        height: 24,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-ur,
+        kind: freedraw,
+        stroke: underline,
+        x: 729,
+        y: 240,
+        width: 63,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-err,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 600,
+        height: 36,
+        text: "error[E0106]: missing lifetime specifier",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: m-help1,
+        kind: text,
+        x: 300,
+        y: 346,
+        width: 640,
+        height: 36,
+        text: "help: … the signature does not say whether",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-help2,
+        kind: text,
+        x: 300,
+        y: 388,
+        width: 460,
+        height: 36,
+        text: "it is borrowed from `x` or `y`",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-one,
+        kind: text,
+        x: 300,
+        y: 478,
+        width: 660,
+        height: 36,
+        text: "one reference in → the output gets its lifetime",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: m-two,
+        kind: text,
+        x: 300,
+        y: 532,
+        width: 600,
+        height: 36,
+        text: "two references in → the compiler won't guess",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # ---- Board 3: the result used after inner is gone (E0597 again) ---------
+    - {
+        id: o-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 640,
+        height: 48,
+        text: "Use the result after inner is gone?",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: o-c0,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 560,
+        height: 36,
+        text: 'let outer = String::from("lifetimes");',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-c1,
+        kind: text,
+        x: 300,
+        y: 264,
+        width: 160,
+        height: 36,
+        text: "let result;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-c2,
+        kind: text,
+        x: 300,
+        y: 306,
+        width: 20,
+        height: 36,
+        text: "{",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-c3,
+        kind: text,
+        x: 340,
+        y: 348,
+        width: 470,
+        height: 36,
+        text: 'let inner = String::from("rust");',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-c4,
+        kind: text,
+        x: 340,
+        y: 390,
+        width: 490,
+        height: 36,
+        text: "result = longest(&outer, &inner);",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-c5,
+        kind: text,
+        x: 300,
+        y: 432,
+        width: 20,
+        height: 36,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-c6,
+        kind: text,
+        x: 300,
+        y: 474,
+        width: 320,
+        height: 36,
+        text: 'println!("{result}");',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-outer-bar,
+        kind: rectangle,
+        x: 900,
+        y: 226,
+        width: 16,
+        height: 282,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: o-outer-label,
+        kind: text,
+        x: 980,
+        y: 222,
+        width: 90,
+        height: 36,
+        text: "outer",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: o-inner-bar,
+        kind: rectangle,
+        x: 940,
+        y: 352,
+        width: 16,
+        height: 112,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: o-inner-label,
+        kind: text,
+        x: 980,
+        y: 348,
+        width: 90,
+        height: 36,
+        text: "inner",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: o-u-inner,
+        kind: freedraw,
+        stroke: underline,
+        x: 689,
+        y: 402,
+        width: 84,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-drop-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 286,
+        y: 424,
+        width: 44,
+        height: 52,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-drop-label,
+        kind: text,
+        x: 346,
+        y: 432,
+        width: 260,
+        height: 36,
+        text: "inner dropped here",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: o-use-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 410,
+        y: 486,
+        width: 112,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-err,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 700,
+        height: 36,
+        text: "error[E0597]: `inner` does not live long enough",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: o-note,
+        kind: text,
+        x: 300,
+        y: 594,
+        width: 620,
+        height: 36,
+        text: "'a = the shorter span, so the result ends with inner",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -47,84 +558,338 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "longest: borrow checker\n"
+      stdout: "longest: lifetimes\n"
       stderr: ""
 
 scenes:
   - id: lifetimes
+    chapter: What a lifetime is
     narration: >
-      [[mark:show-life]] Every reference in Rust is valid for some span of the
-      program — that span is its lifetime. Most of the time the compiler works
-      this out on its own. But when references go into a function and come back
-      out, it sometimes needs a hint.
+      Every reference in Rust is valid for some span of your program. That
+      span is its lifetime. The compiler usually figures it out for you. But
+      when references go into a function and come back out, it can need a
+      hint. Let's see why, and how to write it.
     sources:
       - title: "The Rust Book — Validating References with Lifetimes"
         url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html"
     actions:
+      # Opens in the quiet handle before the first word.
       - id: show-life
         type: slide.show
-        at: { mark: show-life }
+        at: { scene: start, offsetMs: -1200 }
         slideId: lifetimes-slide
 
-  - id: annotation
+  - id: dangling
     narration: >
-      [[mark:show-ann]] That hint is a lifetime parameter. It doesn't change how
-      long anything lives. It tells the compiler the returned reference comes
-      from the same place as the inputs. So the result can never last longer
-      than what it borrows.
+      First, why does Rust track lifetimes?
+      [[mark:draw-code]] Here, r is declared with no value yet. x lives in an
+      inner scope, and r borrows x.
+      [[mark:draw-spans]] r's lifetime runs to the last line, where r is
+      used. x's lifetime is shorter. It ends at the closing brace.
+      [[mark:draw-drop]] There, x is dropped, and its memory is freed. But the
+      last line still uses r, so r would point at memory that's gone. That's
+      a dangling reference.
+      [[mark:draw-err]] Rust refuses. It's error E0597: x doesn't live long
+      enough. A reference can never last longer than the value it points at.
     sources:
-      - title: "The Rust Book — Lifetime Annotation Syntax"
-        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-annotation-syntax"
+      - title: "The Rust Book — Dangling References"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#dangling-references"
+      - title: "The Rust Book — The Borrow Checker"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#the-borrow-checker"
+      - title: "Rust error codes — E0597"
+        url: "https://doc.rust-lang.org/error_codes/E0597.html"
     actions:
-      - id: show-ann
-        type: slide.show
-        at: { mark: show-ann }
-        slideId: annotation-slide
-
-  - id: build-longest
-    narration: >
-      [[mark:open]] Here, main calls longest on two strings, but longest isn't
-      written yet. [[mark:type-longest]] There we go.
-      [[mark:select-lifetime]] The lifetime marker on x, y, and the return type
-      ties them together. Whichever string we return, it stays valid as long as
-      both inputs do.
-    sources:
-      - title: "The Rust Book — Lifetime Annotations in Function Signatures"
-        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-annotations-in-function-signatures"
-    actions:
-      - id: close-slide
+      - id: close-life-slide
         type: slide.close
         at: { scene: start }
+      - id: open-board-dangling
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: 300 }
+        open: true
+        upsertIds: [d-title]
+      - id: draw-code
+        type: whiteboard.apply
+        at: { mark: draw-code }
+        upsertIds: [d-c1, d-c2, d-c3, d-c4, d-c5, d-c6]
+        drawMs: 2400
+      - id: draw-spans
+        type: whiteboard.apply
+        at: { mark: draw-spans }
+        upsertIds: [d-r-bar, d-r-label, d-x-bar, d-x-label]
+        drawMs: 2400
+      - id: draw-drop
+        type: whiteboard.apply
+        at: { mark: draw-drop }
+        upsertIds: [d-drop-circle, d-drop-label, d-use-line, d-dangle]
+        drawMs: 3000
+      - id: draw-err
+        type: whiteboard.apply
+        at: { mark: draw-err }
+        upsertIds: [d-err]
+        drawMs: 1600
+
+  - id: write-longest
+    chapter: References in and out of a function
+    narration: >
+      Now let's add a function.
+      [[mark:open]] Here's main. outer lives in main, and inner lives in an
+      inner scope.
+      [[mark:type-longest]] Let's write longest. It takes two string slices
+      and returns the longer one. We'll leave out any hints for now.
+      [[mark:select-ret]] Look at the return type. It's a reference, but to
+      what? To x, or to y? The body only decides that while the program runs.
+    sources:
+      - title: "The Rust Book — Generic Lifetimes in Functions"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#generic-lifetimes-in-functions"
+    actions:
+      - id: close-board-dangling
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: open-main
         type: workspace.openFile
         at: { mark: open }
         path: main.rs
       - id: type-longest
         type: editor.type
-        at: { mark: type-longest, offsetMs: -400 }
+        at: { mark: type-longest }
         target:
           file: main.rs
-          after: "    println!(\"longest: {result}\");\n}\n"
+          after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "\nfn longest<'a>(x: &'a str, y: &'a str) -> &'a str {\n    if x.len() > y.len() {\n        x\n    } else {\n        y\n    }\n}\n"
-      - id: select-lifetime
+        text: "fn longest(x: &str, y: &str) -> &str {\n    if x.len() > y.len() { x } else { y }\n}\n\n"
+      - id: select-ret
         type: editor.select
-        at: { mark: select-lifetime }
+        at: { mark: select-ret }
         target:
           file: main.rs
-          text: "fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {"
+          text: "-> &str"
           occurrence: 1
+
+  - id: missing
+    narration: >
+      [[mark:draw-sig]] The compiler won't accept this signature. Two
+      references go in, and one comes out.
+      [[mark:draw-e0106]] It's error E0106: missing lifetime specifier.
+      [[mark:draw-help]] The help line says the signature doesn't say whether
+      the result is borrowed from x or y. Why does that matter? When you
+      call longest, the compiler checks the call using only the signature,
+      not the body. So the signature has to say what the result borrows.
+      [[mark:draw-elision]] But first_word, from the slices lesson, needed no
+      hint. It takes only one reference, so the compiler gives the output that
+      same lifetime. That's a lifetime elision rule. With two references, it
+      won't guess.
+    sources:
+      - title: "Rust error codes — E0106"
+        url: "https://doc.rust-lang.org/error_codes/E0106.html"
+      - title: "The Rust Book — Lifetime Annotations in Function Signatures"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#in-function-signatures"
+      - title: "The Rust Book — Lifetime Elision"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-elision"
+    actions:
+      - id: open-board-missing
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -300 }
+        open: true
+        clear: true
+        upsertIds: [m-title]
+      - id: draw-sig
+        type: whiteboard.apply
+        at: { mark: draw-sig, offsetMs: 300 }
+        upsertIds: [m-sig, m-ux, m-uy, m-ur]
+        drawMs: 2400
+      - id: draw-e0106
+        type: whiteboard.apply
+        at: { mark: draw-e0106 }
+        upsertIds: [m-err]
+        drawMs: 1200
+      - id: draw-help
+        type: whiteboard.apply
+        at: { mark: draw-help }
+        upsertIds: [m-help1, m-help2]
+        drawMs: 2000
+      - id: draw-elision
+        type: whiteboard.apply
+        at: { mark: draw-elision }
+        upsertIds: [m-one, m-two]
+        drawMs: 2400
+
+  - id: param
+    chapter: The lifetime parameter
+    narration: >
+      [[mark:show-param]] The hint is a lifetime parameter. Its name starts
+      with an apostrophe. You declare it in angle brackets, like a generic
+      type, and then write it after each ampersand. That ties the returned
+      reference to the inputs. It doesn't change how long anything lives.
+      It's a promise the compiler checks: the result never lasts longer
+      than what it borrows.
+    sources:
+      - title: "The Rust Book — Lifetime Annotation Syntax"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-annotation-syntax"
+      - title: "The Rust Book — Lifetime Annotations in Function Signatures"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#in-function-signatures"
+    actions:
+      - id: close-board-missing
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: show-param
+        type: slide.show
+        at: { mark: show-param, offsetMs: 300 }
+        slideId: param-slide
+
+  - id: annotate
+    narration: >
+      Back in the editor.
+      [[mark:type-decl]] First, we declare the lifetime after the function's
+      name.
+      [[mark:type-x]] Then x gets it.
+      [[mark:type-y]] Then y gets it.
+      [[mark:type-ret]] And the return type.
+      [[mark:select-sig]] So what's this lifetime? It's the span where both
+      x and y are valid, so it's the shorter of their two lifetimes. And the
+      result is valid only for that span.
+    sources:
+      - title: "The Rust Book — Lifetime Annotations in Function Signatures"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#in-function-signatures"
+    actions:
+      - id: close-param-slide
+        type: slide.close
+        at: { scene: start }
+      - id: type-decl
+        type: editor.type
+        at: { mark: type-decl }
+        target:
+          file: main.rs
+          after: "fn longest"
+          occurrence: 1
+        cadence: natural
+        text: "<'a>"
+      - id: type-x
+        type: editor.type
+        at: { mark: type-x }
+        target:
+          file: main.rs
+          after: "x: &"
+          occurrence: 1
+        cadence: natural
+        text: "'a "
+      - id: type-y
+        type: editor.type
+        at: { mark: type-y }
+        target:
+          file: main.rs
+          after: "y: &"
+          occurrence: 1
+        cadence: natural
+        text: "'a "
+      - id: type-ret
+        type: editor.type
+        at: { mark: type-ret }
+        target:
+          file: main.rs
+          after: ") -> &"
+          occurrence: 1
+        cadence: natural
+        text: "'a "
+      - id: select-sig
+        type: editor.select
+        at: { mark: select-sig }
+        target:
+          file: main.rs
+          text: "-> &'a str"
+          occurrence: 1
+
+  - id: call
+    chapter: Calling longest
+    narration: >
+      [[mark:type-call]] Now let's call longest inside the inner scope, and
+      print the result. The ampersands borrow each String, and Rust converts them to
+      string slices.
+      [[mark:select-call]] Here, outer and inner are both still valid, so the
+      result is safe to use.
+    sources:
+      - title: "The Rust Book — Lifetime Annotations in Function Signatures"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#in-function-signatures"
+      - title: "The Rust Book — Using Deref Coercion in Functions and Methods"
+        url: "https://doc.rust-lang.org/book/ch15-02-deref.html#using-deref-coercion-in-functions-and-methods"
+    actions:
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target:
+          file: main.rs
+          after: "        let inner = String::from(\"rust\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "        let result = longest(&outer, &inner);\n        println!(\"longest: {result}\");\n"
+      - id: select-call
+        type: editor.select
+        at: { mark: select-call }
+        target:
+          file: main.rs
+          text: "longest(&outer, &inner)"
+          occurrence: 1
+
+  - id: outlive
+    narration: >
+      What if we use the result after the inner scope ends?
+      [[mark:draw-moved]] Here, result is printed after the closing brace.
+      [[mark:draw-spans-b]] outer lives to the last line. inner lives only
+      inside the braces.
+      [[mark:draw-drop-b]] inner is borrowed in the call, and dropped at the
+      brace, before result is printed.
+      [[mark:draw-e0597b]] It's error E0597 again: inner doesn't live long
+      enough. But the result really points at outer, and outer is still
+      valid! The compiler goes by the signature, and the signature says the
+      result may borrow from inner. So it can't be used after inner is gone.
+    sources:
+      - title: "The Rust Book — Lifetime Annotations in Function Signatures"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#in-function-signatures"
+      - title: "Rust error codes — E0597"
+        url: "https://doc.rust-lang.org/error_codes/E0597.html"
+    actions:
+      - id: open-board-outlive
+        type: whiteboard.apply
+        at: { scene: start }
+        open: true
+        clear: true
+        upsertIds: [o-title]
+      - id: draw-moved
+        type: whiteboard.apply
+        at: { mark: draw-moved }
+        upsertIds: [o-c0, o-c1, o-c2, o-c3, o-c4, o-c5, o-c6]
+        drawMs: 2400
+      - id: draw-spans-b
+        type: whiteboard.apply
+        at: { mark: draw-spans-b }
+        upsertIds: [o-outer-bar, o-outer-label, o-inner-bar, o-inner-label]
+        drawMs: 1600
+      - id: draw-drop-b
+        type: whiteboard.apply
+        at: { mark: draw-drop-b }
+        upsertIds: [o-u-inner, o-drop-circle, o-drop-label, o-use-line]
+        drawMs: 2400
+      - id: draw-e0597b
+        type: whiteboard.apply
+        at: { mark: draw-e0597b }
+        upsertIds: [o-err, o-note]
+        drawMs: 2400
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Borrow checker is longer than rust, so that's
-      what comes back. Lifetimes are the compiler proving your references always
-      point at valid data. Most stay silent — you annotate only when it asks.
+      [[mark:run]] Let's run it.
+      [[mark:read-out]] It prints lifetimes, the text in outer. It's longer
+      than rust, so longest gave back a reference to outer.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — Generic Lifetimes in Functions"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#generic-lifetimes-in-functions"
     actions:
+      - id: close-board-outlive
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -400 }
+        open: false
       - id: run
         type: runtime.run
         at: { mark: run, offsetMs: 200 }
@@ -132,7 +897,7 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "longest: borrow checker"
+        contains: "longest: lifetimes"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
@@ -140,5 +905,21 @@ scenes:
         path: main.rs
         contains: "fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {"
 
+  - id: wrap
+    narration: >
+      So a lifetime is the span where a reference is valid, and Rust refuses
+      any reference that would last longer than its value. The elision rules
+      usually fill lifetimes in. When a function returns one of several
+      references, a lifetime parameter ties the result to its inputs. Next,
+      iterators and closures: transforming a whole list in a few short steps.
+    sources:
+      - title: "The Rust Book — Validating References with Lifetimes"
+        url: "https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html"
+      - title: "The Rust Book — Processing a Series of Items with Iterators"
+        url: "https://doc.rust-lang.org/book/ch13-02-iterators.html"
+    actions: []
+
 checks:
+  # 500 (not 300): google-svg deck slides embed per-slide font data whose
+  # paint briefly stalls the main thread at each show/close.
   - { type: timing.p95Ms, max: 500 }
