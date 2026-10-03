@@ -1,13 +1,16 @@
-# One idea: a Rust function names typed parameters and a return type, and its
-# last expression — with no semicolon — is the value returned (statement vs.
-# expression). A whiteboard anatomy sketch, then add + double built and run.
+# Rust from zero, lesson 4: functions. The anatomy of a signature (drawn in:
+# snake_case name, typed parameters, return type, the tail expression), then
+# total_cost built and called live (statement vs expression pointed at in the
+# code), the E0308 "remove this semicolon" error on the board (broken code
+# cannot run in an insert-only lesson; message confirmed with rustc 1.98,
+# edition 2024), and an early `return` in ticket_price. One run at the end.
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-functions.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-functions
-  title: "Rust functions: the last expression returns"
+  title: "Rust from zero: Functions"
   locale: en-US
   workspace:
     lessonType: rust
@@ -16,115 +19,306 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let sum = add(2, 3);
-            println!("2 + 3 = {sum}");
+            println!("Movie night");
         }
-  # Diagram: a function as a machine — inputs -> [add: a + b] -> output.
+  # Colour jobs (white-background authoring; the dark board inverts #1e1e1e):
+  # blue = the thing being named, orange = what changes / the caveat,
+  # violet = the result, red = the error, green = what works.
   whiteboardAssets:
-    - id: ft-title
+    # --- Board one: the parts of a function ---------------------------------
+    - id: fn1-title
       kind: text
       x: 300
-      y: 165
-      width: 780
-      height: 44
-      text: "A function turns inputs into an output"
+      y: 160
+      width: 500
+      height: 45
+      text: "What a function is made of"
       strokeColor: "#1e1e1e"
-      fontSize: 34
-    - id: ft-inlabel
+      fontSize: 36
+    - id: fn1-fn
+      kind: text
+      x: 280
+      y: 240
+      width: 32
+      height: 40
+      text: "fn"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: fn1-name
       kind: text
       x: 330
-      y: 262
-      width: 140
-      height: 30
-      text: "inputs"
-      strokeColor: "#80868b"
-      fontSize: 22
-    - id: ft-in
-      kind: text
-      x: 350
-      y: 306
-      width: 120
+      y: 240
+      width: 180
       height: 40
-      text: "2, 3"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: ft-arrow1
-      kind: text
-      x: 480
-      y: 306
-      width: 44
-      height: 40
-      text: "→"
-      strokeColor: "#80868b"
-      fontSize: 34
-    - id: ft-fnlabel
-      kind: text
-      x: 560
-      y: 262
-      width: 200
-      height: 30
-      text: "fn add"
+      text: "total_cost"
       strokeColor: "#1971c2"
-      fontSize: 22
-    - id: ft-fnbox
-      kind: rectangle
-      x: 540
-      y: 288
-      width: 220
-      height: 84
+      fontSize: 32
+    - id: fn1-name-ul
+      kind: freedraw
+      stroke: underline
+      x: 330
+      y: 282
+      width: 180
+      height: 14
       strokeColor: "#1971c2"
-    - id: ft-fnbody
+    - id: fn1-name-l1
       kind: text
-      x: 604
-      y: 314
-      width: 160
+      x: 330
+      y: 305
+      width: 70
+      height: 35
+      text: "name"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: fn1-name-l2
+      kind: text
+      x: 330
+      y: 340
+      width: 165
+      height: 35
+      text: "snake_case"
+      strokeColor: "#1971c2"
+      fontSize: 28
+    - id: fn1-params
+      kind: text
+      x: 530
+      y: 240
+      width: 378
       height: 40
-      text: "a + b"
+      text: "(price: u32, count: u32)"
+      strokeColor: "#f08c00"
+      fontSize: 32
+    - id: fn1-params-ul
+      kind: freedraw
+      stroke: underline
+      x: 530
+      y: 282
+      width: 376
+      height: 14
+      strokeColor: "#f08c00"
+    - id: fn1-params-l1
+      kind: text
+      x: 530
+      y: 305
+      width: 160
+      height: 35
+      text: "parameters"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: fn1-params-l2
+      kind: text
+      x: 530
+      y: 340
+      width: 260
+      height: 35
+      text: "each needs a type"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: fn1-ret
+      kind: text
+      x: 930
+      y: 240
+      width: 110
+      height: 40
+      text: "-> u32"
+      strokeColor: "#6741d9"
+      fontSize: 32
+    - id: fn1-ret-ul
+      kind: freedraw
+      stroke: underline
+      x: 930
+      y: 282
+      width: 107
+      height: 14
+      strokeColor: "#6741d9"
+    - id: fn1-ret-l
+      kind: text
+      x: 930
+      y: 305
+      width: 160
+      height: 35
+      text: "return type"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: fn1-open
+      kind: text
+      x: 1055
+      y: 240
+      width: 20
+      height: 40
+      text: "{"
       strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: ft-arrow2
+      fontSize: 32
+    - id: fn1-body
       kind: text
-      x: 780
-      y: 306
-      width: 44
+      x: 370
+      y: 410
+      width: 206
       height: 40
-      text: "→"
-      strokeColor: "#80868b"
-      fontSize: 34
-    - id: ft-outlabel
-      kind: text
-      x: 850
-      y: 262
-      width: 160
-      height: 30
-      text: "returns"
-      strokeColor: "#2f9e44"
-      fontSize: 22
-    - id: ft-outbox
-      kind: rectangle
-      x: 840
-      y: 288
-      width: 150
-      height: 84
-      strokeColor: "#2f9e44"
-    - id: ft-outval
-      kind: text
-      x: 902
-      y: 314
-      width: 80
-      height: 40
-      text: "5"
-      strokeColor: "#2f9e44"
-      fontSize: 30
-    - id: ft-note
-      kind: text
+      text: "price * count"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: fn1-body-circle
+      kind: freedraw
+      stroke: circle
       x: 340
-      y: 430
-      width: 780
-      height: 36
-      text: "the last expression — a + b, no semicolon — is returned"
+      y: 392
+      width: 266
+      height: 76
+      strokeColor: "#6741d9"
+    - id: fn1-body-l1
+      kind: text
+      x: 640
+      y: 398
+      width: 280
+      height: 35
+      text: "last expression, no ;"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: fn1-body-l2
+      kind: text
+      x: 640
+      y: 436
+      width: 295
+      height: 35
+      text: "= the value returned"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: fn1-close
+      kind: text
+      x: 280
+      y: 480
+      width: 18
+      height: 40
+      text: "}"
       strokeColor: "#1e1e1e"
-      fontSize: 26
+      fontSize: 32
+    - id: fn1-why
+      kind: text
+      x: 300
+      y: 570
+      width: 730
+      height: 35
+      text: "types in the signature: a promise the compiler checks"
+      strokeColor: "#2f9e44"
+      fontSize: 28
+    # --- Board two: one semicolon turns the value into a statement ----------
+    # The error lines are rustc 1.98's real output for `price * count;` as
+    # the body of total_cost (shortened, not reworded).
+    - id: fn2-title
+      kind: text
+      x: 300
+      y: 160
+      width: 455
+      height: 45
+      text: "Statement or expression?"
+      strokeColor: "#1e1e1e"
+      fontSize: 36
+    - id: fn2-expr-label
+      kind: text
+      x: 280
+      y: 244
+      width: 150
+      height: 38
+      text: "expression"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: fn2-expr-code
+      kind: text
+      x: 470
+      y: 240
+      width: 206
+      height: 40
+      text: "price * count"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: fn2-expr-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 718
+      y: 242
+      width: 78
+      height: 36
+      strokeColor: "#6741d9"
+    - id: fn2-expr-result
+      kind: text
+      x: 810
+      y: 244
+      width: 255
+      height: 35
+      text: "gives a u32 value"
+      strokeColor: "#6741d9"
+      fontSize: 28
+    - id: fn2-stmt-label
+      kind: text
+      x: 280
+      y: 324
+      width: 155
+      height: 38
+      text: "statement"
+      strokeColor: "#1971c2"
+      fontSize: 30
+    - id: fn2-stmt-code
+      kind: text
+      x: 470
+      y: 320
+      width: 214
+      height: 40
+      text: "price * count;"
+      strokeColor: "#1e1e1e"
+      fontSize: 32
+    - id: fn2-semi-circle
+      kind: freedraw
+      stroke: circle
+      x: 673
+      y: 312
+      width: 26
+      height: 56
+      strokeColor: "#e03131"
+    - id: fn2-stmt-arrow
+      kind: freedraw
+      stroke: arrow-right
+      x: 718
+      y: 322
+      width: 78
+      height: 36
+      strokeColor: "#f08c00"
+    - id: fn2-stmt-result
+      kind: text
+      x: 810
+      y: 324
+      width: 270
+      height: 35
+      text: "gives () — no value"
+      strokeColor: "#f08c00"
+      fontSize: 28
+    - id: fn2-err-1
+      kind: text
+      x: 280
+      y: 430
+      width: 485
+      height: 38
+      text: "error[E0308]: mismatched types"
+      strokeColor: "#e03131"
+      fontSize: 30
+    - id: fn2-err-2
+      kind: text
+      x: 280
+      y: 475
+      width: 370
+      height: 35
+      text: "expected `u32`, found `()`"
+      strokeColor: "#e03131"
+      fontSize: 28
+    - id: fn2-help
+      kind: text
+      x: 280
+      y: 545
+      width: 660
+      height: 35
+      text: "help: remove this semicolon to return this value"
+      strokeColor: "#2f9e44"
+      fontSize: 28
 
 build:
   voiceProfile: pocket-alba-v1
@@ -137,118 +331,278 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "2 + 3 = 5\ndoubled is 10\n"
+      stdout: "Movie night\nfour tickets: 48\nadult: 12, baby: 0\n"
       stderr: ""
 
 scenes:
   - id: anatomy
+    chapter: What a function is made of
     narration: >
-      [[mark:board]] A function is a machine. [[mark:show-in]] Inputs go in —
-      two and three. [[mark:show-fn]] Inside, add computes A plus b.
-      [[mark:show-out]] Out comes the result — five. That last expression, no
-      semicolon, is the return value. [[mark:board-close]] Let's build one.
+      [[mark:board]] You've already written one function: main, where every
+      Rust program starts. Now let's write our own.
+      [[mark:draw-name]] A function starts with f n, short for function, then
+      its name. In Rust,
+      function names use snake case: lowercase words, joined by underscores.
+      If you use capital letters instead, the compiler warns you and suggests
+      the snake case name. [[mark:draw-params]] Next come the parameters, in
+      parentheses. Each one has a name and a type, and you must write the
+      type. [[mark:draw-return]] After the arrow comes the return type. That's
+      the type of the value it gives back.
+      [[mark:draw-body]] Then the body, in curly braces. Its last expression
+      has no semicolon, and that's the value the function returns.
+      [[mark:draw-why]] So why all these types? The signature is a promise.
+      Rust checks every call, and the body, against it. Because every
+      signature lists its types, Rust can work out the types inside the body,
+      so you rarely need type annotations there. And when something's wrong,
+      the error can point at the exact place.
     sources:
       - title: "The Rust Book — Functions"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html"
+      - title: "The Rust Book — Parameters"
+        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#parameters"
+      - title: "The Rust Reference — Functions"
+        url: "https://doc.rust-lang.org/reference/items/functions.html"
+      - title: "The rustc book — the non_snake_case lint"
+        url: "https://doc.rust-lang.org/rustc/lints/listing/warn-by-default.html#non-snake-case"
     actions:
       - id: open-board
         type: whiteboard.apply
         at: { mark: board }
         open: true
-        upsertIds: [ft-title]
-      - id: show-in
+        upsertIds: [fn1-title]
+      - id: draw-name
         type: whiteboard.apply
-        at: { mark: show-in }
-        upsertIds: [ft-inlabel, ft-in]
-      - id: show-fn
+        at: { mark: draw-name }
+        upsertIds: [fn1-fn, fn1-name, fn1-name-ul, fn1-name-l1, fn1-name-l2]
+        drawMs: 1800
+      - id: draw-params
         type: whiteboard.apply
-        at: { mark: show-fn }
-        upsertIds: [ft-arrow1, ft-fnlabel, ft-fnbox, ft-fnbody]
-      - id: show-out
+        at: { mark: draw-params }
+        upsertIds: [fn1-params, fn1-params-ul, fn1-params-l1, fn1-params-l2]
+        drawMs: 1800
+      - id: draw-return
         type: whiteboard.apply
-        at: { mark: show-out }
-        upsertIds: [ft-arrow2, ft-outlabel, ft-outbox, ft-outval, ft-note]
+        at: { mark: draw-return }
+        upsertIds: [fn1-ret, fn1-ret-ul, fn1-ret-l, fn1-open]
+        drawMs: 1400
+      - id: draw-body
+        type: whiteboard.apply
+        at: { mark: draw-body }
+        upsertIds: [fn1-body, fn1-close, fn1-body-circle, fn1-body-l1, fn1-body-l2]
+        drawMs: 2200
+      - id: draw-why
+        type: whiteboard.apply
+        at: { mark: draw-why }
+        upsertIds: [fn1-why]
+        drawMs: 1400
+
+  - id: write-total
+    chapter: Writing and calling a function
+    narration: >
+      Let's build one. [[mark:open-main]] Here's main, printing one line.
+      [[mark:type-total]] We'll add total_cost below it. In Rust, a function
+      can come before or after the code that calls it.
+      [[mark:select-params]] It takes a price and a count, and both are u32.
+      [[mark:select-tail]] The body is one expression, price times count, with
+      no semicolon. So that's the value total_cost returns, with no return
+      keyword. Why does that work? A block in curly braces is an
+      expression too, and its value is its last expression. A function's body
+      is a block.
+    sources:
+      - title: "The Rust Book — Functions with Return Values"
+        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#functions-with-return-values"
+      - title: "The Rust Book — Statements and Expressions"
+        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#statements-and-expressions"
+    actions:
       - id: close-board
         type: whiteboard.apply
-        at: { mark: board-close }
+        at: { scene: start }
         open: false
-
-  - id: define-add
-    narration: >
-      [[mark:open]] main calls add — not written yet. [[mark:type-add]] Write
-      it. Two parameters, both i32, return an i32.
-      [[mark:select-add-expression]] The body is one expression, A plus b, with
-      no semicolon. That sum is what add returns.
-    sources:
-      - title: "The Rust Book — Function Parameters"
-        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#parameters"
-    actions:
       - id: open-main
         type: workspace.openFile
-        at: { mark: open }
+        at: { mark: open-main }
         path: main.rs
-      - id: type-add
+      - id: type-total
         type: editor.type
-        at: { mark: type-add, offsetMs: -400 }
+        at: { mark: type-total, offsetMs: -400 }
         target:
           file: main.rs
-          after: "    println!(\"2 + 3 = {sum}\");\n}\n"
+          after: "    println!(\"Movie night\");\n}\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\nfn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n"
-      - id: select-add-expression
+        text: "\nfn total_cost(price: u32, count: u32) -> u32 {\n    price * count\n}\n"
+      - id: select-params
         type: editor.select
-        at: { mark: select-add-expression }
+        at: { mark: select-params }
         target:
           file: main.rs
-          text: "a + b"
+          text: "price: u32, count: u32"
+          occurrence: 1
+      - id: select-tail
+        type: editor.select
+        at: { mark: select-tail }
+        target:
+          file: main.rs
+          text: "price * count"
           occurrence: 1
 
-  - id: statement-vs-expression
+  - id: call-total
     narration: >
-      [[mark:type-double]] A function with two lines. double computes n times
-      two and binds it to result. The semicolon makes that a statement.
-      [[mark:select-double-expression]] Then result stands alone, with no
-      semicolon. That's the return value. [[mark:type-call]] Back in main, call
-      double and print the result.
+      [[mark:type-call]] Let's call it from main, for four tickets at twelve
+      each. Rust reads the signature, so it knows twelve and four are
+      u32 values. [[mark:select-call]] The call is an expression. It produces
+      a value: forty-eight. [[mark:select-let]] The whole let line is a
+      statement. It does a job, storing that value in total, but it doesn't
+      produce a value itself.
     sources:
       - title: "The Rust Book — Statements and Expressions"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#statements-and-expressions"
     actions:
-      - id: type-double
-        type: editor.type
-        at: { mark: type-double, offsetMs: -400 }
-        target:
-          file: main.rs
-          after: "    a + b\n}\n"
-          occurrence: 1
-        cadence: line-by-line
-        text: "\nfn double(n: i32) -> i32 {\n    let result = n * 2;\n    result\n}\n"
-      - id: select-double-expression
-        type: editor.select
-        at: { mark: select-double-expression }
-        target:
-          file: main.rs
-          text: "    let result = n * 2;\n    result"
-          occurrence: 1
       - id: type-call
         type: editor.type
-        at: { mark: type-call }
+        at: { mark: type-call, offsetMs: -400 }
         target:
           file: main.rs
-          after: "    println!(\"2 + 3 = {sum}\");\n"
+          after: "    println!(\"Movie night\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let doubled = double(sum);\n    println!(\"doubled is {doubled}\");\n"
+        text: "    let total = total_cost(12, 4);\n    println!(\"four tickets: {total}\");\n"
+      - id: select-call
+        type: editor.select
+        at: { mark: select-call }
+        target:
+          file: main.rs
+          text: "total_cost(12, 4)"
+          occurrence: 1
+      - id: select-let
+        type: editor.select
+        at: { mark: select-let }
+        target:
+          file: main.rs
+          text: "let total = total_cost(12, 4);"
+          occurrence: 1
+
+  - id: semicolon
+    chapter: Statements and expressions
+    narration: >
+      [[mark:board-two]] That difference matters most at the end of a
+      function. [[mark:draw-expr]] Here, price times count is an expression.
+      It gives back a u32. [[mark:draw-stmt]] Add a semicolon, and it becomes
+      a statement, which gives back no value. Rust's type for no value is the
+      unit type, written as empty parentheses. A function with no arrow, like
+      main, returns unit too.
+      [[mark:draw-error]] So with that semicolon, total_cost promises a u32
+      but returns unit. The compiler stops with error E0308, mismatched types:
+      expected u32, found unit. [[mark:draw-help]] And it tells you the fix.
+      Remove this semicolon to return this value.
+      [[mark:close-board-two]] Our total_cost has no semicolon, so it
+      compiles.
+    sources:
+      - title: "The Rust Book — Statements and Expressions"
+        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#statements-and-expressions"
+      - title: "Rust error codes — E0308"
+        url: "https://doc.rust-lang.org/error_codes/E0308.html"
+      - title: "std — The unit type ()"
+        url: "https://doc.rust-lang.org/std/primitive.unit.html"
+      - title: "The Rust Reference — Functions"
+        url: "https://doc.rust-lang.org/reference/items/functions.html"
+    actions:
+      - id: open-board-two
+        type: whiteboard.apply
+        at: { mark: board-two }
+        open: true
+        clear: true
+        upsertIds: [fn2-title]
+      - id: draw-expr
+        type: whiteboard.apply
+        at: { mark: draw-expr }
+        upsertIds: [fn2-expr-label, fn2-expr-code, fn2-expr-arrow, fn2-expr-result]
+        drawMs: 1800
+      - id: draw-stmt
+        type: whiteboard.apply
+        at: { mark: draw-stmt }
+        upsertIds: [fn2-stmt-label, fn2-stmt-code, fn2-semi-circle, fn2-stmt-arrow, fn2-stmt-result]
+        drawMs: 2400
+      - id: draw-error
+        type: whiteboard.apply
+        at: { mark: draw-error }
+        upsertIds: [fn2-err-1, fn2-err-2]
+        drawMs: 1800
+      - id: draw-help
+        type: whiteboard.apply
+        at: { mark: draw-help }
+        upsertIds: [fn2-help]
+        drawMs: 1400
+      - id: close-board-two
+        type: whiteboard.apply
+        at: { mark: close-board-two }
+        open: false
+
+  - id: early-return
+    chapter: Leaving early with return
+    narration: >
+      [[mark:type-ticket]] Sometimes a function knows its answer early. Our
+      new ticket_price function gives a ticket's price for an age. The
+      if runs its block only when its condition is true. You'll learn if fully
+      in the next lesson. [[mark:select-return]] Here, return gives back zero
+      and leaves the function immediately. So a ticket for a child under three
+      is free, and the rest of the function doesn't run. Its semicolon is fine,
+      because return doesn't need to be last.
+      [[mark:select-twelve]] Everyone else reaches the end, where twelve is
+      the last expression. That's the usual style. Use return to leave early,
+      and let the last expression give the normal answer.
+      [[mark:type-ticket-calls]] Let's get the price for an adult and a baby,
+      and print both.
+    sources:
+      - title: "The Rust Book — Functions with Return Values"
+        url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#functions-with-return-values"
+      - title: "The Rust Reference — return expressions"
+        url: "https://doc.rust-lang.org/reference/expressions/return-expr.html"
+      - title: "The Rust Book — if Expressions"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#if-expressions"
+    actions:
+      - id: type-ticket
+        type: editor.type
+        at: { mark: type-ticket, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    price * count\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\nfn ticket_price(age: u32) -> u32 {\n    if age < 3 {\n        return 0;\n    }\n    12\n}\n"
+      - id: select-return
+        type: editor.select
+        at: { mark: select-return }
+        target:
+          file: main.rs
+          text: "return 0;"
+          occurrence: 1
+      - id: select-twelve
+        type: editor.select
+        at: { mark: select-twelve }
+        target:
+          file: main.rs
+          text: "12"
+          occurrence: 2
+      - id: type-ticket-calls
+        type: editor.type
+        at: { mark: type-ticket-calls, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    println!(\"four tickets: {total}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let adult = ticket_price(30);\n    let baby = ticket_price(1);\n    println!(\"adult: {adult}, baby: {baby}\");\n"
 
   - id: run
     narration: >
-      [[mark:run]] Run it. Two plus three, five. Double five, ten. Both came
-      from a function's final expression. The semicolon is the difference
-      between a statement and a value.
+      [[mark:run]] Let's run it. Movie night, then forty-eight for four
+      tickets: price times count. An adult pays twelve, from the last
+      expression of ticket_price. And the baby pays zero, from the
+      early return.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "Rust by Example — Functions"
+        url: "https://doc.rust-lang.org/rust-by-example/fn.html"
     actions:
       - id: run
         type: runtime.run
@@ -257,13 +611,24 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "doubled is 10"
+        contains: "adult: 12, baby: 0"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "fn double(n: i32) -> i32 {"
+        contains: "fn ticket_price(age: u32) -> u32 {"
+
+  - id: wrap
+    narration: >
+      So a function names its inputs with their types, and promises the type
+      it returns. The last expression, without a semicolon, is the value it
+      gives back, and return leaves early. Next, you'll make decisions and
+      repeat work with control flow: if, loop, while, and for.
+    sources:
+      - title: "The Rust Book — Control Flow"
+        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html"
+    actions: []
 
 checks:
   - { type: timing.p95Ms, max: 300 }
