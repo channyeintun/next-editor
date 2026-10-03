@@ -1,16 +1,41 @@
-# One idea: an enum is a type that is exactly one of several variants, and a
-# variant can carry data; Option<T> is the standard enum (Some/None) that
-# replaces null. Slides introduce enums + Option; the editor builds a Status
-# enum matched to text, plus an Option match, then runs.
-# NOTE: slides are interim inline markdown — to be swapped to the branded
-# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Rust from zero, lesson 10: enums and Option.
+#
+# The arc: the deck page "Enums" introduces a Status that is Active or
+# Away(u32); a whiteboard draws the idea (exactly one variant at a time, data
+# only where a variant has it, a fixed list — Status::Busy is E0599). The
+# editor builds the enum, two values, and an equality check that shows the
+# data is part of the value. The deck page "Option<T> — no null" introduces
+# Option; the editor adds None / Some(15); a second board shows what the
+# compiler says when you use an Option<u32> as a u32 (E0308) and the fix,
+# unwrap_or, which the editor then types. One run at the end. match is the
+# NEXT lesson, so this one never takes data back out of a variant.
+#
+# Why PartialEq: a variant field that is only ever printed through a derived
+# Debug impl raises "field `0` is never read" (derived Debug is ignored by the
+# dead-code lint), and the live console must stay warning-free. Comparing
+# `ben == Status::Away(20)` reads the field honestly and teaches that the
+# data is part of the value.
+#
+# Compiler errors on the boards, confirmed with rustc 1.98 (edition 2024) on
+# broken variants of the final program:
+#   let ben = Status::Busy;
+#     error[E0599]: no variant, associated function, or constant named `Busy`
+#     found for enum `Status` in the current scope   (board: shortened with …)
+#   let minutes: u32 = ana_away;
+#     error[E0308]: mismatched types
+#     expected `u32`, found `Option<u32>`
+#
+# Board colours: blue = the variants (the things being named), orange = the
+# data a variant carries / the None caveat, green = what's valid and the fix,
+# red = the errors, violet = the result. #1e1e1e paints white on the dark board.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-enums.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-enums
-  title: "Rust enums and Option: one of several"
+  title: "Rust from zero: Enums and Option"
   locale: en-US
   workspace:
     lessonType: rust
@@ -18,26 +43,340 @@ lesson:
     entryFilePath: main.rs
     files:
       main.rs: |
-        enum Status {
-            Active,
-            Away(u32),
-        }
+        // Who's online in a chat app?
 
         fn main() {
-            let a = Status::Active;
-            let b = Status::Away(15);
         }
   slides:
     - id: enum-slide
       contentType: google
-      name: What is an enum
+      name: Enums
       deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_20
     - id: option-slide
       contentType: google
-      name: Option
+      name: Option<T> — no null
       deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_31
+  whiteboardAssets:
+    # ---- Board 1: a Status is exactly one variant ---------------------------
+    - {
+        id: b1-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 760,
+        height: 48,
+        text: "A Status value is one of:",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: b1-active-box,
+        kind: rectangle,
+        x: 300,
+        y: 232,
+        width: 240,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-active-text,
+        kind: text,
+        x: 366,
+        y: 266,
+        width: 140,
+        height: 40,
+        text: "Active",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: b1-or,
+        kind: text,
+        x: 588,
+        y: 266,
+        width: 50,
+        height: 40,
+        text: "or",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: b1-away-box,
+        kind: rectangle,
+        x: 680,
+        y: 232,
+        width: 400,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b1-away-text,
+        kind: text,
+        x: 704,
+        y: 266,
+        width: 100,
+        height: 40,
+        text: "Away",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: b1-data-box,
+        kind: rectangle,
+        x: 840,
+        y: 254,
+        width: 210,
+        height: 66,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b1-data-text,
+        kind: text,
+        x: 868,
+        y: 268,
+        width: 170,
+        height: 40,
+        text: "u32: 15",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-active-note,
+        kind: text,
+        x: 340,
+        y: 362,
+        width: 200,
+        height: 40,
+        text: "no data",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b1-away-note,
+        kind: text,
+        x: 760,
+        y: 362,
+        width: 320,
+        height: 40,
+        text: "holds the minutes",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b1-one,
+        kind: text,
+        x: 300,
+        y: 432,
+        width: 760,
+        height: 40,
+        text: "always exactly one variant at a time",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b1-one-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 446,
+        width: 520,
+        height: 30,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b1-busy-code,
+        kind: text,
+        x: 300,
+        y: 522,
+        width: 260,
+        height: 40,
+        text: "Status::Busy",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b1-busy-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 296,
+        y: 524,
+        width: 190,
+        height: 36,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b1-busy-err,
+        kind: text,
+        x: 300,
+        y: 576,
+        width: 780,
+        height: 40,
+        text: "error[E0599]: no variant … named `Busy`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # ---- Board 2: an Option<u32> is not a u32 (E0308) -----------------------
+    - {
+        id: b2-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 780,
+        height: 48,
+        text: "Use an Option as a u32?",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: b2-code-a,
+        kind: text,
+        x: 300,
+        y: 226,
+        width: 300,
+        height: 40,
+        text: "let minutes: u32 =",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-code-b,
+        kind: text,
+        x: 570,
+        y: 226,
+        width: 160,
+        height: 40,
+        text: "ana_away;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 570,
+        y: 238,
+        width: 128,
+        height: 30,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b2-err,
+        kind: text,
+        x: 300,
+        y: 296,
+        width: 780,
+        height: 40,
+        text: "error[E0308]: mismatched types",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-exp,
+        kind: text,
+        x: 300,
+        y: 342,
+        width: 780,
+        height: 40,
+        text: "expected `u32`, found `Option<u32>`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b2-some-box,
+        kind: rectangle,
+        x: 300,
+        y: 420,
+        width: 220,
+        height: 76,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b2-some-text,
+        kind: text,
+        x: 342,
+        y: 438,
+        width: 160,
+        height: 40,
+        text: "Some(15)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-or,
+        kind: text,
+        x: 550,
+        y: 438,
+        width: 50,
+        height: 40,
+        text: "or",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-none-box,
+        kind: rectangle,
+        x: 620,
+        y: 420,
+        width: 180,
+        height: 76,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b2-none-text,
+        kind: text,
+        x: 676,
+        y: 438,
+        width: 100,
+        height: 40,
+        text: "None",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b2-none-note,
+        kind: text,
+        x: 830,
+        y: 438,
+        width: 260,
+        height: 40,
+        text: "no number!",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b2-fix,
+        kind: text,
+        x: 300,
+        y: 556,
+        width: 360,
+        height: 40,
+        text: "ana_away.unwrap_or(0)",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b2-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 660,
+        y: 548,
+        width: 120,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b2-result,
+        kind: text,
+        x: 800,
+        y: 556,
+        width: 200,
+        height: 40,
+        text: "u32: 0",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -50,107 +389,308 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "active now\naway for 15 min\nvalue 7\n"
+      stdout: "ana is Active\nben is Away(15)\nben == Away(20)? false\nNone and Some(15)\nana: 0 min away\n"
       stderr: ""
 
 scenes:
-  - id: what-is-an-enum
+  - id: enum-slide
+    chapter: One of a fixed set
     narration: >
-      [[mark:show-enum]] An enum is a type that's exactly one of a fixed set of
-      variants. Here a Status is either Active, or Away — and Away carries a
-      number, the minutes someone's been gone. One type, several shapes.
+      [[mark:show-enum]] A user in a chat app is either active, or away. In
+      many languages, you'd store that as a string, plus a separate number
+      for the minutes. Rust has a better tool, the enum. It's a type that's
+      one of a fixed set of variants. Here, a Status is Active, or it's Away.
+      And a variant can carry data. Away holds a u32, the minutes the user's
+      been away.
     sources:
       - title: "The Rust Book — Defining an Enum"
         url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"
     actions:
+      # Shown in the quiet handle before the first word.
       - id: show-enum
         type: slide.show
-        at: { mark: show-enum }
+        at: { mark: show-enum, offsetMs: -1500 }
         slideId: enum-slide
 
-  - id: option
+  - id: one-of
     narration: >
-      [[mark:show-option]] The most important enum is Option. Rust has no null.
-      A value is either Some, holding data, or None. Because it's an enum, the
-      compiler makes you handle both cases before you use it.
+      Let's draw it. [[mark:draw-variants]] A Status value is always exactly
+      one of these two. [[mark:draw-data]] And only Away has minutes, so an
+      active user can't have minutes by mistake. [[mark:draw-one]] That's the
+      difference from a struct. A struct holds all its fields at once. An
+      enum holds one variant at a time. [[mark:draw-busy]] The list is also
+      fixed. Try a variant that isn't in the list, like Busy, and the
+      compiler stops you with error E0599: there's no variant named Busy. A
+      string would accept any text, even a typo, and you'd only find the bug
+      while the program runs.
     sources:
-      - title: "The Rust Book — The Option Enum"
+      - title: "The Rust Book — Defining an Enum"
+        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"
+      - title: "The Rust Book — Defining and Instantiating Structs"
+        url: "https://doc.rust-lang.org/book/ch05-01-defining-structs.html"
+      - title: "Rust error codes — E0599"
+        url: "https://doc.rust-lang.org/error_codes/E0599.html"
+    actions:
+      - id: close-enum-slide
+        type: slide.close
+        at: { scene: start }
+      - id: open-board-status
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: 300 }
+        open: true
+        upsertIds: [b1-title]
+      - id: draw-variants
+        type: whiteboard.apply
+        at: { mark: draw-variants }
+        upsertIds: [b1-active-box, b1-active-text, b1-or, b1-away-box, b1-away-text]
+        drawMs: 2000
+      - id: draw-data
+        type: whiteboard.apply
+        at: { mark: draw-data }
+        upsertIds: [b1-data-box, b1-data-text, b1-active-note, b1-away-note]
+        drawMs: 1800
+      - id: draw-one
+        type: whiteboard.apply
+        at: { mark: draw-one }
+        upsertIds: [b1-one, b1-one-line]
+        drawMs: 1600
+      - id: draw-busy
+        type: whiteboard.apply
+        at: { mark: draw-busy }
+        upsertIds: [b1-busy-code, b1-busy-strike, b1-busy-err]
+        drawMs: 2400
+
+  - id: define
+    chapter: Writing an enum
+    narration: >
+      Now let's write it. [[mark:type-enum]] The enum keyword, the name, then
+      the variants in curly braces, with commas between them. The derive line
+      adds two abilities. Debug, which you saw with structs, lets us print a
+      Status. PartialEq lets us compare two of them with double equals.
+      [[mark:select-away]] And Away(u32) says this variant carries one u32.
+      Active carries nothing.
+    sources:
+      - title: "The Rust Book — Defining an Enum"
+        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"
+      - title: "The Rust Book — Derivable Traits"
+        url: "https://doc.rust-lang.org/book/appendix-03-derivable-traits.html"
+    actions:
+      - id: close-board-status
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { scene: start, offsetMs: 500 }
+        path: main.rs
+      - id: type-enum
+        type: editor.type
+        at: { mark: type-enum }
+        target:
+          file: main.rs
+          after: "// Who's online in a chat app?\n\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "#[derive(Debug, PartialEq)]\nenum Status {\n    Active,\n    Away(u32),\n}\n\n"
+      - id: select-away
+        type: editor.select
+        at: { mark: select-away }
+        target:
+          file: main.rs
+          text: "Away(u32)"
+          occurrence: 1
+
+  - id: values
+    narration: >
+      [[mark:type-values]] To make a value, write the enum's name, two colons,
+      and the variant. [[mark:select-ben]] For Away, you pass the minutes in
+      parentheses, like a function call. In fact, Away really is a function:
+      it takes a u32 and builds a Status. Then we print both.
+      [[mark:type-compare]] The minutes are part of the value, too. So ben,
+      which is Away(15), isn't equal to Away(20). Same variant, different
+      data.
+    sources:
+      - title: "The Rust Book — Enum Values"
+        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#enum-values"
+      - title: "std::cmp::PartialEq (derivable)"
+        url: "https://doc.rust-lang.org/std/cmp/trait.PartialEq.html#derivable"
+    actions:
+      - id: type-values
+        type: editor.type
+        at: { mark: type-values, offsetMs: -300 }
+        target:
+          file: main.rs
+          after: "fn main() {\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    let ana = Status::Active;\n    let ben = Status::Away(15);\n    println!(\"ana is {ana:?}\");\n    println!(\"ben is {ben:?}\");\n"
+      - id: select-ben
+        type: editor.select
+        at: { mark: select-ben }
+        target:
+          file: main.rs
+          text: "Status::Away(15)"
+          occurrence: 1
+      - id: type-compare
+        type: editor.type
+        at: { mark: type-compare }
+        target:
+          file: main.rs
+          after: "    println!(\"ben is {ben:?}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    println!(\"ben == Away(20)? {}\", ben == Status::Away(20));\n"
+
+  - id: option-slide
+    chapter: Option instead of null
+    narration: >
+      [[mark:show-option]] Now, an enum you'll use very often: Option. Rust
+      has no null. In many languages, a value can be null, and if you forget
+      to check, the program crashes while it's running. Rust puts the missing
+      case into the type instead. An Option is either Some, holding a value,
+      or None, holding nothing. That's the same shape as our Status.
+      [[mark:option-t]] The T is a placeholder for any type, so an Option of
+      u32 is a u32 that might be missing. And the compiler makes you handle
+      both cases. You can write Some and None on their own, without Option
+      in front.
+    sources:
+      - title: "The Rust Book — The Option Enum and Its Advantages Over Null Values"
         url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantages-over-null-values"
+      - title: "std::option::Option"
+        url: "https://doc.rust-lang.org/std/option/enum.Option.html"
+      - title: "std::prelude"
+        url: "https://doc.rust-lang.org/std/prelude/index.html"
     actions:
       - id: show-option
         type: slide.show
         at: { mark: show-option }
         slideId: option-slide
 
-  - id: match-the-enum
+  - id: options-code
     narration: >
-      [[mark:open]] Here are our two statuses. [[mark:type-describe]] describe
-      matches on the status. Active gives a fixed message.
-      [[mark:select-away]] Away binds the number inside the variant, so we can
-      print how many minutes. We call it on both.
+      Back in the editor. [[mark:type-options]] Ana's active, so she hasn't
+      been away at all. That's None. Ben's been away fifteen minutes, so
+      that's Some(15). [[mark:select-option-type]] Both have the type Option
+      of u32, and we print them too.
     sources:
-      - title: "The Rust Book — The match Control Flow Construct"
-        url: "https://doc.rust-lang.org/book/ch06-02-match.html"
+      - title: "std::option::Option"
+        url: "https://doc.rust-lang.org/std/option/enum.Option.html"
     actions:
-      - id: close-slide
+      - id: close-option-slide
         type: slide.close
         at: { scene: start }
-      - id: open-main
-        type: workspace.openFile
-        at: { mark: open }
-        path: main.rs
-      - id: type-describe
+      - id: type-options
         type: editor.type
-        at: { mark: type-describe, offsetMs: -400 }
+        at: { mark: type-options }
         target:
           file: main.rs
-          after: "    let b = Status::Away(15);\n"
+          after: "    println!(\"ben == Away(20)? {}\", ben == Status::Away(20));\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    println!(\"{}\", describe(&a));\n    println!(\"{}\", describe(&b));\n}\n\nfn describe(s: &Status) -> String {\n    match s {\n        Status::Active => String::from(\"active now\"),\n        Status::Away(mins) => format!(\"away for {mins} min\"),\n    }\n"
-      - id: select-away
+        text: "\n    let ana_away: Option<u32> = None;\n    let ben_away: Option<u32> = Some(15);\n    println!(\"{ana_away:?} and {ben_away:?}\");\n"
+      - id: select-option-type
         type: editor.select
-        at: { mark: select-away }
+        at: { mark: select-option-type }
         target:
           file: main.rs
-          text: "Status::Away(mins)"
+          text: "Option<u32>"
           occurrence: 1
 
-  - id: option-match
+  - id: compiler
+    chapter: The compiler's answer
     narration: >
-      [[mark:type-option]] Now an Option holding Some seven. We match it too:
-      [[mark:select-option-arms]] Some hands us the value, while None is the
-      empty case. There's no way to forget the None. That's how Rust removes
-      null crashes.
+      So can you use Ana's Option as a plain number? [[mark:draw-broken]]
+      Let's say you put it in a u32. [[mark:draw-error]] The compiler refuses,
+      with error E0308, mismatched types. It expected a u32, and found an
+      Option of u32. [[mark:draw-cases]] Here's why. An Option might be
+      None, and None has no number inside. [[mark:draw-fix]] So you have to
+      say what happens in the None case. One way is unwrap_or. It gives you
+      the value inside Some, or the default you pass it.
     sources:
-      - title: "The Rust Book — Concise Control Flow with if let"
-        url: "https://doc.rust-lang.org/book/ch06-03-if-let.html"
+      - title: "Rust error codes — E0308"
+        url: "https://doc.rust-lang.org/error_codes/E0308.html"
+      - title: "The Rust Book — The Option Enum and Its Advantages Over Null Values"
+        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantages-over-null-values"
+      - title: "std::option::Option::unwrap_or"
+        url: "https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap_or"
     actions:
-      - id: type-option
+      - id: open-board-option
+        type: whiteboard.apply
+        at: { scene: start }
+        open: true
+        clear: true
+        upsertIds: [b2-title]
+      - id: draw-broken
+        type: whiteboard.apply
+        at: { mark: draw-broken }
+        upsertIds: [b2-code-a, b2-code-b]
+        drawMs: 1400
+      - id: draw-error
+        type: whiteboard.apply
+        at: { mark: draw-error }
+        upsertIds: [b2-underline, b2-err, b2-exp]
+        drawMs: 2400
+      - id: draw-cases
+        type: whiteboard.apply
+        at: { mark: draw-cases }
+        upsertIds: [b2-some-box, b2-some-text, b2-or, b2-none-box, b2-none-text, b2-none-note]
+        drawMs: 2400
+      - id: draw-fix
+        type: whiteboard.apply
+        at: { mark: draw-fix }
+        upsertIds: [b2-fix, b2-arrow, b2-result]
+        drawMs: 2000
+
+  - id: fix
+    narration: >
+      [[mark:type-fix]] Let's do that in code. Again, minutes is a u32,
+      but this time we call unwrap_or on Ana's Option, with a default of zero.
+      [[mark:select-unwrap]] unwrap_or handles both cases, so minutes is a
+      plain u32. [[mark:type-print]] Then we print it.
+    sources:
+      - title: "std::option::Option::unwrap_or"
+        url: "https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap_or"
+    actions:
+      - id: close-board-option
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-fix
         type: editor.type
-        at: { mark: type-option, offsetMs: -400 }
+        at: { mark: type-fix, offsetMs: 400 }
         target:
           file: main.rs
-          after: "    println!(\"{}\", describe(&b));\n"
+          after: "    println!(\"{ana_away:?} and {ben_away:?}\");\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: "\n    let minutes: u32 = ana_away.unwrap_or(0);\n"
+      - id: select-unwrap
+        type: editor.select
+        at: { mark: select-unwrap }
+        target:
+          file: main.rs
+          text: "unwrap_or(0)"
+          occurrence: 1
+      - id: type-print
+        type: editor.type
+        at: { mark: type-print }
+        target:
+          file: main.rs
+          after: "    let minutes: u32 = ana_away.unwrap_or(0);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let found: Option<i32> = Some(7);\n    match found {\n        Some(v) => println!(\"value {v}\"),\n        None => println!(\"no value\"),\n    }\n"
-      - id: select-option-arms
-        type: editor.select
-        at: { mark: select-option-arms }
-        target:
-          file: main.rs
-          text: "        Some(v) => println!(\"value {v}\"),\n        None => println!(\"no value\"),"
-          occurrence: 1
+        text: "    println!(\"ana: {minutes} min away\");\n"
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Active reads active now, Away reports fifteen
-      minutes, and the Option gives us its value, seven. Enums name a fixed set
-      of choices; Option is the one that makes null a thing of the past.
+      [[mark:run]] Let's run it. ana is Active, and ben is Away(15).
+      Comparing ben with Away(20) gives false. Then None, and Some(15). And
+      unwrap_or turned Ana's None into zero minutes.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — Defining an Enum"
+        url: "https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"
+      - title: "std::option::Option"
+        url: "https://doc.rust-lang.org/std/option/enum.Option.html"
     actions:
       - id: run
         type: runtime.run
@@ -159,13 +699,28 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "away for 15 min"
+        contains: "ben == Away(20)? false"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "Status::Away(mins) => format!"
+        contains: "let minutes: u32 = ana_away.unwrap_or(0);"
+
+  - id: wrap
+    narration: >
+      So an enum is a type that's one of a fixed set of variants, and a
+      variant can carry data. Option is the enum Rust uses instead of null,
+      and the compiler makes you handle None. Next, match: how to run
+      different code for each variant, and get the data back out.
+    sources:
+      - title: "The Rust Book — Enums and Pattern Matching"
+        url: "https://doc.rust-lang.org/book/ch06-00-enums.html"
+      - title: "The Rust Book — The match Control Flow Construct"
+        url: "https://doc.rust-lang.org/book/ch06-02-match.html"
+    actions: []
 
 checks:
+  # 500 (not 300): google-svg deck slides embed per-slide font data whose
+  # paint briefly stalls the main thread at each show/close.
   - { type: timing.p95Ms, max: 500 }
