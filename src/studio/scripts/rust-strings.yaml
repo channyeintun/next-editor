@@ -1,13 +1,55 @@
-# One idea: String is owned, growable UTF-8 text (heap); &str is a borrowed
-# view (like a literal). You grow a String with push_str/push and build new
-# ones with format!. A whiteboard sketch, then a String grown and formatted.
+# Rust from zero, lesson 13: strings.
+#
+# The arc: a whiteboard draws the two string types side by side. A String is
+# a pointer, length and capacity (like a Vec) that owns its text on the heap
+# and can grow into spare room; a string slice (&str) is only a pointer and a
+# length that borrows text someone else owns, such as a literal stored in the
+# program. Why two: owning text costs a heap allocation, and code that only
+# reads doesn't need one. The editor then builds a String: String::from
+# copies a literal into an owned String, push_str appends a string slice,
+# push appends one char, and format! joins a String and a &str into a new
+# String without taking ownership of either (the + operator, by contrast,
+# takes the left String). A second board answers why place[0] doesn't
+# compile: strings are UTF-8, "café" is five bytes but four characters, a
+# byte index could land inside é and a character index couldn't be fast, so
+# the compiler refuses with E0277; a byte range that cuts é panics at run
+# time; .chars() gives whole characters. Back in the editor, len (bytes)
+# against chars().count() (characters), and a for loop over chars(). The
+# lesson is insert-only with one run, so the broken lines are only shown on
+# the board. One run at the end.
+#
+# Every message on a board or in the narration was confirmed with rustc 1.98
+# (edition 2024) on the broken variants:
+#   `let place: &str = "café"; let first = place[0];` (and the same on a String)
+#     error[E0277]: the type `str` cannot be indexed by `{integer}`
+#       ^ string indices are ranges of `usize`
+#   `let part = &place[0..4];` compiles, then panics when it runs:
+#     end byte index 4 is not a char boundary; it is inside 'é' (bytes 3..5 of string)
+#   `let s3 = s1 + &s2; println!("{s1} {s3}");` (the + operator takes s1)
+#     error[E0382]: borrow of moved value: `s1`   (not shown; narration only
+#     says + takes ownership of the String on its left)
+# The bytes on board 2 are the real UTF-8 bytes of "café": 63 61 66 C3 A9.
+#
+# Spoken forms: the narration says "format" and "print line" (the course's
+# convention from rust-hello; a "!" mid-sentence breaks the TTS prosody and the
+# lexicon has no println entry), and "the e with an accent" rather than a lone
+# "é" or spelled letters, which Pocket TTS may drop or misread. "café" as a
+# whole word stays. The captions and the board keep the real code.
+#
+# Board colours: blue = the variable being named (message: String,
+# place: &str), green = what works (owned text that can grow, .chars()),
+# orange = the caveat (spare room, borrowed and fixed, the two bytes of é,
+# half a character, a range that panics), red = the error, violet = the
+# result (only read → &str / build → String, 5 bytes but 4 characters).
+# #1e1e1e paints white on the dark board.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-strings.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-strings
-  title: "Rust strings: String vs &str"
+  title: "Rust from zero: Strings"
   locale: en-US
   workspace:
     lessonType: rust
@@ -16,64 +58,481 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let mut greeting = String::from("hello");
-            println!("start: {greeting}");
+            let mut message = String::from("Hello");
+            println!("{message}");
         }
-  # Diagram: String drawn as an owned heap buffer holding the text, with the
-  # &str borrowed view and the grow-ops labelled.
   whiteboardAssets:
-    - id: str-title
-      kind: text
-      x: 300
-      y: 165
-      width: 720
-      height: 44
-      text: "String vs &str"
-      strokeColor: "#1e1e1e"
-      fontSize: 34
-    - id: str-boxlabel
-      kind: text
-      x: 360
-      y: 250
-      width: 460
-      height: 32
-      text: "String — owns, grows (heap)"
-      strokeColor: "#1971c2"
-      fontSize: 24
-    - id: str-box
-      kind: rectangle
-      x: 340
-      y: 288
-      width: 520
-      height: 84
-      strokeColor: "#1971c2"
-    - id: str-content
-      kind: text
-      x: 366
-      y: 316
-      width: 480
-      height: 40
-      text: "hello, world!"
-      strokeColor: "#1e1e1e"
-      fontSize: 30
-    - id: str-view
-      kind: text
-      x: 340
-      y: 402
-      width: 740
-      height: 34
-      text: '&str — a borrowed view, like "Rust"'
-      strokeColor: "#f08c00"
-      fontSize: 26
-    - id: str-note
-      kind: text
-      x: 340
-      y: 450
-      width: 740
-      height: 34
-      text: "grow a String: push_str · push · format!"
-      strokeColor: "#1e1e1e"
-      fontSize: 26
+    # ---- Board 1: String vs &str ------------------------------------------
+    - {
+        id: t1-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 440,
+        height: 48,
+        text: "String vs &str",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    # The String: pointer, length, capacity → owned heap text with spare room.
+    - {
+        id: t1-s-box,
+        kind: rectangle,
+        x: 290,
+        y: 222,
+        width: 270,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t1-s-name,
+        kind: text,
+        x: 308,
+        y: 232,
+        width: 240,
+        height: 36,
+        text: "message: String",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: t1-s-fields,
+        kind: text,
+        x: 308,
+        y: 276,
+        width: 230,
+        height: 36,
+        text: "ptr | len | cap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t1-s-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 574,
+        y: 248,
+        width: 92,
+        height: 48,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t1-heap-box,
+        kind: rectangle,
+        x: 680,
+        y: 232,
+        width: 190,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: t1-heap-text,
+        kind: text,
+        x: 738,
+        y: 254,
+        width: 80,
+        height: 36,
+        text: "Hello",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t1-spare-box,
+        kind: rectangle,
+        x: 870,
+        y: 232,
+        width: 120,
+        height: 80,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: t1-spare-text,
+        kind: text,
+        x: 894,
+        y: 254,
+        width: 76,
+        height: 36,
+        text: "spare",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t1-heap-label,
+        kind: text,
+        x: 680,
+        y: 326,
+        width: 400,
+        height: 36,
+        text: "on the heap: owned, can grow",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # The string slice: pointer and length → text it borrows (a literal).
+    - {
+        id: t1-v-box,
+        kind: rectangle,
+        x: 290,
+        y: 420,
+        width: 270,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t1-v-name,
+        kind: text,
+        x: 308,
+        y: 430,
+        width: 200,
+        height: 36,
+        text: "place: &str",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: t1-v-fields,
+        kind: text,
+        x: 308,
+        y: 474,
+        width: 140,
+        height: 36,
+        text: "ptr | len",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t1-v-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 574,
+        y: 446,
+        width: 92,
+        height: 48,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t1-lit-box,
+        kind: rectangle,
+        x: 680,
+        y: 430,
+        width: 150,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t1-lit-text,
+        kind: text,
+        x: 724,
+        y: 452,
+        width: 64,
+        height: 36,
+        text: "café",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t1-lit-where,
+        kind: text,
+        x: 846,
+        y: 452,
+        width: 220,
+        height: 36,
+        text: "in the program",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t1-lit-label,
+        kind: text,
+        x: 680,
+        y: 524,
+        width: 400,
+        height: 36,
+        text: "borrowed: read, can't grow",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t1-why,
+        kind: text,
+        x: 290,
+        y: 600,
+        width: 640,
+        height: 36,
+        text: "only read → &str     build text → String",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board 2: why place[0] doesn't compile (E0277) ---------------------
+    - {
+        id: t2-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 620,
+        height: 48,
+        text: "Why place[0] doesn't compile",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    # "café" as UTF-8: five byte boxes, 80px each from x=330; é spans 3 and 4.
+    - {
+        id: t2-ch0,
+        kind: text,
+        x: 363,
+        y: 212,
+        width: 24,
+        height: 36,
+        text: "c",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-ch1,
+        kind: text,
+        x: 443,
+        y: 212,
+        width: 24,
+        height: 36,
+        text: "a",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-ch2,
+        kind: text,
+        x: 525,
+        y: 212,
+        width: 24,
+        height: 36,
+        text: "f",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-ch3,
+        kind: text,
+        x: 643,
+        y: 212,
+        width: 24,
+        height: 36,
+        text: "é",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: t2-b0, kind: rectangle, x: 330, y: 252, width: 80, height: 64, strokeColor: "#1e1e1e" }
+    - { id: t2-b1, kind: rectangle, x: 410, y: 252, width: 80, height: 64, strokeColor: "#1e1e1e" }
+    - { id: t2-b2, kind: rectangle, x: 490, y: 252, width: 80, height: 64, strokeColor: "#1e1e1e" }
+    - { id: t2-b3, kind: rectangle, x: 570, y: 252, width: 80, height: 64, strokeColor: "#f08c00" }
+    - { id: t2-b4, kind: rectangle, x: 650, y: 252, width: 80, height: 64, strokeColor: "#f08c00" }
+    - {
+        id: t2-v0,
+        kind: text,
+        x: 354,
+        y: 266,
+        width: 32,
+        height: 36,
+        text: "63",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-v1,
+        kind: text,
+        x: 434,
+        y: 266,
+        width: 32,
+        height: 36,
+        text: "61",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-v2,
+        kind: text,
+        x: 514,
+        y: 266,
+        width: 32,
+        height: 36,
+        text: "66",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-v3,
+        kind: text,
+        x: 592,
+        y: 266,
+        width: 36,
+        height: 36,
+        text: "C3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-v4,
+        kind: text,
+        x: 672,
+        y: 266,
+        width: 36,
+        height: 36,
+        text: "A9",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-i0,
+        kind: text,
+        x: 363,
+        y: 324,
+        width: 24,
+        height: 36,
+        text: "0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-i1,
+        kind: text,
+        x: 443,
+        y: 324,
+        width: 24,
+        height: 36,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-i2,
+        kind: text,
+        x: 523,
+        y: 324,
+        width: 24,
+        height: 36,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-i3,
+        kind: text,
+        x: 603,
+        y: 324,
+        width: 24,
+        height: 36,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-i4,
+        kind: text,
+        x: 683,
+        y: 324,
+        width: 24,
+        height: 36,
+        text: "4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-nbytes,
+        kind: text,
+        x: 770,
+        y: 256,
+        width: 140,
+        height: 36,
+        text: "5 bytes",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: t2-nchars,
+        kind: text,
+        x: 770,
+        y: 296,
+        width: 200,
+        height: 36,
+        text: "4 characters",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # The broken line and the compiler's answer.
+    - {
+        id: t2-code,
+        kind: text,
+        x: 300,
+        y: 392,
+        width: 300,
+        height: 36,
+        text: "let first = place[0];",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t2-u-code,
+        kind: freedraw,
+        stroke: underline,
+        x: 462,
+        y: 402,
+        width: 116,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: t2-half,
+        kind: text,
+        x: 660,
+        y: 392,
+        width: 300,
+        height: 36,
+        text: "place[3] → half of é",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t2-err1,
+        kind: text,
+        x: 300,
+        y: 452,
+        width: 440,
+        height: 36,
+        text: "error[E0277]: the type `str`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: t2-err2,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 480,
+        height: 36,
+        text: "cannot be indexed by `{integer}`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: t2-panic,
+        kind: text,
+        x: 300,
+        y: 556,
+        width: 420,
+        height: 36,
+        text: "&place[0..4] cuts é → panic",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t2-fix,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 470,
+        height: 36,
+        text: "whole characters → place.chars()",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -86,108 +545,321 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "start: hello\ngrown: hello, world!\nlength in bytes: 13\nhello, world! from Rust\n"
+      stdout: "Hello, world!\nHello, world! Meet me at the café.\ncafé: 5 bytes, 4 characters\nc\na\nf\né\n"
       stderr: ""
 
 scenes:
-  - id: two-string-types
+  - id: two-types
+    chapter: Two kinds of string
     narration: >
-      [[mark:board]] Rust has two string types. [[mark:show-string]] A String is
-      owned and growable — it lives on the heap and holds your text.
-      [[mark:show-view]] A &str is a borrowed view, like a text literal you
-      don't own. [[mark:show-note]] You grow a String with push_str, push, or
-      format. [[mark:board-close]] Let's build one up.
+      Rust has two main string types, and most programs use both.
+      [[mark:draw-string]] First, String. Like a Vec, it holds three things:
+      a pointer to its text on the heap, a length, and a capacity. The String
+      owns that text, so it can change and grow it. The capacity can
+      include spare room. When that's full, the String moves its text to a
+      bigger block on the heap.
+      [[mark:draw-str]] The other type is the string slice, written ampersand
+      str. It's only a pointer and a length. It borrows text that something
+      else owns: part of a String, or a literal stored in your program. It
+      can read that text, but it can't grow it.
+      [[mark:draw-why]] So why two types? Owning text needs a heap
+      allocation, and reading text doesn't. That's why functions that only
+      read take a string slice, and code that builds text uses a String.
     sources:
-      - title: "The Rust Book — Storing UTF-8 Text with Strings"
-        url: "https://doc.rust-lang.org/book/ch08-02-strings.html"
+      - title: "The Rust Book — Defining Strings"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#defining-strings"
+      - title: "std::string::String — Representation"
+        url: "https://doc.rust-lang.org/std/string/struct.String.html#representation"
+      - title: "The Rust Book — String Literals as Slices"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-literals-as-slices"
+      - title: "The Rust Book — String Slices as Parameters"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices-as-parameters"
     actions:
-      - id: open-board
+      # Opens in the quiet handle before the first word, already titled.
+      - id: open-board-types
         type: whiteboard.apply
-        at: { mark: board }
+        at: { scene: start, offsetMs: -1500 }
         open: true
-        upsertIds: [str-title]
-      - id: show-string
+        upsertIds: [t1-title]
+      - id: draw-string
         type: whiteboard.apply
-        at: { mark: show-string }
-        upsertIds: [str-boxlabel, str-box, str-content]
-      - id: show-view
+        at: { mark: draw-string }
+        upsertIds:
+          [
+            t1-s-box,
+            t1-s-name,
+            t1-s-fields,
+            t1-s-arrow,
+            t1-heap-box,
+            t1-heap-text,
+            t1-spare-box,
+            t1-spare-text,
+            t1-heap-label,
+          ]
+        drawMs: 4000
+      - id: draw-str
         type: whiteboard.apply
-        at: { mark: show-view }
-        upsertIds: [str-view]
-      - id: show-note
+        at: { mark: draw-str }
+        upsertIds:
+          [
+            t1-v-box,
+            t1-v-name,
+            t1-v-fields,
+            t1-v-arrow,
+            t1-lit-box,
+            t1-lit-text,
+            t1-lit-where,
+            t1-lit-label,
+          ]
+        drawMs: 3600
+      - id: draw-why
         type: whiteboard.apply
-        at: { mark: show-note }
-        upsertIds: [str-note]
-      - id: close-board
-        type: whiteboard.apply
-        at: { mark: board-close }
-        open: false
+        at: { mark: draw-why }
+        upsertIds: [t1-why]
+        drawMs: 1600
 
-  - id: grow-it
+  - id: build
+    chapter: Building a String
     narration: >
-      [[mark:open]] We start with the String hello. [[mark:type-grow]] Let's
-      grow it in two steps. [[mark:select-grow]] push_str adds a whole piece,
-      comma world. push adds one character, the exclamation mark. Now len gives
-      the size in bytes: thirteen, because these characters are one byte each.
+      Let's build a String in code. [[mark:open-main]] Our program starts
+      with one, called message.
+      [[mark:select-from]] String::from takes a literal, which is a string
+      slice, and copies its text into a new String on the heap. Now message
+      owns that text. It's declared with mut, so we can change it.
+      [[mark:type-push-str]] push_str adds a string slice to the end. If
+      there's no spare room, the String grows for you.
+      [[mark:type-push]] push adds one character. The exclamation mark is in
+      single quotes, because it's a char, not a string.
     sources:
-      - title: "The Rust Book — Updating a String"
-        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#updating-a-string"
+      - title: "The Rust Book — Creating a New String"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#creating-a-new-string"
+      - title: "The Rust Book — Appending with push_str or push"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#appending-with-push_str-or-push"
+      - title: "std::string::String::push_str"
+        url: "https://doc.rust-lang.org/std/string/struct.String.html#method.push_str"
+      - title: "std::string::String::push"
+        url: "https://doc.rust-lang.org/std/string/struct.String.html#method.push"
     actions:
+      - id: close-board-types
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: open-main
         type: workspace.openFile
-        at: { mark: open }
+        at: { mark: open-main }
         path: main.rs
-      - id: type-grow
-        type: editor.type
-        at: { mark: type-grow, offsetMs: -400 }
-        target:
-          file: main.rs
-          after: "    println!(\"start: {greeting}\");\n"
-          occurrence: 1
-        cadence: line-by-line
-        text: "    greeting.push_str(\", world\");\n    greeting.push('!');\n    println!(\"grown: {greeting}\");\n    println!(\"length in bytes: {}\", greeting.len());\n"
-      - id: select-grow
+      - id: select-from
         type: editor.select
-        at: { mark: select-grow }
+        at: { mark: select-from }
         target:
           file: main.rs
-          text: "    greeting.push_str(\", world\");\n    greeting.push('!');"
+          text: 'String::from("Hello")'
           occurrence: 1
+      - id: type-push-str
+        type: editor.type
+        at: { mark: type-push-str }
+        target:
+          file: main.rs
+          after: "    let mut message = String::from(\"Hello\");\n"
+          occurrence: 1
+        cadence: natural
+        text: "    message.push_str(\", world\");\n"
+      - id: type-push
+        type: editor.type
+        at: { mark: type-push }
+        target:
+          file: main.rs
+          after: "    message.push_str(\", world\");\n"
+          occurrence: 1
+        cadence: natural
+        text: "    message.push('!');\n"
 
-  - id: format-it
+  - id: join
     narration: >
-      [[mark:type-format]] name is a &str, a borrowed literal.
-      [[mark:select-format]] format! builds a new String from a template,
-      dropping our values into the braces without changing the originals.
+      [[mark:type-format]] Now let's join some text. place is a literal, so
+      its type is a string slice.
+      [[mark:select-format]] The format macro works like print line, but
+      instead of printing, it returns a new String. It only borrows message
+      and place, so you can still use both. A plus sign can join strings
+      too, but it takes ownership of the String on its left. So format is
+      usually the clearer choice.
     sources:
-      - title: "The Rust Book — Concatenation with format!"
-        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#concatenation-with-the--operator-or-the-format-macro"
+      - title: "The Rust Book — Concatenating with + or format!"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#concatenating-with--or-format"
+      - title: "std — macro format!"
+        url: "https://doc.rust-lang.org/std/macro.format.html"
     actions:
       - id: type-format
         type: editor.type
         at: { mark: type-format, offsetMs: -400 }
         target:
           file: main.rs
-          after: "    println!(\"length in bytes: {}\", greeting.len());\n"
+          after: "    println!(\"{message}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let name = \"Rust\";\n    let line = format!(\"{greeting} from {name}\");\n    println!(\"{line}\");\n"
+        text: "\n    let place: &str = \"café\";\n    let invite = format!(\"{message} Meet me at the {place}.\");\n    println!(\"{invite}\");\n"
       - id: select-format
         type: editor.select
         at: { mark: select-format }
         target:
           file: main.rs
-          text: 'format!("{greeting} from {name}")'
+          text: "format!"
           occurrence: 1
+
+  - id: indexing
+    chapter: Why place[0] doesn't compile
+    narration: >
+      In many languages, you'd get the first letter with a zero in square
+      brackets. In Rust, that doesn't compile. Let's see why.
+      [[mark:draw-bytes]] Strings in Rust are stored as UTF-8 bytes. Each box
+      is one byte. Plain English letters take one byte each, but the e with
+      an accent takes two. Other characters can take three or four.
+      That's how a string stores its text. A char value on its own is still
+      four bytes, as you saw with data types.
+      [[mark:draw-counts]] So café is five bytes long, but it's only four
+      characters.
+      [[mark:draw-code]] Now, what should index zero give you? A byte? Then
+      index three would give you half of that e. A character? Then Rust
+      would have to read from the start to find it, and indexing should
+      always be fast.
+      [[mark:draw-error]] So Rust doesn't guess. The compiler stops with
+      error E0277: the type str can't be indexed by an integer. str is the
+      text a string slice points to. A String gives the same error.
+      [[mark:draw-panic]] You can still slice with a byte range. But a range
+      that cuts that e in half panics when the program runs.
+      [[mark:draw-chars]] To get whole characters, ask for them with chars.
+    sources:
+      - title: "The Rust Book — Indexing into Strings"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#indexing-into-strings"
+      - title: "The Rust Book — Internal Representation"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#internal-representation"
+      - title: "The Rust Book — Slicing Strings"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#slicing-strings"
+      - title: "Rust error codes — E0277"
+        url: "https://doc.rust-lang.org/error_codes/E0277.html"
+    actions:
+      - id: open-board-index
+        type: whiteboard.apply
+        at: { scene: start }
+        open: true
+        clear: true
+        upsertIds: [t2-title]
+      - id: draw-bytes
+        type: whiteboard.apply
+        at: { mark: draw-bytes }
+        upsertIds:
+          [
+            t2-b0,
+            t2-b1,
+            t2-b2,
+            t2-b3,
+            t2-b4,
+            t2-v0,
+            t2-v1,
+            t2-v2,
+            t2-v3,
+            t2-v4,
+            t2-i0,
+            t2-i1,
+            t2-i2,
+            t2-i3,
+            t2-i4,
+            t2-ch0,
+            t2-ch1,
+            t2-ch2,
+            t2-ch3,
+          ]
+        drawMs: 4200
+      - id: draw-counts
+        type: whiteboard.apply
+        at: { mark: draw-counts }
+        upsertIds: [t2-nbytes, t2-nchars]
+        drawMs: 1400
+      - id: draw-code
+        type: whiteboard.apply
+        at: { mark: draw-code }
+        upsertIds: [t2-code, t2-u-code, t2-half]
+        drawMs: 2400
+      - id: draw-error
+        type: whiteboard.apply
+        at: { mark: draw-error }
+        upsertIds: [t2-err1, t2-err2]
+        drawMs: 2400
+      - id: draw-panic
+        type: whiteboard.apply
+        at: { mark: draw-panic }
+        upsertIds: [t2-panic]
+        drawMs: 1400
+      - id: draw-chars
+        type: whiteboard.apply
+        at: { mark: draw-chars }
+        upsertIds: [t2-fix]
+        drawMs: 1400
+
+  - id: chars
+    chapter: Walking the characters
+    narration: >
+      [[mark:type-counts]] Back in the code, let's measure café both ways.
+      [[mark:select-len]] len gives you the length in bytes, because bytes
+      are what a string stores.
+      [[mark:select-chars]] chars gives you the characters one at a time, and
+      count counts them.
+      [[mark:type-loop]] And a for loop over chars prints each character on
+      its own line.
+    sources:
+      - title: "The Rust Book — Iterating Over Strings"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#iterating-over-strings"
+      - title: "std — str::len"
+        url: "https://doc.rust-lang.org/std/primitive.str.html#method.len"
+      - title: "std — str::chars"
+        url: "https://doc.rust-lang.org/std/primitive.str.html#method.chars"
+    actions:
+      - id: close-board-index
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-counts
+        type: editor.type
+        at: { mark: type-counts, offsetMs: 300 }
+        target:
+          file: main.rs
+          after: "    println!(\"{invite}\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    let bytes = place.len();\n    let characters = place.chars().count();\n    println!(\"{place}: {bytes} bytes, {characters} characters\");\n"
+      - id: select-len
+        type: editor.select
+        at: { mark: select-len }
+        target:
+          file: main.rs
+          text: "place.len()"
+          occurrence: 1
+      - id: select-chars
+        type: editor.select
+        at: { mark: select-chars }
+        target:
+          file: main.rs
+          text: "place.chars().count()"
+          occurrence: 1
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target:
+          file: main.rs
+          after: "{characters} characters\");\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    for c in place.chars() {\n        println!(\"{c}\");\n    }\n"
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Hello grows into hello comma world, thirteen
-      bytes, and format! combines it with the name. Reach for String when you
-      own and change text; &str when you're only borrowing a view.
+      [[mark:run]] Let's run it. Hello, world, with the exclamation mark from
+      push. Then the invite that format built. The word café is five bytes,
+      but four characters. And the loop prints each character whole, even
+      the e with the accent.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — Storing UTF-8 Encoded Text with Strings"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html"
     actions:
       - id: run
         type: runtime.run
@@ -196,13 +868,26 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "hello, world! from Rust"
+        contains: "5 bytes, 4 characters"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: 'greeting.push_str(", world");'
+        contains: 'message.push_str(", world");'
+
+  - id: wrap
+    narration: >
+      So a String owns its text and can grow it, and a string slice borrows
+      text to read it. Both are UTF-8, so you don't index them by number. You
+      ask for chars instead. Next, hash maps: values you store and look up by
+      a key.
+    sources:
+      - title: "The Rust Book — Handling the Complexities of Strings"
+        url: "https://doc.rust-lang.org/book/ch08-02-strings.html#handling-the-complexities-of-strings"
+      - title: "The Rust Book — Storing Keys with Associated Values in Hash Maps"
+        url: "https://doc.rust-lang.org/book/ch08-03-hash-maps.html"
+    actions: []
 
 checks:
   - { type: timing.p95Ms, max: 300 }
