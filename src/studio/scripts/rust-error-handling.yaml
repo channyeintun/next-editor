@@ -1,15 +1,47 @@
-# One idea: recoverable errors are values — Result<T,E> is Ok or Err, and the
-# ? operator unwraps Ok or returns Err early, so you handle failure without
-# exceptions. Slides introduce Result + ?; the editor calls a parsing function
-# on good and bad input and matches both, then runs. Slides pin the branded
-# "Next Editor · Rust" Google deck.
+# Rust from zero, lesson 15: error handling.
+#
+# The arc: a whiteboard sorts errors into two kinds (Rust has no exceptions):
+# a bug panics and stops the program (v[99] → index out of bounds), while a
+# failure you expect (bad input) comes back as a Result value and the caller
+# decides. The deck page "Result<T, E>" gives the enum. The editor then
+# parses two strings in a loop; parse returns a Result, not an i32, and a
+# second board shows the compiler's answer when you treat it as a number
+# (E0369). A match handles Ok and Err (leaving one out is E0004). unwrap is
+# named as the panicking shortcut, and the deck page "The ? operator" gives
+# the better one. The editor builds add(), which uses ? on two parses and
+# returns Result; a third board shows ? used in main (E0277). main prints
+# both add() results with {:?}. One run at the end.
+#
+# Every compiler message on the boards or in the narration was confirmed with
+# rustc 1.98 (edition 2024) on the broken variants:
+#   let parsed = input.parse::<i32>(); let doubled = parsed * 2;
+#     error[E0369]: cannot multiply `Result<i32, ParseIntError>` by `{integer}`
+#     (label under `parsed`: Result<i32, ParseIntError>)
+#   fn main() { let n = "42".parse::<i32>()?; … }
+#     error[E0277]: the `?` operator can only be used in a function that
+#       returns `Result` or `Option` (or another type that implements
+#       `FromResidual`)
+#     label: cannot use the `?` operator in a function that returns `()`
+#   match parsed { Ok(n) => … }   (no Err arm)
+#     error[E0004]: non-exhaustive patterns: `Err(_)` not covered
+#   let v = vec![1, 2, 3]; println!("{}", v[99]);   (compiles, then panics)
+#     thread 'main' (…) panicked at …
+#     index out of bounds: the len is 3 but the index is 99
+#   "oops".parse::<i32>().unwrap()   (panics)
+#     called `Result::unwrap()` on an `Err` value: ParseIntError { kind: InvalidDigit }
+#
+# Board colours: red = panic and the compiler errors, blue = Result (the
+# thing being named), orange = bad input / the type that surprises you,
+# green = what works (handle it, the caller decides), violet = the result
+# (an error you expect is a value). #1e1e1e paints white on the dark board.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-error-handling.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-error-handling
-  title: "Rust error handling: Result and ?"
+  title: "Rust from zero: Error handling"
   locale: en-US
   workspace:
     lessonType: rust
@@ -17,17 +49,14 @@ lesson:
     entryFilePath: main.rs
     files:
       main.rs: |
-        fn parse_and_double(text: &str) -> Result<i32, std::num::ParseIntError> {
-            let n: i32 = text.parse()?;
-            Ok(n * 2)
-        }
-
         fn main() {
+            for input in ["42", "oops"] {
+            }
         }
   slides:
     - id: result-slide
       contentType: google
-      name: Result
+      name: Result<T, E>
       deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_42
     - id: question-slide
@@ -35,6 +64,371 @@ lesson:
       name: The ? operator
       deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_53
+  whiteboardAssets:
+    # ---- Board 1: two kinds of errors -------------------------------------
+    - {
+        id: b-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 520,
+        height: 48,
+        text: "Two kinds of errors",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: b-bug-box,
+        kind: rectangle,
+        x: 290,
+        y: 222,
+        width: 290,
+        height: 72,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-bug-text,
+        kind: text,
+        x: 314,
+        y: 240,
+        width: 240,
+        height: 36,
+        text: "a bug: v[99]",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 592,
+        y: 233,
+        width: 110,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-panic-box,
+        kind: rectangle,
+        x: 714,
+        y: 222,
+        width: 160,
+        height: 72,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-panic-text,
+        kind: text,
+        x: 748,
+        y: 240,
+        width: 100,
+        height: 36,
+        text: "panic!",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-stops,
+        kind: text,
+        x: 892,
+        y: 240,
+        width: 200,
+        height: 36,
+        text: "it stops",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-msg,
+        kind: text,
+        x: 300,
+        y: 312,
+        width: 790,
+        height: 36,
+        text: "index out of bounds: the len is 3 but the index is 99",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-input-box,
+        kind: rectangle,
+        x: 290,
+        y: 420,
+        width: 290,
+        height: 72,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-input-text,
+        kind: text,
+        x: 312,
+        y: 438,
+        width: 250,
+        height: 36,
+        text: 'bad input: "oops"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow-b,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 592,
+        y: 431,
+        width: 110,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-result-box,
+        kind: rectangle,
+        x: 714,
+        y: 420,
+        width: 160,
+        height: 72,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-result-text,
+        kind: text,
+        x: 744,
+        y: 438,
+        width: 110,
+        height: 36,
+        text: "Result",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-decide,
+        kind: text,
+        x: 892,
+        y: 438,
+        width: 200,
+        height: 36,
+        text: "you decide",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-parse,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 560,
+        height: 36,
+        text: '"oops".parse::<i32>()  →  Err(…)',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-values,
+        kind: text,
+        x: 290,
+        y: 590,
+        width: 640,
+        height: 36,
+        text: "no exceptions: an expected error is a value",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board 2: using a Result as a number (E0369) -----------------------
+    - {
+        id: e1-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 620,
+        height: 48,
+        text: "A Result is not a number",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: e1-code1,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 560,
+        height: 36,
+        text: "let parsed = input.parse::<i32>();",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e1-code2,
+        kind: text,
+        x: 300,
+        y: 276,
+        width: 400,
+        height: 36,
+        text: "let doubled = parsed * 2;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e1-under,
+        kind: freedraw,
+        stroke: underline,
+        x: 498,
+        y: 286,
+        width: 90,
+        height: 24,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e1-type,
+        kind: text,
+        x: 502,
+        y: 324,
+        width: 420,
+        height: 36,
+        text: "Result<i32, ParseIntError>",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e1-msg1,
+        kind: text,
+        x: 300,
+        y: 404,
+        width: 500,
+        height: 36,
+        text: "error[E0369]: cannot multiply",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e1-msg2,
+        kind: text,
+        x: 300,
+        y: 442,
+        width: 700,
+        height: 36,
+        text: "`Result<i32, ParseIntError>` by `{integer}`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e1-fix,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 640,
+        height: 36,
+        text: "handle Ok and Err first → then use the i32",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board 3: ? needs a Result to return (E0277) -----------------------
+    - {
+        id: e2-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 620,
+        height: 48,
+        text: "? needs a Result to return",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: e2-code1,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 200,
+        height: 36,
+        text: "fn main() {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e2-code2,
+        kind: text,
+        x: 340,
+        y: 268,
+        width: 480,
+        height: 36,
+        text: 'let n = "42".parse::<i32>()?;',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e2-under-main,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 232,
+        width: 120,
+        height: 24,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e2-returns,
+        kind: text,
+        x: 540,
+        y: 222,
+        width: 220,
+        height: 36,
+        text: "returns `()`",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e2-circle-q,
+        kind: freedraw,
+        stroke: circle,
+        x: 690,
+        y: 262,
+        width: 32,
+        height: 48,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e2-msg1,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 720,
+        height: 36,
+        text: "error[E0277]: the `?` operator can only be used",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e2-msg2,
+        kind: text,
+        x: 300,
+        y: 388,
+        width: 720,
+        height: 36,
+        text: "in a function that returns `Result` or `Option`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e2-works,
+        kind: text,
+        x: 300,
+        y: 476,
+        width: 560,
+        height: 36,
+        text: "works: add returns a Result",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e2-works-code,
+        kind: text,
+        x: 340,
+        y: 518,
+        width: 700,
+        height: 36,
+        text: "-> Result<i32, ParseIntError>",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -47,109 +441,358 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "ok: 42\ncould not parse\n"
+      stdout: "42 is the number 42\noops failed: invalid digit found in string\nOk(42)\nErr(ParseIntError { kind: InvalidDigit })\n"
       stderr: ""
 
 scenes:
-  - id: result
+  - id: two-kinds
+    chapter: Two kinds of errors
     narration: >
-      [[mark:show-result]] Some failures you can recover from — bad input, a
-      missing file. Rust models those with Result: a value is either Ok, holding
-      success, or Err, holding the problem. And you must handle both.
+      Programs fail. A file is missing, or someone types letters where you
+      wanted a number. Rust has no exceptions. It sorts errors into two kinds.
+      [[mark:draw-bug]] The first kind is a bug, like reading index
+      ninety-nine of a vector that only has three items.
+      [[mark:draw-panic]] Reading past the end isn't safe, so Rust panics. It
+      prints this message, and the program stops. You can call the panic
+      macro yourself, too.
+      [[mark:draw-input]] The second kind is a failure you expect, like bad
+      input.
+      [[mark:draw-result]] For those, a function returns a Result, and its
+      caller decides what to do.
+      [[mark:draw-values]] So an expected error isn't a crash. It's a value in
+      the return type, so you can see which calls can fail.
+    sources:
+      - title: "The Rust Book — Error Handling"
+        url: "https://doc.rust-lang.org/book/ch09-00-error-handling.html"
+      - title: "The Rust Book — Unrecoverable Errors with panic!"
+        url: "https://doc.rust-lang.org/book/ch09-01-unrecoverable-errors-with-panic.html"
+      - title: "std::panic! macro"
+        url: "https://doc.rust-lang.org/std/macro.panic.html"
+    actions:
+      # Opens in the quiet handle before the first word, already titled.
+      - id: open-board-kinds
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1500 }
+        open: true
+        upsertIds: [b-title]
+      - id: draw-bug
+        type: whiteboard.apply
+        at: { mark: draw-bug }
+        upsertIds: [b-bug-box, b-bug-text]
+        drawMs: 1200
+      - id: draw-panic
+        type: whiteboard.apply
+        at: { mark: draw-panic }
+        upsertIds: [b-arrow-a, b-panic-box, b-panic-text, b-stops, b-msg]
+        drawMs: 3000
+      - id: draw-input
+        type: whiteboard.apply
+        at: { mark: draw-input }
+        upsertIds: [b-input-box, b-input-text]
+        drawMs: 1200
+      - id: draw-result
+        type: whiteboard.apply
+        at: { mark: draw-result }
+        upsertIds: [b-arrow-b, b-result-box, b-result-text, b-decide, b-parse]
+        drawMs: 2800
+      - id: draw-values
+        type: whiteboard.apply
+        at: { mark: draw-values }
+        upsertIds: [b-values]
+        drawMs: 1400
+
+  - id: result-type
+    narration: >
+      [[mark:show-result]] Result is an enum for errors you can recover from.
+      Ok holds the value when things work, and Err holds the error when they
+      don't. T and E are placeholders for those two types. Like Option, you
+      must handle both cases to use the value.
     sources:
       - title: "The Rust Book — Recoverable Errors with Result"
         url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"
+      - title: "std::result::Result"
+        url: "https://doc.rust-lang.org/std/result/enum.Result.html"
     actions:
+      - id: close-board-kinds
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: show-result
         type: slide.show
-        at: { mark: show-result }
+        at: { mark: show-result, offsetMs: 300 }
         slideId: result-slide
 
-  - id: question-mark
+  - id: parse
+    chapter: Parsing a number
     narration: >
-      [[mark:show-q]] Checking every Result by hand gets noisy. The
-      question-mark operator helps: on Ok it unwraps the value and keeps going;
-      on Err it returns that error from your function early. Short, and still
-      safe.
+      Here's a loop over two pieces of text: forty-two, and the word oops.
+      [[mark:type-parse]] Let's turn each one into a number with parse. The
+      i32 in angle brackets tells parse which type to make.
+      [[mark:select-parse]] So what does parse give back? Not an i32. Text
+      like oops can't become a number, so parse returns a Result.
     sources:
-      - title: "The Rust Book — A Shortcut for Propagating Errors: the ? Operator"
-        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#a-shortcut-for-propagating-errors-the--operator"
+      - title: "std — str::parse"
+        url: "https://doc.rust-lang.org/std/primitive.str.html#method.parse"
+      - title: "The Rust Book — Recoverable Errors with Result"
+        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"
     actions:
+      - id: close-result-slide
+        type: slide.close
+        at: { scene: start }
+      - id: open-main
+        type: workspace.openFile
+        at: { scene: start, offsetMs: 800 }
+        path: main.rs
+      - id: type-parse
+        type: editor.type
+        at: { mark: type-parse }
+        target:
+          file: main.rs
+          after: "    for input in [\"42\", \"oops\"] {\n"
+          occurrence: 1
+        cadence: fast-explainer
+        text: "        let parsed = input.parse::<i32>();\n"
+      - id: select-parse
+        type: editor.select
+        at: { mark: select-parse }
+        target:
+          file: main.rs
+          text: "input.parse::<i32>()"
+          occurrence: 1
+
+  - id: not-a-number
+    narration: >
+      [[mark:draw-e1-code]] What if you multiply parsed by two anyway?
+      [[mark:draw-e1-msg]] The compiler stops you with error E0369. It can't
+      multiply a Result by an integer.
+      [[mark:draw-e1-type]] It also shows you the real type of parsed.
+      [[mark:draw-e1-fix]] To get the number out, you have to handle both
+      cases first.
+    sources:
+      - title: "Rust error codes — E0369"
+        url: "https://doc.rust-lang.org/error_codes/E0369.html"
+      - title: "std::num::ParseIntError"
+        url: "https://doc.rust-lang.org/std/num/struct.ParseIntError.html"
+    actions:
+      - id: open-board-e1
+        type: whiteboard.apply
+        at: { scene: start }
+        open: true
+        clear: true
+        upsertIds: [e1-title]
+      - id: draw-e1-code
+        type: whiteboard.apply
+        at: { mark: draw-e1-code, offsetMs: 300 }
+        upsertIds: [e1-code1, e1-code2]
+        drawMs: 1800
+      - id: draw-e1-msg
+        type: whiteboard.apply
+        at: { mark: draw-e1-msg }
+        upsertIds: [e1-msg1, e1-msg2]
+        drawMs: 2200
+      - id: draw-e1-type
+        type: whiteboard.apply
+        at: { mark: draw-e1-type }
+        upsertIds: [e1-under, e1-type]
+        drawMs: 1600
+      - id: draw-e1-fix
+        type: whiteboard.apply
+        at: { mark: draw-e1-fix }
+        upsertIds: [e1-fix]
+        drawMs: 1400
+
+  - id: match
+    narration: >
+      [[mark:type-match]] Let's handle it with a match: one arm for Ok, and
+      one for Err.
+      [[mark:select-ok]] In the Ok arm, n is the i32 itself.
+      [[mark:select-err]] In the Err arm, e is the error, and printing it says
+      what went wrong. Leave out either arm, and it's error E0004: the match
+      doesn't cover every case.
+    sources:
+      - title: "The Rust Book — Recoverable Errors with Result"
+        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"
+      - title: "Rust error codes — E0004"
+        url: "https://doc.rust-lang.org/error_codes/E0004.html"
+    actions:
+      - id: close-board-e1
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-match
+        type: editor.type
+        at: { mark: type-match, offsetMs: 300 }
+        target:
+          file: main.rs
+          after: "        let parsed = input.parse::<i32>();\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "        match parsed {\n            Ok(n) => println!(\"{input} is the number {n}\"),\n            Err(e) => println!(\"{input} failed: {e}\"),\n        }\n"
+      - id: select-ok
+        type: editor.select
+        at: { mark: select-ok }
+        target:
+          file: main.rs
+          text: "Ok(n)"
+          occurrence: 1
+      - id: select-err
+        type: editor.select
+        at: { mark: select-err }
+        target:
+          file: main.rs
+          text: "Err(e)"
+          occurrence: 1
+
+  - id: question-mark
+    chapter: The question-mark operator
+    narration: >
+      [[mark:select-match]] Writing a match every time gets long. One
+      shortcut is unwrap. It gives you the value on Ok, but it panics on Err.
+      That's fine in a quick test, but not for user input.
+      [[mark:show-q]] A better one is the question-mark operator. Put it after
+      a call that returns a Result. On Ok, it unwraps the value, and your code
+      keeps going. On Err, it returns that error from the function right away,
+      and the caller decides what to do.
+    sources:
+      - title: "The Rust Book — Shortcuts for Panic on Error: unwrap and expect"
+        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#shortcuts-for-panic-on-error"
+      - title: "The Rust Book — The ? Operator Shortcut"
+        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#the--operator-shortcut"
+      - title: "The Rust Reference — The try propagation expression"
+        url: "https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-try-propagation-expression"
+    actions:
+      - id: select-match
+        type: editor.select
+        at: { mark: select-match }
+        target:
+          file: main.rs
+          text: "match parsed {\n            Ok(n) => println!(\"{input} is the number {n}\"),\n            Err(e) => println!(\"{input} failed: {e}\"),\n        }"
+          occurrence: 1
       - id: show-q
         type: slide.show
         at: { mark: show-q }
         slideId: question-slide
 
-  - id: the-ok-path
+  - id: add
     narration: >
-      [[mark:open]] Here's a function that parses text into a number.
-      [[mark:select-question]] See the question-mark after parse? If parsing
-      fails, the error returns right here. Otherwise we double the number and
-      wrap it in Ok. [[mark:type-ok]] First we call it with twenty-one and match
-      the Ok.
+      [[mark:type-add]] Let's write a function called add. It parses two
+      pieces of text and adds them. The use line at the top brings in parse's
+      error type for whole numbers.
+      [[mark:select-q]] Here's the question mark, after the first parse. If
+      that text isn't a number, add stops right here and returns the Err.
+      [[mark:select-sum]] If both parse, we wrap the sum in Ok, because add
+      returns a Result.
     sources:
-      - title: "The Rust Book — Where the ? Operator Can Be Used"
-        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#where-the--operator-can-be-used"
+      - title: "The Rust Book — Propagating Errors"
+        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#propagating-errors"
+      - title: "std::num::ParseIntError"
+        url: "https://doc.rust-lang.org/std/num/struct.ParseIntError.html"
     actions:
-      - id: close-slide
+      - id: close-q-slide
         type: slide.close
         at: { scene: start }
-      - id: open-main
-        type: workspace.openFile
-        at: { mark: open }
-        path: main.rs
-      - id: select-question
-        type: editor.select
-        at: { mark: select-question }
-        target:
-          file: main.rs
-          text: "text.parse()?"
-          occurrence: 1
-      - id: type-ok
+      - id: type-add
         type: editor.type
-        at: { mark: type-ok, offsetMs: -400 }
+        at: { mark: type-add, offsetMs: 300 }
         target:
           file: main.rs
-          after: "fn main() {\n"
+          after: ""
           occurrence: 1
         cadence: line-by-line
-        text: "    match parse_and_double(\"21\") {\n        Ok(v) => println!(\"ok: {v}\"),\n        Err(e) => println!(\"error: {e}\"),\n    }\n"
+        text: "use std::num::ParseIntError;\n\nfn add(a: &str, b: &str) -> Result<i32, ParseIntError> {\n    let x = a.parse::<i32>()?;\n    let y = b.parse::<i32>()?;\n    Ok(x + y)\n}\n\n"
+      - id: select-q
+        type: editor.select
+        at: { mark: select-q }
+        target:
+          file: main.rs
+          text: "a.parse::<i32>()?"
+          occurrence: 1
+      - id: select-sum
+        type: editor.select
+        at: { mark: select-sum }
+        target:
+          file: main.rs
+          text: "Ok(x + y)"
+          occurrence: 1
 
-  - id: the-err-path
+  - id: needs-result
     narration: >
-      So what about bad input? [[mark:type-err]] Let's call it again with the
-      word oops, which can't be a number. [[mark:select-err-arm]] This time
-      parse fails, the question-mark returns the error, and our match lands on
-      the Err arm instead.
+      [[mark:select-ret]] Look at add's return type: a Result. That gives the
+      question mark a place to send the error.
+      [[mark:draw-e2-code]] What if you use it in main instead? main returns
+      unit, written as empty parentheses.
+      [[mark:draw-e2-msg]] You get error E0277: the question-mark operator can
+      only be used in a function that returns Result or Option.
+      [[mark:draw-e2-works]] That's why it works in add.
     sources:
-      - title: "The Rust Book — To panic! or Not to panic!"
-        url: "https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html"
+      - title: "The Rust Book — Where to Use the ? Operator"
+        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html#where-to-use-the--operator"
+      - title: "Rust error codes — E0277"
+        url: "https://doc.rust-lang.org/error_codes/E0277.html"
+      - title: "std — The unit type ()"
+        url: "https://doc.rust-lang.org/std/primitive.unit.html"
     actions:
-      - id: type-err
-        type: editor.type
-        at: { mark: type-err, offsetMs: -400 }
+      - id: select-ret
+        type: editor.select
+        at: { mark: select-ret }
         target:
           file: main.rs
-          after: "        Err(e) => println!(\"error: {e}\"),\n    }\n"
+          text: "Result<i32, ParseIntError>"
+          occurrence: 1
+      - id: open-board-e2
+        type: whiteboard.apply
+        at: { mark: draw-e2-code, offsetMs: -300 }
+        open: true
+        clear: true
+        upsertIds: [e2-title]
+      - id: draw-e2-code
+        type: whiteboard.apply
+        at: { mark: draw-e2-code, offsetMs: 300 }
+        upsertIds: [e2-code1, e2-code2, e2-under-main, e2-returns]
+        drawMs: 2600
+      - id: draw-e2-msg
+        type: whiteboard.apply
+        at: { mark: draw-e2-msg }
+        upsertIds: [e2-circle-q, e2-msg1, e2-msg2]
+        drawMs: 3000
+      - id: draw-e2-works
+        type: whiteboard.apply
+        at: { mark: draw-e2-works }
+        upsertIds: [e2-works, e2-works-code]
+        drawMs: 1600
+
+  - id: calls
+    narration: >
+      [[mark:type-calls]] Let's call add from main, with twenty and
+      twenty-two, then with oops. We print each Result with the Debug
+      placeholder you've seen with structs.
+    sources:
+      - title: "std::fmt::Debug"
+        url: "https://doc.rust-lang.org/std/fmt/trait.Debug.html"
+    actions:
+      - id: close-board-e2
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-calls
+        type: editor.type
+        at: { mark: type-calls, offsetMs: 400 }
+        target:
+          file: main.rs
+          after: "            Err(e) => println!(\"{input} failed: {e}\"),\n        }\n    }\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    match parse_and_double(\"oops\") {\n        Ok(v) => println!(\"ok: {v}\"),\n        Err(_) => println!(\"could not parse\"),\n    }\n"
-      - id: select-err-arm
-        type: editor.select
-        at: { mark: select-err-arm }
-        target:
-          file: main.rs
-          text: 'Err(_) => println!("could not parse"),'
-          occurrence: 1
+        text: "\n    println!(\"{:?}\", add(\"20\", \"22\"));\n    println!(\"{:?}\", add(\"20\", \"oops\"));\n"
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Twenty-one doubles to forty-two; oops reports
-      it couldn't parse — and nothing crashed. Result plus the question-mark is
-      how Rust handles failure, without exceptions.
+      [[mark:run]] Let's run it. Forty-two became a number. The word oops
+      failed, and the error says why: invalid digit found in string. add gives Ok,
+      forty-two. With oops, it's an Err. The question mark returned it early,
+      so the addition never ran, and nothing panicked.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — Recoverable Errors with Result"
+        url: "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"
     actions:
       - id: run
         type: runtime.run
@@ -158,13 +801,28 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "ok: 42"
+        contains: "oops failed: invalid digit found in string"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "let n: i32 = text.parse()?;"
+        contains: "let x = a.parse::<i32>()?;"
+
+  - id: wrap
+    narration: >
+      So panic is for bugs, and it stops the program. Result is for errors you
+      expect: handle it with match, or send it to the caller with the
+      question mark.
+      Next, generics: one function for many types.
+    sources:
+      - title: "The Rust Book — To panic! or Not to panic!"
+        url: "https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html"
+      - title: "The Rust Book — Generic Data Types"
+        url: "https://doc.rust-lang.org/book/ch10-01-syntax.html"
+    actions: []
 
 checks:
+  # 500 (not 300): google-svg deck slides embed per-slide font data whose
+  # paint briefly stalls the main thread at each show/close.
   - { type: timing.p95Ms, max: 500 }
