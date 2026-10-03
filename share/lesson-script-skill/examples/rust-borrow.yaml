@@ -1,14 +1,43 @@
-# The borrow checker, taught in a full arc: the ownership rules, the E0382
-# move error the checker throws (slides — broken code cannot run in an
-# insert-only lesson), then borrowing built live: an immutable borrow through
-# a function, shared readers side by side, and a run proving the owner
-# survives it all. Validate with:
+# Rust from zero, lesson 7: references and borrowing.
+#
+# The arc: the lesson's own deck recaps the ownership rules and what a move
+# breaks (E0382) — the problem borrowing solves. A whiteboard draws what a
+# reference is (&owner points at owner, which owns the heap text; the borrow
+# ends and nothing is dropped). The editor then builds it: measure(&String)
+# borrows into a function, two shared readers coexist, `mut` is added and
+# exclaim(&mut String) changes the String through a mutable reference. The
+# deck's "borrowing rules" page states many readers OR one writer, and a
+# second board shows the compiler's answer when a reader is still in use as
+# the writer starts (E0502), plus E0499 for two writers. Back in the editor,
+# the readers' last use explains why the built program compiles. One run.
+#
+# Every compiler message on the board or in the narration was confirmed with
+# rustc 1.98 (edition 2024) on the broken variants:
+#   let first = &owner; exclaim(&mut owner); println!("{first}");
+#     error[E0502]: cannot borrow `owner` as mutable because it is also
+#       borrowed as immutable
+#     immutable borrow occurs here / mutable borrow occurs here /
+#     immutable borrow later used here
+#   let a = &mut owner; let b = &mut owner; (both used)
+#     error[E0499]: cannot borrow `owner` as mutable more than once at a time
+#   let owner = …; exclaim(&mut owner);   (no `mut`)
+#     error[E0596]: cannot borrow `owner` as mutable, as it is not declared
+#       as mutable
+#   the deck's move slide: let s2 = s1; println!("{s1}, world");
+#     error[E0382]: borrow of moved value: `s1`
+#
+# Board colours: blue = the reference / shared borrow (the thing being
+# named), green = the valid owner and what works, orange = the mutable
+# borrow (what changes), red = the error, violet = the result (nothing is
+# dropped). #1e1e1e paints white on the dark board.
+#
+# Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-borrow.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-borrow
-  title: "The borrow checker: use it, don't lose it"
+  title: "Rust from zero: References and borrowing"
   locale: en-US
   workspace:
     lessonType: rust
@@ -17,8 +46,8 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let owner = String::from("borrow checker");
-            println!("{owner} owns the string");
+            let owner = String::from("Rust");
+            println!("owner: {owner}");
         }
   # Branded deck (Next Editor lesson style), published to the web; each
   # slide pins one page of it. Deck: "Next Editor · Rust: The Borrow Checker".
@@ -38,6 +67,295 @@ lesson:
       name: The borrowing rules
       deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vTyXMb7TYBURwgEV2HpO1J4n0wRj8npiTABfbt8ZfMiljNlHsfoSO7VlVLvv40AUkRGW4OoHbsYwZVw/pub"
       pageId: SLIDES_API1441186920_34
+  whiteboardAssets:
+    # ---- Board 1: what a reference is -------------------------------------
+    - {
+        id: r-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 400,
+        height: 48,
+        text: "A reference borrows",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: r-owner-box,
+        kind: rectangle,
+        x: 290,
+        y: 376,
+        width: 220,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: r-owner-text,
+        kind: text,
+        x: 314,
+        y: 398,
+        width: 180,
+        height: 36,
+        text: "owner: String",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-heap-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 522,
+        y: 391,
+        width: 136,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r-heap-box,
+        kind: rectangle,
+        x: 670,
+        y: 376,
+        width: 200,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r-heap-text,
+        kind: text,
+        x: 742,
+        y: 398,
+        width: 58,
+        height: 36,
+        text: "Rust",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-heap-label,
+        kind: text,
+        x: 742,
+        y: 466,
+        width: 60,
+        height: 36,
+        text: "heap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-owner-label,
+        kind: text,
+        x: 290,
+        y: 476,
+        width: 300,
+        height: 36,
+        text: "owner owns the text",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: r-ref-box,
+        kind: rectangle,
+        x: 290,
+        y: 222,
+        width: 220,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-ref-text,
+        kind: text,
+        x: 354,
+        y: 239,
+        width: 100,
+        height: 36,
+        text: "&owner",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: r-ref-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 375,
+        y: 298,
+        width: 50,
+        height: 72,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-ref-label,
+        kind: text,
+        x: 540,
+        y: 239,
+        width: 380,
+        height: 36,
+        text: "reference: read through it",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: r-drop,
+        kind: text,
+        x: 290,
+        y: 556,
+        width: 470,
+        height: 36,
+        text: "borrow ends → nothing is dropped",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board 2: the compiler's answer (E0502, then E0499) ----------------
+    - {
+        id: e-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 400,
+        height: 48,
+        text: "A reader still in use",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: e-code1,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 270,
+        height: 36,
+        text: "let first = &owner;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-code2,
+        kind: text,
+        x: 300,
+        y: 282,
+        width: 290,
+        height: 36,
+        text: "exclaim(&mut owner);",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-code3,
+        kind: text,
+        x: 300,
+        y: 342,
+        width: 240,
+        height: 36,
+        text: 'println!("{first}");',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-msg1,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 690,
+        height: 36,
+        text: "error[E0502]: cannot borrow `owner` as mutable",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-msg2,
+        kind: text,
+        x: 300,
+        y: 458,
+        width: 590,
+        height: 36,
+        text: "because it is also borrowed as immutable",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-u1,
+        kind: freedraw,
+        stroke: underline,
+        x: 458,
+        y: 232,
+        width: 96,
+        height: 24,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-l1,
+        kind: text,
+        x: 620,
+        y: 222,
+        width: 410,
+        height: 36,
+        text: "immutable borrow occurs here",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-u2,
+        kind: freedraw,
+        stroke: underline,
+        x: 404,
+        y: 292,
+        width: 162,
+        height: 24,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-l2,
+        kind: text,
+        x: 620,
+        y: 282,
+        width: 390,
+        height: 36,
+        text: "mutable borrow occurs here",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-u3,
+        kind: freedraw,
+        stroke: underline,
+        x: 423,
+        y: 352,
+        width: 68,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-l3,
+        kind: text,
+        x: 620,
+        y: 342,
+        width: 470,
+        height: 36,
+        text: "immutable borrow later used here",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-two,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 640,
+        height: 36,
+        text: "two &mut at the same time → error[E0499]",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-fix,
+        kind: text,
+        x: 300,
+        y: 596,
+        width: 530,
+        height: 36,
+        text: "works: last use of first before &mut",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -50,163 +368,343 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "14 bytes, borrowed only\nreaders: borrow checker and borrow checker\nborrow checker owns the string\n"
+      stdout: "Rust has 4 bytes\nreaders: Rust and Rust\nowner: Rust!\n"
       stderr: ""
 
 scenes:
-  - id: rules
+  - id: recap
+    chapter: Why borrow?
     narration: >
-      [[mark:show-rules]] So how does Rust manage memory without a garbage
-      collector? Ownership. And the rules fit on one slide. Every value has an
-      owner. There's only one owner at a time. And when the owner goes out of
-      scope, the value is dropped. The borrow checker is the compiler checking
-      these rules, before your program ever runs.
+      You've seen the three ownership rules. Every value has an owner.
+      There's only one owner at a time. When the owner goes out of scope,
+      the value is dropped.
+      [[mark:show-move]] You've also seen a move. Once s1 is assigned to s2,
+      using s1 again is error E0382. The message says borrow, because
+      printing s1 only borrows it. But passing a String to a function moves
+      it, just like assignment. So how can a function use your String without
+      taking it? It borrows it.
     sources:
-      - title: "The Rust Book — What Is Ownership?"
-        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
+      - title: "The Rust Book — Ownership Rules"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#ownership-rules"
+      - title: "The Rust Book — Ownership and Functions"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#ownership-and-functions"
+      - title: "Rust error codes — E0382"
+        url: "https://doc.rust-lang.org/error_codes/E0382.html"
     actions:
+      # Opens in the quiet handle before the first word.
       - id: show-rules
         type: slide.show
-        at: { mark: show-rules }
+        at: { scene: start, offsetMs: -1200 }
         slideId: ownership-rules
-
-  - id: move-error
-    narration: >
-      Here's what happens when you break rule two.
-      [[mark:show-error]] Assigning s1 to s2 moves the String — after that
-      line, s1 isn't valid anymore. Try to print it, and you get error E0382,
-      borrow of moved value. Read the message closely. It names the move,
-      tells you String doesn't implement Copy, and points at the line that
-      uses s1 after the move. The checker rejects the whole program. Nothing
-      runs.
-    sources:
-      - title: "The Rust Book — Variables and Data Interacting with Move"
-        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-move"
-    actions:
-      # No close first — showing another slide while one is open advances the
-      # deck in place, like moving to the next slide.
-      - id: show-error
+      # No close first: showing another slide advances the deck in place.
+      - id: show-move
         type: slide.show
-        at: { mark: show-error }
+        at: { mark: show-move }
         slideId: move-error
 
-  - id: meet-owner
+  - id: reference
     narration: >
-      Moves are safe, but they take the value away from you.
-      [[mark:open-main]] So here's our program. It owns one String, called
-      owner, and prints it at the end. Now, we want another function to read
-      that String — without taking it. That's exactly what borrowing is for.
+      A reference is how you borrow.
+      [[mark:draw-owner]] Here's a String called owner. It owns the text
+      Rust, on the heap.
+      [[mark:draw-ref]] Put an ampersand before owner, and you get a
+      reference. It points at owner, so you can read through it.
+      [[mark:draw-drop]] But it doesn't own the value. When the borrow ends,
+      nothing is dropped. The text stays with owner.
     sources:
       - title: "The Rust Book — References and Borrowing"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
     actions:
-      - id: close-error
+      - id: close-move
         type: slide.close
         at: { scene: start }
-      - id: open-main
-        type: workspace.openFile
-        at: { mark: open-main }
-        path: main.rs
+      - id: open-board-ref
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: 300 }
+        open: true
+        upsertIds: [r-title]
+      - id: draw-owner
+        type: whiteboard.apply
+        at: { mark: draw-owner }
+        upsertIds:
+          [
+            r-owner-box,
+            r-owner-text,
+            r-heap-arrow,
+            r-heap-box,
+            r-heap-text,
+            r-heap-label,
+            r-owner-label,
+          ]
+        drawMs: 2400
+      - id: draw-ref
+        type: whiteboard.apply
+        at: { mark: draw-ref }
+        upsertIds: [r-ref-box, r-ref-text, r-ref-arrow, r-ref-label]
+        drawMs: 2400
+      - id: draw-drop
+        type: whiteboard.apply
+        at: { mark: draw-drop }
+        upsertIds: [r-drop]
+        drawMs: 1600
 
-  - id: borrow-fn
+  - id: measure
+    chapter: Borrowing in a function
     narration: >
-      [[mark:type-measure]] Let's add measure.
-      [[mark:select-borrow-type]] See the ampersand in the signature? That
-      declares a reference. measure borrows the String: it can read the value,
-      but it never owns it. Nothing is dropped when the function returns.
-      Ownership stays right where it was.
+      Let's put that in code. Here, owner holds the text Rust.
+      [[mark:type-measure]] Let's add a function called measure. It returns
+      the length of a String, in bytes.
+      [[mark:select-ref-type]] Look at the parameter's type: ampersand String,
+      a reference to a String. So measure borrows the String. It reads it,
+      but never owns it.
     sources:
       - title: "The Rust Book — References and Borrowing"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
+      - title: "std::string::String::len"
+        url: "https://doc.rust-lang.org/std/string/struct.String.html#method.len"
     actions:
+      - id: close-board-ref
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { scene: start, offsetMs: 800 }
+        path: main.rs
       - id: type-measure
         type: editor.type
-        at: { mark: type-measure, offsetMs: -400 }
+        at: { mark: type-measure }
         target:
           file: main.rs
           after: ""
           occurrence: 1
+        cadence: line-by-line
         text: "fn measure(text: &String) -> usize {\n    text.len()\n}\n\n"
-      - id: select-borrow-type
+      - id: select-ref-type
         type: editor.select
-        at: { mark: select-borrow-type }
+        at: { mark: select-ref-type }
         target:
           file: main.rs
           text: "&String"
           occurrence: 1
 
-  - id: borrow-call
+  - id: call
     narration: >
-      [[mark:type-call]] Now let's call measure with a reference to owner, and
-      print the length we get back. [[mark:select-owner-borrow]] The borrow
-      starts at the ampersand and ends inside the call. When the call returns,
-      owner is unchanged. It still owns the String.
+      [[mark:type-call]] Now let's call it. We write the ampersand at the call
+      too, so we lend owner instead of moving it.
+      [[mark:select-call]] The borrow starts here, and it ends when measure
+      returns.
+      [[mark:type-print-length]] So owner is still valid. Let's print it
+      with its length.
     sources:
-      - title: "std::string::String::len"
-        url: "https://doc.rust-lang.org/std/string/struct.String.html#method.len"
+      - title: "The Rust Book — References and Borrowing"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
     actions:
       - id: type-call
         type: editor.type
-        at: { mark: type-call, offsetMs: 0 }
+        at: { mark: type-call }
         target:
           file: main.rs
-          after: "    let owner = String::from(\"borrow checker\");\n"
+          after: "    let owner = String::from(\"Rust\");\n"
           occurrence: 1
-        cadence: line-by-line
-        text: "    let length = measure(&owner);\n    println!(\"{length} bytes, borrowed only\");\n"
-      - id: select-owner-borrow
+        cadence: natural
+        text: "    let length = measure(&owner);\n"
+      - id: select-call
         type: editor.select
-        at: { mark: select-owner-borrow }
+        at: { mark: select-call }
         target:
           file: main.rs
           text: "&owner"
           occurrence: 1
+      - id: type-print-length
+        type: editor.type
+        at: { mark: type-print-length }
+        target:
+          file: main.rs
+          after: "    let length = measure(&owner);\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "    println!(\"{owner} has {length} bytes\");\n"
 
-  - id: shared-readers
+  - id: readers
     narration: >
-      [[mark:show-borrow-rules]] Borrowing has one rule of its own. At any
-      time, you can have either one mutable reference, or any number of
-      shared ones. Many readers, or a single writer — never both at once.
-      [[mark:type-readers]] Let's add two shared references to owner.
-      [[mark:select-readers]] They can exist at the same time because neither
-      one can change the String they're reading.
+      A plain ampersand makes a shared, or immutable, reference. Shared
+      references only read, so you can have as many as you want at once.
+      [[mark:type-readers]] Let's make two, first and second, and print both.
     sources:
       - title: "The Rust Book — Mutable References"
         url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references"
     actions:
-      - id: show-borrow-rules
-        type: slide.show
-        at: { mark: show-borrow-rules }
-        slideId: borrow-rules
-      - id: close-borrow-rules
-        type: slide.close
-        at: { mark: type-readers, offsetMs: -600 }
       - id: type-readers
         type: editor.type
         at: { mark: type-readers }
         target:
           file: main.rs
-          after: "    println!(\"{length} bytes, borrowed only\");\n"
+          after: "    println!(\"{owner} has {length} bytes\");\n"
           occurrence: 1
         cadence: line-by-line
         text: "    let first = &owner;\n    let second = &owner;\n    println!(\"readers: {first} and {second}\");\n"
-      - id: select-readers
-        type: editor.select
-        at: { mark: select-readers }
+
+  - id: mutable
+    chapter: Mutable references
+    narration: >
+      What if a function needs to change the String? Then it needs a mutable
+      reference. [[mark:type-mut]] First, the owner must allow changes, so
+      let's add mut. Without it, you'd get error E0596: owner isn't declared
+      as mutable.
+      [[mark:type-exclaim]] Now a function called exclaim. It adds an
+      exclamation mark to the end.
+      [[mark:select-mut-type]] Its parameter is ampersand mut String: a
+      reference that can change what it borrows.
+      [[mark:type-exclaim-call]] We call it with ampersand mut owner, and the
+      last line prints the result.
+    sources:
+      - title: "The Rust Book — Mutable References"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references"
+      - title: "Rust error codes — E0596"
+        url: "https://doc.rust-lang.org/error_codes/E0596.html"
+      - title: "std::string::String::push_str"
+        url: "https://doc.rust-lang.org/std/string/struct.String.html#method.push_str"
+    actions:
+      - id: type-mut
+        type: editor.type
+        at: { mark: type-mut }
         target:
           file: main.rs
-          text: "    let first = &owner;\n    let second = &owner;"
+          after: "fn main() {\n    let "
+          occurrence: 1
+        cadence: natural
+        text: "mut "
+      - id: type-exclaim
+        type: editor.type
+        at: { mark: type-exclaim }
+        target:
+          file: main.rs
+          after: "    text.len()\n}\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\nfn exclaim(text: &mut String) {\n    text.push_str(\"!\");\n}\n"
+      - id: select-mut-type
+        type: editor.select
+        at: { mark: select-mut-type }
+        target:
+          file: main.rs
+          text: "&mut String"
+          occurrence: 1
+      - id: type-exclaim-call
+        type: editor.type
+        at: { mark: type-exclaim-call }
+        target:
+          file: main.rs
+          after: "    println!(\"readers: {first} and {second}\");\n"
+          occurrence: 1
+        cadence: natural
+        text: "    exclaim(&mut owner);\n"
+
+  - id: rule
+    chapter: Many readers or one writer
+    narration: >
+      [[mark:show-borrow-rules]] Now, the rule that keeps this safe. At any
+      time, you can have many shared references, the readers. Or exactly one
+      mutable reference, the writer, with no readers beside it. Never both at
+      once. And a reference must never live longer than the value it borrows.
+      Why so strict? Changing a String can move its text to new memory. A
+      reference into the old text would then point at freed memory.
+    sources:
+      - title: "The Rust Book — The Rules of References"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#the-rules-of-references"
+      - title: "The Rust Book — Reading Elements of Vectors"
+        url: "https://doc.rust-lang.org/book/ch08-01-vectors.html#reading-elements-of-vectors"
+    actions:
+      - id: show-borrow-rules
+        type: slide.show
+        at: { mark: show-borrow-rules }
+        slideId: borrow-rules
+
+  - id: error
+    narration: >
+      So what if a reader is still in use when the writer starts?
+      [[mark:draw-err-code]] Here, first borrows owner, exclaim borrows it as
+      mutable, then first is printed.
+      [[mark:draw-err-msg]] The compiler refuses with error E0502. You can't
+      borrow owner as mutable, because it's also borrowed as immutable.
+      [[mark:draw-err-labels]] It marks the immutable borrow, the mutable
+      borrow, and the later use of first.
+      [[mark:draw-err-two]] Two mutable borrows at once fail too, with error
+      E0499.
+    sources:
+      - title: "Rust error codes — E0502"
+        url: "https://doc.rust-lang.org/error_codes/E0502.html"
+      - title: "Rust error codes — E0499"
+        url: "https://doc.rust-lang.org/error_codes/E0499.html"
+    actions:
+      - id: close-borrow-rules
+        type: slide.close
+        at: { scene: start }
+      - id: open-board-error
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: 300 }
+        open: true
+        clear: true
+        upsertIds: [e-title]
+      - id: draw-err-code
+        type: whiteboard.apply
+        at: { mark: draw-err-code }
+        upsertIds: [e-code1, e-code2, e-code3]
+        drawMs: 2000
+      - id: draw-err-msg
+        type: whiteboard.apply
+        at: { mark: draw-err-msg }
+        upsertIds: [e-msg1, e-msg2]
+        drawMs: 2400
+      - id: draw-err-labels
+        type: whiteboard.apply
+        at: { mark: draw-err-labels }
+        upsertIds: [e-u1, e-l1, e-u2, e-l2, e-u3, e-l3]
+        drawMs: 3000
+      - id: draw-err-two
+        type: whiteboard.apply
+        at: { mark: draw-err-two }
+        upsertIds: [e-two]
+        drawMs: 1600
+
+  - id: last-use
+    narration: >
+      So why does our program compile? [[mark:draw-fix]] Because a borrow
+      lasts only until its last use. If the reader's last use comes before
+      the mutable borrow, it works.
+      [[mark:select-readers-use]] Our readers are last used on this line,
+      before exclaim. So when the writer starts, they're already done.
+    sources:
+      - title: "The Rust Book — Mutable References"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references"
+    actions:
+      - id: draw-fix
+        type: whiteboard.apply
+        at: { mark: draw-fix }
+        upsertIds: [e-fix]
+        drawMs: 1000
+      - id: close-board-error
+        type: whiteboard.apply
+        at: { mark: select-readers-use, offsetMs: -500 }
+        open: false
+      - id: select-readers-use
+        type: editor.select
+        at: { mark: select-readers-use }
+        target:
+          file: main.rs
+          text: '    println!("readers: {first} and {second}");'
           occurrence: 1
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. Fourteen bytes, measured through a borrow.
-      Two readers, sharing one String. And the final line proves owner still
-      owns it. Every one of those accesses was checked at compile time — your
-      running program does no extra work.
+      [[mark:run]] Let's run it. The first line says Rust has four bytes,
+      measured through a borrow. Both readers see Rust. And the last line
+      shows Rust with an exclamation mark. It changed through a mutable
+      reference, and owner still owns it.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — References and Borrowing"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
     actions:
       - id: run
         type: runtime.run
@@ -215,27 +713,28 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "readers: borrow checker and borrow checker"
+        contains: "owner: Rust!"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "let second = &owner;"
+        contains: "exclaim(&mut owner);"
 
   - id: wrap
     narration: >
-      So when the borrow checker rejects your code, it's pointing at one of
-      these rules. Name the owner, find the borrows, and check how long each
-      reference lives. That's the whole method. And that's how Rust stays
-      safe, without a garbage collector.
+      A reference lets you use a value without owning it. Shared
+      references read, mutable ones change, and it's many readers or one
+      writer, never both. Next, slices: references to part of a String or an
+      array.
     sources:
-      - title: "The Rust Book — Understanding Ownership"
-        url: "https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html"
+      - title: "The Rust Book — References and Borrowing"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
+      - title: "The Rust Book — The Slice Type"
+        url: "https://doc.rust-lang.org/book/ch04-03-slices.html"
     actions: []
 
 checks:
   # 500 (not the default 300): google-svg deck slides embed per-slide font
-  # data whose paint briefly stalls the main thread at each show/close, so
-  # one action lands ~0.4s late. Imperceptible against static slides.
+  # data whose paint briefly stalls the main thread at each show/close.
   - { type: timing.p95Ms, max: 500 }

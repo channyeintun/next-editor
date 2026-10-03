@@ -630,7 +630,7 @@ of the previous board while wiping the rest works.
 
 ## A complete example
 
-`src/studio/scripts/rust-borrow.yaml` is the canonical example: eight scenes,
+`src/studio/scripts/rust-borrow.yaml` is the canonical example: eleven scenes,
 published-deck slides, keystroke and line-by-line typing, run + gates, in the
 conversational persona register. Start from a copy of it. Smaller historical
 pilots (Go, incl. whiteboard + retry-fixture usage) live as test fixtures

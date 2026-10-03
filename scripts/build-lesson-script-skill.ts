@@ -164,7 +164,7 @@ export function buildReference(canonical: string): string {
   out = replaceOnce(
     out,
     lines(
-      "`src/studio/scripts/rust-borrow.yaml` is the canonical example: eight scenes,",
+      "`src/studio/scripts/rust-borrow.yaml` is the canonical example: eleven scenes,",
       "published-deck slides, keystroke and line-by-line typing, run + gates, in the",
       "conversational persona register. Start from a copy of it. Smaller historical",
       "pilots (Go, incl. whiteboard + retry-fixture usage) live as test fixtures",
@@ -181,7 +181,7 @@ export function buildReference(canonical: string): string {
     ),
     lines(
       "`examples/rust-borrow.yaml` (bundled beside this document) is the canonical",
-      "example: eight scenes, published-deck slides, keystroke and line-by-line",
+      "example: eleven scenes, published-deck slides, keystroke and line-by-line",
       "typing, run + gates, in the conversational persona register. Start from a copy",
       "of it.",
     ),

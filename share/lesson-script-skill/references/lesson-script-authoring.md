@@ -613,6 +613,6 @@ of the previous board while wiping the rest works.
 ## A complete example
 
 `examples/rust-borrow.yaml` (bundled beside this document) is the canonical
-example: eight scenes, published-deck slides, keystroke and line-by-line
+example: eleven scenes, published-deck slides, keystroke and line-by-line
 typing, run + gates, in the conversational persona register. Start from a copy
 of it.
