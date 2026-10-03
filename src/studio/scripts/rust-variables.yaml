@@ -17,8 +17,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-variables
-  title: "Rust from zero: Variables and mutability"
-  locale: en-US
+  title: "Rust from zero: Variable နဲ့ mutability"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -41,7 +41,7 @@ lesson:
       y: 160
       width: 620
       height: 48
-      text: "let: immutable by default"
+      text: "let: default က immutable"
       strokeColor: "#1e1e1e"
       fontSize: 38
     - id: b1-code
@@ -92,7 +92,7 @@ lesson:
       y: 322
       width: 330
       height: 40
-      text: "immutable: stays 3"
+      text: "immutable: 3 အတိုင်းပဲ"
       strokeColor: "#2f9e44"
       fontSize: 30
     - id: b1-trust
@@ -154,7 +154,7 @@ lesson:
       y: 160
       width: 520
       height: 48
-      text: "mut vs. shadowing"
+      text: "mut နဲ့ shadowing"
       strokeColor: "#1e1e1e"
       fontSize: 38
     - id: b2-mut-code
@@ -213,7 +213,7 @@ lesson:
       y: 322
       width: 420
       height: 36
-      text: "one variable, same type"
+      text: "variable တစ်ခု၊ type အတူတူ"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: b2-sh-code1
@@ -255,7 +255,7 @@ lesson:
       y: 412
       width: 260
       height: 36
-      text: "old one: hidden"
+      text: "အဟောင်း: ကွယ်သွားပြီ"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: b2-sh-code2
@@ -297,7 +297,7 @@ lesson:
       y: 496
       width: 260
       height: 36
-      text: "new variable,"
+      text: "variable အသစ်၊"
       strokeColor: "#6741d9"
       fontSize: 28
     - id: b2-sh-note2
@@ -306,12 +306,15 @@ lesson:
       y: 534
       width: 260
       height: 36
-      text: "new type"
+      text: "type အသစ်"
       strokeColor: "#6741d9"
       fontSize: 28
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 31
 
 runtime:
@@ -321,18 +324,22 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "lives: 3\nscore: 250 of 1000\nspaces: 4\n"
+      stdout: "lives: 3
+
+        score: 250 of 1000
+
+        spaces: 4\n"
       stderr: ""
 
 scenes:
   - id: let-binding
-    chapter: "let: immutable by default"
-    narration: >
-      [[mark:open-main]] Here's a small Rust program with one variable.
-      [[mark:select-let]] You make a variable with let. This line binds the
-      name lives to the value three. Notice there's no type written here. Rust
-      looks at the three and picks the type for you. That's called type
-      inference.
+    chapter: "let: default က immutable"
+    narration: >-
+      [[mark:open-main]] ဒီမှာ variable တစ်ခုပဲ ပါတဲ့ Rust program သေးသေးလေး တစ်ခု ရှိပါတယ်။
+      [[mark:select-let]] Rust မှာ variable တစ်ခု လုပ်ချင်ရင် let ကို သုံးရပါတယ်။ ဒီ စာကြောင်းမှာ
+      let က lives ဆိုတဲ့ နာမည်ကို 3 ဆိုတဲ့ တန်ဖိုးနဲ့ ချိတ်ပေးလိုက်တာပါ။ type ကို ဘယ်နေရာမှာမှ
+      မရေးထားတာ သတိထား ကြည့်ပါ။ Rust က 3 ကို ကြည့်ပြီး type ကို ကိုယ့်အစား ရွေးပေးလိုက်တာ ဖြစ်ပြီး၊
+      ဒါကို type inference လို့ ခေါ်ပါတယ်။
     sources:
       - title: "The Rust Book — Variables and Mutability"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"
@@ -352,20 +359,22 @@ scenes:
           occurrence: 1
 
   - id: immutable
-    narration: >
-      [[mark:board-title]] So what does let really make?
-      [[mark:draw-binding]] Think of the name lives pointing at a box that
-      holds three. [[mark:draw-stays]] By default, a variable is immutable. Once
-      lives is three, it stays three. [[mark:draw-broken]] So what happens if
-      you add a line that assigns two to lives? [[mark:draw-error]] The
-      program doesn't compile. You get error E0384, and the message says you
-      can't assign twice to an immutable variable. [[mark:why]] Why is this the
-      default? Say one part of your code expects lives to stay three, and
-      another part changes it. That kind of bug is hard to find.
-      [[mark:draw-trust]] When values can't change, you can read a line and
-      trust what it says, because the compiler checks it for you.
-      [[mark:draw-help]] And look at the help line. The compiler tells you how
-      to allow the change: make the binding mutable.
+    narration: >-
+      [[mark:board-title]] ဒါဆို let က တကယ်တမ်း ဘာကို လုပ်ပေးလိုက်တာလဲ ဆိုတာ whiteboard ပေါ်မှာ
+      ကြည့်ရအောင်။ [[mark:draw-binding]] lives ဆိုတဲ့ နာမည်က 3 ကို ထည့်ထားတဲ့ အကွက် တစ်ခုကို
+      ညွှန်နေတယ်လို့ စဉ်းစားကြည့်ပါ။ [[mark:draw-stays]] Rust မှာ variable တစ်ခုက default အားဖြင့်
+      immutable ဖြစ်ပါတယ်၊ ဆိုလိုတာက ပြောင်းလို့ မရပါဘူး။ lives က 3 ဖြစ်သွားပြီဆိုရင် 3 အတိုင်းပဲ
+      ဆက်နေမှာပါ။ [[mark:draw-broken]] ဒါဆို lives ထဲကို 2 ထည့်တဲ့ စာကြောင်း တစ်ကြောင်း
+      ထပ်ရေးလိုက်ရင် ဘာဖြစ်မလဲ။ [[mark:draw-error]] program က compile လုပ်လို့ မရတော့ပါဘူး။ compiler
+      က E0384 error နဲ့ ရပ်သွားပြီး၊ immutable variable တစ်ခုထဲကို တန်ဖိုး နှစ်ကြိမ် ထည့်လို့
+      မရဘူးလို့ ပြောပါတယ်။ ဒါဆို ဘာကြောင့် ဒါကို default လုပ်ထားတာလဲ။ ဥပမာအားဖြင့်၊ ကိုယ့် code ရဲ့
+      တစ်နေရာက lives ကို 3 အတိုင်း ရှိနေမယ်လို့ မျှော်လင့်ထားပြီး၊ တခြား တစ်နေရာကနေ အဲဒါကို
+      ပြောင်းလိုက်တယ် ဆိုပါစို့။ အဲဒီလို bug မျိုးက ရှာရ အရမ်း ခက်ပါတယ်။ [[mark:draw-trust]]
+      တန်ဖိုးတွေက ပြောင်းလို့ မရဘူးဆိုရင်တော့၊ စာကြောင်း တစ်ကြောင်းကို ဖတ်လိုက်ရင် အဲဒီ စာကြောင်းက
+      ပြောတဲ့အတိုင်းပဲ ဖြစ်မယ်လို့ စိတ်ချလို့ ရပါတယ်။ ဘာကြောင့်လဲဆိုတော့ compiler က ကိုယ့်အစား
+      စစ်ပေးထားလို့ပါ။ [[mark:draw-help]] ပြီးတော့ help စာကြောင်းကိုလည်း ကြည့်ပါ။ ပြောင်းလို့ ရအောင်
+      ဘယ်လို လုပ်ရမလဲ ဆိုတာကို compiler က တန်းပြောပြထားပါတယ်။ binding ကို mutable လုပ်လိုက်ပါတဲ့။
+      mutable ဆိုတာ ပြောင်းလို့ ရတယ်လို့ ဆိုလိုတာပါ။
     sources:
       - title: "The Rust Book — Variables and Mutability"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"
@@ -409,19 +418,21 @@ scenes:
         drawMs: 1200
 
   - id: mut
-    chapter: Changing a value with mut
-    narration: >
-      [[mark:type-mut]] Let's add a score, which does need to change.
-      [[mark:select-mut]] The mut keyword makes this binding mutable. Score
-      starts at zero, and the plus-equals line adds two hundred fifty to it.
-      mut is also a note to anyone reading your code: this value is going to
-      change. Take mut away, and the plus-equals line gets the same E0384
-      error.
+    chapter: mut နဲ့ တန်ဖိုး ပြောင်းခြင်း
+    narration: >-
+      [[mark:type-mut]] ကဲ၊ editor ထဲ ပြန်သွားပြီး၊ ဒီတစ်ခါ တကယ် ပြောင်းဖို့ လိုတဲ့ score တစ်ခု
+      ထည့်ကြည့်ရအောင်။ [[mark:select-mut]] ဒီ mut keyword ကြောင့် score ဆိုတဲ့ variable က mutable
+      ဖြစ်သွားပြီး၊ ပြောင်းလို့ ရသွားတာပါ။ score က 0 ကနေ စပြီး၊ plus equal စာကြောင်းက 250 ကို
+      ပေါင်းထည့်ပေးပါတယ်။ ပြီးတော့ mut ဆိုတာ ကိုယ့် code ကို ဖတ်မယ့်သူတိုင်းအတွက် မှတ်ချက် တစ်ခုလည်း
+      ဖြစ်ပါတယ်။ ဒီ တန်ဖိုးက နောက်ပိုင်းမှာ ပြောင်းသွားမယ်လို့ ကြိုပြောထားတာပါ။ mut ကို
+      ပြန်ဖြုတ်လိုက်ရင်တော့၊ plus equal စာကြောင်းမှာ ခုနက E0384 error ပဲ ထပ်တက်ပါလိမ့်မယ်။
     sources:
       - title: "The Rust Book — Variables and Mutability"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"
       - title: "The Rust Reference — Compound assignment expressions"
-        url: "https://doc.rust-lang.org/reference/expressions/operator-expr.html#compound-assignment-expressions"
+        url:
+          "https://doc.rust-lang.org/reference/expressions/operator-expr.html#compound-assignment-expres\
+          sions"
     actions:
       - id: close-board1
         type: whiteboard.apply
@@ -435,7 +446,13 @@ scenes:
           after: "    println!(\"lives: {lives}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let mut score = 0;\n    score += 250;\n    println!(\"score: {score}\");\n"
+        text: "
+
+          \    let mut score = 0;
+
+          \    score += 250;
+
+          \    println!(\"score: {score}\");\n"
       - id: select-mut
         type: editor.select
         at: { mark: select-mut }
@@ -446,16 +463,16 @@ scenes:
 
   - id: shadow-board
     chapter: Shadowing
-    narration: >
-      [[mark:board2]] There's a second way to reuse a name, and it's called
-      shadowing. Let's compare it with mut. [[mark:draw-mut]] With mut,
-      there's one variable. You put a new value in the same box, and it has to
-      be the same type. [[mark:draw-shadow1]] With shadowing, you start with a
-      variable, like spaces, that holds some text. [[mark:draw-shadow2]] Then
-      you write let again, with the same name. That makes a brand-new
-      variable, in a new box. From that line on, the old one is hidden.
-      [[mark:draw-shadow-type]] And since it's a new variable, it can even
-      have a different type. Here, it's a number.
+    narration: >-
+      [[mark:board2]] နာမည် တစ်ခုကို ပြန်သုံးဖို့ နောက်နည်း တစ်နည်း ရှိပါသေးတယ်။ ဒါကို shadowing
+      လို့ ခေါ်ပြီး၊ mut နဲ့ ဘာကွာလဲ ဆိုတာ whiteboard ပေါ်မှာ နှိုင်းယှဉ် ကြည့်ရအောင်။
+      [[mark:draw-mut]] mut နဲ့ဆိုရင် variable က တစ်ခုတည်းပါ။ အကွက် တစ်ခုတည်းထဲကို တန်ဖိုး အသစ်
+      ထည့်တာ ဖြစ်ပြီး၊ အဲဒီ တန်ဖိုးက type အတူတူပဲ ဖြစ်ရပါမယ်။ [[mark:draw-shadow1]] shadowing ကတော့
+      ဒီလိုပါ။ အစမှာ spaces လို variable တစ်ခု ရှိပြီး၊ သူ့ထဲမှာ စာသား တစ်ခု ထည့်ထားတယ် ဆိုပါစို့။
+      [[mark:draw-shadow2]] ပြီးတော့ နာမည် အတူတူနဲ့ let ကို ထပ်ရေးလိုက်ပါတယ်။ အဲဒီအခါ အကွက် အသစ်
+      တစ်ခုထဲမှာ variable အသစ်စက်စက် တစ်ခု ထွက်လာပြီး၊ အဲဒီ စာကြောင်းကစပြီး အဟောင်းက ကွယ်သွားပါတယ်။
+      [[mark:draw-shadow-type]] ပြီးတော့ variable အသစ် ဖြစ်တဲ့အတွက်၊ type တောင် ပြောင်းလို့ ရပါတယ်။
+      ဒီမှာဆိုရင် ကိန်းဂဏန်း ဖြစ်သွားပါပြီ။
     sources:
       - title: "The Rust Book — Shadowing"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html#shadowing"
@@ -497,12 +514,14 @@ scenes:
         drawMs: 1000
 
   - id: shadow-code
-    narration: >
-      [[mark:type-shadow]] Let's try it. spaces starts as text, four spaces
-      between quotes. [[mark:select-shadow]] Then the second let takes its
-      length, which is a number, and keeps the name spaces. You don't need a
-      second name, like space count. If spaces were mut instead, assigning
-      the length to it would fail with error E0308, mismatched types.
+    narration: >-
+      [[mark:type-shadow]] ကဲ၊ editor ထဲ ပြန်သွားပြီး စမ်းကြည့်ရအောင်။ spaces က အစမှာ double quote
+      ကြားမှာ space လေးခု ပါတဲ့ စာသား တစ်ခုပါ။ [[mark:select-shadow]] ပြီးတော့ ဒုတိယ let က အဲဒီ
+      စာသားရဲ့ အရှည်ကို ယူလိုက်ပါတယ်။ အရှည်ဆိုတာ ကိန်းဂဏန်း ဖြစ်ပေမယ့်၊ နာမည်ကတော့ spaces အတိုင်းပဲ
+      ဆက်သုံးထားပါတယ်။ ဒါကြောင့် space count လို ဒုတိယ နာမည် တစ်ခု ထပ်ရှာစရာ မလိုတော့ပါဘူး။
+      ဒီနေရာမှာ spaces ကို shadow မလုပ်ဘဲ mut နဲ့ ရေးထားမယ်ဆိုရင်တော့၊ စာသား variable ထဲကို
+      ကိန်းဂဏန်း ထည့်တာ ဖြစ်သွားပြီး၊ type မကိုက်တဲ့အတွက် compiler က E0308 error၊ mismatched types
+      နဲ့ ရပ်သွားပါလိမ့်မယ်။
     sources:
       - title: "The Rust Book — Shadowing"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html#shadowing"
@@ -523,7 +542,13 @@ scenes:
           after: "    println!(\"score: {score}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let spaces = \"    \";\n    let spaces = spaces.len();\n    println!(\"spaces: {spaces}\");\n"
+        text: "
+
+          \    let spaces = \"    \";
+
+          \    let spaces = spaces.len();
+
+          \    println!(\"spaces: {spaces}\");\n"
       - id: select-shadow
         type: editor.select
         at: { mark: select-shadow }
@@ -533,17 +558,17 @@ scenes:
           occurrence: 1
 
   - id: constants
-    chapter: Constants and type annotations
-    narration: >
-      [[mark:type-const]] Some values are fixed for the whole program, like a
-      top score. For those, Rust has const. You can put it outside any
-      function, so all of your code can use it. [[mark:select-const]] A
-      constant's name is upper case, with underscores between words. The
-      compiler warns you if it isn't. And the type is required. Here it's u32,
-      an unsigned 32-bit integer, so it can't be negative. Leave the type out,
-      and the compiler stops with the error: missing type for const item. A
-      const can't be mut, and its value must be known when the program
-      compiles.
+    chapter: Const နဲ့ type annotation
+    narration: >-
+      [[mark:type-const]] တချို့ တန်ဖိုးတွေကတော့ program တစ်ခုလုံးမှာ ဘယ်တော့မှ မပြောင်းပါဘူး။
+      ဥပမာအားဖြင့် ရနိုင်တဲ့ အများဆုံး score လိုမျိုးပါ။ အဲဒီလို တန်ဖိုးတွေအတွက် Rust မှာ const
+      ရှိပါတယ်။ const ကို function တွေရဲ့ အပြင်ဘက်မှာ ရေးထားလို့ ရတဲ့အတွက်၊ ကိုယ့် code အားလုံးကနေ
+      သုံးလို့ ရပါတယ်။ [[mark:select-const]] MAX SCORE ဆိုတဲ့ နာမည်ကို ကြည့်ပါ။ constant ရဲ့
+      နာမည်ကို စာလုံးကြီးနဲ့ ရေးပြီး၊ စကားလုံးတွေကြားမှာ underscore ခံပြီး ရေးရပါတယ်။ ဒီလို
+      မရေးထားရင် compiler က warning ပေးပါလိမ့်မယ်။ ပြီးတော့ type ကိုလည်း မဖြစ်မနေ ရေးပေးရပါတယ်။
+      ဒီမှာတော့ u32 ပါ၊ unsigned 32 bit integer ဖြစ်တဲ့အတွက် အနုတ်ကိန်း ဖြစ်လို့ မရပါဘူး။ type ကို
+      ချန်ထားလိုက်ရင် compiler က missing type for const item ဆိုတဲ့ error နဲ့ ရပ်သွားပါတယ်။ const
+      ကို mut လုပ်လို့ မရသလို၊ သူ့ တန်ဖိုးကိုလည်း program compile လုပ်ချိန်မှာတင် သိနေရပါမယ်။
     sources:
       - title: "The Rust Book — Constants"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html#constants"
@@ -570,12 +595,12 @@ scenes:
           occurrence: 1
 
   - id: annotate
-    narration: >
-      [[mark:select-score]] A let can have its type written out too. Rust
-      picked i32 for score, the default for whole numbers. But a score never
-      goes below zero. [[mark:type-annotation]] So let's write u32, after a
-      colon. That's a type annotation. [[mark:type-max]] Now let's print the
-      score next to the constant.
+    narration: >-
+      [[mark:select-score]] let မှာလည်း type ကို ထည့်ရေးလို့ ရပါတယ်။ score အတွက် Rust က i32 ကို
+      ရွေးပေးထားပါတယ်၊ ဒါက ဒသမ မပါတဲ့ ကိန်းဂဏန်းတွေအတွက် default type ပါ။ ဒါပေမဲ့ score ဆိုတာ
+      ဘယ်တော့မှ သုညအောက် မရောက်ပါဘူး။ [[mark:type-annotation]] ဒါကြောင့် score နောက်မှာ colon ခံပြီး
+      u32 လို့ ရေးလိုက်ရအောင်။ ဒါကို type annotation လို့ ခေါ်ပါတယ်။ [[mark:type-max]] အခု score ကို
+      constant နဲ့ တွဲပြီး print ထုတ်ကြည့်ရအောင်။
     sources:
       - title: "The Rust Book — Data Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html"
@@ -609,10 +634,9 @@ scenes:
         text: " of {MAX_SCORE}"
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. [[mark:read-output]] Lives is three. The
-      score is two hundred fifty, out of a thousand. And spaces is now the
-      number four, not the text.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ lives က 3 ပါ။ score က 1000 ထဲက 250 ပါ။ ပြီးတော့ spaces ကတော့
+      အခု စာသား မဟုတ်တော့ဘဲ၊ 4 ဆိုတဲ့ ကိန်းဂဏန်း ဖြစ်သွားပါပြီ။
     sources:
       - title: "Rust Playground"
         url: "https://play.rust-lang.org/"
@@ -633,11 +657,11 @@ scenes:
         contains: "let spaces = spaces.len();"
 
   - id: wrap
-    narration: >
-      So, let makes a variable that can't change, unless you add mut.
-      Shadowing makes a new variable with the same name, and const is a fixed
-      value with a type. Next, we'll look at Rust's data types, like the i32
-      and u32 you met here.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ let က ပြောင်းလို့ မရတဲ့ variable တစ်ခု လုပ်ပေးပြီး၊ ပြောင်းချင်ရင် mut
+      ထည့်ရပါတယ်။ shadowing ကတော့ နာမည် အတူတူနဲ့ variable အသစ် တစ်ခု လုပ်တာ ဖြစ်ပြီး၊ const ကတော့
+      type ပါတဲ့ အသေ သတ်မှတ်ထားတဲ့ တန်ဖိုး တစ်ခုပါ။ နောက် lesson မှာတော့ ဒီ lesson မှာ တွေ့ခဲ့တဲ့
+      i32 နဲ့ u32 လို Rust ရဲ့ data type တွေကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Variables and Mutability"
         url: "https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html"

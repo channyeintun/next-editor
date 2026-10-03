@@ -10,8 +10,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-functions
-  title: "Rust from zero: Functions"
-  locale: en-US
+  title: "Rust from zero: Function တွေ"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -32,7 +32,7 @@ lesson:
       y: 160
       width: 500
       height: 45
-      text: "What a function is made of"
+      text: "Function ရဲ့ အစိတ်အပိုင်း"
       strokeColor: "#1e1e1e"
       fontSize: 36
     - id: fn1-fn
@@ -67,7 +67,7 @@ lesson:
       y: 305
       width: 70
       height: 35
-      text: "name"
+      text: "နာမည်"
       strokeColor: "#1971c2"
       fontSize: 28
     - id: fn1-name-l2
@@ -102,7 +102,7 @@ lesson:
       y: 305
       width: 160
       height: 35
-      text: "parameters"
+      text: "parameter တွေ"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: fn1-params-l2
@@ -111,7 +111,7 @@ lesson:
       y: 340
       width: 260
       height: 35
-      text: "each needs a type"
+      text: "တစ်ခုစီ type လိုတယ်"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: fn1-ret
@@ -172,7 +172,7 @@ lesson:
       y: 398
       width: 280
       height: 35
-      text: "last expression, no ;"
+      text: "နောက်ဆုံး expression၊ ; မပါ"
       strokeColor: "#6741d9"
       fontSize: 28
     - id: fn1-body-l2
@@ -181,7 +181,7 @@ lesson:
       y: 436
       width: 295
       height: 35
-      text: "= the value returned"
+      text: "= ပြန်ပေးတဲ့ တန်ဖိုး"
       strokeColor: "#6741d9"
       fontSize: 28
     - id: fn1-close
@@ -199,7 +199,7 @@ lesson:
       y: 570
       width: 730
       height: 35
-      text: "types in the signature: a promise the compiler checks"
+      text: "signature ထဲက type တွေ: compiler က စစ်တဲ့ ကတိ"
       strokeColor: "#2f9e44"
       fontSize: 28
     # --- Board two: one semicolon turns the value into a statement ----------
@@ -211,7 +211,7 @@ lesson:
       y: 160
       width: 455
       height: 45
-      text: "Statement or expression?"
+      text: "Statement လား၊ expression လား"
       strokeColor: "#1e1e1e"
       fontSize: 36
     - id: fn2-expr-label
@@ -246,7 +246,7 @@ lesson:
       y: 244
       width: 255
       height: 35
-      text: "gives a u32 value"
+      text: "u32 တန်ဖိုး ရတယ်"
       strokeColor: "#6741d9"
       fontSize: 28
     - id: fn2-stmt-label
@@ -289,7 +289,7 @@ lesson:
       y: 324
       width: 270
       height: 35
-      text: "gives () — no value"
+      text: "() ရတယ် — တန်ဖိုး မရှိ"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: fn2-err-1
@@ -321,7 +321,10 @@ lesson:
       fontSize: 28
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 33
 
 runtime:
@@ -331,30 +334,36 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "Movie night\nfour tickets: 48\nadult: 12, baby: 0\n"
+      stdout: "Movie night
+
+        four tickets: 48
+
+        adult: 12, baby: 0\n"
       stderr: ""
 
 scenes:
   - id: anatomy
-    chapter: What a function is made of
-    narration: >
-      [[mark:board]] You've already written one function: main, where every
-      Rust program starts. Now let's write our own.
-      [[mark:draw-name]] A function starts with f n, short for function, then
-      its name. In Rust,
-      function names use snake case: lowercase words, joined by underscores.
-      If you use capital letters instead, the compiler warns you and suggests
-      the snake case name. [[mark:draw-params]] Next come the parameters, in
-      parentheses. Each one has a name and a type, and you must write the
-      type. [[mark:draw-return]] After the arrow comes the return type. That's
-      the type of the value it gives back.
-      [[mark:draw-body]] Then the body, in curly braces. Its last expression
-      has no semicolon, and that's the value the function returns.
-      [[mark:draw-why]] So why all these types? The signature is a promise.
-      Rust checks every call, and the body, against it. Because every
-      signature lists its types, Rust can work out the types inside the body,
-      so you rarely need type annotations there. And when something's wrong,
-      the error can point at the exact place.
+    chapter: Function ရဲ့ အစိတ်အပိုင်းတွေ
+    narration: >-
+      [[mark:board]] ဒီ lesson မှာ function တွေအကြောင်း လေ့လာမှာ ဖြစ်လို့၊ function တစ်ခုမှာ ဘာတွေ
+      ပါလဲ ဆိုတာကနေ စကြည့်ရအောင်။ တကယ်တော့ function တစ်ခုကို ကိုယ်တိုင် ရေးဖူးပြီးသားပါ။ အဲဒါက main
+      function ပါ၊ Rust program တိုင်းဟာ main ကနေ စတာပါ။ အခုတော့ ကိုယ်ပိုင် function တွေကို
+      ရေးကြည့်ရအောင်။ [[mark:draw-name]] function တစ်ခုကို f n နဲ့ စရေးပါတယ်။ f n ဆိုတာ function ရဲ့
+      အတိုကောက်ပါ။ သူ့နောက်မှာ function ရဲ့ နာမည် လာပါတယ်။ Rust မှာ function နာမည်တွေကို snake case
+      နဲ့ ပေးပါတယ်။ ဆိုလိုတာက စာလုံးသေးတွေချည်း သုံးပြီး၊ စကားလုံး တစ်လုံးနဲ့ တစ်လုံးကြားကို
+      underscore နဲ့ ဆက်ပေးတာပါ။ စာလုံးကြီးတွေ သုံးမိရင်တော့ compiler က warning ပေးပြီး၊ snake case
+      နာမည်ကို အကြံပြုပေးပါလိမ့်မယ်။ [[mark:draw-params]] နာမည် နောက်မှာ parameter တွေ လာပြီး၊
+      ကွင်းထဲမှာ ရေးပါတယ်။ parameter တစ်ခုစီမှာ နာမည် တစ်ခုနဲ့ type တစ်ခု ပါပြီး၊ type ကိုတော့
+      မရေးဘဲ ထားလို့ မရပါဘူး၊ ကိုယ်တိုင် ရေးပေးရပါတယ်။ [[mark:draw-return]] ကွင်း ပိတ်ပြီးတဲ့
+      နောက်မှာ arrow တစ်ခု ရှိပြီး၊ arrow နောက်မှာ return type လာပါတယ်။ return type ဆိုတာ ဒီ
+      function က ပြန်ပေးမယ့် တန်ဖိုးရဲ့ type ပါ။ [[mark:draw-body]] နောက်ဆုံးကတော့ body ပါ။ body ကို
+      တွန့်ကွင်းထဲမှာ ရေးပြီး၊ body ရဲ့ နောက်ဆုံး expression မှာ semicolon မပါတာကို သတိထား ကြည့်ပါ။
+      အဲဒီ နောက်ဆုံး expression ရဲ့ တန်ဖိုးကပဲ function က ပြန်ပေးတဲ့ တန်ဖိုး ဖြစ်ပါတယ်။
+      [[mark:draw-why]] ဒါဆို type တွေကို ဘာကြောင့် ဒီလောက် ရေးနေရတာလဲ။ signature ဆိုတာ ကတိ တစ်ခုပါ။
+      ဒီ function ကို ခေါ်တဲ့ နေရာတိုင်းကိုရော၊ function ရဲ့ body ကိုပါ Rust က အဲဒီ ကတိနဲ့
+      တိုက်စစ်ပါတယ်။ signature တိုင်းမှာ type တွေ အပြည့်အစုံ ရေးထားတဲ့အတွက်၊ body ထဲက type တွေကို
+      Rust က ကိုယ့်အစား တွက်ထုတ်နိုင်ပြီး၊ body ထဲမှာ type annotation ရေးစရာ သိပ် မလိုတော့ပါဘူး။
+      ပြီးတော့ တစ်ခုခု မှားနေရင်လည်း error က မှားတဲ့ နေရာ အတိအကျကို ထောက်ပြနိုင်ပါတယ်။
     sources:
       - title: "The Rust Book — Functions"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html"
@@ -397,17 +406,18 @@ scenes:
         drawMs: 1400
 
   - id: write-total
-    chapter: Writing and calling a function
-    narration: >
-      Let's build one. [[mark:open-main]] Here's main, printing one line.
-      [[mark:type-total]] We'll add total_cost below it. In Rust, a function
-      can come before or after the code that calls it.
-      [[mark:select-params]] It takes a price and a count, and both are u32.
-      [[mark:select-tail]] The body is one expression, price times count, with
-      no semicolon. So that's the value total_cost returns, with no return
-      keyword. Why does that work? A block in curly braces is an
-      expression too, and its value is its last expression. A function's body
-      is a block.
+    chapter: Function ရေးပြီး ခေါ်ခြင်း
+    narration: >-
+      ကဲ၊ တကယ် ရေးကြည့်ရအောင်။ [[mark:open-main]] ဒီမှာ main ရှိပါတယ်၊ စာကြောင်း တစ်ကြောင်းပဲ print
+      ထုတ်နေပါတယ်။ [[mark:type-total]] သူ့အောက်မှာ total cost ဆိုတဲ့ function ကို ထည့်ပါမယ်။ Rust
+      မှာ function တစ်ခုကို သူ့ကို ခေါ်တဲ့ code ရဲ့ အရှေ့မှာ ရေးရေး၊ အနောက်မှာ ရေးရေး ရပါတယ်။
+      [[mark:select-params]] ဒီ function က price နဲ့ count ဆိုတဲ့ parameter နှစ်ခု လက်ခံပြီး၊
+      နှစ်ခုလုံးက u32 ပါ။ [[mark:select-tail]] body ထဲမှာကတော့ expression တစ်ခုတည်းပဲ ရှိပါတယ်၊
+      price နဲ့ count ကို မြှောက်တာပါ၊ semicolon မပါပါဘူး။ ဒါကြောင့် ဒီ တန်ဖိုးကပဲ total cost က
+      ပြန်ပေးတဲ့ တန်ဖိုး ဖြစ်သွားပြီး၊ return keyword တောင် ရေးစရာ မလိုပါဘူး။ ဘာကြောင့် ဒီလို
+      ရတာလဲဆိုတော့၊ တွန့်ကွင်းထဲက block တစ်ခုဟာ သူ့ဘာသာ expression တစ်ခု ဖြစ်ပြီး၊ block ရဲ့
+      တန်ဖိုးဆိုတာ သူ့ထဲက နောက်ဆုံး expression ရဲ့ တန်ဖိုးပဲ ဖြစ်လို့ပါ။ function ရဲ့ body ကလည်း
+      block တစ်ခုပါပဲ။
     sources:
       - title: "The Rust Book — Functions with Return Values"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#functions-with-return-values"
@@ -430,7 +440,13 @@ scenes:
           after: "    println!(\"Movie night\");\n}\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\nfn total_cost(price: u32, count: u32) -> u32 {\n    price * count\n}\n"
+        text: "
+
+          fn total_cost(price: u32, count: u32) -> u32 {
+
+          \    price * count
+
+          }\n"
       - id: select-params
         type: editor.select
         at: { mark: select-params }
@@ -447,13 +463,13 @@ scenes:
           occurrence: 1
 
   - id: call-total
-    narration: >
-      [[mark:type-call]] Let's call it from main, for four tickets at twelve
-      each. Rust reads the signature, so it knows twelve and four are
-      u32 values. [[mark:select-call]] The call is an expression. It produces
-      a value: forty-eight. [[mark:select-let]] The whole let line is a
-      statement. It does a job, storing that value in total, but it doesn't
-      produce a value itself.
+    narration: >-
+      [[mark:type-call]] အခု main ထဲကနေ ဒီ function ကို ခေါ်ကြည့်ရအောင်။ လက်မှတ် တစ်စောင်ကို 12
+      နှုန်းနဲ့၊ လေးစောင်အတွက် ဆိုပါစို့။ Rust က signature ကို ဖတ်ထားတဲ့အတွက်၊ 12 နဲ့ 4 ဟာ u32
+      တန်ဖိုးတွေ ဖြစ်တယ်ဆိုတာ သူ့ဘာသာ သိပါတယ်။ [[mark:select-call]] function ကို ခေါ်တဲ့ ဒီ အပိုင်းက
+      expression တစ်ခုပါ။ သူက တန်ဖိုး တစ်ခု ထုတ်ပေးပါတယ်၊ အဲဒါက 48 ပါ။ [[mark:select-let]] ဒီ let
+      စာကြောင်း တစ်ကြောင်းလုံးကတော့ statement ပါ။ သူက အလုပ် တစ်ခု လုပ်ပေးပါတယ်၊ ဆိုလိုတာက ထွက်လာတဲ့
+      တန်ဖိုးကို total ထဲ သိမ်းပေးတာပါ၊ ဒါပေမဲ့ သူ့ကိုယ်တိုင်ကတော့ တန်ဖိုး ဘာမှ ထုတ်မပေးပါဘူး။
     sources:
       - title: "The Rust Book — Statements and Expressions"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#statements-and-expressions"
@@ -466,7 +482,9 @@ scenes:
           after: "    println!(\"Movie night\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let total = total_cost(12, 4);\n    println!(\"four tickets: {total}\");\n"
+        text: "    let total = total_cost(12, 4);
+
+          \    println!(\"four tickets: {total}\");\n"
       - id: select-call
         type: editor.select
         at: { mark: select-call }
@@ -483,20 +501,20 @@ scenes:
           occurrence: 1
 
   - id: semicolon
-    chapter: Statements and expressions
-    narration: >
-      [[mark:board-two]] That difference matters most at the end of a
-      function. [[mark:draw-expr]] Here, price times count is an expression.
-      It gives back a u32. [[mark:draw-stmt]] Add a semicolon, and it becomes
-      a statement, which gives back no value. Rust's type for no value is the
-      unit type, written as empty parentheses. A function with no arrow, like
-      main, returns unit too.
-      [[mark:draw-error]] So with that semicolon, total_cost promises a u32
-      but returns unit. The compiler stops with error E0308, mismatched types:
-      expected u32, found unit. [[mark:draw-help]] And it tells you the fix.
-      Remove this semicolon to return this value.
-      [[mark:close-board-two]] Our total_cost has no semicolon, so it
-      compiles.
+    chapter: Statement နဲ့ expression
+    narration: >-
+      [[mark:board-two]] expression နဲ့ statement ဆိုတဲ့ ဒီ ကွာခြားချက်ဟာ function တစ်ခုရဲ့ အဆုံးမှာ
+      အရေးအကြီးဆုံး ဖြစ်ပါတယ်။ [[mark:draw-expr]] ဒီမှာ price နဲ့ count ကို မြှောက်တာက expression
+      တစ်ခုပါ၊ u32 တန်ဖိုး တစ်ခု ပြန်ပေးပါတယ်။ [[mark:draw-stmt]] သူ့နောက်မှာ semicolon တစ်လုံး
+      ထည့်လိုက်တာနဲ့ statement ဖြစ်သွားပြီး၊ statement က တန်ဖိုး ဘာမှ ပြန်မပေးတော့ပါဘူး။ တန်ဖိုး
+      မရှိတာကို Rust မှာ unit type လို့ ခေါ်ပြီး၊ ကွင်းအလွတ်နဲ့ ရေးပါတယ်။ arrow မပါတဲ့ function တွေ၊
+      ဥပမာအားဖြင့် main လိုမျိုးကလည်း unit ကိုပဲ ပြန်ပေးနေတာပါ။ [[mark:draw-error]] ဒါဆို ဒီ
+      semicolon တစ်လုံးကြောင့် total cost က u32 ပြန်ပေးမယ်လို့ ကတိပေးထားပေမယ့်၊ တကယ်တမ်း unit ပဲ
+      ပြန်ပေးနေတဲ့ သဘော ဖြစ်သွားပါတယ်။ ဒါကြောင့် compiler က E0308 error၊ mismatched types နဲ့
+      ရပ်သွားပါတယ်။ ဆိုလိုတာက type မကိုက်ဘူး၊ u32 ကို မျှော်လင့်ထားပေမယ့် unit ကို တွေ့တယ် ဆိုတဲ့
+      သဘောပါ။ [[mark:draw-help]] ပြီးတော့ help စာကြောင်းမှာ ပြင်နည်းကိုပါ တန်းပြောထားပါတယ်။ ဒီ
+      semicolon ကို ဖြုတ်လိုက်ရင် တန်ဖိုးကို ပြန်ပေးနိုင်ပါပြီတဲ့။ [[mark:close-board-two]] ကိုယ့်
+      total cost မှာတော့ semicolon မပါတဲ့အတွက် compile လုပ်လို့ ရပါတယ်။
     sources:
       - title: "The Rust Book — Statements and Expressions"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#statements-and-expressions"
@@ -539,20 +557,20 @@ scenes:
         open: false
 
   - id: early-return
-    chapter: Leaving early with return
-    narration: >
-      [[mark:type-ticket]] Sometimes a function knows its answer early. Our
-      new ticket_price function gives a ticket's price for an age. The
-      if runs its block only when its condition is true. You'll learn if fully
-      in the next lesson. [[mark:select-return]] Here, return gives back zero
-      and leaves the function immediately. So a ticket for a child under three
-      is free, and the rest of the function doesn't run. Its semicolon is fine,
-      because return doesn't need to be last.
-      [[mark:select-twelve]] Everyone else reaches the end, where twelve is
-      the last expression. That's the usual style. Use return to leave early,
-      and let the last expression give the normal answer.
-      [[mark:type-ticket-calls]] Let's get the price for an adult and a baby,
-      and print both.
+    chapter: return နဲ့ စောစော ထွက်ခြင်း
+    narration: >-
+      [[mark:type-ticket]] တစ်ခါတစ်လေ function တစ်ခုက သူ့အဖြေကို စောစော သိနေတတ်ပါတယ်။ အခု ထည့်မယ့်
+      ticket price ဆိုတဲ့ function က အသက်ကို ကြည့်ပြီး လက်မှတ် ဈေးကို ပြန်ပေးပါတယ်။ သူ့ထဲမှာ if
+      တစ်ခု ပါပြီး၊ if ရဲ့ condition က true ဖြစ်မှသာ တွန့်ကွင်းထဲက code ကို run ပါတယ်။ if အကြောင်း
+      အသေးစိတ်ကိုတော့ နောက် lesson မှာ လေ့လာရပါမယ်။ [[mark:select-return]] ဒီနေရာမှာ return က 0 ကို
+      ပြန်ပေးပြီး၊ function ထဲကနေ ချက်ချင်း ထွက်သွားပါတယ်။ ဒါကြောင့် အသက် 3 နှစ် အောက် ကလေးအတွက်
+      လက်မှတ်က အခမဲ့ ဖြစ်ပြီး၊ function ရဲ့ ကျန်တဲ့ အပိုင်းကို run မလုပ်တော့ပါဘူး။ ဒီ return နောက်က
+      semicolon ကတော့ ပြဿနာ မရှိပါဘူး၊ ဘာကြောင့်လဲဆိုတော့ return က နောက်ဆုံးမှာ နေစရာ မလိုလို့ပါ။
+      [[mark:select-twelve]] ကျန်တဲ့ သူတွေအတွက်ကတော့ function ရဲ့ အဆုံးထိ ရောက်သွားပြီး၊ အဲဒီမှာ 12
+      က နောက်ဆုံး expression ဖြစ်ပါတယ်။ ဒါက Rust မှာ ပုံမှန် ရေးလေ့ရှိတဲ့ ပုံစံပါ။ စောစော
+      ထွက်ချင်ရင် return ကို သုံးပြီး၊ ပုံမှန် အဖြေကိုတော့ နောက်ဆုံး expression ကနေ
+      ပြန်ပေးခိုင်းပါတယ်။ [[mark:type-ticket-calls]] ကဲ၊ လူကြီး တစ်ယောက်နဲ့ ကလေးငယ် တစ်ယောက်အတွက်
+      လက်မှတ် ဈေးကို ယူပြီး၊ နှစ်ခုလုံးကို print ထုတ်ကြည့်ရအောင်။
     sources:
       - title: "The Rust Book — Functions with Return Values"
         url: "https://doc.rust-lang.org/book/ch03-03-how-functions-work.html#functions-with-return-values"
@@ -569,7 +587,19 @@ scenes:
           after: "    price * count\n}\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\nfn ticket_price(age: u32) -> u32 {\n    if age < 3 {\n        return 0;\n    }\n    12\n}\n"
+        text: "
+
+          fn ticket_price(age: u32) -> u32 {
+
+          \    if age < 3 {
+
+          \        return 0;
+
+          \    }
+
+          \    12
+
+          }\n"
       - id: select-return
         type: editor.select
         at: { mark: select-return }
@@ -592,14 +622,18 @@ scenes:
           after: "    println!(\"four tickets: {total}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let adult = ticket_price(30);\n    let baby = ticket_price(1);\n    println!(\"adult: {adult}, baby: {baby}\");\n"
+        text: "    let adult = ticket_price(30);
+
+          \    let baby = ticket_price(1);
+
+          \    println!(\"adult: {adult}, baby: {baby}\");\n"
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. Movie night, then forty-eight for four
-      tickets: price times count. An adult pays twelve, from the last
-      expression of ticket_price. And the baby pays zero, from the
-      early return.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ ပထမ စာကြောင်းက Movie night ဖြစ်ပြီး၊ နောက်တစ်ကြောင်းမှာ
+      လက်မှတ် လေးစောင်အတွက် 48 ဆိုတာ price နဲ့ count ကို မြှောက်ထားတဲ့ တန်ဖိုးပါ။ လူကြီးက 12
+      ပေးရပါတယ်၊ ဒါက ticket price ရဲ့ နောက်ဆုံး expression ကနေ လာတာပါ။ ကလေးငယ်ကတော့ 0 ပါ၊ ဒါကတော့
+      စောစော ထွက်သွားတဲ့ return ကနေ လာတာပါ။
     sources:
       - title: "Rust by Example — Functions"
         url: "https://doc.rust-lang.org/rust-by-example/fn.html"
@@ -620,11 +654,12 @@ scenes:
         contains: "fn ticket_price(age: u32) -> u32 {"
 
   - id: wrap
-    narration: >
-      So a function names its inputs with their types, and promises the type
-      it returns. The last expression, without a semicolon, is the value it
-      gives back, and return leaves early. Next, you'll make decisions and
-      repeat work with control flow: if, loop, while, and for.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ function တစ်ခုက သူ့ parameter တွေကို နာမည်ရော type ရော သတ်မှတ်ပေးပြီး၊
+      ပြန်ပေးမယ့် type ကိုလည်း ကတိပေးထားပါတယ်။ semicolon မပါတဲ့ နောက်ဆုံး expression က function
+      ပြန်ပေးတဲ့ တန်ဖိုး ဖြစ်ပြီး၊ return ကတော့ စောစော ထွက်ဖို့ သုံးပါတယ်။ နောက် lesson မှာတော့
+      control flow ကို ကြည့်သွားပါမယ်။ if၊ loop၊ while နဲ့ for တွေနဲ့ ဆုံးဖြတ်ချက် ချတာရော၊
+      အလုပ်တွေကို ထပ်ခါထပ်ခါ လုပ်တာရော ရေးကြည့်ပါမယ်။
     sources:
       - title: "The Rust Book — Control Flow"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html"

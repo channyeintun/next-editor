@@ -20,7 +20,7 @@ schemaVersion: 1
 lesson:
   slug: rust-control-flow
   title: "Rust from zero: Control flow"
-  locale: en-US
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -45,7 +45,7 @@ lesson:
       y: 160
       width: 420
       height: 48
-      text: "if is an expression"
+      text: "if ဆိုတာ expression"
       strokeColor: "#1e1e1e"
       fontSize: 38
     - id: b1-cond
@@ -70,7 +70,7 @@ lesson:
       y: 256
       width: 110
       height: 36
-      text: "a bool"
+      text: "bool"
       strokeColor: "#1971c2"
       fontSize: 28
     - id: b1-arrow-true
@@ -168,7 +168,7 @@ lesson:
       y: 566
       width: 400
       height: 38
-      text: "label = the chosen value"
+      text: "label = ရွေးလိုက်တဲ့ တန်ဖိုး"
       strokeColor: "#6741d9"
       fontSize: 30
 
@@ -179,7 +179,7 @@ lesson:
       y: 160
       width: 520
       height: 48
-      text: "What the compiler checks"
+      text: "Compiler က ဘာ စစ်လဲ"
       strokeColor: "#1e1e1e"
       fontSize: 38
     - id: b2-rule1
@@ -188,7 +188,7 @@ lesson:
       y: 228
       width: 520
       height: 40
-      text: "1. The condition must be a bool"
+      text: "1. condition က bool ဖြစ်ရမယ်"
       strokeColor: "#1971c2"
       fontSize: 30
     - id: b2-bad1
@@ -249,7 +249,7 @@ lesson:
       y: 440
       width: 660
       height: 40
-      text: "2. Both branches must give the same type"
+      text: "2. branch နှစ်ခုလုံး type တူရမယ်"
       strokeColor: "#1971c2"
       fontSize: 30
     - id: b2-bad2
@@ -295,7 +295,7 @@ lesson:
       y: 160
       width: 420
       height: 48
-      text: "Control flow in Rust"
+      text: "Rust ရဲ့ control flow"
       strokeColor: "#1e1e1e"
       fontSize: 38
     - id: b3-if-box
@@ -328,7 +328,7 @@ lesson:
       y: 250
       width: 240
       height: 36
-      text: "picks a branch,"
+      text: "branch ရွေးတယ်၊"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: b3-if-v
@@ -337,7 +337,7 @@ lesson:
       y: 250
       width: 210
       height: 36
-      text: "gives a value"
+      text: "တန်ဖိုး ပြန်ပေးတယ်"
       strokeColor: "#6741d9"
       fontSize: 28
     - id: b3-loop-box
@@ -370,7 +370,7 @@ lesson:
       y: 335
       width: 270
       height: 36
-      text: "runs until break,"
+      text: "break အထိ ပတ်တယ်၊"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: b3-loop-v
@@ -379,7 +379,7 @@ lesson:
       y: 335
       width: 210
       height: 36
-      text: "gives a value"
+      text: "တန်ဖိုး ပြန်ပေးတယ်"
       strokeColor: "#6741d9"
       fontSize: 28
     - id: b3-while-box
@@ -412,7 +412,7 @@ lesson:
       y: 420
       width: 440
       height: 36
-      text: "checks a condition each time"
+      text: "တစ်ကြိမ်တိုင်း condition စစ်တယ်"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: b3-for-box
@@ -445,12 +445,15 @@ lesson:
       y: 505
       width: 450
       height: 36
-      text: "each item of a range or array"
+      text: "range ဒါမှမဟုတ် array ထဲက တစ်ခုချင်း"
       strokeColor: "#2f9e44"
       fontSize: 28
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 34
 
 runtime:
@@ -460,22 +463,47 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "today is 30 degrees\nit feels hot\ndoubled past 100: 128\n3...\n2...\n1...\nlap 1\nlap 2\nlap 3\n12 degrees\n21 degrees\n30 degrees\n"
+      stdout: "today is 30 degrees
+
+        it feels hot
+
+        doubled past 100: 128
+
+        3...
+
+        2...
+
+        1...
+
+        lap 1
+
+        lap 2
+
+        lap 3
+
+        12 degrees
+
+        21 degrees
+
+        30 degrees\n"
       stderr: ""
 
 scenes:
   - id: if-expression
-    chapter: if is an expression
-    narration: >
-      [[mark:open-board]] Programs make choices, and they repeat work. That's
-      control flow. We'll use if to choose, and three kinds of loop to repeat.
-      [[mark:draw-cond]] An if checks a condition that's a bool: is today
-      greater than twenty-five? [[mark:draw-branches]] When it's true, the
-      first branch runs. When it's false, the else branch runs.
-      [[mark:draw-result]] Now here's what's different in Rust. if is an
-      expression, so it gives back a value. The branch that runs gives its
-      value to label. Many languages need a separate operator for this, with a
-      question mark and a colon. Rust doesn't have one. if does that job.
+    chapter: if ဆိုတာ expression တစ်ခု
+    narration: >-
+      [[mark:open-board]] program တစ်ခုဆိုတာ အခြေအနေကို ကြည့်ပြီး ရွေးချယ်ရတာတွေ ရှိသလို၊ အလုပ်
+      တစ်ခုကို ထပ်ခါထပ်ခါ လုပ်ရတာတွေလည်း ရှိပါတယ်။ ဒီလို program ရဲ့ သွားလမ်းကို ထိန်းတာကို control
+      flow လို့ ခေါ်ပါတယ်။ ဒီ lesson မှာ ရွေးချယ်ဖို့အတွက် if ကို သုံးမှာ ဖြစ်ပြီး၊ ထပ်ခါထပ်ခါ
+      လုပ်ဖို့အတွက်တော့ loop သုံးမျိုးကို ကြည့်သွားပါမယ်။ [[mark:draw-cond]] if က condition တစ်ခုကို
+      စစ်ပါတယ်။ condition ဆိုတာ bool တစ်ခု ဖြစ်ပြီး၊ အဖြေက true ဒါမှမဟုတ် false ထွက်မယ့် မေးခွန်း
+      တစ်ခုလို့ မြင်လို့ ရပါတယ်။ ဥပမာအားဖြင့် today က 25 ထက် ကြီးလား ဆိုတာမျိုးပါ။
+      [[mark:draw-branches]] အဖြေက true ဆိုရင် ပထမ branch ကို run ပြီး၊ false ဆိုရင်တော့ else branch
+      ကို run ပါတယ်။ [[mark:draw-result]] Rust မှာ ထူးခြားတာက ဒီနေရာပါ။ if ဆိုတာ expression တစ်ခု
+      ဖြစ်တဲ့အတွက်၊ တန်ဖိုး တစ်ခု ပြန်ပေးပါတယ်။ ဆိုလိုတာက၊ run သွားတဲ့ branch ရဲ့ တန်ဖိုးက label ထဲ
+      ရောက်သွားတာပါ။ တခြား ဘာသာစကား အများစုမှာဆိုရင် ဒီအလုပ်အတွက် question mark နဲ့ colon သုံးတဲ့
+      operator သီးသန့် တစ်ခု လိုပါတယ်။ Rust မှာတော့ အဲဒီလို operator မရှိပါဘူး။ ဘာကြောင့်လဲဆိုတော့၊
+      if ကိုယ်တိုင်က အဲဒီ အလုပ်ကို လုပ်ပေးနေလို့ပါ။
     sources:
       - title: "The Rust Book — if Expressions"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#if-expressions"
@@ -505,16 +533,16 @@ scenes:
         drawMs: 2000
 
   - id: build-if
-    narration: >
-      Let's write it. [[mark:open-main]] So far, today is thirty.
-      [[mark:type-if]] We name the result label. Then, on the right of the
-      equals sign, we write the whole if, with a value in each branch: hot, or
-      mild. [[mark:select-cond]] The condition needs no parentheses. Add them,
-      and the compiler warns you. [[mark:select-branches]] There's no
-      semicolon after hot, or after mild. You saw this with functions: a
-      block's value is its last expression. The semicolon comes once, at the
-      end of the whole let.
-      [[mark:type-print]] Then we print label.
+    narration: >-
+      ကဲ၊ ရေးကြည့်ရအောင်။ [[mark:open-main]] ဖိုင်ထဲမှာ အခု ရှိနေတာက today ဆိုတဲ့ variable ပါ၊
+      တန်ဖိုးက 30 ပါ။ [[mark:type-if]] ရလဒ်ကို label လို့ နာမည် ပေးပြီး၊ equal sign ရဲ့ ညာဘက်မှာ if
+      တစ်ခုလုံးကို ရေးပါတယ်။ branch တစ်ခုစီမှာ တန်ဖိုး တစ်ခုစီ ပါပါတယ်၊ hot ဒါမှမဟုတ် mild ပါ။
+      [[mark:select-cond]] condition ကို ကွင်းခတ်စရာ မလိုတာ သတိထား ကြည့်ပါ။ ကွင်း ထည့်ရေးလိုက်ရင်
+      compiler က မလိုအပ်ဘူးဆိုပြီး warning ပြပါလိမ့်မယ်။ [[mark:select-branches]] ပြီးတော့ hot
+      နောက်မှာရော mild နောက်မှာရော semicolon မပါတာကိုလည်း ကြည့်ပါ။ function lesson မှာ
+      တွေ့ခဲ့ပြီးသားအတိုင်း၊ block တစ်ခုရဲ့ တန်ဖိုးဆိုတာ သူ့ရဲ့ နောက်ဆုံး expression ပါ။ semicolon
+      ကတော့ let တစ်ခုလုံးရဲ့ အဆုံးမှာ တစ်ခါပဲ လာပါတယ်။ [[mark:type-print]] ပြီးရင် label ကို print
+      ထုတ်ကြည့်ပါမယ်။
     sources:
       - title: "The Rust Book — Using if in a let Statement"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#using-if-in-a-let-statement"
@@ -567,19 +595,20 @@ scenes:
         text: "    println!(\"it feels {label}\");\n"
 
   - id: compiler-rules
-    chapter: What the compiler checks
-    narration: >
-      [[mark:open-rules]] Before the program runs, the compiler checks two
-      rules about if. [[mark:draw-rule-one]] First, the condition must be a
-      bool. In some languages, a number works as a condition, and zero means
-      false. Rust won't guess. [[mark:draw-error-one]] Write if today, and the
-      compiler stops with error E0308, mismatched types. It expected a bool,
-      and found an integer. [[mark:draw-fix-one]] So you write the comparison
-      yourself, and the code says exactly what it checks.
-      [[mark:draw-rule-two]] Second, both branches must give the same type,
-      because label needs one type, known at compile time.
-      [[mark:draw-error-two]] So a string in one branch and a number in
-      the other is also E0308: if and else have incompatible types.
+    chapter: Compiler က ဘာ စစ်လဲ
+    narration: >-
+      [[mark:open-rules]] program run မလုပ်ခင်မှာ compiler က if နဲ့ ပတ်သက်ပြီး စည်းကမ်း နှစ်ချက်ကို
+      စစ်ပါတယ်။ [[mark:draw-rule-one]] ပထမ အချက်က၊ condition က bool ဖြစ်ကို ဖြစ်ရပါမယ်။ တချို့
+      ဘာသာစကားတွေမှာ ကိန်းဂဏန်း တစ်ခုကို condition အနေနဲ့ တန်းသုံးလို့ ရပြီး၊ သုည ဆိုရင် false လို့
+      ယူဆပါတယ်။ Rust ကတော့ ဒီလို ခန့်မှန်းပြီး မလုပ်ပေးပါဘူး။ [[mark:draw-error-one]] if today လို့
+      ရေးလိုက်ရင် compiler က E0308 error၊ mismatched types နဲ့ ရပ်သွားပါတယ်။ ဆိုလိုတာက၊ bool ကို
+      မျှော်လင့်ထားတဲ့ နေရာမှာ integer တစ်ခု တွေ့သွားလို့ပါ။ [[mark:draw-fix-one]] ဒါကြောင့်
+      နှိုင်းယှဉ်တဲ့ အပိုင်းကို ကိုယ်တိုင် ရေးပေးရပါတယ်။ အဲဒီလို ရေးလိုက်တော့ ဒီ code က ဘာကို
+      စစ်နေလဲ ဆိုတာ အတိအကျ သိသာသွားပါတယ်။ [[mark:draw-rule-two]] ဒုတိယ အချက်က၊ branch နှစ်ခုလုံးက
+      type တူတဲ့ တန်ဖိုး ပြန်ပေးရပါမယ်။ ဘာကြောင့်လဲဆိုတော့၊ label မှာ type တစ်ခုတည်း ရှိရမှာ
+      ဖြစ်ပြီး၊ အဲဒီ type ကို compile လုပ်ချိန်မှာတင် သိထားရလို့ပါ။ [[mark:draw-error-two]]
+      ဒါကြောင့် branch တစ်ခုမှာ စာသား၊ နောက် တစ်ခုမှာ ကိန်းဂဏန်း ပြန်ပေးမိရင်လည်း E0308 error ပါပဲ။
+      if နဲ့ else မှာ type မကိုက်ဘူးလို့ compiler က ပြောပါလိမ့်မယ်။
     sources:
       - title: "Rust error codes — E0308"
         url: "https://doc.rust-lang.org/error_codes/E0308.html"
@@ -621,17 +650,18 @@ scenes:
         drawMs: 2800
 
   - id: loop-break
-    chapter: Three kinds of loop
-    narration: >
-      Now, repeating work. The first loop is called loop.
-      [[mark:type-loop]] It repeats forever, until you tell it to stop.
-      Here, n starts at one and doubles each time.
-      [[mark:select-if-no-else]] This if has no else. That's fine, because we
-      don't use its value. It only decides when to stop.
-      [[mark:select-break]] break stops the loop, and it can carry a value
-      out. So loop is an expression too, like if. Its value goes into big, and
-      big doesn't need mut, because it never changes. Only loop can do this,
-      since while and for can end without any break.
+    chapter: Loop သုံးမျိုး
+    narration: >-
+      အခု ထပ်ခါထပ်ခါ လုပ်တဲ့ အပိုင်းကို ကြည့်ရအောင်။ ပထမဆုံး loop ကတော့ နာမည်ကိုက loop လို့
+      ခေါ်ပါတယ်။ [[mark:type-loop]] ဒီ loop က ရပ်ခိုင်းမှ ရပ်ပါတယ်၊ မရပ်ခိုင်းသရွေ့ အဆုံးမရှိ
+      ပတ်နေမှာပါ။ ဒီမှာ n က 1 ကနေ စပြီး၊ တစ်ကြိမ် ပတ်တိုင်း နှစ်ဆ တိုးသွားပါတယ်။
+      [[mark:select-if-no-else]] ဒီ if မှာ else မပါတာ သတိထား ကြည့်ပါ။ ဒီလို ရေးလို့ ရပါတယ်။
+      ဘာကြောင့်လဲဆိုတော့၊ ဒီ if ရဲ့ တန်ဖိုးကို ကိုယ်က မသုံးလို့ပါ။ ဘယ်အချိန် ရပ်မလဲ ဆိုတာကိုပဲ သူက
+      ဆုံးဖြတ်ပေးတာပါ။ [[mark:select-break]] break က loop ကို ရပ်ပေးတာ ဖြစ်ပြီး၊ ရပ်တဲ့အခါ တန်ဖိုး
+      တစ်ခုကိုပါ အပြင် သယ်ထွက်လို့ ရပါတယ်။ ဒါကြောင့် loop ကလည်း if လိုပဲ expression တစ်ခု ဖြစ်ပါတယ်။
+      သူ့ရဲ့ တန်ဖိုးက big ထဲ ရောက်သွားပြီး၊ big က နောက်ပိုင်း ဘယ်တော့မှ မပြောင်းတော့တဲ့အတွက် mut
+      လည်း မလိုပါဘူး။ ဒီလို တန်ဖိုး ပြန်ပေးတာကို loop ပဲ လုပ်နိုင်ပါတယ်။ ဘာကြောင့်လဲဆိုတော့၊ while
+      နဲ့ for ကတော့ break မပါဘဲလည်း အဆုံးသတ်သွားနိုင်လို့ပါ။
     sources:
       - title: "The Rust Book — Returning Values from Loops"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#returning-values-from-loops"
@@ -652,7 +682,23 @@ scenes:
           after: "    println!(\"it feels {label}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let mut n = 1;\n    let big = loop {\n        n *= 2;\n        if n > 100 {\n            break n;\n        }\n    };\n    println!(\"doubled past 100: {big}\");\n"
+        text: "
+
+          \    let mut n = 1;
+
+          \    let big = loop {
+
+          \        n *= 2;
+
+          \        if n > 100 {
+
+          \            break n;
+
+          \        }
+
+          \    };
+
+          \    println!(\"doubled past 100: {big}\");\n"
       - id: select-if-no-else
         type: editor.select
         at: { mark: select-if-no-else }
@@ -669,12 +715,11 @@ scenes:
           occurrence: 1
 
   - id: while-loop
-    narration: >
-      [[mark:type-while]] The second is while. Let's use it for a countdown
-      from three. [[mark:select-while]] while checks its condition before each
-      pass, and stops as soon as it's false. Here, that's when countdown
-      reaches zero. while is most useful when you don't know in advance how
-      many passes you'll need.
+    narration: >-
+      [[mark:type-while]] ဒုတိယ loop က while ပါ။ ဒါကို 3 ကနေ နောက်ပြန် ရေတွက်တဲ့ countdown အတွက်
+      သုံးကြည့်ရအောင်။ [[mark:select-while]] while က တစ်ကြိမ် မပတ်ခင်တိုင်း သူ့ condition ကို အရင်
+      စစ်ပြီး၊ false ဖြစ်တာနဲ့ ချက်ချင်း ရပ်ပါတယ်။ ဒီမှာဆိုရင် countdown က သုည ရောက်သွားတဲ့အခါ
+      ရပ်မှာပါ။ ဘယ်နှစ်ကြိမ် ပတ်ရမလဲ ဆိုတာ ကြိုမသိတဲ့အခါမျိုးမှာ while က အသုံးအဝင်ဆုံးပါ။
     sources:
       - title: "The Rust Book — Conditional Loops with while"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#conditional-loops-with-while"
@@ -687,7 +732,17 @@ scenes:
           after: "    println!(\"doubled past 100: {big}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let mut countdown = 3;\n    while countdown > 0 {\n        println!(\"{countdown}...\");\n        countdown -= 1;\n    }\n"
+        text: "
+
+          \    let mut countdown = 3;
+
+          \    while countdown > 0 {
+
+          \        println!(\"{countdown}...\");
+
+          \        countdown -= 1;
+
+          \    }\n"
       - id: select-while
         type: editor.select
         at: { mark: select-while }
@@ -697,19 +752,20 @@ scenes:
           occurrence: 1
 
   - id: for-loop
-    narration: >
-      [[mark:type-range]] The third is for, and it's the loop you'll use
-      most. It runs once for each value in a range. [[mark:select-range]] Two
-      dots and an equals sign make the range include its end, so this gives
-      one, two, and three. Without the equals sign, the range stops just
-      before three. [[mark:type-array]] for also works on an array. Here's
-      an array of three temperatures.
-      [[mark:select-for-array]] Each pass gives you the next element, temp.
-      There's no index to manage, so you can't read past the end. That's why
-      for is usually safer than while with a counter.
+    narration: >-
+      [[mark:type-range]] တတိယ loop က for ဖြစ်ပြီး၊ အသုံးအများဆုံး loop လည်း ဖြစ်ပါတယ်။ for က range
+      တစ်ခုထဲက တန်ဖိုး တစ်ခုချင်းစီအတွက် တစ်ကြိမ်စီ ပတ်ပေးပါတယ်။ [[mark:select-range]] dot dot equal
+      လို့ ရေးထားတဲ့အတွက် range ထဲမှာ အဆုံး ကိန်းပါ ပါဝင်ပြီး၊ ဒီမှာဆိုရင် 1၊ 2 နဲ့ 3 ရပါတယ်။ equal
+      sign မပါဘဲ dot dot ပဲ ရေးရင်တော့ range က 3 မရောက်ခင်မှာ ရပ်သွားပါလိမ့်မယ်။ [[mark:type-array]]
+      for ကို array ပေါ်မှာလည်း သုံးလို့ ရပါတယ်။ ဒီမှာ အပူချိန် သုံးခု ပါတဲ့ array တစ်ခု ရှိပါတယ်။
+      [[mark:select-for-array]] တစ်ကြိမ် ပတ်တိုင်း နောက်တစ်ခု element က temp ထဲ ရောက်လာပါတယ်။
+      ကိုယ်တိုင် ထိန်းရမယ့် index မရှိတဲ့အတွက်၊ array အဆုံး ကျော်ပြီး ဖတ်မိစရာလည်း မရှိပါဘူး။
+      ဒါကြောင့် counter နဲ့ while သုံးတာထက် for က ပုံမှန်အားဖြင့် ပိုစိတ်ချရပါတယ်။
     sources:
       - title: "The Rust Book — Looping Through a Collection with for"
-        url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html#looping-through-a-collection-with-for"
+        url:
+          "https://doc.rust-lang.org/book/ch03-05-control-flow.html#looping-through-a-collection-with-fo\
+          r"
       - title: "The Rust Reference — Range expressions"
         url: "https://doc.rust-lang.org/reference/expressions/range-expr.html"
     actions:
@@ -721,7 +777,13 @@ scenes:
           after: "        countdown -= 1;\n    }\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    for lap in 1..=3 {\n        println!(\"lap {lap}\");\n    }\n"
+        text: "
+
+          \    for lap in 1..=3 {
+
+          \        println!(\"lap {lap}\");
+
+          \    }\n"
       - id: select-range
         type: editor.select
         at: { mark: select-range }
@@ -734,10 +796,20 @@ scenes:
         at: { mark: type-array, offsetMs: -200 }
         target:
           file: main.rs
-          after: "        println!(\"lap {lap}\");\n    }\n"
+          after: "        println!(\"lap {lap}\");
+
+            \    }\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let temps = [12, 21, 30];\n    for temp in temps {\n        println!(\"{temp} degrees\");\n    }\n"
+        text: "
+
+          \    let temps = [12, 21, 30];
+
+          \    for temp in temps {
+
+          \        println!(\"{temp} degrees\");
+
+          \    }\n"
       - id: select-for-array
         type: editor.select
         at: { mark: select-for-array }
@@ -747,12 +819,12 @@ scenes:
           occurrence: 1
 
   - id: run
-    chapter: Run it
-    narration: >
-      [[mark:run]] Let's run it. [[mark:read-output]] Thirty degrees, so it
-      feels hot. Doubling passed one hundred at one hundred twenty-eight. Then
-      the countdown: three, two, one. Three laps from the range. And each
-      temperature from the array.
+    chapter: Run ကြည့်ရအောင်
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ အပူချိန်က 30 ဖြစ်တဲ့အတွက် it feels hot လို့ ထွက်လာပါတယ်။ n က
+      နှစ်ဆ နှစ်ဆ တိုးရင်း 100 ကို ကျော်သွားတဲ့အချိန်မှာ 128 ဖြစ်နေတဲ့အတွက်၊ 128 လို့ ပြပါတယ်။
+      ပြီးတော့ countdown က 3၊ 2၊ 1 ပါ။ range ကနေ lap သုံးကြိမ် ထွက်လာပြီး၊ နောက်ဆုံးမှာ array ထဲက
+      အပူချိန် တစ်ခုချင်းစီ ထွက်လာပါတယ်။
     sources:
       - title: "Rust by Example — for loops"
         url: "https://doc.rust-lang.org/rust-by-example/flow_control/for.html"
@@ -775,13 +847,13 @@ scenes:
         contains: "let big = loop {"
 
   - id: wrap
-    narration: >
-      [[mark:recap-if]] So, if picks a branch and gives back a value.
-      [[mark:recap-loop]] loop runs until break, and can give back a value
-      too. [[mark:recap-while]] while repeats as long as its condition is
-      true. [[mark:recap-for]] And for goes through each item of a range or an
-      array. Next, we'll look at ownership: how Rust manages memory without a
-      garbage collector.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-if]] if က branch တစ်ခုကို ရွေးပြီး၊ တန်ဖိုး တစ်ခု
+      ပြန်ပေးပါတယ်။ [[mark:recap-loop]] loop က break မတွေ့မချင်း ပတ်နေပြီး၊ သူလည်း တန်ဖိုး
+      ပြန်ပေးနိုင်ပါတယ်။ [[mark:recap-while]] while ကတော့ condition က true ဖြစ်နေသရွေ့ ထပ်ခါထပ်ခါ
+      ပတ်ပါတယ်။ [[mark:recap-for]] ပြီးတော့ for က range ဒါမှမဟုတ် array ထဲက တန်ဖိုး တစ်ခုချင်းစီကို
+      အစဉ်လိုက် သွားပေးပါတယ်။ နောက် lesson မှာတော့ ownership ကို ကြည့်သွားပါမယ်။ garbage collector
+      မပါဘဲ Rust က memory ကို ဘယ်လို စီမံလဲ ဆိုတာပါ။
     sources:
       - title: "The Rust Book — Control Flow"
         url: "https://doc.rust-lang.org/book/ch03-05-control-flow.html"

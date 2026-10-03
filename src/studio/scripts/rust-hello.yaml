@@ -16,8 +16,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-hello
-  title: "Rust from zero: Your first program"
-  locale: en-US
+  title: "Rust from zero: ပထမဆုံး program"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -37,7 +37,7 @@ lesson:
       y: 160
       width: 600
       height: 48
-      text: "How Rust runs your code"
+      text: "Rust က code ကို ဘယ်လို run လဲ"
       strokeColor: "#1e1e1e"
       fontSize: 38
     - id: h-src-box
@@ -62,7 +62,7 @@ lesson:
       y: 366
       width: 200
       height: 36
-      text: "you write it"
+      text: "ကိုယ် ရေးတယ်"
       strokeColor: "#1971c2"
       fontSize: 28
     - id: h-arr-1
@@ -95,7 +95,7 @@ lesson:
       y: 366
       width: 210
       height: 36
-      text: "checks it all"
+      text: "အကုန် စစ်တယ်"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: h-arr-err
@@ -112,7 +112,7 @@ lesson:
       y: 506
       width: 300
       height: 36
-      text: "error: nothing runs"
+      text: "error: run မဖြစ်ဘူး"
       strokeColor: "#e03131"
       fontSize: 28
     - id: h-arr-2
@@ -162,7 +162,7 @@ lesson:
       y: 586
       width: 440
       height: 44
-      text: "Checked before it runs"
+      text: "run မလုပ်ခင် စစ်တယ်"
       strokeColor: "#2f9e44"
       fontSize: 34
     # Board 2 — two broken programs and what the compiler answers.
@@ -177,7 +177,7 @@ lesson:
       y: 160
       width: 620
       height: 48
-      text: "When the compiler says no"
+      text: "Compiler က လက်မခံတဲ့အခါ"
       strokeColor: "#1e1e1e"
       fontSize: 38
     - id: e-code1
@@ -256,12 +256,15 @@ lesson:
       y: 590
       width: 620
       height: 44
-      text: "Nothing runs until it compiles"
+      text: "compile မရမချင်း ဘာမှ run မဖြစ်ဘူး"
       strokeColor: "#f08c00"
       fontSize: 32
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 101
 
 runtime:
@@ -273,28 +276,34 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "Hello, world!\n2 + 3 = 5\nHello, Ferris!\n"
+      stdout: "Hello, world!
+
+        2 + 3 = 5
+
+        Hello, Ferris!\n"
       stderr: ""
 
 scenes:
   - id: big-picture
-    chapter: From code to a running program
-    narration: >
-      [[mark:board]] Welcome to Rust from zero. Let's write your first Rust
-      program, and see what happens between writing it and running it.
-      [[mark:draw-source]] First, you write your code in a source file.
-      [[mark:draw-compiler]] Then the Rust compiler reads the whole file, and
-      checks it before anything runs. [[mark:draw-error]] If it finds a
-      mistake, it stops and shows you an error. Nothing runs.
-      [[mark:draw-program]] If the code is fine, the compiler builds a
-      program, and that program prints your output. [[mark:draw-rule]] So a
-      lot of mistakes are caught before your program ever starts. In
-      languages like Python or JavaScript, many mistakes only show up while
-      the program is running. Think of the compiler as a helper that reads
-      your code first.
+    chapter: Code ကနေ program အထိ
+    narration: >-
+      [[mark:board]] မင်္ဂလာပါ ခင်ဗျာ။ Rust from zero course ကို ကြိုဆိုပါတယ်။ ဒီ lesson မှာ
+      ကိုယ့်ရဲ့ ပထမဆုံး Rust program ကို ရေးကြည့်မှာ ဖြစ်ပြီး၊ code ရေးပြီးတဲ့အချိန်ကနေ run
+      တဲ့အချိန်အထိ ကြားထဲမှာ ဘာတွေ ဖြစ်သွားလဲ ဆိုတာကိုပါ ကြည့်သွားပါမယ်။ [[mark:draw-source]]
+      အရင်ဆုံး ကိုယ်က code ကို source file တစ်ခုထဲမှာ ရေးပါတယ်။ [[mark:draw-compiler]] ပြီးတော့ Rust
+      compiler က အဲဒီ ဖိုင် တစ်ဖိုင်လုံးကို ဖတ်ပြီး၊ ဘာမှ run မလုပ်ခင် အကုန် စစ်ပါတယ်။
+      [[mark:draw-error]] စစ်ရင်းနဲ့ အမှား တစ်ခုခု တွေ့သွားရင်၊ compiler က အဲဒီမှာ ရပ်ပြီး error
+      ပြပါတယ်။ အဲဒီအခါ ဘာမှ run မဖြစ်ပါဘူး။ [[mark:draw-program]] code မှာ ပြဿနာ မရှိဘူးဆိုရင်တော့၊
+      compiler က program တစ်ခု တည်ဆောက်ပေးပြီး၊ အဲဒီ program က ကိုယ့် output ကို print ထုတ်ပေးပါတယ်။
+      [[mark:draw-rule]] ဆိုတော့ အမှား အများကြီးကို program စတောင် မစခင်မှာ ဖမ်းမိသွားတာပါ။ Python
+      တို့ JavaScript တို့လို ဘာသာစကားတွေမှာဆိုရင်၊ အမှား အတော်များများက program run နေတဲ့အချိန်ကျမှ
+      ပေါ်လာတတ်ပါတယ်။ ဒါကြောင့် compiler ဆိုတာ ကိုယ့် code ကို အရင် ဖတ်ပြီး စစ်ပေးတဲ့ လက်ထောက်
+      တစ်ယောက်လို သဘောထားလို့ ရပါတယ်။
     sources:
       - title: "The Rust Book — Compiling and Running Are Separate Steps"
-        url: "https://doc.rust-lang.org/book/ch01-02-hello-world.html#compiling-and-running-are-separate-steps"
+        url:
+          "https://doc.rust-lang.org/book/ch01-02-hello-world.html#compiling-and-running-are-separate-st\
+          eps"
     actions:
       - id: open-board
         type: whiteboard.apply
@@ -328,24 +337,23 @@ scenes:
         drawMs: 1000
 
   - id: main-fn
-    chapter: Your first lines of Rust
-    narration: >
-      Now let's write it. [[mark:open-main]] Here's our file, with one empty
-      function. [[mark:select-main]] f n is short for function, and this
-      function is called main. main is special. It's where every Rust program
-      starts running. Its body goes between the curly braces, and right now
-      it's empty. [[mark:type-hello]] Let's give it something to do. Print
-      line prints some text, then moves to a new line. We'll print the classic
-      first message: Hello, world. [[mark:select-macro]] See the exclamation
-      mark after print line? It tells you that print line isn't a normal
-      function. It's a macro. A macro is code that writes more code for you,
-      while your program compiles. Why does that matter? A normal Rust
-      function always takes the same number of values. A macro can take any
-      number, and print line checks them before anything runs.
-      [[mark:select-semi]] And the line ends with a semicolon. In Rust, a
-      semicolon ends a statement, one step of your program. If you forget it
-      and another line follows, the compiler stops and tells you it expected a
-      semicolon.
+    chapter: ပထမဆုံး Rust စာကြောင်းတွေ
+    narration: >-
+      ကဲ၊ အခု ရေးကြည့်ရအောင်။ [[mark:open-main]] ဒီမှာ ကိုယ့် ဖိုင် ရှိပါတယ်။ သူ့ထဲမှာ function
+      အလွတ် တစ်ခုပဲ ပါပါသေးတယ်။ [[mark:select-main]] f n ဆိုတာ function ရဲ့ အတိုကောက်ပါ။ ဒီ function
+      ကိုတော့ main လို့ နာမည် ပေးထားပါတယ်။ main function က ထူးခြားပါတယ်။ Rust program တိုင်းဟာ main
+      ကနေ စ run တာပါ။ function ရဲ့ body က တွန့်ကွင်းထဲမှာ ရှိပြီး၊ အခုတော့ အလွတ်ပဲ ရှိပါသေးတယ်။
+      [[mark:type-hello]] ဒါဆို သူ့ကို အလုပ် တစ်ခု ပေးကြည့်ရအောင်။ println က စာသားကို print ထုတ်ပြီး
+      နောက်တစ်ကြောင်း ဆင်းပေးပါတယ်။ ပထမဆုံး program တိုင်းလိုလို ရေးလေ့ရှိတဲ့ Hello, world ဆိုတဲ့
+      စာသားကို print ထုတ်ကြည့်ပါမယ်။ [[mark:select-macro]] println နောက်က exclamation mark ကို
+      သတိထား ကြည့်ပါ။ အဲဒါက println ဟာ သာမန် function မဟုတ်ဘဲ macro ဖြစ်တယ်လို့ ပြောတာပါ။ macro
+      ဆိုတာ ကိုယ့် program ကို compile လုပ်နေချိန်မှာ ကိုယ့်အစား code ထပ်ရေးပေးတဲ့ code ပါ။ ဒါက
+      ဘာကြောင့် အရေးကြီးလဲဆိုတော့၊ သာမန် Rust function တစ်ခုက လက်ခံတဲ့ တန်ဖိုး အရေအတွက်က အမြဲ
+      ပုံသေပါ။ macro ကတော့ တန်ဖိုး ဘယ်နှစ်ခု ဖြစ်ဖြစ် လက်ခံနိုင်ပြီး၊ println က အဲဒီ တန်ဖိုးတွေကို
+      ဘာမှ run မလုပ်ခင် စစ်ပေးပါတယ်။ [[mark:select-semi]] ပြီးတော့ စာကြောင်း အဆုံးမှာ semicolon
+      ရှိပါတယ်။ Rust မှာ semicolon က statement တစ်ခု ပြီးသွားပြီ ဆိုတာကို ပြတာပါ။ statement ဆိုတာ
+      ကိုယ့် program ရဲ့ အဆင့် တစ်ဆင့်ပါ။ semicolon ထည့်ဖို့ မေ့သွားပြီး သူ့နောက်မှာ စာကြောင်း
+      တစ်ကြောင်း ထပ်ပါလာရင်၊ compiler က ရပ်ပြီး semicolon လိုနေတယ်လို့ ပြောပါလိမ့်မယ်။
     sources:
       - title: "The Rust Book — Anatomy of a Rust Program"
         url: "https://doc.rust-lang.org/book/ch01-02-hello-world.html#anatomy-of-a-rust-program"
@@ -393,12 +401,12 @@ scenes:
           occurrence: 1
 
   - id: comment
-    narration: >
-      [[mark:type-comment]] Now let's add a note at the top of the file. Two
-      slashes start a comment. The compiler ignores everything after them, up
-      to the end of the line, so a comment is only for the people who read
-      your code. Use it to explain things a reader might not know yet, like
-      where a Rust program starts.
+    narration: >-
+      [[mark:type-comment]] အခု ဖိုင်ရဲ့ ထိပ်ဆုံးမှာ မှတ်စု တစ်ကြောင်း ထည့်ကြည့်ရအောင်။ slash
+      နှစ်ခုနဲ့ comment စပါတယ်။ slash နှစ်ခု နောက်ကနေ စာကြောင်း အဆုံးအထိ ရှိသမျှကို compiler က လုံးဝ
+      ဂရုမစိုက်ပါဘူး။ ဒါကြောင့် comment ဆိုတာ code ကို ဖတ်မယ့် လူတွေအတွက်ပဲ ဖြစ်ပါတယ်။ ဖတ်တဲ့သူ
+      မသိသေးနိုင်တဲ့ အချက်တွေ၊ ဥပမာအားဖြင့် Rust program က ဘယ်ကနေ စလဲ ဆိုတာမျိုးကို ရှင်းပြဖို့
+      comment ကို သုံးပါ။
     sources:
       - title: "The Rust Book — Comments"
         url: "https://doc.rust-lang.org/book/ch03-04-comments.html"
@@ -415,20 +423,19 @@ scenes:
         text: "// Every Rust program starts at main.\n"
 
   - id: placeholders
-    chapter: "Placeholders: printing values"
-    narration: >
-      [[mark:type-sum]] Fixed text is a good start. But most of the time,
-      you'll want to print values that your program calculates. Let's print a
-      small sum. [[mark:select-braces]] These curly braces are a placeholder.
-      Print line fills it with the first value after the text. Here, the
-      program adds two plus three, and five goes where the braces are. Add
-      more braces, and the values fill them in order.
-      [[mark:type-name]] There's a shorter way, too, when a value has a name.
-      Let's give a value a name with let. You'll learn let properly in the
-      next lesson. [[mark:select-name]] Now you can write that name right
-      inside the braces, and print line fills in its value. You can't put a
-      calculation there, though. For that, use empty braces and pass the value
-      after the text.
+    chapter: "Placeholder: တန်ဖိုး print ထုတ်ခြင်း"
+    narration: >-
+      [[mark:type-sum]] ပုံသေ စာသား print ထုတ်တာက အစအနေနဲ့ ကောင်းပါတယ်။ ဒါပေမဲ့ အများအားဖြင့်တော့
+      ကိုယ့် program က တွက်ထုတ်လိုက်တဲ့ တန်ဖိုးတွေကို print ထုတ်ချင်မှာပါ။ ပေါင်းလဒ် သေးသေးလေး တစ်ခု
+      print ထုတ်ကြည့်ရအောင်။ [[mark:select-braces]] ဒီ တွန့်ကွင်း အလွတ်က placeholder ပါ။ စာသား
+      နောက်က ပထမ တန်ဖိုးကို println က အဲဒီ နေရာမှာ ဖြည့်ပေးပါတယ်။ ဒီမှာ program က 2 ပေါင်း 3 ကို
+      တွက်ပြီး၊ 5 ဆိုတဲ့ အဖြေက တွန့်ကွင်း နေရာမှာ ဝင်သွားပါတယ်။ တွန့်ကွင်း ထပ်ထည့်ရင်လည်း၊
+      တန်ဖိုးတွေက အစဉ်လိုက် ဝင်သွားပါတယ်။ [[mark:type-name]] တန်ဖိုး တစ်ခုမှာ နာမည် ရှိတယ်ဆိုရင်
+      ပိုတိုတဲ့ နည်းလည်း ရှိပါသေးတယ်။ let နဲ့ တန်ဖိုး တစ်ခုကို နာမည် ပေးကြည့်ရအောင်။ let
+      အကြောင်းကိုတော့ နောက် lesson မှာ သေသေချာချာ လေ့လာရပါမယ်။ [[mark:select-name]] အခု အဲဒီ
+      နာမည်ကို တွန့်ကွင်းထဲမှာ တန်းရေးလို့ ရပြီး၊ println က သူ့ တန်ဖိုးကို ဖြည့်ပေးပါတယ်။ ဒါပေမဲ့
+      တွန့်ကွင်းထဲမှာ တွက်ချက်မှု တစ်ခုကိုတော့ ထည့်လို့ မရပါဘူး။ အဲဒါမျိုးအတွက်ဆိုရင် တွန့်ကွင်း
+      အလွတ် သုံးပြီး၊ တန်ဖိုးကို စာသား နောက်မှာ ထည့်ပေးရပါတယ်။
     sources:
       - title: "std::fmt — Positional parameters"
         url: "https://doc.rust-lang.org/std/fmt/index.html#positional-parameters"
@@ -461,7 +468,9 @@ scenes:
           after: "    println!(\"2 + 3 = {}\", 2 + 3);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let name = \"Ferris\";\n    println!(\"Hello, {name}!\");\n"
+        text: "    let name = \"Ferris\";
+
+          \    println!(\"Hello, {name}!\");\n"
       - id: select-name
         type: editor.select
         at: { mark: select-name }
@@ -471,19 +480,19 @@ scenes:
           occurrence: 1
 
   - id: compiler-errors
-    chapter: When the compiler says no
-    narration: >
-      [[mark:board-errors]] So what happens when you get something wrong?
-      [[mark:draw-nobang]] Say you forget the exclamation mark.
-      [[mark:draw-e0423]] The compiler stops with error E0423: expected
-      function, found macro. [[mark:draw-help]] And look at the help line. It
-      tells you the fix: use the exclamation mark. [[mark:draw-args]] Here's
-      another one: two placeholders, but only one value.
-      [[mark:draw-args-error]] Because print line is a macro, the compiler
-      checks this too. Two positional arguments in the format string, but
-      there's only one argument. [[mark:draw-note]] Neither program runs until
-      you fix it. So read these messages closely. They point at the exact
-      spot, and they often tell you the fix.
+    chapter: Compiler က လက်မခံတဲ့အခါ
+    narration: >-
+      [[mark:board-errors]] ဒါဆို တစ်ခုခု မှားသွားရင် ဘာ ဖြစ်မလဲ ကြည့်ရအောင်။ [[mark:draw-nobang]]
+      ဥပမာအားဖြင့် exclamation mark ထည့်ဖို့ မေ့သွားတယ် ဆိုပါစို့။ [[mark:draw-e0423]] compiler က
+      E0423 error နဲ့ ရပ်သွားပါတယ်။ function တစ်ခု မျှော်လင့်ထားပေမယ့် macro တစ်ခု တွေ့သွားတယ်လို့
+      ဆိုလိုတာပါ။ [[mark:draw-help]] ပြီးတော့ help စာကြောင်းကို ကြည့်ပါ။ ပြင်နည်းကို
+      တန်းပြောထားပါတယ်၊ exclamation mark သုံးပါတဲ့။ [[mark:draw-args]] နောက်တစ်ခု ကြည့်ရအောင်။ ဒီမှာ
+      placeholder နှစ်ခု ရှိပေမယ့်၊ တန်ဖိုးကတော့ တစ်ခုပဲ ပေးထားပါတယ်။ [[mark:draw-args-error]]
+      println က macro ဖြစ်တဲ့အတွက်၊ compiler က ဒါကိုလည်း စစ်ပါတယ်။ format string ထဲမှာ positional
+      argument နှစ်ခု ရှိပေမယ့်၊ argument က တစ်ခုပဲ ရှိတယ်လို့ ပြောတာပါ။ [[mark:draw-note]] ဒီ
+      program နှစ်ခုလုံး ကိုယ် မပြင်မချင်း run မဖြစ်ပါဘူး။ ဒါကြောင့် ဒီလို error တွေ တက်လာရင်
+      သေသေချာချာ ဖတ်ပါ။ သူတို့က မှားတဲ့ နေရာ အတိအကျကို ညွှန်ပြပြီး၊ အများအားဖြင့် ပြင်နည်းကိုပါ
+      ပြောပြပါတယ်။
     sources:
       - title: "Error code E0423"
         url: "https://doc.rust-lang.org/error_codes/E0423.html"
@@ -528,10 +537,11 @@ scenes:
         drawMs: 1000
 
   - id: run
-    narration: >
-      Back in the editor, our program is correct. [[mark:run]] Let's run it.
-      Three lines. Hello, world. Then two plus three equals five. And Hello,
-      Ferris, with the name filled into the braces.
+    narration: >-
+      editor ထဲ ပြန်သွားရအောင်။ ကိုယ့် program မှာတော့ အမှား မရှိပါဘူး။ [[mark:run]] run
+      ကြည့်ရအောင်။ စာကြောင်း သုံးကြောင်း ထွက်လာပါတယ်။ ပထမက Hello, world ပါ။ ပြီးတော့ 2 ပေါင်း 3 က 5
+      ဖြစ်တယ် ဆိုတဲ့ စာကြောင်းပါ။ နောက်ဆုံးက Hello, Ferris ဖြစ်ပြီး၊ တွန့်ကွင်း နေရာမှာ နာမည်
+      ဝင်သွားတာကို မြင်ရပါတယ်။
     sources:
       - title: "Rust by Example — Hello World"
         url: "https://doc.rust-lang.org/rust-by-example/hello.html"
@@ -556,11 +566,12 @@ scenes:
         contains: 'let name = "Ferris";'
 
   - id: wrap
-    narration: >
-      So, your program starts at main, and print line is a macro that fills
-      its placeholders with values. And the compiler checks the whole file
-      before anything runs. Next, we'll look at variables: how let works, and
-      why a Rust variable can't change unless you allow it.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ ကိုယ့် program က main ကနေ စပါတယ်။ println က macro တစ်ခု ဖြစ်ပြီး၊ သူ့
+      placeholder တွေကို တန်ဖိုးတွေနဲ့ ဖြည့်ပေးပါတယ်။ ပြီးတော့ compiler က ဘာမှ run မလုပ်ခင် ဖိုင်
+      တစ်ဖိုင်လုံးကို စစ်ပါတယ်။ နောက် lesson မှာတော့ variable နဲ့ mutability ကို ကြည့်သွားပါမယ်။ let
+      က ဘယ်လို အလုပ်လုပ်လဲ၊ ပြီးတော့ Rust variable တစ်ခုကို ကိုယ်က ခွင့်မပြုမချင်း ဘာကြောင့်
+      ပြောင်းလို့ မရလဲ ဆိုတာတွေပါ။
     sources:
       - title: "The Rust Book — Hello, World!"
         url: "https://doc.rust-lang.org/book/ch01-02-hello-world.html"

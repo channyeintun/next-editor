@@ -21,8 +21,8 @@ schemaVersion: 1
 
 lesson:
   slug: rust-data-types
-  title: "Rust from zero: Data types"
-  locale: en-US
+  title: "Rust from zero: Data type တွေ"
+  locale: my-MM
   workspace:
     lessonType: rust
     name: Rust Lesson
@@ -46,7 +46,7 @@ lesson:
       y: 160
       width: 470
       height: 46
-      text: "Integers come in sizes"
+      text: "Integer အရွယ်အစားတွေ"
       strokeColor: "#1e1e1e"
       fontSize: 36
     - {
@@ -179,7 +179,7 @@ lesson:
       y: 462
       width: 300
       height: 36
-      text: "i: can be negative"
+      text: "i: အနုတ် ဖြစ်နိုင်တယ်"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - id: int-unsigned
@@ -188,7 +188,7 @@ lesson:
       y: 462
       width: 260
       height: 36
-      text: "u: zero and up"
+      text: "u: သုညနဲ့ အထက်"
       strokeColor: "#1e1e1e"
       fontSize: 28
     - {
@@ -207,7 +207,7 @@ lesson:
       y: 344
       width: 200
       height: 36
-      text: "the default"
+      text: "default"
       strokeColor: "#2f9e44"
       fontSize: 28
     - id: int-range
@@ -216,7 +216,7 @@ lesson:
       y: 232
       width: 300
       height: 36
-      text: "u8 holds 0 to 255"
+      text: "u8: 0 ကနေ 255 အထိ"
       strokeColor: "#f08c00"
       fontSize: 28
     - id: int-err-code
@@ -257,7 +257,7 @@ lesson:
       y: 160
       width: 580
       height: 46
-      text: "Compound types group values"
+      text: "Compound type က တန်ဖိုးတွေ စုတယ်"
       strokeColor: "#1e1e1e"
       fontSize: 36
     - {
@@ -530,7 +530,10 @@ lesson:
       fontSize: 28
 
 build:
-  voiceProfile: pocket-alba-v1
+  voiceProfile:
+    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
+    # profile at render time when the signed-in user has the D1 capability.
+    pocket-alba-v1
   seed: 32
 
 runtime:
@@ -540,20 +543,29 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "score 1250, lives 3\nspeed 2.5, alive true, heart ♥\nlevel 7, health 92.5, player.0 = 7\nfirst 40, last 60, count 3\n"
+      stdout: "score 1250, lives 3
+
+        speed 2.5, alive true, heart ♥
+
+        level 7, health 92.5, player.0 = 7
+
+        first 40, last 60, count 3\n"
       stderr: ""
 
 scenes:
   - id: integer-sizes
-    chapter: Integers come in sizes
-    narration: >
-      Every value in Rust has a type, and the compiler knows it before your
-      program runs. You've met i32 and u32, so let's start with
-      integers. [[mark:draw-bars]] There are several integer types, and the
-      name tells you the size. The number is how many bits it uses, like 8, 16, 32 or 64.
-      [[mark:draw-signs]] The letter matters too. i means signed, so it can be
-      negative. u means unsigned: zero and up.
-      [[mark:draw-default]] When you don't write a type, Rust picks i32.
+    chapter: Integer အရွယ်အစားတွေ
+    narration: >-
+      Rust မှာ တန်ဖိုးတိုင်းမှာ type တစ်ခုစီ ရှိပြီး၊ အဲဒီ type ကို ကိုယ့် program run
+      မလုပ်ခင်ကတည်းက compiler က သိနေပါတယ်။ ပြီးခဲ့တဲ့ lesson မှာ i32 နဲ့ u32 ကို တွေ့ခဲ့ပြီး
+      ဖြစ်တဲ့အတွက်၊ integer တွေကနေ စကြည့်ရအောင်။ [[mark:draw-bars]] Rust မှာ integer type က
+      တစ်မျိုးတည်း မဟုတ်ဘဲ အမျိုးမျိုး ရှိပြီး၊ type ရဲ့ နာမည်ကို ကြည့်ရုံနဲ့ အရွယ်အစားကို
+      သိနိုင်ပါတယ်။ နာမည် နောက်က ကိန်းဂဏန်းက အဲဒီ type သုံးတဲ့ bit အရေအတွက် ဖြစ်ပြီး၊ 8 bit၊ 16 bit၊
+      32 bit၊ 64 bit ဆိုပြီး ရှိပါတယ်။ ဘေးက အကွက်တွေ တစ်ဆင့်ချင်း ပိုရှည်လာတာက အဲဒီ bit အရေအတွက်ကို
+      ပြတာပါ။ [[mark:draw-signs]] ရှေ့က စာလုံးကလည်း အဓိပ္ပာယ် ရှိပါတယ်။ i ဆိုတာ signed ဖြစ်ပြီး၊
+      ဆိုလိုတာက အနုတ်ကိန်း ထည့်လို့ ရပါတယ်။ u ဆိုတာကတော့ unsigned ဖြစ်ပြီး၊ သုညနဲ့ အထက်ပဲ ထည့်လို့
+      ရပါတယ်။ [[mark:draw-default]] ဒါဆို type ကို ဘာမှ မရေးဘဲ ထားရင် ဘာဖြစ်မလဲဆိုတော့၊ Rust က i32
+      ကို default အနေနဲ့ ရွေးပေးပါတယ်။
     sources:
       - title: "The Rust Book — Data Types: Integer Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#integer-types"
@@ -598,13 +610,14 @@ scenes:
         drawMs: 1400
 
   - id: integer-limits
-    narration: >
-      Why does the size matter? [[mark:draw-range]] A smaller type uses less
-      memory, but it holds a smaller range. A u8 is one byte, so it only holds
-      zero to 255. [[mark:draw-error]] Try to put 256 in it, and the program
-      doesn't compile. The error says: literal out of range for u8. A literal
-      is a value written in your code, like this 256. [[mark:after-error]] So
-      you pick a size that fits your data.
+    narration: >-
+      ဒါဆို အရွယ်အစားက ဘာကြောင့် အရေးကြီးလဲ။ [[mark:draw-range]] type သေးလေ memory နည်းလေ
+      ဖြစ်ပေမယ့်၊ ထည့်လို့ ရတဲ့ ကိန်းဂဏန်း အပိုင်းအခြားကလည်း ကျဉ်းသွားပါတယ်။ ဥပမာအားဖြင့် u8 ဆိုတာ 1
+      byte ပဲ ရှိတဲ့အတွက်၊ 0 ကနေ 255 အထိပဲ ဆန့်ပါတယ်။ [[mark:draw-error]] အဲဒီထဲကို 256
+      ထည့်ကြည့်မယ်ဆိုရင် program က compile လုပ်လို့ မရတော့ပါဘူး။ compiler ပြတဲ့ error က literal out
+      of range for u8 ဖြစ်ပြီး၊ ဆိုလိုတာက ဒီ literal က u8 ရဲ့ အပိုင်းအခြားထဲမှာ မဆန့်ဘူးလို့
+      ပြောတာပါ။ literal ဆိုတာ code ထဲမှာ တိုက်ရိုက် ရေးထားတဲ့ တန်ဖိုးပါ၊ ဒီနေရာမှာဆိုရင် 256 ပါ။
+      ဒါကြောင့် ကိုယ် သိမ်းမယ့် တန်ဖိုးတွေ ဆန့်မယ့် အရွယ်အစားကို ရွေးရတာပါ။
     sources:
       - title: "The Rust Book — Data Types: Integer Overflow"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#integer-overflow"
@@ -625,19 +638,19 @@ scenes:
         drawMs: 2600
 
   - id: scalars
-    chapter: Floats, booleans and characters
-    narration: >
-      [[mark:open-main]] Here's our program. [[mark:select-score]] score has
-      no type written, so Rust makes it an i32. [[mark:select-u8]] lives has
-      its type after the colon: u8. Three is between zero and 255, so it fits.
-      Integers are one of four scalar types, which hold a single value.
-      [[mark:type-scalars]] Let's add the other three. A number with a
-      decimal point is a float. The default is f64. On modern CPUs it's about
-      as fast as f32, and more precise. A bool is true or false. And a
-      char goes in single quotes. Double quotes make a string.
-      [[mark:char-size]] A char is four bytes, so it can hold one Unicode
-      character, not only an English letter. [[mark:select-heart]] Here,
-      it's a heart.
+    chapter: Float၊ bool နဲ့ char
+    narration: >-
+      [[mark:open-main]] ကဲ၊ editor ထဲ ပြန်သွားရအောင်။ ဒီမှာ program သေးသေးလေး တစ်ခု ရှိပါတယ်။
+      [[mark:select-score]] score မှာ type ကို ဘာမှ မရေးထားတဲ့အတွက်၊ Rust က i32 အဖြစ်
+      သတ်မှတ်ပေးလိုက်ပါတယ်။ [[mark:select-u8]] lives မှာတော့ colon နောက်မှာ u8 လို့ type ကို
+      ရေးထားပါတယ်။ 3 က 0 နဲ့ 255 ကြားမှာ ဆန့်တဲ့အတွက် အဆင်ပြေပါတယ်။ integer ဆိုတာ scalar type
+      လေးမျိုးထဲက တစ်မျိုး ဖြစ်ပြီး၊ scalar type ဆိုတာ တန်ဖိုး တစ်ခုတည်းကို သိမ်းတဲ့ type ပါ။
+      [[mark:type-scalars]] ကျန်တဲ့ သုံးမျိုးကို ထည့်ကြည့်ရအောင်။ ဒသမ ပါတဲ့ ကိန်းဂဏန်းကို float လို့
+      ခေါ်ပြီး၊ default က f64 ပါ။ ဘာကြောင့်လဲဆိုတော့၊ ခေတ်ပေါ် CPU တွေမှာ f64 က f32 နဲ့ မြန်နှုန်း
+      သိပ်မကွာဘဲ၊ ပိုပြီး တိကျလို့ပါ။ bool ကတော့ true ဒါမှမဟုတ် false၊ နှစ်ခုထဲက တစ်ခုပါ။ ပြီးတော့
+      char ကို single quote ထဲမှာ ရေးပါတယ်။ double quote နဲ့ ရေးလိုက်ရင်တော့ string ဖြစ်သွားမှာပါ။
+      char type က 4 byte ယူထားတဲ့အတွက်၊ English စာလုံးတင် မကဘဲ၊ Unicode စာလုံး ဘယ်ဟာမဆို တစ်လုံး
+      ထည့်လို့ ရပါတယ်။ [[mark:select-heart]] ဒီမှာဆိုရင် နှလုံးပုံလေး တစ်ခု ထည့်ထားပါတယ်။
     sources:
       - title: "The Rust Book — Data Types: Floating-Point, Boolean and Character Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#floating-point-types"
@@ -676,7 +689,15 @@ scenes:
           after: "    println!(\"score {score}, lives {lives}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let speed = 2.5;\n    let alive = true;\n    let heart = '♥';\n    println!(\"speed {speed}, alive {alive}, heart {heart}\");\n"
+        text: "
+
+          \    let speed = 2.5;
+
+          \    let alive = true;
+
+          \    let heart = '♥';
+
+          \    println!(\"speed {speed}, alive {alive}, heart {heart}\");\n"
       # '♥' (U+2665) is one UTF-16 unit, so Monaco's offsets and the drag
       # endpoints line up with the characters on screen.
       - id: select-heart
@@ -688,17 +709,19 @@ scenes:
           occurrence: 1
 
   - id: compound-board
-    chapter: Tuples and arrays
-    narration: >
-      [[mark:open-compound]] Compound types group several values into one.
-      [[mark:draw-tuple]] A tuple has a fixed number of parts, and each part
-      can have its own type. This one holds an i32 and an f64. The f64 box is
-      twice as wide, because it's 64 bits. You read a part by its position:
-      dot zero, dot one. [[mark:draw-array]] An array is stricter.
-      Every element has the same type, and the length can't change. Indexes
-      go in square brackets, and they start at zero. [[mark:draw-fixed]] So
-      an array's type names both: i32, and three of them. For a list that can
-      grow, you'll use a vector, later in the course.
+    chapter: Tuple နဲ့ array
+    narration: >-
+      [[mark:open-compound]] အခုအထိ ကြည့်ခဲ့တာက တန်ဖိုး တစ်ခုတည်း သိမ်းတဲ့ type တွေပါ။ compound type
+      ကတော့ တန်ဖိုး အများအပြားကို တစ်ခုတည်းအဖြစ် စုပေးတာပါ။ [[mark:draw-tuple]] ပထမဆုံးက tuple ပါ။
+      tuple တစ်ခုမှာ အပိုင်း အရေအတွက်က ပုံသေ ဖြစ်ပြီး၊ အပိုင်း တစ်ခုချင်းစီမှာ ကိုယ်ပိုင် type
+      ရှိလို့ ရပါတယ်။ ဒီ tuple မှာဆိုရင် i32 တစ်ခုနဲ့ f64 တစ်ခု ပါပါတယ်။ f64 ရဲ့ အကွက်က နှစ်ဆ
+      ပိုကျယ်နေတာ သတိထား ကြည့်ပါ၊ သူက 64 bit ဖြစ်လို့ပါ။ tuple ထဲက အပိုင်း တစ်ခုကို ဖတ်ချင်ရင်
+      သူ့နေရာနဲ့ ဖတ်ပါတယ်။ ပထမ အပိုင်းက dot 0၊ ဒုတိယ အပိုင်းက dot 1 ပါ။ [[mark:draw-array]] array
+      ကတော့ ပိုတင်းကျပ်ပါတယ်။ element တိုင်းက type တစ်မျိုးတည်း ဖြစ်ရပြီး၊ အရှည်ကိုလည်း ပြောင်းလို့
+      မရပါဘူး။ index ကို လေးထောင့်ကွင်းထဲမှာ ရေးပြီး၊ 0 ကနေ စရေတွက်ပါတယ်။ [[mark:draw-fixed]]
+      ဒါကြောင့် array ရဲ့ type မှာ element type ရော အရေအတွက်ပါ နှစ်ခုလုံး ပါပါတယ်၊ i32 ဖြစ်ပြီး
+      သုံးလုံး ရှိတယ် ဆိုတဲ့ သဘောပါ။ ကြီးလာနိုင်တဲ့ စာရင်း လိုချင်ရင်တော့ Vec ကို သုံးရမှာ ဖြစ်ပြီး၊
+      ဒါကို course ရဲ့ နောက်ပိုင်းမှာ ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Data Types: Compound Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#compound-types"
@@ -749,15 +772,16 @@ scenes:
         drawMs: 1400
 
   - id: tuple
-    narration: >
-      [[mark:to-code]] Let's write both. [[mark:type-tuple]] First, a player
-      tuple, in parentheses: a level of seven, and a health of 92.5.
-      [[mark:type-destructure]] Then let's take it apart. [[mark:select-destructure]] The pattern on the left has
-      the same shape as the tuple. So level gets the first part, and health
-      gets the second. That's called destructuring. [[mark:select-dot]] And
-      player dot zero reads the first part by its position. Braces in the
-      string can only name a plain variable, so player dot zero goes after the
-      string, into empty braces.
+    narration: >-
+      [[mark:to-code]] ဒါဆို နှစ်ခုလုံးကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-tuple]] အရင်ဆုံး
+      player ဆိုတဲ့ tuple တစ်ခုကို ကွင်းထဲမှာ ရေးပါမယ်။ သူ့ထဲမှာ level အတွက် 7 နဲ့ health အတွက် 92.5
+      ပါပါတယ်။ [[mark:type-destructure]] ပြီးရင် အဲဒီ tuple ကို အပိုင်းလိုက် ပြန်ခွဲကြည့်ရအောင်။
+      [[mark:select-destructure]] equal sign ရဲ့ ဘယ်ဘက်က pattern ကို ကြည့်ပါ၊ tuple နဲ့ ပုံစံ
+      အတူတူပဲ ဖြစ်နေပါတယ်။ ဒါကြောင့် ပထမ အပိုင်းက level ထဲ ရောက်သွားပြီး၊ ဒုတိယ အပိုင်းက health ထဲ
+      ရောက်သွားပါတယ်။ ဒါကို destructuring လို့ ခေါ်ပါတယ်။ [[mark:select-dot]] ပြီးတော့ player dot 0
+      ဆိုတာကတော့ ပထမ အပိုင်းကို သူ့နေရာနဲ့ တိုက်ရိုက် ဖတ်တာပါ။ format string ထဲက တွန့်ကွင်းထဲမှာ
+      ရိုးရိုး variable နာမည်ပဲ ထည့်လို့ ရတဲ့အတွက်၊ player dot 0 ကိုတော့ စာသား နောက်မှာ သီးသန့်
+      ထည့်ပြီး၊ စာသားထဲမှာတော့ တွန့်ကွင်း အလွတ်ကို placeholder အနေနဲ့ ထားခဲ့ရတာပါ။
     sources:
       - title: "The Rust Book — Data Types: The Tuple Type"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#the-tuple-type"
@@ -785,7 +809,9 @@ scenes:
           after: "    let player = (7, 92.5);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let (level, health) = player;\n    println!(\"level {level}, health {health}, player.0 = {}\", player.0);\n"
+        text: "    let (level, health) = player;
+
+          \    println!(\"level {level}, health {health}, player.0 = {}\", player.0);\n"
       - id: select-destructure
         type: editor.select
         at: { mark: select-destructure }
@@ -803,14 +829,14 @@ scenes:
           occurrence: 2
 
   - id: array
-    narration: >
-      [[mark:type-array]] Now an array of three lap times, and a line that
-      prints the first, the last, and the count.
-      [[mark:select-array-type]] Its type says i32, then a semicolon and the
-      length, three. [[mark:select-last]] So the last index is two.
-      [[mark:select-len]] And len gives the number of elements. Lengths and
-      indexes use usize, an unsigned integer that's as wide as a memory
-      address. On most machines, that's 64 bits.
+    narration: >-
+      [[mark:type-array]] နောက်တစ်ခုက array ပါ။ lap time သုံးခု ပါတဲ့ array တစ်ခုနဲ့၊ ပထမ တန်ဖိုး၊
+      နောက်ဆုံး တန်ဖိုးနဲ့ အရေအတွက်ကို print ထုတ်မယ့် စာကြောင်း တစ်ကြောင်း ထည့်ပါမယ်။
+      [[mark:select-array-type]] သူ့ type ကို ကြည့်ရင် လေးထောင့်ကွင်းထဲမှာ i32၊ ပြီးတော့ semicolon၊
+      ပြီးတော့ အရှည် 3 လို့ ရေးထားပါတယ်။ [[mark:select-last]] index က 0 ကနေ စတဲ့အတွက်၊ နောက်ဆုံး
+      index က 2 ဖြစ်ပါတယ်။ [[mark:select-len]] ပြီးတော့ len ကတော့ element အရေအတွက်ကို ပြန်ပေးပါတယ်။
+      Rust မှာ အရှည်တွေနဲ့ index တွေအတွက် usize ဆိုတဲ့ type ကို သုံးပါတယ်။ usize ဆိုတာ memory
+      address တစ်ခုနဲ့ အကျယ် တူတဲ့ unsigned integer ဖြစ်ပြီး၊ ကွန်ပျူတာ အများစုမှာ 64 bit ပါ။
     sources:
       - title: "The Rust Book — Data Types: The Array Type"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#the-array-type"
@@ -825,7 +851,11 @@ scenes:
           after: "    println!(\"level {level}, health {health}, player.0 = {}\", player.0);\n"
           occurrence: 1
         cadence: line-by-line
-        text: "\n    let laps: [i32; 3] = [40, 25, 60];\n    println!(\"first {}, last {}, count {}\", laps[0], laps[2], laps.len());\n"
+        text: "
+
+          \    let laps: [i32; 3] = [40, 25, 60];
+
+          \    println!(\"first {}, last {}, count {}\", laps[0], laps[2], laps.len());\n"
       - id: select-array-type
         type: editor.select
         at: { mark: select-array-type }
@@ -849,16 +879,17 @@ scenes:
           occurrence: 1
 
   - id: out-of-bounds
-    chapter: Reading past the end
-    narration: >
-      What if we asked for index three? [[mark:open-bounds]] There's no
-      fourth element. [[mark:draw-bounds]] The compiler knows the length and
-      the index, so it stops with an error: this operation will panic at
-      runtime. The length is 3 but the index is 3. [[mark:bounds-why]] And
-      when the index is only known while the program runs, Rust still checks
-      it. If it's too big, the program stops with an error called a panic. In
-      C, that read could return whatever is next in memory.
-      [[mark:close-bounds]] Rust never reads past the end of an array.
+    chapter: Array အဆုံး ကျော်ဖတ်ခြင်း
+    narration: >-
+      ဒါဆို index 3 ကို တောင်းကြည့်ရင် ဘာဖြစ်မလဲ။ [[mark:open-bounds]] array ထဲမှာ element သုံးခုပဲ
+      ရှိတဲ့အတွက်၊ စတုတ္ထ element ဆိုတာ မရှိပါဘူး။ [[mark:draw-bounds]] compiler က array ရဲ့
+      အရှည်ရော index ကိုပါ သိနေတဲ့အတွက်၊ error နဲ့ တန်းရပ်သွားပါတယ်။ whiteboard ပေါ်က error စာသားကို
+      ကြည့်ပါ၊ ဆိုလိုတာက ဒီ စာကြောင်းကို run ရင် သေချာပေါက် panic ဖြစ်မယ်၊ array ရဲ့ အရှည်က 3 ပဲ
+      ရှိပြီး index ကလည်း 3 ဖြစ်နေတယ်လို့ ပြောတာပါ။ ပြီးတော့ index ကို program run နေချိန်ကျမှ
+      သိရတဲ့ အခြေအနေမျိုးမှာလည်း Rust က ဆက်စစ်ပေးပါတယ်။ index က ကြီးလွန်းနေရင် program က error နဲ့
+      ရပ်သွားပြီး၊ အဲဒီလို ရပ်သွားတာကို panic လို့ ခေါ်ပါတယ်။ C language မှာဆိုရင် အဲဒီလို
+      ဖတ်လိုက်တဲ့အခါ memory ထဲမှာ ဘေးနားက ဘာရှိရှိ အဲဒါကိုပဲ ပြန်ရသွားနိုင်ပါတယ်။
+      [[mark:close-bounds]] Rust ကတော့ array ရဲ့ အဆုံးကို ကျော်ပြီး ဘယ်တော့မှ မဖတ်ပါဘူး။
     sources:
       - title: "The Rust Book — Data Types: Invalid Array Element Access"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#invalid-array-element-access"
@@ -886,10 +917,11 @@ scenes:
         open: false
 
   - id: run
-    narration: >
-      [[mark:run]] Let's run it. Score 1250 and three lives. Then the float,
-      the bool and the heart. Level 7, health 92.5, and player dot zero is 7
-      too. Then first 40, last 60, and a count of 3.
+    narration: >-
+      [[mark:run]] ကဲ၊ run ကြည့်ရအောင်။ ပထမ စာကြောင်းမှာ score က 1250၊ lives က 3 ဖြစ်ပါတယ်။
+      နောက်တစ်ကြောင်းမှာ float၊ bool နဲ့ နှလုံးပုံလေး ထွက်လာပါတယ်။ ပြီးတော့ level က 7၊ health က
+      92.5၊ player dot 0 ကလည်း 7 ပဲ ဖြစ်ပါတယ်။ နောက်ဆုံး စာကြောင်းမှာတော့ ပထမ တန်ဖိုး 40၊ နောက်ဆုံး
+      တန်ဖိုး 60 နဲ့ အရေအတွက် 3 ဖြစ်ပါတယ်။
     sources:
       - title: "Rust by Example — Primitives"
         url: "https://doc.rust-lang.org/rust-by-example/primitives.html"
@@ -910,11 +942,11 @@ scenes:
         contains: "let laps: [i32; 3] = [40, 25, 60];"
 
   - id: wrap
-    narration: >
-      So every value has one fixed type, and the type decides its size. Scalars
-      hold one value, and tuples and arrays group a fixed number of them.
-      Next, we'll write functions of our own, with typed parameters and a
-      return type.
+    narration: >-
+      ဒါဆို ပြန်ချုပ်ရရင်၊ Rust မှာ တန်ဖိုးတိုင်းမှာ ပုံသေ type တစ်ခုစီ ရှိပြီး၊ အဲဒီ type ကပဲ
+      သူ့အရွယ်အစားကို ဆုံးဖြတ်ပါတယ်။ scalar type တွေက တန်ဖိုး တစ်ခုတည်းကို သိမ်းပြီး၊ tuple နဲ့
+      array ကတော့ အရေအတွက် ပုံသေ ရှိတဲ့ တန်ဖိုးတွေကို စုပေးပါတယ်။ နောက် lesson မှာတော့ ကိုယ်ပိုင်
+      function တွေကို ရေးပြီး၊ type ပါတဲ့ parameter တွေနဲ့ return type ကို ကြည့်သွားပါမယ်။
     sources:
       - title: "The Rust Book — Data Types"
         url: "https://doc.rust-lang.org/book/ch03-02-data-types.html"
