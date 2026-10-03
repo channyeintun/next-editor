@@ -1,16 +1,36 @@
-# One idea: assigning a heap value (String) MOVES ownership — the old binding
-# goes invalid (E0382); Copy types (i32) duplicate instead, and .clone() makes
-# a deep copy on purpose. Slides carry the move + the broken code (an
-# insert-only lesson can't run it); the editor builds the working clone/Copy.
-# NOTE: slides are interim inline markdown — to be swapped to the branded
-# "Next Editor · Rust" Google deck in the render phase (ids stay the same).
+# Rust from zero, lesson 6: ownership.
+#
+# The arc: a whiteboard shows where values live (an i32 on the stack, a
+# String's pointer/len/cap on the stack with its text on the heap) and the two
+# ownership rules that matter here — one owner, dropped at the end of its
+# scope. The editor then shows a scope and the drop point, builds a move
+# (`let s2 = s1;`, deck page "Ownership moves"), and a second board explains
+# WHY the move exists (two pointers to one heap buffer would be freed twice).
+# A third board shows the broken line and the compiler's E0382 answer — the
+# lesson is insert-only with one run, so the broken program is never typed.
+# The deck page "Copy vs. clone" introduces the two ways to duplicate, and
+# the editor builds both (clone + push_str to prove the copy is real, then an
+# i32 copy). One run at the end.
+#
+# The E0382 text on the board was confirmed with rustc 1.98 (edition 2024) on
+# the broken variant `let s2 = s1; println!("{s1}");`:
+#   error[E0382]: borrow of moved value: `s1`
+#   move occurs because `s1` has type `String`, which does not implement the `Copy` trait
+#   value moved here / value borrowed here after move
+#   help: consider cloning the value if the performance cost is acceptable
+#         let s2 = s1.clone();
+#
+# Board colours: blue = stack variables (the things being named), orange = the
+# heap / what moved, green = the valid owner and the fix, red = the error and
+# the bug, violet = the result (drop frees the memory). #1e1e1e paints white.
+#
 # Validate with:
 #   bun scripts/studio-director.ts src/studio/scripts/rust-ownership.yaml
 schemaVersion: 1
 
 lesson:
   slug: rust-ownership
-  title: "Rust ownership: move, Copy, and clone"
+  title: "Rust from zero: Ownership"
   locale: en-US
   workspace:
     lessonType: rust
@@ -19,7 +39,10 @@ lesson:
     files:
       main.rs: |
         fn main() {
-            let s1 = String::from("owned");
+            {
+                let inner = String::from("inside the braces");
+                println!("{inner}");
+            }
         }
   slides:
     - id: move-slide
@@ -32,6 +55,449 @@ lesson:
       name: Copy vs. clone
       deckUrl: "https://docs.google.com/presentation/d/e/2PACX-1vS76iQhA3CLpPgT3qRt7XTlTsu7SnELJhlqiQ33avKOoFhc1844poJj50UPy8_pyPVCMs2vW5GmiLaA/pub"
       pageId: SLIDES_API1285888865_11
+  whiteboardAssets:
+    # ---- Board 1: where values live --------------------------------------
+    - {
+        id: m-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 780,
+        height: 48,
+        text: "Where values live",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: m-stack,
+        kind: text,
+        x: 300,
+        y: 214,
+        width: 200,
+        height: 40,
+        text: "stack",
+        strokeColor: "#1971c2",
+        fontSize: 30,
+      }
+    - {
+        id: m-stack-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 222,
+        width: 110,
+        height: 24,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-n-box,
+        kind: rectangle,
+        x: 290,
+        y: 270,
+        width: 330,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-n-text,
+        kind: text,
+        x: 312,
+        y: 286,
+        width: 290,
+        height: 40,
+        text: "n: i32 = 5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-s1-box,
+        kind: rectangle,
+        x: 290,
+        y: 370,
+        width: 330,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-s1-name,
+        kind: text,
+        x: 312,
+        y: 382,
+        width: 290,
+        height: 40,
+        text: "s1: String",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-s1-parts,
+        kind: text,
+        x: 312,
+        y: 428,
+        width: 290,
+        height: 40,
+        text: "ptr, len, cap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-heap,
+        kind: text,
+        x: 790,
+        y: 214,
+        width: 200,
+        height: 40,
+        text: "heap",
+        strokeColor: "#f08c00",
+        fontSize: 30,
+      }
+    - {
+        id: m-heap-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 790,
+        y: 222,
+        width: 100,
+        height: 24,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 632,
+        y: 398,
+        width: 140,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-heap-box,
+        kind: rectangle,
+        x: 790,
+        y: 380,
+        width: 250,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-heap-text,
+        kind: text,
+        x: 840,
+        y: 404,
+        width: 160,
+        height: 40,
+        text: "hello",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-owner-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 274,
+        y: 358,
+        width: 362,
+        height: 134,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-owner,
+        kind: text,
+        x: 290,
+        y: 506,
+        width: 500,
+        height: 40,
+        text: "one owner: s1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: m-drop,
+        kind: text,
+        x: 290,
+        y: 566,
+        width: 780,
+        height: 40,
+        text: "owner leaves scope → dropped, memory freed",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # ---- Board 2: what `let s2 = s1;` copies -------------------------------
+    - {
+        id: mv-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 780,
+        height: 48,
+        text: "let s2 = s1;",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: mv-s1-box,
+        kind: rectangle,
+        x: 290,
+        y: 270,
+        width: 350,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: mv-s1-text,
+        kind: text,
+        x: 310,
+        y: 290,
+        width: 320,
+        height: 40,
+        text: "s1: ptr, len, cap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: mv-s2-box,
+        kind: rectangle,
+        x: 290,
+        y: 390,
+        width: 350,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: mv-s2-text,
+        kind: text,
+        x: 310,
+        y: 410,
+        width: 320,
+        height: 40,
+        text: "s2: ptr, len, cap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: mv-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 650,
+        y: 288,
+        width: 140,
+        height: 44,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: mv-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 650,
+        y: 408,
+        width: 140,
+        height: 44,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: mv-heap-box,
+        kind: rectangle,
+        x: 800,
+        y: 270,
+        width: 240,
+        height: 200,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: mv-heap-text,
+        kind: text,
+        x: 870,
+        y: 350,
+        width: 140,
+        height: 40,
+        text: "hello",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: mv-heap-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 786,
+        y: 256,
+        width: 268,
+        height: 228,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: mv-twice,
+        kind: text,
+        x: 800,
+        y: 500,
+        width: 280,
+        height: 40,
+        text: "freed twice?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: mv-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 290,
+        y: 270,
+        width: 350,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: mv-s2-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 274,
+        y: 378,
+        width: 382,
+        height: 104,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: mv-owner,
+        kind: text,
+        x: 290,
+        y: 520,
+        width: 480,
+        height: 40,
+        text: "only s2 owns it now",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # ---- Board 3: the compiler's answer (E0382) ----------------------------
+    - {
+        id: er-title,
+        kind: text,
+        x: 280,
+        y: 152,
+        width: 780,
+        height: 48,
+        text: "Use s1 after the move",
+        strokeColor: "#1e1e1e",
+        fontSize: 38,
+      }
+    - {
+        id: er-code1,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 260,
+        height: 40,
+        text: "let s2 = s1;",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: er-code2,
+        kind: text,
+        x: 300,
+        y: 276,
+        width: 300,
+        height: 40,
+        text: 'println!("{s1}");',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: er-borrow-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 286,
+        width: 200,
+        height: 24,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: er-borrow-label,
+        kind: text,
+        x: 620,
+        y: 276,
+        width: 460,
+        height: 40,
+        text: "borrowed here after move",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: er-msg,
+        kind: text,
+        x: 300,
+        y: 346,
+        width: 780,
+        height: 40,
+        text: "error[E0382]: borrow of moved value: `s1`",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: er-moved-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 232,
+        width: 190,
+        height: 24,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: er-moved-label,
+        kind: text,
+        x: 620,
+        y: 222,
+        width: 460,
+        height: 40,
+        text: "value moved here",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: er-note1,
+        kind: text,
+        x: 300,
+        y: 402,
+        width: 780,
+        height: 40,
+        text: "move occurs because `s1` has type `String`,",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: er-note2,
+        kind: text,
+        x: 300,
+        y: 442,
+        width: 780,
+        height: 40,
+        text: "which does not implement the `Copy` trait",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: er-help,
+        kind: text,
+        x: 300,
+        y: 512,
+        width: 780,
+        height: 40,
+        text: "help: consider cloning the value",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: er-fix,
+        kind: text,
+        x: 340,
+        y: 560,
+        width: 600,
+        height: 40,
+        text: "let s2 = s1.clone();",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
 
 build:
   voiceProfile: pocket-alba-v1
@@ -44,90 +510,327 @@ runtime:
     latencyMs: 600
     result:
       status: success
-      stdout: "s1 = owned, s2 = owned\nn = 5, m = 5\n"
+      stdout: "inside the braces\ns2 = hello, s3 = hello world\nn = 5, m = 5\n"
       stderr: ""
 
 scenes:
-  - id: move
+  - id: memory
+    chapter: Who frees the memory?
     narration: >
-      [[mark:show-move]] Every value in Rust has exactly one owner. When you
-      assign a String to a new variable, ownership moves — the old name stops
-      working. Use it after the move, and the compiler stops you with error
-      E0382.
+      Every program has to give back memory it no longer needs. Some
+      languages use a garbage collector. In C, you call free yourself. Rust
+      uses a third way, called ownership, and the compiler checks it before
+      your program runs.
+      [[mark:draw-stack]] An i32 like n has a fixed size, so it's stored on
+      the stack.
+      [[mark:draw-string]] A String can grow, so s1 on the stack holds only a
+      pointer, a length, and a capacity.
+      [[mark:draw-heap]] The text itself lives on the heap, and the pointer
+      points to it.
+      [[mark:draw-owner]] s1 is the owner of that text. A value has only one
+      owner at a time.
+      [[mark:draw-drop]] When the owner goes out of scope, Rust drops the
+      value and frees its memory. No garbage collector, and no free call to
+      forget.
+    sources:
+      - title: "The Rust Book — What Is Ownership? (The Stack and the Heap)"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#the-stack-and-the-heap"
+      - title: "The Rust Book — Ownership Rules"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#ownership-rules"
+      - title: "The Rust Book — Data Types (integer types)"
+        url: "https://doc.rust-lang.org/book/ch03-02-data-types.html#integer-types"
+      - title: "The Rust Book — Memory and Allocation"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#memory-and-allocation"
+    actions:
+      # Opens in the quiet handle before the first word, already titled.
+      - id: open-board-memory
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -1500 }
+        open: true
+        upsertIds: [m-title]
+      - id: draw-stack
+        type: whiteboard.apply
+        at: { mark: draw-stack }
+        upsertIds: [m-stack, m-stack-line, m-n-box, m-n-text]
+        drawMs: 1600
+      - id: draw-string
+        type: whiteboard.apply
+        at: { mark: draw-string }
+        upsertIds: [m-s1-box, m-s1-name, m-s1-parts]
+        drawMs: 1500
+      - id: draw-heap
+        type: whiteboard.apply
+        at: { mark: draw-heap }
+        upsertIds: [m-heap, m-heap-line, m-arrow, m-heap-box, m-heap-text]
+        drawMs: 2000
+      - id: draw-owner
+        type: whiteboard.apply
+        at: { mark: draw-owner }
+        upsertIds: [m-owner-circle, m-owner]
+        drawMs: 1400
+      - id: draw-drop
+        type: whiteboard.apply
+        at: { mark: draw-drop }
+        upsertIds: [m-drop]
+        drawMs: 1500
+
+  - id: scope
+    chapter: Scope and drop
+    narration: >
+      Let's see that in code.
+      [[mark:select-from]] String::from builds a String from the text in
+      quotes.
+      [[mark:select-scope]] These inner curly braces make a scope. The
+      variable inner is valid from where it's declared, down to the closing
+      brace.
+      [[mark:type-drop]] At that brace, inner goes out of scope. Rust calls
+      drop for you right there, and the heap memory is freed.
+    sources:
+      - title: "The Rust Book — Variable Scope"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variable-scope"
+      - title: "The Rust Book — Memory and Allocation"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#memory-and-allocation"
+      - title: "std::ops::Drop"
+        url: "https://doc.rust-lang.org/std/ops/trait.Drop.html"
+    actions:
+      - id: close-board-memory
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { scene: start, offsetMs: 900 }
+        path: main.rs
+      - id: select-from
+        type: editor.select
+        at: { mark: select-from }
+        target:
+          file: main.rs
+          text: "String::from"
+          occurrence: 1
+      # Sweeps the inner block line by line, brace to brace: the scope.
+      - id: select-scope
+        type: editor.select
+        at: { mark: select-scope }
+        target:
+          file: main.rs
+          text: "{\n        let inner = String::from(\"inside the braces\");\n        println!(\"{inner}\");\n    }"
+          occurrence: 1
+      - id: type-drop
+        type: editor.type
+        at: { mark: type-drop }
+        target:
+          file: main.rs
+          after: "        println!(\"{inner}\");\n    }"
+          occurrence: 1
+        cadence: natural
+        text: " // inner is dropped here"
+
+  - id: move
+    chapter: Moving a String
+    narration: >
+      [[mark:type-s1]] Now let's make a String called s1.
+      [[mark:type-move]] Then let's assign it to a new variable, s2. In many
+      languages, you'd now have two names for the same text.
+      [[mark:show-move]] Not in Rust. The String moves to s2, and s1 isn't
+      valid anymore. Use it again, and you get error E0382.
     sources:
       - title: "The Rust Book — Variables and Data Interacting with Move"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-move"
     actions:
+      - id: type-s1
+        type: editor.type
+        at: { mark: type-s1, offsetMs: -400 }
+        target:
+          file: main.rs
+          after: "    } // inner is dropped here\n"
+          occurrence: 1
+        cadence: line-by-line
+        text: "\n    let s1 = String::from(\"hello\");\n"
+      - id: type-move
+        type: editor.type
+        at: { mark: type-move }
+        target:
+          file: main.rs
+          after: "    let s1 = String::from(\"hello\");\n"
+          occurrence: 1
+        cadence: natural
+        text: "    let s2 = s1;\n"
       - id: show-move
         type: slide.show
         at: { mark: show-move }
         slideId: move-slide
 
-  - id: copy-vs-clone
+  - id: why-move
     narration: >
-      [[mark:show-copy]] Small values are different. Types like i32, bool, and
-      char are Copy — assigning them just duplicates the value, and both names
-      stay valid. For heap types like String, you copy on purpose, with clone.
+      So why does Rust do this? [[mark:draw-copy]] The assignment copies the
+      pointer, the length, and the capacity into s2, but not the heap text.
+      [[mark:draw-twice]] Now two variables point at the same memory. At the
+      end of main, Rust would free it twice. That bug is called a double
+      free.
+      [[mark:draw-strike]] So Rust makes s1 invalid instead. Only s2 owns the
+      text, and only s2 frees it.
+    sources:
+      - title: "The Rust Book — Variables and Data Interacting with Move"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-move"
+    actions:
+      - id: close-move-slide
+        type: slide.close
+        at: { scene: start }
+      - id: open-board-move
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: 300 }
+        open: true
+        clear: true
+        upsertIds:
+          [
+            mv-title,
+            m-stack,
+            m-stack-line,
+            m-heap,
+            m-heap-line,
+            mv-s1-box,
+            mv-s1-text,
+            mv-arrow1,
+            mv-heap-box,
+            mv-heap-text,
+          ]
+      - id: draw-copy
+        type: whiteboard.apply
+        at: { mark: draw-copy }
+        upsertIds: [mv-s2-box, mv-s2-text, mv-arrow2]
+        drawMs: 1800
+      - id: draw-twice
+        type: whiteboard.apply
+        at: { mark: draw-twice }
+        upsertIds: [mv-heap-circle, mv-twice]
+        drawMs: 1600
+      - id: draw-strike
+        type: whiteboard.apply
+        at: { mark: draw-strike }
+        upsertIds: [mv-strike, mv-s2-circle, mv-owner]
+        drawMs: 2200
+
+  - id: compiler-error
+    narration: >
+      What does the compiler say if you try?
+      [[mark:draw-error-code]] Here's a print of s1, after the move.
+      [[mark:draw-error-msg]] The answer is error E0382, borrow of moved value
+      s1. Printing reads s1, and Rust calls that kind of read a borrow.
+      [[mark:draw-error-note]] The message points at the move, and says why.
+      String doesn't implement the Copy trait. A trait names something a type
+      can do.
+      [[mark:draw-error-help]] It even suggests a fix. Clone the value.
+    sources:
+      - title: "Rust error codes — E0382"
+        url: "https://doc.rust-lang.org/error_codes/E0382.html"
+      - title: "The Rust Book — Defining Shared Behavior with Traits"
+        url: "https://doc.rust-lang.org/book/ch10-02-traits.html"
+    actions:
+      - id: open-board-error
+        type: whiteboard.apply
+        at: { scene: start }
+        clear: true
+        upsertIds: [er-title]
+      - id: draw-error-code
+        type: whiteboard.apply
+        at: { mark: draw-error-code }
+        upsertIds: [er-code1, er-code2]
+        drawMs: 1400
+      - id: draw-error-msg
+        type: whiteboard.apply
+        at: { mark: draw-error-msg }
+        upsertIds: [er-borrow-line, er-borrow-label, er-msg]
+        drawMs: 2600
+      - id: draw-error-note
+        type: whiteboard.apply
+        at: { mark: draw-error-note }
+        upsertIds: [er-moved-line, er-moved-label, er-note1, er-note2]
+        drawMs: 2400
+      - id: draw-error-help
+        type: whiteboard.apply
+        at: { mark: draw-error-help }
+        upsertIds: [er-help, er-fix]
+        drawMs: 1800
+
+  - id: copy-clone
+    chapter: Copy and clone
+    narration: >
+      [[mark:show-copy]] So which types copy instead of moving? Types like
+      i32, bool, and char are Copy. They're small and live only on the stack,
+      so copying them costs almost nothing. Assigning one duplicates it, and
+      both names stay valid. Heap types like String and Vec move instead. A
+      Vec is a growable list. When you really want a second String, call
+      clone.
     sources:
       - title: "The Rust Book — Stack-Only Data: Copy"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy"
+      - title: "std::marker::Copy"
+        url: "https://doc.rust-lang.org/std/marker/trait.Copy.html"
+      - title: "std::vec::Vec"
+        url: "https://doc.rust-lang.org/std/vec/struct.Vec.html"
     actions:
+      - id: close-board-error
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
       - id: show-copy
         type: slide.show
-        at: { mark: show-copy }
+        at: { mark: show-copy, offsetMs: 300 }
         slideId: copy-slide
 
-  - id: clone-it
+  - id: clone
     narration: >
-      [[mark:open]] So here's a String, s1. [[mark:type-clone]] We call clone
-      to make s2 a full, independent copy. [[mark:select-clone]] That clone call
-      leaves s1 valid. Both names own a String, and both print fine.
+      [[mark:type-clone]] Back in the editor, let's make s3 a clone of s2,
+      then change it. push_str adds text to the end of a String. That changes
+      s3, so s3 needs mut. [[mark:select-clone]] clone copies the heap text
+      too, so s3 gets its own memory. And s2 stays valid, because clone only
+      reads it. Copying takes real work, so Rust only does it when you ask.
     sources:
       - title: "The Rust Book — Variables and Data Interacting with Clone"
         url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#variables-and-data-interacting-with-clone"
+      - title: "std::string::String::push_str"
+        url: "https://doc.rust-lang.org/std/string/struct.String.html#method.push_str"
     actions:
-      - id: close-slide
+      - id: close-copy-slide
         type: slide.close
         at: { scene: start }
-      - id: open-main
-        type: workspace.openFile
-        at: { mark: open }
-        path: main.rs
       - id: type-clone
         type: editor.type
-        at: { mark: type-clone, offsetMs: -400 }
+        at: { mark: type-clone, offsetMs: 500 }
         target:
           file: main.rs
-          after: "    let s1 = String::from(\"owned\");\n"
+          after: "    let s2 = s1;\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let s2 = s1.clone();\n    println!(\"s1 = {s1}, s2 = {s2}\");\n"
+        text: "\n    let mut s3 = s2.clone();\n    s3.push_str(\" world\");\n    println!(\"s2 = {s2}, s3 = {s3}\");\n"
       - id: select-clone
         type: editor.select
         at: { mark: select-clone }
         target:
           file: main.rs
-          text: "s1.clone()"
+          text: "s2.clone()"
           occurrence: 1
 
-  - id: copy-it
+  - id: copy
     narration: >
-      [[mark:type-copy]] Now a plain integer. [[mark:select-copy]] n is five,
-      and m gets a copy of it. Because i32 is Copy, n is still valid afterward.
-      Nothing moved, and both names hold five.
+      [[mark:type-copy]] Now let's assign an i32 the same way.
+      [[mark:select-copy]] m gets a copy of n. There's no heap memory here, so
+      nothing can be freed twice. That's why i32 is Copy. And n stays valid,
+      so we can still print it.
     sources:
-      - title: "The Rust Book — What Is Ownership?"
-        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
+      - title: "The Rust Book — Stack-Only Data: Copy"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy"
     actions:
       - id: type-copy
         type: editor.type
         at: { mark: type-copy, offsetMs: -400 }
         target:
           file: main.rs
-          after: "    println!(\"s1 = {s1}, s2 = {s2}\");\n"
+          after: "    println!(\"s2 = {s2}, s3 = {s3}\");\n"
           occurrence: 1
         cadence: line-by-line
-        text: "    let n = 5;\n    let m = n;\n    println!(\"n = {n}, m = {m}\");\n"
+        text: "\n    let n = 5;\n    let m = n;\n    println!(\"n = {n}, m = {m}\");\n"
       - id: select-copy
         type: editor.select
         at: { mark: select-copy }
@@ -138,12 +841,12 @@ scenes:
 
   - id: run
     narration: >
-      [[mark:run]] Let's run it. s1 and s2 both say owned; n and m both hold
-      five. Move by default keeps ownership clear; clone and Copy are the two
-      ways values get duplicated.
+      [[mark:run]] Let's run it. The first line comes from inside the braces,
+      before inner was dropped. s2 still says hello, and its clone says hello
+      world. And n and m are both five.
     sources:
-      - title: "Rust Playground"
-        url: "https://play.rust-lang.org/"
+      - title: "The Rust Book — What Is Ownership?"
+        url: "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html"
     actions:
       - id: run
         type: runtime.run
@@ -152,15 +855,28 @@ scenes:
       - id: expect-output
         type: expect.output
         at: { afterAction: run }
-        contains: "s1 = owned, s2 = owned"
+        contains: "s2 = hello, s3 = hello world"
         timeoutMs: 8000
       - id: expect-file-main
         type: expect.file
         at: { afterAction: run }
         path: main.rs
-        contains: "let s2 = s1.clone();"
+        contains: "let mut s3 = s2.clone();"
+
+  - id: wrap
+    narration: >
+      So a value has one owner at a time, and it's dropped when its owner goes
+      out of scope. Assigning a String moves it, Copy types are duplicated, and
+      clone makes a real copy. Next, borrowing: how a function can use a value
+      without taking it.
+    sources:
+      - title: "The Rust Book — Understanding Ownership"
+        url: "https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html"
+      - title: "The Rust Book — References and Borrowing"
+        url: "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html"
+    actions: []
 
 checks:
-  # 500 (not 300): slide lessons become google-svg decks whose per-slide font
+  # 500 (not 300): google-svg deck slides embed per-slide font data whose
   # paint briefly stalls the main thread at each show/close.
   - { type: timing.p95Ms, max: 500 }
