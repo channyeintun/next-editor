@@ -18,19 +18,20 @@ import {
 import { narrationNoiseSeed } from "./tts/pocket/noise";
 import { preloadPocket, synthesizePocketDialog } from "./tts/pocketSynth";
 import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/profiles";
+import { levelNarrationDialogs, NARRATION_LEVELING } from "./tts/loudness";
 import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
-import { stitchWavSegments, validateDialogWav } from "./tts/wav";
+import { decodeWavPcm16, encodeWavPcm16, stitchWavSegments, validateDialogWav } from "./tts/wav";
 
 /**
  * The in-page Director stage (narration + compile at render time): split the
  * script's narration at its markers into dialogs, synthesize each with
  * the selected voice provider (per-dialog content-addressed cache),
- * schedule dialogs jointly with the actions, stitch one narration WAV, and
- * compile the absolute-time plan. Deterministic throughout: dialogs are
- * seeded, so edits only re-synthesize the changed spans and repeat builds
- * reproduce identical audio. Pocket-TTS dialogs share one noise seed; Modal
- * VoxCPM2 dialogs additionally reuse one recorded reference for stable speaker
- * identity.
+ * level every dialog to one shared loudness, schedule dialogs jointly with
+ * the actions, stitch one narration WAV, and compile the absolute-time plan.
+ * Deterministic throughout: dialogs are seeded, so edits only re-synthesize
+ * the changed spans and repeat builds reproduce identical audio. Pocket-TTS
+ * dialogs share one noise seed; Modal VoxCPM2 dialogs additionally reuse one
+ * recorded reference for stable speaker identity.
  */
 
 export interface BuiltNarration {
@@ -123,6 +124,12 @@ function narrationLexiconFor(locale: string): PronunciationLexicon {
 
 const LABEL_PREVIEW_TOKENS = 6;
 
+/**
+ * How far a dialog may end from the narration's shared loudness before the
+ * Director warns. Only a take that is very peaky or far too quiet ends off it.
+ */
+const MAX_LEVEL_DEVIATION_LU = 1;
+
 /** `dialog 3/12 "intro.2" ("Go functions can return two values…")` — for errors and warnings. */
 function dialogLabelOf(dialog: NarrationDialog, index: number, count: number): string {
   const preview = dialog.tokens.slice(0, LABEL_PREVIEW_TOKENS).join(" ");
@@ -212,7 +219,8 @@ export async function buildPlanFromScript(
   await provider.preload();
 
   // ---- Per-dialog synthesis through the content-addressed cache -----------
-  const segments: Uint8Array[] = [];
+  const takes: Uint8Array[] = [];
+  const labels: string[] = [];
   const durationsMs: number[] = [];
   const dialogHashes: string[] = [];
   const synthesisWarnings: string[] = [];
@@ -233,6 +241,7 @@ export async function buildPlanFromScript(
     dialogHashes.push(requestHash);
 
     const label = dialogLabelOf(dialogs[i], i, dialogs.length);
+    labels.push(label);
     let take = await readCachedTake(requestHash, provider.sampleRate, (reason) =>
       synthesisWarnings.push(
         `Cached audio for ${label} was unusable (${reason}) and was synthesized again`,
@@ -252,9 +261,29 @@ export async function buildPlanFromScript(
         `${capitalize(label)} ran to the speech engine's length limit without the model ending the sentence — listen for run-on or cut-off audio, and reword or split that sentence if it sounds wrong`,
       );
     }
-    segments.push(take.wav);
+    takes.push(take.wav);
     durationsMs.push(take.durationMs);
   }
+
+  // ---- One loudness for every dialog --------------------------------------
+  // The cache keeps each raw take; leveling happens on every build, so a
+  // change to the leveling never invalidates paid or slow synthesis. The gain
+  // is per dialog and static, so durations (and the schedule) do not change.
+  const leveled = levelNarrationDialogs(
+    takes.map((wav) => decodeWavPcm16(wav).pcm),
+    provider.sampleRate,
+  );
+  const segments = leveled.dialogs.map(({ pcm }) => encodeWavPcm16(pcm, provider.sampleRate));
+  const levelingWarnings = leveled.dialogs.flatMap(({ leveledLufs }, index) => {
+    const offLu = leveledLufs === null ? 0 : leveledLufs - leveled.levelLufs;
+    if (Math.abs(offLu) <= MAX_LEVEL_DEVIATION_LU) {
+      return [];
+    }
+    const direction = offLu < 0 ? "quieter" : "louder";
+    return [
+      `${capitalize(labels[index])} stays ${Math.abs(offLu).toFixed(1)} dB ${direction} than the rest of the narration after leveling — listen to it, and reword that dialog if it stands out`,
+    ];
+  });
 
   // ---- Joint scheduling + stitch ------------------------------------------
   onPhase?.("schedule");
@@ -275,9 +304,13 @@ export async function buildPlanFromScript(
     provider.sampleRate,
   );
   const audioSha256 = await sha256Hex(stitched);
+  // The leveling settings are part of the key: changing them changes the
+  // stitched audio, so the plan hash changes with it and a stored
+  // repeatability baseline resets instead of reporting different audio.
   const narrationKey = await sha256HexOfJson({
     dialogHashes,
     totalDurationMs: schedule.totalDurationMs,
+    leveling: NARRATION_LEVELING,
   });
 
   // ---- Resolve published-deck slides into pinned google-svg content ------
@@ -308,6 +341,6 @@ export async function buildPlanFromScript(
     },
     dialogCount: dialogs.length,
     synthesizedCount,
-    warnings: [...synthesisWarnings, ...schedule.warnings, ...warnings],
+    warnings: [...synthesisWarnings, ...levelingWarnings, ...schedule.warnings, ...warnings],
   };
 }

@@ -37,7 +37,10 @@ browser at render time. Two ways it reaches the studio:
    the prose. Each mark is an **anchor**: the text splits at every mark into
    **dialogs**, each dialog is synthesized to audio separately (pocket-tts in
    the render page for English; VoxCPM2 on Modal for Burmese), and actions
-   fire at the mark they reference.
+   fire at the mark they reference. Before the dialogs are stitched, every one
+   is leveled to the same loudness (−18 LUFS, or lower for the whole narration
+   when one dialog is too peaky or too quiet to get there), so the voice keeps
+   one volume.
 2. The scheduler places dialogs **around the actions**: narration waits until
    an anchored typing action finishes before the next dialog starts. You do
    not compute timings — you place marks where things should happen and let
@@ -624,6 +627,7 @@ of the previous board while wiping the rest works.
 | `⚠ …ms of silence inserted before dialog …`     | Your action outlasts the narration around it; add a sentence there or shorten the typed text.           |
 | `… ran to the speech engine's length limit …`   | A sentence hit Pocket's ~40s cap unended; reword or split it (the warning repeats until it changes).    |
 | `Narration dialog N/M "…" ("…"): …`             | That dialog's synthesis failed or its audio is unusable; Burmese errors carry the service's reason.     |
+| `… stays N dB quieter than the rest …`          | Too quiet or too peaky for leveling to match the others; listen, and reword that dialog for a new take. |
 | `Anchor occurrence N of "…" not found` (render) | The `after` string doesn't match the file at perform time — check tabs/newlines and earlier insertions. |
 | `checkpoint.output.… never contains …`          | Fixture output and `expect.output` disagree, or the program doesn't print it.                           |
 | `runtime.waitForReady` times out                | Check the pinned install/run commands, lockfile, expected port, and server diagnostics in the receipt.  |

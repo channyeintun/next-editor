@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { sha256HexOfJson } from "./hash";
 import { LEXICON_V1 } from "./script/lexicon";
 import { parseLessonScript } from "./script/schema";
+import { measureIntegratedLoudness, NARRATION_LOUDNESS_TARGET_LUFS } from "./tts/loudness";
 import { ttsRequestHash, VOICE_PROFILES } from "./tts/profiles";
-import { encodeWavPcm16 } from "./tts/wav";
+import { decodeWavPcm16, encodeWavPcm16, type StitchSegment } from "./tts/wav";
 
 const tts = vi.hoisted(() => ({
   getCachedDialogWav:
@@ -41,12 +42,34 @@ vi.mock("./tts/modalVoxCpm2Synth", () => ({
   synthesizeModalVoxCpm2Wav: tts.synthesizeModalVoxCpm2Wav,
 }));
 
+// The real stitch, watched so tests can measure each placed dialog.
+const stitch = vi.hoisted(() => ({ segments: [] as StitchSegment[][] }));
+vi.mock("./tts/wav", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./tts/wav")>();
+  return {
+    ...actual,
+    stitchWavSegments: (segments: StitchSegment[], totalDurationMs: number, rate: number) => {
+      stitch.segments.push(segments);
+      return actual.stitchWavSegments(segments, totalDurationMs, rate);
+    },
+  };
+});
+
 const { buildPlanFromScript } = await import("./inPageDirector");
 
-/** A voiced (non-silent) PCM16 mono WAV of the given length. */
-function voicedWav(durationMs: number, sampleRate: number): Uint8Array {
-  return encodeWavPcm16(
-    new Int16Array(Math.ceil((sampleRate / 1000) * durationMs)).fill(1_000),
+/** A voiced (non-silent) PCM16 mono WAV of the given length: a 220 Hz tone. */
+function voicedWav(durationMs: number, sampleRate: number, amplitude = 0.1): Uint8Array {
+  const pcm = new Int16Array(Math.ceil((sampleRate / 1000) * durationMs));
+  for (let i = 0; i < pcm.length; i++) {
+    pcm[i] = Math.round(amplitude * 0x7fff * Math.sin((2 * Math.PI * 220 * i) / sampleRate));
+  }
+  return encodeWavPcm16(pcm, sampleRate);
+}
+
+function loudnessOfWav(wav: Uint8Array): number | null {
+  const { pcm, sampleRate } = decodeWavPcm16(wav);
+  return measureIntegratedLoudness(
+    Float32Array.from(pcm, (sample) => sample / 0x8000),
     sampleRate,
   );
 }
@@ -59,6 +82,7 @@ function loadPilot() {
 
 describe("buildPlanFromScript narration", () => {
   beforeEach(() => {
+    stitch.segments = [];
     tts.getCachedDialogWav.mockReset().mockResolvedValue(null);
     tts.deleteCachedDialogWav.mockReset().mockResolvedValue();
     tts.preloadPocket.mockReset().mockResolvedValue();
@@ -219,5 +243,70 @@ describe("buildPlanFromScript narration", () => {
 
     expect(tts.synthesizePocketDialog).not.toHaveBeenCalled();
     expect(second.warnings.filter((warning) => capWarning.test(warning))).toHaveLength(1);
+  });
+
+  it("levels every dialog to one loudness, and caches the raw take", async () => {
+    // Every other take comes out of the model 9 dB quieter.
+    let calls = 0;
+    tts.synthesizePocketDialog.mockImplementation(async (_, speechText) => ({
+      wav: voicedWav(400 + speechText.split(/\s+/).length * 320, 24_000, calls++ % 2 ? 0.07 : 0.2),
+      cappedChunkCount: 0,
+    }));
+
+    const result = await buildPlanFromScript(loadPilot());
+
+    const placed = stitch.segments[0];
+    expect(placed.length).toBe(result.dialogCount);
+    expect(placed.length).toBeGreaterThan(2);
+    for (const segment of placed) {
+      const loudness = loudnessOfWav(segment.bytes);
+      expect(Math.abs(loudness! - NARRATION_LOUDNESS_TARGET_LUFS)).toBeLessThan(0.2);
+    }
+    // Leveling changes the volume only: each placed dialog keeps its take's length.
+    const cached = tts.putCachedDialogWav.mock.calls.map(
+      ([, take]) => (take as { wav: Uint8Array }).wav,
+    );
+    expect(placed.map((segment) => segment.bytes.length)).toEqual(cached.map((wav) => wav.length));
+    // The cache holds the take as synthesized, quiet ones still quiet.
+    expect(loudnessOfWav(cached[1])! - loudnessOfWav(cached[0])!).toBeCloseTo(-9, 0);
+    expect(result.warnings.filter((warning) => warning.includes("leveling"))).toEqual([]);
+  });
+
+  it("brings a narration that is quiet as a whole to one loudness", async () => {
+    // Takes around −31 and −34 LUFS: the 12 dB gain limit holds every one
+    // short of the target, so they meet lower instead of keeping their step.
+    let calls = 0;
+    tts.synthesizePocketDialog.mockImplementation(async (_, speechText) => ({
+      wav: voicedWav(
+        400 + speechText.split(/\s+/).length * 320,
+        24_000,
+        calls++ % 2 ? 0.028 : 0.04,
+      ),
+      cappedChunkCount: 0,
+    }));
+
+    const result = await buildPlanFromScript(loadPilot());
+
+    const levels = stitch.segments[0].map((segment) => loudnessOfWav(segment.bytes)!);
+    expect(levels.length).toBeGreaterThan(2);
+    expect(Math.max(...levels) - Math.min(...levels)).toBeLessThan(0.2);
+    expect(Math.max(...levels)).toBeLessThan(NARRATION_LOUDNESS_TARGET_LUFS - 3);
+    expect(result.warnings.filter((warning) => warning.includes("leveling"))).toEqual([]);
+  });
+
+  it("warns about a dialog that stays off the shared loudness", async () => {
+    // So quiet that the 12 dB gain limit cannot bring it up to the others.
+    tts.synthesizePocketDialog.mockImplementationOnce(async () => ({
+      wav: voicedWav(1_600, 24_000, 0.006),
+      cappedChunkCount: 0,
+    }));
+
+    const result = await buildPlanFromScript(loadPilot());
+
+    expect(result.warnings.filter((warning) => warning.includes("leveling"))).toEqual([
+      expect.stringMatching(
+        /^Dialog 1\/\d+ "[^"]+" \("Go functions can return two values…"\) stays \d+\.\d dB quieter than the rest of the narration after leveling/,
+      ),
+    ]);
   });
 });

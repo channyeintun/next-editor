@@ -280,6 +280,8 @@ Provider selection should follow a pronunciation/alignment/licensing spike, not 
 
 _Status 2026-10-02:_ none of these hosted providers was adopted. English narration uses pocket-tts in the render page, and Burmese uses VoxCPM2 on Modal ([modal-voxcpm2-burmese.md](./modal-voxcpm2-burmese.md)). Neither returns word timings, so `src/studio/script/alignment.ts` uses an **estimation provider**: it spreads each dialog's measured duration over its tokens by spoken length plus punctuation pauses. Latin text is weighed by its letters, and Myanmar script at 3 virtual characters per syllable rather than by code units. The pronunciation lexicon (step 3 below) applies to English narration only; Burmese narration is sent as written.
 
+Each dialog is synthesized separately, and the models do not hold one output level between requests, so every dialog is leveled to one loudness before stitching and the voice keeps one volume: a single static gain per dialog toward −18 LUFS (BS.1770 integrated loudness), with the whole narration lowered together (but no lower than −24 LUFS) when a dialog cannot get there because its peaks would pass −1 dBFS or it needs more than the 12 dB gain limit (`src/studio/tts/loudness.ts`). The dialog cache keeps the raw takes.
+
 The Director should:
 
 1. Keep separate **display text** and **speech text** representations.

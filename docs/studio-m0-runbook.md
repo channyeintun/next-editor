@@ -148,10 +148,16 @@ rebuilds (upstream uses `Math.random()`). Synthesis goes through a per-dialog
 content-addressed cache in the browser's Cache storage; the scheduler then
 places dialogs **around the actions** (narration waits while typing finishes —
 marker times are exact by construction) and stitches the segments into the
-single WAV the recorder consumes. Editing one sentence re-synthesizes only
-that dialog. The ~125MB bundle (int8 ONNX + voices) downloads once into the
-browser cache; the repo carries no narration audio (the archived M0 fixture
-aside). Voices come precomputed in the bundle
+single WAV the recorder consumes. Before the stitch, every dialog is leveled
+to one loudness (`src/studio/tts/loudness.ts`) so the voice keeps one volume:
+each dialog gets a single static gain toward −18 LUFS (BS.1770), and when a
+dialog cannot get there (its peaks would pass −1 dBFS, or it needs more than
+the 12 dB gain limit), the whole narration comes down together (but no lower
+than −24 LUFS) instead of that dialog alone. The cache
+keeps the raw takes, so leveling never costs a new synthesis. Editing one
+sentence re-synthesizes only that dialog. The ~125MB bundle (int8 ONNX +
+voices) downloads once into the browser cache; the repo carries no narration
+audio (the archived M0 fixture aside). Voices come precomputed in the bundle
 (`alba` default; azelma, cosette, eponine, fantine, javert, jean, marius —
 a new voice is a one-line profile in `src/studio/tts/profiles.ts`). Pocket's
 text prep splits a dialog into sentences only at `.`, `!`, or `?` (plus closing
@@ -171,7 +177,11 @@ as `dialog N/M "<id>" ("first words…")`. When a Pocket sentence runs to the
 500-frame (~40 s) cap without the model ending it, the Director warns that the
 dialog "ran to the speech engine's length limit without the model ending the
 sentence" — reword or split that sentence. The take is still cached, and the
-warning repeats on every cache hit until the text changes.
+warning repeats on every cache hit until the text changes. Only a take that
+cannot reach even −24 LUFS (too peaky, or too quiet for the 12 dB gain limit)
+or is too loud for that limit ends off the shared level; when it ends more
+than 1 dB off, a warning says it "stays N dB quieter (or louder) than the rest
+of the narration".
 
 Anchors are narration-relative only (`{mark, offsetMs}`, `{scene: start,
 offsetMs}`, `{afterAction}`); absolute times are forbidden in scripts. Unknown
