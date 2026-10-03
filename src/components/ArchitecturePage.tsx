@@ -1198,9 +1198,12 @@ export default function ArchitecturePage() {
                 <tr>
                   <td>tests</td>
                   <td>
-                    <code>vitest</code>{" "}
+                    <code>vitest</code>
+                    <code>fast-check</code>{" "}
                     <span className="note-inline">
-                      run via <code>vp test</code> in jsdom; the Worker has its own node config
+                      run via <code>vp test</code> in jsdom; the Worker has its own node config;
+                      fast-check property tests check the replay, recording-clock, and media-span
+                      laws over generated inputs
                     </span>
                   </td>
                 </tr>
