@@ -7,6 +7,8 @@ interface ErrorPayload {
 }
 
 const referenceAudioCache = new Map<string, Promise<string>>();
+const NETWORK_ATTEMPTS = 3;
+const NETWORK_RETRY_DELAYS_MS = [2_000, 5_000];
 
 function base64Of(bytes: Uint8Array): string {
   const chunks: string[] = [];
@@ -66,7 +68,29 @@ export async function synthesizeModalVoxCpm2Wav(
     throw new Error(`Unsupported VoxCPM2 profile "${profile.id}"`);
   }
   const referenceAudioBase64 = await loadReferenceAudioBase64(profile);
+  const body = JSON.stringify({ text: speechText, seed, referenceAudioBase64 });
 
+  // A connection dropped between the browser and the Worker rejects with a
+  // TypeError ("Failed to fetch") and no response, even when Modal finished the
+  // take. A synthesis request changes nothing server-side, so asking again is
+  // safe; a Worker error response carries its own message and is never retried.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await requestSynthesis(body);
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      if (attempt >= NETWORK_ATTEMPTS) {
+        throw new Error(
+          `VoxCPM2 narration: the connection failed ${NETWORK_ATTEMPTS} times (${error.message})`,
+          { cause: error },
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, NETWORK_RETRY_DELAYS_MS[attempt - 1]));
+    }
+  }
+}
+
+async function requestSynthesis(body: string): Promise<Uint8Array> {
   const response = await fetch("/api/studio/tts/voxcpm2", {
     method: "POST",
     credentials: "same-origin",
@@ -74,7 +98,7 @@ export async function synthesizeModalVoxCpm2Wav(
       Accept: "audio/wav",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ text: speechText, seed, referenceAudioBase64 }),
+    body,
   });
 
   if (!response.ok) {

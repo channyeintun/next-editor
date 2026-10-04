@@ -22,7 +22,8 @@ available only when the signed-in user has the
 
 Next Editor does not add a synthesis timeout to the upstream request. It waits
 until Modal responds or the client or hosting infrastructure closes the
-connection.
+connection. A dropped browser connection ("Failed to fetch", no response) is
+retried twice for that dialog; an error response from the Worker is not.
 
 The selected sample stays in browser IndexedDB between runs. It is sent
 transiently for each uncached Burmese dialog, used as VoxCPM2's

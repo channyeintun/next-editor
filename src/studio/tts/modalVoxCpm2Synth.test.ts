@@ -22,13 +22,23 @@ const SAVED_VOICE: SavedCustomVoice = {
 };
 const PROFILE = modalVoxCpm2BurmeseProfileOf(SAVED_VOICE);
 
+type FetchMock = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
 beforeEach(() => {
   voiceStore.getCustomVoice.mockReset().mockResolvedValue(SAVED_VOICE);
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
+
+function wavResponse(): Response {
+  return new Response(new Uint8Array([82, 73, 70, 70]).buffer, {
+    status: 200,
+    headers: { "Content-Type": "audio/wav" },
+  });
+}
 
 describe("synthesizeModalVoxCpm2Wav", () => {
   it("calls only the same-origin Worker route and returns WAV bytes", async () => {
@@ -63,20 +73,53 @@ describe("synthesizeModalVoxCpm2Wav", () => {
     ).rejects.toThrow("requires a recorded reference voice");
   });
 
-  it("surfaces the Worker's safe error message", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        return new Response(JSON.stringify({ error: "not enabled" }), {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        });
-      }),
-    );
+  it("surfaces the Worker's safe error message without retrying", async () => {
+    const fetchSpy = vi.fn<FetchMock>(async () => {
+      return new Response(JSON.stringify({ error: "not enabled" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
 
     await expect(synthesizeModalVoxCpm2Wav(PROFILE, "စာသား", 1)).rejects.toThrow(
       "VoxCPM2 narration: not enabled",
     );
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
+  it("retries a dropped connection with the same request", async () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi
+      .fn<FetchMock>()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(wavResponse());
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const result = synthesizeModalVoxCpm2Wav(PROFILE, "စာသား", 1);
+    await vi.runAllTimersAsync();
+
+    await expect(result).resolves.toEqual(new Uint8Array([82, 73, 70, 70]));
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls[1][1]?.body).toBe(fetchSpy.mock.calls[0][1]?.body);
+  });
+
+  it("gives up after three dropped connections", async () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi.fn<FetchMock>(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    // Settle into a value first: a bare rejection would go unhandled while the
+    // fake timers run the retry delays.
+    const failure = synthesizeModalVoxCpm2Wav(PROFILE, "စာသား", 1).catch((error: unknown) => error);
+    await vi.runAllTimersAsync();
+
+    expect(((await failure) as Error).message).toBe(
+      "VoxCPM2 narration: the connection failed 3 times (Failed to fetch)",
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 
   it("rejects a successful non-WAV response", async () => {
