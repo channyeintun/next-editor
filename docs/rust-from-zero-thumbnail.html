@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rust from zero thumbnail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
+    />
+    <!--
+      Rust from zero (Burmese) lesson thumbnail, 1280×720 (16:9, the lesson card ratio).
+      Click any text to edit it; click a progress square to set the lesson number.
+      Screenshot the frame only (Cmd+Shift+4 and drag over it, or DevTools →
+      right-click the #thumb node → Capture node screenshot for an exact 1280×720 PNG).
+      Brand: Next Editor lesson template (cream page, ink, yellow/purple/teal,
+      Google Sans + Google Sans Code); Burmese falls back to Noto Sans Myanmar.
+    -->
+    <style>
+      :root {
+        --bg: #f0efe9;
+        --ink: #1e1e1e;
+        --yellow: #ffd255;
+        --yellow-dk: #f2b705;
+        --purple: #6d57ff;
+        --teal-dk: #08877a;
+        --gray: #80868b;
+        --dot: #cfccc2;
+        --white: #ffffff;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* max-content keeps the whole frame reachable by scrolling in a narrow window.
+         The frame sits at the top rather than centered vertically: centering can land it
+         on a half pixel, and a screenshot then picks up a line of the page background. */
+      body {
+        margin: 0;
+        min-width: max-content;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 32px 16px;
+        background: #2b2b2e;
+        font-family: var(--sans);
+      }
+
+      [contenteditable] {
+        outline: none;
+        cursor: text;
+      }
+
+      [contenteditable]:hover {
+        box-shadow: inset 0 -3px 0 rgb(109 87 255 / 0.35);
+      }
+
+      #thumb {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        background-color: var(--bg);
+        background-image: radial-gradient(rgb(30 30 30 / 0.07) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      .series {
+        position: absolute;
+        left: 60px;
+        top: 46px;
+        font: 700 36px/1 var(--mono);
+        letter-spacing: -0.01em;
+      }
+
+      .series .brace {
+        color: var(--yellow-dk);
+      }
+
+      .lang {
+        position: absolute;
+        right: 60px;
+        top: 38px;
+        padding: 12px 30px 14px;
+        border-radius: 999px;
+        background: var(--purple);
+        color: var(--white);
+        font: 700 28px/1.3 var(--mm);
+      }
+
+      .card {
+        position: absolute;
+        border: 4px solid var(--ink);
+        box-shadow: 12px 12px 0 var(--ink);
+      }
+
+      .number {
+        left: 64px;
+        top: 164px;
+        width: 300px;
+        height: 350px;
+        border-radius: 28px;
+        background: var(--yellow);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+
+      .number .label {
+        font: 700 26px/1 var(--mono);
+        letter-spacing: 0.16em;
+      }
+
+      .number .value {
+        font: 700 200px/0.95 var(--sans);
+        letter-spacing: -0.04em;
+      }
+
+      .title-box {
+        position: absolute;
+        left: 420px;
+        top: 140px;
+        width: 800px;
+        height: 290px;
+        display: flex;
+        align-items: center;
+      }
+
+      .title {
+        width: 100%;
+        font-weight: 700;
+        font-family: var(--sans);
+        line-height: 1.32;
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+
+      .code {
+        left: 420px;
+        top: 462px;
+        width: 796px;
+        height: 92px;
+        border-radius: 22px;
+        background: var(--white);
+        box-shadow: 10px 10px 0 var(--ink);
+        display: flex;
+        align-items: center;
+        padding: 0 34px;
+      }
+
+      .code .tab {
+        position: absolute;
+        left: 28px;
+        top: -19px;
+        padding: 5px 14px 6px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--white);
+        font: 700 17px/1 var(--mono);
+      }
+
+      .code .src {
+        width: 100%;
+        white-space: pre;
+        overflow: hidden;
+        font: 500 32px/1 var(--mono);
+      }
+
+      .src .kw {
+        color: var(--purple);
+        font-weight: 700;
+      }
+
+      .src .str {
+        color: var(--teal-dk);
+      }
+
+      .src .num {
+        color: #b26b00;
+      }
+
+      .src .cm {
+        color: var(--gray);
+      }
+
+      .progress {
+        position: absolute;
+        left: 64px;
+        bottom: 66px;
+        display: flex;
+        gap: 18px;
+      }
+
+      .module {
+        display: flex;
+        gap: 7px;
+      }
+
+      .sq {
+        width: 24px;
+        height: 24px;
+        border-radius: 5px;
+        background: var(--dot);
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .sq.on {
+        background: var(--yellow);
+        box-shadow: inset 0 0 0 3px var(--ink);
+      }
+
+      .brand {
+        position: absolute;
+        right: 60px;
+        bottom: 50px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 30px/1 var(--sans);
+      }
+
+      .brand svg {
+        width: 56px;
+        height: 56px;
+      }
+
+      .help {
+        max-width: 1280px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="thumb">
+      <div class="series">
+        <span class="brace">{</span> Rust from zero <span class="brace">}</span>
+      </div>
+      <div class="lang" contenteditable="plaintext-only" spellcheck="false">မြန်မာလို</div>
+
+      <div class="card number">
+        <div class="label">LESSON</div>
+        <div class="value" id="number" contenteditable="plaintext-only" spellcheck="false">01</div>
+      </div>
+
+      <div class="title-box" id="title-box">
+        <div class="title" id="title" contenteditable="plaintext-only" spellcheck="false">
+          ပထမဆုံး program
+        </div>
+      </div>
+
+      <div class="card code">
+        <div class="tab" contenteditable="plaintext-only" spellcheck="false">main.rs</div>
+        <div class="src" id="code" contenteditable="plaintext-only" spellcheck="false">
+          println!("Hello, world!");
+        </div>
+      </div>
+
+      <div class="progress" id="progress" aria-label="Lesson in the course"></div>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+    </div>
+
+    <p class="help">
+      Click any text to edit it · click a square (or type a number) to mark the lesson · then
+      screenshot only the 1280×720 frame.
+    </p>
+
+    <script>
+      // Modules of the course: 5 · 3 · 3 · 4 · 5 lessons (docs/rust-from-zero-course.md).
+      const MODULES = [5, 3, 3, 4, 5];
+      const KEYWORDS =
+        /^(fn|let|mut|impl|enum|match|for|in|struct|if|else|trait|use|pub|return|while|loop|mod|where|move|ref|self|Self|const|static|type|as|dyn)$/;
+
+      const number = document.getElementById("number");
+      const title = document.getElementById("title");
+      const titleBox = document.getElementById("title-box");
+      const code = document.getElementById("code");
+      const progress = document.getElementById("progress");
+
+      const squares = [];
+      let lesson = 0;
+      for (const count of MODULES) {
+        const module = document.createElement("div");
+        module.className = "module";
+        for (let i = 0; i < count; i++) {
+          const index = squares.length + 1;
+          const square = document.createElement("button");
+          square.type = "button";
+          square.className = "sq";
+          square.title = `Lesson ${index}`;
+          square.addEventListener("click", () => {
+            number.textContent = String(index).padStart(2, "0");
+            markLesson(index);
+          });
+          squares.push(square);
+          module.append(square);
+        }
+        progress.append(module);
+      }
+
+      function markLesson(index) {
+        lesson = index;
+        squares.forEach((square, i) => square.classList.toggle("on", i + 1 === index));
+      }
+
+      // Largest size (to 116px) at which the title fits its box in at most two lines.
+      function fitTitle() {
+        let size = 116;
+        title.style.fontSize = `${size}px`;
+        while (
+          size > 40 &&
+          (title.scrollHeight > titleBox.clientHeight || title.scrollWidth > titleBox.clientWidth)
+        ) {
+          size -= 2;
+          title.style.fontSize = `${size}px`;
+        }
+      }
+
+      // Light Rust highlighting, applied whenever the code line is not being edited.
+      function escapeHtml(text) {
+        return text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+      }
+
+      function highlight(source) {
+        const token =
+          /(\/\/.*$)|("(?:\\.|[^"\\])*")|('[a-z_]\w*(?!'))|(\b\d[\d_]*(?:\.\d+)?\b)|(\b[A-Za-z_]\w*!?)/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, comment, string, lifetime, num, word] = match;
+          let cls = null;
+          if (comment) cls = "cm";
+          else if (string) cls = "str";
+          else if (lifetime) cls = "num";
+          else if (num) cls = "num";
+          else if (word && (KEYWORDS.test(word) || word.endsWith("!"))) cls = "kw";
+          html += cls ? `<span class="${cls}">${escapeHtml(text)}</span>` : escapeHtml(text);
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      // Shrink long code lines so they stay on one line inside the card.
+      function fitCode() {
+        let size = 32;
+        code.style.fontSize = `${size}px`;
+        while (size > 18 && code.scrollWidth > code.clientWidth) {
+          size -= 1;
+          code.style.fontSize = `${size}px`;
+        }
+      }
+
+      function renderCode() {
+        code.innerHTML = highlight(code.textContent.replace(/\s*\n\s*/g, " ").trim());
+        fitCode();
+      }
+
+      number.addEventListener("input", () => {
+        const value = Number.parseInt(number.textContent, 10);
+        markLesson(value >= 1 && value <= squares.length ? value : 0);
+      });
+      title.addEventListener("input", fitTitle);
+      code.addEventListener("input", fitCode);
+      code.addEventListener("blur", renderCode);
+
+      // Source formatting may indent the editable text onto its own lines.
+      title.textContent = title.textContent.trim();
+      markLesson(1);
+      renderCode();
+      document.fonts.ready.then(() => {
+        fitTitle();
+        fitCode();
+      });
+    </script>
+  </body>
+</html>
