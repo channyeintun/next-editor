@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { UploadLessonModal, useAuth, useStudioCapabilities } from "@next-editor/infra";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
@@ -256,6 +257,7 @@ export default function StudioController() {
     readImportedScripts(),
   );
   const [showDraftModal, setShowDraftModal] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [narrationLanguage, setNarrationLanguage] = useState<StudioNarrationLanguage>("en");
   const runningRef = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -744,307 +746,336 @@ export default function StudioController() {
     );
   }
 
+  // Collapsing keeps the header (status badge + toggle) right-anchored where it
+  // was, so the toggle stays under the pointer and the preview behind the
+  // panel is uncovered mid-render. The body stays mounted, only hidden.
   return (
-    <div className="fixed right-3 top-14 z-70 w-96 max-h-[75vh] overflow-y-auto rounded-xl border border-slate-700 bg-[#0d1117]/95 p-4 text-slate-200 shadow-2xl backdrop-blur text-[13px] leading-5">
+    <div
+      className={`fixed right-3 top-14 z-70 rounded-xl border border-slate-700 bg-[#0d1117]/95 text-slate-200 shadow-2xl backdrop-blur text-[13px] leading-5 ${
+        collapsed ? "py-2 pl-3 pr-2" : "w-96 max-h-[75vh] overflow-y-auto p-4"
+      }`}
+    >
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-semibold text-white">Studio render</h2>
-        <span
-          className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
-            phase === "done"
-              ? "bg-emerald-500/15 text-emerald-300"
-              : phase === "failed"
-                ? "bg-rose-500/15 text-rose-300"
-                : running
-                  ? "bg-amber-500/15 text-amber-300"
-                  : "bg-slate-500/15 text-slate-300"
-          }`}
-        >
-          {running ? phase : phase === "idle" ? "ready" : phase}
-        </span>
-      </div>
-
-      <div className="mt-2 flex items-center gap-2">
-        <select
-          value={planSlug}
-          disabled={running}
-          onChange={(event) => selectLesson(event.target.value)}
-          aria-label="Lesson to render"
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
-        >
-          {Object.keys(sources)
-            .sort()
-            .map((slug) => (
-              <option key={slug} value={slug}>
-                {slug}
-                {importedScripts[slug] ? " (imported)" : ""}
-              </option>
-            ))}
-        </select>
-        <button
-          type="button"
-          disabled={running}
-          onClick={() => importInputRef.current?.click()}
-          className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-          title="Import a LessonScript YAML (validated and critiqued here in the page)"
-        >
-          Import…
-        </button>
-        <input
-          ref={importInputRef}
-          type="file"
-          accept=".yaml,.yml"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) {
-              void handleImportFile(file);
-            }
-          }}
-        />
-      </div>
-
-      <div className="mt-2">
-        <select
-          value={narrationLanguage}
-          disabled={running || studioCapabilitiesLoading || voiceBusy !== null || voiceRecording}
-          onChange={(event) =>
-            chooseNarrationLanguage(event.target.value as StudioNarrationLanguage)
-          }
-          aria-label="Narration language and provider"
-          className="w-full rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
-        >
-          <option value="en">English · Pocket-TTS</option>
-          {studioCapabilities.burmeseVoxCpm2 ? (
-            <option value="my">မြန်မာ · VoxCPM2 (Modal)</option>
-          ) : null}
-        </select>
-      </div>
-
-      <div className="mt-2 flex items-center gap-2">
-        <select
-          value={selectedVoice ? selectedVoice.id : "default"}
-          disabled={running || voiceBusy !== null}
-          onChange={(event) => chooseVoice(event.target.value)}
-          aria-label="Narrator voice"
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
-        >
-          <option value="default">
-            {narrationLanguage === "my" ? "voice: reference required" : "voice: script default"}
-          </option>
-          {customVoices.map((voice) => (
-            <option key={voice.id} value={voice.id}>
-              voice: {voice.name} ({narrationLanguage === "my" ? "reference" : "cloned"})
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={running || voiceBusy !== null || voiceRecording}
-          onClick={() => voiceFileInputRef.current?.click()}
-          className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-          title={`Upload ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of clear narrator speech`}
-        >
-          {narrationLanguage === "my" ? "Reference…" : "Clone…"}
-        </button>
-        <button
-          type="button"
-          disabled={running || voiceBusy !== null}
-          onClick={() => {
-            void toggleVoiceRecording();
-          }}
-          className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-            voiceRecording
-              ? "bg-[#3b2222] text-[#ef8d8d] hover:bg-[#4d2a2a]"
-              : "bg-[#222d3b] text-[#8db8ef] hover:bg-[#2a3a4d]"
-          }`}
-          title={`Record ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of narrator speech`}
-        >
-          {voiceRecording ? "Stop" : "Record"}
-        </button>
-        {selectedVoice ? (
-          <>
-            <button
-              type="button"
-              disabled={
-                running ||
-                voiceBusy !== null ||
-                voiceRecording ||
-                (narrationLanguage === "my" && !selectedVoiceIsBurmeseReady)
-              }
-              onClick={() => {
-                void previewVoice();
-              }}
-              className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-              title="Synthesize a short preview sentence with this voice"
-            >
-              Preview
-            </button>
-            <button
-              type="button"
-              disabled={running || voiceBusy !== null || voiceRecording}
-              onClick={() => {
-                void removeVoice();
-              }}
-              className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
-              title="Delete this reference voice from the browser"
-            >
-              ✕
-            </button>
-          </>
-        ) : null}
-        <input
-          ref={voiceFileInputRef}
-          type="file"
-          accept="audio/*"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) {
-              void handleVoiceFile(file);
-            }
-          }}
-        />
-      </div>
-      {voiceBusy ? <p className="mt-1 text-[12px] text-slate-400">{voiceBusy}</p> : null}
-      {voiceRecording ? (
-        <p className="mt-1 text-[12px] text-amber-300">
-          Recording… speak naturally for at least {requiredVoiceSeconds}s; stops automatically at{" "}
-          {MAX_SAMPLE_SECONDS}s.
-        </p>
-      ) : null}
-      {narrationLanguage === "my" ? (
-        <p
-          className={`mt-1 text-[12px] ${
-            selectedVoiceIsBurmeseReady ? "text-slate-400" : "text-amber-300"
-          }`}
-        >
-          A {MIN_VOXCPM2_REFERENCE_SECONDS}–{MAX_SAMPLE_SECONDS}s narrator reference is required so
-          every dialog keeps the same character. The selected sample is sent transiently to your
-          private Modal deployment with the fixed Burmese educator prompt and is not stored there.
-          The LessonScript must use <span className="font-mono text-slate-300">locale: my-MM</span>.
-        </p>
-      ) : null}
-
-      <label
-        className={`mt-2 flex items-center gap-2 text-[12px] ${
-          isScreenSupported ? "text-slate-300" : "text-slate-500"
-        }`}
-        title={
-          isScreenSupported
-            ? 'Also capture this render as a screen recording — a video downloaded alongside the bundle (saved locally, never uploaded). You\'ll pick a screen or tab when the render starts. Narration is captured only when you share a browser tab with "share tab audio" on; sharing a screen or window records a silent video (saved as "…-silent").'
-            : "Screen recording needs a desktop browser with screen capture (getDisplayMedia)."
-        }
-      >
-        <input
-          type="checkbox"
-          checked={screenRecordingEnabled && isScreenSupported}
-          disabled={running || !isScreenSupported}
-          onChange={(event) =>
-            recordingSettingsTrigger.setScreenRecordingEnabled({ enabled: event.target.checked })
-          }
-          className="size-3.5 accent-sky-500 disabled:opacity-50"
-        />
-        Screen recording
-        <span className="text-slate-500">
-          {isScreenSupported ? "— saved locally as video" : "— unavailable on this browser"}
-        </span>
-      </label>
-
-      <p className="mt-1 text-slate-400">
-        runtime <span className="font-mono text-slate-300">{effectiveModeLabel}</span>
-        {" · run #"}
-        {runHistory.length + (running ? 1 : 0) || 1}
-      </p>
-
-      {runtimeModeParam.invalid ? (
-        <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
-          Ignoring <span className="font-mono">runtime={runtimeModeParam.raw}</span> — expected{" "}
-          <span className="font-mono">fixture</span> or <span className="font-mono">live</span>.
-          Using the plan default (<span className="font-mono">{effectiveModeLabel}</span>).
-        </p>
-      ) : null}
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            void runRender();
-          }}
-          disabled={
-            running ||
-            voiceBusy !== null ||
-            voiceRecording ||
-            (narrationLanguage === "my" && !selectedVoiceIsBurmeseReady)
-          }
-          className="rounded-md bg-[#173925] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {runHistory.length === 0 ? "Start render" : "Render again"}
-        </button>
-        <button
-          type="button"
-          onClick={downloadBundle}
-          disabled={!artifacts}
-          className="rounded-md bg-[#222d3b] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Download bundle
-        </button>
-        {report && !artifacts ? (
-          <button
-            type="button"
-            onClick={downloadReport}
-            className="rounded-md bg-[#3b2a22] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#efb28d] transition-colors hover:bg-[#4d382a]"
-          >
-            Download report
-          </button>
-        ) : null}
-        {artifacts ? (
-          <button
-            type="button"
-            onClick={() => setShowDraftModal(true)}
-            className="rounded-md bg-[#2b2340] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#c4b0f5] transition-colors hover:bg-[#382e52]"
-            title={`Upload through the standard lesson flow — creates a draft only; publishing stays a separate human action.${
-              activeRun ? ` ${describeDraftProvenance(activeRun)}` : ""
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
+              phase === "done"
+                ? "bg-emerald-500/15 text-emerald-300"
+                : phase === "failed"
+                  ? "bg-rose-500/15 text-rose-300"
+                  : running
+                    ? "bg-amber-500/15 text-amber-300"
+                    : "bg-slate-500/15 text-slate-300"
             }`}
           >
-            Create draft…
+            {running ? phase : phase === "idle" ? "ready" : phase}
+          </span>
+          <button
+            type="button"
+            // Keep focus where it is: the performer drives a focused editor, and
+            // a toggle click mid-render must not blur it on screen.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setCollapsed((current) => !current)}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "Expand studio render panel" : "Collapse studio render panel"}
+            title={collapsed ? "Show the render console" : "Hide the render console"}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-[#222d3b] hover:text-slate-100"
+          >
+            {collapsed ? (
+              <ChevronDown aria-hidden="true" className="size-4" />
+            ) : (
+              <ChevronUp aria-hidden="true" className="size-4" />
+            )}
           </button>
-        ) : null}
+        </div>
       </div>
 
-      {fatal ? (
-        <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200">
-          {fatal}
+      <div hidden={collapsed}>
+        <div className="mt-2 flex items-center gap-2">
+          <select
+            value={planSlug}
+            disabled={running}
+            onChange={(event) => selectLesson(event.target.value)}
+            aria-label="Lesson to render"
+            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+          >
+            {Object.keys(sources)
+              .sort()
+              .map((slug) => (
+                <option key={slug} value={slug}>
+                  {slug}
+                  {importedScripts[slug] ? " (imported)" : ""}
+                </option>
+              ))}
+          </select>
+          <button
+            type="button"
+            disabled={running}
+            onClick={() => importInputRef.current?.click()}
+            className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+            title="Import a LessonScript YAML (validated and critiqued here in the page)"
+          >
+            Import…
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".yaml,.yml"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) {
+                void handleImportFile(file);
+              }
+            }}
+          />
+        </div>
+
+        <div className="mt-2">
+          <select
+            value={narrationLanguage}
+            disabled={running || studioCapabilitiesLoading || voiceBusy !== null || voiceRecording}
+            onChange={(event) =>
+              chooseNarrationLanguage(event.target.value as StudioNarrationLanguage)
+            }
+            aria-label="Narration language and provider"
+            className="w-full rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+          >
+            <option value="en">English · Pocket-TTS</option>
+            {studioCapabilities.burmeseVoxCpm2 ? (
+              <option value="my">မြန်မာ · VoxCPM2 (Modal)</option>
+            ) : null}
+          </select>
+        </div>
+
+        <div className="mt-2 flex items-center gap-2">
+          <select
+            value={selectedVoice ? selectedVoice.id : "default"}
+            disabled={running || voiceBusy !== null}
+            onChange={(event) => chooseVoice(event.target.value)}
+            aria-label="Narrator voice"
+            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+          >
+            <option value="default">
+              {narrationLanguage === "my" ? "voice: reference required" : "voice: script default"}
+            </option>
+            {customVoices.map((voice) => (
+              <option key={voice.id} value={voice.id}>
+                voice: {voice.name} ({narrationLanguage === "my" ? "reference" : "cloned"})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={running || voiceBusy !== null || voiceRecording}
+            onClick={() => voiceFileInputRef.current?.click()}
+            className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+            title={`Upload ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of clear narrator speech`}
+          >
+            {narrationLanguage === "my" ? "Reference…" : "Clone…"}
+          </button>
+          <button
+            type="button"
+            disabled={running || voiceBusy !== null}
+            onClick={() => {
+              void toggleVoiceRecording();
+            }}
+            className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              voiceRecording
+                ? "bg-[#3b2222] text-[#ef8d8d] hover:bg-[#4d2a2a]"
+                : "bg-[#222d3b] text-[#8db8ef] hover:bg-[#2a3a4d]"
+            }`}
+            title={`Record ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of narrator speech`}
+          >
+            {voiceRecording ? "Stop" : "Record"}
+          </button>
+          {selectedVoice ? (
+            <>
+              <button
+                type="button"
+                disabled={
+                  running ||
+                  voiceBusy !== null ||
+                  voiceRecording ||
+                  (narrationLanguage === "my" && !selectedVoiceIsBurmeseReady)
+                }
+                onClick={() => {
+                  void previewVoice();
+                }}
+                className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+                title="Synthesize a short preview sentence with this voice"
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                disabled={running || voiceBusy !== null || voiceRecording}
+                onClick={() => {
+                  void removeVoice();
+                }}
+                className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
+                title="Delete this reference voice from the browser"
+              >
+                ✕
+              </button>
+            </>
+          ) : null}
+          <input
+            ref={voiceFileInputRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) {
+                void handleVoiceFile(file);
+              }
+            }}
+          />
+        </div>
+        {voiceBusy ? <p className="mt-1 text-[12px] text-slate-400">{voiceBusy}</p> : null}
+        {voiceRecording ? (
+          <p className="mt-1 text-[12px] text-amber-300">
+            Recording… speak naturally for at least {requiredVoiceSeconds}s; stops automatically at{" "}
+            {MAX_SAMPLE_SECONDS}s.
+          </p>
+        ) : null}
+        {narrationLanguage === "my" ? (
+          <p
+            className={`mt-1 text-[12px] ${
+              selectedVoiceIsBurmeseReady ? "text-slate-400" : "text-amber-300"
+            }`}
+          >
+            A {MIN_VOXCPM2_REFERENCE_SECONDS}–{MAX_SAMPLE_SECONDS}s narrator reference is required
+            so every dialog keeps the same character. The selected sample is sent transiently to
+            your private Modal deployment with the fixed Burmese educator prompt and is not stored
+            there. The LessonScript must use{" "}
+            <span className="font-mono text-slate-300">locale: my-MM</span>.
+          </p>
+        ) : null}
+
+        <label
+          className={`mt-2 flex items-center gap-2 text-[12px] ${
+            isScreenSupported ? "text-slate-300" : "text-slate-500"
+          }`}
+          title={
+            isScreenSupported
+              ? 'Also capture this render as a screen recording — a video downloaded alongside the bundle (saved locally, never uploaded). You\'ll pick a screen or tab when the render starts. Narration is captured only when you share a browser tab with "share tab audio" on; sharing a screen or window records a silent video (saved as "…-silent").'
+              : "Screen recording needs a desktop browser with screen capture (getDisplayMedia)."
+          }
+        >
+          <input
+            type="checkbox"
+            checked={screenRecordingEnabled && isScreenSupported}
+            disabled={running || !isScreenSupported}
+            onChange={(event) =>
+              recordingSettingsTrigger.setScreenRecordingEnabled({ enabled: event.target.checked })
+            }
+            className="size-3.5 accent-sky-500 disabled:opacity-50"
+          />
+          Screen recording
+          <span className="text-slate-500">
+            {isScreenSupported ? "— saved locally as video" : "— unavailable on this browser"}
+          </span>
+        </label>
+
+        <p className="mt-1 text-slate-400">
+          runtime <span className="font-mono text-slate-300">{effectiveModeLabel}</span>
+          {" · run #"}
+          {runHistory.length + (running ? 1 : 0) || 1}
         </p>
-      ) : null}
 
-      {buildWarnings.length > 0 ? (
-        <ul className="mt-3 space-y-0.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
-          {buildWarnings.map((warning) => (
-            <li key={warning}>⚠ {warning}</li>
-          ))}
-        </ul>
-      ) : null}
+        {runtimeModeParam.invalid ? (
+          <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
+            Ignoring <span className="font-mono">runtime={runtimeModeParam.raw}</span> — expected{" "}
+            <span className="font-mono">fixture</span> or <span className="font-mono">live</span>.
+            Using the plan default (<span className="font-mono">{effectiveModeLabel}</span>).
+          </p>
+        ) : null}
 
-      {criticNotes.length > 0 ? (
-        <div className="mt-3 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-[12px] text-sky-200">
-          <p className="font-semibold">Critic notes (advisory)</p>
-          <ul className="mt-1 space-y-0.5">
-            {criticNotes.map((note) => (
-              <li key={`${note.id}-${note.sceneId ?? ""}-${note.message}`}>✎ {note.message}</li>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              void runRender();
+            }}
+            disabled={
+              running ||
+              voiceBusy !== null ||
+              voiceRecording ||
+              (narrationLanguage === "my" && !selectedVoiceIsBurmeseReady)
+            }
+            className="rounded-md bg-[#173925] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {runHistory.length === 0 ? "Start render" : "Render again"}
+          </button>
+          <button
+            type="button"
+            onClick={downloadBundle}
+            disabled={!artifacts}
+            className="rounded-md bg-[#222d3b] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Download bundle
+          </button>
+          {report && !artifacts ? (
+            <button
+              type="button"
+              onClick={downloadReport}
+              className="rounded-md bg-[#3b2a22] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#efb28d] transition-colors hover:bg-[#4d382a]"
+            >
+              Download report
+            </button>
+          ) : null}
+          {artifacts ? (
+            <button
+              type="button"
+              onClick={() => setShowDraftModal(true)}
+              className="rounded-md bg-[#2b2340] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#c4b0f5] transition-colors hover:bg-[#382e52]"
+              title={`Upload through the standard lesson flow — creates a draft only; publishing stays a separate human action.${
+                activeRun ? ` ${describeDraftProvenance(activeRun)}` : ""
+              }`}
+            >
+              Create draft…
+            </button>
+          ) : null}
+        </div>
+
+        {fatal ? (
+          <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200">
+            {fatal}
+          </p>
+        ) : null}
+
+        {buildWarnings.length > 0 ? (
+          <ul className="mt-3 space-y-0.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
+            {buildWarnings.map((warning) => (
+              <li key={warning}>⚠ {warning}</li>
             ))}
           </ul>
-        </div>
-      ) : null}
+        ) : null}
 
-      {receipts.length > 0 ? <ReceiptList receipts={receipts} /> : null}
+        {criticNotes.length > 0 ? (
+          <div className="mt-3 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-[12px] text-sky-200">
+            <p className="font-semibold">Critic notes (advisory)</p>
+            <ul className="mt-1 space-y-0.5">
+              {criticNotes.map((note) => (
+                <li key={`${note.id}-${note.sceneId ?? ""}-${note.message}`}>✎ {note.message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
-      {report ? <CheckList report={report} /> : null}
+        {receipts.length > 0 ? <ReceiptList receipts={receipts} /> : null}
 
-      {baselineNote ? <p className="mt-3 text-[12px] text-amber-300">{baselineNote}</p> : null}
+        {report ? <CheckList report={report} /> : null}
 
-      {comparison ? <RepeatabilityVerdict checks={comparison} /> : null}
+        {baselineNote ? <p className="mt-3 text-[12px] text-amber-300">{baselineNote}</p> : null}
+
+        {comparison ? <RepeatabilityVerdict checks={comparison} /> : null}
+      </div>
     </div>
   );
 }
