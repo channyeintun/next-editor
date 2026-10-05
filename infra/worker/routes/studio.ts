@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { requireUser } from "../auth/requireUser";
 import type { Env } from "../env";
 import { readBodyWithLimit } from "../httpBody";
@@ -28,28 +28,53 @@ const MAX_UPSTREAM_ERROR_BYTES = 4 * 1024;
 const MAX_UPSTREAM_DETAIL_CHARS = 200;
 // Anything shaped like a Modal proxy-auth token id or secret (wk-…, ws-…).
 const MODAL_TOKEN_PATTERN = /\b(?:wk|ws)-[A-Za-z0-9]{10,}\b/g;
+// Modal FunctionCall ids, e.g. "fc-01K…" — the only job id ever put in a URL.
+const MODAL_CALL_ID_PATTERN = /^fc-[0-9A-Za-z]{1,64}$/;
+
+// A synthesis is a Modal job that the Worker submits and then polls, never one
+// long request: a cold L4 start spends about a minute before its first step,
+// plus any wait for a free GPU, and Cloudflare ends a subrequest that has not
+// answered within its proxy read timeout (125 s) with a 524. Modal holds each
+// poll open for at most 20 s, so every subrequest stays far inside that.
+const SUBMIT_TIMEOUT_MS = 60_000;
+const POLL_TIMEOUT_MS = 60_000;
+// Only paces polls that Modal answers early; a normal poll already waited 20 s.
+const MIN_POLL_INTERVAL_MS = 5_000;
+// The browser request stays open this long at most: a cold start (≈66 s) plus
+// the longest dialog seen (≈49 s) leaves about 160 s for GPU queueing.
+const SYNTHESIS_DEADLINE_MS = 280_000;
+// Keeps submit + polls + cancel under the 50-subrequest Workers Free limit.
+const MAX_POLLS = 45;
+const MAX_CONSECUTIVE_POLL_FAILURES = 3;
+const CANCEL_TIMEOUT_MS = 5_000;
+// Statuses that say the job could not be read, not that it failed: a hiccup
+// between the Worker and Modal, or the jobs app's 503 when it briefly cannot
+// reach Modal's API. The same job is polled again.
+const TRANSIENT_POLL_STATUSES = new Set([502, 503, 504, 524]);
 
 interface ModalConfig {
-  endpoint: string;
+  /** Base URL of the Modal jobs app (`/jobs`, `/jobs/{id}`). */
+  jobsUrl: string;
   tokenId: string;
   tokenSecret: string;
 }
 
 function modalConfigOf(env: Env): ModalConfig | null {
-  const endpoint = env.VOXCPM2_MODAL_ENDPOINT?.trim();
+  const jobsUrl = env.VOXCPM2_MODAL_JOBS_URL?.trim();
   const tokenId = env.MODAL_PROXY_TOKEN_ID?.trim();
   const tokenSecret = env.MODAL_PROXY_TOKEN_SECRET?.trim();
-  if (!endpoint || !tokenId || !tokenSecret) return null;
+  if (!jobsUrl || !tokenId || !tokenSecret) return null;
 
   let url: URL;
   try {
-    url = new URL(endpoint);
+    url = new URL(jobsUrl);
   } catch {
     return null;
   }
   if (
     url.protocol !== "https:" ||
     !url.hostname.endsWith(".modal.run") ||
+    url.pathname !== "/" ||
     url.username ||
     url.password ||
     url.search ||
@@ -58,7 +83,15 @@ function modalConfigOf(env: Env): ModalConfig | null {
     return null;
   }
 
-  return { endpoint: url.toString(), tokenId, tokenSecret };
+  return { jobsUrl: url.toString(), tokenId, tokenSecret };
+}
+
+function modalAuthHeaders(modal: ModalConfig): Record<string, string> {
+  return { "Modal-Key": modal.tokenId, "Modal-Secret": modal.tokenSecret };
+}
+
+function jobUrl(modal: ModalConfig, callId: string): URL {
+  return new URL(`/jobs/${callId}`, modal.jobsUrl);
 }
 
 /**
@@ -69,7 +102,7 @@ function modalConfigOf(env: Env): ModalConfig | null {
  */
 function sanitizeUpstreamText(text: string, modal: ModalConfig): string | null {
   let cleaned = text;
-  for (const secret of [modal.tokenSecret, modal.tokenId, new URL(modal.endpoint).hostname]) {
+  for (const secret of [modal.tokenSecret, modal.tokenId, new URL(modal.jobsUrl).hostname]) {
     cleaned = cleaned.split(secret).join("[redacted]");
   }
   cleaned = cleaned
@@ -288,39 +321,145 @@ studioRoute.post("/tts/voxcpm2", requireUser, async (c) => {
     return c.json({ error: request.error }, request.status);
   }
 
-  let upstream: Response;
+  let submitted: Response;
   try {
-    upstream = await fetch(modal.endpoint, {
+    submitted = await fetch(new URL("/jobs", modal.jobsUrl), {
       method: "POST",
       headers: {
-        Accept: "audio/wav",
+        Accept: "application/json",
         "Content-Type": "application/json",
-        "Modal-Key": modal.tokenId,
-        "Modal-Secret": modal.tokenSecret,
+        ...modalAuthHeaders(modal),
       },
       body: JSON.stringify({
         text: request.text,
         seed: request.seed,
         reference_audio_base64: request.referenceAudioBase64,
       }),
+      signal: AbortSignal.timeout(SUBMIT_TIMEOUT_MS),
     });
   } catch {
-    console.error("VoxCPM2 Modal request failed");
+    console.error("VoxCPM2 Modal job submission failed");
     return c.json({ error: "Burmese narration service is unavailable" }, 502);
   }
+  if (!submitted.ok) return upstreamFailure(c, submitted, modal, "submit");
 
-  // Every upstream failure stays a 502 (the client only distinguishes ok from
-  // not ok); the message says what went wrong so a failed render is actionable.
-  if (!upstream.ok) {
-    const detail = await upstreamErrorDetail(upstream, modal);
-    console.error("VoxCPM2 Modal request was rejected", { status: upstream.status, detail });
-    return c.json(
-      {
-        error: `Burmese narration service failed with HTTP ${upstream.status}${detail ? `: ${detail}` : ""}`,
-      },
-      502,
-    );
+  const callId = await callIdOf(submitted);
+  if (!callId) {
+    console.error("VoxCPM2 Modal returned no synthesis job");
+    return c.json({ error: "Burmese narration service returned no synthesis job" }, 502);
   }
+
+  const result = await pollJob(c, modal, callId);
+  if (!result.ok) {
+    // Whatever ended the wait, the job may still hold the single GPU container;
+    // its result is not wanted any more, and a cancel that fails changes nothing.
+    await fetch(jobUrl(modal, callId), {
+      method: "DELETE",
+      headers: modalAuthHeaders(modal),
+      signal: AbortSignal.timeout(CANCEL_TIMEOUT_MS),
+    })
+      .then((response) => response.body?.cancel())
+      .catch(() => undefined);
+  }
+  return result;
+});
+
+/** Poll a submitted job until its audio arrives or the wait has to end. */
+async function pollJob(c: Context, modal: ModalConfig, callId: string): Promise<Response> {
+  const startedAt = Date.now();
+  const deadline = startedAt + SYNTHESIS_DEADLINE_MS;
+  let consecutiveFailures = 0;
+  for (let polls = 1; polls <= MAX_POLLS && Date.now() < deadline; polls++) {
+    const pollStartedAt = Date.now();
+    let upstream: Response | null = null;
+    try {
+      upstream = await fetch(jobUrl(modal, callId), {
+        method: "GET",
+        headers: { Accept: "audio/wav", ...modalAuthHeaders(modal) },
+        signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
+      });
+    } catch {
+      upstream = null;
+    }
+
+    // 202 counts as ok to fetch, so it has to be told apart first.
+    const pending = upstream?.status === 202;
+    if (pending || !upstream || TRANSIENT_POLL_STATUSES.has(upstream.status)) {
+      await upstream?.body?.cancel().catch(() => undefined);
+      if (pending) {
+        consecutiveFailures = 0;
+      } else if (++consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+        console.error("VoxCPM2 Modal job polling failed", {
+          status: upstream?.status ?? null,
+          polls,
+          elapsedMs: Date.now() - startedAt,
+        });
+        return c.json(
+          {
+            error: upstream
+              ? `Burmese narration service failed with HTTP ${upstream.status}`
+              : "Burmese narration service is unavailable",
+          },
+          502,
+        );
+      }
+      const wait = Math.min(
+        Math.max(0, MIN_POLL_INTERVAL_MS - (Date.now() - pollStartedAt)),
+        Math.max(0, deadline - Date.now()),
+      );
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      continue;
+    }
+
+    if (!upstream.ok) return upstreamFailure(c, upstream, modal, "poll");
+    return wavResponse(c, upstream, modal);
+  }
+
+  console.error("VoxCPM2 Modal job did not finish in time", {
+    elapsedMs: Date.now() - startedAt,
+  });
+  return c.json(
+    {
+      error: `Burmese narration did not finish within ${SYNTHESIS_DEADLINE_MS / 1000} s, so the job was cancelled; start the render again`,
+    },
+    504,
+  );
+}
+
+/** The job id from a submit response, or null when it carries none. */
+async function callIdOf(submitted: Response): Promise<string | null> {
+  const body = await readBodyWithLimit(submitted, MAX_UPSTREAM_ERROR_BYTES);
+  if (body.status !== "ok") {
+    await submitted.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  try {
+    const { call_id: callId } = JSON.parse(body.text) as { call_id?: unknown };
+    return typeof callId === "string" && MODAL_CALL_ID_PATTERN.test(callId) ? callId : null;
+  } catch {
+    return null;
+  }
+}
+
+// Every upstream failure stays a 502 (the client only distinguishes ok from
+// not ok); the message says what went wrong so a failed render is actionable.
+async function upstreamFailure(
+  c: Context,
+  upstream: Response,
+  modal: ModalConfig,
+  phase: "submit" | "poll",
+) {
+  const detail = await upstreamErrorDetail(upstream, modal);
+  console.error("VoxCPM2 Modal request was rejected", { phase, status: upstream.status, detail });
+  return c.json(
+    {
+      error: `Burmese narration service failed with HTTP ${upstream.status}${detail ? `: ${detail}` : ""}`,
+    },
+    502,
+  );
+}
+
+async function wavResponse(c: Context, upstream: Response, modal: ModalConfig) {
   const contentType = upstream.headers.get("content-type")?.toLowerCase() ?? "";
   if (!contentType.startsWith("audio/wav") || !upstream.body) {
     await upstream.body?.cancel().catch(() => undefined);
@@ -349,4 +488,4 @@ studioRoute.post("/tts/voxcpm2", requireUser, async (c) => {
       "X-Content-Type-Options": "nosniff",
     },
   });
-});
+}

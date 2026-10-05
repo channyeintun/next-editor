@@ -65,7 +65,8 @@ Read, entirely and in order, before writing:
    built-in `voiceProfile`. Burmese (`locale: my-MM`) narration uses VoxCPM2
    on a private server instead: it needs a signed-in account with the Burmese
    narration feature enabled and a 5–20 s reference voice, which is sent with
-   each uncached dialog and not stored.
+   each uncached dialog as the input of a narration job; Modal stores each
+   job's input and keeps its audio for up to 7 days.
 6. **Report**: lesson slug, scenes/actions used, critic notes fixed vs kept,
    and the checks result. A human reviews the rendered lesson and decides on
    **Create draft…** (sign-in required) — never call the lesson done, only

@@ -72,8 +72,9 @@ Users can also provide a narrator reference: the voice row offers **Record**
 (microphone) or an audio-file picker. The prepared sample is stored in the
 browser (IndexedDB). English Pocket-TTS cloning accepts 2–20s and stays
 entirely local. Burmese VoxCPM2 renders require a selected 5–20s reference and
-send it transiently through the authenticated Worker to the private Modal
-function for every uncached dialog; neither service persists it. Reusing that
+send it through the authenticated Worker to the private Modal deployment as
+part of every uncached dialog's narration job; Modal stores each job's input
+and keeps its audio for up to 7 days. Reusing that
 reference keeps one speaker across the render. Scripts keep pinning built-in
 profiles in `build.voiceProfile` — reference selection is a render-time choice.
 The selected voice name appears in the build provenance on the **Create

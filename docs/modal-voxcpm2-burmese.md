@@ -14,22 +14,46 @@ available only when the signed-in user has the
    Burmese dialog posts the text (as written — the English pronunciation
    lexicon is not applied), seed, and that same PCM16 reference WAV to
    `POST /api/studio/tts/voxcpm2`.
-3. The Worker rechecks the session and D1 flag, then calls the private Modal
-   Web Function with Modal proxy-auth headers. It accepts only mono 24 kHz
-   PCM16 reference audio within the duration bound.
+3. The Worker rechecks the session and D1 flag and accepts only mono 24 kHz
+   PCM16 reference audio within the duration bound. With Modal proxy-auth
+   headers it then submits a job to the private Modal `jobs` app
+   (`POST /jobs`), which validates the request on a CPU container and spawns
+   the GPU synthesis, and polls that job (`GET /jobs/{id}`) until the audio is
+   ready.
 4. The browser receives PCM16 mono WAV audio and keeps using the existing
    dialog cache, scheduler, stitcher, captions, and render pipeline.
 
-Next Editor does not add a synthesis timeout to the upstream request. It waits
-until Modal responds or the client or hosting infrastructure closes the
-connection. A dropped browser connection ("Failed to fetch", no response) is
-retried twice for that dialog; an error response from the Worker is not.
+### Why a job, not one request
 
-The selected sample stays in browser IndexedDB between runs. It is sent
-transiently for each uncached Burmese dialog, used as VoxCPM2's
-`reference_wav_path`, and discarded at the end of that request. The Worker and
-Modal function do not persist or log it. Reusing the recording fixes the
-speaker identity; the server-pinned `burmese-educator-v3` prompt fixes delivery.
+The first dialog of a render usually meets a cold L4 container: about 10 s to
+boot, 23 s to load the model, and 27 s of first-inference warm-up before the
+first generation step, plus however long Modal waits for a free GPU. Cloudflare
+ends a Worker subrequest that has sent no response within its proxy read
+timeout (125 s; not configurable below Enterprise) with HTTP 524, and a render
+failed that way on 2026-10-05 when a single request was held open across all
+of it. Now each poll waits at most 20 s on the Modal side, so no subrequest
+comes near that timeout.
+
+The browser request itself stays open while the Worker polls (Workers have no
+duration limit while the client is connected). The Worker gives up after
+280 s, which leaves about 160 s for a GPU queue on top of the slowest cold start
+and dialog seen, cancels the job so the single L4 is free for the next dialog,
+and answers 504; "Render again" resumes from the dialog cache. It sends at most
+47 subrequests per dialog (one submit, up to 45 polls, one cancel), under the
+Workers Free limit of 50. A failed poll (a dropped connection, a
+502/503/504/524 between the Worker and Modal, or the jobs app's own 503 when it
+briefly cannot reach Modal's API) is polled again; three in a row end the wait.
+Whenever the Worker stops waiting without audio, it cancels the job.
+A dropped browser connection ("Failed to fetch", no response) is retried twice
+for that dialog; an error response from the Worker is not.
+
+The selected sample stays in browser IndexedDB between runs. It is sent with
+each uncached Burmese dialog as the input of that dialog's job, and used as
+VoxCPM2's `reference_wav_path`. The Worker does not keep or log it. Modal
+uploads each job's input, sample included, to its object storage (every
+spawned input over 8 KiB goes there) and keeps each job's result for 7 days so
+a poll can collect it; the function logs neither the text nor the sample. Reusing the recording fixes the speaker
+identity; the server-pinned `burmese-educator-v3` prompt fixes delivery.
 
 The prompt text lives only in `integrations/modal/voxcpm2_tts.py` and is never
 sent by the client. `voiceDesignId` in `src/studio/tts/profiles.ts` carries its
@@ -51,9 +75,11 @@ The deployment pins:
 - 48 kHz PCM16 WAV, CFG 2.0, and 10 inference steps
 - the `burmese-educator-v3` delivery prompt plus a required 5–20 second
   per-render narrator reference
-- eager CUDA inference; VoxCPM's `torch.compile` warm-up is disabled because it
-  exceeds the Web Function proxy deadline on an L4 cold start
+- eager CUDA inference; VoxCPM's `torch.compile` warm-up is disabled because on
+  an L4 cold start it would outlast the Worker's 280 s wait for a job
 - one L4 container maximum, scaling to zero after one idle minute
+- a separate CPU `jobs` web app (FastAPI only) that validates, spawns, polls,
+  and cancels synthesis jobs, so a malformed request never starts an L4
 
 Authenticate the Modal CLI, then deploy from the repository root:
 
@@ -63,8 +89,9 @@ modal setup
 modal deploy integrations/modal/voxcpm2_tts.py
 ```
 
-Copy the `synthesize` Web Function URL printed by `modal deploy`. It must be an
-HTTPS `*.modal.run` URL.
+Copy the `jobs` web function URL printed by `modal deploy` (it ends in
+`--next-editor-voxcpm2-jobs.modal.run`). It must be an HTTPS `*.modal.run` URL
+with no path.
 
 Create a proxy token for the Modal workspace:
 
@@ -79,19 +106,23 @@ is enabled, allow that token in the environment containing the deployment:
 modal workspace proxy-tokens allow wk-REPLACE_ME main
 ```
 
-Modal rejects bad proxy credentials before starting a GPU container.
+Modal rejects bad proxy credentials before starting any container.
+
+Until the jobs flow is confirmed in production, the GPU class also keeps the
+old synchronous `synthesize` endpoint, so a Worker rolled back to a version
+that reads `VOXCPM2_MODAL_ENDPOINT` still works. Remove both together.
 
 ## 2. Configure the Cloudflare Worker
 
 Store all three values as Worker secrets:
 
 ```sh
-bunx wrangler secret put VOXCPM2_MODAL_ENDPOINT --config infra/wrangler.toml
+bunx wrangler secret put VOXCPM2_MODAL_JOBS_URL --config infra/wrangler.toml
 bunx wrangler secret put MODAL_PROXY_TOKEN_ID --config infra/wrangler.toml
 bunx wrangler secret put MODAL_PROXY_TOKEN_SECRET --config infra/wrangler.toml
 ```
 
-Use the full Web Function URL for `VOXCPM2_MODAL_ENDPOINT`, the `wk-...` value
+Use the `jobs` URL for `VOXCPM2_MODAL_JOBS_URL`, the `wk-...` value
 for `MODAL_PROXY_TOKEN_ID`, and the `ws-...` value for
 `MODAL_PROXY_TOKEN_SECRET`.
 

@@ -4,8 +4,9 @@ import { sha256Hex } from "../hash";
  * User reference voices, stored locally in IndexedDB as prepared 24 kHz mono
  * samples. Pocket-TTS derives its voice state entirely in the browser. When
  * explicitly selected for Burmese Modal narration, the same sample is sent
- * transiently through the authenticated Worker to Modal for speaker
- * conditioning; neither service persists it.
+ * through the authenticated Worker to Modal for speaker conditioning, as the
+ * input of each narration job. The Worker does not keep it; Modal stores each
+ * job's input and keeps the job's audio for up to 7 days.
  */
 
 export const VOICE_SAMPLE_RATE = 24_000;

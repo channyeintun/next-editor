@@ -47,7 +47,7 @@ function dbWithAccess(user: UserRow | null, enabled: boolean): D1Database {
 function makeEnv(overrides: Partial<Env> = {}): Env {
   return {
     DB: dbWithAccess(USER, true),
-    VOXCPM2_MODAL_ENDPOINT: "https://owner--next-editor-voxcpm2-synthesize.modal.run",
+    VOXCPM2_MODAL_JOBS_URL: "https://owner--next-editor-voxcpm2-jobs.modal.run",
     MODAL_PROXY_TOKEN_ID: "wk-test",
     MODAL_PROXY_TOKEN_SECRET: "ws-test",
     ...overrides,
@@ -83,7 +83,79 @@ function postSynthesis(env: Env, body: BodyInit = synthesisBody()) {
   });
 }
 
+type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+const JOBS_URL = "https://owner--next-editor-voxcpm2-jobs.modal.run";
+const CALL_ID = "fc-01TESTJOB";
+const WAV = new Uint8Array([82, 73, 70, 70]);
+
+function wavResponse(): Response {
+  return new Response(WAV.slice().buffer, {
+    status: 200,
+    headers: { "Content-Type": "audio/wav" },
+  });
+}
+
+function jsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function pendingResponse(): Response {
+  return jsonResponse({ status: "pending" }, 202);
+}
+
+/**
+ * Stand in for the Modal jobs app: POST /jobs answers with `submit`, each
+ * GET /jobs/{id} with the next entry of `polls` (which may throw, like a
+ * dropped connection), DELETE with 204.
+ */
+function stubModal({
+  submit = () => jsonResponse({ call_id: CALL_ID }, 202),
+  polls = [wavResponse],
+}: { submit?: () => Response; polls?: Array<() => Response> } = {}) {
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const queue = [...polls];
+  const fetchSpy = vi.fn<FetchFn>(async (_input, init) => {
+    switch (init?.method) {
+      case "POST":
+        return submit();
+      case "GET": {
+        const next = queue.shift();
+        if (!next) throw new Error("unexpected extra poll");
+        return next();
+      }
+      case "DELETE":
+        return new Response(null, { status: 204 });
+      default:
+        throw new Error(`unexpected ${init?.method} request`);
+    }
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  return fetchSpy;
+}
+
+function callsWith(fetchSpy: ReturnType<typeof vi.fn<FetchFn>>, method: string) {
+  return fetchSpy.mock.calls.filter(([, init]) => init?.method === method);
+}
+
+/** Run a request whose polls sleep between attempts, on fake timers. */
+async function withFakeTimers(run: () => Response | Promise<Response>): Promise<Response> {
+  vi.useFakeTimers();
+  let settled = false;
+  const response = Promise.resolve(run());
+  response.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
+  while (!settled) await vi.advanceTimersByTimeAsync(1_000);
+  return response;
+}
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -107,6 +179,13 @@ describe("studioRoute capabilities", () => {
       makeEnv({ MODAL_PROXY_TOKEN_SECRET: undefined }),
     );
     expect(await unconfigured.json()).toEqual({ burmeseVoxCpm2: false });
+
+    // A Worker configured only for the retired synchronous endpoint is not ready.
+    const legacyOnly = await request(
+      "/capabilities",
+      makeEnv({ VOXCPM2_MODAL_JOBS_URL: undefined }),
+    );
+    expect(await legacyOnly.json()).toEqual({ burmeseVoxCpm2: false });
   });
 });
 
@@ -151,21 +230,13 @@ describe("studioRoute VoxCPM2 proxy", () => {
   });
 
   it("accepts a maximum-length reference clip and rejects miscoded base64", async () => {
-    const fetchSpy = vi.fn<
-      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
-    >(async () => {
-      return new Response(new Uint8Array([82, 73, 70, 70]).slice().buffer, {
-        status: 200,
-        headers: { "Content-Type": "audio/wav" },
-      });
-    });
-    vi.stubGlobal("fetch", fetchSpy);
+    const fetchSpy = stubModal();
 
     // A 20s clip is the ~1.28 MB body that tripped the Worker CPU limit, so it
     // has to survive validation rather than be rejected or time out.
     const longest = synthesisBody({ referenceAudioBase64: referenceAudioBase64(20) });
     expect((await postSynthesis(makeEnv(), longest)).status).toBe(200);
-    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(callsWith(fetchSpy, "POST")).toHaveLength(1);
 
     const tooLong = synthesisBody({ referenceAudioBase64: referenceAudioBase64(21) });
     expect((await postSynthesis(makeEnv(), tooLong)).status).toBe(400);
@@ -183,56 +254,147 @@ describe("studioRoute VoxCPM2 proxy", () => {
     });
     expect((await postSynthesis(makeEnv(), spaced)).status).toBe(400);
 
-    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(callsWith(fetchSpy, "POST")).toHaveLength(1);
   });
 
-  it("sends only validated text, seed, reference audio, and proxy credentials upstream", async () => {
-    const wav = new Uint8Array([82, 73, 70, 70]);
-    const fetchSpy = vi.fn<
-      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
-    >(async () => {
-      return new Response(wav.slice().buffer, {
-        status: 200,
-        headers: { "Content-Type": "audio/wav" },
-      });
-    });
-    vi.stubGlobal("fetch", fetchSpy);
+  it("submits only validated text, seed, reference audio, and proxy credentials, then polls the job", async () => {
+    const fetchSpy = stubModal();
 
     const response = await postSynthesis(makeEnv());
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(new Uint8Array(await response.arrayBuffer())).toEqual(wav);
-    expect(fetchSpy).toHaveBeenCalledOnce();
-    const [url, init] = fetchSpy.mock.calls[0];
-    expect(url).toBe("https://owner--next-editor-voxcpm2-synthesize.modal.run/");
-    expect(init?.headers).toMatchObject({
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(WAV);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    const [submitUrl, submitInit] = fetchSpy.mock.calls[0];
+    expect(String(submitUrl)).toBe(`${JOBS_URL}/jobs`);
+    expect(submitInit?.method).toBe("POST");
+    expect(submitInit?.headers).toMatchObject({
       "Modal-Key": "wk-test",
       "Modal-Secret": "ws-test",
     });
-    expect(init?.signal).toBeUndefined();
-    expect(JSON.parse(String(init?.body))).toEqual({
+    expect(submitInit?.signal).toBeInstanceOf(AbortSignal);
+    expect(JSON.parse(String(submitInit?.body))).toEqual({
       text: "မင်္ဂလာပါ။",
       seed: 42,
       reference_audio_base64: REFERENCE_AUDIO_BASE64,
     });
+
+    const [pollUrl, pollInit] = fetchSpy.mock.calls[1];
+    expect(String(pollUrl)).toBe(`${JOBS_URL}/jobs/${CALL_ID}`);
+    expect(pollInit?.method).toBe("GET");
+    expect(pollInit?.headers).toMatchObject({
+      "Modal-Key": "wk-test",
+      "Modal-Secret": "ws-test",
+    });
+    expect(pollInit?.signal).toBeInstanceOf(AbortSignal);
+    expect(pollInit?.body).toBeUndefined();
   });
 
-  it("rejects a non-Modal endpoint and an unexpected upstream response", async () => {
-    const fetchSpy = vi.fn<
-      (input: string | URL | Request, init?: RequestInit) => Promise<Response>
-    >(async () => {
-      return new Response(JSON.stringify({ error: "bad" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    });
-    vi.stubGlobal("fetch", fetchSpy);
+  it("keeps polling a pending job until its audio is ready", async () => {
+    const fetchSpy = stubModal({ polls: [pendingResponse, pendingResponse, wavResponse] });
 
-    const badConfig = await postSynthesis(
-      makeEnv({ VOXCPM2_MODAL_ENDPOINT: "https://example.com/synthesize" }),
-    );
-    expect(badConfig.status).toBe(503);
+    const response = await withFakeTimers(() => postSynthesis(makeEnv()));
+
+    expect(response.status).toBe(200);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(WAV);
+    expect(callsWith(fetchSpy, "POST")).toHaveLength(1);
+    expect(callsWith(fetchSpy, "GET")).toHaveLength(3);
+    expect(callsWith(fetchSpy, "DELETE")).toHaveLength(0);
+  });
+
+  it("polls the same job again after a dropped connection or a Cloudflare 524", async () => {
+    const fetchSpy = stubModal({
+      polls: [
+        () => {
+          throw new TypeError("network connection lost");
+        },
+        () => new Response("error code: 524", { status: 524 }),
+        wavResponse,
+      ],
+    });
+
+    const response = await withFakeTimers(() => postSynthesis(makeEnv()));
+
+    expect(response.status).toBe(200);
+    expect(callsWith(fetchSpy, "POST")).toHaveLength(1);
+    expect(callsWith(fetchSpy, "DELETE")).toHaveLength(0);
+    expect(callsWith(fetchSpy, "GET").map(([url]) => String(url))).toEqual([
+      `${JOBS_URL}/jobs/${CALL_ID}`,
+      `${JOBS_URL}/jobs/${CALL_ID}`,
+      `${JOBS_URL}/jobs/${CALL_ID}`,
+    ]);
+  });
+
+  it("gives up after three consecutive failed polls and cancels the job", async () => {
+    const fetchSpy = stubModal({
+      polls: [
+        () => new Response("error code: 524", { status: 524 }),
+        pendingResponse,
+        () => new Response("error code: 524", { status: 524 }),
+        () => {
+          throw new TypeError("network connection lost");
+        },
+        () => new Response("Service Unavailable", { status: 503 }),
+      ],
+    });
+
+    const response = await withFakeTimers(() => postSynthesis(makeEnv()));
+
+    // The pending poll in between resets the count, so only the last three
+    // failures in a row end the wait.
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      error: "Burmese narration service failed with HTTP 503",
+    });
+    expect(callsWith(fetchSpy, "GET")).toHaveLength(5);
+    expect(callsWith(fetchSpy, "DELETE")).toHaveLength(1);
+  });
+
+  it("cancels a job that outlives the wait and stays within the subrequest budget", async () => {
+    const fetchSpy = stubModal({ polls: Array.from({ length: 100 }, () => pendingResponse) });
+
+    const response = await withFakeTimers(() => postSynthesis(makeEnv()));
+
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({
+      error:
+        "Burmese narration did not finish within 280 s, so the job was cancelled; start the render again",
+    });
+    const cancels = callsWith(fetchSpy, "DELETE");
+    expect(cancels).toHaveLength(1);
+    expect(String(cancels[0][0])).toBe(`${JOBS_URL}/jobs/${CALL_ID}`);
+    expect(cancels[0][1]?.headers).toMatchObject({ "Modal-Key": "wk-test" });
+    // Workers Free allows 50 external subrequests per invocation.
+    expect(fetchSpy.mock.calls.length).toBeLessThanOrEqual(50);
+  });
+
+  it("rejects a submit response without a well-formed job id", async () => {
+    for (const body of [{}, { call_id: "../../admin" }, { call_id: 7 }]) {
+      const fetchSpy = stubModal({ submit: () => jsonResponse(body, 202) });
+
+      const response = await postSynthesis(makeEnv());
+
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({
+        error: "Burmese narration service returned no synthesis job",
+      });
+      expect(callsWith(fetchSpy, "GET")).toHaveLength(0);
+    }
+  });
+
+  it("rejects a non-Modal jobs URL and an unexpected job result", async () => {
+    const fetchSpy = stubModal({ polls: [() => jsonResponse({ error: "bad" }, 200)] });
+
+    for (const jobsUrl of [
+      "https://example.com/",
+      "http://owner--next-editor-voxcpm2-jobs.modal.run/",
+      "https://owner--next-editor-voxcpm2-jobs.modal.run/jobs",
+    ]) {
+      const badConfig = await postSynthesis(makeEnv({ VOXCPM2_MODAL_JOBS_URL: jobsUrl }));
+      expect(badConfig.status).toBe(503);
+    }
     expect(fetchSpy).not.toHaveBeenCalled();
 
     const badUpstream = await postSynthesis(makeEnv());
@@ -242,42 +404,45 @@ describe("studioRoute VoxCPM2 proxy", () => {
     });
   });
 
-  function stubUpstream(response: () => Response) {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>(async () =>
-        response(),
-      ),
-    );
-  }
-
-  it("forwards Modal's FastAPI error detail with the upstream status", async () => {
-    stubUpstream(
-      () =>
+  it("forwards Modal's FastAPI error detail from a submit or a poll", async () => {
+    stubModal({
+      submit: () =>
         new Response(JSON.stringify({ detail: "reference audio must be a valid WAV" }), {
           status: 400,
           headers: { "Content-Type": "application/json", "Set-Cookie": "modal=1" },
         }),
-    );
+    });
 
-    const response = await postSynthesis(makeEnv());
+    const rejected = await postSynthesis(makeEnv());
 
-    expect(response.status).toBe(502);
-    expect(response.headers.get("set-cookie")).toBeNull();
-    expect(await response.json()).toEqual({
+    expect(rejected.status).toBe(502);
+    expect(rejected.headers.get("set-cookie")).toBeNull();
+    expect(await rejected.json()).toEqual({
       error: "Burmese narration service failed with HTTP 400: reference audio must be a valid WAV",
+    });
+
+    const fetchSpy = stubModal({
+      polls: [() => jsonResponse({ detail: "VoxCPM2 generation failed: OutOfMemoryError" }, 500)],
+    });
+
+    const failed = await postSynthesis(makeEnv());
+    expect(callsWith(fetchSpy, "DELETE")).toHaveLength(1);
+
+    expect(failed.status).toBe(502);
+    expect(await failed.json()).toEqual({
+      error:
+        "Burmese narration service failed with HTTP 500: VoxCPM2 generation failed: OutOfMemoryError",
     });
   });
 
   it("redacts credentials and bounds a plain-text upstream error", async () => {
-    stubUpstream(
-      () =>
+    stubModal({
+      submit: () =>
         new Response(
-          `boom\n\tModal-Secret ws-test from owner--next-editor-voxcpm2-synthesize.modal.run ws-abcdefghijkl ${"x".repeat(500)}`,
+          `boom\n\tModal-Secret ws-test from owner--next-editor-voxcpm2-jobs.modal.run ws-abcdefghijkl ${"x".repeat(500)}`,
           { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } },
         ),
-    );
+    });
 
     const { error } = (await (await postSynthesis(makeEnv())).json()) as { error: string };
 
@@ -290,39 +455,39 @@ describe("studioRoute VoxCPM2 proxy", () => {
   });
 
   it("reports only the status for an HTML or oversized upstream error", async () => {
-    stubUpstream(
-      () =>
+    stubModal({
+      submit: () =>
         new Response("<html><body>524: A timeout occurred</body></html>", {
           status: 524,
           headers: { "Content-Type": "text/html" },
         }),
-    );
+    });
     expect(await (await postSynthesis(makeEnv())).json()).toEqual({
       error: "Burmese narration service failed with HTTP 524",
     });
 
-    stubUpstream(
-      () =>
+    stubModal({
+      submit: () =>
         new Response("y".repeat(5_000), {
-          status: 503,
+          status: 500,
           headers: { "Content-Type": "text/plain" },
         }),
-    );
+    });
     expect(await (await postSynthesis(makeEnv())).json()).toEqual({
-      error: "Burmese narration service failed with HTTP 503",
+      error: "Burmese narration service failed with HTTP 500",
     });
   });
 
   it("releases an upstream error body refused by its Content-Length", async () => {
     const cancel = vi.fn<() => void>();
     const body = new ReadableStream<Uint8Array>({ cancel });
-    stubUpstream(
-      () =>
+    stubModal({
+      submit: () =>
         new Response(body, {
           status: 500,
           headers: { "Content-Type": "text/plain", "Content-Length": "5000" },
         }),
-    );
+    });
 
     expect(await (await postSynthesis(makeEnv())).json()).toEqual({
       error: "Burmese narration service failed with HTTP 500",

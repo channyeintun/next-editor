@@ -42,7 +42,8 @@ export interface Env {
   // Private Burmese Studio narration. All three values are required and the
   // requesting user must also have studio.burmese-voxcpm2 enabled in D1.
   // The browser never receives these Modal workspace credentials.
-  VOXCPM2_MODAL_ENDPOINT?: string;
+  // VOXCPM2_MODAL_JOBS_URL is the base URL of the Modal `jobs` app.
+  VOXCPM2_MODAL_JOBS_URL?: string;
   MODAL_PROXY_TOKEN_ID?: string;
   MODAL_PROXY_TOKEN_SECRET?: string;
   REALTIME_SFU_APP_ID?: string;

@@ -950,9 +950,9 @@ export default function StudioController() {
             }`}
           >
             A {MIN_VOXCPM2_REFERENCE_SECONDS}–{MAX_SAMPLE_SECONDS}s narrator reference is required
-            so every dialog keeps the same character. The selected sample is sent transiently to
-            your private Modal deployment with the fixed Burmese educator prompt and is not stored
-            there. The LessonScript must use{" "}
+            so every dialog keeps the same character. The selected sample goes to your private Modal
+            deployment with each narration job, along with the fixed Burmese educator prompt. Modal
+            stores each job's input and keeps its audio for up to 7 days. The LessonScript must use{" "}
             <span className="font-mono text-slate-300">locale: my-MM</span>.
           </p>
         ) : null}

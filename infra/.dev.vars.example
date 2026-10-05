@@ -25,6 +25,6 @@ REALTIME_SFU_APP_SECRET=
 # Optional: private Burmese Studio narration (VoxCPM2 on Modal). All three are
 # required, and the signed-in user also needs the studio.burmese-voxcpm2 D1
 # feature flag.
-VOXCPM2_MODAL_ENDPOINT=
+VOXCPM2_MODAL_JOBS_URL=
 MODAL_PROXY_TOKEN_ID=
 MODAL_PROXY_TOKEN_SECRET=
