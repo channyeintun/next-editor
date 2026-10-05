@@ -1,6 +1,6 @@
 /* oxlint-disable vitest/require-mock-type-parameters */
 import { act, render, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
   WhiteboardElementJSON,
   WhiteboardSceneState,
@@ -16,8 +16,11 @@ const updateScene = vi.fn();
 // What the canvas holds after updateScene, as Excalidraw tidied it.
 let canvasElements: unknown[] = [];
 const getSceneElementsIncludingDeleted = vi.fn(() => canvasElements);
+// The canvas's gesture state, read before a refit.
+let canvasAppState: Record<string, unknown> = { cursorButton: "up" };
+const getAppState = vi.fn(() => canvasAppState);
 // Excalidraw hands over one API object per mounted canvas.
-const excalidrawApi = { updateScene, getSceneElementsIncludingDeleted };
+const excalidrawApi = { updateScene, getSceneElementsIncludingDeleted, getAppState };
 const stopFollowing = vi.fn();
 let usesPlaybackModel = false;
 let isInPlaybackSession = false;
@@ -87,6 +90,7 @@ vi.mock("../contexts/CollaborationContext", () => ({
 }));
 
 import WhiteboardPanel from "./WhiteboardPanel";
+import { clearTextMeasurements } from "../utils/whiteboardTextFit";
 
 function element(id: string, points: number[][]): WhiteboardElementJSON {
   return { id, version: 1, versionNonce: 1, isDeleted: false, type: "freedraw", points };
@@ -409,5 +413,146 @@ describe("WhiteboardPanel playback viewport", () => {
     await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
     expect(excalidrawInitialData).toMatchObject({ appState: canvasAppState(pinchedView) });
     expect(updateScene.mock.calls[0]?.[0]).not.toHaveProperty("appState");
+  });
+});
+
+describe("WhiteboardPanel text sizing", () => {
+  // The fake canvas measures every character this wide, whatever the font.
+  let glyphWidth = 20;
+  let fonts: EventTarget & { ready: Promise<void> };
+
+  function text(id: string, value: string, width: number): WhiteboardElementJSON {
+    return {
+      id,
+      version: 1,
+      versionNonce: 1,
+      isDeleted: false,
+      type: "text",
+      x: 290,
+      y: 160,
+      width,
+      height: 46,
+      text: value,
+      fontSize: 36,
+      fontFamily: 1,
+      lineHeight: 1.25,
+      textAlign: "left",
+      containerId: null,
+      autoResize: true,
+    };
+  }
+
+  function pushedElements(call: number): WhiteboardElementJSON[] {
+    return (updateScene.mock.calls[call][0] as { elements: WhiteboardElementJSON[] }).elements;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    canvasElements = [];
+    canvasAppState = { cursorButton: "up" };
+    usesPlaybackModel = false;
+    isInPlaybackSession = false;
+    whiteboardState = makeWhiteboardState("external");
+    whiteboardStore = createWhiteboardStore();
+    glyphWidth = 20;
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      font: "",
+      measureText: (line: string) => ({ width: line.length * glyphWidth }),
+    } as never);
+    clearTextMeasurements();
+    fonts = Object.assign(new EventTarget(), { ready: Promise.resolve() });
+    Object.defineProperty(document, "fonts", { value: fonts, configurable: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(document, "fonts");
+  });
+
+  it("hands Excalidraw text sized to its measured glyphs, leaving the scene's own copy alone", async () => {
+    // Burmese drawn in the system fallback font runs wider than the authored box.
+    const title = text("title", "Compound type က", 100);
+    whiteboardState = makeWhiteboardState("external", [title]);
+
+    render(<WhiteboardPanel />);
+
+    await waitFor(() => expect(updateScene).toHaveBeenCalled());
+    const width = "Compound type က".length * 20;
+    expect(pushedElements(0)[0]).toMatchObject({ id: "title", x: 290, y: 160, width });
+    expect(
+      (excalidrawInitialData as { elements: WhiteboardElementJSON[] }).elements[0],
+    ).toMatchObject({ width });
+    expect(title.width).toBe(100);
+  });
+
+  it("fits the canvas's text again once fonts finish loading", async () => {
+    const title = text("title", "Compound", 160);
+    canvasElements = [title];
+    whiteboardState = makeWhiteboardState("external", [title]);
+    render(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await fonts.ready;
+    });
+    // 8 glyphs at 20px fit the 160px box: nothing to refit yet.
+    expect(updateScene).toHaveBeenCalledTimes(1);
+    vi.mocked(whiteboardState.markCanvasSynced).mockClear();
+
+    // Excalidraw's own font arrives and the same text measures wider.
+    glyphWidth = 30;
+    act(() => {
+      fonts.dispatchEvent(new Event("loadingdone"));
+    });
+
+    expect(updateScene).toHaveBeenCalledTimes(2);
+    expect(pushedElements(1)[0]).toMatchObject({ id: "title", x: 290, width: 240 });
+    // A fit is not an edit, so the canvas baseline (and any edit waiting to be
+    // saved) is left to the controller, which ignores fit-only changes.
+    expect(whiteboardState.markCanvasSynced).not.toHaveBeenCalled();
+  });
+
+  it("fits text that arrives through the canvas itself, such as a loaded scene", async () => {
+    render(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await fonts.ready;
+    });
+
+    // Load scene puts text measured on another machine straight into the canvas.
+    canvasElements = [text("loaded", "Compound type က", 100)];
+    act(() => {
+      excalidrawOnChange(canvasElements, { scrollX: 0, scrollY: 0, zoom: { value: 1 } }, {});
+    });
+
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(2));
+    expect(pushedElements(1)[0]).toMatchObject({
+      id: "loaded",
+      width: "Compound type က".length * 20,
+    });
+  });
+
+  it("waits for a gesture on the canvas to end before refitting", async () => {
+    canvasElements = [text("title", "Compound", 160)];
+    render(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await fonts.ready;
+    });
+
+    vi.useFakeTimers();
+    glyphWidth = 30;
+    canvasAppState = { selectedElementsAreBeingDragged: true };
+    act(() => {
+      fonts.dispatchEvent(new Event("loadingdone"));
+    });
+    expect(updateScene).toHaveBeenCalledTimes(1);
+
+    canvasAppState = { selectedElementsAreBeingDragged: false };
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(updateScene).toHaveBeenCalledTimes(2);
+    expect(pushedElements(1)[0]).toMatchObject({ width: 240 });
   });
 });

@@ -269,6 +269,69 @@ describe("useWhiteboardController", () => {
     });
   });
 
+  // WhiteboardPanel widens text to fit its glyphs on this machine (whiteboardTextFit).
+  // That is display only: a room would refuse an upsert at a version it already holds.
+  it("does not record or share text the canvas only widened to fit", () => {
+    vi.useFakeTimers();
+    const store = createWhiteboardStore();
+    const onWhiteboardEvent = vi.fn<(event: WhiteboardEvent) => boolean | void>();
+    const title = {
+      ...element("title"),
+      type: "text",
+      text: "စုတယ်",
+      x: 290,
+      width: 100,
+      height: 45,
+    };
+    store.trigger.setScene({
+      scene: { ...store.getSnapshot().context.scene, elements: [title] },
+    });
+    const { result } = renderHook(() => useWhiteboardController({ store, onWhiteboardEvent }));
+
+    act(() => {
+      result.current.handleExcalidrawChange(
+        [{ ...title, width: 140, versionNonce: 777 }],
+        { scrollX: 0, scrollY: 0, zoom: 1 },
+        false,
+      );
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(onWhiteboardEvent).not.toHaveBeenCalled();
+    expect(store.getSnapshot().context.scene.elements).toEqual([title]);
+  });
+
+  it("records a real edit next to fitted text without the fitted text", () => {
+    vi.useFakeTimers();
+    const store = createWhiteboardStore();
+    const onWhiteboardEvent = vi.fn<(event: WhiteboardEvent) => boolean | void>();
+    const title = {
+      ...element("title"),
+      type: "text",
+      text: "စုတယ်",
+      x: 290,
+      width: 100,
+      height: 45,
+    };
+    store.trigger.setScene({
+      scene: { ...store.getSnapshot().context.scene, elements: [title] },
+    });
+    const { result } = renderHook(() => useWhiteboardController({ store, onWhiteboardEvent }));
+
+    act(() => {
+      result.current.handleExcalidrawChange(
+        [{ ...title, width: 140, versionNonce: 777 }, element("stroke")],
+        { scrollX: 0, scrollY: 0, zoom: 1 },
+        false,
+      );
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(onWhiteboardEvent).toHaveBeenCalledTimes(1);
+    expect(onWhiteboardEvent.mock.calls[0]![0].upserts).toEqual([element("stroke")]);
+    expect(store.getSnapshot().context.scene.elements).toEqual([title, element("stroke")]);
+  });
+
   it("rolls back a local content delta rejected by the collaboration boundary", () => {
     vi.useFakeTimers();
     const store = createWhiteboardStore();

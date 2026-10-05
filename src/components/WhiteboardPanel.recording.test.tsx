@@ -69,6 +69,7 @@ vi.mock("@excalidraw/excalidraw", async () => {
           rerender();
         },
         getSceneElementsIncludingDeleted: () => canvas.elements,
+        getAppState: () => appState,
       };
     });
     excalidrawAPI(api);

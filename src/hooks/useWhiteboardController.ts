@@ -14,6 +14,7 @@ import {
   selectWhiteboardSceneUpdateSource,
   type WhiteboardStoreInstance,
 } from "../stores/whiteboardStore";
+import { withoutTextFit } from "../utils/whiteboardTextFit";
 
 interface UseWhiteboardControllerConfig {
   store: WhiteboardStoreInstance;
@@ -133,10 +134,11 @@ export const useWhiteboardController = ({
     // Snapshots, not live references: Excalidraw mutates elements in place while
     // drawing, so the store must hold clones for the diff (and the recorded
     // upserts) to see each flush's intermediate state — that per-flush growth of
-    // a stroke's points is what makes it animate on replay.
-    const snapshot = edited
-      ? snapshotWhiteboardDelta(baseElements ?? current.elements, elements)
-      : null;
+    // a stroke's points is what makes it animate on replay. Text the panel only
+    // widened to fit its glyphs is not an edit (withoutTextFit): it stays at its
+    // stored size in the store, the recording and the room.
+    const base = baseElements ?? current.elements;
+    const snapshot = edited ? snapshotWhiteboardDelta(base, withoutTextFit(base, elements)) : null;
     const viewChanged = Boolean(view) && !areWhiteboardViewsEqual(view, current.view);
 
     if (!snapshot && !viewChanged) {

@@ -11,6 +11,7 @@ import type { WhiteboardElementJSON, WhiteboardView } from "../core/src/whiteboa
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
 import { planWhiteboardCanvasView } from "../stores/whiteboardStore";
+import { clearTextMeasurements, fitTextElement } from "../utils/whiteboardTextFit";
 
 // Image embeds are out of scope for v1 (binary files aren't recorded into the
 // .ne, see whiteboard-plan.md §4) — this also gates paste/drag-drop of images,
@@ -21,12 +22,37 @@ const UI_OPTIONS = { tools: { image: false } };
 // sync inside updateScene, and every live edit after playback hands control back).
 // The store's elements are the same objects held by `recording.whiteboardEvents`
 // and the replay fold cache, so hand Excalidraw per-element copies to keep the
-// recorded data pristine.
+// recorded data pristine. Text is sized to its glyphs on this machine on the way
+// in (see whiteboardTextFit), so a stored width that is too narrow never clips it.
 function toExcalidrawElements(
   elements: readonly WhiteboardElementJSON[],
 ): OrderedExcalidrawElement[] {
-  return elements.map((element) => ({ ...element })) as unknown as OrderedExcalidrawElement[];
+  return elements.map((element) => {
+    const fitted = fitTextElement(element);
+    return fitted === element ? { ...element } : fitted;
+  }) as unknown as OrderedExcalidrawElement[];
 }
+
+// Something being drawn, dragged, resized, rotated, selected by a box or typed:
+// replacing the scene now would interrupt it. (Not cursorButton: a right-click
+// can leave it "down" with no gesture in progress.)
+function isCanvasGestureActive(appState: AppState): boolean {
+  return (
+    appState.selectedElementsAreBeingDragged ||
+    appState.isResizing ||
+    appState.isRotating ||
+    Boolean(
+      appState.newElement ||
+      appState.multiElement ||
+      appState.resizingElement ||
+      appState.selectionElement ||
+      appState.editingTextElement ||
+      appState.editingLinearElement,
+    )
+  );
+}
+
+const REFIT_RETRY_MS = 250;
 
 function toExcalidrawView(view: WhiteboardView) {
   return {
@@ -103,6 +129,62 @@ export default function WhiteboardPanel() {
       );
     }
   }, [scene, sceneUpdateSource, usesPlaybackModel, isInPlaybackSession, store, markCanvasSynced]);
+
+  // Fit the text the canvas holds, for text that never passed through
+  // toExcalidrawElements at its current measurement: text fitted before
+  // Excalidraw's font arrived (measured in a fallback font), a reopened canvas
+  // given a memoized initialData, a loaded scene or pasted elements. This starts
+  // from the canvas's own elements, not the store scene, so nothing drawn since
+  // the last push is rewound, and it waits for any gesture to end. The onChange
+  // it causes is a fit only, which the controller does not record
+  // (withoutTextFit), so an edit still waiting to be saved is kept. A fitted
+  // canvas fits again as itself, so the onChange this causes ends the cycle.
+  const refitTimerRef = useRef<number | undefined>(undefined);
+  const refitCanvasText = () => {
+    window.clearTimeout(refitTimerRef.current);
+    refitTimerRef.current = undefined;
+    const api = apiRef.current;
+    if (!api) return;
+    if (isCanvasGestureActive(api.getAppState())) {
+      refitTimerRef.current = window.setTimeout(refitCanvasText, REFIT_RETRY_MS);
+      return;
+    }
+    const elements = api.getSceneElementsIncludingDeleted() as unknown as WhiteboardElementJSON[];
+    const fitted = elements.map((element) => fitTextElement(element));
+    if (fitted.every((element, i) => element === elements[i])) return;
+    api.updateScene({
+      elements: fitted as unknown as OrderedExcalidrawElement[],
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+  };
+  // After the canvas reports a change, once (a gesture's many reports share one).
+  const scheduleCanvasRefit = () => {
+    if (refitTimerRef.current === undefined) {
+      refitTimerRef.current = window.setTimeout(refitCanvasText, 0);
+    }
+  };
+
+  // Excalidraw loads its fonts when the canvas mounts, so text measured before
+  // they arrived came out too narrow: measure again and refit once they load.
+  useEffect(() => {
+    if (!isOpen) return;
+    const fonts = typeof document === "undefined" ? undefined : document.fonts;
+    const onFontsLoaded = () => {
+      clearTextMeasurements();
+      refitCanvasText();
+    };
+    let disposed = false;
+    fonts?.addEventListener("loadingdone", onFontsLoaded);
+    void fonts?.ready.then(() => {
+      if (!disposed) onFontsLoaded();
+    });
+    return () => {
+      disposed = true;
+      fonts?.removeEventListener("loadingdone", onFontsLoaded);
+      window.clearTimeout(refitTimerRef.current);
+      refitTimerRef.current = undefined;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -188,6 +270,7 @@ export default function WhiteboardPanel() {
               };
               const isLoadReport = !canvasLoadedRef.current;
               canvasLoadedRef.current = true;
+              scheduleCanvasRefit();
               if (isInPlaybackSession) {
                 store.trigger.observePlaybackCanvasView({
                   view,
