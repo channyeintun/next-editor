@@ -5,12 +5,11 @@ import lessonsData from "../../data/lessons.json";
 export interface LessonsPage {
   lessons: Lesson[];
   /**
-   * Opaque cursor for the next page, or null once exhausted. Namespaces which
-   * backend serves it next — "seed:<n>" for a static build-time shard,
-   * "d1:<n>" for a D1-backed page of user-published lessons — so the static
-   * seed (introduction, etc.) is served first and pagination continues into
-   * D1 once it's exhausted. See docs/cloudflare-architecture.md "Catalog
-   * resolution".
+   * Opaque cursor for the next page, or null once exhausted: "d1:<n>" for the
+   * n-th D1-backed page of user-published lessons, newest first. The bundled
+   * seed (introduction, etc.) has no page of its own; it rides on the last D1
+   * page (see fetchLessonsPage and docs/cloudflare-architecture.md "Catalog
+   * resolution").
    */
   nextPage: string | null;
 }
@@ -47,16 +46,21 @@ function isHtmlFallback(res: { headers: Record<string, unknown> }): boolean {
   return typeof contentType === "string" && contentType.includes("text/html");
 }
 
-function parseCursor(cursor: string): { source: "seed" | "d1"; index: number } {
+const SEED_LESSONS = lessonsData.lessons as Lesson[];
+
+// The D1 page a cursor names. Anything that isn't a "d1:<n>" cursor starts
+// from the first page.
+function d1PageIndex(cursor: string): number {
   const [source, indexStr] = cursor.split(":");
-  return { source: source === "d1" ? "d1" : "seed", index: Number(indexStr) || 0 };
+  return source === "d1" ? Number(indexStr) || 0 : 0;
 }
 
-// In production the Worker always matches /api/lessons* and returns real
-// JSON, but plain `bun run dev` (no dev:worker) has no handler for it at
-// all, so it falls through to the same SPA index.html fallback the seed
-// path guards against above — same isHtmlFallback check, for symmetry and
-// dev robustness.
+// The Worker always answers /api/lessons* with JSON. A host without it (a
+// static preview of the build) would answer with the SPA's index.html instead,
+// which is read as an empty last page, so the gallery shows just the seed.
+// Plain `bun run dev` is different: Vite proxies /api/lessons to the Worker on
+// :8787 (vite.config.ts), so without `dev:worker` page 0 fails with a 502 and
+// the gallery shows its error and a retry button.
 async function fetchD1Page(index: number): Promise<RawLessonsPage> {
   const res = await axios.get<RawLessonsPage>(`/api/lessons?page=${index}`, {
     timeout: REQUEST_TIMEOUT_MS,
@@ -65,27 +69,19 @@ async function fetchD1Page(index: number): Promise<RawLessonsPage> {
   return res.data;
 }
 
-// Serves the static seed catalog first, then continues pagination into
-// user-published D1 lessons once the seed is exhausted — the client only ever
-// downloads the page it's showing, from whichever backend holds it.
+// Pages through user-published D1 lessons, newest first. The bundled seed
+// (introduction) is appended to the last D1 page, so it appears only once the
+// gallery has loaded its oldest lessons. That normally takes scrolling to the
+// end; but the grid's sentinel loads ahead by 400px, so a catalog of one or two
+// pages on a tall window can reach its last page, and the seed, without any
+// scroll. An empty catalog's only page is that last page, so the seed still
+// shows there.
 export async function fetchLessonsPage(cursor: string): Promise<LessonsPage> {
-  const { source, index } = parseCursor(cursor);
-
-  if (source === "seed") {
-    if (index === 0) {
-      return {
-        lessons: lessonsData.lessons as Lesson[],
-        nextPage: "d1:0",
-      };
-    }
-    // No seed shard at this index at all — fall through to D1 from the start.
+  const page = await fetchD1Page(d1PageIndex(cursor));
+  if (page.nextPage !== null) {
+    return { lessons: page.lessons, nextPage: `d1:${page.nextPage}` };
   }
-
-  const page = await fetchD1Page(source === "d1" ? index : 0);
-  return {
-    lessons: page.lessons,
-    nextPage: page.nextPage !== null ? `d1:${page.nextPage}` : null,
-  };
+  return { lessons: [...page.lessons, ...SEED_LESSONS], nextPage: null };
 }
 
 /**
@@ -100,8 +96,8 @@ export async function fetchLessonsPage(cursor: string): Promise<LessonsPage> {
  * published between two of those fetches, every later row shifts down one and
  * the boundary row is genuinely returned twice.
  *
- * It also covers the seed→D1 seam, where a slug present in both catalogs would
- * otherwise be rendered twice.
+ * It also covers the D1→seed seam on the last page, where a slug present in
+ * both catalogs would otherwise be rendered twice.
  *
  * Deduping is the right response rather than a cosmetic patch: React keys the
  * cards by slug, so a repeat is a duplicate key, not just a repeated picture.
@@ -124,7 +120,7 @@ export function flattenLessonPages(pages: readonly LessonsPage[] | undefined): L
 // undefined — Query rejects undefined) when the slug matches neither, so the
 // route can tell "not found" from a real fetch failure.
 export async function findLessonBySlug(slug: string): Promise<Lesson | null> {
-  const seedLesson = lessonsData.lessons.find((l) => l.slug === slug);
+  const seedLesson = SEED_LESSONS.find((l) => l.slug === slug);
   if (seedLesson) {
     return seedLesson as Lesson;
   }

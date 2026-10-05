@@ -34,6 +34,19 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("lesson gallery", () => {
+  it("loads the newest d1 page first, not the bundled seed", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    fetchLessonsPage.mockResolvedValue({ lessons: [lesson("newest")], nextPage: "d1:1" });
+
+    const gallery = renderHook(() => useLessonsInfinite(), { wrapper: wrapper(queryClient) });
+    await waitFor(() => expect(gallery.result.current.isSuccess).toBe(true));
+
+    expect(fetchLessonsPage).toHaveBeenCalledTimes(1);
+    expect(fetchLessonsPage).toHaveBeenCalledWith("d1:0");
+  });
+});
+
 describe("lesson detail cache seeding", () => {
   it("serves a detail query from the gallery page that already carried it", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

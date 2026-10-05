@@ -25,8 +25,8 @@ export function primeLessonDetails(queryClient: QueryClient, lessons: readonly L
   }
 }
 
-// Paginated lesson gallery: the static seed first, then D1-backed
-// user-published lessons (see lib/lessons.ts). Overrides the queryClient-wide
+// Paginated lesson gallery: D1-backed user-published lessons newest first, with
+// the bundled seed appended to the last page (see lib/lessons.ts). Overrides the queryClient-wide
 // staleTime: Infinity default (tuned for the build-static seed alone) with a
 // finite one here, since the D1 portion is live data other users publish to —
 // without this, a tab left open would never see newly published lessons.
@@ -40,7 +40,7 @@ export function useLessonsInfinite() {
       primeLessonDetails(queryClient, page.lessons);
       return page;
     },
-    initialPageParam: "seed:0",
+    initialPageParam: "d1:0",
     getNextPageParam: (lastPage) => lastPage.nextPage,
     staleTime: 60_000,
   });

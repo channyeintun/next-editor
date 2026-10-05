@@ -38,12 +38,30 @@ beforeEach(() => {
 });
 
 describe("fetchLessonsPage", () => {
-  it("returns local json data for seed:0 directly without fetching", async () => {
-    const page = await fetchLessonsPage("seed:0");
-    expect(mockedGet).not.toHaveBeenCalled();
-    expect(page.nextPage).toBe("d1:0");
-    expect(page.lessons).toHaveLength(1);
-    expect(page.lessons[0].slug).toBe("introduction");
+  it("starts at the newest d1 page and leaves the seed out while older pages remain", async () => {
+    mockedGet.mockResolvedValueOnce(
+      jsonResponse({ lessons: [{ slug: "newest-lesson" }], nextPage: 1 }),
+    );
+    const page = await fetchLessonsPage("d1:0");
+    expect(mockedGet).toHaveBeenCalledWith("/api/lessons?page=0", { timeout: 15_000 });
+    expect(page.lessons.map((l) => l.slug)).toEqual(["newest-lesson"]);
+    expect(page.nextPage).toBe("d1:1");
+  });
+
+  it("appends the seed after the oldest d1 lessons on the last page", async () => {
+    mockedGet.mockResolvedValueOnce(
+      jsonResponse({ lessons: [{ slug: "oldest-lesson" }], nextPage: null }),
+    );
+    const page = await fetchLessonsPage("d1:3");
+    expect(page.lessons.map((l) => l.slug)).toEqual(["oldest-lesson", "introduction"]);
+    expect(page.nextPage).toBeNull();
+  });
+
+  it("shows the seed alone when d1 has no published lessons", async () => {
+    mockedGet.mockResolvedValueOnce(jsonResponse({ lessons: [], nextPage: null }));
+    const page = await fetchLessonsPage("d1:0");
+    expect(page.lessons.map((l) => l.slug)).toEqual(["introduction"]);
+    expect(page.nextPage).toBeNull();
   });
 
   it("paginates within d1 using d1:n cursors", async () => {
@@ -71,10 +89,10 @@ describe("fetchLessonsPage", () => {
     expect(page.nextPage).toBeNull();
   });
 
-  it("treats a d1 SPA fallback (200 + text/html) as an empty terminal page instead of crashing", async () => {
+  it("treats a d1 SPA fallback (200 + text/html) as an empty last page instead of crashing", async () => {
     mockedGet.mockResolvedValueOnce(htmlFallbackResponse());
     const page = await fetchLessonsPage("d1:0");
-    expect(page.lessons).toEqual([]);
+    expect(page.lessons.map((l) => l.slug)).toEqual(["introduction"]);
     expect(page.nextPage).toBeNull();
   });
 });
@@ -130,15 +148,15 @@ describe("flattenLessonPages", () => {
     expect(flat.map((l) => l.slug)).toEqual(["a", "b", "c", "d"]);
   });
 
-  it("keeps the first copy, so the seed catalog wins over a D1 row of the same slug", () => {
-    const seed = { ...lesson("introduction"), title: "Seed copy" };
-    const d1 = { ...lesson("introduction"), title: "D1 copy" };
+  it("keeps the first copy of a slug that appears on two pages", () => {
+    const first = { ...lesson("a"), title: "First copy" };
+    const second = { ...lesson("a"), title: "Second copy" };
     const flat = flattenLessonPages([
-      { lessons: [seed], nextPage: "d1:0" },
-      { lessons: [d1], nextPage: null },
+      { lessons: [first], nextPage: "d1:1" },
+      { lessons: [second], nextPage: null },
     ]);
     expect(flat).toHaveLength(1);
-    expect(flat[0].title).toBe("Seed copy");
+    expect(flat[0].title).toBe("First copy");
   });
 
   it("handles no pages at all", () => {

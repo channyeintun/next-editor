@@ -148,9 +148,10 @@ comments already call out):
 | **Seed** (curated, e.g. `introduction`) | `/lessons/page-*.json`, `/lessons/by-slug/*.json` | Static assets (unchanged vite plugin) | No      | Edge/CDN  |
 | **Dynamic** (user, published)           | `/api/lessons?page=`, `/api/lessons/:slug`        | D1 via Worker                         | Yes     | Short TTL |
 
-- **Gallery** (`fetchLessonsPage`): serve the seed shard(s) first, then continue
-  the infinite scroll into D1 pages. The `nextPage` cursor encodes which source
-  and offset comes next, so the existing `useInfiniteQuery` wiring is untouched.
+- **Gallery** (`fetchLessonsPage`): page through D1 newest first (`d1:<n>`
+  cursors) and append the bundled seed to the last D1 page, so the introduction
+  appears only once the infinite scroll reaches the oldest lessons. An empty
+  catalog's single page is that last page, so the seed still shows there.
 - **Detail** (`findLessonBySlug`): try the seed `by-slug` shard; on 404 fall
   back to `/api/lessons/:slug`. Returns `null` on a real miss (unchanged
   contract), so `LessonDetailRoute` still distinguishes not-found from error.

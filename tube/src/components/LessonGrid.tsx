@@ -109,11 +109,11 @@ export default function LessonGrid() {
   // `useInfiniteQuery` flips `status` to "error" for ANY failed fetch, including a
   // `fetchNextPage()` that fails with earlier pages already rendered. Gating the
   // whole component on bare `isError` therefore threw away every loaded card, the
-  // scroll position and the search bar over one paging blip — and since page 0 is
-  // served from the bundled seed and cannot reject, that was the *only* way this
-  // branch was ever reached. Full-page error is for "we have nothing to show"; a
-  // paging failure gets the inline retry row below the grid instead.
-  if (isError && lessons.length === 0) {
+  // scroll position and the search bar over one paging blip. Full-page error is
+  // for "we have nothing to show" (page 0 itself failed); a paging failure gets
+  // the inline retry row below the grid instead. A search runs its own query, so
+  // a failed gallery page 0 never replaces search results.
+  if (isError && lessons.length === 0 && !debouncedQuery) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-center">
         <p className="text-red-400">
@@ -130,10 +130,12 @@ export default function LessonGrid() {
     );
   }
 
+  // Page 0 is a network fetch, so a search can start before it lands (or after
+  // it fails). The box stays either way: it is what the search is typed into.
   if (debouncedQuery) {
     return (
       <div>
-        {lessons.length > 0 && <SearchBar value={query} onChange={setQuery} />}
+        <SearchBar value={query} onChange={setQuery} />
         <SearchResults query={debouncedQuery} />
       </div>
     );
