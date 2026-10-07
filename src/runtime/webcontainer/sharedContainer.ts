@@ -78,6 +78,13 @@ export async function getOrBootSharedWebContainer(): Promise<WebContainer> {
 
   if (!sharedWebContainerState.bootPromise) {
     preconnectWebContainerCdn();
+    // Fetched alongside the boot, not statically: it carries the ~77 KB recorder
+    // bundle as text, which no page that never boots a WebContainer (mobile,
+    // playback) should fetch. A failure surfaces where it is awaited below; this
+    // handler only keeps it from going unhandled when the boot fails first.
+    const previewScriptModule = import("./previewScript");
+    previewScriptModule.catch(() => {});
+
     sharedWebContainerState.bootPromise = import("@webcontainer/api")
       .then(({ WebContainer }) =>
         WebContainer.boot({
@@ -90,11 +97,9 @@ export async function getOrBootSharedWebContainer(): Promise<WebContainer> {
         // Install the rrweb recorder into every preview HTML response up front,
         // so replay works regardless of how the app renders (SSR/CSR/hybrid).
         // Set once per boot; it persists for the instance's whole lifetime and
-        // applies to every preview reloaded afterwards. Loaded here, not
-        // statically: it carries the ~77 KB recorder bundle as text, which no
-        // page that never boots a WebContainer (mobile, playback) should fetch.
+        // applies to every preview reloaded afterwards.
         try {
-          const { createRuntimePreviewScript } = await import("./previewScript");
+          const { createRuntimePreviewScript } = await previewScriptModule;
           await instance.setPreviewScript(createRuntimePreviewScript());
         } catch (error) {
           console.warn("Failed to install runtime preview recorder script:", error);

@@ -7,6 +7,9 @@ const bootWebContainer = vi.hoisted(() => vi.fn<() => Promise<WebContainer>>());
 
 vi.mock("@webcontainer/api", () => ({ WebContainer: { boot: bootWebContainer } }));
 
+// Notes when the boot imports the recorder payload module, also lazily.
+const previewScriptLoaded = vi.hoisted(() => vi.fn<() => void>());
+
 describe("isWebContainerRuntimeSupported", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -43,6 +46,11 @@ describe("shared WebContainer lifetime", () => {
 
   beforeEach(async () => {
     bootWebContainer.mockReset();
+    previewScriptLoaded.mockClear();
+    vi.doMock("./previewScript", () => {
+      previewScriptLoaded();
+      return { createRuntimePreviewScript: () => "preview recorder script" };
+    });
     vi.resetModules();
     sharedContainer = await import("./sharedContainer");
   });
@@ -125,6 +133,18 @@ describe("shared WebContainer lifetime", () => {
     bootsInto(createStandInWebContainer());
     await sharedContainer.getOrBootSharedWebContainer();
     expect(preconnects()).toHaveLength(1);
+  });
+
+  it("fetches the preview recorder while booting and installs it before handing the container out", async () => {
+    const landBoot = deferNextBoot();
+    const booting = sharedContainer.getOrBootSharedWebContainer();
+    await vi.waitFor(() => expect(previewScriptLoaded).toHaveBeenCalledOnce());
+
+    const instance = createStandInWebContainer();
+    landBoot(instance);
+    await expect(booting).resolves.toBe(instance);
+
+    expect(instance.setPreviewScript).toHaveBeenCalledExactlyOnceWith("preview recorder script");
   });
 
   it("counts a holder's repeated release once", async () => {
