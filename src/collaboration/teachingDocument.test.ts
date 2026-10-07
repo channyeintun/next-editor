@@ -496,6 +496,76 @@ describe("collaboration teaching document", () => {
     doc.destroy();
   });
 
+  it("reuses parsed whiteboard candidates without skipping the record identity check", () => {
+    const doc = new Y.Doc();
+    seedCollaborationTeachingDocument(doc, { slides: [], whiteboardElements: [element("shape")] });
+    const [first] = projectCollaborationTeachingDocument(doc).whiteboardElements;
+    const [second] = validateCollaborationTeachingDocument(doc).projection.whiteboardElements;
+    // An unchanged record is not parsed again: every projection shares its
+    // element, so nothing may mutate it.
+    expect(second).toBe(first);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first?.groupIds)).toBe(true);
+
+    const teaching = doc.getMap("project").get("teaching") as Y.Map<unknown>;
+    const whiteboard = teaching.get("whiteboardElements") as Y.Map<Y.Array<string>>;
+    const impostor = new Y.Array<string>();
+    impostor.insert(0, whiteboard.get("shape")!.toArray());
+    whiteboard.set("impostor", impostor);
+
+    expect(
+      projectCollaborationTeachingDocument(doc).whiteboardElements.map(({ id }) => id),
+    ).toEqual(["shape"]);
+    expect(() => validateCollaborationTeachingDocument(doc)).toThrow(/mismatched identity/);
+    doc.destroy();
+  });
+
+  it("counts reused whiteboard candidates in UTF-8 bytes against the scene limit", () => {
+    // Three UTF-8 bytes per UTF-16 unit, so a string-length count would pass.
+    const text = (id: string, index: number) => ({
+      ...element(id, 1, `a${String(index).padStart(3, "0")}`),
+      type: "text",
+      fontSize: 20,
+      fontFamily: 1,
+      text: "မ".repeat(7_000),
+      textAlign: "left",
+      verticalAlign: "top",
+      containerId: null,
+      originalText: "မ".repeat(7_000),
+      autoResize: true,
+      lineHeight: 1.25,
+    });
+    const doc = new Y.Doc();
+    seedCollaborationTeachingDocument(doc, {
+      slides: [],
+      whiteboardElements: Array.from({ length: 70 }, (_, index) => text(`t${index}`, index)),
+    });
+    expect(validateCollaborationTeachingDocument(doc).projection.whiteboardElements).toHaveLength(
+      70,
+    );
+
+    const teaching = doc.getMap("project").get("teaching") as Y.Map<unknown>;
+    const whiteboard = teaching.get("whiteboardElements") as Y.Map<Y.Array<string>>;
+    doc.transact(() => {
+      for (let index = 70; index < 76; index += 1) {
+        const record = new Y.Array<string>();
+        record.insert(0, [
+          JSON.stringify({
+            kind: "element",
+            version: 1,
+            versionNonce: 10,
+            element: text(`t${index}`, index),
+          }),
+        ]);
+        whiteboard.set(`t${index}`, record);
+      }
+    });
+
+    expect(() => projectCollaborationTeachingDocument(doc)).toThrow(/scene limit/);
+    expect(() => validateCollaborationTeachingDocument(doc)).toThrow(/scene limit/);
+    doc.destroy();
+  });
+
   it("rejects slide manifests that are not present in the immutable order", () => {
     const doc = new Y.Doc();
     seedCollaborationTeachingDocument(doc, {

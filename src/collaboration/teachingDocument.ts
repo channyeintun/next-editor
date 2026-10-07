@@ -536,7 +536,10 @@ export function normalizeCollaborationTeachingSlides(
   return normalized;
 }
 
-function serializedElement(element: WhiteboardElementJSON): string {
+function serializeWhiteboardElement(element: WhiteboardElementJSON): {
+  serialized: string;
+  bytes: number;
+} {
   let serialized: string;
   try {
     serialized = JSON.stringify(element, (_key, value: unknown) => {
@@ -548,10 +551,15 @@ function serializedElement(element: WhiteboardElementJSON): string {
   } catch {
     throw new CollaborationTeachingError("A whiteboard element is not serializable");
   }
-  if (textEncoder.encode(serialized).byteLength > MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES) {
+  const bytes = textEncoder.encode(serialized).byteLength;
+  if (bytes > MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES) {
     throw new CollaborationTeachingError("A whiteboard element is too large to share");
   }
-  return serialized;
+  return { serialized, bytes };
+}
+
+function serializedElement(element: WhiteboardElementJSON): string {
+  return serializeWhiteboardElement(element).serialized;
 }
 
 function compareCodeUnits(left: string, right: string): number {
@@ -583,7 +591,11 @@ function compareProgressiveWhiteboardStroke(
   return leftPoints - rightPoints;
 }
 
-export function validateCollaborationWhiteboardElement(value: unknown): WhiteboardElementJSON {
+/** Validates an element; `bytes` is the size of its serialized form. */
+function normalizeWhiteboardElement(value: unknown): {
+  element: WhiteboardElementJSON;
+  bytes: number;
+} {
   let clone: WhiteboardElementJSON;
   try {
     clone = structuredClone(value) as WhiteboardElementJSON;
@@ -594,7 +606,12 @@ export function validateCollaborationWhiteboardElement(value: unknown): Whiteboa
   if (!parsed.success) {
     throw new CollaborationTeachingError("A whiteboard element is malformed or unsafe");
   }
-  return JSON.parse(serializedElement(parsed.data)) as WhiteboardElementJSON;
+  const { serialized, bytes } = serializeWhiteboardElement(parsed.data);
+  return { element: JSON.parse(serialized) as WhiteboardElementJSON, bytes };
+}
+
+export function validateCollaborationWhiteboardElement(value: unknown): WhiteboardElementJSON {
+  return normalizeWhiteboardElement(value).element;
 }
 
 function compareWhiteboardElements(
@@ -630,6 +647,48 @@ type CollaborationWhiteboardCandidate =
 interface SerializedCollaborationWhiteboardCandidate {
   candidate: CollaborationWhiteboardCandidate;
   serialized: string;
+  /** The size of `serialized`, which the whiteboard history limit counts. */
+  bytes: number;
+  /** The size of the serialized element, which the scene limit counts; 0 for a tombstone. */
+  elementBytes: number;
+}
+
+/**
+ * The candidates parsed by the latest full read of a whiteboard map, by their
+ * serialized string. Parsing is a pure function of the string, so reusing one
+ * is exact. Every whiteboard delta (one per 100 ms while someone draws) makes
+ * the drawing client, each peer and the room read the whole board, and only
+ * the changed records hold new strings; a read keeps only the strings it saw,
+ * so the cache never outgrows the board. Cached candidates are shared by every
+ * projection, so they are frozen.
+ */
+const parsedWhiteboardCandidates = new WeakMap<
+  object,
+  ReadonlyMap<string, SerializedCollaborationWhiteboardCandidate>
+>();
+
+interface WhiteboardCandidateRead {
+  previous: ReadonlyMap<string, SerializedCollaborationWhiteboardCandidate> | undefined;
+  current: Map<string, SerializedCollaborationWhiteboardCandidate>;
+}
+
+function beginWhiteboardCandidateRead<T>(whiteboard: Y.Map<T>): WhiteboardCandidateRead {
+  return { previous: parsedWhiteboardCandidates.get(whiteboard), current: new Map() };
+}
+
+function finishWhiteboardCandidateRead<T>(
+  whiteboard: Y.Map<T>,
+  read: WhiteboardCandidateRead,
+): void {
+  parsedWhiteboardCandidates.set(whiteboard, read.current);
+}
+
+function freezeJsonValue<T>(value: T): T {
+  if (typeof value === "object" && value !== null) {
+    for (const child of Object.values(value)) freezeJsonValue(child);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 function whiteboardCandidateRank(candidate: CollaborationWhiteboardCandidate): number {
@@ -656,50 +715,49 @@ function compareWhiteboardCandidates(
 
 function serializeWhiteboardCandidate(
   candidate: CollaborationWhiteboardCandidate,
+  elementBytes: number,
 ): SerializedCollaborationWhiteboardCandidate {
   const serialized = JSON.stringify(candidate);
-  if (
-    textEncoder.encode(serialized).byteLength >
-    MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES + 512
-  ) {
+  const bytes = textEncoder.encode(serialized).byteLength;
+  if (bytes > MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES + 512) {
     throw new CollaborationTeachingError("A whiteboard element record is too large to share");
   }
-  return { candidate, serialized };
+  return { candidate, serialized, bytes, elementBytes };
 }
 
 function elementWhiteboardCandidate(
   element: WhiteboardElementJSON,
 ): SerializedCollaborationWhiteboardCandidate {
-  const normalized = validateCollaborationWhiteboardElement(element);
-  return serializeWhiteboardCandidate({
-    kind: "element",
-    version: normalized.version,
-    versionNonce: normalized.versionNonce,
-    element: normalized,
-  });
+  const { element: normalized, bytes } = normalizeWhiteboardElement(element);
+  return serializeWhiteboardCandidate(
+    {
+      kind: "element",
+      version: normalized.version,
+      versionNonce: normalized.versionNonce,
+      element: normalized,
+    },
+    bytes,
+  );
 }
 
 function tombstoneWhiteboardCandidate(
   previous: CollaborationWhiteboardCandidate,
 ): SerializedCollaborationWhiteboardCandidate {
-  return serializeWhiteboardCandidate({
-    kind: "tombstone",
-    version: previous.version === Number.MAX_SAFE_INTEGER ? previous.version : previous.version + 1,
-    versionNonce: Number.MAX_SAFE_INTEGER,
-  });
+  return serializeWhiteboardCandidate(
+    {
+      kind: "tombstone",
+      version:
+        previous.version === Number.MAX_SAFE_INTEGER ? previous.version : previous.version + 1,
+      versionNonce: Number.MAX_SAFE_INTEGER,
+    },
+    0,
+  );
 }
 
-function parseWhiteboardCandidate(
-  id: string,
-  serialized: unknown,
-): SerializedCollaborationWhiteboardCandidate {
-  if (typeof serialized !== "string") {
-    throw new CollaborationTeachingError("A whiteboard element candidate is malformed");
-  }
-  if (
-    textEncoder.encode(serialized).byteLength >
-    MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES + 512
-  ) {
+/** Parses and validates one candidate; the record's element ID is checked by the caller. */
+function parseWhiteboardCandidate(serialized: string): SerializedCollaborationWhiteboardCandidate {
+  const bytes = textEncoder.encode(serialized).byteLength;
+  if (bytes > MAX_COLLABORATION_WHITEBOARD_ELEMENT_BYTES + 512) {
     throw new CollaborationTeachingError("A whiteboard element candidate is too large");
   }
   let value: unknown;
@@ -727,6 +785,8 @@ function parseWhiteboardCandidate(
     return {
       candidate: object as unknown as CollaborationWhiteboardTombstoneCandidate,
       serialized,
+      bytes,
+      elementBytes: 0,
     };
   }
   if (object.kind !== "element") {
@@ -739,12 +799,8 @@ function parseWhiteboardCandidate(
       "A whiteboard element candidate contains unsupported fields",
     );
   }
-  const element = validateCollaborationWhiteboardElement(object.element);
-  if (
-    element.id !== id ||
-    element.version !== object.version ||
-    element.versionNonce !== object.versionNonce
-  ) {
+  const { element, bytes: elementBytes } = normalizeWhiteboardElement(object.element);
+  if (element.version !== object.version || element.versionNonce !== object.versionNonce) {
     throw new CollaborationTeachingError(
       "A whiteboard element candidate has mismatched identity data",
     );
@@ -757,12 +813,15 @@ function parseWhiteboardCandidate(
       element,
     },
     serialized,
+    bytes,
+    elementBytes,
   };
 }
 
 function readWhiteboardCandidate(
   id: string,
   value: unknown,
+  read: WhiteboardCandidateRead,
 ): SerializedCollaborationWhiteboardCandidate {
   if (!(value instanceof Y.Array)) {
     throw new CollaborationTeachingError("A whiteboard element record is malformed");
@@ -772,11 +831,26 @@ function readWhiteboardCandidate(
   }
   let winner: SerializedCollaborationWhiteboardCandidate | null = null;
   for (const serialized of value.toArray()) {
-    const candidate = parseWhiteboardCandidate(id, serialized);
+    if (typeof serialized !== "string") {
+      throw new CollaborationTeachingError("A whiteboard element candidate is malformed");
+    }
+    let candidate = read.current.get(serialized) ?? read.previous?.get(serialized);
+    if (!candidate) candidate = freezeJsonValue(parseWhiteboardCandidate(serialized));
+    read.current.set(serialized, candidate);
+    if (candidate.candidate.kind === "element" && candidate.candidate.element.id !== id) {
+      throw new CollaborationTeachingError(
+        "A whiteboard element candidate has mismatched identity data",
+      );
+    }
     if (!winner || compareWhiteboardCandidates(candidate, winner) > 0) winner = candidate;
   }
   if (!winner) throw new CollaborationTeachingError("A whiteboard element record is empty");
   return winner;
+}
+
+/** The UTF-8 size of a candidate string, from the read that parsed it when possible. */
+function whiteboardCandidateBytes(read: WhiteboardCandidateRead, serialized: string): number {
+  return read.current.get(serialized)?.bytes ?? textEncoder.encode(serialized).byteLength;
 }
 
 function whiteboardCandidateArray(
@@ -805,16 +879,13 @@ export function applyCollaborationWhiteboardEvent(
   return Array.from(byId.values()).sort(compareWhiteboardElementOrder);
 }
 
-function assertWhiteboardSceneBounds(elements: readonly WhiteboardElementJSON[]): void {
-  if (elements.length > MAX_COLLABORATION_WHITEBOARD_ELEMENTS) {
+/** `elementBytes` is the total size of the elements' serialized forms. */
+function assertWhiteboardSceneBounds(elementCount: number, elementBytes: number): void {
+  if (elementCount > MAX_COLLABORATION_WHITEBOARD_ELEMENTS) {
     throw new CollaborationTeachingError("The shared whiteboard has too many elements");
   }
-  let totalBytes = 0;
-  for (const element of elements) {
-    totalBytes += textEncoder.encode(serializedElement(element)).byteLength;
-    if (totalBytes > MAX_COLLABORATION_WHITEBOARD_SCENE_BYTES) {
-      throw new CollaborationTeachingError("The shared whiteboard exceeds the room scene limit");
-    }
+  if (elementBytes > MAX_COLLABORATION_WHITEBOARD_SCENE_BYTES) {
+    throw new CollaborationTeachingError("The shared whiteboard exceeds the room scene limit");
   }
 }
 
@@ -868,7 +939,13 @@ export function seedCollaborationTeachingDocument(
   const whiteboardElements = applyCollaborationWhiteboardEvent([], {
     upserts: [...seed.whiteboardElements],
   });
-  assertWhiteboardSceneBounds(whiteboardElements);
+  assertWhiteboardSceneBounds(
+    whiteboardElements.length,
+    whiteboardElements.reduce(
+      (total, element) => total + serializeWhiteboardElement(element).bytes,
+      0,
+    ),
+  );
 
   doc.transact(() => {
     const teaching = getCollaborationTeachingRoot(doc);
@@ -938,18 +1015,25 @@ export function projectCollaborationTeachingDocument(doc: Y.Doc): CollaborationT
     presentationValue instanceof Y.Map ? presentationValue.get("currentSlideId") : null;
   const revisionValue = presentationValue instanceof Y.Map ? presentationValue.get("revision") : 0;
   const whiteboardElements: WhiteboardElementJSON[] = [];
+  let whiteboardElementBytes = 0;
   if (whiteboardValue instanceof Y.Map) {
+    const read = beginWhiteboardCandidateRead(whiteboardValue);
     for (const [id, value] of whiteboardValue) {
       try {
-        const winner = readWhiteboardCandidate(id, value).candidate;
-        if (winner.kind === "element") whiteboardElements.push(winner.element);
+        const winner = readWhiteboardCandidate(id, value, read);
+        if (winner.candidate.kind === "element") {
+          whiteboardElements.push(winner.candidate.element);
+          whiteboardElementBytes += winner.elementBytes;
+        }
       } catch {
         // Malformed teaching entries are isolated instead of crashing workspace projection.
       }
     }
+    finishWhiteboardCandidateRead(whiteboardValue, read);
   }
-  const orderedWhiteboard = applyCollaborationWhiteboardEvent([], { upserts: whiteboardElements });
-  assertWhiteboardSceneBounds(orderedWhiteboard);
+  // Each winner was validated when it was parsed, and the map holds one per ID.
+  const orderedWhiteboard = whiteboardElements.sort(compareWhiteboardElementOrder);
+  assertWhiteboardSceneBounds(orderedWhiteboard.length, whiteboardElementBytes);
   return {
     initialized: true,
     slideOrder,
@@ -1053,6 +1137,7 @@ export function validateCollaborationTeachingDocument(doc: Y.Doc): Collaboration
   }
   let whiteboardBytes = 0;
   const whiteboardHistory: Array<{ id: string; candidates: string[] }> = [];
+  const read = beginWhiteboardCandidateRead(whiteboard);
   for (const [id, value] of whiteboard) {
     if (typeof id !== "string" || id.length < 1 || id.length > 256) {
       throw new CollaborationTeachingError("A whiteboard element ID is malformed");
@@ -1060,13 +1145,13 @@ export function validateCollaborationTeachingDocument(doc: Y.Doc): Collaboration
     if (!(value instanceof Y.Array)) {
       throw new CollaborationTeachingError("A whiteboard element record is malformed");
     }
-    readWhiteboardCandidate(id, value);
+    readWhiteboardCandidate(id, value, read);
     const candidates = value.toArray();
     for (const serialized of candidates) {
       if (typeof serialized !== "string") {
         throw new CollaborationTeachingError("A whiteboard element candidate is malformed");
       }
-      whiteboardBytes += textEncoder.encode(serialized).byteLength;
+      whiteboardBytes += whiteboardCandidateBytes(read, serialized);
       if (whiteboardBytes > MAX_COLLABORATION_WHITEBOARD_SCENE_BYTES) {
         throw new CollaborationTeachingError(
           "The shared whiteboard history exceeds the room limit",
@@ -1075,18 +1160,28 @@ export function validateCollaborationTeachingDocument(doc: Y.Doc): Collaboration
     }
     whiteboardHistory.push({ id, candidates });
   }
+  finishWhiteboardCandidateRead(whiteboard, read);
   whiteboardHistory.sort((left, right) => compareCodeUnits(left.id, right.id));
   const immutableFingerprint = JSON.stringify({
     slideOrder: projection.slideOrder,
     slides: projection.slideOrder.map((id) => projection.slides.get(id)),
   });
-  const mutableFingerprint = JSON.stringify({
-    currentSlideId: projection.currentSlideId,
-    presentationRevision: projection.presentationRevision,
-    whiteboardElements: projection.whiteboardElements,
-    whiteboardHistory,
-  });
-  return { projection, immutableFingerprint, mutableFingerprint };
+  // Only teaching initialization compares it, while the room validates every
+  // whiteboard update: stringify the whole board only when it is read.
+  let mutableFingerprint: string | null = null;
+  return {
+    projection,
+    immutableFingerprint,
+    get mutableFingerprint() {
+      mutableFingerprint ??= JSON.stringify({
+        currentSlideId: projection.currentSlideId,
+        presentationRevision: projection.presentationRevision,
+        whiteboardElements: projection.whiteboardElements,
+        whiteboardHistory,
+      });
+      return mutableFingerprint;
+    },
+  };
 }
 
 function assertTeachingUpdateFitsSnapshot(doc: Y.Doc, additionalBytes: number): void {
@@ -1140,9 +1235,11 @@ export function applyCollaborationWhiteboardDelta(
     COLLABORATION_TEACHING_WHITEBOARD,
   );
   const winners = new Map<string, SerializedCollaborationWhiteboardCandidate>();
+  const read = beginWhiteboardCandidateRead(whiteboard);
   for (const [id, value] of whiteboard) {
-    winners.set(id, readWhiteboardCandidate(id, value));
+    winners.set(id, readWhiteboardCandidate(id, value, read));
   }
+  finishWhiteboardCandidateRead(whiteboard, read);
 
   const changed = new Map<string, SerializedCollaborationWhiteboardCandidate>();
   for (const id of event.removedIds ?? []) {
@@ -1166,14 +1263,19 @@ export function applyCollaborationWhiteboardDelta(
   if (winners.size > MAX_COLLABORATION_WHITEBOARD_ELEMENTS) {
     throw new CollaborationTeachingError("The shared whiteboard has too many element records");
   }
-  const next = Array.from(winners.values())
-    .flatMap(({ candidate }) => (candidate.kind === "element" ? [candidate.element] : []))
-    .sort(compareWhiteboardElementOrder);
-  assertWhiteboardSceneBounds(next);
+  const next: WhiteboardElementJSON[] = [];
+  let nextElementBytes = 0;
+  for (const { candidate, elementBytes } of winners.values()) {
+    if (candidate.kind !== "element") continue;
+    next.push(candidate.element);
+    nextElementBytes += elementBytes;
+  }
+  next.sort(compareWhiteboardElementOrder);
+  assertWhiteboardSceneBounds(next.length, nextElementBytes);
 
   let additionalBytes = 0;
   for (const candidate of changed.values()) {
-    additionalBytes += textEncoder.encode(candidate.serialized).byteLength + 512;
+    additionalBytes += candidate.bytes + 512;
   }
   if (additionalBytes > 0) {
     let historyBytes = 0;
@@ -1182,20 +1284,18 @@ export function applyCollaborationWhiteboardDelta(
       existingIds.add(id);
       const replacement = changed.get(id);
       if (replacement) {
-        historyBytes += textEncoder.encode(replacement.serialized).byteLength;
+        historyBytes += replacement.bytes;
       } else {
         for (const serialized of value.toArray()) {
           if (typeof serialized !== "string") {
             throw new CollaborationTeachingError("A whiteboard element candidate is malformed");
           }
-          historyBytes += textEncoder.encode(serialized).byteLength;
+          historyBytes += whiteboardCandidateBytes(read, serialized);
         }
       }
     }
     for (const [id, candidate] of changed) {
-      if (!existingIds.has(id)) {
-        historyBytes += textEncoder.encode(candidate.serialized).byteLength;
-      }
+      if (!existingIds.has(id)) historyBytes += candidate.bytes;
     }
     if (historyBytes > MAX_COLLABORATION_WHITEBOARD_SCENE_BYTES) {
       throw new CollaborationTeachingError("The shared whiteboard history exceeds the room limit");
