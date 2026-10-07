@@ -289,10 +289,12 @@ unusable.
 
 - **"Cannot find module 'hono'" (or `hono/cookie`) during `wrangler dev`/`deploy`**:
   esbuild's Yarn PnP detection can walk up past the repo root and false-positive
-  on an unrelated `.pnp.cjs` elsewhere on the machine. Fix is already in
-  `wrangler.toml`'s `[alias]` block (`hono = "hono"`, `"hono/cookie" = "hono/cookie"`)
-  — if a _new_ package hits this, add it there too (Cloudflare's own documented
-  workaround).
+  on an unrelated `.pnp.cjs` elsewhere on the machine (a parent directory or
+  `~`). Move that stray manifest out of the way. Don't reach for Cloudflare's
+  documented `[alias]` workaround (`hono = "hono"`): self-aliases resolve
+  through Node's `require.resolve`, so every aliased package is bundled from its
+  CJS/node build instead of its workerd/browser ESM, which made the Worker about
+  1.6 MB larger when `wrangler.toml` carried such a table.
 - **A worker-side file typechecks under the root `tsc -b tsconfig.json` but fails
   under `infra/worker/tsconfig.json`**: the root config's `@app/*` alias is a
   Vite-only alias — Wrangler's bundler doesn't read `vite.config.ts` at all, so

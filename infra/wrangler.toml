@@ -2,6 +2,11 @@ name = "next-editor-tube"
 main = "./worker/index.ts"
 compatibility_date = "2026-07-05"
 compatibility_flags = ["nodejs_compat"]
+# Deliberately no [alias] table. Self-aliases ("hono" = "hono") make Wrangler
+# resolve through Node's require.resolve, which bundles each package's CJS/node
+# build (jose on node:crypto, hono CJS, the whole lucide-react barrel) instead
+# of its tree-shakeable workerd/browser ESM: about 1.6 MB more to parse. They
+# only ever worked around a stray ~/.pnp.cjs (docs/cloudflare-deploy-guide.md).
 
 # The browser-facing origin, used to build the exact Google OAuth redirect_uri
 # (must byte-for-byte match what's registered in Google Cloud Console — it
@@ -71,87 +76,6 @@ ZIG_PLAYGROUND_ENABLED = "true"
 [[routes]]
 pattern = "nexteditor.dev"
 custom_domain = true
-
-# Without this, esbuild's Yarn PnP detection walks up past the repo root,
-# finds an unrelated ~/.pnp.cjs on this machine, and refuses normal
-# node_modules resolution for "hono" (Wrangler's own suggested fix for this
-# false-positive: https://developers.cloudflare.com/workers/wrangler/configuration/#bundling-issues).
-[alias]
-hono = "hono"
-"hono/cookie" = "hono/cookie"
-# Landing-page edge SSR imports. Keep both package roots and exported
-# subpaths explicit so Wrangler bypasses an unrelated parent ~/.pnp.cjs.
-react = "react"
-"react/jsx-runtime" = "react/jsx-runtime"
-"react-dom" = "react-dom"
-"react-dom/server.edge" = "react-dom/server.edge"
-"react-router" = "react-router"
-"lucide-react" = "lucide-react"
-# Lesson-detail edge SSR dehydrates the same React Query cache the browser
-# hydrates, so the Worker builds against the identical query implementation.
-"@tanstack/react-query" = "@tanstack/react-query"
-"@tanstack/query-core" = "@tanstack/query-core"
-"cookie-es" = "cookie-es"
-"scheduler" = "scheduler"
-"@upstash/qstash" = "@upstash/qstash"
-uncrypto = "uncrypto"
-jose = "jose"
-neverthrow = "neverthrow"
-# Passkey auth (worker/auth/passkey.ts) and its transitive deps.
-"@simplewebauthn/server" = "@simplewebauthn/server"
-"@simplewebauthn/server/helpers" = "@simplewebauthn/server/helpers"
-"@hexagon/base64" = "@hexagon/base64"
-"@levischuck/tiny-cbor" = "@levischuck/tiny-cbor"
-"@peculiar/asn1-android" = "@peculiar/asn1-android"
-"@peculiar/asn1-asym-key" = "@peculiar/asn1-asym-key"
-"@peculiar/asn1-ecc" = "@peculiar/asn1-ecc"
-"@peculiar/asn1-rsa" = "@peculiar/asn1-rsa"
-"@peculiar/asn1-schema" = "@peculiar/asn1-schema"
-"@peculiar/asn1-cms" = "@peculiar/asn1-cms"
-"@peculiar/asn1-csr" = "@peculiar/asn1-csr"
-"@peculiar/asn1-pfx" = "@peculiar/asn1-pfx"
-"@peculiar/asn1-pkcs8" = "@peculiar/asn1-pkcs8"
-"@peculiar/asn1-pkcs9" = "@peculiar/asn1-pkcs9"
-"@peculiar/asn1-x509" = "@peculiar/asn1-x509"
-"@peculiar/asn1-x509-attr" = "@peculiar/asn1-x509-attr"
-"@peculiar/asn1-x509-post-quantum" = "@peculiar/asn1-x509-post-quantum"
-"@peculiar/x509" = "@peculiar/x509"
-"@peculiar/utils" = "@peculiar/utils"
-"@peculiar/utils/bytes" = "@peculiar/utils/bytes"
-"@peculiar/utils/encoding" = "@peculiar/utils/encoding"
-asn1js = "asn1js"
-pvtsutils = "pvtsutils"
-pvutils = "pvutils"
-"reflect-metadata" = "reflect-metadata"
-tslib = "tslib"
-tsyringe = "tsyringe"
-yjs = "yjs"
-"y-protocols/sync" = "y-protocols/sync"
-zod = "zod"
-"zod/v4" = "zod/v4"
-"zod/v4/core" = "zod/v4/core"
-"lib0/array" = "lib0/array"
-"lib0/binary" = "lib0/binary"
-"lib0/buffer" = "lib0/buffer"
-"lib0/decoding" = "lib0/decoding"
-"lib0/dist/decoding.cjs" = "lib0/dist/decoding.cjs"
-"lib0/encoding" = "lib0/encoding"
-"lib0/dist/encoding.cjs" = "lib0/dist/encoding.cjs"
-"lib0/environment" = "lib0/environment"
-"lib0/error" = "lib0/error"
-"lib0/function" = "lib0/function"
-"lib0/iterator" = "lib0/iterator"
-"lib0/logging" = "lib0/logging"
-"lib0/map" = "lib0/map"
-"lib0/math" = "lib0/math"
-"lib0/object" = "lib0/object"
-"lib0/observable" = "lib0/observable"
-"lib0/promise" = "lib0/promise"
-"lib0/random" = "lib0/random"
-"lib0/set" = "lib0/set"
-"lib0/string" = "lib0/string"
-"lib0/time" = "lib0/time"
-"lib0/webcrypto" = "lib0/webcrypto"
 
 # The SPA build output (bun run build, from the repo root). Served through the
 # Worker (see run_worker_first below): its catch-all (worker/index.ts) hands
