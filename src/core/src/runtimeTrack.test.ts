@@ -19,6 +19,10 @@ import type { Recording } from "./types";
 
 // Mirrors the rolling window in useWebContainerRuntimeSession.
 const WINDOW = 50_000;
+// The rolling-window cases diff thousands of 50 KB windows: about 1–1.6 s alone,
+// several times that while other suites share the machine, so they get the
+// room the default 5 s timeout does not leave.
+const ROLLING_WINDOW_TIMEOUT_MS = 15_000;
 
 function snapshot(output: string, extra: Partial<RuntimeRecordingSnapshot> = {}) {
   return {
@@ -68,50 +72,62 @@ describe("diffTerminalOutput", () => {
     expect(applyTerminalOutputDelta(previous, expected)).toBe(next);
   });
 
-  it("stays exact and minimal on a repetitive rolling window", () => {
-    const outputs = streamedOutputs(2_000);
-    for (let index = 1; index < outputs.length; index++) {
-      const delta = diffTerminalOutput(outputs[index - 1], outputs[index]);
-      expect(applyTerminalOutputDelta(outputs[index - 1], delta)).toBe(outputs[index]);
-      // Never carries more than the chunk that actually arrived.
-      expect(delta.append.length).toBeLessThanOrEqual(64);
-    }
-  });
+  it(
+    "stays exact and minimal on a repetitive rolling window",
+    () => {
+      const outputs = streamedOutputs(2_000);
+      for (let index = 1; index < outputs.length; index++) {
+        const delta = diffTerminalOutput(outputs[index - 1], outputs[index]);
+        expect(applyTerminalOutputDelta(outputs[index - 1], delta)).toBe(outputs[index]);
+        // Never carries more than the chunk that actually arrived.
+        expect(delta.append.length).toBeLessThanOrEqual(64);
+      }
+    },
+    ROLLING_WINDOW_TIMEOUT_MS,
+  );
 });
 
 describe("runtime track checkpoints and resolution", () => {
-  it("starts with a checkpoint and resolves every index to the recorded snapshot", () => {
-    const snapshots = streamedOutputs(1_500).map((output) => snapshot(output));
-    const events = record(snapshots);
+  it(
+    "starts with a checkpoint and resolves every index to the recorded snapshot",
+    () => {
+      const snapshots = streamedOutputs(1_500).map((output) => snapshot(output));
+      const events = record(snapshots);
 
-    expect(events[0].snapshot).toBe(snapshots[0]);
-    // Forward (the playback path), then backward seeks (the checkpoint path).
-    for (const index of [0, 1, 2, 700, 701, 1_499, 3, 1_000, 999]) {
-      expect(resolveRuntimeSnapshotAt(events, index)).toEqual(snapshots[index]);
-    }
-    expect(resolveLatestRuntimeSnapshot(events)).toEqual(snapshots.at(-1));
-  });
+      expect(events[0].snapshot).toBe(snapshots[0]);
+      // Forward (the playback path), then backward seeks (the checkpoint path).
+      for (const index of [0, 1, 2, 700, 701, 1_499, 3, 1_000, 999]) {
+        expect(resolveRuntimeSnapshotAt(events, index)).toEqual(snapshots[index]);
+      }
+      expect(resolveLatestRuntimeSnapshot(events)).toEqual(snapshots.at(-1));
+    },
+    ROLLING_WINDOW_TIMEOUT_MS,
+  );
 
-  it("stores O(total output), not O(events × window)", () => {
-    const snapshots = streamedOutputs(3_000).map((output) => snapshot(output));
-    const events = record(snapshots);
-    const stored = events.reduce(
-      (total, event) =>
-        total +
-        (event.snapshot
-          ? (event.snapshot.terminalSessions?.[0]?.output.length ?? 0)
-          : (event.delta.terminalSessions?.[0]?.output.append.length ?? 0)),
-      0,
-    );
-    const produced = snapshots.at(-1)!.terminalSessions[0].output.length + 3_000 * 60;
-    const fullSnapshots = snapshots.reduce(
-      (total, next) => total + next.terminalSessions[0].output.length,
-      0,
-    );
+  it(
+    "stores O(total output), not O(events × window)",
+    () => {
+      const snapshots = streamedOutputs(3_000).map((output) => snapshot(output));
+      const events = record(snapshots);
+      const stored = events.reduce(
+        (total, event) =>
+          total +
+          (event.snapshot
+            ? (event.snapshot.terminalSessions?.[0]?.output.length ?? 0)
+            : (event.delta.terminalSessions?.[0]?.output.append.length ?? 0)),
+        0,
+      );
+      const produced = snapshots.at(-1)!.terminalSessions[0].output.length + 3_000 * 60;
+      const fullSnapshots = snapshots.reduce(
+        (total, next) => total + next.terminalSessions[0].output.length,
+        0,
+      );
 
-    expect(stored).toBeLessThan(produced * 3);
-    expect(stored).toBeLessThan(fullSnapshots / 20);
-  });
+      expect(stored).toBeLessThan(produced * 3);
+      expect(stored).toBeLessThan(fullSnapshots / 20);
+    },
+    ROLLING_WINDOW_TIMEOUT_MS,
+  );
 
   it("bounds the deltas between checkpoints when each one is tiny", () => {
     const snapshots = Array.from({ length: RUNTIME_CHECKPOINT_MAX_EVENTS * 2 }, (_, index) =>

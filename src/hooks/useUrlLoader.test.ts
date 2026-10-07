@@ -1170,9 +1170,14 @@ describe("useUrlLoader", () => {
     const { result } = renderLoader(actions);
 
     const oldLoad = result.current.fetchNextEditorFile("https://example.com/old.ne");
-    await waitFor(() => {
-      expect(actions.loadRecording).toHaveBeenCalledTimes(1);
-    });
+    // Decoding the first 64 KB of a large recording: well past waitFor's 1 s
+    // default while other suites share the machine.
+    await waitFor(
+      () => {
+        expect(actions.loadRecording).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 10_000 },
+    );
     await result.current.fetchNextEditorFile("https://example.com/new.ne");
     oldDownload.open();
     await oldLoad;
@@ -1181,5 +1186,5 @@ describe("useUrlLoader", () => {
     expect(loadedIds).toEqual(["old", "new"]);
     expect(actions.appendRecordingDelta).not.toHaveBeenCalled();
     expect(actions.extendRecording).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 });
