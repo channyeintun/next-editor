@@ -101,7 +101,7 @@ export interface IframeInteractionTarget {
   id?: string;
   testId?: string;
   className?: string;
-  xpath: string; // For precise element targeting during playback
+  xpath?: string; // For precise element targeting during playback; absent on mousemove
 }
 
 /**

@@ -346,4 +346,30 @@ describe("createIframeInteractionCaptureScript", () => {
       "*",
     );
   });
+
+  it("gives clicks an element path but not pointer moves", () => {
+    const { button, documentTarget, installWithMouseMoveCapture, parentPostMessage } =
+      createCaptureHarness();
+
+    installWithMouseMoveCapture();
+    documentTarget.emit("mousemove", { buttons: 0, clientX: 1, clientY: 2, target: button });
+    documentTarget.emit("click", { button: 0, clientX: 1, clientY: 2, target: button });
+
+    const payloads = parentPostMessage.mock.calls.map(
+      ([message]) => (message as { payload: { type: string; target: object } }).payload,
+    );
+    expect(payloads).toEqual([
+      expect.objectContaining({
+        type: "mousemove",
+        target: expect.not.objectContaining({ xpath: expect.anything() }),
+      }),
+      expect.objectContaining({
+        type: "click",
+        target: expect.objectContaining({ tagName: "button", xpath: '//*[@id="target"]' }),
+      }),
+    ]);
+    expect(payloads[0].target).toEqual(
+      expect.objectContaining({ tagName: "button", testId: "submit" }),
+    );
+  });
 });

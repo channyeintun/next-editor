@@ -123,8 +123,8 @@ export function createIframeInteractionCaptureScript(
         return undefined;
       }
 
-      function getTargetInfo(element) {
-        return {
+      function getTargetInfo(element, includeXPath) {
+        const info = {
           tagName: element.tagName.toLowerCase(),
           id: element.id || undefined,
           testId:
@@ -132,8 +132,11 @@ export function createIframeInteractionCaptureScript(
               ? element.getAttribute('data-testid') || undefined
               : undefined,
           className: getClassName(element),
-          xpath: getXPath(element),
         };
+        if (includeXPath) {
+          info.xpath = getXPath(element);
+        }
+        return info;
       }
 
       function getWindowSize() {
@@ -172,7 +175,9 @@ export function createIframeInteractionCaptureScript(
             type: messageType,
             payload: {
               type,
-              target: getTargetInfo(target),
+              // Pointer moves post every frame and the host reads only their
+              // coordinates, so they skip the ancestor walk the path needs.
+              target: getTargetInfo(target, type !== 'mousemove'),
               targetTag: target.tagName,
               data: Object.assign({}, getWindowSize(), data),
             },
