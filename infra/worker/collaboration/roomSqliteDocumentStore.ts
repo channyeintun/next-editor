@@ -45,12 +45,13 @@ export interface RoomSqliteStorage {
   transactionSync<T>(callback: () => T): T;
 }
 
+// Every column but the legacy snapshot: append reads this on every update, and
+// that base64 can be close to 2 MB. readSnapshot reads it only when it must.
 interface MetadataRow {
   protocol_version: number;
   document_schema_version: number;
   generation: number;
   stream_cutoff: number;
-  snapshot: string;
   accepted_bytes: number;
   update_count: number;
   tail_count: number;
@@ -458,7 +459,14 @@ export class RoomSqliteDocumentStore {
       .toArray();
     // No chunks for this generation: a revision from before chunked snapshots
     // wrote it, either before this one first ran or after a rollback.
-    if (chunks.length === 0) return decodeYjsSnapshot(metadata.snapshot);
+    if (chunks.length === 0) {
+      const row = this.storage.sql
+        .exec<{ snapshot: string }>(
+          "SELECT snapshot FROM collaboration_document WHERE singleton = 1",
+        )
+        .toArray()[0];
+      return decodeYjsSnapshot(row?.snapshot ?? "");
+    }
     const snapshot = new Uint8Array(
       chunks.reduce((total, { bytes }) => total + bytes.byteLength, 0),
     );
@@ -526,7 +534,11 @@ export class RoomSqliteDocumentStore {
 
   private metadata(): MetadataRow {
     const row = this.storage.sql
-      .exec<MetadataRow>("SELECT * FROM collaboration_document WHERE singleton = 1")
+      .exec<MetadataRow>(
+        `SELECT protocol_version, document_schema_version, generation, stream_cutoff,
+                accepted_bytes, update_count, tail_count, updated_at
+         FROM collaboration_document WHERE singleton = 1`,
+      )
       .toArray()[0];
     if (!row) throw new Error("collaboration SQLite document is not initialized");
     if (
