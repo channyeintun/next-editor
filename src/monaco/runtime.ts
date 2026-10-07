@@ -3,6 +3,7 @@
 import * as monaco from "monaco-editor/editor";
 import { NEXT_EDITOR_MONACO_THEME, defineNextEditorTheme } from "./theme";
 import { configureMonacoTypeScript } from "./typescriptDefaults";
+import { disableUnseenLanguageFeatures } from "./languageServiceModes";
 import { registerKiteLanguage } from "./kiteLanguage";
 import { registerZigLanguage } from "./zigLanguage";
 import { registerHaskellLanguage } from "./haskellLanguage";
@@ -53,9 +54,12 @@ import "monaco-editor/languages/definitions/python/register";
 
 // Worker-backed rich services. JSON is self-contained: its feature registers
 // its own id and tokenizes via its worker, so it needs no language definition.
-import "monaco-editor/languages/features/typescript/register";
+import {
+  javascriptDefaults,
+  typescriptDefaults,
+} from "monaco-editor/languages/features/typescript/register";
 import { cssDefaults } from "monaco-editor/languages/features/css/register";
-import "monaco-editor/languages/features/html/register";
+import { htmlDefaults } from "monaco-editor/languages/features/html/register";
 import "monaco-editor/languages/features/json/register";
 
 import EditorWorker from "monaco-editor/editor/editor.worker?worker";
@@ -99,8 +103,13 @@ function ensureMonacoRuntimeInitialized() {
   // Activate immediately so the first editor never paints Monaco's default theme.
   monaco.editor.setTheme(NEXT_EDITOR_MONACO_THEME);
   configureMonacoTypeScript();
-  // CSS lint markers are never painted either (see configureMonacoTypeScript).
-  cssDefaults.setOptions({ ...cssDefaults.options, validate: false });
+  // Has to run before any model exists (see languageServiceModes.ts).
+  disableUnseenLanguageFeatures({
+    typescript: typescriptDefaults,
+    javascript: javascriptDefaults,
+    css: cssDefaults,
+    html: htmlDefaults,
+  });
   registerZigLanguage();
   registerHaskellLanguage();
   registerKiteLanguage();

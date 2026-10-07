@@ -162,6 +162,14 @@ const EDITOR_OPTIONS = {
   parameterHints: { enabled: false },
   fontWeight: "normal" as const,
   hover: { enabled: "off" as const },
+  // Inlay hints, the code-action lightbulb and outline-based sticky scroll each
+  // query the language worker as the text or cursor changes, for nothing the
+  // editor would show (see languageServiceModes.ts). Indentation-based sticky
+  // lines are computed on the main thread.
+  inlayHints: { enabled: "off" as const },
+  // Monaco types this one as a string enum, which a plain literal doesn't satisfy.
+  lightbulb: { enabled: "off" as Monaco["editor"]["ShowLightbulbIconMode"]["Off"] },
+  stickyScroll: { defaultModel: "indentationModel" as const },
   contextmenu: false,
   folding: false,
   foldingHighlight: false,
