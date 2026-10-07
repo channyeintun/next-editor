@@ -2,6 +2,7 @@ import { useEffect, useRef, type CSSProperties } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { findSlidWindowOverlap } from "./terminalOutputOverlap";
 
 interface XtermTerminalProps {
   output: string;
@@ -9,6 +10,14 @@ interface XtermTerminalProps {
   interactive: boolean;
   shouldFocus?: boolean;
   scrollLine?: number;
+  /**
+   * Keeps text that slid off the front of a capped `output` in the scrollback,
+   * so a full log appends each chunk instead of being re-rendered whole (which
+   * also threw away the viewer's scroll position). Leave it off while scroll
+   * lines are recorded or replayed: they index a buffer that holds exactly
+   * `output`.
+   */
+  keepScrolledOffOutput?: boolean;
   onData?: (input: string) => void;
   onResize?: (size: { cols: number; rows: number }) => void;
   onScroll?: (scrollLine: number) => void;
@@ -54,6 +63,7 @@ function XtermTerminal({
   interactive,
   shouldFocus = false,
   scrollLine,
+  keepScrolledOffOutput = false,
   onData,
   onResize,
   onScroll,
@@ -62,6 +72,9 @@ function XtermTerminal({
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const lastOutputRef = useRef("");
+  // The buffer holds lines above lastOutputRef's text: it slid while
+  // keepScrolledOffOutput was on.
+  const hasScrolledOffOutputRef = useRef(false);
   const lastSessionIdRef = useRef<string | null>(null);
   const onDataRef = useRef(onData);
   const onResizeRef = useRef(onResize);
@@ -124,6 +137,7 @@ function XtermTerminal({
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
     lastOutputRef.current = "";
+    hasScrolledOffOutputRef.current = false;
     lastSessionIdRef.current = null;
 
     return () => {
@@ -135,6 +149,7 @@ function XtermTerminal({
       terminalRef.current = null;
       fitAddonRef.current = null;
       lastOutputRef.current = "";
+      hasScrolledOffOutputRef.current = false;
       lastSessionIdRef.current = null;
     };
   }, [interactive]);
@@ -173,15 +188,20 @@ function XtermTerminal({
       terminal.reset();
       lastSessionIdRef.current = sessionId;
       lastOutputRef.current = "";
+      hasScrolledOffOutputRef.current = false;
     }
 
-    if (output === lastOutputRef.current) {
+    // Recording or replaying scroll lines again: drop the extra scrollback.
+    const mustRewrite = !keepScrolledOffOutput && hasScrolledOffOutputRef.current;
+
+    if (output === lastOutputRef.current && !mustRewrite) {
       return;
     }
 
     if (!output) {
       terminal.reset();
       lastOutputRef.current = "";
+      hasScrolledOffOutputRef.current = false;
       return;
     }
 
@@ -198,16 +218,35 @@ function XtermTerminal({
       terminal.scrollToLine(scrollLine);
     };
 
-    if (output.startsWith(lastOutputRef.current)) {
-      terminal.write(output.slice(lastOutputRef.current.length), scrollAfterWrite);
+    // How much of `output` the terminal already shows; -1 rewrites it whole.
+    const lastOutput = lastOutputRef.current;
+    let writtenLength = -1;
+
+    if (!mustRewrite && output.startsWith(lastOutput)) {
+      writtenLength = lastOutput.length;
+    } else if (keepScrolledOffOutput) {
+      // Once a capped log is full, each chunk drops text off its front, so the
+      // output no longer starts with what was written; the overlap with the
+      // written text's tail finds where the new text begins.
+      writtenLength = findSlidWindowOverlap(lastOutput, output);
+    }
+
+    if (writtenLength >= 0) {
+      terminal.write(output.slice(writtenLength), scrollAfterWrite);
       lastOutputRef.current = output;
+
+      if (writtenLength < lastOutput.length) {
+        hasScrolledOffOutputRef.current = true;
+      }
+
       return;
     }
 
     terminal.reset();
     terminal.write(output, scrollAfterWrite);
     lastOutputRef.current = output;
-  }, [output, scrollLine, sessionId]);
+    hasScrolledOffOutputRef.current = false;
+  }, [keepScrolledOffOutput, output, scrollLine, sessionId]);
 
   useEffect(() => {
     const terminal = terminalRef.current;

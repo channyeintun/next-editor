@@ -391,6 +391,10 @@ function TerminalPanel() {
   });
   const dockContentSizeClass =
     displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
+  // Scroll lines are recorded and replayed as indexes into a terminal buffer
+  // that holds exactly the (capped) output, so only a dock doing neither lets
+  // older output stay in the scrollback.
+  const keepScrolledOffOutput = !isRecording && !isPlaybackSnapshotActive;
 
   return (
     <>
@@ -587,6 +591,7 @@ function TerminalPanel() {
                     scrollLine={
                       isPlaybackSnapshotActive ? effectiveTerminalScrollLines.runner : undefined
                     }
+                    keepScrolledOffOutput={keepScrolledOffOutput}
                     onScroll={(scrollLine) => updateTerminalScrollLine("runner", scrollLine)}
                   />
                 </div>
@@ -613,6 +618,7 @@ function TerminalPanel() {
                         ? effectiveTerminalScrollLines[effectiveActiveTerminalSessionId]
                         : undefined
                     }
+                    keepScrolledOffOutput={keepScrolledOffOutput}
                     onData={(input) => {
                       if (!isPlaybackSnapshotActive) {
                         void sendTerminalInput(input);
@@ -654,6 +660,7 @@ function TerminalPanel() {
                   scrollLine={
                     isPlaybackSnapshotActive ? effectiveTerminalScrollLines.console : undefined
                   }
+                  keepScrolledOffOutput={keepScrolledOffOutput}
                   onScroll={(scrollLine) => updateTerminalScrollLine("console", scrollLine)}
                 />
               </div>
