@@ -1,4 +1,5 @@
 import {
+  infiniteQueryOptions,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
@@ -30,10 +31,12 @@ export function primeLessonDetails(queryClient: QueryClient, lessons: readonly L
 // staleTime: Infinity default (tuned for the build-static seed alone) with a
 // finite one here, since the D1 portion is live data other users publish to —
 // without this, a tab left open would never see newly published lessons.
-export function useLessonsInfinite() {
-  const queryClient = useQueryClient();
-
-  return useInfiniteQuery({
+//
+// Shared with the /learn route loader (src/router.tsx), which prefetches page 0
+// while the route chunk is still loading. Both must build the same query, or
+// the grid would fetch page 0 a second time.
+export function lessonsInfiniteQueryOptions(queryClient: QueryClient) {
+  return infiniteQueryOptions({
     queryKey: ["lessons", "infinite"],
     queryFn: async ({ pageParam }) => {
       const page = await fetchLessonsPage(pageParam);
@@ -44,6 +47,12 @@ export function useLessonsInfinite() {
     getNextPageParam: (lastPage) => lastPage.nextPage,
     staleTime: 60_000,
   });
+}
+
+export function useLessonsInfinite() {
+  const queryClient = useQueryClient();
+
+  return useInfiniteQuery(lessonsInfiniteQueryOptions(queryClient));
 }
 
 // Single lesson by slug for the detail route. `data` is the lesson, or null

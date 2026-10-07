@@ -17,11 +17,15 @@ function formatPublished(value?: string): string | undefined {
 export default function LessonCard({
   lesson,
   listSlug,
+  priority = false,
 }: {
   lesson: Lesson;
   /** Slug of the playlist this card is rendered within — appended as `?list=` so the
    *  lesson page can offer "Continue to Next" through the same playlist. */
   listSlug?: string;
+  /** In the first row on screen: its thumbnail is the page's LCP candidate, so it
+   *  loads at once and at high priority instead of lazily. */
+  priority?: boolean;
 }) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const href = listSlug ? `/learn/${lesson.slug}?list=${listSlug}` : `/learn/${lesson.slug}`;
@@ -47,7 +51,8 @@ export default function LessonCard({
           <img
             src={resolveThumb(lesson)}
             alt={lesson.title}
-            loading="lazy"
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : undefined}
             onError={() => setThumbFailed(true)}
             className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
           />

@@ -6,6 +6,7 @@ import EditorShellSkeleton from "./components/EditorShellSkeleton";
 import LessonGallerySkeleton from "./components/LessonGallerySkeleton";
 import LoadingSpinner from "./components/LoadingSpinner";
 import LandingPageRoute from "./components/LandingPageRoute";
+import { queryClient } from "./queryClient";
 import { lessonTitleFromSlug } from "./utils/lessonSlug";
 import { useEmbedded } from "./utils/embed";
 
@@ -134,6 +135,21 @@ function withCodeEditorPrefetch<T>(importer: () => Promise<T>) {
   };
 }
 
+// The gallery's page 0 would otherwise be requested only once LessonGrid
+// mounts, after the whole route chunk has loaded and rendered. React Router runs
+// a route's loader alongside its lazy(), so this starts the request in parallel.
+// It returns at once: the navigation never waits on data. The grid's query has
+// the same options, so it adopts this request, in flight or done, rather than
+// repeating it; a failure here leaves the grid to fetch for itself.
+function prefetchLessonGallery() {
+  import("../tube/src/hooks/useLessons")
+    .then(({ lessonsInfiniteQueryOptions }) =>
+      queryClient.prefetchInfiniteQuery(lessonsInfiniteQueryOptions(queryClient)),
+    )
+    .catch(() => {});
+  return null;
+}
+
 function RouteErrorBoundary() {
   const error = useRouteError();
   const posthog = usePostHog();
@@ -259,6 +275,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/learn",
+    loader: prefetchLessonGallery,
     lazy: lazyRoute(() => import("@next-editor/tube"), "/learn"),
     HydrateFallback: LessonGallerySkeleton,
     ErrorBoundary: RouteErrorBoundary,

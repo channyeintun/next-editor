@@ -12,7 +12,8 @@ vi.mock("../lib/lessons", () => ({
   findLessonBySlug: (slug: string) => findLessonBySlug(slug),
 }));
 
-const { lessonDetailQueryKey, useLesson, useLessonsInfinite } = await import("./useLessons");
+const { lessonDetailQueryKey, lessonsInfiniteQueryOptions, useLesson, useLessonsInfinite } =
+  await import("./useLessons");
 
 function lesson(slug: string): Lesson {
   return {
@@ -44,6 +45,23 @@ describe("lesson gallery", () => {
 
     expect(fetchLessonsPage).toHaveBeenCalledTimes(1);
     expect(fetchLessonsPage).toHaveBeenCalledWith("d1:0");
+  });
+
+  it("adopts the page 0 the route loader prefetched instead of fetching again", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let resolvePage!: (page: unknown) => void;
+    fetchLessonsPage.mockReturnValue(new Promise((resolve) => (resolvePage = resolve)));
+
+    // The loader starts the request; the grid mounts while it is in flight.
+    void queryClient.prefetchInfiniteQuery(lessonsInfiniteQueryOptions(queryClient));
+    const gallery = renderHook(() => useLessonsInfinite(), { wrapper: wrapper(queryClient) });
+    resolvePage({ lessons: [lesson("newest")], nextPage: "d1:1" });
+    await waitFor(() => expect(gallery.result.current.isSuccess).toBe(true));
+
+    expect(fetchLessonsPage).toHaveBeenCalledTimes(1);
+    expect(gallery.result.current.data?.pages[0].lessons).toEqual([lesson("newest")]);
+    // Primed like a fetch the grid made itself.
+    expect(queryClient.getQueryData(lessonDetailQueryKey("newest"))).toEqual(lesson("newest"));
   });
 });
 

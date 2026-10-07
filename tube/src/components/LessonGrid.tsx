@@ -174,7 +174,7 @@ export default function LessonGrid() {
                   >
                     {rows[vi.index].map((lesson, idx) =>
                       lesson ? (
-                        <LessonCard key={lesson.slug} lesson={lesson} />
+                        <LessonCard key={lesson.slug} lesson={lesson} priority={vi.index === 0} />
                       ) : (
                         <LessonCardSkeleton key={`skel-${idx}`} />
                       ),
