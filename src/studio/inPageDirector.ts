@@ -215,9 +215,6 @@ export async function buildPlanFromScript(
   const dialogs = splitIntoDialogs(extracted);
   const lexicon = narrationLexiconFor(script.lesson.locale);
 
-  onPhase?.("tts-model");
-  await provider.preload();
-
   // ---- Per-dialog synthesis through the content-addressed cache -----------
   const takes: Uint8Array[] = [];
   const labels: string[] = [];
@@ -225,6 +222,11 @@ export async function buildPlanFromScript(
   const dialogHashes: string[] = [];
   const synthesisWarnings: string[] = [];
   let synthesizedCount = 0;
+  // The request hashes never need the engine, so it loads on the first cache
+  // miss: Pocket builds four ONNX sessions from a ~125 MB bundle on the main
+  // thread, which a fully cached render (the usual edit-and-rerender loop)
+  // would otherwise pay on every page load for nothing.
+  let providerLoaded = false;
   for (let i = 0; i < dialogs.length; i++) {
     onPhase?.(`synthesize ${i + 1}/${dialogs.length}`);
     const speechText = speechTextOf(dialogs[i].tokens, lexicon);
@@ -248,6 +250,13 @@ export async function buildPlanFromScript(
       ),
     );
     if (!take) {
+      if (!providerLoaded) {
+        onPhase?.("tts-model");
+        await provider.preload();
+        providerLoaded = true;
+        // The load reports its own sub-phases; put this dialog's progress back.
+        onPhase?.(`synthesize ${i + 1}/${dialogs.length}`);
+      }
       take = await synthesizeTake(provider, speechText, label);
       // A frame-capped take is cached too: Pocket is seeded and deterministic,
       // so synthesizing the same request again reproduces the same audio and

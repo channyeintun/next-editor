@@ -142,6 +142,45 @@ describe("buildPlanFromScript narration", () => {
     expect(result.plan.narration.mimeType).toBe("audio/wav");
   });
 
+  it("never loads the Pocket engine when every dialog is cached", async () => {
+    tts.getCachedDialogWav.mockResolvedValue({ wav: voicedWav(1_200, 24_000), hitFrameCap: false });
+    const phases: string[] = [];
+
+    const result = await buildPlanFromScript(loadPilot(), { onPhase: (p) => phases.push(p) });
+
+    expect(result.synthesizedCount).toBe(0);
+    expect(tts.preloadPocket).not.toHaveBeenCalled();
+    expect(phases).not.toContain("tts-model");
+  });
+
+  it("loads the Pocket engine once, at the first cache miss, then resumes that dialog's phase", async () => {
+    // Dialog 1 is cached; every later one misses.
+    tts.getCachedDialogWav.mockResolvedValueOnce({
+      wav: voicedWav(1_200, 24_000),
+      hitFrameCap: false,
+    });
+    const phases: string[] = [];
+    tts.preloadPocket.mockImplementation(async (_profile, onPhase) => {
+      (onPhase as (phase: string) => void)("tts-bundle");
+    });
+
+    const result = await buildPlanFromScript(loadPilot(), { onPhase: (p) => phases.push(p) });
+
+    expect(tts.preloadPocket).toHaveBeenCalledOnce();
+    expect(result.synthesizedCount).toBe(result.dialogCount - 1);
+    const count = result.dialogCount;
+    expect(phases.slice(0, 5)).toEqual([
+      `synthesize 1/${count}`,
+      `synthesize 2/${count}`,
+      "tts-model",
+      "tts-bundle",
+      `synthesize 2/${count}`,
+    ]);
+    expect(tts.preloadPocket.mock.invocationCallOrder[0]).toBeLessThan(
+      tts.synthesizePocketDialog.mock.invocationCallOrder[0],
+    );
+  });
+
   it("respells English narration only", async () => {
     const english = loadPilot();
     english.scenes[0].narration = english.scenes[0].narration.replace("Go functions", "A struct");
