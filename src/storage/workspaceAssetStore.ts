@@ -80,6 +80,13 @@ function getDatabase(): Promise<IDBDatabase> | null {
   return databasePromise;
 }
 
+/**
+ * Blobs by asset id: the disk-backed ones IndexedDB reads return, and each
+ * registered asset's memory-built Blob until its write commits. Keeping the
+ * memory-built ones past that held every asset of every lesson opened in the
+ * tab in memory until it closed. Without IndexedDB nothing commits, so there
+ * the memory-built Blob, the only copy, stays.
+ */
 const blobCache = new Map<string, Blob>();
 const assetListeners = new Set<(assetId: string) => void>();
 let assetWriteQueue: Promise<void> = Promise.resolve();
@@ -116,9 +123,10 @@ function asBlob(value: unknown, mimeType: string): Blob | null {
   return null;
 }
 
-async function writeAssetBlob(assetId: string, blob: Blob): Promise<void> {
+/** Stores an asset; false when there is no IndexedDB to store it in. */
+async function writeAssetBlob(assetId: string, blob: Blob): Promise<boolean> {
   const databaseResult = getDatabase();
-  if (!databaseResult) return;
+  if (!databaseResult) return false;
 
   const run = async () => {
     const database = await databaseResult;
@@ -130,6 +138,12 @@ async function writeAssetBlob(assetId: string, blob: Blob): Promise<void> {
   const result = assetWriteQueue.then(run, run);
   assetWriteQueue = result.catch(() => undefined);
   await result;
+  return true;
+}
+
+/** Drops a memory-built Blob IndexedDB now holds; the next read gets the stored copy. */
+function releaseStoredBlob(assetId: string, blob: Blob): void {
+  if (blobCache.get(assetId) === blob) blobCache.delete(assetId);
 }
 
 export interface RegisterWorkspaceAssetOptions {
@@ -162,8 +176,9 @@ export async function registerWorkspaceAsset(
   };
   const cached = blobCache.get(assetId);
   const blob = cached ?? new Blob([buffer], { type: mimeType });
+  // Cached while the write runs, so a read racing it still finds the asset.
   blobCache.set(assetId, blob);
-  await writeAssetBlob(assetId, blob);
+  if (await writeAssetBlob(assetId, blob)) releaseStoredBlob(assetId, blob);
   notifyAssetAvailable(assetId);
   return descriptor;
 }
@@ -274,9 +289,9 @@ export async function migrateLegacyWorkspaceAssets(
  * Verify that every descriptor referenced by the save has durable bytes.
  *
  * Registering an asset already stores it, so this normally only reads. It writes
- * an asset back from memory when its stored copy is missing or the wrong size (a
- * registration whose write failed, or site data cleared under the page); an asset
- * that is in neither place fails the save.
+ * an asset back from memory when its stored copy is missing or the wrong size and
+ * memory still holds it, which it does only until a write commits (a registration
+ * whose write failed); an asset that is in neither place fails the save.
  */
 export async function persistWorkspaceAssets(project: WorkspaceProject): Promise<void> {
   try {
@@ -310,7 +325,9 @@ export async function persistWorkspaceAssets(project: WorkspaceProject): Promise
           `Workspace asset ${descriptor.assetId} is missing or corrupt`,
         );
       }
-      await writeAssetBlob(descriptor.assetId, cached);
+      if (await writeAssetBlob(descriptor.assetId, cached)) {
+        releaseStoredBlob(descriptor.assetId, cached);
+      }
     }
   } catch (error) {
     if (error instanceof WorkspaceAssetPersistenceError) throw error;
