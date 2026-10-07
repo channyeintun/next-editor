@@ -24,7 +24,10 @@ import type { PreviewAdapterHandle } from "../../stores/previewAdapterHandle";
 import type { ApiClientReplayState } from "../../types/slides";
 import { isWorkspaceTextFile } from "../../types/workspace";
 import { RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE } from "./previewIframeUtils";
-import { RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE } from "./rrwebPreview";
+import {
+  RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
+  RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE,
+} from "./rrwebPreview";
 import { usePreviewController } from "./usePreviewController";
 
 const editor = vi.hoisted(() => ({
@@ -431,5 +434,35 @@ describe("usePreviewController runtime snapshots", () => {
     editWorkspace();
 
     expect(snapshotRequestReasons(postMessage)).toEqual(["edit"]);
+  });
+
+  it("stops refreshing the fallback snapshot once the take has an rrweb seed", () => {
+    const { editWorkspace, postMessage } = renderWithOpenRuntime(true);
+    const seed = new MessageEvent("message", {
+      data: {
+        type: RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
+        payload: {
+          version: 2,
+          time: 10,
+          documentId: "doc-1",
+          refresh: true,
+          events: [
+            { type: 4, timestamp: 1, data: {} },
+            { type: 2, timestamp: 2, data: {} },
+          ],
+        },
+      },
+    });
+    // The fake cross-origin window is not a WindowProxy MessageEvent accepts.
+    Object.defineProperty(seed, "source", {
+      value: lastView?.result.current.iframeRef.current?.contentWindow,
+    });
+    act(() => {
+      window.dispatchEvent(seed);
+    });
+
+    editWorkspace();
+
+    expect(snapshotRequestReasons(postMessage)).toEqual([]);
   });
 });

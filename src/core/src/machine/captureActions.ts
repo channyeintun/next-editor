@@ -313,6 +313,30 @@ const getPreviousCapturedContent = (
     : undefined;
 };
 
+/**
+ * A frame's previewState.content is the preview page's whole HTML: the replay
+ * fallback for a take whose live preview has no rrweb seed. Once the take holds one
+ * (an initial document with events), replay rebuilds the preview from that stream
+ * and never reads the fallback (usePreviewPlaybackRegistration), so storing it would
+ * only add a page copy per frame segment and a diff per edit to the file. A retake
+ * that discards the seed also discards every frame captured after it.
+ */
+const withoutUnreplayedPreviewContent = (
+  session: RecordingSession,
+  frame: EditorFrame,
+): EditorFrame => {
+  const previewState = frame.state.previewState;
+  if (
+    previewState?.content === undefined ||
+    !session.previewInitialDocuments.some((document) => document.events?.length)
+  ) {
+    return frame;
+  }
+
+  const { content: _content, ...rest } = previewState;
+  return { ...frame, state: { ...frame.state, previewState: rest } };
+};
+
 /** Encode a captured frame into the session (in place) and keep its view state for reuse. */
 const commitCapturedFrame = (
   session: RecordingSession,
@@ -320,7 +344,11 @@ const commitCapturedFrame = (
   viewStateRef: CapturedViewStateRef | undefined,
   contentEditDelta?: CreatedContentEditDelta,
 ): void => {
-  const { state: encoder, emitted } = pushFrame(session.encoder, frame, contentEditDelta);
+  const { state: encoder, emitted } = pushFrame(
+    session.encoder,
+    withoutUnreplayedPreviewContent(session, frame),
+    contentEditDelta,
+  );
   if (emitted) {
     session.frames.push(emitted);
   }

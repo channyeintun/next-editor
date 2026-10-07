@@ -1008,9 +1008,14 @@ export function usePreviewController(): PreviewController {
   // Frames recorded from a live runtime carry its last HTML snapshot, the
   // fallback for recordings rrweb cannot replay. While recording, refresh it
   // after each workspace edit; outside a recording nothing reads it, and a
-  // whole-page snapshot per keystroke would be pure cost.
+  // whole-page snapshot per keystroke would be pure cost. Neither does a take
+  // whose rrweb seed has been recorded: its frames no longer store the fallback.
   const refreshRecordedRuntimeSnapshot = useEffectEvent(() => {
-    if (!isRecordingRef.current || !isLiveRuntimePreviewActive) {
+    if (
+      !isRecordingRef.current ||
+      !isLiveRuntimePreviewActive ||
+      recordedPreviewInitialDocumentIdRef.current !== null
+    ) {
       return;
     }
 

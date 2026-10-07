@@ -280,6 +280,66 @@ describe("retaking", () => {
       expect(previewPatchBatches[0].events).toHaveLength(1);
       actor.stop();
     });
+
+    // The frames of a take whose preview shows `page`, and what they store of it.
+    function startPreviewTake() {
+      const editor = new RecordingEditor();
+      const preview = { page: "<p>start</p>" };
+      const actor = startTake(editor, {
+        getPreviewState: () => ({ size: "medium", isOpen: true, content: preview.page }),
+        requestPreviewCheckpoint: vi.fn<() => void>(),
+      });
+      const capture = (page: string) => {
+        preview.page = page;
+        editor.setContent(`// ${page}`);
+        actor.send({ type: "CAPTURE_FRAME" });
+      };
+      const storedPages = () => {
+        const { frames } = sessionOf(actor);
+        return frames.map(
+          (_, index) => reconstructFrameAtIndex(frames, index)?.state.previewState?.content,
+        );
+      };
+      return { actor, capture, storedPages };
+    }
+
+    it("stops storing the HTML fallback in frames once the take has an rrweb seed", () => {
+      const advance = pinClocks();
+      const { actor, capture, storedPages } = startPreviewTake();
+
+      advance(100);
+      capture("<p>one</p>");
+      // A document without events is no seed: replay could not rebuild from it.
+      actor.send({
+        type: "PREVIEW_INITIAL_DOCUMENT",
+        document: { ...document(50_100), events: [] },
+      });
+      advance(100);
+      capture("<p>two</p>");
+      actor.send({ type: "PREVIEW_INITIAL_DOCUMENT", document: document(50_200) });
+      advance(100);
+      capture("<p>three</p>");
+
+      expect(storedPages()).toEqual(["<p>start</p>", "<p>one</p>", "<p>two</p>", undefined]);
+      actor.stop();
+    });
+
+    it("stores the HTML fallback again once a retake discards the seed", () => {
+      const advance = pinClocks();
+      const { actor, capture, storedPages } = startPreviewTake();
+
+      advance(100);
+      actor.send({ type: "PREVIEW_INITIAL_DOCUMENT", document: document(50_100) });
+      capture("<p>discarded</p>");
+      actor.send({ type: "RETAKE_RECORDING" });
+      actor.send({ type: "RESUME_RECORDING" });
+      advance(100);
+      capture("<p>kept</p>");
+
+      expect(sessionOf(actor).previewInitialDocuments).toEqual([]);
+      expect(storedPages()).toEqual(["<p>start</p>", "<p>kept</p>"]);
+      actor.stop();
+    });
   });
 });
 
