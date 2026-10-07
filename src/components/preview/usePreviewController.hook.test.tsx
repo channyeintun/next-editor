@@ -320,6 +320,21 @@ describe("usePreviewController rrweb replay surface", () => {
   });
 });
 
+describe("usePreviewController repaint nudge", () => {
+  it("does not nudge the open iframe's layer again when the controller re-renders", () => {
+    const view = renderController();
+    act(() => {
+      view.result.current.handleFloat();
+    });
+    const requestFrame = vi.spyOn(window, "requestAnimationFrame");
+
+    view.rerender();
+    view.rerender();
+
+    expect(requestFrame).not.toHaveBeenCalled();
+  });
+});
+
 describe("usePreviewController workspace edits", () => {
   it("does not re-render the controller when the workspace is edited", () => {
     const { result } = renderController();

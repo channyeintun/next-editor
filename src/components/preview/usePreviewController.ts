@@ -217,6 +217,33 @@ function writeIframeContent(iframe: HTMLIFrameElement, content: string): boolean
 }
 
 /**
+ * A cross-origin runtime iframe (e.g. the :PORT runtime preview) can paint
+ * blank inside the floating panel's clipped/composited container — it is
+ * `position: fixed` with `rounded-xl`, `overflow-hidden`, a box-shadow and a
+ * transform/opacity transition, none of which the docked panel has. Chromium
+ * leaves the frame unpainted until something forces a repaint, which is why a
+ * manual scroll "revives" it. Toggling a compositor-only transform nudges that
+ * repaint without reloading the frame (changing src/srcdoc/display would
+ * reload a cross-origin frame and lose its state instead). Module-level so the
+ * uncompiled controller's repaint effects key off the panel state alone, not a
+ * function recreated (and so re-run, toggling the layer) on every render.
+ */
+function forceIframeRepaint(iframeRef: RefObject<HTMLIFrameElement | null>): void {
+  const iframe = iframeRef.current;
+  if (!iframe) {
+    return;
+  }
+
+  iframe.style.transform = "translateZ(0)";
+  requestAnimationFrame(() => {
+    const current = iframeRef.current;
+    if (current) {
+      current.style.transform = "";
+    }
+  });
+}
+
+/**
  * Whether the preview frame may keep `allow-same-origin`.
  *
  * The flag is only dangerous on the `srcdoc` path: an about:srcdoc document
@@ -1277,36 +1304,13 @@ export function usePreviewController(): PreviewController {
     stopFollowingDragRef.current = followPointerDrag(event, onMove, onEnd);
   };
 
-  const forceIframeRepaint = () => {
-    const iframe = iframeRef.current;
-    if (!iframe) {
-      return;
-    }
-
-    // A cross-origin runtime iframe (e.g. the :PORT runtime preview) can paint
-    // blank inside the floating panel's clipped/composited container — it is
-    // `position: fixed` with `rounded-xl`, `overflow-hidden`, a box-shadow and a
-    // transform/opacity transition, none of which the docked panel has. Chromium
-    // leaves the frame unpainted until something forces a repaint, which is why a
-    // manual scroll "revives" it. Toggling a compositor-only transform nudges that
-    // repaint without reloading the frame (changing src/srcdoc/display would
-    // reload a cross-origin frame and lose its state instead).
-    iframe.style.transform = "translateZ(0)";
-    requestAnimationFrame(() => {
-      const current = iframeRef.current;
-      if (current) {
-        current.style.transform = "";
-      }
-    });
-  };
-
   const handleTransitionStart = () => {
     setIsTransitioning(true);
   };
 
   const handleTransitionComplete = () => {
     setIsTransitioning(false);
-    forceIframeRepaint();
+    forceIframeRepaint(iframeRef);
   };
 
   useEffect(() => {
@@ -1318,14 +1322,14 @@ export function usePreviewController(): PreviewController {
     // transition), so also force the repaint on the next frame and once more after
     // the 150ms panel transition would have finished. Safe to over-fire: the nudge
     // is idempotent and a no-op for same-origin previews.
-    const raf = requestAnimationFrame(forceIframeRepaint);
-    const timer = window.setTimeout(forceIframeRepaint, 220);
+    const raf = requestAnimationFrame(() => forceIframeRepaint(iframeRef));
+    const timer = window.setTimeout(() => forceIframeRepaint(iframeRef), 220);
 
     return () => {
       cancelAnimationFrame(raf);
       window.clearTimeout(timer);
     };
-  }, [panelMode, isOpen, forceIframeRepaint]);
+  }, [panelMode, isOpen]);
 
   // Returning to browser mode uncovers the runtime iframe; if Chromium occlusion-
   // culled it while the API panel overlay was on top, nudge a repaint so it isn't
@@ -1335,10 +1339,10 @@ export function usePreviewController(): PreviewController {
       return;
     }
 
-    const raf = requestAnimationFrame(forceIframeRepaint);
+    const raf = requestAnimationFrame(() => forceIframeRepaint(iframeRef));
 
     return () => cancelAnimationFrame(raf);
-  }, [activeMode, isOpen, forceIframeRepaint]);
+  }, [activeMode, isOpen]);
 
   return {
     containerRef,
