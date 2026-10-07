@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { csrf } from "hono/csrf";
+import { mount } from "hono/mount";
 import type { Env } from "./env";
 import { lessonsRoute } from "./routes/lessons";
 import { playlistsRoute } from "./routes/playlists";
@@ -9,7 +10,6 @@ import { searchRoute } from "./routes/search";
 import { mediaRoute } from "./routes/media";
 import { authRoute } from "./auth/session";
 import { googleAuthRoute } from "./auth/google";
-import { passkeyRoute } from "./auth/passkey";
 import { uploadsRoute } from "./routes/uploads";
 import { proxyRoute } from "./routes/proxy";
 import { slideImagesRoute } from "./routes/slideImages";
@@ -87,7 +87,18 @@ app.route("/api/search", searchRoute);
 app.route("/media", mediaRoute);
 app.route("/api/auth", authRoute);
 app.route("/api/auth/google", googleAuthRoute);
-app.route("/api/auth/passkey", passkeyRoute);
+// Loaded on first use rather than with the rest of the routes: passkey sign-in
+// is rare, and @simplewebauthn/server drags in the @peculiar ASN.1 stack
+// (tsyringe + reflect-metadata decorators), which would otherwise evaluate on
+// every isolate start. The bundle stays a single file; esbuild only defers
+// running the module until this import.
+app.all(
+  "/api/auth/passkey/*",
+  mount(async (request, env, executionCtx) => {
+    const { passkeyRoute } = await import("./auth/passkey");
+    return passkeyRoute.fetch(request, env, executionCtx);
+  }),
+);
 app.route("/api/uploads", uploadsRoute);
 app.route("/api/proxy", proxyRoute);
 app.route("/api/openrouter", openrouterRoute);
