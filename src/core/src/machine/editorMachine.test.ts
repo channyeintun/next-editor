@@ -1747,6 +1747,61 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  // A replayed sidebar scroll changes nothing the editor shows, so the frame applied on
+  // it stands. Re-deriving it from the nearest keyframe for every scroll event of a
+  // burst only applied the same frame again.
+  it("keeps the applied frame across a replayed sidebar scroll", async () => {
+    const editor = new MockEditor(new MockTextModel("outside"));
+    let currentWorkspace = createWorkspaceSnapshot("outside");
+    const recording: Recording = {
+      ...createRecording(),
+      frames: [
+        {
+          timestamp: 0,
+          isKeyframe: true,
+          state: {
+            content: "hello",
+            selection,
+            position: { lineNumber: 1, column: 1 },
+            viewState: {
+              cursorState: [],
+              viewState: { scrollLeft: 0, firstPosition: { lineNumber: 1, column: 1 } },
+              contributionsState: {},
+            } as unknown as monaco.editor.ICodeEditorViewState,
+            mouseCursor: { x: 0, y: 0, visible: false },
+          },
+        },
+      ],
+      workspaceEvents: [
+        { timestamp: 0, snapshot: createWorkspaceSnapshot("hello") },
+        { timestamp: 100, snapshot: createWorkspaceSnapshot("hello", 40) },
+      ],
+    };
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
+        getWorkspaceSnapshot: () => currentWorkspace,
+        applyWorkspaceSnapshot: (snapshot) => {
+          currentWorkspace = snapshot;
+        },
+      },
+    }).start();
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "TICK", currentTime: 50 });
+    const appliedFrame = actor.getSnapshot().context.currentFrame;
+    const restoredViewStates = editor.restoredViewStates.length;
+
+    actor.send({ type: "TICK", currentTime: 150 });
+
+    expect(currentWorkspace.sidebarScrollTop).toBe(40);
+    expect(actor.getSnapshot().context.currentFrame).toBe(appliedFrame);
+    expect(editor.restoredViewStates).toHaveLength(restoredViewStates);
+    expect(editor.getValue()).toBe("hello");
+    actor.stop();
+  });
+
   describe("a damaged frame skipped during replay", () => {
     // An edit recorded against other base text: replaying it on "hello" is a base mismatch.
     const createDamagedRecording = (): Recording => {

@@ -971,10 +971,20 @@ export const applyWorkspaceEventsAtTime = ({
   if (replayResult.snapshotToApply) {
     // Already memoized — resolving `snapshotToApply` is what read it.
     const snapshot = currentWorkspaceSnapshot();
+    const nextSnapshot = replayResult.snapshotToApply;
     const activeFileChanged =
-      Boolean(snapshot) && snapshot?.activeFilePath !== replayResult.snapshotToApply.activeFilePath;
+      Boolean(snapshot) && snapshot?.activeFilePath !== nextSnapshot.activeFilePath;
+    // A replayed sidebar scroll or folder toggle leaves the editor's model and its text
+    // as they are, so the frame applied on it still stands. Re-deriving it from the
+    // nearest keyframe for every scroll event of a burst only redid the same frame.
+    const editorUntouched = snapshot
+      ? !activeFileChanged && areWorkspaceProjectsEqual(snapshot.project, nextSnapshot.project)
+      : false;
 
-    applyWorkspaceSnapshot(replayResult.snapshotToApply);
+    applyWorkspaceSnapshot(nextSnapshot);
+    if (editorUntouched) {
+      return { lastAppliedWorkspaceEventIndex: replayResult.nextIndex };
+    }
     // Only the Monaco-rendered frame depends on the workspace. The slide, preview and
     // other track cursors stay put, so a replayed file switch does not replay their
     // whole history (see invalidateRenderedPlaybackState).
