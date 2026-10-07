@@ -320,6 +320,8 @@ describe("recorder wiring snapshot handshake", () => {
       expect(findSerializedElement(serializedRoot, "img")?.attributes?.rr_dataURL).toBe(
         "data:image/png;base64,YXZhdGFy",
       );
+      // Images are encoded as WebP rather than rrweb's default PNG.
+      expect(toDataUrl).toHaveBeenCalledWith("image/webp", 0.9);
 
       const findRefreshDocs = () =>
         messages.filter(

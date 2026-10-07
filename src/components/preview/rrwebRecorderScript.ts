@@ -314,6 +314,11 @@ export function createRrwebPreviewRecorderScript({
             // batch flushes (missed ones keep their URL — the pre-existing
             // behavior, not a regression).
             inlineImages: true,
+            // Inlined as WebP, not rrweb's default PNG: photos shrink several
+            // times over in the .ne (deflate cannot compress them), and every
+            // corrective FullSnapshot repeats them. 0.9 keeps crisp UI graphics
+            // and text sharp; a browser that cannot encode WebP falls back to PNG.
+            dataURLOptions: { type: 'image/webp', quality: 0.9 },
             // Capture real input values: the preview replays the author's own demo
             // content, and typed text must stay visible in replay. Password fields
             // stay masked (rrweb's default { password: true }); the interaction
