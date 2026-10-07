@@ -1,9 +1,25 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server.edge";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vite-plus/test";
 import LandingPage from "../../../src/components/LandingPage";
-import { injectLandingMarkup, renderLandingMarkup, renderLandingResponse } from "./landing";
+import {
+  injectLandingFontPreloads,
+  injectLandingMarkup,
+  renderLandingMarkup,
+  renderLandingResponse,
+} from "./landing";
+
+const repoFile = (path: string) =>
+  readFileSync(fileURLToPath(new URL(`../../../${path}`, import.meta.url)), "utf8");
+
+function fontPreloadHrefs(document: string): string[] {
+  return [...document.matchAll(/<link rel="preload" href="([^"]+)" as="font"[^>]*>/g)].map(
+    (match) => match[1],
+  );
+}
 
 describe("landing page SSR", () => {
   it("renders crawlable landing-page content and navigation", () => {
@@ -53,6 +69,42 @@ describe("landing page SSR", () => {
     expect(document).toContain("Turn real coding sessions into interactive tutorials");
     expect(response.headers.get("etag")).toBeNull();
     expect(response.headers.get("last-modified")).toBeNull();
+  });
+
+  it("preloads the hero fonts at the top of the landing document's head", async () => {
+    const response = await renderLandingResponse(
+      new Response(repoFile("index.html"), {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    );
+    const document = await response.text();
+
+    expect(fontPreloadHrefs(document)).toEqual([
+      "/fonts/pp-neue-machina-inktrap-ultrabold.woff2",
+      "/fonts/pp-telegraf-regular.woff2",
+    ]);
+    // Fonts are fetched in CORS mode; a preload without crossorigin is wasted.
+    expect(document).toContain(
+      '<link rel="preload" href="/fonts/pp-telegraf-regular.woff2" as="font" type="font/woff2" crossorigin />',
+    );
+    // Ahead of the entry script, so they are not queued behind its modulepreloads.
+    expect(document.indexOf('as="font"')).toBeLessThan(document.indexOf('<script type="module"'));
+  });
+
+  it("preloads font urls that src/index.css actually declares", () => {
+    const css = repoFile("src/index.css");
+    const hrefs = fontPreloadHrefs(
+      injectLandingFontPreloads('<html><head><meta charset="UTF-8" /></head></html>'),
+    );
+
+    expect(hrefs).toHaveLength(2);
+    for (const href of hrefs) {
+      expect(css).toContain(`src: url("${href}") format("woff2")`);
+    }
+  });
+
+  it("leaves the shared index.html without font preloads", () => {
+    expect(fontPreloadHrefs(repoFile("index.html"))).toEqual([]);
   });
 
   it("preserves non-HTML asset responses", async () => {
