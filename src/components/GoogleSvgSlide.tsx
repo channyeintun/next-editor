@@ -1,10 +1,15 @@
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { DeckStep } from "../googleSlides/types";
 import {
   SLIDE_ANIMATION_INIT_MESSAGE_TYPE,
   SLIDE_ANIMATION_REVEAL_MESSAGE_TYPE,
   createSandboxedSlideDocument,
 } from "../utils/sandboxedSlideDocument";
+import {
+  inlinableSlideImageHrefs,
+  loadSlideImages,
+  peekSlideImages,
+} from "../utils/slideImageCache";
 
 interface GoogleSvgSlideProps {
   /** Normalized inline SVG markup for one slide. */
@@ -29,9 +34,36 @@ export default function GoogleSvgSlide({
   onLoad,
 }: GoogleSvgSlideProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const srcDoc = createSandboxedSlideDocument(content, "image/svg+xml", {
-    animationBridge: true,
-  });
+  // The frame cannot cache its own image loads, so it waits for the page to fetch
+  // them once (slideImageCache.ts) and gets them inline. Until then nothing loads,
+  // and BufferedSlideContent keeps the previous slide up as it did while the frame
+  // downloaded them.
+  const [loaded, setLoaded] = useState<{
+    content: string;
+    images: ReadonlyMap<string, string>;
+  } | null>(null);
+  const inlineImages =
+    loaded?.content === content
+      ? loaded.images
+      : peekSlideImages(inlinableSlideImageHrefs(content));
+  const isLoadingImages = inlineImages === null;
+  const srcDoc = isLoadingImages
+    ? null
+    : createSandboxedSlideDocument(content, "image/svg+xml", {
+        animationBridge: true,
+        inlineImages,
+      });
+
+  useEffect(() => {
+    if (!isLoadingImages) return;
+    let cancelled = false;
+    void loadSlideImages(inlinableSlideImageHrefs(content)).then((images) => {
+      if (!cancelled) setLoaded({ content, images });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [content, isLoadingImages]);
 
   const initializeAnimation = useEffectEvent(() => {
     iframeRef.current?.contentWindow?.postMessage(
@@ -61,6 +93,10 @@ export default function GoogleSvgSlide({
   useEffect(() => {
     revealSteps();
   }, [stepsRevealed]);
+
+  if (srcDoc === null) {
+    return <div className="size-full bg-black" />;
+  }
 
   return (
     <iframe

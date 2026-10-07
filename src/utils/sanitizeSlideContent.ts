@@ -16,6 +16,12 @@ const FORBIDDEN_ELEMENTS = new Set([
 
 const URL_ATTRIBUTES = new Set(["href", "src", "xlink:href", "action", "formaction"]);
 
+const IMAGE_DATA_URL = /^data:image\/(?:png|gif|jpe?g|webp|avif|svg\+xml);/i;
+
+function isImageElement(elementName: string): boolean {
+  return elementName === "img" || elementName === "image";
+}
+
 function isSafeUrl(value: string, elementName: string): boolean {
   const normalized = value
     .trim()
@@ -24,14 +30,12 @@ function isSafeUrl(value: string, elementName: string): boolean {
     .toLowerCase();
   if (normalized.startsWith("javascript:") || normalized.startsWith("vbscript:")) return false;
   if (normalized.startsWith("data:")) {
-    return elementName === "img" || elementName === "image"
-      ? /^data:image\/(?:png|gif|jpe?g|webp|avif|svg\+xml);/i.test(value.trim())
-      : false;
+    return isImageElement(elementName) ? IMAGE_DATA_URL.test(value.trim()) : false;
   }
   return true;
 }
 
-function sanitizeElement(element: Element): void {
+function sanitizeElement(element: Element, inlineImages?: ReadonlyMap<string, string>): void {
   for (const attribute of Array.from(element.attributes)) {
     const name = attribute.name.toLowerCase();
     if (name.startsWith("on")) {
@@ -45,8 +49,18 @@ function sanitizeElement(element: Element): void {
       element.removeAttribute(attribute.name);
       continue;
     }
-    if (URL_ATTRIBUTES.has(name) && !isSafeUrl(attribute.value, element.localName.toLowerCase())) {
-      element.removeAttribute(attribute.name);
+    if (URL_ATTRIBUTES.has(name)) {
+      const elementName = element.localName.toLowerCase();
+      if (!isSafeUrl(attribute.value, elementName)) {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+      // An image the page already fetched (slideImageCache.ts) goes in as a data: URL,
+      // held to the same rule as an authored one, so the frame never fetches it.
+      const inlined = inlineImages?.get(attribute.value);
+      if (inlined && isImageElement(elementName) && IMAGE_DATA_URL.test(inlined)) {
+        attribute.value = inlined;
+      }
       continue;
     }
     if (
@@ -65,7 +79,11 @@ function sanitizeElement(element: Element): void {
  * Styling, ordinary layout, IDs, and remote image URLs are retained so authored and
  * imported slides continue to render and Google-Slides step animation can target nodes.
  */
-export function sanitizeSlideContent(content: string, mimeType: "text/html" | "image/svg+xml") {
+export function sanitizeSlideContent(
+  content: string,
+  mimeType: "text/html" | "image/svg+xml",
+  inlineImages?: ReadonlyMap<string, string>,
+) {
   const document = new DOMParser().parseFromString(content, mimeType);
   const root = mimeType === "text/html" ? document.body : document.documentElement;
 
@@ -80,14 +98,14 @@ export function sanitizeSlideContent(content: string, mimeType: "text/html" | "i
     return "";
   }
 
-  sanitizeElement(root);
+  sanitizeElement(root, inlineImages);
 
   for (const element of Array.from(root.querySelectorAll("*"))) {
     if (FORBIDDEN_ELEMENTS.has(element.localName.toLowerCase())) {
       element.remove();
       continue;
     }
-    sanitizeElement(element);
+    sanitizeElement(element, inlineImages);
   }
 
   return mimeType === "text/html" ? root.innerHTML : root.outerHTML;

@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vite-plus/test";
-import { fireEvent, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import CustomSlideRenderer from "./CustomSlideRenderer";
+import { peekSlideImages, retainSlideImages } from "../utils/slideImageCache";
 import type { Slide } from "../types/slides";
 
 function htmlSlide(id: string, content: string): Slide {
@@ -162,5 +163,43 @@ describe("CustomSlideRenderer", () => {
     expect(srcDoc).not.toContain("attacker.invalid");
     expect(srcDoc).toContain("style-src 'unsafe-inline'");
     expect(srcDoc).not.toMatch(/style-src[^;]*https:/);
+  });
+
+  it("keeps only the shown deck's images in memory", async () => {
+    const href = "/media/slide-images/abc";
+    const imageSlide: Slide = {
+      ...googleSlide("a"),
+      content: `<svg xmlns="http://www.w3.org/2000/svg"><image href="${href}"/></svg>`,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<() => Promise<{ ok: boolean; blob: () => Promise<Blob> }>>(async () => ({
+        ok: true,
+        blob: async () => new Blob(["png"], { type: "image/png" }),
+      })),
+    );
+    try {
+      const { rerender } = render(
+        <CustomSlideRenderer
+          slides={[imageSlide]}
+          currentSlideIndex={0}
+          currentVerticalIndex={0}
+        />,
+      );
+      await waitFor(() => expect(peekSlideImages([href])?.size).toBe(1));
+
+      rerender(
+        <CustomSlideRenderer
+          slides={[htmlSlide("b", "<p>Another deck</p>")]}
+          currentSlideIndex={0}
+          currentVerticalIndex={0}
+        />,
+      );
+
+      expect(peekSlideImages([href])).toBeNull();
+    } finally {
+      retainSlideImages([]);
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -93,6 +93,8 @@ const SLIDE_ANIMATION_BRIDGE_SCRIPT = `(function(){
 
 interface SandboxedSlideDocumentOptions {
   animationBridge?: boolean;
+  /** Image href → data: URL, for images the page already fetched (slideImageCache.ts). */
+  inlineImages?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -104,9 +106,9 @@ interface SandboxedSlideDocumentOptions {
 export function createSandboxedSlideDocument(
   content: string,
   mimeType: "text/html" | "image/svg+xml",
-  { animationBridge = false }: SandboxedSlideDocumentOptions = {},
+  { animationBridge = false, inlineImages }: SandboxedSlideDocumentOptions = {},
 ): string {
-  const sanitized = sanitizeSlideContent(content, mimeType);
+  const sanitized = sanitizeSlideContent(content, mimeType, inlineImages);
   const trustedAnimationScript = animationBridge
     ? `<script nonce="${SLIDE_ANIMATION_SCRIPT_NONCE}">${SLIDE_ANIMATION_BRIDGE_SCRIPT}</script>`
     : "";

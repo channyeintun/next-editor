@@ -3,6 +3,7 @@ import { marked } from "marked";
 import type { Slide } from "../types/slides";
 import { getSlideBackgroundImage } from "../config/slideBackgrounds";
 import { createSandboxedSlideDocument } from "../utils/sandboxedSlideDocument";
+import { inlinableSlideImageHrefs, retainSlideImages } from "../utils/slideImageCache";
 import GoogleSvgSlide from "./GoogleSvgSlide";
 
 interface CustomSlideRendererProps {
@@ -185,6 +186,15 @@ function CustomSlideRenderer({
   currentVerticalIndex,
 }: CustomSlideRendererProps) {
   const slide = slides[currentSlideIndex];
+
+  // The page holds fetched slide images in memory (slideImageCache.ts); keep only this deck's.
+  useEffect(() => {
+    retainSlideImages(
+      slides.flatMap((deckSlide) =>
+        deckSlide.contentType === "google-svg" ? inlinableSlideImageHrefs(deckSlide.content) : [],
+      ),
+    );
+  }, [slides]);
 
   if (!slide) {
     return (

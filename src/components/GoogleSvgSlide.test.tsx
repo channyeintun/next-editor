@@ -1,11 +1,12 @@
-import { fireEvent, render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import GoogleSvgSlide from "./GoogleSvgSlide";
 import type { DeckStep } from "../googleSlides/types";
 import {
   SLIDE_ANIMATION_INIT_MESSAGE_TYPE,
   SLIDE_ANIMATION_REVEAL_MESSAGE_TYPE,
 } from "../utils/sandboxedSlideDocument";
+import { retainSlideImages } from "../utils/slideImageCache";
 
 const minimalSvg =
   '<svg viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg"><rect id="r1" width="10" height="10"/></svg>';
@@ -121,5 +122,53 @@ describe("GoogleSvgSlide", () => {
     expect(srcDoc).not.toContain("onclick=");
     expect(srcDoc).not.toContain("<script>");
     expect(srcDoc).not.toContain("foreignObject");
+  });
+});
+
+describe("GoogleSvgSlide images", () => {
+  const href = "/media/slide-images/dc6812";
+  const svg = `<svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><image xlink:href="${href}"/><a xlink:href="${href}"><rect/></a></svg>`;
+  type FetchImage = () => Promise<{ ok: boolean; blob: () => Promise<Blob> }>;
+  const fetchImage = vi.fn<FetchImage>(async () => ({
+    ok: true,
+    blob: async () => new Blob(["jpeg"], { type: "image/jpeg" }),
+  }));
+
+  afterEach(() => {
+    retainSlideImages([]);
+    vi.unstubAllGlobals();
+  });
+
+  it("loads each image once in the page and hands the frame a data: URL", async () => {
+    vi.stubGlobal("fetch", fetchImage);
+    const dataUrl = `data:image/jpeg;base64,${btoa("jpeg")}`;
+
+    // Nothing loads until the page has the image, so the previous slide stays up.
+    const first = render(<GoogleSvgSlide content={svg} stepsRevealed={0} />);
+    expect(first.container.querySelector("iframe")).toBeNull();
+    await waitFor(() => expect(first.container.querySelector("iframe")).not.toBeNull());
+    const srcDoc = first.container.querySelector("iframe")?.srcdoc ?? "";
+    expect(srcDoc).toContain(`<image xlink:href="${dataUrl}"`);
+    // Only image elements take a data: URL, as the sanitizer requires.
+    expect(srcDoc).toContain(`<a xlink:href="${href}"`);
+    first.unmount();
+
+    // Shown again, it renders at once from memory.
+    const second = render(<GoogleSvgSlide content={svg} stepsRevealed={0} />);
+    expect(second.container.querySelector("iframe")?.srcdoc).toBe(srcDoc);
+    expect(fetchImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the href when the page cannot load the image", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<FetchImage>(async () => ({ ok: false, blob: async () => new Blob([]) })),
+    );
+
+    const { container } = render(<GoogleSvgSlide content={svg} stepsRevealed={0} />);
+
+    await waitFor(() =>
+      expect(container.querySelector("iframe")?.srcdoc).toContain(`<image xlink:href="${href}"`),
+    );
   });
 });
