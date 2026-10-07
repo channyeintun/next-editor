@@ -107,10 +107,6 @@ const RUNNER_PANELS: Record<Exclude<WorkspaceExecutionKind, "webcontainer">, Com
  * nothing for a lesson type that has neither.
  */
 function RuntimeDock({ lessonType }: { lessonType: WorkspaceLessonType }) {
-  // Uncompiled, like CodeEditor. Compiled, it would hand React the same panel
-  // element on every render, so the panels would no longer re-render along
-  // with the editor the way they did when CodeEditor rendered them inline.
-  "use no memo";
   if (lessonSupportsTerminal(lessonType)) return <TerminalPanel />;
   const executionKind = executionKindForLessonType(lessonType);
   const RunnerPanel = executionKind === "webcontainer" ? null : RUNNER_PANELS[executionKind];
@@ -1253,19 +1249,39 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     publishCollaborationViewport(editor);
   };
 
-  return (
-    <div className="h-full flex flex-col" data-cursor-replay-target="workspace">
+  // This component re-renders on every keystroke (the editor state carries the
+  // active file's content), and being uncompiled it would hand these children
+  // new elements each time, so all of them would re-render too. They subscribe
+  // to their own state, so keep their elements until a prop changes. <Preview />
+  // is left out on purpose: its uncompiled controller's effects would run less
+  // often, which needs a replay check in Chrome (see reactCompilerCoverage.test.ts).
+  const shouldTrackWorkspaceChanges = isRecording || Boolean(currentRecording);
+  const workspaceEventRecorder = useMemo(
+    () => (
       <WorkspaceEventRecorder
         handleWorkspaceEvent={handleWorkspaceEvent}
         isRecording={isRecording}
-        shouldTrackWorkspaceChanges={isRecording || Boolean(currentRecording)}
+        shouldTrackWorkspaceChanges={shouldTrackWorkspaceChanges}
       />
-      <EditorHeader showImportExport={showImportExport} breadcrumb={breadcrumb} />
+    ),
+    [handleWorkspaceEvent, isRecording, shouldTrackWorkspaceChanges],
+  );
+  const editorHeader = useMemo(
+    () => <EditorHeader showImportExport={showImportExport} breadcrumb={breadcrumb} />,
+    [breadcrumb, showImportExport],
+  );
+  const fileSidebar = useMemo(() => <FileSidebar />, []);
+  const runtimeDock = useMemo(() => <RuntimeDock lessonType={lessonType} />, [lessonType]);
+
+  return (
+    <div className="h-full flex flex-col" data-cursor-replay-target="workspace">
+      {workspaceEventRecorder}
+      {editorHeader}
       <div
         className="flex min-h-0 flex-1 overflow-hidden"
         data-cursor-replay-target="workspace-body"
       >
-        <FileSidebar />
+        {fileSidebar}
         {/* Monaco Editor */}
         <div
           className="flex min-w-0 flex-1 gap-2 overflow-hidden bg-[#11141c]"
@@ -1294,7 +1310,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
                 />
               )}
             </div>
-            <RuntimeDock lessonType={lessonType} />
+            {runtimeDock}
           </div>
           {/* Go, Kotlin, and Python lessons have no preview surface at all —
               the dock console is their only runtime output. */}
