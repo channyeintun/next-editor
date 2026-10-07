@@ -3,7 +3,6 @@
 // serializes work on it.
 import type { WebContainer } from "@webcontainer/api";
 import { isMobileBrowser } from "../../utils/isMobileBrowser";
-import { createRuntimePreviewScript } from "./previewScript";
 
 const sharedWebContainerState: {
   instance: WebContainer | null;
@@ -91,8 +90,11 @@ export async function getOrBootSharedWebContainer(): Promise<WebContainer> {
         // Install the rrweb recorder into every preview HTML response up front,
         // so replay works regardless of how the app renders (SSR/CSR/hybrid).
         // Set once per boot; it persists for the instance's whole lifetime and
-        // applies to every preview reloaded afterwards.
+        // applies to every preview reloaded afterwards. Loaded here, not
+        // statically: it carries the ~77 KB recorder bundle as text, which no
+        // page that never boots a WebContainer (mobile, playback) should fetch.
         try {
+          const { createRuntimePreviewScript } = await import("./previewScript");
           await instance.setPreviewScript(createRuntimePreviewScript());
         } catch (error) {
           console.warn("Failed to install runtime preview recorder script:", error);

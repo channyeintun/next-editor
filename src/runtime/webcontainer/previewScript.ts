@@ -1,4 +1,4 @@
-import { createRrwebPreviewRecorderScript } from "../../components/preview/rrwebPreview";
+import { createRrwebPreviewRecorderScript } from "../../components/preview/rrwebRecorderScript";
 import {
   RUNTIME_SNAPSHOT_MESSAGE_TYPE,
   RUNTIME_SNAPSHOT_REQUEST_MESSAGE_TYPE,

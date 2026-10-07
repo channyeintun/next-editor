@@ -12,13 +12,13 @@ import type {
 } from "../../types/slides";
 import {
   buildRrwebReplayEvents,
-  createRrwebPreviewRecorderScript,
   hasRrwebPreviewSeed,
   PREVIEW_RRWEB_FORMAT_VERSION,
   RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
   RUNTIME_PATCH_BATCH_MESSAGE_TYPE,
   RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE,
 } from "./rrwebPreview";
+import { createRrwebPreviewRecorderScript } from "./rrwebRecorderScript";
 
 function event(type: number, timestamp: number): PreviewRecordedEvent {
   return { type, timestamp, data: { tag: timestamp } };
