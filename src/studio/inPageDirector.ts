@@ -209,6 +209,14 @@ export async function buildPlanFromScript(
   const profile = voiceProfile ?? requireVoiceProfile(script.build.voiceProfile);
   const provider = providerFor(profile, script.build.seed, onPhase);
 
+  // Slide resolution doesn't depend on the narration, so its deck fetch and
+  // image ingest round trips start now and overlap synthesis; the "slides"
+  // stage below awaits the result. The no-op catch only stops a deck failure
+  // from being reported as unhandled while synthesis runs (or after it throws
+  // first) — awaiting the promise still rejects with it.
+  const slidesResolution = resolveScriptSlides(script.lesson.slides, fetchPublishedDeck);
+  slidesResolution.catch(() => {});
+
   const extracted = extractNarration(
     script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
   );
@@ -324,7 +332,7 @@ export async function buildPlanFromScript(
 
   // ---- Resolve published-deck slides into pinned google-svg content ------
   onPhase?.("slides");
-  const resolvedSlides = await resolveScriptSlides(script.lesson.slides, fetchPublishedDeck);
+  const resolvedSlides = await slidesResolution;
 
   // ---- Compile (same gates as any plan; fails closed before recording) ----
   onPhase?.("compile");

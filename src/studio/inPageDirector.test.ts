@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import YAML from "yaml";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { ParsedDeck } from "../googleSlides/types";
 import { sha256HexOfJson } from "./hash";
 import { LEXICON_V1 } from "./script/lexicon";
 import { parseLessonScript } from "./script/schema";
@@ -42,6 +43,14 @@ vi.mock("./tts/modalVoxCpm2Synth", () => ({
   synthesizeModalVoxCpm2Wav: tts.synthesizeModalVoxCpm2Wav,
 }));
 
+const slides = vi.hoisted(() => ({
+  fetchPublishedDeck: vi.fn<(url: string) => Promise<ParsedDeck>>(),
+}));
+vi.mock("../googleSlides", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../googleSlides")>()),
+  fetchPublishedDeck: slides.fetchPublishedDeck,
+}));
+
 // The real stitch, watched so tests can measure each placed dialog.
 const stitch = vi.hoisted(() => ({ segments: [] as StitchSegment[][] }));
 vi.mock("./tts/wav", async (importOriginal) => {
@@ -80,6 +89,20 @@ function loadPilot() {
   );
 }
 
+const DECK_URL = "https://docs.google.com/presentation/d/e/2PACX-test/pub";
+
+/** The pilot with one slide sourced from a published deck page. */
+function loadPilotWithDeckSlide() {
+  const script = loadPilot();
+  script.lesson.slides.push({
+    id: "rules",
+    contentType: "google",
+    deckUrl: DECK_URL,
+    pageId: "SLIDES_API1_0",
+  });
+  return script;
+}
+
 describe("buildPlanFromScript narration", () => {
   beforeEach(() => {
     stitch.segments = [];
@@ -93,6 +116,12 @@ describe("buildPlanFromScript narration", () => {
     }));
     tts.synthesizeModalVoxCpm2Wav.mockReset().mockImplementation(async (_, speechText) => {
       return voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000);
+    });
+    slides.fetchPublishedDeck.mockReset().mockResolvedValue({
+      sourceUrl: DECK_URL,
+      width: 1600,
+      height: 900,
+      slides: [{ pageId: "SLIDES_API1_0", title: "Rules", svg: "<svg>rules</svg>", steps: [] }],
     });
   });
 
@@ -178,6 +207,38 @@ describe("buildPlanFromScript narration", () => {
     ]);
     expect(tts.preloadPocket.mock.invocationCallOrder[0]).toBeLessThan(
       tts.synthesizePocketDialog.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("fetches the published deck while the narration synthesizes", async () => {
+    const result = await buildPlanFromScript(loadPilotWithDeckSlide());
+
+    expect(slides.fetchPublishedDeck).toHaveBeenCalledExactlyOnceWith(DECK_URL);
+    expect(slides.fetchPublishedDeck.mock.invocationCallOrder[0]).toBeLessThan(
+      tts.synthesizePocketDialog.mock.invocationCallOrder[0],
+    );
+    expect(result.plan.slides).toContainEqual(
+      expect.objectContaining({
+        id: "rules",
+        contentType: "google-svg",
+        content: "<svg>rules</svg>",
+      }),
+    );
+  });
+
+  it("fails on an unreachable deck only after the narration, and a narration failure wins", async () => {
+    slides.fetchPublishedDeck.mockRejectedValue(new Error("deck offline"));
+    const phases: string[] = [];
+
+    await expect(
+      buildPlanFromScript(loadPilotWithDeckSlide(), { onPhase: (p) => phases.push(p) }),
+    ).rejects.toThrow("deck offline");
+    expect(phases.at(-1)).toBe("slides");
+    expect(tts.putCachedDialogWav).toHaveBeenCalled();
+
+    tts.synthesizePocketDialog.mockRejectedValueOnce(new Error("engine exploded"));
+    await expect(buildPlanFromScript(loadPilotWithDeckSlide())).rejects.toThrow(
+      /^Narration dialog 1\/\d+ .*: engine exploded$/,
     );
   });
 
