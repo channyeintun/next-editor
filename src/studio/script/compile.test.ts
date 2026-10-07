@@ -140,6 +140,74 @@ describe("compileLessonScript", () => {
     expect(editorCursor).toBe(false);
   });
 
+  it("takes the pointer to no file row for the file that is already showing", () => {
+    // selectScript opens main.go, its entry file: the row would click nothing.
+    const { plan } = compileLessonScript(scheduledInputFor(selectScript()));
+
+    expect(plan.actions.some((action) => action.type === "cursor.moveTo")).toBe(false);
+  });
+
+  it("clicks the Run button while the dock is open and its chevron while it is shut", () => {
+    const base = selectScript();
+    const script = parseLessonScript({
+      ...base,
+      runtime: { ...base.runtime, dockStartsCollapsed: true },
+      scenes: [
+        {
+          ...base.scenes[0],
+          narration:
+            "First we open the program. [[mark:open]] Here is main, the entry point, and " +
+            "[[mark:run]] we run it right away to see it print a greeting. Then we hide the " +
+            "console again [[mark:shut]] and look at the code for a while, reading it line by " +
+            "line before [[mark:again]] we run it one more time to check the output.",
+          actions: [
+            { id: "run", type: "runtime.run", at: { mark: "run" } },
+            { id: "shut", type: "runtime.collapseDock", at: { mark: "shut" } },
+            { id: "again", type: "runtime.run", at: { mark: "again" } },
+          ],
+        },
+      ],
+    });
+    const { plan } = compileLessonScript(scheduledInputFor(script));
+    const clickBefore = (id: string) => plan.actions.find((action) => action.id === `cursor-${id}`);
+
+    // The dock starts shut: the first run is opened by its chevron…
+    expect(clickBefore("run")).toMatchObject({
+      type: "cursor.moveTo",
+      target: { kind: "target-id", id: "runtime-dock-toggle" },
+      press: true,
+    });
+    // …which also shuts it again…
+    expect(clickBefore("shut")).toMatchObject({
+      target: { kind: "target-id", id: "runtime-dock-toggle" },
+    });
+    // …and with the dock shut once more, the second run goes through it too.
+    expect(clickBefore("again")).toMatchObject({
+      target: { kind: "target-id", id: "runtime-dock-toggle" },
+    });
+
+    const open = parseLessonScript({ ...script, runtime: base.runtime });
+    expect(
+      compileLessonScript(scheduledInputFor(open)).plan.actions.find(
+        (action) => action.id === "cursor-run",
+      ),
+    ).toMatchObject({ target: { kind: "run-button" }, press: true });
+  });
+
+  it("releases each click just before the action it performs, from a deterministic budget", () => {
+    const { plan } = compileLessonScript(scheduledInputFor(loadPilotScript()));
+    const moves = plan.actions.filter((action) => action.type === "cursor.moveTo");
+
+    expect(moves.length).toBeGreaterThan(0);
+    for (const move of moves) {
+      const performed = plan.actions.find((action) => `cursor-${action.id}` === move.id)!;
+      expect(move.press).toBe(true);
+      expect(move.at + move.durationMs).toBe(performed.at - 80);
+      // The longest approach plus the rest and the press — never more.
+      expect(move.durationMs).toBeLessThanOrEqual(800 + 220 + 100);
+    }
+  });
+
   it("starts a chapter at the first spoken word of each scene that titles one", () => {
     const script = loadPilotScript();
     const [first, second] = script.scenes;
@@ -187,15 +255,15 @@ describe("compileLessonScript", () => {
     expect(plan.lesson.slug).toBe("go-cube");
     expect(plan.gates?.timingP95MaxMs).toBe(300);
     expect(plan.narration.captions.cues.length).toBeGreaterThan(3);
-    // Derived attention-cursor moves precede the actions they announce.
+    // Derived pointer clicks precede the actions they perform.
     const ids = plan.actions.map((action) => action.id);
     expect(ids.indexOf("cursor-open-square")).toBeLessThan(ids.indexOf("open-square"));
     expect(ids.indexOf("cursor-run")).toBeLessThan(ids.indexOf("run"));
     expect(warnings.length).toBeLessThanOrEqual(2);
 
-    // A cursor tween must never be ordered before a real action scheduled at
-    // the same instant: the serial Performer would let the ~600ms tween block
-    // it, drifting the real action off its planned mark.
+    // A pointer move must never be ordered before a real action scheduled at
+    // the same instant: the serial Performer would let the ~1s move block it,
+    // drifting the real action off its planned mark.
     const cursorBlocksSameInstantAction = plan.actions.some(
       (action, i) =>
         i > 0 &&

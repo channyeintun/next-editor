@@ -56,6 +56,8 @@ export const studioTargetRefSchema = z.union([
   z.object({ kind: z.literal("editor") }),
   z.object({ kind: z.literal("run-button") }),
   z.object({ kind: z.literal("target-id"), id: z.string().min(1) }),
+  /** An author-owned `data-testid` element inside the runtime preview frame. */
+  z.object({ kind: z.literal("preview"), testId: z.string().min(1) }),
 ]);
 export type StudioTargetRef = z.infer<typeof studioTargetRefSchema>;
 
@@ -115,8 +117,13 @@ const openFileActionSchema = planActionBase.extend({
 const cursorMoveActionSchema = planActionBase.extend({
   type: z.literal("cursor.moveTo"),
   target: studioTargetRefSchema,
-  /** Materialized tween duration (seed-derived at compile time). */
+  /**
+   * Whole budget: the travel (the driver times it from the real distance and
+   * starts later when it needs less) plus, with `press`, the settle and click.
+   */
   durationMs: positiveMs,
+  /** End on a click — rest on the target, press, release — as a hand operating the control. */
+  press: z.boolean().optional(),
 });
 
 const editorTypeActionSchema = planActionBase.extend({

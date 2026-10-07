@@ -19,7 +19,11 @@ import {
   resetRunnerConsoleForProject,
 } from "../runtime/playgroundConsoleStore";
 import { arePlaygroundFilesEqual } from "../runtime/playgroundFiles";
-import { STUDIO_TARGET_ATTRIBUTE, STUDIO_RUN_BUTTON_TARGET_ID } from "../studio/targets";
+import {
+  STUDIO_DOCK_TOGGLE_TARGET_ID,
+  STUDIO_TARGET_ATTRIBUTE,
+  STUDIO_RUN_BUTTON_TARGET_ID,
+} from "../studio/targets";
 import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtime";
 import { areStructuredDataEqual } from "../utils/equality";
 
@@ -440,6 +444,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
 
         <button
           type="button"
+          {...{ [STUDIO_TARGET_ATTRIBUTE]: STUDIO_DOCK_TOGGLE_TARGET_ID }}
           disabled={isPlaybackSnapshotActive}
           onClick={() => {
             runtimePanelStore.trigger.setIsCollapsed({

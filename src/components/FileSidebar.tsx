@@ -13,7 +13,11 @@ import {
 } from "../hooks/useWorkspace";
 import { useCollapseTransition } from "../hooks/useCollapseTransition";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
-import { STUDIO_TARGET_ATTRIBUTE, studioTargetIdForFile } from "../studio/targets";
+import {
+  STUDIO_TARGET_AIM_ATTRIBUTE,
+  STUDIO_TARGET_ATTRIBUTE,
+  studioTargetIdForFile,
+} from "../studio/targets";
 import FileContextMenu from "./fileSidebar/FileContextMenu";
 import SidebarResizeHandle from "./fileSidebar/SidebarResizeHandle";
 import { useWorkspaceFileImport } from "./fileSidebar/useWorkspaceFileImport";
@@ -396,7 +400,9 @@ function FileSidebarPanel() {
           <span className="flex size-4 shrink-0 items-center justify-center">
             {getFileIcon(node.file)}
           </span>
-          <span className="truncate font-medium">{node.name}</span>
+          <span className="truncate font-medium" {...{ [STUDIO_TARGET_AIM_ATTRIBUTE]: "" }}>
+            {node.name}
+          </span>
         </button>
       </div>
     );

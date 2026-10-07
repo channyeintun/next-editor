@@ -91,7 +91,9 @@ plain words — if a phrase would need a dictionary or is an idiom, rewrite it:
 - Let the pointer move like a hand: a drag-select sweeps across the code and the
   highlight grows with it — character by character on one line, line by line
   across several — then **rests** while you keep talking about it, modelled on a
-  real person's recorded pointer and selection. Time the highlight to land as the
+  real person's recorded pointer and selection. The pointer only ever moves to
+  do something — drag a selection, click a file, Run, the dock's chevron, a
+  preview element — and hides while code is typed or a slide is up. Time the highlight to land as the
   words name the code, and give it a beat to sit before moving on; don't
   re-select on every clause.
 - No fake mistakes unless the lesson explicitly teaches debugging.

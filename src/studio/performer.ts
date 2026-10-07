@@ -40,7 +40,11 @@ async function invokeAction(
     case "workspace.openFile":
       return driver.openFile(action.path, action.timeoutMs);
     case "cursor.moveTo":
-      return driver.moveCursor({ target: action.target, durationMs: action.durationMs });
+      return driver.moveCursor({
+        target: action.target,
+        durationMs: action.durationMs,
+        press: action.press,
+      });
     case "editor.type":
       return driver.typeText({ path: action.path, anchor: action.anchor, chunks: action.chunks });
     case "editor.select":
@@ -220,8 +224,17 @@ export async function performPlan({
     }
 
     const startedAtMs = clock.nowMs();
+    // A pointer move that starts behind schedule (a slow runtime chain before
+    // it) gives the lateness back out of its budget — the idle rest before the
+    // travel goes first — so its click still lands as close to the action it
+    // performs as the driver can make it, instead of pushing that action later.
+    const lateMs = Math.max(0, startedAtMs - action.at);
+    const performed =
+      action.type === "cursor.moveTo" && lateMs > 0
+        ? { ...action, durationMs: Math.max(1, action.durationMs - lateMs) }
+        : action;
     try {
-      const detail = await invokeWithDeadline(action, driver, signal);
+      const detail = await invokeWithDeadline(performed, driver, signal);
       const receipt: ActionReceipt = {
         actionId: action.id,
         actionType: action.type,

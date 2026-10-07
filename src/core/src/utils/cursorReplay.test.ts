@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { EditorFrame, Recording } from "../types";
 import { compressFrames } from "./frameStreamEncoder";
 import { getCursorPositionAtTime, getCursorReplaySamples } from "./cursorReplay";
+import { POINTER_SETTLE_MS, pointerAimDurationMs } from "./pointerMotion";
 
 const createFrame = (
   timestamp: number,
@@ -160,22 +161,11 @@ describe("cursorReplay", () => {
     ];
 
     const samples = getCursorReplaySamples(recording);
-    const result = getCursorPositionAtTime(samples, 300);
 
     expect(samples).toHaveLength(2);
-    expect(result?.cursor).toEqual({
-      x: 50,
-      y: 50,
-      visible: true,
-      tween: {
-        from: { x: 0, y: 0, visible: true },
-        to: { x: 100, y: 100, visible: true },
-        progress: 0.5,
-      },
-    });
   });
 
-  it("holds across a long idle gap then glides to the next position", () => {
+  it("holds a parked pointer, then makes a hand's approach that settles before the next gesture", () => {
     const recording = createRecording([
       createFrame(0, { x: 10, y: 10, visible: true }),
       createFrame(9000, { x: 400, y: 300, visible: true }),
@@ -185,20 +175,161 @@ describe("cursorReplay", () => {
       { timestamp: 9000, x: 400, y: 300, visible: true },
     ];
     const samples = getCursorReplaySamples(recording);
+    const glideMs = pointerAimDurationMs(Math.hypot(390, 290));
+    const arriveAt = 9000 - POINTER_SETTLE_MS;
+    const leaveAt = arriveAt - glideMs;
 
     // Two selections separated by seconds of narration: the cursor parks at the
     // first position through the idle (no slow drift across the editor)…
     expect(getCursorPositionAtTime(samples, 4500)?.cursor).toMatchObject({ x: 10, y: 10 });
-    expect(getCursorPositionAtTime(samples, 8500)?.cursor).toMatchObject({ x: 10, y: 10 });
-    // …then transitions from where it was toward the next position (a real
-    // move, not a jump out of nowhere)…
-    const mid = getCursorPositionAtTime(samples, 8750)?.cursor;
-    expect(mid!.x).toBeGreaterThan(10);
-    expect(mid!.x).toBeLessThan(400);
-    expect(mid!.y).toBeGreaterThan(10);
-    expect(mid!.y).toBeLessThan(300);
-    // …arriving exactly as that gesture begins.
-    expect(getCursorPositionAtTime(samples, 9000)?.cursor).toMatchObject({ x: 400, y: 300 });
+    expect(getCursorPositionAtTime(samples, leaveAt)?.cursor).toMatchObject({ x: 10, y: 10 });
+    // …then moves straight from where it was toward the next position, leaving
+    // and landing at rest (slow at both ends, fastest in between)…
+    const at = (time: number) => getCursorPositionAtTime(samples, time)!.cursor;
+    const early = at(leaveAt + glideMs * 0.1);
+    const mid = at(leaveAt + glideMs * 0.5);
+    const late = at(leaveAt + glideMs * 0.9);
+    expect(early.x - 10).toBeLessThan((mid.x - early.x) / 2);
+    expect(400 - late.x).toBeLessThan((late.x - mid.x) / 2);
+    expect((mid.y - 10) / (mid.x - 10)).toBeCloseTo(290 / 390);
+    // …and arrives a beat before that gesture, resting there until it begins.
+    expect(at(arriveAt)).toMatchObject({ x: 400, y: 300 });
+    expect(at(8950)).toMatchObject({ x: 400, y: 300 });
+  });
+
+  it("times the approach by distance — a short hop is quicker than a long reach", () => {
+    const hop = pointerAimDurationMs(40);
+    const reach = pointerAimDurationMs(900);
+    expect(hop).toBeLessThan(reach);
+    expect(hop).toBeGreaterThanOrEqual(220);
+    expect(reach).toBeLessThanOrEqual(800);
+
+    const samples = [
+      { timestamp: 0, x: 0, y: 0, visible: true },
+      { timestamp: 5000, x: 40, y: 0, visible: true },
+    ];
+    const leaveAt = 5000 - POINTER_SETTLE_MS - hop;
+    expect(getCursorPositionAtTime(samples, leaveAt - 1)?.cursor.x).toBe(0);
+    expect(getCursorPositionAtTime(samples, leaveAt + hop / 2)?.cursor.x).toBeGreaterThan(0);
+  });
+
+  it("travels with the button state of the resting side, pressing only when the gesture starts", () => {
+    const samples = [
+      { timestamp: 0, x: 0, y: 0, visible: true, flags: 0 },
+      { timestamp: 3000, x: 300, y: 0, visible: true, flags: 1 },
+    ];
+
+    expect(getCursorPositionAtTime(samples, 2700)?.cursor.flags).toBe(0);
+    expect(getCursorPositionAtTime(samples, 2990)?.cursor.flags).toBe(0);
+    expect(getCursorPositionAtTime(samples, 3000)?.cursor.flags).toBe(1);
+  });
+
+  it("glides across a short sparse gap without settling when there is no time to", () => {
+    const samples = [
+      { timestamp: 0, x: 0, y: 0, visible: true },
+      { timestamp: 200, x: 480, y: 0, visible: true },
+    ];
+    const at = (time: number) => getCursorPositionAtTime(samples, time)!.cursor.x;
+
+    expect(at(0)).toBe(0);
+    expect(at(100)).toBeGreaterThan(0);
+    expect(at(100)).toBeLessThan(480);
+    expect(at(199)).toBeLessThan(480);
+    expect(at(200)).toBe(480);
+  });
+
+  it("drops the old recorder's stray hidden {0,0} samples from a pointer that never moved", () => {
+    const recording = createRecording([createFrame(0, { x: 0, y: 0, visible: true })]);
+    recording.cursorEvents = [
+      { timestamp: 0, x: 120, y: 80, visible: true },
+      { timestamp: 500, x: 0, y: 0, visible: false },
+      { timestamp: 4000, x: 120, y: 80, visible: true },
+      { timestamp: 4016, x: 124, y: 82, visible: true },
+    ];
+
+    const samples = getCursorReplaySamples(recording);
+
+    expect(samples.map((sample) => sample.visible)).toEqual([true, true]);
+    expect(getCursorPositionAtTime(samples, 2000)?.cursor).toMatchObject({
+      x: 120,
+      y: 80,
+      visible: true,
+    });
+  });
+
+  it("stays on the earlier anchor across a parked gap with nowhere to travel", () => {
+    // The studio pins a resting pointer to the app before the dock opens; the
+    // next sample is the same spot recorded against the opened dock. Until it
+    // is due, the pointer must not be placed against the dock.
+    const samples = [
+      {
+        timestamp: 0,
+        x: 1412,
+        y: 693,
+        visible: true,
+        target: { id: "app", x: 1412, y: 693, rect: { left: 0, top: 0, width: 1440, height: 756 } },
+      },
+      {
+        timestamp: 900,
+        x: 1412,
+        y: 693,
+        visible: true,
+        target: {
+          id: "runtime-dock",
+          x: 1200,
+          y: 310,
+          rect: { left: 212, top: 383, width: 1228, height: 333 },
+        },
+      },
+    ];
+
+    expect(getCursorPositionAtTime(samples, 500)?.cursor.tween?.progress).toBe(0);
+    expect(getCursorPositionAtTime(samples, 900)?.cursor.target?.id).toBe("runtime-dock");
+  });
+
+  it("reads a quick tap as pressed between its press and release samples", () => {
+    const samples = [
+      { timestamp: 0, x: 50, y: 50, visible: true, flags: 0 },
+      { timestamp: 300, x: 50, y: 50, visible: true, flags: 1 },
+      { timestamp: 313, x: 50, y: 50, visible: true, flags: 0 },
+    ];
+
+    expect(getCursorPositionAtTime(samples, 290)?.cursor.flags).toBe(0);
+    expect(getCursorPositionAtTime(samples, 305)?.cursor.flags).toBe(1);
+    expect(getCursorPositionAtTime(samples, 320)?.cursor.flags).toBe(0);
+  });
+
+  it("keeps an older studio render's pointer hidden under a whiteboard it was resting beneath", () => {
+    const recording = createRecording([createFrame(0, { x: 0, y: 0, visible: true })]);
+    recording.whiteboardEvents = [
+      { timestamp: 1_000, isOpen: true },
+      { timestamp: 9_000, isOpen: false },
+    ];
+    recording.cursorEvents = [
+      { timestamp: 0, x: 300, y: 200, visible: true },
+      // The board opened over the resting pointer and took its hover…
+      { timestamp: 1_033, x: 0, y: 0, visible: false },
+      // …and the hand only moved again (34px away) once the board had closed.
+      { timestamp: 9_500, x: 334, y: 200, visible: true },
+    ];
+
+    const samples = getCursorReplaySamples(recording);
+
+    expect(getCursorPositionAtTime(samples, 5_000)?.cursor.visible).toBe(false);
+  });
+
+  it("keeps a real exit from the page that comes back somewhere else", () => {
+    const recording = createRecording([createFrame(0, { x: 0, y: 0, visible: true })]);
+    recording.cursorEvents = [
+      { timestamp: 0, x: 120, y: 80, visible: true },
+      { timestamp: 500, x: 0, y: 0, visible: false },
+      { timestamp: 4000, x: 600, y: 20, visible: true },
+    ];
+
+    const samples = getCursorReplaySamples(recording);
+
+    expect(samples.map((sample) => sample.visible)).toEqual([true, false, true]);
+    expect(getCursorPositionAtTime(samples, 2000)?.cursor.visible).toBe(false);
   });
 
   it("derives interpolated samples from frame-only recordings", () => {

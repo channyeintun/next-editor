@@ -10,6 +10,14 @@ import {
   CURSOR_REPLAY_ROOT_TARGET_ID,
   CURSOR_REPLAY_TARGET_ATTRIBUTE,
 } from "../core/src/utils/cursorCoordinates";
+import {
+  POINTER_PRESS_MS,
+  POINTER_SETTLE_MS,
+  easePointerAim,
+  easePointerDrag,
+  pointerAimDurationMs,
+} from "../core/src/utils/pointerMotion";
+import { dispatchRecordedCursorVisibility } from "../utils/recordedCursorVisibility";
 import type { PreviewEvent, PreviewPanelMode, PreviewState } from "../types/slides";
 import { isWorkspaceTextFile } from "../types/workspace";
 import type {
@@ -26,7 +34,7 @@ import type {
   StudioPreviewCommandResult,
 } from "../utils/iframeStudioCommandBridge";
 import { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil } from "./async";
-import { chunkPlacements, easeInOutCubic, easeOutCubic } from "./cadence";
+import { chunkPlacements, easeInOutCubic } from "./cadence";
 import {
   PlaygroundTerminalError,
   preparePlaygroundRun,
@@ -43,7 +51,7 @@ import type {
   TextAnchor,
   TypingChunk,
 } from "./plan";
-import { describeStudioTarget, resolveStudioTarget } from "./targets";
+import { describeStudioTarget, resolveStudioTarget, studioTargetAimPoint } from "./targets";
 import {
   WHITEBOARD_DRAW_FRAME_MS,
   buildWhiteboardElement,
@@ -108,6 +116,7 @@ export interface StudioDriver {
   moveCursor(input: {
     target: StudioTargetRef;
     durationMs: number;
+    press?: boolean;
   }): Promise<Record<string, unknown>>;
   selectRange(input: {
     path: string;
@@ -164,22 +173,63 @@ function throwIfAborted(signal: AbortSignal): void {
 // what makes the recorded motion read as a hand rather than a 30fps slideshow.
 const CURSOR_STEP_MS = 16;
 
+// How long a drag-select holds the button on its first character before the
+// sweep starts. A hand starts a drag from rest: the press lands, then the
+// pointer accelerates — the recordings rest ~360ms at the anchor, of which the
+// replay's settle before the gesture shows the first ~220ms.
+const DRAG_PRESS_HOLD_MS = 120;
+
+// The shortest scroll toward off-screen code before a drag-select.
+const MIN_SELECT_SCROLL_MS = 150;
+
+// The quickest a pointer move may be squeezed to: one quick stroke, about what
+// a single recorded hand movement took at any range.
+const MIN_TRAVEL_MS = 150;
+
+const CURSOR_REPLAY_ROOT_SELECTOR = `[${CURSOR_REPLAY_TARGET_ATTRIBUTE}="${CURSOR_REPLAY_ROOT_TARGET_ID}"]`;
+
+interface PointerPoint {
+  x: number;
+  y: number;
+}
+
+const roundPoint = (point: PointerPoint): PointerPoint => ({
+  x: Math.round(point.x),
+  y: Math.round(point.y),
+});
+
 /**
- * The element a synthetic pointer sample at (x, y) is dispatched on.
+ * The topmost element at (x, y) inside the cursor-replay root, or null.
  *
  * The mouse-tracking actor drops any sample whose target sits outside the
  * cursor-replay root, and the studio console panel is fixed above the editor
- * but mounted outside that root — so the plain topmost hit would silently lose
- * every sample under the panel. Hit-test through the stack instead and take
- * the topmost element inside the root, falling back to the action's target.
+ * but mounted outside that root — so the plain topmost hit would be that panel.
+ * Hit-testing through the stack finds what the app itself shows at the point.
  */
-export function cursorDispatchTarget(x: number, y: number, fallback: Element): Element {
-  const root = document.querySelector(
-    `[${CURSOR_REPLAY_TARGET_ATTRIBUTE}="${CURSOR_REPLAY_ROOT_TARGET_ID}"]`,
-  );
+function topmostInReplayRoot(x: number, y: number): Element | null {
+  const root = document.querySelector(CURSOR_REPLAY_ROOT_SELECTOR);
   const stack =
     typeof document.elementsFromPoint === "function" ? document.elementsFromPoint(x, y) : [];
-  return stack.find((candidate) => !root || root.contains(candidate)) ?? fallback;
+  return stack.find((candidate) => !root || root.contains(candidate)) ?? null;
+}
+
+/**
+ * The element a synthetic pointer sample at (x, y) is dispatched on: the
+ * topmost one inside the cursor-replay root (so no sample is silently lost
+ * under the studio console), falling back to the action's target.
+ */
+export function cursorDispatchTarget(x: number, y: number, fallback: Element): Element {
+  return topmostInReplayRoot(x, y) ?? fallback;
+}
+
+/**
+ * Whether something else covers `element` at `point` — a maximized slide or
+ * whiteboard over the runner dock, say. A hand cannot click what it cannot
+ * see. Unknown (no hit-testing) counts as uncovered.
+ */
+function isCoveredAt(point: PointerPoint, element: Element): boolean {
+  const top = topmostInReplayRoot(point.x, point.y);
+  return top !== null && top !== element && !element.contains(top);
 }
 
 // The preview.open handshake re-sends instead of waiting. A command message
@@ -236,7 +286,10 @@ function assertWebContainerHealthy(snapshot: WebContainerRuntimeRecordingSnapsho
 
 export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
   const { signal } = deps;
-  let lastCursorPoint: { x: number; y: number } | null = null;
+  let lastCursorPoint: PointerPoint | null = null;
+  // Whether the recorded pointer is hidden right now (mouseTrackingActor records
+  // every sample hidden until it is shown again).
+  let pointerHidden = false;
 
   const activeModelPath = (): string | null => {
     const model = deps.getEditor()?.getModel();
@@ -265,8 +318,8 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     // the mouse-tracking actor listens on the document in the capture phase,
     // so dispatching on the element under the point yields target-aware
     // samples (`createCursorPositionFromClientPoint` walks up from `target`).
-    // `buttons` is 0 for a plain attention move and 1 during a select drag, so
-    // the recorded cursor reads as a press-drag over the highlighted range.
+    // `buttons` is 1 while the button is held — a click's press, or a select
+    // drag — and 0 otherwise, so the recorded cursor shows the press.
     cursorDispatchTarget(x, y, element).dispatchEvent(
       new PointerEvent("pointermove", {
         clientX: x,
@@ -280,6 +333,84 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     );
     lastCursorPoint = { x, y };
   };
+
+  // Hands off the mouse. The pointer disappears where it rests — at the start,
+  // before it has anything to point at; while typing, as the OS hides it; under
+  // a slide or whiteboard that covers what it was resting on — and stays hidden
+  // until its next gesture. A pointer parked on stale code reads as noise.
+  const hidePointer = () => {
+    if (pointerHidden) return;
+    const at = lastCursorPoint ?? {
+      x: Math.round(window.innerWidth / 2),
+      y: Math.round(window.innerHeight / 2),
+    };
+    dispatchRecordedCursorVisibility({ x: at.x, y: at.y, visible: false });
+    pointerHidden = true;
+  };
+
+  // A hidden pointer never travels: it reappears on the spot its next gesture
+  // starts from, so the only motion a learner sees is the gesture itself.
+  const revealPointerAt = (point: PointerPoint) => {
+    if (!pointerHidden) return;
+    dispatchRecordedCursorVisibility({ x: point.x, y: point.y, visible: true });
+    pointerHidden = false;
+    lastCursorPoint = point;
+  };
+
+  // Pin a resting pointer to the app itself just before the layout under it
+  // changes (the runner dock opening or shutting). Replay places a sample
+  // relative to the element it was recorded over, so a pointer resting on the
+  // dock would ride along with the dock's edge — off the bottom of the screen
+  // once it shuts. Recorded against the app root, the same spot stays put while
+  // the panel moves under it, whenever replay applies the layout change.
+  const pinPointerToApp = () => {
+    if (pointerHidden || !lastCursorPoint) return;
+    const root = document.querySelector(CURSOR_REPLAY_ROOT_SELECTOR);
+    if (!root) return;
+    root.dispatchEvent(
+      new PointerEvent("pointermove", {
+        clientX: lastCursorPoint.x,
+        clientY: lastCursorPoint.y,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerType: "mouse",
+        buttons: 0,
+      }),
+    );
+  };
+
+  // Where a preview element sits in host coordinates. The element lives in a
+  // cross-origin frame, so the preview bridge reports its box and the point is
+  // mapped through the frame's own box. Null when it is hidden or scrolled out
+  // of the preview's view — the pointer has nothing on screen to aim at then.
+  const previewAimPoint = async (
+    testId: string,
+    frame: Element,
+    timeoutMs: number,
+  ): Promise<PointerPoint | null> => {
+    const acknowledgement = await deps.preview.executeCommand(
+      { type: "inspect", target: { testId } },
+      { timeoutMs, signal },
+    );
+    const box = acknowledgement.targetBox;
+    if (!box || (box.width === 0 && box.height === 0)) {
+      return null;
+    }
+    const centerX = box.left + box.width / 2;
+    const centerY = box.top + box.height / 2;
+    if (centerX < 0 || centerY < 0 || centerX > box.viewportWidth || centerY > box.viewportHeight) {
+      return null;
+    }
+    const frameRect = frame.getBoundingClientRect();
+    return {
+      x: frameRect.left + centerX * (frameRect.width / Math.max(1, box.viewportWidth)),
+      y: frameRect.top + centerY * (frameRect.height / Math.max(1, box.viewportHeight)),
+    };
+  };
+
+  // Until its first gesture the pointer has nothing to point at.
+  hidePointer();
 
   // Whether a range sits outside the comfortable viewport band and, if so, the
   // scrollTop that would center it. `needed: false` when it is already visible,
@@ -299,7 +430,10 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     // Center the range; clamp into the scrollable area.
     const maxTop = Math.max(0, editor.getScrollHeight() - viewH);
     const centered = top - Math.max(margin, (viewH - (bottom - top)) / 2);
-    return { needed: true, target: Math.max(0, Math.min(maxTop, centered)) };
+    const target = Math.max(0, Math.min(maxTop, centered));
+    // Code at the very top or bottom sits inside the margin band but cannot
+    // scroll any further — that is no scroll, and the drag keeps its whole time.
+    return { needed: Math.abs(target - current) >= 1, target };
   };
 
   // Scroll to `targetTop` with an eased, synchronously-stepped animation and
@@ -360,6 +494,9 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         );
       }
 
+      // Hands on the keyboard: the caret is where to look, and the OS hides
+      // the pointer while typing.
+      hidePointer();
       editor.focus();
       const startPosition = model.getPositionAt(startOffset);
       editor.setSelection(
@@ -445,24 +582,38 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       return { path, insertedChars: expected.length };
     },
 
-    async moveCursor({ target, durationMs }) {
-      if (!resolveStudioTarget(target)) {
+    async moveCursor({ target, durationMs, press = false }) {
+      const started = performance.now();
+      const frame = resolveStudioTarget(target);
+      if (!frame) {
         throw new StudioActionError(`Missing studio target: ${describeStudioTarget(target)}`);
       }
 
-      const from = lastCursorPoint ?? {
-        x: Math.round(window.innerWidth / 2),
-        y: Math.round(window.innerHeight / 2),
-      };
-      const started = performance.now();
-
-      for (;;) {
-        throwIfAborted(signal);
-        const elapsed = performance.now() - started;
-        const progress = Math.min(1, elapsed / durationMs);
-        const eased = easeInOutCubic(progress);
-        // Re-resolve every step: a React re-render can swap the DOM node, and
-        // layout can shift while we tween.
+      // Aiming into the preview is best-effort: the authored preview.click /
+      // preview.input that follows, with its own timeout and retry, stays the
+      // one check that fails the render. An element that is not mounted yet,
+      // hidden, or off the preview's view just gets no click from the pointer.
+      let previewPoint: PointerPoint | null = null;
+      if (target.kind === "preview") {
+        let skipped = "the element is hidden or outside the preview's visible area";
+        try {
+          previewPoint = await previewAimPoint(
+            target.testId,
+            frame,
+            Math.min(2_000, Math.max(250, durationMs)),
+          );
+        } catch (error) {
+          throwIfAborted(signal);
+          skipped = `the preview element could not be located: ${error instanceof Error ? error.message : String(error)}`;
+        }
+        if (!previewPoint) {
+          return { target: describeStudioTarget(target), skipped };
+        }
+      }
+      // Re-resolved every step: a React re-render can swap the DOM node, and
+      // layout can shift while the pointer travels.
+      const destination = (): { point: PointerPoint; element: Element } => {
+        if (previewPoint) return { point: previewPoint, element: frame };
         const element = resolveStudioTarget(target);
         const rect = element?.getBoundingClientRect();
         if (!element || !rect || (rect.width === 0 && rect.height === 0)) {
@@ -470,22 +621,73 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
             `Studio target became invisible: ${describeStudioTarget(target)}`,
           );
         }
-        const destX = rect.left + rect.width / 2;
-        const destY = rect.top + rect.height / 2;
-        dispatchCursorPoint(
-          Math.round(from.x + (destX - from.x) * eased),
-          Math.round(from.y + (destY - from.y) * eased),
-          element,
-        );
-        if (progress >= 1) {
-          break;
-        }
-        // setTimeout stepping (not rAF): rAF pauses in background tabs and
-        // would stall an unattended render mid-tween.
-        await abortableSleep(CURSOR_STEP_MS, signal);
+        return { point: studioTargetAimPoint(element), element };
+      };
+
+      if (isCoveredAt(destination().point, destination().element)) {
+        return {
+          target: describeStudioTarget(target),
+          skipped: "something else covers it on screen",
+        };
       }
 
-      return { target: describeStudioTarget(target) };
+      // The plan budgets the longest approach; the move takes the time its real
+      // distance needs (pointerAimDurationMs) and starts later instead of
+      // crawling, so it still arrives when the plan said it would.
+      const clickMs = press ? POINTER_SETTLE_MS + POINTER_PRESS_MS : 0;
+      const travelBudgetMs = Math.max(0, durationMs - clickMs);
+      const from = pointerHidden ? null : lastCursorPoint;
+      const aim = destination().point;
+      // Never squeezed below one quick stroke, even when a late start left no
+      // budget: a hand does not teleport.
+      const travelMs = from
+        ? Math.min(
+            Math.max(travelBudgetMs, MIN_TRAVEL_MS),
+            pointerAimDurationMs(Math.hypot(aim.x - from.x, aim.y - from.y)),
+          )
+        : 0;
+      const restMs = travelBudgetMs - travelMs - (performance.now() - started);
+      if (restMs > 0) {
+        await abortableSleep(restMs, signal);
+      }
+
+      if (!from) {
+        revealPointerAt(roundPoint(destination().point));
+      } else {
+        const moveStarted = performance.now();
+        for (;;) {
+          throwIfAborted(signal);
+          const progress =
+            travelMs > 0 ? Math.min(1, (performance.now() - moveStarted) / travelMs) : 1;
+          const eased = easePointerAim(progress);
+          const { point, element } = destination();
+          dispatchCursorPoint(
+            Math.round(from.x + (point.x - from.x) * eased),
+            Math.round(from.y + (point.y - from.y) * eased),
+            element,
+          );
+          if (progress >= 1) {
+            break;
+          }
+          // setTimeout stepping (not rAF): rAF pauses in background tabs and
+          // would stall an unattended render mid-tween.
+          await abortableSleep(CURSOR_STEP_MS, signal);
+        }
+      }
+
+      if (press) {
+        // Rest on the control, then click it: press, hold, release. Only the
+        // recorded button state changes — no pointerdown/click reaches the
+        // page, so the action itself stays the semantic command it always was.
+        await abortableSleep(POINTER_SETTLE_MS, signal);
+        const { point, element } = destination();
+        const { x, y } = roundPoint(point);
+        dispatchCursorPoint(x, y, element, 1);
+        await abortableSleep(POINTER_PRESS_MS, signal);
+        dispatchCursorPoint(x, y, element, 0);
+      }
+
+      return { target: describeStudioTarget(target), travelMs, pressed: press };
     },
 
     async selectRange({ path, selection, durationMs }) {
@@ -529,17 +731,31 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
 
       // Scroll the range into view first when it is off-screen (a no-op, 0ms,
       // when already visible — the common case in a small file). The remainder
-      // of the budget is the drag, so the select's total wall-clock still equals
-      // `durationMs` (the Performer budgets a select by exactly this when
-      // checking for overlap). No pointer motion is injected before the drag —
-      // the gesture is only the drag itself.
+      // of the budget is the press and the drag, so the select's total
+      // wall-clock still equals `durationMs` (the Performer budgets a select by
+      // exactly this when checking for overlap). The driver injects no pointer
+      // motion before the drag — the pointer rests while the editor scrolls, as
+      // a hand on a wheel does; replay carries a resting pointer over to the
+      // first character the way a hand would before pressing.
       const node = editor.getDomNode();
       const nodeRect = node?.getBoundingClientRect() ?? null;
 
       const gap = scrollGapForRange(editor, range);
-      const scrollMs = gap.needed ? Math.min(Math.round(durationMs * 0.4), 500) : 0;
+      const scrollShareMs = gap.needed ? Math.min(Math.round(durationMs * 0.4), 500) : 0;
+      // A visible pointer's approach is drawn by replay, landing
+      // POINTER_SETTLE_MS before the press. Rest up to that long after the
+      // scroll — out of the scroll's own share, so the drag keeps its time — so
+      // it lands on text that has stopped moving, not text still sliding in.
+      const settleMs =
+        scrollShareMs > 0 && !pointerHidden
+          ? Math.min(POINTER_SETTLE_MS, Math.max(0, scrollShareMs - MIN_SELECT_SCROLL_MS))
+          : 0;
+      const scrollMs = scrollShareMs - settleMs;
       if (scrollMs > 0) {
         await smoothScrollTo(editor, gap.target, scrollMs);
+      }
+      if (settleMs > 0) {
+        await abortableSleep(settleMs, signal);
       }
 
       // Endpoints come from Monaco's own layout, read *after* any scroll settles
@@ -548,19 +764,31 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       const endVisible = editor.getScrolledVisiblePosition(endPosition);
       let dragged = false;
       if (node && nodeRect && startVisible && endVisible) {
-        const from = {
+        const from = roundPoint({
           x: nodeRect.left + startVisible.left,
           y: nodeRect.top + startVisible.top + startVisible.height / 2,
-        };
+        });
         const to = {
           x: nodeRect.left + endVisible.left,
           y: nodeRect.top + endVisible.top + endVisible.height / 2,
         };
-        const dragMs = Math.max(1, durationMs - scrollMs);
+
+        // Press on the first character and hold a beat before sweeping: a drag
+        // starts from rest. A pointer that was hidden (typing, a slide)
+        // reappears right here rather than travelling in from a stale spot.
+        revealPointerAt(from);
+        const sweepBudgetMs = Math.max(1, durationMs - scrollMs - settleMs);
+        const pressHoldMs = Math.min(DRAG_PRESS_HOLD_MS, Math.round(sweepBudgetMs * 0.2));
+        dispatchCursorPoint(from.x, from.y, node, 1);
+        if (pressHoldMs > 0) {
+          await abortableSleep(pressHoldMs, signal);
+        }
+        const dragMs = Math.max(1, sweepBudgetMs - pressHoldMs);
 
         // The drag *is* the selection: a button-held pointer sweeps straight
-        // from the first character to the last on an ease-out curve (fast start,
-        // careful landing — the recording's drag profile), and the selection
+        // from the first character to the last — accelerating off the press,
+        // peaking early, then a long careful landing (the recorded hands' drag
+        // profile, easePointerDrag) — and the selection
         // extends to whatever character sits under the pointer at each step
         // (`getTargetAtClientPoint`). Selection and mouse are one motion — the
         // single behaviour a hand performs — so both cases come out right for
@@ -573,7 +801,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         for (;;) {
           throwIfAborted(signal);
           const progress = Math.min(1, (performance.now() - startedDrag) / dragMs);
-          const eased = easeOutCubic(progress);
+          const eased = easePointerDrag(progress);
           const px = Math.round(from.x + (to.x - from.x) * eased);
           const py = Math.round(from.y + (to.y - from.y) * eased);
           dispatchCursorPoint(px, py, node, 1);
@@ -634,6 +862,9 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       // before any code runs (an empty console is 288px of editor spent on
       // nothing) and get it back at the run, with no second action to remember.
       // A no-op when the dock is already open, which is the default.
+      if (selectIsCollapsed(deps.runtimePanelStore.getSnapshot().context)) {
+        pinPointerToApp();
+      }
       deps.runtimePanelStore.trigger.setIsCollapsed({ collapsed: false });
 
       const prepared = preparePlaygroundRun({
@@ -773,6 +1004,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         return { collapsed: true, alreadyCollapsed: true };
       }
 
+      pinPointerToApp();
       panel.trigger.setIsCollapsed({ collapsed: true });
       await waitUntil(() => selectIsCollapsed(panel.getSnapshot().context), {
         timeoutMs,
@@ -947,6 +1179,8 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       if (!slides.some((slide) => slide.id === slideId)) {
         throw new StudioActionError(`Slide "${slideId}" is not loaded in the slides store`);
       }
+      // The slide takes the stage; the pointer's resting spot under it is stale.
+      hidePointer();
 
       // Same pair the slides controller performs: record the event, then move
       // the store so the panel renders it (no collaboration in studio renders).
@@ -1012,6 +1246,10 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       // authored assets carry no `index`, so array order is all Excalidraw has.
       let scene = deps.whiteboardStore.getSnapshot().context.scene;
       const openedAt = scene.isOpen;
+      if (open ?? scene.isOpen) {
+        // The board takes the stage; the pointer's resting spot under it is stale.
+        hidePointer();
+      }
       const publish = (event: WhiteboardEvent) => {
         deps.notifyWhiteboardEvent(event);
         scene = applyWhiteboardEvent(scene, event);

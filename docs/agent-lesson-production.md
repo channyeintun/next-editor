@@ -298,9 +298,9 @@ Captions are derived from the approved script, but that does not make alignment 
 
 The purpose of synthetic motion is to guide attention, not impersonate a human.
 
-- **Cursor:** generate seeded, eased paths between registered semantic targets. Use a short approach pause before activation. Micro-jitter and decorative overshoot are off by default because they add noise and event volume.
+- **Cursor:** straight, eased paths onto registered semantic targets, timed from distance by the human motion model measured from real recordings (`src/core/src/utils/pointerMotion.ts`, shared with replay): each move leaves and lands at rest, settles on the control and ends in a recorded click — button state only; the action stays the semantic command. The pointer moves only to operate a control or as a selection's own drag, and hides while typing or under a slide/whiteboard. Micro-jitter, arcs and decorative overshoot stay off: they add noise and event volume.
 - **Typing:** emit bounded chunks through Monaco at a cadence chosen per action. Pause at line and statement boundaries; do not add fake mistakes unless the lesson is explicitly teaching a debugging sequence.
-- **Lead time:** let a cursor or selection arrive shortly before the related narration marker. The exact lead should be measured in pilots rather than fixed globally.
+- **Lead time:** a click releases 80 ms before its action; between gestures, replay lands a resting pointer on the next gesture ~220 ms before it presses (recorded hands rest ~220–340 ms).
 - **Reduced motion:** the Performer should support a low-motion profile, and QA should reject rapid flashing or excessive panel movement.
 - **Stable targets:** every automatable UI region needs a durable target ID. Missing targets are build failures, not reasons to fall back to coordinates.
 

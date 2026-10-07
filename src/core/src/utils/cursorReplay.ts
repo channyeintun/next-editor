@@ -10,28 +10,15 @@ import type { DeltaFrame } from "./deltaTypes";
 import { findFrameIndexAtTime } from "./frameDelta";
 import { isKeyframe } from "./deltaTypes";
 import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
+import { POINTER_SETTLE_MS, easePointerAim, pointerAimDurationMs } from "./pointerMotion";
 
-// Longer than any real cursor glide: pointer motion is sampled every ~16–50ms,
-// so even a slow, deliberate move has dense samples. A gap beyond this with no
-// samples between two *different* positions means the cursor was parked between
-// gestures, not gliding across the whole gap. (Recorded holds dedup to a single
-// sample, so a long same-position gap tweens to itself and is unaffected; this
-// only changes synthetic tracks like the studio's, which record the end of one
-// gesture and the start of the next far apart.)
-const IDLE_HOLD_THRESHOLD_MS = 1000;
-
-// Across such a gap the cursor holds at the previous position, then glides to
-// the next over this final window so it arrives from where it was exactly as the
-// next gesture begins — a real transition, never a slow drift across the whole
-// gap nor a jump out of nowhere.
-const IDLE_TRANSITION_MS = 500;
-
-// From-rest reposition easing: accelerate off the parked spot, settle onto the
-// target. Local to keep core independent of the studio's cadence helpers.
-const easeInOutReposition = (t: number): number => {
-  const c = Math.min(1, Math.max(0, t));
-  return c < 0.5 ? 4 * c * c * c : 1 - (-2 * c + 2) ** 3 / 2;
-};
+// Pointer events arrive every ~16–17ms while a hand moves (60 Hz; the p90 gap
+// in a 52-minute human recording was 34ms) and not at all while it rests. A gap
+// wider than this between two samples means the pointer was parked at the
+// first one, not crawling across the whole gap — on a human recording a rest
+// before the next movement, on the studio's a gesture's end and the next one's
+// start, seconds of narration apart.
+const SPARSE_GAP_MS = 100;
 
 export interface CursorReplayPositionResult {
   cursor: MouseCursorPosition;
@@ -118,15 +105,105 @@ const appendCursorSample = (
   samples.push(sample);
 };
 
-const normalizeCursorEvents = (events: CursorRecordingEvent[]): CursorRecordingEvent[] => {
-  const samples: CursorRecordingEvent[] = [];
+// Recordings made before mouseTrackingActor's `isPageBoundaryLeave` fix carry a
+// hidden {0,0} sample every time the pointer crossed out of *any* element while
+// it never left the page — in the bundled introduction lesson, one ~1ms before
+// nearly every move sample (562 of them), and a dozen while it rested, which
+// blank the pointer until the hand next moves (up to 7.6s). The pointer was
+// there all along: it shows again within a frame, or a few pixels from where
+// it vanished, mid-page. A real exit leaves across a window edge and comes
+// back later somewhere else, so it is kept.
+const STRAY_LEAVE_RETURN_MS = 50;
+const STRAY_LEAVE_RETURN_PX = 48;
+// One exception keeps its hide: a leave logged as a slide or whiteboard opened
+// over a resting pointer that then stayed off the mouse until the panel closed
+// (or for seconds). That is an older studio render's pointer going out of
+// sight under the panel — what the studio now does on purpose — not a blink.
+const OVERLAY_LEAVE_MS = 150;
+const HANDS_OFF_MS = 2_000;
 
-  events
+interface OverlaySpan {
+  open: number;
+  close: number;
+}
+
+// When a slide or the whiteboard covered the stage. An overlay never closed
+// stays open to the end.
+const overlaySpansOf = (recording: Recording): OverlaySpan[] => {
+  const spans: OverlaySpan[] = [];
+  const track = (events: { timestamp: number; open: boolean | undefined }[]) => {
+    let openedAt: number | null = null;
+    for (const event of [...events].sort((a, b) => a.timestamp - b.timestamp)) {
+      if (event.open === true && openedAt === null) {
+        openedAt = event.timestamp;
+      } else if (event.open === false && openedAt !== null) {
+        spans.push({ open: openedAt, close: event.timestamp });
+        openedAt = null;
+      }
+    }
+    if (openedAt !== null) spans.push({ open: openedAt, close: Number.POSITIVE_INFINITY });
+  };
+  track(
+    (recording.slideEvents ?? []).map((event) => ({
+      timestamp: event.timestamp,
+      open: event.type === "slide_open" ? true : event.type === "slide_close" ? false : undefined,
+    })),
+  );
+  track(
+    (recording.whiteboardEvents ?? []).map((event) => ({
+      timestamp: event.timestamp,
+      open: event.isOpen,
+    })),
+  );
+  return spans;
+};
+
+const isOverlayLeave = (
+  sample: CursorRecordingEvent,
+  next: CursorRecordingEvent,
+  overlays: readonly OverlaySpan[],
+): boolean =>
+  overlays.some(
+    (span) =>
+      sample.timestamp >= span.open &&
+      sample.timestamp - span.open <= OVERLAY_LEAVE_MS &&
+      (next.timestamp >= span.close || next.timestamp - sample.timestamp > HANDS_OFF_MS),
+  );
+
+const isStrayLeaveSample = (
+  previous: CursorRecordingEvent | undefined,
+  sample: CursorRecordingEvent,
+  next: CursorRecordingEvent | undefined,
+  overlays: readonly OverlaySpan[],
+): boolean =>
+  !sample.visible &&
+  sample.x === 0 &&
+  sample.y === 0 &&
+  !sample.target &&
+  previous !== undefined &&
+  next !== undefined &&
+  previous.visible &&
+  next.visible &&
+  !isOverlayLeave(sample, next, overlays) &&
+  (next.timestamp - sample.timestamp <= STRAY_LEAVE_RETURN_MS ||
+    (previous.coordinateSpace === next.coordinateSpace &&
+      Math.hypot(next.x - previous.x, next.y - previous.y) <= STRAY_LEAVE_RETURN_PX));
+
+const normalizeCursorEvents = (
+  events: CursorRecordingEvent[],
+  overlays: readonly OverlaySpan[] = [],
+): CursorRecordingEvent[] => {
+  const samples: CursorRecordingEvent[] = [];
+  const ordered = events
     .filter((event) => Number.isFinite(event.timestamp))
-    .sort((a, b) => a.timestamp - b.timestamp)
-    .forEach((event) => {
-      appendCursorSample(samples, event.timestamp, event);
-    });
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  ordered.forEach((event, index) => {
+    if (isStrayLeaveSample(samples[samples.length - 1], event, ordered[index + 1], overlays)) {
+      return;
+    }
+    appendCursorSample(samples, event.timestamp, event);
+  });
 
   return samples;
 };
@@ -150,10 +227,38 @@ const deriveCursorSamplesFromFrames = (frames: DeltaFrame[]): CursorRecordingEve
 
 export const getCursorReplaySamples = (recording: Recording): CursorRecordingEvent[] => {
   if (recording.cursorEvents?.length) {
-    return normalizeCursorEvents(recording.cursorEvents);
+    return normalizeCursorEvents(recording.cursorEvents, overlaySpansOf(recording));
   }
 
   return deriveCursorSamplesFromFrames(recording.frames);
+};
+
+// `progress` of the way from `previous` to `next`, as a tween the renderer
+// resolves endpoint by endpoint (each may be relative to a different target).
+const blendCursors = (
+  previous: CursorRecordingEvent,
+  next: CursorRecordingEvent,
+  progress: number,
+  flags: number | undefined,
+): MouseCursorPosition => {
+  const hover = progress < 1 ? previous.hover : next.hover;
+  return {
+    x: previous.x + (next.x - previous.x) * progress,
+    y: previous.y + (next.y - previous.y) * progress,
+    visible: true,
+    ...(previous.coordinateSpace === next.coordinateSpace && previous.coordinateSpace
+      ? { coordinateSpace: previous.coordinateSpace }
+      : {}),
+    ...(typeof flags === "number" ? { flags } : {}),
+    ...(hover !== undefined ? { hover } : {}),
+    ...(typeof next.angle === "number" ? { angle: next.angle } : {}),
+    ...(typeof next.pressure === "number" ? { pressure: next.pressure } : {}),
+    tween: {
+      from: copyCursorTweenEndpoint(previous),
+      to: copyCursorTweenEndpoint(next),
+      progress,
+    },
+  };
 };
 
 export const getCursorPositionAtTime = (
@@ -176,37 +281,29 @@ export const getCursorPositionAtTime = (
     return { cursor: copyCursorPosition(previous), index };
   }
 
-  // Across a long idle gap the cursor was parked between gestures: hold at
-  // `previous` through the idle, then glide to `next` only over the final
-  // IDLE_TRANSITION_MS, so it arrives from where it was exactly as the next
-  // gesture begins — not a slow drift across the whole gap, and not a jump. The
-  // gradual target keeps the on-screen cursor easing smoothly (Cursor.tsx snaps
-  // only on large per-frame jumps). Shorter gaps interpolate across their span.
-  const progress =
-    duration > IDLE_HOLD_THRESHOLD_MS
-      ? easeInOutReposition((time - (next.timestamp - IDLE_TRANSITION_MS)) / IDLE_TRANSITION_MS)
-      : Math.min(1, Math.max(0, (time - previous.timestamp) / duration));
+  // The button state is a step: it holds from the sample where it changed
+  // until the next one. A tap's [press, release) — 13ms on a trackpad — reads
+  // as pressed, and the stroke into a press does not.
+  if (duration <= SPARSE_GAP_MS) {
+    // Dense samples of one continuous movement: interpolate across the span.
+    const progress = Math.min(1, Math.max(0, (time - previous.timestamp) / duration));
+    return { cursor: blendCursors(previous, next, progress, previous.flags), index };
+  }
 
-  return {
-    cursor: {
-      x: previous.x + (next.x - previous.x) * progress,
-      y: previous.y + (next.y - previous.y) * progress,
-      visible: true,
-      ...(previous.coordinateSpace === next.coordinateSpace && previous.coordinateSpace
-        ? { coordinateSpace: previous.coordinateSpace }
-        : {}),
-      ...(typeof next.flags === "number" ? { flags: next.flags } : {}),
-      ...((progress < 1 ? previous.hover : next.hover) !== undefined
-        ? { hover: progress < 1 ? previous.hover : next.hover }
-        : {}),
-      ...(typeof next.angle === "number" ? { angle: next.angle } : {}),
-      ...(typeof next.pressure === "number" ? { pressure: next.pressure } : {}),
-      tween: {
-        from: copyCursorTweenEndpoint(previous),
-        to: copyCursorTweenEndpoint(next),
-        progress,
-      },
-    },
-    index,
-  };
+  // A parked pointer: hold at `previous`, then make the approach a hand makes —
+  // a straight move timed by its distance that leaves and lands at rest, ending
+  // a beat *before* the next gesture so the pointer settles on its target
+  // before pressing (recorded hands rest ~220–340ms there). Not a slow drift
+  // across the whole gap, and not a jump.
+  const distance = Math.hypot(next.x - previous.x, next.y - previous.y);
+  const glideMs = Math.min(duration, pointerAimDurationMs(distance));
+  const settleMs = Math.min(POINTER_SETTLE_MS, duration - glideMs);
+  const glideStart = next.timestamp - settleMs - glideMs;
+  // No distance, no move: stay on `previous` — the spot as it was recorded
+  // against the element under it then — until `next` takes over at its own
+  // time. Switching early would place the arrow against `next`'s element
+  // before replay has laid that element out the way it was recorded (a dock
+  // that has not opened yet), throwing it off by the dock's height.
+  const progress = glideMs > 0 ? easePointerAim((time - glideStart) / glideMs) : 0;
+  return { cursor: blendCursors(previous, next, progress, previous.flags), index };
 };

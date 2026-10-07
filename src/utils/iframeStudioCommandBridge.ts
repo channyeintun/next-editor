@@ -28,12 +28,27 @@ export interface StudioPreviewTargetInspection {
   value: string | null;
 }
 
+/** Where a command's target sits in the preview's own viewport (CSS px), and that viewport's size. */
+export interface StudioPreviewTargetBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
 export interface StudioPreviewCommandResult {
   command: StudioPreviewCommand["type"];
   route: string;
   scrollLeft: number;
   scrollTop: number;
   target?: StudioPreviewTargetInspection;
+  /**
+   * Geometry for the studio pointer, kept beside `target` rather than in it:
+   * `target` is what checkpoints record, and layout is not an observation.
+   */
+  targetBox?: StudioPreviewTargetBox;
 }
 
 interface StudioPreviewCommandResponsePayload {
@@ -60,6 +75,15 @@ function isTargetInspection(value: unknown): value is StudioPreviewTargetInspect
   );
 }
 
+function isTargetBox(value: unknown): value is StudioPreviewTargetBox {
+  return (
+    isRecord(value) &&
+    ["left", "top", "width", "height", "viewportWidth", "viewportHeight"].every(
+      (key) => typeof value[key] === "number" && Number.isFinite(value[key]),
+    )
+  );
+}
+
 function isCommandResult(value: unknown): value is StudioPreviewCommandResult {
   return (
     isRecord(value) &&
@@ -69,7 +93,8 @@ function isCommandResult(value: unknown): value is StudioPreviewCommandResult {
     Number.isFinite(value.scrollLeft) &&
     typeof value.scrollTop === "number" &&
     Number.isFinite(value.scrollTop) &&
-    (value.target === undefined || isTargetInspection(value.target))
+    (value.target === undefined || isTargetInspection(value.target)) &&
+    (value.targetBox === undefined || isTargetBox(value.targetBox))
   );
 }
 
@@ -211,6 +236,19 @@ export function createStudioPreviewCommandBridgeScript(setupMarker: string): str
         element.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
+      function box(element) {
+        if (!element || typeof element.getBoundingClientRect !== 'function') return undefined;
+        var rect = element.getBoundingClientRect();
+        return {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        };
+      }
+
       function result(command, target) {
         var scrollingElement = document.scrollingElement || document.documentElement;
         return {
@@ -219,6 +257,7 @@ export function createStudioPreviewCommandBridgeScript(setupMarker: string): str
           scrollLeft: scrollingElement ? scrollingElement.scrollLeft : 0,
           scrollTop: scrollingElement ? scrollingElement.scrollTop : 0,
           target: inspect(target),
+          targetBox: box(target),
         };
       }
 

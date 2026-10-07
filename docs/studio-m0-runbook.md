@@ -247,8 +247,10 @@ open http://localhost:5173/studio
   file the bundle ships (Ogg/Opus).
 - Automation can read `window.__NEXT_EDITOR_STUDIO__` (runs, reports, manifests,
   comparison, running flag) instead of scraping the DOM.
-- Use a normal-width window (≥1280 px): the render console overlays the top-right
-  and must not cover the file sidebar or runner dock the cursor tweens toward.
+- Use a normal-width window (≥1280 px) so the layout matches the recorded lesson.
+  The render console overlays the top-right outside the recorded area; it may
+  sit over the Run button, which the pointer's click still reaches (its hit-test
+  only looks inside the recorded app).
 - `/studio` never saves its workspace (Ctrl-S and the other saves do nothing
   there), so a render never overwrites the main project in
   `next-editor-workspace`.

@@ -9,14 +9,34 @@ import {
   RECORDED_CURSOR_VISIBILITY_EVENT,
 } from "../utils/recordedCursorVisibility";
 
-const CURSOR_SNAP_DISTANCE = 2;
-const CURSOR_JUMP_DISTANCE = 50;
-const CURSOR_INITIAL_EASE = 0.15;
-const CURSOR_MAX_EASE = 0.6;
-const CURSOR_EASE_STEP = 0.015;
+// Where the arrow's tip sits inside the 24px glyph box (viewBox 14,6.5 of 48).
+// Press feedback scales and ripples around this point, never the box centre.
+const CURSOR_HOTSPOT = { x: 7, y: 3 };
+const CURSOR_PRESSED_SCALE = 0.86;
+const CURSOR_RING_RADIUS = 14;
+const CURSOR_RING_MS = 320;
+// A tap shorter than a frame still shows pressed for this long.
+const CURSOR_TAP_HOLD_MS = 120;
+// Frames closer than this, moving forward, are continuous playback; anything
+// else is a seek or a resume.
+const CONTINUOUS_PLAYBACK_MS = 250;
+
+const isButtonDown = (cursor: { flags?: number } | undefined): boolean =>
+  ((cursor?.flags ?? 0) & 1) === 1;
+
+const prefersReducedMotion = (): boolean =>
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * CursorComponent - Displays a fake cursor overlay during playback.
+ *
+ * It draws the replayed position as-is: `getCursorPositionAtTime` already
+ * eases every movement, so smoothing it again here would only make the arrow
+ * trail the selection it is dragging. A held button (a click, or the drag of a
+ * drag-select) shows as a slightly pressed arrow, and each press sends one
+ * ring out from the tip so a click on a file or the Run button reads as a
+ * click — just the pressed arrow under reduced motion.
  */
 const CursorComponent: React.FC<{
   hasParent?: boolean;
@@ -25,12 +45,21 @@ const CursorComponent: React.FC<{
   const isPlaying = NextEditorActorContext.useSelector(selectIsPlaying);
   const recording = NextEditorActorContext.useSelector(selectRecording);
   const cursorRef = useRef<HTMLDivElement>(null);
+  const glyphRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
   const [isCursorSuppressed, setIsCursorSuppressed] = useState(false);
   const cursorSamples = recording ? getCursorReplaySamples(recording) : [];
 
   useEffect(() => {
     const handleRecordedCursorVisibility = (event: Event) => {
       if (!(event instanceof CustomEvent) || !isRecordedCursorVisibilityDetail(event.detail)) {
+        return;
+      }
+      // The studio hides its own recorded pointer through this event while it
+      // performs a lesson (typing, a slide over the code). That is a recording
+      // instruction, not a viewer hiding the replayed arrow, so a hide outside
+      // playback must not leave the next playback without one.
+      if (!event.detail.visible && !selectIsPlaying(actorRef.getSnapshot())) {
         return;
       }
 
@@ -41,97 +70,106 @@ const CursorComponent: React.FC<{
     return () => {
       window.removeEventListener(RECORDED_CURSOR_VISIBILITY_EVENT, handleRecordedCursorVisibility);
     };
-  }, []);
+  }, [actorRef]);
 
   useEffect(() => {
     const element = cursorRef.current;
-    if (!isPlaying || !element || cursorSamples.length === 0) {
+    const glyph = glyphRef.current;
+    const ring = ringRef.current;
+    if (
+      !isPlaying ||
+      isCursorSuppressed ||
+      !element ||
+      !glyph ||
+      !ring ||
+      cursorSamples.length === 0
+    ) {
       return;
     }
 
     let animationFrameId = 0;
     let cursorSampleIndex = 0;
-    let x = Number.NaN;
-    let y = Number.NaN;
-    let targetX = Number.NaN;
-    let targetY = Number.NaN;
-    let sx = 1;
-    let sy = 1;
+    let isPressedGlyph = false;
+    // Where the previous frame was, to tell a press crossed during playback
+    // from a seek or a resume landing mid-press.
+    let lastIndex: number | null = null;
+    let lastTime = Number.NaN;
+    let pressedUntil = Number.NEGATIVE_INFINITY;
+    const reducedMotion = prefersReducedMotion();
+    glyph.style.transition = reducedMotion ? "" : "transform 80ms ease-out";
+
+    const showPressed = (pressed: boolean) => {
+      if (pressed === isPressedGlyph) return;
+      isPressedGlyph = pressed;
+      glyph.style.transform = pressed ? `scale(${CURSOR_PRESSED_SCALE})` : "";
+    };
+
+    const ripple = () => {
+      if (reducedMotion || typeof ring.animate !== "function") return;
+      ring.animate(
+        [
+          { transform: "scale(0.35)", opacity: 0.6 },
+          { transform: "scale(1)", opacity: 0 },
+        ],
+        { duration: CURSOR_RING_MS, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+      );
+    };
+
+    // A press is a sample where the button went down. Frames step past
+    // samples — a 13ms trackpad tap falls between two 60fps frames about half
+    // the time — so every sample crossed since the last frame is checked, not
+    // just the state at this one. A seek or a resume only re-syncs.
+    const detectPress = (index: number, time: number) => {
+      const continuous =
+        lastIndex !== null &&
+        index >= lastIndex &&
+        time >= lastTime &&
+        time - lastTime < CONTINUOUS_PLAYBACK_MS;
+      if (continuous) {
+        for (let i = lastIndex! + 1; i <= index; i++) {
+          const sample = cursorSamples[i];
+          if (sample.visible && isButtonDown(sample) && !isButtonDown(cursorSamples[i - 1])) {
+            pressedUntil = time + CURSOR_TAP_HOLD_MS;
+            ripple();
+            break;
+          }
+        }
+      }
+      lastIndex = index;
+      lastTime = time;
+    };
 
     const updateCursor = () => {
       const snapshot = actorRef.getSnapshot();
 
       if (!selectIsPlaying(snapshot)) {
         element.style.opacity = "0";
-        x = Number.NaN;
-        y = Number.NaN;
+        showPressed(false);
         return;
       }
 
-      const result = getCursorPositionAtTime(
-        cursorSamples,
-        snapshot.context.timeline.currentTime,
-        cursorSampleIndex,
-      );
+      const time = snapshot.context.timeline.currentTime;
+      const result = getCursorPositionAtTime(cursorSamples, time, cursorSampleIndex);
 
       if (result) {
         cursorSampleIndex = result.index;
+        detectPress(result.index, time);
       }
 
       const cursorPosition = result ? resolveCursorViewportPosition(result.cursor) : null;
 
       if (!cursorPosition) {
         element.style.opacity = "0";
-        x = Number.NaN;
-        y = Number.NaN;
+        showPressed(false);
       } else {
         const offsetParent = hasParent ? element.offsetParent : null;
         const offsetRect = offsetParent?.getBoundingClientRect();
-        const nextTargetX = offsetRect ? cursorPosition.x - offsetRect.left : cursorPosition.x;
-        const nextTargetY = offsetRect ? cursorPosition.y - offsetRect.top : cursorPosition.y;
-
-        if (!Number.isFinite(x) || !Number.isFinite(y)) {
-          x = nextTargetX;
-          y = nextTargetY;
-          sx = 1;
-          sy = 1;
-        } else if (
-          Math.abs(nextTargetX - x) > CURSOR_JUMP_DISTANCE &&
-          Math.abs(nextTargetY - y) > CURSOR_JUMP_DISTANCE
-        ) {
-          x = nextTargetX;
-          y = nextTargetY;
-          sx = CURSOR_INITIAL_EASE;
-          sy = CURSOR_INITIAL_EASE;
-        }
-
-        targetX = nextTargetX;
-        targetY = nextTargetY;
-
-        const dx = targetX - x;
-        const dy = targetY - y;
-        const absX = Math.abs(dx);
-        const absY = Math.abs(dy);
-
-        if (
-          !Number.isFinite(x) ||
-          !Number.isFinite(y) ||
-          (absX < CURSOR_SNAP_DISTANCE && absY < CURSOR_SNAP_DISTANCE)
-        ) {
-          x = targetX;
-          y = targetY;
-          sx = 1;
-          sy = 1;
-        } else {
-          x += dx * sx;
-          y += dy * sy;
-
-          if (sx < CURSOR_MAX_EASE) sx += CURSOR_EASE_STEP;
-          if (sy < CURSOR_MAX_EASE) sy += CURSOR_EASE_STEP;
-        }
+        const x = offsetRect ? cursorPosition.x - offsetRect.left : cursorPosition.x;
+        const y = offsetRect ? cursorPosition.y - offsetRect.top : cursorPosition.y;
 
         element.style.opacity = "1";
         element.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        showPressed(isButtonDown(result!.cursor) || time < pressedUntil);
       }
 
       animationFrameId = requestAnimationFrame(updateCursor);
@@ -142,8 +180,9 @@ const CursorComponent: React.FC<{
     return () => {
       cancelAnimationFrame(animationFrameId);
       element.style.opacity = "0";
+      glyph.style.transform = "";
     };
-  }, [actorRef, cursorSamples, hasParent, isPlaying]);
+  }, [actorRef, cursorSamples, hasParent, isCursorSuppressed, isPlaying]);
 
   if (!isPlaying || isCursorSuppressed || cursorSamples.length === 0) {
     return null;
@@ -164,10 +203,33 @@ const CursorComponent: React.FC<{
         opacity: 0,
         transform: "translate3d(-9999px, -9999px, 0)",
         willChange: "transform, opacity",
-        contain: "layout paint style",
+        // No paint containment: it would clip the press ring to the 24px box.
+        contain: "layout style",
       }}
     >
-      <IconCursor width={24} height={24} />
+      <div
+        ref={ringRef}
+        style={{
+          position: "absolute",
+          left: CURSOR_HOTSPOT.x - CURSOR_RING_RADIUS,
+          top: CURSOR_HOTSPOT.y - CURSOR_RING_RADIUS,
+          width: CURSOR_RING_RADIUS * 2,
+          height: CURSOR_RING_RADIUS * 2,
+          borderRadius: "50%",
+          border: "2px solid rgba(100, 163, 255, 0.9)",
+          opacity: 0,
+        }}
+      />
+      <div
+        ref={glyphRef}
+        style={{
+          width: 24,
+          height: 24,
+          transformOrigin: `${CURSOR_HOTSPOT.x}px ${CURSOR_HOTSPOT.y}px`,
+        }}
+      >
+        <IconCursor width={24} height={24} />
+      </div>
     </div>
   );
 };

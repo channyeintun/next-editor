@@ -142,6 +142,17 @@ describe("studio lesson registry", () => {
         : [];
       expect(cursorsAtHiddenFileRows, `${slug} cursor moves to a hidden file row`).toEqual([]);
 
+      // Every pointer move is a hand operating a real control: it ends in a
+      // click, and never on a dock container (its middle is empty console).
+      for (const action of plan.actions) {
+        if (action.type !== "cursor.moveTo") continue;
+        expect(action.press, `${slug}/${action.id} pointer move ends in a click`).toBe(true);
+        expect(
+          action.target.kind === "target-id" && action.target.id.endsWith("-runner-dock"),
+          `${slug}/${action.id} aims at a dock container`,
+        ).toBe(false);
+      }
+
       const authoredSelects = script.scenes
         .flatMap((scene) => scene.actions)
         .filter((action) => action.type === "editor.select");

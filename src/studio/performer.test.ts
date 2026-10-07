@@ -158,6 +158,47 @@ describe("performPlan", () => {
     }
   });
 
+  it("hands a late pointer move's lateness back out of its budget, pressing as planned", async () => {
+    const { plan: base, driver } = makePlan();
+    const moves: { durationMs: number; press?: boolean }[] = [];
+    driver.moveCursor = async ({ durationMs, press }) => {
+      moves.push({ durationMs, press });
+      return {};
+    };
+    const plan = parseStudioPlan({
+      ...base,
+      actions: [
+        {
+          id: "cursor-run",
+          type: "cursor.moveTo",
+          at: 0,
+          timeoutMs: 1_000,
+          target: { kind: "run-button" },
+          durationMs: 1_000,
+          press: true,
+        },
+        { id: "c-run", type: "runtime.run", at: 1_080, timeoutMs: 1_000 },
+      ],
+    });
+    // The clock already reads 400ms when the move comes up: a slow action ran
+    // over the time the move was planned for.
+    const origin = performance.now() - 400;
+    const controller = new AbortController();
+
+    await performPlan({
+      plan,
+      driver,
+      clock: { nowMs: () => performance.now() - origin },
+      signal: controller.signal,
+      abort: () => controller.abort(),
+    });
+
+    expect(moves).toHaveLength(1);
+    expect(moves[0].press).toBe(true);
+    expect(moves[0].durationMs).toBeLessThanOrEqual(600);
+    expect(moves[0].durationMs).toBeGreaterThan(500);
+  });
+
   it("dispatches an editor.select through the driver with its resolved range", async () => {
     const { calls, driver } = makePlan();
     const plan = parseStudioPlan({

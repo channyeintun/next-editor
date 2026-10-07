@@ -72,9 +72,20 @@ describe("JavaScript and TypeScript Studio fixtures", () => {
       "runtime.start",
       "runtime.waitForReady",
       "preview.open",
+      "cursor.moveTo",
       "preview.input",
+      "cursor.moveTo",
       "preview.click",
       "expect.preview",
+    ]);
+    // The pointer clicks into the field and onto the button it then operates.
+    expect(
+      plan.actions
+        .filter((action) => action.type === "cursor.moveTo")
+        .map((action) => action.target),
+    ).toEqual([
+      { kind: "preview", testId: "name-input" },
+      { kind: "preview", testId: "greet-button" },
     ]);
     const expectation = plan.actions.at(-1);
     expect(expectation).toMatchObject({
