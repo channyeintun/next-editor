@@ -600,7 +600,11 @@ export function useWebContainerRuntimeSession({
     setErrorMessage(getRuntimeErrorMessage(error));
   };
 
-  const startRunnerProcess = async (instance: WebContainer, commandLine: string) => {
+  /** Starts the runner; true once its process has spawned and is the current runner. */
+  const startRunnerProcess = async (
+    instance: WebContainer,
+    commandLine: string,
+  ): Promise<boolean> => {
     const startId = ++runnerStartIdRef.current;
     const generation = runtimeGenerationRef.current;
     // Neither a later start nor a reset has superseded this start.
@@ -613,13 +617,13 @@ export function useWebContainerRuntimeSession({
 
     if (!parsedCommand) {
       setStatus("ready");
-      return;
+      return false;
     }
 
     await stopRunnerProcess({ waitForExit: true });
 
     if (!isCurrentStart()) {
-      return;
+      return false;
     }
 
     setPreviewUrl(null);
@@ -636,18 +640,18 @@ export function useWebContainerRuntimeSession({
       process = await instance.spawn(parsedCommand.command, parsedCommand.args, spawnOptions);
     } catch (error) {
       if (!isCurrentStart()) {
-        return;
+        return false;
       }
 
       console.error("[runner] Failed to start runner process", error);
       setStatus("error");
       setErrorMessage(getRuntimeErrorMessage(error));
-      return;
+      return false;
     }
 
     if (!isCurrentStart()) {
       safelyKillProcess(process);
-      return;
+      return false;
     }
 
     runnerProcessRef.current = process;
@@ -699,6 +703,8 @@ export function useWebContainerRuntimeSession({
           failRunner("[runner] Runner process error", error);
         }
       });
+
+    return true;
   };
 
   const ensureTerminalProcess = async (

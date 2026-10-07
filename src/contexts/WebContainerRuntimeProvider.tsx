@@ -9,6 +9,7 @@ import {
   WebContainerRuntimeSaveWorkspaceContext,
   type EnvironmentVariables,
   type RunnerConfig,
+  type SaveWorkspaceOptions,
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
   type WebContainerRuntimeOutput,
@@ -39,7 +40,11 @@ import type { WorkspaceSyncMutation } from "./WorkspaceContext";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
 import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";
-import { areWorkspaceProjectsEqual, lessonRunsInWebContainer } from "../types/workspace";
+import {
+  areWorkspaceProjectsEqual,
+  lessonRunsInWebContainer,
+  type WorkspaceProject,
+} from "../types/workspace";
 
 /**
  * Awaits `task` and hands a failure to `onError` instead of rejecting.
@@ -90,6 +95,13 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const reverseSyncEnabledRef = useRef(true);
   const lessonTypeRef = useRef(lessonType);
   const runnerConfigRef = useRef<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
+  // What the runner last started on, so a replay re-saving the same workspace does not
+  // run it again (see saveWorkspace). Null from a start until its process has spawned.
+  const lastRunRef = useRef<{
+    project: WorkspaceProject;
+    commandLine: string;
+    environmentVariables: EnvironmentVariables;
+  } | null>(null);
   const [environmentVariables, setEnvironmentVariables] = useState<EnvironmentVariables>(
     loadStoredEnvironmentVariables,
   );
@@ -261,6 +273,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   const resetRuntime = () => {
     hasRunInitCommandRef.current = false;
+    lastRunRef.current = null;
     prepareRuntimePromiseRef.current = null;
     cancelPendingReverseSync();
     resetWorkspaceSync();
@@ -350,6 +363,8 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   /** Boots or joins the runtime, then (re)starts the runner. Failures reach the caller. */
   const bootAndStartRunner = async (generation: number) => {
+    // Until this start spawns, a failed boot or spawn must stay retryable.
+    lastRunRef.current = null;
     setStatus("booting");
     const instance = await prepareRuntime();
     if (!instance || !isRuntimeGenerationActive(generation)) {
@@ -361,10 +376,10 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
       return;
     }
 
-    await startRunnerProcess(
-      instance,
-      resolveRuntimeRunCommand(getProject(), runnerConfig.runCommand),
-    );
+    const project = getProject();
+    const commandLine = resolveRuntimeRunCommand(project, runnerConfig.runCommand);
+    const spawned = await startRunnerProcess(instance, commandLine);
+    lastRunRef.current = spawned ? { project, commandLine, environmentVariables } : null;
   };
 
   /** Restarts the runner, even while one is starting: the Run button and run-on-save. */
@@ -444,7 +459,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     await sendTerminalInput(`${commandLine}\n`);
   };
 
-  const saveWorkspace = async () => {
+  const saveWorkspace = async (options?: SaveWorkspaceOptions) => {
     // A replayed recording load calls this in the same task as loadProject, before
     // this provider re-renders, so the project comes from the store rather than the
     // render refs. A project the runtime has not switched to yet is left to the
@@ -454,6 +469,23 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     if (
       !lessonRunsInWebContainer(project.lessonType) ||
       project.id !== loadedProjectIdRef.current
+    ) {
+      return;
+    }
+
+    // Every pause and paused seek re-saves the workspace the replay shows, and so does
+    // every replayed file switch or sidebar scroll, mostly with code the runner already
+    // ran. Running it again would spawn the program only to print the same output. The
+    // replay's loadProject has queued the project sync already; the whole-project sync
+    // below only exists for the rerun to read.
+    const lastRun = lastRunRef.current;
+    if (
+      options?.rerunOnlyIfChanged &&
+      lastRun &&
+      lastRun.environmentVariables === environmentVariables &&
+      lastRun.commandLine ===
+        resolveRuntimeRunCommand(project, runnerConfigRef.current.runCommand) &&
+      areWorkspaceProjectsEqual(lastRun.project, project)
     ) {
       return;
     }

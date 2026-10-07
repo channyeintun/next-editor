@@ -8,6 +8,7 @@ import {
   type WebContainerRuntimeMetadata,
   type WebContainerRuntimeOutput,
   WebContainerRuntimeSnapshotGetterContext,
+  type SaveWorkspaceOptions,
   type WebContainerRuntimeRecordingSnapshot,
 } from "../contexts/WebContainerRuntimeContext";
 
@@ -23,7 +24,9 @@ export const useWebContainerRuntimeActions = (): WebContainerRuntimeActions => {
   return context;
 };
 
-export const useWebContainerRuntimeSaveWorkspace = (): (() => Promise<void>) => {
+export const useWebContainerRuntimeSaveWorkspace = (): ((
+  options?: SaveWorkspaceOptions,
+) => Promise<void>) => {
   const context = useContext(WebContainerRuntimeSaveWorkspaceContext);
 
   if (!context) {

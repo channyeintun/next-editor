@@ -241,12 +241,14 @@ function useWorkspaceRecordingAdapter() {
     // Saving as well re-runs a finished run-on-save runner on them, so the live
     // console, shown whenever playback is not playing (ready, paused, ended),
     // follows the replayed workspace, including a next lesson loaded in place
-    // under the same starter project id. Only for a runtime that has been started
-    // (any status but idle): starting one is the auto-start's call
+    // under the same starter project id. Only when the runner has not already run
+    // this code: a pause re-applies the workspace it shows, and file switches and
+    // sidebar scrolls replay as whole snapshots. Only for a runtime that has been
+    // started (any status but idle): starting one is the auto-start's call
     // (allowAmbientStart, runOnStartup, browser support) or the viewer's, never
     // the replay's.
     if (getRuntimeRecordingSnapshot().status !== "idle") {
-      void saveRuntimeWorkspace();
+      void saveRuntimeWorkspace({ rerunOnlyIfChanged: true });
     }
   };
 

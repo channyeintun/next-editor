@@ -294,7 +294,14 @@ describe("NextEditorProvider replay and the WebContainer runtime", () => {
   // while stopped keep a finished script's output in step with the workspace.
   it("re-runs a finished runner on STOP and on a seek while stopped", async () => {
     const editor = renderEditor({ allowAmbientStart: true, pendingRecordingUrl: "/lesson.ne" });
-    await editor.loadRecording(scrollingLesson("javascript-workspace"));
+    await editor.loadRecording(
+      lessonRecording(
+        "editing-lesson",
+        ["console.log(1)", "console.log(2)", "console.log(3)"].map((source) =>
+          workspaceSnapshot({ projectId: "javascript-workspace", source }),
+        ),
+      ),
+    );
     act(() => editor.captured.actions?.play());
     await editor.send({ type: "TICK", currentTime: 150 });
     act(() => editor.captured.actions?.pause());
@@ -307,5 +314,25 @@ describe("NextEditorProvider replay and the WebContainer runtime", () => {
 
     await editor.send({ type: "SEEK", time: 250 });
     expect(editor.spawnedCommands().length).toBeGreaterThan(runsAfterStop);
+  });
+
+  // A pause re-applies the workspace it shows, and file switches and tree scrolls
+  // replay as whole workspace snapshots. Running code the runner already ran again
+  // would only spawn it to print the same output.
+  it("does not re-run a finished runner on code it has already run", async () => {
+    const editor = renderEditor({ allowAmbientStart: true, pendingRecordingUrl: "/lesson.ne" });
+    await editor.loadRecording(scrollingLesson("javascript-workspace"));
+    const runsAfterLoad = editor.spawnedCommands().length;
+    expect(editor.spawnedCommands().at(-1)).toContain("pnpm dev");
+
+    act(() => editor.captured.actions?.play());
+    await editor.send({ type: "TICK", currentTime: 150 });
+    await editor.send({ type: "TICK", currentTime: 250 });
+    act(() => editor.captured.actions?.pause());
+    await settle();
+    await editor.send({ type: "STOP" });
+    await editor.send({ type: "SEEK", time: 250 });
+
+    expect(editor.spawnedCommands()).toHaveLength(runsAfterLoad);
   });
 });

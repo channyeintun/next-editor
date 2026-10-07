@@ -124,9 +124,17 @@ export interface WebContainerRuntimeMetadata extends Omit<
 export const WebContainerRuntimeActionsContext = createContext<WebContainerRuntimeActions | null>(
   null,
 );
-export const WebContainerRuntimeSaveWorkspaceContext = createContext<(() => Promise<void>) | null>(
-  null,
-);
+export interface SaveWorkspaceOptions {
+  /**
+   * Skip the run-on-save rerun when the runner last ran exactly this project (a replay
+   * re-saving the workspace it shows). An explicit save always reruns.
+   */
+  rerunOnlyIfChanged?: boolean;
+}
+
+export const WebContainerRuntimeSaveWorkspaceContext = createContext<
+  ((options?: SaveWorkspaceOptions) => Promise<void>) | null
+>(null);
 export const WebContainerRuntimeSnapshotGetterContext = createContext<
   (() => WebContainerRuntimeRecordingSnapshot) | null
 >(null);

@@ -956,6 +956,60 @@ describe("WebContainerRuntimeProvider saveWorkspace", () => {
     return { captured, boot };
   }
 
+  // A replay re-saves the workspace it shows on every pause, paused seek, file switch
+  // and sidebar scroll. A finished runner must not run the same code again for it.
+  it("reruns for a replay save only when the code differs from the last run", async () => {
+    const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
+    const { instance } = createFakeInstance(fakeFs);
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
+    vi.mocked(getOrBootSharedWebContainer).mockReset().mockResolvedValue(instance);
+
+    const captured: {
+      runtime: WebContainerRuntimeActions | null;
+      workspace: WorkspaceActions | null;
+      save: ReturnType<typeof useWebContainerRuntimeSaveWorkspace> | null;
+    } = { runtime: null, workspace: null, save: null };
+    function Capture() {
+      captured.runtime = useWebContainerRuntimeActions();
+      captured.workspace = useWorkspaceActions();
+      captured.save = useWebContainerRuntimeSaveWorkspace();
+      return null;
+    }
+    render(
+      <WorkspaceProvider>
+        <WebContainerRuntimeProvider allowAmbientStart={false}>
+          <Capture />
+        </WebContainerRuntimeProvider>
+      </WorkspaceProvider>,
+    );
+    await act(async () => {
+      await captured.runtime?.startRuntime();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    const runs = () => vi.mocked(instance.spawn).mock.calls.length;
+    const save = async (options?: { rerunOnlyIfChanged: boolean }) => {
+      await act(async () => {
+        await captured.save?.(options);
+        await vi.advanceTimersByTimeAsync(200);
+      });
+    };
+    const started = runs();
+
+    // An explicit save (Ctrl+S) always reruns, here on the project the install's
+    // reverse sync settled.
+    await save();
+    expect(runs()).toBe(started + 1);
+    await save({ rerunOnlyIfChanged: true });
+    expect(runs()).toBe(started + 1);
+
+    act(() => captured.workspace?.createFile("notes.txt", "draft"));
+    await save({ rerunOnlyIfChanged: true });
+    expect(runs()).toBe(started + 2);
+    await save({ rerunOnlyIfChanged: true });
+    expect(runs()).toBe(started + 2);
+  });
+
   function lessonProject(id: string, lessonType: WorkspaceLessonType): WorkspaceProject {
     const entryFilePath = lessonType === "go" ? "main.go" : "main.js";
     return {
