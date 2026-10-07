@@ -1,4 +1,4 @@
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { VoiceEngine } from "../voice/engine";
 import type { VoiceUnavailableReason } from "../voice/machine";
@@ -11,6 +11,16 @@ vi.mock("./CollaborationContext", () => ({
 
 vi.mock("@next-editor/infra", () => ({
   getCollaborationVoiceAvailability: () => Promise.resolve(true),
+}));
+
+// The production engine, which the provider imports on demand.
+const browserEngines: FakeEngine[] = [];
+vi.mock("../voice/browserVoiceEngine", () => ({
+  createBrowserVoiceEngine: (options: { roomId: string; collaborationSessionId: string }) => {
+    const engine = new FakeEngine(options);
+    browserEngines.push(engine);
+    return engine;
+  },
 }));
 
 import {
@@ -92,6 +102,7 @@ describe("CollaborationVoiceProvider", () => {
 
   beforeEach(() => {
     engines.length = 0;
+    browserEngines.length = 0;
     collaborationState = null;
   });
 
@@ -202,6 +213,36 @@ describe("CollaborationVoiceProvider", () => {
     );
     expect(engines).toHaveLength(1);
     expect(engines[0].disposed).toBe(true);
+  });
+
+  it("loads the browser engine once a room is active", async () => {
+    collaborationState = activeCollaboration(ROOM_ID, SESSION_ID);
+    const view = render(
+      <CollaborationVoiceProvider>
+        <StateProbe />
+      </CollaborationVoiceProvider>,
+    );
+    await waitFor(() => expect(browserEngines).toHaveLength(1));
+    expect(browserEngines[0].options).toEqual({
+      roomId: ROOM_ID,
+      collaborationSessionId: SESSION_ID,
+    });
+    // jsdom has no WebRTC.
+    expect(browserEngines[0].availability).toEqual(["unsupported-browser"]);
+    view.unmount();
+    expect(browserEngines[0].disposed).toBe(true);
+  });
+
+  it("builds no browser engine when the room ends while the engine loads", async () => {
+    collaborationState = activeCollaboration(ROOM_ID, SESSION_ID);
+    const view = render(
+      <CollaborationVoiceProvider>
+        <StateProbe />
+      </CollaborationVoiceProvider>,
+    );
+    view.unmount();
+    await act(() => import("../voice/browserVoiceEngine"));
+    expect(browserEngines).toHaveLength(0);
   });
 
   it("disposes the engine on unmount", async () => {

@@ -7,11 +7,8 @@ import {
   type ReactNode,
 } from "react";
 import { getCollaborationVoiceAvailability } from "@next-editor/infra";
-import { VoiceEngine, type VoiceEngineDeps } from "../voice/engine";
-import { createVoiceMediaSession } from "../voice/partyTracksAdapter";
+import type { VoiceEngine } from "../voice/engine";
 import { setVoiceJoinedForRecording } from "../voice/recorderBridge";
-import { createRemoteAudioSink } from "../voice/remoteAudioSink";
-import { createSpeakingDetector } from "../voice/speakingDetector";
 import type { VoiceCommands, VoiceUiState } from "../voice/types";
 import { useOptionalCollaboration } from "./CollaborationContext";
 
@@ -58,15 +55,13 @@ export function isVoiceCapableBrowser(): boolean {
   );
 }
 
-function browserVoiceEngineDeps(): VoiceEngineDeps {
-  return {
-    createSocket: (url) => new WebSocket(url),
-    createMediaSession: createVoiceMediaSession,
-    createSink: (onBlockedChange) => createRemoteAudioSink({ onBlockedChange }),
-    createSpeakingDetector,
-    setTimer: (callback, delayMs) => setTimeout(callback, delayMs),
-    clearTimer: (timer) => clearTimeout(timer),
-  };
+/**
+ * The engine and its media stack (partytracks + rxjs, ~19 KB gz) load only for
+ * an active room, which learners never join. Kept out of the component: the
+ * React Compiler cannot compile a function holding `import()`.
+ */
+function loadBrowserVoiceEngine() {
+  return import("../voice/browserVoiceEngine");
 }
 
 export interface CollaborationVoiceProviderProps {
@@ -92,38 +87,50 @@ export function CollaborationVoiceProvider({
   useEffect(() => {
     if (!activeRoomId || !collaborationSessionId) return;
     let cancelled = false;
-    const nextEngine = createEngine
-      ? createEngine({ roomId: activeRoomId, collaborationSessionId })
-      : new VoiceEngine({ roomId: activeRoomId, collaborationSessionId }, browserVoiceEngineDeps());
-    setEngine(nextEngine);
-    // Recorder privacy bridge: while voice is joined, tab/display audio is
-    // excluded from screen recordings (plan §11).
-    const syncRecorderBridge = () => {
-      setVoiceJoinedForRecording(VOICE_JOINED_STATES.has(nextEngine.getUiState().state));
+    let teardown: (() => void) | null = null;
+    const startEngine = (nextEngine: VoiceEngine) => {
+      setEngine(nextEngine);
+      // Recorder privacy bridge: while voice is joined, tab/display audio is
+      // excluded from screen recordings (plan §11).
+      const syncRecorderBridge = () => {
+        setVoiceJoinedForRecording(VOICE_JOINED_STATES.has(nextEngine.getUiState().state));
+      };
+      const unsubscribeRecorderBridge = nextEngine.subscribe(syncRecorderBridge);
+      syncRecorderBridge();
+      if (!isVoiceCapableBrowser() && !createEngine) {
+        nextEngine.setAvailability("unsupported-browser");
+      } else {
+        const probe = checkAvailability ?? getCollaborationVoiceAvailability;
+        probe(activeRoomId).then(
+          (enabled) => {
+            if (!cancelled) nextEngine.setAvailability(enabled ? null : "feature-disabled");
+          },
+          () => {
+            if (!cancelled) nextEngine.setAvailability("feature-disabled");
+          },
+        );
+      }
+      teardown = () => {
+        unsubscribeRecorderBridge();
+        nextEngine.dispose();
+        setVoiceJoinedForRecording(false);
+        setEngine((current) => (current === nextEngine ? null : current));
+      };
     };
-    const unsubscribeRecorderBridge = nextEngine.subscribe(syncRecorderBridge);
-    syncRecorderBridge();
-    if (!isVoiceCapableBrowser() && !createEngine) {
-      nextEngine.setAvailability("unsupported-browser");
+    const options = { roomId: activeRoomId, collaborationSessionId };
+    if (createEngine) {
+      startEngine(createEngine(options));
     } else {
-      const probe = checkAvailability ?? getCollaborationVoiceAvailability;
-      probe(activeRoomId).then(
-        (enabled) => {
-          if (!cancelled) nextEngine.setAvailability(enabled ? null : "feature-disabled");
-        },
-        () => {
-          if (!cancelled) nextEngine.setAvailability("feature-disabled");
-        },
-      );
+      void loadBrowserVoiceEngine().then(({ createBrowserVoiceEngine }) => {
+        // The room may have changed or closed while the chunk loaded.
+        if (!cancelled) startEngine(createBrowserVoiceEngine(options));
+      });
     }
     return () => {
       // A room change or collaboration leave always tears voice down fully
       // before any new room's engine exists.
       cancelled = true;
-      unsubscribeRecorderBridge();
-      nextEngine.dispose();
-      setVoiceJoinedForRecording(false);
-      setEngine((current) => (current === nextEngine ? null : current));
+      teardown?.();
     };
   }, [activeRoomId, collaborationSessionId, createEngine, checkAvailability]);
 
