@@ -31,6 +31,8 @@ interface UseWebContainerRuntimeSessionOptions {
 
 const RUNNER_OUTPUT_LIMIT = 6000;
 const TERMINAL_OUTPUT_LIMIT = 50000;
+// Hidden tabs run no animation frames; this timeout publishes output there.
+const OUTPUT_FLUSH_FALLBACK_MS = 100;
 
 interface TerminalSessionHandle extends RuntimeTerminalSessionSnapshot {
   inputWriter: WritableStreamDefaultWriter<string> | null;
@@ -42,6 +44,31 @@ interface TerminalSessionHandle extends RuntimeTerminalSessionSnapshot {
 /** Passes the user's environment variables to a spawned process, when there are any. */
 function getSpawnOptions(environmentVariables: EnvironmentVariables) {
   return Object.keys(environmentVariables).length > 0 ? { env: environmentVariables } : undefined;
+}
+
+/** Streamed output the refs hold but React state does not show yet. */
+interface PendingOutputFlush {
+  runner: boolean;
+  terminal: boolean;
+  cancel: () => void;
+}
+
+/**
+ * Runs `callback` before the next paint, or after a timeout in a hidden tab,
+ * whichever comes first; the callback must tolerate a second call. Returns a
+ * function that cancels both.
+ */
+function scheduleBeforeNextPaint(callback: () => void): () => void {
+  const frame =
+    typeof requestAnimationFrame === "function" ? requestAnimationFrame(callback) : null;
+  const timeout = setTimeout(callback, OUTPUT_FLUSH_FALLBACK_MS);
+
+  return () => {
+    if (frame !== null) {
+      cancelAnimationFrame(frame);
+    }
+    clearTimeout(timeout);
+  };
 }
 
 function toTerminalSessionSnapshots(
@@ -155,8 +182,12 @@ export function useWebContainerRuntimeSession({
     useMirroredState<RuntimePreviewMessage | null>(null);
   const [latestLifecycleEvent, latestLifecycleEventRef, setLatestLifecycleEvent] =
     useMirroredState<RuntimeLifecycleEvent | null>(null);
-  const [lastOutput, lastOutputRef, setLastOutput] = useMirroredState<string | null>(null);
+  // Streamed output: the refs take every chunk at once (getRecordingSnapshot
+  // reads them), and React state follows at most once a frame; see flushOutput.
+  const lastOutputRef = useRef<string | null>(null);
+  const [lastOutput, setLastOutputState] = useState<string | null>(null);
   const [terminalSessions, setTerminalSessions] = useState<RuntimeTerminalSessionSnapshot[]>([]);
+  const pendingOutputFlushRef = useRef<PendingOutputFlush | null>(null);
   const [activeTerminalSessionId, activeTerminalSessionIdRef, setActiveTerminalSession] =
     useMirroredState<string | null>(null);
   const [activeCommand, activeCommandRef, setActiveCommand] = useMirroredState<string | null>(null);
@@ -183,6 +214,53 @@ export function useWebContainerRuntimeSession({
     }
   };
 
+  /** Replaces the runner output at once: a clear or a new run, not a streamed chunk. */
+  const setLastOutput = (value: string | null) => {
+    lastOutputRef.current = value;
+    setLastOutputState(value);
+  };
+
+  const syncTerminalSessions = () => {
+    setTerminalSessions(toTerminalSessionSnapshots(terminalSessionsRef.current));
+  };
+
+  /**
+   * Publishes the streamed output that is still waiting for a frame. A process
+   * exit calls it directly, so a run's last line renders with its new status.
+   */
+  const flushOutput = () => {
+    const pending = pendingOutputFlushRef.current;
+
+    if (!pending) {
+      return;
+    }
+
+    pendingOutputFlushRef.current = null;
+    pending.cancel();
+
+    if (pending.runner) {
+      setLastOutputState(lastOutputRef.current);
+    }
+
+    if (pending.terminal) {
+      syncTerminalSessions();
+    }
+  };
+
+  // An install or a dev server writes many chunks a frame, and output state
+  // re-renders the dock and the recorder's runtime-event check, so a chunk
+  // only marks its stream for the next frame's flush.
+  const scheduleOutputFlush = (stream: "runner" | "terminal") => {
+    let pending = pendingOutputFlushRef.current;
+
+    if (!pending) {
+      pending = { runner: false, terminal: false, cancel: scheduleBeforeNextPaint(flushOutput) };
+      pendingOutputFlushRef.current = pending;
+    }
+
+    pending[stream] = true;
+  };
+
   // Runner output is mirrored to the browser console for local debugging;
   // session replay never records it (POSTHOG_REPLAY_PRIVACY_OPTIONS).
   const appendOutput = (chunk: string) => {
@@ -198,11 +276,10 @@ export function useWebContainerRuntimeSession({
       console.log("[runner]", consoleChunk);
     }
 
-    setLastOutput(`${lastOutputRef.current ?? ""}${sanitizedChunk}`.slice(-RUNNER_OUTPUT_LIMIT));
-  };
-
-  const syncTerminalSessions = () => {
-    setTerminalSessions(toTerminalSessionSnapshots(terminalSessionsRef.current));
+    lastOutputRef.current = `${lastOutputRef.current ?? ""}${sanitizedChunk}`.slice(
+      -RUNNER_OUTPUT_LIMIT,
+    );
+    scheduleOutputFlush("runner");
   };
 
   const findTerminalSession = (sessionId: string | null) =>
@@ -219,18 +296,8 @@ export function useWebContainerRuntimeSession({
       return;
     }
 
-    const nextOutput = `${terminalSession.output}${chunk}`.slice(-TERMINAL_OUTPUT_LIMIT);
-    terminalSession.output = nextOutput;
-
-    setTerminalSessions((current) =>
-      current.map((session) => {
-        return {
-          ...session,
-          output: session.id === sessionId ? nextOutput : session.output,
-        };
-      }),
-    );
-
+    terminalSession.output = `${terminalSession.output}${chunk}`.slice(-TERMINAL_OUTPUT_LIMIT);
+    scheduleOutputFlush("terminal");
     onTerminalOutputRef.current?.();
   };
 
@@ -320,6 +387,9 @@ export function useWebContainerRuntimeSession({
     removeInstanceListeners();
     teardownSharedWebContainer(instanceRef.current);
     instanceRef.current = null;
+    // The setters below publish the emptied output; a pending frame adds nothing.
+    pendingOutputFlushRef.current?.cancel();
+    pendingOutputFlushRef.current = null;
     setStatus("idle");
     setPreviewUrl(null);
     setPreviewPort(null);
@@ -510,6 +580,8 @@ export function useWebContainerRuntimeSession({
           foregroundProcessesRef.current.delete(process);
         }
 
+        flushOutput();
+
         if (options.trackAsActiveCommand && isRuntimeGenerationActive(generation)) {
           setActiveCommand(null);
         }
@@ -520,6 +592,7 @@ export function useWebContainerRuntimeSession({
   /** The runner's output stream or process failed: drop the runner and show why. */
   const failRunner = (label: string, error: unknown) => {
     console.error(label, error);
+    flushOutput();
     runnerProcessRef.current = null;
     setPreviewUrl(null);
     setPreviewPort(null);
@@ -608,6 +681,7 @@ export function useWebContainerRuntimeSession({
         setPreviewUrl(null);
         setPreviewPort(null);
         appendOutput(`\nRunner exited with code ${exitCode}\n`);
+        flushOutput();
 
         if (exitCode !== 0) {
           console.error("[runner]", formatCommandError(commandLine));
@@ -664,6 +738,7 @@ export function useWebContainerRuntimeSession({
       currentSession.inputWriter = null;
       currentSession.process = null;
       appendTerminalOutput(sessionId, message);
+      flushOutput();
     };
 
     const startShell = async () => {
@@ -819,6 +894,9 @@ export function useWebContainerRuntimeSession({
 
     return () => {
       isMountedRef.current = false;
+      // Publishes rather than drops the pending output: StrictMode's rehearsal
+      // unmount keeps the hook (and its state) alive.
+      flushOutput();
     };
   }, []);
 

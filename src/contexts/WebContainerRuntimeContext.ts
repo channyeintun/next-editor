@@ -96,8 +96,24 @@ export interface WebContainerRuntimeRecordingSnapshot {
   latestLifecycleEvent: RuntimeLifecycleEvent | null;
 }
 
-/** Everything a recording snapshot holds, plus the runtime's support and settings. */
-export interface WebContainerRuntimeMetadata extends WebContainerRuntimeRecordingSnapshot {
+/**
+ * The runner console and the terminal sessions' text: the fields that change on
+ * every output chunk, so they have a context of their own and only the
+ * components that render output re-render while a process streams.
+ */
+export type WebContainerRuntimeOutput = Pick<
+  WebContainerRuntimeRecordingSnapshot,
+  "lastOutput" | "terminalSessions"
+>;
+
+/**
+ * Everything a recording snapshot holds except the streaming output, plus the
+ * runtime's support and settings.
+ */
+export interface WebContainerRuntimeMetadata extends Omit<
+  WebContainerRuntimeRecordingSnapshot,
+  keyof WebContainerRuntimeOutput
+> {
   isSupported: boolean;
   environmentVariables: EnvironmentVariables;
   runnerConfig: RunnerConfig;
@@ -116,5 +132,8 @@ export const WebContainerRuntimeSnapshotGetterContext = createContext<
 >(null);
 
 export const WebContainerRuntimeMetadataContext = createContext<WebContainerRuntimeMetadata | null>(
+  null,
+);
+export const WebContainerRuntimeOutputContext = createContext<WebContainerRuntimeOutput | null>(
   null,
 );

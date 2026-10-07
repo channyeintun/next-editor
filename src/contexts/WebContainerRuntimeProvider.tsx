@@ -4,12 +4,14 @@ import {
   isRuntimeBusy,
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
+  WebContainerRuntimeOutputContext,
   WebContainerRuntimeSnapshotGetterContext,
   WebContainerRuntimeSaveWorkspaceContext,
   type EnvironmentVariables,
   type RunnerConfig,
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
+  type WebContainerRuntimeOutput,
 } from "./WebContainerRuntimeContext";
 import {
   DEFAULT_RUNNER_CONFIG,
@@ -664,8 +666,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     errorMessage,
     latestPreviewMessage,
     latestLifecycleEvent,
-    lastOutput,
-    terminalSessions,
     activeTerminalSessionId,
     activeCommand,
     environmentVariables,
@@ -673,12 +673,18 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     ambientStartEnabled: allowAmbientStart,
   };
 
+  // Kept out of metadataValue so a streamed chunk does not re-render every
+  // metadata consumer (the preview controller among them), only the output's.
+  const outputValue: WebContainerRuntimeOutput = { lastOutput, terminalSessions };
+
   return (
     <WebContainerRuntimeSnapshotGetterContext value={getRecordingSnapshot}>
       <WebContainerRuntimeSaveWorkspaceContext value={saveWorkspace}>
         <WebContainerRuntimeActionsContext value={actionsValue}>
           <WebContainerRuntimeMetadataContext value={metadataValue}>
-            {children}
+            <WebContainerRuntimeOutputContext value={outputValue}>
+              {children}
+            </WebContainerRuntimeOutputContext>
           </WebContainerRuntimeMetadataContext>
         </WebContainerRuntimeActionsContext>
       </WebContainerRuntimeSaveWorkspaceContext>

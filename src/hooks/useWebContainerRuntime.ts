@@ -2,9 +2,11 @@ import { useContext } from "react";
 import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
+  WebContainerRuntimeOutputContext,
   WebContainerRuntimeSaveWorkspaceContext,
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
+  type WebContainerRuntimeOutput,
   WebContainerRuntimeSnapshotGetterContext,
   type WebContainerRuntimeRecordingSnapshot,
 } from "../contexts/WebContainerRuntimeContext";
@@ -52,6 +54,19 @@ export const useWebContainerRuntimeMetadata = (): WebContainerRuntimeMetadata =>
   if (!context) {
     throw new Error(
       "useWebContainerRuntimeMetadata must be used within a WebContainerRuntimeProvider",
+    );
+  }
+
+  return context;
+};
+
+/** The runner and terminal output; it changes on every streamed chunk (at most once a frame). */
+export const useWebContainerRuntimeOutput = (): WebContainerRuntimeOutput => {
+  const context = useContext(WebContainerRuntimeOutputContext);
+
+  if (!context) {
+    throw new Error(
+      "useWebContainerRuntimeOutput must be used within a WebContainerRuntimeProvider",
     );
   }
 

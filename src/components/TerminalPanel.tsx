@@ -30,6 +30,7 @@ import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
+  useWebContainerRuntimeOutput,
 } from "../hooks/useWebContainerRuntime";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import type {
@@ -168,15 +169,14 @@ function TerminalPanel() {
   const {
     activeTerminalSessionId,
     status,
-    lastOutput,
     errorMessage,
     activeCommand,
     latestPreviewMessage,
     previewPort,
     previewUrl,
     runnerConfig,
-    terminalSessions,
   } = useWebContainerRuntimeMetadata();
+  const { lastOutput, terminalSessions } = useWebContainerRuntimeOutput();
   const { currentRecording, isRecording } = useNextEditorMetadata();
   const displayIsSettingsOpen = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isSettingsOpen ?? false)
