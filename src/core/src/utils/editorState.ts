@@ -239,9 +239,25 @@ export function normalizeDeltaFrame(frame: DeltaFrame): DeltaFrame {
   };
 }
 
+/**
+ * Frame arrays that hold only normalized frames: ones the codec decoded (it normalizes
+ * each frame as it arrives), a take's captured frames (keyframes and view states are
+ * normalized as they are taken), and normalizeRecordingData's own results. Normalizing
+ * one again deep-cloned every view state and changed nothing. Such an array may only
+ * ever grow by frames of the same kind: decoded stream deltas, or captures.
+ */
+const normalizedFrameArrays = new WeakSet<readonly DeltaFrame[]>();
+
+/** Records that every frame in `frames` is already normalized (see normalizedFrameArrays). */
+export function markFramesNormalized(frames: readonly DeltaFrame[]): void {
+  normalizedFrameArrays.add(frames);
+}
+
 export function normalizeRecordingData(recording: Recording): Recording {
-  return {
-    ...recording,
-    frames: recording.frames.map((frame) => normalizeDeltaFrame(frame)),
-  };
+  // Either way the caller gets its own array, as callers that append in place expect.
+  const frames = normalizedFrameArrays.has(recording.frames)
+    ? recording.frames.slice()
+    : recording.frames.map((frame) => normalizeDeltaFrame(frame));
+  normalizedFrameArrays.add(frames);
+  return { ...recording, frames };
 }

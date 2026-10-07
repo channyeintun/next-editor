@@ -6,6 +6,7 @@ import {
   createFrameDelta,
   reconstructFrameAtIndex,
 } from "../core/src/utils/frameDelta";
+import { normalizeRecordingData } from "../core/src/utils/editorState";
 import { decompressBinaryToRecording } from "./recordingCodec";
 import {
   createStreamingRecordingReader,
@@ -396,6 +397,20 @@ describe("recordingCodec", () => {
         expect.objectContaining({ name: "recording.reader_snapshot", count: 3 }),
       ]),
     );
+  });
+
+  it("hands out decoded frames that loading does not normalize again", async () => {
+    const bytes = await encodeRecordingToStream(
+      createRecording({ frames: [makeKeyframe(0, "a\n"), makeKeyframe(500, "ab\n")] }),
+    );
+    const reader = createStreamingRecordingReader();
+    reader.push(bytes);
+
+    for (const decoded of [decodeRecordingStream(bytes), reader.getRecording()]) {
+      if (!decoded) throw new Error("Expected a decoded recording");
+      // A pass-through keeps every frame object; a second normalization would copy each.
+      expect(normalizeRecordingData(decoded).frames[1]).toBe(decoded.frames[1]);
+    }
   });
 
   it("progressive snapshots do not share mutable event arrays", async () => {

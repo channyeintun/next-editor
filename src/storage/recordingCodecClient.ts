@@ -1,5 +1,6 @@
 import { wrap, type Remote } from "comlink";
 import type { Recording } from "../core/src";
+import { markFramesNormalized } from "../core/src/utils/editorState";
 import { loadDmpCodec } from "./dmpCodec/dmpCodec";
 import {
   decompressBinaryToRecording as decompressBinaryToRecordingInProcess,
@@ -103,6 +104,8 @@ export async function decompressBinaryToRecording(binaryData: Uint8Array): Promi
         },
       )
     : await decompressBinaryToRecordingInProcess(binaryData);
+  // The decoder normalized every frame; a worker's mark of that stays in the worker.
+  markFramesNormalized(recording.frames);
   return hydrateDecodedRecordingWorkspaceAssets(recording);
 }
 

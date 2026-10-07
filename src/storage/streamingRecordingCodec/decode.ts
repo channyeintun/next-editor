@@ -7,7 +7,7 @@ import type {
   SlideEvent,
 } from "../../core/src/slides";
 import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
-import { normalizeDeltaFrame } from "../../core/src/utils/editorState";
+import { markFramesNormalized, normalizeDeltaFrame } from "../../core/src/utils/editorState";
 import type { RuntimeRecordingEvent } from "../../types/runtime";
 import type { WorkspaceRecordingAsset, WorkspaceRecordingEvent } from "../../types/workspace";
 import type { WhiteboardEvent } from "../../core/src/whiteboard";
@@ -403,6 +403,8 @@ function assembleRecording(
   streamFinalized: boolean,
 ): Recording {
   const { meta } = stream;
+  // decodeSegment normalized every frame as it arrived, so loading these needs no second pass.
+  markFramesNormalized(records.frames);
 
   const provisionalRecording: Recording = {
     version: meta.version,

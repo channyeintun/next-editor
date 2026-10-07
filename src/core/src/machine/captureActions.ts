@@ -50,6 +50,7 @@ import { totalMediaSpanLength } from "../utils/mediaSpans";
 import { defaultChapterTitle } from "../utils/chapters";
 import { arePositionsEqual, areSelectionsEqual } from "../utils/editorDiff";
 import {
+  markFramesNormalized,
   normalizeEditorPosition,
   normalizeEditorSelection,
   normalizeEditorViewState,
@@ -931,6 +932,9 @@ export const finalizeRecording = ({ context }: EditorActionArgs): EditorContextU
       ? Math.max(Math.min(elapsedMs, externalDurationMs), 1)
       : elapsedMs;
   const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() || undefined;
+  // Captured keyframes went through createKeyframe and every view state through createFrame,
+  // so the take's frames are normalized already and loading it needs no second pass.
+  markFramesNormalized(context.session.frames);
   const recording = assembleRecording({
     tracks: context.session,
     duration,

@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type * as monaco from "monaco-editor";
-import type { EditorFrame } from "../types";
-import { normalizeEditorFrame } from "./editorState";
+import type { EditorFrame, Recording } from "../types";
+import type { DeltaFrame } from "./deltaTypes";
+import {
+  markFramesNormalized,
+  normalizeDeltaFrame,
+  normalizeEditorFrame,
+  normalizeRecordingData,
+} from "./editorState";
 
 const frameWithViewState = (): EditorFrame => ({
   timestamp: 0,
@@ -57,5 +63,48 @@ describe("normalizeEditorFrame", () => {
       position: { lineNumber: 1, column: 3 },
       selection: frame.state.selection,
     });
+  });
+});
+
+describe("normalizeRecordingData", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const recordingOf = (frames: DeltaFrame[]): Recording => ({
+    version: 4,
+    id: "recording",
+    name: "Recording",
+    createdAt: 0,
+    duration: 1,
+    keyframeInterval: 120,
+    frames,
+  });
+
+  // Loading a decoded lesson or a finished take deep-cloned every view state the
+  // decoder or the capture had just normalized.
+  it("does not normalize frames marked as normalized again", () => {
+    const frames = [normalizeDeltaFrame({ ...frameWithViewState(), isKeyframe: true })];
+    markFramesNormalized(frames);
+    const clone = vi.spyOn(globalThis, "structuredClone");
+
+    const loaded = normalizeRecordingData(recordingOf(frames));
+
+    expect(clone).not.toHaveBeenCalled();
+    expect(loaded.frames[0]).toBe(frames[0]);
+    // Still the caller's own array: the machine appends streamed frames to it in place.
+    expect(loaded.frames).not.toBe(frames);
+  });
+
+  it("normalizes unmarked frames once, and not again when its result is loaded", () => {
+    const frame: DeltaFrame = { ...frameWithViewState(), isKeyframe: true };
+    const clone = vi.spyOn(globalThis, "structuredClone");
+
+    const once = normalizeRecordingData(recordingOf([frame]));
+    const twice = normalizeRecordingData(once);
+
+    expect(clone).toHaveBeenCalledTimes(1);
+    expect(once.frames[0]).toEqual(normalizeDeltaFrame(frame));
+    expect(twice.frames).toEqual(once.frames);
   });
 });
