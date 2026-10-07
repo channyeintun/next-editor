@@ -61,6 +61,11 @@ const PUBLIC_KEY_PREFIXES = ["lessons/", "slide-images/"];
 // These are served as immutable and kept in this location's cache. Everything
 // else (.ne, audio, captions, the first upload's "<id>-thumbnail.<ext>") can be
 // replaced in place by an upload retry or an owner edit, so it must revalidate.
+// Never rewrite a key of these shapes in place (a thumbnail re-encode or
+// backfill writes a new key and repoints the row): browsers would keep the old
+// bytes for a year and each location until eviction. Deleting the R2 object
+// does not reach those caches either; see docs/cloudflare-architecture.md for
+// purging one that must disappear.
 const WRITE_ONCE_KEY_RE =
   /^(?:slide-images\/[0-9a-f]{64}|lessons\/([\w-]+)\/\1-thumbnail-\d+\.(?:png|jpe?g|webp))$/;
 const WRITE_ONCE_CACHE_CONTROL = "public, max-age=31536000, immutable";

@@ -132,9 +132,16 @@ with 304), and `Range` support for audio/video streaming. The two write-once
 key shapes, `slide-images/<sha256>` and timestamped
 `<id>-thumbnail-<timestamp>` images, are never rewritten, so they are sent as
 `public, max-age=31536000, immutable` and kept in the serving location's Cache
-API (`caches.default`), which answers repeat views without an R2 read. Serving
-through the Worker (rather than a public bucket domain) keeps media same-origin →
-COEP-clean and cache-friendly.
+API (`caches.default`), which answers repeat views without an R2 read. So a
+re-encode or backfill of those images must write new keys and repoint the rows,
+never overwrite in place. Deleting the R2 object (a lesson delete, a replaced
+thumbnail) leaves any location's cached copy servable until eviction; when one
+must disappear everywhere (a takedown), purge it from the `nexteditor.dev` zone
+cache by prefix (`nexteditor.dev/media/lessons/<id>/`) or with Purge Everything,
+since `cache.delete` in the Worker only clears the location it runs in.
+Browsers that already hold a copy keep it. Serving through the Worker (rather
+than a public bucket domain) keeps media same-origin → COEP-clean and
+cache-friendly.
 
 D1 stores the **path** (`media/lessons/<id>/<id>.ne`, no leading slash), not the
 raw R2 key, so the value drops straight into `lesson.ne` (the client requests
