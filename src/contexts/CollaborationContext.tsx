@@ -92,6 +92,7 @@ import {
   applyTeachingSlides,
   applyTeachingWhiteboard,
   borrowStandaloneTeachingStores,
+  isSameTeachingProjection,
   recordCanonicalTeachingChange,
   teachingHydrationKey,
   type StandaloneTeachingStores,
@@ -378,7 +379,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
 
       const previous = teachingProjectionRef.current;
       teachingProjectionRef.current = projection;
-      setTeaching(projection);
+      // A teaching transaction that changes nothing shown (a peer's candidate
+      // that loses, a re-projection) must not replace the context value and
+      // re-render every collaboration consumer.
+      if (!previous || !isSameTeachingProjection(previous, projection)) setTeaching(projection);
 
       const currentProvider = providerRef.current;
       const currentUser = userRef.current;

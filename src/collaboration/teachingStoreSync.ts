@@ -185,3 +185,34 @@ export function teachingHydrationKey(
     }),
   });
 }
+
+/**
+ * Whether two projections of the room's teaching surfaces show the same
+ * state. Whiteboard elements compare by identity: the projection reuses the
+ * element of every record whose candidates did not change, so equal
+ * references mean an unchanged element, and a different one only costs an
+ * update that changes nothing.
+ */
+export function isSameTeachingProjection(
+  left: CollaborationTeachingProjection,
+  right: CollaborationTeachingProjection,
+): boolean {
+  if (
+    left.initialized !== right.initialized ||
+    left.currentSlideId !== right.currentSlideId ||
+    left.presentationRevision !== right.presentationRevision ||
+    left.slideOrder.length !== right.slideOrder.length ||
+    left.slides.size !== right.slides.size ||
+    left.whiteboardElements.length !== right.whiteboardElements.length
+  ) {
+    return false;
+  }
+  return (
+    left.slideOrder.every((slideId, index) => slideId === right.slideOrder[index]) &&
+    Array.from(left.slides).every(
+      ([slideId, manifest]) =>
+        JSON.stringify(manifest) === JSON.stringify(right.slides.get(slideId)),
+    ) &&
+    left.whiteboardElements.every((element, index) => element === right.whiteboardElements[index])
+  );
+}
