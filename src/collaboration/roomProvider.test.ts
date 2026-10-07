@@ -98,6 +98,10 @@ class FakeApi implements CollaborationRoomApi {
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function waitUntil(predicate: () => boolean): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     if (predicate()) return;
@@ -184,6 +188,8 @@ describe("CollaborationRoomProvider", () => {
       anchor: { ...standardPosition, assoc: 1 },
       head: { ...standardPosition, assoc: 1 },
     });
+    // A selection change right after a publish waits out the awareness interval.
+    await sleep(200);
     expect(socket.binarySent.length).toBeGreaterThan(beforeSuppressedSelection + 1);
 
     await provider.publishAwareness({
@@ -687,6 +693,58 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     });
     await waitUntil(() => !provider.hasPendingUpdates);
     expect(clientUpdates(sockets[1]!)).toHaveLength(2);
+    provider.stop();
+  });
+
+  it("sends the latest of a burst of selection changes, and a leave at once", async () => {
+    const { sockets, factory } = socketRecorder();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      webSocketFactory: factory,
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+    const awarenessStates = () =>
+      sentFrames(sockets[0]!).flatMap((frame) =>
+        frame.kind === "awareness"
+          ? [decodeCollaborationAwarenessProtocolUpdate(frame.update)[0]?.state]
+          : [],
+      );
+    const selection = (clock: number) => ({
+      anchor: { type: null, tname: "source", item: null, assoc: 0 },
+      head: { type: null, tname: null, item: { client: 1, clock }, assoc: 0 },
+    });
+    await provider.publishAwareness({
+      kind: "state",
+      sessionId: provider.awarenessSessionId,
+      revision: 1,
+      surface: { kind: "editor", fileNodeId: null, viewport: null },
+      cursor: null,
+    });
+    expect(awarenessStates()).toHaveLength(1);
+
+    // A drag-select: y-monaco republishes the selection on every mousemove.
+    for (let clock = 0; clock < 30; clock += 1) {
+      provider.awareness.setLocalStateField("selection", selection(clock));
+    }
+    expect(awarenessStates()).toHaveLength(1);
+    await sleep(200);
+    expect(awarenessStates()).toHaveLength(2);
+    expect(awarenessStates()[1]).toEqual(expect.objectContaining({ selection: selection(29) }));
+
+    // Throttled behind the frame above; the leave must not be followed by it.
+    provider.awareness.setLocalStateField("selection", selection(30));
+    await provider.publishAwareness({
+      kind: "leave",
+      sessionId: provider.awarenessSessionId,
+      revision: 2,
+    });
+    expect(awarenessStates()).toHaveLength(3);
+    expect(awarenessStates()[2]).toBeNull();
+    await sleep(200);
+    expect(awarenessStates()).toHaveLength(3);
     provider.stop();
   });
 

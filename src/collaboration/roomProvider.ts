@@ -43,6 +43,14 @@ const MAX_SEEN_STREAM_IDS = 2_000;
 const WEBSOCKET_ACK_TIMEOUT_MS = 15_000;
 const WEBSOCKET_HEARTBEAT_MS = 20_000;
 const WEBSOCKET_OPEN = 1;
+// y-monaco republishes the local selection on every Monaco selection change,
+// each mousemove of a drag-select, and the room accepts 20 awareness frames
+// per second per socket, refusing the rest without broadcasting them (the
+// final selection among them). Explicit publishes are already throttled by
+// the collaboration context and carry the current selection, so they go out
+// at once; any other change waits until this long after the last frame of
+// either kind, which keeps the total near 13 per second.
+const IMPLICIT_AWARENESS_INTERVAL_MS = 150;
 
 export interface CollaborationRoomApi {
   getRoom(roomId: string): Promise<CollaborationRoomSession>;
@@ -180,6 +188,9 @@ export class CollaborationRoomProvider {
   >();
   private awarenessPublicationSuppressed = false;
   private isPublishingExplicitAwareness = false;
+  private lastAwarenessSentAt = Number.NEGATIVE_INFINITY;
+  private pendingAwarenessUpdate: Uint8Array | null = null;
+  private pendingAwarenessTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: CollaborationRoomProviderOptions) {
     this.roomId = options.roomId;
@@ -267,6 +278,7 @@ export class CollaborationRoomProvider {
     if (this.batchTimer) clearTimeout(this.batchTimer);
     this.reconnectTimer = null;
     this.batchTimer = null;
+    this.clearPendingAwareness();
     this.doc.off("update", this.handleDocumentUpdate);
     this.doc.off("afterTransaction", this.handleAfterTransaction);
     this.awareness.off("update", this.handleAwarenessProtocolUpdate);
@@ -341,18 +353,52 @@ export class CollaborationRoomProvider {
     if (!changedClients.includes(this.awareness.clientID)) return;
     const state = this.awareness.getLocalState();
     if (state !== null && !collaborationAwarenessClientStateSchema.safeParse(state).success) return;
+    // Encoded now: a later flush must send this state, not one changed while
+    // publication was suppressed.
+    const update = awarenessProtocol.encodeAwarenessUpdate(this.awareness, [
+      this.awareness.clientID,
+    ]);
+    if (state === null || this.isPublishingExplicitAwareness) {
+      // A leave or an explicit publish replaces a throttled state, never follows it.
+      this.clearPendingAwareness();
+      this.sendAwarenessUpdate(update);
+      return;
+    }
+    this.pendingAwarenessUpdate = update;
+    if (this.pendingAwarenessTimer) return;
+    const delay = this.lastAwarenessSentAt + IMPLICIT_AWARENESS_INTERVAL_MS - monotonicNow();
+    if (delay <= 0) {
+      this.flushPendingAwareness();
+      return;
+    }
+    this.pendingAwarenessTimer = setTimeout(() => {
+      this.pendingAwarenessTimer = null;
+      this.flushPendingAwareness();
+    }, delay);
+  };
+
+  private flushPendingAwareness(): void {
+    const update = this.pendingAwarenessUpdate;
+    this.pendingAwarenessUpdate = null;
+    if (update && this.connectionState === "live") this.sendAwarenessUpdate(update);
+  }
+
+  private clearPendingAwareness(): void {
+    if (this.pendingAwarenessTimer) clearTimeout(this.pendingAwarenessTimer);
+    this.pendingAwarenessTimer = null;
+    this.pendingAwarenessUpdate = null;
+  }
+
+  private sendAwarenessUpdate(update: Uint8Array): void {
     const socket = this.socket;
     if (!socket || socket.readyState !== WEBSOCKET_OPEN) return;
+    this.lastAwarenessSentAt = monotonicNow();
     try {
-      socket.send(
-        encodeCollaborationAwarenessUpdate(
-          awarenessProtocol.encodeAwarenessUpdate(this.awareness, [this.awareness.clientID]),
-        ),
-      );
+      socket.send(encodeCollaborationAwarenessUpdate(update));
     } catch {
       this.handleTransportFailure("Collaboration awareness could not be delivered", this.attemptId);
     }
-  };
+  }
 
   private readonly handleAwarenessProtocolChange = (changes: {
     added: number[];
