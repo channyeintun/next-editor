@@ -89,6 +89,8 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     promise: Promise<WebContainer | null>;
   } | null>(null);
   const hasAutoStartedRef = useRef(false);
+  // Bumped by a reset a consumer asks for, so the auto-start effect looks again.
+  const [autoStartRequest, setAutoStartRequest] = useState(0);
   const loadedProjectIdRef = useRef<string | null>(null);
   const reverseSyncTimeoutRef = useRef<number | null>(null);
   const reverseSyncRequestRef = useRef(0);
@@ -278,6 +280,20 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     cancelPendingReverseSync();
     resetWorkspaceSync();
     resetRuntimeSession();
+  };
+
+  /**
+   * The reset consumers get: a starter switch, a project import, the studio.
+   * Unlike the provider's own resets it re-arms the auto-start, because the
+   * workspace it clears the way for has usually auto-started already. A reset
+   * that lands after that start (the starter switch's used to, after awaiting
+   * the save) cancels it mid-boot, and nothing would start the workspace again:
+   * the dock sat on "Waiting for runtime output..." until a page reload.
+   */
+  const resetRuntimeAndRearmAutoStart = () => {
+    resetRuntime();
+    hasAutoStartedRef.current = false;
+    setAutoStartRequest((request) => request + 1);
   };
 
   const setReverseSyncEnabled = (enabled: boolean) => {
@@ -613,6 +629,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     runnerConfig.enabled,
     runnerConfig.runOnStartup,
     allowAmbientStart,
+    autoStartRequest,
   ]);
 
   useEffect(() => {
@@ -679,7 +696,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     createTerminalSession,
     closeTerminalSession,
     startRuntime,
-    resetRuntime,
+    resetRuntime: resetRuntimeAndRearmAutoStart,
     clearRunnerOutput,
     rerunRunner,
     runCommand,

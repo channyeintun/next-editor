@@ -154,9 +154,17 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
   // Starter templates are split into per-framework chunks, so the starter is
   // fetched on demand before it replaces the workspace.
-  const replaceWithStarter = async (starterLessonType: WorkspaceLessonType) => {
+  const replaceWithStarter = async (
+    starterLessonType: WorkspaceLessonType,
+    { resetRuntimeFirst = false } = {},
+  ) => {
     const starterProject = await createStarterWorkspaceForLessonType(starterLessonType);
 
+    // In the same task as the swap, never after the save below: the swap's render
+    // already auto-starts the new project, and a later reset cancels that start.
+    if (resetRuntimeFirst) {
+      resetRuntime();
+    }
     reconcileExternalProject(starterProject);
     await saveProject();
     updateRunnerConfig({ enabled: true });
@@ -263,13 +271,14 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       return;
     }
 
+    // Imported projects ship their own dependencies, so tear the runtime down for
+    // a fresh mount + `pnpm install`, in the same task as the swap (see
+    // replaceWithStarter).
+    resetRuntime();
     reconcileExternalProject(importedProject);
     await saveProject();
     updateRunnerConfig({ enabled: true });
     analytics.capture("project_zip_imported");
-    // Imported projects ship their own dependencies, so tear the runtime down to
-    // force a fresh mount + `pnpm install` for the new project on next start.
-    resetRuntime();
   };
 
   const handleCreateNewEditor = async () => {
@@ -319,11 +328,10 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       return;
     }
 
-    await replaceWithStarter(nextOption.value);
+    // Each framework ships different dependencies, so the runtime is torn down
+    // for a fresh mount + `pnpm install` of the new project.
+    await replaceWithStarter(nextOption.value, { resetRuntimeFirst: true });
     analytics.capture("lesson_type_selected", { lesson_type: nextLessonType });
-    // Each framework ships different dependencies, so tear the runtime down to
-    // force a fresh mount + `pnpm install` for the new project on next start.
-    resetRuntime();
   };
 
   return (

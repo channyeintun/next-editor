@@ -55,6 +55,10 @@ export interface RuntimeLifecycleEvent {
 
 export interface WebContainerRuntimeActions {
   startRuntime: () => Promise<void>;
+  /**
+   * Stops everything and tears the container down for a fresh mount and install.
+   * The workspace then auto-starts again when the runner config allows it.
+   */
   resetRuntime: () => void;
   /** Empties the runner console. Not a reset: the process and runtime survive. */
   clearRunnerOutput: () => void;
