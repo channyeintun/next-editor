@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "@app/core/src";
 import { inferLanguageFromFilename } from "@app/captions/parseCaptions";
 import { apiClient } from "../apiClient";
-import { formatDuration, uploadLesson } from "./uploadLesson";
+import { formatDuration, thumbnailExtension, uploadLesson } from "./uploadLesson";
 
 vi.mock("../apiClient", () => ({
   apiClient: {
@@ -67,6 +67,17 @@ describe("formatDuration", () => {
     expect(formatDuration(150_000)).toBe("2:30");
     expect(formatDuration(5_000)).toBe("0:05");
     expect(formatDuration(0)).toBe("0:00");
+  });
+});
+
+describe("thumbnailExtension", () => {
+  // resizeThumbnail names its output "<base>.webp"; anything the upload route
+  // would refuse must never be forwarded.
+  it("keeps a WebP thumbnail's extension, from its name or its type", () => {
+    expect(thumbnailExtension(new File([], "cover.webp", { type: "image/webp" }))).toBe("webp");
+    expect(thumbnailExtension(new File([], "blob", { type: "image/webp" }))).toBe("webp");
+    expect(thumbnailExtension(new File([], "IMG_1234.JPG", { type: "image/jpeg" }))).toBe("jpg");
+    expect(thumbnailExtension(new File([], "icon.svg", { type: "image/svg+xml" }))).toBe("png");
   });
 });
 

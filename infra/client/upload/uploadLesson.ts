@@ -40,7 +40,7 @@ interface UploadTarget {
   blob: Blob;
 }
 
-const THUMBNAIL_EXTENSIONS = ["png", "jpg", "jpeg"] as const;
+const THUMBNAIL_EXTENSIONS = ["png", "jpg", "jpeg", "webp"] as const;
 
 // The upload route's filename allow-list only recognizes these extensions, so a name-derived
 // guess (e.g. a phone photo like "IMG_1234.JPG") must be normalized against it — falling back
@@ -55,6 +55,7 @@ export function thumbnailExtension(file: File): string {
   const fromMime: Record<string, string> = {
     "image/png": "png",
     "image/jpeg": "jpg",
+    "image/webp": "webp",
   };
   return fromMime[file.type] ?? "png";
 }

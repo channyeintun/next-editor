@@ -15,7 +15,7 @@ import { MAX_MEDIA_BYTES } from "../../client/upload/mediaConstraints";
 // upload URLs are exposed to the browser.
 export const uploadsRoute = new Hono<{ Bindings: Env }>();
 
-const THUMBNAIL_FILENAME_RE = /\.(?:png|jpe?g)$/i;
+const THUMBNAIL_FILENAME_RE = /\.(?:png|jpe?g|webp)$/i;
 const CAPTION_FILENAME_RE = /\.vtt$/i;
 
 // The stored content-type is derived from the filename extension, never copied
@@ -42,6 +42,7 @@ const CONTENT_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
+  webp: "image/webp",
   vtt: "text/vtt",
 } satisfies Record<LessonMediaExtension | "vtt", string>;
 

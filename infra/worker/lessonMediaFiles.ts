@@ -22,6 +22,7 @@ export const LESSON_MEDIA_EXTENSIONS = [
   "png",
   "jpg",
   "jpeg",
+  "webp",
 ] as const;
 
 export type LessonMediaExtension = (typeof LESSON_MEDIA_EXTENSIONS)[number];

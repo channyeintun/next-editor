@@ -3,6 +3,7 @@ import { uploadsRoute } from "./uploads";
 import { getCurrentUser } from "../auth/session";
 import { getLessonById } from "../../db/queries";
 import { MAX_CAPTION_BYTES } from "../../client/upload/captionConstraints";
+import { MAX_THUMBNAIL_BYTES } from "../../client/upload/thumbnailConstraints";
 import { LESSON_MEDIA_EXTENSIONS } from "../lessonMediaFiles";
 
 vi.mock("../auth/session", () => ({
@@ -123,6 +124,26 @@ describe("uploadsRoute media filenames", () => {
       expect.anything(),
       expect.anything(),
     );
+  });
+
+  // resizeThumbnail encodes WebP; it must be stored as an image and held to the
+  // thumbnail cap, not the much larger recording-media one.
+  it("stores a .webp thumbnail as image/webp under the thumbnail size cap", async () => {
+    const { env, put } = createEnv();
+
+    const stored = await uploadsRoute.request(...putRequest("/l1/media/l1-thumbnail.webp"), env);
+    expect(stored.status).toBe(200);
+    expect(put).toHaveBeenCalledWith(
+      "lessons/l1/l1-thumbnail.webp",
+      expect.anything(),
+      expect.objectContaining({ httpMetadata: { contentType: "image/webp" } }),
+    );
+
+    const oversized = await uploadsRoute.request(
+      ...putRequest("/l1/media/l1-thumbnail-1791222405295.webp", MAX_THUMBNAIL_BYTES + 1),
+      env,
+    );
+    expect(oversized.status).toBe(413);
   });
 
   it.each(["l1.svg", "l1.html", "l1.ne.html"])("refuses %s", async (filename) => {
