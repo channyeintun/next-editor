@@ -45,7 +45,7 @@ import RecordingDraftRecovery from "./RecordingDraftRecovery";
 import { useLinkedStartTime } from "../hooks/useLinkedStartTime";
 import { ApiClientStoreProvider } from "../contexts/ApiClientStoreContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
-import { useProductTourOnce } from "./tour/useProductTourOnce";
+import { useProductTourOnce, type ProductTourOnceOptions } from "./tour/useProductTourOnce";
 import CollaborationSurfaceBridge from "./CollaborationSurfaceBridge";
 import CollaborationFollowOverlay from "./CollaborationFollowOverlay";
 import { loadWhiteboardPanel } from "./whiteboardPanelLoader";
@@ -54,6 +54,16 @@ const CodeEditor = lazy(() => import("./CodeEditor"));
 // Bundles Excalidraw (~180KB gzip) — deferred until the panel is actually opened,
 // not just until this component mounts (see the `isOpen` gate around its render).
 const WhiteboardPanel = lazy(loadWhiteboardPanel);
+
+// Rendered inside CodeEditor's Suspense boundary, so it commits only together
+// with CodeEditor: most tour targets (header, runner dock, agent tab) live
+// there, and with Monaco downloading alongside the route rather than ahead of
+// it, CodeEditor can mount well after this shell. Started from the shell, the
+// tour would pick its steps from the record bar alone, then mark itself seen.
+function ProductTourOnce(options: ProductTourOnceOptions) {
+  useProductTourOnce(options);
+  return null;
+}
 
 export interface EditorProps {
   /** Force read-only playback (hides import/export, record mode, tour). Falls back
@@ -179,8 +189,6 @@ function EditorLayout({
     getLinkedStart,
   });
 
-  useProductTourOnce({ recordingLoading, loadError, readOnly });
-
   return (
     <div
       className={`${POSTHOG_SENSITIVE_ROOT_CLASS} ${fill ? "h-full" : "h-dvh"} flex flex-col text-white overflow-hidden`}
@@ -196,6 +204,11 @@ function EditorLayout({
             immediately instead. */}
         <Suspense fallback={<EditorShellSkeleton breadcrumb={breadcrumb} fill />}>
           <CodeEditor showImportExport={!readOnly} breadcrumb={breadcrumb} />
+          <ProductTourOnce
+            recordingLoading={recordingLoading}
+            loadError={loadError}
+            readOnly={readOnly}
+          />
         </Suspense>
         <CursorComponent />
         <CameraOverlay />

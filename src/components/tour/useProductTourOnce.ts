@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { startTour } from "./productTour";
 
-interface ProductTourOnceOptions {
+export interface ProductTourOnceOptions {
   recordingLoading: boolean;
   loadError: string | null;
   readOnly: boolean;
