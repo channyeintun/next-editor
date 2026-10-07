@@ -20,29 +20,25 @@ interface OpenRouterModelsResponse {
 
 export const FALLBACK_MODEL_OPTIONS: AgentModelOption[] = [
   { id: "anthropic/claude-haiku-5.5", label: "Anthropic: Claude Haiku 5.5", supportsImages: true },
-  { id: "anthropic/claude-haiku-4.5", label: "Anthropic: Claude Haiku 4.5", supportsImages: true },
-  { id: "anthropic/claude-opus-4.8", label: "Anthropic: Claude Opus 4.8", supportsImages: true },
-  { id: "anthropic/claude-sonnet-5", label: "Anthropic: Claude Sonnet 5", supportsImages: true },
-  { id: "openai/gpt-5.4", label: "OpenAI: GPT-5.4", supportsImages: true },
-  { id: "openai/gpt-5.4-mini", label: "OpenAI: GPT-5.4 Mini", supportsImages: true },
-  { id: "openai/gpt-5.5", label: "OpenAI: GPT-5.5", supportsImages: true },
-  { id: "openai/gpt-5.6-sol", label: "OpenAI: GPT-5.6 Sol", supportsImages: true },
-  { id: "openai/gpt-5.6-sol-pro", label: "OpenAI: GPT-5.6 Sol Pro", supportsImages: true },
-  { id: "openai/gpt-5.6-terra", label: "OpenAI: GPT-5.6 Terra", supportsImages: true },
-  { id: "openai/gpt-5.6-terra-pro", label: "OpenAI: GPT-5.6 Terra Pro", supportsImages: true },
-  { id: "openai/gpt-5.6-luna", label: "OpenAI: GPT-5.6 Luna", supportsImages: true },
-  { id: "openai/gpt-5.6-luna-pro", label: "OpenAI: GPT-5.6 Luna Pro", supportsImages: true },
+  { id: "anthropic/claude-opus-5.5", label: "Anthropic: Claude Opus 5.5", supportsImages: true },
+  {
+    id: "anthropic/claude-sonnet-5.5",
+    label: "Anthropic: Claude Sonnet 5.5",
+    supportsImages: true,
+  },
+  { id: "openai/gpt-6-astra", label: "OpenAI: GPT-6 Astra", supportsImages: true },
+  { id: "openai/gpt-6-astra-pro", label: "OpenAI: GPT-6 Astra Pro", supportsImages: true },
+  { id: "openai/gpt-6.1-sol", label: "OpenAI: GPT-6.1 Sol", supportsImages: true },
+  { id: "openai/gpt-6.1-sol-pro", label: "OpenAI: GPT-6.1 Sol Pro", supportsImages: true },
+  { id: "openai/gpt-6-luna", label: "OpenAI: GPT-6 Luna", supportsImages: true },
+  { id: "openai/gpt-6-luna-pro", label: "OpenAI: GPT-6 Luna Pro", supportsImages: true },
   { id: "google/gemma-4-26b-a4b-it", label: "Google: Gemma 4 26B A4B", supportsImages: true },
   {
     id: "google/gemini-3.1-pro-preview",
     label: "Google: Gemini 3.1 Pro Preview",
     supportsImages: true,
   },
-  {
-    id: "google/gemini-3-flash-preview",
-    label: "Google: Gemini 3 Flash Preview",
-    supportsImages: true,
-  },
+  { id: "google/gemini-3.8-flash", label: "Google: Gemini 3.8 Flash", supportsImages: true },
 ];
 
 function hasModelId(model: OpenRouterModel): model is OpenRouterModel & { id: string } {
