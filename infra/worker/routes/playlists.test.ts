@@ -4,11 +4,12 @@ import { getCurrentUser } from "../auth/session";
 import {
   addLessonToPlaylist,
   deletePlaylist,
+  getPlaylistBySlug,
   insertPlaylist,
   updatePlaylist,
+  type PlaylistWithLessons,
 } from "../../db/playlistQueries";
-import { playlistSlugKey } from "../cache";
-import type { PlaylistRow } from "../../db/types";
+import type { LessonRow, PlaylistRow } from "../../db/types";
 
 vi.mock("../auth/session", () => ({
   getCurrentUser: vi.fn<() => Promise<unknown>>(),
@@ -19,6 +20,7 @@ vi.mock("../../db/playlistQueries", () => ({
   updatePlaylist: vi.fn<() => Promise<PlaylistRow | null>>(async () => null),
   deletePlaylist: vi.fn<() => Promise<string | null>>(),
   addLessonToPlaylist: vi.fn<() => Promise<unknown>>(),
+  getPlaylistBySlug: vi.fn<() => Promise<PlaylistWithLessons | null>>(),
 }));
 
 vi.mock("../../db/slug", () => ({
@@ -79,57 +81,86 @@ describe("playlistsRoute text limits", () => {
   });
 });
 
-describe("playlistsRoute cache invalidation", () => {
-  function withCache() {
-    const cache = { delete: vi.fn<(key: string) => Promise<void>>(async () => undefined) };
-    return { cache, env: { DB: {} as D1Database, CACHE: cache as unknown as KVNamespace } };
-  }
-
-  // The mutation answers with the slug it changed, so the route invalidates
-  // that playlist's key without reading the row again.
-  it("invalidates the deleted playlist's key", async () => {
+describe("playlistsRoute mutations", () => {
+  // The mutation answers with the playlist's slug, or null when the caller
+  // does not own it.
+  it("deletes the caller's playlist", async () => {
     vi.mocked(deletePlaylist).mockResolvedValue("my-list");
-    const { cache, env: cachedEnv } = withCache();
 
     const response = await playlistsRoute.request(
       "https://nexteditor.dev/playlist-1",
       { method: "DELETE" },
-      cachedEnv as never,
+      env,
     );
 
     expect(response.status).toBe(200);
-    expect(cache.delete).toHaveBeenCalledWith(playlistSlugKey("my-list"));
   });
 
-  it("answers 404 and invalidates nothing for a playlist the caller does not own", async () => {
+  it("answers 404 for a playlist the caller does not own", async () => {
     vi.mocked(deletePlaylist).mockResolvedValue(null);
-    const { cache, env: cachedEnv } = withCache();
 
     const response = await playlistsRoute.request(
       "https://nexteditor.dev/playlist-1",
       { method: "DELETE" },
-      cachedEnv as never,
+      env,
     );
 
     expect(response.status).toBe(404);
-    expect(cache.delete).not.toHaveBeenCalled();
   });
 
-  it("invalidates the playlist a lesson was added to", async () => {
+  it("adds a lesson to the caller's playlist", async () => {
     vi.mocked(addLessonToPlaylist).mockResolvedValue({ status: "ok", slug: "my-list" });
-    const { cache, env: cachedEnv } = withCache();
 
-    const response = await playlistsRoute.request(
-      "https://nexteditor.dev/playlist-1/lessons",
-      {
-        method: "POST",
-        body: JSON.stringify({ lessonId: "lesson-1" }),
-        headers: { "content-type": "application/json" },
-      },
-      cachedEnv as never,
-    );
+    const response = await send("POST", "/playlist-1/lessons", { lessonId: "lesson-1" });
 
     expect(response.status).toBe(201);
-    expect(cache.delete).toHaveBeenCalledWith(playlistSlugKey("my-list"));
+  });
+});
+
+describe("playlistsRoute public read", () => {
+  const playlist: PlaylistRow = {
+    id: "playlist-1",
+    slug: "my-list",
+    owner_id: "user-1",
+    title: "My list",
+    description: null,
+    created_at: 1,
+    updated_at: 1,
+  };
+  const member = {
+    slug: "a-lesson",
+    title: "A lesson",
+    description: null,
+    thumbnail: null,
+    ne: "media/lessons/l1/l1.ne",
+    duration: null,
+    tags: null,
+    author: null,
+    author_url: null,
+    published_at: null,
+  } as LessonRow;
+
+  // Straight from D1 on every request, so an edit shows up on the next read.
+  it("answers with the playlist and its published members as D1 holds them", async () => {
+    vi.mocked(getPlaylistBySlug).mockResolvedValue({ playlist, lessons: [member] });
+
+    const response = await playlistsRoute.request("https://nexteditor.dev/my-list", undefined, env);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      slug: "my-list",
+      title: "My list",
+      description: "",
+      lessons: [expect.objectContaining({ slug: "a-lesson", ne: "media/lessons/l1/l1.ne" })],
+    });
+    expect(getPlaylistBySlug).toHaveBeenCalledWith(expect.anything(), "my-list");
+  });
+
+  it("answers 404 for an unknown slug", async () => {
+    vi.mocked(getPlaylistBySlug).mockResolvedValue(null);
+
+    const response = await playlistsRoute.request("https://nexteditor.dev/nope", undefined, env);
+
+    expect(response.status).toBe(404);
   });
 });

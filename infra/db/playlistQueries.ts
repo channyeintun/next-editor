@@ -239,8 +239,7 @@ export async function updatePlaylist(
   if (sets.length === 0) {
     // Owner-scoped, matching the UPDATE below. An unscoped read by id here
     // once let `PATCH /api/playlists/:id` with an empty body read back another
-    // user's row and — worse — made the route invalidate that playlist's cache
-    // key (routes/playlists.ts), an unauthenticated-cost KV eviction primitive.
+    // user's row.
     const row = await db
       .prepare("SELECT * FROM playlists WHERE id = ? AND owner_id = ?")
       .bind(id, ownerId)
@@ -257,8 +256,8 @@ export async function updatePlaylist(
   return row ?? null;
 }
 
-// The mutations below answer with the playlist's slug on success, the key the
-// route must invalidate, so it never has to read the row again to learn it.
+// The mutations below answer with the playlist's slug on success, and with null
+// (the route's 404) when `ownerId` does not own the playlist.
 
 /** The deleted playlist's slug, or null when no playlist `id` is owned by `ownerId`. */
 export async function deletePlaylist(

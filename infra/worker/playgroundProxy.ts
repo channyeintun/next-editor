@@ -156,7 +156,9 @@ export async function readCachedValue<T>(
 /**
  * Store a result for later runs of the same program. With the request's
  * `waitUntil` (requestWaitUntil in waitUntil.ts) the result goes back to the
- * learner without waiting for KV's central write, as in cache.ts's cached().
+ * learner without waiting for the write, which goes to KV's central store
+ * (330-430 ms measured from Singapore). Nothing reads the entry before a later
+ * run, and a write the runtime drops only costs that run a miss.
  */
 export async function writeCachedValue(
   cache: KVNamespace | null,

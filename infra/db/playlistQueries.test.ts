@@ -10,8 +10,8 @@ import {
 
 /**
  * The playlist mutations against real SQLite, so the ownership checks and the
- * slug each one answers with (the KV key the route invalidates) come from the
- * SQL itself. Only the columns these statements touch are created.
+ * slug each one answers with come from the SQL itself. Only the columns these
+ * statements touch are created.
  */
 function createDb(): D1Database {
   const db = new DatabaseSync(":memory:");

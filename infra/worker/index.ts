@@ -24,7 +24,6 @@ import { studioRoute } from "./routes/studio";
 import { renderLandingResponse } from "./ssr/landing";
 import { renderLessonDetailResponse, renderMissingLessonResponse } from "./ssr/lessonDetail";
 import { findPublishedLessonBySlug } from "./lessonCatalog";
-import { requestWaitUntil } from "./waitUntil";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -131,7 +130,7 @@ app.get("/learn/:slug", async (c) => {
   }
 
   try {
-    const lesson = await findPublishedLessonBySlug(c.env, slug, requestWaitUntil(c));
+    const lesson = await findPublishedLessonBySlug(c.env, slug);
     if (!lesson) {
       return await renderMissingLessonResponse(assetResponse, slug);
     }

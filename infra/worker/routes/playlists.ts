@@ -23,14 +23,6 @@ import {
 import { generateUniqueSlug, isSlugUniqueViolation, MAX_SLUG_INSERT_ATTEMPTS } from "../../db/slug";
 import { requireUser } from "../auth/requireUser";
 import { metadataTextError } from "../../lessons/metadataLimits";
-import { cached, getCache, invalidateCache, playlistSlugKey } from "../cache";
-import { requestWaitUntil } from "../waitUntil";
-
-// Shorter than the lesson-slug 300s tier: a playlist's cache can also go
-// stale from a member lesson being unpublished/deleted elsewhere (in
-// lessons.ts), which doesn't invalidate this key. A short TTL accepts brief
-// staleness there instead of threading cross-file cache invalidation.
-const SLUG_CACHE_TTL_SECONDS = 60;
 
 function slugify(title: string): string {
   const base = title
@@ -155,7 +147,6 @@ playlistsRoute.patch("/:id", requireUser, async (c) => {
     return c.json({ error: "not found" }, 404);
   }
 
-  await invalidateCache(getCache(c.env), playlistSlugKey(row.slug));
   const withCount = await getOwnedPlaylistById(c.env.DB, row.id, user.id);
   return c.json(
     playlistRowToOwnedPlaylist(
@@ -172,7 +163,6 @@ playlistsRoute.delete("/:id", requireUser, async (c) => {
     return c.json({ error: "not found" }, 404);
   }
 
-  await invalidateCache(getCache(c.env), playlistSlugKey(deletedSlug));
   return c.json({ success: true });
 });
 
@@ -199,7 +189,6 @@ playlistsRoute.post("/:id/lessons", requireUser, async (c) => {
     return c.json({ error: "lesson is already in this playlist" }, 409);
   }
 
-  await invalidateCache(getCache(c.env), playlistSlugKey(result.slug));
   return c.json({ success: true }, 201);
 });
 
@@ -212,7 +201,6 @@ playlistsRoute.delete("/:id/lessons/:lessonId", requireUser, async (c) => {
     return c.json({ error: "not found" }, 404);
   }
 
-  await invalidateCache(getCache(c.env), playlistSlugKey(slug));
   return c.json({ success: true });
 });
 
@@ -242,26 +230,19 @@ playlistsRoute.post("/:id/reorder", requireUser, async (c) => {
     return c.json({ error: "not found" }, 404);
   }
 
-  await invalidateCache(getCache(c.env), playlistSlugKey(slug));
   return c.json({ success: true });
 });
 
 // Registered last: Hono dispatches in registration order, so a "/:slug" GET
 // above "/mine" would answer /api/playlists/mine itself (as in lessons.ts).
+//
+// Read from D1 on every request, like the other public catalog reads (see
+// cache.ts), so an edit to the playlist or to a member lesson's publish state
+// shows up immediately.
 playlistsRoute.get("/:slug", async (c) => {
-  const slug = c.req.param("slug");
-  const playlist = await cached(
-    getCache(c.env),
-    playlistSlugKey(slug),
-    SLUG_CACHE_TTL_SECONDS,
-    async () => {
-      const result = await getPlaylistBySlug(c.env.DB, slug);
-      return result ? playlistRowToPlaylist(result.playlist, result.lessons) : null;
-    },
-    requestWaitUntil(c),
-  );
-  if (!playlist) {
+  const result = await getPlaylistBySlug(c.env.DB, c.req.param("slug"));
+  if (!result) {
     return c.json({ error: "not found" }, 404);
   }
-  return c.json(playlist);
+  return c.json(playlistRowToPlaylist(result.playlist, result.lessons));
 });

@@ -118,44 +118,38 @@ describe("lessonsRoute lesson ids", () => {
 });
 
 describe("lessonsRoute gallery pages", () => {
-  function createKv() {
-    return {
-      get: vi.fn<() => Promise<null>>(async () => null),
-      put: vi.fn<() => Promise<void>>(async () => undefined),
-    };
+  function listPage(page: number) {
+    return lessonsRoute.request(`https://nexteditor.dev/?page=${page}`, undefined, env);
   }
 
-  function listPage(page: number, cache: ReturnType<typeof createKv>) {
-    return lessonsRoute.request(`https://nexteditor.dev/?page=${page}`, undefined, {
-      DB: {} as D1Database,
-      CACHE: cache as unknown as KVNamespace,
-    } as never);
-  }
-
-  it("caches a page that has lessons on it", async () => {
+  it("answers each request with the page D1 holds now", async () => {
     vi.mocked(listPublishedLessons).mockResolvedValue({
       rows: [{ ...lessonRow(LESSON_ID), status: "published" }],
-      nextPage: null,
+      nextPage: 1,
     });
-    const cache = createKv();
 
-    const response = await listPage(0, cache);
+    const response = await listPage(0);
 
     expect(response.status).toBe(200);
-    expect(cache.put).toHaveBeenCalledTimes(1);
+    expect(await response.json()).toEqual({
+      lessons: [
+        expect.objectContaining({
+          slug: "a-lesson",
+          ne: `media/lessons/${LESSON_ID}/${LESSON_ID}.ne`,
+        }),
+      ],
+      nextPage: 1,
+    });
+    expect(listPublishedLessons).toHaveBeenCalledWith(expect.anything(), 0, 12);
   });
 
-  // Every distinct ?page= is its own KV key, so caching an empty page let an
-  // unauthenticated loop over page numbers mint one billable KV write each.
-  it("answers a page past the end without writing it to KV", async () => {
+  it("answers a page past the end with an empty page", async () => {
     vi.mocked(listPublishedLessons).mockResolvedValue({ rows: [], nextPage: null });
-    const cache = createKv();
 
-    const response = await listPage(500, cache);
+    const response = await listPage(500);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ lessons: [], nextPage: null });
-    expect(cache.put).not.toHaveBeenCalled();
   });
 });
 

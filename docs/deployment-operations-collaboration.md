@@ -20,7 +20,7 @@ path. Collaboration protocol version 2 and binary envelope version 3 are mandato
 - D1 database bound as `DB`.
 - R2 bucket bound as `BUCKET`.
 - `CollaborationRoomDurableObject` bound as `COLLABORATION_ROOMS` with SQLite enabled.
-- Workers KV bound as `CACHE` for public catalog caching; it is not collaboration storage.
+- Workers KV bound as `CACHE` for playground result caching; it is not collaboration storage.
 
 Apply all D1 migrations in `infra/db/migrations/`. Migrations 0008 and 0009 constrain rooms to the
 Cloudflare WebSocket transport and Durable Object SQLite persistence.

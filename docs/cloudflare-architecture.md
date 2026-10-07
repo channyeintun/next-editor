@@ -15,7 +15,7 @@ the `/learn` catalog, lesson publishing, playlists, and live collaboration.
 | Lesson lifecycle      | **Draft → Publish.** Uploaded lessons start as private drafts; only `published` rows appear in the public gallery.                                                                                                             |
 | Who can create        | **Any Google account.** Sign in with Google → you can record, upload, and publish.                                                                                                                                             |
 | Existing JSON catalog | **Kept as-is.** The curated seed (e.g. `introduction`) stays static and D1-free — frequent-access, edge-cached. D1 only holds user-generated lessons.                                                                          |
-| Public read cache     | **Cloudflare Workers KV.** Public lesson/playlist JSON uses the fail-open `CACHE` binding; search remains uncached.                                                                                                            |
+| Public read cache     | **None for the catalog.** Public lesson/playlist JSON reads D1 directly; the fail-open `CACHE` Workers KV binding only caches playground Run/Format results; search remains uncached.                                          |
 | Live collaboration    | **Room Durable Objects.** Binary WebSockets and per-room SQLite are the only collaboration transport and durability path.                                                                                                      |
 | Voice chat            | **Direct Cloudflare Realtime SFU.** Audio-only WebRTC coordinated by a separate per-room voice Durable Object behind a room-scoped gateway; fails closed on the `VOICE_CHAT_ENABLED` flag and never touches the Yjs transport. |
 
@@ -72,7 +72,7 @@ flowchart LR
     Worker -->|built SPA and seed catalog| Assets[Static Assets]
     Worker -->|users, content, room control plane| D1[(D1)]
     Worker -->|lesson media and private room assets| R2[(R2)]
-    Worker -->|fail-open public JSON cache| KV[(Workers KV: CACHE)]
+    Worker -->|fail-open playground result cache| KV[(Workers KV: CACHE)]
     Worker <-->|OAuth| Google[Google]
     Worker -->|authenticated WebSocket| Room[Room Durable Object]
     Room -->|room log and snapshots| SQL[(Room-local SQLite)]
@@ -81,8 +81,8 @@ flowchart LR
 
 Everything is one hostname, so COEP `require-corp` is satisfied and the session
 cookie is first-party. Cloudflare's CDN caches static assets and (with cache
-headers) `/media/*` at the edge. Workers KV serves only disposable public
-lesson/playlist cache entries. Durable Object SQLite is fail-closed for
+headers) `/media/*` at the edge. Workers KV holds only disposable playground
+results. Durable Object SQLite is fail-closed for
 WebSocket room history.
 
 ## Data model — D1
@@ -143,10 +143,10 @@ Two sources, merged by the tube client (this is the "Swap point for a real
 backend" the existing `tube/vite/lessonsApiPlugin.ts` and `tube/src/lib/lessons.ts`
 comments already call out):
 
-| Source                                  | Path                                              | Backed by                             | D1 hit? | Cache     |
-| --------------------------------------- | ------------------------------------------------- | ------------------------------------- | ------- | --------- |
-| **Seed** (curated, e.g. `introduction`) | `/lessons/page-*.json`, `/lessons/by-slug/*.json` | Static assets (unchanged vite plugin) | No      | Edge/CDN  |
-| **Dynamic** (user, published)           | `/api/lessons?page=`, `/api/lessons/:slug`        | D1 via Worker                         | Yes     | Short TTL |
+| Source                                  | Path                                              | Backed by                             | D1 hit? | Cache    |
+| --------------------------------------- | ------------------------------------------------- | ------------------------------------- | ------- | -------- |
+| **Seed** (curated, e.g. `introduction`) | `/lessons/page-*.json`, `/lessons/by-slug/*.json` | Static assets (unchanged vite plugin) | No      | Edge/CDN |
+| **Dynamic** (user, published)           | `/api/lessons?page=`, `/api/lessons/:slug`        | D1 via Worker                         | Yes     | None     |
 
 - **Gallery** (`fetchLessonsPage`): page through D1 newest first (`d1:<n>`
   cursors) and append the bundled seed to the last D1 page, so the introduction
@@ -193,43 +193,41 @@ repeating the lookup, and any edge failure degrades to the untouched SPA shell.
 
 ## Caching — Cloudflare Workers KV
 
-The "Short TTL" cache in the table above is `infra/worker/cache.ts`: a
-cache-aside Workers KV layer in front of the highest-traffic public D1 reads.
-Lesson lists use a 60s key TTL, lesson details use 300s, and public playlist
-details use 60s. Search (`/api/search`) is deliberately **not** cached because
-its unbounded query cardinality has low reuse and would create unnecessary KV
-reads and writes.
+`infra/worker/cache.ts` exposes the `CACHE` Workers KV binding. Its one user is
+the playground proxies (`/api/<language>-playground/run` and `/format`), which
+cache deterministic results under a content hash of the program, because the
+upstream compile they save takes seconds. The result goes back to the learner
+before the KV write finishes (`waitUntil`).
+
+The public catalog reads (`/api/lessons`, `/api/lessons/:slug`,
+`/api/playlists/:slug` and the `/learn/:slug` edge render) used to read through
+KV and now query D1 directly. KV's per-location read cache lasts 30s, and at
+this site's traffic nearly every catalog read fell outside it and paid KV's
+central store (~180–195 ms from Singapore) in front of an indexed D1 query that
+costs ~55–90 ms. Reading D1 also makes a publish, unpublish or edit visible on
+the next request. Search (`/api/search`) was never cached.
 
 - **Cloudflare binding, fail-open behavior.** `infra/wrangler.toml` declares
   the `CACHE` KV binding. Wrangler persists it locally and can automatically
   provision the production namespace on first deploy. `getCache(env)` still
   returns `null` when a non-Wrangler/self-hosted environment omits the binding,
-  and every operation in `cached()`/`invalidateCache()` is wrapped so KV errors
-  fall back to D1.
+  and every KV read and write is wrapped, so the playground runs uncached
+  rather than failing.
 - **Encoding and expiry.** Values are JSON-serialized and written with
-  `expirationTtl`. Reads use KV's JSON mode and a 30s regional `cacheTtl`, the
-  current platform minimum, to keep cross-edge staleness shorter than the
-  stored entry TTL.
-- **Invalidation and consistency.** Lesson and playlist mutations delete the
-  affected slug key. Workers KV is eventually consistent: a delete is visible
-  immediately where it was issued, while another location can briefly retain
-  its cached value. The 30s read-cache setting bounds the normal regional cache
-  window; failed deletes fall back to the key's 60s or 300s expiration. The
-  paginated lesson list relies on its 60s expiration rather than per-page
-  invalidation.
-- **Quota behavior.** KV reads, writes, and deletes each consume their own
-  operation quotas. Every cache miss can cause one write, so production should
-  monitor the `CACHE` namespace—especially the Free plan's much smaller write
-  allowance. Quota errors remain fail-open and therefore increase D1 traffic
-  instead of failing requests.
+  `expirationTtl`; a read is re-validated by the route's own parser before it
+  is served.
+- **Quota behavior.** KV reads and writes each consume their own operation
+  quotas, and every uncached Run or Format can cause one write. Quota errors
+  remain fail-open.
 - **Deployment requirements.** No cache secret or `.dev.vars` value is needed.
   A CI deploy token must have account-level **Workers KV Storage: Edit** in
   addition to its existing Worker permissions. The ID-less binding is
   auto-provisioned on first deploy; operators can instead create a namespace
   manually and add its public ID to `wrangler.toml`.
-- **Migration boundary.** Existing Redis cache entries are disposable and are
-  not copied. After the KV-backed release is smoke-tested, remove obsolete
-  `UPSTASH_REDIS_REST_*` and `COLLAB_REDIS_REST_*` Worker secrets.
+- **Migration boundary.** Catalog entries written before the switch to D1 are
+  never read again and expire on their own (60–300s TTLs). Existing Redis cache
+  entries were likewise disposable; remove obsolete `UPSTASH_REDIS_REST_*` and
+  `COLLAB_REDIS_REST_*` Worker secrets.
 
 See Cloudflare's documentation for [KV consistency](https://developers.cloudflare.com/kv/concepts/how-kv-works/),
 [KV pricing](https://developers.cloudflare.com/kv/platform/pricing/), and
@@ -276,7 +274,7 @@ deletes the stored copy along with the intent.
 | `POST /api/auth/google/onetap`                                     | —                   | Google One Tap sign-in with a JWKS-verified credential                                                                |
 | `/api/auth/passkey/*`                                              | cookie / —          | Passkey registration (signed in) and discoverable-credential sign-in                                                  |
 | `GET /api/auth/me`, `PATCH /username`, `POST /logout`              | cookie              | Session and profile lifecycle                                                                                         |
-| `GET /api/lessons`, `GET /api/lessons/:slug`                       | —                   | Published lesson reads through Workers KV, then D1                                                                    |
+| `GET /api/lessons`, `GET /api/lessons/:slug`                       | —                   | Published lesson reads straight from D1                                                                               |
 | `/api/lessons/mine`, create/update/publish/unpublish/delete routes | owner               | Draft and published lesson lifecycle                                                                                  |
 | `PUT /api/uploads/:id/media/:filename`                             | owner/sign-in       | Validate and stream a lesson object through the Worker to R2                                                          |
 | `/api/playlists/*`                                                 | mixed               | Public playlist detail plus owner CRUD, membership, and ordering                                                      |
@@ -330,12 +328,15 @@ thumbnails and captions use their smaller shared client/server constraints.
 ## Cost / free-tier fit
 
 Keeping the curated seed static means the highest-traffic lesson
-(`introduction`) costs no D1 or KV operations. Workers KV's Free plan currently
-allows 100,000 key reads and 1,000 key writes per day; a hot key with a short
-expiration can consume the write allowance faster than the read allowance, so
-production must monitor the `CACHE` namespace. Quota or KV availability errors
-fall through to D1 rather than failing public requests. Check the linked
-Cloudflare pricing pages again before changing traffic or TTL assumptions.
+(`introduction`) costs no D1 operations. Every other catalog read is one indexed
+D1 query over a small table, well inside D1's free daily row-read allowance at
+current traffic; if traffic grows by orders of magnitude, a per-location cache
+in front of those reads is the lever to revisit. Workers KV's Free plan
+currently allows 100,000 key reads and 1,000 key writes per day, which the
+playground result cache must stay inside, so production should monitor the
+`CACHE` namespace. Quota or KV availability errors make a Run go uncached
+rather than fail. Check the linked Cloudflare pricing pages again before
+changing traffic or TTL assumptions.
 
 ## What explicitly does **not** change
 

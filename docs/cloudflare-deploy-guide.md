@@ -101,11 +101,12 @@ environments.
 
 ### 5. Prepare the Workers KV cache
 
-The public lesson and playlist endpoints read through the `CACHE` Workers KV
+The playground Run/Format routes cache their results in the `CACHE` Workers KV
 binding (see
-[cloudflare-architecture.md](./cloudflare-architecture.md#caching--cloudflare-workers-kv)).
-No cache credentials, `.dev.vars` entries, or data migration are required. The
-cache starts empty and warms from D1.
+[cloudflare-architecture.md](./cloudflare-architecture.md#caching--cloudflare-workers-kv));
+the public lesson and playlist endpoints read D1 directly. No cache
+credentials, `.dev.vars` entries, or data migration are required. The cache
+starts empty.
 
 `infra/wrangler.toml` intentionally declares the binding without an
 account-specific namespace ID:
@@ -160,9 +161,9 @@ npx wrangler kv namespace list
 ```
 
 Also confirm **Workers & Pages → next-editor-tube → Settings → Bindings** shows
-`CACHE` as a KV namespace, then run the regular lesson API smoke test twice.
-The first request may be a cold miss; cache failures are fail-open and still
-return the D1-backed response.
+`CACHE` as a KV namespace, then run the same playground program twice. The
+first Run is a cold miss; cache failures are fail-open and still return the
+upstream's result.
 
 After smoke-testing, remove the obsolete Redis-cache Worker secrets if they
 exist:

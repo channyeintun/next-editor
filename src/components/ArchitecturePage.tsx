@@ -384,7 +384,7 @@ const storageChips: ChipSpec[] = [
   },
   {
     title: "Workers KV",
-    lines: ["public lesson/playlist JSON +", "playground results; fail-open"],
+    lines: ["playground Run/Format", "results; fail-open"],
     tag: 27,
   },
   {
@@ -628,7 +628,7 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
     n: "27",
     title: "Workers KV",
     detail:
-      "public lesson/playlist JSON and playground results; eventually consistent and fail-open.",
+      "playground Run/Format results; eventually consistent and fail-open. The public lesson/playlist catalog reads D1 directly.",
   },
   {
     n: "28",

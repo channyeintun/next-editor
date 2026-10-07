@@ -16,20 +16,11 @@ import { lessonRowToLesson, lessonRowToOwnedLesson } from "../../db/types";
 import { requireUser } from "../auth/requireUser";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 import { metadataTextError } from "../../lessons/metadataLimits";
-import { cached, getCache, invalidateCache, lessonListKey, lessonSlugKey } from "../cache";
 import { findPublishedLessonBySlug } from "../lessonCatalog";
 import { isLessonId, LESSON_ID_PATTERN } from "../lessonIds";
 import { isLessonMediaFilename } from "../lessonMediaFiles";
-import { requestWaitUntil } from "../waitUntil";
 
 const DEFAULT_PAGE_SIZE = 12;
-// Short TTL: a newly published/edited lesson should show up in the public
-// gallery within roughly this long. The list isn't invalidated key-by-key on
-// writes (see invalidateCache calls below) — every paginated page would need
-// tracking for a marginal staleness win, so it just relies on this TTL
-// instead. The per-slug equivalent lives in lessonCatalog.ts, shared with the
-// edge render.
-const LIST_CACHE_TTL_SECONDS = 60;
 
 function slugify(title: string): string {
   const base = title
@@ -90,20 +81,10 @@ lessonsRoute.get("/", async (c) => {
     return c.json({ error: "invalid page" }, 400);
   }
 
-  // An empty page loads as null, which cached() never stores: every distinct
-  // ?page= is its own KV key, so caching the empty pages past the end would let
-  // an unauthenticated loop over page numbers mint one KV write per request.
-  const body = await cached(
-    getCache(c.env),
-    lessonListKey(page, DEFAULT_PAGE_SIZE),
-    LIST_CACHE_TTL_SECONDS,
-    async () => {
-      const { rows, nextPage } = await listPublishedLessons(c.env.DB, page, DEFAULT_PAGE_SIZE);
-      return rows.length > 0 ? { lessons: rows.map(lessonRowToLesson), nextPage } : null;
-    },
-    requestWaitUntil(c),
-  );
-  return c.json(body ?? { lessons: [], nextPage: null });
+  // Read from D1 on every request, like the other public catalog reads (see
+  // cache.ts), so a publish or unpublish shows up in the gallery immediately.
+  const { rows, nextPage } = await listPublishedLessons(c.env.DB, page, DEFAULT_PAGE_SIZE);
+  return c.json({ lessons: rows.map(lessonRowToLesson), nextPage });
 });
 
 interface CreateLessonBody {
@@ -254,7 +235,6 @@ lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
     }
   }
 
-  await invalidateCache(getCache(c.env), lessonSlugKey(row.slug));
   return c.json(lessonRowToOwnedLesson(row));
 });
 
@@ -265,10 +245,6 @@ lessonsRoute.post(`/:id{${LESSON_ID_PATTERN}}/publish`, requireUser, async (c) =
   if (!row) {
     return c.json({ error: "not found" }, 404);
   }
-  // Keep the KV entry aligned with the authoritative publish state. Workers KV
-  // is eventually consistent, so another edge can briefly retain its cached
-  // value even after this delete succeeds.
-  await invalidateCache(getCache(c.env), lessonSlugKey(row.slug));
   return c.json(lessonRowToOwnedLesson(row));
 });
 
@@ -279,9 +255,6 @@ lessonsRoute.post(`/:id{${LESSON_ID_PATTERN}}/unpublish`, requireUser, async (c)
   if (!row) {
     return c.json({ error: "not found" }, 404);
   }
-  // See the publish route above. Delete the shared entry now; KV's 30-second
-  // regional read cache bounds the normal cross-edge propagation window.
-  await invalidateCache(getCache(c.env), lessonSlugKey(row.slug));
   return c.json(lessonRowToOwnedLesson(row));
 });
 
@@ -295,7 +268,6 @@ lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
   }
 
   await deleteLesson(c.env.DB, id, user.id);
-  await invalidateCache(getCache(c.env), lessonSlugKey(existing.slug));
 
   // The row goes first. If this cleanup fails the cost is orphaned R2 objects;
   // in the other order a failed row delete left a live lesson, possibly
@@ -327,7 +299,7 @@ lessonsRoute.get("/mine", requireUser, async (c) => {
 // above "/mine" would answer /api/lessons/mine itself. (db/slug.ts never gives
 // a row the slug "mine" for the same reason.)
 lessonsRoute.get("/:slug", async (c) => {
-  const lesson = await findPublishedLessonBySlug(c.env, c.req.param("slug"), requestWaitUntil(c));
+  const lesson = await findPublishedLessonBySlug(c.env, c.req.param("slug"));
   if (!lesson) {
     return c.json({ error: "not found" }, 404);
   }

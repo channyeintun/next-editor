@@ -232,9 +232,8 @@ export async function listPublishedLessons(
       // publish gives several rows the same millisecond, and SQLite is then
       // free to return tied rows in storage order, which can differ between
       // the query for page N and the query for page N+1 (they are separate
-      // requests, and routes/lessons.ts caches each page independently). A
-      // tie straddling a page boundary then lands on both pages: the gallery
-      // shows one lesson twice and silently never shows another.
+      // requests). A tie straddling a page boundary then lands on both pages:
+      // the gallery shows one lesson twice and silently never shows another.
       `SELECT * FROM lessons WHERE status = 'published'
        ORDER BY published_at DESC, id DESC
        LIMIT ? OFFSET ?`,
