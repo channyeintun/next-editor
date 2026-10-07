@@ -3,12 +3,14 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import {
   POCKET_ONNX_RUNTIME_VERSION,
+  athanLabProfileOf,
   customVoiceProfileOf,
   modalVoxCpm2BurmeseProfileOf,
   requireVoiceProfile,
   ttsRequestHash,
   type PocketVoiceProfile,
 } from "./profiles";
+import { ATHANLAB_TEXT_PREP_VERSION } from "./athanlab/textPrep";
 import { POCKET_TEXT_PREP_VERSION } from "./pocket/textPrep";
 
 describe("pocket voice profiles", () => {
@@ -59,5 +61,45 @@ describe("voxcpm2 request hash", () => {
     expect(
       await ttsRequestHash({ profile, speechText: "မင်္ဂလာပါ။", lexiconVersion: 1, seed: 42 }),
     ).toBe("fd4e90cdaaeb185a9d38e6b99c4086d20452231db164412357060df7fad51cfa");
+  });
+});
+
+describe("athanlab voice profiles", () => {
+  it("pin the voice and every server-fixed request setting", () => {
+    expect(athanLabProfileOf("voice_01")).toEqual({
+      id: "athanlab-voice_01",
+      providerId: "athanlab",
+      voiceId: "voice_01",
+      outputFormat: "wav",
+      numberMode: "smart",
+      textPrepVersion: ATHANLAB_TEXT_PREP_VERSION,
+      sampleRate: 48000,
+      mimeType: "audio/wav",
+    });
+  });
+
+  it("are not in the static registry", () => {
+    expect(() => requireVoiceProfile("athanlab-voice_01")).toThrow(/Unknown voice profile/);
+  });
+
+  // Each take is bought: only a change that alters what AthanLab is asked to
+  // speak (or who speaks it) may re-key a cached dialog.
+  it("key cached dialogs on the voice and the text-prep version", async () => {
+    const profile = athanLabProfileOf("voice_01");
+    const request = { profile, speechText: "မင်္ဂလာပါ။", lexiconVersion: 1, seed: 0 };
+    const hash = await ttsRequestHash(request);
+
+    // Pinned: a change to this hash makes every user buy their cached takes again.
+    expect(hash).toBe("cc61e779445fa636f0a434cc636a45593b51c784bbd8487254a90c825cbf967f");
+    expect(await ttsRequestHash({ ...request, profile: athanLabProfileOf("voice_01") })).toBe(hash);
+    expect(await ttsRequestHash({ ...request, profile: athanLabProfileOf("voice_02") })).not.toBe(
+      hash,
+    );
+    expect(
+      await ttsRequestHash({
+        ...request,
+        profile: { ...profile, textPrepVersion: 2 as unknown as 1 },
+      }),
+    ).not.toBe(hash);
   });
 });

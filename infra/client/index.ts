@@ -54,3 +54,22 @@ export { MAX_TITLE_CHARS, MAX_DESCRIPTION_CHARS } from "../lessons/metadataLimit
 export { resizeThumbnail } from "./upload/resizeThumbnail";
 export { useStudioCapabilities } from "./studio/useStudioCapabilities";
 export type { StudioCapabilities } from "./studio/useStudioCapabilities";
+export {
+  athanLabErrorOf,
+  athanLabVoiceSampleUrl,
+  invalidateAthanLabAccount,
+  useAthanLabKey,
+  useAthanLabUsage,
+  useAthanLabVoices,
+  useRemoveAthanLabKey,
+  useSaveAthanLabKey,
+} from "./studio/athanlab";
+export type {
+  AthanLabError,
+  AthanLabKeySaveResult,
+  AthanLabKeyStatus,
+  AthanLabUsage,
+  AthanLabUsageReport,
+  AthanLabVoice,
+  AthanLabVoiceList,
+} from "./studio/athanlab";

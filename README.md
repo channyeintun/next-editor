@@ -130,8 +130,11 @@ header). Each runs in one of three places:
 - `/studio` renders a narrated lesson from a LessonScript: YAML whose narration carries
   `[[mark:…]]` anchors for editor, runtime, preview, slide, and whiteboard actions.
 - English narration is synthesized in the browser (Kyutai Pocket TTS on ONNX Runtime Web, with
-  optional local voice cloning). Burmese narration comes from VoxCPM2 on Modal through the Worker,
-  for signed-in users who have the `studio.burmese-voxcpm2` feature flag.
+  optional local voice cloning). Burmese narration uses AthanLab with the user's own API key: any
+  signed-in user can connect a key, which the Worker stores encrypted and never shows again. Each
+  uncached dialog is an AthanLab job charged to the user's AthanLab balance, and AthanLab keeps job
+  text and audio for 30 days. Users with the `studio.burmese-voxcpm2` feature flag can choose
+  VoxCPM2 on Modal instead.
 - A deterministic performer drives the real editor while the normal recorder captures it. QA
   gates check the result, and a render that passes every gate can become a draft through the
   normal upload flow; publishing stays a human decision.
@@ -216,7 +219,8 @@ bun run d1:migrate:local
   values.
 - `infra/.dev.vars` holds the Worker's secrets. `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and
   `SESSION_SECRET` are needed for anything behind sign-in; QStash, voice chat, and Burmese
-  narration are optional.
+  narration are optional. AthanLab narration needs `ATHANLAB_KEY_ENCRYPTION_SECRET` (generate it
+  with `openssl rand -base64 32`); without it, AthanLab narration stays off.
 
 ### Run
 
@@ -302,7 +306,8 @@ Provisioning, secrets, and the custom domain are covered in
 - [docs/agent-lesson-production.md](docs/agent-lesson-production.md) and
   [docs/lesson-script-authoring.md](docs/lesson-script-authoring.md): Studio's design and its
   authoring contract
-- [docs/modal-voxcpm2-burmese.md](docs/modal-voxcpm2-burmese.md): Burmese narration on Modal
+- [docs/modal-voxcpm2-burmese.md](docs/modal-voxcpm2-burmese.md): the private VoxCPM2 Burmese
+  narration on Modal
 
 ## License
 

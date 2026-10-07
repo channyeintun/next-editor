@@ -62,11 +62,17 @@ Read, entirely and in order, before writing:
 5. **Voice**: English narration is synthesized in the page (pocket-tts).
    The voice row can record or clone the author's own voice (2–20 s sample,
    stored only in that browser) — a render-time choice; the YAML keeps a
-   built-in `voiceProfile`. Burmese (`locale: my-MM`) narration uses VoxCPM2
-   on a private server instead: it needs a signed-in account with the Burmese
-   narration feature enabled and a 5–20 s reference voice, which is sent with
-   each uncached dialog as the input of a narration job; Modal stores each
-   job's input and keeps its audio for up to 7 days.
+   built-in `voiceProfile`. Burmese (`locale: my-MM`) narration uses
+   AthanLab with the author's own API key instead: any signed-in account can
+   connect a key in the studio (it is stored encrypted on the server and never
+   shown again) and pick an AthanLab voice. Each uncached dialog is one
+   AthanLab job charged to the author's AthanLab balance, and AthanLab keeps
+   each job's text and audio for 30 days. Place each `[[mark:…]]` at a
+   sentence end (after `။`) for the most natural AthanLab intonation.
+   Accounts with the private VoxCPM2 feature can choose VoxCPM2 on Modal: it
+   needs a 5–20 s reference voice, which is sent with each uncached dialog as
+   the input of a narration job; Modal stores each job's input and keeps its
+   audio for up to 7 days.
 6. **Report**: lesson slug, scenes/actions used, critic notes fixed vs kept,
    and the checks result. A human reviews the rendered lesson and decides on
    **Create draft…** (sign-in required) — never call the lesson done, only

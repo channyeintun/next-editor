@@ -17,6 +17,7 @@ function referenceAudioBase64(seconds = 5): string {
 }
 
 const REFERENCE_AUDIO_BASE64 = referenceAudioBase64();
+const ATHANLAB_SECRET = btoa("k".repeat(32));
 
 const USER: UserRow = {
   id: "user-1",
@@ -169,23 +170,38 @@ describe("studioRoute capabilities", () => {
 
   it("exposes Burmese VoxCPM2 only when the user flag and Modal config are present", async () => {
     const enabled = await request("/capabilities", makeEnv());
-    expect(await enabled.json()).toEqual({ burmeseVoxCpm2: true });
+    expect(await enabled.json()).toEqual({ burmeseVoxCpm2: true, athanlab: false });
 
     const disabled = await request("/capabilities", makeEnv({ DB: dbWithAccess(USER, false) }));
-    expect(await disabled.json()).toEqual({ burmeseVoxCpm2: false });
+    expect(await disabled.json()).toEqual({ burmeseVoxCpm2: false, athanlab: false });
 
     const unconfigured = await request(
       "/capabilities",
       makeEnv({ MODAL_PROXY_TOKEN_SECRET: undefined }),
     );
-    expect(await unconfigured.json()).toEqual({ burmeseVoxCpm2: false });
+    expect(await unconfigured.json()).toEqual({ burmeseVoxCpm2: false, athanlab: false });
 
     // A Worker configured only for the retired synchronous endpoint is not ready.
     const legacyOnly = await request(
       "/capabilities",
       makeEnv({ VOXCPM2_MODAL_JOBS_URL: undefined }),
     );
-    expect(await legacyOnly.json()).toEqual({ burmeseVoxCpm2: false });
+    expect(await legacyOnly.json()).toEqual({ burmeseVoxCpm2: false, athanlab: false });
+  });
+
+  it("exposes AthanLab to every signed-in user once the key vault secret is valid", async () => {
+    const configured = await request(
+      "/capabilities",
+      makeEnv({ DB: dbWithAccess(USER, false), ATHANLAB_KEY_ENCRYPTION_SECRET: ATHANLAB_SECRET }),
+    );
+    expect(await configured.json()).toEqual({ burmeseVoxCpm2: false, athanlab: true });
+
+    // Anything but base64 of exactly 32 bytes leaves AthanLab off (fails closed).
+    const malformed = await request(
+      "/capabilities",
+      makeEnv({ ATHANLAB_KEY_ENCRYPTION_SECRET: btoa("x".repeat(16)) }),
+    );
+    expect(await malformed.json()).toEqual({ burmeseVoxCpm2: true, athanlab: false });
   });
 });
 

@@ -7,9 +7,20 @@ export interface DraftProvenanceRun {
   result: { manifest: Pick<StudioBuildManifest, "planSlug" | "planHash" | "runtimeMode"> };
   /** TTS implementation that produced the narration, or null. */
   narrationProvider: string | null;
-  /** Cloned-voice name used for the run, or null for the script default. */
+  /** Display name of the run's chosen voice, or null for the script default. */
   voiceName: string | null;
+  /**
+   * What `voiceName` names: a Pocket-TTS voice cloned from the user's sample, a
+   * VoxCPM2 narrator reference, or a voice from the user's AthanLab account.
+   */
+  voiceKind: "cloned" | "reference" | "athanlab" | null;
 }
+
+const VOICE_KIND_PHRASES: Record<NonNullable<DraftProvenanceRun["voiceKind"]>, string> = {
+  cloned: "the user-cloned voice",
+  reference: "the reference voice",
+  athanlab: "the AthanLab voice",
+};
 
 /**
  * The description pre-filled on a studio run's draft upload.
@@ -28,12 +39,13 @@ export function describeDraftDescription(run: Pick<DraftProvenanceRun, "title">)
 
 /**
  * Internal build provenance of a studio run (plan, plan hash, runtime,
- * narration and cloned voice) plus the review reminder, for the studio panel
- * only — never the public description.
+ * narration and voice) plus the review reminder, for the studio panel only —
+ * never the public description.
  */
 export function describeDraftProvenance(run: DraftProvenanceRun): string {
   const { planSlug, planHash, runtimeMode } = run.result.manifest;
   const narration = run.narrationProvider ? `, ${run.narrationProvider} narration` : "";
-  const voice = run.voiceName ? ` with the user-cloned voice "${run.voiceName}"` : "";
+  const voicePhrase = run.voiceKind ? VOICE_KIND_PHRASES[run.voiceKind] : "the voice";
+  const voice = run.voiceName ? ` with ${voicePhrase} "${run.voiceName}"` : "";
   return `AI-produced draft — rendered unattended by the Next Editor studio (plan ${planSlug}, plan sha256 ${planHash.slice(0, 16)}, ${runtimeMode} runtime${narration}${voice}). Review the full lesson before publishing.`;
 }

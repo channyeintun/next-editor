@@ -90,11 +90,12 @@ WebSocket room history.
 The migrations in [`infra/db/migrations`](../infra/db/migrations) are the
 authoritative schema. D1 currently holds:
 
-| Area                        | Tables and responsibility                                            |
-| --------------------------- | -------------------------------------------------------------------- |
-| Identity                    | `users` (including public usernames) and revocable `sessions`        |
-| Published content           | `lessons`, `playlists`, and ordered `playlist_lessons` membership    |
-| Collaboration control plane | rooms, members, invitations/claims, audit events, and asset metadata |
+| Area                        | Tables and responsibility                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| Identity                    | `users` (including public usernames) and revocable `sessions`                                  |
+| Published content           | `lessons`, `playlists`, and ordered `playlist_lessons` membership                              |
+| Collaboration control plane | rooms, members, invitations/claims, audit events, and asset metadata                           |
+| Studio narration            | `user_provider_credentials` (AES-256-GCM-encrypted AthanLab API keys), `provider_auth_breaker` |
 
 The public gallery reads only published lessons; owner-scoped routes expose
 drafts. D1 does **not** store the live Yjs update log or presence state. Room
@@ -297,7 +298,10 @@ deletes the stored copy along with the intent.
 | `POST /api/slide-images`                                           | cookie              | Ingest Google Slides images into content-addressed R2 keys                                                            |
 | `GET /api/proxy?url=`, `POST /api/openrouter/responses`            | route-specific      | Guarded same-origin external-service proxies                                                                          |
 | `POST /api/<language>-playground/run`, `/format`                   | —                   | Kill-switched, cached proxies, limited per user or IP: Go, Kotlin, Rust, Zig, Haskell (`/format`: Go, Rust, Zig)      |
-| `GET /api/studio/capabilities`, `POST /api/studio/tts/voxcpm2`     | cookie + D1 flag    | Studio capability discovery and private Burmese narration                                                             |
+| `GET /api/studio/capabilities`                                     | cookie              | Studio capability discovery (`athanlab`, `burmeseVoxCpm2`)                                                            |
+| `/api/studio/athanlab/*` (key, voices, sample, usage)              | cookie + stored key | Connect, check, and remove the user's own AthanLab API key; list voices, play free samples, show the balance          |
+| `POST /api/studio/tts/athanlab`                                    | cookie + stored key | Burmese narration: one AthanLab job per uncached dialog, charged to the user's AthanLab balance                       |
+| `POST /api/studio/tts/voxcpm2`                                     | cookie + D1 flag    | Private Burmese narration on Modal                                                                                    |
 
 ## Upload & publish sequence
 
@@ -334,6 +338,7 @@ thumbnails and captions use their smaller shared client/server constraints.
 - The upload route validates authentication, existing-lesson ownership, exact content length, filename/extension, and size before writing under `lessons/<id>/…`.
 - Draft lessons are never returned by the public gallery query; only `/api/lessons/mine` (owner-scoped) exposes them.
 - Collaboration routes re-check room membership and roles server-side; browser clients never receive QStash credentials.
+- Users' AthanLab API keys are sealed with AES-256-GCM before they reach D1 (Worker secret `ATHANLAB_KEY_ENCRYPTION_SECRET`; the additional data binds each key to its user). The Worker decrypts a key only to call `https://api.athanlab.com` for that user, never returns or logs it, and stops sending it after AthanLab answers 401. AthanLab blocks a whole network after 20 failed authentications in 5 minutes, and every user reaches it through Cloudflare's shared egress, so two D1 guards limit ours. A key check (`PUT /api/studio/athanlab/key`) runs only after one conditional upsert on `provider_auth_breaker` has counted it as a failure in the current fixed 5-minute window, which it does only while that window holds fewer than 8; the check gets its slot back only when AthanLab gives a definite answer other than 401 (a call that threw or timed out keeps it, since AthanLab may have counted the key), and is refused if D1 fails. So at most 8 failed key checks are admitted per window and 16 in any 5-minute span, each failing at most once and within about a minute of being admitted. Each request's first call with a stored key (for a synthesis, its first submit with its retries) is made under a per-user lease on its `user_provider_credentials` row, bound to the sealed key the request decrypted, released when that call is finished and otherwise lapsing 5 s after that call's own timeout; a 401 marks the key invalid before the lease is released. So concurrent requests with a revoked key cost one failed authentication between them, not one each, even when the user replaces the key meanwhile (requests still holding the old key answer `key_busy` and retry with the new one); only a first submit still retrying transient AthanLab errors past its lease lets another request try too. Those failures count in the same window and pause key checks sooner, but are not capped by it. Per-user Rate Limiting bindings (`ATHANLAB_KEY_RATE_LIMITER`, `ATHANLAB_API_RATE_LIMITER`) fail closed. Without the secret, AthanLab narration is off; rotating it makes every user connect their key again.
 - The Realtime SFU application ID and token are Worker secrets. Every SFU operation is re-authenticated (session + D1 membership) and then authorized inside the room's voice Durable Object against per-connection capabilities and a session/track/mid ownership registry; upstream responses are sanitized before reaching the browser.
 
 ## Cost / free-tier fit

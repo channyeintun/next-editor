@@ -93,11 +93,17 @@ the file immediately:
 npx wrangler secret put GOOGLE_CLIENT_ID     < /path/to/tmpfile
 npx wrangler secret put GOOGLE_CLIENT_SECRET < /path/to/tmpfile
 npx wrangler secret put SESSION_SECRET       < /path/to/tmpfile   # openssl rand -hex 32
+npx wrangler secret put ATHANLAB_KEY_ENCRYPTION_SECRET < /path/to/tmpfile   # openssl rand -base64 32
 ```
 
 Use a **different** `SESSION_SECRET` than local dev's `infra/.dev.vars` —
 it's what signs the OAuth handshake cookie, no reason to share it across
 environments.
+
+`ATHANLAB_KEY_ENCRYPTION_SECRET` encrypts the AthanLab API keys users connect
+in Studio (AES-256-GCM, stored in D1). Without it, AthanLab narration stays off.
+Keep it stable: rotating it leaves every stored key unreadable, so each user
+has to connect their key again.
 
 ### 5. Prepare the Workers KV cache
 

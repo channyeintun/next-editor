@@ -16,7 +16,7 @@ and exception capture is filtered separately because DOM replay selectors do not
 | Runner, shell, console, and runtime diagnostics                   | Sensitive workspace data | Blocked from session replay; messages and breadcrumbs removed from exceptions    |
 | API request paths, headers, bodies, and responses                 | Sensitive request data   | Blocked from session replay; request/response properties removed from exceptions |
 | Slides, drawings, captions, recordings, and playback state        | Sensitive lesson data    | Blocked from session replay; never attach authored content to analytics          |
-| Credentials, tokens, cookies, and authorization headers           | Secret                   | Never capture; inputs are masked as defense in depth                             |
+| Credentials, tokens, cookies, authorization headers, and API keys | Secret                   | Never capture; inputs are masked as defense in depth                             |
 
 ## Enforcement
 
@@ -29,6 +29,11 @@ and exception capture is filtered separately because DOM replay selectors do not
   `POSTHOG_REPLAY_PRIVACY_OPTIONS`). The WebContainer runtime mirrors runner output to the
   browser console, and a DOM block selector does not cover console events; left unset, PostHog
   would follow the project's remote "capture console logs" setting.
+- Replay network capture is pinned off the same way (`recordBody: false` and `recordHeaders: false`
+  in `POSTHOG_REPLAY_PRIVACY_OPTIONS.session_recording`). Left unset, a remote PostHog dashboard
+  setting can turn request/response body capture on, and PostHog's default scrubber misses
+  camel-case fields such as the `apiKey` that Studio sends once to connect an AthanLab key. The
+  key field itself is a password input with the `ph-no-capture` class.
 - WebContainer preview exceptions are dropped. Other application exceptions retain only an error
   type plus URL-without-query stack locations; messages, source context, breadcrumbs, commands,
   and request/response payloads are removed.

@@ -42,13 +42,15 @@ deck. Every other visual is a whiteboard diagram drawn in as the narration expla
 
 ## Rendering a lesson
 
-1. Choose the Burmese voice (VoxCPM2) and your narrator reference sample in the voice row; the
-   lessons pin the English Pocket profile and Studio swaps in the Burmese one at render time.
+1. Choose a Burmese provider: **မြန်မာ · VoxCPM2 (Modal)** with your narrator reference sample in
+   the voice row, or **မြန်မာ · AthanLab (your API key)** with an AthanLab voice. The lessons pin
+   the English Pocket profile and Studio swaps in the Burmese one at render time.
 2. Open `/studio`, pick the lesson from the dropdown (or open `/studio?plan=<script>`), keep the tab
    in front (Start render is disabled while the tab is hidden), and press **Start render**.
-3. The run uses the lesson's fixture, so no sign-in is needed for the render itself. Lessons with deck
-   slides fetch the deck from Google at render time and allow a 500 ms timing gate instead of 300 ms
-   (painting a deck slide briefly stalls the page).
+3. The run uses the lesson's fixture, so the code needs no live runtime, but both Burmese
+   providers need a signed-in account (AthanLab for your stored key, VoxCPM2 for its feature flag).
+   Lessons with deck slides fetch the deck from Google at render time and allow a 500 ms timing gate
+   instead of 300 ms (painting a deck slide briefly stalls the page).
 4. When every check passes, watch the replay, then **Create draft…**, publish, and add the lesson to
    the course playlist.
 

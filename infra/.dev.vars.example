@@ -28,3 +28,9 @@ REALTIME_SFU_APP_SECRET=
 VOXCPM2_MODAL_JOBS_URL=
 MODAL_PROXY_TOKEN_ID=
 MODAL_PROXY_TOKEN_SECRET=
+
+# Optional: Burmese Studio narration with each user's own AthanLab API key.
+# Base64 of exactly 32 random bytes, e.g. `openssl rand -base64 32`; it seals
+# the keys users store. Leave it empty to keep AthanLab narration off. Changing
+# it makes stored keys unreadable, so users would connect their key again.
+ATHANLAB_KEY_ENCRYPTION_SECRET=

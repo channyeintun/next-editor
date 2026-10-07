@@ -374,7 +374,7 @@ const edgeChips: ChipSpec[] = [
 const storageChips: ChipSpec[] = [
   {
     title: "D1 (SQLite)",
-    lines: ["users, sessions, passkeys, lessons,", "playlists, rooms, audit, flags"],
+    lines: ["users, sessions, passkeys, lessons,", "playlists, rooms, encrypted API keys"],
     tag: 25,
   },
   {
@@ -399,7 +399,7 @@ const storageChips: ChipSpec[] = [
   },
   {
     title: "Rate Limiting",
-    lines: ["per-user or per-IP playground", "budgets, fail closed"],
+    lines: ["playground + AthanLab budgets,", "per user or per IP; fail closed"],
     tag: 30,
   },
 ];
@@ -452,19 +452,24 @@ const workerServices: ExternalSpec[] = [
     tag: 37,
   },
   {
+    title: "AthanLab",
+    lines: ["Burmese Studio narration with the", "user's own encrypted key"],
+    tag: 38,
+  },
+  {
     title: "Modal · VoxCPM2",
     lines: ["Burmese Studio narration,", "gated by a D1 feature flag"],
-    tag: 38,
+    tag: 39,
   },
   {
     title: "Upstash QStash",
     lines: ["signed callback purges a", "room 7 days after it closes"],
-    tag: 39,
+    tag: 40,
   },
   {
     title: "Cloudflare Realtime SFU",
     lines: ["audio-only WebRTC media plane,", "Opus fan-out between members"],
-    tag: 40,
+    tag: 41,
   },
 ];
 
@@ -616,7 +621,7 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
     n: "25",
     title: "D1",
     detail:
-      "users, sessions, passkeys, lessons, playlists, per-user feature flags, and the collaboration room and access-control plane.",
+      "users, sessions, passkeys, lessons, playlists, per-user feature flags, users' provider API keys (AthanLab) encrypted by the Worker with AES-256-GCM, a failed-sign-in breaker, and the collaboration room and access-control plane.",
   },
   {
     n: "26",
@@ -646,7 +651,7 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
     n: "30",
     title: "Rate Limiting",
     detail:
-      "budgets for the playground proxies, per user or per IP when signed out; a route whose binding is missing answers 502 instead of proxying.",
+      "budgets for the playground proxies (per user, or per IP when signed out) and for AthanLab key checks and narration calls (per user); a route whose binding is missing refuses the request instead of calling out.",
   },
   {
     n: "31",
@@ -688,18 +693,24 @@ const notes: Array<{ n: string; title: string; detail: string }> = [
   },
   {
     n: "38",
+    title: "AthanLab",
+    detail:
+      "Burmese Studio narration with the user's own encrypted key. Only the Worker calls api.athanlab.com, as AthanLab's terms require; each uncached dialog is one job charged to the user's AthanLab balance. A D1 breaker admits at most 8 failing key checks per 5-minute window (16 in any 5 minutes, under the 20 that make AthanLab block our shared network), and a per-user D1 lease, bound to the sealed key, holds other requests with the same stored key back until AthanLab has answered the first, so a revoked key is not rejected once per concurrent request.",
+  },
+  {
+    n: "39",
     title: "Modal · VoxCPM2",
     detail:
       "Burmese Studio narration for users with the studio.burmese-voxcpm2 D1 flag; the Modal credentials stay in the Worker.",
   },
   {
-    n: "39",
+    n: "40",
     title: "Upstash QStash",
     detail:
       "seven days after a room closes, a signed job purges its Durable Object document, R2 assets, and D1 rows.",
   },
   {
-    n: "40",
+    n: "41",
     title: "Cloudflare Realtime SFU",
     detail:
       "Opus audio forwarding between room members over DTLS-SRTP; roomless by design, so the app decides who may subscribe. Feature-flagged via VOICE_CHAT_ENABLED.",
@@ -898,11 +909,11 @@ export default function ArchitecturePage() {
               </div>
               <div>
                 <b>rev</b>
-                <span>E</span>
+                <span>F</span>
               </div>
               <div>
                 <b>date</b>
-                <span>2026-09-28</span>
+                <span>2026-10-08</span>
               </div>
             </div>
           </div>
@@ -926,9 +937,10 @@ export default function ArchitecturePage() {
                 The Worker serves the static build with edge rendering, authenticates users, and
                 proxies the language playgrounds and the coding agent's model calls. It uses D1, R2,
                 Workers KV, room and voice Durable Objects, and rate-limit bindings, and calls
-                Google Identity, the language playgrounds, OpenRouter, Modal, and Upstash QStash.
-                The voice Durable Objects gate every call to the Cloudflare Realtime SFU, which
-                exchanges audio-only WebRTC media directly with the browser.
+                Google Identity, the language playgrounds, OpenRouter, AthanLab (Burmese narration
+                with each user's own encrypted key), Modal, and Upstash QStash. The voice Durable
+                Objects gate every call to the Cloudflare Realtime SFU, which exchanges audio-only
+                WebRTC media directly with the browser.
               </desc>
 
               <defs>

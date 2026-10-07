@@ -37,10 +37,14 @@ markdown, and with humans.
    critic note.
 3. **Start render**, watch the lesson perform itself, and confirm
    "Checks (N/N ok)".
-4. Optionally narrate with your own cloned voice (the voice row: record or
-   upload 2–20 s, or 5–20 s for Burmese; for English narration the sample
-   never leaves your browser — Burmese narration sends it, unstored, to its
-   narration service).
+4. Optionally narrate English with your own cloned voice (the voice row:
+   record or upload 2–20 s; the sample never leaves your browser). Burmese
+   narration uses AthanLab with your own API key: sign in and connect the key
+   once (it is stored encrypted and never shown again); each new dialog is
+   one job charged to your AthanLab balance, and AthanLab keeps each job's
+   text and audio for 30 days. Accounts with the private VoxCPM2 feature can
+   use VoxCPM2 on Modal instead, which takes a 5–20 s reference sample and
+   sends it with each new dialog to its narration service.
 5. Sign in and **Create draft…** to upload it like any recording. A human
    reviews before anything is published.
 

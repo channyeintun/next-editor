@@ -74,6 +74,12 @@ ZIG_PLAYGROUND_ENABLED = "true"
 #   wrangler secret put VOXCPM2_MODAL_JOBS_URL    --config infra/wrangler.toml
 #   wrangler secret put MODAL_PROXY_TOKEN_ID      --config infra/wrangler.toml
 #   wrangler secret put MODAL_PROXY_TOKEN_SECRET  --config infra/wrangler.toml
+# Burmese Studio narration with each user's own AthanLab API key needs no flag,
+# only the key-sealing secret: base64 of exactly 32 random bytes (generate it
+# with `openssl rand -base64 32`). Without it, or with a malformed one,
+# AthanLab narration stays off. Rotating it makes every stored AthanLab key
+# unreadable, so each user has to connect their key again:
+#   wrangler secret put ATHANLAB_KEY_ENCRYPTION_SECRET --config infra/wrangler.toml
 
 # Custom Domain: routes all paths of nexteditor.dev to this Worker. Requires
 # the zone to already be on Cloudflare (nameservers pointed here) — done by
@@ -135,7 +141,8 @@ binding = "CACHE"
 # `period` may only be 10 or 60 seconds; keep 60, because the routes' 429 says
 # "retry in a minute". `namespace_id` names the counter across the whole
 # Cloudflare account: never reuse one for a different budget, and keep this
-# 7101-7107 block clear of other Workers' ids, or they would share counters.
+# 7101-7109 block (playgrounds 7101-7107, AthanLab 7108-7109) clear of other
+# Workers' ids, or they would share counters.
 [[ratelimits]]
 name = "GO_RUN_RATE_LIMITER"
 namespace_id = "7101"
@@ -181,6 +188,29 @@ simple = { limit = 6, period = 60 }
 name = "ZIG_UPSTREAM_RATE_LIMITER"
 namespace_id = "7107"
 simple = { limit = 4, period = 60 }
+
+# AthanLab narration (worker/routes/athanlab.ts), keyed "user:<id>" (every
+# AthanLab route requires sign-in); a refusal answers 429 with
+# retryAfterSeconds 60. Key checks on PUT /api/studio/athanlab/key are free but
+# each wrong key counts against AthanLab's failed-auth limit for our whole
+# shared network, so they get a tight budget of their own. Across all users,
+# the D1 breaker in worker/athanlab/breaker.ts admits a check only into one of
+# 8 slots per fixed 5-minute window, taken before AthanLab hears of the key
+# and kept when AthanLab answers 401 (or never answers at all).
+[[ratelimits]]
+name = "ATHANLAB_KEY_RATE_LIMITER"
+namespace_id = "7108"
+simple = { limit = 5, period = 60 }
+
+# Every route that sends a stored AthanLab key: voices, voice samples, usage,
+# and synthesis (one per dialog attempt; each stays far below AthanLab's own
+# 60 writes and 600 reads per key per minute). Separately, each request makes
+# its first AthanLab call under a per-user lease in D1, so concurrent requests
+# with a revoked key do not each cost a failed sign-in.
+[[ratelimits]]
+name = "ATHANLAB_API_RATE_LIMITER"
+namespace_id = "7109"
+simple = { limit = 30, period = 60 }
 
 # One hibernating WebSocket coordinator per live-collaboration room. Every room
 # keeps its durable Yjs log in this object's SQLite storage.

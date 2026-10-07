@@ -36,7 +36,8 @@ browser at render time. Two ways it reaches the studio:
 1. Narration is written per **scene**, with `[[mark:name]]` tokens embedded in
    the prose. Each mark is an **anchor**: the text splits at every mark into
    **dialogs**, each dialog is synthesized to audio separately (pocket-tts in
-   the render page for English; VoxCPM2 on Modal for Burmese), and actions
+   the render page for English; for Burmese, AthanLab with your own API key,
+   or VoxCPM2 on Modal when that private feature is enabled), and actions
    fire at the mark they reference. Before the dialogs are stitched, every one
    is leveled to the same loudness (−18 LUFS, or lower for the whole narration
    when one dialog is too peaky or too quiet to get there), so the voice keeps
@@ -71,14 +72,43 @@ critiqued in the page), press **Start render**, watch, and **Create draft…**
 Users can also provide a narrator reference: the voice row offers **Record**
 (microphone) or an audio-file picker. The prepared sample is stored in the
 browser (IndexedDB). English Pocket-TTS cloning accepts 2–20s and stays
-entirely local. Burmese VoxCPM2 renders require a selected 5–20s reference and
-send it through the authenticated Worker to the private Modal deployment as
-part of every uncached dialog's narration job; Modal stores each job's input
-and keeps its audio for up to 7 days. Reusing that
-reference keeps one speaker across the render. Scripts keep pinning built-in
-profiles in `build.voiceProfile` — reference selection is a render-time choice.
-The selected voice name appears in the build provenance on the **Create
-draft…** button's tooltip, not in the public draft description.
+entirely local.
+
+Burmese narration (`locale: my` or `my-MM`) has two providers, chosen in the
+render console's narration select:
+
+- **မြန်မာ · AthanLab (your API key)** is open to any signed-in user, and its
+  panel takes the place of the voice row. Paste your own AthanLab API key
+  once: Next Editor checks it, stores it encrypted on its server, uses it only
+  for your own narration jobs, and never shows it again (the panel shows only
+  its last four characters). Get a key at
+  https://athanlab.com/dashboard/api (developer access is invite-only and needs
+  AthanLab's Max plan). Create a separate key for Next Editor with only the
+  `speech:write`, `speech:read`, and `voices:read` permissions (`usage:read`
+  is optional and shows your balance), a monthly character budget, and a short
+  expiry. Then pick one of your AthanLab voices — **Listen** plays a free
+  sample — and every dialog keeps that one speaker. Each uncached dialog is
+  one AthanLab job, charged to your AthanLab balance at AthanLab's rates, and
+  AthanLab keeps each job's text and audio for 30 days. Finished dialogs are
+  cached in this browser, so rendering the same text again is not charged
+  again. If AthanLab rejects the saved key (it expired or was revoked),
+  Studio stops sending it and asks you to connect a new one; **Disconnect**
+  deletes it from Next Editor, and you should also revoke it in your AthanLab
+  dashboard.
+- **မြန်မာ · VoxCPM2 (Modal)** is listed only for accounts with the private
+  VoxCPM2 feature. Its renders require a selected 5–20s reference and send it
+  through the authenticated Worker to the private Modal deployment as part of
+  every uncached dialog's narration job; Modal stores each job's input and
+  keeps its audio for up to 7 days. Reusing that reference keeps one speaker
+  across the render.
+
+Scripts keep pinning built-in profiles in `build.voiceProfile` — the
+narration provider, voice, and reference are render-time choices. **Start
+render** stays disabled, with the reason shown, until the script's locale
+matches the chosen provider's language, and a Burmese provider works with
+LessonScript sources only. The selected voice name appears in the build
+provenance on the **Create draft…** button's tooltip, not in the public draft
+description.
 
 The render console also offers an opt-in **Screen recording** toggle
 (desktop browsers only). When enabled, pressing **Start render** first prompts
@@ -347,6 +377,14 @@ Marker rules:
 - A mark anchors to the word that follows it. Place a mark exactly where the
   related action should begin. Marks at sentence boundaries sound best (each
   inter-mark span is synthesized as one utterance).
+- For Burmese narration with AthanLab, place each `[[mark:…]]` at the end of a
+  sentence (after `။`, `!`, or `?`) for the most natural AthanLab intonation.
+  Each dialog is its own AthanLab job, and Studio adds `။` to a dialog that
+  does not already end in `။`, `!`, `?`, `.`, or `၊` — so a mark in the middle
+  of a sentence makes the voice finish the first part like a whole sentence.
+  When a mark has to sit inside a sentence, put it right after a `၊` pause.
+  Studio also removes quotation marks and brackets from the text it sends and
+  turns `…` into a `၊` pause; the captions keep your text as written.
 - Every mark referenced by an action must exist. A mark no action references
   is fine: it still splits the dialog there and buys a breath. The critic's
   `marker.unused` note fires only for a mark that splits nothing (at the start
@@ -621,23 +659,36 @@ of the previous board while wiping the rest works.
 
 ## Failure → fix table
 
-| Symptom                                         | Fix                                                                                                            |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `Invalid lesson script: …`                      | Schema violation (including an unknown or misspelled key); the path in the message names the field.            |
-| `Unknown marker "x" — known markers: …`         | An action references a mark not present in narration.                                                          |
-| `Typing action "…" overlaps "…"` (compile)      | Two authored actions collide; move the later mark or add `offsetMs`.                                           |
-| `⚠ …ms of silence inserted before dialog …`     | Your action outlasts the narration around it; add a sentence there or shorten the typed text.                  |
-| `… ran to the speech engine's length limit …`   | A sentence hit Pocket's ~40s cap unended; reword or split it (the warning repeats until it changes).           |
-| `Narration dialog N/M "…" ("…"): …`             | That dialog's synthesis failed or its audio is unusable; Burmese errors carry the service's reason.            |
-| `… stays N dB quieter than the rest …`          | Too quiet or too peaky for leveling to match the others; listen, and reword that dialog for a new take.        |
-| `Anchor occurrence N of "…" not found` (render) | The `after` string doesn't match the file at perform time — check tabs/newlines and earlier insertions.        |
-| `checkpoint.output.… never contains …`          | Fixture output and `expect.output` disagree, or the program doesn't print it.                                  |
-| `runtime.waitForReady` times out                | Check the pinned install/run commands, package versions, expected port, and server diagnostics in the receipt. |
-| `Preview … command failed`                      | The iframe bridge did not acknowledge, the target's `data-testid` is missing, or the preview crashed.          |
-| `checkpoint.preview.…` failure                  | The recorded route/DOM differs from `expect.preview`; inspect the attached diagnostic screenshot.              |
-| `preview.replayData` failure                    | The artifact lacks an rrweb seed or the mutation patches required for the authored interactions.               |
-| `timing.p95 — … (max 300ms)` failure            | Usually a squeezed action; check the receipts in the render report for the late action.                        |
-| Repeatability FAIL on `repeat.audio`            | Should not happen (synthesis is seeded); report it as a bug rather than working around it.                     |
+| Symptom                                         | Fix                                                                                                                                                                      |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Invalid lesson script: …`                      | Schema violation (including an unknown or misspelled key); the path in the message names the field.                                                                      |
+| `Unknown marker "x" — known markers: …`         | An action references a mark not present in narration.                                                                                                                    |
+| `Typing action "…" overlaps "…"` (compile)      | Two authored actions collide; move the later mark or add `offsetMs`.                                                                                                     |
+| `⚠ …ms of silence inserted before dialog …`     | Your action outlasts the narration around it; add a sentence there or shorten the typed text.                                                                            |
+| `… ran to the speech engine's length limit …`   | A sentence hit Pocket's ~40s cap unended; reword or split it (the warning repeats until it changes).                                                                     |
+| `Narration dialog N/M "…" ("…"): …`             | That dialog's synthesis failed or its audio is unusable; Burmese errors carry the provider's reason.                                                                     |
+| `… needs Burmese narration …` (or the reverse)  | The narration select and the script's `locale` disagree; choose the matching provider (it never translates).                                                             |
+| `AthanLab: …` asking you to connect your key    | The saved key is missing, expired, revoked, or can no longer be read; connect a new key in the AthanLab panel.                                                           |
+| Other `AthanLab: …` errors                      | AthanLab's own reason (for example, no characters left); fix it on AthanLab, then render again (see below).                                                              |
+| `… stays N dB quieter than the rest …`          | Too quiet or too peaky for leveling to match the others; listen, and reword that dialog for a new take.                                                                  |
+| `Anchor occurrence N of "…" not found` (render) | The `after` string doesn't match the file at perform time — check tabs/newlines and earlier insertions.                                                                  |
+| `checkpoint.output.… never contains …`          | Fixture output and `expect.output` disagree, or the program doesn't print it.                                                                                            |
+| `runtime.waitForReady` times out                | Check the pinned install/run commands, package versions, expected port, and server diagnostics in the receipt.                                                           |
+| `Preview … command failed`                      | The iframe bridge did not acknowledge, the target's `data-testid` is missing, or the preview crashed.                                                                    |
+| `checkpoint.preview.…` failure                  | The recorded route/DOM differs from `expect.preview`; inspect the attached diagnostic screenshot.                                                                        |
+| `preview.replayData` failure                    | The artifact lacks an rrweb seed or the mutation patches required for the authored interactions.                                                                         |
+| `timing.p95 — … (max 300ms)` failure            | Usually a squeezed action; check the receipts in the render report for the late action.                                                                                  |
+| Repeatability FAIL on `repeat.audio`            | Pocket-TTS and VoxCPM2 are seeded: report it as a bug. AthanLab takes are not seeded — they replay from the browser cache or AthanLab's 24 h idempotent job (see below). |
+
+**Rendering again with AthanLab.** Dialogs AthanLab has already finished stay
+in this browser's dialog cache, so a new render pays only for the dialogs that
+are missing. AthanLab takes are not seeded: when the same account asks for
+the same dialog text and voice within 24 hours, AthanLab returns its original
+job (its idempotent job) without a new charge — which also picks up a dialog
+AthanLab was still generating when the last render stopped. A `repeat.audio`
+FAIL with AthanLab therefore means neither the cache nor that job had the
+take, for example after the browser cache was cleared more than 24 hours after
+the first render; render both runs again.
 
 ## A complete example
 

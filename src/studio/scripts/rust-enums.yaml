@@ -384,8 +384,10 @@ lesson:
 
 build:
   voiceProfile:
-    # Studio replaces this built-in profile with the selected Burmese VoxCPM2
-    # profile at render time when the signed-in user has the D1 capability.
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
     pocket-alba-v1
   seed: 43
 

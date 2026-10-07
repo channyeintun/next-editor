@@ -1,7 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { UploadLessonModal, useAuth, useStudioCapabilities } from "@next-editor/infra";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  invalidateAthanLabAccount,
+  UploadLessonModal,
+  useAuth,
+  useStudioCapabilities,
+} from "@next-editor/infra";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import { useNextEditorActions } from "../hooks/useNextEditorContext";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
@@ -49,14 +55,26 @@ import {
   type SavedCustomVoice,
   VOICE_SAMPLE_RATE,
 } from "./tts/customVoices";
-import { customVoiceProfileOf, modalVoxCpm2BurmeseProfileOf } from "./tts/profiles";
+import {
+  athanLabProfileOf,
+  customVoiceProfileOf,
+  modalVoxCpm2BurmeseProfileOf,
+  type VoiceProfile,
+} from "./tts/profiles";
 import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
 import { synthesizePocketWav } from "./tts/pocketSynth";
 import { critiqueScript, type CritiqueNote } from "./script/critic";
 import { extractNarration } from "./script/markers";
 import { runStudioRender, type StudioRenderOptions, type StudioRunResult } from "./runStudioRender";
 import type { RenderSemantics } from "./compare";
-import { validateNarrationLanguage, type StudioNarrationLanguage } from "./narrationLanguage";
+import {
+  isStudioNarrationProvider,
+  narrationLanguageOf,
+  narrationProviderLabel,
+  validateNarrationLanguage,
+  type StudioNarrationProvider,
+} from "./narrationLanguage";
+import AthanLabPanel from "./AthanLabPanel";
 
 /**
  * The studio render console: pick a lesson (checked-in scripts auto-register;
@@ -71,6 +89,46 @@ import { validateNarrationLanguage, type StudioNarrationLanguage } from "./narra
 // the browsing session so an import → render → reload → re-render loop works.
 const IMPORTED_SCRIPTS_KEY = "next-editor:studio:imported-scripts";
 const VOICE_CHOICE_KEY = "next-editor:studio:voice-choice";
+const NARRATION_PROVIDER_KEY = "next-editor:studio:narration-provider";
+
+function readStoredNarrationProvider(): StudioNarrationProvider {
+  try {
+    const stored = localStorage.getItem(NARRATION_PROVIDER_KEY);
+    return isStudioNarrationProvider(stored) ? stored : "pocket";
+  } catch {
+    return "pocket";
+  }
+}
+
+function storeNarrationProvider(provider: StudioNarrationProvider): void {
+  try {
+    localStorage.setItem(NARRATION_PROVIDER_KEY, provider);
+  } catch {
+    // Storage unavailable — the choice still holds until reload.
+  }
+}
+
+/** Until <AthanLabPanel> reports, a render with AthanLab cannot start. */
+const ATHANLAB_NOT_REPORTED = { ready: false, reason: "Checking your AthanLab setup…" };
+
+/** The non-script-source refusal, shared by the Start guard and runRender. */
+const BURMESE_SCRIPT_ONLY_ERROR = "Burmese narration is available for LessonScript sources only";
+
+/**
+ * Why the selected lesson cannot be narrated by the selected provider, or null.
+ * `scriptLocale` is null for a plan source, or a script that fails to parse
+ * (runRender reports the schema error).
+ */
+function narrationSetupErrorOf(
+  source: StudioLessonSource | undefined,
+  scriptLocale: string | null,
+  provider: StudioNarrationProvider,
+): string | null {
+  if (!source) return null;
+  if (source.kind === "plan") return provider === "pocket" ? null : BURMESE_SCRIPT_ONLY_ERROR;
+  if (scriptLocale === null) return null;
+  return validateNarrationLanguage(scriptLocale, narrationLanguageOf(provider));
+}
 
 function readImportedScripts(): Record<string, string> {
   try {
@@ -125,8 +183,10 @@ interface StudioRunEntry {
   sourceRevision: string;
   /** Human title captured at render time; the draft-upload flow uses THIS, never the current selection. */
   title: string;
-  /** Cloned-voice name used for this run, or null for the script default. */
+  /** Display name of the voice used for this run, or null for the script default. */
   voiceName: string | null;
+  /** What `voiceName` names — see DraftProvenanceRun. */
+  voiceKind: "cloned" | "reference" | "athanlab" | null;
   /** TTS implementation used to produce this run's narration. */
   narrationProvider: string | null;
   result: StudioRunResult;
@@ -221,9 +281,11 @@ export default function StudioController() {
   const getWebContainerRuntimeSnapshot = useWebContainerRuntimeSnapshotGetter();
   const previewPanel = usePreviewPanel();
   const previewHandle = usePreviewAdapterHandle();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
   const { capabilities: studioCapabilities, isLoading: studioCapabilitiesLoading } =
-    useStudioCapabilities(user?.id ?? null);
+    useStudioCapabilities(userId);
+  const queryClient = useQueryClient();
   const webContainerRuntimeActionsRef = useRef(webContainerRuntimeActions);
   const webContainerRuntimeMetadataRef = useRef(webContainerRuntimeMetadata);
 
@@ -258,7 +320,14 @@ export default function StudioController() {
   );
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [narrationLanguage, setNarrationLanguage] = useState<StudioNarrationLanguage>("en");
+  const [provider, setProvider] = useState<StudioNarrationProvider>(readStoredNarrationProvider);
+  // Reported by <AthanLabPanel>: the voice every dialog is synthesized with,
+  // and whether a render can start (key connected, voice chosen, balance left).
+  const [athanLabVoice, setAthanLabVoice] = useState<{ id: string; name: string } | null>(null);
+  const [athanLabReadiness, setAthanLabReadiness] = useState<{
+    ready: boolean;
+    reason: string | null;
+  }>(ATHANLAB_NOT_REPORTED);
   const runningRef = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -284,11 +353,15 @@ export default function StudioController() {
   const voiceRecorderRef = useRef<{ recorder: MediaRecorder; chunks: Blob[] } | null>(null);
   const [voiceRecording, setVoiceRecording] = useState(false);
 
-  const chooseNarrationLanguage = (language: StudioNarrationLanguage) => {
-    if (language === narrationLanguage) return;
-    setNarrationLanguage(language);
-    // A completed bundle belongs to the provider that synthesized it. Do not
-    // leave that artifact exposed after the provider selection changes.
+  const chooseProvider = (next: StudioNarrationProvider) => {
+    if (next === provider) return;
+    setProvider(next);
+    storeNarrationProvider(next);
+    // A remounting panel reports afresh; never start from its previous answer.
+    if (next === "athanlab") setAthanLabReadiness(ATHANLAB_NOT_REPORTED);
+    // A completed bundle belongs to the provider that synthesized it — also
+    // across the two Burmese providers. Do not leave that artifact exposed
+    // after the provider selection changes.
     setLatest(null);
     setComparison(null);
     setBaselineNote(null);
@@ -296,17 +369,36 @@ export default function StudioController() {
     setFatal(null);
   };
 
+  // VoxCPM2 is enabled per user; fall back to English when it is not (once the
+  // session is known — signed-out-while-loading would otherwise reset it on
+  // every page load). The stored choice is left alone so it returns when the
+  // flag does. AthanLab is never reset here: its panel explains what is missing.
   useEffect(() => {
     if (
+      !authLoading &&
       !studioCapabilitiesLoading &&
       !studioCapabilities.burmeseVoxCpm2 &&
-      narrationLanguage === "my"
+      provider === "voxcpm2"
     ) {
-      setNarrationLanguage("en");
+      setProvider("pocket");
       setLatest(null);
       setComparison(null);
     }
-  }, [narrationLanguage, studioCapabilities.burmeseVoxCpm2, studioCapabilitiesLoading]);
+  }, [authLoading, provider, studioCapabilities.burmeseVoxCpm2, studioCapabilitiesLoading]);
+
+  const reportAthanLabVoice = (voiceId: string | null, voiceName: string | null) => {
+    setAthanLabVoice((current) => {
+      if (voiceId === null) return null;
+      if (current?.id === voiceId && current.name === voiceName) return current;
+      return { id: voiceId, name: voiceName ?? voiceId };
+    });
+  };
+
+  const reportAthanLabReadiness = (ready: boolean, reason: string | null) => {
+    setAthanLabReadiness((current) =>
+      current.ready === ready && current.reason === reason ? current : { ready, reason },
+    );
+  };
 
   useEffect(() => {
     void listCustomVoices().then(setCustomVoices);
@@ -316,7 +408,7 @@ export default function StudioController() {
   const selectedVoiceIsBurmeseReady =
     selectedVoice !== null && isBurmeseReferenceReady(selectedVoice);
   const requiredVoiceSeconds =
-    narrationLanguage === "my" ? MIN_VOXCPM2_REFERENCE_SECONDS : MIN_SAMPLE_SECONDS;
+    provider === "voxcpm2" ? MIN_VOXCPM2_REFERENCE_SECONDS : MIN_SAMPLE_SECONDS;
 
   const chooseVoice = (value: string) => {
     setVoiceChoice(value);
@@ -328,7 +420,7 @@ export default function StudioController() {
     try {
       const samples = await prepareVoiceSample(bytes);
       if (
-        narrationLanguage === "my" &&
+        provider === "voxcpm2" &&
         samples.length < MIN_VOXCPM2_REFERENCE_SECONDS * VOICE_SAMPLE_RATE
       ) {
         throw new Error(
@@ -394,7 +486,7 @@ export default function StudioController() {
     setVoiceBusy(`Synthesizing a preview with "${selectedVoice.name}"…`);
     try {
       const wav =
-        narrationLanguage === "my"
+        provider === "voxcpm2"
           ? await synthesizeModalVoxCpm2Wav(
               modalVoxCpm2BurmeseProfileOf(selectedVoice),
               "မင်္ဂလာပါ။ ဒီအသံနဲ့ သင်ခန်းစာတစ်လျှောက် တစ်သမတ်တည်း ရှင်းပြပေးပါမယ်။",
@@ -482,6 +574,9 @@ export default function StudioController() {
       return;
     }
     runningRef.current = true;
+    // Captured once: the provider select is disabled while rendering, but the
+    // finally below must refresh the account this render actually used.
+    const renderProvider = provider;
     // The report's wall time covers synthesis and compilation, not just the performance.
     const startedAt = { iso: new Date().toISOString(), performanceNowMs: performance.now() };
     setRunning(true);
@@ -506,21 +601,57 @@ export default function StudioController() {
           `Unknown lesson "${planSlug}" — available: ${Object.keys(sources).join(", ")}`,
         );
       }
+      // Everything checkable without a network round trip — the script's
+      // locale against the provider, the provider's own requirements — fails
+      // here, before the screen picker below opens for a render that cannot run.
+      const script = source.kind === "script" ? source.load() : null;
+      if (!script && renderProvider !== "pocket") {
+        throw new Error(BURMESE_SCRIPT_ONLY_ERROR);
+      }
       const renderVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
-      let burmeseVoiceProfile: ReturnType<typeof modalVoxCpm2BurmeseProfileOf> | undefined;
-      if (narrationLanguage === "my") {
-        if (!renderVoice || !isBurmeseReferenceReady(renderVoice)) {
-          throw new Error(
-            `Burmese narration requires a ${MIN_VOXCPM2_REFERENCE_SECONDS}–${MAX_SAMPLE_SECONDS}s narrator reference. Record or upload one first.`,
-          );
+      let voiceProfile: VoiceProfile | undefined;
+      let voiceName: string | null = null;
+      let voiceKind: StudioRunEntry["voiceKind"] = null;
+      if (script) {
+        const languageError = validateNarrationLanguage(
+          script.lesson.locale,
+          narrationLanguageOf(renderProvider),
+        );
+        if (languageError) throw new Error(languageError);
+
+        if (renderProvider === "voxcpm2") {
+          if (!studioCapabilities.burmeseVoxCpm2) {
+            throw new Error("Burmese · VoxCPM2 (Modal) is not enabled for this user");
+          }
+          if (!renderVoice || !isBurmeseReferenceReady(renderVoice)) {
+            throw new Error(
+              `Burmese narration requires a ${MIN_VOXCPM2_REFERENCE_SECONDS}–${MAX_SAMPLE_SECONDS}s narrator reference. Record or upload one first.`,
+            );
+          }
+          voiceProfile = modalVoxCpm2BurmeseProfileOf(renderVoice);
+          voiceName = renderVoice.name;
+          voiceKind = "reference";
+        } else if (renderProvider === "athanlab") {
+          if (!studioCapabilities.athanlab) {
+            throw new Error("AthanLab narration is not available on this server yet");
+          }
+          if (!athanLabReadiness.ready || !athanLabVoice) {
+            throw new Error(athanLabReadiness.reason ?? "Choose an AthanLab voice first");
+          }
+          voiceProfile = athanLabProfileOf(athanLabVoice.id);
+          voiceName = athanLabVoice.name;
+          voiceKind = "athanlab";
+        } else if (renderVoice) {
+          voiceProfile = customVoiceProfileOf(renderVoice);
+          voiceName = renderVoice.name;
+          voiceKind = "cloned";
         }
-        burmeseVoiceProfile = modalVoxCpm2BurmeseProfileOf(renderVoice);
       }
 
       // Script sources run the in-page Director first: per-dialog synthesis
-      // (cached, seeded), joint scheduling, stitching, compilation.
+      // (cached; seeded where the provider allows), joint scheduling,
+      // stitching, compilation.
       let plan: StudioPlan;
-      let voiceName: string | null = null;
       let narrationProvider: string | null = null;
       const renderOptions: StudioRenderOptions = { startedAt };
       setBuildWarnings([]);
@@ -541,35 +672,18 @@ export default function StudioController() {
         }
       }
 
-      if (source.kind === "script") {
-        const script = source.load();
-        const languageError = validateNarrationLanguage(script.lesson.locale, narrationLanguage);
-        if (languageError) throw new Error(languageError);
-
-        if (narrationLanguage === "my" && !studioCapabilities.burmeseVoxCpm2) {
-          throw new Error("Burmese · VoxCPM2 (Modal) is not enabled for this user");
-        }
-
-        const clonedVoice = narrationLanguage === "en" ? renderVoice : null;
-        const built = await buildPlanFromScript(script, {
+      if (source.kind === "plan") {
+        plan = source.load();
+      } else {
+        // `script` is this source, already parsed and checked above.
+        const built = await buildPlanFromScript(script ?? source.load(), {
           onPhase: setPhase,
-          voiceProfile:
-            narrationLanguage === "my"
-              ? burmeseVoiceProfile
-              : clonedVoice
-                ? customVoiceProfileOf(clonedVoice)
-                : undefined,
+          voiceProfile,
         });
-        voiceName = (narrationLanguage === "my" ? renderVoice : clonedVoice)?.name ?? null;
-        narrationProvider = narrationLanguage === "my" ? "VoxCPM2 (Modal)" : "Pocket-TTS";
+        narrationProvider = narrationProviderLabel(renderProvider);
         plan = built.plan;
         renderOptions.narration = built.narration;
         setBuildWarnings(built.warnings);
-      } else {
-        if (narrationLanguage === "my") {
-          throw new Error("Burmese narration is available for LessonScript sources only");
-        }
-        plan = source.load();
       }
       const mode: StudioRuntimeMode =
         requestedMode ?? (plan.runtime.kind === "none" ? "fixture" : plan.runtime.defaultMode);
@@ -624,6 +738,7 @@ export default function StudioController() {
         sourceRevision: sourceRevisionOf(planSlug, importedScripts),
         title: sourceTitle(source),
         voiceName,
+        voiceKind,
         narrationProvider,
         result,
       };
@@ -666,6 +781,12 @@ export default function StudioController() {
     } finally {
       runningRef.current = false;
       setRunning(false);
+      // The render spent AthanLab characters (refresh the balance), or AthanLab
+      // refused the saved key — re-reading the key flips the panel to its
+      // connect form.
+      if (renderProvider === "athanlab" && userId !== null) {
+        void invalidateAthanLabAccount(queryClient, userId);
+      }
     }
   };
 
@@ -704,6 +825,23 @@ export default function StudioController() {
     () => requestedMode ?? (source ? sourceRuntimeDefault(source) : "?"),
     [requestedMode, source],
   );
+  // The selected script's locale, parsed once per selection for the same reason.
+  const selectedScriptLocale = useMemo(() => {
+    if (source?.kind !== "script") return null;
+    try {
+      return source.load().lesson.locale;
+    } catch {
+      return null;
+    }
+  }, [source]);
+  // Disables Start render with its reason, so a locale/provider mismatch is
+  // caught before the screen picker opens (runRender checks again).
+  const narrationSetupError = narrationSetupErrorOf(source, selectedScriptLocale, provider);
+  const startBlockedReason =
+    narrationSetupError ??
+    (provider === "athanlab" && !athanLabReadiness.ready
+      ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
+      : null);
 
   const downloadBundle = () => {
     if (!activeRun || !artifacts) {
@@ -843,107 +981,125 @@ export default function StudioController() {
 
         <div className="mt-2">
           <select
-            value={narrationLanguage}
+            value={provider}
             disabled={running || studioCapabilitiesLoading || voiceBusy !== null || voiceRecording}
-            onChange={(event) =>
-              chooseNarrationLanguage(event.target.value as StudioNarrationLanguage)
-            }
+            onChange={(event) => {
+              if (isStudioNarrationProvider(event.target.value)) {
+                chooseProvider(event.target.value);
+              }
+            }}
             aria-label="Narration language and provider"
             className="w-full rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
           >
-            <option value="en">English · Pocket-TTS</option>
+            <option value="pocket">English · Pocket-TTS</option>
+            <option value="athanlab">မြန်မာ · AthanLab (your API key)</option>
             {studioCapabilities.burmeseVoxCpm2 ? (
-              <option value="my">မြန်မာ · VoxCPM2 (Modal)</option>
+              <option value="voxcpm2">မြန်မာ · VoxCPM2 (Modal)</option>
             ) : null}
           </select>
         </div>
 
-        <div className="mt-2 flex items-center gap-2">
-          <select
-            value={selectedVoice ? selectedVoice.id : "default"}
+        {provider === "athanlab" ? (
+          <AthanLabPanel
+            userId={userId}
+            capabilityAvailable={studioCapabilities.athanlab}
+            capabilitiesLoading={authLoading || studioCapabilitiesLoading}
             disabled={running || voiceBusy !== null}
-            onChange={(event) => chooseVoice(event.target.value)}
-            aria-label="Narrator voice"
-            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
-          >
-            <option value="default">
-              {narrationLanguage === "my" ? "voice: reference required" : "voice: script default"}
-            </option>
-            {customVoices.map((voice) => (
-              <option key={voice.id} value={voice.id}>
-                voice: {voice.name} ({narrationLanguage === "my" ? "reference" : "cloned"})
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={running || voiceBusy !== null || voiceRecording}
-            onClick={() => voiceFileInputRef.current?.click()}
-            className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-            title={`Upload ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of clear narrator speech`}
-          >
-            {narrationLanguage === "my" ? "Reference…" : "Clone…"}
-          </button>
-          <button
-            type="button"
-            disabled={running || voiceBusy !== null}
-            onClick={() => {
-              void toggleVoiceRecording();
-            }}
-            className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              voiceRecording
-                ? "bg-[#3b2222] text-[#ef8d8d] hover:bg-[#4d2a2a]"
-                : "bg-[#222d3b] text-[#8db8ef] hover:bg-[#2a3a4d]"
-            }`}
-            title={`Record ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of narrator speech`}
-          >
-            {voiceRecording ? "Stop" : "Record"}
-          </button>
-          {selectedVoice ? (
-            <>
-              <button
-                type="button"
-                disabled={
-                  running ||
-                  voiceBusy !== null ||
-                  voiceRecording ||
-                  (narrationLanguage === "my" && !selectedVoiceIsBurmeseReady)
-                }
-                onClick={() => {
-                  void previewVoice();
-                }}
-                className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
-                title="Synthesize a short preview sentence with this voice"
-              >
-                Preview
-              </button>
-              <button
-                type="button"
-                disabled={running || voiceBusy !== null || voiceRecording}
-                onClick={() => {
-                  void removeVoice();
-                }}
-                className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
-                title="Delete this reference voice from the browser"
-              >
-                ✕
-              </button>
-            </>
-          ) : null}
-          <input
-            ref={voiceFileInputRef}
-            type="file"
-            accept="audio/*"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) {
-                void handleVoiceFile(file);
-              }
-            }}
+            onVoiceChange={reportAthanLabVoice}
+            onReadyChange={reportAthanLabReadiness}
           />
-        </div>
+        ) : null}
+
+        {/* AthanLab voices come from the user's AthanLab account (the panel
+            above); the browser-local clone/reference voices are for the others. */}
+        {provider === "athanlab" ? null : (
+          <div className="mt-2 flex items-center gap-2">
+            <select
+              value={selectedVoice ? selectedVoice.id : "default"}
+              disabled={running || voiceBusy !== null}
+              onChange={(event) => chooseVoice(event.target.value)}
+              aria-label="Narrator voice"
+              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+            >
+              <option value="default">
+                {provider === "voxcpm2" ? "voice: reference required" : "voice: script default"}
+              </option>
+              {customVoices.map((voice) => (
+                <option key={voice.id} value={voice.id}>
+                  voice: {voice.name} ({provider === "voxcpm2" ? "reference" : "cloned"})
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={running || voiceBusy !== null || voiceRecording}
+              onClick={() => voiceFileInputRef.current?.click()}
+              className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+              title={`Upload ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of clear narrator speech`}
+            >
+              {provider === "voxcpm2" ? "Reference…" : "Clone…"}
+            </button>
+            <button
+              type="button"
+              disabled={running || voiceBusy !== null}
+              onClick={() => {
+                void toggleVoiceRecording();
+              }}
+              className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                voiceRecording
+                  ? "bg-[#3b2222] text-[#ef8d8d] hover:bg-[#4d2a2a]"
+                  : "bg-[#222d3b] text-[#8db8ef] hover:bg-[#2a3a4d]"
+              }`}
+              title={`Record ${requiredVoiceSeconds}–${MAX_SAMPLE_SECONDS}s of narrator speech`}
+            >
+              {voiceRecording ? "Stop" : "Record"}
+            </button>
+            {selectedVoice ? (
+              <>
+                <button
+                  type="button"
+                  disabled={
+                    running ||
+                    voiceBusy !== null ||
+                    voiceRecording ||
+                    (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady)
+                  }
+                  onClick={() => {
+                    void previewVoice();
+                  }}
+                  className="shrink-0 rounded-md bg-[#222d3b] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#8db8ef] transition-colors hover:bg-[#2a3a4d] disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Synthesize a short preview sentence with this voice"
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  disabled={running || voiceBusy !== null || voiceRecording}
+                  onClick={() => {
+                    void removeVoice();
+                  }}
+                  className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Delete this reference voice from the browser"
+                >
+                  ✕
+                </button>
+              </>
+            ) : null}
+            <input
+              ref={voiceFileInputRef}
+              type="file"
+              accept="audio/*"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) {
+                  void handleVoiceFile(file);
+                }
+              }}
+            />
+          </div>
+        )}
         {voiceBusy ? <p className="mt-1 text-[12px] text-slate-400">{voiceBusy}</p> : null}
         {voiceRecording ? (
           <p className="mt-1 text-[12px] text-amber-300">
@@ -951,7 +1107,7 @@ export default function StudioController() {
             {MAX_SAMPLE_SECONDS}s.
           </p>
         ) : null}
-        {narrationLanguage === "my" ? (
+        {provider === "voxcpm2" ? (
           <p
             className={`mt-1 text-[12px] ${
               selectedVoiceIsBurmeseReady ? "text-slate-400" : "text-amber-300"
@@ -1014,7 +1170,8 @@ export default function StudioController() {
               running ||
               voiceBusy !== null ||
               voiceRecording ||
-              (narrationLanguage === "my" && !selectedVoiceIsBurmeseReady)
+              (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady) ||
+              startBlockedReason !== null
             }
             className="rounded-md bg-[#173925] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -1050,6 +1207,10 @@ export default function StudioController() {
             </button>
           ) : null}
         </div>
+
+        {startBlockedReason && !running ? (
+          <p className="mt-2 text-[12px] text-amber-300">{startBlockedReason}</p>
+        ) : null}
 
         {fatal ? (
           <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200">

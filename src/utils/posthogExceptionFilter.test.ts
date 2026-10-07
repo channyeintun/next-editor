@@ -43,12 +43,15 @@ describe("shouldSendPostHogEvent", () => {
 
   // The runtime mirrors every runner output chunk to console.log. Left undefined,
   // replay console capture follows the PostHog project's remote setting, which
-  // no DOM block selector can override.
-  it("pins session-replay console capture off and blocks the editor surface", () => {
+  // no DOM block selector can override. Network bodies and headers are the same:
+  // request bodies carry API keys (the AthanLab key save posts `{apiKey}`).
+  it("pins session-replay console and network capture off and blocks the editor surface", () => {
     expect(POSTHOG_REPLAY_PRIVACY_OPTIONS.enable_recording_console_log).toBe(false);
     expect(POSTHOG_REPLAY_PRIVACY_OPTIONS.session_recording).toEqual({
       maskAllInputs: true,
       blockSelector: POSTHOG_SENSITIVE_SURFACE_SELECTOR,
+      recordBody: false,
+      recordHeaders: false,
     });
   });
 

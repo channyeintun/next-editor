@@ -17,6 +17,7 @@ function run(overrides: Partial<DraftProvenanceRun>): DraftProvenanceRun {
     },
     narrationProvider: null,
     voiceName: null,
+    voiceKind: null,
     ...overrides,
   };
 }
@@ -30,15 +31,33 @@ describe("describeDraftProvenance", () => {
 
   it("adds the narration provider and the cloned voice when the run had them", () => {
     expect(
-      describeDraftProvenance(run({ narrationProvider: "Pocket-TTS", voiceName: "My voice" })),
+      describeDraftProvenance(
+        run({ narrationProvider: "Pocket-TTS", voiceName: "My voice", voiceKind: "cloned" }),
+      ),
     ).toBe(
       'AI-produced draft — rendered unattended by the Next Editor studio (plan rust-borrow, plan sha256 0123456789abcdef, fixture runtime, Pocket-TTS narration with the user-cloned voice "My voice"). Review the full lesson before publishing.',
     );
   });
 
-  it("names a cloned voice without a provider, and skips empty names", () => {
-    expect(describeDraftProvenance(run({ voiceName: "Studio" }))).toContain(
+  it("names a VoxCPM2 narrator reference and an AthanLab voice by their kind", () => {
+    expect(
+      describeDraftProvenance(
+        run({ narrationProvider: "VoxCPM2 (Modal)", voiceName: "Chan", voiceKind: "reference" }),
+      ),
+    ).toContain('VoxCPM2 (Modal) narration with the reference voice "Chan").');
+    expect(
+      describeDraftProvenance(
+        run({ narrationProvider: "AthanLab", voiceName: "Nilar", voiceKind: "athanlab" }),
+      ),
+    ).toContain('AthanLab narration with the AthanLab voice "Nilar").');
+  });
+
+  it("names a voice without a provider, and skips empty names", () => {
+    expect(describeDraftProvenance(run({ voiceName: "Studio", voiceKind: "cloned" }))).toContain(
       'fixture runtime with the user-cloned voice "Studio").',
+    );
+    expect(describeDraftProvenance(run({ voiceName: "Studio" }))).toContain(
+      'fixture runtime with the voice "Studio").',
     );
     expect(describeDraftProvenance(run({ narrationProvider: "", voiceName: "" }))).toContain(
       "fixture runtime).",
@@ -55,9 +74,9 @@ describe("describeDraftDescription", () => {
 
   it("keeps build provenance and the review reminder out of the public text", () => {
     const description = describeDraftDescription(
-      run({ narrationProvider: "Pocket-TTS", voiceName: "My voice" }),
+      run({ narrationProvider: "AthanLab", voiceName: "My voice", voiceKind: "athanlab" }),
     );
-    expect(description).not.toMatch(/sha256|rust-borrow|fixture|Pocket-TTS|My voice|Review/);
+    expect(description).not.toMatch(/sha256|rust-borrow|fixture|AthanLab|My voice|Review/);
   });
 
   it("falls back to a generic lead when the title is blank", () => {

@@ -7,7 +7,7 @@ import { sha256HexOfJson } from "./hash";
 import { LEXICON_V1 } from "./script/lexicon";
 import { parseLessonScript } from "./script/schema";
 import { measureIntegratedLoudness, NARRATION_LOUDNESS_TARGET_LUFS } from "./tts/loudness";
-import { ttsRequestHash, VOICE_PROFILES } from "./tts/profiles";
+import { athanLabProfileOf, ttsRequestHash, VOICE_PROFILES } from "./tts/profiles";
 import { decodeWavPcm16, encodeWavPcm16, type StitchSegment } from "./tts/wav";
 
 const tts = vi.hoisted(() => ({
@@ -26,6 +26,7 @@ const tts = vi.hoisted(() => ({
     >(),
   synthesizeModalVoxCpm2Wav:
     vi.fn<(profile: unknown, speechText: string, seed: number) => Promise<Uint8Array>>(),
+  synthesizeAthanLabWav: vi.fn<(profile: unknown, speechText: string) => Promise<Uint8Array>>(),
 }));
 
 vi.mock("./tts/dialogCache", () => ({
@@ -41,6 +42,10 @@ vi.mock("./tts/pocketSynth", () => ({
 
 vi.mock("./tts/modalVoxCpm2Synth", () => ({
   synthesizeModalVoxCpm2Wav: tts.synthesizeModalVoxCpm2Wav,
+}));
+
+vi.mock("./tts/athanlabSynth", () => ({
+  synthesizeAthanLabWav: tts.synthesizeAthanLabWav,
 }));
 
 const slides = vi.hoisted(() => ({
@@ -123,6 +128,9 @@ describe("buildPlanFromScript narration", () => {
     tts.synthesizeModalVoxCpm2Wav.mockReset().mockImplementation(async (_, speechText) => {
       return voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000);
     });
+    tts.synthesizeAthanLabWav.mockReset().mockImplementation(async (_, speechText) => {
+      return voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000);
+    });
     slides.fetchPublishedDeck.mockReset().mockResolvedValue(PUBLISHED_DECK);
   });
 
@@ -170,6 +178,40 @@ describe("buildPlanFromScript narration", () => {
     );
     expect(result.plan.lesson.locale).toBe("my-MM");
     expect(result.plan.narration.mimeType).toBe("audio/wav");
+  });
+
+  it("dispatches an AthanLab profile with a fixed seed, so a new script seed keeps every take", async () => {
+    const profile = athanLabProfileOf("voice_01");
+    const script = loadPilot();
+    script.lesson.locale = "my-MM";
+    const result = await buildPlanFromScript(script, { voiceProfile: profile });
+
+    expect(tts.preloadPocket).not.toHaveBeenCalled();
+    expect(tts.synthesizePocketDialog).not.toHaveBeenCalled();
+    expect(tts.synthesizeModalVoxCpm2Wav).not.toHaveBeenCalled();
+    expect(tts.synthesizeAthanLabWav).toHaveBeenCalledTimes(result.dialogCount);
+    expect(tts.synthesizeAthanLabWav.mock.calls.every(([called]) => called === profile)).toBe(true);
+    expect(tts.getCachedDialogWav.mock.calls[0][0]).toBe(
+      await ttsRequestHash({
+        profile,
+        speechText: tts.synthesizeAthanLabWav.mock.calls[0][1],
+        lexiconVersion: LEXICON_V1.version,
+        seed: 0,
+      }),
+    );
+    expect(result.plan.lesson.locale).toBe("my-MM");
+    expect(result.plan.narration.mimeType).toBe("audio/wav");
+
+    const requestHashes = tts.getCachedDialogWav.mock.calls.map(([requestHash]) => requestHash);
+    tts.getCachedDialogWav.mockClear();
+    const reseeded = loadPilot();
+    reseeded.lesson.locale = "my-MM";
+    reseeded.build.seed += 1;
+    await buildPlanFromScript(reseeded, { voiceProfile: profile });
+
+    expect(tts.getCachedDialogWav.mock.calls.map(([requestHash]) => requestHash)).toEqual(
+      requestHashes,
+    );
   });
 
   it("never loads the Pocket engine when every dialog is cached", async () => {

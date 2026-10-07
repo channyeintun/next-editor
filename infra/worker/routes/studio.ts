@@ -3,10 +3,13 @@ import { requireUser } from "../auth/requireUser";
 import type { Env } from "../env";
 import { readBodyWithLimit } from "../httpBody";
 import { isUserFeatureEnabled, STUDIO_BURMESE_VOXCPM2_FEATURE } from "../../db/featureFlags";
+import { keyVaultOf } from "../athanlab/keyVault";
 
 // Mounted at /api/studio in worker/index.ts. The capability response controls
 // discovery only; POST /tts/voxcpm2 repeats authentication and the D1 check so
-// a hidden option can never be invoked by calling the route directly.
+// a hidden option can never be invoked by calling the route directly. AthanLab
+// narration (routes/athanlab.ts) needs no flag: every signed-in user may bring
+// their own key, so its capability only says whether the server can store one.
 export const studioRoute = new Hono<{ Bindings: Env }>();
 
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
@@ -301,6 +304,7 @@ studioRoute.get("/capabilities", requireUser, async (c) => {
   const enabled = await hasBurmeseTtsAccess(c.env, user.id);
   return c.json({
     burmeseVoxCpm2: enabled && modalConfigOf(c.env) !== null,
+    athanlab: keyVaultOf(c.env) !== null,
   });
 });
 

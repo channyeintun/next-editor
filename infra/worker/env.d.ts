@@ -46,6 +46,18 @@ export interface Env {
   VOXCPM2_MODAL_JOBS_URL?: string;
   MODAL_PROXY_TOKEN_ID?: string;
   MODAL_PROXY_TOKEN_SECRET?: string;
+  // Burmese Studio narration with each user's own AthanLab API key
+  // (routes/athanlab.ts). The secret is base64 of exactly 32 random bytes
+  // (`openssl rand -base64 32`); it seals the keys stored in D1 with
+  // AES-256-GCM (athanlab/keyVault.ts). Missing or malformed, AthanLab
+  // narration fails closed. Rotating it makes every stored key unreadable, so
+  // users connect their key again.
+  ATHANLAB_KEY_ENCRYPTION_SECRET?: string;
+  // Per-user AthanLab budgets (Workers Rate Limiting, keyed "user:<id>"): key
+  // checks on PUT /api/studio/athanlab/key, and every route that sends a
+  // stored key to AthanLab. A missing binding fails closed with a 503.
+  ATHANLAB_KEY_RATE_LIMITER?: RateLimit;
+  ATHANLAB_API_RATE_LIMITER?: RateLimit;
   REALTIME_SFU_APP_ID?: string;
   REALTIME_SFU_APP_SECRET?: string;
   // Cloudflare Workers KV cache (infra/worker/cache.ts). Optional in the type

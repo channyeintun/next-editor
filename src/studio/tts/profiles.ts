@@ -1,4 +1,5 @@
 import { sha256HexOfJson } from "../hash";
+import { ATHANLAB_TEXT_PREP_VERSION } from "./athanlab/textPrep";
 import { POCKET_TEXT_PREP_VERSION } from "./pocket/textPrep";
 
 /**
@@ -10,8 +11,10 @@ import { POCKET_TEXT_PREP_VERSION } from "./pocket/textPrep";
  *
  * `pocket-tts-web` runs Kyutai's English model in the page over
  * onnxruntime-web. `voxcpm2-modal` calls the authenticated first-party Worker
- * proxy, which is separately authorized by a per-user D1 flag. Provider
- * credentials are deliberately absent from profiles and request hashes.
+ * proxy, which is separately authorized by a per-user D1 flag. `athanlab`
+ * calls the first-party Worker too, which speaks to AthanLab with the user's
+ * own API key, stored encrypted server-side. Provider credentials are
+ * deliberately absent from profiles and request hashes.
  */
 
 export interface PocketVoiceProfile {
@@ -64,7 +67,32 @@ export interface ModalVoxCpm2VoiceProfile {
   mimeType: "audio/wav";
 }
 
-export type VoiceProfile = PocketVoiceProfile | ModalVoxCpm2VoiceProfile;
+/**
+ * AthanLab (https://athanlab.com) Burmese narration, bought per dialog with
+ * the user's own API key. Like cloned voices it is a render-time choice, not a
+ * registry entry: the voice comes from the user's AthanLab account. The Worker
+ * fixes every request setting except the text and the voice, and the fields
+ * here mirror those settings so a change to any of them re-keys the cache.
+ */
+export interface AthanLabVoiceProfile {
+  /** `athanlab-${voiceId}`. */
+  id: string;
+  providerId: "athanlab";
+  /** AthanLab voice id, pinned so every dialog keeps one speaker. */
+  voiceId: string;
+  outputFormat: "wav";
+  numberMode: "smart";
+  /** Version of the text sent for a speech text (athanlab/textPrep.ts). */
+  textPrepVersion: typeof ATHANLAB_TEXT_PREP_VERSION;
+  /**
+   * AthanLab does not document its WAV's rate, so every take is normalized
+   * to this rate in the page (athanlab/normalizeWav.ts).
+   */
+  sampleRate: 48000;
+  mimeType: "audio/wav";
+}
+
+export type VoiceProfile = PocketVoiceProfile | ModalVoxCpm2VoiceProfile | AthanLabVoiceProfile;
 
 const POCKET_BUNDLE_BASE =
   "https://huggingface.co/spaces/KevinAHM/pocket-tts-web/resolve/d0c0c79b7712256a32d691c67f20b8ae2e020d00/onnx/english_2026-04";
@@ -139,6 +167,20 @@ export function customVoiceProfileOf(voice: {
     customVoiceId: voice.id,
     customVoiceSha256: voice.sampleSha256,
     sampleRate: 24000,
+    mimeType: "audio/wav",
+  };
+}
+
+/** Profile for one AthanLab voice of the signed-in user's account. */
+export function athanLabProfileOf(voiceId: string): AthanLabVoiceProfile {
+  return {
+    id: `athanlab-${voiceId}`,
+    providerId: "athanlab",
+    voiceId,
+    outputFormat: "wav",
+    numberMode: "smart",
+    textPrepVersion: ATHANLAB_TEXT_PREP_VERSION,
+    sampleRate: 48000,
     mimeType: "audio/wav",
   };
 }

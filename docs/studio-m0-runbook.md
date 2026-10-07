@@ -37,12 +37,12 @@ upload flow (`UploadLessonModal`): media to the lesson's R2 prefix, a D1
 description becomes the lesson's public meta and JSON-LD text once published, so
 it pre-fills only "<title> — a narrated coding lesson. The narration is
 AI-generated." The build provenance (plan slug, plan hash, runtime mode,
-narration provider, cloned voice) and the review reminder are in the **Create
-draft…** button's tooltip. `build-manifest.json` holds the full plan hash, seed,
-runtime contract, and artifact hashes; the narration provider and cloned-voice
-name appear only in the tooltip. Publishing remains a separate
-owner action in the lessons UI — the studio has no publish path. Requires
-`bun run dev:worker` and a signed-in session.
+narration provider, and the cloned, reference, or AthanLab voice) and the review
+reminder are in the **Create draft…** button's tooltip. `build-manifest.json`
+holds the full plan hash, seed, runtime contract, and artifact hashes; the
+narration provider and voice name appear only in the tooltip. Publishing
+remains a separate owner action in the lessons UI — the studio has no publish
+path. Requires `bun run dev:worker` and a signed-in session.
 
 Mistimed builds are rejected mechanically: a script's
 `{ type: timing.p95Ms, max: N }` check compiles into the plan's timing gate,
@@ -117,7 +117,8 @@ validates every script. It keeps going past a bad script: each failure prints
 as `✗ <file>: <message>`, the run ends with `N of M script(s) valid` (plus
 `N script(s) failed`), and it exits 1 if any script failed. A `voxcpm2-modal`
 voice profile gets a note that `/studio` renders it only for a signed-in
-account with the Burmese VoxCPM2 feature enabled.
+account with the Burmese VoxCPM2 feature enabled. AthanLab voices are chosen
+in `/studio` at render time and are never pinned in a script.
 
 Script objects are strict — an unknown or misspelled key is an error — and
 `build.seed` must be 0–2147483647. An anchor names exactly one of `scene`,
@@ -164,11 +165,33 @@ text prep splits a dialog into sentences only at `.`, `!`, or `?` (plus closing
 quotes or brackets) followed by whitespace, so `fmt.Println` and `3.14` stay
 whole; a sentence over the token budget is cut at word boundaries, and token
 slicing is left for a single over-long word. `POCKET_TEXT_PREP_VERSION` (2) is
-part of Pocket dialogs' cache keys only. Burmese (`my-MM`) narration
-synthesizes with VoxCPM2 on Modal through the Worker instead
-([modal-voxcpm2-burmese.md](./modal-voxcpm2-burmese.md)); a failure there
-carries the service's reason (`Burmese narration service failed with HTTP 400:
-…`).
+part of Pocket dialogs' cache keys only. Burmese (`my-MM`) narration goes
+through the Worker instead, with one of two providers chosen in the render
+console:
+
+- **AthanLab** works for any signed-in user with their own AthanLab API key.
+  The key is pasted once in the AthanLab panel, checked against AthanLab,
+  stored AES-256-GCM-encrypted in D1, and never returned to the browser (the
+  panel shows only its last four characters). Each uncached dialog is one
+  AthanLab job (`POST /api/studio/tts/athanlab`), charged to the user's
+  AthanLab balance; AthanLab keeps each job's text and audio for 30 days. The
+  chosen AthanLab voice is pinned for the whole render. Before sending,
+  `src/studio/tts/athanlab/textPrep.ts` (`ATHANLAB_TEXT_PREP_VERSION`, 1)
+  removes quotation marks and brackets, turns `…` into a `၊` pause, and adds
+  `။` to a dialog that has no final mark — so place `[[mark:…]]` at sentence
+  ends for natural intonation. Each take is resampled to 48 kHz mono in the
+  page. AthanLab is not seedable, so its dialogs use a fixed seed of 0 in
+  their cache key (changing `build.seed` does not pay for every take again),
+  and a repeat render replays each take from the dialog cache or from
+  AthanLab's 24 h idempotent job. A dialog AthanLab is still generating when
+  the Worker's time runs out keeps running; the page asks again and gets the
+  same job, at no extra charge. Errors start with `AthanLab:`; a rejected
+  (expired or revoked) key is never sent again until the user connects a new
+  one.
+- **VoxCPM2 on Modal** ([modal-voxcpm2-burmese.md](./modal-voxcpm2-burmese.md))
+  is listed only for accounts with the private `studio.burmese-voxcpm2` D1
+  flag; a failure there carries the service's reason
+  (`Burmese narration service failed with HTTP 400: …`).
 
 Every take is validated (PCM16 mono, the provider's sample rate, non-empty, not
 silent) before it is cached, and a cache hit is re-validated: a bad entry is
@@ -189,9 +212,10 @@ marks fail in the CLI; overlaps and out-of-bounds times fail in-page at
 compile, after synthesis and before any recording starts. The scheduler warns
 when actions force more than ~2.5s of inserted silence — add narration there or
 shorten the action. The pronunciation lexicon applies to the speech text of
-English narration only; Burmese narration is sent as written. Word timings
-inside a dialog remain estimated (bounded by that dialog's few seconds; Myanmar
-script is weighed by syllables), while cue-level caption timing is exact.
+English narration only; Burmese narration is sent as written (apart from
+AthanLab's punctuation clean-up above). Word timings inside a dialog remain
+estimated (bounded by that dialog's few seconds; Myanmar script is weighed by
+syllables), while cue-level caption timing is exact.
 Chapters start at their scene's first spoken word, except a chapter on the
 first scene, which starts at 0:00.
 
@@ -247,20 +271,21 @@ browser, as above).
 
 ## What exists (map)
 
-| Piece                                                                       | Where                                                           |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Compiled-plan schema (Zod, versioned, timing/overlap/caption validation)    | `src/studio/plan.ts`                                            |
-| Seeded cadence + easing (typing chunks materialized into the plan)          | `src/studio/cadence.ts`                                         |
-| StudioDriver: open/type/cursor/run/wait/expect through real app seams       | `src/studio/driver.ts`                                          |
-| Monaco-free async/anchor primitives                                         | `src/studio/async.ts`                                           |
-| Deterministic Performer (recording-clock scheduling, receipts, fail-closed) | `src/studio/performer.ts`                                       |
-| End-to-end render orchestration (pin → record → perform → QA → bundle)      | `src/studio/runStudioRender.ts`                                 |
-| Artifact QA gates (decode, monotonicity, tracks, checkpoints)               | `src/studio/qa.ts`                                              |
-| Repeatability comparison (normalized, tolerance-based)                      | `src/studio/compare.ts`                                         |
-| Receipts / render report / build manifest types                             | `src/studio/report.ts`                                          |
-| Durable UI target registry (`data-studio-target`)                           | `src/studio/targets.ts`                                         |
-| Narration synthesis (pocket-tts in page; VoxCPM2 on Modal for Burmese)      | `src/studio/inPageDirector.ts`, `src/studio/tts/`               |
-| Render console UI + `/studio` route                                         | `src/studio/StudioController.tsx`, `src/studio/StudioRoute.tsx` |
+| Piece                                                                       | Where                                                             |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Compiled-plan schema (Zod, versioned, timing/overlap/caption validation)    | `src/studio/plan.ts`                                              |
+| Seeded cadence + easing (typing chunks materialized into the plan)          | `src/studio/cadence.ts`                                           |
+| StudioDriver: open/type/cursor/run/wait/expect through real app seams       | `src/studio/driver.ts`                                            |
+| Monaco-free async/anchor primitives                                         | `src/studio/async.ts`                                             |
+| Deterministic Performer (recording-clock scheduling, receipts, fail-closed) | `src/studio/performer.ts`                                         |
+| End-to-end render orchestration (pin → record → perform → QA → bundle)      | `src/studio/runStudioRender.ts`                                   |
+| Artifact QA gates (decode, monotonicity, tracks, checkpoints)               | `src/studio/qa.ts`                                                |
+| Repeatability comparison (normalized, tolerance-based)                      | `src/studio/compare.ts`                                           |
+| Receipts / render report / build manifest types                             | `src/studio/report.ts`                                            |
+| Durable UI target registry (`data-studio-target`)                           | `src/studio/targets.ts`                                           |
+| Narration synthesis (pocket-tts in page; AthanLab or VoxCPM2 for Burmese)   | `src/studio/inPageDirector.ts`, `src/studio/tts/`                 |
+| AthanLab key panel (connect, voice, balance) and its Worker routes          | `src/studio/AthanLabPanel.tsx`, `infra/worker/routes/athanlab.ts` |
+| Render console UI + `/studio` route                                         | `src/studio/StudioController.tsx`, `src/studio/StudioRoute.tsx`   |
 
 Key seams used (not bypassed): workspace store actions (`loadProject`,
 `setActiveFilePath`), live Monaco `executeEdits` (flows through the workspace bridge

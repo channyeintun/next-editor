@@ -21,6 +21,7 @@ import { rustPlaygroundRoute } from "./routes/rustPlayground";
 import { zigPlaygroundRoute } from "./routes/zigPlayground";
 import { collaborationRoute } from "./routes/collaboration";
 import { studioRoute } from "./routes/studio";
+import { athanlabRoute, athanlabTtsRoute } from "./routes/athanlab";
 import { renderLandingResponse } from "./ssr/landing";
 import { renderLessonDetailResponse, renderMissingLessonResponse } from "./ssr/lessonDetail";
 import { findPublishedLessonBySlug } from "./lessonCatalog";
@@ -109,6 +110,10 @@ app.route("/api/rust-playground", rustPlaygroundRoute);
 app.route("/api/zig-playground", zigPlaygroundRoute);
 app.route("/api/collaboration", collaborationRoute);
 app.route("/api/studio", studioRoute);
+// Burmese Studio narration with each user's own AthanLab key: key custody,
+// voices and usage, and the synthesis endpoint beside /api/studio/tts/voxcpm2.
+app.route("/api/studio/athanlab", athanlabRoute);
+app.route("/api/studio/tts/athanlab", athanlabTtsRoute);
 // Slide-image R2 ingestion. The pre-/api/proxy-rename alias /api/slide-image
 // (singular) is gone: every persisted document that referenced it was
 // migrated to /media/slide-images/<hash> hrefs on 2026-07-11.

@@ -13,12 +13,17 @@ export const POSTHOG_SENSITIVE_SURFACE_SELECTOR = `.${POSTHOG_SENSITIVE_ROOT_CLA
  * drawings must not land in third-party replays: the editor root is blocked and inputs are
  * masked. Console capture is pinned off because the WebContainer runtime mirrors runner
  * output to the console, and left undefined PostHog follows the project's remote setting.
+ * Network body and header capture are pinned off for the same reason: unless the client
+ * says `false`, a dashboard setting can turn them on, and PostHog's default payload
+ * scrubber misses camel-case fields such as the `apiKey` the AthanLab key save sends.
  */
 export const POSTHOG_REPLAY_PRIVACY_OPTIONS = {
   enable_recording_console_log: false,
   session_recording: {
     maskAllInputs: true,
     blockSelector: POSTHOG_SENSITIVE_SURFACE_SELECTOR,
+    recordBody: false,
+    recordHeaders: false,
   },
 } satisfies Partial<PostHogConfig>;
 

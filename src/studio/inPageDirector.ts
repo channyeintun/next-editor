@@ -20,6 +20,7 @@ import { preloadPocket, synthesizePocketDialog } from "./tts/pocketSynth";
 import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/profiles";
 import { levelNarrationDialogs, NARRATION_LEVELING } from "./tts/loudness";
 import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
+import { synthesizeAthanLabWav } from "./tts/athanlabSynth";
 import { decodeWavPcm16, encodeWavPcm16, stitchWavSegments, validateDialogWav } from "./tts/wav";
 
 /**
@@ -28,10 +29,13 @@ import { decodeWavPcm16, encodeWavPcm16, stitchWavSegments, validateDialogWav } 
  * the selected voice provider (per-dialog content-addressed cache),
  * level every dialog to one shared loudness, schedule dialogs jointly with
  * the actions, stitch one narration WAV, and compile the absolute-time plan.
- * Deterministic throughout: dialogs are seeded, so edits only re-synthesize
- * the changed spans and repeat builds reproduce identical audio. Pocket-TTS
- * dialogs share one noise seed; Modal VoxCPM2 dialogs additionally reuse one
- * recorded reference for stable speaker identity.
+ * Every dialog is content-addressed by its request, so edits only
+ * re-synthesize the changed spans. Pocket-TTS and Modal VoxCPM2 are seeded,
+ * so repeat builds reproduce identical audio: Pocket-TTS dialogs share one
+ * noise seed, and Modal VoxCPM2 dialogs additionally reuse one recorded
+ * reference for stable speaker identity. AthanLab is not seedable: its
+ * dialogs pin one AthanLab voice, and a take is reproduced from the cache
+ * (or, within 24 h, from the AthanLab job already bought for that request).
  */
 
 export interface BuiltNarration {
@@ -104,6 +108,21 @@ function providerFor(
         preload: async () => undefined,
         synthesize: async (speechText) => ({
           wav: await synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
+          hitFrameCap: false,
+        }),
+      };
+    case "athanlab":
+      return {
+        sampleRate: profile.sampleRate,
+        mimeType: profile.mimeType,
+        // AthanLab takes no seed. A fixed one keeps a change to the script's
+        // seed from re-keying — and so buying again — every AthanLab take.
+        seed: 0,
+        // Nothing to warm up: each dialog is one Worker request, and a
+        // separate request would only spend the user's AthanLab balance.
+        preload: async () => undefined,
+        synthesize: async (speechText) => ({
+          wav: await synthesizeAthanLabWav(profile, speechText),
           hitFrameCap: false,
         }),
       };
@@ -244,7 +263,8 @@ export async function buildPlanFromScript(
       // The lexicon's whole effect is the speech text, which is hashed above,
       // so this stays the lexicon release for every language: a Burmese
       // dialog the English respellings never touched keeps its request hash
-      // (and its paid Modal take); one they did touch re-keys by its text.
+      // (and its paid Modal or AthanLab take); one they did touch re-keys by
+      // its text.
       lexiconVersion: LEXICON_V1.version,
       seed: provider.seed,
     });
