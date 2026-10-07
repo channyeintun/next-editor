@@ -7,9 +7,6 @@ const bootWebContainer = vi.hoisted(() => vi.fn<() => Promise<WebContainer>>());
 
 vi.mock("@webcontainer/api", () => ({ WebContainer: { boot: bootWebContainer } }));
 
-// Notes when the boot imports the recorder payload module, also lazily.
-const previewScriptLoaded = vi.hoisted(() => vi.fn<() => void>());
-
 describe("isWebContainerRuntimeSupported", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -43,12 +40,17 @@ describe("isWebContainerRuntimeSupported", () => {
 describe("shared WebContainer lifetime", () => {
   // A fresh module per test, so each one starts with no container, boot or holder.
   let sharedContainer: typeof import("./sharedContainer");
+  // Settles once the boot imports the recorder payload module, also lazily.
+  let previewScriptLoaded: Promise<void>;
 
   beforeEach(async () => {
     bootWebContainer.mockReset();
-    previewScriptLoaded.mockClear();
+    let markPreviewScriptLoaded = () => {};
+    previewScriptLoaded = new Promise((resolve) => {
+      markPreviewScriptLoaded = resolve;
+    });
     vi.doMock("./previewScript", () => {
-      previewScriptLoaded();
+      markPreviewScriptLoaded();
       return { createRuntimePreviewScript: () => "preview recorder script" };
     });
     vi.resetModules();
@@ -138,7 +140,8 @@ describe("shared WebContainer lifetime", () => {
   it("fetches the preview recorder while booting and installs it before handing the container out", async () => {
     const landBoot = deferNextBoot();
     const booting = sharedContainer.getOrBootSharedWebContainer();
-    await vi.waitFor(() => expect(previewScriptLoaded).toHaveBeenCalledOnce());
+    // The boot has not landed yet, so only a fetch started alongside it gets here.
+    await previewScriptLoaded;
 
     const instance = createStandInWebContainer();
     landBoot(instance);
