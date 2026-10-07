@@ -190,8 +190,15 @@ function decodeSegment(
       assertFrameFormatCompatibility(frames, stream.formatVersion);
       return { recordCount: frames.length, commit: () => appendAll(records.frames, frames) };
     }
-    case SEGMENT_KIND.slide:
-      return appendTo(records.slideEvents, decodeRecords<SlideEvent>(payload, budget));
+    case SEGMENT_KIND.slide: {
+      const events = decodeRecords<SlideEvent>(payload, budget);
+      // `slide_interaction` events are dropped: nothing reads the interaction they
+      // carry. Older lessons hold thousands of them, the code preview's hovers, scrolls
+      // and mousemoves recorded a second time as slide events, and on replay each one
+      // only re-rendered the slides store and lengthened every seek's backward scan.
+      const kept = events.filter((event) => event.type !== "slide_interaction");
+      return { recordCount: events.length, commit: () => appendAll(records.slideEvents, kept) };
+    }
     case SEGMENT_KIND.preview:
       return appendTo(records.previewEvents, decodeRecords<PreviewEvent>(payload, budget));
     case SEGMENT_KIND.previewDoc:

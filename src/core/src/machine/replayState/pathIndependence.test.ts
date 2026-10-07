@@ -1019,7 +1019,8 @@ const SLIDES: Slide[] = [
 
 // "gone" is a slide deleted during the take: the deck is saved at finalize, so
 // events can name a slide it no longer has. A tick applies nothing for such an
-// event, and a seek must keep the same last placed state.
+// event, and a seek must keep the same last placed state. An event without a
+// slideId shows the slide named before it.
 const arbSlideStep = fc.record(
   {
     gap: arbGap,
@@ -1036,7 +1037,7 @@ const arbSlideStep = fc.record(
     indexv: fc.nat({ max: 2 }),
     clickX: fc.nat({ max: 100 }),
   },
-  { requiredKeys: ["gap", "type", "slideId"] },
+  { requiredKeys: ["gap", "type"] },
 );
 
 function recordSlides(steps: Array<ValueOf<typeof arbSlideStep>>): SlideEvent[] {

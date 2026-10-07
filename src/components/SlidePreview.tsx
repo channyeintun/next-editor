@@ -33,6 +33,7 @@ function SlidePreview({
 
   const onSlideEventRef = useRef(onSlideEvent);
   onSlideEventRef.current = onSlideEvent;
+  const slideContentRef = useRef<HTMLDivElement>(null);
 
   const currentSlide = slides[currentSlideIndex];
 
@@ -63,10 +64,19 @@ function SlidePreview({
     onStopPlayback?.();
   };
 
-  // Handle messages from html slides that embed an iframe with the shared
-  // interaction-capture script (see src/utils/iframeInteractionCapture.ts) —
-  // unrelated to the slide renderer itself.
+  // Handle messages from slide frames that run the shared interaction-capture
+  // script (see src/utils/iframeInteractionCapture.ts).
   useEffect(() => {
+    // The code preview's capture script posts to this same window from a same-origin
+    // frame. Without this check every preview hover, scroll and mousemove (once per
+    // animation frame) was recorded a second time as a slide event, deck open or not.
+    // No slide frame on screen (the deck is closed) means no slide interaction.
+    const isFromSlideFrame = (source: MessageEventSource | null) =>
+      source !== null &&
+      Array.from(slideContentRef.current?.querySelectorAll("iframe") ?? []).some(
+        (frame) => frame.contentWindow === source,
+      );
+
     const handleMessage = (event: MessageEvent) => {
       if (isPlaying) return;
 
@@ -77,6 +87,7 @@ function SlidePreview({
       // as well as window.opener and the untrusted runtime preview frame could
       // cancel follow-mode and forge interaction events into a live recording.
       if (event.origin !== "null" && event.origin !== window.location.origin) return;
+      if (!isFromSlideFrame(event.source)) return;
 
       const { type, payload } = event.data || {};
       // payload was dereferenced unguarded, so a bare {type:"IFRAME_INTERACTION"}
@@ -229,6 +240,7 @@ function SlidePreview({
       >
         {/* Slide content area */}
         <div
+          ref={slideContentRef}
           className="relative w-full flex-1 bg-black"
           data-cursor-replay-target="slide-content"
           onClick={(e) => e.stopPropagation()}

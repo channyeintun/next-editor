@@ -52,7 +52,6 @@ describe("applySlideRecordingState", () => {
       isMaximized: true,
       currentSlideId: "b",
       indexv: 2,
-      currentInteraction: undefined,
     });
   });
 
@@ -66,7 +65,6 @@ describe("applySlideRecordingState", () => {
       isMaximized: false,
       currentSlideId: "c",
       indexv: 0,
-      currentInteraction: undefined,
     });
   });
 
@@ -80,6 +78,28 @@ describe("applySlideRecordingState", () => {
     const before = store.getSnapshot().context.previewState;
 
     applySlideRecordingState(store, { isOpen: true, currentSlideId: "a" });
+
+    expect(store.getSnapshot().context.previewState).toBe(before);
+  });
+
+  it("does not show a recorded interaction", () => {
+    const store = storeShowing({
+      isOpen: true,
+      isMaximized: false,
+      currentSlideId: "a",
+      indexv: 0,
+    });
+    const before = store.getSnapshot().context.previewState;
+
+    applySlideRecordingState(store, {
+      isOpen: true,
+      currentSlideId: "a",
+      currentInteraction: {
+        type: "hover_start",
+        timestamp: 10,
+        target: { tagName: "DIV", xpath: "/html/body/div" },
+      },
+    });
 
     expect(store.getSnapshot().context.previewState).toBe(before);
   });

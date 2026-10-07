@@ -103,6 +103,10 @@ function createSlideReplayApplication(
   eventIndex: number,
 ): SlideReplayApplication | null {
   const slideEvent = slideEvents[eventIndex];
+  // Without a deck only a close can be placed, so skip the backward scans.
+  if (slideEvent.type !== "slide_close" && !slides?.length) {
+    return null;
+  }
   const slideState = buildSlideStateAtEvent(slideEvents, eventIndex);
   const slideIndex =
     slideEvent.type === "slide_close"
@@ -117,6 +121,41 @@ function createSlideReplayApplication(
     slideIndex,
     slideState,
   };
+}
+
+/**
+ * The last event at or before `eventIndex` that {@link createSlideReplayApplication}
+ * can place, or -1. A close always places; any other event places when the slide it
+ * shows (its own slideId, else the nearest earlier one) is in the deck. So every event
+ * from one slideId-bearing event up to the next shows the same slide: such a run places
+ * its newest event, or only its closes. One pass back finds the answer. Asking each
+ * event in turn costs a backward scan per event, O(n²) on a long track that places
+ * nothing.
+ */
+function findLastPlaceableEventIndex(
+  slideEvents: SlideEvent[],
+  slides: Slide[] | undefined,
+  eventIndex: number,
+): number {
+  let runEnd = eventIndex;
+  let runClose = -1;
+  for (let index = eventIndex; index >= 0; index -= 1) {
+    const { type, slideId } = slideEvents[index];
+    if (type === "slide_close" && runClose < 0) {
+      runClose = index;
+    }
+    if (!slideId) {
+      continue;
+    }
+    if (slides?.some((slide) => slide.id === slideId)) {
+      return runEnd;
+    }
+    if (runClose >= 0) {
+      return runClose;
+    }
+    runEnd = index - 1;
+  }
+  return runClose;
 }
 
 export function getSlideReplayResult({
@@ -140,14 +179,10 @@ export function getSlideReplayResult({
     // tick, so it must not change the deck on a seek either. Before the first such
     // event the deck is closed. Applying nothing there left a deck opened later in
     // the recording on screen after a backward seek, STOP or restart.
-    let application = CLOSED_SLIDE_APPLICATION;
-    for (let index = nextIndex; index >= 0; index -= 1) {
-      const placed = createSlideReplayApplication(slideEvents, slides, index);
-      if (placed) {
-        application = placed;
-        break;
-      }
-    }
+    const placedIndex = findLastPlaceableEventIndex(slideEvents, slides, nextIndex);
+    const application =
+      (placedIndex >= 0 && createSlideReplayApplication(slideEvents, slides, placedIndex)) ||
+      CLOSED_SLIDE_APPLICATION;
 
     return {
       applications: [application],

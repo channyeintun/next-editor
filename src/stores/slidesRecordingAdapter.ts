@@ -29,14 +29,15 @@ export function applySlideRecordingState(
   const nextIsMaximized = slideState.isMaximized ?? prev.isMaximized ?? false;
   const nextSlideId = slideState.currentSlideId ?? prev.currentSlideId ?? null;
   const nextIndexv = slideState.indexv ?? prev.indexv ?? 0;
-  const nextInteraction = slideState.currentInteraction;
 
+  // A recorded interaction is not shown: nothing reads `currentInteraction`, and
+  // each replayed one is a fresh object, so comparing it re-rendered every slides
+  // consumer for nothing.
   if (
     nextIsOpen !== prev.isOpen ||
     nextIsMaximized !== prev.isMaximized ||
     nextSlideId !== prev.currentSlideId ||
-    nextIndexv !== prev.indexv ||
-    nextInteraction !== prev.currentInteraction
+    nextIndexv !== prev.indexv
   ) {
     store.trigger.setPreviewState({
       previewState: {
@@ -44,7 +45,6 @@ export function applySlideRecordingState(
         isMaximized: nextIsMaximized,
         currentSlideId: nextSlideId,
         indexv: nextIndexv,
-        currentInteraction: nextInteraction,
       },
     });
   }

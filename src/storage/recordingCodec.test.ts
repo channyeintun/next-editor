@@ -243,6 +243,47 @@ describe("recordingCodec", () => {
     expect(decoded.tracks?.some((track) => track.kind === "whiteboard")).toBe(true);
   });
 
+  it("drops slide_interaction events on decode and keeps the deck's own events", async () => {
+    const interaction = {
+      type: "hover_start" as const,
+      timestamp: 300,
+      target: { tagName: "DIV", xpath: "/html/body/div" },
+    };
+    const recording = createRecording({
+      duration: 800,
+      slideEvents: [
+        { timestamp: 100, type: "slide_open", slideId: "slide-1", indexv: 0 },
+        { timestamp: 300, type: "slide_interaction", slideId: "slide-1", interaction },
+        { timestamp: 500, type: "slide_change", slideId: "slide-2", indexv: 0 },
+        { timestamp: 600, type: "slide_interaction", interaction },
+      ],
+    });
+
+    const decoded = await decompressBinaryToRecording(await encodeRecordingToStream(recording));
+
+    expect(decoded.slideEvents).toEqual([recording.slideEvents![0], recording.slideEvents![2]]);
+  });
+
+  it("leaves no slide track when every slide event was an interaction", async () => {
+    const recording = createRecording({
+      slideEvents: [
+        {
+          timestamp: 100,
+          type: "slide_interaction",
+          interaction: {
+            type: "scroll",
+            timestamp: 100,
+            target: { tagName: "HTML", xpath: "/html" },
+          },
+        },
+      ],
+    });
+
+    const decoded = await decompressBinaryToRecording(await encodeRecordingToStream(recording));
+
+    expect(decoded.slideEvents).toBeUndefined();
+  });
+
   it("round trips chat events (deltas + a checkpoint)", async () => {
     const contentDelta = createContentDelta("", "Hello!");
     expect(contentDelta).not.toBeNull();

@@ -21,10 +21,19 @@ vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorMetadata: () => ({ isPlaying: false }),
 }));
 vi.mock("./CustomSlideRenderer", () => ({
-  default: () => <div data-testid="slide-renderer" />,
+  default: () => (
+    <div data-testid="slide-renderer">
+      <iframe title="Slide frame" />
+    </div>
+  ),
 }));
 
 import SlidePreview from "./SlidePreview";
+
+function slideFrameWindow(): Window {
+  const frame = screen.getByTitle<HTMLIFrameElement>("Slide frame");
+  return frame.contentWindow!;
+}
 
 const slides: Slide[] = [
   { id: "one", order: 0, content: "one", contentType: "html" },
@@ -96,6 +105,7 @@ describe("SlidePreview local follow intent", () => {
       window,
       new MessageEvent("message", {
         origin: window.location.origin,
+        source: slideFrameWindow(),
         data: {
           type: "IFRAME_INTERACTION",
           payload: {
@@ -117,6 +127,59 @@ describe("SlidePreview local follow intent", () => {
     );
   });
 
+  it("ignores interaction messages from a frame that is not a slide", () => {
+    const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
+    render(
+      <SlidePreview slides={slides} currentSlideIndex={0} isOpen onSlideEvent={onSlideEvent} />,
+    );
+    // The code preview runs the same capture script in a same-origin frame.
+    const preview = document.createElement("iframe");
+    document.body.append(preview);
+
+    fireEvent(
+      window,
+      new MessageEvent("message", {
+        origin: window.location.origin,
+        source: preview.contentWindow,
+        data: {
+          type: "IFRAME_INTERACTION",
+          payload: { type: "hover_start", target: { tagName: "DIV", xpath: "/html/body/div" } },
+        },
+      }),
+    );
+    preview.remove();
+
+    expect(stopFollowing).not.toHaveBeenCalled();
+    expect(onSlideEvent).not.toHaveBeenCalled();
+  });
+
+  it("ignores slide frame interaction while the deck is closed", () => {
+    const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
+    const view = render(
+      <SlidePreview slides={slides} currentSlideIndex={0} isOpen onSlideEvent={onSlideEvent} />,
+    );
+    const source = slideFrameWindow();
+    view.rerender(
+      <SlidePreview
+        slides={slides}
+        currentSlideIndex={0}
+        isOpen={false}
+        onSlideEvent={onSlideEvent}
+      />,
+    );
+
+    fireEvent(
+      window,
+      new MessageEvent("message", {
+        origin: window.location.origin,
+        source,
+        data: { type: "IFRAME_INTERACTION", payload: { type: "click" } },
+      }),
+    );
+
+    expect(onSlideEvent).not.toHaveBeenCalled();
+  });
+
   it("ignores interaction messages from a foreign origin or a malformed payload", () => {
     stopFollowing.mockClear();
     const onSlideEvent = vi.fn<(event: SlideEvent) => boolean | void>();
@@ -130,6 +193,7 @@ describe("SlidePreview local follow intent", () => {
       window,
       new MessageEvent("message", {
         origin: "https://evil.example",
+        source: slideFrameWindow(),
         data: { type: "IFRAME_INTERACTION", payload: { type: "click" } },
       }),
     );
@@ -138,6 +202,7 @@ describe("SlidePreview local follow intent", () => {
       window,
       new MessageEvent("message", {
         origin: window.location.origin,
+        source: slideFrameWindow(),
         data: { type: "IFRAME_INTERACTION" },
       }),
     );

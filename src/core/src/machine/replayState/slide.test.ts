@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vite-plus/test";
 import type { Slide, SlideEvent } from "../../slides";
 import { getSlideReplayResult } from "./slide";
@@ -182,5 +183,99 @@ describe("slide replay of a slide deleted during the take", () => {
         slideState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
       },
     ]);
+  });
+});
+
+describe("slide replay resync", () => {
+  const closedDeck = {
+    slideIndex: -1,
+    slideState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
+  };
+
+  it("places only closes when the recording has no deck", () => {
+    const slideEvents: SlideEvent[] = [
+      { type: "slide_open", timestamp: 0, slideId: "one", indexv: 0 },
+      { type: "slide_close", timestamp: 100, slideId: "one" },
+      { type: "slide_open", timestamp: 200, slideId: "one", indexv: 0 },
+    ];
+    for (const deck of [undefined, []]) {
+      expect(
+        getSlideReplayResult({
+          slideEvents,
+          slides: deck,
+          currentTime: 250,
+          lastAppliedIndex: -1,
+          isResync: true,
+        }).applications,
+      ).toEqual([{ slideIndex: -1, slideState: expect.objectContaining({ isOpen: false }) }]);
+    }
+  });
+
+  it("keeps the deck closed across a long track that names no slide", () => {
+    // Lessons recorded before the preview frames were filtered carry thousands of these.
+    const slideEvents: SlideEvent[] = Array.from({ length: 5_000 }, (_, index) => ({
+      type: "slide_interaction",
+      timestamp: index,
+    }));
+    expect(
+      getSlideReplayResult({
+        slideEvents,
+        slides,
+        currentTime: 10_000,
+        lastAppliedIndex: -1,
+        isResync: true,
+      }),
+    ).toEqual({ applications: [closedDeck], nextIndex: 4_999 });
+  });
+
+  it("shows what playing from the start shows", () => {
+    const arbEvent = fc.record(
+      {
+        gap: fc.nat({ max: 3 }),
+        type: fc.constantFrom<SlideEvent["type"]>(
+          "slide_open",
+          "slide_close",
+          "slide_change",
+          "slide_maximize",
+          "slide_minimize",
+          "slide_interaction",
+        ),
+        slideId: fc.constantFrom("one", "two", "gone"),
+        isMaximized: fc.boolean(),
+        indexv: fc.nat({ max: 2 }),
+      },
+      { requiredKeys: ["gap", "type"] },
+    );
+    fc.assert(
+      fc.property(
+        fc.array(arbEvent, { maxLength: 30 }),
+        fc.constantFrom(undefined, [], slides),
+        (steps, deck) => {
+          let time = 0;
+          const slideEvents: SlideEvent[] = steps.map(({ gap, ...event }) => {
+            time += gap;
+            return { ...event, timestamp: time };
+          });
+          for (let currentTime = -1; currentTime <= time + 1; currentTime += 1) {
+            const played = getSlideReplayResult({
+              slideEvents,
+              slides: deck,
+              currentTime,
+              lastAppliedIndex: -1,
+              isResync: false,
+            });
+            const sought = getSlideReplayResult({
+              slideEvents,
+              slides: deck,
+              currentTime,
+              lastAppliedIndex: -1,
+              isResync: true,
+            });
+            expect(sought.nextIndex).toBe(played.nextIndex);
+            expect(sought.applications).toEqual([played.applications.at(-1) ?? closedDeck]);
+          }
+        },
+      ),
+    );
   });
 });
