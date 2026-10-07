@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { UploadLessonModal, useAuth, useStudioCapabilities } from "@next-editor/infra";
@@ -424,7 +424,10 @@ export default function StudioController() {
     chooseVoice("default");
   };
 
-  const sources = allSources(importedScripts);
+  // Memoized (this module is uncompiled) so `sources[planSlug]` keeps its
+  // identity across the per-receipt/phase/output-chunk re-renders, which lets
+  // the runtime label below skip re-parsing the lesson YAML each time.
+  const sources = useMemo(() => allSources(importedScripts), [importedScripts]);
 
   const selectLesson = (slug: string) => {
     if (slug !== planSlug) {
@@ -695,7 +698,12 @@ export default function StudioController() {
   const activeRun = latestMatchesSelection ? latest : null;
   const report = activeRun?.result.report ?? null;
   const artifacts = activeRun?.result.artifacts ?? null;
-  const effectiveModeLabel = requestedMode ?? (source ? sourceRuntimeDefault(source) : "?");
+  // sourceRuntimeDefault parses + validates the whole YAML (5–14 ms per call);
+  // only a changed selection or import needs that again.
+  const effectiveModeLabel = useMemo(
+    () => requestedMode ?? (source ? sourceRuntimeDefault(source) : "?"),
+    [requestedMode, source],
+  );
 
   const downloadBundle = () => {
     if (!activeRun || !artifacts) {
