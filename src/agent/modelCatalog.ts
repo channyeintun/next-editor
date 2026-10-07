@@ -19,6 +19,7 @@ interface OpenRouterModelsResponse {
 }
 
 export const FALLBACK_MODEL_OPTIONS: AgentModelOption[] = [
+  { id: "anthropic/claude-haiku-5.5", label: "Anthropic: Claude Haiku 5.5", supportsImages: true },
   { id: "anthropic/claude-haiku-4.5", label: "Anthropic: Claude Haiku 4.5", supportsImages: true },
   { id: "anthropic/claude-opus-4.8", label: "Anthropic: Claude Opus 4.8", supportsImages: true },
   { id: "anthropic/claude-sonnet-5", label: "Anthropic: Claude Sonnet 5", supportsImages: true },

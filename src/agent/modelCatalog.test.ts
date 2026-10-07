@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { FALLBACK_MODEL_OPTIONS, fetchOpenRouterModelOptions } from "./modelCatalog";
+import { DEFAULT_AGENT_MODEL } from "./types";
 
 describe("OpenRouter model catalog", () => {
   afterEach(() => {
@@ -32,6 +33,10 @@ describe("OpenRouter model catalog", () => {
       { id: "example/free-model:free", label: "Free model", supportsImages: false },
       { id: "example/image-model", label: "Image model", supportsImages: true },
     ]);
+  });
+
+  it("lists the default model first in fallbacks so its label shows before the catalog loads", () => {
+    expect(FALLBACK_MODEL_OPTIONS[0]?.id).toBe(DEFAULT_AGENT_MODEL);
   });
 
   it("does not include the removed Gemma 4 31B entry in fallbacks", () => {

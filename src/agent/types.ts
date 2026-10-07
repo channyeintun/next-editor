@@ -9,7 +9,7 @@ import type { PreviewScreenshotResult } from "../utils/iframeScreenshotBridge";
 /** OpenRouter model slug selected from its live model catalog. */
 export type AgentModelId = string;
 
-export const DEFAULT_AGENT_MODEL: AgentModelId = "anthropic/claude-haiku-4.5";
+export const DEFAULT_AGENT_MODEL: AgentModelId = "anthropic/claude-haiku-5.5";
 
 export interface ToolConfirmationRequest {
   toolName: string;
