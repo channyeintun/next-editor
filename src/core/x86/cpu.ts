@@ -28,7 +28,7 @@ import {
   type DecodedOperand,
 } from "./decoder";
 import { CONDITION_CODES } from "./isa";
-import { Memory, MemoryFault } from "./memory";
+import { Memory, MemoryFault, PAGE_BYTES } from "./memory";
 import { physicalRegister, REGISTERS_64 } from "./registers";
 
 export const RAX = 0;
@@ -159,6 +159,15 @@ export class Machine {
   #break = 0n;
   #heapStart = 0n;
   #instructions = 0;
+  /**
+   * Decoded instructions by address. A loop body runs millions of times, and
+   * decoding it again each time was about a third of the run. Only an
+   * instruction that sits inside one page is kept: that page passed the
+   * execute check, so it is `rx`, and nothing writes an `rx` page once the
+   * loader has placed the program. An instruction that runs onto the next page
+   * may end in bytes the program can still write, so it is decoded every time.
+   */
+  #decoded = new Map<bigint, DecodedInstruction>();
   #maxInstructions: number;
   #maxOutputBytes: number;
   #maxHeapBytes: number;
@@ -383,9 +392,15 @@ export class Machine {
 
   /** Execute exactly one instruction. Throws `Halt` when the program stops. */
   step(): DecodedInstruction {
-    // 15 bytes is the architectural maximum length of an x86 instruction.
-    const window = this.memory.readCode(this.rip, 15);
-    const decoded = this.#decode(window);
+    let decoded = this.#decoded.get(this.rip);
+    if (!decoded) {
+      // 15 bytes is the architectural maximum length of an x86 instruction.
+      const window = this.memory.readCode(this.rip, 15);
+      decoded = this.#decode(window);
+      if (Number(this.rip % BigInt(PAGE_BYTES)) + decoded.length <= PAGE_BYTES) {
+        this.#decoded.set(this.rip, decoded);
+      }
+    }
     const nextRip = (this.rip + BigInt(decoded.length)) & U64;
     this.#instructions += 1;
     this.#execute(decoded, nextRip);

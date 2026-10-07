@@ -221,6 +221,44 @@ _start:
     expect(result.exitCode).toBe(7);
   });
 
+  it("decodes afresh an instruction whose bytes run onto a page the program writes", () => {
+    // `tail` is the last byte of the code page: 0xe9 is `jmp rel32`, and its
+    // displacement is the first dword of .data. `aim` rewrites that dword, so
+    // the same jump lands somewhere else each time; a decode remembered by
+    // address would send the second jump back to `first`, forever.
+    const program = (padding: number) =>
+      wrap(` lea rax, [rel first]
+ call aim
+ lea rcx, [rel tail]
+ jmp rcx
+first:
+ lea rax, [rel second]
+ call aim
+ lea rcx, [rel tail]
+ jmp rcx
+second:
+ mov rdi, 7
+ mov rax, 60
+ syscall
+aim:
+ lea rbx, [rel tail]
+ sub rax, rbx
+ sub rax, 5
+ mov [rel target], eax
+ ret
+${" nop\n".repeat(padding)}tail:
+ db 0xe9
+section .data
+target: dd 0`);
+    // Every instruction above has one size wherever it sits, so the padding
+    // that puts `tail` on the page's last byte can be measured unpadded.
+    const unpadded = assemble(program(0)).segments[0].bytes.length;
+    const result = assembleAndRun(program(0x1000 - unpadded), { maxInstructions: 10_000 });
+
+    expect(result.status).toBe("success");
+    expect(result.exitCode).toBe(7);
+  });
+
   it("a local label before any global label is rejected, not misfiled", () => {
     expect(() => assemble("section .text\n.loop:\n ret\n")).toThrow(/no label above it/);
   });
