@@ -101,6 +101,37 @@ describe("getWorkspaceAssetBlob", () => {
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([65, 66, 67]));
   });
 
+  // Until the write commits, IndexedDB does not have the asset yet, so a read
+  // that lands meanwhile (a preview opening the file) must come from memory.
+  it("serves a read that races the registration's write from memory", async () => {
+    const fake = new FakeIndexedDB();
+    vi.stubGlobal("indexedDB", fake.indexedDB);
+    const bytes = new Uint8Array([65, 66, 67]);
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    const descriptor: WorkspaceAssetDescriptor = {
+      kind: "asset",
+      assetId: Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+      mimeType: "image/png",
+      size: bytes.byteLength,
+    };
+    const get = vi.spyOn(IDBObjectStore.prototype, "get");
+    const put = IDBObjectStore.prototype.put;
+    const racing: { read: Promise<Blob> | null } = { read: null };
+    vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (
+      this: IDBObjectStore,
+      ...args: Parameters<IDBObjectStore["put"]>
+    ) {
+      racing.read = getWorkspaceAssetBlob(descriptor);
+      return put.apply(this, args);
+    });
+
+    await registerWorkspaceAsset(bytes, { mimeType: "image/png" });
+
+    if (!racing.read) throw new Error("Expected the registration to store the asset");
+    expect(new Uint8Array(await (await racing.read).arrayBuffer())).toEqual(bytes);
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it("keeps the only copy in memory when there is no IndexedDB", async () => {
     vi.stubGlobal("indexedDB", undefined);
     const descriptor = await registerWorkspaceAsset(new Uint8Array([65, 66, 67]), {
