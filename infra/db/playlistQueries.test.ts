@@ -1,17 +1,18 @@
 // @vitest-environment node
 import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   addLessonToPlaylist,
   deletePlaylist,
+  getPlaylistBySlug,
   removeLessonFromPlaylist,
   reorderPlaylistLessons,
 } from "./playlistQueries";
 
 /**
- * The playlist mutations against real SQLite, so the ownership checks and the
- * slug each one answers with come from the SQL itself. Only the columns these
- * statements touch are created.
+ * The playlist queries against real SQLite, so the ownership checks, the slug
+ * each mutation answers with and the public read's membership come from the SQL
+ * itself. Only the columns these statements touch are created.
  */
 function createDb(): D1Database {
   const db = new DatabaseSync(":memory:");
@@ -29,7 +30,11 @@ function createDb(): D1Database {
   `);
 
   function statement(sql: string, args: unknown[] = []) {
+    // A batched SELECT answers with its rows, as D1's batch() does.
     const run = () => {
+      if (/^\s*SELECT\b/i.test(sql)) {
+        return { results: db.prepare(sql).all(...(args as never[])), meta: { changes: 0 } };
+      }
       const result = db.prepare(sql).run(...(args as never[]));
       return { meta: { changes: Number(result.changes) } };
     };
@@ -79,5 +84,42 @@ describe("playlist mutations", () => {
     ).resolves.toBeNull();
     await expect(deletePlaylist(db, "playlist-1", "intruder")).resolves.toBeNull();
     await expect(deletePlaylist(db, "playlist-1", "owner")).resolves.toBe("my-list");
+  });
+});
+
+describe("getPlaylistBySlug", () => {
+  it("answers the playlist and its published members in position order, in one batch", async () => {
+    const db = createDb();
+    await addLessonToPlaylist(db, "playlist-1", "owner", "lesson-1");
+    await addLessonToPlaylist(db, "playlist-1", "owner", "lesson-2");
+    await reorderPlaylistLessons(db, "playlist-1", "owner", ["lesson-2", "lesson-1"]);
+    const batch = vi.spyOn(db, "batch");
+
+    const result = await getPlaylistBySlug(db, "my-list");
+
+    expect(result?.playlist).toMatchObject({ id: "playlist-1", slug: "my-list" });
+    expect(result?.lessons.map((lesson) => lesson.id)).toEqual(["lesson-2", "lesson-1"]);
+    expect(batch).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves out a member that is no longer published", async () => {
+    const db = createDb();
+    await addLessonToPlaylist(db, "playlist-1", "owner", "lesson-1");
+    await addLessonToPlaylist(db, "playlist-1", "owner", "lesson-2");
+    await db.prepare("UPDATE lessons SET status = 'draft' WHERE id = ?").bind("lesson-1").run();
+
+    const result = await getPlaylistBySlug(db, "my-list");
+
+    expect(result?.lessons.map((lesson) => lesson.id)).toEqual(["lesson-2"]);
+  });
+
+  it("answers an empty playlist with no members", async () => {
+    const result = await getPlaylistBySlug(createDb(), "my-list");
+
+    expect(result).toMatchObject({ playlist: { slug: "my-list" }, lessons: [] });
+  });
+
+  it("answers null for an unknown slug", async () => {
+    await expect(getPlaylistBySlug(createDb(), "nope")).resolves.toBeNull();
   });
 });

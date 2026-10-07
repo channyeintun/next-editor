@@ -56,27 +56,31 @@ export interface PlaylistWithLessons {
 // filter (re-applied on every read, not just at insert time) is what keeps it
 // from leaking through the playlist page. Mirrors getPublishedLessonBySlug's
 // same published-only convention in queries.ts.
+//
+// One D1 batch, so one round trip rather than two in sequence (~55-90 ms each
+// from Singapore): the member query looks the playlist up by slug itself instead
+// of waiting for the first statement's id. The batch also reads both from the
+// same snapshot.
 export async function getPlaylistBySlug(
   db: D1Database,
   slug: string,
 ): Promise<PlaylistWithLessons | null> {
-  const playlist = await db
-    .prepare("SELECT * FROM playlists WHERE slug = ?")
-    .bind(slug)
-    .first<PlaylistRow>();
+  const [playlistResult, lessonsResult] = await db.batch([
+    db.prepare("SELECT * FROM playlists WHERE slug = ?").bind(slug),
+    db
+      .prepare(
+        `SELECT lessons.* FROM playlist_lessons
+         JOIN lessons ON lessons.id = playlist_lessons.lesson_id
+         WHERE playlist_lessons.playlist_id = (SELECT id FROM playlists WHERE slug = ?)
+           AND lessons.status = 'published'
+         ORDER BY playlist_lessons.position ASC`,
+      )
+      .bind(slug),
+  ]);
+  const playlist = playlistResult.results?.[0] as PlaylistRow | undefined;
   if (!playlist) return null;
 
-  const result = await db
-    .prepare(
-      `SELECT lessons.* FROM playlist_lessons
-       JOIN lessons ON lessons.id = playlist_lessons.lesson_id
-       WHERE playlist_lessons.playlist_id = ? AND lessons.status = 'published'
-       ORDER BY playlist_lessons.position ASC`,
-    )
-    .bind(playlist.id)
-    .all<LessonRow>();
-
-  return { playlist, lessons: result.results ?? [] };
+  return { playlist, lessons: (lessonsResult.results ?? []) as LessonRow[] };
 }
 
 // Owner-scoped membership read: every member row regardless of published
