@@ -831,6 +831,60 @@ describe("CollaborationContext teaching projection", () => {
     view.unmount();
   });
 
+  // A teaching transaction that changes nothing shown (here, a peer's candidate
+  // that loses to the current winner) must not hand every collaboration
+  // consumer a new projection.
+  it("keeps the teaching projection when a teaching transaction changes nothing shown", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    act(() => {
+      seedCollaborationProject(provider.doc, createStarterHtmlCssWorkspace());
+      seedCollaborationTeachingDocument(provider.doc, {
+        slides: [],
+        whiteboardElements: [{ ...rectangle("e0", "a0"), version: 2, versionNonce: 20 }],
+      });
+    });
+    await waitFor(() => expect(collaboration!.teaching.whiteboardElements).toHaveLength(1));
+    const teaching = collaboration!.teaching;
+    vi.mocked(projectCollaborationTeachingDocument).mockClear();
+
+    act(() => {
+      const root = provider.doc.getMap("project").get("teaching") as import("yjs").Map<unknown>;
+      const record = (root.get("whiteboardElements") as import("yjs").Map<unknown>).get(
+        "e0",
+      ) as import("yjs").Array<string>;
+      record.push([
+        JSON.stringify({
+          kind: "element",
+          version: 1,
+          versionNonce: 10,
+          element: rectangle("e0", "a0"),
+        }),
+      ]);
+    });
+    await waitFor(() => expect(projectCollaborationTeachingDocument).toHaveBeenCalledTimes(1));
+    expect(collaboration!.teaching).toBe(teaching);
+
+    act(() => {
+      collaboration!.publishWhiteboardDelta({ upserts: [rectangle("e1", "a1")] });
+    });
+    await waitFor(() => expect(collaboration!.teaching).not.toBe(teaching));
+    expect(collaboration!.teaching.whiteboardElements.map(({ id }) => id)).toEqual(["e0", "e1"]);
+    view.unmount();
+  });
+
   // A projection that changes neither the presentation nor its current slide
   // (here, a whiteboard change) keeps the build step the viewer is on; moving
   // away and back between two projections starts the slide over.
