@@ -1122,6 +1122,57 @@ export const applySlideEventsAtTime = ({
   return {};
 };
 
+/** One track's replay step: an `assign` body, or a plain action that only calls host hooks. */
+type ReplayStep = (args: EditorActionArgs) => EditorContextUpdate | void;
+
+/**
+ * Brings every replayed track to the playhead. The workspace goes first: a replayed file
+ * switch holds the editor frame back until the editor has the new model
+ * (pendingPlaybackEditorSync).
+ */
+const REPLAY_STATE_STEPS: readonly ReplayStep[] = [
+  applyWorkspaceEventsAtTime,
+  applyRuntimeEventsAtTime,
+  applyFrameAtTime,
+  applyPreviewPatchBatchesAtTime,
+  applyPreviewEventsAtTime,
+  applySlideEventsAtTime,
+  applyWhiteboardEventsAtTime,
+  applyChatEventsAtTime,
+];
+
+const TICK_REPLAY_STEPS: readonly ReplayStep[] = [storeTickTime, ...REPLAY_STATE_STEPS];
+
+/**
+ * Runs `steps` as one `assign`. Each step sees what the ones before it changed and calls its
+ * host hooks in the same order, as separate actions did, and their updates merge into one.
+ * xstate copies the whole context for every assign, even one that changes nothing (on most
+ * ticks no track moves), and V8 copies a context this wide in dictionary mode, about 10 µs
+ * each: eight per tick were most of the tick's cost.
+ */
+function runReplaySteps(
+  { context, event }: EditorActionArgs,
+  steps: readonly ReplayStep[],
+): EditorContextUpdate {
+  let stepContext = context;
+  let update: EditorContextUpdate | undefined;
+  for (const step of steps) {
+    const stepUpdate = step({ context: stepContext, event });
+    if (!stepUpdate || Object.keys(stepUpdate).length === 0) continue;
+    stepContext = { ...stepContext, ...stepUpdate };
+    update = { ...update, ...stepUpdate };
+  }
+  return update ?? {};
+}
+
+/** Brings every replayed track to the playhead (REPLAY_STATE_STEPS). */
+export const applyReplayStateAtTime = (args: EditorActionArgs): EditorContextUpdate =>
+  runReplaySteps(args, REPLAY_STATE_STEPS);
+
+/** A playing TICK: move the playhead to the tick (storeTickTime), then bring every track there. */
+export const applyReplayStateAtTick = (args: EditorActionArgs): EditorContextUpdate =>
+  runReplaySteps(args, TICK_REPLAY_STEPS);
+
 // ============================================================================
 // Playback audio
 // ============================================================================

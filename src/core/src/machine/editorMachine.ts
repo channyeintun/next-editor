@@ -62,9 +62,9 @@ import {
   appendRecordingDelta,
   addCaptionTrack,
   setChapters,
-  applyFrameAtTime,
+  applyReplayStateAtTime,
+  applyReplayStateAtTick,
   seekToTime,
-  storeTickTime,
   moveToPlaybackEnd,
   clearPlaybackAudioSpawned,
   setPlaybackSpeed,
@@ -84,13 +84,6 @@ import {
   clearRecording,
   notifySeek,
   setEditorRef,
-  applyPreviewEventsAtTime,
-  applyPreviewPatchBatchesAtTime,
-  applyWorkspaceEventsAtTime,
-  applyRuntimeEventsAtTime,
-  applySlideEventsAtTime,
-  applyWhiteboardEventsAtTime,
-  applyChatEventsAtTime,
   getPlaybackAudioState,
   reportMachineError,
   syncPlaybackAudio,
@@ -103,22 +96,6 @@ import { isDmpCodecLoaded } from "../../../storage/dmpCodec/dmpCodec";
  * (see audioPlaybackActor). Seeks, plays and speed changes reposition it at once.
  */
 const PLAYBACK_AUDIO_SYNC_INTERVAL_MS = 250;
-
-/**
- * Brings every replayed track to the playhead. The workspace goes first: a replayed file
- * switch holds the editor frame back until the editor has the new model
- * (pendingPlaybackEditorSync).
- */
-const APPLY_REPLAY_STATE_ACTIONS = [
-  "applyWorkspaceEventsAtTime",
-  "applyRuntimeEventsAtTime",
-  "applyFrameAtTime",
-  "applyPreviewPatchBatchesAtTime",
-  "applyPreviewEventsAtTime",
-  "applySlideEventsAtTime",
-  "applyWhiteboardEventsAtTime",
-  "applyChatEventsAtTime",
-] as const;
 
 /**
  * Hands the workspace to the viewer (paused, ended): keep what the recording shows, stop
@@ -507,9 +484,11 @@ export const editorMachine = setup({
     appendRecordingDelta: assign(appendRecordingDelta),
     addCaptionTrack: assign(addCaptionTrack),
     setChapters: assign(setChapters),
-    applyFrameAtTime: assign(applyFrameAtTime),
+    // Brings every replayed track to the playhead, workspace first, as one assign: the
+    // order and why it is one action are at runReplaySteps (replayActions.ts).
+    applyReplayStateAtTime: assign(applyReplayStateAtTime),
+    applyReplayStateAtTick: assign(applyReplayStateAtTick),
     seekToTime: assign(seekToTime),
-    storeTickTime: assign(storeTickTime),
     moveToPlaybackEnd: assign(moveToPlaybackEnd),
     clearPlaybackAudioSpawned: assign(clearPlaybackAudioSpawned),
     stopAudioPlayer: stopChild("audioPlayer"),
@@ -538,13 +517,6 @@ export const editorMachine = setup({
     clearRecording: assign(clearRecording),
     notifySeek,
     setEditorRef: assign(setEditorRef),
-    applyPreviewEventsAtTime: assign(applyPreviewEventsAtTime),
-    applyPreviewPatchBatchesAtTime,
-    applyWorkspaceEventsAtTime: assign(applyWorkspaceEventsAtTime),
-    applyRuntimeEventsAtTime: assign(applyRuntimeEventsAtTime),
-    applySlideEventsAtTime: assign(applySlideEventsAtTime),
-    applyWhiteboardEventsAtTime: assign(applyWhiteboardEventsAtTime),
-    applyChatEventsAtTime: assign(applyChatEventsAtTime),
     // A longer stream or late media changes the duration, and may be the first usable
     // narration (spawned lazily here), whether or not the replay applied the new records.
     syncStreamedRecordingGrowth: enqueueActions(({ context, enqueue, check }) => {
@@ -671,7 +643,7 @@ export const editorMachine = setup({
           "setEditorRef",
           "clearPendingPlaybackEditorSync",
           "invalidateRenderedPlaybackState",
-          ...APPLY_REPLAY_STATE_ACTIONS,
+          "applyReplayStateAtTime",
         ],
       },
       {
@@ -1075,7 +1047,7 @@ export const editorMachine = setup({
           startPosition: context.timeline.currentTime,
         }),
       },
-      entry: [...APPLY_REPLAY_STATE_ACTIONS, "spawnPlaybackAudio"],
+      entry: ["applyReplayStateAtTime", "spawnPlaybackAudio"],
       exit: ["stopAudioPlayer", "clearCursorDecorations", "clearPlaybackAudioSpawned"],
       on: {
         WORKSPACE_EVENT: {
@@ -1092,11 +1064,7 @@ export const editorMachine = setup({
           },
           {
             guard: "isForLoadedRecording",
-            actions: [
-              "extendRecording",
-              ...APPLY_REPLAY_STATE_ACTIONS,
-              "syncStreamedRecordingGrowth",
-            ],
+            actions: ["extendRecording", "applyReplayStateAtTime", "syncStreamedRecordingGrowth"],
           },
         ],
         APPEND_RECORDING_DELTA: [
@@ -1108,19 +1076,19 @@ export const editorMachine = setup({
             guard: "isForLoadedRecording",
             actions: [
               "appendRecordingDelta",
-              ...APPLY_REPLAY_STATE_ACTIONS,
+              "applyReplayStateAtTime",
               "syncStreamedRecordingGrowth",
             ],
           },
         ],
         TICK: {
-          actions: ["storeTickTime", ...APPLY_REPLAY_STATE_ACTIONS, "syncPlaybackAudioToTimeline"],
+          actions: ["applyReplayStateAtTick", "syncPlaybackAudioToTimeline"],
         },
         SEEK: {
           actions: [
             "reattachPlaybackWorkspace",
             "seekToTime",
-            ...APPLY_REPLAY_STATE_ACTIONS,
+            "applyReplayStateAtTime",
             "notifySeek",
             "seekPlaybackActors",
           ],
@@ -1137,7 +1105,7 @@ export const editorMachine = setup({
             "preserveLearnerWorkspace",
             "resetPlayback",
             "reattachPlaybackWorkspace",
-            ...APPLY_REPLAY_STATE_ACTIONS,
+            "applyReplayStateAtTime",
             "seekPlaybackActors",
           ],
         },
@@ -1187,7 +1155,7 @@ export const editorMachine = setup({
         playing: {
           entry: [
             "invalidateAppliedPlaybackState",
-            ...APPLY_REPLAY_STATE_ACTIONS,
+            "applyReplayStateAtTime",
             "startPlaybackActors",
           ],
           exit: "pausePlaybackActors",
@@ -1216,7 +1184,7 @@ export const editorMachine = setup({
             // The timeline is paused, so no TICK is expected here. Handling one keeps a
             // stray tick from bubbling up to playback.TICK, which would move the playhead.
             TICK: {
-              actions: [...APPLY_REPLAY_STATE_ACTIONS],
+              actions: ["applyReplayStateAtTime"],
             },
             SEEK: {
               actions: [
@@ -1224,7 +1192,7 @@ export const editorMachine = setup({
                 "reattachPlaybackWorkspace",
                 "clearPendingEditorSyncForPausedSeek",
                 "seekToTime",
-                ...APPLY_REPLAY_STATE_ACTIONS,
+                "applyReplayStateAtTime",
                 ...SYNC_PAUSED_WORKSPACE_ACTIONS,
                 "notifySeek",
                 "seekPlaybackActors",
