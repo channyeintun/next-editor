@@ -153,7 +153,6 @@ const DEMO_IFRAME_HEIGHT = 900;
 const DEFAULT_IFRAME_SCALE = 0.4513888888888889;
 const DEMO_URL = "/code?url=/lessons/introduction/introduction.ne";
 const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true&largeControls=true`;
-const DEMO_POSTER_SRC = "/lessons/introduction/thumbnail.webp";
 const DEMO_MOUNT_IDLE_TIMEOUT_MS = 2500;
 
 const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) => {
@@ -170,7 +169,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
   // after hydration.
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
   // Even on desktop the demo frame waits for this page's load event and an idle
-  // moment (the lesson's thumbnail holds its box until then): it brings ~1.4 MB
+  // moment (the dark panel holds its box until then): it brings ~1.4 MB
   // gz of editor code, the .ne and its audio, all on this page's main thread,
   // and it can't start playing without a click inside it anyway. Not mounted on
   // a click here either, since that gives the frame no user activation and its
@@ -438,42 +437,30 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                             <p className="text-sm text-slate-400">Tap to open the full editor</p>
                           </div>
                         </a>
-                      ) : (
-                        <>
-                          {/* Stays under the frame, which covers it once its own
-                              page has painted a background. */}
-                          <img
-                            src={DEMO_POSTER_SRC}
-                            alt=""
-                            decoding="async"
-                            className="absolute inset-0 size-full object-cover"
-                          />
-                          {isDemoMounted && (
-                            <iframe
-                              ref={iframeRef}
-                              src={DEMO_IFRAME_SRC}
-                              className={`absolute border-0 ${
-                                isFullscreen ? "inset-0 size-full" : "origin-top-left"
-                              }`}
-                              // Fullscreen drops the fixed-size + scale treatment and lets
-                              // the editor lay out at the screen's native resolution, so
-                              // text stays crisp and the (regular-size) controls render 1:1.
-                              style={
-                                isFullscreen
-                                  ? undefined
-                                  : {
-                                      width: DEMO_IFRAME_WIDTH,
-                                      height: DEMO_IFRAME_HEIGHT,
-                                      left: offsetX,
-                                      top: offsetY,
-                                      transform: `scale(${scale})`,
-                                    }
-                              }
-                              title="Next Editor Live Demo"
-                            />
-                          )}
-                        </>
-                      )}
+                      ) : isDemoMounted ? (
+                        <iframe
+                          ref={iframeRef}
+                          src={DEMO_IFRAME_SRC}
+                          className={`absolute border-0 ${
+                            isFullscreen ? "inset-0 size-full" : "origin-top-left"
+                          }`}
+                          // Fullscreen drops the fixed-size + scale treatment and lets
+                          // the editor lay out at the screen's native resolution, so
+                          // text stays crisp and the (regular-size) controls render 1:1.
+                          style={
+                            isFullscreen
+                              ? undefined
+                              : {
+                                  width: DEMO_IFRAME_WIDTH,
+                                  height: DEMO_IFRAME_HEIGHT,
+                                  left: offsetX,
+                                  top: offsetY,
+                                  transform: `scale(${scale})`,
+                                }
+                          }
+                          title="Next Editor Live Demo"
+                        />
+                      ) : null}
                       {isFullscreen && (
                         <button
                           type="button"

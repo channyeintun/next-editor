@@ -38,12 +38,11 @@ function renderLandingPage() {
 }
 
 describe("LandingPage demo embed", () => {
-  it("shows the poster on desktop and mounts the demo only after load and idle", () => {
+  it("mounts the demo on desktop only after load and idle, with no poster before it", () => {
     const { container } = renderLandingPage();
 
-    expect(container.querySelector('img[src="/lessons/introduction/thumbnail.webp"]')).not.toBe(
-      null,
-    );
+    // A poster under the frame flashed against the frame's own skeleton.
+    expect(container.querySelector('img[src*="/lessons/introduction/"]')).toBe(null);
     act(() => vi.runAllTimers());
     expect(screen.queryByTitle("Next Editor Live Demo")).toBe(null);
 
@@ -60,7 +59,7 @@ describe("LandingPage demo embed", () => {
 
   it("never mounts the demo on mobile", () => {
     device.mobile = true;
-    const { container } = renderLandingPage();
+    renderLandingPage();
 
     act(() => {
       window.dispatchEvent(new Event("load"));
@@ -68,7 +67,6 @@ describe("LandingPage demo embed", () => {
     });
 
     expect(screen.queryByTitle("Next Editor Live Demo")).toBe(null);
-    expect(container.querySelector('img[src="/lessons/introduction/thumbnail.webp"]')).toBe(null);
     expect(screen.getByRole("link", { name: "Open the interactive demo" })).toBeInTheDocument();
   });
 });
