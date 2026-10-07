@@ -90,6 +90,12 @@ function loadPilot() {
 }
 
 const DECK_URL = "https://docs.google.com/presentation/d/e/2PACX-test/pub";
+const PUBLISHED_DECK: ParsedDeck = {
+  sourceUrl: DECK_URL,
+  width: 1600,
+  height: 900,
+  slides: [{ pageId: "SLIDES_API1_0", title: "Rules", svg: "<svg>rules</svg>", steps: [] }],
+};
 
 /** The pilot with one slide sourced from a published deck page. */
 function loadPilotWithDeckSlide() {
@@ -117,12 +123,7 @@ describe("buildPlanFromScript narration", () => {
     tts.synthesizeModalVoxCpm2Wav.mockReset().mockImplementation(async (_, speechText) => {
       return voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000);
     });
-    slides.fetchPublishedDeck.mockReset().mockResolvedValue({
-      sourceUrl: DECK_URL,
-      width: 1600,
-      height: 900,
-      slides: [{ pageId: "SLIDES_API1_0", title: "Rules", svg: "<svg>rules</svg>", steps: [] }],
-    });
+    slides.fetchPublishedDeck.mockReset().mockResolvedValue(PUBLISHED_DECK);
   });
 
   it("reuses the plan seed across dialogs and bypasses legacy cached audio", async () => {
@@ -211,9 +212,22 @@ describe("buildPlanFromScript narration", () => {
   });
 
   it("fetches the published deck while the narration synthesizes", async () => {
+    // The deck answers only once the first dialog is synthesized and cached, so
+    // a Director that awaited the slides before the narration would hang here.
+    let firstTakeCached!: () => void;
+    const firstTake = new Promise<void>((resolve) => {
+      firstTakeCached = resolve;
+    });
+    tts.putCachedDialogWav.mockImplementation(async () => firstTakeCached());
+    slides.fetchPublishedDeck.mockImplementation(async () => {
+      await firstTake;
+      return PUBLISHED_DECK;
+    });
+
     const result = await buildPlanFromScript(loadPilotWithDeckSlide());
 
     expect(slides.fetchPublishedDeck).toHaveBeenCalledExactlyOnceWith(DECK_URL);
+    // ...and it was requested before the narration, not after it.
     expect(slides.fetchPublishedDeck.mock.invocationCallOrder[0]).toBeLessThan(
       tts.synthesizePocketDialog.mock.invocationCallOrder[0],
     );
