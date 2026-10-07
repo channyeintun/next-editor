@@ -378,8 +378,11 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
     const project = getProject();
     const commandLine = resolveRuntimeRunCommand(project, runnerConfig.runCommand);
-    const spawned = await startRunnerProcess(instance, commandLine);
-    lastRunRef.current = spawned ? { project, commandLine, environmentVariables } : null;
+    // Only a start that is still the current one spawns. A superseded start resolves
+    // false, possibly after the newer start recorded its run, so it must not clear that.
+    if (await startRunnerProcess(instance, commandLine)) {
+      lastRunRef.current = { project, commandLine, environmentVariables };
+    }
   };
 
   /** Restarts the runner, even while one is starting: the Run button and run-on-save. */
