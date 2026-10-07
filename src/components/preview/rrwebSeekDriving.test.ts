@@ -231,9 +231,14 @@ describe("rrweb preview replayer per-tick driving", () => {
     const firstEventTime = events[0].timestamp;
     const endOffset = events[events.length - 1].timestamp - firstEventTime + 50;
     const midOffset = Math.round(endOffset / 2);
+    // Ticks start past the seed's FullSnapshot. Before it the panel shows rrweb's
+    // own poster of that snapshot, which a fresh Replayer seeked straight there
+    // has not painted yet, and under load the recorder can stamp the snapshot
+    // several ms after its Meta.
+    const seedOffset = events.find((event) => event.type === 2)!.timestamp - firstEventTime;
     // Forward at 4ms ticks, then back to the middle and forward again.
     const offsets: number[] = [];
-    for (let offset = 4; offset <= endOffset; offset += 4) offsets.push(offset);
+    for (let offset = seedOffset + 4; offset <= endOffset; offset += 4) offsets.push(offset);
     for (let offset = midOffset; offset <= endOffset; offset += 4) offsets.push(offset);
 
     const freshBody = freshBodies(events);
