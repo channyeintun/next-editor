@@ -94,7 +94,7 @@ react = "react"
 "cookie-es" = "cookie-es"
 "scheduler" = "scheduler"
 "@upstash/qstash" = "@upstash/qstash"
-"crypto-js" = "crypto-js"
+uncrypto = "uncrypto"
 jose = "jose"
 neverthrow = "neverthrow"
 # Passkey auth (worker/auth/passkey.ts) and its transitive deps.
