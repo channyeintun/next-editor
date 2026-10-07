@@ -232,6 +232,18 @@ export default ({ mode }: { mode: string }) => {
           codeSplitting: {
             groups: [
               {
+                // Vite's __vitePreload helper (the virtual \0vite/preload-helper)
+                // is imported by every chunk with a dynamic import(), the entry
+                // included. onnxruntime-web has one too, and groups capture
+                // their modules' dependencies, so without a group of its own
+                // the helper joined "ort" and made every page modulepreload and
+                // evaluate ORT. Not "vendor" either: the ort chunk runs as a
+                // pthread worker script and would then import react-dom.
+                name: "preload-helper",
+                test: /vite[\\/]preload-helper/,
+                priority: 1,
+              },
+              {
                 // onnxruntime-web must live alone: its threaded WASM runtime
                 // spawns pthread workers from `import.meta.url`, so the chunk
                 // it sits in is executed as a worker script — any co-bundled
