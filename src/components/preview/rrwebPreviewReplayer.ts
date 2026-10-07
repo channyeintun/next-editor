@@ -19,6 +19,41 @@ export function computeRrwebOffsetMs(currentTime: number, firstEventTime: number
   return Math.max(0, currentTime - firstEventTime);
 }
 
+// rrweb EventType.IncrementalSnapshot and IncrementalSource.MouseMove, hardcoded
+// (like rrwebPreview.ts) so this module keeps its rrweb imports type-only.
+const RRWEB_EVENT_TYPE_INCREMENTAL_SNAPSHOT = 3;
+const RRWEB_INCREMENTAL_SOURCE_MOUSE_MOVE = 1;
+
+// After casting a MouseMove, rrweb's next `pause` skips only the events at or
+// before its FIRST sampled position (up to ~500ms before the event), so every
+// later seek re-cast the mutations in that window. Re-casting is not
+// idempotent: rrweb drops, in place on the event, each remove whose node is
+// already gone, so the next rebuild (a backward seek, a restart, a resume)
+// replayed the swapped-out content stacked. Seeks here always cast
+// synchronously, which reads only a MouseMove's last position, so anchoring its
+// sampled offsets at the event's own time leaves nothing behind it to re-cast.
+function withoutMouseMoveLookback(event: eventWithTime): eventWithTime {
+  const { type, data } = event as unknown as {
+    type: number;
+    data: { source?: number; positions?: { timeOffset: number }[] };
+  };
+  if (
+    type !== RRWEB_EVENT_TYPE_INCREMENTAL_SNAPSHOT ||
+    data.source !== RRWEB_INCREMENTAL_SOURCE_MOUSE_MOVE ||
+    !data.positions?.some((position) => position.timeOffset !== 0)
+  ) {
+    return event;
+  }
+
+  return {
+    ...event,
+    data: {
+      ...data,
+      positions: data.positions.map((position) => ({ ...position, timeOffset: 0 })),
+    },
+  } as eventWithTime;
+}
+
 // How many leading events of a time-sorted stream rrweb's `pause` casts at
 // `baselineTime`: it casts by the raw `event.timestamp < baselineTime`
 // (MouseMove's earlier `positions[0]` time only shifts its timer delay).
@@ -62,7 +97,7 @@ export class RrwebPreviewReplayer {
     ReplayerConstructor: ReplayerConstructor,
   ) {
     this.root = root;
-    this.events = events;
+    this.events = events.map(withoutMouseMoveLookback);
     this.firstEventTime = events[0]?.timestamp ?? 0;
     this.ReplayerConstructor = ReplayerConstructor;
     // No seek here: pause(0) casts nothing, and rrweb paints the first
@@ -115,9 +150,9 @@ export class RrwebPreviewReplayer {
       }
 
       // Most ticks cross no event, and pause(offset) would still rebuild rrweb's
-      // queue of every remaining event (and re-cast the window behind the last
-      // MouseMove) to cast nothing new. So a forward move reaches rrweb only once
-      // it crosses an event; backward moves and a Replayer's first seek always do.
+      // queue of every remaining event to cast nothing new. So a forward move
+      // reaches rrweb only once it crosses an event; backward moves and a
+      // Replayer's first seek always do.
       const baselineTime = this.firstEventTime + offsetMs;
       if (this.castEventCount !== null && offsetMs >= this.lastOffsetMs) {
         const nextEvent = this.events[this.castEventCount];

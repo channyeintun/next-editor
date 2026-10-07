@@ -3,6 +3,7 @@ import { Replayer } from "@rrweb/replay";
 import type { eventWithTime } from "@rrweb/types";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import type { PreviewRecordedEvent } from "../../types/slides";
+import { RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -127,5 +128,113 @@ describe("rrweb seek driving (per-tick pause)", () => {
     activeReplayer.pause(10_000_000);
     await sleep(0);
     expect(rowIndices(replayedDoc()).sort()).toEqual(["2", "3", "4", "5"]);
+  });
+});
+
+// The production wrapper with the jsdom rebuild guard bypassed (see replayDirect
+// in rrwebRoundTrip.test.ts), counting the seeks that reach rrweb.
+class CountingReplayer extends Replayer {
+  static pauseCalls = 0;
+
+  constructor(events: eventWithTime[], config: ConstructorParameters<typeof Replayer>[1]) {
+    super(events, { ...config, UNSAFE_replayCanvas: true });
+  }
+
+  override pause(timeOffset?: number): void {
+    CountingReplayer.pauseCalls += 1;
+    super.pause(timeOffset);
+  }
+}
+
+describe("rrweb preview replayer per-tick driving", () => {
+  it("reaches the DOM of a fresh seek on every tick, through MouseMoves and a seek back", async () => {
+    document.body.innerHTML = `<div id="timeline"><div class="row" data-index="0">post 0</div></div>`;
+
+    const recorded: PreviewRecordedEvent[] = [];
+    stopRecording = record({
+      emit: (event) => recorded.push(event as unknown as PreviewRecordedEvent),
+      slimDOMOptions: { script: true, comment: true },
+    });
+    await sleep(20);
+
+    const timeline = document.getElementById("timeline");
+    if (!timeline) {
+      throw new Error("missing #timeline");
+    }
+
+    // Each frame swaps the only row for the next one (a remove and an add).
+    for (let index = 1; index <= 4; index += 1) {
+      timeline.firstElementChild?.remove();
+      const row = document.createElement("div");
+      row.className = "row";
+      row.setAttribute("data-index", String(index));
+      row.textContent = `post ${index}`;
+      timeline.appendChild(row);
+      await sleep(40);
+    }
+    stopRecording?.();
+    stopRecording = undefined;
+
+    // A MouseMove just after each swap whose first position was sampled before
+    // it, as rrweb's recorder batches pointer positions.
+    const swapTimes = recorded.filter((event) => event.type === 3).map((event) => event.timestamp);
+    const events = [
+      ...recorded,
+      ...swapTimes.map((timestamp) => ({
+        type: 3,
+        timestamp: timestamp + 5,
+        data: { source: 1, positions: [{ x: 1, y: 1, id: 1, timeOffset: -20 }] },
+      })),
+    ].sort((left, right) => left.timestamp - right.timestamp) as unknown as eventWithTime[];
+    const removeCounts = () =>
+      events.map((event) => (event.data as { removes?: unknown[] }).removes?.length);
+    const recordedRemoveCounts = removeCounts();
+
+    const root = document.createElement("div");
+    document.body.append(root);
+    containers.push(root);
+    CountingReplayer.pauseCalls = 0;
+    const preview = new RrwebPreviewReplayer({ root, events }, CountingReplayer);
+    await sleep(5);
+
+    const replayedBody = (container: HTMLElement) =>
+      container.querySelector("iframe")?.contentDocument?.body?.innerHTML;
+    const firstEventTime = events[0].timestamp;
+    const endOffset = events[events.length - 1].timestamp - firstEventTime + 50;
+    const midOffset = Math.round(endOffset / 2);
+    // Forward at 4ms ticks, then back to the middle and forward again.
+    const offsets: number[] = [];
+    for (let offset = 4; offset <= endOffset; offset += 4) offsets.push(offset);
+    for (let offset = midOffset; offset <= endOffset; offset += 4) offsets.push(offset);
+
+    // The expected DOM at an offset: a fresh Replayer seeked straight there,
+    // which only changes once the offset crosses another event.
+    const freshBodies = new Map<number, string | undefined>();
+    const freshBody = (offset: number) => {
+      const crossed = events.filter((event) => event.timestamp < firstEventTime + offset).length;
+      if (!freshBodies.has(crossed)) {
+        const freshRoot = document.createElement("div");
+        document.body.append(freshRoot);
+        const fresh = createReplayer(structuredClone(events), freshRoot);
+        fresh.pause(offset);
+        freshBodies.set(crossed, replayedBody(freshRoot));
+        fresh.destroy();
+        freshRoot.remove();
+      }
+      return freshBodies.get(crossed);
+    };
+
+    for (const offset of offsets) {
+      preview.seekToRecordingTime(firstEventTime + offset);
+      expect(replayedBody(root), `at offset ${offset}`).toBe(freshBody(offset));
+    }
+
+    expect(rowIndices(root.querySelector("iframe")?.contentDocument)).toEqual(["4"]);
+    // rrweb drops removes it re-casts after their node is gone; none were re-cast.
+    expect(removeCounts()).toEqual(recordedRemoveCounts);
+    // Only the first seek, the move back, and ticks that cross an event reach
+    // rrweb: at most every event once per pass, against 60+ ticks.
+    expect(CountingReplayer.pauseCalls).toBeLessThanOrEqual(2 * events.length + 2);
+    preview.destroy();
   });
 });
