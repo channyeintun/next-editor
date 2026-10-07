@@ -2,6 +2,12 @@ name = "next-editor-tube"
 main = "./worker/index.ts"
 compatibility_date = "2026-07-05"
 compatibility_flags = ["nodejs_compat"]
+# Every isolate start (the first request per colo after idle, each Durable
+# Object wake) parses the whole bundle, so ship it minified. Wrangler keeps
+# function names by default, and the uploaded source maps keep Workers Logs
+# stack traces pointing at the TypeScript.
+minify = true
+upload_source_maps = true
 # Deliberately no [alias] table. Self-aliases ("hono" = "hono") make Wrangler
 # resolve through Node's require.resolve, which bundles each package's CJS/node
 # build (jose on node:crypto, hono CJS, the whole lucide-react barrel) instead
