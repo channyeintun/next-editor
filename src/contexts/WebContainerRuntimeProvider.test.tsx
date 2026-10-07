@@ -7,6 +7,7 @@ import { WorkspaceProvider } from "./WorkspaceProvider";
 import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,
+  useWebContainerRuntimeOutput,
   useWebContainerRuntimeSaveWorkspace,
 } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions, useWorkspaceDirtyState } from "../hooks/useWorkspace";
@@ -681,6 +682,77 @@ describe("WebContainerRuntimeProvider runner control", () => {
     });
     expect(runners).toHaveLength(2);
     expect(runners[0]?.kill).toHaveBeenCalled();
+  });
+
+  // Output has a context of its own: the preview controller and the other
+  // metadata consumers must not re-render for each chunk a dev server prints.
+  it("streams runner output without re-rendering metadata consumers", async () => {
+    const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
+    const { instance } = createFakeInstance(fakeFs);
+    let writeRunnerOutput: (chunk: string) => void = () => {};
+    vi.mocked(instance.spawn).mockImplementation((async (_command: string, args: string[]) => {
+      const isRunner = args.join(" ").includes("pnpm dev");
+      return {
+        output: new ReadableStream<string>({
+          start(controller) {
+            if (isRunner) {
+              writeRunnerOutput = (chunk) => controller.enqueue(chunk);
+            } else {
+              controller.close();
+            }
+          },
+        }),
+        input: new WritableStream(),
+        exit: isRunner ? new Promise<number>(() => {}) : Promise.resolve(0),
+        kill: vi.fn<() => void>(),
+        resize: vi.fn<() => void>(),
+      } as unknown as WebContainerProcess;
+    }) as never);
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
+    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+
+    const probes: {
+      runtime: WebContainerRuntimeActions | null;
+      metadataRenders: number;
+      lastOutput: string | null;
+    } = { runtime: null, metadataRenders: 0, lastOutput: null };
+    function Capture() {
+      probes.runtime = useWebContainerRuntimeActions();
+      return null;
+    }
+    function MetadataConsumer() {
+      useWebContainerRuntimeMetadata();
+      probes.metadataRenders += 1;
+      return null;
+    }
+    function OutputConsumer() {
+      probes.lastOutput = useWebContainerRuntimeOutput().lastOutput;
+      return null;
+    }
+    render(
+      <WorkspaceProvider>
+        <WebContainerRuntimeProvider allowAmbientStart={false}>
+          <Capture />
+          <MetadataConsumer />
+          <OutputConsumer />
+        </WebContainerRuntimeProvider>
+      </WorkspaceProvider>,
+    );
+    await act(async () => {
+      await probes.runtime?.startRuntime();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    const metadataRendersBefore = probes.metadataRenders;
+
+    await act(async () => {
+      for (const line of ["one", "two", "three"]) {
+        writeRunnerOutput(`${line}\n`);
+        await vi.advanceTimersByTimeAsync(150);
+      }
+    });
+
+    expect(probes.lastOutput).toContain("one\ntwo\nthree\n");
+    expect(probes.metadataRenders).toBe(metadataRendersBefore);
   });
 });
 
