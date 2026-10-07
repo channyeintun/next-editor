@@ -53,6 +53,24 @@ export const EMPTY_WHITEBOARD_SCENE: WhiteboardSceneState = {
   isMaximized: false,
 };
 
+// Serialized form of elements on the *previous* side of a diff. That side is
+// always an immutable snapshot — snapshotWhiteboardDelta's clones in the store,
+// markCanvasSynced's copies, a parsed room projection; Excalidraw only ever gets
+// copies (WhiteboardPanel) — so an element's JSON never changes once computed.
+// Unchanged elements reach the JSON compare on every 100 ms capture flush, and
+// this serializes each of them once instead of once per flush. The live side
+// is never cached: Excalidraw mutates those objects in place.
+const previousElementJson = new WeakMap<WhiteboardElementJSON, string>();
+
+function previousElementJsonOf(element: WhiteboardElementJSON): string {
+  let json = previousElementJson.get(element);
+  if (json === undefined) {
+    json = JSON.stringify(element);
+    previousElementJson.set(element, json);
+  }
+  return json;
+}
+
 /**
  * Diffs the previous captured elements array against the current one and returns
  * only what changed: `upserts` for new/changed elements (matched by `id`,
@@ -60,6 +78,8 @@ export const EMPTY_WHITEBOARD_SCENE: WhiteboardSceneState = {
  * vanished from the array entirely.
  * Pure and O(elements) — the caller keeps `previousElements` itself (see the
  * whiteboard store's capture path) and passes the latest array on every change.
+ * `previousElements` must be snapshots nothing mutates afterwards (their JSON
+ * is cached by object); `elements` may be Excalidraw's live objects.
  */
 export function deriveWhiteboardDelta(
   previousElements: readonly WhiteboardElementJSON[],
@@ -78,9 +98,10 @@ export function deriveWhiteboardDelta(
     const previous = previousById.get(element.id);
     if (
       !previous ||
-      previous.version !== element.version ||
-      previous.versionNonce !== element.versionNonce ||
-      JSON.stringify(previous) !== JSON.stringify(element)
+      (previous !== element &&
+        (previous.version !== element.version ||
+          previous.versionNonce !== element.versionNonce ||
+          previousElementJsonOf(previous) !== JSON.stringify(element)))
     ) {
       upserts.push(element);
     }

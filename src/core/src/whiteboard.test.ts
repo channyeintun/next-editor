@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   applyWhiteboardEvent,
   areWhiteboardViewsEqual,
@@ -75,6 +75,30 @@ describe("deriveWhiteboardDelta", () => {
 
     expect(delta.upserts).toEqual([]);
     expect(delta.removedIds).toEqual([]);
+  });
+
+  it("upserts an element whose content changed under the same version and nonce", () => {
+    const previous = [makeElement({ id: "a", x: 0 })];
+    const next = [makeElement({ id: "a", x: 10 })];
+
+    expect(deriveWhiteboardDelta(previous, next).upserts).toEqual(next);
+    // Again, once the previous side's JSON is cached.
+    expect(deriveWhiteboardDelta(previous, next).upserts).toEqual(next);
+  });
+
+  it("serializes an unchanged previous snapshot once, however many flushes compare it", () => {
+    const previous = [makeElement({ id: "a", points: [[0, 0]] })];
+    const stringify = vi.spyOn(JSON, "stringify");
+    try {
+      for (let flush = 0; flush < 3; flush++) {
+        // Excalidraw's live object: equal content, a different object.
+        const live = [makeElement({ id: "a", points: [[0, 0]] })];
+        expect(deriveWhiteboardDelta(previous, live).upserts).toEqual([]);
+      }
+      expect(stringify.mock.calls.filter(([value]) => value === previous[0])).toHaveLength(1);
+    } finally {
+      stringify.mockRestore();
+    }
   });
 
   it("handles a new element appearing alongside unchanged ones", () => {
