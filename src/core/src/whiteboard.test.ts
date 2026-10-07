@@ -101,6 +101,16 @@ describe("deriveWhiteboardDelta", () => {
     }
   });
 
+  it("sees a same-version edit made in place to a live object it compared before", () => {
+    const previous = [makeElement({ id: "a", x: 0 })];
+    // Excalidraw hands the same live object to every flush and edits it in place.
+    const live = makeElement({ id: "a", x: 0 });
+
+    expect(deriveWhiteboardDelta(previous, [live]).upserts).toEqual([]);
+    live.x = 10;
+    expect(deriveWhiteboardDelta(previous, [live]).upserts).toEqual([live]);
+  });
+
   it("handles a new element appearing alongside unchanged ones", () => {
     const previous = [makeElement({ id: "a", version: 1 })];
     const next = [makeElement({ id: "a", version: 1 }), makeElement({ id: "c", version: 1 })];
