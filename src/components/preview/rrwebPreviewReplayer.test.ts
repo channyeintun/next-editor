@@ -52,6 +52,16 @@ function rrwebEvent(type: number, timestamp: number): eventWithTime {
   return { type, timestamp, data: {} } as eventWithTime;
 }
 
+// IncrementalSnapshot/MouseMove whose first position is sampled before the
+// event's own timestamp, as rrweb's recorder batches pointer positions.
+function mouseMoveEvent(timestamp: number, firstPositionOffset: number): eventWithTime {
+  return {
+    type: 3,
+    timestamp,
+    data: { source: 1, positions: [{ x: 0, y: 0, id: 1, timeOffset: firstPositionOffset }] },
+  } as eventWithTime;
+}
+
 describe("RrwebPreviewReplayer", () => {
   it("casts an event once the recording clock reaches its rebased time", async () => {
     // rrweb stamps the seed's Meta event before it serializes the page, so the
@@ -105,6 +115,66 @@ describe("RrwebPreviewReplayer", () => {
     expect(fakeRrweb.instances).toHaveLength(2);
     expect(root.childElementCount).toBe(1);
     expect(fakeRrweb.instances[1]?.pause).toHaveBeenLastCalledWith(0);
+
+    preview.destroy();
+  });
+
+  it("seeks rrweb only when the clock crosses an event, moves back, or first applies", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const preview = await createRrwebPreviewReplayer({
+      root,
+      events: [rrwebEvent(4, 100), rrwebEvent(2, 100), rrwebEvent(3, 500), rrwebEvent(3, 900)],
+    });
+    const pause = fakeRrweb.instances[0]?.pause;
+    const pausedOffsets = () => pause?.mock.calls.map(([offset]) => offset);
+
+    preview.seekToRecordingTime(150);
+    expect(pausedOffsets()).toEqual([50]);
+
+    // rrweb casts `timestamp < baseline`, so reaching an event's time is not crossing it.
+    for (const time of [200, 300, 500]) preview.seekToRecordingTime(time);
+    expect(pausedOffsets()).toEqual([50]);
+
+    preview.seekToRecordingTime(501);
+    preview.seekToRecordingTime(700);
+    expect(pausedOffsets()).toEqual([50, 401]);
+
+    preview.seekToRecordingTime(600);
+    preview.seekToRecordingTime(650);
+    expect(pausedOffsets()).toEqual([50, 401, 500]);
+
+    preview.seekToRecordingTime(901);
+    preview.seekToRecordingTime(5_000);
+    expect(pausedOffsets()).toEqual([50, 401, 500, 801]);
+
+    // Back to the start still restarts on a fresh Replayer that seeks at once,
+    // and the seed events at its first event time are crossed right after.
+    preview.seekToRecordingTime(100);
+    expect(fakeRrweb.instances[1]?.pause.mock.calls).toEqual([[0]]);
+    preview.seekToRecordingTime(120);
+    preview.seekToRecordingTime(140);
+    expect(fakeRrweb.instances[1]?.pause.mock.calls).toEqual([[0], [20]]);
+
+    preview.destroy();
+  });
+
+  it("gates a MouseMove on its raw timestamp, not its earlier first position", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const preview = await createRrwebPreviewReplayer({
+      root,
+      events: [rrwebEvent(4, 100), rrwebEvent(2, 100), mouseMoveEvent(600, -400)],
+    });
+    const pause = fakeRrweb.instances[0]?.pause;
+
+    preview.seekToRecordingTime(150);
+    // Past the first position (200) but not the event: rrweb would cast nothing yet.
+    preview.seekToRecordingTime(400);
+    expect(pause?.mock.calls).toEqual([[50]]);
+
+    preview.seekToRecordingTime(601);
+    expect(pause?.mock.calls).toEqual([[50], [501]]);
 
     preview.destroy();
   });

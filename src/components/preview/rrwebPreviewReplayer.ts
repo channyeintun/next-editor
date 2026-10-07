@@ -19,6 +19,23 @@ export function computeRrwebOffsetMs(currentTime: number, firstEventTime: number
   return Math.max(0, currentTime - firstEventTime);
 }
 
+// How many leading events of a time-sorted stream rrweb's `pause` casts at
+// `baselineTime`: it casts by the raw `event.timestamp < baselineTime`
+// (MouseMove's earlier `positions[0]` time only shifts its timer delay).
+function countEventsBefore(events: readonly eventWithTime[], baselineTime: number): number {
+  let low = 0;
+  let high = events.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (events[mid].timestamp < baselineTime) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
+}
+
 // Drives an rrweb `Replayer` from the recording timeline. The host timeline is
 // the single clock: every tick/seek calls `seekToRecordingTime`, which casts all
 // events up to that offset deterministically via `Replayer.pause` (a play that is
@@ -35,6 +52,9 @@ export class RrwebPreviewReplayer {
   // event and serialized the page.
   private readonly firstEventTime: number;
   private lastOffsetMs = 0;
+  // How many leading events the current Replayer's last `pause` cast; null
+  // until its first `pause`.
+  private castEventCount: number | null = null;
   private destroyed = false;
 
   constructor(
@@ -75,6 +95,7 @@ export class RrwebPreviewReplayer {
 
     this.root.replaceChildren();
     this.replayer = this.createReplayer();
+    this.castEventCount = null;
   }
 
   seekToRecordingTime(currentTime: number): void {
@@ -93,7 +114,21 @@ export class RrwebPreviewReplayer {
         this.restartReplayer();
       }
 
+      // Most ticks cross no event, and pause(offset) would still rebuild rrweb's
+      // queue of every remaining event (and re-cast the window behind the last
+      // MouseMove) to cast nothing new. So a forward move reaches rrweb only once
+      // it crosses an event; backward moves and a Replayer's first seek always do.
+      const baselineTime = this.firstEventTime + offsetMs;
+      if (this.castEventCount !== null && offsetMs >= this.lastOffsetMs) {
+        const nextEvent = this.events[this.castEventCount];
+        if (!nextEvent || nextEvent.timestamp >= baselineTime) {
+          this.lastOffsetMs = offsetMs;
+          return;
+        }
+      }
+
       this.replayer.pause(offsetMs);
+      this.castEventCount = countEventsBefore(this.events, baselineTime);
       this.lastOffsetMs = offsetMs;
     } catch {
       // A single failed cast must not break the timeline; the next tick retries.
