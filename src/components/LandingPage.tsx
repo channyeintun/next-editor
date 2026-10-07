@@ -15,6 +15,7 @@ import { Link } from "react-router";
 import Navbar from "./Navbar";
 import { useState, useEffect, useRef } from "react";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
+import { runWhenIdleAfterLoad } from "../utils/idle";
 import {
   DEMO_CONTROLS_SIZE_MESSAGE_TYPE,
   DEMO_EMBED_READY_MESSAGE_TYPE,
@@ -152,6 +153,8 @@ const DEMO_IFRAME_HEIGHT = 900;
 const DEFAULT_IFRAME_SCALE = 0.4513888888888889;
 const DEMO_URL = "/code?url=/lessons/introduction/introduction.ne";
 const DEMO_IFRAME_SRC = `${DEMO_URL}&readOnly=true&deferRuntimeAutostart=true&largeControls=true`;
+const DEMO_POSTER_SRC = "/lessons/introduction/thumbnail.webp";
+const DEMO_MOUNT_IDLE_TIMEOUT_MS = 2500;
 
 const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -166,6 +169,13 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
   // include the iframe; only a confirmed desktop browser is allowed to start it
   // after hydration.
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
+  // Even on desktop the demo frame waits for this page's load event and an idle
+  // moment (the lesson's thumbnail holds its box until then): it brings ~1.4 MB
+  // gz of editor code, the .ne and its audio, all on this page's main thread,
+  // and it can't start playing without a click inside it anyway. Not mounted on
+  // a click here either, since that gives the frame no user activation and its
+  // audio would need a second click.
+  const [isDemoMounted, setIsDemoMounted] = useState(false);
   const [frameworkIndex, setFrameworkIndex] = useState(0);
 
   // Reveal each section once it scrolls into view (replaces motion's whileInView).
@@ -179,6 +189,11 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
   useEffect(() => {
     setIsMobile(isMobileBrowser());
   }, []);
+
+  useEffect(() => {
+    if (isMobile !== false) return;
+    return runWhenIdleAfterLoad(() => setIsDemoMounted(true), DEMO_MOUNT_IDLE_TIMEOUT_MS);
+  }, [isMobile]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -424,28 +439,40 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                           </div>
                         </a>
                       ) : (
-                        <iframe
-                          ref={iframeRef}
-                          src={DEMO_IFRAME_SRC}
-                          className={`absolute border-0 ${
-                            isFullscreen ? "inset-0 size-full" : "origin-top-left"
-                          }`}
-                          // Fullscreen drops the fixed-size + scale treatment and lets
-                          // the editor lay out at the screen's native resolution, so
-                          // text stays crisp and the (regular-size) controls render 1:1.
-                          style={
-                            isFullscreen
-                              ? undefined
-                              : {
-                                  width: DEMO_IFRAME_WIDTH,
-                                  height: DEMO_IFRAME_HEIGHT,
-                                  left: offsetX,
-                                  top: offsetY,
-                                  transform: `scale(${scale})`,
-                                }
-                          }
-                          title="Next Editor Live Demo"
-                        />
+                        <>
+                          {/* Stays under the frame, which covers it once its own
+                              page has painted a background. */}
+                          <img
+                            src={DEMO_POSTER_SRC}
+                            alt=""
+                            decoding="async"
+                            className="absolute inset-0 size-full object-cover"
+                          />
+                          {isDemoMounted && (
+                            <iframe
+                              ref={iframeRef}
+                              src={DEMO_IFRAME_SRC}
+                              className={`absolute border-0 ${
+                                isFullscreen ? "inset-0 size-full" : "origin-top-left"
+                              }`}
+                              // Fullscreen drops the fixed-size + scale treatment and lets
+                              // the editor lay out at the screen's native resolution, so
+                              // text stays crisp and the (regular-size) controls render 1:1.
+                              style={
+                                isFullscreen
+                                  ? undefined
+                                  : {
+                                      width: DEMO_IFRAME_WIDTH,
+                                      height: DEMO_IFRAME_HEIGHT,
+                                      left: offsetX,
+                                      top: offsetY,
+                                      transform: `scale(${scale})`,
+                                    }
+                              }
+                              title="Next Editor Live Demo"
+                            />
+                          )}
+                        </>
                       )}
                       {isFullscreen && (
                         <button

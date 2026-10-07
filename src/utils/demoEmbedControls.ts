@@ -13,3 +13,17 @@ export const DEMO_CONTROLS_SIZE_MESSAGE_TYPE = "NEXT_EDITOR_DEMO_CONTROLS_SIZE";
  *  send a size message before anyone is listening; the announce lets the parent
  *  re-deliver the current size instead of losing it. */
 export const DEMO_EMBED_READY_MESSAGE_TYPE = "NEXT_EDITOR_DEMO_EMBED_READY";
+
+/** Whether this document is that embed: /code booted with the flags LandingPage's
+ *  DEMO_IFRAME_SRC sets, inside a same-origin parent. A cross-origin parent can't
+ *  be read, so a third-party frame never counts. */
+export function isLandingDemoFrame(): boolean {
+  if (window.parent === window) return false;
+  const search = new URLSearchParams(window.location.search);
+  if (search.get("readOnly") !== "true" || search.get("largeControls") !== "true") return false;
+  try {
+    return window.parent.location.origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}

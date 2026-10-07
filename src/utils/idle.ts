@@ -12,3 +12,23 @@ export function runWhenIdle(callback: () => void, timeoutMs: number): () => void
   const timer = window.setTimeout(callback, 1);
   return () => window.clearTimeout(timer);
 }
+
+/**
+ * runWhenIdle, but only after the window `load` event, so optional work never
+ * competes with the page's own fonts, images and scripts.
+ */
+export function runWhenIdleAfterLoad(callback: () => void, timeoutMs: number): () => void {
+  let cancelIdle: (() => void) | null = null;
+  const handleLoad = () => {
+    cancelIdle = runWhenIdle(callback, timeoutMs);
+  };
+  if (document.readyState === "complete") {
+    handleLoad();
+  } else {
+    window.addEventListener("load", handleLoad, { once: true });
+  }
+  return () => {
+    window.removeEventListener("load", handleLoad);
+    cancelIdle?.();
+  };
+}
