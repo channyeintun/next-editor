@@ -829,6 +829,37 @@ describe("useUrlLoader", () => {
     expect(extended?.frames).toHaveLength(60);
   });
 
+  it("hands over what decoded after the first load without waiting for 512 KB", async () => {
+    // ~250 KB, so a byte interval alone would hand nothing over before the end.
+    const bytes = await encodeRecordingToStream(largeRecording(60, 4000));
+    const download = gate();
+    const stream = streamingResponse(bytes, { holdAfter: 96 * 1024, resume: download.opened });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<() => Promise<Response>>(async () => stream.response),
+    );
+    const actions = makeActionsMock();
+    let pulledAtFirstDelta = -1;
+    vi.mocked(actions.appendRecordingDelta).mockImplementation(() => {
+      if (pulledAtFirstDelta < 0) pulledAtFirstDelta = stream.pulledBytes();
+    });
+    const { result } = renderLoader(actions);
+
+    const load = result.current.fetchNextEditorFile("https://example.com/slow.ne");
+    await waitFor(() => {
+      expect(actions.loadRecording).toHaveBeenCalledTimes(1);
+    });
+    // The download stalls, then its next chunk arrives well after the first load.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    download.open();
+    await load;
+
+    expect(pulledAtFirstDelta).toBeGreaterThan(0);
+    expect(pulledAtFirstDelta).toBeLessThan(bytes.length);
+    const [extended] = vi.mocked(actions.extendRecording).mock.calls.at(-1) ?? [];
+    expect(extended?.frames).toHaveLength(60);
+  });
+
   describe("when streaming fails", () => {
     it("reports a body that is not a .ne without downloading it again", async () => {
       const notARecording = new Uint8Array(256 * 1024).fill(0xff);
@@ -1087,7 +1118,8 @@ describe("useUrlLoader", () => {
   });
 
   // The progressive path end to end: one load, then deltas in stream order, then the final
-  // recording. At ~650 KB this lesson gets a delta at the 512 KB step and one at the end.
+  // recording. At ~650 KB this lesson gets at least a delta at the 512 KB step and one at
+  // the end.
   it("hands a long lesson over as a load, ordered deltas and a final extend", async () => {
     const bytes = await encodeRecordingToStream(largeRecording(220, 4000, { id: "long" }));
     const stream = streamingResponse(bytes);

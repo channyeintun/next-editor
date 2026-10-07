@@ -8,7 +8,13 @@ import {
 import { withResolvedMediaUrls } from "./recordingSiblingMedia";
 
 // Once the first playable prefix has loaded (tried on every chunk until then), hand newly
-// decoded records to the player roughly every this many downloaded bytes.
+// decoded records to the player at a chunk that arrives this long after the last hand-over.
+// The first load holds only cluster 0's frames; its workspace, runtime, cursor and preview
+// segments decode a few KB later, and a byte interval alone held them back until the next
+// 512 KB, the end of the stream for a short lesson. Appending a delta is one machine event,
+// so a few a second cost little.
+const STREAM_DELIVERY_INTERVAL_MS = 250;
+// ...and at least every this many downloaded bytes, however fast they arrive.
 const STREAM_DECODE_INTERVAL_BYTES = 512 * 1024;
 
 /** Where streamRecording hands a `.ne` over as it decodes (the URL loader's editor actions). */
@@ -44,6 +50,7 @@ export async function streamRecording(
   const reader = body.getReader();
   const streamReader = createStreamingRecordingReader();
   let lastDecodeLength = 0;
+  let lastDecodeAt = 0;
   let loadedOnce = false;
   let appliedFinalSnapshot = false;
   let latestRecording: Recording | null = null;
@@ -113,8 +120,14 @@ export async function streamRecording(
       streamReader.push(value);
 
       const downloaded = streamReader.byteLength();
-      if (!loadedOnce || downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES) {
+      const now = performance.now();
+      if (
+        !loadedOnce ||
+        now - lastDecodeAt >= STREAM_DELIVERY_INTERVAL_MS ||
+        downloaded - lastDecodeLength >= STREAM_DECODE_INTERVAL_BYTES
+      ) {
         lastDecodeLength = downloaded;
+        lastDecodeAt = now;
         await applyStreamed(false);
       }
     }
