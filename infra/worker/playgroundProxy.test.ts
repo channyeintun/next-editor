@@ -2,7 +2,11 @@ import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { UserRow } from "../db/types";
 import type { Env } from "./env";
-import { checkPlaygroundRateLimit, playgroundRateLimitKey } from "./playgroundProxy";
+import {
+  checkPlaygroundRateLimit,
+  playgroundRateLimitKey,
+  writeCachedValue,
+} from "./playgroundProxy";
 import { countingRateLimiter, refusingRateLimiter } from "./testing/rateLimit";
 
 const OPTIONS = { key: "user:user-1", label: "Test Playground" };
@@ -103,5 +107,62 @@ describe("playgroundRateLimitKey", () => {
     expect(await keyFor(null, "  ")).toBe("ip:unknown");
     expect(await keyFor(null, "2001:db8::1::2")).toBe("ip:unknown");
     expect(await keyFor(null, "2001:db8:zz::1")).toBe("ip:unknown");
+  });
+});
+
+describe("writeCachedValue", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function fakeKv(put: (key: string, value: string) => Promise<void>) {
+    return { put: vi.fn<(key: string, value: string) => Promise<void>>(put) };
+  }
+
+  it("awaits the write when there is no waitUntil", async () => {
+    let stored: string | undefined;
+    const cache = fakeKv(async (_key, value) => {
+      stored = value;
+    });
+
+    await writeCachedValue(cache as unknown as KVNamespace, "k", { ok: true }, 60, "Test");
+
+    expect(stored).toBe('{"ok":true}');
+    expect(cache.put).toHaveBeenCalledWith("k", '{"ok":true}', { expirationTtl: 60 });
+  });
+
+  it("hands the write to waitUntil instead of waiting for it", async () => {
+    let finishPut: () => void = () => {};
+    const cache = fakeKv(
+      () =>
+        new Promise<void>((resolve) => {
+          finishPut = resolve;
+        }),
+    );
+    const pending: Promise<unknown>[] = [];
+
+    // Resolves although the KV write has not finished.
+    await writeCachedValue(cache as unknown as KVNamespace, "k", { ok: true }, 60, "Test", (p) =>
+      pending.push(p),
+    );
+
+    expect(pending).toHaveLength(1);
+    finishPut();
+    await expect(pending[0]).resolves.toBeUndefined();
+  });
+
+  it("hands waitUntil a write that resolves even when the write fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const cache = fakeKv(async () => {
+      throw new Error("KV unavailable");
+    });
+    const pending: Promise<unknown>[] = [];
+
+    await writeCachedValue(cache as unknown as KVNamespace, "k", 1, 60, "Test", (p) =>
+      pending.push(p),
+    );
+
+    await expect(pending[0]).resolves.toBeUndefined();
+    expect(console.error).toHaveBeenCalledWith("Test cache write failed");
   });
 });

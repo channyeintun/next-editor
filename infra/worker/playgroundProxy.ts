@@ -3,6 +3,7 @@ import { sha256Hex } from "../../src/shared/sha256Hex";
 import { getCurrentUser } from "./auth/session";
 import type { Env } from "./env";
 import { readBodyWithLimit } from "./httpBody";
+import type { WaitUntil } from "./waitUntil";
 
 // Plumbing shared by the language playground proxy routes (routes/{go,kotlin,
 // rust,zig,haskell}Playground.ts), alongside httpBody.ts's readBodyWithLimit.
@@ -152,20 +153,33 @@ export async function readCachedValue<T>(
   }
 }
 
+/**
+ * Store a result for later runs of the same program. With the request's
+ * `waitUntil` (requestWaitUntil in waitUntil.ts) the result goes back to the
+ * learner without waiting for KV's central write, as in cache.ts's cached().
+ */
 export async function writeCachedValue(
   cache: KVNamespace | null,
   key: string,
   value: unknown,
   ttlSeconds: number,
   label: string,
+  waitUntil?: WaitUntil,
 ): Promise<void> {
   if (!cache) {
     return;
   }
-  try {
-    await cache.put(key, JSON.stringify(value), { expirationTtl: ttlSeconds });
-  } catch {
-    console.error(`${label} cache write failed`);
+  const write = (async () => {
+    try {
+      await cache.put(key, JSON.stringify(value), { expirationTtl: ttlSeconds });
+    } catch {
+      console.error(`${label} cache write failed`);
+    }
+  })();
+  if (waitUntil) {
+    waitUntil(write);
+  } else {
+    await write;
   }
 }
 

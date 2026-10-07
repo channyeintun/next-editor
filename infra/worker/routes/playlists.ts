@@ -24,6 +24,7 @@ import { generateUniqueSlug, isSlugUniqueViolation, MAX_SLUG_INSERT_ATTEMPTS } f
 import { requireUser } from "../auth/requireUser";
 import { metadataTextError } from "../../lessons/metadataLimits";
 import { cached, getCache, invalidateCache, playlistSlugKey } from "../cache";
+import { requestWaitUntil } from "../waitUntil";
 
 // Shorter than the lesson-slug 300s tier: a playlist's cache can also go
 // stale from a member lesson being unpublished/deleted elsewhere (in
@@ -257,6 +258,7 @@ playlistsRoute.get("/:slug", async (c) => {
       const result = await getPlaylistBySlug(c.env.DB, slug);
       return result ? playlistRowToPlaylist(result.playlist, result.lessons) : null;
     },
+    requestWaitUntil(c),
   );
   if (!playlist) {
     return c.json({ error: "not found" }, 404);

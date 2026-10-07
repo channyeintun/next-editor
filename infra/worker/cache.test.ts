@@ -96,6 +96,61 @@ describe("cached", () => {
 
     expect(result).toBe("fresh-value");
   });
+
+  it("with a waitUntil, returns without waiting for the PUT and hands it to waitUntil", async () => {
+    const fake = createFakeKv();
+    let finishPut: () => void = () => {};
+    fake.put.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishPut = resolve;
+        }),
+    );
+    const pending: Promise<unknown>[] = [];
+    const waitUntil = vi.fn<(promise: Promise<unknown>) => void>((promise) => {
+      pending.push(promise);
+    });
+
+    const result = await cached(
+      fake as unknown as KVNamespace,
+      "miss-key",
+      60,
+      async () => "fresh-value",
+      waitUntil,
+    );
+
+    expect(result).toBe("fresh-value");
+    expect(fake.put).toHaveBeenCalledWith("miss-key", JSON.stringify("fresh-value"), {
+      expirationTtl: 60,
+    });
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    let settled = false;
+    void pending[0].then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    finishPut();
+    await pending[0];
+    expect(settled).toBe(true);
+  });
+
+  it("hands waitUntil a write that resolves even when the PUT throws", async () => {
+    const fake = createFakeKv();
+    fake.put.mockRejectedValueOnce(new Error("KV unavailable"));
+    const pending: Promise<unknown>[] = [];
+
+    const result = await cached(
+      fake as unknown as KVNamespace,
+      "some-key",
+      60,
+      async () => "fresh-value",
+      (promise) => pending.push(promise),
+    );
+
+    expect(result).toBe("fresh-value");
+    await expect(pending[0]).resolves.toBeUndefined();
+  });
 });
 
 describe("invalidateCache", () => {

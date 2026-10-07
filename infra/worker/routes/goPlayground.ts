@@ -11,6 +11,7 @@ import {
   truncateOutput,
   writeCachedValue,
 } from "../playgroundProxy";
+import { requestWaitUntil } from "../waitUntil";
 import {
   type GoPlaygroundFormatResult,
   parseGoPlaygroundRunResult,
@@ -599,7 +600,14 @@ goPlaygroundRoute.post("/run", async (c) => {
   // Only successful and compiler-error responses are cached (plan §7.2);
   // other categories always re-run.
   if (result.status === "success" || result.status === "compile-error") {
-    await writeCachedValue(cache, cacheKey, result, CACHE_TTL_SECONDS, LOG_LABEL);
+    await writeCachedValue(
+      cache,
+      cacheKey,
+      result,
+      CACHE_TTL_SECONDS,
+      LOG_LABEL,
+      requestWaitUntil(c),
+    );
   }
 
   logRun({

@@ -11,6 +11,7 @@ import {
   validateSingleFileLessonRequest,
   writeCachedValue,
 } from "../playgroundProxy";
+import { requestWaitUntil } from "../waitUntil";
 import {
   parseZigPlaygroundFormatResult,
   parseZigPlaygroundRunResult,
@@ -414,7 +415,14 @@ zigPlaygroundRoute.post("/run", async (c) => {
   // Only deterministic outcomes are cached, mirroring the other playground
   // routes: success and compile-error re-serve; runtime errors always re-run.
   if (result.status === "success" || result.status === "compile-error") {
-    await writeCachedValue(cache, cacheKey, result, CACHE_TTL_SECONDS, LOG_LABEL);
+    await writeCachedValue(
+      cache,
+      cacheKey,
+      result,
+      CACHE_TTL_SECONDS,
+      LOG_LABEL,
+      requestWaitUntil(c),
+    );
   }
 
   logRun({
@@ -542,7 +550,14 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json({ error: normalized.error }, 422);
   }
 
-  await writeCachedValue(cache, cacheKey, normalized.result, CACHE_TTL_SECONDS, LOG_LABEL);
+  await writeCachedValue(
+    cache,
+    cacheKey,
+    normalized.result,
+    CACHE_TTL_SECONDS,
+    LOG_LABEL,
+    requestWaitUntil(c),
+  );
 
   logFormat({
     outcome: "success",

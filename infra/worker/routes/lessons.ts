@@ -20,6 +20,7 @@ import { cached, getCache, invalidateCache, lessonListKey, lessonSlugKey } from 
 import { findPublishedLessonBySlug } from "../lessonCatalog";
 import { isLessonId, LESSON_ID_PATTERN } from "../lessonIds";
 import { isLessonMediaFilename } from "../lessonMediaFiles";
+import { requestWaitUntil } from "../waitUntil";
 
 const DEFAULT_PAGE_SIZE = 12;
 // Short TTL: a newly published/edited lesson should show up in the public
@@ -100,6 +101,7 @@ lessonsRoute.get("/", async (c) => {
       const { rows, nextPage } = await listPublishedLessons(c.env.DB, page, DEFAULT_PAGE_SIZE);
       return rows.length > 0 ? { lessons: rows.map(lessonRowToLesson), nextPage } : null;
     },
+    requestWaitUntil(c),
   );
   return c.json(body ?? { lessons: [], nextPage: null });
 });
@@ -325,7 +327,7 @@ lessonsRoute.get("/mine", requireUser, async (c) => {
 // above "/mine" would answer /api/lessons/mine itself. (db/slug.ts never gives
 // a row the slug "mine" for the same reason.)
 lessonsRoute.get("/:slug", async (c) => {
-  const lesson = await findPublishedLessonBySlug(c.env, c.req.param("slug"));
+  const lesson = await findPublishedLessonBySlug(c.env, c.req.param("slug"), requestWaitUntil(c));
   if (!lesson) {
     return c.json({ error: "not found" }, 404);
   }

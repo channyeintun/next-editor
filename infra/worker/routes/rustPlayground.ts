@@ -11,6 +11,7 @@ import {
   validateSingleFileLessonRequest,
   writeCachedValue,
 } from "../playgroundProxy";
+import { requestWaitUntil } from "../waitUntil";
 import {
   parseRustPlaygroundRunResult,
   type RustPlaygroundFormatResult,
@@ -343,7 +344,14 @@ rustPlaygroundRoute.post("/run", async (c) => {
   // Only deterministic outcomes are cached, mirroring the other playground
   // routes: success and compile-error re-serve; runtime errors always re-run.
   if (result.status === "success" || result.status === "compile-error") {
-    await writeCachedValue(cache, cacheKey, result, CACHE_TTL_SECONDS, LOG_LABEL);
+    await writeCachedValue(
+      cache,
+      cacheKey,
+      result,
+      CACHE_TTL_SECONDS,
+      LOG_LABEL,
+      requestWaitUntil(c),
+    );
   }
 
   logRun({

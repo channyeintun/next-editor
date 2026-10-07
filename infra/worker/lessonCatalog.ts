@@ -4,6 +4,7 @@ import { getPublishedLessonBySlug } from "../db/queries";
 import { lessonRowToLesson } from "../db/types";
 import { cached, getCache, lessonSlugKey } from "./cache";
 import type { Env } from "./env";
+import type { WaitUntil } from "./waitUntil";
 
 // A newly published/edited lesson should appear on its detail page within
 // roughly this long. Both readers below share it, so the JSON API and the
@@ -21,14 +22,24 @@ const SEED_LESSONS = seedManifest.lessons as Lesson[];
 // A cache miss on a not-found slug is never populated: cached() does not store
 // a null, so every lookup of that slug re-queries D1. Fine here — 404s are
 // cheap and rare enough not to need their own cache path.
-export async function findPublishedLessonBySlug(env: Env, slug: string): Promise<Lesson | null> {
+export async function findPublishedLessonBySlug(
+  env: Env,
+  slug: string,
+  waitUntil?: WaitUntil,
+): Promise<Lesson | null> {
   const seeded = SEED_LESSONS.find((lesson) => lesson.slug === slug);
   if (seeded) {
     return seeded;
   }
 
-  return cached(getCache(env), lessonSlugKey(slug), SLUG_CACHE_TTL_SECONDS, async () => {
-    const row = await getPublishedLessonBySlug(env.DB, slug);
-    return row ? lessonRowToLesson(row) : null;
-  });
+  return cached(
+    getCache(env),
+    lessonSlugKey(slug),
+    SLUG_CACHE_TTL_SECONDS,
+    async () => {
+      const row = await getPublishedLessonBySlug(env.DB, slug);
+      return row ? lessonRowToLesson(row) : null;
+    },
+    waitUntil,
+  );
 }

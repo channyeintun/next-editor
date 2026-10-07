@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { WaitUntil } from "./waitUntil";
 
 // Bump this to invalidate every lesson/playlist catalog key minted below at
 // once (e.g. after changing the shape of a cached value) without touching TTLs
@@ -48,11 +49,17 @@ export function getCache(env: Env): KVNamespace | null {
 // Every KV call is wrapped so a missing/unreachable/rate-limited cache
 // degrades to calling `loader` directly rather than turning into a request
 // failure — cache availability must never be able to take the app down.
+//
+// Pass the request's `waitUntil` (requestWaitUntil in waitUntil.ts) so a miss
+// returns without waiting for the KV write, which goes to KV's central store
+// and measured 330–430 ms from Singapore. Nothing reads the entry before a
+// later request, and a write the runtime drops only costs that request a miss.
 export async function cached<T>(
   cache: KVNamespace | null,
   key: string,
   ttlSeconds: number,
   loader: () => Promise<T>,
+  waitUntil?: WaitUntil,
 ): Promise<T> {
   if (!cache) {
     return loader();
@@ -72,22 +79,29 @@ export async function cached<T>(
 
   const value = await loader();
 
-  try {
-    const serialized = JSON.stringify(value);
-    // `value === null` is skipped, not just `serialized === undefined`:
-    // JSON.stringify(null) is the string "null", so a not-found lookup used to
-    // pass this guard and write an entry — which the read above then rejects
-    // (`hit !== null`), so it could never be served. Every unauthenticated
-    // request for a nonexistent slug or an out-of-range page therefore minted a
-    // billable KV write, at an attacker-chosen key, that did nothing. Skipping
-    // it changes no behaviour: such an entry was never readable.
-    if (value !== null && serialized !== undefined) {
-      await cache.put(key, serialized, {
-        expirationTtl: Math.max(ttlSeconds, KV_MIN_EXPIRATION_TTL_SECONDS),
-      });
+  const write = (async () => {
+    try {
+      const serialized = JSON.stringify(value);
+      // `value === null` is skipped, not just `serialized === undefined`:
+      // JSON.stringify(null) is the string "null", so a not-found lookup used to
+      // pass this guard and write an entry — which the read above then rejects
+      // (`hit !== null`), so it could never be served. Every unauthenticated
+      // request for a nonexistent slug or an out-of-range page therefore minted a
+      // billable KV write, at an attacker-chosen key, that did nothing. Skipping
+      // it changes no behaviour: such an entry was never readable.
+      if (value !== null && serialized !== undefined) {
+        await cache.put(key, serialized, {
+          expirationTtl: Math.max(ttlSeconds, KV_MIN_EXPIRATION_TTL_SECONDS),
+        });
+      }
+    } catch (error) {
+      console.error("Cache write failed", { key }, error);
     }
-  } catch (error) {
-    console.error("Cache write failed", { key }, error);
+  })();
+  if (waitUntil) {
+    waitUntil(write);
+  } else {
+    await write;
   }
 
   return value;
