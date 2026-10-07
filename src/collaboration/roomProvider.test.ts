@@ -633,6 +633,63 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     provider.stop();
   });
 
+  it("merges edits queued behind an unacknowledged update, but resends a sent one unchanged", async () => {
+    const { sockets, factory } = socketRecorder();
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      batchWindowMs: 0,
+      random: () => 0,
+      webSocketFactory: factory,
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+    const text = provider.doc.getText("source");
+    const clientUpdates = (socket: FakeWebSocket) =>
+      sentFrames(socket).filter((frame) => frame.kind === "client-update");
+
+    text.insert(0, "a");
+    const inFlight = await nextClientUpdate(sockets[0]!);
+    // One batch window per keystroke: each queues its own entry behind "a".
+    for (const key of ["b", "c", "d"]) {
+      text.insert(text.length, key);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    sockets[0]!.close(1006, "network");
+    // Let the in-flight send settle its rejection before retrying.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await provider.retryNow();
+    await openAndSync(provider, sockets[1]!, new Y.Doc());
+
+    // The room may already hold "a": its retry must carry the same id and bytes.
+    const resent = await nextClientUpdate(sockets[1]!);
+    expect(resent.updateId).toBe(inFlight.updateId);
+    expect(resent.update).toEqual(inFlight.update);
+    sockets[1]!.message({
+      type: "document.ack",
+      updateId: resent.updateId,
+      streamId: "2-0",
+      duplicate: true,
+    });
+
+    await waitUntil(() => clientUpdates(sockets[1]!).length === 2);
+    const merged = await nextClientUpdate(sockets[1]!);
+    const server = new Y.Doc();
+    Y.applyUpdate(server, resent.update);
+    Y.applyUpdate(server, merged.update);
+    expect(server.getText("source").toString()).toBe("abcd");
+    sockets[1]!.message({
+      type: "document.ack",
+      updateId: merged.updateId,
+      streamId: "3-0",
+      duplicate: false,
+    });
+    await waitUntil(() => !provider.hasPendingUpdates);
+    expect(clientUpdates(sockets[1]!)).toHaveLength(2);
+    provider.stop();
+  });
+
   it("reconnects when the socket stops answering its heartbeat", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance", "Date"] });
     const { sockets, factory } = socketRecorder();

@@ -469,6 +469,33 @@ export class CollaborationRoomProvider {
     enqueueBatch();
   }
 
+  /**
+   * Folds the unsent entries queued behind the head into it before it is sent.
+   * The outbox is stop-and-wait, so each batch flushed while an update awaits
+   * its ack becomes its own entry; sent one per round trip, a writer who types
+   * faster than the RTT falls further behind with every key. Yjs updates merge
+   * losslessly and the room has never seen these updateIds. An entry that was
+   * sent keeps its updateId and bytes, so its retry stays idempotent.
+   */
+  private mergeUnsentOutboxHead(): void {
+    const head = this.outbox[0];
+    if (!head || head.firstSentAt !== undefined) return;
+    let count = 1;
+    let bytes = head.update.byteLength;
+    while (count < this.outbox.length && count < MAX_BATCH_UPDATE_COUNT) {
+      const next = this.outbox[count];
+      if (next.firstSentAt !== undefined) break;
+      if (bytes + next.update.byteLength > BATCH_MERGE_BUDGET_BYTES) break;
+      bytes += next.update.byteLength;
+      count += 1;
+    }
+    if (count === 1) return;
+    const update = Y.mergeUpdates(this.outbox.slice(0, count).map((entry) => entry.update));
+    // As in movePendingUpdatesToOutbox: a merge past the limit is sent unmerged.
+    if (update.byteLength > MAX_YJS_UPDATE_BYTES) return;
+    this.outbox.splice(0, count, { updateId: head.updateId, update, queuedAt: head.queuedAt });
+  }
+
   private async connectAttempt(attemptId: string): Promise<void> {
     try {
       const roomSession = await this.api.getRoom(this.roomId);
@@ -841,6 +868,7 @@ export class CollaborationRoomProvider {
     this.isPublishing = true;
     try {
       while (!this.isStopped && this.connectionState === "live" && this.outbox.length > 0) {
+        this.mergeUnsentOutboxHead();
         const pending = this.outbox[0];
         const sentAt = monotonicNow();
         const transport = "cloudflare-websocket";
