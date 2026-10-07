@@ -1,8 +1,14 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { runWhenIdleAfterLoad } from "@app/utils/idle";
 import { apiClient } from "../apiClient";
 import { useGoogleCredentialSignIn } from "./useAuth";
-import { loadGoogleIdentity } from "./googleIdentity";
+import { loadGoogleIdentity, type GoogleAccountsId } from "./googleIdentity";
+
+// The GSI script loads once the page has loaded and gone idle: it is ~101 KB
+// gz of third-party JS, and fetched at once it lands while a signed-out
+// gallery view is loading its thumbnails.
+const GSI_IDLE_TIMEOUT_MS = 2500;
 
 // Renders nothing itself — mounts Google One Tap / automatic sign-in, whose
 // prompt appears as browser-managed UI in the top corner. Only mounted while
@@ -21,7 +27,7 @@ export default function GoogleOneTap() {
   useEffect(() => {
     if (!clientId) return;
     let cancelled = false;
-    void loadGoogleIdentity().then((accountsId) => {
+    const showPrompt = (accountsId: GoogleAccountsId | null) => {
       if (cancelled || !accountsId) return;
       accountsId.initialize({
         client_id: clientId,
@@ -52,9 +58,13 @@ export default function GoogleOneTap() {
           }
         }
       });
-    });
+    };
+    const cancelIdle = runWhenIdleAfterLoad(() => {
+      void loadGoogleIdentity().then(showPrompt);
+    }, GSI_IDLE_TIMEOUT_MS);
     return () => {
       cancelled = true;
+      cancelIdle();
       window.google?.accounts?.id?.cancel();
     };
   }, [clientId, signInMutate]);
