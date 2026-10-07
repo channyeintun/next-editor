@@ -128,8 +128,12 @@ Bytes are served **through the Worker** at `/media/lessons/<id>/<file>` from the
 R2 binding (`env.BUCKET.get(key)`), with `Content-Type`, an ETag with
 `Cache-Control: public, max-age=0, must-revalidate` (an upload retry or an edit
 may replace a key, so a cached copy is revalidated, and a current one is answered
-with 304), and `Range` support for audio/video streaming. Serving through the
-Worker (rather than a public bucket domain) keeps media same-origin →
+with 304), and `Range` support for audio/video streaming. The two write-once
+key shapes, `slide-images/<sha256>` and timestamped
+`<id>-thumbnail-<timestamp>` images, are never rewritten, so they are sent as
+`public, max-age=31536000, immutable` and kept in the serving location's Cache
+API (`caches.default`), which answers repeat views without an R2 read. Serving
+through the Worker (rather than a public bucket domain) keeps media same-origin →
 COEP-clean and cache-friendly.
 
 D1 stores the **path** (`media/lessons/<id>/<id>.ne`, no leading slash), not the

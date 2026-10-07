@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
+import { requestWaitUntil } from "../waitUntil";
 
 // Mounted at /media in worker/index.ts. Serves R2 objects directly — the R2
 // key is exactly the wildcard tail (e.g. request "/media/lessons/l1/l1.ne" ->
@@ -51,6 +52,45 @@ const RENDERABLE_CONTENT_TYPES = new Set([
 // namespace added to this bucket later is private by default.
 const PUBLIC_KEY_PREFIXES = ["lessons/", "slide-images/"];
 
+// Keys whose bytes never change once written:
+// - slide-images/<sha256 of the source URL>: routes/slideImages.ts reuses a key
+//   that already exists and never writes it again.
+// - lessons/<id>/<id>-thumbnail-<ms>.<ext>: updateLessonThumbnail
+//   (infra/client/upload/uploadLesson.ts) uploads every replacement under a
+//   fresh timestamp instead of overwriting.
+// These are served as immutable and kept in this location's cache. Everything
+// else (.ne, audio, captions, the first upload's "<id>-thumbnail.<ext>") can be
+// replaced in place by an upload retry or an owner edit, so it must revalidate.
+const WRITE_ONCE_KEY_RE =
+  /^(?:slide-images\/[0-9a-f]{64}|lessons\/([\w-]+)\/\1-thumbnail-\d+\.(?:png|jpe?g|webp))$/;
+const WRITE_ONCE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
+// Write-once keys are served from this location's Cache API copy when it has
+// one, which skips the R2 read (~110-250 ms more than a cached file, measured
+// from Singapore). Only a plain or revalidating GET qualifies: cache.match()
+// answers If-None-Match itself, but would ignore If-Match/If-Unmodified-Since,
+// and Range is left to R2 below. The query string is dropped from the cache key
+// so it cannot multiply the entries. Null outside the Workers runtime (the
+// worker tests run in Node).
+function writeOnceEdgeCache(request: Request): { cache: Cache; key: string } | null {
+  if (
+    typeof caches === "undefined" ||
+    request.method !== "GET" ||
+    request.headers.has("range") ||
+    request.headers.has("if-match") ||
+    request.headers.has("if-unmodified-since")
+  ) {
+    return null;
+  }
+  const url = new URL(request.url);
+  return {
+    // Cast: the worker typecheck also loads lib.dom (through @types/jsdom),
+    // whose CacheStorage has no `default`.
+    cache: (caches as unknown as { default: Cache }).default,
+    key: `${url.origin}${url.pathname}`,
+  };
+}
+
 mediaRoute.get("/:key{.+}", async (c) => {
   const key = c.req.param("key");
   if (!key) {
@@ -58,6 +98,20 @@ mediaRoute.get("/:key{.+}", async (c) => {
   }
   if (!PUBLIC_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) {
     return c.json({ error: "not found" }, 404);
+  }
+
+  const writeOnce = WRITE_ONCE_KEY_RE.test(key);
+  const edge = writeOnce ? writeOnceEdgeCache(c.req.raw) : null;
+  if (edge) {
+    // A failing cache only costs the R2 read below, never the request.
+    try {
+      const hit = await edge.cache.match(new Request(edge.key, { headers: c.req.raw.headers }));
+      if (hit) {
+        return hit;
+      }
+    } catch (error) {
+      console.error("Media edge cache read failed", { key }, error);
+    }
   }
 
   // Handing R2 the request headers as `onlyIf` lets it evaluate the client's
@@ -102,10 +156,13 @@ mediaRoute.get("/:key{.+}", async (c) => {
   // Upload retries and owner edits may replace an existing key. Keep the ETag
   // available for validators, but require clients/CDNs to revalidate rather
   // than serving an obsolete recording, thumbnail, or companion track for a
-  // year. Content-Length is left to the runtime, which infers it correctly
-  // from the streamed body in the 200 and 206 branches below (verified against
-  // local Miniflare).
-  headers.set("cache-control", "public, max-age=0, must-revalidate");
+  // year — except for the write-once keys above, which never change. Content-
+  // Length is left to the runtime, which infers it correctly from the streamed
+  // body in the 200 and 206 branches below (verified against local Miniflare).
+  headers.set(
+    "cache-control",
+    writeOnce ? WRITE_ONCE_CACHE_CONTROL : "public, max-age=0, must-revalidate",
+  );
 
   if (!("body" in object)) {
     // A revalidation (If-None-Match / If-Modified-Since) that failed means the
@@ -128,7 +185,23 @@ mediaRoute.get("/:key{.+}", async (c) => {
     return new Response(object.body, { status: 206, headers });
   }
 
-  return new Response(object.body, { status: 200, headers });
+  const response = new Response(object.body, { status: 200, headers });
+  if (edge) {
+    const put = (async () => {
+      try {
+        await edge.cache.put(edge.key, response.clone());
+      } catch (error) {
+        console.error("Media edge cache write failed", { key }, error);
+      }
+    })();
+    const waitUntil = requestWaitUntil(c);
+    if (waitUntil) {
+      waitUntil(put);
+    } else {
+      await put;
+    }
+  }
+  return response;
 });
 
 // R2Range is declared as a discriminated union ({offset,length?} | {offset?,length}
