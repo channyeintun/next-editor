@@ -122,6 +122,18 @@ function lazyRoute(importer: () => Promise<{ default: ComponentType }>, routePat
   };
 }
 
+// Editor lazy-loads CodeEditor, and Monaco with it, so the shell can paint and
+// fetch the lesson without waiting for Monaco. Routes that render the Editor
+// start that import alongside their own chunk, so Monaco still downloads from
+// the start of the navigation, in parallel. A failed fetch is left to Editor's
+// own lazy import, which reports it.
+function withCodeEditorPrefetch<T>(importer: () => Promise<T>) {
+  return () => {
+    import("./components/CodeEditor").catch(() => {});
+    return importer();
+  };
+}
+
 function RouteErrorBoundary() {
   const error = useRouteError();
   const posthog = usePostHog();
@@ -219,7 +231,10 @@ export const router = createBrowserRouter([
   },
   {
     path: "/code",
-    lazy: lazyRoute(() => import("./components/CodeRoute"), "/code"),
+    lazy: lazyRoute(
+      withCodeEditorPrefetch(() => import("./components/CodeRoute")),
+      "/code",
+    ),
     HydrateFallback: EditorRouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
@@ -235,7 +250,10 @@ export const router = createBrowserRouter([
   // server beyond the standard app APIs (drafts still require sign-in).
   {
     path: "/studio",
-    lazy: lazyRoute(() => import("./studio/StudioRoute"), "/studio"),
+    lazy: lazyRoute(
+      withCodeEditorPrefetch(() => import("./studio/StudioRoute")),
+      "/studio",
+    ),
     HydrateFallback: RouteHydrateFallback,
     ErrorBoundary: RouteErrorBoundary,
   },
@@ -264,8 +282,12 @@ export const router = createBrowserRouter([
     // profiles (/learn/@username) — see LearnSlugRoute for why these can't
     // be split into two router-level routes.
     path: "/learn/:slug",
+    // Author profiles share this route and also start the CodeEditor import:
+    // a route's lazy() can't see the slug.
     lazy: lazyRoute(
-      () => import("@next-editor/tube").then((m) => ({ default: m.LearnSlugRoute })),
+      withCodeEditorPrefetch(() =>
+        import("@next-editor/tube").then((m) => ({ default: m.LearnSlugRoute })),
+      ),
       "/learn/:slug",
     ),
     HydrateFallback: LearnSlugHydrateFallback,

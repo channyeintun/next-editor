@@ -28,6 +28,7 @@ import {
 import type { TextEditEvent } from "../types/textEdit";
 import { collaborationTextForPath } from "../collaboration/collaborationTextForPath";
 import { canPublishCollaborationUpdate } from "../collaboration/protocol";
+import { trackCollaborationUndoOrigin } from "../collaboration/undo";
 import { resolveMonacoAwarenessSelections } from "../collaboration/monacoAwareness";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
 import {
@@ -80,6 +81,12 @@ import {
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { mayTakeFocus } from "./mayTakeFocus";
+
+// y-monaco transactions carry their MonacoBinding as the origin. Registered
+// here, at module load and so before any binding exists, because undo.ts must
+// not import y-monaco itself: that would put Monaco in the static closure of
+// everything that reaches CollaborationContext.
+trackCollaborationUndoOrigin(MonacoBinding);
 
 const Preview = lazy(() => import("./Preview"));
 // The other runner panels are thin clients in front of a Worker proxy, but this

@@ -8,7 +8,20 @@ import {
   projectCollaborationDocument,
   seedCollaborationProject,
 } from "./projectDocument";
-import { createCollaborationUndoManager } from "./undo";
+import { createCollaborationUndoManager, trackCollaborationUndoOrigin } from "./undo";
+
+// CodeEditor registers this at module load; undo.ts itself stays Monaco-free.
+trackCollaborationUndoOrigin(MonacoBinding);
+
+function seedEntryText() {
+  const project = createStarterHtmlCssWorkspace();
+  const doc = new Y.Doc();
+  seedCollaborationProject(doc, project);
+  const fileId = projectCollaborationDocument(doc).nodeIdByPath.get(project.entryFilePath);
+  const text = fileId ? getCollaborationTexts(doc).get(fileId) : undefined;
+  if (!text) throw new Error("collaboration text is missing");
+  return { doc, text, initial: project.files[project.entryFilePath].content };
+}
 
 describe("collaboration undo", () => {
   it("undoes local editor changes without capturing remote updates", () => {
@@ -47,5 +60,34 @@ describe("collaboration undo", () => {
 
     manager.destroy();
     doc.destroy();
+  });
+
+  it("tracks an origin registered after the manager was created", () => {
+    // A room can sync, and so create its manager, before the lazy CodeEditor
+    // module that registers MonacoBinding has evaluated.
+    const { doc, text, initial } = seedEntryText();
+    const manager = createCollaborationUndoManager(doc);
+    class LateOrigin {}
+    trackCollaborationUndoOrigin(LateOrigin);
+
+    doc.transact(() => text.insert(0, "late-"), new LateOrigin());
+    manager.undo();
+    expect(text.toString()).toBe(initial);
+
+    manager.destroy();
+    doc.destroy();
+  });
+
+  it("stops updating a manager once it is destroyed", () => {
+    const destroyedExplicitly = createCollaborationUndoManager(seedEntryText().doc);
+    destroyedExplicitly.destroy();
+    const { doc } = seedEntryText();
+    const destroyedWithDoc = createCollaborationUndoManager(doc);
+    doc.destroy();
+    class AfterDestroyOrigin {}
+    trackCollaborationUndoOrigin(AfterDestroyOrigin);
+
+    expect(destroyedExplicitly.trackedOrigins.has(AfterDestroyOrigin)).toBe(false);
+    expect(destroyedWithDoc.trackedOrigins.has(AfterDestroyOrigin)).toBe(false);
   });
 });
