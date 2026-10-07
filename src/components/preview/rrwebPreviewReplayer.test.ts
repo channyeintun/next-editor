@@ -7,6 +7,7 @@ import { computeRrwebOffsetMs, createRrwebPreviewReplayer } from "./rrwebPreview
 interface FakeReplayerInstance {
   pause: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
+  addEvent: ReturnType<typeof vi.fn>;
 }
 
 const fakeRrweb = vi.hoisted(() => ({
@@ -19,6 +20,7 @@ vi.mock("@rrweb/replay", () => ({
     readonly iframe = document.createElement("iframe");
     readonly pause = vi.fn<(offset?: number) => void>();
     readonly destroy = vi.fn<() => void>(() => this.wrapper.remove());
+    readonly addEvent = vi.fn<(event: eventWithTime) => void>();
 
     constructor(_events: unknown[], config: { root: HTMLElement }) {
       this.wrapper.append(this.iframe);
@@ -155,6 +157,38 @@ describe("RrwebPreviewReplayer", () => {
     preview.seekToRecordingTime(120);
     preview.seekToRecordingTime(140);
     expect(fakeRrweb.instances[1]?.pause.mock.calls).toEqual([[0], [20]]);
+
+    preview.destroy();
+  });
+
+  it("hands later events to the live Replayer and counts the ones it casts on arrival", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const preview = await createRrwebPreviewReplayer({
+      root,
+      events: [rrwebEvent(4, 100), rrwebEvent(2, 100), rrwebEvent(3, 500)],
+    });
+    const replayer = fakeRrweb.instances[0];
+    preview.seekToRecordingTime(600);
+    expect(replayer?.pause.mock.calls).toEqual([[500]]);
+
+    // Older than the last seek's baseline, so rrweb casts it as it is added.
+    const late = rrwebEvent(3, 550);
+    expect(preview.appendEvents([late])).toBe(true);
+    expect(replayer?.addEvent).toHaveBeenLastCalledWith(late);
+    preview.seekToRecordingTime(650);
+    expect(replayer?.pause.mock.calls).toEqual([[500]]);
+
+    // Ahead of it, so the seek that crosses it casts it.
+    expect(preview.appendEvents([rrwebEvent(3, 700)])).toBe(true);
+    preview.seekToRecordingTime(690);
+    preview.seekToRecordingTime(701);
+    expect(replayer?.pause.mock.calls).toEqual([[500], [601]]);
+
+    // Anything not after the stream's last event would replay out of order.
+    expect(preview.appendEvents([rrwebEvent(3, 700)])).toBe(false);
+    expect(replayer?.addEvent).toHaveBeenCalledTimes(2);
+    expect(fakeRrweb.instances).toHaveLength(1);
 
     preview.destroy();
   });

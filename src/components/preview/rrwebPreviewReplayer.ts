@@ -87,9 +87,10 @@ export class RrwebPreviewReplayer {
   // event and serialized the page.
   private readonly firstEventTime: number;
   private lastOffsetMs = 0;
-  // How many leading events the current Replayer's last `pause` cast; null
-  // until its first `pause`.
+  // How many leading events the current Replayer has cast, and the baseline its
+  // last `pause` cast them up to; the count is null until its first `pause`.
   private castEventCount: number | null = null;
+  private castBaselineTime = 0;
   private destroyed = false;
 
   constructor(
@@ -164,10 +165,35 @@ export class RrwebPreviewReplayer {
 
       this.replayer.pause(offsetMs);
       this.castEventCount = countEventsBefore(this.events, baselineTime);
+      this.castBaselineTime = baselineTime;
       this.lastOffsetMs = offsetMs;
     } catch {
       // A single failed cast must not break the timeline; the next tick retries.
     }
+  }
+
+  // Hands the Replayer events streamed in after it was built (already rebased
+  // like its own), instead of rebuilding it from the last FullSnapshot. Only
+  // events strictly after its last one are taken, so its stream stays exactly
+  // what a rebuild from the longer recording would replay; otherwise this adds
+  // nothing and returns false, and the caller rebuilds.
+  appendEvents(events: readonly eventWithTime[]): boolean {
+    const lastEvent = this.events.at(-1);
+    if (this.destroyed || (events[0] && lastEvent && events[0].timestamp <= lastEvent.timestamp)) {
+      return false;
+    }
+
+    for (const event of events) {
+      const replayEvent = withoutMouseMoveLookback(event);
+      this.events.push(replayEvent);
+      this.replayer.addEvent(replayEvent);
+    }
+    // rrweb casts an added event at once when it is older than its last
+    // seek's baseline, and otherwise when a later seek crosses it.
+    if (this.castEventCount !== null) {
+      this.castEventCount = countEventsBefore(this.events, this.castBaselineTime);
+    }
+    return true;
   }
 
   // The replay iframe fills the preview panel rather than rrweb's Meta-derived

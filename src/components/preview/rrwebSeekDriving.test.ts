@@ -146,59 +146,88 @@ class CountingReplayer extends Replayer {
   }
 }
 
+// Records a page that swaps its only row for the next one four times (a remove
+// and an add each), with a MouseMove just after each swap whose first position
+// was sampled before it, as rrweb's recorder batches pointer positions.
+async function recordRowSwaps(): Promise<eventWithTime[]> {
+  document.body.innerHTML = `<div id="timeline"><div class="row" data-index="0">post 0</div></div>`;
+
+  const recorded: PreviewRecordedEvent[] = [];
+  stopRecording = record({
+    emit: (event) => recorded.push(event as unknown as PreviewRecordedEvent),
+    slimDOMOptions: { script: true, comment: true },
+  });
+  await sleep(20);
+
+  const timeline = document.getElementById("timeline");
+  if (!timeline) {
+    throw new Error("missing #timeline");
+  }
+
+  for (let index = 1; index <= 4; index += 1) {
+    timeline.firstElementChild?.remove();
+    const row = document.createElement("div");
+    row.className = "row";
+    row.setAttribute("data-index", String(index));
+    row.textContent = `post ${index}`;
+    timeline.appendChild(row);
+    await sleep(40);
+  }
+  stopRecording?.();
+  stopRecording = undefined;
+
+  const swapTimes = recorded.filter((event) => event.type === 3).map((event) => event.timestamp);
+  return [
+    ...recorded,
+    ...swapTimes.map((timestamp) => ({
+      type: 3,
+      timestamp: timestamp + 5,
+      data: { source: 1, positions: [{ x: 1, y: 1, id: 1, timeOffset: -20 }] },
+    })),
+  ].sort((left, right) => left.timestamp - right.timestamp) as unknown as eventWithTime[];
+}
+
+const replayedBody = (container: HTMLElement) =>
+  container.querySelector("iframe")?.contentDocument?.body?.innerHTML;
+
+// The expected DOM at an offset: a fresh Replayer seeked straight there, which
+// only changes once the offset crosses another event.
+function freshBodies(events: eventWithTime[]): (offset: number) => string | undefined {
+  const bodies = new Map<number, string | undefined>();
+  return (offset) => {
+    const crossed = events.filter((event) => event.timestamp < events[0].timestamp + offset).length;
+    if (!bodies.has(crossed)) {
+      const freshRoot = document.createElement("div");
+      document.body.append(freshRoot);
+      const fresh = createReplayer(structuredClone(events), freshRoot);
+      fresh.pause(offset);
+      bodies.set(crossed, replayedBody(freshRoot));
+      fresh.destroy();
+      freshRoot.remove();
+    }
+    return bodies.get(crossed);
+  };
+}
+
+function mountReplayRoot(): HTMLElement {
+  const root = document.createElement("div");
+  document.body.append(root);
+  containers.push(root);
+  return root;
+}
+
 describe("rrweb preview replayer per-tick driving", () => {
   it("reaches the DOM of a fresh seek on every tick, through MouseMoves and a seek back", async () => {
-    document.body.innerHTML = `<div id="timeline"><div class="row" data-index="0">post 0</div></div>`;
-
-    const recorded: PreviewRecordedEvent[] = [];
-    stopRecording = record({
-      emit: (event) => recorded.push(event as unknown as PreviewRecordedEvent),
-      slimDOMOptions: { script: true, comment: true },
-    });
-    await sleep(20);
-
-    const timeline = document.getElementById("timeline");
-    if (!timeline) {
-      throw new Error("missing #timeline");
-    }
-
-    // Each frame swaps the only row for the next one (a remove and an add).
-    for (let index = 1; index <= 4; index += 1) {
-      timeline.firstElementChild?.remove();
-      const row = document.createElement("div");
-      row.className = "row";
-      row.setAttribute("data-index", String(index));
-      row.textContent = `post ${index}`;
-      timeline.appendChild(row);
-      await sleep(40);
-    }
-    stopRecording?.();
-    stopRecording = undefined;
-
-    // A MouseMove just after each swap whose first position was sampled before
-    // it, as rrweb's recorder batches pointer positions.
-    const swapTimes = recorded.filter((event) => event.type === 3).map((event) => event.timestamp);
-    const events = [
-      ...recorded,
-      ...swapTimes.map((timestamp) => ({
-        type: 3,
-        timestamp: timestamp + 5,
-        data: { source: 1, positions: [{ x: 1, y: 1, id: 1, timeOffset: -20 }] },
-      })),
-    ].sort((left, right) => left.timestamp - right.timestamp) as unknown as eventWithTime[];
+    const events = await recordRowSwaps();
     const removeCounts = () =>
       events.map((event) => (event.data as { removes?: unknown[] }).removes?.length);
     const recordedRemoveCounts = removeCounts();
 
-    const root = document.createElement("div");
-    document.body.append(root);
-    containers.push(root);
+    const root = mountReplayRoot();
     CountingReplayer.pauseCalls = 0;
     const preview = new RrwebPreviewReplayer({ root, events }, CountingReplayer);
     await sleep(5);
 
-    const replayedBody = (container: HTMLElement) =>
-      container.querySelector("iframe")?.contentDocument?.body?.innerHTML;
     const firstEventTime = events[0].timestamp;
     const endOffset = events[events.length - 1].timestamp - firstEventTime + 50;
     const midOffset = Math.round(endOffset / 2);
@@ -207,23 +236,7 @@ describe("rrweb preview replayer per-tick driving", () => {
     for (let offset = 4; offset <= endOffset; offset += 4) offsets.push(offset);
     for (let offset = midOffset; offset <= endOffset; offset += 4) offsets.push(offset);
 
-    // The expected DOM at an offset: a fresh Replayer seeked straight there,
-    // which only changes once the offset crosses another event.
-    const freshBodies = new Map<number, string | undefined>();
-    const freshBody = (offset: number) => {
-      const crossed = events.filter((event) => event.timestamp < firstEventTime + offset).length;
-      if (!freshBodies.has(crossed)) {
-        const freshRoot = document.createElement("div");
-        document.body.append(freshRoot);
-        const fresh = createReplayer(structuredClone(events), freshRoot);
-        fresh.pause(offset);
-        freshBodies.set(crossed, replayedBody(freshRoot));
-        fresh.destroy();
-        freshRoot.remove();
-      }
-      return freshBodies.get(crossed);
-    };
-
+    const freshBody = freshBodies(events);
     for (const offset of offsets) {
       preview.seekToRecordingTime(firstEventTime + offset);
       expect(replayedBody(root), `at offset ${offset}`).toBe(freshBody(offset));
@@ -235,6 +248,40 @@ describe("rrweb preview replayer per-tick driving", () => {
     // Only the first seek, the move back, and ticks that cross an event reach
     // rrweb: at most every event once per pass, against 60+ ticks.
     expect(CountingReplayer.pauseCalls).toBeLessThanOrEqual(2 * events.length + 2);
+    preview.destroy();
+  });
+
+  it("reaches the same DOM when the stream's tail is appended mid-playback", async () => {
+    const events = await recordRowSwaps();
+    // Split between two distinct times, as a streamed delta lands after the last
+    // event already built.
+    let split = Math.floor(events.length / 2);
+    while (events[split].timestamp === events[split - 1].timestamp) split += 1;
+    const head = events.slice(0, split);
+    const tail = events.slice(split);
+
+    const root = mountReplayRoot();
+    const preview = new RrwebPreviewReplayer({ root, events: head }, CountingReplayer);
+    await sleep(5);
+
+    const firstEventTime = events[0].timestamp;
+    const endOffset = events[events.length - 1].timestamp - firstEventTime + 50;
+    const freshBody = freshBodies(events);
+    let offset = 4;
+    for (; firstEventTime + offset <= tail[1].timestamp; offset += 4) {
+      preview.seekToRecordingTime(firstEventTime + offset);
+    }
+    // Playback ran past the first tail events before they arrived: rrweb casts
+    // those on arrival, and later ones as the clock crosses them.
+    expect(preview.appendEvents(structuredClone(tail))).toBe(true);
+    for (; offset <= endOffset; offset += 4) {
+      preview.seekToRecordingTime(firstEventTime + offset);
+      // rrweb adds events on a microtask.
+      await sleep(0);
+      expect(replayedBody(root), `at offset ${offset}`).toBe(freshBody(offset));
+    }
+
+    expect(rowIndices(root.querySelector("iframe")?.contentDocument)).toEqual(["4"]);
     preview.destroy();
   });
 });

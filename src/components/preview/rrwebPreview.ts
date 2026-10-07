@@ -39,20 +39,19 @@ export const PREVIEW_RRWEB_FORMAT_VERSION = 2;
 // segment that reached the host fastest; rebasing every event by it keeps each
 // one at (never after) its true recording time and preserves the raw rrweb
 // deltas between events, so replay follows when the preview actually changed.
+//
+// `lead` overrides that rebase, so events streamed in after a build can be
+// rebased exactly as the build's were (see getRrwebReplayLead).
 export function buildRrwebReplayEvents(
   initialDocuments: PreviewInitialDocument[],
   patchBatches: PreviewDomPatchBatch[],
+  lead = getRrwebReplayLead(initialDocuments, patchBatches),
 ): eventWithTime[] {
   const segments = [...initialDocuments, ...patchBatches].filter(
     (segment) => segment.events?.length,
   );
   if (segments.length === 0) {
     return [];
-  }
-
-  let lead = -Infinity;
-  for (const segment of segments) {
-    lead = Math.max(lead, segment.events![0].timestamp - segment.time);
   }
 
   // Copies: rrweb's Replayer writes `delay` onto the events it is given, and
@@ -66,6 +65,22 @@ export function buildRrwebReplayEvents(
   events.sort((left, right) => left.timestamp - right.timestamp);
 
   return events as unknown as eventWithTime[];
+}
+
+// The preview clock's lead over the recording clock that buildRrwebReplayEvents
+// rebases every event by: the largest over the segments that carry events, or
+// -Infinity when none does.
+export function getRrwebReplayLead(
+  initialDocuments: readonly PreviewInitialDocument[],
+  patchBatches: readonly PreviewDomPatchBatch[],
+): number {
+  let lead = -Infinity;
+  for (const segment of [...initialDocuments, ...patchBatches]) {
+    if (segment.events?.length) {
+      lead = Math.max(lead, segment.events[0].timestamp - segment.time);
+    }
+  }
+  return lead;
 }
 
 // True when a recording's preview can be replayed by rrweb: it has a seed (an

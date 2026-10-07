@@ -6,6 +6,8 @@ import type {
   ApiClientRequestTab,
   IframeInteractionEvent,
   PreviewActiveMode,
+  PreviewDomPatchBatch,
+  PreviewInitialDocument,
   PreviewPanelMode,
   PreviewSize,
   PreviewState,
@@ -13,7 +15,7 @@ import type {
 import { arePreviewSizesEqual } from "../../utils/equality";
 import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
-import { buildRrwebReplayEvents } from "./rrwebPreview";
+import { buildRrwebReplayEvents, getRrwebReplayLead } from "./rrwebPreview";
 import { createRrwebPreviewReplayer, type RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 interface UsePreviewPlaybackRegistrationOptions {
@@ -86,6 +88,20 @@ export function usePreviewPlaybackRegistration({
   // afterwards was silently dropped while playback moved on.
   const rrwebReplayBuiltInitialDocCountRef = useRef(0);
   const rrwebReplayBuiltPatchBatchCountRef = useRef(0);
+  // The last segments and the rebase lead the stream so far was built with: a
+  // stream that still starts with those segments and grew without raising the
+  // lead only appended events, which the live Replayer takes as they are.
+  const rrwebReplayBuiltLastInitialDocRef = useRef<PreviewInitialDocument | undefined>(undefined);
+  const rrwebReplayBuiltLastPatchBatchRef = useRef<PreviewDomPatchBatch | undefined>(undefined);
+  const rrwebReplayBuiltLeadRef = useRef(-Infinity);
+
+  const recordRrwebReplayBuild = (input: PreviewPatchReplayInput, lead: number) => {
+    rrwebReplayBuiltInitialDocCountRef.current = input.initialDocuments.length;
+    rrwebReplayBuiltPatchBatchCountRef.current = input.patchBatches.length;
+    rrwebReplayBuiltLastInitialDocRef.current = input.initialDocuments.at(-1);
+    rrwebReplayBuiltLastPatchBatchRef.current = input.patchBatches.at(-1);
+    rrwebReplayBuiltLeadRef.current = lead;
+  };
 
   // Destroys the current Replayer and invalidates a build still loading, so the
   // next apply builds afresh.
@@ -104,6 +120,35 @@ export function usePreviewPlaybackRegistration({
   useEffect(() => (isRrwebReplayActive ? disposeRrwebReplay : undefined), [isRrwebReplayActive]);
 
   useEffect(() => {
+    // Streamed growth that only appended events goes to the live Replayer;
+    // false means the stream changed some other way and needs a rebuild.
+    const appendRrwebReplayGrowth = (input: PreviewPatchReplayInput): boolean => {
+      const replayer = rrwebReplayerRef.current;
+      const builtDocCount = rrwebReplayBuiltInitialDocCountRef.current;
+      const builtBatchCount = rrwebReplayBuiltPatchBatchCountRef.current;
+      if (
+        !replayer ||
+        input.initialDocuments[builtDocCount - 1] !== rrwebReplayBuiltLastInitialDocRef.current ||
+        input.patchBatches[builtBatchCount - 1] !== rrwebReplayBuiltLastPatchBatchRef.current
+      ) {
+        return false;
+      }
+
+      const newDocuments = input.initialDocuments.slice(builtDocCount);
+      const newBatches = input.patchBatches.slice(builtBatchCount);
+      const lead = rrwebReplayBuiltLeadRef.current;
+      // A segment with a larger lead re-times every event already built.
+      if (
+        getRrwebReplayLead(newDocuments, newBatches) > lead ||
+        !replayer.appendEvents(buildRrwebReplayEvents(newDocuments, newBatches, lead))
+      ) {
+        return false;
+      }
+
+      recordRrwebReplayBuild(input, lead);
+      return true;
+    };
+
     const applyRrwebReplay = (input: PreviewPatchReplayInput) => {
       const container = replayContainerRef.current;
       if (!container) {
@@ -122,7 +167,7 @@ export function usePreviewPlaybackRegistration({
       const needsRebuild =
         rrwebReplayRecordingIdRef.current !== input.recordingId ||
         rrwebReplayContainerElRef.current !== container ||
-        streamGrew;
+        (streamGrew && !appendRrwebReplayGrowth(input));
 
       if (needsRebuild) {
         disposeRrwebReplay();
@@ -136,9 +181,9 @@ export function usePreviewPlaybackRegistration({
       rrwebReplayPendingTimeRef.current = input.currentTime;
 
       if (!rrwebReplayerRef.current && rrwebReplayLoadStateRef.current === "idle") {
-        const events = buildRrwebReplayEvents(input.initialDocuments, input.patchBatches);
-        rrwebReplayBuiltInitialDocCountRef.current = input.initialDocuments.length;
-        rrwebReplayBuiltPatchBatchCountRef.current = input.patchBatches.length;
+        const lead = getRrwebReplayLead(input.initialDocuments, input.patchBatches);
+        const events = buildRrwebReplayEvents(input.initialDocuments, input.patchBatches, lead);
+        recordRrwebReplayBuild(input, lead);
 
         // rrweb needs at least a Meta + FullSnapshot to build the document.
         if (events.length >= 2) {
