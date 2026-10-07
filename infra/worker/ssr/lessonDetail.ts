@@ -240,8 +240,28 @@ export function injectLessonDocument(
 
   return appendToHead(
     next,
-    `<script type="application/ld+json">${jsonLd}</script>\n    ${queryStateScript(slug, lesson)}`,
+    `${recordingPreloadLink(lesson)}\n    <script type="application/ld+json">${jsonLd}</script>\n    ${queryStateScript(slug, lesson)}`,
   );
+}
+
+/**
+ * Starts the lesson's `.ne` download with the document. The client only asks
+ * for it once the editor route's JS has loaded and the editor has mounted
+ * (useUrlLoader), so without this the download waits behind all of that.
+ *
+ * The preload is only reused if it matches the client's request:
+ * - the href is the URL LessonDetail builds, `/${lesson.ne}`;
+ * - `as="fetch"` with `crossorigin="anonymous"` gives it the same destination,
+ *   mode (cors) and credentials mode (same-origin) as the plain same-origin
+ *   `fetch(url, { signal })` in recordingFetch.ts.
+ *
+ * Chromium also reuses it when PostHog's tracing headers are added to that
+ * fetch (src/main.tsx), because Blink does not compare request headers when
+ * matching a preload. WebKit does, so Safari fetches the file again (a 304
+ * once the preload is in its HTTP cache) and gains nothing from this.
+ */
+function recordingPreloadLink(lesson: Lesson): string {
+  return `<link rel="preload" href="/${escapeAttribute(lesson.ne)}" as="fetch" crossorigin="anonymous" />`;
 }
 
 export function renderLessonDetailResponse(

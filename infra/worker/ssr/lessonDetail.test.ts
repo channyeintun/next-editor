@@ -146,6 +146,30 @@ describe("lesson detail SSR", () => {
     ).toBe("</script><img src=x onerror=alert(1)>");
   });
 
+  it("preloads the recording at the URL and with the mode the client fetches it", () => {
+    const document = injectLessonDocument(INDEX_HTML, CONTEXT);
+    const head = document.slice(0, document.indexOf("</head>"));
+
+    // LessonDetail loads `/${lesson.ne}` with a plain same-origin fetch():
+    // cors mode, same-origin credentials, which is what as="fetch" plus
+    // crossorigin="anonymous" asks for. Anything else is a second download.
+    expect(head).toContain(
+      '<link rel="preload" href="/media/lessons/abc/lesson.ne" as="fetch" crossorigin="anonymous" />',
+    );
+  });
+
+  it("escapes the recording path in the preload link", () => {
+    const document = injectLessonDocument(INDEX_HTML, {
+      ...CONTEXT,
+      lesson: { ...LESSON, ne: 'media/lessons/abc/"><script>alert(1)</script>.ne' },
+    });
+
+    expect(document).toContain(
+      'href="/media/lessons/abc/&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;.ne"',
+    );
+    expect(document).not.toContain("<script>alert(1)");
+  });
+
   it("describes the lesson as a Course for rich results", () => {
     const jsonLd = buildLessonJsonLd(LESSON, "https://nexteditor.dev", "https://nexteditor.dev/x");
 
@@ -212,6 +236,8 @@ describe("lesson detail SSR", () => {
 
     expect(response.status).toBe(404);
     expect(document).toContain('<meta name="robots" content="noindex,follow" />');
+    // No row, so no recording to preload.
+    expect(document).not.toContain('as="fetch"');
     // Still the SPA shell, so the client renders its own "Lesson not found".
     expect(document).toContain('<div id="root"></div>');
 
