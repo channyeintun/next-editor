@@ -1,5 +1,4 @@
 import { createStore } from "@xstate/store-react";
-import { runAgentLoop } from "./agentLoop";
 import { getAgentStore, type AgentWorkspaceScope } from "./agentStore";
 import { createChatRecorder, type ChatEventHandler } from "./chatRecording";
 import type { AgentModelId, ToolConfirmationRequest, ToolContext } from "./types";
@@ -226,6 +225,11 @@ async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
   const recordChatDelta = createChatRecorder(agentStore, options.handleChatEvent);
 
   try {
+    // agentLoop carries the OpenRouter SDK, the tools and the system prompt,
+    // which only a Send needs; a static import put them in every lesson's
+    // runtime dock. Inside the try, a failed chunk fetch is reported like any
+    // other failed run.
+    const { runAgentLoop } = await import("./agentLoop");
     await runAgentLoop({
       apiKey: options.apiKey,
       model: options.model,
