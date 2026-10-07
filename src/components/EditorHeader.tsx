@@ -432,7 +432,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
                     label="Take a Tour"
                     onClick={() => {
                       setIsMenuOpen(false);
-                      startTour({ force: true });
+                      void startTour({ force: true });
                     }}
                   />
                 </>

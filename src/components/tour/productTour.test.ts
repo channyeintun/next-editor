@@ -16,13 +16,13 @@ describe("product tour", () => {
     document.body.innerHTML = "";
   });
 
-  it("introduces live collaboration before workspace settings", () => {
+  it("introduces live collaboration before workspace settings", async () => {
     document.body.innerHTML = `
       <button data-tour="collaboration">Live</button>
       <button data-tour="settings">Settings</button>
     `;
 
-    startTour({ force: true });
+    await startTour({ force: true });
 
     const options = mocks.driver.mock.calls[0][0] as {
       steps: Array<{ element: string; popover?: { title?: string } }>;

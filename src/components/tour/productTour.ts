@@ -1,5 +1,4 @@
-import { driver, type DriveStep } from "driver.js";
-import "driver.js/dist/driver.css";
+import type { DriveStep } from "driver.js";
 
 const TOUR_SEEN_KEY = "next-editor.tour.v1.seen";
 
@@ -145,11 +144,16 @@ export function markTourSeen(): void {
   }
 }
 
-export function startTour({ force = false }: { force?: boolean } = {}): void {
+/**
+ * driver.js and its CSS load here, on demand: the auto-start skips read-only
+ * lessons and anyone who has seen the tour, so almost no editor load needs them.
+ */
+export async function startTour({ force = false }: { force?: boolean } = {}): Promise<void> {
   if (!force && hasSeenTour()) {
     return;
   }
 
+  const { driver } = await import("./driverWithStyles");
   const steps = buildTourSteps();
 
   if (steps.length === 0) {

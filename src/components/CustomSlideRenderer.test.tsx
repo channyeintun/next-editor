@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CustomSlideRenderer from "./CustomSlideRenderer";
 import { peekSlideImages, retainSlideImages } from "../utils/slideImageCache";
 import type { Slide } from "../types/slides";
@@ -51,22 +51,20 @@ describe("CustomSlideRenderer", () => {
     expect(srcDoc).not.toContain("javascript:");
   });
 
-  it("sanitizes raw HTML embedded in markdown", () => {
+  it("sanitizes raw HTML embedded in markdown", async () => {
     const slides = [markdownSlide("a", "# Title\n\n<img src=x onerror=alert(1)>")];
-    const { container } = render(
-      <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
-    );
-    const srcDoc = container.querySelector("iframe")?.srcdoc ?? "";
+    render(<CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />);
+    // MarkdownSlide is lazy, so its iframe mounts once the module resolves.
+    const srcDoc = (await screen.findByTitle("Markdown slide")).getAttribute("srcdoc") ?? "";
     expect(srcDoc).toContain("<h1>Title</h1>");
     expect(srcDoc).not.toContain("onerror=");
   });
 
-  it("renders markdown slide content as HTML", () => {
+  it("renders markdown slide content as HTML", async () => {
     const slides = [markdownSlide("a", "# Title\n\nBody text")];
-    const { container } = render(
-      <CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />,
-    );
-    const srcDoc = container.querySelector("iframe")?.srcdoc ?? "";
+    render(<CustomSlideRenderer slides={slides} currentSlideIndex={0} currentVerticalIndex={0} />);
+    // MarkdownSlide is lazy, so its iframe mounts once the module resolves.
+    const srcDoc = (await screen.findByTitle("Markdown slide")).getAttribute("srcdoc") ?? "";
     expect(srcDoc).toContain("<h1>Title</h1>");
     expect(srcDoc).toContain("<p>Body text</p>");
   });

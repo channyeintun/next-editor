@@ -32,7 +32,7 @@ export function useProductTourOnce({
     // run #2 short-circuits on the ref), so the tour would never auto-start.
     tourStartedRef.current = true;
     requestAnimationFrame(() => {
-      startTour();
+      void startTour();
     });
   }, [recordingLoading, loadError, readOnly]);
 }

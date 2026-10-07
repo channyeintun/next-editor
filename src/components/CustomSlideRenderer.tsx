@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { marked } from "marked";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { Slide } from "../types/slides";
 import { getSlideBackgroundImage } from "../config/slideBackgrounds";
 import { createSandboxedSlideDocument } from "../utils/sandboxedSlideDocument";
 import { inlinableSlideImageHrefs, retainSlideImages } from "../utils/slideImageCache";
 import GoogleSvgSlide from "./GoogleSvgSlide";
+
+// Only markdown slides need marked; lesson decks are google-svg. Until the
+// chunk arrives the slide shows its black frame, as it does while any slide's
+// iframe loads, and a buffered transition keeps the previous slide on screen
+// until the new iframe's onLoad either way.
+const MarkdownSlide = lazy(() => import("./MarkdownSlide"));
 
 interface CustomSlideRendererProps {
   slides: Slide[];
@@ -24,25 +29,6 @@ function RawHtmlSlide({ content, onLoad }: IsolatedSlideProps) {
       sandbox=""
       referrerPolicy="no-referrer"
       srcDoc={createSandboxedSlideDocument(content, "text/html")}
-      onLoad={onLoad}
-      className="size-full border-0 bg-black"
-      style={{ colorScheme: "dark" }}
-    />
-  );
-}
-
-function MarkdownSlide({ content, onLoad }: IsolatedSlideProps) {
-  const html = marked(content, { async: false });
-
-  return (
-    <iframe
-      title="Markdown slide"
-      sandbox=""
-      referrerPolicy="no-referrer"
-      srcDoc={createSandboxedSlideDocument(
-        `<main class="slide-markdown" style="box-sizing:border-box;width:100%;height:100%;padding:3rem;color:white">${html}</main>`,
-        "text/html",
-      )}
       onLoad={onLoad}
       className="size-full border-0 bg-black"
       style={{ colorScheme: "dark" }}
@@ -78,7 +64,9 @@ function SlideContent({
       style={backgroundImage ? { backgroundImage: `url(${backgroundImage})` } : undefined}
     >
       {slide.contentType === "markdown" ? (
-        <MarkdownSlide content={slide.content} onLoad={onLoad} />
+        <Suspense fallback={null}>
+          <MarkdownSlide content={slide.content} onLoad={onLoad} />
+        </Suspense>
       ) : (
         <RawHtmlSlide content={slide.content} onLoad={onLoad} />
       )}
