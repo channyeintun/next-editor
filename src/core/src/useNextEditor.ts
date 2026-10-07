@@ -76,12 +76,7 @@ const getPlaybackState = (state: EditorMachineSnapshot): "playing" | "paused" | 
 const getRunningSession = (state: EditorMachineSnapshot): RecordingSession | null =>
   state.matches("recording") ? state.context.session : null;
 
-/**
- * Every flag useNextEditorMetadata exposes, from one pass over the snapshot. The hook
- * compares the result with shallowEqual, so consumers re-render only when a field
- * changes, not on every TICK or captured frame.
- */
-export const selectNextEditorMetadata = (state: EditorMachineSnapshot) => {
+const computeNextEditorMetadata = (state: EditorMachineSnapshot) => {
   const playbackState = getPlaybackState(state);
   return {
     isRecording: state.matches("recording"),
@@ -93,6 +88,28 @@ export const selectNextEditorMetadata = (state: EditorMachineSnapshot) => {
     isReplayLoaded: state.matches("playback"),
     currentRecording: state.context.recording,
   };
+};
+
+// Two dozen mounted components select the metadata from each snapshot, every TICK, so
+// the first one computes it and the rest get that object. Weak, so a left-behind
+// snapshot does not keep its recording alive.
+const nextEditorMetadataBySnapshot = new WeakMap<
+  EditorMachineSnapshot,
+  ReturnType<typeof computeNextEditorMetadata>
+>();
+
+/**
+ * Every flag useNextEditorMetadata exposes, from one pass over the snapshot. The hook
+ * compares the result with shallowEqual, so consumers re-render only when a field
+ * changes, not on every TICK or captured frame. The same snapshot gives the same object.
+ */
+export const selectNextEditorMetadata = (state: EditorMachineSnapshot) => {
+  let metadata = nextEditorMetadataBySnapshot.get(state);
+  if (!metadata) {
+    metadata = computeNextEditorMetadata(state);
+    nextEditorMetadataBySnapshot.set(state, metadata);
+  }
+  return metadata;
 };
 
 /**

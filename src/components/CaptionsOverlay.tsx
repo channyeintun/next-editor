@@ -1,4 +1,4 @@
-import { useNextEditorMetadata, useLiveTime } from "../hooks/useNextEditorContext";
+import { useNextEditorMetadata, useLiveTimeValue } from "../hooks/useNextEditorContext";
 import { useCaptionStore } from "../hooks/useCaptionStore";
 import { selectCaptionTrack } from "../captions/captionTracks";
 import type { CaptionCue } from "../core/src/types";
@@ -25,14 +25,14 @@ function findActiveCue(cues: CaptionCue[], time: number): CaptionCue | null {
 const CaptionsOverlay: React.FC = () => {
   const { currentRecording } = useNextEditorMetadata();
   const { enabled, trackId, language } = useCaptionStore();
-  const currentTime = useLiveTime();
 
   const activeTrack = selectCaptionTrack(currentRecording?.captions, { trackId, language });
+  // The cue, not the time: the overlay re-renders when the caption changes, not every tick.
+  const activeCue = useLiveTimeValue((time) =>
+    enabled && activeTrack ? findActiveCue(activeTrack.cues, time) : null,
+  );
 
-  if (!enabled || !activeTrack) return null;
-
-  const activeCue = findActiveCue(activeTrack.cues, currentTime);
-  if (!activeCue) return null;
+  if (!enabled || !activeTrack || !activeCue) return null;
 
   const isRtl = RTL_LANGUAGES.has(activeTrack.language.split("-")[0]);
 

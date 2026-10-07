@@ -13,7 +13,7 @@ const clipboard = vi.hoisted(() => ({
 
 vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => actions,
-  useLiveTime: () => 65_000,
+  useLiveTimeValue: <T,>(derive: (currentTime: number) => T) => derive(65_000),
 }));
 vi.mock("../utils/clipboard", () => clipboard);
 

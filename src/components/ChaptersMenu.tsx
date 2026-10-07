@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { BookmarkPlus, Check, Link, ListVideo, Trash2 } from "lucide-react";
 import type { Recording, RecordingChapter } from "../core/src";
-import { useLiveTime, useNextEditorActions } from "../hooks/useNextEditorContext";
+import { useLiveTimeValue, useNextEditorActions } from "../hooks/useNextEditorContext";
 import {
   defaultChapterTitle,
   findChapterIndexAt,
@@ -31,8 +31,9 @@ export function CurrentChapterTitle({
   chapters: readonly RecordingChapter[];
   large?: boolean;
 }) {
-  const currentTime = useLiveTime();
-  const chapter = chapters[findChapterIndexAt(chapters, currentTime)];
+  // The chapter, not the time: the title re-renders at chapter boundaries, not every tick.
+  const chapterIndex = useLiveTimeValue((time) => findChapterIndexAt(chapters, time));
+  const chapter = chapters[chapterIndex];
   if (!chapter) return null;
   return (
     <span
@@ -62,10 +63,12 @@ export default function ChaptersMenu({
   buttonClassName: string;
 }) {
   const { seekTo, setChapters } = useNextEditorActions();
-  const currentTime = useLiveTime();
   const [open, setOpen] = useState(false);
   const [copiedTime, setCopiedTime] = useState<number | null>(null);
   const chapters = recording.chapters ?? [];
+  // Only the open menu shows the playhead (the exact time, the chapter playing), so a
+  // closed one does not re-render every tick.
+  const currentTime = useLiveTimeValue((time) => (open ? time : 0));
   const currentIndex = findChapterIndexAt(chapters, currentTime);
 
   useEffect(() => {

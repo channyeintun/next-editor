@@ -11,7 +11,7 @@ const player = vi.hoisted(() => ({
 
 vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorMetadata: () => ({ currentRecording: player.recording }),
-  useLiveTime: () => player.time,
+  useLiveTimeValue: <T,>(derive: (currentTime: number) => T) => derive(player.time),
 }));
 
 const burmese: CaptionTrack = {

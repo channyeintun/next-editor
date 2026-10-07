@@ -152,6 +152,12 @@ describe("selectNextEditorMetadata", () => {
     expect(metadata).toMatchObject(expected);
   });
 
+  // Two dozen components select it from each TICK's snapshot; only the first computes it.
+  it("gives every caller the same object for the same snapshot", () => {
+    const snapshot = playbackAt("playing", 400);
+    expect(selectNextEditorMetadata(snapshot)).toBe(selectNextEditorMetadata(snapshot));
+  });
+
   it("is shallow-equal across a currentTime-only change, so consumers skip the render", () => {
     const before = selectNextEditorMetadata(playbackAt("playing", 400));
     const after = selectNextEditorMetadata(playbackAt("playing", 416));

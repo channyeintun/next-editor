@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
   Scissors,
   FileMusic,
@@ -19,9 +19,10 @@ import {
   useNextEditorActions,
   useNextEditorMetadata,
   useNextEditorPlayback,
-  useLiveTime,
+  useLiveTimeValue,
   useRecordingElapsedMs,
 } from "../hooks/useNextEditorContext";
+import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
 import ChaptersMenu, { CurrentChapterTitle } from "./ChaptersMenu";
 import type { CaptionCue, RecordingChapter } from "../core/src/types";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
@@ -34,7 +35,7 @@ import PlaybackSpeedVolume from "./mediaControls/PlaybackSpeedVolume";
 import PlayIcon from "./icon/Play";
 import PauseIcon from "./icon/Pause";
 import SettingIcon from "./icon/Setting";
-import ProgressBar from "./ProgressBar";
+import ProgressBar, { LIVE_PROGRESS_VARIABLE } from "./ProgressBar";
 import Switch from "./Switch";
 import type { Recording } from "../core/src";
 import {
@@ -111,6 +112,9 @@ async function parseCaptionFile(file: File): Promise<ParsedCaptionFile> {
   return { cues, language: inferLanguageFromFilename(file.name) ?? "en" };
 }
 
+const toProgressPercent = (currentTime: number, duration: number) =>
+  duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
+
 const PlaybackProgress = ({
   progressDuration,
   onSeek,
@@ -122,15 +126,38 @@ const PlaybackProgress = ({
   chapters?: readonly RecordingChapter[];
   large?: boolean;
 }) => {
-  const currentTime = useLiveTime();
+  const editorActor = NextEditorActorContext.useActorRef();
+  const liveProgressRef = useRef<HTMLDivElement>(null);
+  // The bar reads the time in whole seconds; the fill and thumb follow every tick through
+  // a CSS variable written here, without a render per tick (as the cursor overlay moves).
+  const currentTime = useLiveTimeValue((time) => Math.floor(time / 1000) * 1000);
+
+  useLayoutEffect(() => {
+    const element = liveProgressRef.current;
+    if (!element) return;
+    let shown = "";
+    const show = (time: number) => {
+      const next = `${Math.max(0, Math.min(toProgressPercent(time, progressDuration), 100))}%`;
+      if (next === shown) return;
+      shown = next;
+      element.style.setProperty(LIVE_PROGRESS_VARIABLE, next);
+    };
+    show(editorActor.getSnapshot().context.timeline.currentTime);
+    const subscription = editorActor.subscribe((snapshot) =>
+      show(snapshot.context.timeline.currentTime),
+    );
+    return () => subscription.unsubscribe();
+  }, [editorActor, progressDuration]);
+
   return (
     <div
+      ref={liveProgressRef}
       className={`flex items-center pointer-events-auto ${
         large ? "flex-1 max-w-[75%] ml-1 mr-auto" : "flex-1 mx-1"
       }`}
     >
       <ProgressBar
-        progress={progressDuration > 0 ? Math.min((currentTime / progressDuration) * 100, 100) : 0}
+        progress={toProgressPercent(currentTime, progressDuration)}
         duration={progressDuration}
         currentTime={currentTime}
         onSeek={onSeek}
@@ -158,14 +185,15 @@ const PlaybackTimer = ({
   progressDuration: number;
   large?: boolean;
 }) => {
-  const currentTime = useLiveTime();
+  // The timer shows whole seconds, so it re-renders once a second rather than every tick.
+  const playbackSeconds = useLiveTimeValue((currentTime) =>
+    Math.floor(
+      (currentRecording ? Math.max(0, progressDuration - currentTime) : currentTime) / 1000,
+    ),
+  );
   // The take's recorded time, which stands still while it is paused.
   const recordingTime = useRecordingElapsedMs();
-  const displayTime = isRecording
-    ? recordingTime
-    : currentRecording
-      ? Math.max(0, progressDuration - currentTime)
-      : currentTime;
+  const displayTime = isRecording ? recordingTime : playbackSeconds * 1000;
 
   return (
     <span

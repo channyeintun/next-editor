@@ -55,6 +55,13 @@ export interface ProgressBarProps {
 }
 
 /**
+ * Set on an ancestor, this CSS variable places the fill and thumb instead of `progress`
+ * (as a percentage, e.g. "42%"), so a player can move them every frame without
+ * re-rendering the bar. A drag still shows where the pointer is.
+ */
+export const LIVE_PROGRESS_VARIABLE = "--next-editor-live-progress";
+
+/**
  * Custom progress bar component that matches the demo functionality
  * Replaces input type=range which has display issues
  */
@@ -140,7 +147,12 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   };
 
   // Use drag progress while dragging, otherwise use actual progress
-  const displayProgress = isDragging && dragProgress !== null ? dragProgress : progress;
+  const isShowingDrag = isDragging && dragProgress !== null;
+  const displayProgress = isShowingDrag ? dragProgress : progress;
+  const progressPercent = `${Math.max(0, Math.min(displayProgress, 100))}%`;
+  const position = isShowingDrag
+    ? progressPercent
+    : `var(${LIVE_PROGRESS_VARIABLE}, ${progressPercent})`;
 
   const containerStyle: React.CSSProperties = {
     width,
@@ -168,7 +180,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   `;
 
   const progressStyle: React.CSSProperties = {
-    width: `${Math.max(0, Math.min(displayProgress, 100))}%`,
+    width: position,
     height: "100%",
     backgroundColor: progressColor,
     borderRadius: "inherit",
@@ -177,7 +189,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   const thumbStyle: React.CSSProperties = {
     position: "absolute",
     top: "50%",
-    left: `${Math.max(0, Math.min(displayProgress, 100))}%`,
+    left: position,
     width: "12px",
     height: "12px",
     backgroundColor: progressColor,

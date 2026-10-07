@@ -68,6 +68,14 @@ export const useLiveTime = () => {
 };
 
 /**
+ * A value derived from the live playback time, for a component that shows less than the
+ * exact time: whole seconds, the current chapter or caption. It re-renders only when that
+ * value changes, not on every tick like `useLiveTime`.
+ */
+export const useLiveTimeValue = <T>(derive: (currentTime: number) => T): T =>
+  NextEditorActorContext.useSelector((state) => derive(selectLiveTime(state)));
+
+/**
  * The running take's recorded time in ms, refreshed every `intervalMs` while it runs.
  * It stands still while the take is paused, and is 0 outside a take.
  */

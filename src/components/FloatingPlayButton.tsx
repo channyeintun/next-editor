@@ -2,7 +2,7 @@ import { useSearchParams } from "react-router";
 import {
   useNextEditorActions,
   useNextEditorMetadata,
-  useLiveTime,
+  useLiveTimeValue,
 } from "../hooks/useNextEditorContext";
 import { parseTimeParameter } from "../core/src/utils/chapters";
 import "../App.css";
@@ -15,7 +15,6 @@ import "../App.css";
 const FloatingPlayButton = () => {
   const { play } = useNextEditorActions();
   const { currentRecording, isPlaying, isRecording } = useNextEditorMetadata();
-  const currentTime = useLiveTime();
 
   // A link to a moment (?t=) opens the lesson there, which is its start as far as this
   // button is concerned.
@@ -23,7 +22,10 @@ const FloatingPlayButton = () => {
   const linkStart = currentRecording
     ? Math.min(parseTimeParameter(searchParams.get("t")) ?? 0, currentRecording.duration)
     : 0;
-  const atStart = currentTime === 0 || Math.abs(currentTime - linkStart) < 1;
+  // Whether, not when: the button re-renders as the playhead leaves the start, not every tick.
+  const atStart = useLiveTimeValue(
+    (currentTime) => currentTime === 0 || Math.abs(currentTime - linkStart) < 1,
+  );
 
   // Only show when there's a recording loaded, not currently playing or recording, and at its start
   const shouldShow = currentRecording && !isPlaying && !isRecording && atStart;
