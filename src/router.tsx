@@ -1,12 +1,12 @@
 import { useEffect, type ComponentType } from "react";
 import { createBrowserRouter, isRouteErrorResponse, useParams, useRouteError } from "react-router";
-import { usePostHog } from "@posthog/react";
 import Breadcrumb from "./components/Breadcrumb";
 import EditorShellSkeleton from "./components/EditorShellSkeleton";
 import LessonGallerySkeleton from "./components/LessonGallerySkeleton";
 import LoadingSpinner from "./components/LoadingSpinner";
 import LandingPageRoute from "./components/LandingPageRoute";
 import { queryClient } from "./queryClient";
+import { analytics } from "./utils/analytics";
 import { lessonTitleFromSlug } from "./utils/lessonSlug";
 import { useEmbedded } from "./utils/embed";
 
@@ -152,16 +152,15 @@ function prefetchLessonGallery() {
 
 function RouteErrorBoundary() {
   const error = useRouteError();
-  const posthog = usePostHog();
   const dynamicImportError = isDynamicImportError(error);
 
   // In an effect, not during render: StrictMode double-invokes render and any
   // re-render of the boundary would re-report the same error.
   useEffect(() => {
     if (!dynamicImportError) {
-      posthog?.captureException(error);
+      analytics.captureException(error);
     }
-  }, [error, dynamicImportError, posthog]);
+  }, [error, dynamicImportError]);
 
   const title = dynamicImportError ? "App update required" : "Unexpected application error";
   const description = dynamicImportError

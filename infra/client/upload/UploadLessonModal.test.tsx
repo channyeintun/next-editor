@@ -39,8 +39,6 @@ vi.mock("./useUploadLesson", () => ({
   formatDuration: () => "0:01",
 }));
 
-vi.mock("@posthog/react", () => ({ usePostHog: () => undefined }));
-
 vi.mock("@app/storage/RecordingStorage", () => ({
   createRecordingStorage: () => ({ save: signIn.saveRecording }),
 }));

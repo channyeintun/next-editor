@@ -112,7 +112,7 @@ function ApiKeySection({
       <p className="text-sm font-medium text-slate-100">API key</p>
       {/* ph-no-capture blocks this field from PostHog session replays so the
           API key is never recorded, independent of the global maskAllInputs
-          setting (see posthog init in src/main.tsx). */}
+          setting (see posthog init in src/utils/posthogClient.ts). */}
       <input
         type="password"
         value={keyDraft}

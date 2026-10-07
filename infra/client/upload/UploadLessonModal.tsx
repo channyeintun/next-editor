@@ -3,6 +3,7 @@ import axios from "axios";
 import { Captions, ImagePlus, X } from "lucide-react";
 import type { CaptionCue, Recording } from "@app/core/src";
 import ModalShell from "@app/components/ModalShell";
+import { analytics } from "@app/utils/analytics";
 import { copyTextToClipboard } from "@app/utils/clipboard";
 import { createRecordingStorage } from "@app/storage/RecordingStorage";
 import { useAuth, signInUrl } from "../auth/useAuth";
@@ -17,7 +18,6 @@ import {
   metadataTextError,
 } from "../../lessons/metadataLimits";
 import GoogleIcon from "@app/components/icon/Google";
-import { usePostHog } from "@posthog/react";
 
 export interface UploadLessonModalProps {
   recording: Recording;
@@ -72,7 +72,6 @@ export default function UploadLessonModal({
   initialDescription,
   initialTags,
 }: UploadLessonModalProps) {
-  const posthog = usePostHog();
   const { isSignedIn, isLoading: authLoading } = useAuth();
   const [title, setTitle] = useState(initialTitle ?? defaultTitle(recording.createdAt));
   const [description, setDescription] = useState(initialDescription ?? "");
@@ -136,7 +135,7 @@ export default function UploadLessonModal({
   };
 
   const handleSignIn = async () => {
-    posthog?.capture("sign_in_initiated", { trigger: "upload_modal" });
+    analytics.capture("sign_in_initiated", { trigger: "upload_modal" });
     await redirectToSignIn();
   };
 
@@ -294,7 +293,7 @@ export default function UploadLessonModal({
       });
       setUploadResult(result);
       onUploaded?.();
-      posthog?.capture("lesson_uploaded", {
+      analytics.capture("lesson_uploaded", {
         has_thumbnail: !!(thumbnailFile || useDefaultThumbnail),
         has_description: !!description.trim(),
         tag_count: tags.length,
@@ -321,7 +320,7 @@ export default function UploadLessonModal({
   const handlePublish = async () => {
     if (!uploadResult) return;
     await publish.mutateAsync(uploadResult.id);
-    posthog?.capture("lesson_published", { lesson_id: uploadResult.id });
+    analytics.capture("lesson_published", { lesson_id: uploadResult.id });
     onClose();
   };
 

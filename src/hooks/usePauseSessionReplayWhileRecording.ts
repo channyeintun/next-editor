@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { usePostHog } from "@posthog/react";
+import { analytics } from "../utils/analytics";
 
 /**
  * PostHog session replay's DOM observer competes for CPU with lesson capture
@@ -7,15 +7,13 @@ import { usePostHog } from "@posthog/react";
  * actively recording and resume when they stop.
  */
 export function usePauseSessionReplayWhileRecording(isRecording: boolean): void {
-  const posthog = usePostHog();
-
   useEffect(() => {
     if (!isRecording) {
       return;
     }
-    posthog?.stopSessionRecording();
+    analytics.stopSessionRecording();
     return () => {
-      posthog?.startSessionRecording();
+      analytics.startSessionRecording();
     };
-  }, [isRecording, posthog]);
+  }, [isRecording]);
 }

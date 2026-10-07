@@ -11,7 +11,6 @@ import {
   type ReactNode,
 } from "react";
 import { useSearchParams } from "react-router";
-import { usePostHog } from "@posthog/react";
 import * as Y from "yjs";
 import {
   closeCollaborationRoom,
@@ -58,6 +57,7 @@ import {
   scheduleCollaborationAwarenessFlush,
 } from "../collaboration/followLifecycle";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
+import { analytics } from "../utils/analytics";
 import { areCollaborationSurfacesEqual, editorSurfaceOn } from "../collaboration/awarenessSurface";
 import { messageFromError } from "../collaboration/errorMessage";
 import { stopProviderAfterBestEffortFlush } from "../collaboration/providerShutdown";
@@ -197,9 +197,6 @@ const EMPTY_TEACHING_PROJECTION: CollaborationTeachingProjection = {
 };
 
 export function CollaborationProvider({ children }: { children: ReactNode }) {
-  const posthog = usePostHog();
-  const posthogRef = useRef(posthog);
-  posthogRef.current = posthog;
   const baseActions = useWorkspaceActions();
   // Null where no runtime is mounted, as in tests of this provider alone.
   const runtimeActions = useContext(WebContainerRuntimeActionsContext);
@@ -285,7 +282,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     followedSurfaceKindRef.current = null;
     providerRef.current?.setAwarenessPublicationSuppressed(applyingFollowDepthRef.current > 0);
     setFollowedParticipantKey(null);
-    posthogRef.current?.capture("collaboration_follow_stopped", { reason });
+    analytics.capture("collaboration_follow_stopped", { reason });
   }, []);
 
   const queueLocalTextEdit = useCallback(
@@ -1003,9 +1000,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       followedParticipantKeyRef.current = key;
       current.setAwarenessPublicationSuppressed(true);
       setFollowedParticipantKey(key);
-      posthog?.capture("collaboration_follow_started");
+      analytics.capture("collaboration_follow_started");
     },
-    [ownParticipantKey, participantsBySession, posthog, stopFollowing],
+    [ownParticipantKey, participantsBySession, stopFollowing],
   );
 
   const runFollowApplication = useCallback((application: () => void) => {
@@ -1153,8 +1150,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
     if (followedSurfaceKindRef.current === surfaceKind) return;
     followedSurfaceKindRef.current = surfaceKind;
-    posthog?.capture("collaboration_follow_surface_changed", { surface: surfaceKind });
-  }, [followedParticipant?.surface.kind, posthog]);
+    analytics.capture("collaboration_follow_surface_changed", { surface: surfaceKind });
+  }, [followedParticipant?.surface.kind]);
 
   useEffect(() => {
     if (followAvailability === "missing") stopFollowing("target-left");

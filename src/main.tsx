@@ -4,28 +4,14 @@ import "./index.css";
 import App from "./App.tsx";
 import { hydrateServerQueryState } from "./queryClient";
 import { loadDmpCodec } from "./storage/dmpCodec/dmpCodec";
-import posthog from "posthog-js";
-import { PostHogProvider } from "@posthog/react";
-import {
-  POSTHOG_REPLAY_PRIVACY_OPTIONS,
-  sanitizePostHogEvent,
-} from "./utils/posthogExceptionFilter";
+import { analytics, bufferEarlyErrors, loadAnalyticsWhenIdle } from "./utils/analytics";
 import { installPerformanceMetricsReporter } from "./utils/performanceMetrics";
 
-posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN, {
-  api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
-  defaults: "2026-01-30",
-  __add_tracing_headers: [window.location.host, "localhost"],
-  // Uncaught errors/rejections anywhere in the app — the route error boundary
-  // only sees render-path failures.
-  capture_exceptions: true,
-  before_send: (event) => sanitizePostHogEvent(event),
-  // Replay blocking and console capture; see docs/observability-privacy.md.
-  ...POSTHOG_REPLAY_PRIVACY_OPTIONS,
-});
+// PostHog itself loads after the first render (loadAnalyticsWhenIdle, below).
+bufferEarlyErrors();
 
 installPerformanceMetricsReporter((metrics) => {
-  posthog.capture("performance_metrics", { metrics });
+  analytics.capture("performance_metrics", { metrics });
 });
 
 // Warm the diff-match-patch WASM codec that the recording encode/decode/replay
@@ -44,11 +30,9 @@ hydrateServerQueryState();
 
 const root = document.getElementById("root")!;
 const app = (
-  <PostHogProvider client={posthog}>
-    <StrictMode>
-      <App />
-    </StrictMode>
-  </PostHogProvider>
+  <StrictMode>
+    <App />
+  </StrictMode>
 );
 
 if (root.dataset.ssr === "landing") {
@@ -56,3 +40,5 @@ if (root.dataset.ssr === "landing") {
 } else {
   createRoot(root).render(app);
 }
+
+loadAnalyticsWhenIdle();

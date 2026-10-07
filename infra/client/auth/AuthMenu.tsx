@@ -13,13 +13,12 @@ import {
 } from "./usePasskey";
 import GoogleOneTap from "./GoogleOneTap";
 import GoogleIcon from "@app/components/icon/Google";
-import { usePostHog } from "@posthog/react";
+import { analytics } from "@app/utils/analytics";
 
 // Sign-in link / avatar menu for the Navbar's `actions` slot. Matches the
 // existing pill-button style ("Start creating" in Navbar.tsx) so it reads as
 // part of the same nav, not a bolted-on widget.
 export default function AuthMenu() {
-  const posthog = usePostHog();
   const { user, isSignedIn, isLoading } = useAuth();
   const signOut = useSignOut();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -27,9 +26,9 @@ export default function AuthMenu() {
   // Identify user on login and on every page load when already signed in.
   useEffect(() => {
     if (user) {
-      posthog?.identify(user.id, { username: user.username });
+      analytics.identify(user.id, { username: user.username });
     }
-  }, [user, posthog]);
+  }, [user]);
 
   if (isLoading) {
     return <div className="size-9 rounded-full bg-white/5" aria-hidden="true" />;
@@ -112,8 +111,8 @@ export default function AuthMenu() {
               role="menuitem"
               onClick={() => {
                 setMenuOpen(false);
-                posthog?.capture("signed_out");
-                posthog?.reset();
+                analytics.capture("signed_out");
+                analytics.reset();
                 signOut.mutate();
               }}
               disabled={signOut.isPending}
@@ -133,7 +132,6 @@ export default function AuthMenu() {
 // picker to show, so a compact key button keeps the signed-out navbar from
 // growing a second full-width pill.
 function PasskeySignInButton() {
-  const posthog = usePostHog();
   const signIn = useSignInWithPasskey();
   const [error, setError] = useState<string | null>(null);
 
@@ -153,7 +151,7 @@ function PasskeySignInButton() {
         onClick={() => {
           setError(null);
           signIn.mutate(undefined, {
-            onSuccess: () => posthog?.capture("signed_in_with_passkey"),
+            onSuccess: () => analytics.capture("signed_in_with_passkey"),
             onError: (err) => {
               if (isPasskeyCancel(err)) return;
               setError(passkeyErrorMessage(err, "Passkey sign-in failed. Please try again."));
@@ -182,7 +180,6 @@ function PasskeySignInButton() {
 // that the account already has one — the transient outcomes reset after a
 // few seconds.
 function AddPasskeyMenuItem() {
-  const posthog = usePostHog();
   const register = useRegisterPasskey();
   const { passkeys } = usePasskeyList();
   const [outcome, setOutcome] = useState<"idle" | "added" | "duplicate" | "failed">("idle");
@@ -214,7 +211,7 @@ function AddPasskeyMenuItem() {
         register.mutate(undefined, {
           onSuccess: () => {
             setOutcome("added");
-            posthog?.capture("passkey_added");
+            analytics.capture("passkey_added");
           },
           onError: (err) =>
             setOutcome(
