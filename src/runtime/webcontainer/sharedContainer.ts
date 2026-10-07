@@ -17,6 +17,27 @@ const sharedWebContainerState: {
 
 const webContainerTaskQueues = new WeakMap<WebContainer, Promise<void>>();
 
+// WebContainer.boot fetches its runtime from this CDN. The connection is warmed
+// here, when a boot starts, rather than by a static hint in index.html, which
+// opened it on every page: the landing, the /learn gallery, mobile and
+// playground-language lessons never boot a WebContainer.
+const WEBCONTAINER_CDN_ORIGIN = "https://w-corp-staticblitz.com";
+
+function preconnectWebContainerCdn(): void {
+  if (
+    typeof document === "undefined" ||
+    document.head.querySelector(`link[rel="preconnect"][href="${WEBCONTAINER_CDN_ORIGIN}"]`)
+  ) {
+    return;
+  }
+
+  const link = document.createElement("link");
+  link.rel = "preconnect";
+  link.href = WEBCONTAINER_CDN_ORIGIN;
+  link.crossOrigin = "";
+  document.head.append(link);
+}
+
 /**
  * Serialize filesystem transactions across the runtime UI, reverse sync, and
  * agent tools that share one WebContainer instance.
@@ -57,6 +78,7 @@ export async function getOrBootSharedWebContainer(): Promise<WebContainer> {
   }
 
   if (!sharedWebContainerState.bootPromise) {
+    preconnectWebContainerCdn();
     sharedWebContainerState.bootPromise = import("@webcontainer/api")
       .then(({ WebContainer }) =>
         WebContainer.boot({

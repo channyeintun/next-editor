@@ -107,6 +107,26 @@ describe("shared WebContainer lifetime", () => {
     expect(instance.teardown).toHaveBeenCalledOnce();
   });
 
+  it("warms the WebContainer CDN connection once, when a boot starts", async () => {
+    const preconnects = () =>
+      document.head.querySelectorAll(
+        'link[rel="preconnect"][href="https://w-corp-staticblitz.com"]',
+      );
+    for (const link of preconnects()) link.remove();
+    expect(preconnects()).toHaveLength(0);
+
+    bootsInto(createStandInWebContainer());
+    const first = await sharedContainer.getOrBootSharedWebContainer();
+    expect(preconnects()).toHaveLength(1);
+    expect(preconnects()[0]?.getAttribute("crossorigin")).toBe("");
+
+    // A reboot after teardown reuses the hint instead of stacking another.
+    sharedContainer.teardownSharedWebContainer(first);
+    bootsInto(createStandInWebContainer());
+    await sharedContainer.getOrBootSharedWebContainer();
+    expect(preconnects()).toHaveLength(1);
+  });
+
   it("counts a holder's repeated release once", async () => {
     const instance = createStandInWebContainer();
     bootsInto(instance);
