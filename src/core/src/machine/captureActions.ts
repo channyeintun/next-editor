@@ -1,32 +1,21 @@
-import type * as monaco from "monaco-editor";
 import type { SlideEvent, PreviewEvent } from "../slides";
 import {
   createIdleAudioState,
   createIdleCameraState,
-  createIdleScreenState,
-  type CapturedContentRef,
-  type CapturedViewStateRef,
   type EditorActionArgs,
   type EditorContextUpdate,
   type EditorMachineContext,
   type EditorMachineEvent,
-  type EditorMachineInput,
   type RecordingSession,
 } from "./types";
-import type {
-  CursorRecordingEvent,
-  EditorFrame,
-  EditorSelection,
-  MouseCursorPosition,
-} from "../types";
+import type { MouseCursorPosition } from "../types";
 import type { RuntimeRecordingEvent } from "../../../types/runtime";
 import type { WhiteboardEvent } from "../whiteboard";
 import {
   toSidebarWidthDeltaSnapshot,
   type WorkspaceRecordingEvent,
 } from "../../../types/workspace";
-import { createContentEditDelta, type CreatedContentEditDelta } from "../utils/frameDelta";
-import { createFrameStreamEncoder, pushFrame } from "../utils/frameStreamEncoder";
+import { createFrameStreamEncoder } from "../utils/frameStreamEncoder";
 import {
   appendChatDelta,
   appendPreviewInitialDocument,
@@ -36,41 +25,34 @@ import {
   appendSlideRecordingEvent,
   appendWhiteboardRecordingEvent,
   appendWorkspaceRecordingEvent,
+  getRecorderStartOffsetMs,
   getRecordingTimestamp,
 } from "./recordingSession";
 import {
   createRecordingClock,
   isRecordingClockPaused,
   pauseRecordingClock,
-  recordingTimeAtPerf,
   resumeRecordingClock,
 } from "./recordingClock";
+import { appendCursorEvent } from "./frameCapture";
 import { withSafePoint } from "./retake";
 import { totalMediaSpanLength } from "../utils/mediaSpans";
 import { defaultChapterTitle } from "../utils/chapters";
-import { arePositionsEqual, areSelectionsEqual } from "../utils/editorDiff";
-import {
-  markFramesNormalized,
-  normalizeEditorPosition,
-  normalizeEditorSelection,
-  normalizeEditorViewState,
-} from "../utils/editorState";
-import { areMouseCursorPositionsEqual } from "../utils/cursorCoordinates";
-import { normalizeNonNegativeTime } from "./playbackValues";
+import { markFramesNormalized } from "../utils/editorState";
 import { assembleRecording } from "./recordingAssembly";
 import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
-
-const SCREEN_RECORDER_ID_PREFIX = "screenRecorder-";
 
 // ============================================================================
 // Recording-capture action bodies
 //
 // Plain functions with the exact shape XState's `assign`/`enqueueActions`
-// callbacks expect, specific to the recording/capture side (frame/cursor/
-// audio/camera capture, session lifecycle, session finalize). editorMachine.ts
-// wires each of these into `actions: {}` via `assign(fn)` / `enqueueActions(fn)`
-// — kept there (rather than wrapped here) so XState's `setup()` can still infer
-// the machine's exact context/event/actor types for the wrapped action, which
+// callbacks expect, specific to the recording/capture side (audio/camera
+// capture, the recording-state tracks, session lifecycle, session finalize).
+// Editor frame and cursor capture live in frameCapture.ts and the local screen
+// recorder in screenCaptureActions.ts. editorMachine.ts wires each of these
+// into `actions: {}` via `assign(fn)` / `enqueueActions(fn)` — kept there
+// (rather than wrapped here) so XState's `setup()` can still infer the
+// machine's exact context/event/actor types for the wrapped action, which
 // isn't independently nameable outside `setup()`. Extracted purely so the
 // machine file reads as wiring; zero behavior change.
 // ============================================================================
@@ -103,259 +85,6 @@ export const getRunningRecorders = (context: EditorMachineContext): RunningRecor
   camera: context.enableCameraRecording && context.camera.isRecording,
   screenActorId: context.screen.isRecording ? context.screen.actorId : null,
 });
-
-// Capture reads the live editor: fall back to the input ref getter so a
-// SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
-// rehydration) cannot silently disable frame/cursor capture.
-const getCaptureEditor = (context: EditorMachineContext) =>
-  context.editorRefs.editor ?? context.getEditorInstance();
-
-// ============================================================================
-// Frame and cursor capture
-// ============================================================================
-
-/**
- * A pointer move this soon after the last full frame records only its cursor sample, not
- * a frame of its own (unless the pointer's visibility changed).
- */
-const MOUSE_FRAME_INTERVAL_MS = 50;
-
-/**
- * Create a frame from current editor state.
- *
- * `previousContent`, when both its `versionId` and `modelUri` match the current
- * model, lets the frame reuse the prior content string by reference instead of
- * calling `editor.getValue()` again. This matters for mouse/selection frames (no
- * document edit since the last capture): the caller's content-delta diff already
- * short-circuits on `prev === next` by reference, so avoiding a fresh `getValue()`
- * copy turns that into an O(1) check instead of an O(doc) string equality scan
- * preceded by an O(doc) copy.
- *
- * The `modelUri` check matters because this is a multi-file workspace — Monaco's
- * `getVersionId()` is a per-model counter, so switching the active file between
- * captures can coincidentally produce the same numeric version id on the new
- * model. Without also checking the model URI, that coincidence would silently
- * reuse the previous file's content string for the new file, desyncing the
- * recorded stream.
- *
- * `previousViewState` similarly lets the frame reuse the prior `viewState`
- * object by reference, skipping `editor.saveViewState()` and the normalize pass
- * over it, whenever the values that `saveViewState()` would derive from —
- * content version, model, scroll position, selection, and cursor position — are
- * all unchanged since the last capture. This is the case for mouse-move-only
- * frames (`onDidScrollChange`/pointer frames with no edit, no scroll, no
- * selection change): `saveViewState()` would return a structurally identical
- * (but freshly allocated) object, and the delta encoder's `areStructuredDataEqual`
- * deep-compare on `viewState` (see `frameDelta.ts`) already short-circuits on
- * reference equality, so reusing the reference turns that deep compare into an
- * O(1) check. Selection/position changes still invalidate the reuse — they are
- * part of the gate, not bypassed by it — so cursor/selection-only frames still
- * get a freshly saved (and correctly differing) viewState.
- */
-export const createFrame = (
-  editor: monaco.editor.IStandaloneCodeEditor,
-  timestamp: number,
-  mouseCursor: MouseCursorPosition,
-  getSlideState?: EditorMachineInput["getSlideState"],
-  getPreviewState?: EditorMachineInput["getPreviewState"],
-  previousContent?: CapturedContentRef,
-  previousViewState?: CapturedViewStateRef,
-  selectionOverride?: EditorSelection,
-): {
-  frame: EditorFrame;
-  contentVersionId: number;
-  modelUri: string;
-  viewStateRef: CapturedViewStateRef;
-} => {
-  const model = editor.getModel();
-  const versionId = model?.getVersionId() ?? -1;
-  const modelUri = model?.uri.toString() ?? "";
-  const content =
-    previousContent &&
-    previousContent.versionId === versionId &&
-    previousContent.modelUri === modelUri
-      ? previousContent.value
-      : editor.getValue();
-  const editorPosition = normalizeEditorPosition(editor.getPosition());
-  const selection = normalizeEditorSelection(
-    selectionOverride ?? editor.getSelection(),
-    undefined,
-    editorPosition,
-  );
-  const position = selectionOverride
-    ? normalizeEditorPosition({
-        lineNumber: selection.positionLineNumber,
-        column: selection.positionColumn,
-      })
-    : editorPosition;
-  const scrollTop = editor.getScrollTop();
-  const scrollLeft = editor.getScrollLeft();
-
-  const canReuseViewState =
-    previousViewState !== undefined &&
-    previousViewState.versionId === versionId &&
-    previousViewState.modelUri === modelUri &&
-    previousViewState.scrollTop === scrollTop &&
-    previousViewState.scrollLeft === scrollLeft &&
-    arePositionsEqual(previousViewState.position, position) &&
-    areSelectionsEqual(previousViewState.selection, selection);
-
-  const viewState = canReuseViewState
-    ? previousViewState.value
-    : normalizeEditorViewState(editor.saveViewState(), selection, position);
-
-  // normalizeEditorFrame treats Monaco's primary cursorState as authoritative.
-  // Replace that primary cursor in a freshly normalized (cloned) view state so a
-  // collaborative selection survives frame normalization without moving the
-  // host's editor. A reused view state already matches: the reuse gate compared
-  // the same selection and position, and Monaco derives cursorState[0] from the
-  // primary selection alone. It is also the previous frame's object, so writing
-  // into it would change a frame that is already recorded.
-  if (selectionOverride && viewState && !canReuseViewState) {
-    const mutableViewState = viewState as unknown as {
-      cursorState?: Array<Record<string, unknown>>;
-    };
-    const cursorState = mutableViewState.cursorState;
-    const primaryCursorState = cursorState?.[0];
-    if (primaryCursorState) {
-      cursorState[0] = {
-        ...primaryCursorState,
-        inSelectionMode:
-          selection.selectionStartLineNumber !== selection.positionLineNumber ||
-          selection.selectionStartColumn !== selection.positionColumn,
-        selectionStart: {
-          lineNumber: selection.selectionStartLineNumber,
-          column: selection.selectionStartColumn,
-        },
-        position,
-        selection,
-      };
-    }
-  }
-
-  const slideState = getSlideState?.();
-  const previewState = getPreviewState?.();
-
-  return {
-    frame: {
-      timestamp,
-      state: {
-        content,
-        selection,
-        position,
-        viewState,
-        mouseCursor,
-        slideState: slideState?.previewState,
-        currentSlideIndex: slideState?.currentSlideIndex,
-        previewState: previewState || undefined,
-      },
-    },
-    contentVersionId: versionId,
-    modelUri,
-    viewStateRef: {
-      value: viewState,
-      versionId,
-      modelUri,
-      scrollTop,
-      scrollLeft,
-      selection,
-      position,
-    },
-  };
-};
-
-const didCursorPositionChange = (
-  previous: MouseCursorPosition | undefined,
-  next: MouseCursorPosition | undefined,
-): boolean => {
-  return !areMouseCursorPositionsEqual(previous, next);
-};
-
-/**
- * Pushes in place, so `cursorEvents` keeps its identity until a retake replaces it (see
- * the mutable capture buffer invariant on {@link RecordingSession}). Returns `false` when
- * the position deduplicates against the last event (no push happened) so callers know
- * whether to bump `sessionRevision`.
- */
-const appendCursorEvent = (
-  cursorEvents: CursorRecordingEvent[],
-  timestamp: number,
-  mousePosition: MouseCursorPosition | undefined,
-): boolean => {
-  if (!mousePosition) return false;
-
-  const lastCursorEvent = cursorEvents[cursorEvents.length - 1];
-  const cursorChanged = didCursorPositionChange(lastCursorEvent, mousePosition);
-
-  if (!cursorChanged) {
-    return false;
-  }
-
-  cursorEvents.push({ timestamp, ...mousePosition });
-  return true;
-};
-
-/**
- * The last captured content string paired with the model identity it was read at, for
- * `createFrame` to reuse by reference. `lastCapturedViewStateRef` holds that identity: it
- * comes from the same `createFrame` call that produced `currentFrame`.
- */
-const getPreviousCapturedContent = (
-  session: RecordingSession,
-  currentFrame: EditorFrame | null,
-): CapturedContentRef | undefined => {
-  const viewStateRef = session.lastCapturedViewStateRef;
-  return currentFrame && viewStateRef
-    ? {
-        value: currentFrame.state.content,
-        versionId: viewStateRef.versionId,
-        modelUri: viewStateRef.modelUri,
-      }
-    : undefined;
-};
-
-/**
- * A frame's previewState.content is the preview page's whole HTML: the replay
- * fallback for a take whose live preview has no rrweb seed. Once the take holds one
- * (an initial document with events), replay rebuilds the preview from that stream
- * and never reads the fallback (usePreviewPlaybackRegistration), so storing it would
- * only add a page copy per frame segment and a diff per edit to the file. A retake
- * that discards the seed also discards every frame captured after it.
- */
-const withoutUnreplayedPreviewContent = (
-  session: RecordingSession,
-  frame: EditorFrame,
-): EditorFrame => {
-  const previewState = frame.state.previewState;
-  if (
-    previewState?.content === undefined ||
-    !session.previewInitialDocuments.some((document) => document.events?.length)
-  ) {
-    return frame;
-  }
-
-  const { content: _content, ...rest } = previewState;
-  return { ...frame, state: { ...frame.state, previewState: rest } };
-};
-
-/** Encode a captured frame into the session (in place) and keep its view state for reuse. */
-const commitCapturedFrame = (
-  session: RecordingSession,
-  frame: EditorFrame,
-  viewStateRef: CapturedViewStateRef | undefined,
-  contentEditDelta?: CreatedContentEditDelta,
-): void => {
-  const { state: encoder, emitted } = pushFrame(
-    session.encoder,
-    withoutUnreplayedPreviewContent(session, frame),
-    contentEditDelta,
-  );
-  if (emitted) {
-    session.frames.push(emitted);
-  }
-  session.encoder = encoder;
-  session.lastCapturedViewStateRef = viewStateRef;
-};
 
 /** The take's microphone, per take like the camera: a start that names none uses the default. */
 export const setMicrophoneDevice = ({ event }: EditorActionArgs): EditorContextUpdate => {
@@ -565,212 +294,6 @@ export const initRecordingSession = ({ context, event }: EditorActionArgs): Edit
       lastMousePosition: initialMousePosition,
     },
     sessionRevision: 0,
-  };
-};
-
-export const captureInitialFrame = ({ context }: EditorActionArgs): EditorContextUpdate => {
-  const session = context.session;
-  if (!session) return {};
-
-  const lastMousePosition = session.lastMousePosition;
-
-  // Use createFrame for the initial frame to ensure it has all metadata
-  const editor = getCaptureEditor(context);
-  let initialFrame: EditorFrame;
-  let viewStateRef: CapturedViewStateRef | undefined;
-
-  if (editor) {
-    ({ frame: initialFrame, viewStateRef } = createFrame(
-      editor,
-      0,
-      lastMousePosition,
-      context.getSlideState,
-      context.getPreviewState,
-    ));
-  } else {
-    initialFrame = {
-      timestamp: 0,
-      state: {
-        content: "",
-        selection: {
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: 1,
-          endColumn: 1,
-          selectionStartLineNumber: 1,
-          selectionStartColumn: 1,
-          positionLineNumber: 1,
-          positionColumn: 1,
-        },
-        position: { lineNumber: 1, column: 1 },
-        viewState: null,
-        mouseCursor: lastMousePosition,
-      },
-    };
-  }
-
-  commitCapturedFrame(session, initialFrame, viewStateRef);
-
-  return {
-    session,
-    sessionRevision: context.sessionRevision + 1,
-    currentFrame: initialFrame,
-  };
-};
-
-export const captureFrame = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  const editor = getCaptureEditor(context);
-  if (!context.session) return {};
-
-  const timestamp = getRecordingTimestamp(context.session);
-
-  const mousePosition =
-    event.type === "CAPTURE_FRAME" && event.mousePosition
-      ? event.mousePosition
-      : context.session.lastMousePosition;
-
-  // While paused the pointer is followed but not recorded: every sample would land on
-  // the pause's single instant. Resuming records where it ended up.
-  if (
-    event.type === "CAPTURE_FRAME" &&
-    event.isMouseMovement &&
-    isRecordingClockPaused(context.session.clock)
-  ) {
-    context.session.lastMousePosition = mousePosition;
-    return {};
-  }
-  const cursorAppended =
-    event.type === "CAPTURE_FRAME" && event.isMouseMovement
-      ? appendCursorEvent(context.session.cursorEvents, timestamp, mousePosition)
-      : false;
-
-  // The cursor track has no dependency on Monaco — `mousePosition` arrives from
-  // mouseTrackingActor fully resolved and lives in its own track. Bailing on a
-  // null editor before this point dropped every cursor sample for as long as the
-  // active file was a binary asset (CodeEditor nulls both refs then), so the
-  // replayed pointer froze while the presenter talked over an image and then
-  // teleported when a code file reopened.
-  if (!editor) {
-    context.session.lastMousePosition = mousePosition;
-    return {
-      session: context.session,
-      sessionRevision: cursorAppended ? context.sessionRevision + 1 : context.sessionRevision,
-    };
-  }
-
-  if (event.type === "CAPTURE_FRAME" && event.isMouseMovement) {
-    const lastFrame = context.session.encoder.lastFullFrame;
-    const lastMousePosition = context.session.lastMousePosition;
-    const visibilityChanged = lastMousePosition?.visible !== mousePosition?.visible;
-
-    if (
-      lastFrame &&
-      timestamp - lastFrame.timestamp < MOUSE_FRAME_INTERVAL_MS &&
-      !visibilityChanged
-    ) {
-      context.session.lastMousePosition = mousePosition;
-      return {
-        session: context.session,
-        sessionRevision: cursorAppended ? context.sessionRevision + 1 : context.sessionRevision,
-      };
-    }
-  }
-
-  const previousContent = getPreviousCapturedContent(context.session, context.currentFrame);
-
-  let capturedContent = previousContent;
-  let contentEditDelta: CreatedContentEditDelta | undefined;
-  const textEdit = event.type === "CAPTURE_FRAME" ? event.textEdit : undefined;
-  const model = editor.getModel();
-  const currentModelUri = model?.uri.toString() ?? "";
-  const currentVersionId = model?.getVersionId() ?? -1;
-  if (
-    textEdit &&
-    previousContent &&
-    previousContent.modelUri === currentModelUri &&
-    previousContent.versionId === textEdit.beforeVersion &&
-    currentVersionId === textEdit.afterVersion
-  ) {
-    const created = createContentEditDelta(previousContent.value, textEdit);
-    if (created) {
-      capturedContent = {
-        value: created.content,
-        versionId: currentVersionId,
-        modelUri: currentModelUri,
-      };
-      contentEditDelta = created;
-    }
-  }
-
-  const { frame, viewStateRef } = createFrame(
-    editor,
-    timestamp,
-    mousePosition,
-    context.getSlideState,
-    context.getPreviewState,
-    capturedContent,
-    context.session.lastCapturedViewStateRef,
-    event.type === "CAPTURE_FRAME" ? event.selection : undefined,
-  );
-
-  // The cursor track above already holds every pointer sample, and replay
-  // reads frame pointers only for recordings that have no cursor track. A
-  // pointer capture therefore gives the encoder the last stored pointer, so
-  // it stores a frame only when the capture also sampled something the frame
-  // track owns (scroll, preview). currentFrame and lastMousePosition keep the
-  // live pointer, which the next capture that is not a pointer move stores.
-  const lastStoredFrame = context.session.encoder.lastStoredFrame;
-  const encoderFrame =
-    event.type === "CAPTURE_FRAME" && event.isMouseMovement && lastStoredFrame
-      ? { ...frame, state: { ...frame.state, mouseCursor: lastStoredFrame.state.mouseCursor } }
-      : frame;
-  commitCapturedFrame(context.session, encoderFrame, viewStateRef, contentEditDelta);
-  context.session.lastMousePosition = mousePosition;
-
-  return {
-    session: context.session,
-    sessionRevision: context.sessionRevision + 1,
-    currentFrame: frame,
-  };
-};
-
-export const capturePreviewRefreshFrame = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "PREVIEW_EVENT" || event.event.type !== "preview_refresh") {
-    return {};
-  }
-
-  const editor = getCaptureEditor(context);
-  if (!editor || !context.session) {
-    return {};
-  }
-
-  const timestamp = getRecordingTimestamp(context.session);
-  const { frame, viewStateRef } = createFrame(
-    editor,
-    timestamp,
-    context.session.lastMousePosition,
-    context.getSlideState,
-    context.getPreviewState,
-    getPreviousCapturedContent(context.session, context.currentFrame),
-    context.session.lastCapturedViewStateRef,
-  );
-
-  if (frame.state.previewState) {
-    frame.state.previewState = {
-      ...frame.state.previewState,
-      content: event.event.content ?? frame.state.previewState.content,
-    };
-  }
-
-  commitCapturedFrame(context.session, frame, viewStateRef);
-
-  return {
-    session: context.session,
-    sessionRevision: context.sessionRevision + 1,
-    currentFrame: frame,
   };
 };
 
@@ -1072,15 +595,6 @@ export const storeCameraBlob = ({ context, event }: EditorActionArgs): EditorCon
   };
 };
 
-/**
- * Where on the take's recorded time a recorder that began at `startedAtPerf` started, or
- * 0 outside a take. A recorder that started during a pause starts where the take resumes.
- */
-const getRecorderStartOffsetMs = (context: EditorMachineContext, startedAtPerf: number): number =>
-  context.session
-    ? recordingTimeAtPerf(context.session.clock, context.session.startedAtPerf, startedAtPerf)
-    : 0;
-
 export const storeCameraStarted = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "CAMERA_STARTED") return {};
   // The camera MediaRecorder only starts after getUserMedia resolves, which lags the
@@ -1089,7 +603,7 @@ export const storeCameraStarted = ({ context, event }: EditorActionArgs): Editor
   // ahead of audio. Both sides must be the same (monotonic) clock — see P7. Read through
   // the take's clock: a camera that finished warming up during a pause starts recording
   // when the take resumes, which is the moment the pause holds.
-  const startOffsetMs = getRecorderStartOffsetMs(context, event.startedAtPerf);
+  const startOffsetMs = getRecorderStartOffsetMs(context.session, event.startedAtPerf);
   return {
     camera: {
       ...context.camera,
@@ -1127,96 +641,4 @@ export const handleExternalAudioError = ({ event }: EditorActionArgs): EditorCon
     session: null,
     sessionRevision: 0,
   };
-};
-
-// ============================================================================
-// Local screen-recording action bodies
-//
-// The screen video is a keep-forever, local-only artifact. It rides in on the
-// START_RECORDING event as a pre-acquired display stream (acquired in the click
-// handler to keep transient user activation) and exits via `onScreenRecordingReady`.
-// It is NEVER folded into the `Recording` — see the publish-safety guardrails in
-// docs/video-plan.md. Nothing here writes a `screen*` field onto the finalized recording.
-// ============================================================================
-
-export const setScreenStream = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "START_RECORDING") return {};
-  const screenStream = event.screenStream ?? null;
-  const screenRecorderGeneration = screenStream
-    ? context.screenRecorderGeneration + 1
-    : context.screenRecorderGeneration;
-  return {
-    screenStream,
-    screenRecorderGeneration,
-    screen: screenStream
-      ? {
-          ...createIdleScreenState(),
-          actorId: `${SCREEN_RECORDER_ID_PREFIX}${screenRecorderGeneration}`,
-        }
-      : createIdleScreenState(),
-  };
-};
-
-export const storeScreenStarted = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "SCREEN_STARTED") return {};
-  // The screen MediaRecorder starts a beat after the session origin (picker + getDisplayMedia
-  // ran before START_RECORDING, but MediaRecorder.start resolves at spawn). Capture the offset
-  // on the same monotonic clock as the session so a consumer can realign the local video.
-  const startOffsetMs = getRecorderStartOffsetMs(context, event.startedAtPerf);
-  return {
-    screen: {
-      ...context.screen,
-      mimeType: event.mimeType,
-      hasAudio: event.hasAudio,
-      startOffsetMs,
-    },
-  };
-};
-
-export const notifyScreenRecordingReady = ({ context, event }: EditorActionArgs): void => {
-  if (event.type !== "SCREEN_STOPPED") return;
-  context.onScreenRecordingReady?.({
-    blob: event.blob,
-    mimeType: event.mimeType || event.blob.type,
-    hasAudio: event.hasAudio,
-    startOffsetMs: normalizeNonNegativeTime(event.startOffsetMs),
-  });
-};
-
-/** Reset screen slices after the blob has exited. The actor releases tracks before emitting it. */
-export const clearScreenRecording = (): EditorContextUpdate => ({
-  screen: createIdleScreenState(),
-  screenStream: null,
-});
-
-export const handleScreenError = ({ event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "SCREEN_ERROR") return {};
-  console.warn("Screen recording disabled:", event.error);
-  return clearScreenRecording();
-};
-
-/**
- * Stop and drop a pre-acquired display stream that never reached the actor. Used only on the
- * arming-gap abort paths (mic AUDIO_RECORDING_ERROR / early STOP_RECORDING before the screen actor
- * spawns) —
- * once the actor owns the stream, its own teardown handles track cleanup instead.
- */
-export const releaseScreenStream = ({ context }: EditorActionArgs): EditorContextUpdate => {
-  if (!context.screenStream) return {};
-  context.screenStream.getTracks().forEach((track) => track.stop());
-  return clearScreenRecording();
-};
-
-/**
- * Stop the display stream of a START_RECORDING that no state accepted: the codec refusal in idle,
- * or any state other than idle (the record button stays live while the mic prompt is open and
- * during the stop window). The host ran getDisplayMedia at click time and handed the stream over,
- * so nothing else will ever stop those tracks. Plain side effect: it must not touch the screen
- * context of a capture that is still running or finishing.
- */
-export const releaseUnacceptedScreenStream = ({ context, event }: EditorActionArgs): void => {
-  if (event.type !== "START_RECORDING" || !event.screenStream) return;
-  // A host re-sending the stream the machine already owns must not kill the live capture.
-  if (event.screenStream === context.screenStream) return;
-  event.screenStream.getTracks().forEach((track) => track.stop());
 };

@@ -728,9 +728,10 @@ export type EditorMachineEvent =
 // ============================================================================
 
 /**
- * What an action body in captureActions.ts, replayActions.ts or frameReplay.ts reads. Those
- * bodies are wrapped as named actions in `setup()`, so `event` is the whole union and each
- * body narrows it itself (`if (event.type !== "X") return {}`).
+ * What an action body in captureActions.ts, frameCapture.ts, screenCaptureActions.ts,
+ * replayActions.ts or frameReplay.ts reads. Those bodies are wrapped as named actions in
+ * `setup()`, so `event` is the whole union and each body narrows it itself
+ * (`if (event.type !== "X") return {}`).
  */
 export interface EditorActionArgs {
   context: EditorMachineContext;

@@ -19,9 +19,6 @@ import {
   stopExternalAudioRecording,
   resetAudioAfterRecorderStop,
   initRecordingSession,
-  captureInitialFrame,
-  captureFrame,
-  capturePreviewRefreshFrame,
   captureSlideEvent,
   capturePreviewEvent,
   capturePreviewInitialDocument,
@@ -42,6 +39,12 @@ import {
   clearCameraRecording,
   handleAudioRecordingError,
   handleExternalAudioError,
+  pauseRecordingSession,
+  resumeRecordingSession,
+  addChapterMarker,
+} from "./captureActions";
+import { captureInitialFrame, captureFrame, capturePreviewRefreshFrame } from "./frameCapture";
+import {
   setScreenStream,
   storeScreenStarted,
   notifyScreenRecordingReady,
@@ -49,10 +52,7 @@ import {
   handleScreenError,
   releaseScreenStream,
   releaseUnacceptedScreenStream,
-  pauseRecordingSession,
-  resumeRecordingSession,
-  addChapterMarker,
-} from "./captureActions";
+} from "./screenCaptureActions";
 import { findRetakeTargetNow, rewindSessionToSafePoint } from "./retake";
 import { appendChatDelta, appendRuntimeRecordingEvent } from "./recordingSession";
 import { editRecordedAudio, hasAudioEdit } from "../utils/audioEdit";
@@ -292,8 +292,9 @@ export const editorMachine = setup({
     recorderStopWatchdog: 2000,
   },
   actions: {
-    // Recording (capture-side) actions — bodies live in captureActions.ts, wrapped
-    // here so `setup()` can infer this machine's exact context/event/actor types.
+    // Recording (capture-side) actions — bodies live in captureActions.ts,
+    // frameCapture.ts and screenCaptureActions.ts, wrapped here so `setup()` can
+    // infer this machine's exact context/event/actor types.
     setCameraRecordingEnabled: assign(setCameraRecordingEnabled),
     setMicrophoneDevice: assign(setMicrophoneDevice),
     prepareExternalAudioRecording: assign(prepareExternalAudioRecording),

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type * as monaco from "monaco-editor";
 import type { EditorSelection, MouseCursorPosition } from "../types";
 import { normalizeEditorFrame } from "../utils/editorState";
-import { createFrame } from "./captureActions";
+import { createFrame } from "./frameCapture";
 
 interface FakeEditorState {
   uri: string;

@@ -24,12 +24,24 @@ import type { RecordingSession } from "./types";
 import {
   hasRecordingClockExclusions,
   readRecordingClock,
+  recordingTimeAtPerf,
   toRecordingWallTime,
 } from "./recordingClock";
 
 /** Recorded time now: the take's clock, which stands still while it is paused. */
 export function getRecordingTimestamp(session: RecordingSession): number {
   return readRecordingClock(session.clock, session.startedAtPerf);
+}
+
+/**
+ * Where on the take's recorded time a recorder that began at `startedAtPerf` started, or
+ * 0 outside a take. A recorder that started during a pause starts where the take resumes.
+ */
+export function getRecorderStartOffsetMs(
+  session: RecordingSession | null,
+  startedAtPerf: number,
+): number {
+  return session ? recordingTimeAtPerf(session.clock, session.startedAtPerf, startedAtPerf) : 0;
 }
 
 /**
