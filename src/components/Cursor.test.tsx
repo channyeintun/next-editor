@@ -3,7 +3,7 @@ import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { CursorRecordingEvent, Recording } from "../core/src";
 import { NextEditorActorContext } from "../contexts/NextEditorActorContext";
-import { dispatchRecordedCursorVisibility } from "../utils/recordedCursorVisibility";
+import { dispatchRecordedCursorVisibility } from "../core/src/utils/recordedCursorVisibility";
 import Cursor from "./Cursor";
 
 function lesson(cursorEvents: CursorRecordingEvent[]): Recording {

@@ -1,4 +1,6 @@
-export const IFRAME_INTERACTION_MESSAGE_TYPE = "IFRAME_INTERACTION";
+import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../core/src/utils/iframeInteractionProtocol";
+
+export { IFRAME_INTERACTION_MESSAGE_TYPE };
 export const IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE = "IFRAME_NAVIGATION_COMMAND";
 
 interface IframeInteractionCaptureScriptOptions {

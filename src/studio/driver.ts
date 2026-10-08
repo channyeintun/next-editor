@@ -19,7 +19,7 @@ import {
   easePointerDrag,
   pointerAimDurationMs,
 } from "../core/src/utils/pointerMotion";
-import { dispatchRecordedCursorVisibility } from "../utils/recordedCursorVisibility";
+import { dispatchRecordedCursorVisibility } from "../core/src/utils/recordedCursorVisibility";
 import type { PreviewEvent, PreviewPanelMode, PreviewState } from "../types/slides";
 import { isWorkspaceTextFile } from "../types/workspace";
 import type {

@@ -1,4 +1,4 @@
-import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../../../utils/iframeInteractionCapture";
+import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../utils/iframeInteractionProtocol";
 
 // ============================================================================
 // Iframe Cursor Tracking

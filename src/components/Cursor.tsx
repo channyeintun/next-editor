@@ -7,7 +7,7 @@ import IconCursor from "./icon/IconCursor";
 import {
   isRecordedCursorVisibilityDetail,
   RECORDED_CURSOR_VISIBILITY_EVENT,
-} from "../utils/recordedCursorVisibility";
+} from "../core/src/utils/recordedCursorVisibility";
 
 // Where the arrow's tip sits inside the 24px glyph box (viewBox 14,6.5 of 48).
 // Press feedback scales and ripples around this point, never the box centre.

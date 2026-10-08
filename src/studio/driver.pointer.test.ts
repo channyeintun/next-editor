@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { createRuntimePanelStore } from "../stores/runtimePanelStore";
 import { POINTER_PRESS_MS, POINTER_SETTLE_MS } from "../core/src/utils/pointerMotion";
-import { RECORDED_CURSOR_VISIBILITY_EVENT } from "../utils/recordedCursorVisibility";
+import { RECORDED_CURSOR_VISIBILITY_EVENT } from "../core/src/utils/recordedCursorVisibility";
 import type { Terminal } from "@xterm/xterm";
 import { registerXtermTerminal } from "../components/xtermRegistry";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";

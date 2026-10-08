@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createActor } from "xstate";
 import type { MouseCursorPosition } from "../types";
-import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../../../utils/iframeInteractionCapture";
-import { RECORDED_CURSOR_VISIBILITY_EVENT } from "../../../utils/recordedCursorVisibility";
+import { IFRAME_INTERACTION_MESSAGE_TYPE } from "../utils/iframeInteractionProtocol";
+import { RECORDED_CURSOR_VISIBILITY_EVENT } from "../utils/recordedCursorVisibility";
 import { mouseTrackingActor } from "./mouseTrackingActor";
 
 function mockRect(

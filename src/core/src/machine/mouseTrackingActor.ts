@@ -8,7 +8,7 @@ import {
 import {
   isRecordedCursorVisibilityDetail,
   RECORDED_CURSOR_VISIBILITY_EVENT,
-} from "../../../utils/recordedCursorVisibility";
+} from "../utils/recordedCursorVisibility";
 import { startIframeCursorTracking } from "./iframeCursorTracking";
 
 // ============================================================================

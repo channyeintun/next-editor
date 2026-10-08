@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { dispatchRecordedCursorVisibility } from "../../utils/recordedCursorVisibility";
+import { dispatchRecordedCursorVisibility } from "../../core/src/utils/recordedCursorVisibility";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,
   FILE_SIDEBAR_KEYBOARD_LARGE_STEP,
