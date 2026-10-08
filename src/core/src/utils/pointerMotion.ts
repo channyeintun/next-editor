@@ -18,6 +18,11 @@
  * - A drag-select starts from rest after the press, peaks early (≈ 0.2–0.33 of
  *   the drag) and decelerates onto the last character — the recordings reach
  *   .35 / .71 / .91 of the distance at 25 / 50 / 75% of the drag time.
+ *   easePointerDrag keeps that early peak (1/3) and the rest-to-rest ends but
+ *   is a smooth closed form, not a quantile fit: it reaches .26 / .69 / .95, a
+ *   slower start and a later landing than the recorded .35 / .71 / .91. The
+ *   curve, not the recorded quantiles, is what the studio's drag-selects
+ *   follow, and so what a learner sees replayed.
  */
 
 const clamp01 = (t: number): number => Math.min(1, Math.max(0, t));

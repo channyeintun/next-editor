@@ -48,7 +48,8 @@ describe("easePointerAim", () => {
 describe("easePointerDrag", () => {
   it("accelerates off the press, peaks early, then lands carefully", () => {
     expect(peakTime(easePointerDrag)).toBeCloseTo(1 / 3, 1);
-    // Recorded drags reach .35 / .71 / .91 of the distance at 25 / 50 / 75%.
+    // The curve reaches .26 / .69 / .95 (recorded drags: .35 / .71 / .91; the curve
+    // keeps their early peak, not their quantiles).
     expect(easePointerDrag(0.25)).toBeCloseTo(0.26, 2);
     expect(easePointerDrag(0.5)).toBeCloseTo(0.69, 2);
     expect(easePointerDrag(0.75)).toBeCloseTo(0.95, 2);
