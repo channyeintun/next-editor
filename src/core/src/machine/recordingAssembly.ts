@@ -11,6 +11,7 @@ import type {
   RecordingChapter,
   RecordingAudioSource,
   RecordingCameraSource,
+  RecordingTrackKind,
   RecordingTrackMeta,
 } from "../types";
 import type { WhiteboardEvent } from "../whiteboard";
@@ -117,104 +118,60 @@ export interface AssembleRecordingInput {
   chapters?: readonly RecordingChapter[];
 }
 
-const EDITOR_TRACK_ID = "editor";
-const SLIDE_TRACK_ID = "slide";
-const PREVIEW_TRACK_ID = "preview";
-const WORKSPACE_TRACK_ID = "workspace";
-const RUNTIME_TRACK_ID = "runtime";
-const CURSOR_TRACK_ID = "cursor";
-const WHITEBOARD_TRACK_ID = "whiteboard";
-const CHAT_TRACK_ID = "chat";
-const AUDIO_TRACK_ID = "audio";
-const CAMERA_TRACK_ID = "camera";
+/**
+ * The event tracks, in the order the track list names them, each with the arrays
+ * that hold its events. A track is listed when any of its arrays has entries.
+ */
+const EVENT_TRACKS: ReadonlyArray<readonly [RecordingTrackKind, readonly RecordingTrackName[]]> = [
+  ["slide", ["slideEvents"]],
+  ["preview", ["previewEvents", "previewInitialDocuments", "previewPatchBatches"]],
+  ["workspace", ["workspaceEvents"]],
+  ["runtime", ["runtimeEvents"]],
+  ["cursor", ["cursorEvents"]],
+  ["whiteboard", ["whiteboardEvents"]],
+  ["chat", ["chatEvents"]],
+];
 
-const buildTrackMetadata = ({
-  durationMs,
-  hasSlideEvents,
-  hasPreviewEvents,
-  hasWorkspaceEvents,
-  hasRuntimeEvents,
-  hasCursorEvents,
-  hasWhiteboardEvents,
-  hasChatEvents,
-  audioMimeType,
-  audioSource,
-  audioStartOffsetMs,
-  hasAudio,
-  cameraMimeType,
-  cameraSource,
-  cameraStartOffsetMs,
-  hasCamera,
-}: {
-  durationMs: number;
-  hasSlideEvents: boolean;
-  hasPreviewEvents: boolean;
-  hasWorkspaceEvents: boolean;
-  hasRuntimeEvents: boolean;
-  hasCursorEvents: boolean;
-  hasWhiteboardEvents: boolean;
-  hasChatEvents: boolean;
-  audioMimeType?: string;
-  audioSource?: Recording["audioSource"];
-  audioStartOffsetMs: number;
-  hasAudio: boolean;
-  cameraMimeType?: string;
-  cameraSource?: Recording["cameraSource"];
-  cameraStartOffsetMs: number;
-  hasCamera: boolean;
-}): RecordingTrackMeta[] => {
-  const tracks: RecordingTrackMeta[] = [
-    {
-      id: EDITOR_TRACK_ID,
-      kind: "editor",
-      durationMs,
-    },
-  ];
+/**
+ * The track list up to the media tracks: the editor track, then each event track that
+ * has events. Capture builds it here, and so does the codec for a recording that carries
+ * no track list, so a new event track is one row of EVENT_TRACKS for both.
+ */
+export function buildEventTrackMetadata(
+  tracks: Partial<Record<RecordingTrackName, readonly unknown[]>>,
+  durationMs: number,
+): RecordingTrackMeta[] {
+  const metadata: RecordingTrackMeta[] = [{ id: "editor", kind: "editor", durationMs }];
+  for (const [kind, names] of EVENT_TRACKS) {
+    if (names.some((name) => tracks[name]?.length)) {
+      metadata.push({ id: kind, kind, durationMs });
+    }
+  }
+  return metadata;
+}
 
-  if (hasSlideEvents) {
-    tracks.push({ id: SLIDE_TRACK_ID, kind: "slide", durationMs });
-  }
-  if (hasPreviewEvents) {
-    tracks.push({ id: PREVIEW_TRACK_ID, kind: "preview", durationMs });
-  }
-  if (hasWorkspaceEvents) {
-    tracks.push({ id: WORKSPACE_TRACK_ID, kind: "workspace", durationMs });
-  }
-  if (hasRuntimeEvents) {
-    tracks.push({ id: RUNTIME_TRACK_ID, kind: "runtime", durationMs });
-  }
-  if (hasCursorEvents) {
-    tracks.push({ id: CURSOR_TRACK_ID, kind: "cursor", durationMs });
-  }
-  if (hasWhiteboardEvents) {
-    tracks.push({ id: WHITEBOARD_TRACK_ID, kind: "whiteboard", durationMs });
-  }
-  if (hasChatEvents) {
-    tracks.push({ id: CHAT_TRACK_ID, kind: "chat", durationMs });
-  }
-  if (hasAudio) {
-    tracks.push({
-      id: AUDIO_TRACK_ID,
-      kind: "audio",
-      mimeType: audioMimeType || undefined,
-      source: audioSource,
-      startOffsetMs: audioStartOffsetMs,
-      durationMs: Math.max(0, durationMs - audioStartOffsetMs),
-    });
-  }
-  if (hasCamera) {
-    tracks.push({
-      id: CAMERA_TRACK_ID,
-      kind: "camera",
-      mimeType: cameraMimeType || undefined,
-      source: cameraSource,
-      startOffsetMs: cameraStartOffsetMs,
-      durationMs: Math.max(0, durationMs - cameraStartOffsetMs),
-    });
-  }
-
-  return tracks;
-};
+/**
+ * The track list's entry for the narration or the camera video, which starts
+ * `startOffsetMs` into the take. Whether the recording has one is the caller's rule.
+ */
+export function buildMediaTrackMetadata(
+  kind: "audio" | "camera",
+  durationMs: number,
+  media: {
+    mimeType?: string;
+    source?: RecordingAudioSource | RecordingCameraSource;
+    startOffsetMs: number;
+  },
+): RecordingTrackMeta {
+  return {
+    id: kind,
+    kind,
+    mimeType: media.mimeType || undefined,
+    source: media.source,
+    startOffsetMs: media.startOffsetMs,
+    durationMs: Math.max(0, durationMs - media.startOffsetMs),
+  };
+}
 
 export function assembleRecording({
   tracks,
@@ -229,27 +186,25 @@ export function assembleRecording({
 }: AssembleRecordingInput): Recording {
   // Frames were compressed incrementally during capture.
   const clusters = buildRecordingClusters(tracks.frames, duration);
-  const trackMetadata = buildTrackMetadata({
-    durationMs: duration,
-    hasSlideEvents: tracks.slideEvents.length > 0,
-    hasPreviewEvents:
-      tracks.previewEvents.length > 0 ||
-      tracks.previewInitialDocuments.length > 0 ||
-      tracks.previewPatchBatches.length > 0,
-    hasWorkspaceEvents: tracks.workspaceEvents.length > 0,
-    hasRuntimeEvents: tracks.runtimeEvents.length > 0,
-    hasCursorEvents: tracks.cursorEvents.length > 0,
-    hasWhiteboardEvents: tracks.whiteboardEvents.length > 0,
-    hasChatEvents: tracks.chatEvents.length > 0,
-    audioMimeType: audio.mimeType || audio.blob?.type,
-    audioSource: audio.source,
-    audioStartOffsetMs: audio.startOffsetMs,
-    hasAudio: Boolean(audio.blob) || Boolean(audio.pending),
-    cameraMimeType: camera.mimeType || camera.blob?.type,
-    cameraSource: camera.source,
-    cameraStartOffsetMs: camera.startOffsetMs,
-    hasCamera: Boolean(camera.blob),
-  });
+  const trackMetadata = buildEventTrackMetadata(tracks, duration);
+  if (audio.blob || audio.pending) {
+    trackMetadata.push(
+      buildMediaTrackMetadata("audio", duration, {
+        mimeType: audio.mimeType || audio.blob?.type,
+        source: audio.source,
+        startOffsetMs: audio.startOffsetMs,
+      }),
+    );
+  }
+  if (camera.blob) {
+    trackMetadata.push(
+      buildMediaTrackMetadata("camera", duration, {
+        mimeType: camera.mimeType || camera.blob.type,
+        source: camera.source,
+        startOffsetMs: camera.startOffsetMs,
+      }),
+    );
+  }
   // One clock read, so the id, the name and createdAt name the same instant.
   const createdAt = Date.now();
 

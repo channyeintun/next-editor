@@ -1,15 +1,14 @@
 import type { Recording } from "../../core/src";
+import {
+  buildEventTrackMetadata,
+  buildMediaTrackMetadata,
+} from "../../core/src/machine/recordingAssembly";
 import type { RecordingClusterMeta, RecordingTrackMeta } from "../../core/src/types";
 import {
   buildRecordingClusters,
   resolveClusterIndexForTime,
 } from "../../core/src/utils/recordingClusters";
-import {
-  clampU32,
-  DEFAULT_AUDIO_TRACK_ID,
-  DEFAULT_CAMERA_TRACK_ID,
-  readRecordTimestamp,
-} from "./format";
+import { clampU32, readRecordTimestamp } from "./format";
 
 // ============================================================================
 // Recording metadata derivation.
@@ -40,58 +39,26 @@ export function deriveRecordingTracks(recording: Recording): RecordingTrackMeta[
     return recording.tracks.map((track) => ({ ...track }));
   }
 
-  const tracks: RecordingTrackMeta[] = [
-    { id: "editor", kind: "editor", durationMs: recording.duration },
-  ];
-
-  if (recording.slideEvents?.length) {
-    tracks.push({ id: "slide", kind: "slide", durationMs: recording.duration });
-  }
-  if (
-    recording.previewEvents?.length ||
-    recording.previewInitialDocuments?.length ||
-    recording.previewPatchBatches?.length
-  ) {
-    tracks.push({ id: "preview", kind: "preview", durationMs: recording.duration });
-  }
-  if (recording.workspaceEvents?.length) {
-    tracks.push({ id: "workspace", kind: "workspace", durationMs: recording.duration });
-  }
-  if (recording.runtimeEvents?.length) {
-    tracks.push({ id: "runtime", kind: "runtime", durationMs: recording.duration });
-  }
-  if (recording.cursorEvents?.length) {
-    tracks.push({ id: "cursor", kind: "cursor", durationMs: recording.duration });
-  }
-  if (recording.whiteboardEvents?.length) {
-    tracks.push({ id: "whiteboard", kind: "whiteboard", durationMs: recording.duration });
-  }
-  if (recording.chatEvents?.length) {
-    tracks.push({ id: "chat", kind: "chat", durationMs: recording.duration });
-  }
+  const tracks = buildEventTrackMetadata(recording, recording.duration);
   const hasInlineAudio = recording.audioBlob instanceof Blob && recording.audioBlob.size > 0;
   // External audio (sibling file/URL) carries no blob but is still an audio track.
   if (hasInlineAudio || recording.audioFile || recording.audioUrl) {
-    const startOffsetMs = recording.audioStartOffsetMs ?? 0;
-    tracks.push({
-      id: DEFAULT_AUDIO_TRACK_ID,
-      kind: "audio",
-      mimeType: (hasInlineAudio && (recording.audioBlob as Blob).type) || undefined,
-      source: recording.audioSource,
-      startOffsetMs,
-      durationMs: Math.max(0, recording.duration - startOffsetMs),
-    });
+    tracks.push(
+      buildMediaTrackMetadata("audio", recording.duration, {
+        mimeType: hasInlineAudio ? (recording.audioBlob as Blob).type : undefined,
+        source: recording.audioSource,
+        startOffsetMs: recording.audioStartOffsetMs ?? 0,
+      }),
+    );
   }
   if (recording.cameraBlob instanceof Blob && recording.cameraBlob.size > 0) {
-    const startOffsetMs = recording.cameraStartOffsetMs ?? 0;
-    tracks.push({
-      id: DEFAULT_CAMERA_TRACK_ID,
-      kind: "camera",
-      mimeType: recording.cameraBlob.type || undefined,
-      source: recording.cameraSource,
-      startOffsetMs,
-      durationMs: Math.max(0, recording.duration - startOffsetMs),
-    });
+    tracks.push(
+      buildMediaTrackMetadata("camera", recording.duration, {
+        mimeType: recording.cameraBlob.type,
+        source: recording.cameraSource,
+        startOffsetMs: recording.cameraStartOffsetMs ?? 0,
+      }),
+    );
   }
 
   return tracks;
