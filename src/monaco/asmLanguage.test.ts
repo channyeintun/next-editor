@@ -120,6 +120,7 @@ describe("asm monarch grammar", () => {
     ["0b1010_1010", "number.binary"],
     ["0o17", "number.octal"],
     ["0AAh", "number.hex"],
+    ["0b10h", "number.hex"],
     ["1010b", "number.binary"],
     ["17q", "number.octal"],
     ["170", "number"],

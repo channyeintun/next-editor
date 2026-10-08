@@ -397,6 +397,10 @@ describe("integer literals", () => {
     ["0o17", 15n],
     ["17q", 15n],
     ["255", 255n],
+    // A `0b` prefix and an `h` suffix together read as hex, as NASM has it.
+    ["0bh", 11n],
+    ["0b10h", 2832n],
+    ["0b8000h", 0xb8000n],
   ])("reads %s", (text, expected) => {
     expect(parseIntegerLiteral(text)).toBe(expected);
   });

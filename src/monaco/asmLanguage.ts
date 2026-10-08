@@ -204,12 +204,14 @@ export const asmMonarchLanguage: monaco.languages.IMonarchLanguage = {
       // alike. The suffix rules have to precede the plain-decimal one, which
       // would otherwise take the digits and leave `b`/`q` to the identifier
       // rule — so `1010b` would read as a number next to a variable name.
+      // The `h` suffix also precedes the `0b` prefix, as it does in the lexer:
+      // `0b10h` is hex, not binary `0b10` followed by a name `h`.
       [/0[xX][0-9a-fA-F_]+/, "number.hex"],
+      [/[0-9][0-9a-fA-F_]*[hH]\b/, "number.hex"],
       [/0[bB][01_]+/, "number.binary"],
       [/0[oO][0-7_]+/, "number.octal"],
       [/[01][01_]*[bB]\b/, "number.binary"],
       [/[0-7][0-7_]*[qQ]\b/, "number.octal"],
-      [/[0-9][0-9a-fA-F_]*[hH]\b/, "number.hex"],
       [/\d[\d_]*/, "number"],
 
       // A quote with no partner before the end of the line. Without these the

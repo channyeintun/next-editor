@@ -60,10 +60,12 @@ export function parseIntegerLiteral(text: string): bigint | null {
 
   const lower = cleaned.toLowerCase();
   try {
+    // When a `0b` prefix and an `h` suffix both apply (`0bh`, `0b8000h`), NASM
+    // reads the number as hex, so the suffix is tested first.
+    if (/^[0-9a-f]+h$/.test(lower)) return BigInt(`0x${lower.slice(0, -1)}`);
     if (lower.startsWith("0x")) return BigInt(lower);
     if (lower.startsWith("0b")) return BigInt(lower);
     if (lower.startsWith("0o")) return BigInt(lower);
-    if (/^[0-9a-f]+h$/.test(lower)) return BigInt(`0x${lower.slice(0, -1)}`);
     if (/^[01]+b$/.test(lower)) return BigInt(`0b${lower.slice(0, -1)}`);
     if (/^[0-7]+q$/.test(lower)) return BigInt(`0o${lower.slice(0, -1)}`);
     if (/^[0-9]+$/.test(lower)) return BigInt(lower);
