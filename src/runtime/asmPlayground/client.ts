@@ -1,4 +1,4 @@
-import { assemble, AsmError, describeStop, formatDiagnostic, load } from "../../core/x86";
+import { assemble, AsmError, formatDiagnostic, load, summarizeRun } from "../../core/x86";
 import { ASM_ENTRY_PATH } from "./files";
 import {
   parseAsmPlaygroundRunResult,
@@ -121,22 +121,19 @@ export class AsmPlaygroundClient {
     for (;;) {
       const reason = machine.runSlice(SLICE_INSTRUCTIONS);
       if (reason) {
-        const decoder = new TextDecoder();
-        const stdout = decoder.decode(Uint8Array.from(machine.stdout));
-        const stderr = decoder.decode(Uint8Array.from(machine.stderr));
+        const summary = summarizeRun(machine, reason, program, entry.path);
+        const { stdout, stderr, instructions, flags } = summary;
         const registers = machine
           .snapshotRegisters()
           .filter((entry) => entry.value !== before.get(entry.name))
           .map((entry) => ({ name: entry.name, value: entry.value.toString() }));
-        const flags = { ...machine.flags };
-        const instructions = machine.instructionsExecuted;
 
-        if (reason.kind === "exited") {
+        if (summary.status === "success") {
           return validated({
             status: "success",
             stdout,
             stderr,
-            exitCode: reason.code,
+            exitCode: summary.exitCode,
             instructions,
             registers,
             flags,
@@ -147,7 +144,7 @@ export class AsmPlaygroundClient {
           status: "runtime-error",
           stdout,
           stderr,
-          exitDetail: describeStop(reason, machine, program, entry.path),
+          exitDetail: summary.detail,
           instructions,
           registers,
           flags,

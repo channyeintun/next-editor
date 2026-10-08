@@ -17,7 +17,13 @@
  * own stack finds what it expects.
  */
 
-import { assemble, STACK_SIZE, STACK_TOP, type AssembledProgram } from "./assembler";
+import {
+  assemble,
+  STACK_SIZE,
+  STACK_TOP,
+  type AssembledProgram,
+  type ListingRow,
+} from "./assembler";
 import { AsmError } from "./errors";
 import {
   DEFAULT_MAX_HEAP_BYTES,
@@ -25,6 +31,7 @@ import {
   DEFAULT_MAX_OUTPUT_BYTES,
   Machine,
   RSP,
+  zeroFlags,
   type Flags,
   type StopReason,
 } from "./cpu";
@@ -50,8 +57,18 @@ export interface X86RunResult {
   registers: X86RegisterSnapshot[];
   flags: Flags;
   /** Bytes the assembler produced, for a hex listing. */
-  listing: { address: bigint; bytes: number[]; line: number }[];
+  listing: ListingRow[];
 }
+
+/**
+ * What a stopped machine reports, before a caller adds the registers: all of
+ * them in `assembleAndRun`, only the ones the program changed in the page.
+ */
+export type X86RunSummary = Pick<X86RunResult, "stdout" | "stderr" | "instructions" | "flags"> &
+  (
+    | { status: "success"; exitCode: number }
+    | { status: "runtime-error"; exitCode: null; detail: string }
+  );
 
 export interface X86RunOptions {
   stdin?: string;
@@ -149,14 +166,7 @@ export function assembleAndRun(source: string, options: X86RunOptions = {}): X86
     exitCode: null,
     instructions: 0,
     registers: [],
-    flags: {
-      carry: false,
-      parity: false,
-      adjust: false,
-      zero: false,
-      sign: false,
-      overflow: false,
-    },
+    flags: zeroFlags(),
     listing: [],
   };
 
@@ -177,33 +187,49 @@ export function assembleAndRun(source: string, options: X86RunOptions = {}): X86
   const machine = load(program, options);
   const reason = machine.run();
 
-  const result: X86RunResult = {
+  return {
     ...empty,
-    status: reason.kind === "exited" ? "success" : "runtime-error",
-    stdout: decoder.decode(Uint8Array.from(machine.stdout)),
-    stderr: decoder.decode(Uint8Array.from(machine.stderr)),
-    exitCode: reason.kind === "exited" ? reason.code : null,
-    instructions: machine.instructionsExecuted,
+    ...summarizeRun(machine, reason, program, fileName),
     registers: machine.snapshotRegisters(),
-    flags: { ...machine.flags },
     listing: program.listing,
   };
-
-  if (reason.kind !== "exited") {
-    result.detail = describeStop(reason, machine, program, fileName);
-  }
-
-  return result;
 }
 
 /**
- * The sentence a learner reads when a program stopped without exiting.
+ * Read the result off a machine that has stopped: the status, what it
+ * printed, how it exited — or the sentence saying why it did not — and its
+ * flags.
  *
  * Exported because the page's runner (`runtime/asmPlayground/client.ts`) drives
- * `load`/`runSlice` itself rather than `assembleAndRun`, and it must print the
- * same words these tests pin — this used to be two hand-maintained copies.
+ * `load`/`runSlice` itself rather than `assembleAndRun`, so it can yield between
+ * slices, and it must report what these tests pin — this mapping used to be two
+ * hand-maintained copies.
  */
-export function describeStop(
+export function summarizeRun(
+  machine: Machine,
+  reason: StopReason,
+  program: AssembledProgram,
+  fileName: string,
+): X86RunSummary {
+  const output = {
+    stdout: decoder.decode(Uint8Array.from(machine.stdout)),
+    stderr: decoder.decode(Uint8Array.from(machine.stderr)),
+    instructions: machine.instructionsExecuted,
+    flags: { ...machine.flags },
+  };
+  if (reason.kind === "exited") {
+    return { ...output, status: "success", exitCode: reason.code };
+  }
+  return {
+    ...output,
+    status: "runtime-error",
+    exitCode: null,
+    detail: describeStop(reason, machine, program, fileName),
+  };
+}
+
+/** The sentence a learner reads when a program stopped without exiting. */
+function describeStop(
   reason: Exclude<StopReason, { kind: "exited" }>,
   machine: Machine,
   program: AssembledProgram,

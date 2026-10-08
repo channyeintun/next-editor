@@ -32,8 +32,14 @@
 export { assemble } from "./assembler";
 export { AsmError } from "./errors";
 export type { AssembledProgram, AssembledSegment, ListingRow } from "./assembler";
-export { assembleAndRun, describeStop, formatDiagnostic, formatListing, load } from "./run";
-export type { X86RunResult, X86RunOptions, X86RunStatus, X86RegisterSnapshot } from "./run";
+export { assembleAndRun, formatDiagnostic, formatListing, load, summarizeRun } from "./run";
+export type {
+  X86RunResult,
+  X86RunOptions,
+  X86RunStatus,
+  X86RunSummary,
+  X86RegisterSnapshot,
+} from "./run";
 // `load` hands back a Machine and a result carries its Flags, so both are part
 // of the surface as types; nothing outside this directory drives a Machine.
 export type { Flags, Machine, StopReason } from "./cpu";

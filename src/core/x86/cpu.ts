@@ -58,6 +58,11 @@ export interface Flags {
   overflow: boolean;
 }
 
+/** The flags before the first instruction runs: all clear. */
+export function zeroFlags(): Flags {
+  return { carry: false, parity: false, adjust: false, zero: false, sign: false, overflow: false };
+}
+
 export type StopReason =
   | { kind: "exited"; code: number }
   | { kind: "fault"; message: string }
@@ -137,14 +142,7 @@ export class Machine {
   readonly memory = new Memory();
   readonly registers = new BigUint64Array(16);
   rip = 0n;
-  flags: Flags = {
-    carry: false,
-    parity: false,
-    adjust: false,
-    zero: false,
-    sign: false,
-    overflow: false,
-  };
+  flags: Flags = zeroFlags();
 
   /** Bytes the program wrote to file descriptor 1 and 2. */
   readonly stdout: number[] = [];
