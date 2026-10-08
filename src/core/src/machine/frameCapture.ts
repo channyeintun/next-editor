@@ -61,52 +61,47 @@ const readModelIdentity = (model: monaco.editor.ITextModel | null) => ({
   modelId: model?.id ?? "",
 });
 
+interface CreateFrameOptions {
+  timestamp: number;
+  mouseCursor: MouseCursorPosition;
+  getSlideState?: EditorMachineInput["getSlideState"];
+  getPreviewState?: EditorMachineInput["getPreviewState"];
+  /** The last capture's content string and view state, reused by reference when unchanged. */
+  previous?: { content?: CapturedContentRef; viewState?: CapturedViewStateRef };
+  /** Another collaborator's selection, recorded without moving the local editor. */
+  selectionOverride?: EditorSelection;
+}
+
 /**
  * Create a frame from current editor state.
  *
- * `previousContent`, when both its `versionId` and `modelId` match the current
- * model, lets the frame reuse the prior content string by reference instead of
- * calling `editor.getValue()` again. This matters for mouse/selection frames (no
- * document edit since the last capture): the caller's content-delta diff already
- * short-circuits on `prev === next` by reference, so avoiding a fresh `getValue()`
- * copy turns that into an O(1) check instead of an O(doc) string equality scan
- * preceded by an O(doc) copy.
+ * `previous` lets a capture that changed nothing reuse the last capture's values by
+ * reference: the delta encoder's content diff and its `viewState` deep-compare (see
+ * `frameDelta.ts`) then short-circuit on reference equality, instead of comparing a
+ * fresh `getValue()` copy or `saveViewState()` object against an identical one.
  *
- * The `modelId` check matters because this is a multi-file workspace — Monaco's
- * `getVersionId()` is a per-model counter that starts at 1 on every new model, so
- * switching the active file between captures, or re-creating a removed file under
- * the same URI, can coincidentally produce the same numeric version id on another
- * model. Without also checking the model instance, that coincidence would silently
- * reuse the previous model's content string, desyncing the recorded stream.
- *
- * `previousViewState` similarly lets the frame reuse the prior `viewState`
- * object by reference, skipping `editor.saveViewState()` and the normalize pass
- * over it, whenever the values that `saveViewState()` would derive from —
- * content version, model, scroll position, selection, and cursor position — are
- * all unchanged since the last capture. This is the case for mouse-move-only
- * frames (`onDidScrollChange`/pointer frames with no edit, no scroll, no
- * selection change): `saveViewState()` would return a structurally identical
- * (but freshly allocated) object, and the delta encoder's `areStructuredDataEqual`
- * deep-compare on `viewState` (see `frameDelta.ts`) already short-circuits on
- * reference equality, so reusing the reference turns that deep compare into an
- * O(1) check. Selection/position changes still invalidate the reuse — they are
- * part of the gate, not bypassed by it — so cursor/selection-only frames still
- * get a freshly saved (and correctly differing) viewState.
+ * - `previous.content` is reused when its `versionId` and `modelId` match the current
+ *   model. Version ids restart at 1 on every new model, so the model instance must
+ *   match too: a file switch, or a file re-created under the same URI, can land on the
+ *   same version id, and reusing the old string would desync the recorded stream.
+ * - `previous.viewState` is reused, skipping `saveViewState()` and its normalize pass,
+ *   when the model identity, scroll position, selection and cursor position all match,
+ *   as on a pointer-only frame. Selection and position are part of the gate, so a
+ *   cursor or selection change still saves a fresh (and correctly differing) one.
  */
 export const createFrame = (
   editor: monaco.editor.IStandaloneCodeEditor,
-  timestamp: number,
-  mouseCursor: MouseCursorPosition,
-  getSlideState?: EditorMachineInput["getSlideState"],
-  getPreviewState?: EditorMachineInput["getPreviewState"],
-  previousContent?: CapturedContentRef,
-  previousViewState?: CapturedViewStateRef,
-  selectionOverride?: EditorSelection,
-): {
-  frame: EditorFrame;
-  contentVersionId: number;
-  viewStateRef: CapturedViewStateRef;
-} => {
+  {
+    timestamp,
+    mouseCursor,
+    getSlideState,
+    getPreviewState,
+    previous,
+    selectionOverride,
+  }: CreateFrameOptions,
+): { frame: EditorFrame; viewStateRef: CapturedViewStateRef } => {
+  const previousContent = previous?.content;
+  const previousViewState = previous?.viewState;
   const { versionId, modelId } = readModelIdentity(editor.getModel());
   const content =
     previousContent &&
@@ -188,7 +183,6 @@ export const createFrame = (
         previewState: previewState || undefined,
       },
     },
-    contentVersionId: versionId,
     viewStateRef: {
       value: viewState,
       versionId,
@@ -306,13 +300,12 @@ export const captureInitialFrame = ({ context }: EditorActionArgs): EditorContex
   let viewStateRef: CapturedViewStateRef | undefined;
 
   if (editor) {
-    ({ frame: initialFrame, viewStateRef } = createFrame(
-      editor,
-      0,
-      lastMousePosition,
-      context.getSlideState,
-      context.getPreviewState,
-    ));
+    ({ frame: initialFrame, viewStateRef } = createFrame(editor, {
+      timestamp: 0,
+      mouseCursor: lastMousePosition,
+      getSlideState: context.getSlideState,
+      getPreviewState: context.getPreviewState,
+    }));
   } else {
     initialFrame = {
       timestamp: 0,
@@ -450,16 +443,14 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
     editor.getModel(),
   );
 
-  const { frame, viewStateRef } = createFrame(
-    editor,
+  const { frame, viewStateRef } = createFrame(editor, {
     timestamp,
-    mousePosition,
-    context.getSlideState,
-    context.getPreviewState,
-    capturedContent,
-    session.lastCapturedViewStateRef,
-    capture?.selection,
-  );
+    mouseCursor: mousePosition,
+    getSlideState: context.getSlideState,
+    getPreviewState: context.getPreviewState,
+    previous: { content: capturedContent, viewState: session.lastCapturedViewStateRef },
+    selectionOverride: capture?.selection,
+  });
 
   // The cursor track above already holds every pointer sample, and replay
   // reads frame pointers only for recordings that have no cursor track. A
@@ -496,15 +487,16 @@ export const capturePreviewRefreshFrame = ({
   }
 
   const timestamp = getRecordingTimestamp(context.session);
-  const { frame, viewStateRef } = createFrame(
-    editor,
+  const { frame, viewStateRef } = createFrame(editor, {
     timestamp,
-    context.session.lastMousePosition,
-    context.getSlideState,
-    context.getPreviewState,
-    getPreviousCapturedContent(context.session, context.currentFrame),
-    context.session.lastCapturedViewStateRef,
-  );
+    mouseCursor: context.session.lastMousePosition,
+    getSlideState: context.getSlideState,
+    getPreviewState: context.getPreviewState,
+    previous: {
+      content: getPreviousCapturedContent(context.session, context.currentFrame),
+      viewState: context.session.lastCapturedViewStateRef,
+    },
+  });
 
   if (frame.state.previewState) {
     frame.state.previewState = {

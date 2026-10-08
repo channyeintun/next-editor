@@ -39,24 +39,26 @@ const makeEditor = (state: FakeEditorState) => {
 
 const mouse: MouseCursorPosition = { x: 0, y: 0, visible: false };
 
+/** What a capture hands the next one: its content string and view state. */
+const previousOf = ({ frame, viewStateRef }: ReturnType<typeof createFrame>) => ({
+  content: {
+    value: frame.state.content,
+    versionId: viewStateRef.versionId,
+    modelId: viewStateRef.modelId,
+  },
+  viewState: viewStateRef,
+});
+
 describe("createFrame capture gating", () => {
   it("reuses content and viewState by reference when model, version, scroll and selection are unchanged", () => {
     const fake = makeEditor({ uri: "file:///a.ts", versionId: 5, value: "aaa", scrollTop: 0 });
-    const first = createFrame(fake.editor, 0, mouse);
+    const first = createFrame(fake.editor, { timestamp: 0, mouseCursor: mouse });
 
-    const second = createFrame(
-      fake.editor,
-      50,
-      mouse,
-      undefined,
-      undefined,
-      {
-        value: first.frame.state.content,
-        versionId: first.contentVersionId,
-        modelId: first.viewStateRef.modelId,
-      },
-      first.viewStateRef,
-    );
+    const second = createFrame(fake.editor, {
+      timestamp: 50,
+      mouseCursor: mouse,
+      previous: previousOf(first),
+    });
 
     expect(second.frame.state.content).toBe(first.frame.state.content);
     expect(fake.getValue).toHaveBeenCalledTimes(1);
@@ -66,26 +68,18 @@ describe("createFrame capture gating", () => {
 
   it("does not reuse content when the model changed, even if the per-model version id coincides", () => {
     const fake = makeEditor({ uri: "file:///a.ts", versionId: 5, value: "aaa", scrollTop: 0 });
-    const first = createFrame(fake.editor, 0, mouse);
+    const first = createFrame(fake.editor, { timestamp: 0, mouseCursor: mouse });
 
     // Simulate switching the active file: new model, same numeric version id.
     fake.state.uri = "file:///b.ts";
     fake.state.modelId = "$model2";
     fake.state.value = "bbb";
 
-    const second = createFrame(
-      fake.editor,
-      50,
-      mouse,
-      undefined,
-      undefined,
-      {
-        value: first.frame.state.content,
-        versionId: first.contentVersionId,
-        modelId: first.viewStateRef.modelId,
-      },
-      first.viewStateRef,
-    );
+    const second = createFrame(fake.editor, {
+      timestamp: 50,
+      mouseCursor: mouse,
+      previous: previousOf(first),
+    });
 
     expect(second.frame.state.content).toBe("bbb");
     expect(second.viewStateRef.modelId).toBe("$model2");
@@ -100,26 +94,18 @@ describe("createFrame capture gating", () => {
       value: "old",
       scrollTop: 0,
     });
-    const first = createFrame(fake.editor, 0, mouse);
+    const first = createFrame(fake.editor, { timestamp: 0, mouseCursor: mouse });
 
     // The file is removed and re-created: a new model under the same uri, whose
     // version id starts over at 1.
     fake.state.modelId = "$model2";
     fake.state.value = "new";
 
-    const second = createFrame(
-      fake.editor,
-      50,
-      mouse,
-      undefined,
-      undefined,
-      {
-        value: first.frame.state.content,
-        versionId: first.contentVersionId,
-        modelId: first.viewStateRef.modelId,
-      },
-      first.viewStateRef,
-    );
+    const second = createFrame(fake.editor, {
+      timestamp: 50,
+      mouseCursor: mouse,
+      previous: previousOf(first),
+    });
 
     expect(fake.getValue).toHaveBeenCalledTimes(2);
     expect(second.frame.state.content).toBe("new");
@@ -128,23 +114,15 @@ describe("createFrame capture gating", () => {
 
   it("recomputes viewState when scroll changes but still reuses unchanged content", () => {
     const fake = makeEditor({ uri: "file:///a.ts", versionId: 5, value: "aaa", scrollTop: 0 });
-    const first = createFrame(fake.editor, 0, mouse);
+    const first = createFrame(fake.editor, { timestamp: 0, mouseCursor: mouse });
 
     fake.state.scrollTop = 120;
 
-    const second = createFrame(
-      fake.editor,
-      50,
-      mouse,
-      undefined,
-      undefined,
-      {
-        value: first.frame.state.content,
-        versionId: first.contentVersionId,
-        modelId: first.viewStateRef.modelId,
-      },
-      first.viewStateRef,
-    );
+    const second = createFrame(fake.editor, {
+      timestamp: 50,
+      mouseCursor: mouse,
+      previous: previousOf(first),
+    });
 
     expect(fake.saveViewState).toHaveBeenCalledTimes(2);
     expect(second.frame.state.content).toBe(first.frame.state.content);
@@ -198,16 +176,11 @@ describe("createFrame capture gating", () => {
       },
     });
 
-    const captured = createFrame(
-      fake.editor,
-      25,
-      mouse,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      remoteSelection,
-    );
+    const captured = createFrame(fake.editor, {
+      timestamp: 25,
+      mouseCursor: mouse,
+      selectionOverride: remoteSelection,
+    });
     const normalized = normalizeEditorFrame(captured.frame);
 
     expect(normalized.state.selection).toEqual(remoteSelection);
@@ -262,29 +235,20 @@ describe("createFrame capture gating", () => {
     const cursorStateOf = (viewState: unknown) =>
       (viewState as { cursorState: Array<Record<string, unknown>> }).cursorState;
 
-    const first = createFrame(
-      fake.editor,
-      0,
-      mouse,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      remoteSelection,
-    );
+    const first = createFrame(fake.editor, {
+      timestamp: 0,
+      mouseCursor: mouse,
+      selectionOverride: remoteSelection,
+    });
     const recordedCursor = cursorStateOf(first.frame.state.viewState)[0];
     const recordedCursorJson = JSON.stringify(recordedCursor);
 
-    const second = createFrame(
-      fake.editor,
-      50,
-      mouse,
-      undefined,
-      undefined,
-      undefined,
-      first.viewStateRef,
-      remoteSelection,
-    );
+    const second = createFrame(fake.editor, {
+      timestamp: 50,
+      mouseCursor: mouse,
+      previous: { viewState: first.viewStateRef },
+      selectionOverride: remoteSelection,
+    });
 
     // The unchanged selection reuses the recorded view state, which must stay as recorded.
     expect(second.frame.state.viewState).toBe(first.frame.state.viewState);
