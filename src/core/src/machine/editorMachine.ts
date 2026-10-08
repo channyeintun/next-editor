@@ -53,12 +53,8 @@ import {
   resumeRecordingSession,
   addChapterMarker,
 } from "./captureActions";
-import { findRetakeTarget, rewindSessionToSafePoint } from "./retake";
-import {
-  appendChatDelta,
-  appendRuntimeRecordingEvent,
-  getRecordingTimestamp,
-} from "./recordingSession";
+import { findRetakeTargetNow, rewindSessionToSafePoint } from "./retake";
+import { appendChatDelta, appendRuntimeRecordingEvent } from "./recordingSession";
 import { editRecordedAudio, hasAudioEdit } from "../utils/audioEdit";
 import {
   setRecording,
@@ -265,8 +261,7 @@ export const editorMachine = setup({
     isExternalAudioRecording: ({ context }) => getRunningRecorders(context).externalAudio,
     isCameraRecording: ({ context }) => getRunningRecorders(context).camera,
     canRetake: ({ context }) =>
-      context.session !== null &&
-      findRetakeTarget(context.session.safePoints, getRecordingTimestamp(context.session)) !== null,
+      context.session !== null && findRetakeTargetNow(context.session) !== null,
     // A microphone blob that lands after its take finalized (the stop watchdog won) and
     // whose narration still has a retake's cut to apply must go back through loading.
     isLateAudioAwaitingEdit: ({ context }) =>
@@ -424,7 +419,7 @@ export const editorMachine = setup({
     retakeRecording: enqueueActions(({ context, enqueue }) => {
       const session = context.session;
       if (!session) return;
-      const target = findRetakeTarget(session.safePoints, getRecordingTimestamp(session));
+      const target = findRetakeTargetNow(session);
       if (!target) return;
       const restore = rewindSessionToSafePoint(session, target);
 

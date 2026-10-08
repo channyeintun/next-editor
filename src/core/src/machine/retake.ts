@@ -39,6 +39,11 @@ export function findRetakeTarget(
   return null;
 }
 
+/** Where a retake of `session` would rewind to at this moment of its recording. */
+export function findRetakeTargetNow(session: RecordingSession): RecordingSafePoint | null {
+  return findRetakeTarget(session.safePoints, getRecordingTimestamp(session));
+}
+
 /**
  * Adds a safe point. One at the same recorded time as the last replaces it: after a
  * retake the take resumes at the moment it rewound to, and the resumed anchor (its
