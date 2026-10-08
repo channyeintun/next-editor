@@ -138,6 +138,9 @@ export interface ApiClientReplayState {
   history?: ApiClientReplayHistoryEntry[];
 }
 
+/** Newest-first API-client history length, shared by the live store and replay. */
+export const API_CLIENT_HISTORY_LIMIT = 25;
+
 export interface PreviewState {
   size: PreviewSize;
   isOpen?: boolean;

@@ -1,4 +1,9 @@
-import type { PreviewEvent, PreviewState } from "../../preview";
+import {
+  API_CLIENT_HISTORY_LIMIT,
+  type ApiClientReplayState,
+  type PreviewEvent,
+  type PreviewState,
+} from "../../preview";
 import { findTimedEventIndexAtOrBefore, isCursorAheadOf } from "./cursor";
 
 // ============================================================================
@@ -22,6 +27,61 @@ export interface PreviewReplayResult {
 
 const previewReplayIndexCache = new WeakMap<PreviewEvent[], PreviewReplayIndex>();
 
+// API client interactions inherently happen in the API frame, so a request or
+// response implies API mode even if the explicit mode-switch event wasn't
+// captured (e.g. the user was already in API mode when recording started).
+function impliesApiMode(previewEvent: PreviewEvent): boolean {
+  return (
+    previewEvent.type === "api_client_request" ||
+    previewEvent.type === "api_client_response" ||
+    previewEvent.type === "api_client_request_tab" ||
+    previewEvent.type === "api_client_inspect_history"
+  );
+}
+
+// The API client's request/response/history sub-state after one preview event;
+// events that don't touch it carry the previous sub-state through.
+function nextApiClientState(
+  previewEvent: PreviewEvent,
+  previous: ApiClientReplayState | undefined,
+): ApiClientReplayState | undefined {
+  if (previewEvent.type === "api_client_request") {
+    return {
+      request: previewEvent.apiClientRequest,
+      sending: true,
+      history: previous?.history,
+    };
+  }
+
+  if (previewEvent.type === "api_client_response" && previewEvent.apiClientResult) {
+    const historyEntry = {
+      id: String(previewEvent.timestamp),
+      request: previous?.request,
+      result: previewEvent.apiClientResult,
+    };
+    return {
+      request: previous?.request,
+      result: previewEvent.apiClientResult,
+      sending: false,
+      // Newest first and capped, matching the live store.
+      history: [historyEntry, ...(previous?.history ?? [])].slice(0, API_CLIENT_HISTORY_LIMIT),
+    };
+  }
+
+  if (previewEvent.type === "api_client_inspect_history" && previewEvent.apiClientRequest) {
+    // Inspecting a history entry restores that entry's full request (method/path/
+    // headers/body) and result, keeping the existing history.
+    return {
+      ...previous,
+      request: previewEvent.apiClientRequest,
+      result: previewEvent.apiClientResult,
+      sending: false,
+    };
+  }
+
+  return previous;
+}
+
 function mergePreviewEventState(
   previewEvent: PreviewEvent,
   previousState?: PreviewState,
@@ -41,48 +101,8 @@ function mergePreviewEventState(
   const carriedScrollLeft = previewEvent.scrollLeft ?? previousState?.scrollLeft;
   const nextActiveMode = previewEvent.activeMode ?? previousState?.activeMode;
   const nextRequestTab = previewEvent.requestTab ?? previousState?.requestTab;
-
-  // API client interactions inherently happen in the API frame, so a request or
-  // response implies API mode even if the explicit mode-switch event wasn't
-  // captured (e.g. the user was already in API mode when recording started).
-  const impliesApiMode =
-    previewEvent.type === "api_client_request" ||
-    previewEvent.type === "api_client_response" ||
-    previewEvent.type === "api_client_request_tab" ||
-    previewEvent.type === "api_client_inspect_history";
-  const resolvedActiveMode = impliesApiMode ? "api" : nextActiveMode;
-
-  let nextApiClientState = previousState?.apiClientState;
-  if (previewEvent.type === "api_client_request") {
-    nextApiClientState = {
-      request: previewEvent.apiClientRequest,
-      sending: true,
-      history: previousState?.apiClientState?.history,
-    };
-  } else if (previewEvent.type === "api_client_response" && previewEvent.apiClientResult) {
-    const previousApiClientState = previousState?.apiClientState;
-    const historyEntry = {
-      id: String(previewEvent.timestamp),
-      request: previousApiClientState?.request,
-      result: previewEvent.apiClientResult,
-    };
-    nextApiClientState = {
-      request: previousApiClientState?.request,
-      result: previewEvent.apiClientResult,
-      sending: false,
-      // Newest first, matching the live store; cap mirrors the store's MAX_HISTORY.
-      history: [historyEntry, ...(previousApiClientState?.history ?? [])].slice(0, 25),
-    };
-  } else if (previewEvent.type === "api_client_inspect_history" && previewEvent.apiClientRequest) {
-    // Inspecting a history entry restores that entry's full request (method/path/
-    // headers/body) and result, keeping the existing history.
-    nextApiClientState = {
-      ...previousState?.apiClientState,
-      request: previewEvent.apiClientRequest,
-      result: previewEvent.apiClientResult,
-      sending: false,
-    };
-  }
+  const resolvedActiveMode = impliesApiMode(previewEvent) ? "api" : nextActiveMode;
+  const apiClientState = nextApiClientState(previewEvent, previousState?.apiClientState);
 
   const appliedState: PreviewState = {
     size: previewEvent.size ?? previousState?.size ?? "small",
@@ -95,7 +115,7 @@ function mergePreviewEventState(
     currentInteraction: previewEvent.interaction,
     activeMode: resolvedActiveMode,
     requestTab: nextRequestTab,
-    apiClientState: nextApiClientState,
+    apiClientState,
   };
 
   if (nextIsOpen !== undefined) {

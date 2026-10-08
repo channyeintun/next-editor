@@ -1,8 +1,9 @@
 import { createStore } from "@xstate/store-react";
-import type {
-  ApiClientRecordedResult,
-  ApiClientReplayState,
-  ApiClientRequestTab,
+import {
+  API_CLIENT_HISTORY_LIMIT,
+  type ApiClientRecordedResult,
+  type ApiClientReplayState,
+  type ApiClientRequestTab,
 } from "../types/slides";
 import { MAX_API_CLIENT_RETAINED_BODY_BYTES, truncateUtf8 } from "../utils/apiClientBridge";
 
@@ -88,8 +89,6 @@ export interface ApiClientStoreContext {
   result: ApiClientResult | null;
   history: ApiClientHistoryEntry[];
 }
-
-const MAX_HISTORY = 25;
 
 function initialContext(): ApiClientStoreContext {
   return {
@@ -181,7 +180,7 @@ export function createApiClientStore() {
           result: toRetainedApiClientResult(event.result),
           timestamp: Date.now(),
         };
-        const history = [entry, ...context.history].slice(0, MAX_HISTORY);
+        const history = [entry, ...context.history].slice(0, API_CLIENT_HISTORY_LIMIT);
         return {
           ...context,
           sending: false,
