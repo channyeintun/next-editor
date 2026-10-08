@@ -18,6 +18,7 @@ import { selectNextEditorMetadata } from "../useNextEditor";
 import { reconstructFrameAtIndex } from "../utils/frameDelta";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { RuntimeRecordingSnapshot } from "../../../types/runtime";
+import type { ChatCheckpoint } from "../../../types/chat";
 
 const audioEdit = vi.hoisted(() => ({
   editRecordedAudio: vi.fn<(blob: Blob, edit: unknown) => Promise<Blob>>(),
@@ -235,6 +236,26 @@ describe("retaking", () => {
     const { runtimeEvents } = sessionOf(actor);
     expect(runtimeEvents).toHaveLength(2);
     expect(runtimeEvents[1]).toMatchObject({ timestamp: 0, snapshot: live });
+    actor.stop();
+  });
+
+  it("records the agent conversation whole at the safe point", () => {
+    const advance = pinClocks();
+    const live: ChatCheckpoint = {
+      items: [{ kind: "message", id: "m1", role: "user", text: "add a button" }],
+      status: "done",
+      draft: "",
+    };
+    const actor = startTake(new RecordingEditor(), { getChatCheckpoint: () => live });
+
+    advance(1_000);
+    actor.send({ type: "CHAT_EVENT", event: { k: "draft", text: "now style it" } });
+    advance(1_000);
+    actor.send({ type: "RETAKE_RECORDING" });
+
+    expect(sessionOf(actor).chatEvents).toEqual([
+      { timestamp: 0, event: { k: "checkpoint", state: live } },
+    ]);
     actor.stop();
   });
 

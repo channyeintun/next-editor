@@ -54,7 +54,11 @@ import {
   addChapterMarker,
 } from "./captureActions";
 import { findRetakeTarget, rewindSessionToSafePoint } from "./retake";
-import { appendRuntimeRecordingEvent, getRecordingTimestamp } from "./recordingSession";
+import {
+  appendChatDelta,
+  appendRuntimeRecordingEvent,
+  getRecordingTimestamp,
+} from "./recordingSession";
 import { editRecordedAudio, hasAudioEdit } from "../utils/audioEdit";
 import {
   setRecording,
@@ -444,12 +448,7 @@ export const editorMachine = setup({
       }
       if (restore.chatChanged) {
         const checkpoint = context.getChatCheckpoint?.();
-        if (checkpoint) {
-          session.chatEvents.push({
-            timestamp: getRecordingTimestamp(session),
-            event: { k: "checkpoint", state: checkpoint },
-          });
-        }
+        if (checkpoint) appendChatDelta(session, { k: "checkpoint", state: checkpoint });
       }
 
       enqueue.assign({
