@@ -12,7 +12,7 @@ export const isValidEditorState = (state: unknown): state is EditorState => {
   const obj = state as Record<string, unknown>;
 
   // Validate content
-  if (obj.content === undefined || obj.content === null) {
+  if (typeof obj.content !== "string") {
     return false;
   }
 
