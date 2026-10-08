@@ -40,6 +40,12 @@ export type {
   X86RunSummary,
   X86RegisterSnapshot,
 } from "./run";
-// `load` hands back a Machine and a result carries its Flags, so both are part
-// of the surface as types; nothing outside this directory drives a Machine.
+// `load` hands back a live Machine, and the page's runner
+// (runtime/asmPlayground/client.ts) calls two of its methods: `runSlice`, so
+// it can yield between slices, and `snapshotRegisters`, for the registers the
+// program changed. Everything else it reports comes from `summarizeRun`. So
+// Machine, Flags and StopReason are part of the surface as types; the encoder,
+// decoder, parser, memory and page table are not. The Monaco grammar imports
+// `KNOWN_MNEMONICS` from ./isa directly rather than through here, so the
+// editor's eagerly loaded chunk never pulls in the assembler or the CPU.
 export type { Flags, Machine, StopReason } from "./cpu";

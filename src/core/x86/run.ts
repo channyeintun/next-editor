@@ -3,11 +3,13 @@
  *
  * This is the layer that stands in for `nasm && ld && ./a.out`. Together with
  * `assemble` it is the whole surface for *running* assembly, and the app
- * reaches it through `./index`, which re-exports exactly these: everything
- * below — the two-pass layout, the encoder, the decoder, the page table — is an
- * implementation detail of "run this assembly". (The Monaco tokenizer also
- * borrows `KNOWN_MNEMONICS` from `./isa`, which is a word list rather than a
- * way to run anything.)
+ * reaches it through `./index`: the tests call `assembleAndRun`, and the page's
+ * runner calls `load`, steps the Machine with `runSlice`, and reads it with
+ * `summarizeRun` and `snapshotRegisters`. Everything below — the two-pass
+ * layout, the encoder, the decoder, the page table — is an implementation
+ * detail of "run this assembly". (The Monaco tokenizer also borrows
+ * `KNOWN_MNEMONICS` from `./isa`, which is a word list rather than a way to run
+ * anything.)
  *
  * The loading it does is the part people usually never see. A Linux program
  * does not begin with an empty stack: the kernel puts `argc`, the argument
