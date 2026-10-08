@@ -3,6 +3,7 @@ import type {
   RuntimeRecordingEvent,
   RuntimeRecordingSnapshot,
   RuntimeTerminalOutputDelta,
+  RuntimeTerminalScrollLines,
   RuntimeTerminalSessionSnapshot,
 } from "./runtime";
 
@@ -117,6 +118,93 @@ export function applyRuntimeDelta(
       output: applyTerminalOutputDelta(previousOutputs.get(session.id) ?? "", session.output),
     })),
   };
+}
+
+function areStringArraysEqual(left?: string[], right?: string[]): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+function areTerminalSessionSnapshotsEqual(
+  left?: RuntimeTerminalSessionSnapshot[],
+  right?: RuntimeTerminalSessionSnapshot[],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((leftSession, index) => {
+    const rightSession = right[index];
+
+    return (
+      leftSession.id === rightSession.id &&
+      leftSession.title === rightSession.title &&
+      leftSession.output === rightSession.output
+    );
+  });
+}
+
+function areTerminalScrollLinesEqual(
+  left?: RuntimeTerminalScrollLines,
+  right?: RuntimeTerminalScrollLines,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every(
+    (key) => Object.prototype.hasOwnProperty.call(right, key) && left[key] === right[key],
+  );
+}
+
+/**
+ * Whether two snapshots hold the same runtime state. It is the recorder's only
+ * dedupe gate for runtime events, so it compares every recorded field: a field
+ * it skipped would be dropped whenever it was the only thing that changed.
+ */
+export function areRuntimeRecordingSnapshotsEqual(
+  left: RuntimeRecordingSnapshot,
+  right: RuntimeRecordingSnapshot,
+): boolean {
+  return (
+    left.mode === right.mode &&
+    left.status === right.status &&
+    left.previewUrl === right.previewUrl &&
+    left.previewPort === right.previewPort &&
+    left.lastOutput === right.lastOutput &&
+    left.activeCommand === right.activeCommand &&
+    left.errorMessage === right.errorMessage &&
+    left.activeTerminalSessionId === right.activeTerminalSessionId &&
+    left.activeTab === right.activeTab &&
+    left.isCollapsed === right.isCollapsed &&
+    left.isFullHeight === right.isFullHeight &&
+    left.isSettingsOpen === right.isSettingsOpen &&
+    areStringArraysEqual(left.consoleLines, right.consoleLines) &&
+    areTerminalSessionSnapshotsEqual(left.terminalSessions, right.terminalSessions) &&
+    areTerminalScrollLinesEqual(left.terminalScrollLines, right.terminalScrollLines)
+  );
 }
 
 function totalOutputLength(sessions: ReadonlyArray<{ output: string }> | undefined): number {

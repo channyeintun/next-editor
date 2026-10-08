@@ -13,8 +13,8 @@ import {
   type WorkspaceRecordingSnapshot,
   type WorkspaceWidthDeltas,
 } from "../../../types/workspace";
-import { areRuntimeRecordingSnapshotsEqual } from "../../../utils/equality";
 import {
+  areRuntimeRecordingSnapshotsEqual,
   createRuntimeRecordingEvent,
   resolveLatestRuntimeSnapshot,
   RUNTIME_CHECKPOINT_RESET,
