@@ -313,7 +313,8 @@ export async function encodeMonoPcmToOggOpus(
 
   const packets: Uint8Array[] = [];
   let preSkip: number | null = null;
-  let failure: Error | null = null;
+  // Assigned from the error callback, so TypeScript must not narrow it to null.
+  let failure = null as Error | null;
 
   const encoder = new AudioEncoder({
     output: (chunk, metadata) => {
@@ -355,7 +356,9 @@ export async function encodeMonoPcmToOggOpus(
     }
     await encoder.flush();
   } finally {
-    encoder.close();
+    // An encoder error already closed the codec, and close() on a closed codec
+    // throws InvalidStateError, which would replace the real error.
+    if (encoder.state !== "closed") encoder.close();
   }
 
   if (failure) throw failure;
