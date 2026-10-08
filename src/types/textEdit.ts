@@ -30,38 +30,55 @@ function isNonNegativeInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0;
 }
 
+/** The event-level checks: a file identity, advancing versions, and a fresh length. */
+function hasValidEventIdentity(event: TextEditEvent, actualBeforeLength: number): boolean {
+  return (
+    event.fileId.length !== 0 &&
+    event.path.length !== 0 &&
+    isNonNegativeInteger(event.beforeVersion) &&
+    isNonNegativeInteger(event.afterVersion) &&
+    event.afterVersion > event.beforeVersion &&
+    isNonNegativeInteger(event.beforeLength) &&
+    event.beforeLength === actualBeforeLength
+  );
+}
+
 /**
- * Validate and order an edit event without materializing the current text.
- * Monaco ranges are relative to the pre-edit model, so applying from the end
- * of the document toward the start preserves every offset. For equal-offset
- * insertions, reverse application preserves Monaco's original text order.
+ * Validate and order an edit event without materializing the current text:
+ * its identity, versions and length against the model, then its changes (see
+ * {@link prepareTextEditChanges}).
  */
 export function prepareTextEditEvent(
   event: TextEditEvent,
   actualBeforeLength: number,
 ): PreparedTextEditEvent | null {
-  if (
-    event.fileId.length === 0 ||
-    event.path.length === 0 ||
-    !isNonNegativeInteger(event.beforeVersion) ||
-    !isNonNegativeInteger(event.afterVersion) ||
-    event.afterVersion <= event.beforeVersion ||
-    !isNonNegativeInteger(event.beforeLength) ||
-    !isNonNegativeInteger(event.afterLength) ||
-    event.beforeLength !== actualBeforeLength ||
-    event.changes.length === 0
-  ) {
-    return null;
-  }
+  if (!hasValidEventIdentity(event, actualBeforeLength)) return null;
+  return prepareTextEditChanges(event.changes, actualBeforeLength, event.afterLength);
+}
+
+/**
+ * Validate and order a batch of changes against a text of `beforeLength` code
+ * units that they must turn into one of `afterLength`, with no event identity
+ * (recording replay has none). Monaco ranges are relative to the pre-edit
+ * model, so applying from the end of the document toward the start preserves
+ * every offset. For equal-offset insertions, reverse application preserves
+ * Monaco's original text order.
+ */
+export function prepareTextEditChanges(
+  changes: readonly TextEditChange[],
+  beforeLength: number,
+  afterLength: number,
+): PreparedTextEditEvent | null {
+  if (!isNonNegativeInteger(afterLength) || changes.length === 0) return null;
 
   let lengthDelta = 0;
-  const indexedChanges = event.changes.map((change, index) => ({ change, index }));
+  const indexedChanges = changes.map((change, index) => ({ change, index }));
 
   for (const { change } of indexedChanges) {
     if (
       !isNonNegativeInteger(change.offset) ||
       !isNonNegativeInteger(change.deleteLength) ||
-      change.offset + change.deleteLength > actualBeforeLength
+      change.offset + change.deleteLength > beforeLength
     ) {
       return null;
     }
@@ -69,7 +86,7 @@ export function prepareTextEditEvent(
     if (!Number.isSafeInteger(lengthDelta)) return null;
   }
 
-  if (actualBeforeLength + lengthDelta !== event.afterLength) return null;
+  if (beforeLength + lengthDelta !== afterLength) return null;
 
   const ascendingChanges = indexedChanges.toSorted(
     (left, right) => left.change.offset - right.change.offset || left.index - right.index,
@@ -104,7 +121,20 @@ export function prepareTextEditEvent(
 }
 
 export function applyTextEditEvent(content: string, event: TextEditEvent): string | null {
-  const prepared = prepareTextEditEvent(event, content.length);
+  if (!hasValidEventIdentity(event, content.length)) return null;
+  return applyTextEditChanges(content, event.changes, event.afterLength);
+}
+
+/**
+ * Applies a bare change batch (see {@link prepareTextEditChanges}) to
+ * `content`, or returns null when the batch is invalid for it.
+ */
+export function applyTextEditChanges(
+  content: string,
+  changes: readonly TextEditChange[],
+  afterLength: number,
+): string | null {
+  const prepared = prepareTextEditChanges(changes, content.length, afterLength);
   if (!prepared) return null;
 
   let nextContent = content;

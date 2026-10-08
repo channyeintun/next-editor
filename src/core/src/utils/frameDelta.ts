@@ -23,6 +23,7 @@ import {
 import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
 import { findTimedEventIndexAtOrBefore } from "./timedIndex";
 import {
+  applyTextEditChanges,
   applyTextEditEvent,
   type TextEditChange,
   type TextEditEvent,
@@ -198,34 +199,12 @@ export function applyContentEditDelta(base: string, delta: ContentEditDelta): st
     );
   }
 
-  const content = applyTextEditEvent(base, {
-    fileId: "recording",
-    path: "recording",
-    beforeVersion: 0,
-    afterVersion: 1,
-    beforeLength: delta.beforeLength,
-    afterLength: delta.afterLength,
-    changes: delta.changes,
-  });
+  const content = applyTextEditChanges(base, delta.changes, delta.afterLength);
   if (content === null) throw new Error("content edit delta contains invalid edits");
   if (hashContentEditText(content) !== delta.afterHash) {
     throw new Error("content edit delta result failed its integrity check");
   }
   return content;
-}
-
-function applyContentEditDeltaAt(
-  base: string,
-  delta: ContentEditDelta,
-  frameIndex?: number,
-): string {
-  try {
-    return applyContentEditDelta(base, delta);
-  } catch (error) {
-    if (frameIndex === undefined || !(error instanceof Error)) throw error;
-    error.message = `content edit delta failed at frame ${frameIndex}: ${error.message}`;
-    throw error;
-  }
 }
 
 /**
@@ -281,20 +260,22 @@ export function applyContentDelta(base: string, delta: ContentDelta): string {
 }
 
 /**
- * Same as {@link applyContentDelta}, but on failure rethrows with `frameIndex`
- * folded into the message so a replay desync (dmp base mismatch or a corrupt
- * delta) is attributable to the frame that failed, instead of surfacing as a
- * bare codec error with no reconstruction context. Mutates and rethrows the
- * original error (rather than wrapping it in a new one) so `instanceof
- * DmpBaseMismatchError` still holds for callers that distinguish it from a
- * corrupt-delta error. No-op when `frameIndex` is omitted.
+ * Runs `apply` (a content or content-edit delta application) and, on failure,
+ * rethrows with `frameIndex` folded into the message after `label`, so a
+ * replay desync (a base mismatch or a corrupt delta) is attributable to the
+ * frame that failed instead of surfacing as a bare codec error with no
+ * reconstruction context. Mutates and rethrows the original error (rather than
+ * wrapping it in a new one) so `instanceof DmpBaseMismatchError` and
+ * `instanceof ContentEditBaseMismatchError` still hold for callers that
+ * distinguish them from a corrupt-delta error. No-op when `frameIndex` is
+ * omitted.
  */
-function applyContentDeltaAt(base: string, delta: ContentDelta, frameIndex?: number): string {
+function withFrameIndex<T>(label: string, frameIndex: number | undefined, apply: () => T): T {
   try {
-    return applyContentDelta(base, delta);
+    return apply();
   } catch (error) {
     if (frameIndex === undefined || !(error instanceof Error)) throw error;
-    error.message = `content delta failed at frame ${frameIndex}: ${error.message}`;
+    error.message = `${label} failed at frame ${frameIndex}: ${error.message}`;
     throw error;
   }
 }
@@ -587,7 +568,9 @@ function resolvePreviewStateDelta(
     const { contentDelta, ...rest } = deltaPreviewState;
     return {
       ...rest,
-      content: applyContentDeltaAt(basePreviewState?.content ?? "", contentDelta, frameIndex),
+      content: withFrameIndex("content delta", frameIndex, () =>
+        applyContentDelta(basePreviewState?.content ?? "", contentDelta),
+      ),
     };
   }
   return deltaPreviewState;
@@ -622,17 +605,22 @@ export function applyFrameDeltaToNormalized(
   delta: FrameDelta,
   frameIndex?: number,
 ): EditorFrame {
-  if (delta.contentDelta && delta.contentEditDelta) {
+  const { contentDelta, contentEditDelta } = delta;
+  if (contentDelta && contentEditDelta) {
     throw new Error(
       frameIndex === undefined
         ? "frame contains conflicting content delta variants"
         : `frame ${frameIndex} contains conflicting content delta variants`,
     );
   }
-  const newContent = delta.contentEditDelta
-    ? applyContentEditDeltaAt(base.state.content, delta.contentEditDelta, frameIndex)
-    : delta.contentDelta
-      ? applyContentDeltaAt(base.state.content, delta.contentDelta, frameIndex)
+  const newContent = contentEditDelta
+    ? withFrameIndex("content edit delta", frameIndex, () =>
+        applyContentEditDelta(base.state.content, contentEditDelta),
+      )
+    : contentDelta
+      ? withFrameIndex("content delta", frameIndex, () =>
+          applyContentDelta(base.state.content, contentDelta),
+        )
       : base.state.content;
 
   const newPosition = delta.positionDelta
