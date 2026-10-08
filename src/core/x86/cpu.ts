@@ -24,6 +24,7 @@
 import {
   AsmDecodeError,
   decodeInstruction,
+  MAX_INSTRUCTION_BYTES,
   type DecodedInstruction,
   type DecodedOperand,
 } from "./decoder";
@@ -394,9 +395,10 @@ export class Machine {
   step(): DecodedInstruction {
     let decoded = this.#decoded.get(this.rip);
     if (!decoded) {
-      // 15 bytes is the architectural maximum length of an x86 instruction.
-      const window = this.memory.readCode(this.rip, 15);
-      decoded = this.#decode(window);
+      // The decoder refuses anything longer than this window, so it never needs
+      // a byte past it — running out here means the bytes are no instruction.
+      const window = this.memory.readCode(this.rip, MAX_INSTRUCTION_BYTES);
+      decoded = decodeInstruction(window, 0, this.rip);
       if (Number(this.rip % BigInt(PAGE_BYTES)) + decoded.length <= PAGE_BYTES) {
         this.#decoded.set(this.rip, decoded);
       }
@@ -405,24 +407,6 @@ export class Machine {
     this.#instructions += 1;
     this.#execute(decoded, nextRip);
     return decoded;
-  }
-
-  #decode(window: Uint8Array): DecodedInstruction {
-    try {
-      return decodeInstruction(window, 0, this.rip);
-    } catch (cause) {
-      // The window is exactly the architectural maximum, so a decoder that asks
-      // for a sixteenth byte has not run out of *code* — it is looking at bytes
-      // no processor would accept as one instruction. Its own reader says "ran
-      // off the end of the code", which describes this buffer, not the program.
-      if (cause instanceof RangeError) {
-        throw new Halt({
-          kind: "fault",
-          message: `The bytes at 0x${this.rip.toString(16)} are not an instruction — no x86 instruction is longer than the 15 bytes read here`,
-        });
-      }
-      throw cause;
-    }
   }
 
   #execute(decoded: DecodedInstruction, nextRip: bigint): void {

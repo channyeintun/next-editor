@@ -85,6 +85,37 @@ describe("decoding bytes no form in the table claims", () => {
   });
 });
 
+describe("decoding bytes that stop too soon or run too long", () => {
+  it("rejects an instruction cut short as a decode error, not a reader crash", () => {
+    // A ModRM byte and a second opcode byte that are not there. These used to
+    // escape as a bare RangeError, which the machine had to recognise by class.
+    expect(() => decode(0x8b)).toThrow(AsmDecodeError);
+    expect(() => decode(0x8b)).toThrow(/runs past the end of the code/);
+    expect(() => decode(0x0f)).toThrow(AsmDecodeError);
+    expect(() => decode(0x66, 0x48)).toThrow(/runs past the end of the code/);
+  });
+
+  it("still says an empty buffer holds no instruction", () => {
+    expect(() => decode()).toThrow("There is no instruction here");
+  });
+
+  it("rejects an instruction longer than 15 bytes even when more bytes follow", () => {
+    // Sixteen operand-size prefixes and a nop decoded as a 17-byte instruction.
+    const bytes = [...Array.from({ length: 16 }, () => 0x66), 0x90];
+    expect(() => decode(...bytes)).toThrow(AsmDecodeError);
+    expect(() => decode(...bytes)).toThrow(/longer than the 15 bytes/);
+    // Fourteen prefixes and a two-byte opcode is sixteen bytes, too.
+    expect(() => decode(...bytes.slice(0, 14), 0x0f, 0x05)).toThrow(/longer than the 15 bytes/);
+  });
+
+  it("still decodes an instruction that is exactly 15 bytes", () => {
+    expect(decode(...Array.from({ length: 14 }, () => 0x66), 0x90)).toMatchObject({
+      mnemonic: "nop",
+      length: 15,
+    });
+  });
+});
+
 describe("a size keyword written on the immediate", () => {
   it.each([
     ["mov [rax], byte 1", "c6 00 01"],

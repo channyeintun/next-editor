@@ -37,6 +37,15 @@ export type DecodedOperand =
   /** A branch displacement, measured from the end of this instruction. */
   | { kind: "relative"; offset: bigint };
 
+/**
+ * The architectural maximum length of one x86 instruction, prefixes included.
+ *
+ * The decoder enforces it rather than leaving it to whoever fetched the bytes:
+ * sixteen `66` prefixes and an opcode is not a long instruction, it is not an
+ * instruction at all, and a processor rejects it however many bytes follow.
+ */
+export const MAX_INSTRUCTION_BYTES = 15;
+
 export interface DecodedInstruction {
   mnemonic: string;
   /** Total bytes consumed, prefixes included. */
@@ -123,11 +132,16 @@ const USES_MODRM: ReadonlySet<Encoding> = new Set<Encoding>(["MR", "RM", "MI", "
 class ByteReader {
   #bytes: Uint8Array;
   #offset: number;
+  /** One past the last byte this instruction may use: the end of the code, or 15 bytes in. */
+  #limit: number;
+  #address: bigint;
   readonly start: number;
 
-  constructor(bytes: Uint8Array, offset: number) {
+  constructor(bytes: Uint8Array, offset: number, address: bigint) {
     this.#bytes = bytes;
     this.#offset = offset;
+    this.#limit = Math.min(bytes.length, offset + MAX_INSTRUCTION_BYTES);
+    this.#address = address;
     this.start = offset;
   }
 
@@ -136,14 +150,34 @@ class ByteReader {
   }
 
   peek(): number | undefined {
-    return this.#bytes[this.#offset];
+    return this.#offset < this.#limit ? this.#bytes[this.#offset] : undefined;
   }
 
   u8(): number {
+    if (this.#offset >= this.#limit) throw this.truncated();
     const value = this.#bytes[this.#offset];
-    if (value === undefined) throw new RangeError("Ran off the end of the code");
     this.#offset += 1;
     return value;
+  }
+
+  /**
+   * The error for an instruction that needs a byte past the limit. Which limit
+   * it hit decides the sentence: a reader fed a full fetch window has not run
+   * out of *code* at byte sixteen, it is looking at bytes no processor would
+   * accept as one instruction.
+   */
+  truncated(): AsmDecodeError {
+    const at = `0x${this.#address.toString(16)}`;
+    if (this.consumed >= MAX_INSTRUCTION_BYTES) {
+      return new AsmDecodeError(
+        `The bytes at ${at} are not an instruction — no x86 instruction is longer than the ${MAX_INSTRUCTION_BYTES} bytes read here`,
+        this.#address,
+      );
+    }
+    return new AsmDecodeError(
+      `The instruction at ${at} runs past the end of the code`,
+      this.#address,
+    );
   }
 
   signed(bytes: number): bigint {
@@ -176,7 +210,7 @@ export function decodeInstruction(
   offset: number,
   address: bigint,
 ): DecodedInstruction {
-  const reader = new ByteReader(bytes, offset);
+  const reader = new ByteReader(bytes, offset, address);
 
   let operandSizeOverride = false;
   let rex = 0;
@@ -184,7 +218,12 @@ export function decodeInstruction(
 
   for (;;) {
     const next = reader.peek();
-    if (next === undefined) throw new AsmDecodeError("There is no instruction here", address);
+    if (next === undefined) {
+      // Only an empty buffer has no instruction at all; prefixes with nothing
+      // after them are one that was cut short.
+      if (reader.consumed === 0) throw new AsmDecodeError("There is no instruction here", address);
+      throw reader.truncated();
+    }
     if (next === 0x66) {
       operandSizeOverride = true;
       reader.u8();
