@@ -3770,7 +3770,7 @@ describe("editorMachine local screen recording", () => {
     expect(actor.getSnapshot().context.screen.isRecording).toBe(false);
   });
 
-  it("spawns the screen actor and records the start offset on SCREEN_STARTED", async () => {
+  it("spawns the screen actor and records its MIME type and audio flag on SCREEN_STARTED", async () => {
     const actor = start();
     actor.send({ type: "START_RECORDING", screenStream: makeDisplayStream() });
     await waitFor(actor, (s) => s.matches("recording"));
@@ -3781,7 +3781,6 @@ describe("editorMachine local screen recording", () => {
     expect(screen.isRecording).toBe(true);
     expect(screen.mimeType).toBe("video/webm;codecs=vp9,opus");
     expect(screen.hasAudio).toBe(false);
-    expect(screen.startOffsetMs).toBeGreaterThanOrEqual(0);
   });
 
   it("saves the screen blob after stop — even once the machine reaches playback — and clears context", async () => {

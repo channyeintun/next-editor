@@ -380,7 +380,6 @@ export const editorMachine = setup({
           ...context.screen,
           isRecording: true,
           mimeType: "",
-          startOffsetMs: 0,
         },
       });
     }),

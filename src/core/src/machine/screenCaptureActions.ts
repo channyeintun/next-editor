@@ -1,5 +1,4 @@
 import { createIdleScreenState, type EditorActionArgs, type EditorContextUpdate } from "./types";
-import { getRecorderStartOffsetMs } from "./recordingSession";
 import { normalizeNonNegativeTime } from "./playbackValues";
 
 // ============================================================================
@@ -34,16 +33,11 @@ export const setScreenStream = ({ context, event }: EditorActionArgs): EditorCon
 
 export const storeScreenStarted = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "SCREEN_STARTED") return {};
-  // The screen MediaRecorder starts a beat after the session origin (picker + getDisplayMedia
-  // ran before START_RECORDING, but MediaRecorder.start resolves at spawn). Capture the offset
-  // on the same monotonic clock as the session so a consumer can realign the local video.
-  const startOffsetMs = getRecorderStartOffsetMs(context.session, event.startedAtPerf);
   return {
     screen: {
       ...context.screen,
       mimeType: event.mimeType,
       hasAudio: event.hasAudio,
-      startOffsetMs,
     },
   };
 };

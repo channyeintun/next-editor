@@ -298,7 +298,11 @@ export interface ScreenRecordingReadyPayload {
    * narration is included when this is false.
    */
   hasAudio: boolean;
-  /** Milliseconds between the recording-session origin and the first captured screen frame. */
+  /**
+   * Milliseconds from the take's start to the screen MediaRecorder starting: the screen actor's
+   * raw `performance.now()` at MediaRecorder start minus `session.startedAtPerf`. It is not read
+   * through the take's clock, so a pause before the recorder started is counted.
+   */
   startOffsetMs: number;
 }
 

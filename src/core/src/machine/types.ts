@@ -239,9 +239,10 @@ export interface CameraState {
   /** Source used for the active or finalized camera video */
   source: RecordingCameraSource | null;
   /**
-   * Milliseconds between the recording-session origin (`session.startedAt`) and the moment the
-   * camera actually started capturing. The camera spawns after `getUserMedia` resolves, so its
-   * first frame lags the timeline origin by this warmup; playback subtracts it to stay in sync.
+   * Recorded time at which the camera actually started capturing: its start read from
+   * `session.startedAtPerf` through the take's clock (`getRecorderStartOffsetMs`). The camera
+   * spawns after `getUserMedia` resolves, so its first frame lags the timeline origin by this
+   * warmup; playback subtracts it to stay in sync.
    */
   startOffsetMs: number;
 }
@@ -268,12 +269,6 @@ export interface ScreenState {
    * promise is not made for a file that has none.
    */
   hasAudio: boolean;
-  /**
-   * Milliseconds between the recording-session origin (`session.startedAtPerf`) and the moment
-   * the screen MediaRecorder actually started. Reported alongside the blob so a consumer could
-   * later align the local video against the session timeline.
-   */
-  startOffsetMs: number;
 }
 
 /**
@@ -799,7 +794,6 @@ export const createIdleScreenState = (): ScreenState => ({
   isRecording: false,
   mimeType: "",
   hasAudio: false,
-  startOffsetMs: 0,
 });
 
 /**

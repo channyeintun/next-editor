@@ -29,7 +29,11 @@ export interface ScreenRecordingInput {
   micTrack?: MediaStreamTrack | null;
   /** Injectable AudioContext constructor so jsdom tests can supply a fake. */
   audioContextCtor?: typeof AudioContext;
-  /** Monotonic origin of the editor recording this local capture accompanies. */
+  /**
+   * Monotonic origin of the editor recording this local capture accompanies. The actor computes
+   * the start offset from it and carries it on SCREEN_STOPPED, because a late stop from an
+   * earlier capture arrives after `context.screen` has moved on.
+   */
   sessionStartedAtPerf: number;
 }
 
@@ -52,6 +56,7 @@ export type ScreenRecordingEmit =
       mimeType: string;
       /** Whether the saved video carries an audio track. */
       hasAudio: boolean;
+      /** MediaRecorder start minus `sessionStartedAtPerf`; the only copy of the screen's offset. */
       startOffsetMs: number;
     }
   | { type: "SCREEN_ERROR"; actorId: string; error: string };
