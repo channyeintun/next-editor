@@ -1,9 +1,8 @@
 // Pure-JS common-prefix/suffix length helpers. The live editor diff
-// (`applyContentDiff`) uses them to narrow the range it rewrites in Monaco, and
-// `frameDelta.ts` wraps them as `findCommonPrefixLength` and
-// `findCommonSuffixLength`. (They were once a fallback for a
-// WebAssembly affix module; content deltas now come from the diff-match-patch
-// codec instead, which does not use these helpers.)
+// (`applyContentDiff`) uses them to narrow the range it rewrites in Monaco.
+// (They were once a fallback for a WebAssembly affix module; content deltas
+// now come from the diff-match-patch codec instead, which does not use these
+// helpers.)
 //
 // Lengths are in UTF-16 code units but never split a surrogate pair. An edit
 // offset inside a pair is widened to the pair boundary by Monaco while the

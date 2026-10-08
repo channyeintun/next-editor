@@ -10,9 +10,7 @@ import type {
   Keyframe,
   DeltaFrame,
 } from "./deltaTypes";
-import { isKeyframe, isDelta } from "./deltaTypes";
-export { isKeyframe, isDelta };
-import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
+import { isKeyframe } from "./deltaTypes";
 import { encodeAppendDelta, getDmpCodec } from "../../dmp/dmpCodec";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
 import {
@@ -37,22 +35,6 @@ interface KeyframeIndex {
 }
 
 const keyframeIndexCache = new WeakMap<DeltaFrame[], KeyframeIndex>();
-
-/**
- * Finds the length of the common prefix between two strings, in UTF-16 code
- * units, without splitting a surrogate pair.
- */
-export function findCommonPrefixLength(str1: string, str2: string): number {
-  return findCommonPrefixJS(str1, str2);
-}
-
-/**
- * Finds the length of the common suffix between two strings, in UTF-16 code
- * units, without splitting a surrogate pair.
- */
-export function findCommonSuffixLength(str1: string, str2: string): number {
-  return findCommonSuffixJS(str1, str2);
-}
 
 // ============================================================================
 // Content Delta Functions

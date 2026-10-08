@@ -6,8 +6,8 @@ import type {
   Recording,
 } from "./types";
 import type { PreviewDomPatchBatch, PreviewInitialDocument } from "./preview";
-import { createKeyframe, applyFrameDeltaToNormalized, isKeyframe } from "./utils/frameDelta";
-import type { DeltaFrame } from "./utils/deltaTypes";
+import { createKeyframe, applyFrameDeltaToNormalized } from "./utils/frameDelta";
+import { isKeyframe, type DeltaFrame } from "./utils/deltaTypes";
 import { normalizeEditorFrame } from "./utils/editorState";
 import { buildRecordingClusters } from "./utils/recordingClusters";
 import {

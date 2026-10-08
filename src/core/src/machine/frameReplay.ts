@@ -2,14 +2,13 @@ import type * as monaco from "monaco-editor";
 import type { EditorActionArgs, EditorContextUpdate, EditorMachineContext } from "./types";
 import type { EditorFrame } from "../types";
 import type { PreviewState } from "../preview";
-import type { DeltaFrame, FrameDelta } from "../utils/deltaTypes";
+import { isKeyframe, type DeltaFrame, type FrameDelta } from "../utils/deltaTypes";
 import type { WorkspaceRecordingEvent } from "../../../types/workspace";
 import {
   reconstructFrameAtIndex,
   applyFrameDeltaToNormalized,
   findFrameIndexAtTime,
   findNearestKeyframeIndex,
-  isKeyframe,
 } from "../utils/frameDelta";
 import { isEditorReady, isValidEditorState } from "../utils/validation";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";

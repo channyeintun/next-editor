@@ -2,8 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   applyContentDelta,
   createContentDelta,
-  findCommonPrefixLength,
-  findCommonSuffixLength,
   findFrameIndexAtTime,
   reconstructFrameAtIndex,
 } from "../frameDelta";
@@ -129,31 +127,6 @@ describe("Delta Compression Optimization", () => {
     expect(findFrameIndexAtTime(frames, 50, 1)).toBe(0);
     expect(findFrameIndexAtTime(frames, 50)).toBe(0);
     expect(findFrameIndexAtTime([], 50)).toBe(-1);
-  });
-
-  it("should not treat a shared UTF-8 lead byte as a shared character prefix", () => {
-    expect(findCommonPrefixLength("éx", "èy")).toBe(0);
-  });
-
-  it("should preserve suffix characters when the differing character is multi-byte", () => {
-    expect(findCommonSuffixLength("éa", "ĩa")).toBe(1);
-  });
-
-  it("does not end a common prefix inside a surrogate pair", () => {
-    // 😀 and 😁 share their high surrogate; the prefix must not keep it alone.
-    expect(findCommonPrefixLength("😀", "😁")).toBe(0);
-    expect(findCommonPrefixLength("x😁", "x😀😁")).toBe(1);
-    expect(findCommonPrefixLength("a😀b", "a😃b")).toBe(1);
-    expect(findCommonPrefixLength("😀x", "😀y")).toBe(2);
-  });
-
-  it("does not start a common suffix inside a surrogate pair", () => {
-    // 😀 (U+1F600) and U+1FA00 share their low surrogate, as do U+20000 and U+10000.
-    expect(findCommonSuffixLength("😀", "\u{1FA00}")).toBe(0);
-    expect(findCommonSuffixLength("a\u{20000}", "b\u{10000}")).toBe(0);
-    expect(findCommonSuffixLength("😀", "😁")).toBe(0);
-    expect(findCommonSuffixLength("😁x", "😀😁x")).toBe(3);
-    expect(findCommonSuffixLength("x😀", "y😀")).toBe(2);
   });
 
   it("round-trips content deltas, including multi-byte UTF-8 edits", () => {
