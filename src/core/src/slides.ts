@@ -54,6 +54,12 @@ export interface SlidePreviewState {
   isOpen: boolean;
   isMaximized?: boolean;
   currentSlideId?: string | null;
+  /**
+   * Build steps revealed on the current slide: 0 = none, slide.steps.length = all
+   * (google-svg only; always 0 for html/markdown). Named after reveal.js's vertical
+   * index; the name is part of the recording format (persisted slide events), so a
+   * rename needs a format change. Collaboration rooms never carry it.
+   */
   indexv?: number;
   currentInteraction?: IframeInteractionEvent;
 }
@@ -69,6 +75,12 @@ export interface SlideEvent {
   timestamp: number;
   slideId?: string;
   isMaximized?: boolean;
+  /**
+   * Build steps revealed on the current slide: 0 = none, slide.steps.length = all
+   * (google-svg only; always 0 for html/markdown). Named after reveal.js's vertical
+   * index; the name is part of the recording format (persisted slide events), so a
+   * rename needs a format change. Collaboration rooms never carry it.
+   */
   indexv?: number;
   interaction?: IframeInteractionEvent;
 }
