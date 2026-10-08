@@ -11,6 +11,7 @@ import {
   diffTerminalOutput,
   resolveLatestRuntimeSnapshot,
   resolveRuntimeSnapshotAt,
+  RUNTIME_CHECKPOINT_DUE,
   RUNTIME_CHECKPOINT_MAX_EVENTS,
   RUNTIME_CHECKPOINT_RESET,
   type RuntimeCheckpointProgress,
@@ -141,6 +142,21 @@ describe("runtime track checkpoints and resolution", () => {
       run = event.snapshot ? 0 : run + 1;
       expect(run).toBeLessThan(RUNTIME_CHECKPOINT_MAX_EVENTS);
     }
+  });
+
+  // A retake records the live terminal whole at the safe point by handing in this progress.
+  it("writes the next event whole when a checkpoint is due", () => {
+    const previous = snapshot("x".repeat(100));
+    const next = snapshot(`${"x".repeat(100)}y`);
+
+    expect(createRuntimeRecordingEvent(0, previous, next, RUNTIME_CHECKPOINT_RESET).event).toEqual({
+      timestamp: 0,
+      delta: diffRuntimeSnapshot(previous, next),
+    });
+    expect(createRuntimeRecordingEvent(0, previous, next, RUNTIME_CHECKPOINT_DUE)).toEqual({
+      event: { timestamp: 0, snapshot: next },
+      progress: RUNTIME_CHECKPOINT_RESET,
+    });
   });
 
   it("carries non-output fields whole and handles sessions opening and closing", () => {

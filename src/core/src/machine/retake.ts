@@ -8,8 +8,8 @@ import {
 import { reconstructFrameAtIndex } from "../utils/frameDelta";
 import { resumeFrameStreamEncoder } from "../utils/frameStreamEncoder";
 import { addMediaCut, totalMediaSpanLength } from "../utils/mediaSpans";
-import { RUNTIME_CHECKPOINT_MAX_EVENTS, resolveLatestRuntimeSnapshot } from "../runtimeTrack";
-import { getRecordingTimestamp } from "./recordingSession";
+import { RUNTIME_CHECKPOINT_DUE, resolveLatestRuntimeSnapshot } from "../runtimeTrack";
+import { getRecordingTimestamp, restartPreviewStream } from "./recordingSession";
 import { rewindRecordingClock } from "./recordingClock";
 import type { RecordingTracks } from "./recordingAssembly";
 import type { RecordingSafePoint, RecordingSession } from "./types";
@@ -167,15 +167,9 @@ export function rewindSessionToSafePoint(
   // The live terminal cannot be rewound, so its next state is recorded whole: a
   // checkpoint, not a delta against output the take no longer has.
   session.lastRuntimeSnapshot = resolveLatestRuntimeSnapshot(session.runtimeEvents) ?? undefined;
-  session.runtimeCheckpointProgress = {
-    events: RUNTIME_CHECKPOINT_MAX_EVENTS - 1,
-    appendedChars: 0,
-  };
+  session.runtimeCheckpointProgress = RUNTIME_CHECKPOINT_DUE;
 
-  if (previewStreamed) {
-    session.previewAwaitingCheckpoint = true;
-    session.previewCheckpointWall = undefined;
-  }
+  if (previewStreamed) restartPreviewStream(session);
 
   return {
     frame,

@@ -141,6 +141,12 @@ export interface RuntimeCheckpointProgress {
 
 export const RUNTIME_CHECKPOINT_RESET: RuntimeCheckpointProgress = { events: 0, appendedChars: 0 };
 
+/** Progress that makes createRuntimeRecordingEvent write the next event whole. */
+export const RUNTIME_CHECKPOINT_DUE: RuntimeCheckpointProgress = {
+  events: RUNTIME_CHECKPOINT_MAX_EVENTS - 1,
+  appendedChars: 0,
+};
+
 /**
  * The event to record for `next`, given the resolved state of the previous
  * event. A checkpoint is written once the deltas since the last one have

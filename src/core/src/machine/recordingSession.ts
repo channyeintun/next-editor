@@ -110,6 +110,15 @@ function earliestEventStamp(events: PreviewRecordedEvent[] | undefined): number 
   return earliest;
 }
 
+/**
+ * Re-bases the preview stream after a retake: patch batches are dropped until the
+ * preview's next full snapshot arrives.
+ */
+export function restartPreviewStream(session: RecordingSession): void {
+  session.previewAwaitingCheckpoint = true;
+  session.previewCheckpointWall = undefined;
+}
+
 export function appendPreviewInitialDocument(
   session: RecordingSession,
   document: PreviewInitialDocument,
