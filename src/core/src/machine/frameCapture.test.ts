@@ -6,6 +6,8 @@ import { createFrame } from "./frameCapture";
 
 interface FakeEditorState {
   uri: string;
+  /** The model instance's `id`; defaults to the uri (one model per file). */
+  modelId?: string;
   versionId: number;
   value: string;
   scrollTop: number;
@@ -21,6 +23,7 @@ const makeEditor = (state: FakeEditorState) => {
   );
   const editor = {
     getModel: () => ({
+      id: state.modelId ?? state.uri,
       getVersionId: () => state.versionId,
       uri: { toString: () => state.uri },
     }),
@@ -50,7 +53,7 @@ describe("createFrame capture gating", () => {
       {
         value: first.frame.state.content,
         versionId: first.contentVersionId,
-        modelUri: first.modelUri,
+        modelId: first.viewStateRef.modelId,
       },
       first.viewStateRef,
     );
@@ -67,6 +70,7 @@ describe("createFrame capture gating", () => {
 
     // Simulate switching the active file: new model, same numeric version id.
     fake.state.uri = "file:///b.ts";
+    fake.state.modelId = "$model2";
     fake.state.value = "bbb";
 
     const second = createFrame(
@@ -78,13 +82,47 @@ describe("createFrame capture gating", () => {
       {
         value: first.frame.state.content,
         versionId: first.contentVersionId,
-        modelUri: first.modelUri,
+        modelId: first.viewStateRef.modelId,
       },
       first.viewStateRef,
     );
 
     expect(second.frame.state.content).toBe("bbb");
-    expect(second.modelUri).toBe("file:///b.ts");
+    expect(second.viewStateRef.modelId).toBe("$model2");
+    expect(fake.saveViewState).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reuse content from a removed file's model when a new model takes its uri", () => {
+    const fake = makeEditor({
+      uri: "file:///a.ts",
+      modelId: "$model1",
+      versionId: 1,
+      value: "old",
+      scrollTop: 0,
+    });
+    const first = createFrame(fake.editor, 0, mouse);
+
+    // The file is removed and re-created: a new model under the same uri, whose
+    // version id starts over at 1.
+    fake.state.modelId = "$model2";
+    fake.state.value = "new";
+
+    const second = createFrame(
+      fake.editor,
+      50,
+      mouse,
+      undefined,
+      undefined,
+      {
+        value: first.frame.state.content,
+        versionId: first.contentVersionId,
+        modelId: first.viewStateRef.modelId,
+      },
+      first.viewStateRef,
+    );
+
+    expect(fake.getValue).toHaveBeenCalledTimes(2);
+    expect(second.frame.state.content).toBe("new");
     expect(fake.saveViewState).toHaveBeenCalledTimes(2);
   });
 
@@ -103,7 +141,7 @@ describe("createFrame capture gating", () => {
       {
         value: first.frame.state.content,
         versionId: first.contentVersionId,
-        modelUri: first.modelUri,
+        modelId: first.viewStateRef.modelId,
       },
       first.viewStateRef,
     );

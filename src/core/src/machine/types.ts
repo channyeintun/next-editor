@@ -73,8 +73,12 @@ export interface RecordingSafePoint {
 export interface CapturedContentRef {
   value: string;
   versionId: number;
-  /** `model.uri.toString()` — version ids are per-model counters, so identity requires both. */
-  modelUri: string;
+  /**
+   * `model.id`, unique to one model instance. Version ids restart at 1 on every new
+   * model, so identity needs both: a file switch can land on the same version id, and
+   * a file removed and re-created comes back as a new model under the same URI.
+   */
+  modelId: string;
 }
 
 /**
@@ -84,7 +88,8 @@ export interface CapturedContentRef {
 export interface CapturedViewStateRef {
   value: monaco.editor.ICodeEditorViewState | null;
   versionId: number;
-  modelUri: string;
+  /** `model.id`; see {@link CapturedContentRef.modelId}. */
+  modelId: string;
   scrollTop: number;
   scrollLeft: number;
   selection: EditorSelection;
@@ -187,13 +192,14 @@ export interface RecordingSession {
    * by reference instead of calling `editor.saveViewState()` again — see
    * `CapturedViewStateRef` above.
    *
-   * Its `versionId` and `modelUri` also identify the model that last captured frame's
+   * Its `versionId` and `modelId` also identify the model that last captured frame's
    * `state.content` was read from (see `currentFrame` on the machine context). When a
-   * new capture's version id AND model URI both match, the content string is reused
-   * by reference instead of re-reading `editor.getValue()`. Version ids are a
-   * per-model counter, so the URI must match too — otherwise a file switch
-   * between captures (same numeric version id, different model) would silently
-   * reuse the previous file's content.
+   * new capture's version id AND model id both match, the content string is reused
+   * by reference instead of re-reading `editor.getValue()`. Version ids restart at 1
+   * on every new model, so the model instance must match too — otherwise a file
+   * switch, or a file removed and re-created under the same URI, between captures
+   * (same numeric version id, different model) would silently reuse the previous
+   * model's content.
    */
   lastCapturedViewStateRef?: CapturedViewStateRef;
 }

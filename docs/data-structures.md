@@ -439,7 +439,7 @@ interface RecordingSession {
   whiteboardEvents: WhiteboardEvent[];
   chatEvents: ChatRecordingEvent[]; // Coding-agent chat: dmp content deltas + sparse checkpoints
   lastMousePosition: MouseCursorPosition;
-  lastCapturedViewStateRef?: CapturedViewStateRef; // Perf: reuse saveViewState() result and, by its versionId + modelUri, the content string when unchanged
+  lastCapturedViewStateRef?: CapturedViewStateRef; // Perf: reuse saveViewState() result and, by its versionId + modelId, the content string when unchanged
 }
 ```
 

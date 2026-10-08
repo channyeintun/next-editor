@@ -51,9 +51,20 @@ const getCaptureEditor = (context: EditorMachineContext) =>
 const MOUSE_FRAME_INTERVAL_MS = 50;
 
 /**
+ * The identity a captured content string or view state is keyed on. `model.id` is
+ * unique to one model instance; a URI is not, since a file removed and re-created
+ * during the take comes back as a new model under the same URI, its version id
+ * starting over at 1.
+ */
+const readModelIdentity = (model: monaco.editor.ITextModel | null) => ({
+  versionId: model?.getVersionId() ?? -1,
+  modelId: model?.id ?? "",
+});
+
+/**
  * Create a frame from current editor state.
  *
- * `previousContent`, when both its `versionId` and `modelUri` match the current
+ * `previousContent`, when both its `versionId` and `modelId` match the current
  * model, lets the frame reuse the prior content string by reference instead of
  * calling `editor.getValue()` again. This matters for mouse/selection frames (no
  * document edit since the last capture): the caller's content-delta diff already
@@ -61,12 +72,12 @@ const MOUSE_FRAME_INTERVAL_MS = 50;
  * copy turns that into an O(1) check instead of an O(doc) string equality scan
  * preceded by an O(doc) copy.
  *
- * The `modelUri` check matters because this is a multi-file workspace — Monaco's
- * `getVersionId()` is a per-model counter, so switching the active file between
- * captures can coincidentally produce the same numeric version id on the new
- * model. Without also checking the model URI, that coincidence would silently
- * reuse the previous file's content string for the new file, desyncing the
- * recorded stream.
+ * The `modelId` check matters because this is a multi-file workspace — Monaco's
+ * `getVersionId()` is a per-model counter that starts at 1 on every new model, so
+ * switching the active file between captures, or re-creating a removed file under
+ * the same URI, can coincidentally produce the same numeric version id on another
+ * model. Without also checking the model instance, that coincidence would silently
+ * reuse the previous model's content string, desyncing the recorded stream.
  *
  * `previousViewState` similarly lets the frame reuse the prior `viewState`
  * object by reference, skipping `editor.saveViewState()` and the normalize pass
@@ -94,16 +105,13 @@ export const createFrame = (
 ): {
   frame: EditorFrame;
   contentVersionId: number;
-  modelUri: string;
   viewStateRef: CapturedViewStateRef;
 } => {
-  const model = editor.getModel();
-  const versionId = model?.getVersionId() ?? -1;
-  const modelUri = model?.uri.toString() ?? "";
+  const { versionId, modelId } = readModelIdentity(editor.getModel());
   const content =
     previousContent &&
     previousContent.versionId === versionId &&
-    previousContent.modelUri === modelUri
+    previousContent.modelId === modelId
       ? previousContent.value
       : editor.getValue();
   const editorPosition = normalizeEditorPosition(editor.getPosition());
@@ -124,7 +132,7 @@ export const createFrame = (
   const canReuseViewState =
     previousViewState !== undefined &&
     previousViewState.versionId === versionId &&
-    previousViewState.modelUri === modelUri &&
+    previousViewState.modelId === modelId &&
     previousViewState.scrollTop === scrollTop &&
     previousViewState.scrollLeft === scrollLeft &&
     arePositionsEqual(previousViewState.position, position) &&
@@ -181,11 +189,10 @@ export const createFrame = (
       },
     },
     contentVersionId: versionId,
-    modelUri,
     viewStateRef: {
       value: viewState,
       versionId,
-      modelUri,
+      modelId,
       scrollTop,
       scrollLeft,
       selection,
@@ -239,7 +246,7 @@ const getPreviousCapturedContent = (
     ? {
         value: currentFrame.state.content,
         versionId: viewStateRef.versionId,
-        modelUri: viewStateRef.modelUri,
+        modelId: viewStateRef.modelId,
       }
     : undefined;
 };
@@ -383,23 +390,18 @@ const resolveCapturedContent = (
   textEdit: TextEditEvent | undefined,
   model: monaco.editor.ITextModel | null,
 ): { capturedContent?: CapturedContentRef; contentEditDelta?: CreatedContentEditDelta } => {
-  const currentModelUri = model?.uri.toString() ?? "";
-  const currentVersionId = model?.getVersionId() ?? -1;
+  const { versionId, modelId } = readModelIdentity(model);
   if (
     textEdit &&
     previousContent &&
-    previousContent.modelUri === currentModelUri &&
+    previousContent.modelId === modelId &&
     previousContent.versionId === textEdit.beforeVersion &&
-    currentVersionId === textEdit.afterVersion
+    versionId === textEdit.afterVersion
   ) {
     const created = createContentEditDelta(previousContent.value, textEdit);
     if (created) {
       return {
-        capturedContent: {
-          value: created.content,
-          versionId: currentVersionId,
-          modelUri: currentModelUri,
-        },
+        capturedContent: { value: created.content, versionId, modelId },
         contentEditDelta: created,
       };
     }

@@ -4061,14 +4061,15 @@ describe("editorMachine pointer captures while recording", () => {
     content = "const a = 1;";
     versionId = 1;
     uri = "file:///main.ts";
+    modelCount = 1;
     getValueCalls = 0;
-    readonly model = {
-      uri: { toString: () => this.uri },
-      getVersionId: () => this.versionId,
-    };
 
     getModel() {
-      return this.model as unknown as monaco.editor.ITextModel;
+      return {
+        id: `$model${this.modelCount}`,
+        uri: { toString: () => this.uri },
+        getVersionId: () => this.versionId,
+      } as unknown as monaco.editor.ITextModel;
     }
 
     getValue() {
@@ -4081,8 +4082,9 @@ describe("editorMachine pointer captures while recording", () => {
       this.versionId += 1;
     }
 
-    /** Switch files. Each model counts versions on its own, so the id starts over. */
+    /** Switch files: another model, which counts versions on its own from 1. */
     open(uri: string, content: string) {
+      this.modelCount += 1;
       this.uri = uri;
       this.content = content;
       this.versionId = 1;
