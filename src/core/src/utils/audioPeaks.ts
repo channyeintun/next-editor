@@ -9,6 +9,9 @@ import type { MediaSpan } from "./mediaSpans";
 /** Decoding at 8 kHz keeps a long take small in memory; loudness needs no more. */
 const PEAKS_DECODE_RATE = 8_000;
 
+/** Loudness grid when nothing else sets one. */
+const DEFAULT_BUCKET_MS = 50;
+
 export interface AudioPeaks {
   /** The loudest sample in each bucket, 0–1. */
   peaks: Float32Array;
@@ -16,7 +19,10 @@ export interface AudioPeaks {
   bucketMs: number;
 }
 
-export async function computeAudioPeaks(blob: Blob, bucketMs = 50): Promise<AudioPeaks> {
+export async function computeAudioPeaks(
+  blob: Blob,
+  bucketMs = DEFAULT_BUCKET_MS,
+): Promise<AudioPeaks> {
   const buffer = await decodeAudioBlob(blob, PEAKS_DECODE_RATE);
   const samplesPerBucket = Math.max(1, Math.round((PEAKS_DECODE_RATE * bucketMs) / 1000));
   const peaks = new Float32Array(Math.ceil(buffer.length / samplesPerBucket));
@@ -43,16 +49,28 @@ export interface DeadAirOptions {
   keepMs?: number;
 }
 
+/** The quietest fifth of the take is its noise floor. */
+const NOISE_FLOOR_PERCENTILE = 0.2;
+/** Quiet means within this multiple of the noise floor. */
+const QUIET_HEADROOM = 3;
+/** Lowest quiet level: a gated room whose floor is digital silence. */
+const QUIET_LEVEL_MIN = 0.015;
+/** Highest quiet level: a noisy room, so speech still counts as speech. */
+const QUIET_LEVEL_MAX = 0.08;
+
 /**
- * The level below which the narration counts as quiet: well above its noise floor
- * (the quietest fifth of it), within bounds for a room with a noise gate or without.
+ * The level below which the narration counts as quiet: well above its noise floor,
+ * within bounds for a room with a noise gate or without.
  */
 function quietLevel(peaks: Float32Array): number {
   if (peaks.length === 0) return 0;
   const sorted = Float32Array.from(peaks).sort();
-  const noiseFloor = sorted[Math.floor(sorted.length * 0.2)];
-  return Math.min(0.08, Math.max(0.015, noiseFloor * 3));
+  const noiseFloor = sorted[Math.floor(sorted.length * NOISE_FLOOR_PERCENTILE)];
+  return Math.min(QUIET_LEVEL_MAX, Math.max(QUIET_LEVEL_MIN, noiseFloor * QUIET_HEADROOM));
 }
+
+/** No real take is longer; bounds the busy grid against a hostile file's header. */
+const MAX_DEAD_AIR_SCAN_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Stretches where nobody spoke and nothing happened, long enough to be dead air:
@@ -66,8 +84,10 @@ export function suggestDeadAirCuts({
   minimumMs = 3_000,
   keepMs = 600,
 }: DeadAirOptions): MediaSpan[] {
-  const stepMs = audio?.bucketMs ?? 50;
-  const steps = Math.ceil(durationMs / stepMs);
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return [];
+  const scanMs = Math.min(durationMs, MAX_DEAD_AIR_SCAN_MS);
+  const stepMs = audio?.bucketMs ?? DEFAULT_BUCKET_MS;
+  const steps = Math.ceil(scanMs / stepMs);
   if (steps <= 0) return [];
   const busy = new Uint8Array(steps);
 
@@ -88,7 +108,7 @@ export function suggestDeadAirCuts({
   let runStart = -1;
   const closeRun = (end: number) => {
     const start = runStart * stepMs;
-    const stop = Math.min(durationMs, end * stepMs);
+    const stop = Math.min(scanMs, end * stepMs);
     if (stop - start >= minimumMs) {
       cuts.push({ start: start + keepMs / 2, end: stop - keepMs / 2 });
     }

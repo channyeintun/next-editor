@@ -57,4 +57,19 @@ describe("suggesting dead-air cuts", () => {
     });
     expect(cuts).toEqual([{ start: 2_350, end: 8_700 }]);
   });
+
+  it("suggests nothing for a duration that is not a real length", () => {
+    for (const durationMs of [Number.NaN, Number.POSITIVE_INFINITY, -1, 0]) {
+      expect(suggestDeadAirCuts({ durationMs, activityTimes: [] })).toEqual([]);
+    }
+  });
+
+  // The duration comes from the recording's header, so a hostile file could size the
+  // scan grid past what a typed array holds, or at gigabytes and minutes of looping
+  // just under that. Only the first day of it is scanned.
+  it("scans no more than a day of a take whose header claims longer", () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const cuts = suggestDeadAirCuts({ durationMs: Number.MAX_VALUE, activityTimes: [] });
+    expect(cuts).toEqual([{ start: 300, end: dayMs - 300 }]);
+  });
 });
