@@ -1,5 +1,5 @@
 import type { ChatDelta, ChatItem, ChatStatus } from "../../../types/chat";
-import { applyContentDelta } from "./frameDelta";
+import { applyContentDelta } from "./contentDelta";
 
 export interface ChatFoldState {
   items: ChatItem[];

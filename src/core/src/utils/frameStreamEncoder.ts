@@ -1,11 +1,7 @@
 import type { EditorFrame } from "../types";
 import { DELTA_CONFIG, isKeyframe, type DeltaFrame } from "./deltaTypes";
-import {
-  createFrameDelta,
-  createKeyframe,
-  hasChanges,
-  type CreatedContentEditDelta,
-} from "./frameDelta";
+import type { CreatedContentEditDelta } from "./contentDelta";
+import { createFrameDelta, createKeyframe, hasChanges } from "./frameDelta";
 
 /**
  * Running state for the incremental (capture-time) frame encoder.

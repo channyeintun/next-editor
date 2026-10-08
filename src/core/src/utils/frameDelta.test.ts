@@ -2,14 +2,10 @@ import { describe, expect, it } from "vite-plus/test";
 import type { EditorFrame, EditorSelection } from "../types";
 import type { PreviewState } from "../preview";
 import type { Keyframe } from "./deltaTypes";
+import { ContentEditBaseMismatchError, createContentEditDelta } from "./contentDelta";
 import {
-  ContentEditBaseMismatchError,
-  applyContentDelta,
   applyFrameDelta,
   applySelectionDelta,
-  createAppendContentDelta,
-  createContentDelta,
-  createContentEditDelta,
   createFrameDelta,
   createSelectionDelta,
   findNearestKeyframeIndex,
@@ -96,34 +92,6 @@ describe("Monaco content edit deltas", () => {
 });
 
 describe("frameDelta reconstruction errors", () => {
-  it("encodes append-only text as one codec-compatible suffix delta", () => {
-    const base = "existing streamed response ".repeat(8);
-    const appended = "plus a final 🌍 suffix";
-    const created = createAppendContentDelta(base, appended);
-    expect(created).not.toBeNull();
-    if (!created) throw new Error("Expected an append-only content delta");
-
-    const appendedBytes = new TextEncoder().encode(appended);
-    expect(applyContentDelta(base, created)).toBe(base + appended);
-    expect(created.delta.byteLength).toBeLessThan(new TextEncoder().encode(base + appended).length);
-    expect(Array.from(created.delta.slice(-appendedBytes.byteLength))).toEqual(
-      Array.from(appendedBytes),
-    );
-    expect(createAppendContentDelta(base, "")).toBeNull();
-    expect(() => applyContentDelta(`${base}!`, created)).toThrow(DmpBaseMismatchError);
-
-    const splitSurrogateBase = "split emoji: \ud83c";
-    const splitSurrogateSuffix = "\udf0d";
-    expect(createAppendContentDelta(splitSurrogateBase, splitSurrogateSuffix)).toBeNull();
-    const fallback = createContentDelta(
-      splitSurrogateBase,
-      splitSurrogateBase + splitSurrogateSuffix,
-    );
-    expect(fallback).not.toBeNull();
-    if (!fallback) throw new Error("Expected a split-surrogate fallback delta");
-    expect(applyContentDelta("split emoji: �", fallback)).toBe("split emoji: 🌍");
-  });
-
   it("attributes a base-mismatch failure to the failing frame index", () => {
     const base = "const value = 1;\nconst other = 2;\n";
     const edited = base.replace("= 1", "= 9");

@@ -15,7 +15,7 @@ import type {
   MouseCursorPosition,
 } from "../types";
 import type { TextEditEvent } from "../../../types/textEdit";
-import { createContentEditDelta, type CreatedContentEditDelta } from "../utils/frameDelta";
+import { createContentEditDelta, type CreatedContentEditDelta } from "../utils/contentDelta";
 import { pushFrame } from "../utils/frameStreamEncoder";
 import { getRecordingTimestamp } from "./recordingSession";
 import { isRecordingClockPaused } from "./recordingClock";

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { findTimedEventIndexAtOrBefore, type TimedReplayEvent } from "./timedIndex";
+import {
+  findFrameIndexAtTime,
+  findTimedEventIndexAtOrBefore,
+  type TimedReplayEvent,
+} from "./timedIndex";
 
 /** Events in order, built from `[timestamp, count]` runs. */
 function eventsFromRuns(runs: Array<[timestamp: number, count: number]>): TimedReplayEvent[] {
@@ -60,5 +64,26 @@ describe("findTimedEventIndexAtOrBefore", () => {
   it("puts stamp 15 past the linear scan limit from a hint at stamp 0", () => {
     expect(MIXED_EVENTS).toHaveLength(200);
     expect(MIXED_EVENTS.findLastIndex((event) => event.timestamp <= 15)).toBeGreaterThan(128);
+  });
+});
+
+describe("findFrameIndexAtTime", () => {
+  it("finds late frames across seeks and long jumps", () => {
+    const frames = Array.from({ length: 10_000 }, (_, index) => ({ timestamp: index * 10 }));
+
+    expect(findFrameIndexAtTime(frames, 98_760, -1)).toBe(9_876);
+    expect(findFrameIndexAtTime(frames, 1_230, 9_876)).toBe(123);
+    expect(findFrameIndexAtTime(frames, 77_770, 10)).toBe(7_777);
+  });
+
+  // Unlike the replay tracks' lookup, an editor always shows a frame: a time before the
+  // first one resolves to it, from a cold search and from a forward cursor alike.
+  it("resolves a time before the first frame to the first frame", () => {
+    const frames = [{ timestamp: 100 }, { timestamp: 200 }];
+
+    expect(findFrameIndexAtTime(frames, 50, -1)).toBe(0);
+    expect(findFrameIndexAtTime(frames, 50, 1)).toBe(0);
+    expect(findFrameIndexAtTime(frames, 50)).toBe(0);
+    expect(findFrameIndexAtTime([], 50)).toBe(-1);
   });
 });

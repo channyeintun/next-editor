@@ -7,9 +7,9 @@ import type { WorkspaceRecordingEvent } from "../../../types/workspace";
 import {
   reconstructFrameAtIndex,
   applyFrameDeltaToNormalized,
-  findFrameIndexAtTime,
   findNearestKeyframeIndex,
 } from "../utils/frameDelta";
+import { findFrameIndexAtTime } from "../utils/timedIndex";
 import { isEditorReady, isValidEditorState } from "../utils/validation";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
 import { applyContentDiff, applySelectionDiff, areSelectionsEqual } from "../utils/editorDiff";

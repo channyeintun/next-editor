@@ -7,7 +7,7 @@ host:
 - **`diffDelta(a, b)`** — a [diff-match-patch](https://github.com/google/diff-match-patch)
   (Myers middle-snake) delta that transforms `a` into `b`. It generalizes the old
   prefix/suffix (`affix`) `ContentDelta`, which bloated to near-keyframe size on
-  scattered, non-contiguous edits ([`frameDelta.ts`](../src/utils/frameDelta.ts)).
+  scattered, non-contiguous edits ([`contentDelta.ts`](../src/utils/contentDelta.ts)).
 - **`applyDelta(a, delta)`** — reconstructs `b` from `a` and the delta.
 
 Compression is handled separately by **fflate** (zlib), not this module.

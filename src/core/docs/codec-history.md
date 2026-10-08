@@ -158,7 +158,7 @@ unchanged — no migration.
 ## Current state
 
 - **Diff:** `getDmpCodec().diffDelta(a, b)` / `applyDelta(a, delta)`, wired into
-  `createContentDelta` / `applyContentDelta` in `frameDelta.ts`. ABI and op
+  `createContentDelta` / `applyContentDelta` in `contentDelta.ts`. ABI and op
   format documented in [`../dmp/README.md`](../dmp/README.md).
 - **Compression:** fflate, in `streamingRecordingCodec/format.ts`.
 - **The JS prefix/suffix helpers survive** (`findCommonPrefixLength` /

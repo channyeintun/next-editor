@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { ChatDelta } from "../../../types/chat";
-import { createContentDelta } from "./frameDelta";
+import { createContentDelta } from "./contentDelta";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "./chatDelta";
 
 function fold(

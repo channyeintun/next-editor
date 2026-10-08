@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import {
-  applyContentDelta,
-  createContentDelta,
-  findFrameIndexAtTime,
-  reconstructFrameAtIndex,
-} from "../frameDelta";
+import { reconstructFrameAtIndex } from "../frameDelta";
 import { compressFrames } from "../frameStreamEncoder";
 import { isKeyframe, isDelta } from "../deltaTypes";
 import type { EditorFrame } from "../../types";
@@ -106,47 +101,5 @@ describe("Delta Compression Optimization", () => {
 
     const reconstructed400 = reconstructFrameAtIndex(compressed, 2);
     expect(reconstructed400?.state.content).toBe("abc");
-  });
-
-  it("should find late frames across seeks and long jumps", () => {
-    const frames = Array.from({ length: 10_000 }, (_, index) =>
-      createMockFrame(`content ${index}`, index * 10),
-    );
-
-    expect(findFrameIndexAtTime(frames, 98_760, -1)).toBe(9_876);
-    expect(findFrameIndexAtTime(frames, 1_230, 9_876)).toBe(123);
-    expect(findFrameIndexAtTime(frames, 77_770, 10)).toBe(7_777);
-  });
-
-  // Unlike the replay tracks' lookup, an editor always shows a frame: a time before the
-  // first one resolves to it, from a cold search and from a forward cursor alike.
-  it("should resolve a time before the first frame to the first frame", () => {
-    const frames = [createMockFrame("a", 100), createMockFrame("ab", 200)];
-
-    expect(findFrameIndexAtTime(frames, 50, -1)).toBe(0);
-    expect(findFrameIndexAtTime(frames, 50, 1)).toBe(0);
-    expect(findFrameIndexAtTime(frames, 50)).toBe(0);
-    expect(findFrameIndexAtTime([], 50)).toBe(-1);
-  });
-
-  it("round-trips content deltas, including multi-byte UTF-8 edits", () => {
-    const cases: Array<[string, string]> = [
-      ["éx", "èy"],
-      ["éa", "ĩa"],
-      ["const label = 'a';", "const label = '漢';"],
-      // Scattered, non-contiguous edits — the case the prefix/suffix model bloated.
-      ["alpha\nbravo\ncharlie\ndelta\n", "ALPHA\nbravo\ncharlie\nDELTA\n"],
-    ];
-
-    for (const [prev, next] of cases) {
-      const delta = createContentDelta(prev, next);
-      expect(delta).not.toBeNull();
-      expect(delta!.delta).toBeInstanceOf(Uint8Array);
-      expect(applyContentDelta(prev, delta!)).toBe(next);
-    }
-  });
-
-  it("returns null when content is unchanged", () => {
-    expect(createContentDelta("same", "same")).toBeNull();
   });
 });

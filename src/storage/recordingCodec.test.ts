@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { Recording, RecordingTrackMeta } from "../core/src";
-import {
-  createContentDelta,
-  createContentEditDelta,
-  createFrameDelta,
-  reconstructFrameAtIndex,
-} from "../core/src/utils/frameDelta";
+import { createContentDelta, createContentEditDelta } from "../core/src/utils/contentDelta";
+import { createFrameDelta, reconstructFrameAtIndex } from "../core/src/utils/frameDelta";
 import { normalizeRecordingData } from "../core/src/utils/editorState";
 import { decompressBinaryToRecording } from "./recordingCodec";
 import {

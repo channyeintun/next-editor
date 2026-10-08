@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createContentEditDelta, createFrameDelta } from "../../core/src/utils/frameDelta";
+import { createContentEditDelta } from "../../core/src/utils/contentDelta";
+import { createFrameDelta } from "../../core/src/utils/frameDelta";
 import { createStreamingRecordingReader, encodeRecordingToStream } from ".";
 import { decodeRecords, LEGACY_STREAM_FORMAT_VERSION } from "./format";
 

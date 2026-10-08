@@ -76,3 +76,15 @@ function findTimedEventIndexAtOrBeforeBinary<T extends TimedReplayEvent>(
 
   return nearestIndex;
 }
+
+/**
+ * Index of the frame on screen at `time`: the last frame at or before it, or the
+ * first frame when `time` precedes them all. -1 only for an empty array.
+ */
+export function findFrameIndexAtTime(
+  frames: TimedReplayEvent[],
+  time: number,
+  startIndex: number = 0,
+): number {
+  return frames.length ? Math.max(0, findTimedEventIndexAtOrBefore(frames, time, startIndex)) : -1;
+}

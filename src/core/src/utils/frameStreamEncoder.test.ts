@@ -2,7 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 import type * as monaco from "monaco-editor";
 import type { EditorFrame } from "../types";
 import { DELTA_CONFIG, isDelta, isKeyframe, type DeltaFrame } from "./deltaTypes";
-import { applyFrameDelta, createContentEditDelta, reconstructFrameAtIndex } from "./frameDelta";
+import { createContentEditDelta } from "./contentDelta";
+import { applyFrameDelta, reconstructFrameAtIndex } from "./frameDelta";
 import {
   compressFrames,
   createFrameStreamEncoder,

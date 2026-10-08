@@ -130,7 +130,8 @@ The main extension hooks in `EditorMachineInput` are:
 
 | File                                   | Purpose                                                                                                                                                                                     |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `frameDelta.ts`                        | `reconstructFrameAtIndex`, `createContentDelta`, `applyContentDelta`, `findFrameIndexAtTime`                                                                                                |
+| `frameDelta.ts`                        | `createFrameDelta`, `applyFrameDelta`, `reconstructFrameAtIndex` — editor frame deltas and keyframe reconstruction                                                                          |
+| `contentDelta.ts`                      | `createContentDelta`, `applyContentDelta`, `createAppendContentDelta`, `createContentEditDelta` — text deltas shared by frames, the chat track and the agent                                |
 | `editorDiff.ts`                        | `applyContentDiff`, `applySelectionDiff` — apply a replayed frame to a live Monaco editor                                                                                                   |
 | `validation.ts`                        | `isValidEditorState`, `isEditorReady`                                                                                                                                                       |
 | `deltaTypes.ts`                        | `DeltaFrame` and related delta wire types                                                                                                                                                   |
@@ -142,11 +143,11 @@ The main extension hooks in `EditorMachineInput` are:
 | `iframeInteractionProtocol.ts`         | `IFRAME_INTERACTION_MESSAGE_TYPE`, the `postMessage` type preview frames report pointer interactions with                                                                                   |
 | `audioContext.ts` / `audioDuration.ts` | Shared `AudioContext` helpers and exact-duration calculation for audio blobs                                                                                                                |
 | `stringAffix.ts`                       | `findCommonAffixLengths` and its prefix/suffix helpers: the changed range for Monaco replay, workspace-event dedup and shared-text replacement                                              |
-| `timedIndex.ts`                        | `findTimedEventIndexAtOrBefore` — timestamp-to-index lookup shared by frames and every replay track                                                                                         |
+| `timedIndex.ts`                        | `findTimedEventIndexAtOrBefore` — timestamp-to-index lookup shared by frames and every replay track; `findFrameIndexAtTime` clamps it so an editor always shows a frame                     |
 
 ### dmpCodec (WASM diffing)
 
-WebAssembly-accelerated content diffing backs `createContentDelta` / `applyContentDelta` in `frameDelta.ts`. The host binding, `src/core/dmp/dmpCodec.ts`, sits beside the Rust crate it loads (see `src/core/dmp/README.md` for the Rust module and wire format):
+WebAssembly-accelerated content diffing backs `createContentDelta` / `applyContentDelta` in `contentDelta.ts`. The host binding, `src/core/dmp/dmpCodec.ts`, sits beside the Rust crate it loads (see `src/core/dmp/README.md` for the Rust module and wire format):
 
 ```typescript
 // Load the zero-import diff-match-patch WASM module

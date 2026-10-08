@@ -25,8 +25,8 @@ import {
   ContentEditBaseMismatchError,
   createContentDelta,
   createContentEditDelta,
-  reconstructFrameAtIndex,
-} from "../utils/frameDelta";
+} from "../utils/contentDelta";
+import { reconstructFrameAtIndex } from "../utils/frameDelta";
 import { compressFrames } from "../utils/frameStreamEncoder";
 import {
   DmpBaseMismatchError,
