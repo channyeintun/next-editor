@@ -136,11 +136,19 @@ export async function encodeEditedAudio(
   return new Blob([wav as Uint8Array<ArrayBuffer>], { type: "audio/wav" });
 }
 
-/** Applies `edit` to a narration file and returns the edited file. */
-export async function editRecordedAudio(blob: Blob, edit: AudioEdit): Promise<Blob> {
+/**
+ * Applies `edit` to a narration file and returns the edited file with its length. The
+ * length comes from the edited samples, so the caller need not decode the file it was
+ * just handed to measure it.
+ */
+export async function editRecordedAudio(
+  blob: Blob,
+  edit: AudioEdit,
+): Promise<{ blob: Blob; durationMs: number }> {
   const samples = await decodeToMono(blob, AUDIO_EDIT_SAMPLE_RATE);
-  return encodeEditedAudio(
-    applyAudioEditToSamples(samples, AUDIO_EDIT_SAMPLE_RATE, edit),
-    AUDIO_EDIT_SAMPLE_RATE,
-  );
+  const edited = applyAudioEditToSamples(samples, AUDIO_EDIT_SAMPLE_RATE, edit);
+  return {
+    blob: await encodeEditedAudio(edited, AUDIO_EDIT_SAMPLE_RATE),
+    durationMs: (edited.length / AUDIO_EDIT_SAMPLE_RATE) * 1000,
+  };
 }

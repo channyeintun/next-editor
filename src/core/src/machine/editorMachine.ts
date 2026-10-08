@@ -196,12 +196,14 @@ export const editorMachine = setup({
       // A retake left what it discarded in the narration file, and an edit asks for cuts
       // and mutes. Both are applied here, once the audio is in hand; a microphone blob
       // that has not arrived yet keeps the edit for when it does.
+      let editedAudioDurationMs: number | undefined;
       if (hasAudioEdit(recording.pendingAudioEdit) && recording.audioBlob instanceof Blob) {
         try {
-          const audioBlob = await editRecordedAudio(
+          const { blob: audioBlob, durationMs } = await editRecordedAudio(
             recording.audioBlob,
             recording.pendingAudioEdit,
           );
+          editedAudioDurationMs = durationMs;
           recording = {
             ...recording,
             audioBlob,
@@ -224,10 +226,14 @@ export const editorMachine = setup({
       if (playbackAudioState?.finalized && recording.audioSource !== "external") {
         try {
           if (recording.audioBlob instanceof Blob) {
-            const exactDuration = await measureAudioDurationSeconds(recording.audioBlob);
+            // An edit above already knows its output's length from the samples it
+            // encoded, so only an unedited file is decoded to measure it.
+            const exactDurationMs =
+              editedAudioDurationMs ??
+              (await measureAudioDurationSeconds(recording.audioBlob)) * 1000;
             // Use audio duration as the source of truth if it exists
             // This prevents trailing silence from wall-clock overhead
-            duration = normalizeTimelineDuration(exactDuration * 1000, duration);
+            duration = normalizeTimelineDuration(exactDurationMs, duration);
           }
         } catch (err) {
           console.error("Failed to calculate exact audio duration:", err);

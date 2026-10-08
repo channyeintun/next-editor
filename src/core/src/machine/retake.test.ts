@@ -21,14 +21,18 @@ import type { RuntimeRecordingSnapshot } from "../runtime";
 import type { ChatCheckpoint } from "../../../types/chat";
 
 const audioEdit = vi.hoisted(() => ({
-  editRecordedAudio: vi.fn<(blob: Blob, edit: unknown) => Promise<Blob>>(),
+  editRecordedAudio:
+    vi.fn<(blob: Blob, edit: unknown) => Promise<{ blob: Blob; durationMs: number }>>(),
 }));
 vi.mock("../utils/audioEdit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../utils/audioEdit")>()),
   editRecordedAudio: audioEdit.editRecordedAudio,
 }));
-vi.mock("../utils/audioDuration", () => ({
+const audioDuration = vi.hoisted(() => ({
   measureAudioDurationSeconds: vi.fn<(blob: Blob) => Promise<number>>(async () => 1),
+}));
+vi.mock("../utils/audioDuration", () => ({
+  measureAudioDurationSeconds: audioDuration.measureAudioDurationSeconds,
 }));
 
 const selection = {
@@ -97,6 +101,7 @@ const sessionOf = (actor: ReturnType<typeof startTake>) => actor.getSnapshot().c
 afterEach(() => {
   vi.restoreAllMocks();
   audioEdit.editRecordedAudio.mockReset();
+  audioDuration.measureAudioDurationSeconds.mockClear();
 });
 
 describe("retaking", () => {
@@ -395,7 +400,7 @@ describe("retaking with recorders", () => {
     const advance = pinClocks();
     const received: AudioRecordingEvent["type"][] = [];
     const edited = new Blob(["edited"], { type: "audio/ogg" });
-    audioEdit.editRecordedAudio.mockResolvedValue(edited);
+    audioEdit.editRecordedAudio.mockResolvedValue({ blob: edited, durationMs: 1_250 });
     const machine = takeMachine.provide({
       actors: {
         audioRecording: fromTypedCallback<
@@ -439,6 +444,9 @@ describe("retaking with recorders", () => {
     expect(recording.audioBlob).toBe(edited);
     expect(recording.pendingAudioEdit).toBeUndefined();
     expect(recording.tracks?.find((track) => track.kind === "audio")?.mimeType).toBe("audio/ogg");
+    // The edit's own length is the take's: the file it just encoded is not decoded again.
+    expect(recording.duration).toBe(1_250);
+    expect(audioDuration.measureAudioDurationSeconds).not.toHaveBeenCalled();
     actor.stop();
   });
 
