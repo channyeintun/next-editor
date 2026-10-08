@@ -117,24 +117,24 @@ export function deriveWhiteboardDelta(
   return { upserts, removedIds };
 }
 
-/** Applies a locally derived delta to a newer scene without removing elements
- * that arrived after the local capture window began. */
+/**
+ * Applies a locally derived delta to a newer scene without removing elements
+ * that arrived after the local capture window began. The newer scene is a room
+ * update that landed mid-window, so the result follows the room's order
+ * ({@link compareWhiteboardElementOrder}), not replay's: tied elements then
+ * already sit where the room's projection puts them, instead of flipping when
+ * the room's scene comes back.
+ *
+ * `delta` must come from {@link deriveWhiteboardDelta} (or
+ * {@link snapshotWhiteboardDelta}), where no id is in both `upserts` and
+ * `removedIds`. The shared merge upserts before it removes, which gives the
+ * same result as removing first only under that precondition.
+ */
 export function rebaseWhiteboardDelta(
   currentElements: readonly WhiteboardElementJSON[],
   delta: Pick<WhiteboardEvent, "upserts" | "removedIds">,
 ): WhiteboardElementJSON[] {
-  const removed = new Set(delta.removedIds ?? []);
-  const byId = new Map(
-    currentElements
-      .filter((element) => !removed.has(element.id))
-      .map((element) => [element.id, element] as const),
-  );
-  for (const element of delta.upserts ?? []) byId.set(element.id, element);
-  return Array.from(byId.values()).sort(
-    (left, right) =>
-      compareWhiteboardElementIndices(left, right) ||
-      (left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
-  );
+  return mergeWhiteboardElements(currentElements, delta, compareWhiteboardElementOrder);
 }
 
 /**
@@ -211,6 +211,32 @@ export function compareWhiteboardElementIndices(
 }
 
 /**
+ * The collaboration room's canonical scene order: fractional `index`, then the
+ * element id for ties. Merges that must converge with a room sort with this
+ * (teachingDocument's projection, {@link rebaseWhiteboardDelta}). Replay and the
+ * studio driver keep {@link compareWhiteboardElementIndices}, because a stable
+ * sort over its ties is the only z-order unindexed authored assets have.
+ */
+export function compareWhiteboardElementOrder(
+  a: WhiteboardElementJSON,
+  b: WhiteboardElementJSON,
+): number {
+  return compareWhiteboardElementIndices(a, b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+/** Upserts then removes by id, and sorts the result with the consumer's `compare`. */
+function mergeWhiteboardElements(
+  elements: readonly WhiteboardElementJSON[],
+  delta: Pick<WhiteboardEvent, "upserts" | "removedIds">,
+  compare: (a: WhiteboardElementJSON, b: WhiteboardElementJSON) => number,
+): WhiteboardElementJSON[] {
+  const byId = new Map(elements.map((element) => [element.id, element] as const));
+  for (const element of delta.upserts ?? []) byId.set(element.id, element);
+  for (const id of delta.removedIds ?? []) byId.delete(id);
+  return Array.from(byId.values()).sort(compare);
+}
+
+/**
  * Fold one whiteboard delta into a scene. Shared by replay (replayState/whiteboard.ts)
  * and by the studio driver, which publishes the same delta to the live board — if the
  * two disagreed about element order, a lesson would render one z-order live and a
@@ -224,21 +250,7 @@ export function applyWhiteboardEvent(
   let elements = state.elements;
 
   if (event.upserts?.length || event.removedIds?.length) {
-    const byId = new Map(elements.map((element) => [element.id, element]));
-
-    if (event.upserts) {
-      for (const element of event.upserts) {
-        byId.set(element.id, element);
-      }
-    }
-
-    if (event.removedIds) {
-      for (const id of event.removedIds) {
-        byId.delete(id);
-      }
-    }
-
-    elements = Array.from(byId.values()).sort(compareWhiteboardElementIndices);
+    elements = mergeWhiteboardElements(elements, event, compareWhiteboardElementIndices);
   }
 
   return {

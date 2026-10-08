@@ -1,6 +1,10 @@
 import * as Y from "yjs";
 import { z } from "zod";
-import type { WhiteboardElementJSON, WhiteboardEvent } from "../core/src/whiteboard";
+import {
+  compareWhiteboardElementOrder,
+  type WhiteboardElementJSON,
+  type WhiteboardEvent,
+} from "../core/src/whiteboard";
 import type { Slide } from "../types/slides";
 import {
   collaborationAssetDescriptorSchema,
@@ -564,16 +568,6 @@ function serializedElement(element: WhiteboardElementJSON): string {
 
 function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
-}
-
-/** Scene order: Excalidraw's fractional `index`, then the element ID for ties. */
-function compareWhiteboardElementOrder(
-  left: WhiteboardElementJSON,
-  right: WhiteboardElementJSON,
-): number {
-  const leftIndex = typeof left.index === "string" ? left.index : "";
-  const rightIndex = typeof right.index === "string" ? right.index : "";
-  return compareCodeUnits(leftIndex, rightIndex) || compareCodeUnits(left.id, right.id);
 }
 
 function compareProgressiveWhiteboardStroke(

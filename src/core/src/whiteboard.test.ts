@@ -184,6 +184,22 @@ describe("rebaseWhiteboardDelta", () => {
 
     expect(rebaseWhiteboardDelta([...base, remote], delta!)).toEqual([liveLocal, remote]);
   });
+
+  // Rebase deliberately orders like the collaboration room (index, then id), not
+  // like replay: the newer scene it lands on is a room update, and the room's
+  // echo would otherwise flip tied elements. applyWhiteboardEvent's matching test
+  // pins replay's stable order for the same input.
+  it("breaks ties between unindexed elements by id, as the room does", () => {
+    const local = makeElement({ id: "local", index: "a0" });
+    const delta = snapshotWhiteboardDelta([], [local]);
+    const roomScene = [makeElement({ id: "z" }), makeElement({ id: "a" })];
+
+    expect(rebaseWhiteboardDelta(roomScene, delta!).map((element) => element.id)).toEqual([
+      "a",
+      "z",
+      "local",
+    ]);
+  });
 });
 
 describe("areWhiteboardViewsEqual", () => {
@@ -256,6 +272,20 @@ describe("applyWhiteboardEvent", () => {
     const next = applyWhiteboardEvent(scene, { timestamp: 0, upserts: [element("asset")] });
 
     expect(next.elements.map((item) => item.id)).toEqual(["asset", "bottom", "top"]);
+  });
+
+  // Replay keeps unindexed elements in their array order, unlike
+  // rebaseWhiteboardDelta, which breaks the same ties by id to match the room.
+  // Authored assets carry no index, so array order is their only z-order.
+  it("keeps tied unindexed elements in their array order", () => {
+    const scene = { ...EMPTY_WHITEBOARD_SCENE, elements: [element("z"), element("a")] };
+
+    const next = applyWhiteboardEvent(scene, {
+      timestamp: 0,
+      upserts: [element("local", "a0")],
+    });
+
+    expect(next.elements.map((item) => item.id)).toEqual(["z", "a", "local"]);
   });
 
   it("carries view and panel flags forward when the delta omits them", () => {
