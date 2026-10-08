@@ -24,6 +24,7 @@ import {
   normalizeEditorPosition,
   normalizeEditorSelection,
   normalizeEditorViewState,
+  withPrimaryCursorSelection,
 } from "../utils/editorState";
 import { areMouseCursorPositionsEqual } from "../utils/cursorCoordinates";
 
@@ -133,38 +134,17 @@ export const createFrame = (
     arePositionsEqual(previousViewState.position, position) &&
     areSelectionsEqual(previousViewState.selection, selection);
 
-  const viewState = canReuseViewState
+  const normalizedViewState = canReuseViewState
     ? previousViewState.value
     : normalizeEditorViewState(editor.saveViewState(), selection, position);
-
-  // normalizeEditorFrame treats Monaco's primary cursorState as authoritative.
-  // Replace that primary cursor in a freshly normalized (cloned) view state so a
-  // collaborative selection survives frame normalization without moving the
-  // host's editor. A reused view state already matches: the reuse gate compared
-  // the same selection and position, and Monaco derives cursorState[0] from the
-  // primary selection alone. It is also the previous frame's object, so writing
-  // into it would change a frame that is already recorded.
-  if (selectionOverride && viewState && !canReuseViewState) {
-    const mutableViewState = viewState as unknown as {
-      cursorState?: Array<Record<string, unknown>>;
-    };
-    const cursorState = mutableViewState.cursorState;
-    const primaryCursorState = cursorState?.[0];
-    if (primaryCursorState) {
-      cursorState[0] = {
-        ...primaryCursorState,
-        inSelectionMode:
-          selection.selectionStartLineNumber !== selection.positionLineNumber ||
-          selection.selectionStartColumn !== selection.positionColumn,
-        selectionStart: {
-          lineNumber: selection.selectionStartLineNumber,
-          column: selection.selectionStartColumn,
-        },
-        position,
-        selection,
-      };
-    }
-  }
+  // normalizeEditorFrame treats the primary cursor as authoritative, so a collaborative
+  // selection replaces it here, without moving the host's editor. A reused view state
+  // already matches (the reuse gate compared this same selection and position, and
+  // Monaco derives the primary cursor from them alone); copying it would lose the reuse.
+  const viewState =
+    selectionOverride && !canReuseViewState
+      ? withPrimaryCursorSelection(normalizedViewState, selection, position)
+      : normalizedViewState;
 
   const slideState = getSlideState?.();
   const previewState = getPreviewState?.();

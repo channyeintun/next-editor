@@ -184,6 +184,38 @@ export function normalizeEditorViewState(
   return clonedViewState as unknown as monaco.editor.ICodeEditorViewState;
 }
 
+/**
+ * `viewState` with its primary cursor (the one normalizeEditorFrame reads back as the
+ * frame's selection and position) set to `selection` and `position`; the other cursors
+ * are kept. It returns a shallow copy, so it never writes into its input, and a view
+ * state with no primary cursor comes back as it is.
+ */
+export function withPrimaryCursorSelection(
+  viewState: monaco.editor.ICodeEditorViewState | null,
+  selection: EditorSelection,
+  position: EditorPosition,
+): monaco.editor.ICodeEditorViewState | null {
+  const primaryCursorState = getPrimaryCursorState(viewState);
+  if (!viewState || !primaryCursorState) {
+    return viewState;
+  }
+
+  const [, ...otherCursorStates] = viewState.cursorState;
+  const cursorState = {
+    ...primaryCursorState,
+    inSelectionMode:
+      selection.selectionStartLineNumber !== selection.positionLineNumber ||
+      selection.selectionStartColumn !== selection.positionColumn,
+    selectionStart: {
+      lineNumber: selection.selectionStartLineNumber,
+      column: selection.selectionStartColumn,
+    },
+    position,
+    selection,
+  };
+  return { ...viewState, cursorState: [cursorState, ...otherCursorStates] };
+}
+
 export function normalizeEditorFrame(frame: EditorFrame): EditorFrame {
   const initialPosition = normalizeEditorPosition(frame.state.position);
   const initialSelection = normalizeEditorSelection(
