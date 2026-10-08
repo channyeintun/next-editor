@@ -5,7 +5,7 @@ import type {
   EditorFrame,
   Recording,
 } from "./types";
-import type { PreviewDomPatchBatch, PreviewInitialDocument } from "./slides";
+import type { PreviewDomPatchBatch, PreviewInitialDocument } from "./preview";
 import { createKeyframe, applyFrameDeltaToNormalized, isKeyframe } from "./utils/frameDelta";
 import type { DeltaFrame } from "./utils/deltaTypes";
 import { normalizeEditorFrame } from "./utils/editorState";

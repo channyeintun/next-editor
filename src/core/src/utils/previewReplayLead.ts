@@ -1,4 +1,4 @@
-import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../slides";
+import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../preview";
 
 // ============================================================================
 // The preview clock's lead over the recording clock.

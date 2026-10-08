@@ -4,8 +4,8 @@ import type {
   PreviewDomPatchBatch,
   PreviewEvent,
   PreviewInitialDocument,
-  SlideEvent,
-} from "../../core/src/slides";
+} from "../../core/src/preview";
+import type { SlideEvent } from "../../core/src/slides";
 import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
 import { markFramesNormalized, normalizeDeltaFrame } from "../../core/src/utils/editorState";
 import type { RuntimeRecordingEvent } from "../../core/src/runtime";

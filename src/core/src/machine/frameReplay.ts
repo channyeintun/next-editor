@@ -1,7 +1,7 @@
 import type * as monaco from "monaco-editor";
 import type { EditorActionArgs, EditorContextUpdate, EditorMachineContext } from "./types";
 import type { EditorFrame } from "../types";
-import type { PreviewState } from "../slides";
+import type { PreviewState } from "../preview";
 import type { DeltaFrame, FrameDelta } from "../utils/deltaTypes";
 import type { WorkspaceRecordingEvent } from "../../../types/workspace";
 import {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../slides";
+import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../preview";
 import { getRrwebReplayLead } from "./previewReplayLead";
 
 const seed = (time: number, stamps: number[]): PreviewInitialDocument => ({

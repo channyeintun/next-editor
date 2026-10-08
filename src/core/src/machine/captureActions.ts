@@ -1,4 +1,5 @@
-import type { SlideEvent, PreviewEvent } from "../slides";
+import type { PreviewEvent } from "../preview";
+import type { SlideEvent } from "../slides";
 import {
   createIdleAudioState,
   createIdleCameraState,

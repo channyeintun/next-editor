@@ -20,7 +20,8 @@ import {
   type WorkspaceRecordingSnapshot,
 } from "../../../../types/workspace";
 import { diffRuntimeSnapshot, resolveRuntimeSnapshotAt } from "../../runtimeTrack";
-import type { PreviewEvent, Slide, SlideEvent } from "../../slides";
+import type { PreviewEvent } from "../../preview";
+import type { Slide, SlideEvent } from "../../slides";
 import type { Recording, RecordingStreamDelta } from "../../types";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "../../utils/chatDelta";
 import { createContentDelta } from "../../utils/frameDelta";

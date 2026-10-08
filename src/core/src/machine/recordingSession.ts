@@ -2,8 +2,9 @@ import type {
   PreviewDomPatchBatch,
   PreviewEvent,
   PreviewInitialDocument,
-  SlideEvent,
-} from "../slides";
+  PreviewRecordedEvent,
+} from "../preview";
+import type { SlideEvent } from "../slides";
 import type { WhiteboardEvent } from "../whiteboard";
 import type { RuntimeRecordingSnapshot } from "../runtime";
 import type { ChatRecordingEvent } from "../../../types/chat";
@@ -19,7 +20,6 @@ import {
   resolveLatestRuntimeSnapshot,
   RUNTIME_CHECKPOINT_RESET,
 } from "../runtimeTrack";
-import type { PreviewRecordedEvent } from "../slides";
 import type { RecordingSession } from "./types";
 import {
   hasRecordingClockExclusions,

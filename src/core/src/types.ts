@@ -4,10 +4,8 @@ import type {
   PreviewEvent,
   PreviewInitialDocument,
   PreviewState,
-  Slide,
-  SlideEvent,
-  SlidePreviewState,
-} from "./slides";
+} from "./preview";
+import type { Slide, SlideEvent, SlidePreviewState } from "./slides";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "./runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../types/workspace";
 import type { WhiteboardEvent } from "./whiteboard";

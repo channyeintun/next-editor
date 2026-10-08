@@ -1,4 +1,4 @@
-import type { PreviewDomPatchBatch } from "../../core/src/slides";
+import type { PreviewDomPatchBatch } from "../../core/src/preview";
 
 // ============================================================================
 // Preview-patch added-node dedup (stream-only representation)

@@ -19,7 +19,7 @@ import type {
 import { getPlaybackAudioState } from "./playbackActors";
 import { fromTypedCallback } from "./fromTypedCallback";
 import type { CaptionTrack, EditorFrame, Recording, RecordingStreamDelta } from "../types";
-import type { PreviewEvent } from "../slides";
+import type { PreviewEvent } from "../preview";
 import type { WhiteboardSceneState } from "../whiteboard";
 import {
   ContentEditBaseMismatchError,

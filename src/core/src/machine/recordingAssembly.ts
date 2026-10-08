@@ -1,10 +1,5 @@
-import type {
-  PreviewDomPatchBatch,
-  PreviewEvent,
-  PreviewInitialDocument,
-  Slide,
-  SlideEvent,
-} from "../slides";
+import type { PreviewDomPatchBatch, PreviewEvent, PreviewInitialDocument } from "../preview";
+import type { Slide, SlideEvent } from "../slides";
 import type {
   CursorRecordingEvent,
   Recording,

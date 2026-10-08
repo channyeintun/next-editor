@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { EditorFrame, EditorSelection } from "../types";
-import type { PreviewState } from "../slides";
+import type { PreviewState } from "../preview";
 import type { Keyframe } from "./deltaTypes";
 import {
   ContentEditBaseMismatchError,

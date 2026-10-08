@@ -1,5 +1,6 @@
 import type { EditorFrame, MouseCursorPosition, EditorSelection, EditorPosition } from "../types";
-import type { SlidePreviewState, PreviewState } from "../slides";
+import type { PreviewState } from "../preview";
+import type { SlidePreviewState } from "../slides";
 import type {
   ContentDelta,
   ContentEditDelta,

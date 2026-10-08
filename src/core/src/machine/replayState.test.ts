@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { PreviewEvent, Slide, SlideEvent } from "../slides";
+import type { PreviewEvent } from "../preview";
+import type { Slide, SlideEvent } from "../slides";
 import type { RuntimeRecordingEvent } from "../runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import { EMPTY_WHITEBOARD_SCENE, type WhiteboardEvent } from "../whiteboard";

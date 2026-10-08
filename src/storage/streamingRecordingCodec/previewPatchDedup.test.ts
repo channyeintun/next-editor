@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { Recording } from "../../core/src";
-import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../../core/src/slides";
+import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../../core/src/preview";
 import { createStreamingRecordingReader, decodeRecordingStream, encodeRecordingToStream } from ".";
 import { createPreviewAddNodeHydrator, createPreviewAddNodeStripper } from "./previewPatchDedup";
 

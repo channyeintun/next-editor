@@ -10,6 +10,7 @@ flowchart TB
     Index[index.ts]
     Types[types.ts]
     Slides[slides.ts]
+    Preview[preview.ts<br/>preview, iframe-interaction + API-client model]
     Hook[useNextEditor.ts<br/>actor senders + interaction effects]
     Machine[machine/editorMachine.ts]
     Timeline[machine/timelineMachine.ts]

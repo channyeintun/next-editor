@@ -12,7 +12,7 @@ import type {
 } from "./audioActor";
 import { fromTypedCallback } from "./fromTypedCallback";
 import type { EditorMachineInput } from "./types";
-import type { PreviewState } from "../slides";
+import type { PreviewState } from "../preview";
 import { getRecordingTimestamp } from "./recordingSession";
 import { selectNextEditorMetadata } from "../useNextEditor";
 import { reconstructFrameAtIndex } from "../utils/frameDelta";

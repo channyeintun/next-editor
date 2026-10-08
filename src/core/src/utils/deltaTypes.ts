@@ -1,6 +1,7 @@
 import type * as monaco from "monaco-editor";
 import type { MouseCursorPosition, EditorFrame } from "../types";
-import type { SlidePreviewState, PreviewState } from "../slides";
+import type { PreviewState } from "../preview";
+import type { SlidePreviewState } from "../slides";
 import type { TextEditChange } from "../../../types/textEdit";
 
 // ============================================================================

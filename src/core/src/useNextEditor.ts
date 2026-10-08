@@ -11,12 +11,8 @@ import type {
   RecordingChapter,
   RecordingStreamDelta,
 } from "./types";
-import type {
-  PreviewDomPatchBatch,
-  PreviewEvent,
-  PreviewInitialDocument,
-  SlideEvent,
-} from "./slides";
+import type { PreviewDomPatchBatch, PreviewEvent, PreviewInitialDocument } from "./preview";
+import type { SlideEvent } from "./slides";
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
 import type { TextEditEvent } from "../../types/textEdit";

@@ -1,4 +1,4 @@
-import type { PreviewEvent, PreviewState } from "../../slides";
+import type { PreviewEvent, PreviewState } from "../../preview";
 import { findTimedEventIndexAtOrBefore, isCursorAheadOf } from "./cursor";
 
 // ============================================================================

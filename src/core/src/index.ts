@@ -30,10 +30,10 @@ export type { EditorActorRef } from "./useNextEditor";
 export type { EditorMachineContext, EditorMachineEvent, EditorMachineInput } from "./machine/types";
 
 // Slide type exports
+export type { Slide, SlidePreviewState, SlideEvent } from "./slides";
+
+// Preview type exports
 export type {
-  Slide,
-  SlidePreviewState,
-  SlideEvent,
   PreviewSize,
   PreviewPanelMode,
   PreviewState,
@@ -41,7 +41,7 @@ export type {
   PreviewDomPatchBatch,
   PreviewInitialDocument,
   PreviewRecordedEvent,
-} from "./slides";
+} from "./preview";
 
 // Whiteboard type exports
 export type {

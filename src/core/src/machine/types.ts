@@ -4,10 +4,8 @@ import type {
   PreviewEvent,
   PreviewInitialDocument,
   PreviewState,
-  Slide,
-  SlideEvent,
-  SlidePreviewState,
-} from "../slides";
+} from "../preview";
+import type { Slide, SlideEvent, SlidePreviewState } from "../slides";
 import type {
   CaptionTrack,
   RecordingChapter,
