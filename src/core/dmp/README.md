@@ -14,7 +14,10 @@ Compression is handled separately by **fflate** (zlib), not this module.
 
 The TypeScript host binding, [`dmpCodec.ts`](./dmpCodec.ts) (loader,
 instantiation and ABI wrapper), and its tests sit beside the crate, so core
-owns its codec in one directory.
+owns its codec in one directory. The binding also holds `encodeAppendDelta`,
+which writes an append-only delta (CHECK, EQUAL over the base, INSERT of the
+suffix) in TypeScript without running the diff; it mirrors the wire format in
+`src/lib.rs`, so a format change there must update it too.
 
 This replaces the previous AssemblyScript implementation (see
 [`../docs/codec-history.md`](../docs/codec-history.md)). The move to Rust buys

@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
-import { type DmpCodec, DmpBaseMismatchError, instantiateDmpCodec } from "./dmpCodec";
+import {
+  type DmpCodec,
+  DmpBaseMismatchError,
+  encodeAppendDelta,
+  instantiateDmpCodec,
+} from "./dmpCodec";
 
 // The dmp codec artifact (`bun run build:wasm`) is committed, and
 // vitest.setup.ts already fails loudly when it is missing, so there is no skip.
@@ -86,6 +91,25 @@ describe("dmp codec (diff-match-patch in Rust)", () => {
     // tag = (hashLen << 2) | CHECK = (4 << 2) | 3 = 0x13, then 4 hash bytes.
     expect(delta[0]).toBe(0x13);
     expect(delta.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("applies an append-only delta encoded without the module", async () => {
+    const codec = await load();
+    const cases: [string, string][] = [
+      ["", "first streamed chunk"],
+      ["streamed answer so far ", "and the next chunk"],
+      ["café ☕ naïve — ", "résumé 🌍"],
+      // Past 127 bytes the EQUAL and INSERT tags take more than one varint byte.
+      ["x".repeat(300), "y".repeat(200)],
+    ];
+    for (const [base, appended] of cases) {
+      const a = enc.encode(base);
+      const delta = encodeAppendDelta(a, enc.encode(appended));
+
+      expect(delta[0]).toBe(0x13);
+      expect(dec.decode(codec.applyDelta(a, delta))).toBe(base + appended);
+      expect(() => codec.applyDelta(enc.encode(`${base}!`), delta)).toThrow(DmpBaseMismatchError);
+    }
   });
 
   it("rejects applying a delta to a same-length wrong base (the silent-corruption case)", async () => {

@@ -20,6 +20,9 @@
 // codec methods are plain sync calls — only `loadDmpCodec()` is async. All data
 // crosses through linear memory using the module's alloc/pack ABI (see
 // README.md).
+//
+// `encodeAppendDelta` (end of this file) is the one place TypeScript writes the
+// delta wire format itself, so it sits here beside the crate that defines it.
 
 interface DmpExports {
   memory: WebAssembly.Memory;
@@ -174,4 +177,99 @@ export function loadDmpCodec(): Promise<DmpCodec> {
     return codec;
   })();
   return cached;
+}
+
+// ---------------------------------------------------------------------------
+// Append-only fast path. The constants and helpers below mirror the delta
+// wire format in src/lib.rs (op kinds, `op_tag`, `varint_size`, `write_varint`,
+// `fnv1a32`); a change there must be made here too. A test in dmpCodec.test.ts
+// applies this encoder's output with the real module.
+// ---------------------------------------------------------------------------
+
+// Op kinds, the low 2 bits of a serialized op tag (EQUAL, INSERT and CHECK in
+// lib.rs). The append encoder never writes DELETE.
+const EQUAL_KIND = 0;
+const INSERT_KIND = 2;
+const CHECK_KIND = 3;
+/** The CHECK op's payload: a little-endian FNV-1a hash of the whole base. */
+const CHECK_HASH_LEN = 4;
+/** One under lib.rs MAX_BUF (2^30): the longest op whose `(len << 2) | kind` tag fits a u32. */
+const MAX_OP_BYTES = 0x3fffffff;
+const FNV1A32_OFFSET_BASIS = 0x811c9dc5;
+const FNV1A32_PRIME = 0x01000193;
+
+/**
+ * lib.rs `op_tag`, `(len << 2) | kind`, computed arithmetically so a length
+ * near MAX_OP_BYTES does not wrap to a negative int32.
+ */
+function opTag(kind: number, len: number): number {
+  return len * 4 + kind;
+}
+
+function fnv1a32(bytes: Uint8Array): number {
+  let hash = FNV1A32_OFFSET_BASIS;
+  for (const byte of bytes) {
+    hash ^= byte;
+    hash = Math.imul(hash, FNV1A32_PRIME);
+  }
+  return hash >>> 0;
+}
+
+/** Byte length of `value` as an LEB128 varint. */
+function varintSize(value: number): number {
+  let remaining = value >>> 0;
+  let byteLength = 1;
+  while (remaining >= 0x80) {
+    remaining >>>= 7;
+    byteLength += 1;
+  }
+  return byteLength;
+}
+
+/** Writes `value` as an LEB128 varint at `offset`; returns the offset after it. */
+function writeVarint(target: Uint8Array, offset: number, value: number): number {
+  let remaining = value >>> 0;
+  while (remaining >= 0x80) {
+    target[offset] = (remaining & 0x7f) | 0x80;
+    offset += 1;
+    remaining >>>= 7;
+  }
+  target[offset] = remaining;
+  return offset + 1;
+}
+
+/**
+ * Encodes the delta that appends `appendedBytes` to `baseBytes` without
+ * running the Myers diff: the mandatory CHECK head over the base, one EQUAL op
+ * over the whole base (omitted when it is empty) and one INSERT op carrying
+ * only the appended bytes. Pure TypeScript, so it needs no loaded module;
+ * {@link DmpCodec.applyDelta} accepts the result like any diffDelta output.
+ * Throws when either side is longer than one op can describe.
+ */
+export function encodeAppendDelta(baseBytes: Uint8Array, appendedBytes: Uint8Array): Uint8Array {
+  if (baseBytes.byteLength > MAX_OP_BYTES || appendedBytes.byteLength > MAX_OP_BYTES) {
+    throw new Error("append-only content delta exceeds the codec operation limit");
+  }
+
+  const checkTag = opTag(CHECK_KIND, CHECK_HASH_LEN);
+  const equalTag = opTag(EQUAL_KIND, baseBytes.byteLength);
+  const insertTag = opTag(INSERT_KIND, appendedBytes.byteLength);
+  const byteLength =
+    varintSize(checkTag) +
+    CHECK_HASH_LEN +
+    (baseBytes.byteLength > 0 ? varintSize(equalTag) : 0) +
+    varintSize(insertTag) +
+    appendedBytes.byteLength;
+  const delta = new Uint8Array(byteLength);
+
+  let offset = writeVarint(delta, 0, checkTag);
+  new DataView(delta.buffer).setUint32(offset, fnv1a32(baseBytes), true);
+  offset += CHECK_HASH_LEN;
+  if (baseBytes.byteLength > 0) {
+    offset = writeVarint(delta, offset, equalTag);
+  }
+  offset = writeVarint(delta, offset, insertTag);
+  delta.set(appendedBytes, offset);
+
+  return delta;
 }

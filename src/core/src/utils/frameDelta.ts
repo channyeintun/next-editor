@@ -13,7 +13,7 @@ import type {
 import { isKeyframe, isDelta } from "./deltaTypes";
 export { isKeyframe, isDelta };
 import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
-import { getDmpCodec } from "../../dmp/dmpCodec";
+import { encodeAppendDelta, getDmpCodec } from "../../dmp/dmpCodec";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
 import {
   normalizeEditorFrame,
@@ -61,40 +61,10 @@ const contentTextEncoder = new TextEncoder();
 const contentTextDecoder = new TextDecoder();
 const MAX_CONTENT_EDIT_CHANGES = 64;
 const MAX_CONTENT_EDIT_CODE_UNITS = 256 * 1024;
-const DMP_CHECK_TAG = (4 << 2) | 3;
-const DMP_EQUAL_KIND = 0;
-const DMP_INSERT_KIND = 2;
-const DMP_MAX_OP_BYTES = 0x3fffffff;
-
-function fnv1a32(bytes: Uint8Array): number {
-  let hash = 0x811c9dc5;
-  for (const byte of bytes) {
-    hash ^= byte;
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
-}
-
-function dmpVarUintByteLength(value: number): number {
-  let remaining = value >>> 0;
-  let byteLength = 1;
-  while (remaining >= 0x80) {
-    remaining >>>= 7;
-    byteLength += 1;
-  }
-  return byteLength;
-}
-
-function writeDmpVarUint(target: Uint8Array, offset: number, value: number): number {
-  let remaining = value >>> 0;
-  while (remaining >= 0x80) {
-    target[offset] = (remaining & 0x7f) | 0x80;
-    offset += 1;
-    remaining >>>= 7;
-  }
-  target[offset] = remaining;
-  return offset + 1;
-}
+// The content-edit integrity hash is 32-bit FNV-1a; recordings store it, so
+// these are part of the ContentEditDelta format.
+const FNV1A32_OFFSET_BASIS = 0x811c9dc5;
+const FNV1A32_PRIME = 0x01000193;
 
 function hasBoundedContentEditChanges(value: unknown): value is readonly TextEditChange[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > MAX_CONTENT_EDIT_CHANGES) {
@@ -126,13 +96,13 @@ function hasBoundedContentEditChanges(value: unknown): value is readonly TextEdi
 
 /** FNV-1a over UTF-16 code units, without allocating an encoded full-string copy. */
 function hashContentEditText(value: string): number {
-  let hash = 0x811c9dc5;
+  let hash = FNV1A32_OFFSET_BASIS;
   for (let index = 0; index < value.length; index += 1) {
     const codeUnit = value.charCodeAt(index);
     hash ^= codeUnit & 0xff;
-    hash = Math.imul(hash, 0x01000193);
+    hash = Math.imul(hash, FNV1A32_PRIME);
     hash ^= codeUnit >>> 8;
-    hash = Math.imul(hash, 0x01000193);
+    hash = Math.imul(hash, FNV1A32_PRIME);
   }
   return hash >>> 0;
 }
@@ -276,7 +246,9 @@ export function createContentDelta(prev: string, next: string): ContentDelta | n
  * Creates the codec-compatible delta for an append-only text update without
  * invoking the Myers diff. The wire payload contains one equal op for the
  * existing UTF-8 bytes and one insert op for only the appended suffix, while
- * retaining the codec's mandatory base-integrity check.
+ * retaining the codec's mandatory base-integrity check. The bytes are written by
+ * {@link encodeAppendDelta}, which lives in the codec binding beside the Rust
+ * wire format it mirrors.
  */
 export function createAppendContentDelta(base: string, appended: string): ContentDelta | null {
   if (appended.length === 0) return null;
@@ -293,34 +265,9 @@ export function createAppendContentDelta(base: string, appended: string): Conten
     return null;
   }
 
-  const baseBytes = contentTextEncoder.encode(base);
-  const appendedBytes = contentTextEncoder.encode(appended);
-  if (baseBytes.byteLength > DMP_MAX_OP_BYTES || appendedBytes.byteLength > DMP_MAX_OP_BYTES) {
-    throw new Error("append-only content delta exceeds the codec operation limit");
-  }
-
-  const equalTag = baseBytes.byteLength * 4 + DMP_EQUAL_KIND;
-  const insertTag = appendedBytes.byteLength * 4 + DMP_INSERT_KIND;
-  const byteLength =
-    1 +
-    4 +
-    (baseBytes.byteLength > 0 ? dmpVarUintByteLength(equalTag) : 0) +
-    dmpVarUintByteLength(insertTag) +
-    appendedBytes.byteLength;
-  const delta = new Uint8Array(byteLength);
-  let offset = 0;
-
-  delta[offset] = DMP_CHECK_TAG;
-  offset += 1;
-  new DataView(delta.buffer).setUint32(offset, fnv1a32(baseBytes), true);
-  offset += 4;
-  if (baseBytes.byteLength > 0) {
-    offset = writeDmpVarUint(delta, offset, equalTag);
-  }
-  offset = writeDmpVarUint(delta, offset, insertTag);
-  delta.set(appendedBytes, offset);
-
-  return { delta };
+  return {
+    delta: encodeAppendDelta(contentTextEncoder.encode(base), contentTextEncoder.encode(appended)),
+  };
 }
 
 /**
