@@ -1,3 +1,4 @@
+import { decodeAudioBlob } from "./audioDecode";
 import type { MediaSpan } from "./mediaSpans";
 
 // ============================================================================
@@ -16,8 +17,7 @@ export interface AudioPeaks {
 }
 
 export async function computeAudioPeaks(blob: Blob, bucketMs = 50): Promise<AudioPeaks> {
-  const context = new OfflineAudioContext(1, 1, PEAKS_DECODE_RATE);
-  const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+  const buffer = await decodeAudioBlob(blob, PEAKS_DECODE_RATE);
   const samplesPerBucket = Math.max(1, Math.round((PEAKS_DECODE_RATE * bucketMs) / 1000));
   const peaks = new Float32Array(Math.ceil(buffer.length / samplesPerBucket));
   for (let channel = 0; channel < buffer.numberOfChannels; channel++) {

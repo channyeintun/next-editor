@@ -1,3 +1,4 @@
+import { decodeAudioBlob } from "./audioDecode";
 import { normalizeMediaSpans, type MediaSpan } from "./mediaSpans";
 import { encodeMonoPcmToOggOpus, OGG_OPUS_MIME } from "./oggOpus";
 import { encodeWavPcm16, floatTo16BitPcm } from "./wavPcm16";
@@ -95,9 +96,7 @@ export function applyAudioEditToSamples(
 
 /** The audio as mono samples at `sampleRate`: every channel averaged. */
 async function decodeToMono(blob: Blob, sampleRate: number): Promise<Float32Array<ArrayBuffer>> {
-  // An OfflineAudioContext opens no audio device and needs no user gesture.
-  const context = new OfflineAudioContext(1, 1, sampleRate);
-  const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+  const buffer = await decodeAudioBlob(blob, sampleRate);
   if (buffer.numberOfChannels === 1) return buffer.getChannelData(0);
 
   const mono = new Float32Array(buffer.length);

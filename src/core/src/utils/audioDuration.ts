@@ -6,6 +6,8 @@
  * Web Audio API.
  */
 
+import { decodeAudioBlob } from "./audioDecode";
+
 // Decoding resamples the whole file to the context's rate as Float32, so the rate
 // sets the memory cost: 20 minutes of mono audio is ~230 MB at 48 kHz and ~38 MB
 // here. The length is still exact to a fraction of a millisecond.
@@ -71,14 +73,12 @@ function getDurationFromAudioElement(audioBlob: Blob): Promise<number> {
 }
 
 /**
- * Duration of `audioBlob` in seconds. Decodes on an OfflineAudioContext: it opens no
- * audio device and is not subject to the autoplay policy, unlike the page's shared
- * realtime context, which this used to create on load before any user gesture.
+ * Duration of `audioBlob` in seconds, decoded offline at a low rate; decodeAudioBlob
+ * says why it must never use the page's realtime context.
  */
 export async function measureAudioDurationSeconds(audioBlob: Blob): Promise<number> {
-  const context = new OfflineAudioContext(1, 1, DECODE_SAMPLE_RATE);
   try {
-    return (await context.decodeAudioData(await audioBlob.arrayBuffer())).duration;
+    return (await decodeAudioBlob(audioBlob, DECODE_SAMPLE_RATE)).duration;
   } catch (decodeError) {
     console.warn(
       "AudioContext.decodeAudioData failed, falling back to HTMLAudioElement:",
