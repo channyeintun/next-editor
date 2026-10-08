@@ -7,7 +7,8 @@ import type {
   LearnerWorkspaceSave,
 } from "./types";
 import type { EditorFrame, Recording } from "../types";
-import type { FrameDelta } from "../utils/deltaTypes";
+import type { PreviewState } from "../slides";
+import type { DeltaFrame, FrameDelta } from "../utils/deltaTypes";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import {
   areWorkspaceProjectsEqual,
@@ -78,6 +79,15 @@ export const reportMachineError = (
   }
   console.error("[editorMachine]", error);
 };
+
+/** Color of the playback caret's marks in the minimap and the overview ruler. */
+const PLAYBACK_CURSOR_COLOR = "#007ACC";
+
+/**
+ * Preview scroll offsets within this many pixels count as unchanged, so fractional scroll
+ * values do not re-apply the preview.
+ */
+const PREVIEW_SCROLL_TOLERANCE_PX = 1;
 
 const resolveBoundedReplayTime = (
   context: EditorMachineContext,
@@ -414,11 +424,11 @@ export const applyFrameState = (
               className: "playback-cursor-decoration",
               stickiness: 1, // NeverGrowsWhenTypingAtEdges
               minimap: {
-                color: "#007ACC",
+                color: PLAYBACK_CURSOR_COLOR,
                 position: 1, // Inline
               },
               overviewRuler: {
-                color: "#007ACC",
+                color: PLAYBACK_CURSOR_COLOR,
                 position: 2, // Center
               },
             },
@@ -442,36 +452,19 @@ export const applyFrameState = (
   return collection;
 };
 
-export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
-  const currentTime = resolveBoundedReplayTime(context, event);
-
-  if (!recording || !editorRefs.editor || context.pendingPlaybackEditorSync) {
-    return {};
-  }
-
-  const frames = recording.frames;
-  if (!frames?.length) return {};
-
-  const frameIndex = findFrameIndexAtTime(frames, currentTime, lastAppliedFrameIndex);
-
-  if (frameIndex === lastAppliedFrameIndex) {
-    return {};
-  }
-
-  let frame: EditorFrame | null = null;
+/**
+ * The editor state at `frameIndex`, folded from the applied frame or rebuilt from its
+ * keyframe, or null when that frame must be skipped: its reconstruction threw (reported
+ * here) or produced an invalid state.
+ */
+function foldFrameAtIndex(
+  context: EditorMachineContext,
+  frames: DeltaFrame[],
+  frameIndex: number,
+): EditorFrame | null {
+  const { currentFrame, lastAppliedFrameIndex } = context;
   const targetFrame = frames[frameIndex];
-  const editorModelBoundaryTime = latestEditorModelBoundaryTime(
-    recording.workspaceEvents,
-    context.lastAppliedWorkspaceEventIndex,
-  );
-
-  if (editorModelBoundaryTime !== null && targetFrame.timestamp < editorModelBoundaryTime) {
-    return {
-      lastAppliedFrameIndex: frameIndex,
-      currentFrame: null,
-    };
-  }
+  let frame: EditorFrame | null;
 
   // Reconstruction throws by design on a damaged recording
   // (ContentEditBaseMismatchError, DmpBaseMismatchError, conflicting delta
@@ -480,11 +473,11 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
   // — including recording — is a no-op, with `onError` never called. So one bad
   // frame used to freeze the whole editor for the rest of the page session.
   // Skipping the frame and reporting it lets playback continue past the damage.
-  // A skipped frame clears currentFrame, as the model-boundary skip above does, so
-  // the forward fold below never runs on a base that is not the fold at
-  // lastAppliedFrameIndex: relative caret deltas would land on the wrong base. The
-  // rest of the damaged keyframe span is then skipped too (one report per frame)
-  // until the next keyframe re-bases the editor.
+  // The caller clears currentFrame for a skipped frame, as it does for the
+  // model-boundary skip, so the forward fold below never runs on a base that is
+  // not the fold at lastAppliedFrameIndex: relative caret deltas would land on the
+  // wrong base. The rest of the damaged keyframe span is then skipped too (one
+  // report per frame) until the next keyframe re-bases the editor.
   try {
     if (isKeyframe(targetFrame)) {
       // Keyframe: always use directly, most efficient
@@ -517,10 +510,120 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
         ? error
         : new Error(`Could not reconstruct recording frame ${frameIndex}`),
     );
-    return { lastAppliedFrameIndex: frameIndex, currentFrame: null };
+    return null;
   }
 
-  if (!frame || !isValidEditorState(frame.state)) {
+  if (!frame || !isValidEditorState(frame.state)) return null;
+  return frame;
+}
+
+/**
+ * Mirrors a frame's slide state to the host. Runs only for a recording without a
+ * slideEvents track; when the track exists, the slide replay applies it instead.
+ */
+function mirrorFrameSlideState(
+  context: EditorMachineContext,
+  frame: EditorFrame,
+  previousFrame: EditorFrame | null,
+): void {
+  const { slideState, currentSlideIndex } = frame.state;
+  if (
+    !slideState ||
+    currentSlideIndex === undefined ||
+    !context.applySlideState ||
+    context.recording?.slideEvents?.length
+  ) {
+    return;
+  }
+
+  // Check if this slide state has changed to prevent excessive re-renders
+  const prevSlideState = previousFrame?.state.slideState;
+  const prevSlideIndex = previousFrame?.state.currentSlideIndex;
+
+  const hasChanged =
+    !prevSlideState ||
+    slideState.isOpen !== prevSlideState.isOpen ||
+    slideState.currentSlideId !== prevSlideState.currentSlideId ||
+    slideState.indexv !== prevSlideState.indexv ||
+    currentSlideIndex !== prevSlideIndex;
+
+  if (hasChanged) {
+    context.applySlideState(slideState, currentSlideIndex);
+  }
+}
+
+/**
+ * Mirrors a frame's preview panel state to the host. Runs only for a recording without a
+ * previewEvents track. Returns the state it applied, or undefined when it applied none.
+ */
+function mirrorFramePreviewState(
+  context: EditorMachineContext,
+  frame: EditorFrame,
+): PreviewState | undefined {
+  const { previewState } = frame.state;
+  // Dedicated preview events capture preview UI state changes more
+  // accurately than editor frames, so only fall back to frame snapshots
+  // when no preview event stream exists.
+  if (!previewState || !context.applyPreviewState || context.recording?.previewEvents?.length) {
+    return undefined;
+  }
+
+  const nextState = {
+    ...previewState,
+    refreshKey: undefined,
+    currentInteraction: undefined,
+  };
+  const currentState = context.lastAppliedPreviewState;
+
+  if (
+    !currentState ||
+    !arePreviewSizesEqual(nextState.size, currentState.size) ||
+    nextState.isOpen !== currentState.isOpen ||
+    nextState.mode !== currentState.mode ||
+    nextState.content !== currentState.content ||
+    Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) >
+      PREVIEW_SCROLL_TOLERANCE_PX ||
+    Math.abs((nextState.scrollLeft || 0) - (currentState.scrollLeft || 0)) >
+      PREVIEW_SCROLL_TOLERANCE_PX
+  ) {
+    context.applyPreviewState(nextState);
+    return nextState;
+  }
+  return undefined;
+}
+
+export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
+  const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
+  const currentTime = resolveBoundedReplayTime(context, event);
+
+  if (!recording || !editorRefs.editor || context.pendingPlaybackEditorSync) {
+    return {};
+  }
+
+  const frames = recording.frames;
+  if (!frames?.length) return {};
+
+  const frameIndex = findFrameIndexAtTime(frames, currentTime, lastAppliedFrameIndex);
+
+  if (frameIndex === lastAppliedFrameIndex) {
+    return {};
+  }
+
+  const editorModelBoundaryTime = latestEditorModelBoundaryTime(
+    recording.workspaceEvents,
+    context.lastAppliedWorkspaceEventIndex,
+  );
+
+  if (editorModelBoundaryTime !== null && frames[frameIndex].timestamp < editorModelBoundaryTime) {
+    return {
+      lastAppliedFrameIndex: frameIndex,
+      currentFrame: null,
+    };
+  }
+
+  // A skipped frame leaves no fold at its index for the next tick to build on.
+  const frame = foldFrameAtIndex(context, frames, frameIndex);
+  if (!frame) {
     return { lastAppliedFrameIndex: frameIndex, currentFrame: null };
   }
 
@@ -544,53 +647,10 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
     };
   }
 
-  if (
-    frame.state.slideState &&
-    frame.state.currentSlideIndex !== undefined &&
-    context.applySlideState
-  ) {
-    // Check if this slide state has changed to prevent excessive re-renders
-    // We only do this check if we don't have separate slide events
-    if (!recording.slideEvents?.length) {
-      const prevSlideState = currentFrame?.state.slideState;
-      const prevSlideIndex = currentFrame?.state.currentSlideIndex;
-
-      const hasChanged =
-        !prevSlideState ||
-        frame.state.slideState.isOpen !== prevSlideState.isOpen ||
-        frame.state.slideState.currentSlideId !== prevSlideState.currentSlideId ||
-        frame.state.slideState.indexv !== prevSlideState.indexv ||
-        frame.state.currentSlideIndex !== prevSlideIndex;
-
-      if (hasChanged) {
-        context.applySlideState(frame.state.slideState, frame.state.currentSlideIndex);
-      }
-    }
-  }
-
-  if (frame.state.previewState && context.applyPreviewState && !recording.previewEvents?.length) {
-    // Dedicated preview events capture preview UI state changes more
-    // accurately than editor frames, so only fall back to frame snapshots
-    // when no preview event stream exists.
-    const nextState = {
-      ...frame.state.previewState,
-      refreshKey: undefined,
-      currentInteraction: undefined,
-    };
-    const currentState = context.lastAppliedPreviewState;
-
-    if (
-      !currentState ||
-      !arePreviewSizesEqual(nextState.size, currentState.size) ||
-      nextState.isOpen !== currentState.isOpen ||
-      nextState.mode !== currentState.mode ||
-      nextState.content !== currentState.content ||
-      Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) > 1 ||
-      Math.abs((nextState.scrollLeft || 0) - (currentState.scrollLeft || 0)) > 1
-    ) {
-      context.applyPreviewState(nextState);
-      updates.lastAppliedPreviewState = nextState;
-    }
+  mirrorFrameSlideState(context, frame, currentFrame);
+  const previewState = mirrorFramePreviewState(context, frame);
+  if (previewState) {
+    updates.lastAppliedPreviewState = previewState;
   }
 
   return updates;
