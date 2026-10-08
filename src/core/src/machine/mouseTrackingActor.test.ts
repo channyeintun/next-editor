@@ -79,6 +79,28 @@ describe("mouseTrackingActor", () => {
     return iframe;
   };
 
+  // Reading a cross-origin frame's document throws, so it reports moves by
+  // postMessage instead.
+  const renderCrossOriginFrame = () => {
+    const iframe = renderFrame();
+    Object.defineProperty(iframe, "contentDocument", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Blocked a cross-origin frame", "SecurityError");
+      },
+    });
+    return iframe;
+  };
+
+  const postFrameMove = (iframe: HTMLIFrameElement, data: Record<string, number>) => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: iframe.contentWindow,
+        data: { type: IFRAME_INTERACTION_MESSAGE_TYPE, payload: { type: "mousemove", data } },
+      }),
+    );
+  };
+
   const getFrameDocument = (iframe: HTMLIFrameElement): Document => {
     const frameDocument = iframe.contentDocument;
     if (!frameDocument) throw new Error("the iframe has no document");
@@ -298,15 +320,7 @@ describe("mouseTrackingActor", () => {
 
   it("stops reporting page and window events after the actor stops", () => {
     const { line } = renderApp();
-    // A cross-origin frame: reading its document throws, so it reports moves by
-    // postMessage instead.
-    const crossOriginFrame = renderFrame();
-    Object.defineProperty(crossOriginFrame, "contentDocument", {
-      configurable: true,
-      get: () => {
-        throw new DOMException("Blocked a cross-origin frame", "SecurityError");
-      },
-    });
+    const crossOriginFrame = renderCrossOriginFrame();
     const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
     const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
     const firePageEvents = () => {
@@ -317,15 +331,7 @@ describe("mouseTrackingActor", () => {
           detail: { x: 300, y: 200, visible: true },
         }),
       );
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          source: crossOriginFrame.contentWindow,
-          data: {
-            type: IFRAME_INTERACTION_MESSAGE_TYPE,
-            payload: { type: "mousemove", data: { clientX: 64, clientY: 48 } },
-          },
-        }),
-      );
+      postFrameMove(crossOriginFrame, { clientX: 64, clientY: 48 });
     };
 
     firePageEvents();
@@ -336,6 +342,44 @@ describe("mouseTrackingActor", () => {
     firePageEvents();
 
     expect(onMouseMove).toHaveBeenCalledTimes(6);
+  });
+
+  it("drops a cross-origin frame's move whose point is not a finite number", () => {
+    renderApp();
+    const iframe = renderCrossOriginFrame();
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+
+    postFrameMove(iframe, { clientX: Number.NaN, clientY: 48 });
+    postFrameMove(iframe, { clientX: 64, clientY: Number.POSITIVE_INFINITY });
+
+    expect(onMouseMove).not.toHaveBeenCalled();
+
+    postFrameMove(iframe, { clientX: 64, clientY: 48 });
+
+    expect(onMouseMove).toHaveBeenCalledTimes(1);
+    actor.stop();
+  });
+
+  it("falls back for a cross-origin frame's size and buttons that are not finite", () => {
+    renderApp();
+    const iframe = renderCrossOriginFrame();
+    const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
+    const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
+
+    postFrameMove(iframe, {
+      clientX: 64,
+      clientY: 48,
+      windowWidth: Number.POSITIVE_INFINITY,
+      windowHeight: Number.NaN,
+      buttons: Number.NaN,
+    });
+
+    // Without a size the frame's own box is its viewport: (100 + 64, 75 + 48),
+    // relative to the app root at (50, 25).
+    expect(onMouseMove).toHaveBeenCalledTimes(1);
+    expect(onMouseMove.mock.calls[0][0]).toMatchObject({ x: 114, y: 98, flags: 0 });
+    actor.stop();
   });
 
   it("listens to mouse events instead when the browser has no pointer events", () => {

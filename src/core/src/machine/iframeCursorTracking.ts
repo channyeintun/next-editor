@@ -184,7 +184,15 @@ export function startIframeCursorTracking(options: IframeCursorTrackingOptions):
       return;
     }
 
-    if (typeof payload?.data?.clientX !== "number" || typeof payload?.data?.clientY !== "number") {
+    // The message comes from code running in the preview. A non-finite
+    // coordinate drops it, where it would become a visible sample at the
+    // page's top-left, and the other fields fall back as the pointer path's do.
+    const finite = (value: unknown): number | undefined =>
+      typeof value === "number" && Number.isFinite(value) ? value : undefined;
+    const data = payload?.data;
+    const clientX = finite(data?.clientX);
+    const clientY = finite(data?.clientY);
+    if (clientX === undefined || clientY === undefined) {
       return;
     }
 
@@ -200,17 +208,17 @@ export function startIframeCursorTracking(options: IframeCursorTrackingOptions):
 
     const point = toParentClientPoint(
       iframe,
-      payload.data.clientX,
-      payload.data.clientY,
-      typeof payload.data.windowWidth === "number" ? payload.data.windowWidth : undefined,
-      typeof payload.data.windowHeight === "number" ? payload.data.windowHeight : undefined,
+      clientX,
+      clientY,
+      finite(data.windowWidth),
+      finite(data.windowHeight),
     );
 
     options.onPoint({
       iframe,
       clientX: point.clientX,
       clientY: point.clientY,
-      flags: typeof payload.data.buttons === "number" ? payload.data.buttons : 0,
+      flags: finite(data.buttons) ?? 0,
     });
   };
 
