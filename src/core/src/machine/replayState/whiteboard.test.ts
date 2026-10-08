@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import { getWhiteboardReplayResult } from "./whiteboard";
-import type { WhiteboardElementJSON, WhiteboardEvent } from "../../whiteboard";
+import {
+  applyWhiteboardEvent,
+  EMPTY_WHITEBOARD_SCENE,
+  type WhiteboardElementJSON,
+  type WhiteboardEvent,
+} from "../../whiteboard";
 
 function element(id: string): WhiteboardElementJSON {
   return {
@@ -23,6 +28,23 @@ function track(n: number): WhiteboardEvent[] {
     upserts: [element(`e${index}`)],
     removedIds: [],
   })) as WhiteboardEvent[];
+}
+
+/**
+ * n events at t = index * 10, each adding one element and removing the one added
+ * `window` events before it, so every index has its own scene of bounded size.
+ */
+function slidingTrack(n: number, window: number): WhiteboardEvent[] {
+  return Array.from({ length: n }, (_, index) => ({
+    timestamp: index * 10,
+    upserts: [element(`e${index}`)],
+    removedIds: index >= window ? [`e${index - window}`] : [],
+  })) as WhiteboardEvent[];
+}
+
+/** The scene at `index`, folded from the start with no cache. */
+function foldDirectly(events: WhiteboardEvent[], index: number) {
+  return events.slice(0, index + 1).reduce(applyWhiteboardEvent, EMPTY_WHITEBOARD_SCENE);
 }
 
 describe("whiteboard replay", () => {
@@ -93,5 +115,53 @@ describe("whiteboard replay", () => {
 
     expect(back.nextIndex).toBe(2);
     expect(back.stateToApply?.elements.map((e) => e.id)).toEqual(["e0", "e1", "e2"]);
+  });
+
+  // Only every 64th scene is kept, plus the last one resolved, so lookups away from
+  // the last one fold forward from a checkpoint. Each must match a direct fold. A
+  // sliding track keeps the cold fold to the end fast: with `track`, every event
+  // re-sorts a scene that grows to 10,000 elements.
+  it("resolves far, near-start and near-end seeks from sparse checkpoints", () => {
+    const events = slidingTrack(10_000, 8);
+    let lastAppliedIndex = -1;
+
+    for (const index of [9_999, 5, 9_998]) {
+      const result = getWhiteboardReplayResult({
+        whiteboardEvents: events,
+        currentTime: index * 10,
+        lastAppliedIndex,
+      });
+
+      expect(result.nextIndex).toBe(index);
+      expect(result.stateToApply?.elements.map((e) => e.id)).toEqual(
+        foldDirectly(events, index).elements.map((e) => e.id),
+      );
+      lastAppliedIndex = result.nextIndex;
+    }
+  });
+
+  it("keeps checkpoints exact as streamed events are appended", () => {
+    // Streaming playback appends to the same array in place, so the checkpoints are
+    // extended chunk by chunk rather than built once.
+    const events = slidingTrack(300, 8);
+    const streamed: WhiteboardEvent[] = [];
+    for (let end = 50; end <= events.length; end += 50) {
+      streamed.push(...events.slice(streamed.length, end));
+      getWhiteboardReplayResult({
+        whiteboardEvents: streamed,
+        currentTime: (end - 1) * 10,
+        lastAppliedIndex: -1,
+      });
+    }
+
+    for (const index of [299, 127, 128, 63, 200, 255, 3]) {
+      expect(
+        getWhiteboardReplayResult({
+          whiteboardEvents: streamed,
+          currentTime: index * 10,
+          lastAppliedIndex: -1,
+        }).stateToApply?.elements.map((e) => e.id),
+      ).toEqual(foldDirectly(events, index).elements.map((e) => e.id));
+    }
   });
 });
