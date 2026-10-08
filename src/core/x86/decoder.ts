@@ -41,7 +41,16 @@ export type DecodedOperand =
       /** Bits 8-15 of `index` rather than its low byte: `ah`, `ch`, `dh`, `bh`. */
       high8: boolean;
     }
-  | { kind: "immediate"; value: bigint }
+  | {
+      kind: "immediate";
+      /**
+       * The immediate sign-extended to the operand width, as unsigned bits —
+       * the same convention as a register or memory read, so `mov al, -1`
+       * carries 255n and `mov rax, -1` carries 2^64 - 1 whatever the width of
+       * the field that encoded it.
+       */
+      value: bigint;
+    }
   | {
       kind: "memory";
       size: OperandSize;
@@ -251,14 +260,6 @@ class ByteReader {
     const signBit = 1n << BigInt(bytes * 8 - 1);
     return value & signBit ? value - (1n << BigInt(bytes * 8)) : value;
   }
-
-  unsigned(bytes: number): bigint {
-    let value = 0n;
-    for (let index = 0; index < bytes; index += 1) {
-      value |= BigInt(this.u8()) << BigInt(index * 8);
-    }
-    return value;
-  }
 }
 
 /** The operand-size override: 16-bit operands where the default is 32. */
@@ -436,12 +437,14 @@ export function decodeInstruction(
         break;
       case "imm":
         // Any field narrower than the operand is sign-extended by the hardware,
-        // so the width decides this and not the form's `signExtended`, which is
-        // an encode-side rule about which values a form will accept.
+        // so the field is always read signed, whatever the form's
+        // `signExtended` says — that is an encode-side rule about which values
+        // a form will accept. Reducing to the operand width then gives the
+        // unsigned bits every other operand read returns; for a full 8-byte
+        // field the two steps cancel out.
         operands.push({
           kind: "immediate",
-          value:
-            immediateWidth < 8 ? reader.signed(immediateWidth) : reader.unsigned(immediateWidth),
+          value: BigInt.asUintN(operandSize * 8, reader.signed(immediateWidth)),
         });
         break;
       case "rel":

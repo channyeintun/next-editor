@@ -220,4 +220,21 @@ describe("encode then decode", () => {
     const decoded = decodeInstruction(Uint8Array.from(assembleOne("mov sil, dil")), 0, 0x401000n);
     expect(decoded.operands[0]).toMatchObject({ kind: "register", index: 6, high8: false });
   });
+
+  it("reads every immediate as unsigned bits at the operand width", () => {
+    // The field's width does not show through: `mov rax, -1` encodes a 4-byte
+    // field and `mov rax, 0xffffffffffffffff` an 8-byte one, and both carry
+    // the value a read of rax would return afterwards.
+    for (const [source, value] of [
+      ["mov al, -1", 0xffn],
+      ["add eax, -1", 0xffff_ffffn],
+      ["mov rax, -1", 0xffff_ffff_ffff_ffffn],
+      ["mov rax, 0xffffffffffffffff", 0xffff_ffff_ffff_ffffn],
+      ["push -1", 0xffff_ffff_ffff_ffffn],
+      ["imul rax, rbx, -2", 0xffff_ffff_ffff_fffen],
+    ] as const) {
+      const decoded = decodeInstruction(Uint8Array.from(assembleOne(source)), 0, 0x401000n);
+      expect(decoded.operands.at(-1)).toEqual({ kind: "immediate", value });
+    }
+  });
 });
