@@ -44,10 +44,11 @@ The app layer is responsible for React composition, WebContainer integration, In
 
 `src/core/src/index.ts` re-exports the recording model's types, and nothing else:
 
-- `Recording`, `EditorFrame`, `EditorState`
-- `EditorActorRef`, `TimelineActorRef`
+- `Recording`, `EditorFrame`, `EditorState`, `EditorSelection`
+- `RecordingAudioSource`, `RecordingCameraSource`
+- `EditorActorRef`
 - `EditorMachineContext`, `EditorMachineEvent`, `EditorMachineInput`
-- Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewState`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, and `PreviewRecordedEvent`
+- Slide and preview types such as `SlideEvent`, `PreviewEvent`, `PreviewState`, `PreviewInitialDocument`, `PreviewDomPatchBatch`, `PreviewRecordedEvent`, and `PreviewPatchReplayInput`
 - Caption types such as `CaptionTrack`, `CaptionCue`, and `CaptionWord`
 - Track/cluster metadata types: `RecordingTrackKind`, `RecordingTrackMeta`, `RecordingClusterMeta`
 

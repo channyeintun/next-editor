@@ -18,8 +18,11 @@ export type {
   EditorFrame,
   Recording,
   RecordingStreamDelta,
+  RecordingAudioSource,
   RecordingCameraSource,
   EditorState,
+  EditorSelection,
+  PreviewPatchReplayInput,
 } from "./types";
 
 // Machine type exports
