@@ -121,7 +121,7 @@ export const buildScreenCaptureStream = (
  * pre-acquired display stream (never self-acquires; `getDisplayMedia` must run in the click
  * handler to keep transient user activation) and muxes available display/tab audio plus an
  * optional microphone clone. External narration is present only when the chosen tab capture
- * supplies it; audio-less captures are explicitly reported as silent.
+ * supplies it; captures without audio are reported through `hasAudio`.
  *
  * The blob is emitted via `SCREEN_STOPPED` and saved to disk by the app layer — it is never
  * folded into the `Recording`, so nothing in the machine's finalize join waits on it.
@@ -215,16 +215,8 @@ export const screenRecordingActor = fromTypedCallback<
         audioContextCtor: input.audioContextCtor,
       });
       audioContext = mix.audioContext;
+      // Reported on SCREEN_STARTED/SCREEN_STOPPED; the host decides how to surface a silent file.
       hasAudio = mix.stream.getAudioTracks().length > 0;
-      if (!hasAudio) {
-        // No display/tab audio and no mic to mix — the file will be silent. Surface it so a
-        // consumer (e.g. the studio, which plays external narration the browser can only capture
-        // as *tab* audio) does not promise "narration included" for a video that has none.
-        console.warn(
-          "screenRecordingActor: no audio track captured — the screen recording will be silent " +
-            '(share a browser tab with "share tab audio" enabled to include the narration).',
-        );
-      }
 
       mediaRecorder = new MediaRecorder(mix.stream, {
         mimeType,
