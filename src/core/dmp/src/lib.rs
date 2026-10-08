@@ -25,7 +25,8 @@
 // SIZE BOUND: offsets and op lengths are u32 and the serialized op tag is
 // `(len << 2) | type`, so each buffer and each single op must stay under ~2^30
 // bytes. The varint reader matches this (it stops at `shift > 28`). Comfortable
-// for editor-sized documents; callers must not feed it gigabyte inputs.
+// for editor-sized documents; at or above MAX_BUF, `alloc` traps and the codec
+// functions return ERR, so a forged length cannot wrap the heap arithmetic.
 //
 // TIME BOUND: the diff is also bounded in *effort* (see WORK_BUDGET), because
 // `diffDelta` runs synchronously on the recorder's thread and Myers is O(N·D).
@@ -71,6 +72,18 @@ fn align_up(n: usize, a: usize) -> usize {
     (n + a - 1) & !(a - 1)
 }
 
+// Allocator arithmetic must never wrap: usize is 32-bit here and the release
+// build has no overflow checks, so a wrapped size or end address would hand out
+// a block overlapping live ones (and poison the free list for the session).
+// Trap instead; the host sees a RuntimeError and the heap is left untouched.
+#[inline]
+fn or_trap(v: Option<usize>) -> usize {
+    match v {
+        Some(v) => v,
+        None => core::arch::wasm32::unreachable(),
+    }
+}
+
 struct HeapState {
     inited: bool,
     bump: usize,
@@ -106,7 +119,8 @@ impl Heap {
             s.end = bytes;
             s.inited = true;
         }
-        let need = align_up(if size < ALIGN { ALIGN } else { size }, ALIGN);
+        let need = or_trap((if size < ALIGN { ALIGN } else { size }).checked_add(ALIGN - 1))
+            & !(ALIGN - 1);
 
         // Best fit over the free list (capacity kept as-is; no splitting): pick
         // the smallest block that fits, so a small request doesn't consume a
@@ -141,9 +155,10 @@ impl Heap {
 
         // Bump, growing linear memory if the block won't fit.
         let h = s.bump;
-        let total = HEADER + need;
-        if h + total > s.end {
-            let extra = align_up(h + total - s.end, PAGE);
+        let total = or_trap(HEADER.checked_add(need));
+        let next_bump = or_trap(h.checked_add(total));
+        if next_bump > s.end {
+            let extra = align_up(next_bump - s.end, PAGE);
             let pages = extra / PAGE;
             if core::arch::wasm32::memory_grow(0, pages) == usize::MAX {
                 core::arch::wasm32::unreachable();
@@ -151,7 +166,7 @@ impl Heap {
             s.end += pages * PAGE;
         }
         *(h as *mut usize) = need;
-        s.bump = h + total;
+        s.bump = next_bump;
         h + HEADER
     }
 
@@ -602,6 +617,11 @@ unsafe fn read_varint(mut ptr: usize, end: usize) -> (u32, bool, usize) {
 // ---------------------------------------------------------------------------
 #[no_mangle]
 pub extern "C" fn alloc(size: u32) -> u32 {
+    // No buffer may reach MAX_BUF (see SIZE BOUND), so an oversized request is
+    // a host bug or a forged length: trap before touching the heap.
+    if size as usize >= MAX_BUF {
+        core::arch::wasm32::unreachable();
+    }
     unsafe { HEAP.raw_alloc(if size == 0 { 1 } else { size as usize }) as u32 }
 }
 
@@ -659,6 +679,10 @@ pub extern "C" fn diffDelta(a_ptr: u32, a_len: u32, b_ptr: u32, b_len: u32) -> u
 
 #[no_mangle]
 pub extern "C" fn applyDelta(a_ptr: u32, a_len: u32, d_ptr: u32, d_len: u32) -> u64 {
+    // Same bound as diffDelta; it also keeps `d_ptr + d_len` from wrapping.
+    if a_len as usize >= MAX_BUF || d_len as usize >= MAX_BUF {
+        return ERR;
+    }
     let a_len = a_len as usize;
     let a_base = a_ptr as usize;
     let d_ptr = d_ptr as usize;

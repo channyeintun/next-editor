@@ -94,12 +94,18 @@ the delta is well-formed but the base failed its CHECK hash — a replay desync,
 surfaced by the host as `DmpBaseMismatchError`. The host reads `len` bytes at
 `ptr`, then calls `freeBuf(ptr)`.
 
-| export                                | signature    | notes                              |
-| ------------------------------------- | ------------ | ---------------------------------- |
-| `alloc(size u32)`                     | `-> ptr u32` | host-writable input buffer         |
-| `freeBuf(ptr u32)`                    |              | release a buffer (input or result) |
-| `diffDelta(aPtr,aLen,bPtr,bLen u32)`  | `-> u64`     | `a -> b` delta                     |
-| `applyDelta(aPtr,aLen,dPtr,dLen u32)` | `-> u64`     | reconstructs `b` from `a` + delta  |
+| export                                | signature    | notes                                           |
+| ------------------------------------- | ------------ | ----------------------------------------------- |
+| `alloc(size u32)`                     | `-> ptr u32` | host-writable input buffer; traps at >= 2^30    |
+| `freeBuf(ptr u32)`                    |              | release a buffer (input or result) exactly once |
+| `diffDelta(aPtr,aLen,bPtr,bLen u32)`  | `-> u64`     | `a -> b` delta                                  |
+| `applyDelta(aPtr,aLen,dPtr,dLen u32)` | `-> u64`     | reconstructs `b` from `a` + delta               |
+
+Buffers stay under 2^30 bytes (`MAX_BUF`): `alloc` traps on a larger request,
+and the codec functions return the corrupt sentinel for a larger length, so a
+forged size can never wrap the allocator's 32-bit arithmetic. The host binding
+also rejects any input that is not an `ArrayBuffer` view before calling `alloc`,
+since a delta decoded from an untrusted `.ne` file can be a plain object.
 
 The delta is opaque to JS: each op is a LEB128 varint `(len << 2) | type`
 (`0` EQUAL copy-from-source, `1` DELETE skip-source, `2` INSERT literal bytes

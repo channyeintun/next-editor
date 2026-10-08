@@ -38,7 +38,8 @@ export interface DmpCodec {
   /**
    * Reconstruct `b` from `a` and a delta produced by {@link diffDelta}. Throws
    * {@link DmpBaseMismatchError} when `a` is not the base the delta was diffed
-   * against, and a plain Error on a structurally corrupt delta.
+   * against, a plain Error on a structurally corrupt delta, and a TypeError
+   * when either input is not an ArrayBuffer view (e.g. a forged msgpack map).
    */
   applyDelta(a: Uint8Array, delta: Uint8Array): Uint8Array;
 }
@@ -55,6 +56,14 @@ function bind(exports: DmpExports): DmpCodec {
   const u8 = () => new Uint8Array(exports.memory.buffer);
 
   const write = (input: Uint8Array): number => {
+    // Deltas come out of untrusted .ne files via msgpack, where a map such as
+    // `{ length: -8 }` decodes to a plain object; its length must never reach
+    // alloc as a raw size. ArrayBuffer.isView rather than `instanceof`, which
+    // also rejects genuine byte arrays from another realm (a same-origin frame,
+    // or jsdom's globals under Vitest, where TextEncoder output fails it).
+    if (!ArrayBuffer.isView(input)) {
+      throw new TypeError("dmp codec: input must be a Uint8Array");
+    }
     const ptr = exports.alloc(input.length || 1);
     u8().set(input, ptr);
     return ptr;
@@ -81,25 +90,31 @@ function bind(exports: DmpExports): DmpCodec {
     return out;
   };
 
+  // Both writes sit inside the try so a throwing second write (bad input, or
+  // an alloc trap) still frees the first buffer.
   return {
     diffDelta(a, b) {
-      const aPtr = write(a);
-      const bPtr = write(b);
+      let aPtr: number | null = null;
+      let bPtr: number | null = null;
       try {
+        aPtr = write(a);
+        bPtr = write(b);
         return read(exports.diffDelta(aPtr, a.length, bPtr, b.length), "diffDelta");
       } finally {
-        exports.freeBuf(aPtr);
-        exports.freeBuf(bPtr);
+        if (aPtr !== null) exports.freeBuf(aPtr);
+        if (bPtr !== null) exports.freeBuf(bPtr);
       }
     },
     applyDelta(a, delta) {
-      const aPtr = write(a);
-      const dPtr = write(delta);
+      let aPtr: number | null = null;
+      let dPtr: number | null = null;
       try {
+        aPtr = write(a);
+        dPtr = write(delta);
         return read(exports.applyDelta(aPtr, a.length, dPtr, delta.length), "applyDelta");
       } finally {
-        exports.freeBuf(aPtr);
-        exports.freeBuf(dPtr);
+        if (aPtr !== null) exports.freeBuf(aPtr);
+        if (dPtr !== null) exports.freeBuf(dPtr);
       }
     },
   };

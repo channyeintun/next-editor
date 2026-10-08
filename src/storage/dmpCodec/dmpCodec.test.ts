@@ -147,6 +147,51 @@ describe.skipIf(!hasArtifact)("dmp codec (diff-match-patch in Rust)", () => {
     }
   });
 
+  it("rejects a forged non-Uint8Array delta and stays usable afterwards", async () => {
+    const codec = await load();
+    const base = enc.encode("const answer = 42;\n".repeat(20));
+    // A msgpack map in a crafted .ne decodes to a plain object. Its length used
+    // to reach alloc as a raw size, wrapping the allocator so the next round
+    // trip spun forever in the free-list scan (or failed for the session).
+    const forged = { length: -8 } as unknown as Uint8Array;
+    expect(() => codec.applyDelta(base, forged)).toThrow(TypeError);
+    expect(() => codec.applyDelta(forged, base)).toThrow(TypeError);
+    expect(() => codec.diffDelta(base, forged)).toThrow(TypeError);
+    expect(() => codec.diffDelta(forged, base)).toThrow(TypeError);
+
+    for (let round = 0; round < 50; round++) {
+      const target = `const answer = ${round};\n`.repeat(20 + round);
+      const delta = codec.diffDelta(base, enc.encode(target));
+      expect(dec.decode(codec.applyDelta(base, delta))).toBe(target);
+    }
+  });
+
+  it("traps oversized allocations and length arguments at the module boundary", async () => {
+    const { instance } = await WebAssembly.instantiate(readFileSync(wasmPath), {});
+    const exports = instance.exports as unknown as {
+      memory: WebAssembly.Memory;
+      alloc(size: number): number;
+      applyDelta(aPtr: number, aLen: number, dPtr: number, dLen: number): bigint;
+    };
+    const first = exports.alloc(16);
+    // A near-u32::MAX size used to wrap `HEADER + need`, returning a pointer
+    // without advancing the bump so later blocks overlapped it.
+    expect(() => exports.alloc(0xfffffff0)).toThrow(WebAssembly.RuntimeError);
+    expect(() => exports.alloc(1 << 30)).toThrow(WebAssembly.RuntimeError);
+
+    // Later allocations still work and do not overlap.
+    const second = exports.alloc(16);
+    const third = exports.alloc(16);
+    expect(second).toBeGreaterThanOrEqual(first + 16);
+    expect(third).toBeGreaterThanOrEqual(second + 16);
+    expect(third + 16).toBeLessThanOrEqual(exports.memory.buffer.byteLength);
+
+    // applyDelta refuses oversized lengths (ERR) instead of wrapping `dPtr + dLen`.
+    expect(BigInt.asUintN(64, exports.applyDelta(first, 0, second, 0xfffffff0))).toBe(
+      0xffffffffffffffffn,
+    );
+  });
+
   it("bounds a bulk structural edit instead of stalling the recorder", async () => {
     const codec = await load();
     // Myers is O(N·D): a large document that changes *throughout* (rename-all,
