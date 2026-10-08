@@ -511,6 +511,15 @@ describe("assembler diagnostics", () => {
     );
   });
 
+  // The expression is consumed before the register is rejected, so a caret
+  // taken from the parser's position then lands past the operand.
+  it("points at a register used outside an address, not past it", () => {
+    const error = failing(inProgram(" mov rax, 1 + rbx"));
+    expect(error.message).toContain("cannot be used in a plain expression");
+    expect(error.line).toBe(5);
+    expect(error.column).toBe(15);
+  });
+
   // The lexer raises `AsmSyntaxError` and `assemble` re-raises it as the base
   // class on the way out. That hand-off copies the position across by hand, so
   // it is the one place a caret could quietly drift a column without any

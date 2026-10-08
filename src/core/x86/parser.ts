@@ -473,7 +473,7 @@ class Parser {
       explicitRelative = false;
     }
 
-    const folded = this.#foldAddress(this.#parseAddressExpression(), 1n, open);
+    const folded = this.#foldAddress(this.#parseAddressAdditive(), 1n, open);
     this.#expectPunct("]");
 
     if (folded.terms.length > 2) {
@@ -535,11 +535,11 @@ class Parser {
     };
   }
 
-  /** Expression grammar extended with bare register terms, for `[…]` only. */
-  #parseAddressExpression(): AddressExpression {
-    return this.#parseAddressAdditive();
-  }
-
+  /**
+   * The one expression grammar, everywhere: it accepts bare register terms.
+   * Inside `[…]` they fold into the base and index; everywhere else
+   * `toExpression` rejects them by name, pointing at the register.
+   */
   #parseAddressAdditive(): AddressExpression {
     let left = this.#parseAddressMultiplicative();
     for (;;) {
@@ -576,7 +576,7 @@ class Parser {
     }
     if (token.kind === "punct" && token.value === "(") {
       this.#next();
-      const inner = this.#parseAddressExpression();
+      const inner = this.#parseAddressAdditive();
       this.#expectPunct(")");
       return inner;
     }
@@ -584,7 +584,7 @@ class Parser {
       const register = lookupRegister(token.value);
       if (register) {
         this.#next();
-        return { kind: "register", register };
+        return { kind: "register", register, token };
       }
     }
     return this.#parsePrimary();
@@ -651,8 +651,8 @@ class Parser {
             constant: {
               kind: "binary",
               operator: expression.operator,
-              left: toExpression(expression.left, at),
-              right: toExpression(expression.right, at),
+              left: toExpression(expression.left),
+              right: toExpression(expression.right),
             },
           };
         }
@@ -662,7 +662,7 @@ class Parser {
 
         const registerSide = leftRegisters.length > 0 ? expression.left : expression.right;
         const scaleSide = leftRegisters.length > 0 ? expression.right : expression.left;
-        const scaleExpression = toExpression(scaleSide, at);
+        const scaleExpression = toExpression(scaleSide);
         if (scaleExpression.kind !== "number") {
           throw this.#error("A register's scale must be a plain number", at);
         }
@@ -680,12 +680,12 @@ class Parser {
         };
       }
       default:
-        return { terms: [], constant: toExpression(expression, at) };
+        return { terms: [], constant: toExpression(expression) };
     }
   }
 
   #parseExpression(): Expression {
-    return toExpression(this.#parseAddressAdditive(), this.#peek());
+    return toExpression(this.#parseAddressAdditive());
   }
 
   #parsePrimary(): AddressExpression {
@@ -724,7 +724,8 @@ const ZERO: Expression = { kind: "number", value: 0n };
 
 type AddressExpression =
   | Expression
-  | { kind: "register"; register: RegisterRef }
+  /** `token` is where the register was written, for the caret when one is rejected. */
+  | { kind: "register"; register: RegisterRef; token: Token }
   | { kind: "unary"; operator: "-" | "+"; operand: AddressExpression }
   | {
       kind: "binary";
@@ -746,26 +747,26 @@ function collectRegisters(expression: AddressExpression): RegisterRef[] {
   }
 }
 
-function toExpression(expression: AddressExpression, at: Token): Expression {
+function toExpression(expression: AddressExpression): Expression {
   switch (expression.kind) {
     case "register":
       throw new AsmSyntaxError(
         `Register ${expression.register.name} cannot be used in a plain expression`,
-        at.line,
-        at.column,
+        expression.token.line,
+        expression.token.column,
       );
     case "unary":
       return {
         kind: "unary",
         operator: expression.operator,
-        operand: toExpression(expression.operand, at),
+        operand: toExpression(expression.operand),
       };
     case "binary":
       return {
         kind: "binary",
         operator: expression.operator,
-        left: toExpression(expression.left, at),
-        right: toExpression(expression.right, at),
+        left: toExpression(expression.left),
+        right: toExpression(expression.right),
       };
     default:
       return expression;
