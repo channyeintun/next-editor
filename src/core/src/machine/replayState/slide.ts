@@ -26,6 +26,16 @@ const SLIDE_STRUCTURAL_EVENT_TYPES = new Set<SlideEvent["type"]>([
   "slide_minimize",
 ]);
 
+/** An event that changes how the deck is shown: opened, closed, maximized or minimized. */
+function isViewEvent(event: SlideEvent): boolean {
+  return (
+    SLIDE_VISIBILITY_EVENT_TYPES.has(event.type) || SLIDE_STRUCTURAL_EVENT_TYPES.has(event.type)
+  );
+}
+
+/** The vertical index a closed deck reports. */
+const CLOSED_DECK_INDEXV = 0;
+
 /**
  * The deck before the first slide event it can place. No visibility event yet means closed (see
  * `buildSlideStateAtEvent`), and the recorder writes a t=0 `slide_open` only when
@@ -33,7 +43,12 @@ const SLIDE_STRUCTURAL_EVENT_TYPES = new Set<SlideEvent["type"]>([
  */
 const CLOSED_SLIDE_APPLICATION: SlideReplayApplication = {
   slideIndex: -1,
-  slideState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
+  slideState: {
+    isOpen: false,
+    isMaximized: false,
+    currentSlideId: null,
+    indexv: CLOSED_DECK_INDEXV,
+  },
 };
 
 /**
@@ -55,6 +70,18 @@ function findLastEventAtOrBefore(
   return undefined;
 }
 
+/** Whether the deck is maximized after `lastViewEvent`, the latest view event. */
+function resolveMaximized(lastViewEvent: SlideEvent | undefined): boolean {
+  if (lastViewEvent?.type === "slide_maximize") return true;
+  if (lastViewEvent?.type === "slide_open") return lastViewEvent.isMaximized ?? false;
+  return false;
+}
+
+/**
+ * The deck state at `eventIndex`. Each backward lookup runs only when its answer is
+ * used: the view lookup only for an open deck, and the index lookup only when the
+ * event carries no vertical index of its own.
+ */
 function buildSlideStateAtEvent(slideEvents: SlideEvent[], eventIndex: number): SlidePreviewState {
   const slideEvent = slideEvents[eventIndex];
   const lastVisibilityEvent = findLastEventAtOrBefore(slideEvents, eventIndex, (event) =>
@@ -63,36 +90,29 @@ function buildSlideStateAtEvent(slideEvents: SlideEvent[], eventIndex: number): 
   const lastPositionEvent = findLastEventAtOrBefore(slideEvents, eventIndex, (event) =>
     Boolean(event.slideId),
   );
-  const lastViewEvent = findLastEventAtOrBefore(
-    slideEvents,
-    eventIndex,
-    (event) =>
-      SLIDE_VISIBILITY_EVENT_TYPES.has(event.type) || SLIDE_STRUCTURAL_EVENT_TYPES.has(event.type),
-  );
   const targetSlideId = slideEvent.slideId || lastPositionEvent?.slideId;
-  const lastIndexEvent = findLastEventAtOrBefore(
-    slideEvents,
-    eventIndex,
-    (event) =>
-      (targetSlideId ? event.slideId === targetSlideId : true) &&
-      event.indexv !== undefined &&
-      event.indexv !== null,
-  );
   const isOpen = lastVisibilityEvent?.type === "slide_open";
   const isMaximized =
-    isOpen && lastViewEvent
-      ? lastViewEvent.type === "slide_maximize"
-        ? true
-        : lastViewEvent.type === "slide_open"
-          ? (lastViewEvent.isMaximized ?? false)
-          : false
-      : false;
+    isOpen && resolveMaximized(findLastEventAtOrBefore(slideEvents, eventIndex, isViewEvent));
+
+  let indexv: number | undefined;
+  if (slideEvent.type === "slide_close") {
+    indexv = CLOSED_DECK_INDEXV;
+  } else if (slideEvent.indexv != null) {
+    indexv = slideEvent.indexv;
+  } else {
+    indexv = findLastEventAtOrBefore(
+      slideEvents,
+      eventIndex,
+      (event) => (targetSlideId ? event.slideId === targetSlideId : true) && event.indexv != null,
+    )?.indexv;
+  }
 
   return {
     isOpen,
     isMaximized,
     currentSlideId: targetSlideId || null,
-    indexv: slideEvent.type === "slide_close" ? 0 : (slideEvent.indexv ?? lastIndexEvent?.indexv),
+    indexv,
     currentInteraction: slideEvent.interaction,
   };
 }
