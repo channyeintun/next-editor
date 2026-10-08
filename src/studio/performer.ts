@@ -53,6 +53,12 @@ async function invokeAction(
         selection: action.selection,
         durationMs: action.durationMs,
       });
+    case "console.point":
+      return driver.pointConsole({
+        target: action.target,
+        durationMs: action.durationMs,
+        timeoutMs: action.timeoutMs,
+      });
     case "runtime.run":
       return driver.runWorkspace(action.timeoutMs);
     case "runtime.start":
@@ -61,6 +67,8 @@ async function invokeAction(
       return driver.waitForRuntimeReady(action.timeoutMs);
     case "runtime.collapseDock":
       return driver.collapseRuntimeDock(action.timeoutMs);
+    case "runtime.expandDock":
+      return driver.expandRuntimeDock(action.timeoutMs);
     case "preview.open":
       return driver.openPreview({ mode: action.mode, timeoutMs: action.timeoutMs });
     case "preview.click":
@@ -137,7 +145,7 @@ async function invokeWithDeadline(
   const timedEditBudgetMs =
     action.type === "editor.type"
       ? action.chunks.reduce((total, chunk) => total + chunk.delayMs, 0)
-      : action.type === "editor.select"
+      : action.type === "editor.select" || action.type === "console.point"
         ? action.durationMs
         : 0;
   const deadlineMs = action.timeoutMs + timedEditBudgetMs;

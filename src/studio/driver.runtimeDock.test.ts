@@ -52,6 +52,20 @@ describe("StudioDriver runner dock", () => {
     expect(runtimeEvents).toHaveLength(1);
   });
 
+  it("opens a shut dock (between the chevron click and the Run press) and records it", async () => {
+    const { driver, runtimePanelStore, runtimeEvents } = makeDriver();
+    runtimePanelStore.trigger.setIsCollapsed({ collapsed: true });
+
+    await expect(driver.expandRuntimeDock(1_000)).resolves.toMatchObject({ expanded: true });
+
+    expect(selectIsCollapsed(runtimePanelStore.getSnapshot().context)).toBe(false);
+    expect(runtimeEvents).toHaveLength(1);
+    await expect(driver.expandRuntimeDock(1_000)).resolves.toMatchObject({
+      alreadyExpanded: true,
+    });
+    expect(runtimeEvents).toHaveLength(1);
+  });
+
   it("is a no-op on an already collapsed dock", async () => {
     const { driver, runtimePanelStore, runtimeEvents } = makeDriver();
     runtimePanelStore.trigger.setIsCollapsed({ collapsed: true });

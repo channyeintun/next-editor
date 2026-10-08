@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { registerCursorCellAnchor } from "./cursorCellAnchors";
 import {
   createCursorPositionFromClientPoint,
   resolveCursorViewportPosition,
@@ -103,6 +104,41 @@ describe("cursorCoordinates", () => {
       x: 220,
       y: 200,
     });
+  });
+
+  it("records and resolves a point over a terminal by its place in the text", () => {
+    const root = document.createElement("div");
+    root.setAttribute("data-cursor-replay-target", "app");
+    const terminal = document.createElement("div");
+    terminal.setAttribute("data-cursor-replay-target", "terminal-go-runner");
+    root.appendChild(terminal);
+    document.body.appendChild(root);
+    mockRect(root, { left: 0, top: 0, width: 1000, height: 800 });
+    mockRect(terminal, { left: 100, top: 500, width: 600, height: 200 });
+    // While recording, (330, 560) is line 3, character 8; on replay that line
+    // sits two rows lower, as on a console that fits more rows.
+    let replaying = false;
+    registerCursorCellAnchor(terminal, {
+      toCell: (x, y) => (x === 330 && y === 560 ? { line: 3, offset: 8, dx: 0.6, dy: 0.5 } : null),
+      toClient: (cell) => (cell.line === 3 && replaying ? { x: 330, y: 600 } : null),
+    });
+
+    const cursor = createCursorPositionFromClientPoint({
+      clientX: 330,
+      clientY: 560,
+      visible: true,
+      eventTarget: terminal,
+    });
+    expect(cursor.target).toMatchObject({
+      id: "terminal-go-runner",
+      cell: { line: 3, offset: 8, dx: 0.6, dy: 0.5 },
+    });
+
+    replaying = true;
+    expect(resolveCursorViewportPosition(cursor)).toEqual({ x: 330, y: 600 });
+    // A line no longer on screen falls back to the recorded pixel offset.
+    replaying = false;
+    expect(resolveCursorViewportPosition(cursor)).toEqual({ x: 330, y: 560 });
   });
 
   it("records points relative to the app root when present", () => {

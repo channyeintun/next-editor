@@ -4,6 +4,7 @@ import type { NarrationDialog } from "./dialogs";
 import type { ExtractedNarration } from "./markers";
 import type { LessonScript } from "./schema";
 import {
+  pointDurationOf,
   selectDurationOf,
   typingDurationOf,
   typingSeedsOf,
@@ -126,6 +127,7 @@ export function scheduleDialogs({
         action.id,
         typingDurationOf(action, seed) +
           selectDurationOf(action, seed) +
+          pointDurationOf(action) +
           whiteboardDrawDurationOf(action),
       );
       const anchor = action.at;

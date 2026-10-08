@@ -169,22 +169,37 @@ describe("compileLessonScript", () => {
       ],
     });
     const { plan } = compileLessonScript(scheduledInputFor(script));
-    const clickBefore = (id: string) => plan.actions.find((action) => action.id === `cursor-${id}`);
+    const byId = (id: string) => plan.actions.find((action) => action.id === id);
+    const order = (...ids: string[]) =>
+      ids.map((id) => plan.actions.findIndex((action) => action.id === id));
 
-    // The dock starts shut: the first run is opened by its chevron…
-    expect(clickBefore("run")).toMatchObject({
+    // The dock starts shut: its chevron is clicked, the dock opens, and only
+    // then is Run pressed — the chevron never seems to run the program.
+    expect(byId("cursor-run-dock")).toMatchObject({
       type: "cursor.moveTo",
       target: { kind: "target-id", id: "runtime-dock-toggle" },
       press: true,
     });
-    // …which also shuts it again…
-    expect(clickBefore("shut")).toMatchObject({
+    expect(byId("open-dock-run")).toMatchObject({ type: "runtime.expandDock" });
+    expect(byId("cursor-run")).toMatchObject({ target: { kind: "run-button" }, press: true });
+    const [chevron, opening, runPress, run] = order(
+      "cursor-run-dock",
+      "open-dock-run",
+      "cursor-run",
+      "run",
+    );
+    expect(chevron).toBeLessThan(opening);
+    expect(opening).toBeLessThan(runPress);
+    expect(runPress).toBeLessThan(run);
+    // Collapsing clicks the same chevron…
+    expect(byId("cursor-shut")).toMatchObject({
       target: { kind: "target-id", id: "runtime-dock-toggle" },
     });
-    // …and with the dock shut once more, the second run goes through it too.
-    expect(clickBefore("again")).toMatchObject({
+    // …and with the dock shut once more, the second run opens it the same way.
+    expect(byId("cursor-again-dock")).toMatchObject({
       target: { kind: "target-id", id: "runtime-dock-toggle" },
     });
+    expect(byId("cursor-again")).toMatchObject({ target: { kind: "run-button" } });
 
     const open = parseLessonScript({ ...script, runtime: base.runtime });
     expect(
@@ -206,6 +221,200 @@ describe("compileLessonScript", () => {
       // The longest approach plus the rest and the press — never more.
       expect(move.durationMs).toBeLessThanOrEqual(800 + 220 + 100);
     }
+  });
+
+  it("compiles console.point as a timed pointing gesture at a line the program prints", () => {
+    const base = selectScript();
+    const script = parseLessonScript({
+      ...base,
+      scenes: [
+        {
+          ...base.scenes[0],
+          narration:
+            "First we open the program. [[mark:run]] Let's run it and look at what it prints. " +
+            "[[mark:read]] The console shows one short line, the greeting hi, printed by main.",
+          actions: [
+            { id: "run", type: "runtime.run", at: { mark: "run", offsetMs: 200 } },
+            {
+              id: "read",
+              type: "console.point",
+              at: { mark: "read" },
+              target: { text: "hi" },
+            },
+          ],
+        },
+      ],
+    });
+
+    const { plan } = compileLessonScript(scheduledInputFor(script));
+    const point = plan.actions.find((action) => action.id === "read");
+
+    expect(point).toMatchObject({
+      type: "console.point",
+      target: { text: "hi", occurrence: 1 },
+      durationMs: 800,
+    });
+    // A gesture of its own: no derived click precedes it.
+    expect(plan.actions.some((action) => action.id === "cursor-read")).toBe(false);
+  });
+
+  it("rejects a console.point at a line the pinned output never prints", () => {
+    const base = selectScript();
+    const script = parseLessonScript({
+      ...base,
+      scenes: [
+        {
+          ...base.scenes[0],
+          narration:
+            "First we open the program. [[mark:read]] Now look at the second line it prints.",
+          actions: [
+            { id: "read", type: "console.point", at: { mark: "read" }, target: { text: "bye" } },
+          ],
+        },
+      ],
+    });
+
+    expect(() => compileLessonScript(scheduledInputFor(script))).toThrow(
+      /console.point "read" targets output line 1 containing "bye", but the run's console has 0 such lines/,
+    );
+  });
+
+  describe("console.point placement", () => {
+    // selectScript's Go program, made to print `output` (and, optionally, vet notes).
+    function pointing(
+      actions: unknown[],
+      { output = "hi\n", vetErrors, dockStartsCollapsed = false } = {} as {
+        output?: string;
+        vetErrors?: string;
+        dockStartsCollapsed?: boolean;
+      },
+    ) {
+      const base = selectScript();
+      return parseLessonScript({
+        ...base,
+        runtime: {
+          ...base.runtime,
+          dockStartsCollapsed,
+          fixture: {
+            latencyMs: 100,
+            // Go reports vet notes on a run that still ran: status "vet-error", exit 0.
+            result: vetErrors
+              ? { status: "vet-error", exitCode: 0, output, vetErrors }
+              : { status: "success", exitCode: 0, output },
+          },
+        },
+        scenes: [
+          {
+            ...base.scenes[0],
+            narration:
+              "First we open the program. [[mark:a]] Let's run it and see. [[mark:b]] Here is the first " +
+              "line it printed. [[mark:c]] Now we close the console. [[mark:d]] And look at this line again.",
+            actions,
+          },
+        ],
+      });
+    }
+    const run = { id: "run", type: "runtime.run", at: { mark: "a" } };
+    const point = (mark: string, text: string) => ({
+      id: `point-${mark}`,
+      type: "console.point",
+      at: { mark },
+      target: { text },
+    });
+
+    it("needs output on the console first", () => {
+      expect(() =>
+        compileLessonScript(
+          scheduledInputFor(pointing([point("b", "hi"), { ...run, at: { mark: "c" } }])),
+        ),
+      ).toThrow(/console.point "point-b" comes before the lesson's first runtime.run/);
+    });
+
+    it("needs the dock open, and opens again with the next run", () => {
+      const collapse = { id: "shut", type: "runtime.collapseDock", at: { mark: "c" } };
+      expect(() =>
+        compileLessonScript(scheduledInputFor(pointing([run, collapse, point("d", "hi")]))),
+      ).toThrow(/points at the console while the runner dock is shut/);
+      expect(() =>
+        compileLessonScript(
+          scheduledInputFor(pointing([run, point("b", "hi")], { dockStartsCollapsed: true })),
+        ),
+      ).not.toThrow();
+    });
+
+    it("only points at lines still on screen — the console keeps its last six rows", () => {
+      const sixLines = "one\ntwo\nthree\nfour\nfive\nsix\n";
+      // six output lines plus the exit line: the first has scrolled away.
+      expect(() =>
+        compileLessonScript(
+          scheduledInputFor(pointing([run, point("b", "one")], { output: sixLines })),
+        ),
+      ).toThrow(/"one", which has scrolled out of the console/);
+      expect(() =>
+        compileLessonScript(
+          scheduledInputFor(pointing([run, point("b", "two")], { output: sixLines })),
+        ),
+      ).not.toThrow();
+    });
+
+    it("refuses a point that would land on a vet warning instead of the output", () => {
+      expect(() =>
+        compileLessonScript(
+          scheduledInputFor(
+            pointing([run, point("b", "name")], {
+              output: "name: Ada\n",
+              vetErrors: "./main.go:4:2: name declared and not used",
+            }),
+          ),
+        ),
+      ).toThrow(/lands on the runner's warning line/);
+    });
+
+    it("matches tabs as the console shows them", () => {
+      expect(() =>
+        compileLessonScript(
+          scheduledInputFor(pointing([run, point("b", "Name:   Ada")], { output: "Name:\tAda\n" })),
+        ),
+      ).not.toThrow();
+      expect(() => pointing([run, point("b", "Name:\tAda")], { output: "Name:\tAda\n" })).toThrow(
+        /tab as spaces/,
+      );
+    });
+  });
+
+  it("only lets console lessons point at the console", () => {
+    const base = selectScript();
+    const noRuntime = {
+      ...base,
+      lesson: {
+        ...base.lesson,
+        workspace: {
+          lessonType: "javascript",
+          name: "JS",
+          entryFilePath: "index.js",
+          files: { "index.js": "console.log(1)\n", "package.json": "{}" },
+        },
+      },
+      runtime: {
+        kind: "webcontainer",
+        adapterVersion: 1,
+        defaultMode: "live",
+        initCommand: "pnpm install",
+        runCommand: "pnpm dev",
+        environment: {},
+      },
+      scenes: [
+        {
+          ...base.scenes[0],
+          narration: "Look at this. [[mark:read]] The output shows one.",
+          actions: [
+            { id: "read", type: "console.point", at: { mark: "read" }, target: { text: "1" } },
+          ],
+        },
+      ],
+    };
+
+    expect(() => parseLessonScript(noRuntime)).toThrow(/console.point.*preview lesson/);
   });
 
   it("starts a chapter at the first spoken word of each scene that titles one", () => {

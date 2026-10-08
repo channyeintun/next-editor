@@ -25,11 +25,14 @@ const distributedSkill = readBundle("SKILL.md");
 const canonicalReference = readFileSync(resolve(ROOT, "docs/lesson-script-authoring.md"), "utf8");
 const inRepoSkill = readFileSync(resolve(ROOT, ".claude/skills/lesson-script/SKILL.md"), "utf8");
 
-/** The action types agents author. cursor.moveTo is derived by the compiler, not authored. */
+/** The action types agents author. The compiler derives cursor.moveTo and runtime.expandDock. */
 const schemaActionTypes = studioPlanActionSchema.options.map(
   (option) => option.shape.type.value as string,
 );
-const authoredActionTypes = schemaActionTypes.filter((type) => type !== "cursor.moveTo").sort();
+const derivedActionTypes = new Set(["cursor.moveTo", "runtime.expandDock"]);
+const authoredActionTypes = schemaActionTypes
+  .filter((type) => !derivedActionTypes.has(type))
+  .sort();
 
 /**
  * Every lesson must perform at least one action — narration alone never touches

@@ -79,7 +79,9 @@ export function runtimeContractIssues(
         action.type === "runtime.collapseDock" ||
         action.type.startsWith("preview.") ||
         action.type === "expect.preview" ||
-        action.type === "expect.output"
+        action.type === "expect.output" ||
+        // No runtime, no console to point at.
+        action.type === "console.point"
       ) {
         issues.push(
           `Action "${action.id}" (${action.type}) needs a runnable runtime, but lesson type "${workspace.lessonType}" has none in the studio yet`,
@@ -132,6 +134,10 @@ export function runtimeContractIssues(
       } else if (action.type === "expect.output") {
         issues.push(
           `Action "${action.id}" (expect.output) is for console runtimes; a ${workspace.lessonType} preview lesson asserts with expect.preview`,
+        );
+      } else if (action.type === "console.point") {
+        issues.push(
+          `Action "${action.id}" (console.point) points at console output; a ${workspace.lessonType} preview lesson shows its result in the preview`,
         );
       }
     }

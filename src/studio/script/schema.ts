@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   WHITEBOARD_DRAW_MAX_MS,
+  consoleLineTargetSchema as planConsoleLineTargetSchema,
   studioPreviewTargetSchema as planPreviewTargetSchema,
   studioRetryPolicySchema as planRetryPolicySchema,
   studioRuntimeSchema as planRuntimeSchema,
@@ -143,6 +144,13 @@ const scriptEditorSelectSchema = scriptActionBase.extend({
   target: scriptSelectTargetSchema,
 });
 
+// Points at a line of the program's output while the narration reads it: the
+// latest run's `occurrence`-th console line containing `text`.
+const scriptConsolePointSchema = scriptActionBase.extend({
+  type: z.literal("console.point"),
+  target: planConsoleLineTargetSchema.strict(),
+});
+
 const scriptRuntimeRunSchema = scriptActionBase.extend({
   type: z.literal("runtime.run"),
 });
@@ -270,6 +278,7 @@ export const scriptActionSchema = z.discriminatedUnion("type", [
   scriptOpenFileSchema,
   scriptEditorTypeSchema,
   scriptEditorSelectSchema,
+  scriptConsolePointSchema,
   scriptRuntimeRunSchema,
   scriptRuntimeStartSchema,
   scriptRuntimeWaitForReadySchema,

@@ -1,9 +1,11 @@
 import type {
+  CursorCellAnchor,
   CursorTargetRect,
   CursorTargetSnapshot,
   CursorTweenEndpoint,
   MouseCursorPosition,
 } from "../types";
+import { getCursorCellAnchor } from "./cursorCellAnchors";
 
 export const CURSOR_REPLAY_TARGET_ATTRIBUTE = "data-cursor-replay-target";
 export const CURSOR_REPLAY_VIEWPORT_TARGET_ID = "viewport";
@@ -177,13 +179,35 @@ function createTargetSnapshot(
   rect: CursorTargetRect,
   clientX: number,
   clientY: number,
+  cell?: CursorCellAnchor | null,
 ): CursorTargetSnapshot {
   return {
     id,
     rect,
     x: clientX - rect.left,
     y: clientY - rect.top,
+    ...(cell ? { cell } : {}),
   };
+}
+
+// Where in a terminal's text a client point falls, when the target has one.
+function cellAt(target: Element | null, clientX: number, clientY: number): CursorCellAnchor | null {
+  if (!target) return null;
+  return getCursorCellAnchor(target)?.toCell(clientX, clientY) ?? null;
+}
+
+function areCellsEqual(
+  previous: CursorCellAnchor | undefined,
+  next: CursorCellAnchor | undefined,
+): boolean {
+  if (!previous && !next) return true;
+  if (!previous || !next) return false;
+  return (
+    previous.line === next.line &&
+    previous.offset === next.offset &&
+    previous.dx === next.dx &&
+    previous.dy === next.dy
+  );
 }
 
 function createCursorMetadata({
@@ -231,7 +255,8 @@ function areCursorTargetsEqual(
     previous.id === next.id &&
     previous.x === next.x &&
     previous.y === next.y &&
-    areTargetRectsEqual(previous.rect, next.rect)
+    areTargetRectsEqual(previous.rect, next.rect) &&
+    areCellsEqual(previous.cell, next.cell)
   );
 }
 
@@ -292,7 +317,13 @@ export function createCursorPositionFromClientPoint({
         angle,
         pressure,
       }),
-      target: createTargetSnapshot(targetId, getRectRelativeToRoot(target, rootRect), x, y),
+      target: createTargetSnapshot(
+        targetId,
+        getRectRelativeToRoot(target, rootRect),
+        x,
+        y,
+        cellAt(target, toFiniteNumber(clientX), toFiniteNumber(clientY)),
+      ),
     };
   }
 
@@ -338,7 +369,13 @@ export function createCursorPositionFromClientPoint({
       angle,
       pressure,
     }),
-    target: createTargetSnapshot(targetId, getRectSnapshot(replayTarget), x, y),
+    target: createTargetSnapshot(
+      targetId,
+      getRectSnapshot(replayTarget),
+      x,
+      y,
+      cellAt(replayTarget, toFiniteNumber(clientX), toFiniteNumber(clientY)),
+    ),
   };
 }
 
@@ -366,14 +403,24 @@ function resolveEndpointToViewport(
     return { x: cursor.x, y: cursor.y };
   }
 
+  const targetElement =
+    target.id === CURSOR_REPLAY_VIEWPORT_TARGET_ID || !ownerDocument
+      ? null
+      : findReplayTargetById(target.id, ownerDocument);
+
+  // Over a terminal, the place in its text wins over the pixel offset: the
+  // viewer's console may fit more or fewer rows than the recording's did, and
+  // the same pixel offset would then sit on a different line.
+  if (target.cell && targetElement) {
+    const point = getCursorCellAnchor(targetElement)?.toClient(target.cell);
+    if (point) return point;
+  }
+
   const currentRect =
     target.id === CURSOR_REPLAY_VIEWPORT_TARGET_ID
       ? getViewportRect(ownerDocument)
-      : ownerDocument
-        ? (() => {
-            const targetElement = findReplayTargetById(target.id, ownerDocument);
-            return targetElement ? getRectSnapshot(targetElement) : null;
-          })()
+      : targetElement
+        ? getRectSnapshot(targetElement)
         : null;
 
   if (!currentRect || target.rect.width <= 0 || target.rect.height <= 0) {

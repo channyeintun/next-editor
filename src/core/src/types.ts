@@ -107,11 +107,24 @@ export interface CursorTargetRect {
  * Cursor coordinates relative to a stable UI region. Playback can use this
  * to remap a recorded position onto the current layout.
  */
+/**
+ * A place in a target's text content: the written line, the character offset
+ * within it, and where inside that character's cell (0–1 each way).
+ */
+export interface CursorCellAnchor {
+  line: number;
+  offset: number;
+  dx: number;
+  dy: number;
+}
+
 export interface CursorTargetSnapshot {
   id: string;
   rect: CursorTargetRect;
   x: number;
   y: number;
+  /** Set over a terminal: replay resolves it before the pixel offset. */
+  cell?: CursorCellAnchor;
 }
 
 export type CursorCoordinateSpace = "viewport" | "root";

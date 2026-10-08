@@ -4,7 +4,9 @@ import { selectIsCollapsed, type RuntimePanelStoreInstance } from "../stores/run
 import { selectPreviewState, type SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";
 import { appendRunnerConsoleLines } from "../runtime/playgroundConsoleStore";
+import type { Terminal } from "@xterm/xterm";
 import type { SlideEvent } from "../core/src/slides";
+import { getXtermTerminal } from "../components/xtermRegistry";
 import { applyWhiteboardEvent, type WhiteboardEvent } from "../core/src/whiteboard";
 import {
   CURSOR_REPLAY_ROOT_TARGET_ID,
@@ -34,6 +36,7 @@ import type {
   StudioPreviewCommandResult,
 } from "../utils/iframeStudioCommandBridge";
 import { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil } from "./async";
+import { consoleLineAimPoint, findConsoleLine, type ConsoleLineLookup } from "./consoleLines";
 import { chunkPlacements, easeInOutCubic } from "./cadence";
 import {
   PlaygroundTerminalError,
@@ -42,6 +45,7 @@ import {
 } from "./playgroundRuntime";
 import { isPlaygroundRuntime, isPlaygroundRuntimeKind } from "./plan";
 import type {
+  ConsoleLineTarget,
   SelectionAnchor,
   StudioRuntime,
   StudioRuntimeMode,
@@ -123,10 +127,16 @@ export interface StudioDriver {
     selection: SelectionAnchor;
     durationMs: number;
   }): Promise<Record<string, unknown>>;
+  pointConsole(input: {
+    target: ConsoleLineTarget;
+    durationMs: number;
+    timeoutMs: number;
+  }): Promise<Record<string, unknown>>;
   runWorkspace(timeoutMs: number): Promise<Record<string, unknown>>;
   startRuntime(timeoutMs: number): Promise<Record<string, unknown>>;
   waitForRuntimeReady(timeoutMs: number): Promise<Record<string, unknown>>;
   collapseRuntimeDock(timeoutMs: number): Promise<Record<string, unknown>>;
+  expandRuntimeDock(timeoutMs: number): Promise<Record<string, unknown>>;
   openPreview(input: {
     mode: PreviewPanelMode;
     timeoutMs: number;
@@ -179,6 +189,9 @@ const CURSOR_STEP_MS = 16;
 // replay's settle before the gesture shows the first ~220ms.
 const DRAG_PRESS_HOLD_MS = 120;
 
+// How long a pointer move waits for its control to render (see moveCursor).
+const TARGET_APPEAR_MS = 500;
+
 // The shortest scroll toward off-screen code before a drag-select.
 const MIN_SELECT_SCROLL_MS = 150;
 
@@ -220,6 +233,38 @@ function topmostInReplayRoot(x: number, y: number): Element | null {
  */
 export function cursorDispatchTarget(x: number, y: number, fallback: Element): Element {
   return topmostInReplayRoot(x, y) ?? fallback;
+}
+
+/**
+ * Where a console row's text ends on screen (its last non-blank character), or
+ * null when the renderer draws no DOM text (a canvas/WebGL renderer) or the
+ * page cannot measure it.
+ */
+function paintedTextRight(row: Element | undefined): number | null {
+  if (!row || typeof document.createRange !== "function") return null;
+  const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+  let lastNode: Text | null = null;
+  let lastIndex = 0;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node as Text;
+    const trimmed = text.data.replace(/\s+$/u, "");
+    if (trimmed.length > 0) {
+      lastNode = text;
+      lastIndex = trimmed.length;
+    }
+  }
+  if (!lastNode) return null;
+  try {
+    const range = document.createRange();
+    range.setStart(row, 0);
+    range.setEnd(lastNode, lastIndex);
+    const rights = [...range.getClientRects()]
+      .filter((rect) => rect.width > 0)
+      .map((rect) => rect.right);
+    return rights.length > 0 ? Math.max(...rights) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -287,6 +332,9 @@ function assertWebContainerHealthy(snapshot: WebContainerRuntimeRecordingSnapsho
 export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
   const { signal } = deps;
   let lastCursorPoint: PointerPoint | null = null;
+  // The header line the latest Playground run printed, so pointing at the
+  // console reads that run's output and not an earlier one's identical line.
+  let lastRunHeader: string | null = null;
   // Whether the recorded pointer is hidden right now (mouseTrackingActor records
   // every sample hidden until it is shown again).
   let pointerHidden = false;
@@ -407,6 +455,21 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       x: frameRect.left + centerX * (frameRect.width / Math.max(1, box.viewportWidth)),
       y: frameRect.top + centerY * (frameRect.height / Math.max(1, box.viewportHeight)),
     };
+  };
+
+  // The console on screen: the visible terminal inside the runtime dock, with
+  // the live xterm instance behind it (null while the dock is shut).
+  const visibleConsole = (): { container: Element; terminal: Terminal } | null => {
+    const dock = document.querySelector('[data-cursor-replay-target="runtime-dock"]');
+    if (!dock) return null;
+    for (const container of dock.querySelectorAll('[data-cursor-replay-target^="terminal-"]')) {
+      const rect = container.getBoundingClientRect();
+      const terminal = getXtermTerminal(container);
+      if (terminal && rect.width > 0 && rect.height > 0) {
+        return { container, terminal };
+      }
+    }
+    return null;
   };
 
   // Until its first gesture the pointer has nothing to point at.
@@ -584,6 +647,19 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
 
     async moveCursor({ target, durationMs, press = false }) {
       const started = performance.now();
+      // A control can take a frame to appear — the Run button renders once the
+      // dock it lives in has opened — so give it a moment before failing.
+      if (!resolveStudioTarget(target)) {
+        try {
+          await waitUntil(() => resolveStudioTarget(target) !== null, {
+            timeoutMs: TARGET_APPEAR_MS,
+            signal,
+            description: describeStudioTarget(target),
+          });
+        } catch {
+          throwIfAborted(signal);
+        }
+      }
       const frame = resolveStudioTarget(target);
       if (!frame) {
         throw new StudioActionError(`Missing studio target: ${describeStudioTarget(target)}`);
@@ -848,6 +924,92 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       return { path, selectedChars: selection.text.length, dragged };
     },
 
+    async pointConsole({ target, durationMs, timeoutMs }) {
+      // Wait for the line to be printed (a point lands while the output is still
+      // arriving), then point at it. A line that scrolled out of view, or never
+      // appears, fails the render: pointing at nothing would teach nothing.
+      type VisibleLine = Extract<ConsoleLineLookup, { status: "visible" }>;
+      // Written from inside the wait's predicate, so declared without the
+      // narrowing a plain `= null` initializer would pin on it.
+      let found = null as { container: Element; terminal: Terminal; line: VisibleLine } | null;
+      const described = `console line ${target.occurrence} containing ${JSON.stringify(target.text)}`;
+      await waitUntil(
+        () => {
+          const surface = visibleConsole();
+          if (!surface) return false;
+          const lookup = findConsoleLine({
+            buffer: surface.terminal.buffer.active,
+            rows: surface.terminal.rows,
+            text: target.text,
+            occurrence: target.occurrence,
+            runHeader: lastRunHeader,
+          });
+          if (lookup.status === "offscreen") {
+            throw new StudioActionError(
+              `The ${described} has scrolled out of the console's view — point at lines that are on screen`,
+            );
+          }
+          if (lookup.status !== "visible") return false;
+          found = { ...surface, line: lookup };
+          return true;
+        },
+        {
+          timeoutMs,
+          signal,
+          description: `the ${described} in the latest run's output (is the runner dock open?)`,
+        },
+      );
+      if (!found) {
+        throw new StudioActionError(`The ${described} was not found`);
+      }
+      const { container, terminal, line: visible } = found;
+      const screenRect = (
+        container.querySelector(".xterm-screen") ?? container
+      ).getBoundingClientRect();
+      const row = container.querySelectorAll(".xterm-rows > div")[visible.viewportRow];
+      const aim = roundPoint(
+        consoleLineAimPoint(
+          visible,
+          screenRect,
+          { cols: terminal.cols, rows: terminal.rows },
+          paintedTextRight(row),
+        ),
+      );
+      if (isCoveredAt(aim, container)) {
+        throw new StudioActionError(`The ${described} is covered on screen`);
+      }
+
+      // A hidden pointer appears at the line; a visible one travels there the
+      // way it does toward a control — no click: it points, then rests.
+      const from = pointerHidden ? null : lastCursorPoint;
+      const travelMs = from
+        ? Math.min(durationMs, pointerAimDurationMs(Math.hypot(aim.x - from.x, aim.y - from.y)))
+        : 0;
+      if (!from) {
+        revealPointerAt(aim);
+        // The reveal's own sample is placed by plain hit-testing, which can find
+        // an overlay outside the recorded app; record the rest again through
+        // the console so it is anchored to the line, as every move is.
+        dispatchCursorPoint(aim.x, aim.y, container);
+      } else {
+        const moveStarted = performance.now();
+        for (;;) {
+          throwIfAborted(signal);
+          const progress =
+            travelMs > 0 ? Math.min(1, (performance.now() - moveStarted) / travelMs) : 1;
+          const eased = easePointerAim(progress);
+          dispatchCursorPoint(
+            Math.round(from.x + (aim.x - from.x) * eased),
+            Math.round(from.y + (aim.y - from.y) * eased),
+            container,
+          );
+          if (progress >= 1) break;
+          await abortableSleep(CURSOR_STEP_MS, signal);
+        }
+      }
+      return { line: visible.line.text, travelMs };
+    },
+
     async runWorkspace(timeoutMs) {
       const runtime = deps.runtime;
       if (!isPlaygroundRuntime(runtime)) {
@@ -874,6 +1036,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         timeoutMs,
         signal,
       });
+      lastRunHeader = prepared.startedLines.at(-1) ?? null;
       appendRunnerConsoleLines(deps.runtimePanelStore, prepared.startedLines);
 
       let outcome;
@@ -996,6 +1159,26 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         previewUrl: snapshot.previewUrl,
         previewPort: snapshot.previewPort,
       };
+    },
+
+    async expandRuntimeDock(timeoutMs) {
+      const panel = deps.runtimePanelStore;
+      if (!selectIsCollapsed(panel.getSnapshot().context)) {
+        return { expanded: true, alreadyExpanded: true };
+      }
+
+      // The pointer has just clicked the chevron; it stays where it is while
+      // the dock opens under it.
+      pinPointerToApp();
+      panel.trigger.setIsCollapsed({ collapsed: false });
+      await waitUntil(() => !selectIsCollapsed(panel.getSnapshot().context), {
+        timeoutMs,
+        signal,
+        description: "the runner dock to open",
+      });
+      // Captured at the action's time, as collapseRuntimeDock does.
+      deps.notifyRuntimeEvent();
+      return { expanded: true };
     },
 
     async collapseRuntimeDock(timeoutMs) {

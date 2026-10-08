@@ -42,6 +42,7 @@ const copyCursorTarget = (
           width: target.rect.width,
           height: target.rect.height,
         },
+        ...(target.cell ? { cell: { ...target.cell } } : {}),
       }
     : undefined;
 

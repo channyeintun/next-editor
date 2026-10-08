@@ -96,6 +96,9 @@ plain words — if a phrase would need a dictionary or is an idiom, rewrite it:
   preview element — and hides while code is typed or a slide is up. Time the highlight to land as the
   words name the code, and give it a beat to sit before moving on; don't
   re-select on every clause.
+- Point at the output you read: when the narration explains what a run printed,
+  `console.point` each line as the words reach it ("the first line… then…"), so
+  the eye follows the voice down the console instead of hunting for the line.
 - No fake mistakes unless the lesson explicitly teaches debugging.
 - Every runnable checkpoint must actually run; expected output is asserted, not
   narrated on faith (`expect.output`).

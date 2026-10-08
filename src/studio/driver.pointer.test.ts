@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { createRuntimePanelStore } from "../stores/runtimePanelStore";
 import { POINTER_PRESS_MS, POINTER_SETTLE_MS } from "../core/src/utils/pointerMotion";
 import { RECORDED_CURSOR_VISIBILITY_EVENT } from "../utils/recordedCursorVisibility";
+import type { Terminal } from "@xterm/xterm";
+import { registerXtermTerminal } from "../components/xtermRegistry";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
 
 vi.mock("../monaco", () => ({
@@ -46,6 +48,41 @@ function mountApp() {
   place(name, { left: 40, top: 106, width: 48, height: 20 });
   place(run, { left: 870, top: 385, width: 60, height: 30 });
   return { app, row, name, run };
+}
+
+// The runner dock's console: an xterm container whose screen is 80 columns of
+// 8px by 10 rows of 18px, showing `lines` from the top.
+function mountConsole(app: Element, lines: string[], viewportY = 0) {
+  const dock = document.createElement("div");
+  dock.setAttribute("data-cursor-replay-target", "runtime-dock");
+  const container = document.createElement("div");
+  container.setAttribute("data-cursor-replay-target", "terminal-go-runner");
+  const screen = document.createElement("div");
+  screen.className = "xterm-screen";
+  container.append(screen);
+  dock.append(container);
+  app.append(dock);
+  place(container, { left: 300, top: 500, width: 800, height: 200 });
+  place(screen, { left: 310, top: 510, width: 640, height: 180 });
+  const rows = lines.map((text) => {
+    const cells = [...text.padEnd(80, " ")];
+    return {
+      isWrapped: false,
+      length: 80,
+      translateToString: () => text,
+      getCell: (x: number) => ({
+        getChars: () => (cells[x] === " " ? "" : cells[x]),
+        getWidth: () => 1,
+      }),
+    };
+  });
+  const terminal = {
+    cols: 80,
+    rows: 10,
+    buffer: { active: { length: rows.length, viewportY, getLine: (y: number) => rows[y] } },
+  };
+  registerXtermTerminal(container, terminal as unknown as Terminal);
+  return container;
 }
 
 function makeDriver(preview: Partial<StudioDriverDeps["preview"]> = {}) {
@@ -288,6 +325,72 @@ describe("StudioDriver pointer", () => {
       { x: 800, y: 170, buttons: 1 },
       { x: 800, y: 170, buttons: 0 },
     ]);
+  });
+
+  it("points at a console line: travels to just past its last character, and does not click", async () => {
+    const { app } = mountApp();
+    mountConsole(app, ["[go-run] go run main.go", "0 apple", "1 banana", "2 mango"]);
+    const { driver } = makeDriver();
+    await driver.moveCursor({
+      target: { kind: "run-button" },
+      durationMs: POINTER_SETTLE_MS + POINTER_PRESS_MS + 10,
+      press: true,
+    });
+    samples = [];
+
+    const result = await driver.pointConsole({
+      target: { text: "banana", occurrence: 1 },
+      durationMs: 800,
+      timeoutMs: 1_000,
+    });
+
+    // "1 banana" ends at column 8 on row 2: (310 + 8.6·8, 510 + 2.5·18).
+    const path = moves();
+    expect(path.at(-1)).toMatchObject({ x: 379, y: 555, buttons: 0 });
+    expect(path.every((sample) => sample.buttons === 0)).toBe(true);
+    for (let index = 1; index < path.length; index++) {
+      expect(path[index].y).toBeGreaterThanOrEqual(path[index - 1].y);
+    }
+    expect(result).toMatchObject({ line: "1 banana" });
+  });
+
+  it("shows a hidden pointer right at the console line instead of travelling in", async () => {
+    const { app } = mountApp();
+    mountConsole(app, ["0 apple", "1 banana"]);
+    const { driver } = makeDriver();
+
+    await driver.pointConsole({
+      target: { text: "apple", occurrence: 1 },
+      durationMs: 800,
+      timeoutMs: 1_000,
+    });
+
+    expect(samples[1]).toEqual({ kind: "visibility", visible: true, x: 371, y: 519 });
+    // One sample on the same spot, through the console — no travel.
+    expect(moves().map(({ x, y, buttons }) => ({ x, y, buttons }))).toEqual([
+      { x: 371, y: 519, buttons: 0 },
+    ]);
+  });
+
+  it("fails clearly for a console line that never appears or has scrolled away", async () => {
+    const { app } = mountApp();
+    mountConsole(app, ["0 apple", "1 banana", "2 mango"], 2);
+    const { driver } = makeDriver();
+
+    await expect(
+      driver.pointConsole({
+        target: { text: "cherry", occurrence: 1 },
+        durationMs: 800,
+        timeoutMs: 80,
+      }),
+    ).rejects.toThrow(/cherry.*is the runner dock open/);
+    await expect(
+      driver.pointConsole({
+        target: { text: "apple", occurrence: 1 },
+        durationMs: 800,
+        timeoutMs: 80,
+      }),
+    ).rejects.toThrow(/scrolled out of the console's view/);
   });
 
   it("pins a resting pointer to the app before the dock under it shuts", async () => {

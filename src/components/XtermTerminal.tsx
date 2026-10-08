@@ -3,6 +3,12 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { findSlidWindowOverlap } from "./terminalOutputOverlap";
+import { registerXtermTerminal, unregisterXtermTerminal } from "./xtermRegistry";
+import { createXtermCellAnchor } from "./xtermCellAnchor";
+import {
+  registerCursorCellAnchor,
+  unregisterCursorCellAnchor,
+} from "../core/src/utils/cursorCellAnchors";
 
 interface XtermTerminalProps {
   output: string;
@@ -139,8 +145,15 @@ function XtermTerminal({
     lastOutputRef.current = "";
     hasScrolledOffOutputRef.current = false;
     lastSessionIdRef.current = null;
+    registerXtermTerminal(container, terminal);
+    // Pointer samples over the console record the line and character they sit
+    // on, so playback finds the same line however many rows the viewer fits.
+    const cellAnchor = createXtermCellAnchor(container, terminal);
+    registerCursorCellAnchor(container, cellAnchor);
 
     return () => {
+      unregisterCursorCellAnchor(container, cellAnchor);
+      unregisterXtermTerminal(container, terminal);
       dataDisposable.dispose();
       scrollDisposable.dispose();
       resizeObserver.disconnect();

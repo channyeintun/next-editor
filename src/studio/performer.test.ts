@@ -27,6 +27,10 @@ function makePlan(overrides?: { failRun?: boolean }): {
       calls.push(`select:${path}:${selection.text}`);
       return { path };
     },
+    async pointConsole({ target }) {
+      calls.push(`point:${target.text}`);
+      return {};
+    },
     async runWorkspace() {
       calls.push("run");
       if (overrides?.failRun) {
@@ -41,6 +45,10 @@ function makePlan(overrides?: { failRun?: boolean }): {
     async waitForRuntimeReady() {
       calls.push("runtime-ready");
       return { status: "ready" };
+    },
+    async expandRuntimeDock() {
+      calls.push("runtime-expand-dock");
+      return { expanded: true };
     },
     async collapseRuntimeDock() {
       calls.push("runtime-collapse-dock");

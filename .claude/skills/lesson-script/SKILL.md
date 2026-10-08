@@ -33,6 +33,12 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      by line across several) then rests, scrolling off-screen code into view
      first; you author only the target, and time the `at` mark so the highlight
      lands as the narration names the code, then let it sit.
+   - When the narration reads a run's output, `console.point` each line it
+     explains (`target.text` = a piece of that line, e.g. `"1 banana"`), at the
+     mark where the words about that line begin — the pointer moves line to line.
+     Only the console's last 6 rows are on screen (output + the exit line), so
+     point at the last 5 output lines at most; points must follow a run while
+     the dock is open.
    - Never author pointer moves: the Director derives a click on the file row,
      Run button / dock chevron and preview element before the actions that use
      them, and the pointer hides while typing or under a slide — see "The

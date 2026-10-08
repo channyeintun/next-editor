@@ -134,6 +134,30 @@ const editorTypeActionSchema = planActionBase.extend({
   chunks: z.array(typingChunkSchema).min(1),
 });
 
+/**
+ * A console line to point at: the `occurrence`-th line containing `text` in
+ * the latest run's output (one line — the text never spans a line break).
+ */
+export const consoleLineTargetSchema = z.object({
+  text: z
+    .string()
+    .min(1)
+    .refine((text) => !text.includes("\n"), "A console line target is one line of text")
+    .refine(
+      (text) => !text.includes("\t"),
+      "The console shows a tab as spaces up to the next 8-column stop — target text without a tab, or write the spaces the console shows",
+    ),
+  occurrence: z.number().int().min(1).default(1),
+});
+export type ConsoleLineTarget = z.infer<typeof consoleLineTargetSchema>;
+
+const consolePointActionSchema = planActionBase.extend({
+  type: z.literal("console.point"),
+  target: consoleLineTargetSchema,
+  /** Travel budget toward the line; the driver moves for what the distance needs. */
+  durationMs: positiveMs,
+});
+
 const editorSelectActionSchema = planActionBase.extend({
   type: z.literal("editor.select"),
   path: z.string().min(1),
@@ -158,6 +182,15 @@ const runtimeWaitForReadyActionSchema = planActionBase.extend({
 
 const runtimeCollapseDockActionSchema = planActionBase.extend({
   type: z.literal("runtime.collapseDock"),
+});
+
+/**
+ * Derived by the compiler, never authored: opens the shut runner dock, the way
+ * its chevron does, between the pointer clicking that chevron and pressing the
+ * Run button that only then appears.
+ */
+const runtimeExpandDockActionSchema = planActionBase.extend({
+  type: z.literal("runtime.expandDock"),
 });
 
 const previewOpenActionSchema = planActionBase.extend({
@@ -265,10 +298,12 @@ export const studioPlanActionSchema = z.discriminatedUnion("type", [
   cursorMoveActionSchema,
   editorTypeActionSchema,
   editorSelectActionSchema,
+  consolePointActionSchema,
   runtimeRunActionSchema,
   runtimeStartActionSchema,
   runtimeWaitForReadyActionSchema,
   runtimeCollapseDockActionSchema,
+  runtimeExpandDockActionSchema,
   previewOpenActionSchema,
   previewClickActionSchema,
   previewInputActionSchema,
@@ -987,14 +1022,15 @@ export const studioPlanSchema = z
     // A timed action must fit between its start and the next scheduled action:
     // the Performer is sequential, so a later action scheduled before this one
     // can finish is an impossible overlap (§5). Typing spends its chunk delays,
-    // a select spends its drag-glide duration, and a drawn whiteboard apply
-    // spends one 20 fps frame budget per sequential asset.
+    // a select spends its drag-glide duration, pointing at a console line its
+    // travel budget, and a drawn whiteboard apply spends one 20 fps frame
+    // budget per sequential asset.
     for (let i = 0; i < plan.actions.length; i++) {
       const action = plan.actions[i];
       const busyMs =
         action.type === "editor.type"
           ? action.chunks.reduce((total, chunk) => total + chunk.delayMs, 0)
-          : action.type === "editor.select"
+          : action.type === "editor.select" || action.type === "console.point"
             ? action.durationMs
             : action.type === "whiteboard.apply"
               ? whiteboardDrawDurationMs(action.upsertIds.length, action.drawMs)
@@ -1007,7 +1043,9 @@ export const studioPlanSchema = z
             ? "Typing"
             : action.type === "editor.select"
               ? "Selection"
-              : "Whiteboard drawing";
+              : action.type === "console.point"
+                ? "Pointing"
+                : "Whiteboard drawing";
         ctx.addIssue({
           code: "custom",
           message: `${label} action "${action.id}" (${busyMs}ms) overlaps "${next.id}" at ${next.at}ms`,

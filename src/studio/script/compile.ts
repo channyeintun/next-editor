@@ -12,6 +12,7 @@ import {
   POINTER_SETTLE_MS,
 } from "../../core/src/utils/pointerMotion";
 import {
+  isPlaygroundRuntime,
   isPlaygroundRuntimeKind,
   parseStudioPlan,
   runtimeDockStartsCollapsed,
@@ -20,6 +21,8 @@ import {
   type StudioTargetRef,
 } from "../plan";
 import { STUDIO_DOCK_TOGGLE_TARGET_ID } from "../targets";
+import { CONSOLE_MIN_COLUMNS, CONSOLE_VISIBLE_ROWS } from "../consoleLines";
+import { expandConsoleTabs, fixtureRunConsoleLines } from "../fixtureConsoleLines";
 import { whiteboardDrawDurationMs } from "../whiteboardAssets";
 import {
   markerTimeMs,
@@ -106,6 +109,9 @@ const CURSOR_TRAVEL_MAX_MS = POINTER_AIM_MAX_MS;
 const CURSOR_TRAVEL_MIN_MS = 150;
 /** Clear time an action needs before it for its click: lead, shortest travel, rest, press. */
 const CURSOR_CLICK_NEEDS_MS = CURSOR_CLICK_LEAD_MS + CURSOR_TRAVEL_MIN_MS + CURSOR_CLICK_MS;
+/** Window (before the run's click lead) for chevron click → dock opens → Run press. */
+const CURSOR_OPEN_AND_RUN_NEEDS_MS =
+  2 * (CURSOR_CLICK_MS + CURSOR_TRAVEL_MIN_MS) + CURSOR_CLICK_LEAD_MS;
 // Drag-select timing: a base grab plus per-character travel, seed-jittered. The
 // driver spends this whole budget sweeping a button-held pointer across the
 // span, so it is tuned to the reference human recording (human-interactions.ne),
@@ -124,7 +130,56 @@ const SELECT_DRAG_MAX_MS = 1_200;
  * follow, or the marks/offsets advice silently disappears.
  */
 const PLAN_TIMING_ERROR =
-  /(?:Typing|Selection|Whiteboard drawing) action "[^"]*" \([\d.]+ms\) overlaps|starts after the narration ends/;
+  /(?:Typing|Selection|Pointing|Whiteboard drawing) action "[^"]*" \([\d.]+ms\) overlaps|starts after the narration ends/;
+
+// Runner lines that are warnings about the program, not its output. A point
+// whose text also appears in one would land on the warning first.
+const RUNNER_WARNING_LINE = /^\[(?:go-vet|kotlin-warn|haskell-warn)\]/;
+
+/**
+ * Every way a lesson's `console.point`s cannot land, checked against the exact
+ * console its pinned run prints (Playground lessons only — a WebContainer
+ * console's output is not pinned). The text is matched as the console shows
+ * it, tabs as spaces; the target has to be one the learner can see, which is
+ * the last CONSOLE_VISIBLE_ROWS rows; and it must not resolve to a warning.
+ */
+function consolePointIssues(script: LessonScript): string[] {
+  if (!isPlaygroundRuntime(script.runtime)) return [];
+  const lines = fixtureRunConsoleLines(script.runtime).map(expandConsoleTabs);
+  const issues: string[] = [];
+  for (const scene of script.scenes) {
+    for (const action of scene.actions) {
+      if (action.type !== "console.point") continue;
+      const { text, occurrence } = action.target;
+      const matching = lines.flatMap((line, index) => (line.includes(text) ? [index] : []));
+      if (matching.length < occurrence) {
+        issues.push(
+          `console.point "${action.id}" targets output line ${occurrence} containing ${JSON.stringify(text)}, but the run's console has ${matching.length} such line${matching.length === 1 ? "" : "s"}`,
+        );
+        continue;
+      }
+      const index = matching[occurrence - 1];
+      if (RUNNER_WARNING_LINE.test(lines[index]) && !RUNNER_WARNING_LINE.test(text)) {
+        issues.push(
+          `console.point "${action.id}" lands on the runner's warning line ${JSON.stringify(lines[index])} — make the text match only the output line you mean, or raise its occurrence`,
+        );
+        continue;
+      }
+      const rowsToBottom = lines
+        .slice(index)
+        .reduce(
+          (rows, line) => rows + Math.max(1, Math.ceil(line.length / CONSOLE_MIN_COLUMNS)),
+          0,
+        );
+      if (rowsToBottom > CONSOLE_VISIBLE_ROWS) {
+        issues.push(
+          `console.point "${action.id}" targets ${JSON.stringify(lines[index])}, which has scrolled out of the console by then: only its last ${CONSOLE_VISIBLE_ROWS} rows stay on screen (the exit line takes one) — point at a later line or print fewer lines`,
+        );
+      }
+    }
+  }
+  return issues;
+}
 
 /** What is on screen for the pointer to click, as the lesson's actions change it. */
 interface PointerUiState {
@@ -226,6 +281,15 @@ export function selectDurationOf(action: ScriptAction, seed: number): number {
   return Math.min(SELECT_DRAG_MAX_MS, Math.round(base + jitter));
 }
 
+/**
+ * Travel budget for a `console.point` (0 for any other action): the longest
+ * human approach, so the move from wherever the pointer rests — the Run button,
+ * the line above — never has to rush. A hop to the next line takes far less.
+ */
+export function pointDurationOf(action: ScriptAction): number {
+  return action.type === "console.point" ? POINTER_AIM_MAX_MS : 0;
+}
+
 /** Time a drawn whiteboard apply spends emitting its frames. */
 export function whiteboardDrawDurationOf(action: ScriptAction): number {
   if (action.type !== "whiteboard.apply") {
@@ -243,6 +307,7 @@ function actionBusyMs(action: ScriptAction, seed: number): number {
   return (
     typingDurationOf(action, seed) +
     selectDurationOf(action, seed) +
+    pointDurationOf(action) +
     whiteboardDrawDurationOf(action)
   );
 }
@@ -255,6 +320,14 @@ export function compileLessonScript({
   resolvedSlides,
 }: CompileInput): CompileOutput {
   const warnings: string[] = [];
+
+  // ---- Console points must land on a line the learner can see -------------
+  // Checked before any narration is synthesized, against the console the
+  // pinned run prints, instead of failing at the pointer mid-render.
+  const pointIssues = consolePointIssues(script);
+  if (pointIssues.length > 0) {
+    throw new CompileError(pointIssues.join("; "));
+  }
 
   // ---- Resolve anchors to absolute times ----------------------------------
   const authored: TimedAction[] = [];
@@ -336,14 +409,36 @@ export function compileLessonScript({
   // — a file row, the Run button, the dock's chevron, a preview element —
   // released just before the action fires, the way a hand operates the UI.
   const cursorMoves: { id: string; at: number; target: StudioTargetRef; durationMs: number }[] = [];
+  // Dock openings between a chevron click and the Run press after it.
+  const dockOpenings: { id: string; at: number }[] = [];
   const ui: PointerUiState = {
     activeFile: script.lesson.workspace.entryFilePath,
     dockOpen: !runtimeDockStartsCollapsed(script.runtime),
   };
   let lastBusyUntilMs = 0;
   let prevAuthoredAtMs = 0;
+  // Whether a run has printed to the console yet: a point needs output to land on.
+  const runActionType = isPlaygroundRuntimeKind(script.runtime.kind)
+    ? "runtime.run"
+    : "runtime.start";
+  let hasRunOutput = false;
 
   for (const entry of authored) {
+    if (entry.action.type === "console.point") {
+      if (!hasRunOutput) {
+        throw new CompileError(
+          `console.point "${entry.action.id}" comes before the lesson's first ${runActionType} — there is no output on the console to point at yet`,
+        );
+      }
+      if (!ui.dockOpen) {
+        throw new CompileError(
+          `console.point "${entry.action.id}" points at the console while the runner dock is shut — move it before the runtime.collapseDock, or run again first`,
+        );
+      }
+    }
+    if (entry.action.type === runActionType) {
+      hasRunOutput = true;
+    }
     const target = clickTargetForAction(entry.action, script, ui);
     const busyMs = actionBusyMs(entry.action, typingSeed.get(entry.action.id)!);
 
@@ -354,7 +449,30 @@ export function compileLessonScript({
       const floorMs = Math.max(lastBusyUntilMs, prevAuthoredAtMs);
       const releaseMs = entry.at - CURSOR_CLICK_LEAD_MS;
       const windowMs = releaseMs - floorMs;
-      if (windowMs >= CURSOR_CLICK_MS + CURSOR_TRAVEL_MIN_MS) {
+      // A shut dock shows no Run button. Clicking only its chevron would read as
+      // the chevron running the program, so the pointer opens the dock and
+      // then presses Run — the one control that runs code.
+      const opensDockFirst = entry.action.type === "runtime.run" && !ui.dockOpen;
+      if (opensDockFirst && windowMs >= CURSOR_OPEN_AND_RUN_NEEDS_MS) {
+        const moveMs = Math.min(
+          Math.floor((windowMs - CURSOR_CLICK_LEAD_MS) / 2),
+          CURSOR_CLICK_MS + CURSOR_TRAVEL_MAX_MS,
+        );
+        const runMoveAt = releaseMs - moveMs;
+        cursorMoves.push({
+          id: `cursor-${entry.action.id}-dock`,
+          at: runMoveAt - CURSOR_CLICK_LEAD_MS - moveMs,
+          target,
+          durationMs: moveMs,
+        });
+        dockOpenings.push({ id: `open-dock-${entry.action.id}`, at: runMoveAt });
+        cursorMoves.push({
+          id: `cursor-${entry.action.id}`,
+          at: runMoveAt,
+          target: { kind: "run-button" },
+          durationMs: moveMs,
+        });
+      } else if (windowMs >= CURSOR_CLICK_MS + CURSOR_TRAVEL_MIN_MS) {
         const durationMs = Math.min(windowMs, CURSOR_CLICK_MS + CURSOR_TRAVEL_MAX_MS);
         cursorMoves.push({
           id: `cursor-${entry.action.id}`,
@@ -362,6 +480,11 @@ export function compileLessonScript({
           target,
           durationMs,
         });
+        if (opensDockFirst) {
+          warnings.push(
+            `Only the dock's chevron is clicked before "${entry.action.id}" — pressing Run after opening the dock needs ${CURSOR_OPEN_AND_RUN_NEEDS_MS + CURSOR_CLICK_LEAD_MS}ms clear before it`,
+          );
+        }
       } else {
         warnings.push(
           `Skipped the pointer click before "${entry.action.id}" — only ${Math.max(0, Math.round(entry.at - floorMs))}ms clear before it (a click needs ${CURSOR_CLICK_NEEDS_MS}ms after the previous action starts and any typing, select drag or whiteboard drawing ends)`,
@@ -376,6 +499,12 @@ export function compileLessonScript({
 
   // ---- Assemble the plan ---------------------------------------------------
   const planActions = [
+    ...dockOpenings.map((opening) => ({
+      id: opening.id,
+      type: "runtime.expandDock" as const,
+      at: opening.at,
+      timeoutMs: 2_000,
+    })),
     ...cursorMoves.map((move) => ({
       id: move.id,
       type: "cursor.moveTo" as const,
@@ -419,6 +548,15 @@ export function compileLessonScript({
             path: action.target.file,
             selection: { text: action.target.text, occurrence: action.target.occurrence },
             durationMs: selectDurationOf(action, typingSeed.get(action.id)!),
+          };
+        case "console.point":
+          return {
+            id: action.id,
+            type: action.type,
+            at,
+            timeoutMs: action.timeoutMs,
+            target: action.target,
+            durationMs: pointDurationOf(action),
           };
         case "runtime.run":
         case "runtime.collapseDock":
