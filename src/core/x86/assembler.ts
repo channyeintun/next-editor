@@ -53,7 +53,14 @@ import {
   type EncodeRequest,
   type ResolvedOperands,
 } from "./encoder";
-import { parse, type Expression, type Statement } from "./parser";
+import {
+  parse,
+  type EquStatement,
+  type Expression,
+  type InstructionStatement,
+  type LabelStatement,
+  type Statement,
+} from "./parser";
 
 export const TEXT_BASE = 0x401000n;
 export const PAGE_SIZE = 0x1000n;
@@ -109,8 +116,15 @@ function normalizeSection(name: string, line: number, column: number): SectionNa
   );
 }
 
+/**
+ * A statement the layout gives an address to. Grouping consumes the other
+ * three, so a kind the parser gains is a compile error in `layoutPass` rather
+ * than a line that lays out as nothing.
+ */
+type LayoutStatement = Exclude<Statement, { kind: "section" | "global" | "default" }>;
+
 interface Placed {
-  statement: Statement;
+  statement: LayoutStatement;
   section: SectionName;
   address: bigint;
   bytes: number[];
@@ -119,6 +133,24 @@ interface Placed {
    * until the layout settles rather than reported from one that may not have.
    */
   pendingReach?: AsmEncodeError;
+}
+
+/** Which layout pass is running; see the module comment. */
+interface Pass {
+  /**
+   * The first pass reads a symbol defined further down as a placeholder and
+   * starts every branch that has a long form in it, so it is the one pass that
+   * lays the program out too long and the one that checks for names defined
+   * twice.
+   */
+  first: boolean;
+}
+
+/** Where one layout pass put each section, and the span `.bss` covers. */
+interface Layout {
+  sectionStarts: Map<SectionName, bigint>;
+  bssStart: bigint;
+  bssEnd: bigint;
 }
 
 function alignUp(value: bigint, boundary: bigint): bigint {
@@ -382,20 +414,17 @@ function dataBytes(
   return bytes;
 }
 
-export function assemble(source: string): AssembledProgram {
-  let statements: Statement[];
-  try {
-    statements = parse(source);
-  } catch (cause) {
-    if (cause instanceof AsmSyntaxError) {
-      throw new AsmError(cause.message, cause.line, cause.column);
-    }
-    throw cause;
-  }
-
-  const declared = declaredNames(statements);
-
-  // Assign each statement to a section, keeping source order inside it.
+/**
+ * Assign each statement to a section, keeping source order inside it.
+ *
+ * `placed` is every entry in source order and `bySection` the same entries in
+ * layout order. Both hold the same objects, so a pass that lays out one has
+ * laid out the other.
+ */
+function groupBySection(statements: Statement[]): {
+  placed: Placed[];
+  bySection: Map<SectionName, Placed[]>;
+} {
   const placed: Placed[] = [];
   let currentSection: SectionName = ".text";
 
@@ -405,7 +434,9 @@ export function assemble(source: string): AssembledProgram {
       continue;
     }
     // `global` is a linker instruction and there is no linker here; the entry
-    // point is found by name below. `default` was consumed by the parser.
+    // point is found by name once the layout settles. The parser already
+    // applied `default rel/abs` to the operands that follow. Neither statement
+    // has anything to lay out.
     if (statement.kind === "global" || statement.kind === "default") continue;
     if (statement.kind === "reserve" && currentSection !== ".bss") {
       throw new AsmError(
@@ -439,55 +470,165 @@ export function assemble(source: string): AssembledProgram {
     throw new AsmError("This program has no instructions in section .text", 1, 1);
   }
 
-  const symbols = new SymbolTable();
-  let sectionStarts = new Map<SectionName, bigint>();
+  return { placed, bySection };
+}
+
+/**
+ * Refuse a second definition of a label's or an `equ`'s name.
+ *
+ * Only on the first pass: every later pass redefines every label by design, so
+ * checking on all of them would report each one as its own duplicate.
+ */
+function rejectRedefinition(
+  symbols: SymbolTable,
+  statement: LabelStatement | EquStatement,
+  pass: Pass,
+): void {
+  if (pass.first && symbols.has(statement.name)) {
+    throw new AsmError(
+      `"${statement.name}" is defined more than once`,
+      statement.line,
+      statement.column,
+    );
+  }
+}
+
+/**
+ * Resolve an instruction's operands against what this pass knows and encode
+ * it, or decide what it occupies while that cannot be judged yet.
+ *
+ * This is where the branch-width policy lives: which failures wait for a
+ * later pass, what an instruction that waits takes up in the meantime, and
+ * which failures are final.
+ */
+function placeInstruction(
+  statement: InstructionStatement,
+  cursor: bigint,
+  sectionStart: bigint,
+  symbols: SymbolTable,
+  declared: ReadonlySet<string>,
+  pass: Pass,
+): Pick<Placed, "bytes" | "pendingReach"> {
+  const resolved: ResolvedOperands = {
+    immediates: new Map(),
+    targets: new Map(),
+    displacements: new Map(),
+  };
+
+  const unresolved = { used: false };
+  statement.operands.forEach((operand, position) => {
+    // Diagnostics quote the operand's own position, not the mnemonic's:
+    // the caret under `nowhere` in `jmp nowhere` is what names the
+    // mistake.
+    if (operand.kind === "immediate") {
+      const value = evaluate(
+        operand.value,
+        symbols,
+        cursor,
+        sectionStart,
+        declared,
+        operand,
+        unresolved,
+      );
+      resolved.immediates.set(position, value);
+      resolved.targets.set(position, value);
+    }
+    if (operand.kind === "memory") {
+      resolved.displacements.set(
+        position,
+        evaluate(
+          operand.displacement,
+          symbols,
+          cursor,
+          sectionStart,
+          declared,
+          operand,
+          unresolved,
+        ),
+      );
+    }
+  });
+
+  const request: EncodeRequest = {
+    statement,
+    address: cursor,
+    resolved,
+    minimumRelBytes: pass.first ? 4 : 1,
+  };
+  try {
+    return { bytes: encodeInstruction(request).bytes };
+  } catch (cause) {
+    if (!(cause instanceof AsmEncodeError)) throw cause;
+    if (isShortOnlyBranch(statement.mnemonic)) {
+      // A `loop` that does not reach has no wider form to ask for, and
+      // the distance it was measured against may not be the one it will
+      // have: on the first pass every branch in between is in its long
+      // form and a target further down is a placeholder, and after that
+      // such a target is wherever the previous pass left it. It keeps
+      // its one true length, so it moves nothing, and the verdict waits
+      // for the layout to settle.
+      return { bytes: shortBranchStandIn(request, cause), pendingReach: cause };
+    }
+    if (unresolved.used || pass.first) {
+      // The instruction was built on a placeholder for a symbol defined
+      // further down the file. Whether it encodes cannot be judged yet,
+      // so it reserves the longest an instruction can be and is asked
+      // again next pass, when every symbol has a real value. Reporting
+      // it now would blame `mov al, SIZE` for a `SIZE equ 7` that is
+      // three lines below it and perfectly valid.
+      //
+      // The first pass gets the same benefit of the doubt even without a
+      // placeholder, because it lays every branch out in its long form:
+      // `mov al, end - start` across ten short jumps and 200 other bytes
+      // measures 260 there and 220 once the jumps have shrunk.
+      return { bytes: Array.from({ length: MAX_INSTRUCTION_BYTES }, () => 0x90) };
+    }
+    // From the second pass on, a branch with a long form is offered it
+    // as well, so this is not a failure that widening could fix.
+    throw new AsmError(cause.message, cause.line, cause.column);
+  }
+}
+
+/**
+ * Lay the whole program out once, against what the passes before this one
+ * learned.
+ *
+ * Each entry's address and bytes and each label's and `equ`'s value are
+ * written in place; what comes back is where the sections themselves landed.
+ */
+function layoutPass(
+  bySection: Map<SectionName, Placed[]>,
+  symbols: SymbolTable,
+  declared: ReadonlySet<string>,
+  pass: Pass,
+): Layout {
+  let cursor = TEXT_BASE;
+  const sectionStarts = new Map<SectionName, bigint>();
   let bssStart = 0n;
   let bssEnd = 0n;
-  let previousSignature = "";
 
-  // The relaxation loop described in the module comment. The bound is what
-  // makes it end; a real program settles long before it.
-  let settled = false;
-  for (let iteration = 0; iteration < 32; iteration += 1) {
-    let cursor = TEXT_BASE;
-    sectionStarts = new Map();
+  for (const section of SECTION_ORDER) {
+    const entries = bySection.get(section) ?? [];
+    // Each section starts on its own page, the way a linker separates
+    // permissions. An empty section still gets an address so `$$` is defined.
+    cursor = alignUp(cursor, PAGE_SIZE);
+    sectionStarts.set(section, cursor);
+    const sectionStart = cursor;
 
-    for (const section of SECTION_ORDER) {
-      const entries = bySection.get(section) ?? [];
-      // Each section starts on its own page, the way a linker separates
-      // permissions. An empty section still gets an address so `$$` is defined.
-      cursor = alignUp(cursor, PAGE_SIZE);
-      sectionStarts.set(section, cursor);
-      const sectionStart = cursor;
+    for (const entry of entries) {
+      const { statement } = entry;
 
-      for (const entry of entries) {
-        const { statement } = entry;
-
-        if (statement.kind === "label") {
-          // Only on the first pass: every later pass redefines every label by
-          // design, so checking on all of them would report each one as its own
-          // duplicate.
-          if (iteration === 0 && symbols.has(statement.name)) {
-            throw new AsmError(
-              `"${statement.name}" is defined more than once`,
-              statement.line,
-              statement.column,
-            );
-          }
+      switch (statement.kind) {
+        case "label": {
+          rejectRedefinition(symbols, statement, pass);
           symbols.set(statement.name, cursor);
           entry.address = cursor;
           entry.bytes = [];
-          continue;
+          break;
         }
 
-        if (statement.kind === "equ") {
-          if (iteration === 0 && symbols.has(statement.name)) {
-            throw new AsmError(
-              `"${statement.name}" is defined more than once`,
-              statement.line,
-              statement.column,
-            );
-          }
+        case "equ": {
+          rejectRedefinition(symbols, statement, pass);
           const unresolved = { used: false };
           symbols.set(
             statement.name,
@@ -504,10 +645,10 @@ export function assemble(source: string): AssembledProgram {
           );
           entry.address = cursor;
           entry.bytes = [];
-          continue;
+          break;
         }
 
-        if (statement.kind === "align") {
+        case "align": {
           const unresolved = { used: false };
           const boundary = evaluate(
             statement.boundary,
@@ -547,17 +688,17 @@ export function assemble(source: string): AssembledProgram {
           );
           cursor = aligned;
           if (section === ".bss") checkBssSize(cursor, sectionStart, statement);
-          continue;
+          break;
         }
 
-        if (statement.kind === "data") {
+        case "data": {
           entry.address = cursor;
           entry.bytes = dataBytes(statement, symbols, cursor, sectionStart, declared);
           cursor += BigInt(entry.bytes.length);
-          continue;
+          break;
         }
 
-        if (statement.kind === "reserve") {
+        case "reserve": {
           const unresolved = { used: false };
           const count = evaluate(
             statement.count,
@@ -586,161 +727,64 @@ export function assemble(source: string): AssembledProgram {
           entry.bytes = [];
           cursor += count * BigInt(statement.width);
           checkBssSize(cursor, sectionStart, statement);
-          continue;
+          break;
         }
 
-        // Section, global and default statements never reach the layout — they
-        // were consumed while grouping — so what is left is an instruction.
-        if (statement.kind !== "instruction") continue;
-
-        entry.address = cursor;
-        const resolved: ResolvedOperands = {
-          immediates: new Map(),
-          targets: new Map(),
-          displacements: new Map(),
-        };
-
-        const unresolved = { used: false };
-        statement.operands.forEach((operand, position) => {
-          // Diagnostics quote the operand's own position, not the mnemonic's:
-          // the caret under `nowhere` in `jmp nowhere` is what names the
-          // mistake.
-          if (operand.kind === "immediate") {
-            const value = evaluate(
-              operand.value,
-              symbols,
-              cursor,
-              sectionStart,
-              declared,
-              operand,
-              unresolved,
-            );
-            resolved.immediates.set(position, value);
-            resolved.targets.set(position, value);
-          }
-          if (operand.kind === "memory") {
-            resolved.displacements.set(
-              position,
-              evaluate(
-                operand.displacement,
-                symbols,
-                cursor,
-                sectionStart,
-                declared,
-                operand,
-                unresolved,
-              ),
-            );
-          }
-        });
-
-        const request: EncodeRequest = {
-          statement,
-          address: cursor,
-          resolved,
-          minimumRelBytes: iteration === 0 ? 4 : 1,
-        };
-        try {
-          entry.bytes = encodeInstruction(request).bytes;
-          entry.pendingReach = undefined;
-        } catch (cause) {
-          if (!(cause instanceof AsmEncodeError)) throw cause;
-          if (isShortOnlyBranch(statement.mnemonic)) {
-            // A `loop` that does not reach has no wider form to ask for, and
-            // the distance it was measured against may not be the one it will
-            // have: on the first pass every branch in between is in its long
-            // form and a target further down is a placeholder, and after that
-            // such a target is wherever the previous pass left it. It keeps
-            // its one true length, so it moves nothing, and the verdict waits
-            // for the layout to settle.
-            entry.bytes = shortBranchStandIn(request, cause);
-            entry.pendingReach = cause;
-          } else if (unresolved.used || iteration === 0) {
-            // The instruction was built on a placeholder for a symbol defined
-            // further down the file. Whether it encodes cannot be judged yet,
-            // so it reserves the longest an instruction can be and is asked
-            // again next pass, when every symbol has a real value. Reporting
-            // it now would blame `mov al, SIZE` for a `SIZE equ 7` that is
-            // three lines below it and perfectly valid.
-            //
-            // The first pass gets the same benefit of the doubt even without a
-            // placeholder, because it lays every branch out in its long form:
-            // `mov al, end - start` across ten short jumps and 200 other bytes
-            // measures 260 there and 220 once the jumps have shrunk.
-            entry.bytes = Array.from({ length: MAX_INSTRUCTION_BYTES }, () => 0x90);
-          } else {
-            // From the second pass on, a branch with a long form is offered it
-            // as well, so this is not a failure that widening could fix.
-            throw new AsmError(cause.message, cause.line, cause.column);
-          }
+        case "instruction": {
+          entry.address = cursor;
+          const placement = placeInstruction(
+            statement,
+            cursor,
+            sectionStart,
+            symbols,
+            declared,
+            pass,
+          );
+          entry.bytes = placement.bytes;
+          entry.pendingReach = placement.pendingReach;
+          cursor += BigInt(entry.bytes.length);
+          break;
         }
 
-        cursor += BigInt(entry.bytes.length);
-      }
-
-      if (section === ".bss") {
-        bssStart = sectionStart;
-        bssEnd = cursor;
+        default: {
+          const unhandled: never = statement;
+          throw new Error(`Internal: no layout for ${(unhandled as Statement).kind}`);
+        }
       }
     }
 
-    // Symbol values belong in the signature as much as the bytes do. `a equ b`
-    // above `b equ 5` resolves one link per pass, and a pass that only moved a
-    // symbol looks identical byte for byte — so without them the loop stops on
-    // the pass that finally learned the value and emits the placeholder.
-    const signature = [
-      ...placed.map((entry) => `${entry.address}:${entry.bytes.join(",")}`),
-      ...[...symbols.entries()].map(([name, value]) => `${name}=${value}`),
-    ].join("|");
-    if (signature === previousSignature) {
-      settled = true;
-      break;
+    if (section === ".bss") {
+      bssStart = sectionStart;
+      bssEnd = cursor;
     }
-    previousSignature = signature;
   }
 
-  // Running out of iterations would mean emitting whichever half-relaxed
-  // layout the last pass happened to leave behind — bytes that are wrong in a
-  // way nothing downstream could detect. There is no known program that gets
-  // here; if one exists, it is a bug in this file and should read as one.
-  if (!settled) {
-    throw new AsmError(
-      "The assembler could not settle on a layout for this program — please report it",
-      1,
-      1,
-    );
-  }
+  return { sectionStarts, bssStart, bssEnd };
+}
 
-  // The layout has stopped moving, so a value still built on a placeholder is
-  // never going to arrive: the symbol is defined in terms of itself.
-  for (const entry of placed) {
-    const { statement } = entry;
-    if (statement.kind !== "equ" || !symbols.isProvisional(statement.name)) continue;
-    throw new AsmError(
-      `"${statement.name}" is defined in terms of itself`,
-      statement.line,
-      statement.column,
-    );
-  }
+/**
+ * Everything a layout pass decided, in a form two passes can be compared by.
+ *
+ * Symbol values belong in it as much as the bytes do. `a equ b` above `b equ
+ * 5` resolves one link per pass, and a pass that only moved a symbol looks
+ * identical byte for byte — so without them the loop stops on the pass that
+ * finally learned the value and emits the placeholder.
+ */
+function layoutSignature(placed: Placed[], symbols: SymbolTable): string {
+  return [
+    ...placed.map((entry) => `${entry.address}:${entry.bytes.join(",")}`),
+    ...[...symbols.entries()].map(([name, value]) => `${name}=${value}`),
+  ].join("|");
+}
 
-  // Every address is now final, so a `loop` that still does not reach never
-  // will. This runs after the check above because a target built on a value
-  // that never arrived is that value's fault, not the branch's.
-  const unreached = placed.find((entry) => entry.pendingReach);
-  if (unreached?.pendingReach) {
-    const { message, line, column } = unreached.pendingReach;
-    throw new AsmError(message, line, column);
-  }
-
-  const entrySymbol = symbols.get("_start") ?? symbols.get("main");
-  if (entrySymbol === undefined) {
-    throw new AsmError(
-      "This program has no _start label — a program with no libc starts at _start",
-      1,
-      1,
-    );
-  }
-
+/**
+ * The settled layout as loadable segments, with the listing and the line map
+ * that lead from an address back to the source.
+ */
+function emitImage(
+  bySection: Map<SectionName, Placed[]>,
+  sectionStarts: Map<SectionName, bigint>,
+): Pick<AssembledProgram, "segments" | "listing" | "lineForAddress"> {
   const segments: AssembledSegment[] = [];
   const listing: ListingRow[] = [];
   const lineForAddress = new Map<bigint, number>();
@@ -778,12 +822,88 @@ export function assemble(source: string): AssembledProgram {
     left.address < right.address ? -1 : left.address > right.address ? 1 : 0,
   );
 
+  return { segments, listing, lineForAddress };
+}
+
+export function assemble(source: string): AssembledProgram {
+  let statements: Statement[];
+  try {
+    statements = parse(source);
+  } catch (cause) {
+    if (cause instanceof AsmSyntaxError) {
+      throw new AsmError(cause.message, cause.line, cause.column);
+    }
+    throw cause;
+  }
+
+  const declared = declaredNames(statements);
+  const { placed, bySection } = groupBySection(statements);
+  const symbols = new SymbolTable();
+
+  // The relaxation loop described in the module comment. The bound is what
+  // makes it end; a real program settles long before it.
+  let layout: Layout | null = null;
+  let previousSignature = "";
+  for (let iteration = 0; iteration < 32; iteration += 1) {
+    const candidate = layoutPass(bySection, symbols, declared, { first: iteration === 0 });
+    const signature = layoutSignature(placed, symbols);
+    if (signature === previousSignature) {
+      layout = candidate;
+      break;
+    }
+    previousSignature = signature;
+  }
+
+  // Running out of iterations would mean emitting whichever half-relaxed
+  // layout the last pass happened to leave behind — bytes that are wrong in a
+  // way nothing downstream could detect. There is no known program that gets
+  // here; if one exists, it is a bug in this file and should read as one.
+  if (layout === null) {
+    throw new AsmError(
+      "The assembler could not settle on a layout for this program — please report it",
+      1,
+      1,
+    );
+  }
+
+  // The layout has stopped moving, so a value still built on a placeholder is
+  // never going to arrive: the symbol is defined in terms of itself.
+  for (const entry of placed) {
+    const { statement } = entry;
+    if (statement.kind !== "equ" || !symbols.isProvisional(statement.name)) continue;
+    throw new AsmError(
+      `"${statement.name}" is defined in terms of itself`,
+      statement.line,
+      statement.column,
+    );
+  }
+
+  // Every address is now final, so a `loop` that still does not reach never
+  // will. This runs after the check above because a target built on a value
+  // that never arrived is that value's fault, not the branch's.
+  const unreached = placed.find((entry) => entry.pendingReach);
+  if (unreached?.pendingReach) {
+    const { message, line, column } = unreached.pendingReach;
+    throw new AsmError(message, line, column);
+  }
+
+  const entrySymbol = symbols.get("_start") ?? symbols.get("main");
+  if (entrySymbol === undefined) {
+    throw new AsmError(
+      "This program has no _start label — a program with no libc starts at _start",
+      1,
+      1,
+    );
+  }
+
+  const { segments, listing, lineForAddress } = emitImage(bySection, layout.sectionStarts);
+
   return {
     entry: entrySymbol,
     segments,
-    bssStart,
-    bssEnd,
-    breakStart: alignUp(bssEnd, PAGE_SIZE),
+    bssStart: layout.bssStart,
+    bssEnd: layout.bssEnd,
+    breakStart: alignUp(layout.bssEnd, PAGE_SIZE),
     symbols: symbols.entries(),
     listing,
     lineForAddress,
