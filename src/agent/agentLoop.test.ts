@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { WorkspaceLessonType } from "../types/workspace";
 import type { ChatDelta } from "../types/chat";
-import { getDmpCodec } from "../storage/dmpCodec/dmpCodec";
+import { getDmpCodec } from "../core/dmp/dmpCodec";
 import { runAgentLoop, type RunAgentLoopOptions } from "./agentLoop";
 
 function createFakeWorkspaceStore(

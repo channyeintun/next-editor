@@ -15,7 +15,7 @@ import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatDelta, ChatImage, ChatItem } from "../types/chat";
 import { outputMessageText, toEasyInputMessage, toResponsesInput } from "../types/chat";
 import { createAppendContentDelta, createContentDelta } from "../core/src/utils/frameDelta";
-import { isDmpCodecLoaded, loadDmpCodec } from "../storage/dmpCodec/dmpCodec";
+import { isDmpCodecLoaded, loadDmpCodec } from "../core/dmp/dmpCodec";
 import { AgentProviderError } from "./agentError";
 
 const MAX_OUTPUT_TOKENS = 32000;

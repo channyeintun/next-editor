@@ -43,8 +43,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  // The diff-match-patch codec lives in src/core/dmp as a Rust crate (no .ts),
-  // so tsc ignores it; no exclude needed.
+  // The diff-match-patch codec lives in src/core/dmp as a Rust crate with its
+  // TypeScript host binding (dmpCodec.ts) beside it; tsc compiles the binding
+  // under "src" and ignores the Rust, so no exclude is needed.
   //
   // infra/worker is deliberately NOT in this project — it compiles against
   // @cloudflare/workers-types with no DOM lib, so it cannot share these

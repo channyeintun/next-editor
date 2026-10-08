@@ -7,7 +7,7 @@ import { kiteRunResultToConsoleLines } from "./console";
 import { parseKitePlaygroundRunResult } from "./types";
 
 // Vitest cannot import a bare `.wasm`, so the compiler is instantiated from
-// bytes — the same arrangement `dmpCodec.test.ts` uses.
+// bytes — the same arrangement `src/core/dmp/dmpCodec.test.ts` uses.
 const wasmPath = resolve(process.cwd(), "src/core/kite/build/kite-compiler.wasm");
 
 describe("kite compiler", () => {

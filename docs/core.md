@@ -145,7 +145,7 @@ The main extension hooks in `EditorMachineInput` are:
 
 ### dmpCodec (WASM diffing)
 
-WebAssembly-accelerated content diffing backs `createContentDelta` / `applyContentDelta` in `frameDelta.ts` (see `src/core/dmp/README.md` for the Rust module and wire format):
+WebAssembly-accelerated content diffing backs `createContentDelta` / `applyContentDelta` in `frameDelta.ts`. The host binding, `src/core/dmp/dmpCodec.ts`, sits beside the Rust crate it loads (see `src/core/dmp/README.md` for the Rust module and wire format):
 
 ```typescript
 // Load the zero-import diff-match-patch WASM module

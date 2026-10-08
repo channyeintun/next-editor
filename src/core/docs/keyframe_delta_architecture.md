@@ -74,7 +74,7 @@ interface Recording {
 
 To compute `ContentDelta` compactly:
 
-1.  **Rust core**: `diffDelta(a, b)` / `applyDelta(a, delta)` are a diff-match-patch (Myers middle-snake) implementation in Rust (`no_std`), compiled to a tiny **zero-import** WebAssembly module (`src/core/dmp/`, ~6.7 KB). `createContentDelta` / `applyContentDelta` in `frameDelta.ts` round-trip the delta through it (loaded via the host wrapper in `src/storage/dmpCodec/`).
+1.  **Rust core**: `diffDelta(a, b)` / `applyDelta(a, delta)` are a diff-match-patch (Myers middle-snake) implementation in Rust (`no_std`), compiled to a tiny **zero-import** WebAssembly module (`src/core/dmp/`). `createContentDelta` / `applyContentDelta` in `frameDelta.ts` round-trip the delta through it (loaded via the host binding beside the crate, `src/core/dmp/dmpCodec.ts`).
 2.  **Why Myers, not affix**: the earlier prefix/suffix model bloated to near-keyframe size whenever an edit touched both ends of the document; the Myers diff stays small across scattered, non-contiguous edits.
 3.  **Performance & UTF-8 safety**: Wasm diffs the raw UTF-8 bytes directly (predictable, fast). `applyDelta` reconstructs the target bytes exactly, so the round-trip is byte-exact and can never split a multi-byte character.
 

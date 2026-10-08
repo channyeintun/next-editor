@@ -7,7 +7,7 @@ import { STREAM_FORMAT_VERSION } from "./streamingRecordingCodec/format";
 
 // The real worker needs the wasm diff codec, which Vitest cannot import; the
 // client only awaits it, so a resolved stand-in is enough here.
-vi.mock("./dmpCodec/dmpCodec", () => ({ loadDmpCodec: async () => ({}) }));
+vi.mock("../core/dmp/dmpCodec", () => ({ loadDmpCodec: async () => ({}) }));
 
 type WorkerBehavior = "decode" | "die";
 

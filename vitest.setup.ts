@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { installDmpCodec, instantiateDmpCodec } from "./src/storage/dmpCodec/dmpCodec";
+import { installDmpCodec, instantiateDmpCodec } from "./src/core/dmp/dmpCodec";
 
 // The recording codec's content delta requires the diff-match-patch WASM module.
 // Vitest doesn't run Vite's WASM-ESM import, so install it synchronously from the

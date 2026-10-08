@@ -1,19 +1,18 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import { type DmpCodec, DmpBaseMismatchError, instantiateDmpCodec } from "./dmpCodec";
 
-// The dmp codec is a reproducible build artifact (`bun run build:wasm`) and is
-// gitignored, so skip rather than fail when it hasn't been built locally/in CI.
+// The dmp codec artifact (`bun run build:wasm`) is committed, and
+// vitest.setup.ts already fails loudly when it is missing, so there is no skip.
 // Resolve from the project root (vitest cwd); import.meta.url isn't a file: URL
 // under the test transform.
 const wasmPath = resolve(process.cwd(), "src/core/dmp/build/next-editor-dmp.wasm");
-const hasArtifact = existsSync(wasmPath);
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-describe.skipIf(!hasArtifact)("dmp codec (diff-match-patch in Rust)", () => {
+describe("dmp codec (diff-match-patch in Rust)", () => {
   const load = () => instantiateDmpCodec(readFileSync(wasmPath));
 
   it("round-trips a single contiguous edit with a compact delta", async () => {

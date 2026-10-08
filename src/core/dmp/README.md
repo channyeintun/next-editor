@@ -7,10 +7,14 @@ host:
 - **`diffDelta(a, b)`** — a [diff-match-patch](https://github.com/google/diff-match-patch)
   (Myers middle-snake) delta that transforms `a` into `b`. It generalizes the old
   prefix/suffix (`affix`) `ContentDelta`, which bloated to near-keyframe size on
-  scattered, non-contiguous edits ([`frameDelta.ts`](../../utils/frameDelta.ts)).
+  scattered, non-contiguous edits ([`frameDelta.ts`](../src/utils/frameDelta.ts)).
 - **`applyDelta(a, delta)`** — reconstructs `b` from `a` and the delta.
 
 Compression is handled separately by **fflate** (zlib), not this module.
+
+The TypeScript host binding, [`dmpCodec.ts`](./dmpCodec.ts) (loader,
+instantiation and ABI wrapper), and its tests sit beside the crate, so core
+owns its codec in one directory.
 
 This replaces the previous AssemblyScript implementation (see
 [`../docs/codec-history.md`](../docs/codec-history.md)). The move to Rust buys
@@ -27,7 +31,7 @@ decoding).
 This module is intentionally **import-free** — `WebAssembly.Module.imports()` is
 `[]`. That is exactly the shape Vite's WASM-ESM integration requires: with no
 imports to satisfy, the host loads it with a bare `import("…wasm")` and uses its
-exports directly (see [`dmpCodec.ts`](../../storage/dmpCodec/dmpCodec.ts)) — no
+exports directly (see [`dmpCodec.ts`](./dmpCodec.ts)) — no
 fetch, no `WebAssembly.instantiate` boilerplate, no import object.
 
 Three things keep it import-free:
@@ -66,7 +70,7 @@ rustup target add wasm32-unknown-unknown
 brew install binaryen          # provides wasm-opt
 ```
 
-The `.wasm` is committed (~6.5 KB) so tests and Vercel need **no** Rust
+The `.wasm` (a few KB) is committed so tests and Vercel need **no** Rust
 toolchain; only regenerating the artifact does. The Cargo `target/` dir is
 gitignored.
 

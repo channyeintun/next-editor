@@ -1,7 +1,7 @@
 import { wrap, type Remote } from "comlink";
+import { loadDmpCodec } from "../core/dmp/dmpCodec";
 import type { Recording } from "../core/src";
 import { markFramesNormalized } from "../core/src/utils/editorState";
-import { loadDmpCodec } from "./dmpCodec/dmpCodec";
 import {
   decompressBinaryToRecording as decompressBinaryToRecordingInProcess,
   encodeRecordingToStream as encodeRecordingToStreamInProcess,

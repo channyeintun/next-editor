@@ -16,7 +16,7 @@ import {
   reconstructFrameAtIndex,
 } from "./frameDelta";
 import { compressFrames } from "./frameStreamEncoder";
-import { DmpBaseMismatchError } from "../../../storage/dmpCodec/dmpCodec";
+import { DmpBaseMismatchError } from "../../dmp/dmpCodec";
 
 const frameAt = (timestamp: number, content: string): EditorFrame => ({
   timestamp,

@@ -98,7 +98,7 @@ import {
 } from "./playbackActors";
 import { reportMachineError } from "./replayStep";
 import { isAtPlaybackEnd, normalizeTimelineDuration } from "./playbackValues";
-import { isDmpCodecLoaded } from "../../../storage/dmpCodec/dmpCodec";
+import { isDmpCodecLoaded } from "../../dmp/dmpCodec";
 
 /**
  * Hands the workspace to the viewer (paused, ended): keep what the recording shows, stop

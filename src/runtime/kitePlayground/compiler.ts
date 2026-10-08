@@ -3,7 +3,7 @@
 // `src/core/kite/build/kite-compiler.wasm` is `kitec` itself built for
 // `wasm32-unknown-unknown` — the same Rust the terminal runs, which is what
 // makes a lesson's diagnostics the diagnostics. It is a **zero-import** module
-// (see the note in `src/storage/dmpCodec/dmpCodec.ts`), so it instantiates with
+// (see the note in `src/core/dmp/dmpCodec.ts`), so it instantiates with
 // no import object and needs no glue.
 //
 // The boundary is a pointer and a length each way, the shape `kitec`'s own

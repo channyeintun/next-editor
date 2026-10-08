@@ -33,7 +33,7 @@ import {
   getDmpCodec,
   installDmpCodec,
   type DmpCodec,
-} from "../../../storage/dmpCodec/dmpCodec";
+} from "../../dmp/dmpCodec";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { LearnerWorkspaceSave } from "./types";
 
@@ -761,7 +761,7 @@ describe("editorMachine actor lifecycle", () => {
   // whole session is lost with only a console message. Refusing to start is the
   // honest outcome, since the take would not be encodable at save time either.
   it("refuses to start recording when the dmp codec is unavailable", async () => {
-    const dmpCodec = await import("../../../storage/dmpCodec/dmpCodec");
+    const dmpCodec = await import("../../dmp/dmpCodec");
     const loadedSpy = vi.spyOn(dmpCodec, "isDmpCodecLoaded").mockReturnValue(false);
     const errors: Error[] = [];
 
@@ -792,7 +792,7 @@ describe("editorMachine actor lifecycle", () => {
 
   // The app's provider passes no onError, so a refused start used to leave no trace at all.
   it("logs a machine error to the console when the host supplies no onError", async () => {
-    const dmpCodec = await import("../../../storage/dmpCodec/dmpCodec");
+    const dmpCodec = await import("../../dmp/dmpCodec");
     const loadedSpy = vi.spyOn(dmpCodec, "isDmpCodecLoaded").mockReturnValue(false);
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const actor = createActor(editorMachine, {
@@ -3877,7 +3877,7 @@ describe("editorMachine local screen recording", () => {
   // The host acquires the display stream at click time and hands it over with START_RECORDING.
   // A start the machine does not take must stop it, or the browser keeps sharing the tab.
   it("releases the display stream of a start refused for an unloaded codec", async () => {
-    const dmpCodec = await import("../../../storage/dmpCodec/dmpCodec");
+    const dmpCodec = await import("../../dmp/dmpCodec");
     const loadedSpy = vi.spyOn(dmpCodec, "isDmpCodecLoaded").mockReturnValue(false);
     const display = new FakeScreenStream([new FakeScreenTrack("video")]);
     const videoTrack = display.getVideoTracks()[0] as unknown as FakeScreenTrack;

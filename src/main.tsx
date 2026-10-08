@@ -3,7 +3,7 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import { hydrateServerQueryState } from "./queryClient";
-import { loadDmpCodec } from "./storage/dmpCodec/dmpCodec";
+import { loadDmpCodec } from "./core/dmp/dmpCodec";
 import { analytics, bufferEarlyErrors, loadAnalyticsWhenIdle } from "./utils/analytics";
 import { installPerformanceMetricsReporter } from "./utils/performanceMetrics";
 

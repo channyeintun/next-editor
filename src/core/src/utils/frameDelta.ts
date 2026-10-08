@@ -12,7 +12,7 @@ import type {
 import { isKeyframe, isDelta } from "./deltaTypes";
 export { isKeyframe, isDelta };
 import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
-import { getDmpCodec } from "../../../storage/dmpCodec/dmpCodec";
+import { getDmpCodec } from "../../dmp/dmpCodec";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
 import {
   normalizeEditorFrame,
@@ -581,8 +581,10 @@ export function createFrameDelta(
           ? { ...rest, contentDelta: previewContentDelta }
           : { ...rest, contentUnchanged: true };
       } catch {
-        // dmp codec unavailable: fall back to the full copy rather than fail
-        // the capture.
+        // Defensive only: the codec cannot be missing during capture
+        // (START_RECORDING refuses without it, the isDmpCodecMissing guard),
+        // so this catches an unexpected codec failure on the preview HTML and
+        // keeps the always-correct full copy rather than failing the capture.
         delta.previewState = nextPreview;
       }
     } else {

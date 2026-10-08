@@ -111,7 +111,8 @@ The diff-match-patch port moved from AssemblyScript to **Rust** (`no_std`,
 
 - **Diff:** the same Myers middle-snake algorithm, ported faithfully so the delta
   byte format is **identical** to Phase 3. `ContentDelta = { delta: Uint8Array }`
-  is unchanged; the host wrapper in `src/storage/dmpCodec/` is unchanged.
+  is unchanged; the host wrapper in `src/storage/dmpCodec/` is unchanged (it
+  has since moved beside the crate, to `src/core/dmp/dmpCodec.ts`).
 - **Compression:** still fflate.
 - **WASM:** `src/core/dmp/build/next-editor-dmp.wasm`, **~6.7 KB, zero imports**
   (`WebAssembly.Module.imports()` is `[]`), committed. Built with `bun run
