@@ -74,7 +74,9 @@ export default function LessonCard({
           </Link>
         </h3>
         {(lesson.author || published) && (
-          <p className="mt-1 text-xs text-slate-400">
+          // slate-300 on the #11141c page is 12.4:1 (WCAG AAA); slate-400 renders
+          // as #90a1b9, 6.9997:1, just under the 7:1 AAA floor.
+          <p className="mt-1 text-xs text-slate-300">
             {lesson.author &&
               (lesson.authorUrl ? (
                 <Link
