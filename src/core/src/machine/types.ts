@@ -738,8 +738,8 @@ export type EditorContextUpdate = Partial<EditorMachineContext>;
  * stores and passes it as the editor actor's `input`.
  */
 export interface EditorMachineInput extends EditorMachineHostHooks {
-  /** Monaco editor ref */
-  editorRef: React.RefObject<monaco.editor.IStandaloneCodeEditor | null>;
+  /** The Monaco editor's ref. Any ref object works, for example one from React's useRef. */
+  editorRef: { readonly current: monaco.editor.IStandaloneCodeEditor | null };
   /** Enable audio recording */
   enableAudioRecording?: boolean;
   /** Enable camera recording */
