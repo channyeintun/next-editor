@@ -278,7 +278,9 @@ const EMPTY_RUNTIME_SNAPSHOT: RuntimeRecordingSnapshot = { mode: "single-file", 
  *
  * A delta with no state before it — a track whose first event is not a
  * checkpoint, which no writer produces — resolves against an empty state rather
- * than throwing, so a damaged file degrades to missing terminal text.
+ * than throwing, so a damaged file degrades to missing terminal text. Likewise
+ * an entry with neither a snapshot nor a delta (the decoder does not check each
+ * record's shape) is skipped, so a damaged file degrades to stale terminal text.
  */
 export function resolveRuntimeSnapshotAt(
   events: RuntimeRecordingEvent[],
@@ -287,7 +289,7 @@ export function resolveRuntimeSnapshotAt(
   if (index < 0 || index >= events.length) return null;
 
   const target = events[index];
-  if (target.snapshot) {
+  if (target?.snapshot) {
     runtimeResolverCache.set(events, { index, snapshot: target.snapshot });
     return target.snapshot;
   }
@@ -304,7 +306,7 @@ export function resolveRuntimeSnapshotAt(
   // applied only to be thrown away. A playback tick usually moves one event, so
   // this usually scans one event.
   for (let cursor = index; cursor > floor; cursor--) {
-    const checkpoint = events[cursor].snapshot;
+    const checkpoint = events[cursor]?.snapshot;
     if (checkpoint) {
       startIndex = cursor + 1;
       snapshot = checkpoint;
@@ -314,7 +316,8 @@ export function resolveRuntimeSnapshotAt(
 
   for (let cursor = startIndex; cursor <= index; cursor++) {
     const event = events[cursor];
-    snapshot = event.snapshot ?? applyRuntimeDelta(snapshot, event.delta!);
+    if (event?.snapshot) snapshot = event.snapshot;
+    else if (event?.delta) snapshot = applyRuntimeDelta(snapshot, event.delta);
   }
 
   runtimeResolverCache.set(events, { index, snapshot });

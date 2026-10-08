@@ -191,16 +191,27 @@ describe("runtime track checkpoints and resolution", () => {
 
   // The load resolves index 0, so the first forward seek starts from a fold at the very
   // start. It used to apply every delta up to a checkpoint in the range and then throw
-  // the result away. The event before the checkpoint here is damaged (no snapshot and no
-  // delta), so applying it throws: the seek must never touch it.
+  // the result away. Reading the event before the checkpoint here throws, so the seek
+  // must never touch it.
   it("a forward seek from a retained fold restarts at the checkpoint it passes", () => {
     const boot = snapshot("boot\n");
     const ready = snapshot("ready\n", { status: "ready" });
     const prompt = snapshot("ready\n$ ", { status: "ready" });
+    const touched = (): never => {
+      throw new Error("the seek read an event before the checkpoint it passes");
+    };
     const events: RuntimeRecordingEvent[] = [
       { timestamp: 0, snapshot: boot },
       { timestamp: 10, delta: diffRuntimeSnapshot(boot, snapshot("boot\nnpm i\n")) },
-      { timestamp: 20 } as RuntimeRecordingEvent,
+      {
+        timestamp: 20,
+        get snapshot() {
+          return touched();
+        },
+        get delta() {
+          return touched();
+        },
+      } as RuntimeRecordingEvent,
       { timestamp: 30, snapshot: ready },
       { timestamp: 40, delta: diffRuntimeSnapshot(ready, prompt) },
     ];
@@ -208,6 +219,27 @@ describe("runtime track checkpoints and resolution", () => {
     expect(resolveRuntimeSnapshotAt(events, 0)).toBe(boot);
     expect(resolveRuntimeSnapshotAt(events, 4)).toEqual(prompt);
     expect(resolveRuntimeSnapshotAt([...events], 4)).toEqual(prompt);
+  });
+
+  // The decoder checks a runtime record's size, not its shape, so a damaged or crafted
+  // file can carry an entry with neither a snapshot nor a delta, or no entry at all.
+  // Playback resolves an index on every tick, so such an entry is skipped rather than
+  // thrown on, and the state it stands for is the one before it.
+  it("skips an entry with neither a snapshot nor a delta", () => {
+    const boot = snapshot("boot\n");
+    const ready = snapshot("boot\nready\n", { status: "ready" });
+    const events: RuntimeRecordingEvent[] = [
+      { timestamp: 0, snapshot: boot },
+      { timestamp: 1 } as never,
+      null as never,
+      { timestamp: 3, delta: diffRuntimeSnapshot(boot, ready) },
+    ];
+
+    [boot, boot, boot, ready].forEach((expected, index) => {
+      // Forward from the retained fold, then from the checkpoint with no fold to reuse.
+      expect(resolveRuntimeSnapshotAt(events, index)).toEqual(expected);
+      expect(resolveRuntimeSnapshotAt([...events], index)).toEqual(expected);
+    });
   });
 
   it("round-trips the delta track through the SCR3 stream", async () => {
