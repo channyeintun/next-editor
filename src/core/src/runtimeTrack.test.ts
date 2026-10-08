@@ -21,8 +21,10 @@ import type { Recording } from "./types";
 const WINDOW = 50_000;
 // The rolling-window cases diff thousands of 50 KB windows: about 1–1.6 s alone,
 // several times that while other suites share the machine, so they get the
-// room the default 5 s timeout does not leave.
-const ROLLING_WINDOW_TIMEOUT_MS = 15_000;
+// room the default 5 s timeout does not leave. 15 s was not enough with several
+// worktrees testing at once on an 8-core Mac (load average 50–60): a src/core run
+// took 16.5 s for the 3,000-chunk case. The budget only guards against a hang.
+const ROLLING_WINDOW_TIMEOUT_MS = 60_000;
 
 function snapshot(output: string, extra: Partial<RuntimeRecordingSnapshot> = {}) {
   return {
