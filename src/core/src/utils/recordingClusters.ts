@@ -40,7 +40,7 @@ export function buildRecordingClusters(
   }
 
   const runs = splitFramesAtKeyframes(frames);
-  const clusters = runs.map((run, index): RecordingClusterMeta => {
+  return runs.map((run, index): RecordingClusterMeta => {
     const startTimeMs = run[0].timestamp;
     const nextStartTimeMs = index + 1 < runs.length ? runs[index + 1][0].timestamp : durationMs;
     const lastFrameTimeMs = run[run.length - 1].timestamp;
@@ -51,10 +51,6 @@ export function buildRecordingClusters(
       containsKeyframe: isKeyframe(run[0]),
     };
   });
-
-  const lastCluster = clusters[clusters.length - 1];
-  lastCluster.endTimeMs = Math.max(lastCluster.startTimeMs, lastCluster.endTimeMs, durationMs);
-  return clusters;
 }
 
 /**
