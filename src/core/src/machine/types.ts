@@ -254,7 +254,11 @@ export interface ScreenState {
  * Editor references and decorations
  */
 export interface EditorRefs {
-  /** Monaco editor instance */
+  /**
+   * The editor last delivered by SET_EDITOR_REF. It can lag the live editor when that
+   * event is dropped while the actor is stopped. Replay reads only this one, because
+   * SET_EDITOR_REF is what resyncs playback onto a new editor (shouldSyncPlaybackEditorRef).
+   */
   editor: monaco.editor.IStandaloneCodeEditor | null;
   /** Current cursor decorations collection */
   cursorDecorationsCollection: monaco.editor.IEditorDecorationsCollection | null;
@@ -369,7 +373,11 @@ export interface EditorMachineContext extends EditorMachineHostHooks {
   screenStream: MediaStream | null;
   /** Editor references */
   editorRefs: EditorRefs;
-  /** Getter for the live Monaco editor instance */
+  /**
+   * A live read of the host's editor ref. Capture falls back to it (getCaptureEditor in
+   * frameCapture.ts) so a lost SET_EDITOR_REF cannot silently stop frame capture; replay
+   * never does (see EditorRefs.editor).
+   */
   getEditorInstance: () => monaco.editor.IStandaloneCodeEditor | null;
   /** Whether audio recording is enabled */
   enableAudioRecording: boolean;
