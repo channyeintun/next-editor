@@ -14,6 +14,7 @@ import type {
   EditorSelection,
   MouseCursorPosition,
 } from "../types";
+import type { TextEditEvent } from "../../../types/textEdit";
 import { createContentEditDelta, type CreatedContentEditDelta } from "../utils/frameDelta";
 import { pushFrame } from "../utils/frameStreamEncoder";
 import { getRecordingTimestamp } from "./recordingSession";
@@ -336,70 +337,52 @@ export const captureInitialFrame = ({ context }: EditorActionArgs): EditorContex
   };
 };
 
-export const captureFrame = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  const editor = getCaptureEditor(context);
-  if (!context.session) return {};
+/**
+ * A capture that stores no frame still keeps its pointer sample: the live pointer goes
+ * to `lastMousePosition` for the next capture to store, and the revision moves only
+ * when the sample was appended to the cursor track.
+ */
+const keepPointerOnly = (
+  context: EditorMachineContext,
+  session: RecordingSession,
+  mousePosition: MouseCursorPosition,
+  cursorAppended: boolean,
+): EditorContextUpdate => {
+  session.lastMousePosition = mousePosition;
+  return {
+    session,
+    sessionRevision: cursorAppended ? context.sessionRevision + 1 : context.sessionRevision,
+  };
+};
 
-  const timestamp = getRecordingTimestamp(context.session);
+/**
+ * Whether a pointer move lands within MOUSE_FRAME_INTERVAL_MS of the last full frame
+ * without changing the pointer's visibility. It compares against `lastMousePosition`, so
+ * call it before the sample is kept.
+ */
+const isThrottledPointerSample = (
+  session: RecordingSession,
+  timestamp: number,
+  mousePosition: MouseCursorPosition,
+): boolean => {
+  const lastFrame = session.encoder.lastFullFrame;
+  return (
+    !!lastFrame &&
+    timestamp - lastFrame.timestamp < MOUSE_FRAME_INTERVAL_MS &&
+    session.lastMousePosition?.visible === mousePosition?.visible
+  );
+};
 
-  const mousePosition =
-    event.type === "CAPTURE_FRAME" && event.mousePosition
-      ? event.mousePosition
-      : context.session.lastMousePosition;
-
-  // While paused the pointer is followed but not recorded: every sample would land on
-  // the pause's single instant. Resuming records where it ended up.
-  if (
-    event.type === "CAPTURE_FRAME" &&
-    event.isMouseMovement &&
-    isRecordingClockPaused(context.session.clock)
-  ) {
-    context.session.lastMousePosition = mousePosition;
-    return {};
-  }
-  const cursorAppended =
-    event.type === "CAPTURE_FRAME" && event.isMouseMovement
-      ? appendCursorEvent(context.session.cursorEvents, timestamp, mousePosition)
-      : false;
-
-  // The cursor track has no dependency on Monaco — `mousePosition` arrives from
-  // mouseTrackingActor fully resolved and lives in its own track. Bailing on a
-  // null editor before this point dropped every cursor sample for as long as the
-  // active file was a binary asset (CodeEditor nulls both refs then), so the
-  // replayed pointer froze while the presenter talked over an image and then
-  // teleported when a code file reopened.
-  if (!editor) {
-    context.session.lastMousePosition = mousePosition;
-    return {
-      session: context.session,
-      sessionRevision: cursorAppended ? context.sessionRevision + 1 : context.sessionRevision,
-    };
-  }
-
-  if (event.type === "CAPTURE_FRAME" && event.isMouseMovement) {
-    const lastFrame = context.session.encoder.lastFullFrame;
-    const lastMousePosition = context.session.lastMousePosition;
-    const visibilityChanged = lastMousePosition?.visible !== mousePosition?.visible;
-
-    if (
-      lastFrame &&
-      timestamp - lastFrame.timestamp < MOUSE_FRAME_INTERVAL_MS &&
-      !visibilityChanged
-    ) {
-      context.session.lastMousePosition = mousePosition;
-      return {
-        session: context.session,
-        sessionRevision: cursorAppended ? context.sessionRevision + 1 : context.sessionRevision,
-      };
-    }
-  }
-
-  const previousContent = getPreviousCapturedContent(context.session, context.currentFrame);
-
-  let capturedContent = previousContent;
-  let contentEditDelta: CreatedContentEditDelta | undefined;
-  const textEdit = event.type === "CAPTURE_FRAME" ? event.textEdit : undefined;
-  const model = editor.getModel();
+/**
+ * The content a capture hands `createFrame`: the previous capture's string, advanced by
+ * `textEdit` when that edit took this same model from the previous capture's version to
+ * the current one. The edit's delta goes to the encoder, so it need not diff the file.
+ */
+const resolveCapturedContent = (
+  previousContent: CapturedContentRef | undefined,
+  textEdit: TextEditEvent | undefined,
+  model: monaco.editor.ITextModel | null,
+): { capturedContent?: CapturedContentRef; contentEditDelta?: CreatedContentEditDelta } => {
   const currentModelUri = model?.uri.toString() ?? "";
   const currentVersionId = model?.getVersionId() ?? -1;
   if (
@@ -411,14 +394,59 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
   ) {
     const created = createContentEditDelta(previousContent.value, textEdit);
     if (created) {
-      capturedContent = {
-        value: created.content,
-        versionId: currentVersionId,
-        modelUri: currentModelUri,
+      return {
+        capturedContent: {
+          value: created.content,
+          versionId: currentVersionId,
+          modelUri: currentModelUri,
+        },
+        contentEditDelta: created,
       };
-      contentEditDelta = created;
     }
   }
+  return { capturedContent: previousContent };
+};
+
+export const captureFrame = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
+  const session = context.session;
+  if (!session) return {};
+  const editor = getCaptureEditor(context);
+
+  const timestamp = getRecordingTimestamp(session);
+
+  // SLIDE_EVENT also runs this action: it re-captures the frame with the last pointer.
+  const capture = event.type === "CAPTURE_FRAME" ? event : undefined;
+  const isPointerMove = Boolean(capture?.isMouseMovement);
+  const mousePosition = capture?.mousePosition ?? session.lastMousePosition;
+
+  // While paused the pointer is followed but not recorded: every sample would land on
+  // the pause's single instant. Resuming records where it ended up.
+  if (isPointerMove && isRecordingClockPaused(session.clock)) {
+    session.lastMousePosition = mousePosition;
+    return {};
+  }
+  const cursorAppended =
+    isPointerMove && appendCursorEvent(session.cursorEvents, timestamp, mousePosition);
+
+  // The cursor track has no dependency on Monaco — `mousePosition` arrives from
+  // mouseTrackingActor fully resolved and lives in its own track. Bailing on a
+  // null editor before this point dropped every cursor sample for as long as the
+  // active file was a binary asset (CodeEditor nulls both refs then), so the
+  // replayed pointer froze while the presenter talked over an image and then
+  // teleported when a code file reopened.
+  if (!editor) {
+    return keepPointerOnly(context, session, mousePosition, cursorAppended);
+  }
+
+  if (isPointerMove && isThrottledPointerSample(session, timestamp, mousePosition)) {
+    return keepPointerOnly(context, session, mousePosition, cursorAppended);
+  }
+
+  const { capturedContent, contentEditDelta } = resolveCapturedContent(
+    getPreviousCapturedContent(session, context.currentFrame),
+    capture?.textEdit,
+    editor.getModel(),
+  );
 
   const { frame, viewStateRef } = createFrame(
     editor,
@@ -427,8 +455,8 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
     context.getSlideState,
     context.getPreviewState,
     capturedContent,
-    context.session.lastCapturedViewStateRef,
-    event.type === "CAPTURE_FRAME" ? event.selection : undefined,
+    session.lastCapturedViewStateRef,
+    capture?.selection,
   );
 
   // The cursor track above already holds every pointer sample, and replay
@@ -437,16 +465,16 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
   // it stores a frame only when the capture also sampled something the frame
   // track owns (scroll, preview). currentFrame and lastMousePosition keep the
   // live pointer, which the next capture that is not a pointer move stores.
-  const lastStoredFrame = context.session.encoder.lastStoredFrame;
+  const lastStoredFrame = session.encoder.lastStoredFrame;
   const encoderFrame =
-    event.type === "CAPTURE_FRAME" && event.isMouseMovement && lastStoredFrame
+    isPointerMove && lastStoredFrame
       ? { ...frame, state: { ...frame.state, mouseCursor: lastStoredFrame.state.mouseCursor } }
       : frame;
-  commitCapturedFrame(context.session, encoderFrame, viewStateRef, contentEditDelta);
-  context.session.lastMousePosition = mousePosition;
+  commitCapturedFrame(session, encoderFrame, viewStateRef, contentEditDelta);
+  session.lastMousePosition = mousePosition;
 
   return {
-    session: context.session,
+    session,
     sessionRevision: context.sessionRevision + 1,
     currentFrame: frame,
   };
