@@ -44,14 +44,21 @@ export interface WhiteboardSceneState {
   isMaximized: boolean;
 }
 
-export const DEFAULT_WHITEBOARD_VIEW: WhiteboardView = { scrollX: 0, scrollY: 0, zoom: 1 };
+// Shared reference sentinels: every store and replay state starts from these,
+// and replay compares the scene by identity. Frozen so a stray write throws at
+// its source instead of changing every later empty scene.
+export const DEFAULT_WHITEBOARD_VIEW: WhiteboardView = Object.freeze({
+  scrollX: 0,
+  scrollY: 0,
+  zoom: 1,
+});
 
-export const EMPTY_WHITEBOARD_SCENE: WhiteboardSceneState = {
-  elements: [],
+export const EMPTY_WHITEBOARD_SCENE: WhiteboardSceneState = Object.freeze({
+  elements: Object.freeze<WhiteboardElementJSON[]>([]) as WhiteboardElementJSON[],
   view: DEFAULT_WHITEBOARD_VIEW,
   isOpen: false,
   isMaximized: false,
-};
+});
 
 // Serialized form of elements on the *previous* side of a diff. That side is
 // always an immutable snapshot — snapshotWhiteboardDelta's clones in the store,
