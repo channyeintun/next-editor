@@ -334,8 +334,11 @@ export class Machine {
 
   #push(value: bigint): void {
     const rsp = (this.registers[RSP] - 8n) & U64;
-    this.registers[RSP] = rsp;
+    // The store goes first, so a push or call that overflows the stack faults
+    // with rsp where it was — which is what a real processor leaves, and what
+    // the register readout should show next to the fault.
     this.memory.write(rsp, 8, value);
+    this.registers[RSP] = rsp;
   }
 
   #pop(): bigint {
@@ -671,6 +674,10 @@ export class Machine {
         break;
 
       case "pop":
+        // Unlike push, rsp moves *before* the destination is written, and has
+        // to: `pop rsp` ends holding the popped value, and `pop [rsp+8]`
+        // addresses from the incremented rsp (Intel SDM, POP). Storing first
+        // would break both, for a tidier rsp on a fault.
         writeAt(0, this.#pop());
         break;
 
@@ -687,10 +694,16 @@ export class Machine {
         branched = true;
         break;
 
-      case "leave":
-        this.registers[RSP] = this.registers[RBP];
-        this.registers[RBP] = this.#pop();
+      case "leave": {
+        // mov rsp, rbp then pop rbp, with the read done before either register
+        // moves — so a frame pointer that points nowhere faults with both of
+        // them still showing what the program had.
+        const frame = this.registers[RBP];
+        const saved = this.memory.read(frame, 8);
+        this.registers[RSP] = (frame + 8n) & U64;
+        this.registers[RBP] = saved;
         break;
+      }
 
       case "jmp":
         this.rip = readAt(0) & U64;

@@ -503,4 +503,33 @@ _start:
     });
     expect(machine.memory.read(program.bssEnd - 4n, 4)).toBe(0n);
   });
+
+  it("leaves rsp where it was when a push or leave faults", () => {
+    // The register readout sits next to the fault. A push that moved rsp
+    // before its store failed showed the learner a stack pointer the faulting
+    // instruction never committed.
+    const push = assembleAndRun(wrap(" mov rsp, 0x1008\n push rax"));
+    expect(push.status).toBe("runtime-error");
+    expect(register(push, "rsp")).toBe(0x1008n);
+
+    const leave = assembleAndRun(wrap(" mov rsp, 0x2000\n mov rbp, 0x1000\n leave"));
+    expect(leave.status).toBe("runtime-error");
+    expect(register(leave, "rsp")).toBe(0x2000n);
+    expect(register(leave, "rbp")).toBe(0x1000n);
+  });
+
+  it("moves rsp before pop writes its destination", () => {
+    // The opposite order from push, and required: `pop rsp` keeps the popped
+    // value, and `pop [rsp]` stores where rsp points *after* the pop.
+    const intoRsp = assembleAndRun(
+      wrap(" mov rax, 0x1234\n push rax\n pop rsp\n mov rax, 60\n syscall"),
+    );
+    expect(intoRsp.status).toBe("success");
+    expect(register(intoRsp, "rsp")).toBe(0x1234n);
+
+    const throughRsp = assembleAndRun(
+      wrap(" push 7\n push 42\n pop qword [rsp]\n pop rdi\n mov rax, 60\n syscall"),
+    );
+    expect(throughRsp.exitCode).toBe(42);
+  });
 });
