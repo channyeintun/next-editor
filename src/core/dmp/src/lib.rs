@@ -244,13 +244,14 @@ fn pack(ptr: usize, len: usize) -> u64 {
 
 // ---------------------------------------------------------------------------
 // Op accumulator — diffs are streamed here in document order as parallel
-// triples (kind, off, len). For INSERT, `off` is the absolute linear-memory
-// address of the literal bytes (in the `b` buffer, which stays live for the
-// whole diff). Adjacent same-kind ops are coalesced on push.
+// pairs (kind, len). Adjacent same-kind ops are coalesced on push. An INSERT
+// records no source position: ops arrive in document order and only EQUAL and
+// INSERT consume `b`, so diffDelta's writer finds each INSERT's literal bytes
+// with a cursor into `b`. For the same reason two consecutive INSERTs are
+// always contiguous in `b` and merge like any other kind.
 // ---------------------------------------------------------------------------
 struct Ops {
     kind: Vec<u8>,
-    off: Vec<usize>,
     len: Vec<usize>,
 }
 
@@ -258,32 +259,23 @@ impl Ops {
     fn new() -> Ops {
         Ops {
             kind: Vec::new(),
-            off: Vec::new(),
             len: Vec::new(),
         }
     }
 
-    fn emit(&mut self, kind: u8, off: usize, len: usize) {
+    // Kept out of line: inlined into its six call sites it adds ~0.7 KB to the
+    // artifact, and it runs once per op, not per step of the search.
+    #[inline(never)]
+    fn emit(&mut self, kind: u8, len: usize) {
         if len == 0 {
             return;
         }
         let n = self.kind.len();
-        if n > 0 {
-            let last = n - 1;
-            if self.kind[last] == kind {
-                if kind != INSERT {
-                    self.len[last] += len;
-                    return;
-                }
-                // INSERT only merges when its source bytes are contiguous.
-                if self.off[last] + self.len[last] == off {
-                    self.len[last] += len;
-                    return;
-                }
-            }
+        if n > 0 && self.kind[n - 1] == kind {
+            self.len[n - 1] += len;
+            return;
         }
         self.kind.push(kind);
-        self.off.push(off);
         self.len.push(len);
     }
 }
@@ -436,7 +428,7 @@ impl Differ {
 
         let p = common_prefix(a, b);
         if p > 0 {
-            self.ops.emit(EQUAL, 0, p);
+            self.ops.emit(EQUAL, p);
         }
         let a0 = &a[p..];
         let b0 = &b[p..];
@@ -448,19 +440,19 @@ impl Differ {
         self.diff_compute(a_mid, b_mid);
 
         if s > 0 {
-            self.ops.emit(EQUAL, 0, s);
+            self.ops.emit(EQUAL, s);
         }
     }
 
     fn diff_compute(&mut self, a: &[u8], b: &[u8]) {
         if a.is_empty() {
             if !b.is_empty() {
-                self.ops.emit(INSERT, b.as_ptr() as usize, b.len());
+                self.ops.emit(INSERT, b.len());
             }
             return;
         }
         if b.is_empty() {
-            self.ops.emit(DELETE, 0, a.len());
+            self.ops.emit(DELETE, a.len());
             return;
         }
         self.diff_bisect(a, b);
@@ -600,8 +592,8 @@ impl Differ {
         // here, but the budget always runs out first.) Note this replaces only
         // the range handed to *this* bisect, so the prefix/suffix already
         // matched by the callers upstream is still preserved.
-        self.ops.emit(DELETE, 0, a.len());
-        self.ops.emit(INSERT, b.as_ptr() as usize, b.len());
+        self.ops.emit(DELETE, a.len());
+        self.ops.emit(INSERT, b.len());
     }
 
     fn bisect_split(&mut self, a: &[u8], b: &[u8], x: i32, y: i32) {
@@ -706,16 +698,25 @@ pub extern "C" fn diffDelta(a_ptr: u32, a_len: u32, b_ptr: u32, b_len: u32) -> u
         core::ptr::copy_nonoverlapping(base_hash.to_le_bytes().as_ptr(), o as *mut u8, CHECK_HASH_LEN);
     }
     o += CHECK_HASH_LEN;
+    // Ops are in document order, so a cursor over `b` (advanced by EQUAL and
+    // INSERT, the two kinds that consume it) locates each INSERT's literal.
+    let mut b_at = 0usize;
     for i in 0..ops.kind.len() {
-        let tag = ((ops.len[i] as u32) << 2) | ops.kind[i] as u32;
+        let len = ops.len[i];
+        let tag = ((len as u32) << 2) | ops.kind[i] as u32;
         o = unsafe { write_varint(o, tag) };
         if ops.kind[i] == INSERT {
+            let lit = &b[b_at..b_at + len];
             unsafe {
-                core::ptr::copy_nonoverlapping(ops.off[i] as *const u8, o as *mut u8, ops.len[i]);
+                core::ptr::copy_nonoverlapping(lit.as_ptr(), o as *mut u8, len);
             }
-            o += ops.len[i];
+            o += len;
+            b_at += len;
+        } else if ops.kind[i] == EQUAL {
+            b_at += len;
         }
     }
+    debug_assert_eq!(b_at, b.len());
     pack(out, size)
 }
 
