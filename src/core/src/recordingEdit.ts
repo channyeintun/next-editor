@@ -15,7 +15,7 @@ import {
   normalizeMediaSpans,
   type MediaSpan,
 } from "./utils/mediaSpans";
-import type { AudioEdit } from "./utils/audioEdit";
+import { hasAudioEdit, type AudioEdit } from "./utils/audioEdit";
 import { captionTextFromWords } from "./utils/captionCues";
 import { getRrwebReplayLead } from "./utils/previewReplayLead";
 
@@ -231,6 +231,11 @@ export function applyRecordingEdit(recording: Recording, edit: RecordingEdit): R
   // first cut, so the caller fetches it first.
   if (!hasAudio && (recording.audioUrl || recording.audioFile)) {
     throw new Error("The recording's narration must be loaded before it can be edited");
+  }
+  // A pending narration edit (a retake's) is on the narration's own clock, and this
+  // edit's would replace it.
+  if (hasAudioEdit(recording.pendingAudioEdit)) {
+    throw new Error("The recording's narration is still being cut; edit it once that is done");
   }
 
   const validCuts = normalizeMediaSpans(

@@ -201,7 +201,9 @@ mutes stretches of a finished recording through `applyRecordingEdit` (`src/core/
   `src/core/src/utils/captionCues.ts`), and it is dropped when every word went. A Whisper cue
   has no word timings, so it keeps its whole text.
 - The narration edit (cuts less their window, and mutes, on the audio's own clock) is left as
-  `pendingAudioEdit` for `loadRecording`, and the camera's `cameraCuts` gain the cut spans.
+  `pendingAudioEdit` for `loadRecording`, and the camera's `cameraCuts` gain the cut spans. A
+  recording whose own narration edit is still pending (a retake's, not yet applied) is refused:
+  that edit is on the narration's clock and this one would replace it.
 - The edited recording gets a new id and is loaded in place; once loaded (narration cut) it is
   offered for upload like a take that just finished. "Suggest dead-air cuts" proposes quiet
   stretches with no recorded activity (`suggestDeadAirCuts`).

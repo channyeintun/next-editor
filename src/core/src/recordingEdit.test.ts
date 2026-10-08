@@ -303,4 +303,11 @@ describe("applying an edit to a recording", () => {
       }),
     ).toThrow("must be loaded");
   });
+
+  it("will not replace a retake's narration cut that is still pending", () => {
+    const retaken = recordingWith({ pendingAudioEdit: { cuts: [{ start: 100, end: 900 }] } });
+    expect(() => applyRecordingEdit(retaken, { cuts: [cut], mutes: [] })).toThrow(
+      "still being cut",
+    );
+  });
 });
