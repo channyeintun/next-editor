@@ -184,7 +184,9 @@ export function tokenize(source: string): Token[] {
         if (source[index] === "\\" && quote === '"') {
           raw += source[index];
           index += 1;
-          if (index >= source.length) break;
+          // A backslash escapes the next character, but never a line break:
+          // that still ends the line, and with it the unclosed literal.
+          if (index >= source.length || source[index] === "\n") break;
         }
         raw += source[index];
         index += 1;

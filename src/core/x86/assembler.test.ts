@@ -543,4 +543,13 @@ describe("assembler diagnostics", () => {
     expect(error.line).toBe(2);
     expect(error.column).toBe(7);
   });
+
+  // The backslash used to take the line break as its escape, so this failed
+  // as an unknown escape with a raw newline inside the message.
+  it("reports a string whose line ends in a backslash as not closed", () => {
+    const error = failing('section .data\n x db "abc\\\n", 0\nsection .text\n_start:\n ret\n');
+    expect(error.message).toBe("String literal is not closed");
+    expect(error.line).toBe(2);
+    expect(error.column).toBe(7);
+  });
 });
