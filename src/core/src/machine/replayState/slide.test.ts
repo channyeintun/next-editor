@@ -116,6 +116,41 @@ describe("slide replay before the first event", () => {
   });
 });
 
+describe("slide replay of a tick behind the cursor", () => {
+  const slideEvents: SlideEvent[] = [
+    { type: "slide_open", timestamp: 0, slideId: "one", indexv: 0 },
+    { type: "slide_change", timestamp: 100, slideId: "two", indexv: 0 },
+    { type: "slide_change", timestamp: 200, slideId: "one", indexv: 0 },
+  ];
+
+  it("shows the slide at the tick once instead of replaying every hop from the start", () => {
+    // Replaying from index 0 applied the open on "one" and then the hop to "two".
+    expect(
+      getSlideReplayResult({
+        slideEvents,
+        slides,
+        currentTime: 150,
+        lastAppliedIndex: 2,
+        isResync: false,
+      }),
+    ).toEqual({
+      applications: [
+        {
+          slideIndex: 1,
+          slideState: {
+            isOpen: true,
+            isMaximized: false,
+            currentSlideId: "two",
+            indexv: 0,
+            currentInteraction: undefined,
+          },
+        },
+      ],
+      nextIndex: 1,
+    });
+  });
+});
+
 describe("slide replay of a slide deleted during the take", () => {
   // The deck is saved at finalize, so "gone" is no longer in it.
   const slideEvents: SlideEvent[] = [

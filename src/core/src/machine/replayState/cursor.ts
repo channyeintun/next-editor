@@ -17,11 +17,6 @@ export type ReplayTriggerEvent = {
   time?: number;
 };
 
-export interface ReplayCursorResult<T extends TimedReplayEvent> {
-  latestEvent: T | null;
-  nextIndex: number;
-}
-
 export function resolveReplayTime(event: ReplayTriggerEvent, fallbackTime: number): number {
   if (event.type === "TICK") {
     return event.currentTime ?? fallbackTime;
@@ -46,26 +41,26 @@ function isSeekReplayEvent(event: ReplayTriggerEvent): boolean {
  * invalidated. Advancing from an invalidated cursor replays every event from index
  * 0, which re-fires stale transient interactions (clicks, focus, slide hops) as
  * if they were live. Tracks with a baseline (a closed deck, an empty transcript)
- * also apply it on a resync that lands before their first event.
+ * also apply it on a resync that lands before their first event. The tracks that
+ * replay crossed events (preview, slide) treat a TICK whose time is behind their
+ * cursor as a resync too (see {@link isCursorAheadOf}).
  */
 export function isReplayResync(event: ReplayTriggerEvent, lastAppliedIndex: number): boolean {
   return isSeekReplayEvent(event) || (event.type !== "TICK" && lastAppliedIndex < 0);
 }
 
-export function advanceReplayCursor<T extends TimedReplayEvent>({
-  events,
-  currentTime,
-  lastAppliedIndex,
-}: {
-  events: T[];
-  currentTime: number;
-  lastAppliedIndex: number;
-}): ReplayCursorResult<T> {
-  const nextIndex = findTimedEventIndexAtOrBefore(events, currentTime, lastAppliedIndex);
-  const latestEvent = nextIndex >= 0 ? events[nextIndex] : null;
-
-  return {
-    latestEvent,
-    nextIndex,
-  };
+/**
+ * The clock moved behind the event the cursor last applied without a SEEK:
+ * re-derive the track at `currentTime` instead of replaying from index 0.
+ */
+export function isCursorAheadOf(
+  events: TimedReplayEvent[],
+  lastAppliedIndex: number,
+  currentTime: number,
+): boolean {
+  return (
+    lastAppliedIndex >= 0 &&
+    lastAppliedIndex < events.length &&
+    events[lastAppliedIndex].timestamp > currentTime
+  );
 }

@@ -139,6 +139,37 @@ describe("replayState", () => {
     expect(isReplayResync({ type: "APPEND_RECORDING_DELTA" }, 3)).toBe(false);
   });
 
+  it("resolves the preview at a tick behind its cursor without replaying from the start", () => {
+    const click = (timestamp: number): PreviewEvent => ({
+      type: "preview_interaction",
+      timestamp,
+      interaction: {
+        type: "click",
+        timestamp,
+        target: { tagName: "button", xpath: "/html/body/button" },
+      },
+    });
+    const previewEvents: PreviewEvent[] = [
+      { type: "preview_open", timestamp: 0, size: "small", route: "/" },
+      click(100),
+      click(200),
+    ];
+
+    // The clock moved from past 200 back to 150 without a SEEK. Replaying from
+    // index 0 applied the open and re-fired the click at 100.
+    const rewound = getPreviewReplayResult({
+      previewEvents,
+      currentTime: 150,
+      lastAppliedIndex: 2,
+      lastAppliedState: undefined,
+      isResync: false,
+    });
+
+    expect(rewound.nextIndex).toBe(1);
+    expect(rewound.appliedStates).toHaveLength(1);
+    expect(rewound.appliedStates[0].currentInteraction).toBeUndefined();
+  });
+
   it("carries API client request/response state through replay and seeking", () => {
     const previewEvents: PreviewEvent[] = [
       { type: "api_client_mode", timestamp: 0, size: "medium", activeMode: "api" },

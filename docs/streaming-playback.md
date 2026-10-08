@@ -230,7 +230,9 @@ a faster way to reach the same state. These are the cursor rules that keep it, i
 [replayActions.ts](../src/core/src/machine/replayActions.ts):
 
 - **TICK** moves each track forward from its cursor (`lastApplied…EventIndex`). Tracks with
-  transient interactions (slide hops, preview clicks) replay every event the tick crosses.
+  transient interactions (slide hops, preview clicks) replay every event the tick crosses. For
+  them a TICK behind the cursor (the clock moved back without a SEEK) is a resync
+  (`isCursorAheadOf`), so it never replays the track from its first event.
 - **SEEK**, **PLAY** after a pause, a rewind and a workspace detach reset the cursors together
   with `REPLAY_CURSORS_RESET`. The next apply is then a resync (`isReplayResync` in
   [cursor.ts](../src/core/src/machine/replayState/cursor.ts)). It lands on one state at T and

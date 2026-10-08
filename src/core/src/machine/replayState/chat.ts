@@ -1,6 +1,6 @@
 import type { ChatCheckpoint, ChatRecordingEvent } from "../../../../types/chat";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "../../utils/chatDelta";
-import { advanceReplayCursor } from "./cursor";
+import { findTimedEventIndexAtOrBefore } from "./cursor";
 
 // ============================================================================
 // Chat track replay.
@@ -123,28 +123,24 @@ export function getChatReplayResult({
   /** See `isReplayResync`: the apply re-asserts the transcript at `currentTime`. */
   isResync?: boolean;
 }): ChatReplayResult {
-  const replayCursor = advanceReplayCursor({
-    events: chatEvents,
-    currentTime,
-    lastAppliedIndex,
-  });
+  const nextIndex = findTimedEventIndexAtOrBefore(chatEvents, currentTime, lastAppliedIndex);
 
   // Before the first chat event the transcript is empty. Applying nothing there left
   // a later transcript on screen after a backward seek, STOP or restart. A tick applies
   // the baseline only when it rewinds the cursor past that event, so ticks that have
   // not reached it yet never rewrite the store.
-  if (replayCursor.nextIndex < 0 && (isResync || lastAppliedIndex >= 0)) {
+  if (nextIndex < 0 && (isResync || lastAppliedIndex >= 0)) {
     return { nextIndex: -1, snapshotToApply: EMPTY_CHAT_CHECKPOINT };
   }
 
-  if (!replayCursor.latestEvent || replayCursor.nextIndex === lastAppliedIndex) {
-    return { nextIndex: replayCursor.nextIndex };
+  if (nextIndex < 0 || nextIndex === lastAppliedIndex) {
+    return { nextIndex };
   }
 
-  const folded = foldChatEventsUpTo(chatEvents, replayCursor.nextIndex);
+  const folded = foldChatEventsUpTo(chatEvents, nextIndex);
 
   return {
-    nextIndex: replayCursor.nextIndex,
+    nextIndex,
     snapshotToApply: { items: folded.items, status: folded.status, draft: folded.draft },
   };
 }

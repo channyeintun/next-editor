@@ -1,6 +1,6 @@
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../../types/runtime";
 import { resolveRuntimeSnapshotAt } from "../../runtimeTrack";
-import { advanceReplayCursor } from "./cursor";
+import { findTimedEventIndexAtOrBefore } from "./cursor";
 
 // ============================================================================
 // Runtime track replay.
@@ -25,20 +25,16 @@ export function getRuntimeReplayResult({
   currentTime: number;
   lastAppliedIndex: number;
 }): RuntimeReplayResult {
-  const replayCursor = advanceReplayCursor({
-    events: runtimeEvents,
-    currentTime,
-    lastAppliedIndex,
-  });
+  const nextIndex = findTimedEventIndexAtOrBefore(runtimeEvents, currentTime, lastAppliedIndex);
 
-  if (replayCursor.latestEvent && replayCursor.nextIndex !== lastAppliedIndex) {
+  if (nextIndex >= 0 && nextIndex !== lastAppliedIndex) {
     return {
-      nextIndex: replayCursor.nextIndex,
-      snapshotToApply: resolveRuntimeSnapshotAt(runtimeEvents, replayCursor.nextIndex) ?? undefined,
+      nextIndex,
+      snapshotToApply: resolveRuntimeSnapshotAt(runtimeEvents, nextIndex) ?? undefined,
     };
   }
 
   return {
-    nextIndex: replayCursor.nextIndex,
+    nextIndex,
   };
 }

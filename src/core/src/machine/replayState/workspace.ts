@@ -3,7 +3,7 @@ import {
   type WorkspaceRecordingEvent,
   type WorkspaceRecordingSnapshot,
 } from "../../../../types/workspace";
-import { advanceReplayCursor } from "./cursor";
+import { findTimedEventIndexAtOrBefore } from "./cursor";
 
 // ============================================================================
 // Workspace track replay.
@@ -136,29 +136,25 @@ export function getWorkspaceReplayResult({
   getCurrentSnapshot?: () => WorkspaceRecordingSnapshot | null;
   lastAppliedIndex: number;
 }): WorkspaceReplayResult {
-  const replayCursor = advanceReplayCursor({
-    events: workspaceEvents,
-    currentTime,
-    lastAppliedIndex,
-  });
+  const nextIndex = findTimedEventIndexAtOrBefore(workspaceEvents, currentTime, lastAppliedIndex);
 
-  if (replayCursor.latestEvent && replayCursor.nextIndex !== lastAppliedIndex) {
+  if (nextIndex >= 0 && nextIndex !== lastAppliedIndex) {
     const snapshot = getCurrentSnapshot?.() ?? null;
     const snapshotToApply = resolveWorkspaceSnapshotForReplay({
       workspaceEvents,
-      nextIndex: replayCursor.nextIndex,
+      nextIndex,
       lastAppliedIndex,
     });
 
     if (!snapshot || !areWorkspaceSnapshotsEqual(snapshot, snapshotToApply)) {
       return {
-        nextIndex: replayCursor.nextIndex,
+        nextIndex,
         snapshotToApply,
       };
     }
   }
 
   return {
-    nextIndex: replayCursor.nextIndex,
+    nextIndex,
   };
 }

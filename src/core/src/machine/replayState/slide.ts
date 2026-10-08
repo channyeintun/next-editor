@@ -1,5 +1,5 @@
 import type { Slide, SlideEvent, SlidePreviewState } from "../../slides";
-import { findTimedEventIndexAtOrBefore } from "./cursor";
+import { findTimedEventIndexAtOrBefore, isCursorAheadOf } from "./cursor";
 
 // ============================================================================
 // Slide track replay.
@@ -172,7 +172,7 @@ export function getSlideReplayResult({
   /** See `isReplayResync`: apply the one state at `currentTime` instead of replaying history. */
   isResync: boolean;
 }): SlideReplayResult {
-  if (isResync) {
+  if (isResync || isCursorAheadOf(slideEvents, lastAppliedIndex, currentTime)) {
     const nextIndex = findTimedEventIndexAtOrBefore(slideEvents, currentTime, -1);
     // Show what forward playback shows at `currentTime`: the last event the deck can
     // place. An event whose slide was deleted during the take applies nothing on a
@@ -195,15 +195,7 @@ export function getSlideReplayResult({
   let nextIndex = lastAppliedIndex;
   const applications: SlideReplayApplication[] = [];
 
-  if (
-    nextIndex >= 0 &&
-    nextIndex < slideEvents.length &&
-    slideEvents[nextIndex].timestamp > currentTime
-  ) {
-    nextIndex = -1;
-  }
-
-  for (let index = nextIndex + 1; index < slideEvents.length; index++) {
+  for (let index = lastAppliedIndex + 1; index < slideEvents.length; index++) {
     const slideEvent = slideEvents[index];
 
     if (slideEvent.timestamp > currentTime) {
@@ -217,12 +209,6 @@ export function getSlideReplayResult({
     }
 
     nextIndex = index;
-  }
-
-  // A tick that rewound the cursor to before the first event closes the deck once.
-  // The cursor is -1 afterwards, so later ticks before that event apply nothing.
-  if (nextIndex < 0 && lastAppliedIndex >= 0) {
-    applications.push(CLOSED_SLIDE_APPLICATION);
   }
 
   return {

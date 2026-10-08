@@ -1,5 +1,5 @@
 import type { PreviewEvent, PreviewState } from "../../slides";
-import { findTimedEventIndexAtOrBefore } from "./cursor";
+import { findTimedEventIndexAtOrBefore, isCursorAheadOf } from "./cursor";
 
 // ============================================================================
 // Preview track replay.
@@ -166,7 +166,7 @@ export function getPreviewReplayResult({
   /** See `isReplayResync`: resolve the retained state instead of replaying history. */
   isResync: boolean;
 }): PreviewReplayResult {
-  if (isResync) {
+  if (isResync || isCursorAheadOf(previewEvents, lastAppliedIndex, currentTime)) {
     const nextIndex = findTimedEventIndexAtOrBefore(previewEvents, currentTime, -1);
 
     if (nextIndex < 0) {
@@ -194,16 +194,7 @@ export function getPreviewReplayResult({
   let retainedState = lastAppliedState;
   const appliedStates: PreviewState[] = [];
 
-  if (
-    nextIndex >= 0 &&
-    nextIndex < previewEvents.length &&
-    previewEvents[nextIndex].timestamp > currentTime
-  ) {
-    nextIndex = -1;
-    retainedState = undefined;
-  }
-
-  for (let index = nextIndex + 1; index < previewEvents.length; index++) {
+  for (let index = lastAppliedIndex + 1; index < previewEvents.length; index++) {
     const previewEvent = previewEvents[index];
 
     if (previewEvent.timestamp > currentTime) {
