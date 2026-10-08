@@ -11,9 +11,12 @@ export const CURSOR_REPLAY_TARGET_ATTRIBUTE = "data-cursor-replay-target";
 export const CURSOR_REPLAY_VIEWPORT_TARGET_ID = "viewport";
 export const CURSOR_REPLAY_ROOT_TARGET_ID = "app";
 
-// Targets whose *content* is scaled to fit the box (the preview iframe is
-// scaled-to-fit, the slide preview scales its content, and the raw viewport fallback). For
-// these, a recorded point must be re-scaled by the box's current size on replay.
+// Set to "content" on a target whose *content* is scaled to fit its box (the
+// preview iframe is scaled-to-fit, and the slide preview scales its content).
+// For these, and for the raw viewport fallback, a recorded point must be
+// re-scaled by the box's current size on replay. Replay reads the attribute
+// from the live element, so the component that owns a scaled surface declares
+// it next to its target id.
 //
 // Every other target (the code editor, file explorer, terminal dock, layout
 // containers, app root) renders fixed-size, top-left-anchored content, so its
@@ -21,14 +24,7 @@ export const CURSOR_REPLAY_ROOT_TARGET_ID = "app";
 // keeps the cursor over the same content when the box is merely resized (e.g.
 // the editor widens after the file explorer is hidden) rather than sliding it
 // sideways in proportion to the new width.
-const CURSOR_SCALING_TARGET_IDS: ReadonlySet<string> = new Set([
-  CURSOR_REPLAY_VIEWPORT_TARGET_ID,
-  "preview-frame",
-  "preview-content",
-  "preview",
-  "slide-preview",
-  "slide-content",
-]);
+export const CURSOR_REPLAY_SCALE_ATTRIBUTE = "data-cursor-replay-scale";
 
 interface CreateCursorPositionOptions {
   clientX: number;
@@ -427,7 +423,10 @@ function resolveEndpointToViewport(
     return resolveUntargetedPoint(cursor, ownerDocument);
   }
 
-  if (CURSOR_SCALING_TARGET_IDS.has(target.id)) {
+  if (
+    target.id === CURSOR_REPLAY_VIEWPORT_TARGET_ID ||
+    targetElement?.getAttribute(CURSOR_REPLAY_SCALE_ATTRIBUTE) === "content"
+  ) {
     return {
       x: currentRect.left + (target.x / target.rect.width) * currentRect.width,
       y: currentRect.top + (target.y / target.rect.height) * currentRect.height,

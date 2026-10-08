@@ -402,7 +402,11 @@ export function PreviewChrome({
         onModeChange={onModeChange}
       />
 
-      <div className="relative min-h-0 flex-1" data-cursor-replay-target="preview-content">
+      <div
+        className="relative min-h-0 flex-1"
+        data-cursor-replay-target="preview-content"
+        data-cursor-replay-scale="content"
+      >
         {children}
         {mode === "floating" ? <PreviewResizeHandle onResizeStart={onResizeStart} /> : null}
       </div>
@@ -427,6 +431,7 @@ export function PreviewChrome({
       className={rootClassName}
       style={rootStyle}
       data-cursor-replay-target="preview"
+      data-cursor-replay-scale="content"
       onTransitionStart={(event) => {
         if (event.target === event.currentTarget) {
           onTransitionStart();

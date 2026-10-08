@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { registerCursorCellAnchor } from "./cursorCellAnchors";
 import {
+  CURSOR_REPLAY_SCALE_ATTRIBUTE,
   createCursorPositionFromClientPoint,
   resolveCursorViewportPosition,
 } from "./cursorCoordinates";
@@ -63,6 +64,7 @@ describe("cursorCoordinates", () => {
     const target = document.createElement("div");
 
     target.setAttribute("data-cursor-replay-target", "preview-frame");
+    target.setAttribute(CURSOR_REPLAY_SCALE_ATTRIBUTE, "content");
     document.body.appendChild(target);
     mockRect(target, { left: 100, top: 50, width: 400, height: 300 });
 
@@ -104,6 +106,51 @@ describe("cursorCoordinates", () => {
       x: 220,
       y: 200,
     });
+  });
+
+  it("anchors a target without the scale attribute to its top-left, whatever its id", () => {
+    // The live element decides, not the recorded id: a preview frame that does
+    // not declare scaled content keeps the recorded offset from its top-left.
+    const target = document.createElement("div");
+
+    target.setAttribute("data-cursor-replay-target", "preview-frame");
+    document.body.appendChild(target);
+    mockRect(target, { left: 100, top: 50, width: 400, height: 300 });
+
+    const recordedCursor = createCursorPositionFromClientPoint({
+      clientX: 300,
+      clientY: 200,
+      visible: true,
+      targetElement: target,
+    });
+
+    mockRect(target, { left: 20, top: 10, width: 800, height: 600 });
+
+    expect(resolveCursorViewportPosition(recordedCursor)).toEqual({
+      x: 220,
+      y: 160,
+    });
+  });
+
+  it("re-scales a viewport sample by the current window size", () => {
+    // The viewport has no element to carry the attribute, so it scales by id.
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(800);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
+
+    expect(
+      resolveCursorViewportPosition({
+        x: 30,
+        y: 40,
+        visible: true,
+        coordinateSpace: "viewport",
+        target: {
+          id: "viewport",
+          x: 30,
+          y: 40,
+          rect: { left: 0, top: 0, width: 400, height: 300 },
+        },
+      }),
+    ).toEqual({ x: 60, y: 80 });
   });
 
   it("records and resolves a point over a terminal by its place in the text", () => {

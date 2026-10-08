@@ -30,6 +30,7 @@ export function RuntimePreviewRenderer({
         ref={replayContainerRef}
         className={`absolute inset-0 block size-full overflow-hidden bg-transparent ${disablePointerEvents ? "pointer-events-none" : ""}`}
         data-cursor-replay-target="preview-frame"
+        data-cursor-replay-scale="content"
       />
     );
   }
@@ -63,6 +64,7 @@ export function RuntimePreviewRenderer({
       title="Runtime Preview"
       sandbox={sandbox}
       data-cursor-replay-target="preview-frame"
+      data-cursor-replay-scale="content"
     />
   );
 }

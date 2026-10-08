@@ -234,6 +234,7 @@ function SlidePreview({
       <div
         className={`${positioning} inset-1/2 -translate-1/2 z-100 bg-slate-900 rounded-2xl overflow-hidden flex flex-col shadow-2xl transition-shadow w-full max-w-7xl aspect-video`}
         data-cursor-replay-target="slide-preview"
+        data-cursor-replay-scale="content"
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -243,6 +244,7 @@ function SlidePreview({
           ref={slideContentRef}
           className="relative w-full flex-1 bg-black"
           data-cursor-replay-target="slide-content"
+          data-cursor-replay-scale="content"
           onClick={(e) => e.stopPropagation()}
         >
           <CustomSlideRenderer
