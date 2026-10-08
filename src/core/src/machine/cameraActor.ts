@@ -8,6 +8,16 @@ import { getSupportedRecorderMimeType, CAMERA_VIDEO_MIME_TYPES } from "../utils/
 
 const CAMERA_TIMESLICE_MS = 1000;
 
+// The face camera records a small square tile (480x480 at 24fps by default), so ~400 kbps
+// keeps the file light.
+const CAMERA_VIDEO_BITS_PER_SECOND = 400_000;
+const DEFAULT_CAMERA_CONSTRAINTS: MediaTrackConstraints = {
+  width: { ideal: 480 },
+  height: { ideal: 480 },
+  frameRate: { ideal: 24, max: 30 },
+  facingMode: "user",
+};
+
 export interface CameraRecordingInput {
   constraints?: MediaTrackConstraints;
 }
@@ -62,12 +72,7 @@ export const cameraRecordingActor = fromTypedCallback<
 
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: input.constraints ?? {
-          width: { ideal: 480 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 24, max: 30 },
-          facingMode: "user",
-        },
+        video: input.constraints ?? DEFAULT_CAMERA_CONSTRAINTS,
         audio: false,
       });
 
@@ -88,7 +93,7 @@ export const cameraRecordingActor = fromTypedCallback<
 
       mediaRecorder = new MediaRecorder(stream, {
         mimeType,
-        videoBitsPerSecond: 400_000,
+        videoBitsPerSecond: CAMERA_VIDEO_BITS_PER_SECOND,
       });
 
       chunks = [];
