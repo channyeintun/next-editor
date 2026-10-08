@@ -305,6 +305,7 @@ The microphone, camera and screen recorders all take `RecorderControlEvent` (`ST
 ### Mouse tracking actor (`mouseTrackingActor`)
 
 - Invoked only while `recording`; forwards live mouse positions into `CAPTURE_FRAME` events for cursor sampling.
+- Tracks preview iframes through `startIframeCursorTracking` (`iframeCursorTracking.ts`): same-origin frames by listeners on their documents, cross-origin frames by the injected script's postMessage. It reports each point in page coordinates, and the actor maps it to the recording root.
 
 ## Replay Cursors In Context
 
