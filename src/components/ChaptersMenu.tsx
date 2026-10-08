@@ -137,11 +137,7 @@ export default function ChaptersMenu({
                         const title = event.currentTarget.value.trim();
                         if (title === chapter.title) return;
                         update(
-                          chapters.map((entry, at) =>
-                            at === index
-                              ? { ...entry, title: title || defaultChapterTitle(index) }
-                              : entry,
-                          ),
+                          chapters.map((entry, at) => (at === index ? { ...entry, title } : entry)),
                         );
                       }}
                       onKeyDown={(event) => {

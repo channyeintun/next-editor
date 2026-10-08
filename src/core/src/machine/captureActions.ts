@@ -36,7 +36,7 @@ import {
 } from "./recordingClock";
 import { appendCursorEvent } from "./frameCapture";
 import { addSafePoint } from "./retake";
-import { defaultChapterTitle } from "../utils/chapters";
+import { chapterTitle } from "../utils/chapters";
 import { markFramesNormalized } from "../utils/editorState";
 import { assembleRecording } from "./recordingAssembly";
 import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
@@ -413,10 +413,7 @@ export const addChapterMarker = ({ context, event }: EditorActionArgs): EditorCo
 
   session.chapters = [
     ...session.chapters,
-    {
-      time: recordingTime,
-      title: event.title?.trim() || defaultChapterTitle(session.chapters.length),
-    },
+    { time: recordingTime, title: chapterTitle(event.title, session.chapters.length) },
   ];
   // While paused, the clock stands at the moment the pause began: that is the anchor.
   const at = session.clock.pausedAt ?? { perf: performance.now(), wall: Date.now() };

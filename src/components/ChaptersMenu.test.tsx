@@ -77,6 +77,19 @@ describe("ChaptersMenu", () => {
     ]);
   });
 
+  it("names a chapter by its place when the author clears its title", () => {
+    render(<ChaptersMenu recording={lesson} editable iconSize={16} buttonClassName="" />);
+    openMenu();
+
+    const title = screen.getByLabelText("Title of the chapter at 1:00");
+    fireEvent.change(title, { target: { value: "   " } });
+    fireEvent.blur(title);
+    expect(actions.setChapters).toHaveBeenLastCalledWith("lesson", [
+      { time: 0, title: "Setup" },
+      { time: 60_000, title: "Chapter 2" },
+    ]);
+  });
+
   it("stays out of the way of a lesson with no chapters for its viewers", () => {
     const { container } = render(
       <ChaptersMenu

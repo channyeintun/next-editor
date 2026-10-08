@@ -11,6 +11,17 @@ export const MAX_CHAPTER_TITLE_LENGTH = 120;
 export const defaultChapterTitle = (index: number) => `Chapter ${index + 1}`;
 
 /**
+ * A chapter's title as stored: trimmed and cut to the cap, or the default for its place
+ * when nothing is left. The cut counts UTF-16 units, as the title input's maxLength
+ * does, and drops a surrogate pair (an emoji) it would split in half.
+ */
+export const chapterTitle = (title: string | undefined, index: number) =>
+  title
+    ?.trim()
+    .slice(0, MAX_CHAPTER_TITLE_LENGTH)
+    .replace(/[\uD800-\uDBFF]$/, "") || defaultChapterTitle(index);
+
+/**
  * Chapters sorted by time, one per moment, with usable titles. Anything that is not a
  * chapter is dropped, so a file's header can be passed as is.
  */
@@ -23,10 +34,7 @@ export function normalizeChapters(chapters: readonly unknown[]): RecordingChapte
         Number.isFinite((chapter as RecordingChapter).time) &&
         typeof (chapter as RecordingChapter).title === "string",
     )
-    .map((chapter) => ({
-      time: Math.max(0, chapter.time),
-      title: chapter.title.trim().slice(0, MAX_CHAPTER_TITLE_LENGTH),
-    }))
+    .map((chapter) => ({ time: Math.max(0, chapter.time), title: chapter.title }))
     .sort((left, right) => left.time - right.time);
 
   // Two chapters at one moment name the same stretch: the later one wins.
@@ -38,7 +46,7 @@ export function normalizeChapters(chapters: readonly unknown[]): RecordingChapte
   }
   return byMoment.map((chapter, index) => ({
     ...chapter,
-    title: chapter.title || defaultChapterTitle(index),
+    title: chapterTitle(chapter.title, index),
   }));
 }
 

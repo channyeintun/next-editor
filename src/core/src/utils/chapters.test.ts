@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  chapterTitle,
   findChapterIndexAt,
   formatTimeParameter,
   MAX_CHAPTER_TITLE_LENGTH,
@@ -28,6 +29,19 @@ describe("chapters", () => {
   it("cuts an overlong title", () => {
     const [chapter] = normalizeChapters([{ time: 0, title: "x".repeat(500) }]);
     expect(chapter.title).toHaveLength(MAX_CHAPTER_TITLE_LENGTH);
+  });
+
+  it("does not split an emoji when it cuts a title", () => {
+    const [chapter] = normalizeChapters([{ time: 0, title: `${"a".repeat(119)}\u{1F600}` }]);
+    expect(chapter.title).toBe("a".repeat(119));
+  });
+
+  it("trims a title, cuts it to the cap, and names an empty one by its place", () => {
+    expect(chapterTitle("  Routing ", 0)).toBe("Routing");
+    expect(chapterTitle("x".repeat(500), 0)).toBe("x".repeat(MAX_CHAPTER_TITLE_LENGTH));
+    expect(chapterTitle(`${"a".repeat(119)}\u{1F600}`, 0)).toBe("a".repeat(119));
+    expect(chapterTitle("   ", 2)).toBe("Chapter 3");
+    expect(chapterTitle(undefined, 0)).toBe("Chapter 1");
   });
 
   it("finds the chapter playing at a moment", () => {
