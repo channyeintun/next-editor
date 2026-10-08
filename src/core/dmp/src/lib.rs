@@ -376,6 +376,13 @@ fn common_suffix(a: &[u8], b: &[u8]) -> usize {
 // ---------------------------------------------------------------------------
 const WORK_BUDGET: u64 = 50_000_000;
 
+// Deepest Myers level the budget can pay for, plus one. Level d is charged
+// 2(d + 1), so levels 0..=d cost (d + 1)(d + 2) in total, and since the budget
+// is per call no bisect can ever reach a level of MAX_LEVELS or deeper. Every
+// diagonal a level writes satisfies |k| <= d, so diff_bisect sizes its V arrays
+// by this window instead of by the whole changed span.
+const MAX_LEVELS: i32 = WORK_BUDGET.isqrt() as i32 + 1;
+
 struct Budget {
     left: UnsafeCell<u64>,
 }
@@ -449,8 +456,15 @@ fn diff_bisect(ops: &mut Ops, a: &[u8], b: &[u8]) {
     let a_len = a.len() as i32;
     let b_len = b.len() as i32;
     let max_d = (a_len + b_len + 1) / 2; // ceil((a_len + b_len) / 2)
-    let v_offset = max_d;
-    let v_length = 2 * max_d; // logical diagonal span used by the overlap guards
+
+    // The arrays span only the diagonals the search can reach: the reference
+    // sizes them by max_d, but WORK_BUDGET stops every bisect before level
+    // MAX_LEVELS, so for a large changed span most of that would be zeroed
+    // scratch that is never written. The level loop below is bounded by the
+    // window too, so no index can leave it whatever the budget.
+    let window = max_d.min(MAX_LEVELS);
+    let v_offset = window;
+    let v_length = 2 * window; // logical diagonal span used by the overlap guards
     // The reference diff_bisect relies on sparse arrays auto-growing past
     // v_length for the `v_offset ± 1` accesses (notably when max_d == 1). Fixed
     // buffers don't grow, so pad by 2 to keep every `± 1` index in bounds.
@@ -469,7 +483,7 @@ fn diff_bisect(ops: &mut Ops, a: &[u8], b: &[u8]) {
     let mut k2end = 0;
 
     let mut d = 0;
-    while d < max_d {
+    while d < max_d && d < window {
         // Charge this level's forward + reverse k-loop spans (each visits d + 1
         // diagonals). Out of budget: stop searching and take the replace
         // fallthrough below, exactly as the reference does on deadline expiry.
@@ -557,8 +571,10 @@ fn diff_bisect(ops: &mut Ops, a: &[u8], b: &[u8]) {
     // Fallthrough: emit a replace for this subproblem — a correct, if
     // suboptimal, diff. Reached only by exhausting WORK_BUDGET (the reference's
     // deadline branch); the middle snake is otherwise always found within
-    // max_d. Note this replaces only the range handed to *this* bisect, so the
-    // prefix/suffix already matched by the callers upstream is still preserved.
+    // max_d. (Leaving through the window bound would also land here, but the
+    // budget always runs out first.) Note this replaces only the range handed
+    // to *this* bisect, so the prefix/suffix already matched by the callers
+    // upstream is still preserved.
     ops.emit(DELETE, 0, a.len());
     ops.emit(INSERT, b.as_ptr() as usize, b.len());
 }
