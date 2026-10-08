@@ -59,6 +59,28 @@ export function withSafePoint(
     : [...safePoints, point];
 }
 
+/**
+ * Where the recorders' files stand at recorded time `recordingTime`: past every stretch
+ * retakes discarded.
+ */
+export function mediaTimeAt(session: RecordingSession, recordingTime: number): number {
+  return recordingTime + totalMediaSpanLength(session.mediaCuts);
+}
+
+/** Marks `recordingTime`, read at clock readings `at`, as a moment a retake can rewind to. */
+export function addSafePoint(
+  session: RecordingSession,
+  recordingTime: number,
+  at: { perf: number; wall: number },
+): void {
+  session.safePoints = withSafePoint(session.safePoints, {
+    recordingTime,
+    perf: at.perf,
+    wall: at.wall,
+    mediaTime: mediaTimeAt(session, recordingTime),
+  });
+}
+
 /** The entries recorded at or before `time`: a new array, since tracks are append-only. */
 function keptUntil<T>(entries: readonly T[], time: number, timeOf: (entry: T) => number): T[] {
   let end = entries.length;
@@ -111,7 +133,7 @@ export function rewindSessionToSafePoint(
 
   // The recorders ran (paused or not) the whole time, so their files hold the
   // discarded stretch: from where they were at the safe point to where they are now.
-  const mediaNow = getRecordingTimestamp(session) + totalMediaSpanLength(session.mediaCuts);
+  const mediaNow = mediaTimeAt(session, getRecordingTimestamp(session));
   session.mediaCuts = addMediaCut(session.mediaCuts, { start: target.mediaTime, end: mediaNow });
   session.clock = rewindRecordingClock(session.clock, target.perf, target.wall);
   session.safePoints = session.safePoints.filter((point) => point.recordingTime <= time);

@@ -35,8 +35,7 @@ import {
   resumeRecordingClock,
 } from "./recordingClock";
 import { appendCursorEvent } from "./frameCapture";
-import { withSafePoint } from "./retake";
-import { totalMediaSpanLength } from "../utils/mediaSpans";
+import { addSafePoint } from "./retake";
 import { defaultChapterTitle } from "../utils/chapters";
 import { markFramesNormalized } from "../utils/editorState";
 import { assembleRecording } from "./recordingAssembly";
@@ -395,12 +394,7 @@ export const resumeRecordingSession = ({ context }: EditorActionArgs): EditorCon
   const wall = Date.now();
   session.clock = resumeRecordingClock(session.clock, perf, wall);
   const recordingTime = getRecordingTimestamp(session);
-  session.safePoints = withSafePoint(session.safePoints, {
-    recordingTime,
-    perf,
-    wall,
-    mediaTime: recordingTime + totalMediaSpanLength(session.mediaCuts),
-  });
+  addSafePoint(session, recordingTime, { perf, wall });
   appendCursorEvent(session.cursorEvents, recordingTime, session.lastMousePosition);
   return { session, sessionRevision: context.sessionRevision + 1 };
 };
@@ -426,12 +420,7 @@ export const addChapterMarker = ({ context, event }: EditorActionArgs): EditorCo
   ];
   // While paused, the clock stands at the moment the pause began: that is the anchor.
   const at = session.clock.pausedAt ?? { perf: performance.now(), wall: Date.now() };
-  session.safePoints = withSafePoint(session.safePoints, {
-    recordingTime,
-    perf: at.perf,
-    wall: at.wall,
-    mediaTime: recordingTime + totalMediaSpanLength(session.mediaCuts),
-  });
+  addSafePoint(session, recordingTime, at);
   return { session, sessionRevision: context.sessionRevision + 1 };
 };
 
