@@ -7,21 +7,36 @@
  * bytes depends on how long every instruction in between turned out to be.
  *
  * This resolves that the way assemblers have always resolved it, by laying the
- * program out repeatedly until it stops moving. The first pass assumes the
- * widest form of everything, which is always correct if wasteful. Each pass
- * after it re-encodes with the addresses the previous pass produced, and every
- * address it produces is less than or equal to the one before — code only ever
- * gets shorter, never longer, because shrinking the bytes between a jump and
- * its target can only bring them closer together. A sequence that only
- * decreases and is bounded below has to stop, so the loop terminates.
+ * program out repeatedly until it stops moving. The first pass puts every
+ * branch that has a long form in it and reads a symbol defined further down as
+ * a large placeholder, so it lays the program out too long rather than too
+ * short. Every pass after it lets each branch take the shortest form that
+ * reaches, measured against this pass's address for a label above it and the
+ * previous pass's for a label below. The loop stops on the first pass that
+ * reproduces the one before it.
  *
- * Where it stops is *a* shortest fixed point rather than *the* shortest layout,
- * and the difference is worth stating rather than glossing. Shrinking is judged
- * one instruction at a time against the current addresses, so a forward branch
- * whose distance sits just above the one-byte limit — 128 to 130 bytes for
+ * Nothing makes each pass shorter than the last. A target further down is read
+ * where the previous pass left it, and a value computed from addresses — `add
+ * rax, end - start` — can need a wider immediate on one pass than on the pass
+ * before. What guarantees the loop ends is its bound on passes, and running
+ * into that bound is reported rather than emitting a layout that never
+ * settled. Real programs settle in a handful of passes.
+ *
+ * `loop`, `loope` and `loopne` stand apart. They have a one-byte displacement
+ * and no long form, so they are two bytes on every pass, the first included,
+ * and never move anything. Whether one reaches is judged once, after the layout
+ * has settled, because a distance read from a layout that has not — every
+ * branch still long on the first pass, a target further down still where the
+ * pass before left it — can say "does not reach" about a `loop` that does.
+ *
+ * Where it stops is *a* fixed point rather than *the* shortest layout, and the
+ * difference is worth stating rather than glossing. A forward branch is first
+ * measured against a pass on which it was still long, so one whose distance
+ * sits just above the one-byte limit on that measure — 128 to 130 bytes for
  * `jmp`, 128 to 131 for a `jcc` — stays long even though it would fit once it
- * and its neighbours shrank together. The bytes are correct and the program
- * runs; it is three or four bytes larger than NASM's for that one case.
+ * shrank. The bytes are correct and the program runs; it is three or four
+ * bytes larger than NASM's for that case. A `loop` that only reaches across
+ * such a branch once it has shrunk is rejected for the same reason.
  *
  * The addresses themselves imitate what `ld` produces for a static, no-libc
  * program: `.text` at 0x401000, the read-only and writable sections on the
@@ -32,7 +47,12 @@
  */
 
 import { AsmEncodeError, AsmError, AsmSyntaxError } from "./errors";
-import { encodeInstruction, type ResolvedOperands } from "./encoder";
+import {
+  encodeInstruction,
+  isShortOnlyBranch,
+  type EncodeRequest,
+  type ResolvedOperands,
+} from "./encoder";
 import { parse, type Expression, type Statement } from "./parser";
 
 export const TEXT_BASE = 0x401000n;
@@ -94,8 +114,11 @@ interface Placed {
   section: SectionName;
   address: bigint;
   bytes: number[];
-  /** Branch-width floor, raised when a short jump turned out not to reach. */
-  minimumRelBytes: 1 | 4;
+  /**
+   * Why a branch with no long form did not reach on the latest pass, held
+   * until the layout settles rather than reported from one that may not have.
+   */
+  pendingReach?: AsmEncodeError;
 }
 
 function alignUp(value: bigint, boundary: bigint): bigint {
@@ -116,6 +139,28 @@ const UNKNOWN_SYMBOL = 0x7fff_ffffn;
 
 /** The longest an x86 instruction can be, used as a first-pass placeholder. */
 const MAX_INSTRUCTION_BYTES = 15;
+
+/**
+ * The bytes a branch with no long form occupies while its reach is pending.
+ *
+ * Encoded against a target at its own address, which any displacement
+ * reaches, so the length is the branch's real one and the layout around it is
+ * the layout it will have. When even that fails, what is wrong is the operand
+ * rather than the distance, and the original complaint is reported as it is.
+ */
+function shortBranchStandIn(request: EncodeRequest, failure: AsmEncodeError): number[] {
+  try {
+    return encodeInstruction({
+      ...request,
+      resolved: { ...request.resolved, targets: new Map([[0, request.address]]) },
+    }).bytes;
+  } catch (cause) {
+    if (cause instanceof AsmEncodeError) {
+      throw new AsmError(failure.message, failure.line, failure.column);
+    }
+    throw cause;
+  }
+}
 
 /** The largest magnitude an expression may reach; see `evaluate`. */
 const VALUE_LIMIT = 1n << 128n;
@@ -379,7 +424,7 @@ export function assemble(source: string): AssembledProgram {
         statement.column,
       );
     }
-    placed.push({ statement, section: currentSection, address: 0n, bytes: [], minimumRelBytes: 4 });
+    placed.push({ statement, section: currentSection, address: 0n, bytes: [] });
   }
 
   const bySection = new Map<SectionName, Placed[]>();
@@ -400,8 +445,8 @@ export function assemble(source: string): AssembledProgram {
   let bssEnd = 0n;
   let previousSignature = "";
 
-  // The relaxation loop described in the module comment. The bound is a
-  // backstop: a layout that only shrinks converges long before this.
+  // The relaxation loop described in the module comment. The bound is what
+  // makes it end; a real program settles long before it.
   let settled = false;
   for (let iteration = 0; iteration < 32; iteration += 1) {
     let cursor = TEXT_BASE;
@@ -589,41 +634,44 @@ export function assemble(source: string): AssembledProgram {
           }
         });
 
+        const request: EncodeRequest = {
+          statement,
+          address: cursor,
+          resolved,
+          minimumRelBytes: iteration === 0 ? 4 : 1,
+        };
         try {
-          const encoded = encodeInstruction({
-            statement,
-            address: cursor,
-            resolved,
-            minimumRelBytes: entry.minimumRelBytes,
-          });
-          entry.bytes = encoded.bytes;
+          entry.bytes = encodeInstruction(request).bytes;
+          entry.pendingReach = undefined;
         } catch (cause) {
-          if (cause instanceof AsmEncodeError) {
-            // A jump that will not reach is not an error yet — it is a request
-            // for the wider form on the next pass.
-            if (entry.minimumRelBytes === 1) {
-              entry.minimumRelBytes = 4;
-              entry.bytes = [0, 0, 0, 0, 0, 0];
-            } else if (unresolved.used || iteration === 0) {
-              // The instruction was built on a placeholder for a symbol defined
-              // further down the file. Whether it encodes cannot be judged yet,
-              // so it reserves the longest an instruction can be and is asked
-              // again next pass, when every symbol has a real value. Reporting
-              // it now would blame `mov al, SIZE` for a `SIZE equ 7` that is
-              // three lines below it and perfectly valid.
-              //
-              // The first pass gets the same benefit of the doubt even without a
-              // placeholder, because it lays every branch out in its widest form
-              // and `loop` has only a short one: a `loop` whose body settles to
-              // 90 bytes can measure 130 on the pass that has not shrunk yet.
-              // Pass 1 is the smallest layout the program can have and later
-              // passes only widen, so a reach failure from then on is real.
-              entry.bytes = Array.from({ length: MAX_INSTRUCTION_BYTES }, () => 0x90);
-            } else {
-              throw new AsmError(cause.message, cause.line, cause.column);
-            }
+          if (!(cause instanceof AsmEncodeError)) throw cause;
+          if (isShortOnlyBranch(statement.mnemonic)) {
+            // A `loop` that does not reach has no wider form to ask for, and
+            // the distance it was measured against may not be the one it will
+            // have: on the first pass every branch in between is in its long
+            // form and a target further down is a placeholder, and after that
+            // such a target is wherever the previous pass left it. It keeps
+            // its one true length, so it moves nothing, and the verdict waits
+            // for the layout to settle.
+            entry.bytes = shortBranchStandIn(request, cause);
+            entry.pendingReach = cause;
+          } else if (unresolved.used || iteration === 0) {
+            // The instruction was built on a placeholder for a symbol defined
+            // further down the file. Whether it encodes cannot be judged yet,
+            // so it reserves the longest an instruction can be and is asked
+            // again next pass, when every symbol has a real value. Reporting
+            // it now would blame `mov al, SIZE` for a `SIZE equ 7` that is
+            // three lines below it and perfectly valid.
+            //
+            // The first pass gets the same benefit of the doubt even without a
+            // placeholder, because it lays every branch out in its long form:
+            // `mov al, end - start` across ten short jumps and 200 other bytes
+            // measures 260 there and 220 once the jumps have shrunk.
+            entry.bytes = Array.from({ length: MAX_INSTRUCTION_BYTES }, () => 0x90);
           } else {
-            throw cause;
+            // From the second pass on, a branch with a long form is offered it
+            // as well, so this is not a failure that widening could fix.
+            throw new AsmError(cause.message, cause.line, cause.column);
           }
         }
 
@@ -649,14 +697,6 @@ export function assemble(source: string): AssembledProgram {
       break;
     }
     previousSignature = signature;
-
-    // After the first pass every address is real, so short branches become
-    // worth trying again.
-    if (iteration === 0) {
-      for (const entry of placed) {
-        if (entry.statement.kind === "instruction") entry.minimumRelBytes = 1;
-      }
-    }
   }
 
   // Running out of iterations would mean emitting whichever half-relaxed
@@ -681,6 +721,15 @@ export function assemble(source: string): AssembledProgram {
       statement.line,
       statement.column,
     );
+  }
+
+  // Every address is now final, so a `loop` that still does not reach never
+  // will. This runs after the check above because a target built on a value
+  // that never arrived is that value's fault, not the branch's.
+  const unreached = placed.find((entry) => entry.pendingReach);
+  if (unreached?.pendingReach) {
+    const { message, line, column } = unreached.pendingReach;
+    throw new AsmError(message, line, column);
   }
 
   const entrySymbol = symbols.get("_start") ?? symbols.get("main");

@@ -56,10 +56,10 @@ export interface EncodeRequest {
   resolved: ResolvedOperands;
   /**
    * Minimum branch-displacement width to consider, in bytes. The first layout
-   * pass runs with this at 4 so the widest form is assumed and later passes can
-   * only shrink; the assembler drops it to 1 after that pass, and raises it back
-   * to 4 for an instruction whose short form turned out not to reach. See
-   * `assembler.ts`'s header for why the layout loop terminates.
+   * pass runs with this at 4, so every branch that has a long form starts in
+   * it; the assembler drops it to 1 from the second pass on, where a branch
+   * takes the shortest form that reaches. A branch with no long form ignores it
+   * — see `isShortOnlyBranch`. `assembler.ts`'s header describes the loop.
    */
   minimumRelBytes: 1 | 4;
 }
@@ -326,6 +326,28 @@ function suggestMnemonic(typed: string): string | null {
   return best;
 }
 
+/** Whether a mnemonic has a branch form with a four-byte displacement. */
+function hasLongBranchForm(mnemonic: string): boolean {
+  return formsFor(mnemonic).some(
+    (form) => form.encoding === "D" && form.operands[0]?.k === "rel" && form.operands[0].size === 4,
+  );
+}
+
+/**
+ * Whether a mnemonic is a branch with a one-byte displacement and nothing else.
+ *
+ * That is `loop`, `loope` and `loopne`: the instruction set gives them no long
+ * form, so each is two bytes wherever it sits and a target out of reach is an
+ * error rather than a reason to widen. The assembler lays them out at that one
+ * length on every pass and judges their reach once the layout has settled.
+ */
+export function isShortOnlyBranch(mnemonic: string): boolean {
+  const forms = formsFor(mnemonic);
+  return (
+    forms.length > 0 && forms.every((form) => form.encoding === "D") && !hasLongBranchForm(mnemonic)
+  );
+}
+
 function registersOf(operands: Operand[]) {
   const list = [];
   for (const operand of operands) {
@@ -510,19 +532,13 @@ function encodeWithForm(
     case "D": {
       const relPattern = form.operands[0];
       if (relPattern.k !== "rel") throw error("Internal: D form without a relative operand");
-      // The width floor exists so the first layout pass assumes the widest form
-      // and later passes only shrink. That reasoning needs a wider form to
-      // exist. `loop`, `loope` and `loopne` have a one-byte displacement and
-      // nothing else — the instruction set offers no long form — so applying
-      // the floor to them discards their only encoding and turns every use into
-      // "a shorter jump was already ruled out", which is both fatal and untrue.
-      const hasWiderForm = formsFor(statement.mnemonic).some(
-        (candidate) =>
-          candidate.encoding === "D" &&
-          candidate.operands[0]?.k === "rel" &&
-          candidate.operands[0].size > relPattern.size,
-      );
-      if (hasWiderForm && relPattern.size < minimumRelBytes) {
+      // The width floor exists so the first layout pass starts every branch in
+      // its long form. That needs a long form to exist. `loop`, `loope` and
+      // `loopne` have a one-byte displacement and nothing else — the
+      // instruction set offers no long form — so applying the floor to them
+      // would discard their only encoding and turn every use into "a shorter
+      // jump was already ruled out", which is both fatal and untrue.
+      if (relPattern.size < minimumRelBytes && hasLongBranchForm(statement.mnemonic)) {
         throw error("A shorter jump was already ruled out");
       }
       const target = resolved.targets.get(0);

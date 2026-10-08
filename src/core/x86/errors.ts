@@ -13,12 +13,13 @@
  *
  *   * `AsmEncodeError` is the one with real recovery attached. When the
  *     relaxation loop in `assembler.ts` asks the encoder for bytes and gets
- *     this back, it usually is *not* an error — it is "this jump does not
- *     reach yet, widen it and ask again next pass". `encoder.ts` catches it a
- *     second time to try every candidate form and keep the most useful
- *     complaint. Both of those must swallow encoder verdicts and nothing else;
- *     if the encoder threw the same class as everyone else, an unrelated
- *     failure would be silently absorbed into a retry.
+ *     this back, it is often *not* an error yet — it is "this value is still
+ *     a placeholder, ask again next pass" or "this `loop` does not reach on a
+ *     layout that has not settled, judge it once it has". `encoder.ts`
+ *     catches it a second time to try every candidate form and keep the most
+ *     useful complaint. Both of those must swallow encoder verdicts and
+ *     nothing else; if the encoder threw the same class as everyone else, an
+ *     unrelated failure would be silently absorbed into a retry.
  *   * `AsmSyntaxError` marks "the text is not assembly" as opposed to "the
  *     program is". `assemble` catches it around `parse` alone, which is the
  *     only place it can legitimately arrive from.
@@ -59,7 +60,7 @@ export class AsmSyntaxError extends AsmError {
 
 /**
  * Raised by the encoder. Caught inside the encoder to pick between forms, and
- * by the relaxation loop, where it often means "widen and retry" rather than
+ * by the relaxation loop, where it often means "ask again later" rather than
  * "reject". Nothing outside those two places should treat it as fatal on its
  * own.
  */

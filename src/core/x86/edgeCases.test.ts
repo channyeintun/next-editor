@@ -340,6 +340,59 @@ _start:
     expect(register(result, "rcx")).toBe(1n);
   });
 
+  // The branch is on line 6 and its displacement is exactly `gap`.
+  const FORWARD_LOOP = (mnemonic: string, gap: number) => `section .text
+global _start
+_start:
+    mov ecx, 3
+    cmp ecx, 0
+    ${mnemonic} done
+${"    nop\n".repeat(gap)}done:
+    mov eax, 60
+    xor edi, edi
+    syscall
+`;
+
+  describe.each([
+    ["loop", 0xe2],
+    ["loope", 0xe1],
+    ["loopne", 0xe0],
+  ])("a forward %s", (mnemonic, opcode) => {
+    it.each([124, 125, 126, 127])("reaches across %i bytes", (gap) => {
+      // The first pass reads `done` as a placeholder that does not reach, and
+      // the branch used to reserve fifteen bytes for it there, then six on the
+      // pass after. Laid out from those, `done` kept measuring more than 127
+      // bytes away, and the third pass rejected a branch that reaches.
+      const result = assembleAndRun(FORWARD_LOOP(mnemonic, gap));
+      expect(result.status).toBe("success");
+      expect(result.exitCode).toBe(0);
+      expect(result.listing.find((row) => row.line === 6)?.bytes).toEqual([opcode, gap]);
+    });
+
+    it("is rejected, on its own line, when the target is 128 bytes away", () => {
+      const result = assembleAndRun(FORWARD_LOOP(mnemonic, 128));
+      expect(result.status).toBe("assemble-error");
+      expect(result.diagnostics).toMatch(/^main\.asm:6:\d+: error: .*does not reach/);
+    });
+  });
+
+  it("reaches back exactly 128 bytes with loop, and no further", () => {
+    const backward = (gap: number) => `top:\n${" nop\n".repeat(gap)} loop top`;
+    expect(bytes(backward(126)).endsWith("e2 80")).toBe(true);
+    expect(() => bytes(backward(127))).toThrow(/does not reach/);
+  });
+
+  it("takes a label difference that only fits a byte once the jumps have shrunk", () => {
+    // Every jump is six bytes on the first pass and two once settled, so
+    // `fwd - start` measures 260 there and 220 in the end. Judged on the first
+    // pass, `mov al` was rejected for a value it never has.
+    const jumps = Array.from({ length: 10 }, (_, index) => ` jz .s${index}\n.s${index}:`);
+    const program = assemble(
+      wrap(`start:\n${jumps.join("\n")}\n${" nop\n".repeat(200)}fwd:\n mov al, fwd - start`),
+    );
+    expect(program.listing.at(-1)?.bytes).toEqual([0xb0, 220]);
+  });
+
   it("takes a symbol defined further down the file as a byte-wide immediate", () => {
     // The placeholder a forward reference stands in for is deliberately large,
     // so the first pass reaches for the widest form. `mov al, SIZE` has no
