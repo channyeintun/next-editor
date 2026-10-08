@@ -1,14 +1,7 @@
-import type {
-  CaptionCue,
-  CaptionTrack,
-  CursorRecordingEvent,
-  EditorFrame,
-  Recording,
-} from "./types";
+import type { CaptionCue, CaptionTrack, CursorRecordingEvent, Recording } from "./types";
 import type { PreviewDomPatchBatch, PreviewInitialDocument } from "./preview";
-import { createKeyframe, applyFrameDeltaToNormalized } from "./utils/frameDelta";
-import { isKeyframe, type DeltaFrame } from "./utils/deltaTypes";
-import { normalizeEditorFrame } from "./utils/editorState";
+import { createKeyframe, reconstructFrameAtIndex } from "./utils/frameDelta";
+import type { DeltaFrame } from "./utils/deltaTypes";
 import { buildRecordingClusters } from "./utils/recordingClusters";
 import {
   mapRecordingTimeToMediaTime,
@@ -85,42 +78,23 @@ const cutIndexOf = (time: number, cuts: readonly MediaSpan[]) =>
 
 function editFrames(frames: readonly DeltaFrame[], cuts: readonly MediaSpan[]): DeltaFrame[] {
   const edited: DeltaFrame[] = [];
-  let current: EditorFrame | null = null;
-  // The frames of the cut being passed through, squashed into one keyframe once it ends.
-  let pendingCut = -1;
-  let pendingState: EditorFrame | null = null;
-
-  const flushCut = () => {
-    if (pendingCut < 0 || !pendingState) return;
-    edited.push(
-      createKeyframe({
-        ...pendingState,
-        timestamp: mapTimeThroughCuts(pendingState.timestamp, cuts),
-      }),
-    );
-    pendingCut = -1;
-    pendingState = null;
-  };
-
   frames.forEach((frame, index) => {
-    current = isKeyframe(frame)
-      ? normalizeEditorFrame(frame)
-      : current
-        ? applyFrameDeltaToNormalized(current, frame, index)
-        : null;
-
     const cut = cutIndexOf(frame.timestamp, cuts);
-    if (cut >= 0) {
-      if (cut !== pendingCut) flushCut();
-      pendingCut = cut;
-      pendingState = current;
+    if (cut < 0) {
+      edited.push({ ...frame, timestamp: mapTimeThroughCuts(frame.timestamp, cuts) });
       return;
     }
 
-    flushCut();
-    edited.push({ ...frame, timestamp: mapTimeThroughCuts(frame.timestamp, cuts) });
+    // The frames of a cut are squashed into one keyframe of the state at its last one.
+    const next = frames[index + 1];
+    if (next && cutIndexOf(next.timestamp, cuts) === cut) return;
+    const state = reconstructFrameAtIndex(frames, index);
+    if (state) {
+      edited.push(
+        createKeyframe({ ...state, timestamp: mapTimeThroughCuts(state.timestamp, cuts) }),
+      );
+    }
   });
-  flushCut();
   return edited;
 }
 

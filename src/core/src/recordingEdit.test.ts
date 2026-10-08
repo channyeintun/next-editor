@@ -7,6 +7,7 @@ import {
 } from "./recordingEdit";
 import { compressFrames } from "./utils/frameStreamEncoder";
 import { reconstructFrameAtIndex } from "./utils/frameDelta";
+import { isKeyframe } from "./utils/deltaTypes";
 import { getRrwebReplayLead } from "./utils/previewReplayLead";
 import type { EditorFrame, Recording } from "./types";
 
@@ -97,6 +98,64 @@ describe("applying an edit to a recording", () => {
     ]);
     expect(edited.duration).toBe(7_000 + CUT_WINDOW_MS);
     expect(edited.id).not.toBe("take");
+  });
+
+  it("squashes a cut that spans a keyframe into the state at its last frame", () => {
+    // A frame every 10ms, each one character longer, so the encoder places a keyframe
+    // well into the take; the cut starts before it and ends after it.
+    const typed = Array.from({ length: 300 }, (_, index) =>
+      frame(index * 10, "x".repeat(index + 1)),
+    );
+    const frames = compressFrames(typed);
+    const keyframeAt = frames.findIndex((entry, index) => index > 0 && isKeyframe(entry));
+    expect(keyframeAt).toBeGreaterThan(20);
+    const spanning = { start: (keyframeAt - 20) * 10, end: (keyframeAt + 30) * 10 };
+
+    const edited = applyRecordingEdit(recordingWith({ frames }), { cuts: [spanning], mutes: [] });
+
+    const inCut = (time: number) => time > spanning.start && time <= spanning.end;
+    const lastInCut = typed.findLast((entry) => inCut(entry.timestamp))!;
+    const expected = typed.filter((entry) => !inCut(entry.timestamp) || entry === lastInCut);
+    expect(
+      edited.frames.map((_, index) => reconstructFrameAtIndex(edited.frames, index)?.state.content),
+    ).toEqual(expected.map((entry) => entry.state.content));
+    expect(edited.frames.map((entry) => entry.timestamp)).toEqual(
+      expected.map((entry) => mapTimeThroughCuts(entry.timestamp, [spanning])),
+    );
+    expect(isKeyframe(edited.frames[expected.indexOf(lastInCut)])).toBe(true);
+  });
+
+  it("squashes the frames of two adjacent cuts into one keyframe each", () => {
+    // No frame falls between the two cuts.
+    const cuts = [
+      { start: 2_000, end: 3_500 },
+      { start: 3_600, end: 5_000 },
+    ];
+    const edited = applyRecordingEdit(
+      recordingWith({
+        frames: compressFrames([
+          frame(0, "a"),
+          frame(1_000, "ab"),
+          frame(2_500, "ab x"),
+          frame(3_000, "ab xy"),
+          frame(4_000, "ab xyz"),
+          frame(4_500, "ab xyzw"),
+          frame(6_000, "ab xyzw!"),
+        ]),
+      }),
+      { cuts, mutes: [] },
+    );
+    expect(
+      edited.frames.map((_, index) => reconstructFrameAtIndex(edited.frames, index)?.state.content),
+    ).toEqual(["a", "ab", "ab xy", "ab xyzw", "ab xyzw!"]);
+    expect(edited.frames.map((entry) => entry.timestamp)).toEqual([
+      0,
+      1_000,
+      mapTimeThroughCuts(3_000, cuts),
+      mapTimeThroughCuts(4_500, cuts),
+      mapTimeThroughCuts(6_000, cuts),
+    ]);
+    expect(edited.frames.map(isKeyframe)).toEqual([true, false, true, true, false]);
   });
 
   it("keeps where the pointer ended up inside a cut, and only that", () => {

@@ -34,7 +34,7 @@ interface KeyframeIndex {
   scannedLength: number;
 }
 
-const keyframeIndexCache = new WeakMap<DeltaFrame[], KeyframeIndex>();
+const keyframeIndexCache = new WeakMap<readonly DeltaFrame[], KeyframeIndex>();
 
 // ============================================================================
 // Content Delta Functions
@@ -652,7 +652,10 @@ export function applyFrameDeltaToNormalized(
  * Finds the index of the nearest keyframe at or before the given frame index.
  * Searches backwards from targetIndex to find the first keyframe.
  */
-export function findNearestKeyframeIndex(frames: DeltaFrame[], targetIndex: number): number {
+export function findNearestKeyframeIndex(
+  frames: readonly DeltaFrame[],
+  targetIndex: number,
+): number {
   if (!frames.length) return -1;
 
   const boundedTargetIndex = Math.min(targetIndex, frames.length - 1);
@@ -700,7 +703,7 @@ export function findNearestKeyframeIndex(frames: DeltaFrame[], targetIndex: numb
  * Works correctly with sparse frame arrays where empty frames are skipped.
  */
 export function reconstructFrameAtIndex(
-  frames: DeltaFrame[],
+  frames: readonly DeltaFrame[],
   targetIndex: number,
 ): EditorFrame | null {
   if (targetIndex < 0 || targetIndex >= frames.length) return null;
