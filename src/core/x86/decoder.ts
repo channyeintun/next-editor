@@ -116,6 +116,14 @@ function encodedRegister(encoding: number, size: OperandSize, sawRex: boolean): 
   return { kind: "register", index: physicalRegister(encoding, high8), size, high8 };
 }
 
+/** Encodings that carry a ModRM byte after the opcode. */
+const USES_MODRM: ReadonlySet<Encoding> = new Set<Encoding>(["MR", "RM", "MI", "M", "RMI"]);
+
+/** Encodings whose last opcode byte carries a register in its low three bits. */
+function foldsRegisterIntoOpcode(encoding: Encoding): boolean {
+  return encoding === "O" || encoding === "OI";
+}
+
 interface TableEntry {
   form: InstructionForm;
   /** True when the low three bits of the last opcode byte name a register. */
@@ -131,8 +139,7 @@ function add(key: number, entry: TableEntry): void {
 }
 
 for (const form of INSTRUCTION_FORMS) {
-  const registerInOpcode = form.encoding === "O" || form.encoding === "OI";
-  if (registerInOpcode) {
+  if (foldsRegisterIntoOpcode(form.encoding)) {
     // `push rcx` and `push rax` are different bytes for the same form, so the
     // table carries all eight.
     for (let offset = 0; offset < 8; offset += 1) {
@@ -144,8 +151,6 @@ for (const form of INSTRUCTION_FORMS) {
   }
   add(opcodeKey(form.opcode, form.ext ?? -1), { form, registerInOpcode: false });
 }
-
-const USES_MODRM: ReadonlySet<Encoding> = new Set<Encoding>(["MR", "RM", "MI", "M", "RMI"]);
 
 class ByteReader {
   #bytes: Uint8Array;
@@ -332,7 +337,7 @@ export function decodeInstruction(
     const pattern = form.operands[position];
     switch (pattern.k) {
       case "reg":
-        if (form.encoding === "O" || form.encoding === "OI") {
+        if (matched.registerInOpcode) {
           operands.push(encodedRegister(opcodeRegister + (rexB << 3), pattern.size, sawRex));
         } else {
           operands.push(encodedRegister(modrm!.reg, pattern.size, sawRex));
