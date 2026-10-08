@@ -2650,6 +2650,40 @@ describe("audioPlaybackActor", () => {
     expect(audio.currentTime).toBe(2);
   });
 
+  // A selected-file take resumes its narration with PLAY alone. Extrapolating from the
+  // PAUSE skipped the whole paused span, so the narration ran ahead of the take.
+  it("resumes where PAUSE left it when PLAY comes without a SEEK", () => {
+    const clock = pinPerformanceClock();
+    const actor = createPlayback(1);
+    const audio = MockAudio.instances[0]!;
+    actor.send({ type: "PLAY" });
+    clock.now += 1000;
+    audio.currentTime = 1;
+    actor.send({ type: "PAUSE" });
+
+    clock.now += 3000;
+    actor.send({ type: "PLAY" });
+
+    expect(audio.currentTime).toBe(1);
+  });
+
+  // A retake pauses and seeks to the safe point, then resumes later with PLAY.
+  it("resumes at the SEEK made while paused, not past it", () => {
+    const clock = pinPerformanceClock();
+    const actor = createPlayback(1);
+    const audio = MockAudio.instances[0]!;
+    actor.send({ type: "PLAY" });
+    clock.now += 1000;
+    audio.currentTime = 1;
+    actor.send({ type: "PAUSE" });
+    actor.send({ type: "SEEK", timeMs: 500 });
+
+    clock.now += 3000;
+    actor.send({ type: "PLAY" });
+
+    expect(audio.currentTime).toBe(0.5);
+  });
+
   it("updates volume and playback rate", () => {
     const actor = createPlayback(1);
     const audio = MockAudio.instances[0]!;

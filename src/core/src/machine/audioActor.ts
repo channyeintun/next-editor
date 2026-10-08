@@ -309,7 +309,8 @@ export const audioRecordingActor = fromTypedCallback<
  * playing). Between reports the target is extrapolated at the playback rate, so
  * the re-anchor on the element's `playing` event — which fires only after
  * `play()`'s real startup latency — can seek to where the timeline actually is
- * by then, instead of freezing in the startup lag forever.
+ * by then, instead of freezing in the startup lag forever. PLAY restarts the
+ * count where PAUSE froze it.
  */
 export const audioPlaybackActor = fromTypedCallback<
   AudioPlaybackEvent,
@@ -424,6 +425,10 @@ export const audioPlaybackActor = fromTypedCallback<
 
     switch (event.type) {
       case "PLAY":
+        // Restart the count from now. A resume can come without a SEEK (a selected-file
+        // take's RESUME_RECORDING sends only PLAY), and the time spent paused must not be
+        // extrapolated.
+        setKnownTimelineTime(currentTargetMs());
         requestedPlay = true;
         // Exact re-align at (re)start: a pause can leave the element a few
         // hundred ms off the timeline, and letting that ride under the SYNC
