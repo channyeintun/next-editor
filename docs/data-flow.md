@@ -195,6 +195,11 @@ mutes stretches of a finished recording through `applyRecordingEdit` (`src/core/
   trace. The preview's rrweb stamps are first re-based onto recorded time so the cut applies to
   them directly, by the same lead replay uses (`getRrwebReplayLead`,
   `src/core/src/utils/previewReplayLead.ts`).
+- Caption cues said inside a cut are dropped and those across one are shortened. A cue with word
+  timings (a studio render's) also loses the words cut from the narration: its text is rebuilt
+  from the words left by the producer's own join rule (`captionTextFromWords`,
+  `src/core/src/utils/captionCues.ts`), and it is dropped when every word went. A Whisper cue
+  has no word timings, so it keeps its whole text.
 - The narration edit (cuts less their window, and mutes, on the audio's own clock) is left as
   `pendingAudioEdit` for `loadRecording`, and the camera's `cameraCuts` gain the cut spans.
 - The edited recording gets a new id and is loaded in place; once loaded (narration cut) it is

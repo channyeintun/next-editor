@@ -16,6 +16,7 @@ import {
   type MediaSpan,
 } from "./utils/mediaSpans";
 import type { AudioEdit } from "./utils/audioEdit";
+import { captionTextFromWords } from "./utils/captionCues";
 import { getRrwebReplayLead } from "./utils/previewReplayLead";
 
 // ============================================================================
@@ -179,14 +180,29 @@ function editCaptionCues(cues: readonly CaptionCue[], cuts: readonly MediaSpan[]
     const end = mapTimeThroughCuts(cue.end, cuts);
     // A cue said entirely inside a cut went with it.
     if (end - start < CUT_WINDOW_MS * 2) continue;
-    const words = cue.words
-      ?.map((word) => ({
+    if (!cue.words) {
+      edited.push({ ...cue, start, end });
+      continue;
+    }
+
+    // A word was cut when it had length and lost it: one too short to measure stays.
+    const words = cue.words.flatMap((word) => {
+      const mapped = {
         ...word,
         start: mapTimeThroughCuts(word.start, cuts),
         end: mapTimeThroughCuts(word.end, cuts),
-      }))
-      .filter((word) => word.end - word.start >= CUT_WINDOW_MS * 2);
-    edited.push({ ...cue, start, end, ...(cue.words ? { words } : {}) });
+      };
+      const wasCut =
+        word.end - word.start >= CUT_WINDOW_MS * 2 && mapped.end - mapped.start < CUT_WINDOW_MS * 2;
+      return wasCut ? [] : [mapped];
+    });
+    if (words.length === cue.words.length) {
+      // Nothing said was cut, so the cue reads as it was written.
+      edited.push({ ...cue, start, end, words });
+    } else if (words.length > 0) {
+      // Its text loses the words cut from the narration.
+      edited.push({ ...cue, start, end, words, text: captionTextFromWords(words) });
+    }
   }
   return edited;
 }

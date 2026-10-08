@@ -135,6 +135,80 @@ describe("applying an edit to a recording", () => {
     ]);
   });
 
+  it("drops the words cut from the narration from a timed cue's text", () => {
+    const edited = applyRecordingEdit(
+      recordingWith({
+        captions: [
+          {
+            id: "en",
+            language: "en",
+            cues: [
+              {
+                start: 500,
+                end: 1_400,
+                text: "Untouched cue.",
+                words: [
+                  { start: 500, end: 900, text: "Untouched" },
+                  { start: 900, end: 1_400, text: "cue." },
+                ],
+              },
+              {
+                start: 1_500,
+                end: 6_000,
+                text: "before a lost words after",
+                words: [
+                  { start: 1_500, end: 1_900, text: "before" },
+                  // Too short to measure, but never cut.
+                  { start: 1_900, end: 1_901, text: "a" },
+                  { start: 2_500, end: 3_000, text: "lost" },
+                  { start: 3_200, end: 4_000, text: "words" },
+                  { start: 5_200, end: 6_000, text: "after" },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+      { cuts: [cut], mutes: [] },
+    );
+    const [untouched, across] = edited.captions![0].cues;
+    expect(untouched.text).toBe("Untouched cue.");
+    expect(untouched.words).toHaveLength(2);
+    expect(across.text).toBe("before a after");
+    expect(across.words).toEqual([
+      { start: 1_500, end: 1_900, text: "before" },
+      { start: 1_900, end: 1_901, text: "a" },
+      { start: 2_200 + CUT_WINDOW_MS, end: 3_000 + CUT_WINDOW_MS, text: "after" },
+    ]);
+    expect(across.end).toBe(3_000 + CUT_WINDOW_MS);
+  });
+
+  it("drops a timed cue whose every word was cut, even across two cuts", () => {
+    const edited = applyRecordingEdit(
+      recordingWith({
+        captions: [
+          {
+            id: "en",
+            language: "en",
+            cues: [
+              {
+                start: 2_500,
+                end: 7_800,
+                text: "both gone",
+                words: [
+                  { start: 2_600, end: 3_000, text: "both" },
+                  { start: 7_200, end: 7_700, text: "gone" },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+      { cuts: [cut, { start: 7_000, end: 8_000 }], mutes: [] },
+    );
+    expect(edited.captions?.[0].cues).toEqual([]);
+  });
+
   it("re-bases the preview's rrweb stamps onto recorded time so replay's offset is 0", () => {
     const edited = applyRecordingEdit(
       recordingWith({

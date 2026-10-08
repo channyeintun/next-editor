@@ -1,4 +1,5 @@
 import type { CaptionCue, CaptionTrack, CaptionWord } from "../../core/src/types";
+import { captionTextFromWords } from "../../core/src/utils/captionCues";
 import type { PronunciationLexicon } from "./lexicon";
 import { spokenFormOf } from "./lexicon";
 import type { ExtractedNarration, NarrationMarker } from "./markers";
@@ -204,7 +205,7 @@ export function buildCaptionTrack(
     cues.push({
       start: cueTokens[0].startMs,
       end: cueTokens[cueTokens.length - 1].endMs,
-      text: cueTokens.map((token) => token.text).join(" "),
+      text: captionTextFromWords(words),
       words,
     });
     cueTokens = [];
