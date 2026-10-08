@@ -214,20 +214,15 @@ export const setRecording = (
 
   const currentWorkspaceSnapshot = context.getWorkspaceSnapshot?.() ?? null;
 
-  if (initialWorkspaceEvent && context.applyWorkspaceSnapshot) {
-    if (
-      !currentWorkspaceSnapshot ||
-      !areWorkspaceSnapshotsEqual(currentWorkspaceSnapshot, initialWorkspaceEvent.snapshot)
-    ) {
-      context.applyWorkspaceSnapshot(initialWorkspaceEvent.snapshot);
-    }
-  } else if (
-    recording.workspaceSnapshot &&
+  // The workspace track's first snapshot, or the recording's one snapshot when it has no track.
+  const initialWorkspaceSnapshot = initialWorkspaceEvent?.snapshot ?? recording.workspaceSnapshot;
+  if (
+    initialWorkspaceSnapshot &&
     context.applyWorkspaceSnapshot &&
     (!currentWorkspaceSnapshot ||
-      !areWorkspaceSnapshotsEqual(currentWorkspaceSnapshot, recording.workspaceSnapshot))
+      !areWorkspaceSnapshotsEqual(currentWorkspaceSnapshot, initialWorkspaceSnapshot))
   ) {
-    context.applyWorkspaceSnapshot(recording.workspaceSnapshot);
+    context.applyWorkspaceSnapshot(initialWorkspaceSnapshot);
   }
 
   const initialRuntimeSnapshot = recording.runtimeEvents
