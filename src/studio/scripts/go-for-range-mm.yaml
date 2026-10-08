@@ -1,0 +1,226 @@
+# Go for range over a slice, in Burmese: highlight the slice and the loop,
+# type a len line after it, run, then point at each line of the output while
+# the narration reads it (console.point), and close the console for a recap.
+# It exercises every studio pointer gesture: drag-selects, the dock chevron
+# click (the dock starts shut), pointing at console lines, and the collapse.
+#
+# Narration is the Fable voice script (two drafts, an editor merge and a
+# native-speaker review), byte-identical apart from the [[mark:…]] tokens;
+# every mark sits at a sentence start for AthanLab's intonation. The fixture
+# is the real `go run` output (go1.26). Validate with:
+#   bun scripts/studio-director.ts src/studio/scripts/go-for-range-mm.yaml
+schemaVersion: 1
+
+lesson:
+  slug: go-for-range-mm
+  title: "Go: slice ကို for range နဲ့ လျှောက်ကြည့်တာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Lesson
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	fruits := []string{"apple", "banana", "mango"}
+
+        	for i, fruit := range fruits {
+        		fmt.Println(i, fruit)
+        	}
+        }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 2026
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  # One run near the end: keep the empty dock shut until there's output.
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    result:
+      status: success
+      exitCode: 0
+      output: "0 apple\n1 banana\n2 mango\ntotal: 3\n"
+
+scenes:
+  - id: slice
+    chapter: slice ဆိုတာ ဘာလဲ
+    narration: >-
+      မင်္ဂလာပါ။ ဒီနေ့ lesson မှာတော့ Go ရဲ့ slice တစ်ခုကို for range နဲ့ တစ်ခုချင်း လျှောက်ကြည့်ပြီး၊
+      ထွက်လာတဲ့ output ကို တစ်ကြောင်းချင်း ဖတ်ကြည့်ကြမှာပါ။ program က အရမ်း တိုတိုလေးပါ၊ ဒါပေမဲ့ Go
+      ရေးတဲ့အခါ အမြဲလိုလို သုံးရမယ့် ပုံစံ တစ်ခုပါ။ [[mark:sel-slice]] အရင်ဆုံး ဒီ fruits ဆိုတဲ့ slice
+      ကို ကြည့်ရအောင်။ သူ့ထဲမှာ apple၊ banana၊ mango ဆိုပြီး string သုံးခု ထည့်ထားပါတယ်။ slice ဆိုတာ
+      item တွေကို အစီအစဉ်အတိုင်း ထည့်ထားတဲ့ စာရင်း တစ်ခုလို တွေးကြည့်လို့ ရပါတယ်။ သူက
+      ကိုယ်ထည့်လိုက်တဲ့ အစီအစဉ်အတိုင်း မှတ်ထားပေးပြီး၊ item တစ်ခုစီမှာ သူ့နေရာကို ပြတဲ့ index ဆိုတဲ့
+      နံပါတ် တစ်ခု ရှိပါတယ်။ ဒီနေရာမှာ သတိထားရမှာက Go မှာ index ကို တစ်ကနေ မရေတွက်ဘဲ သုညကနေ စရေတွက်တယ်
+      ဆိုတာပါ။ ဒါကြောင့် apple က index သုည၊ banana က index တစ်၊ mango ကတော့ index နှစ် ဖြစ်ပါတယ်။
+    sources:
+      - title: "A Tour of Go — Slices"
+        url: "https://go.dev/tour/moretypes/7"
+      - title: "A Tour of Go — Slice literals"
+        url: "https://go.dev/tour/moretypes/9"
+    actions:
+      - id: open-main
+        type: workspace.openFile
+        at: { scene: start }
+        path: main.go
+      - id: sel-slice
+        type: editor.select
+        at: { mark: sel-slice }
+        target:
+          file: main.go
+          text: 'fruits := []string{"apple", "banana", "mango"}'
+          occurrence: 1
+
+  - id: range-loop
+    chapter: for range loop
+    narration: >-
+      [[mark:sel-range]] အခု ဒီ loop ကို ကြည့်ရအောင်။ Go မှာ slice တစ်ခုကို အစကနေ အဆုံးထိ
+      လျှောက်ကြည့်ချင်ရင် for နဲ့ range ကို တွဲသုံးပါတယ်။ range က fruits ထဲက item တွေကို တစ်ခုချင်းစီ
+      ထုတ်ပေးသွားပြီး၊ အလှည့် တစ်ခုစီမှာ တန်ဖိုး နှစ်ခု ပြန်ပေးပါတယ်။ ပထမ တစ်ခုက အဲဒီ item ရှိနေတဲ့
+      နေရာ၊ ဆိုလိုတာက index ပါ။ ဒုတိယ တစ်ခုကတော့ item ကိုယ်တိုင်ပါ။ ဒီ program မှာတော့ index ကို i
+      ထဲမှာ ထည့်ပြီး၊ item ကိုတော့ fruit ထဲမှာ ထည့်ထားပါတယ်။ ဆိုတော့ ပထမ အလှည့်မှာ i က သုည၊ fruit က
+      apple ဖြစ်ပါမယ်။ နောက် အလှည့်မှာ i က တစ်၊ fruit က banana ဖြစ်သွားပါမယ်။ အဲဒီလို item ကုန်တဲ့အထိ
+      ဆက်သွားမှာ ဖြစ်တဲ့အတွက် item သုံးခု ရှိရင် loop က သုံးကြိမ် အလုပ်လုပ်ပါမယ်။ [[mark:sel-print]]
+      loop ထဲမှာတော့ အဲဒီ တန်ဖိုး နှစ်ခုလုံးကို print ထုတ်လိုက်တာပါ။ print က ပေးလိုက်တဲ့ တန်ဖိုးတွေကို
+      space ခြားပြီး တစ်ကြောင်းတည်းမှာ ပြပေးပါတယ်။ ဒါကြောင့် အလှည့် တစ်ခုစီအတွက် console မှာ index နဲ့
+      item ကို တွဲထားတဲ့ စာကြောင်း တစ်ကြောင်းစီ ထွက်လာပါမယ်။
+    sources:
+      - title: "A Tour of Go — Range"
+        url: "https://go.dev/tour/moretypes/16"
+      - title: "Package fmt — Println"
+        url: "https://pkg.go.dev/fmt#Println"
+    actions:
+      - id: sel-range
+        type: editor.select
+        at: { mark: sel-range }
+        target:
+          file: main.go
+          text: "for i, fruit := range fruits"
+          occurrence: 1
+      - id: sel-print
+        type: editor.select
+        at: { mark: sel-print }
+        target:
+          file: main.go
+          text: "fmt.Println(i, fruit)"
+          occurrence: 1
+
+  - id: total
+    chapter: len နဲ့ အရေအတွက် ယူတာ
+    narration: >-
+      [[mark:type-total]] loop ရဲ့ နောက်မှာ စာကြောင်း တစ်ကြောင်း ထပ်ထည့်ကြည့်ရအောင်။ ဒီ တစ်ကြောင်းက
+      slice ထဲမှာ item ဘယ်နှစ်ခု ရှိလဲ ဆိုတာကို print ထုတ်ပေးမှာပါ။ Go မှာ slice တစ်ခုရဲ့ item
+      အရေအတွက်ကို သိချင်ရင် len ကို သုံးပါတယ်။ len ထဲ fruits ကို ထည့်ပေးလိုက်ရင် သူက အထဲမှာ ရှိတဲ့
+      item အရေအတွက်ကို ပြန်ပေးပါတယ်။ ဒီ slice မှာ item သုံးခု ရှိတဲ့အတွက် သုံး ပြန်ရပါမယ်။ ဥပမာ
+      နောက်ပိုင်း item တစ်ခု ထပ်ထည့်လိုက်ရင်တော့ len က လေး ပြန်ပေးပါလိမ့်မယ်။ သတိထားရမှာက ဒီ
+      စာကြောင်းက loop ရဲ့ အပြင်မှာ ရှိတာပါ။ ဒါကြောင့် အလှည့်တိုင်း မဟုတ်ဘဲ၊ loop တစ်ခုလုံး ပြီးမှ
+      တစ်ကြိမ်ပဲ အလုပ်လုပ်ပါမယ်။
+    sources:
+      - title: "A Tour of Go — Slice length and capacity"
+        url: "https://go.dev/tour/moretypes/11"
+      - title: "The Go Programming Language Specification — Length and capacity"
+        url: "https://go.dev/ref/spec#Length_and_capacity"
+    actions:
+      - id: type-total
+        type: editor.type
+        at: { mark: type-total }
+        target:
+          file: main.go
+          after: "\t\tfmt.Println(i, fruit)\n\t}\n"
+          occurrence: 1
+        text: "\tfmt.Println(\"total:\", len(fruits))\n"
+
+  - id: run
+    narration: >-
+      [[mark:run]] ကဲ၊ program ကို run လိုက်ပြီး output ဘာထွက်လာလဲ ကြည့်ရအောင်။
+    sources:
+      - title: "A Tour of Go — Range"
+        url: "https://go.dev/tour/moretypes/16"
+    actions:
+      - id: run
+        type: runtime.run
+        at: { mark: run, offsetMs: 200 }
+        timeoutMs: 15000
+      - id: expect-output
+        type: expect.output
+        at: { afterAction: run }
+        contains: "total: 3"
+        timeoutMs: 8000
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: run }
+        path: main.go
+        contains: 'fmt.Println("total:", len(fruits))'
+
+  - id: output
+    chapter: output ကို တစ်ကြောင်းချင်း ဖတ်တာ
+    narration: >-
+      [[mark:point-0]] ပထမ စာကြောင်းမှာ သုည နဲ့ apple ကို တွေ့ရပါတယ်။ apple က slice ရဲ့ ပထမဆုံး item
+      ဖြစ်ပေမယ့်၊ index က တစ် မဟုတ်ဘဲ သုည ဖြစ်နေတာကို သတိထားကြည့်ပါ။ Go မှာ ရေတွက်တာ သုညကနေ စပါတယ်။
+      [[mark:point-1]] ဒုတိယ စာကြောင်းမှာတော့ တစ် နဲ့ banana ပါ။ ဒါက loop ရဲ့ ဒုတိယ အလှည့်ပါ၊ i က တစ်
+      ဖြစ်သွားပြီး fruit က banana ဖြစ်သွားတာပါ။ [[mark:point-2]] တတိယ စာကြောင်းမှာ နှစ် နဲ့ mango
+      ထွက်လာပါတယ်။ item က သုံးခု ရှိပေမယ့် နောက်ဆုံး index က နှစ်ပဲ ဖြစ်နေတာကို သတိထားပါ။ သုညကနေ
+      စရေတွက်တဲ့အတွက် နောက်ဆုံး index က အရေအတွက်ထက် အမြဲ တစ် လျော့ပါတယ်။ [[mark:point-total]]
+      နောက်ဆုံး စာကြောင်းကတော့ total သုံး ဆိုပြီး ထွက်လာတာပါ။ slice ထဲက item တွေ ကုန်သွားတဲ့အခါ loop က
+      ရပ်သွားပြီး၊ နောက် စာကြောင်းကို ဆက်လုပ်လိုက်တာပါ။ ဒါကြောင့် ဒီ စာကြောင်းက တစ်ကြိမ်ပဲ ထွက်လာပြီး၊
+      သုံး ဆိုတာက len က ပြန်ပေးတဲ့ item အရေအတွက်ပါ။
+    sources:
+      - title: "The Go Programming Language Specification — For statements with range clause"
+        url: "https://go.dev/ref/spec#For_range"
+    actions:
+      - id: point-0
+        type: console.point
+        at: { mark: point-0 }
+        target: { text: "0 apple" }
+      - id: point-1
+        type: console.point
+        at: { mark: point-1 }
+        target: { text: "1 banana" }
+      - id: point-2
+        type: console.point
+        at: { mark: point-2 }
+        target: { text: "2 mango" }
+      - id: point-total
+        type: console.point
+        at: { mark: point-total }
+        target: { text: "total: 3" }
+
+  - id: wrap
+    narration: >-
+      [[mark:shut]] ကဲ၊ console ကို ပိတ်ပြီး code ကို ပြန်ကြည့်ရအောင်။ [[mark:sel-recap]]
+      ပြန်ချုပ်ရရင် range က slice ထဲက item တွေကို တစ်ခုချင်း လျှောက်ပေးပြီး၊ အလှည့် တစ်ခုစီမှာ index
+      နဲ့ item နှစ်ခုလုံး ပြန်ပေးပါတယ်။ ပြီးတော့ index က သုညကနေ စတယ် ဆိုတာကိုလည်း မမေ့ပါနဲ့။
+      ကိုယ်တိုင် slice ထဲကို အသီး တစ်မျိုးလောက် ထပ်ထည့်ပြီး run ကြည့်ရင် ပိုရှင်းသွားမှာပါ။ ဒီနေ့
+      lesson အတွက် ဒီလောက်ပါပဲ၊ နောက် lesson မှာ ပြန်တွေ့ကြပါမယ်။
+    sources:
+      - title: "A Tour of Go — Range"
+        url: "https://go.dev/tour/moretypes/16"
+    actions:
+      - id: shut
+        type: runtime.collapseDock
+        at: { mark: shut }
+      - id: sel-recap
+        type: editor.select
+        at: { mark: sel-recap }
+        target:
+          file: main.go
+          text: "range fruits"
+          occurrence: 1
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
