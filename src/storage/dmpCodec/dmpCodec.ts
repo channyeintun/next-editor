@@ -38,8 +38,9 @@ export interface DmpCodec {
   /**
    * Reconstruct `b` from `a` and a delta produced by {@link diffDelta}. Throws
    * {@link DmpBaseMismatchError} when `a` is not the base the delta was diffed
-   * against, a plain Error on a structurally corrupt delta, and a TypeError
-   * when either input is not an ArrayBuffer view (e.g. a forged msgpack map).
+   * against (it fails the delta's CHECK hash), a plain Error on a structurally
+   * corrupt, truncated or pre-CHECK delta, and a TypeError when either input
+   * is not an ArrayBuffer view (e.g. a forged msgpack map).
    */
   applyDelta(a: Uint8Array, delta: Uint8Array): Uint8Array;
 }

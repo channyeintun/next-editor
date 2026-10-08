@@ -89,10 +89,10 @@ size), see the Phase 4 benchmark table in
 
 All data crosses through linear `memory` (wasm32 offsets). A `u64` result packs
 `(ptr << 32) | len`; `0` means empty. Two failure sentinels: all-ones means a
-structurally corrupt/truncated delta, and all-ones-minus-one (`ERR_BASE`) means
-the delta is well-formed but the base failed its CHECK hash — a replay desync,
-surfaced by the host as `DmpBaseMismatchError`. The host reads `len` bytes at
-`ptr`, then calls `freeBuf(ptr)`.
+structurally corrupt/truncated delta (a pre-CHECK one included), and
+all-ones-minus-one (`ERR_BASE`) means only that the base failed the delta's
+CHECK hash — a replay desync, surfaced by the host as `DmpBaseMismatchError`.
+The host reads `len` bytes at `ptr`, then calls `freeBuf(ptr)`.
 
 | export                                | signature    | notes                                           |
 | ------------------------------------- | ------------ | ----------------------------------------------- |

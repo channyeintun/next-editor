@@ -18,9 +18,9 @@
 // ABI: all data crosses through linear `memory`. The host writes inputs into
 // buffers from `alloc`, calls a codec function, reads the packed `u64` result
 // `(ptr << 32) | len`, then releases buffers with `freeBuf`. A result of `0`
-// means empty; `ERR` (all ones) means a corrupt/truncated delta; `ERR_BASE`
-// (all ones minus one) means the delta is well-formed but the base does not
-// match its CHECK hash (a replay desync — the actionable error).
+// means empty; `ERR` (all ones) means a corrupt/truncated delta (a pre-CHECK
+// one included); `ERR_BASE` (all ones minus one) means only that the base does
+// not match the delta's CHECK hash (a replay desync — the actionable error).
 //
 // SIZE BOUND: offsets and op lengths are u32 and the serialized op tag is
 // `(len << 2) | type`, so each buffer and each single op must stay under ~2^30
@@ -199,9 +199,11 @@ unsafe impl GlobalAlloc for Heap {
 // Constants and result packing.
 // ---------------------------------------------------------------------------
 // Two distinct failure sentinels so the host can attribute the error:
-//   ERR      — structurally corrupt/truncated delta, or oversized input.
-//   ERR_BASE — the delta is well-formed but was applied to the wrong base
-//              (missing/failed CHECK op, or source-length mismatch).
+//   ERR      — a corrupt, truncated or unsupported delta (including one with a
+//              missing or garbled CHECK head, such as a pre-CHECK legacy
+//              delta), or oversized input.
+//   ERR_BASE — only base bytes that fail the delta's CHECK hash: the delta was
+//              applied to the wrong base (a replay desync).
 // Both are impossible ptr/len packs: a real pack's ptr is a heap address well
 // below 2^32 - 1.
 const ERR: u64 = 0xffff_ffff_ffff_ffff;
@@ -769,10 +771,10 @@ pub extern "C" fn applyDelta(a_ptr: u32, a_len: u32, d_ptr: u32, d_len: u32) -> 
     // Pass 1: validate and size the output. The first op MUST be the CHECK op —
     // verify the base hash before trusting any EQUAL copy out of the source.
     let Some((stored, ops_start)) = (unsafe { read_check_head(d_ptr, d_end) }) else {
-        // An unreadable first op is corrupt; a readable one that is not a whole
-        // CHECK head (pre-check-op legacy, or garbled) counts as a base failure.
-        let readable = unsafe { read_op(d_ptr, d_end) }.is_some();
-        return if readable { ERR_BASE } else { ERR };
+        // A missing or garbled CHECK head, including a pre-check-op (legacy)
+        // delta, leaves no hash to verify the base against: the delta itself is
+        // unusable, whatever the base.
+        return ERR;
     };
     let a = unsafe { core::slice::from_raw_parts(a_base as *const u8, a_len) };
     if stored != fnv1a32(a) {
@@ -808,10 +810,11 @@ pub extern "C" fn applyDelta(a_ptr: u32, a_len: u32, d_ptr: u32, d_len: u32) -> 
             return ERR;
         }
     }
-    // A well-formed delta consumes exactly the whole source. Combined with the
-    // hash check above, a wrong base of any length now fails loudly.
+    // A well-formed delta consumes exactly the whole source. The base already
+    // passed its hash, so ops that do not consume it exactly mean a corrupt op
+    // stream, not a wrong base.
     if src != a_len {
-        return ERR_BASE;
+        return ERR;
     }
     if out_len == 0 {
         return 0;

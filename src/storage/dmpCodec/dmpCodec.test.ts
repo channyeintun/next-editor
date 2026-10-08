@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
-import { DmpBaseMismatchError, instantiateDmpCodec } from "./dmpCodec";
+import { type DmpCodec, DmpBaseMismatchError, instantiateDmpCodec } from "./dmpCodec";
 
 // The dmp codec is a reproducible build artifact (`bun run build:wasm`) and is
 // gitignored, so skip rather than fail when it hasn't been built locally/in CI.
@@ -100,13 +100,52 @@ describe.skipIf(!hasArtifact)("dmp codec (diff-match-patch in Rust)", () => {
     expect(() => codec.applyDelta(wrongBase, delta)).toThrow(/base mismatch/);
   });
 
-  it("rejects a delta missing its CHECK op (pre-check-op format)", async () => {
+  // The error applyDelta throws, or undefined when it returns.
+  const applyError = (codec: DmpCodec, base: Uint8Array, delta: Uint8Array): unknown => {
+    try {
+      codec.applyDelta(base, delta);
+      return undefined;
+    } catch (error) {
+      return error;
+    }
+  };
+
+  // A structurally unusable delta is a plain corrupt-delta Error, never a
+  // DmpBaseMismatchError: that one means only that the base failed the hash in
+  // an intact CHECK head.
+  it("rejects a delta missing its CHECK op as corrupt", async () => {
     const codec = await load();
-    // A bare EQUAL op copying the whole 3-byte source: tag = (3 << 2) | 0.
-    const legacyDelta = new Uint8Array([3 << 2]);
-    expect(() => codec.applyDelta(enc.encode("abc"), legacyDelta)).toThrow(DmpBaseMismatchError);
-    // An empty delta is also no longer valid — every delta carries a CHECK head.
-    expect(() => codec.applyDelta(new Uint8Array(0), new Uint8Array(0))).toThrow(/applyDelta/);
+    const base = enc.encode("abc");
+    const corrupt: [Uint8Array, Uint8Array][] = [
+      // A bare EQUAL op copying the whole 3-byte source: tag = (3 << 2) | 0.
+      [base, new Uint8Array([3 << 2])],
+      // A valid delta cut inside its CHECK head (tag + 2 of the 4 hash bytes).
+      [base, codec.diffDelta(base, enc.encode("abd")).slice(0, 3)],
+      // An empty delta is also no longer valid — every delta carries a CHECK head.
+      [new Uint8Array(0), new Uint8Array(0)],
+    ];
+    for (const [a, delta] of corrupt) {
+      const error = applyError(codec, a, delta);
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(DmpBaseMismatchError);
+      expect((error as Error).message).toMatch(/applyDelta failed/);
+    }
+  });
+
+  it("rejects ops that do not consume the whole base as corrupt", async () => {
+    const codec = await load();
+    const base = enc.encode("abc");
+    // CHECK head + EQUAL 3. Shortening the EQUAL to 2 keeps the hash matching,
+    // so the base is right and only the op stream is broken.
+    const delta = codec.diffDelta(base, base);
+    expect(delta.at(-1)).toBe(3 << 2);
+    const short = delta.slice();
+    short[short.length - 1] = 2 << 2;
+
+    const error = applyError(codec, base, short);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DmpBaseMismatchError);
+    expect((error as Error).message).toMatch(/applyDelta failed/);
   });
 
   it("property: random edits round-trip; equal-length wrong bases always fail", async () => {
