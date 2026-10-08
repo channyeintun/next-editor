@@ -46,6 +46,8 @@ export function createFrameStreamEncoder(): FrameStreamEncoderState {
  * produced no changes and is skipped):
  *
  * - first frame → keyframe;
+ * - the frame clears the preview or the view state → keyframe, since a delta's absent
+ *   field means "unchanged" and cannot say "cleared";
  * - a keyframe is due (the last `KEYFRAME_INTERVAL - 1` emitted frames were deltas) and the
  *   frame changed → keyframe;
  * - otherwise, a changed frame → delta;
@@ -59,8 +61,14 @@ export function pushFrame(
   const previous = state.lastStoredFrame;
   let { framesSinceKeyframe } = state;
   let emitted: DeltaFrame | null = null;
+  // Closing the preview (or losing the editor model) empties a field, and a delta cannot
+  // carry that: the player reads an absent field as unchanged and keeps the old state.
+  const clearsState =
+    previous !== null &&
+    ((previous.state.previewState !== undefined && frame.state.previewState === undefined) ||
+      (previous.state.viewState != null && frame.state.viewState == null));
 
-  if (!previous) {
+  if (!previous || clearsState) {
     emitted = createKeyframe(frame);
     framesSinceKeyframe = 0;
   } else if (framesSinceKeyframe + 1 >= DELTA_CONFIG.KEYFRAME_INTERVAL) {

@@ -99,6 +99,7 @@ flowchart LR
 
 - Every 120th stored frame is a keyframe. The cadence counts stored frames, not captures, so captures that change nothing never push a keyframe back.
 - Intermediate frames store only changed content and state.
+- A delta field that is absent means "unchanged", so a delta cannot clear one. A frame that closes the preview or loses the editor's view state is stored as a keyframe instead, and the cadence restarts from it.
 - Playback reconstructs a target frame by starting from the nearest prior keyframe and replaying forward (`reconstructFrameAtIndex` in `src/core/src/utils/frameDelta.ts`).
 
 This keeps exports compact while allowing deterministic restore of editor state at any point on the timeline.

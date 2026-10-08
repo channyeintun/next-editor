@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type * as monaco from "monaco-editor";
 import type { EditorFrame } from "../types";
 import { DELTA_CONFIG, isDelta, isKeyframe, type DeltaFrame } from "./deltaTypes";
 import { applyFrameDelta, createContentEditDelta, reconstructFrameAtIndex } from "./frameDelta";
@@ -142,5 +143,55 @@ describe("pushFrame content deltas", () => {
     if (!emitted || !isDelta(emitted)) throw new Error("Expected a delta frame");
     expect(emitted.contentEditDelta).toEqual(created.delta);
     expect(emitted.contentDelta).toBeUndefined();
+  });
+});
+
+describe("pushFrame clears", () => {
+  const withPreview = (frame: EditorFrame): EditorFrame => ({
+    ...frame,
+    state: { ...frame.state, previewState: { size: "medium", isOpen: true, content: "<p>hi</p>" } },
+  });
+
+  // A delta's absent previewState means "unchanged", so closing the preview mid-take used
+  // to replay as still open until the next keyframe.
+  it("keeps a closed preview closed in every frame that follows", () => {
+    const open = withPreview(frameAt(0, "a"));
+    const closed = frameAt(10, "a");
+    closed.state.mouseCursor = { x: 10, y: 10, visible: true };
+    const edited = { ...closed, timestamp: 20, state: { ...closed.state, content: "ab" } };
+
+    const frames = compressFrames([open, closed, edited]);
+
+    expect(frames).toHaveLength(3);
+    expect(isKeyframe(frames[1])).toBe(true);
+    for (let index = 1; index < frames.length; index++) {
+      expect(reconstructFrameAtIndex(frames, index)?.state.previewState).toBeUndefined();
+    }
+  });
+
+  it("stores a capture that only closes the preview as one keyframe", () => {
+    const open = withPreview(frameAt(0, "a"));
+    const closed = frameAt(10, "a");
+
+    const { stored, storedInputIndices } = encode([open, closed, repeatAt(closed, 20)]);
+
+    expect(storedInputIndices).toEqual([0, 1]);
+    expect(keyframeIndices(stored)).toEqual([0, 1]);
+  });
+
+  it("keeps a cleared view state cleared", () => {
+    const viewState = {
+      cursorState: [],
+      viewState: { scrollLeft: 0, firstPosition: { lineNumber: 1, column: 1 } },
+      contributionsState: {},
+    } as unknown as monaco.editor.ICodeEditorViewState;
+    const withModel = frameAt(0, "a");
+    withModel.state.viewState = viewState;
+    const withoutModel = frameAt(10, "ab");
+
+    const frames = compressFrames([withModel, withoutModel]);
+
+    expect(isKeyframe(frames[1])).toBe(true);
+    expect(reconstructFrameAtIndex(frames, 1)?.state.viewState).toBeNull();
   });
 });

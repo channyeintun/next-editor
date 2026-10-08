@@ -83,6 +83,11 @@ export interface PreviewStateContentPatched extends Omit<PreviewState, "content"
 /**
  * A frame delta - stores only changes from previous frame
  * Used for frames between keyframes to reduce storage
+ *
+ * An absent optional field means "unchanged": the player keeps the base frame's
+ * value, and msgpack drops an undefined one on the wire anyway. A delta therefore
+ * cannot clear a field, so a frame that clears the preview or the view state is
+ * stored as a keyframe instead (see `pushFrame`).
  */
 export interface FrameDelta {
   timestamp: number;

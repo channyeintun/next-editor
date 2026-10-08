@@ -12,6 +12,7 @@ import type {
 } from "./audioActor";
 import { fromTypedCallback } from "./fromTypedCallback";
 import type { EditorMachineInput } from "./types";
+import type { PreviewState } from "../slides";
 import { getRecordingTimestamp } from "./recordingSession";
 import { selectNextEditorMetadata } from "../useNextEditor";
 import { reconstructFrameAtIndex } from "../utils/frameDelta";
@@ -234,6 +235,31 @@ describe("retaking", () => {
     const { runtimeEvents } = sessionOf(actor);
     expect(runtimeEvents).toHaveLength(2);
     expect(runtimeEvents[1]).toMatchObject({ timestamp: 0, snapshot: live });
+    actor.stop();
+  });
+
+  // The rebuilt safe-point frame used to keep the preview open: closing it went out as a
+  // delta with no previewState, which reads as unchanged.
+  it("leaves a preview closed before the safe point closed", () => {
+    const advance = pinClocks();
+    let preview: PreviewState | null = { size: "medium", isOpen: true, content: "<p>hi</p>" };
+    const applyPreviewState = vi.fn<(previewState: PreviewState) => void>();
+    const editor = new RecordingEditor();
+    const actor = startTake(editor, { getPreviewState: () => preview, applyPreviewState });
+
+    advance(1_000);
+    preview = null;
+    actor.send({ type: "CAPTURE_FRAME" });
+    actor.send({ type: "PAUSE_RECORDING" });
+    actor.send({ type: "RESUME_RECORDING" });
+    advance(1_000);
+    editor.setContent("const a = 2;");
+    actor.send({ type: "CAPTURE_FRAME" });
+    actor.send({ type: "RETAKE_RECORDING" });
+
+    expect(getRecordingTimestamp(sessionOf(actor))).toBe(1_000);
+    expect(actor.getSnapshot().context.currentFrame?.state.previewState).toBeUndefined();
+    expect(applyPreviewState).not.toHaveBeenCalled();
     actor.stop();
   });
 
