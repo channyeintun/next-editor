@@ -595,7 +595,7 @@ export const storeCameraStarted = ({ context, event }: EditorActionArgs): Editor
     camera: {
       ...context.camera,
       mimeType: event.mimeType,
-      mediaRecorder: event.mediaRecorder ?? null,
+      mediaRecorder: event.mediaRecorder,
       startOffsetMs,
     },
   };

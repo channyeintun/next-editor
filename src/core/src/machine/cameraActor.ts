@@ -31,7 +31,7 @@ export type CameraRecordingEmit =
       mimeType: string;
       startedAtPerf: number;
       /** The running recorder, so the host can journal its chunks as they arrive. */
-      mediaRecorder?: MediaRecorder;
+      mediaRecorder: MediaRecorder;
     }
   | { type: "CAMERA_STOPPED"; blob: Blob }
   | { type: "CAMERA_ERROR"; error: string };
@@ -116,13 +116,13 @@ export const cameraRecordingActor = fromTypedCallback<
       };
 
       mediaRecorder.onstart = () => {
-        if (!disposed && !stopRequested) {
+        if (!disposed && !stopRequested && mediaRecorder) {
           startedAtPerfMs = performance.now();
           sendBack({
             type: "CAMERA_STARTED",
             mimeType,
             startedAtPerf: startedAtPerfMs,
-            mediaRecorder: mediaRecorder ?? undefined,
+            mediaRecorder,
           });
           syncRecorderPause(mediaRecorder, paused);
         }

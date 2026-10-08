@@ -894,6 +894,7 @@ describe("editorMachine actor lifecycle", () => {
                 type: "CAMERA_STARTED",
                 mimeType: "video/webm",
                 startedAtPerf: performance.now(),
+                mediaRecorder: {} as MediaRecorder,
               });
             }
           });
@@ -3179,6 +3180,7 @@ describe("editorMachine stoppingRecording join", () => {
             type: "CAMERA_STARTED",
             mimeType: "video/webm",
             startedAtPerf: performance.now(),
+            mediaRecorder: {} as MediaRecorder,
           });
         });
         return () => {
