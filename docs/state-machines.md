@@ -294,7 +294,7 @@ The microphone, camera and screen recorders all take `RecorderControlEvent` (`ST
 
 - Plays the narration through an `HTMLAudioElement`, from the recording's published `audioUrl` or else its audio blob, following the timeline through `SEEK` and a periodic `SYNC` (at most every `PLAYBACK_AUDIO_SYNC_INTERVAL_MS` while playing).
 - Emits role-specific `AUDIO_PLAYBACK_READY`, `AUDIO_PLAYBACK_FINISHED`, and `AUDIO_PLAYBACK_ERROR` events so media completion cannot be mistaken for timeline completion.
-- Is spawned once per loaded recording through `syncPlaybackAudio` (`playbackAudioSpawned` context flag): on entering playback (`spawnPlaybackAudio`) when the recording already has audio, or lazily when streamed audio first arrives (`syncStreamedRecordingGrowth`, `startPlaybackActors`).
+- Is spawned once per loaded recording through `syncPlaybackAudio` in `playbackActors.ts` (`playbackAudioSpawned` context flag): on entering playback (`spawnPlaybackAudio`) when the recording already has audio, or lazily when streamed audio first arrives (`syncStreamedRecordingGrowth`, `startPlaybackActors`).
 
 ### Screen recording actor (`screenRecordingActor`)
 
@@ -380,7 +380,7 @@ Which recorders are running is answered once, by `getRunningRecorders(context)` 
 
 ## Actions Summary
 
-Action bodies are split by concern: capture-side bodies live in `captureActions.ts` and replay-side ones in `replayActions.ts`, typed with `EditorActionArgs` / `EditorContextUpdate`, and `editorMachine.ts`'s `setup()` wraps them as `assign(...)` so the machine can infer exact context/event/actor types. Actions that spawn, message or stop child actors are named `enqueueActions` / `stopChild` actions in `setup()` itself. The state config lists action names only; the exceptions are `loading`'s `onDone`/`onError` assigns (typed by the invoke) and `RESTORE_LEARNER_WORKSPACE`'s two raises.
+Action bodies are split by concern: capture-side bodies live in `captureActions.ts` and replay-side ones in `replayActions.ts`, with the editor frame replay (folding frames and applying them to Monaco) in `frameReplay.ts`, all typed with `EditorActionArgs` / `EditorContextUpdate`, and `editorMachine.ts`'s `setup()` wraps them as `assign(...)` so the machine can infer exact context/event/actor types. Actions that spawn, message or stop child actors are named `enqueueActions` / `stopChild` actions in `setup()` itself. The state config lists action names only; the exceptions are `loading`'s `onDone`/`onError` assigns (typed by the invoke) and `RESTORE_LEARNER_WORKSPACE`'s two raises.
 
 ### Recording (capture-side) actions
 

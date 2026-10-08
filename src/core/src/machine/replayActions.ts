@@ -1,33 +1,19 @@
-import type * as monaco from "monaco-editor";
 import type {
   EditorActionArgs,
   EditorContextUpdate,
   EditorMachineContext,
-  EditorMachineEvent,
   LearnerWorkspaceSave,
 } from "./types";
-import type { EditorFrame, Recording } from "../types";
-import type { PreviewState } from "../slides";
-import type { DeltaFrame, FrameDelta } from "../utils/deltaTypes";
-import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { Recording } from "../types";
+import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import {
   areWorkspaceProjectsEqual,
   areWorkspaceSnapshotsEqual,
   isWorkspaceTextFile,
 } from "../../../types/workspace";
-import {
-  reconstructFrameAtIndex,
-  applyFrameDeltaToNormalized,
-  findFrameIndexAtTime,
-  findNearestKeyframeIndex,
-  isKeyframe,
-} from "../utils/frameDelta";
 import { normalizeRecordingData } from "../utils/editorState";
 import { normalizeChapters } from "../utils/chapters";
 import { resolveRuntimeSnapshotAt } from "../runtimeTrack";
-import { isEditorReady, isValidEditorState } from "../utils/validation";
-import { arePreviewSizesEqual, areStructuredDataEqual } from "../../../utils/equality";
-import { applyContentDiff, applySelectionDiff, areSelectionsEqual } from "../utils/editorDiff";
 import {
   getChatReplayResult,
   getPreviewReplayResult,
@@ -36,68 +22,32 @@ import {
   getWhiteboardReplayResult,
   getWorkspaceReplayResult,
   isReplayResync,
-  resolveReplayTime,
 } from "./replayState";
-import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 import {
   normalizePlaybackSpeed,
   normalizePlaybackVolume,
   normalizeTimelineDuration,
   normalizeTimelineTime,
 } from "./playbackValues";
+import { applyFrameAtTime } from "./frameReplay";
+import { reportMachineError, resolveBoundedReplayTime, type ReplayStep } from "./replayStep";
 
 // ============================================================================
 // Playback-replay action bodies
 //
 // Plain functions with the exact shape XState's `assign` callbacks expect,
-// specific to the playback/replay side (applying frames/deltas, seeking, tick
-// handling, workspace/preview/slide/runtime event replay). editorMachine.ts
-// wires each of these into `actions: {}` via `assign(fn)` — kept there
-// (rather than wrapped here) so XState's `setup()` can still infer the
-// machine's exact context/event/actor types for the wrapped action, which
+// specific to the playback/replay side (loading and streaming the recording in,
+// seeking, tick handling, workspace/preview/slide/runtime event replay).
+// editorMachine.ts wires each of these into `actions: {}` via `assign(fn)` —
+// kept there (rather than wrapped here) so XState's `setup()` can still infer
+// the machine's exact context/event/actor types for the wrapped action, which
 // isn't independently nameable outside `setup()`. Extracted purely so the
 // machine file reads as wiring; zero behavior change.
 //
-// Alongside them: applying a frame to Monaco (applyFrameState), driving the
-// narration player (syncPlaybackAudio, at the end), and reportMachineError,
-// which the machine's notifyError shares.
+// Siblings: the editor frame replay and Monaco rendering are in frameReplay.ts,
+// the narration player's driver in playbackActors.ts, and what the replay steps
+// share (reportMachineError, the bounded replay time) in replayStep.ts.
 // ============================================================================
-
-/**
- * Hand a machine failure to the host's `onError`, or to the console when the host supplies none
- * (the app's own provider does not). Without the fallback a denied microphone, a failed load or
- * a damaged frame skipped during replay left no trace at all. Pass the Error itself so the stack
- * and class (ContentEditBaseMismatchError, DmpBaseMismatchError) survive into the log.
- */
-export const reportMachineError = (
-  context: Pick<EditorMachineContext, "onError">,
-  error: Error,
-): void => {
-  if (context.onError) {
-    context.onError(error);
-    return;
-  }
-  console.error("[editorMachine]", error);
-};
-
-/** Color of the playback caret's marks in the minimap and the overview ruler. */
-const PLAYBACK_CURSOR_COLOR = "#007ACC";
-
-/**
- * Preview scroll offsets within this many pixels count as unchanged, so fractional scroll
- * values do not re-apply the preview.
- */
-const PREVIEW_SCROLL_TOLERANCE_PX = 1;
-
-const resolveBoundedReplayTime = (
-  context: EditorMachineContext,
-  event: EditorMachineEvent,
-): number =>
-  normalizeTimelineTime(
-    resolveReplayTime(event, context.timeline.currentTime),
-    context.timeline.duration,
-    context.timeline.currentTime,
-  );
 
 /**
  * The replay cursors a seek, rewind, resume or workspace detach resets together, so the
@@ -132,52 +82,6 @@ const APPLIED_PLAYBACK_STATE_RESET = {
   ...REPLAY_CURSORS_RESET,
   lastAppliedPreviewState: undefined,
 } as const satisfies EditorContextUpdate;
-
-const editorModelBoundaryTimeCache = new WeakMap<readonly WorkspaceRecordingEvent[], number[]>();
-
-/**
- * Frames before the latest active-editor identity change belong to a different
- * Monaco model and must not be applied after a workspace replay switches files.
- *
- * Same-file workspace snapshots are deliberately not boundaries. Studio writes
- * one immediately after `editor.type` so the runnable workspace receives the
- * final code; its timestamp is necessarily a beat later than the editor frame
- * that captured the visible edit. Treating every workspace event as a boundary
- * drops that typed frame until the next cursor/selection frame.
- */
-function latestEditorModelBoundaryTime(
-  workspaceEvents: readonly WorkspaceRecordingEvent[] | undefined,
-  lastAppliedIndex: number,
-): number | null {
-  if (!workspaceEvents?.length || lastAppliedIndex < 0) {
-    return null;
-  }
-
-  const boundedIndex = Math.min(lastAppliedIndex, workspaceEvents.length - 1);
-  let boundaryTimes = editorModelBoundaryTimeCache.get(workspaceEvents);
-  if (!boundaryTimes) {
-    boundaryTimes = [];
-    editorModelBoundaryTimeCache.set(workspaceEvents, boundaryTimes);
-  }
-
-  // Recording streams append events to the same array, so extend the cache
-  // only as far as this replay cursor needs instead of rescanning on every tick.
-  for (let index = boundaryTimes.length; index <= boundedIndex; index += 1) {
-    const event = workspaceEvents[index];
-    if (index === 0) {
-      boundaryTimes.push(event.timestamp);
-      continue;
-    }
-
-    const previousEvent = workspaceEvents[index - 1];
-    const changedModel =
-      event.snapshot.project.id !== previousEvent.snapshot.project.id ||
-      event.snapshot.activeFilePath !== previousEvent.snapshot.activeFilePath;
-    boundaryTimes.push(changedModel ? event.timestamp : boundaryTimes[index - 1]);
-  }
-
-  return boundaryTimes[boundedIndex] ?? null;
-}
 
 /** `loaded` is the `loadRecording` actor's output, passed in by `loading`'s onDone. */
 export const setRecording = (
@@ -362,306 +266,6 @@ export const extendRecording = ({ context, event }: EditorActionArgs): EditorCon
   };
 };
 
-/**
- * Apply editor state from a frame
- */
-export const applyFrameState = (
-  editor: monaco.editor.IStandaloneCodeEditor,
-  frame: EditorFrame,
-  decorationsCollection: monaco.editor.IEditorDecorationsCollection | null,
-  isPlaying: boolean,
-  previousFrame?: EditorFrame | null,
-): monaco.editor.IEditorDecorationsCollection | null => {
-  if (!frame.state || !isEditorReady(editor)) return decorationsCollection;
-
-  let collection = decorationsCollection;
-  // Replay frames are already normalized: recording keyframes by the load and the
-  // codec, delta results by applyFrameDelta. A keyframe is the recording's own
-  // object, though, so Monaco gets a copy of its view state.
-  const { state } = frame;
-
-  try {
-    // Apply content changes
-    if (!previousFrame || previousFrame.state.content !== state.content) {
-      applyContentDiff(editor, state.content);
-    }
-
-    const viewStateChanged =
-      !!state.viewState &&
-      (!previousFrame || !areStructuredDataEqual(state.viewState, previousFrame.state.viewState));
-
-    // Restore scroll/layout first, then explicitly reapply selection so
-    // Monaco cursorState inside viewState cannot override the recorded caret.
-    if (viewStateChanged) {
-      try {
-        editor.restoreViewState(structuredClone(state.viewState));
-      } catch (err) {
-        console.error("Failed to restore view state:", err);
-      }
-    }
-
-    applySelectionDiff(editor, state.selection);
-
-    // Add cursor decorations during playback only when Monaco's own caret is
-    // not visible. This avoids duplicate carets and preserves native
-    // multi-cursor behavior while the editor has text focus.
-    if (isPlaying && !editor.hasTextFocus()) {
-      // Only update decorations if selection changed or collection is missing
-      const selectionChanged =
-        !previousFrame || !areSelectionsEqual(previousFrame.state.selection, frame.state.selection);
-
-      if (selectionChanged || viewStateChanged || !collection) {
-        const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
-        const currentSelections = editor.getSelections() || [frame.state.selection];
-
-        currentSelections.forEach((selection) => {
-          newDecorations.push({
-            // Plain IRange (not `new Range(...)`) so this core machine never
-            // value-imports monaco-editor; Monaco's decoration API lifts IRange
-            // internally. Keeps the 3.7 MB editor chunk out of the eager route
-            // graph (it loads lazily with CodeEditor instead).
-            range: {
-              startLineNumber: selection.positionLineNumber,
-              startColumn: selection.positionColumn,
-              endLineNumber: selection.positionLineNumber,
-              endColumn: selection.positionColumn,
-            },
-            options: {
-              className: "playback-cursor-decoration",
-              stickiness: 1, // NeverGrowsWhenTypingAtEdges
-              minimap: {
-                color: PLAYBACK_CURSOR_COLOR,
-                position: 1, // Inline
-              },
-              overviewRuler: {
-                color: PLAYBACK_CURSOR_COLOR,
-                position: 2, // Center
-              },
-            },
-          });
-        });
-
-        // Create collection if it doesn't exist, otherwise update it
-        if (!collection) {
-          collection = editor.createDecorationsCollection(newDecorations);
-        } else {
-          collection.set(newDecorations);
-        }
-      }
-    } else if (collection) {
-      collection.clear();
-    }
-  } catch (error) {
-    console.error("Error applying editor state:", error);
-  }
-
-  return collection;
-};
-
-/**
- * The editor state at `frameIndex`, folded from the applied frame or rebuilt from its
- * keyframe, or null when that frame must be skipped: its reconstruction threw (reported
- * here) or produced an invalid state.
- */
-function foldFrameAtIndex(
-  context: EditorMachineContext,
-  frames: DeltaFrame[],
-  frameIndex: number,
-): EditorFrame | null {
-  const { currentFrame, lastAppliedFrameIndex } = context;
-  const targetFrame = frames[frameIndex];
-  let frame: EditorFrame | null;
-
-  // Reconstruction throws by design on a damaged recording
-  // (ContentEditBaseMismatchError, DmpBaseMismatchError, conflicting delta
-  // variants). This runs inside an xstate `assign`, and xstate treats an action
-  // throw as fatal: the actor stops, observers are cleared, and every later send
-  // — including recording — is a no-op, with `onError` never called. So one bad
-  // frame used to freeze the whole editor for the rest of the page session.
-  // Skipping the frame and reporting it lets playback continue past the damage.
-  // The caller clears currentFrame for a skipped frame, as it does for the
-  // model-boundary skip, so the forward fold below never runs on a base that is
-  // not the fold at lastAppliedFrameIndex: relative caret deltas would land on the
-  // wrong base. The rest of the damaged keyframe span is then skipped too (one
-  // report per frame) until the next keyframe re-bases the editor.
-  try {
-    if (isKeyframe(targetFrame)) {
-      // Keyframe: always use directly, most efficient
-      frame = targetFrame;
-    } else if (
-      currentFrame &&
-      lastAppliedFrameIndex >= 0 &&
-      frameIndex > lastAppliedFrameIndex &&
-      findNearestKeyframeIndex(frames, frameIndex) <= lastAppliedFrameIndex
-    ) {
-      // Forward within the applied frame's keyframe span: apply only the crossed
-      // deltas. A tick often crosses several frames (mouse frames and
-      // content-plus-cursor pairs a few ms apart, more at 2x), and rebuilding from
-      // the keyframe re-applied up to ~120 deltas each time. currentFrame is the
-      // normalized fold at lastAppliedFrameIndex, so the result equals
-      // reconstruction. Past a keyframe, reconstructing from it is the shorter walk.
-      let next = currentFrame;
-      for (let index = lastAppliedFrameIndex + 1; index <= frameIndex; index++) {
-        next = applyFrameDeltaToNormalized(next, frames[index] as FrameDelta, index);
-      }
-      frame = next;
-    } else {
-      // Backward, or past a keyframe: rebuild from the nearest keyframe
-      frame = reconstructFrameAtIndex(frames, frameIndex);
-    }
-  } catch (error) {
-    reportMachineError(
-      context,
-      error instanceof Error
-        ? error
-        : new Error(`Could not reconstruct recording frame ${frameIndex}`),
-    );
-    return null;
-  }
-
-  if (!frame || !isValidEditorState(frame.state)) return null;
-  return frame;
-}
-
-/**
- * Mirrors a frame's slide state to the host. Runs only for a recording without a
- * slideEvents track; when the track exists, the slide replay applies it instead.
- */
-function mirrorFrameSlideState(
-  context: EditorMachineContext,
-  frame: EditorFrame,
-  previousFrame: EditorFrame | null,
-): void {
-  const { slideState, currentSlideIndex } = frame.state;
-  if (
-    !slideState ||
-    currentSlideIndex === undefined ||
-    !context.applySlideState ||
-    context.recording?.slideEvents?.length
-  ) {
-    return;
-  }
-
-  // Check if this slide state has changed to prevent excessive re-renders
-  const prevSlideState = previousFrame?.state.slideState;
-  const prevSlideIndex = previousFrame?.state.currentSlideIndex;
-
-  const hasChanged =
-    !prevSlideState ||
-    slideState.isOpen !== prevSlideState.isOpen ||
-    slideState.currentSlideId !== prevSlideState.currentSlideId ||
-    slideState.indexv !== prevSlideState.indexv ||
-    currentSlideIndex !== prevSlideIndex;
-
-  if (hasChanged) {
-    context.applySlideState(slideState, currentSlideIndex);
-  }
-}
-
-/**
- * Mirrors a frame's preview panel state to the host. Runs only for a recording without a
- * previewEvents track. Returns the state it applied, or undefined when it applied none.
- */
-function mirrorFramePreviewState(
-  context: EditorMachineContext,
-  frame: EditorFrame,
-): PreviewState | undefined {
-  const { previewState } = frame.state;
-  // Dedicated preview events capture preview UI state changes more
-  // accurately than editor frames, so only fall back to frame snapshots
-  // when no preview event stream exists.
-  if (!previewState || !context.applyPreviewState || context.recording?.previewEvents?.length) {
-    return undefined;
-  }
-
-  const nextState = {
-    ...previewState,
-    refreshKey: undefined,
-    currentInteraction: undefined,
-  };
-  const currentState = context.lastAppliedPreviewState;
-
-  if (
-    !currentState ||
-    !arePreviewSizesEqual(nextState.size, currentState.size) ||
-    nextState.isOpen !== currentState.isOpen ||
-    nextState.mode !== currentState.mode ||
-    nextState.content !== currentState.content ||
-    Math.abs((nextState.scrollTop || 0) - (currentState.scrollTop || 0)) >
-      PREVIEW_SCROLL_TOLERANCE_PX ||
-    Math.abs((nextState.scrollLeft || 0) - (currentState.scrollLeft || 0)) >
-      PREVIEW_SCROLL_TOLERANCE_PX
-  ) {
-    context.applyPreviewState(nextState);
-    return nextState;
-  }
-  return undefined;
-}
-
-export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  const { recording, editorRefs, lastAppliedFrameIndex, currentFrame } = context;
-  const currentTime = resolveBoundedReplayTime(context, event);
-
-  if (!recording || !editorRefs.editor || context.pendingPlaybackEditorSync) {
-    return {};
-  }
-
-  const frames = recording.frames;
-  if (!frames?.length) return {};
-
-  const frameIndex = findFrameIndexAtTime(frames, currentTime, lastAppliedFrameIndex);
-
-  if (frameIndex === lastAppliedFrameIndex) {
-    return {};
-  }
-
-  const editorModelBoundaryTime = latestEditorModelBoundaryTime(
-    recording.workspaceEvents,
-    context.lastAppliedWorkspaceEventIndex,
-  );
-
-  if (editorModelBoundaryTime !== null && frames[frameIndex].timestamp < editorModelBoundaryTime) {
-    return {
-      lastAppliedFrameIndex: frameIndex,
-      currentFrame: null,
-    };
-  }
-
-  // A skipped frame leaves no fold at its index for the next tick to build on.
-  const frame = foldFrameAtIndex(context, frames, frameIndex);
-  if (!frame) {
-    return { lastAppliedFrameIndex: frameIndex, currentFrame: null };
-  }
-
-  const newCollection = applyFrameState(
-    editorRefs.editor,
-    frame,
-    editorRefs.cursorDecorationsCollection,
-    true,
-    currentFrame,
-  );
-
-  const updates: EditorContextUpdate = {
-    lastAppliedFrameIndex: frameIndex,
-    currentFrame: frame,
-  };
-
-  if (newCollection !== editorRefs.cursorDecorationsCollection) {
-    updates.editorRefs = {
-      ...editorRefs,
-      cursorDecorationsCollection: newCollection,
-    };
-  }
-
-  mirrorFrameSlideState(context, frame, currentFrame);
-  const previewState = mirrorFramePreviewState(context, frame);
-  if (previewState) {
-    updates.lastAppliedPreviewState = previewState;
-  }
-
-  return updates;
-};
-
 export const seekToTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "SEEK") return {};
   const clampedTime = normalizeTimelineTime(
@@ -722,19 +326,6 @@ export const setVolume = ({ context, event }: EditorActionArgs): EditorContextUp
     timeline: {
       ...context.timeline,
       volume: normalizePlaybackVolume(event.volume, context.timeline.volume),
-    },
-  };
-};
-
-export const clearCursorDecorations = ({ context }: EditorActionArgs): EditorContextUpdate => {
-  const { editorRefs } = context;
-  if (editorRefs.cursorDecorationsCollection) {
-    editorRefs.cursorDecorationsCollection.clear();
-  }
-  return {
-    editorRefs: {
-      ...editorRefs,
-      cursorDecorationsCollection: null,
     },
   };
 };
@@ -1195,9 +786,6 @@ export const applySlideEventsAtTime = ({
   return {};
 };
 
-/** One track's replay step: an `assign` body, or a plain action that only calls host hooks. */
-type ReplayStep = (args: EditorActionArgs) => EditorContextUpdate | void;
-
 /**
  * Brings every replayed track to the playhead. The workspace goes first: a replayed file
  * switch holds the editor frame back until the editor has the new model
@@ -1245,127 +833,3 @@ export const applyReplayStateAtTime = (args: EditorActionArgs): EditorContextUpd
 /** A playing TICK: move the playhead to the tick (storeTickTime), then bring every track there. */
 export const applyReplayStateAtTick = (args: EditorActionArgs): EditorContextUpdate =>
   runReplaySteps(args, TICK_REPLAY_STEPS);
-
-// ============================================================================
-// Playback audio
-// ============================================================================
-
-interface PlaybackAudioState {
-  /**
-   * Raw audio blob from MediaRecorder. Used for immediate playback after
-   * recording while the lesson is unpublished and has no audioUrl yet.
-   */
-  blob: Blob;
-  /**
-   * Permanent CDN/storage URL, present only after the lesson is published.
-   * Takes precedence over blob when available.
-   */
-  audioUrl?: string;
-  startOffsetMs: number;
-  finalized: boolean;
-}
-
-export const getPlaybackAudioState = (recording: Recording | null): PlaybackAudioState | null => {
-  if (!recording) {
-    return null;
-  }
-
-  const audioBlob = recording.audioBlob;
-  if (!(audioBlob instanceof Blob) || audioBlob.size === 0) {
-    return null;
-  }
-
-  const audioUrl = recording.audioUrl;
-
-  const startOffsetMs = recording.audioStartOffsetMs ?? 0;
-
-  return {
-    blob: audioBlob,
-    audioUrl,
-    startOffsetMs,
-    finalized: recording.streamFinalized ?? true,
-  };
-};
-
-/**
- * The subset of xstate's `enqueue` object used to drive the "audioPlayer" child actor.
- * Kept structural (rather than importing xstate's generic `ActionEnqueuer`) so this
- * helper doesn't need to thread the machine's full setup() type parameters.
- */
-interface PlaybackAudioEnqueue {
-  spawnChild: (
-    src: "audioPlayback",
-    options: { id: "audioPlayer"; input: AudioPlaybackInput },
-  ) => void;
-  sendTo: (actor: "audioPlayer", event: AudioPlaybackEvent) => void;
-  assign: (updater: Partial<EditorMachineContext>) => void;
-}
-
-interface SyncPlaybackAudioOptions {
-  /** Spawn a fresh "audioPlayer" child if this recording has audio and none exists yet. */
-  spawnIfMissing: boolean;
-  /** Send SEEK to the current timeline position. */
-  seek: boolean;
-  /** Send SET_PLAYBACK_RATE to match the timeline speed. */
-  syncRate: boolean;
-  /** Send SET_VOLUME to match the timeline volume. */
-  syncVolume: boolean;
-  /** Send PLAY. */
-  play: boolean;
-}
-
-/**
- * The one true spawn/append/seek/rate/volume/play sequence for the playback "audioPlayer"
- * child actor, encoding what used to be duplicated (with drifting variations) across
- * playback entry, EXTEND_RECORDING, and the "playing" entry in editorMachine.ts.
- *
- * Returns whether the audio actor is spawned and being controlled by this call, so
- * callers that need to interleave other actor messages (e.g. the timelineActor) around
- * the audio sequence can reuse that without recomputing it.
- */
-export const syncPlaybackAudio = (
-  context: EditorMachineContext,
-  enqueue: PlaybackAudioEnqueue,
-  options: SyncPlaybackAudioOptions,
-): boolean => {
-  const audioState = getPlaybackAudioState(context.recording);
-  if (!audioState) {
-    return false;
-  }
-
-  const spawning = options.spawnIfMissing && !context.playbackAudioSpawned;
-  const controlling = spawning || context.playbackAudioSpawned;
-  if (!controlling) {
-    return false;
-  }
-
-  if (spawning) {
-    enqueue.spawnChild("audioPlayback", {
-      id: "audioPlayer",
-      input: {
-        blob: audioState.blob,
-        audioUrl: audioState.audioUrl,
-        startOffsetMs: audioState.startOffsetMs,
-        volume: context.timeline.volume,
-        playbackRate: context.timeline.speed,
-        startPositionMs: context.timeline.currentTime,
-      },
-    });
-    enqueue.assign({ playbackAudioSpawned: true });
-  }
-
-  if (options.seek) {
-    enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: context.timeline.currentTime });
-  }
-  if (options.syncRate) {
-    enqueue.sendTo("audioPlayer", { type: "SET_PLAYBACK_RATE", rate: context.timeline.speed });
-  }
-  if (options.syncVolume) {
-    enqueue.sendTo("audioPlayer", { type: "SET_VOLUME", volume: context.timeline.volume });
-  }
-  if (options.play) {
-    enqueue.sendTo("audioPlayer", { type: "PLAY" });
-  }
-
-  return true;
-};

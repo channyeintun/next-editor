@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type * as monaco from "monaco-editor";
 import type { EditorFrame, EditorSelection } from "../types";
-import { applyFrameState } from "./replayActions";
+import { applyFrameState } from "./frameReplay";
 
 describe("applyFrameState cursor", () => {
   // Monaco's selection carries the caret, so one setSelection is the whole cursor

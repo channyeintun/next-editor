@@ -16,7 +16,7 @@ import type {
   CameraRecordingEvent,
   CameraRecordingInput,
 } from "./cameraActor";
-import { getPlaybackAudioState } from "./replayActions";
+import { getPlaybackAudioState } from "./playbackActors";
 import { fromTypedCallback } from "./fromTypedCallback";
 import type { CaptionTrack, EditorFrame, Recording, RecordingStreamDelta } from "../types";
 import type { PreviewEvent } from "../slides";

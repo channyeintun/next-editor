@@ -8,7 +8,7 @@ import {
 } from "./audioActor";
 import { editorMachine } from "./editorMachine";
 import { fromTypedCallback } from "./fromTypedCallback";
-import { getPlaybackAudioState } from "./replayActions";
+import { getPlaybackAudioState } from "./playbackActors";
 import type { Recording } from "../types";
 
 class FakeAudioTrack {

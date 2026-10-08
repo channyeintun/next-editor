@@ -69,7 +69,6 @@ import {
   clearPlaybackAudioSpawned,
   setPlaybackSpeed,
   setVolume,
-  clearCursorDecorations,
   adoptPlaybackWorkspaceAtPause,
   captureLearnerWorkspaceBaseline,
   getLearnerWorkspaceSave,
@@ -84,10 +83,10 @@ import {
   clearRecording,
   notifySeek,
   setEditorRef,
-  getPlaybackAudioState,
-  reportMachineError,
-  syncPlaybackAudio,
 } from "./replayActions";
+import { clearCursorDecorations } from "./frameReplay";
+import { getPlaybackAudioState, syncPlaybackAudio } from "./playbackActors";
+import { reportMachineError } from "./replayStep";
 import { isAtPlaybackEnd, normalizeTimelineDuration } from "./playbackValues";
 import { isDmpCodecLoaded } from "../../../storage/dmpCodec/dmpCodec";
 
@@ -495,8 +494,9 @@ export const editorMachine = setup({
       event.type === "SCREEN_STOPPED" || event.type === "SCREEN_ERROR" ? event.actorId : "",
     ),
 
-    // Playback (replay-side) actions — bodies live in replayActions.ts, wrapped
-    // here so `setup()` can infer this machine's exact context/event/actor types.
+    // Playback (replay-side) actions — bodies live in replayActions.ts and
+    // frameReplay.ts, wrapped here so `setup()` can infer this machine's exact
+    // context/event/actor types.
     extendRecording: assign(extendRecording),
     appendRecordingDelta: assign(appendRecordingDelta),
     addCaptionTrack: assign(addCaptionTrack),
