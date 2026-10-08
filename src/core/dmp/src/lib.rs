@@ -359,11 +359,6 @@ fn common_suffix(a: &[u8], b: &[u8]) -> usize {
 // across input sizes — and unlike a clock it is deterministic, so identical
 // inputs always yield an identical delta on every machine.
 //
-// The budget is per `diffDelta` call (reset on entry), not per bisect, so the
-// recursive splits can't multiply it. Exhausting it costs delta *size*, never
-// correctness: the fallback is a valid delta and `applyDelta` still
-// reconstructs `b` exactly.
-//
 // 50M charges is ~200ms. The level is set by that size/latency trade rather
 // than by real recordings, which never reach it at all: the whole 11-minute
 // Kotlin lesson recording spends 0 charges, because affix trimming alone
@@ -383,207 +378,212 @@ const WORK_BUDGET: u64 = 50_000_000;
 // by this window instead of by the whole changed span.
 const MAX_LEVELS: i32 = WORK_BUDGET.isqrt() as i32 + 1;
 
-struct Budget {
-    left: UnsafeCell<u64>,
-}
-
-// Sound for the same reason as Heap: single-threaded wasm.
-unsafe impl Sync for Budget {}
-
-static BUDGET: Budget = Budget {
-    left: UnsafeCell::new(WORK_BUDGET),
-};
-
-fn budget_reset() {
-    unsafe { *BUDGET.left.get() = WORK_BUDGET }
-}
-
-/// Charge `n` units; false once the budget is spent.
-fn budget_spend(n: u64) -> bool {
-    unsafe {
-        let left = &mut *BUDGET.left.get();
-        if *left <= n {
-            *left = 0;
-            return false;
-        }
-        *left -= n;
-        true
-    }
-}
-
 // ---------------------------------------------------------------------------
 // diff-match-patch core (faithful port of diff_main / diff_compute /
 // diff_bisect / diff_bisectSplit, operating on bytes instead of UTF-16 units).
 // ---------------------------------------------------------------------------
-fn diff_main(ops: &mut Ops, a: &[u8], b: &[u8]) {
-    if a.is_empty() && b.is_empty() {
-        return;
-    }
 
-    let p = common_prefix(a, b);
-    if p > 0 {
-        ops.emit(EQUAL, 0, p);
-    }
-    let a0 = &a[p..];
-    let b0 = &b[p..];
-
-    let s = common_suffix(a0, b0);
-    let a_mid = &a0[..a0.len() - s];
-    let b_mid = &b0[..b0.len() - s];
-
-    diff_compute(ops, a_mid, b_mid);
-
-    if s > 0 {
-        ops.emit(EQUAL, 0, s);
-    }
+/// One `diffDelta` call's diff state: the ops emitted so far and the work
+/// budget still left. The budget is per call (a fresh `Differ` each time), not
+/// per bisect, so the recursive splits can't multiply it. Exhausting it costs
+/// delta *size*, never correctness: the fallback is a valid delta and
+/// `applyDelta` still reconstructs `b` exactly.
+struct Differ {
+    ops: Ops,
+    budget_left: u64,
 }
 
-fn diff_compute(ops: &mut Ops, a: &[u8], b: &[u8]) {
-    if a.is_empty() {
-        if !b.is_empty() {
-            ops.emit(INSERT, b.as_ptr() as usize, b.len());
+impl Differ {
+    fn new() -> Differ {
+        Differ {
+            ops: Ops::new(),
+            budget_left: WORK_BUDGET,
         }
-        return;
     }
-    if b.is_empty() {
-        ops.emit(DELETE, 0, a.len());
-        return;
+
+    /// Charge `n` units; false once the budget is spent.
+    fn spend(&mut self, n: u64) -> bool {
+        if self.budget_left <= n {
+            self.budget_left = 0;
+            return false;
+        }
+        self.budget_left -= n;
+        true
     }
-    diff_bisect(ops, a, b);
-}
 
-fn diff_bisect(ops: &mut Ops, a: &[u8], b: &[u8]) {
-    let a_len = a.len() as i32;
-    let b_len = b.len() as i32;
-    let max_d = (a_len + b_len + 1) / 2; // ceil((a_len + b_len) / 2)
-
-    // The arrays span only the diagonals the search can reach: the reference
-    // sizes them by max_d, but WORK_BUDGET stops every bisect before level
-    // MAX_LEVELS, so for a large changed span most of that would be zeroed
-    // scratch that is never written. The level loop below is bounded by the
-    // window too, so no index can leave it whatever the budget.
-    let window = max_d.min(MAX_LEVELS);
-    let v_offset = window;
-    let v_length = 2 * window; // logical diagonal span used by the overlap guards
-    // The reference diff_bisect relies on sparse arrays auto-growing past
-    // v_length for the `v_offset ± 1` accesses (notably when max_d == 1). Fixed
-    // buffers don't grow, so pad by 2 to keep every `± 1` index in bounds.
-    let cap = (v_length + 2) as usize;
-    let mut v1 = vec![-1i32; cap];
-    let mut v2 = vec![-1i32; cap];
-    v1[(v_offset + 1) as usize] = 0;
-    v2[(v_offset + 1) as usize] = 0;
-    let delta = a_len - b_len;
-    // Whether the total difference is odd: only then can a forward and reverse
-    // path overlap on the forward pass.
-    let front = (delta & 1) != 0;
-    let mut k1start = 0;
-    let mut k1end = 0;
-    let mut k2start = 0;
-    let mut k2end = 0;
-
-    let mut d = 0;
-    while d < max_d && d < window {
-        // Charge this level's forward + reverse k-loop spans (each visits d + 1
-        // diagonals). Out of budget: stop searching and take the replace
-        // fallthrough below, exactly as the reference does on deadline expiry.
-        if !budget_spend((d as u64 + 1) * 2) {
-            break;
+    fn diff_main(&mut self, a: &[u8], b: &[u8]) {
+        if a.is_empty() && b.is_empty() {
+            return;
         }
 
-        // Forward path.
-        let mut k1 = -d + k1start;
-        while k1 <= d - k1end {
-            let k1_offset = v_offset + k1;
-            let mut x1: i32;
-            if k1 == -d
-                || (k1 != d && v1[(k1_offset - 1) as usize] < v1[(k1_offset + 1) as usize])
-            {
-                x1 = v1[(k1_offset + 1) as usize];
-            } else {
-                x1 = v1[(k1_offset - 1) as usize] + 1;
+        let p = common_prefix(a, b);
+        if p > 0 {
+            self.ops.emit(EQUAL, 0, p);
+        }
+        let a0 = &a[p..];
+        let b0 = &b[p..];
+
+        let s = common_suffix(a0, b0);
+        let a_mid = &a0[..a0.len() - s];
+        let b_mid = &b0[..b0.len() - s];
+
+        self.diff_compute(a_mid, b_mid);
+
+        if s > 0 {
+            self.ops.emit(EQUAL, 0, s);
+        }
+    }
+
+    fn diff_compute(&mut self, a: &[u8], b: &[u8]) {
+        if a.is_empty() {
+            if !b.is_empty() {
+                self.ops.emit(INSERT, b.as_ptr() as usize, b.len());
             }
-            let mut y1 = x1 - k1;
-            while x1 < a_len && y1 < b_len && a[x1 as usize] == b[y1 as usize] {
-                x1 += 1;
-                y1 += 1;
+            return;
+        }
+        if b.is_empty() {
+            self.ops.emit(DELETE, 0, a.len());
+            return;
+        }
+        self.diff_bisect(a, b);
+    }
+
+    fn diff_bisect(&mut self, a: &[u8], b: &[u8]) {
+        let a_len = a.len() as i32;
+        let b_len = b.len() as i32;
+        let max_d = (a_len + b_len + 1) / 2; // ceil((a_len + b_len) / 2)
+
+        // The arrays span only the diagonals the search can reach: the
+        // reference sizes them by max_d, but WORK_BUDGET stops every bisect
+        // before level MAX_LEVELS, so for a large changed span most of that
+        // would be zeroed scratch that is never written. The level loop below
+        // is bounded by the window too, so no index can leave it whatever the
+        // budget.
+        let window = max_d.min(MAX_LEVELS);
+        let v_offset = window;
+        let v_length = 2 * window; // logical diagonal span used by the overlap guards
+        // The reference diff_bisect relies on sparse arrays auto-growing past
+        // v_length for the `v_offset ± 1` accesses (notably when max_d == 1).
+        // Fixed buffers don't grow, so pad by 2 to keep every `± 1` index in
+        // bounds.
+        let cap = (v_length + 2) as usize;
+        let mut v1 = vec![-1i32; cap];
+        let mut v2 = vec![-1i32; cap];
+        v1[(v_offset + 1) as usize] = 0;
+        v2[(v_offset + 1) as usize] = 0;
+        let delta = a_len - b_len;
+        // Whether the total difference is odd: only then can a forward and
+        // reverse path overlap on the forward pass.
+        let front = (delta & 1) != 0;
+        let mut k1start = 0;
+        let mut k1end = 0;
+        let mut k2start = 0;
+        let mut k2end = 0;
+
+        let mut d = 0;
+        while d < max_d && d < window {
+            // Charge this level's forward + reverse k-loop spans (each visits
+            // d + 1 diagonals). Out of budget: stop searching and take the
+            // replace fallthrough below, exactly as the reference does on
+            // deadline expiry.
+            if !self.spend((d as u64 + 1) * 2) {
+                break;
             }
-            v1[k1_offset as usize] = x1;
-            if x1 > a_len {
-                k1end += 2; // ran off the right
-            } else if y1 > b_len {
-                k1start += 2; // ran off the bottom
-            } else if front {
-                let k2_offset = v_offset + delta - k1;
-                if k2_offset >= 0 && k2_offset < v_length && v2[k2_offset as usize] != -1 {
-                    let x2 = a_len - v2[k2_offset as usize];
-                    if x1 >= x2 {
-                        bisect_split(ops, a, b, x1, y1);
-                        return;
+
+            // Forward path.
+            let mut k1 = -d + k1start;
+            while k1 <= d - k1end {
+                let k1_offset = v_offset + k1;
+                let mut x1: i32;
+                if k1 == -d
+                    || (k1 != d && v1[(k1_offset - 1) as usize] < v1[(k1_offset + 1) as usize])
+                {
+                    x1 = v1[(k1_offset + 1) as usize];
+                } else {
+                    x1 = v1[(k1_offset - 1) as usize] + 1;
+                }
+                let mut y1 = x1 - k1;
+                while x1 < a_len && y1 < b_len && a[x1 as usize] == b[y1 as usize] {
+                    x1 += 1;
+                    y1 += 1;
+                }
+                v1[k1_offset as usize] = x1;
+                if x1 > a_len {
+                    k1end += 2; // ran off the right
+                } else if y1 > b_len {
+                    k1start += 2; // ran off the bottom
+                } else if front {
+                    let k2_offset = v_offset + delta - k1;
+                    if k2_offset >= 0 && k2_offset < v_length && v2[k2_offset as usize] != -1 {
+                        let x2 = a_len - v2[k2_offset as usize];
+                        if x1 >= x2 {
+                            self.bisect_split(a, b, x1, y1);
+                            return;
+                        }
                     }
                 }
+                k1 += 2;
             }
-            k1 += 2;
-        }
 
-        // Reverse path.
-        let mut k2 = -d + k2start;
-        while k2 <= d - k2end {
-            let k2_offset = v_offset + k2;
-            let mut x2: i32;
-            if k2 == -d
-                || (k2 != d && v2[(k2_offset - 1) as usize] < v2[(k2_offset + 1) as usize])
-            {
-                x2 = v2[(k2_offset + 1) as usize];
-            } else {
-                x2 = v2[(k2_offset - 1) as usize] + 1;
-            }
-            let mut y2 = x2 - k2;
-            while x2 < a_len
-                && y2 < b_len
-                && a[(a_len - x2 - 1) as usize] == b[(b_len - y2 - 1) as usize]
-            {
-                x2 += 1;
-                y2 += 1;
-            }
-            v2[k2_offset as usize] = x2;
-            if x2 > a_len {
-                k2end += 2;
-            } else if y2 > b_len {
-                k2start += 2;
-            } else if !front {
-                let k1_offset = v_offset + delta - k2;
-                if k1_offset >= 0 && k1_offset < v_length && v1[k1_offset as usize] != -1 {
-                    let x1 = v1[k1_offset as usize];
-                    let y1 = v_offset + x1 - k1_offset;
-                    let x2b = a_len - x2;
-                    if x1 >= x2b {
-                        bisect_split(ops, a, b, x1, y1);
-                        return;
+            // Reverse path.
+            let mut k2 = -d + k2start;
+            while k2 <= d - k2end {
+                let k2_offset = v_offset + k2;
+                let mut x2: i32;
+                if k2 == -d
+                    || (k2 != d && v2[(k2_offset - 1) as usize] < v2[(k2_offset + 1) as usize])
+                {
+                    x2 = v2[(k2_offset + 1) as usize];
+                } else {
+                    x2 = v2[(k2_offset - 1) as usize] + 1;
+                }
+                let mut y2 = x2 - k2;
+                while x2 < a_len
+                    && y2 < b_len
+                    && a[(a_len - x2 - 1) as usize] == b[(b_len - y2 - 1) as usize]
+                {
+                    x2 += 1;
+                    y2 += 1;
+                }
+                v2[k2_offset as usize] = x2;
+                if x2 > a_len {
+                    k2end += 2;
+                } else if y2 > b_len {
+                    k2start += 2;
+                } else if !front {
+                    let k1_offset = v_offset + delta - k2;
+                    if k1_offset >= 0 && k1_offset < v_length && v1[k1_offset as usize] != -1 {
+                        let x1 = v1[k1_offset as usize];
+                        let y1 = v_offset + x1 - k1_offset;
+                        let x2b = a_len - x2;
+                        if x1 >= x2b {
+                            self.bisect_split(a, b, x1, y1);
+                            return;
+                        }
                     }
                 }
+                k2 += 2;
             }
-            k2 += 2;
+            d += 1;
         }
-        d += 1;
+
+        // Fallthrough: emit a replace for this subproblem — a correct, if
+        // suboptimal, diff. Reached only by exhausting WORK_BUDGET (the
+        // reference's deadline branch); the middle snake is otherwise always
+        // found within max_d. (Leaving through the window bound would also land
+        // here, but the budget always runs out first.) Note this replaces only
+        // the range handed to *this* bisect, so the prefix/suffix already
+        // matched by the callers upstream is still preserved.
+        self.ops.emit(DELETE, 0, a.len());
+        self.ops.emit(INSERT, b.as_ptr() as usize, b.len());
     }
 
-    // Fallthrough: emit a replace for this subproblem — a correct, if
-    // suboptimal, diff. Reached only by exhausting WORK_BUDGET (the reference's
-    // deadline branch); the middle snake is otherwise always found within
-    // max_d. (Leaving through the window bound would also land here, but the
-    // budget always runs out first.) Note this replaces only the range handed
-    // to *this* bisect, so the prefix/suffix already matched by the callers
-    // upstream is still preserved.
-    ops.emit(DELETE, 0, a.len());
-    ops.emit(INSERT, b.as_ptr() as usize, b.len());
-}
-
-fn bisect_split(ops: &mut Ops, a: &[u8], b: &[u8], x: i32, y: i32) {
-    let x = x as usize;
-    let y = y as usize;
-    diff_main(ops, &a[..x], &b[..y]);
-    diff_main(ops, &a[x..], &b[y..]);
+    fn bisect_split(&mut self, a: &[u8], b: &[u8], x: i32, y: i32) {
+        let x = x as usize;
+        let y = y as usize;
+        self.diff_main(&a[..x], &b[..y]);
+        self.diff_main(&a[x..], &b[y..]);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -657,9 +657,9 @@ pub extern "C" fn diffDelta(a_ptr: u32, a_len: u32, b_ptr: u32, b_len: u32) -> u
     let a = unsafe { core::slice::from_raw_parts(a_ptr as *const u8, a_len as usize) };
     let b = unsafe { core::slice::from_raw_parts(b_ptr as *const u8, b_len as usize) };
 
-    let mut ops = Ops::new();
-    budget_reset();
-    diff_main(&mut ops, a, b);
+    let mut differ = Differ::new();
+    differ.diff_main(a, b);
+    let ops = differ.ops;
 
     // Every delta starts with a mandatory CHECK op carrying the base hash, so a
     // delta is never empty — even for identical or empty inputs.
