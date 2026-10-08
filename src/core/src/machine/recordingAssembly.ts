@@ -30,17 +30,35 @@ import type { MediaSpan } from "../utils/mediaSpans";
 // would have become.
 // ============================================================================
 
-/** A take's capture tracks: the session's append-only arrays. */
+/**
+ * A take's capture tracks: the session's append-only arrays. RecordingSession declares
+ * its tracks only through this interface, so a retake's cut and the draft journal,
+ * which both go by it, cover every track.
+ */
 export interface RecordingTracks {
+  /**
+   * Already-compressed frames built incrementally during capture. Append-only, except
+   * that a retake replaces it (and every other track) with a copy cut back to the
+   * safe point.
+   */
   frames: DeltaFrame[];
+  /** Collected slide events during recording */
   slideEvents: SlideEvent[];
+  /** Collected preview events during recording */
   previewEvents: PreviewEvent[];
+  /** Collected initial preview documents during recording */
   previewInitialDocuments: PreviewInitialDocument[];
+  /** Collected preview DOM patch batches during recording */
   previewPatchBatches: PreviewDomPatchBatch[];
+  /** Collected workspace events during recording */
   workspaceEvents: WorkspaceRecordingEvent[];
+  /** Collected runtime events during recording (checkpoints + terminal-output deltas) */
   runtimeEvents: RuntimeRecordingEvent[];
+  /** High-cadence fake cursor samples during recording */
   cursorEvents: CursorRecordingEvent[];
+  /** Collected whiteboard change events during recording */
   whiteboardEvents: WhiteboardEvent[];
+  /** Collected coding-agent chat deltas + sparse checkpoints during recording */
   chatEvents: ChatRecordingEvent[];
 }
 

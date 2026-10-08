@@ -415,8 +415,23 @@ interface TimelineState {
 
 `RecordingSession` is a mutable capture buffer: its object identity stays stable for the whole recording, and appenders push into its track arrays in place (O(1) per sample) instead of spreading into new arrays. Each track array is append-only until a retake, which replaces every track array with a copy cut back to the safe point. So a reader that follows a session while it records keeps a cursor per track, made of the array it read and the length it saw, as `RecordingDraftTrackWriter` does. `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-equality selectors can still detect a change.
 
+The session declares its tracks only through `RecordingTracks` (`recordingAssembly.ts`), which it extends. A retake's cut and the draft journal both go by `RecordingTracks`, so they cover every track.
+
 ```typescript
-interface RecordingSession {
+interface RecordingTracks {
+  frames: DeltaFrame[]; // Already-compressed frames, built incrementally
+  slideEvents: SlideEvent[];
+  previewEvents: PreviewEvent[];
+  previewInitialDocuments: PreviewInitialDocument[];
+  previewPatchBatches: PreviewDomPatchBatch[];
+  workspaceEvents: WorkspaceRecordingEvent[];
+  runtimeEvents: RuntimeRecordingEvent[]; // Full-snapshot checkpoints + terminal-output deltas
+  cursorEvents: CursorRecordingEvent[]; // High-cadence fake cursor samples
+  whiteboardEvents: WhiteboardEvent[];
+  chatEvents: ChatRecordingEvent[]; // Coding-agent chat: dmp content deltas + sparse checkpoints
+}
+
+interface RecordingSession extends RecordingTracks {
   startedAt: number; // Date.now() wall-clock, metadata only
   startedAtPerf: number; // performance.now(), monotonic origin for in-session timestamps
   clock: RecordingClock; // Pauses recorded time skips (recordingClock.ts); read it via getRecordingTimestamp
@@ -425,19 +440,9 @@ interface RecordingSession {
   chapters: RecordingChapter[]; // Chapter markers; finalize hands them to the recording
   previewAwaitingCheckpoint?: boolean; // After a retake: drop patch batches until a fresh full snapshot
   previewCheckpointWall?: number; // That snapshot's wall stamp; earlier-stamped patches are dropped too
-  frames: DeltaFrame[]; // Already-compressed frames, built incrementally
   encoder: FrameStreamEncoderState; // Incremental keyframe/delta encoder state
-  slideEvents: SlideEvent[];
-  previewEvents: PreviewEvent[];
-  previewInitialDocuments: PreviewInitialDocument[];
-  previewPatchBatches: PreviewDomPatchBatch[];
-  workspaceEvents: WorkspaceRecordingEvent[];
-  runtimeEvents: RuntimeRecordingEvent[]; // Full-snapshot checkpoints + terminal-output deltas
   lastRuntimeSnapshot?: RuntimeRecordingSnapshot; // Resolved state of the last runtime event (diff base)
   runtimeCheckpointProgress?: RuntimeCheckpointProgress; // Places the next checkpoint
-  cursorEvents: CursorRecordingEvent[]; // High-cadence fake cursor samples
-  whiteboardEvents: WhiteboardEvent[];
-  chatEvents: ChatRecordingEvent[]; // Coding-agent chat: dmp content deltas + sparse checkpoints
   lastMousePosition: MouseCursorPosition;
   lastCapturedViewStateRef?: CapturedViewStateRef; // Perf: reuse saveViewState() result and, by its versionId + modelId, the content string when unchanged
 }

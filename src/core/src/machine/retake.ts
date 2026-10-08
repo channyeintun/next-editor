@@ -139,8 +139,8 @@ export function rewindSessionToSafePoint(
   const previewStreamed =
     session.previewInitialDocuments.length > 0 || session.previewPatchBatches.length > 0;
 
-  // Typed as every track, so a track left out here fails the typecheck instead of
-  // keeping what was recorded after the safe point.
+  // RecordingSession declares its tracks through RecordingTracks, so a track left out
+  // here fails the typecheck instead of keeping what was recorded after the safe point.
   const kept: RecordingTracks = {
     frames: keptUntil(session.frames, time, byTimestamp),
     slideEvents: keptUntil(session.slideEvents, time, byTimestamp),

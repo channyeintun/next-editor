@@ -12,7 +12,6 @@ import type {
   CaptionTrack,
   RecordingChapter,
   MouseCursorPosition,
-  CursorRecordingEvent,
   EditorFrame,
   Recording,
   RecordingStreamDelta,
@@ -23,15 +22,15 @@ import type {
   PreviewPatchReplayInput,
   ScreenRecordingReadyPayload,
 } from "../types";
-import type { DeltaFrame } from "../utils/deltaTypes";
 import type { FrameStreamEncoderState } from "../utils/frameStreamEncoder";
-import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
-import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { RuntimeRecordingSnapshot } from "../../../types/runtime";
+import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
 import type { RuntimeCheckpointProgress } from "../runtimeTrack";
 import type { ChatCheckpoint, ChatRecordingEvent } from "../../../types/chat";
 import type { TextEditEvent } from "../../../types/textEdit";
 import type { RecordingClock } from "./recordingClock";
+import type { RecordingTracks } from "./recordingAssembly";
 import type { MediaSpan } from "../utils/mediaSpans";
 import type { AudioPlaybackEmit, AudioRecordingEmit } from "./audioActor";
 import type { CameraRecordingEmit } from "./cameraActor";
@@ -100,8 +99,9 @@ export interface CapturedViewStateRef {
  * Recording session state.
  *
  * This is a mutable capture buffer: its object identity stays stable for the whole
- * recording. Appenders push into its track arrays in place rather than spreading into
- * a new array/object, so capture cost is O(1) instead of O(session-so-far) per sample.
+ * recording. Appenders push into its track arrays (the RecordingTracks it extends) in
+ * place rather than spreading into a new array/object, so capture cost is O(1) instead
+ * of O(session-so-far) per sample.
  * Each track array is append-only until a retake, which replaces every track array
  * with a copy cut back to the safe point (see retake.ts). So code that reads a session while it records
  * must keep its own read cursor per track: the array it read and the length it saw
@@ -110,7 +110,7 @@ export interface CapturedViewStateRef {
  * `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-
  * equality selectors can still detect a change.
  */
-export interface RecordingSession {
+export interface RecordingSession extends RecordingTracks {
   /**
    * Wall-clock time recording started (`Date.now()`). Metadata only (e.g. the live
    * elapsed-time display) — never subtracted from another wall-clock read to derive an
@@ -149,26 +149,8 @@ export interface RecordingSession {
    * before the snapshot was taken, so they are dropped too.
    */
   previewCheckpointWall?: number;
-  /**
-   * Already-compressed frames built incrementally during capture. Append-only, except
-   * that a retake replaces it (and every other track) with a copy cut back to the
-   * safe point.
-   */
-  frames: DeltaFrame[];
   /** Incremental encoder state (input count, last stored frame, last full frame) */
   encoder: FrameStreamEncoderState;
-  /** Collected slide events during recording */
-  slideEvents: SlideEvent[];
-  /** Collected preview events during recording */
-  previewEvents: PreviewEvent[];
-  /** Collected initial preview documents during recording */
-  previewInitialDocuments: PreviewInitialDocument[];
-  /** Collected preview DOM patch batches during recording */
-  previewPatchBatches: PreviewDomPatchBatch[];
-  /** Collected workspace events during recording */
-  workspaceEvents: WorkspaceRecordingEvent[];
-  /** Collected runtime events during recording (checkpoints + terminal-output deltas) */
-  runtimeEvents: RuntimeRecordingEvent[];
   /**
    * Resolved state of the last runtime event, so the next one can be diffed and
    * deduped without folding the track. Absent when the session began with no
@@ -177,12 +159,6 @@ export interface RecordingSession {
   lastRuntimeSnapshot?: RuntimeRecordingSnapshot;
   /** Where the runtime track stands against its next checkpoint (see runtimeTrack.ts). */
   runtimeCheckpointProgress?: RuntimeCheckpointProgress;
-  /** High-cadence fake cursor samples during recording */
-  cursorEvents: CursorRecordingEvent[];
-  /** Collected whiteboard change events during recording */
-  whiteboardEvents: WhiteboardEvent[];
-  /** Collected coding-agent chat deltas + sparse checkpoints during recording */
-  chatEvents: ChatRecordingEvent[];
   /** Last known mouse position */
   lastMousePosition: MouseCursorPosition;
   /**
