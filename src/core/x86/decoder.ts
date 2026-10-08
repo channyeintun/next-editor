@@ -19,12 +19,13 @@
  * first one.
  */
 
-import { INSTRUCTION_FORMS, type Encoding, type InstructionForm } from "./isa";
+import { INSTRUCTION_FORMS, type Encoding, type InstructionForm, type OperandPattern } from "./isa";
 import {
   encodingNamesHighByte,
   lookupRegister,
   physicalRegister,
   type OperandSize,
+  type RegisterRef,
 } from "./registers";
 
 export type DecodedOperand =
@@ -128,6 +129,36 @@ interface TableEntry {
   form: InstructionForm;
   /** True when the low three bits of the last opcode byte name a register. */
   registerInOpcode: boolean;
+  /** The register each `fixed` operand names, by operand position; unset elsewhere. */
+  fixedRegisters: (RegisterRef | undefined)[];
+}
+
+/**
+ * A form's table entry, checked against its encoding once, as this module
+ * loads. A malformed `isa.ts` entry — a ModRM operand on an encoding with no
+ * ModRM byte, an implicit register that is not a register — then fails on
+ * import, in every test run, instead of the first time a program executes it.
+ */
+function tableEntry(form: InstructionForm): TableEntry {
+  const registerInOpcode = foldsRegisterIntoOpcode(form.encoding);
+  for (const pattern of form.operands) {
+    const needsModrm =
+      pattern.k === "rm" || pattern.k === "mem" || (pattern.k === "reg" && !registerInOpcode);
+    if (needsModrm && !USES_MODRM.has(form.encoding)) {
+      throw new Error(
+        `isa.ts: ${form.mnemonic}'s ${pattern.k} operand needs a ModRM byte, which its ${form.encoding} encoding does not have`,
+      );
+    }
+  }
+  const fixedRegisters = form.operands.map((pattern) => {
+    if (pattern.k !== "fixed") return undefined;
+    const fixed = lookupRegister(pattern.name);
+    if (fixed === null) {
+      throw new Error(`isa.ts: ${form.mnemonic} names ${pattern.name}, which is not a register`);
+    }
+    return fixed;
+  });
+  return { form, registerInOpcode, fixedRegisters };
 }
 
 const TABLE = new Map<number, TableEntry[]>();
@@ -139,17 +170,18 @@ function add(key: number, entry: TableEntry): void {
 }
 
 for (const form of INSTRUCTION_FORMS) {
-  if (foldsRegisterIntoOpcode(form.encoding)) {
+  const entry = tableEntry(form);
+  if (entry.registerInOpcode) {
     // `push rcx` and `push rax` are different bytes for the same form, so the
     // table carries all eight.
     for (let offset = 0; offset < 8; offset += 1) {
       const opcode = [...form.opcode];
       opcode[opcode.length - 1] += offset;
-      add(opcodeKey(opcode), { form, registerInOpcode: true });
+      add(opcodeKey(opcode), entry);
     }
     continue;
   }
-  add(opcodeKey(form.opcode, form.ext ?? -1), { form, registerInOpcode: false });
+  add(opcodeKey(form.opcode, form.ext ?? -1), entry);
 }
 
 class ByteReader {
@@ -333,6 +365,9 @@ export function decodeInstruction(
 
   const immediateWidth = form.immBytes ?? (operandSize === 8 ? 4 : operandSize);
 
+  // `tableEntry` checked at load that every `rm`, `mem` and ModRM `reg`
+  // operand sits on an encoding that reads ModRM, so `modrm` is set wherever
+  // it is used below.
   for (let position = 0; position < form.operands.length; position += 1) {
     const pattern = form.operands[position];
     switch (pattern.k) {
@@ -365,10 +400,8 @@ export function decodeInstruction(
         // the one place that knows which index and width the name stands for —
         // and a REX prefix on the instruction cannot turn an implicit `ah` into
         // `spl`, so its `high8` is taken as named rather than worked out again.
-        const fixed = lookupRegister(pattern.name);
-        if (fixed === null) {
-          throw new AsmDecodeError(`Internal: ${pattern.name} is not a register name`, address);
-        }
+        // `tableEntry` looked the name up at load, so it is always resolved.
+        const fixed = matched.fixedRegisters[position]!;
         operands.push({
           kind: "register",
           index: physicalRegister(fixed.index, fixed.high8),
@@ -380,6 +413,13 @@ export function decodeInstruction(
       case "one":
         operands.push({ kind: "immediate", value: 1n });
         break;
+      default: {
+        const unhandled: never = pattern;
+        throw new AsmDecodeError(
+          `Internal: unhandled operand pattern ${(unhandled as OperandPattern).k}`,
+          address,
+        );
+      }
     }
   }
 
