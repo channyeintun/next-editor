@@ -126,21 +126,21 @@ The main extension hooks in `EditorMachineInput` are:
 
 ## Utility Modules (`src/core/src/utils`)
 
-| File                                   | Purpose                                                                                                       |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `frameDelta.ts`                        | `reconstructFrameAtIndex`, `createContentDelta`, `applyContentDelta`, `findFrameIndexAtTime`                  |
-| `editorDiff.ts`                        | `applyContentDiff`, `applySelectionDiff` — apply a replayed frame to a live Monaco editor                     |
-| `validation.ts`                        | `isValidEditorState`, `isEditorReady`                                                                         |
-| `deltaTypes.ts`                        | `DeltaFrame` and related delta wire types                                                                     |
-| `frameStreamEncoder.ts`                | `pushFrame` (incremental keyframe/delta encoder used during live capture) and its batch fold `compressFrames` |
-| `editorState.ts`                       | Normalizes recorded frames, positions, selections and view states (`normalizeEditorFrame`)                    |
-| `cursorCoordinates.ts`                 | Maps recorded cursor samples onto the current UI layout (viewport/root coordinate spaces)                     |
-| `cursorReplay.ts`                      | Fake-cursor tween/replay logic driven by `cursorEvents`                                                       |
-| `recordedCursorVisibility.ts`          | `RECORDED_CURSOR_VISIBILITY_EVENT`, its guard and dispatcher: hides or shows the recorded cursor at a point   |
-| `iframeInteractionProtocol.ts`         | `IFRAME_INTERACTION_MESSAGE_TYPE`, the `postMessage` type preview frames report pointer interactions with     |
-| `audioContext.ts` / `audioDuration.ts` | Shared `AudioContext` helpers and exact-duration calculation for audio blobs                                  |
-| `stringAffix.ts`                       | Small string prefix/suffix helpers used by content diffing                                                    |
-| `timedIndex.ts`                        | `findTimedEventIndexAtOrBefore` — timestamp-to-index lookup shared by frames and every replay track           |
+| File                                   | Purpose                                                                                                                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `frameDelta.ts`                        | `reconstructFrameAtIndex`, `createContentDelta`, `applyContentDelta`, `findFrameIndexAtTime`                                                                                                |
+| `editorDiff.ts`                        | `applyContentDiff`, `applySelectionDiff` — apply a replayed frame to a live Monaco editor                                                                                                   |
+| `validation.ts`                        | `isValidEditorState`, `isEditorReady`                                                                                                                                                       |
+| `deltaTypes.ts`                        | `DeltaFrame` and related delta wire types                                                                                                                                                   |
+| `frameStreamEncoder.ts`                | `pushFrame` (incremental keyframe/delta encoder used during live capture), its batch fold `compressFrames`, and `resumeFrameStreamEncoder` (carries the keyframe cadence on after a retake) |
+| `editorState.ts`                       | Normalizes recorded frames, positions, selections and view states (`normalizeEditorFrame`)                                                                                                  |
+| `cursorCoordinates.ts`                 | Maps recorded cursor samples onto the current UI layout (viewport/root coordinate spaces)                                                                                                   |
+| `cursorReplay.ts`                      | Fake-cursor tween/replay logic driven by `cursorEvents`                                                                                                                                     |
+| `recordedCursorVisibility.ts`          | `RECORDED_CURSOR_VISIBILITY_EVENT`, its guard and dispatcher: hides or shows the recorded cursor at a point                                                                                 |
+| `iframeInteractionProtocol.ts`         | `IFRAME_INTERACTION_MESSAGE_TYPE`, the `postMessage` type preview frames report pointer interactions with                                                                                   |
+| `audioContext.ts` / `audioDuration.ts` | Shared `AudioContext` helpers and exact-duration calculation for audio blobs                                                                                                                |
+| `stringAffix.ts`                       | Small string prefix/suffix helpers used by content diffing                                                                                                                                  |
+| `timedIndex.ts`                        | `findTimedEventIndexAtOrBefore` — timestamp-to-index lookup shared by frames and every replay track                                                                                         |
 
 ### dmpCodec (WASM diffing)
 

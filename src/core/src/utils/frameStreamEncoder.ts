@@ -1,5 +1,5 @@
 import type { EditorFrame } from "../types";
-import { DELTA_CONFIG, type DeltaFrame } from "./deltaTypes";
+import { DELTA_CONFIG, isKeyframe, type DeltaFrame } from "./deltaTypes";
 import {
   createFrameDelta,
   createKeyframe,
@@ -37,6 +37,23 @@ export function createFrameStreamEncoder(): FrameStreamEncoderState {
     lastStoredFrame: null,
     lastFullFrame: null,
   };
+}
+
+/**
+ * An encoder that carries on after `frames` as if it had emitted them; `lastFrame` is
+ * their fold (null when empty).
+ */
+export function resumeFrameStreamEncoder(
+  frames: readonly DeltaFrame[],
+  lastFrame: EditorFrame | null,
+): FrameStreamEncoderState {
+  // Deltas stored after the last keyframe: the keyframe cadence picks up from there.
+  let framesSinceKeyframe = 0;
+  for (let index = frames.length - 1; index >= 0; index--) {
+    if (isKeyframe(frames[index])) break;
+    framesSinceKeyframe++;
+  }
+  return { framesSinceKeyframe, lastStoredFrame: lastFrame, lastFullFrame: lastFrame };
 }
 
 /**

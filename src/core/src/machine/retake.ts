@@ -5,7 +5,8 @@ import {
   EMPTY_WHITEBOARD_SCENE,
   type WhiteboardSceneState,
 } from "../whiteboard";
-import { isKeyframe, reconstructFrameAtIndex } from "../utils/frameDelta";
+import { reconstructFrameAtIndex } from "../utils/frameDelta";
+import { resumeFrameStreamEncoder } from "../utils/frameStreamEncoder";
 import { addMediaCut, totalMediaSpanLength } from "../utils/mediaSpans";
 import { RUNTIME_CHECKPOINT_MAX_EVENTS, resolveLatestRuntimeSnapshot } from "../runtimeTrack";
 import { getRecordingTimestamp } from "./recordingSession";
@@ -91,16 +92,6 @@ function keptUntil<T>(entries: readonly T[], time: number, timeOf: (entry: T) =>
 const byTimestamp = (entry: { timestamp: number }) => entry.timestamp;
 const byTime = (entry: { time: number }) => entry.time;
 
-/** Deltas stored after the last keyframe: the encoder's keyframe cadence picks up from there. */
-function framesSinceLastKeyframe(frames: RecordingSession["frames"]): number {
-  let count = 0;
-  for (let index = frames.length - 1; index >= 0; index--) {
-    if (isKeyframe(frames[index])) return count;
-    count++;
-  }
-  return count;
-}
-
 /** What the live editor has to be put back to after a rewind. */
 export interface RetakeRestore {
   /** The editor state at the safe point: the last kept frame. */
@@ -169,11 +160,7 @@ export function rewindSessionToSafePoint(
     session.frames.length > 0
       ? reconstructFrameAtIndex(session.frames, session.frames.length - 1)
       : null;
-  session.encoder = {
-    framesSinceKeyframe: framesSinceLastKeyframe(session.frames),
-    lastStoredFrame: frame,
-    lastFullFrame: frame,
-  };
+  session.encoder = resumeFrameStreamEncoder(session.frames, frame);
   // Nothing captured since the safe point may be reused for the next frame.
   session.lastCapturedViewStateRef = undefined;
 

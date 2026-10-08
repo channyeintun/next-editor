@@ -3,7 +3,12 @@ import type * as monaco from "monaco-editor";
 import type { EditorFrame } from "../types";
 import { DELTA_CONFIG, isDelta, isKeyframe, type DeltaFrame } from "./deltaTypes";
 import { applyFrameDelta, createContentEditDelta, reconstructFrameAtIndex } from "./frameDelta";
-import { compressFrames, createFrameStreamEncoder, pushFrame } from "./frameStreamEncoder";
+import {
+  compressFrames,
+  createFrameStreamEncoder,
+  pushFrame,
+  resumeFrameStreamEncoder,
+} from "./frameStreamEncoder";
 
 const INTERVAL = DELTA_CONFIG.KEYFRAME_INTERVAL;
 
@@ -120,6 +125,37 @@ describe("pushFrame keyframe cadence", () => {
       folded = isKeyframe(frame) ? frame : applyFrameDelta(folded, frame, index);
       expect(reconstructFrameAtIndex(frames, index)?.state).toEqual(folded.state);
     }
+  });
+});
+
+describe("resumeFrameStreamEncoder", () => {
+  // Keystroke n is stored as frame n, from capture 3n - 1 (after the opening capture and
+  // its no-op), so these prefixes end just before, on and after the second keyframe, and
+  // on a no-op capture as well as on a stored one.
+  it.each([3 * INTERVAL - 4, 3 * INTERVAL - 1, 3 * INTERVAL, 3 * INTERVAL + 1, 3 * INTERVAL + 15])(
+    "keeps the uninterrupted keyframe cadence after the first %i captures",
+    (split) => {
+      const captures = typingCaptures(300, 1);
+      const prefix = compressFrames(captures.slice(0, split));
+
+      let state = resumeFrameStreamEncoder(
+        prefix,
+        reconstructFrameAtIndex(prefix, prefix.length - 1),
+      );
+      const resumed = [...prefix];
+      for (const capture of captures.slice(split)) {
+        const pushed = pushFrame(state, capture);
+        state = pushed.state;
+        if (pushed.emitted) resumed.push(pushed.emitted);
+      }
+
+      expect(resumed).toHaveLength(301);
+      expect(keyframeIndices(resumed)).toEqual(keyframeIndices(compressFrames(captures)));
+    },
+  );
+
+  it("starts empty when there are no frames to carry on from", () => {
+    expect(resumeFrameStreamEncoder([], null)).toEqual(createFrameStreamEncoder());
   });
 });
 
