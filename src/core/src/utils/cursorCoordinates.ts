@@ -117,12 +117,19 @@ function getTargetId(element: Element | null): string | null {
   return id || null;
 }
 
-function findClosestReplayTarget(element: Element | null): Element | null {
+/** An element that carries a replay target id, and that id (trimmed, never empty). */
+interface ReplayTargetMatch {
+  element: Element;
+  id: string;
+}
+
+function findClosestReplayTarget(element: Element | null): ReplayTargetMatch | null {
   let current: Element | null = element;
 
   while (current) {
-    if (getTargetId(current)) {
-      return current;
+    const id = getTargetId(current);
+    if (id) {
+      return { element: current, id };
     }
 
     current = current.parentElement;
@@ -296,7 +303,7 @@ export function createCursorPositionFromClientPoint({
   const eventElement = getElementFromTarget(eventTarget);
   const replayTarget = preferredTarget ?? findClosestReplayTarget(eventElement);
   const ownerDocument = getOwnerDocument(
-    rootElement ?? replayTarget ?? eventElement ?? targetElement ?? null,
+    rootElement ?? replayTarget?.element ?? eventElement ?? targetElement ?? null,
   );
   const rootTarget = rootElement ?? findCursorReplayRoot(ownerDocument);
 
@@ -304,8 +311,8 @@ export function createCursorPositionFromClientPoint({
     const rootRect = getRectSnapshot(rootTarget);
     const x = Math.floor(toFiniteNumber(clientX) - rootRect.left);
     const y = Math.floor(toFiniteNumber(clientY) - rootRect.top);
-    const target = replayTarget ?? rootTarget;
-    const targetId = getTargetId(target) ?? CURSOR_REPLAY_ROOT_TARGET_ID;
+    const snapshotElement = replayTarget?.element ?? rootTarget;
+    const targetId = replayTarget?.id ?? getTargetId(rootTarget) ?? CURSOR_REPLAY_ROOT_TARGET_ID;
 
     return {
       x,
@@ -320,10 +327,10 @@ export function createCursorPositionFromClientPoint({
       }),
       target: createTargetSnapshot(
         targetId,
-        getRectRelativeToRoot(target, rootRect),
+        getRectRelativeToRoot(snapshotElement, rootRect),
         x,
         y,
-        cellAt(target, toFiniteNumber(clientX), toFiniteNumber(clientY)),
+        cellAt(snapshotElement, toFiniteNumber(clientX), toFiniteNumber(clientY)),
       ),
     };
   }
@@ -349,16 +356,6 @@ export function createCursorPositionFromClientPoint({
     };
   }
 
-  const targetId = getTargetId(replayTarget);
-  if (!targetId) {
-    return {
-      x,
-      y,
-      visible,
-      ...createCursorMetadata({ coordinateSpace: "viewport", flags, angle, pressure }),
-    };
-  }
-
   return {
     x,
     y,
@@ -366,16 +363,16 @@ export function createCursorPositionFromClientPoint({
     ...createCursorMetadata({
       coordinateSpace: "viewport",
       flags,
-      hover: targetId,
+      hover: replayTarget.id,
       angle,
       pressure,
     }),
     target: createTargetSnapshot(
-      targetId,
-      getRectSnapshot(replayTarget),
+      replayTarget.id,
+      getRectSnapshot(replayTarget.element),
       x,
       y,
-      cellAt(replayTarget, toFiniteNumber(clientX), toFiniteNumber(clientY)),
+      cellAt(replayTarget.element, toFiniteNumber(clientX), toFiniteNumber(clientY)),
     ),
   };
 }
