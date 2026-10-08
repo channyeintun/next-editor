@@ -164,8 +164,10 @@ describe("mouseTrackingActor", () => {
     const onMouseMove = vi.fn<(position: MouseCursorPosition) => void>();
     const actor = createActor(mouseTrackingActor, { input: { onMouseMove } }).start();
 
-    // The capture listener on the document also sees leaves from its elements.
+    // The capture listener on the document also sees leaves from its elements,
+    // and the body's when the pointer only moves below a short body.
     fireMouseLeave(line);
+    fireMouseLeave(document.body);
 
     expect(onMouseMove).not.toHaveBeenCalled();
 

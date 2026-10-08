@@ -38,12 +38,15 @@ interface MouseTrackingInput {
  * `getCursorPositionAtTime`, which refuses to tween across a visibility flip.
  * Worst case the pointer is stationary when the node under it is removed, so no
  * `pointermove` corrects it and the replayed cursor stays hidden for the rest of
- * that stretch. Leaving the viewport for real does target the root element.
+ * that stretch. Leaving the viewport for real does target the root element,
+ * whose hit area covers the viewport, so only it marks a page leave. The body
+ * gets a mouseleave too while the pointer is still on screen: when it moves
+ * below a short body, or when the node under it is removed.
  * Only the host page uses it. Preview iframes have no mouseleave listener (see
  * `attachToDocument` in iframeCursorTracking.ts).
  */
 function isPageBoundaryLeave(event: Event, doc: Document): boolean {
-  return event.target === doc.documentElement || event.target === doc.body;
+  return event.target === doc.documentElement;
 }
 
 function getPointerFlags(event: MouseEvent): number {
