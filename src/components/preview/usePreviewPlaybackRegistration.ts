@@ -1,5 +1,6 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { PreviewPatchReplayInput } from "../../core/src/types";
+import { getRrwebReplayLead } from "../../core/src/utils/previewReplayLead";
 import type { PreviewAdapterHandle } from "../../stores/previewAdapterHandle";
 import type {
   ApiClientReplayState,
@@ -15,7 +16,7 @@ import type {
 import { arePreviewSizesEqual } from "../../utils/equality";
 import type { PreviewScrollPosition } from "./previewIframeUtils";
 import { clampCustomPreviewSize, isCustomPreviewSize } from "./previewSizeUtils";
-import { buildRrwebReplayEvents, getRrwebReplayLead } from "./rrwebPreview";
+import { buildRrwebReplayEvents } from "./rrwebPreview";
 import { createRrwebPreviewReplayer, type RrwebPreviewReplayer } from "./rrwebPreviewReplayer";
 
 interface UsePreviewPlaybackRegistrationOptions {

@@ -193,7 +193,8 @@ mutes stretches of a finished recording through `applyRecordingEdit` (`src/core/
   follows moves earlier, so no change inside it is lost. The editor frames inside a cut are
   squashed into one keyframe of their final state, so text typed and deleted there leaves no
   trace. The preview's rrweb stamps are first re-based onto recorded time so the cut applies to
-  them directly.
+  them directly, by the same lead replay uses (`getRrwebReplayLead`,
+  `src/core/src/utils/previewReplayLead.ts`).
 - The narration edit (cuts less their window, and mutes, on the audio's own clock) is left as
   `pendingAudioEdit` for `loadRecording`, and the camera's `cameraCuts` gain the cut spans.
 - The edited recording gets a new id and is loaded in place; once loaded (narration cut) it is

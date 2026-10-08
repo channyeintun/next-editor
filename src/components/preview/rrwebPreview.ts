@@ -1,4 +1,5 @@
 import type { eventWithTime } from "@rrweb/types";
+import { getRrwebReplayLead } from "../../core/src/utils/previewReplayLead";
 import type {
   PreviewDomPatchBatch,
   PreviewInitialDocument,
@@ -25,23 +26,12 @@ export const RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE = "NEXT_EDITOR_RUNTIME_TAKE_SNAP
 export const PREVIEW_RRWEB_FORMAT_VERSION = 2;
 
 // Reassembles the full, time-ordered rrweb event stream the `Replayer` consumes
-// from the recorded segments.
-//
-// Each rrweb event carries the preview iframe's raw `Date.now()` timestamp, but
-// the playback timeline runs on the recording clock (`performance.now() -
-// startedAtPerf`, whose origin is anchored to the audio start — typically
-// seconds after the preview snapshot, due to mic warmup). Replaying on the raw
-// clock makes preview content lag the audio/editor by that fixed offset.
-//
-// A segment's `time` is when the host received it, on the recording clock, so
-// `events[0].timestamp - time` is the preview clock's lead over the recording
-// clock minus that segment's delivery delay. The largest lead belongs to the
-// segment that reached the host fastest; rebasing every event by it keeps each
-// one at (never after) its true recording time and preserves the raw rrweb
-// deltas between events, so replay follows when the preview actually changed.
+// from the recorded segments, every event rebased from the preview iframe's raw
+// clock onto the recording clock by the preview clock's lead (see
+// getRrwebReplayLead, which explains the rule).
 //
 // `lead` overrides that rebase, so events streamed in after a build can be
-// rebased exactly as the build's were (see getRrwebReplayLead).
+// rebased exactly as the build's were.
 export function buildRrwebReplayEvents(
   initialDocuments: PreviewInitialDocument[],
   patchBatches: PreviewDomPatchBatch[],
@@ -65,22 +55,6 @@ export function buildRrwebReplayEvents(
   events.sort((left, right) => left.timestamp - right.timestamp);
 
   return events as unknown as eventWithTime[];
-}
-
-// The preview clock's lead over the recording clock that buildRrwebReplayEvents
-// rebases every event by: the largest over the segments that carry events, or
-// -Infinity when none does.
-export function getRrwebReplayLead(
-  initialDocuments: readonly PreviewInitialDocument[],
-  patchBatches: readonly PreviewDomPatchBatch[],
-): number {
-  let lead = -Infinity;
-  for (const segment of [...initialDocuments, ...patchBatches]) {
-    if (segment.events?.length) {
-      lead = Math.max(lead, segment.events[0].timestamp - segment.time);
-    }
-  }
-  return lead;
 }
 
 // True when a recording's preview can be replayed by rrweb: it has a seed (an

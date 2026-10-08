@@ -7,6 +7,7 @@ import {
 } from "./recordingEdit";
 import { compressFrames } from "./utils/frameStreamEncoder";
 import { reconstructFrameAtIndex } from "./utils/frameDelta";
+import { getRrwebReplayLead } from "./utils/previewReplayLead";
 import type { EditorFrame, Recording } from "./types";
 
 const selection = {
@@ -164,6 +165,10 @@ describe("applying an edit to a recording", () => {
     expect(batch.events![0].timestamp).toBe(mapTimeThroughCuts(66_000 - 59_990, [cut]));
     expect(document.events![0].timestamp - document.time).toBe(0);
     expect(batch.time).toBeGreaterThanOrEqual(batch.events![0].timestamp);
+    // What replay rebases the edited stamps by.
+    expect(getRrwebReplayLead(edited.previewInitialDocuments!, edited.previewPatchBatches!)).toBe(
+      0,
+    );
   });
 
   it("leaves the narration edit for loading, on the audio's own clock", () => {

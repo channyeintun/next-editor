@@ -16,6 +16,7 @@ import {
   type MediaSpan,
 } from "./utils/mediaSpans";
 import type { AudioEdit } from "./utils/audioEdit";
+import { getRrwebReplayLead } from "./utils/previewReplayLead";
 
 // ============================================================================
 // Cutting and muting a finished recording.
@@ -143,19 +144,17 @@ const retimeByTimestamp = <T extends { timestamp: number }>(
   events?.map((event) => ({ ...event, timestamp: mapTimeThroughCuts(event.timestamp, cuts) }));
 
 /**
- * rrweb events are placed by their own stamps less one offset (buildRrwebReplayEvents).
- * Rebasing every stamp onto recorded time first lets the cuts apply to it directly;
- * each segment's `time` is kept at or after its first event, which makes that offset 0.
+ * rrweb events are placed by their own stamps less one offset (getRrwebReplayLead, which
+ * replay rebases by too). Rebasing every stamp onto recorded time first lets the cuts
+ * apply to it directly; each segment's `time` is kept at or after its first event, which
+ * makes that offset 0.
  */
 function editPreviewSegments(
   initialDocuments: readonly PreviewInitialDocument[] | undefined,
   patchBatches: readonly PreviewDomPatchBatch[] | undefined,
   cuts: readonly MediaSpan[],
 ): { initialDocuments?: PreviewInitialDocument[]; patchBatches?: PreviewDomPatchBatch[] } {
-  let lead = -Infinity;
-  for (const segment of [...(initialDocuments ?? []), ...(patchBatches ?? [])]) {
-    if (segment.events?.length) lead = Math.max(lead, segment.events[0].timestamp - segment.time);
-  }
+  const lead = getRrwebReplayLead(initialDocuments ?? [], patchBatches ?? []);
 
   const retime = <T extends PreviewInitialDocument | PreviewDomPatchBatch>(segment: T): T => {
     const time = mapTimeThroughCuts(segment.time, cuts);
