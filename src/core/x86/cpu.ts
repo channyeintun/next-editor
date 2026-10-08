@@ -101,6 +101,10 @@ export const DEFAULT_MAX_OUTPUT_BYTES = 256 * 1024;
  * this the tab dies before the runner ever gets to say what went wrong.
  */
 export const DEFAULT_MAX_HEAP_BYTES = 64 * 1024 * 1024;
+/** How far a single `brk` call may move the break (4 MiB). */
+const MAX_BRK_STEP_BYTES = 0x40_0000n;
+/** Linux's "bad file descriptor" errno, returned negated in `rax`. */
+const EBADF = 9n;
 
 /** Canonical condition mnemonic suffix (`e`, `ge`, …) to its 4-bit code. */
 const CONDITION_BY_NAME = new Map<string, number>();
@@ -814,7 +818,7 @@ export class Machine {
       case 0n: {
         // read(fd, buf, count)
         if (arg0 !== 0n) {
-          this.registers[RAX] = -9n & U64;
+          this.registers[RAX] = -EBADF & U64;
           return;
         }
         const wanted = Number(arg2);
@@ -829,7 +833,7 @@ export class Machine {
       case 1n: {
         // write(fd, buf, count)
         if (arg0 !== 1n && arg0 !== 2n) {
-          this.registers[RAX] = -9n & U64;
+          this.registers[RAX] = -EBADF & U64;
           return;
         }
         const length = Number(arg2);
@@ -866,7 +870,7 @@ export class Machine {
         // #maxHeapBytes above where it started. Without the total, a loop of
         // individually reasonable requests grows real memory thousands of times
         // faster than it burns the instruction budget.
-        const perCall = this.#break + 0x40_0000n;
+        const perCall = this.#break + MAX_BRK_STEP_BYTES;
         const ceiling = this.#heapStart + BigInt(this.#maxHeapBytes);
         if (arg0 > perCall || arg0 > ceiling) {
           this.registers[RAX] = this.#break;
