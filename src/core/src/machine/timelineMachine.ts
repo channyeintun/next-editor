@@ -110,6 +110,11 @@ export const timelineMachine = setup({
       entry: assign({
         startedAt: () => performance.now(),
       }),
+      // Leaving running (PAUSE, or a STOP, including the one raised at the end) freezes the
+      // count at the playhead, so the next START counts on from there.
+      exit: assign({
+        accumulatedTime: ({ context }) => context.currentTime,
+      }),
       invoke: {
         src: "ticker",
       },
@@ -155,9 +160,6 @@ export const timelineMachine = setup({
       },
     },
     paused: {
-      entry: assign({
-        accumulatedTime: ({ context }) => context.currentTime,
-      }),
       on: {
         START: "running",
         STOP: "stopped",

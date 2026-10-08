@@ -148,6 +148,22 @@ describe("timelineMachine ticker lifecycle", () => {
       actor.stop();
     });
 
+    it("counts on from where it stopped", () => {
+      const { actor, timelineActor, position } = startTimeline();
+
+      clock.now = 300;
+      runNextFrame();
+      timelineActor.send({ type: "STOP" });
+      expect(frames.size).toBe(0);
+      clock.now = 5_000;
+      timelineActor.send({ type: "START" });
+      clock.now = 5_100;
+      runNextFrame();
+
+      expect(position()).toBe(400);
+      actor.stop();
+    });
+
     it("re-anchors on a speed change so only later time runs faster", () => {
       const { actor, timelineActor, position } = startTimeline();
 

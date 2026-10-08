@@ -274,6 +274,7 @@ stateDiagram-v2
 
 - `running` invokes a `requestAnimationFrame` ticker that sends `PULSE`. Each pulse moves the playhead and sends the editor `TICK`; once the playhead reaches the end, it raises `STOP` and sends `FINISHED`.
 - `SEEK`, `SET_DURATION` and `SET_SPEED` are handled at the machine root, so they work in every state. `running` has its own `SEEK` and `SET_SPEED`, which also restart the count, so the next pulse measures from there.
+- Leaving `running` freezes the count at the playhead, so `START` from `paused` or `stopped` resumes there.
 - The editor only sends `START`, `PAUSE`, `SEEK`, `SET_SPEED` and `SET_DURATION`. `STOP` is only raised by the timeline itself, from `running`, so nothing sends `paused` its `STOP` today.
 
 ### Recorder actors
