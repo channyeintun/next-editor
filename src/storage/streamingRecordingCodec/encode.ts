@@ -38,6 +38,7 @@ import { deriveRecordingClusters, deriveRecordingTracks, groupRecordsByCluster }
 import { stripFramePreviewContent } from "./framePreviewContentDedup";
 import { createPreviewAddNodeStripper } from "./previewPatchDedup";
 import { createWorkspaceEventContentStripper } from "./workspaceEventDedup";
+import type { DecodedRecording } from "./decode";
 
 // ============================================================================
 // Encoding: turn a `Recording` into SCR3 bytes.
@@ -321,7 +322,7 @@ function buildRecordingStreamMeta(
   };
 }
 
-export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
+export async function encodeRecordingToStream(recording: DecodedRecording): Promise<Uint8Array> {
   const normalized = normalizeRecordingData(recording);
   const tracks = deriveRecordingTracks(normalized);
   const clusters = deriveRecordingClusters(normalized);
@@ -329,7 +330,12 @@ export async function encodeRecordingToStream(recording: Recording): Promise<Uin
 
   writer.writeHeader(buildRecordingStreamMeta(normalized, tracks, clusters));
 
-  for await (const asset of iterateRecordingWorkspaceAssets(normalized)) {
+  // Normalizing rewrites only the frames and types the result as a plain Recording,
+  // so the supplied raw assets are handed to the iterator alongside it.
+  for await (const asset of iterateRecordingWorkspaceAssets({
+    ...normalized,
+    workspaceAssets: recording.workspaceAssets,
+  })) {
     writer.appendWorkspaceAssetSegment(asset);
   }
 

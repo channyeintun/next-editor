@@ -60,7 +60,6 @@ interface Recording {
   previewInitialDocuments?: PreviewInitialDocument[];
   previewPatchBatches?: PreviewDomPatchBatch[];
   workspaceEvents?: WorkspaceRecordingEvent[];
-  workspaceAssets?: WorkspaceRecordingAsset[]; // transient decode/encode handoff only
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
   captions?: CaptionTrack[]; // parsed subtitle tracks carried inline
@@ -100,8 +99,10 @@ Notable current fields:
   which is validated on decode. A `?t=` link (`90`, `1m30s`, `1:30`) opens a lesson at a moment.
 - `cameraCuts` lists camera footage a retake discarded (spans of the camera's media timeline), which playback maps around; `pendingAudioEdit` is a narration edit (retake cuts) that `loadRecording` applies to `audioBlob` and drops — it is never written to a file.
 - Workspace projects store `{ kind: "asset", assetId, mimeType, size }` descriptors rather than
-  base64. `workspaceAssets` exists only while raw SCR3 asset segments are handed to IndexedDB; it
-  is stripped before the recording enters playback state.
+  base64. The raw SCR3 asset segments are not a `Recording` field: the codec hands them over on
+  its own `DecodedRecording.workspaceAssets` (and `StreamingRecordingDelta.newWorkspaceAssets`)
+  in `src/storage/streamingRecordingCodec/decode.ts`, and storage moves them to IndexedDB and
+  strips them before the recording enters playback state.
 - API client request/response data is not a top-level recording field — it travels inside `previewEvents` (see [Preview Replay Data](#preview-replay-data) and [API Client Data](#api-client-data)).
 
 ## Frame Data

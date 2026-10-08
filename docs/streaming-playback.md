@@ -104,8 +104,9 @@ async function streamPrefixes(response: Response) {
     } else {
       const delta = reader.readDelta();
       if (delta) {
-        await persistDecodedWorkspaceAssets(delta.newWorkspaceAssets);
-        appendRecordingDelta({ ...delta, newWorkspaceAssets: [] });
+        const { newWorkspaceAssets, ...recordDelta } = delta;
+        await persistDecodedWorkspaceAssets(newWorkspaceAssets);
+        appendRecordingDelta(recordDelta);
       }
     }
   }

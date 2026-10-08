@@ -88,9 +88,10 @@ export async function streamRecording(
 
     const delta = streamReader.readDelta();
     if (delta) {
-      await persistDecodedWorkspaceAssets(delta.newWorkspaceAssets);
+      const { newWorkspaceAssets, ...recordDelta } = delta;
+      await persistDecodedWorkspaceAssets(newWorkspaceAssets);
       if (sink.isStale()) return;
-      sink.appendDelta({ ...delta, newWorkspaceAssets: [] });
+      sink.appendDelta(recordDelta);
     }
 
     // Settle on the complete recording once the footer is in, or once the body ends

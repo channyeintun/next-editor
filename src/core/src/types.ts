@@ -9,11 +9,7 @@ import type {
   SlidePreviewState,
 } from "./slides";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "./runtime";
-import type {
-  WorkspaceRecordingAsset,
-  WorkspaceRecordingEvent,
-  WorkspaceRecordingSnapshot,
-} from "../../types/workspace";
+import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../types/workspace";
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";
 import type { MediaSpan } from "./utils/mediaSpans";
@@ -199,8 +195,6 @@ export interface Recording {
   previewInitialDocuments?: PreviewInitialDocument[];
   previewPatchBatches?: PreviewDomPatchBatch[];
   workspaceEvents?: WorkspaceRecordingEvent[];
-  /** Transient raw assets decoded from SCR3 before they are moved into asset storage. */
-  workspaceAssets?: WorkspaceRecordingAsset[];
   runtimeEvents?: RuntimeRecordingEvent[];
   cursorEvents?: CursorRecordingEvent[];
   whiteboardEvents?: WhiteboardEvent[];
@@ -277,8 +271,6 @@ export interface RecordingStreamDelta {
   newPreviewInitialDocuments: PreviewInitialDocument[];
   newPreviewPatchBatches: PreviewDomPatchBatch[];
   newWorkspaceEvents: WorkspaceRecordingEvent[];
-  /** Raw asset segments decoded since the previous delivery. */
-  newWorkspaceAssets?: WorkspaceRecordingAsset[];
   newRuntimeEvents: RuntimeRecordingEvent[];
   newCursorEvents: CursorRecordingEvent[];
   newWhiteboardEvents: WhiteboardEvent[];

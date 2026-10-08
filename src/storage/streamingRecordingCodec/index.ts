@@ -15,4 +15,4 @@ export type { RecordingStreamMeta } from "./format";
 export { createStreamingRecordingWriter, encodeRecordingToStream } from "./encode";
 
 export { decodeRecordingStream, createStreamingRecordingReader } from "./decode";
-export type { StreamingRecordingDelta, StreamingRecordingReader } from "./decode";
+export type { DecodedRecording, StreamingRecordingDelta, StreamingRecordingReader } from "./decode";

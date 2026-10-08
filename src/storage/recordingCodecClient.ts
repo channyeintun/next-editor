@@ -9,6 +9,7 @@ import {
 } from "./recordingCodec";
 import type { RecordingCodecWorkerApi } from "./recordingCodec.worker";
 import { hydrateDecodedRecordingWorkspaceAssets } from "./recordingWorkspaceAssets";
+import type { DecodedRecording } from "./streamingRecordingCodec";
 
 interface RecordingCodecWorkerClient {
   api: Remote<RecordingCodecWorkerApi>;
@@ -109,7 +110,7 @@ export async function decompressBinaryToRecording(binaryData: Uint8Array): Promi
   return hydrateDecodedRecordingWorkspaceAssets(recording);
 }
 
-export async function encodeRecordingToStream(recording: Recording): Promise<Uint8Array> {
+export async function encodeRecordingToStream(recording: DecodedRecording): Promise<Uint8Array> {
   const client = getRecordingCodecWorkerClient();
 
   if (!client || recording.workspaceAssets?.length || typeof indexedDB === "undefined") {

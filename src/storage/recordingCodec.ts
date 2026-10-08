@@ -4,6 +4,7 @@ import {
   decodeRecordingStream,
   encodeRecordingToStream,
   isStreamingRecording,
+  type DecodedRecording,
 } from "./streamingRecordingCodec";
 
 export { encodeRecordingToStream };
@@ -18,7 +19,9 @@ export function normalizeRecording(recording: Recording): Recording {
   );
 }
 
-export async function decompressBinaryToRecording(binaryData: Uint8Array): Promise<Recording> {
+export async function decompressBinaryToRecording(
+  binaryData: Uint8Array,
+): Promise<DecodedRecording> {
   if (!isStreamingRecording(binaryData)) {
     throw new Error("Invalid recording format: expected an SCR3 stream");
   }

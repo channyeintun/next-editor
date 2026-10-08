@@ -1,4 +1,5 @@
 import type { Recording } from "../core/src";
+import type { DecodedRecording } from "./streamingRecordingCodec";
 import {
   isWorkspaceAssetDescriptor,
   isWorkspaceAssetFile,
@@ -56,7 +57,7 @@ export function collectRecordingWorkspaceAssetDescriptors(
 }
 
 export async function* iterateRecordingWorkspaceAssets(
-  recording: Recording,
+  recording: DecodedRecording,
 ): AsyncGenerator<WorkspaceRecordingAsset> {
   const descriptors = collectRecordingWorkspaceAssetDescriptors(recording);
   const supplied = new Map<string, WorkspaceRecordingAsset>();
@@ -97,14 +98,14 @@ export async function persistDecodedWorkspaceAssets(
   }
 }
 
-export function stripRecordingWorkspaceAssets(recording: Recording): Recording {
+export function stripRecordingWorkspaceAssets(recording: DecodedRecording): Recording {
   if (!recording.workspaceAssets) return recording;
   const { workspaceAssets: _workspaceAssets, ...withoutAssets } = recording;
   return withoutAssets;
 }
 
 export async function hydrateDecodedRecordingWorkspaceAssets(
-  recording: Recording,
+  recording: DecodedRecording,
 ): Promise<Recording> {
   await persistDecodedWorkspaceAssets(recording.workspaceAssets);
   return stripRecordingWorkspaceAssets(recording);

@@ -52,6 +52,18 @@ import { normalizeChapters } from "../../core/src/utils/chapters";
 // progressively-decoded prefix and a one-shot decode of the same bytes match.
 // ============================================================================
 
+/**
+ * A {@link Recording} as the codec hands it over, which may still carry the raw asset
+ * segments decoded from SCR3. Storage moves them into asset storage and strips them
+ * (recordingWorkspaceAssets.ts) before the recording reaches the machine, so core's
+ * `Recording` does not declare them. The encoder takes the same shape and writes any
+ * supplied assets as they are rather than reading them back from asset storage.
+ */
+export type DecodedRecording = Recording & {
+  /** Raw asset segments decoded from SCR3, before they move into asset storage. */
+  workspaceAssets?: WorkspaceRecordingAsset[];
+};
+
 function assertFrameFormatCompatibility(
   frames: ReadonlyArray<DeltaFrame>,
   formatVersion: number,
@@ -401,19 +413,19 @@ function ingestSegmentRegion(
 }
 
 /**
- * Builds a {@link Recording} from a decoded stream. `records` are passed separately
+ * Builds a {@link DecodedRecording} from a decoded stream. `records` are passed separately
  * so the streaming reader can hand in a copy and keep its own arrays private.
  */
 function assembleRecording(
   stream: DecodedStream,
   records: DecodedRecords,
   streamFinalized: boolean,
-): Recording {
+): DecodedRecording {
   const { meta } = stream;
   // decodeSegment normalized every frame as it arrived, so loading these needs no second pass.
   markFramesNormalized(records.frames);
 
-  const provisionalRecording: Recording = {
+  const provisionalRecording: DecodedRecording = {
     version: meta.version,
     id: meta.id,
     name: meta.name,
@@ -482,11 +494,11 @@ function sortClusters(clusters: RecordingClusterMeta[]): RecordingClusterMeta[] 
 }
 
 /**
- * Decodes a whole SCR3 buffer — or any prefix of one — into a `Recording`. A prefix
+ * Decodes a whole SCR3 buffer — or any prefix of one — into a `DecodedRecording`. A prefix
  * (in-progress footer, truncated trailing segment) decodes tolerantly with
  * `streamFinalized: false`, so callers can progressively decode a growing download.
  */
-export function decodeRecordingStream(bytes: Uint8Array): Recording {
+export function decodeRecordingStream(bytes: Uint8Array): DecodedRecording {
   if (bytes.byteLength > MAX_STREAM_BYTES) {
     throw new Error("Invalid SCR3 stream: recording exceeds the size limit");
   }
@@ -545,7 +557,7 @@ export interface StreamingRecordingReader {
    */
   readDelta(): StreamingRecordingDelta | null;
   /** Current decoded recording, or `null` until the header has fully arrived. */
-  getRecording(): Recording | null;
+  getRecording(): DecodedRecording | null;
   /** True once the footer has been parsed (the stream is complete). */
   isFinalized(): boolean;
   /** Total number of bytes fed so far. */
@@ -556,7 +568,11 @@ export interface StreamingRecordingReader {
   retainedCapacity(): number;
 }
 
-export type StreamingRecordingDelta = RecordingStreamDelta;
+/** A {@link RecordingStreamDelta} plus the raw asset segments decoded since the last one. */
+export type StreamingRecordingDelta = RecordingStreamDelta & {
+  /** Persisted to asset storage, then dropped, before the delta reaches the machine. */
+  newWorkspaceAssets?: WorkspaceRecordingAsset[];
+};
 
 const STREAMING_READER_INITIAL_CAPACITY = 64 * 1024;
 
