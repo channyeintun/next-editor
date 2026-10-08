@@ -354,28 +354,46 @@ fn common_suffix(a: &[u8], b: &[u8]) -> usize {
 // the subproblem as a plain replace. A clock would mean a host import, and this
 // module's whole shape depends on importing nothing (see the header), so the
 // bound here is *effort* rather than time: charge the bisect for each level's
-// k-loop span and take the same fallback once the budget is spent. Effort is a
-// faithful proxy — measured throughput is ~240k charges/ms, near-constant
-// across input sizes — and unlike a clock it is deterministic, so identical
-// inputs always yield an identical delta on every machine.
+// k-loop span and for the snakes it walks, and take the same fallback once the
+// budget is spent. Both terms are needed. The k-loop span dominates when D is
+// large; the snakes dominate on a long, repetitive document with scattered
+// edits, where each diagonal runs a long way before it meets a mismatch.
+// Charging the k-loop alone let a 1 MB document of alternating "ab" with 2000
+// substitutions per side walk 1.8B snake steps on 30M charges and take ~2s.
+// With snakes weighted by SNAKE_STEPS_PER_CHARGE, effort is a faithful proxy —
+// measured throughput is ~240k charges/ms, near-constant across input sizes —
+// and unlike a clock it is deterministic, so identical inputs always yield an
+// identical delta on every machine.
 //
 // 50M charges is ~200ms. The level is set by that size/latency trade rather
 // than by real recordings, which never reach it at all: the whole 11-minute
 // Kotlin lesson recording spends 0 charges, because affix trimming alone
 // resolves all 118 of its content changes. It only binds on bulk structural
-// edits, and there the measured shape is bimodal — edits that still yield a
-// compact delta cost <40M (a 2000-line file with every 10th line deleted: 39M,
-// ~150ms, 1.2 KB delta), while the ones worth abandoning cost 4x-100x more
-// (the same file renamed throughout: 162M; a 10000-line rewrite: 11B, 48s).
-// Cutting at 50M keeps the good deltas and still caps the rest at ~200ms.
+// edits and long repetitive documents, and there the measured shape is mostly
+// bimodal — edits that still yield a compact delta cost <41M (a 2000-line file
+// with every 10th line deleted: 40.6M, 1.2 KB delta; the 1 MB "ab" document
+// with 100 substitutions per side: 27M, 1 KB), while the ones worth abandoning
+// cost 2.5x or more (a 200 KB "ab" document with 2000 substitutions per side:
+// 103M; the 2000-line file renamed throughout: 164M; the 1 MB "ab" document
+// with 2000 substitutions per side: 477M; a 10000-line rewrite: 11B, 48s).
+// Denser line deletions straddle the cut (every 9th line: 50.3M, which falls
+// back). Cutting at 50M keeps the good deltas and caps the rest at ~200ms.
 // ---------------------------------------------------------------------------
 const WORK_BUDGET: u64 = 50_000_000;
 
-// Deepest Myers level the budget can pay for, plus one. Level d is charged
-// 2(d + 1), so levels 0..=d cost (d + 1)(d + 2) in total, and since the budget
-// is per call no bisect can ever reach a level of MAX_LEVELS or deeper. Every
-// diagonal a level writes satisfies |k| <= d, so diff_bisect sizes its V arrays
-// by this window instead of by the whole changed span.
+// Snake steps per budget unit. A snake step is one byte compare (~1ns) and a
+// k-loop charge one diagonal visit (~4ns), so a unit costs about the same wall
+// time either way. Each snake is charged its length divided by this, rounded
+// down: a snake shorter than this is free, but its diagonal was already
+// charged 1 through the k-loop span.
+const SNAKE_STEPS_PER_CHARGE: u64 = 4;
+
+// Deepest Myers level the budget can pay for, plus one. Level d is charged at
+// least 2(d + 1) (its k-loop spans; snakes only add to that), so levels 0..=d
+// cost at least (d + 1)(d + 2) in total, and since the budget is per call no
+// bisect can ever reach a level of MAX_LEVELS or deeper. Every diagonal a
+// level writes satisfies |k| <= d, so diff_bisect sizes its V arrays by this
+// window instead of by the whole changed span.
 const MAX_LEVELS: i32 = WORK_BUDGET.isqrt() as i32 + 1;
 
 // ---------------------------------------------------------------------------
@@ -481,11 +499,11 @@ impl Differ {
         let mut k2end = 0;
 
         let mut d = 0;
-        while d < max_d && d < window {
+        'levels: while d < max_d && d < window {
             // Charge this level's forward + reverse k-loop spans (each visits
             // d + 1 diagonals). Out of budget: stop searching and take the
             // replace fallthrough below, exactly as the reference does on
-            // deadline expiry.
+            // deadline expiry. Each snake below is charged too, as it ends.
             if !self.spend((d as u64 + 1) * 2) {
                 break;
             }
@@ -503,9 +521,13 @@ impl Differ {
                     x1 = v1[(k1_offset - 1) as usize] + 1;
                 }
                 let mut y1 = x1 - k1;
+                let x1_start = x1;
                 while x1 < a_len && y1 < b_len && a[x1 as usize] == b[y1 as usize] {
                     x1 += 1;
                     y1 += 1;
+                }
+                if !self.spend((x1 - x1_start) as u64 / SNAKE_STEPS_PER_CHARGE) {
+                    break 'levels;
                 }
                 v1[k1_offset as usize] = x1;
                 if x1 > a_len {
@@ -538,12 +560,16 @@ impl Differ {
                     x2 = v2[(k2_offset - 1) as usize] + 1;
                 }
                 let mut y2 = x2 - k2;
+                let x2_start = x2;
                 while x2 < a_len
                     && y2 < b_len
                     && a[(a_len - x2 - 1) as usize] == b[(b_len - y2 - 1) as usize]
                 {
                     x2 += 1;
                     y2 += 1;
+                }
+                if !self.spend((x2 - x2_start) as u64 / SNAKE_STEPS_PER_CHARGE) {
+                    break 'levels;
                 }
                 v2[k2_offset as usize] = x2;
                 if x2 > a_len {

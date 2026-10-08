@@ -216,4 +216,53 @@ describe.skipIf(!hasArtifact)("dmp codec (diff-match-patch in Rust)", () => {
     // Degrading to a replace must stay *correct* — only the delta gets bigger.
     expect(dec.decode(codec.applyDelta(a, delta))).toBe(target);
   });
+
+  // Two sides of an alternating "ab" document, each with `edits` bytes
+  // overwritten at seeded positions. Every diagonal's snake runs a long way
+  // before it meets a mismatch, so nearly all of the diff's work is snake
+  // steps rather than k-loop visits.
+  const repetitivePair = (size: number, edits: number) => {
+    let seed = 0x5eed1234;
+    const rand = (max: number) => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed % max;
+    };
+    const side = (mark: string) => {
+      const doc = enc.encode("ab".repeat(size / 2));
+      for (let i = 0; i < edits; i++) doc[rand(size)] = mark.charCodeAt(0);
+      return doc;
+    };
+    return [side("X"), side("Y")] as const;
+  };
+  const sameBytes = (x: Uint8Array, y: Uint8Array) =>
+    x.length === y.length && x.every((byte, i) => byte === y[i]);
+
+  it("bounds snake walks on a long repetitive document", async () => {
+    const codec = await load();
+    // Charging only the k-loop let this run unbounded: 31M charges against
+    // 7.6B snake steps, about 7s on the recorder's thread. Snakes are charged
+    // now too (SNAKE_STEPS_PER_CHARGE in src/core/dmp/src/lib.rs).
+    const [a, b] = repetitivePair(4_000_000, 2_000);
+
+    const started = performance.now();
+    const delta = codec.diffDelta(a, b);
+    const elapsed = performance.now() - started;
+
+    // Same ~200ms budget and slack as the bulk-edit case above.
+    expect(elapsed).toBeLessThan(3_000);
+    expect(sameBytes(codec.applyDelta(a, delta), b)).toBe(true);
+  });
+
+  it("keeps the compact delta for a few edits in a long repetitive document", async () => {
+    const codec = await load();
+    // ~110M snake steps cost the budget ~27M charges here, so the search still
+    // finishes. Charging every snake step in full would abandon it for a 1 MB
+    // replace of what is a ~1 KB delta.
+    const [a, b] = repetitivePair(1_000_000, 100);
+
+    const delta = codec.diffDelta(a, b);
+
+    expect(delta.length).toBeLessThan(4_096);
+    expect(sameBytes(codec.applyDelta(a, delta), b)).toBe(true);
+  });
 });
