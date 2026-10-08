@@ -4241,6 +4241,30 @@ describe("editorMachine learner workspace", () => {
     actor.stop();
   });
 
+  it("keeps edits made after the end before a scrub replaces them", async () => {
+    const { actor, saves, content, edit } = await setup();
+    actor.send({ type: "PLAY" });
+    // Past the second workspace event, so seeking back to 0 has something to re-apply.
+    actor.send({ type: "TICK", currentTime: 600 });
+    actor.send({ type: "FINISHED" });
+    edit("after the end");
+
+    actor.send({ type: "SEEK", time: 0 });
+
+    expect(saves.map((save) => save.snapshot.project.files["index.html"].content)).toEqual([
+      "after the end",
+    ]);
+    expect(content()).toBe("recorded-0");
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.matches({ playback: "ended" })).toBe(true);
+    // The scrub handed the workspace back to the viewer with a fresh baseline.
+    expect(snapshot.context.hasManualWorkspaceOverride).toBe(true);
+    expect(snapshot.context.learnerWorkspaceBaseline).not.toBeNull();
+    actor.send({ type: "SEEK", time: 600 });
+    expect(saves).toHaveLength(1);
+    actor.stop();
+  });
+
   it("saves on request without leaving the pause, and only once per change", async () => {
     const { actor, saves, edit } = await setup();
     actor.send({ type: "PLAY" });

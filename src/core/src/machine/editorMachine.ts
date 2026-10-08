@@ -108,6 +108,23 @@ const SYNC_PAUSED_WORKSPACE_ACTIONS = [
   "captureLearnerWorkspaceBaseline",
 ] as const;
 
+/**
+ * A seek while the viewer owns the workspace (paused, ended): keep their edits, take the
+ * workspace back for the one step that moves the playhead, then hand it over again.
+ * `clearPendingEditorSyncForPausedSeek` holds in `ended` too, since it detaches with the
+ * same SYNC_PAUSED_WORKSPACE_ACTIONS and so never swaps in the playback model either.
+ */
+const SEEK_WHILE_HANDED_OVER_ACTIONS = [
+  "preserveLearnerWorkspace",
+  "reattachPlaybackWorkspace",
+  "clearPendingEditorSyncForPausedSeek",
+  "seekToTime",
+  "applyReplayStateAtTime",
+  ...SYNC_PAUSED_WORKSPACE_ACTIONS,
+  "notifySeek",
+  "seekPlaybackActors",
+] as const;
+
 /** Ends a take: turn the session into the recording, then tell the host it stopped. */
 const FINALIZE_TAKE_ACTIONS = ["finalizeRecording", "notifyRecordingStop"] as const;
 
@@ -1187,16 +1204,7 @@ export const editorMachine = setup({
               actions: ["applyReplayStateAtTime"],
             },
             SEEK: {
-              actions: [
-                "preserveLearnerWorkspace",
-                "reattachPlaybackWorkspace",
-                "clearPendingEditorSyncForPausedSeek",
-                "seekToTime",
-                "applyReplayStateAtTime",
-                ...SYNC_PAUSED_WORKSPACE_ACTIONS,
-                "notifySeek",
-                "seekPlaybackActors",
-              ],
+              actions: [...SEEK_WHILE_HANDED_OVER_ACTIONS],
             },
             PLAY: {
               target: "playing",
@@ -1211,9 +1219,14 @@ export const editorMachine = setup({
         // Like a pause, the end hands the workspace to the viewer: without this the
         // editor stayed on the read-through playback model, so anything typed after the
         // lesson finished never reached the workspace and could be neither run nor kept.
+        // A scrub from here keeps those edits too, then hands the workspace over again;
+        // it stays in `ended`, so PLAY still decides between restarting and playing on.
         ended: {
           entry: [...SYNC_PAUSED_WORKSPACE_ACTIONS],
           on: {
+            SEEK: {
+              actions: [...SEEK_WHILE_HANDED_OVER_ACTIONS],
+            },
             PLAY: [
               {
                 target: "playing",
