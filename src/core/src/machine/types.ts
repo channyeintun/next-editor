@@ -251,9 +251,12 @@ export interface CameraState {
  * Local screen-recording state (opt-in, captured in parallel with the session).
  *
  * Deliberately minimal and fully separate from `CameraState`: the screen video is a
- * keep-forever local artifact and must never be folded into the `Recording`. There is no
- * `blob`/`source` field here — the blob exits the machine directly via `onScreenRecordingReady`
- * and is never retained on context. See the publish-safety guardrails in docs/video-plan.md.
+ * keep-forever local artifact. There is no `blob`/`source` field here: the blob never enters
+ * the `Recording`, the `.ne` codec, storage or any upload path, and is never retained on
+ * context. `onScreenRecordingReady` is its only exit (the app saves it with
+ * `saveScreenRecordingLocally`). The editorMachine.test.ts guardrail ("the finalized recording
+ * carries no screen fields") enforces this; see "Screen recording actor" in
+ * docs/state-machines.md.
  */
 export interface ScreenState {
   /** Unique XState child id for this capture; late events use it to retire only their origin. */

@@ -6,9 +6,12 @@ import { normalizeNonNegativeTime } from "./playbackValues";
 //
 // The screen video is a keep-forever, local-only artifact. It rides in on the
 // START_RECORDING event as a pre-acquired display stream (acquired in the click
-// handler to keep transient user activation) and exits via `onScreenRecordingReady`.
-// It is NEVER folded into the `Recording` — see the publish-safety guardrails in
-// docs/video-plan.md. Nothing here writes a `screen*` field onto the finalized recording.
+// handler to keep transient user activation) and exits via `onScreenRecordingReady`,
+// its only exit (the app saves it with `saveScreenRecordingLocally`). It NEVER enters
+// the `Recording`, the `.ne` codec, storage or any upload path; the editorMachine.test.ts
+// guardrail ("the finalized recording carries no screen fields") enforces it, and
+// "Screen recording actor" in docs/state-machines.md describes the actor. Nothing here
+// writes a `screen*` field onto the finalized recording.
 // ============================================================================
 
 const SCREEN_RECORDER_ID_PREFIX = "screenRecorder-";

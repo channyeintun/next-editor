@@ -600,9 +600,10 @@ export const storeCameraStarted = ({ context, event }: EditorActionArgs): Editor
   // The camera MediaRecorder only starts after getUserMedia resolves, which lags the
   // recording-session origin (session.startedAtPerf) by the camera warmup. Capture that
   // offset so playback can shift the video back into sync; otherwise the face video runs
-  // ahead of audio. Both sides must be the same (monotonic) clock — see P7. Read through
-  // the take's clock: a camera that finished warming up during a pause starts recording
-  // when the take resumes, which is the moment the pause holds.
+  // ahead of audio. Both sides must be the same (monotonic) clock: performance.now(), the
+  // clock session.startedAtPerf was read from. Read through the take's clock: a camera
+  // that finished warming up during a pause starts recording when the take resumes,
+  // which is the moment the pause holds.
   const startOffsetMs = getRecorderStartOffsetMs(context.session, event.startedAtPerf);
   return {
     camera: {
