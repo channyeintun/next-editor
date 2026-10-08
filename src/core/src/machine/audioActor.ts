@@ -89,7 +89,7 @@ export type AudioRecordingEmit =
   | { type: "AUDIO_RECORDING_ERROR"; error: string };
 
 export type AudioPlaybackEmit =
-  | { type: "AUDIO_PLAYBACK_READY"; duration: number }
+  | { type: "AUDIO_PLAYBACK_READY"; durationMs: number }
   | { type: "AUDIO_PLAYBACK_FINISHED" }
   | { type: "AUDIO_PLAYBACK_ERROR"; error: string };
 
@@ -339,7 +339,7 @@ export const audioPlaybackActor = fromTypedCallback<
     const durationMs = seconds * 1000;
     if (durationMs === lastReportedDurationMs) return;
     lastReportedDurationMs = durationMs;
-    sendBack({ type: "AUDIO_PLAYBACK_READY", duration: durationMs });
+    sendBack({ type: "AUDIO_PLAYBACK_READY", durationMs });
   };
   audio.oncanplay = reportDuration;
   audio.ondurationchange = reportDuration;

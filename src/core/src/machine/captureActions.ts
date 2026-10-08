@@ -163,7 +163,7 @@ export const storeExternalAudioDuration = ({
   // A zero or unknown length says nothing about the narration. Storing it would let it
   // overwrite a real length reported earlier, and finalize would measure the take by it.
   const externalDurationMs =
-    Number.isFinite(event.duration) && event.duration > 0 ? event.duration : null;
+    Number.isFinite(event.durationMs) && event.durationMs > 0 ? event.durationMs : null;
   if (externalDurationMs === null) return {};
 
   return {

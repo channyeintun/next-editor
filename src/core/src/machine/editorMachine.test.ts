@@ -2805,7 +2805,7 @@ describe("audioPlaybackActor", () => {
 
     audio.duration = 12.5;
     audio.ondurationchange?.();
-    expect(reported).toEqual([{ type: "AUDIO_PLAYBACK_READY", duration: 12_500 }]);
+    expect(reported).toEqual([{ type: "AUDIO_PLAYBACK_READY", durationMs: 12_500 }]);
 
     // canplay fires again after every stall or seek.
     audio.oncanplay?.();
@@ -3335,7 +3335,7 @@ describe("editorMachine stoppingRecording join", () => {
             endNarration = () => sendBack({ type: "AUDIO_PLAYBACK_FINISHED" });
             receive((event) => {
               if (event.type === "PLAY") {
-                sendBack({ type: "AUDIO_PLAYBACK_READY", duration: 5000 });
+                sendBack({ type: "AUDIO_PLAYBACK_READY", durationMs: 5000 });
               }
             });
           }),

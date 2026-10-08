@@ -5,6 +5,7 @@ import {
   normalizeTimelineTime,
 } from "./playbackValues";
 
+/** All times are timeline milliseconds. */
 export interface TimelineContext {
   currentTime: number;
   duration: number;
