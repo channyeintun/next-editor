@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { ChatCheckpoint, ChatRecordingEvent } from "../../../../types/chat";
+import type { ChatCheckpoint, ChatDelta, ChatRecordingEvent } from "../../../../types/chat";
+import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "../../utils/chatDelta";
 import { createContentDelta } from "../../utils/frameDelta";
 import { getChatReplayResult } from "./chat";
 
@@ -241,5 +242,83 @@ describe("getChatReplayResult before the first chat event", () => {
       nextIndex: -1,
       snapshotToApply: emptyTranscript,
     });
+  });
+});
+
+describe("getChatReplayResult fold budget", () => {
+  function messageStarts(count: number): ChatRecordingEvent[] {
+    return Array.from({ length: count }, (_, index) => ({
+      timestamp: index,
+      event: { k: "message_start", id: `msg-${index}`, role: "user" },
+    }));
+  }
+
+  // Each item-list delta copies the item list, so a crafted track with no checkpoints
+  // made one seek O(deltas × items) on the main thread. The recorder checkpoints every
+  // 200 deltas, so a run ten times that long is refused instead of folded.
+  it("refuses a fold through more item-list deltas than a recorder ever writes", () => {
+    const allowed = messageStarts(2_000);
+    expect(
+      getChatReplayResult({ chatEvents: allowed, currentTime: 1_999, lastAppliedIndex: -1 })
+        .snapshotToApply?.items,
+    ).toHaveLength(2_000);
+
+    const tooMany = messageStarts(2_001);
+    expect(() =>
+      getChatReplayResult({ chatEvents: tooMany, currentTime: 2_000, lastAppliedIndex: -1 }),
+    ).toThrow("too many changes between checkpoints");
+  });
+
+  // The agent panel records prompt drafts per keystroke outside the recorder's
+  // checkpoint count, so a long typed prompt is a legit run with no checkpoint.
+  it("does not count prompt drafts, which a long typed prompt records per keystroke", () => {
+    const events: ChatRecordingEvent[] = Array.from({ length: 5_000 }, (_, index) => ({
+      timestamp: index,
+      event: { k: "draft", text: `keystroke ${index}` },
+    }));
+
+    expect(
+      getChatReplayResult({ chatEvents: events, currentTime: 4_999, lastAppliedIndex: -1 })
+        .snapshotToApply?.draft,
+    ).toBe("keystroke 4999");
+  });
+
+  it("folds a long recorder-shaped track to the end and back", () => {
+    // Recorded the way the agent recorder does: a checkpoint after every 200 deltas.
+    const events: ChatRecordingEvent[] = [];
+    const expected: ChatFoldState[] = [];
+    let state = INITIAL_CHAT_FOLD_STATE;
+    let deltasSinceCheckpoint = 0;
+    for (let serial = 0; events.length < 10_000; serial += 1) {
+      if (deltasSinceCheckpoint === 200) {
+        events.push({ timestamp: events.length, event: { k: "checkpoint", state } });
+        expected.push(state);
+        deltasSinceCheckpoint = 0;
+        continue;
+      }
+      const active = state.items.at(-1);
+      const event: ChatDelta =
+        serial % 40 === 0 || active?.kind !== "message"
+          ? { k: "message_start", id: `msg-${serial}`, role: "assistant" }
+          : { k: "content", delta: insertDelta(active.text, `${active.text}${serial % 10}`) };
+      events.push({ timestamp: events.length, event });
+      state = applyChatDelta(state, event);
+      expected.push(state);
+      deltasSinceCheckpoint += 1;
+    }
+
+    const end = getChatReplayResult({
+      chatEvents: events,
+      currentTime: 9_999,
+      lastAppliedIndex: -1,
+    });
+    expect(end.snapshotToApply).toEqual(expected[9_999]);
+
+    const back = getChatReplayResult({
+      chatEvents: events,
+      currentTime: 4_321,
+      lastAppliedIndex: end.nextIndex,
+    });
+    expect(back.snapshotToApply).toEqual(expected[4_321]);
   });
 });

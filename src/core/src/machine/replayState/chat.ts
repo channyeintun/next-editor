@@ -1,4 +1,8 @@
-import type { ChatCheckpoint, ChatRecordingEvent } from "../../../../types/chat";
+import {
+  CHAT_CHECKPOINT_DELTA_INTERVAL,
+  type ChatCheckpoint,
+  type ChatRecordingEvent,
+} from "../../../../types/chat";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "../../utils/chatDelta";
 import { findTimedEventIndexAtOrBefore } from "./cursor";
 
@@ -17,6 +21,11 @@ import { findTimedEventIndexAtOrBefore } from "./cursor";
 // Without it every advancing tick re-folded from the preceding checkpoint — up
 // to 200 deltas (the recorder's checkpoint interval), each `content` delta being
 // a wasm dmp apply against the growing message text.
+//
+// A fold that would apply far more item-list deltas than the recorder ever writes
+// between checkpoints throws instead (`MAX_ITEM_LIST_DELTAS_PER_FOLD`): the apply
+// action reports it and stops the chat track, rather than a crafted track with no
+// checkpoints freezing the tab.
 // ============================================================================
 
 export interface ChatReplayResult {
@@ -40,6 +49,32 @@ const chatFoldCache = new WeakMap<ChatRecordingEvent[], ChatFoldCache>();
 /** The transcript before the first chat event: the baseline `setRecording` applies at load. */
 const EMPTY_CHAT_CHECKPOINT: ChatCheckpoint = { items: [], status: "idle" };
 
+/**
+ * Whether folding an event of each kind copies the item list (see `applyChatDelta`),
+ * which costs O(items). Exhaustive, so a new delta kind has to be classified here.
+ */
+const REBUILDS_ITEM_LIST: Record<ChatRecordingEvent["event"]["k"], boolean> = {
+  message_start: true,
+  content: true,
+  tool_call: true,
+  tool_result: true,
+  remove: true,
+  reset: false,
+  draft: false,
+  status: false,
+  checkpoint: false,
+};
+
+/**
+ * The agent recorder checkpoints at least every `CHAT_CHECKPOINT_DELTA_INTERVAL` of
+ * its deltas, so a longer run of item-list deltas is a damaged or hostile track. Each
+ * one copies the item list, so an unbounded run is O(deltas × items) on the main
+ * thread. Prompt drafts do not count: the agent panel records them per keystroke
+ * outside the recorder's count, so a long typed prompt is a legit run with no
+ * checkpoint, and each folds in O(1).
+ */
+const MAX_ITEM_LIST_DELTAS_PER_FOLD = CHAT_CHECKPOINT_DELTA_INTERVAL * 10;
+
 function isCheckpointEvent(
   event: ChatRecordingEvent["event"],
 ): event is { k: "checkpoint"; state: ChatCheckpoint } {
@@ -55,53 +90,38 @@ function checkpointFoldState(checkpoint: ChatCheckpoint): ChatFoldState {
 }
 
 function foldChatEventsUpTo(chatEvents: ChatRecordingEvent[], targetIndex: number): ChatFoldState {
+  // Where the fold may start: just after the last fold when moving forward,
+  // otherwise the start of the track, since deltas are not invertible.
   const cached = chatFoldCache.get(chatEvents);
-  let state: ChatFoldState;
-  let foldStart: number;
+  const resumed = cached && cached.index <= targetIndex ? cached : null;
+  const floor = resumed ? resumed.index : -1;
+  let state = resumed ? resumed.state : INITIAL_CHAT_FOLD_STATE;
+  let foldStart = floor + 1;
 
-  if (cached && cached.index <= targetIndex) {
-    // Advancing: continue from where the last fold stopped, unless a checkpoint lies
-    // in between. A forward seek from an early fold would otherwise run every content
-    // delta before that checkpoint only to throw the result away. A playback tick
-    // advances one event, so this scans one event.
-    state = cached.state;
-    foldStart = cached.index + 1;
-    for (let index = targetIndex; index > cached.index; index -= 1) {
-      const event = chatEvents[index].event;
-      if (isCheckpointEvent(event)) {
-        state = checkpointFoldState(event.state);
-        foldStart = index + 1;
-        break;
-      }
-    }
-  } else {
-    // First fold, or a backward seek — deltas are not invertible, so restart from
-    // the nearest checkpoint at or before the target.
-    let checkpointIndex = -1;
-    for (let index = targetIndex; index >= 0; index -= 1) {
-      if (isCheckpointEvent(chatEvents[index].event)) {
-        checkpointIndex = index;
-        break;
-      }
-    }
-
-    state = INITIAL_CHAT_FOLD_STATE;
-    foldStart = 0;
-
-    if (checkpointIndex >= 0) {
-      const checkpointEvent = chatEvents[checkpointIndex].event;
-      if (isCheckpointEvent(checkpointEvent)) {
-        state = checkpointFoldState(checkpointEvent.state);
-        foldStart = checkpointIndex + 1;
-      }
+  // A checkpoint above the floor is a better start, so no delta before it is
+  // applied only to be thrown away. A playback tick advances one event, so this
+  // usually scans one event.
+  for (let index = targetIndex; index > floor; index -= 1) {
+    const event = chatEvents[index].event;
+    if (isCheckpointEvent(event)) {
+      state = checkpointFoldState(event.state);
+      foldStart = index + 1;
+      break;
     }
   }
 
+  let itemListDeltas = 0;
   for (let index = foldStart; index <= targetIndex; index += 1) {
     const event = chatEvents[index].event;
-    // Both branches above start after the last checkpoint at or before the target,
-    // so only deltas are met here. The checkpoint case narrows the event type, and
-    // would still be exact: a checkpoint *is* the folded state at that point.
+    if (REBUILDS_ITEM_LIST[event.k]) {
+      itemListDeltas += 1;
+      if (itemListDeltas > MAX_ITEM_LIST_DELTAS_PER_FOLD) {
+        throw new Error(
+          "The recorded agent chat has too many changes between checkpoints to replay",
+        );
+      }
+    }
+    // Only deltas follow the scan's start; the checkpoint case narrows the event type.
     state = isCheckpointEvent(event)
       ? checkpointFoldState(event.state)
       : applyChatDelta(state, event);

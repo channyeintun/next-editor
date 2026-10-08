@@ -1,11 +1,10 @@
-import type { ChatCheckpoint, ChatDelta } from "../types/chat";
+import { CHAT_CHECKPOINT_DELTA_INTERVAL, type ChatCheckpoint, type ChatDelta } from "../types/chat";
 import type { AgentStoreInstance } from "./agentStore";
 
 // Checkpoint on every run completion (status → done/error) and otherwise every
-// ~200 deltas — sparse enough that checkpoint cost stays sub-dominant to the
-// delta log, bounded enough that a seek never re-folds from empty on a long
-// conversation.
-const CHECKPOINT_DELTA_INTERVAL = 200;
+// CHAT_CHECKPOINT_DELTA_INTERVAL (200) deltas — sparse enough that checkpoint cost
+// stays sub-dominant to the delta log, bounded enough that a seek never re-folds
+// from empty on a long conversation.
 
 export type ChatEventHandler = (
   event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint },
@@ -46,7 +45,7 @@ export function createChatRecorder(
 
     const runSettled =
       delta.k === "status" && (delta.status === "done" || delta.status === "error");
-    if (runSettled || deltasSinceCheckpoint >= CHECKPOINT_DELTA_INTERVAL) {
+    if (runSettled || deltasSinceCheckpoint >= CHAT_CHECKPOINT_DELTA_INTERVAL) {
       emitCheckpoint();
     }
   };

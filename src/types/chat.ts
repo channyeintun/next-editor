@@ -93,6 +93,12 @@ export interface ChatRecordingEvent {
   event: ChatDelta | { k: "checkpoint"; state: ChatCheckpoint };
 }
 
+/**
+ * The agent recorder (src/agent/chatRecording.ts) checkpoints on every run completion
+ * and otherwise after this many of its deltas, which bounds how far a replay seek folds.
+ */
+export const CHAT_CHECKPOINT_DELTA_INTERVAL = 200;
+
 export function toEasyInputMessage({
   role,
   text,
