@@ -85,16 +85,20 @@ import {
   setEditorRef,
 } from "./replayActions";
 import { clearCursorDecorations } from "./frameReplay";
-import { getPlaybackAudioState, syncPlaybackAudio } from "./playbackActors";
+import {
+  getPlaybackAudioState,
+  syncPlaybackAudio,
+  seekPlaybackActors,
+  spawnPlaybackAudio,
+  syncPlaybackAudioToTimeline,
+  syncPlaybackActorsSpeed,
+  syncPlaybackAudioVolume,
+  startPlaybackActors,
+  pausePlaybackActors,
+} from "./playbackActors";
 import { reportMachineError } from "./replayStep";
 import { isAtPlaybackEnd, normalizeTimelineDuration } from "./playbackValues";
 import { isDmpCodecLoaded } from "../../../storage/dmpCodec/dmpCodec";
-
-/**
- * How often, at most, a playing replay sends the narration player its SYNC safety net
- * (see audioPlaybackActor). Seeks, plays and speed changes reposition it at once.
- */
-const PLAYBACK_AUDIO_SYNC_INTERVAL_MS = 250;
 
 /**
  * Hands the workspace to the viewer (paused, ended): keep what the recording shows, stop
@@ -549,90 +553,14 @@ export const editorMachine = setup({
         play: check(stateIn({ playback: "playing" })),
       });
     }),
-    // Moves the timeline and the narration to the playhead that seekToTime or resetPlayback
-    // just stored, so both follow the one clamped value instead of re-deriving it.
-    seekPlaybackActors: enqueueActions(({ context, enqueue }) => {
-      enqueue.sendTo("timelineActor", { type: "SEEK", time: context.timeline.currentTime });
-      if (context.playbackAudioSpawned) {
-        enqueue.sendTo("audioPlayer", { type: "SEEK", timeMs: context.timeline.currentTime });
-      }
-    }),
-    // A loaded recording's narration gets its player as playback begins; one that arrives
-    // later (streaming) is spawned by syncStreamedRecordingGrowth or startPlaybackActors.
-    spawnPlaybackAudio: enqueueActions(({ context, enqueue }) => {
-      syncPlaybackAudio(context, enqueue, {
-        spawnIfMissing: true,
-        seek: false,
-        syncRate: false,
-        syncVolume: false,
-        play: false,
-      });
-    }),
-    // The timeline is the master clock: the narration follows it through the actor's SYNC
-    // safety net, at most every PLAYBACK_AUDIO_SYNC_INTERVAL_MS.
-    syncPlaybackAudioToTimeline: enqueueActions(({ context, enqueue }) => {
-      const lastSync = context.lastSyncTime || 0;
-      const now = performance.now();
-      if (context.playbackAudioSpawned && now - lastSync > PLAYBACK_AUDIO_SYNC_INTERVAL_MS) {
-        enqueue.sendTo("audioPlayer", {
-          type: "SYNC",
-          timeMs: context.timeline.currentTime,
-        });
-        enqueue.assign({ lastSyncTime: now });
-      }
-    }),
-    // Hands the speed setPlaybackSpeed just stored to the timeline and, once spawned, the
-    // narration.
-    syncPlaybackActorsSpeed: enqueueActions(({ context, enqueue }) => {
-      const speed = context.timeline.speed;
-      enqueue.sendTo("timelineActor", { type: "SET_SPEED", speed });
-      if (context.playbackAudioSpawned) {
-        enqueue.sendTo("audioPlayer", {
-          type: "SET_PLAYBACK_RATE",
-          rate: speed,
-        });
-      }
-    }),
-    // Hands the volume setVolume just stored to the narration, once spawned.
-    syncPlaybackAudioVolume: enqueueActions(({ context, enqueue }) => {
-      if (context.playbackAudioSpawned) {
-        enqueue.sendTo("audioPlayer", {
-          type: "SET_VOLUME",
-          volume: context.timeline.volume,
-        });
-      }
-    }),
-    startPlaybackActors: enqueueActions(({ context, enqueue }) => {
-      // Ensure actors are positioned before starting playback. Starting
-      // audio first can briefly play stale audio at high speeds, so PLAY
-      // is sent after timelineActor START rather than through `play` here.
-      //
-      // Streaming playback: the audio may have arrived after the recording was first
-      // loaded (its bytes are at the end of the stream), so the playback-entry spawn
-      // saw no audio. Spawn the player lazily now that audio is available.
-      const controllingPlaybackAudio = syncPlaybackAudio(context, enqueue, {
-        spawnIfMissing: true,
-        seek: true,
-        syncRate: true,
-        syncVolume: false,
-        play: false,
-      });
-
-      enqueue.sendTo("timelineActor", {
-        type: "SEEK",
-        time: context.timeline.currentTime,
-      });
-      enqueue.sendTo("timelineActor", { type: "START" });
-      if (controllingPlaybackAudio) {
-        enqueue.sendTo("audioPlayer", { type: "PLAY" });
-      }
-    }),
-    pausePlaybackActors: enqueueActions(({ context, enqueue }) => {
-      enqueue.sendTo("timelineActor", { type: "PAUSE" });
-      if (context.playbackAudioSpawned) {
-        enqueue.sendTo("audioPlayer", { type: "PAUSE" });
-      }
-    }),
+    // Timeline and narration sends — bodies live in playbackActors.ts.
+    seekPlaybackActors: enqueueActions(seekPlaybackActors),
+    spawnPlaybackAudio: enqueueActions(spawnPlaybackAudio),
+    syncPlaybackAudioToTimeline: enqueueActions(syncPlaybackAudioToTimeline),
+    syncPlaybackActorsSpeed: enqueueActions(syncPlaybackActorsSpeed),
+    syncPlaybackAudioVolume: enqueueActions(syncPlaybackAudioVolume),
+    startPlaybackActors: enqueueActions(startPlaybackActors),
+    pausePlaybackActors: enqueueActions(pausePlaybackActors),
 
     // Shared/general — neither pure capture nor pure replay
     clearError: assign({ error: null }),
