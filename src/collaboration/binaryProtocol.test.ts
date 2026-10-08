@@ -18,6 +18,10 @@ import { collaborationAwarenessClientStateSchema } from "./protocol";
 const CLIENT_ID = "10000000-0000-4000-8000-000000000001";
 const UPDATE_ID = "20000000-0000-4000-8000-000000000002";
 
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
+}
+
 describe("collaboration binary protocol", () => {
   it("negotiates missing Yjs state with standard sync step messages", () => {
     const client = new Y.Doc();
@@ -53,16 +57,33 @@ describe("collaboration binary protocol", () => {
     source.getText("content").insert(0, "x".repeat(64 * 1024));
     const update = Y.encodeStateAsUpdate(source);
 
-    expect(
-      decodeCollaborationBinaryFrame(
-        encodeCollaborationClientUpdate({ clientId: CLIENT_ID, updateId: UPDATE_ID, update }),
-      ),
-    ).toEqual({ kind: "client-update", clientId: CLIENT_ID, updateId: UPDATE_ID, update });
-    expect(
-      decodeCollaborationBinaryFrame(
-        encodeCollaborationServerUpdate({ streamId: "42-0", updateId: UPDATE_ID, update }),
-      ),
-    ).toEqual({ kind: "server-update", streamId: "42-0", updateId: UPDATE_ID, update });
+    // The metadata is compared deeply and the 64 KiB payload byte by byte in one
+    // pass. Deep equality walks a typed array one matcher call per element, which
+    // took over a second per frame and pushed this test past its timeout whenever
+    // another suite was running on the same machine.
+    const clientFrame = decodeCollaborationBinaryFrame(
+      encodeCollaborationClientUpdate({ clientId: CLIENT_ID, updateId: UPDATE_ID, update }),
+    );
+    if (clientFrame.kind !== "client-update") throw new Error("expected a client update frame");
+    const { update: clientUpdate, ...clientMetadata } = clientFrame;
+    expect(clientMetadata).toEqual({
+      kind: "client-update",
+      clientId: CLIENT_ID,
+      updateId: UPDATE_ID,
+    });
+    expect(bytesEqual(clientUpdate, update)).toBe(true);
+
+    const serverFrame = decodeCollaborationBinaryFrame(
+      encodeCollaborationServerUpdate({ streamId: "42-0", updateId: UPDATE_ID, update }),
+    );
+    if (serverFrame.kind !== "server-update") throw new Error("expected a server update frame");
+    const { update: serverUpdate, ...serverMetadata } = serverFrame;
+    expect(serverMetadata).toEqual({
+      kind: "server-update",
+      streamId: "42-0",
+      updateId: UPDATE_ID,
+    });
+    expect(bytesEqual(serverUpdate, update)).toBe(true);
 
     const base64Length = 4 * Math.ceil(update.byteLength / 3);
     expect(update.byteLength).toBeLessThanOrEqual(base64Length * 0.75);
