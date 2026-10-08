@@ -99,6 +99,14 @@ function encodeLittleEndian(value: bigint, bytes: number): number[] {
   return out;
 }
 
+/**
+ * Whether an instruction needs a REX prefix: one of its W, R, X or B bits is
+ * set, or it names `spl`, `bpl`, `sil` or `dil`, which only exist with one.
+ */
+function needsRexPrefix(w: number, r: number, x: number, b: number, forceRex: boolean): boolean {
+  return w === 1 || r === 1 || x === 1 || b === 1 || forceRex;
+}
+
 /** The displacement width of a branch form, or null for any other form. */
 function relWidth(form: InstructionForm): 1 | 4 | null {
   const first = form.operands[0];
@@ -620,7 +628,7 @@ function encodeWithForm(
       // the REX decision has to be previewed here. A rip-relative address has
       // no base and no index, so REX.X and REX.B are both zero for it and the
       // only bits still unknown cannot change the answer.
-      const previewRex = rexW === 1 || ((regField >> 3) & 1) === 1 || forceRex ? 1 : 0;
+      const previewRex = needsRexPrefix(rexW, (regField >> 3) & 1, 0, 0, forceRex) ? 1 : 0;
       const modrm = encodeModRm(
         regField,
         rmOperand,
@@ -632,6 +640,17 @@ function encodeWithForm(
       rexR = modrm.rexR;
       rexX = modrm.rexX;
       rexB = modrm.rexB;
+      // A wrong preview would leave the displacement a byte off and the
+      // program reading the wrong address, so it is checked, not trusted. A
+      // plain Error rather than an AsmEncodeError, so it cannot pass for one
+      // form failing and quietly lose to another.
+      if (
+        rmOperand.kind === "memory" &&
+        rmOperand.ripRelative &&
+        needsRexPrefix(rexW, rexR, rexX, rexB, forceRex) !== (previewRex === 1)
+      ) {
+        throw new Error("Internal: the REX preview for a rip-relative operand was wrong");
+      }
       body = [...modrm.bytes, ...trailing];
       break;
     }
@@ -640,16 +659,16 @@ function encodeWithForm(
       throw error(`Internal: unhandled encoding ${form.encoding}`);
   }
 
-  const needsRex = rexW === 1 || rexR === 1 || rexX === 1 || rexB === 1 || forceRex;
+  const needsRex = needsRexPrefix(rexW, rexR, rexX, rexB, forceRex);
   if (needsRex && hasHighByte) {
     throw error(
       "ah, ch, dh and bh cannot be used in the same instruction as a REX prefix — use al, cl, dl or bl",
     );
   }
 
-  // A rip-relative displacement is measured from the end of the instruction,
-  // and adding REX afterwards would move that end. Recompute it once the REX
-  // decision is final rather than guessing.
+  // A rip-relative displacement was computed against the previewed REX length
+  // above. That preview is exact (and checked) because a rip-relative operand
+  // never sets REX.X or REX.B.
   const rexBytes = needsRex ? [0x40 | (rexW << 3) | (rexR << 2) | (rexX << 1) | rexB] : [];
   const bytes = [...prefixes, ...rexBytes, ...opcode, ...body];
   return { bytes };
