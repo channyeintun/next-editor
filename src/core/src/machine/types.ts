@@ -607,14 +607,19 @@ type PreviewPatchBatchOccurred = {
   batch: PreviewDomPatchBatch;
 };
 
-/** Workspace event occurred */
+/**
+ * The workspace changed: files, the active file, or panel widths. While recording, the
+ * snapshot is read through getWorkspaceSnapshot and only the panel-width deltas since the
+ * previous event ride here. During playback it means the viewer changed the workspace,
+ * which detaches the replay and pauses it if it was playing.
+ */
 type WorkspaceEventOccurred = {
   type: "WORKSPACE_EVENT";
   sidebarWidthDelta?: number;
   previewDockWidthDelta?: number;
 };
 
-/** Runtime event occurred */
+/** The runtime changed; carries nothing. Capture reads its state through getRuntimeSnapshot. */
 type RuntimeEventOccurred = {
   type: "RUNTIME_EVENT";
 };
