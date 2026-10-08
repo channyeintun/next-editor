@@ -141,7 +141,7 @@ The main extension hooks in `EditorMachineInput` are:
 | `recordedCursorVisibility.ts`          | `RECORDED_CURSOR_VISIBILITY_EVENT`, its guard and dispatcher: hides or shows the recorded cursor at a point                                                                                 |
 | `iframeInteractionProtocol.ts`         | `IFRAME_INTERACTION_MESSAGE_TYPE`, the `postMessage` type preview frames report pointer interactions with                                                                                   |
 | `audioContext.ts` / `audioDuration.ts` | Shared `AudioContext` helpers and exact-duration calculation for audio blobs                                                                                                                |
-| `stringAffix.ts`                       | Small string prefix/suffix helpers used by content diffing                                                                                                                                  |
+| `stringAffix.ts`                       | `findCommonAffixLengths` and its prefix/suffix helpers: the changed range for Monaco replay, workspace-event dedup and shared-text replacement                                              |
 | `timedIndex.ts`                        | `findTimedEventIndexAtOrBefore` — timestamp-to-index lookup shared by frames and every replay track                                                                                         |
 
 ### dmpCodec (WASM diffing)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
+import { findCommonAffixLengths, findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
 
 describe("stringAffix", () => {
   it("should not treat a shared UTF-8 lead byte as a shared character prefix", () => {
@@ -25,5 +25,20 @@ describe("stringAffix", () => {
     expect(findCommonSuffixJS("😀", "😁")).toBe(0);
     expect(findCommonSuffixJS("😁x", "😀😁x")).toBe(3);
     expect(findCommonSuffixJS("x😀", "y😀")).toBe(2);
+  });
+
+  it("measures the common suffix after the common prefix so the two never overlap", () => {
+    // On its own the common suffix of "aa" and "aaa" is 2, which would overlap the prefix.
+    expect(findCommonSuffixJS("aa", "aaa")).toBe(2);
+    expect(findCommonAffixLengths("aa", "aaa")).toEqual({ prefix: 2, suffix: 0 });
+    expect(findCommonAffixLengths("aaa", "aa")).toEqual({ prefix: 2, suffix: 0 });
+    expect(findCommonAffixLengths("same", "same")).toEqual({ prefix: 4, suffix: 0 });
+  });
+
+  it("keeps an astral edit in the middle whole at both ends", () => {
+    // 😀 (U+1F600) and 😃 share their high surrogate; 😀 and U+1FA00 share their low one.
+    expect(findCommonAffixLengths("a😀b", "a😃b")).toEqual({ prefix: 1, suffix: 1 });
+    expect(findCommonAffixLengths("x😀y", "x\u{1FA00}y")).toEqual({ prefix: 1, suffix: 1 });
+    expect(findCommonAffixLengths("ab😀cd", "ab\u{1FA00}😃cd")).toEqual({ prefix: 2, suffix: 2 });
   });
 });

@@ -18,7 +18,7 @@ import {
   type WorkspaceProject,
 } from "../types/workspace";
 import { prepareTextEditEvent, type TextEditEvent } from "../types/textEdit";
-import { findCommonPrefixJS, findCommonSuffixJS } from "../core/src/utils/stringAffix";
+import { findCommonAffixLengths } from "../core/src/utils/stringAffix";
 
 export const COLLABORATION_PROJECT_ROOT = "project";
 export const COLLABORATION_PROJECT_METADATA = "metadata";
@@ -610,10 +610,9 @@ function sharedTextReplacement(text: Y.Text, nextContent: string) {
   if (current === nextContent) return null;
   // Both lengths end on code point boundaries: Yjs cannot split a stored string
   // inside a surrogate pair and would replace both halves with U+FFFD.
-  const prefixLength = findCommonPrefixJS(current, nextContent);
-  const suffixLength = findCommonSuffixJS(
-    current.slice(prefixLength),
-    nextContent.slice(prefixLength),
+  const { prefix: prefixLength, suffix: suffixLength } = findCommonAffixLengths(
+    current,
+    nextContent,
   );
   const deleteLength = current.length - prefixLength - suffixLength;
   const insertion = nextContent.slice(prefixLength, nextContent.length - suffixLength);

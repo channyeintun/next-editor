@@ -1,8 +1,10 @@
-// Pure-JS common-prefix/suffix length helpers. The live editor diff
-// (`applyContentDiff`) uses them to narrow the range it rewrites in Monaco.
-// (They were once a fallback for a WebAssembly affix module; content deltas
-// now come from the diff-match-patch codec instead, which does not use these
-// helpers.)
+// Pure-JS common-prefix/suffix length helpers. They narrow a text replacement
+// to the part that changed for three callers: Monaco replay (`applyContentDiff`
+// in editorDiff.ts), the workspace-event splice dedup in storage
+// (workspaceEventDedup.ts), and the Yjs shared-text replacement in
+// collaboration (projectDocument.ts). (They were once a fallback for a
+// WebAssembly affix module; content deltas now come from the diff-match-patch
+// codec instead, which does not use these helpers.)
 //
 // Lengths are in UTF-16 code units but never split a surrogate pair. An edit
 // offset inside a pair is widened to the pair boundary by Monaco while the
@@ -30,4 +32,14 @@ export function findCommonSuffixJS(str1: string, str2: string): number {
   // Two astral characters can share a low surrogate; keep it with its high half.
   if (i > 0 && isLowSurrogate(str1.charCodeAt(str1.length - i))) i--;
   return i;
+}
+
+/**
+ * The common prefix and suffix lengths of `a` and `b`; the suffix is measured on
+ * what follows the prefix, so the two never overlap. Both end on code point
+ * boundaries.
+ */
+export function findCommonAffixLengths(a: string, b: string): { prefix: number; suffix: number } {
+  const prefix = findCommonPrefixJS(a, b);
+  return { prefix, suffix: findCommonSuffixJS(a.slice(prefix), b.slice(prefix)) };
 }

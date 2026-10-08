@@ -1,5 +1,5 @@
 import type * as monaco from "monaco-editor";
-import { findCommonPrefixJS, findCommonSuffixJS } from "./stringAffix";
+import { findCommonAffixLengths } from "./stringAffix";
 import type { EditorPosition, EditorSelection } from "../types";
 
 /**
@@ -79,10 +79,9 @@ export const applyContentDiff = (
 
   try {
     // Narrow the edit to the part between the common prefix and suffix.
-    const commonPrefix = findCommonPrefixJS(currentContent, targetContent);
-    const commonSuffix = findCommonSuffixJS(
-      currentContent.slice(commonPrefix),
-      targetContent.slice(commonPrefix),
+    const { prefix: commonPrefix, suffix: commonSuffix } = findCommonAffixLengths(
+      currentContent,
+      targetContent,
     );
     const startPos = model.getPositionAt(commonPrefix);
     const endPos = model.getPositionAt(currentContent.length - commonSuffix);

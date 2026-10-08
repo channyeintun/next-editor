@@ -3,7 +3,7 @@ import type {
   WorkspaceRecordingEvent,
   WorkspaceRecordingSnapshot,
 } from "../../types/workspace";
-import { findCommonPrefixJS, findCommonSuffixJS } from "../../core/src/utils/stringAffix";
+import { findCommonAffixLengths } from "../../core/src/utils/stringAffix";
 
 // ============================================================================
 // Workspace-event content dedup (stream-only representation)
@@ -55,8 +55,7 @@ const MIN_SPLICE_SAVING_CHARS = 16;
  * path writes as U+FFFD.
  */
 function createContentSplice(previous: string, next: string): ContentSplice | null {
-  const prefix = findCommonPrefixJS(previous, next);
-  const suffix = findCommonSuffixJS(previous.slice(prefix), next.slice(prefix));
+  const { prefix, suffix } = findCommonAffixLengths(previous, next);
   const insert = next.slice(prefix, next.length - suffix);
   if (insert.length + MIN_SPLICE_SAVING_CHARS >= next.length) return null;
   return [prefix, previous.length - prefix - suffix, insert];
