@@ -216,6 +216,21 @@ export class Machine {
     this.registers[index] = (this.registers[index] & ~mask) | (value & mask);
   }
 
+  /**
+   * Where mul, one-operand imul, div and idiv put their two halves: `ah:al`
+   * for the byte form, `rdx:rax` for everything wider. `write` masks each half
+   * to the width.
+   */
+  #writeAccumulatorPair(low: bigint, high: bigint, size: number): void {
+    if (size === 1) {
+      this.write(RAX, 1, low);
+      this.write(RAX, 1, high, true);
+      return;
+    }
+    this.write(RAX, size, low);
+    this.write(RDX, size, high);
+  }
+
   // -- operands -------------------------------------------------------------
 
   #effectiveAddress(operand: Extract<DecodedOperand, { kind: "memory" }>, nextRip: bigint): bigint {
@@ -513,12 +528,7 @@ export class Machine {
           const right = toSigned(readAt(0), size);
           const product = left * right;
           const low = product & mask;
-          if (size === 1) {
-            this.write(RAX, 2, product & 0xffffn);
-          } else {
-            this.write(RAX, size, low);
-            this.write(RDX, size, (product >> BigInt(size * 8)) & mask);
-          }
+          this.#writeAccumulatorPair(low, product >> BigInt(size * 8), size);
           const fits = toSigned(low, size) === product;
           this.flags.carry = !fits;
           this.flags.overflow = !fits;
@@ -542,13 +552,8 @@ export class Machine {
         const left = this.read(RAX, size);
         const right = readAt(0) & mask;
         const product = left * right;
-        if (size === 1) {
-          this.write(RAX, 2, product & 0xffffn);
-        } else {
-          this.write(RAX, size, product & mask);
-          this.write(RDX, size, (product >> BigInt(size * 8)) & mask);
-        }
         const high = product >> BigInt(size * 8);
+        this.#writeAccumulatorPair(product & mask, high, size);
         this.flags.carry = high !== 0n;
         this.flags.overflow = high !== 0n;
         break;
@@ -572,18 +577,7 @@ export class Machine {
         const rawDividend =
           size === 1 ? this.read(RAX, 2) : (this.read(RDX, size) << bits) | this.read(RAX, size);
 
-        // The byte form answers in one register: quotient in al, remainder in
-        // ah. Everything wider answers in rax and rdx.
-        const store = (quotient: bigint, remainder: bigint): void => {
-          if (size === 1) {
-            this.write(RAX, 1, quotient & 0xffn);
-            this.write(RAX, 1, remainder & 0xffn, true);
-          } else {
-            this.write(RAX, size, quotient & mask);
-            this.write(RDX, size, remainder & mask);
-          }
-        };
-
+        // The quotient lands in al or rax and the remainder in ah or rdx.
         if (mnemonic === "div") {
           const quotient = rawDividend / divisor;
           if (quotient > mask) {
@@ -592,7 +586,7 @@ export class Machine {
               message: "The result of this division is too large to fit in the register",
             });
           }
-          store(quotient, rawDividend % divisor);
+          this.#writeAccumulatorPair(quotient, rawDividend % divisor, size);
         } else {
           const signBit = 1n << (dividendBits - 1n);
           const dividend =
@@ -607,7 +601,7 @@ export class Machine {
               message: "The result of this division is too large to fit in the register",
             });
           }
-          store(quotient, dividend % signedDivisor);
+          this.#writeAccumulatorPair(quotient, dividend % signedDivisor, size);
         }
         break;
       }
