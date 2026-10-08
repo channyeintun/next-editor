@@ -197,6 +197,14 @@ describe("the did-you-mean suggestion", () => {
   it("says nothing when nothing is close", () => {
     expect(assembleLine("printf rax")).toThrow(/is not an instruction this runner knows$/);
   });
+
+  it("rules out a very long name without measuring it against every mnemonic", () => {
+    // Measured in full, this took seconds: a grid the length of the name for
+    // each mnemonic the runner knows, on the page's main thread.
+    expect(assembleLine("a".repeat(100_000) + " rax")).toThrow(
+      /is not an instruction this runner knows$/,
+    );
+  });
 });
 
 describe("encoding choices that have to stay stable", () => {

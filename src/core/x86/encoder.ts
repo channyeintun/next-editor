@@ -326,6 +326,10 @@ function suggestMnemonic(typed: string): string | null {
   let best: string | null = null;
   let bestDistance = limit + 1;
   for (const name of KNOWN_MNEMONICS) {
+    // Every edit changes the length by at most one, so a length gap past the
+    // budget can never be within it — and a very long token, which nothing
+    // stops a source from holding, costs nothing to rule out.
+    if (Math.abs(typed.length - name.length) > limit) continue;
     const distance = editDistance(typed, name);
     if (distance > limit) continue;
     // A tie goes to the candidate that starts the way the learner typed:
