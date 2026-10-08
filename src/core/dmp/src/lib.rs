@@ -226,6 +226,20 @@ const INSERT: u8 = 2;
 const CHECK: u8 = 3;
 const CHECK_HASH_LEN: usize = 4;
 
+// The serialized op tag `(len << 2) | kind`. Its layout lives only in these
+// two: diffDelta writes every tag with op_tag, and applyDelta reads every tag
+// through split_tag (via read_op). `len` stays under MAX_BUF, so the shift
+// never drops bits.
+#[inline]
+fn op_tag(kind: u8, len: usize) -> u32 {
+    ((len as u32) << 2) | kind as u32
+}
+
+#[inline]
+fn split_tag(tag: u32) -> (u8, usize) {
+    ((tag & 3) as u8, (tag >> 2) as usize)
+}
+
 // FNV-1a (32-bit) over the base bytes — tiny, allocation-free, and plenty to
 // catch a desynced replay base (this is integrity checking, not cryptography).
 fn fnv1a32(bytes: &[u8]) -> u32 {
@@ -605,7 +619,7 @@ impl Differ {
 }
 
 // ---------------------------------------------------------------------------
-// LEB128 varints. Each op is a varint `(len << 2) | type`; INSERT is followed
+// LEB128 varints. Each op is a varint `op_tag(kind, len)`; INSERT is followed
 // by `len` literal bytes.
 // ---------------------------------------------------------------------------
 fn varint_size(mut v: u32) -> usize {
@@ -646,6 +660,29 @@ unsafe fn read_varint(mut ptr: usize, end: usize) -> (u32, bool, usize) {
     (result, true, ptr)
 }
 
+// Reads one op tag: (kind, len, next_ptr), or None on a truncated/overlong
+// varint. An INSERT's literal bytes start at next_ptr.
+unsafe fn read_op(ptr: usize, end: usize) -> Option<(u8, usize, usize)> {
+    let (tag, ok, next) = read_varint(ptr, end);
+    if !ok {
+        return None;
+    }
+    let (kind, len) = split_tag(tag);
+    Some((kind, len, next))
+}
+
+// Reads the delta's mandatory CHECK head: (stored base hash, start of the ops),
+// or None when the head is missing, garbled or truncated.
+unsafe fn read_check_head(ptr: usize, end: usize) -> Option<(u32, usize)> {
+    let (kind, len, next) = read_op(ptr, end)?;
+    if kind != CHECK || len != CHECK_HASH_LEN || next + CHECK_HASH_LEN > end {
+        return None;
+    }
+    let mut stored = [0u8; CHECK_HASH_LEN];
+    core::ptr::copy_nonoverlapping(next as *const u8, stored.as_mut_ptr(), CHECK_HASH_LEN);
+    Some((u32::from_le_bytes(stored), next + CHECK_HASH_LEN))
+}
+
 // ---------------------------------------------------------------------------
 // Host I/O buffers (unmanaged: the host owns their lifetime via alloc/freeBuf).
 // ---------------------------------------------------------------------------
@@ -681,11 +718,10 @@ pub extern "C" fn diffDelta(a_ptr: u32, a_len: u32, b_ptr: u32, b_len: u32) -> u
 
     // Every delta starts with a mandatory CHECK op carrying the base hash, so a
     // delta is never empty — even for identical or empty inputs.
-    let check_tag = ((CHECK_HASH_LEN as u32) << 2) | CHECK as u32;
+    let check_tag = op_tag(CHECK, CHECK_HASH_LEN);
     let mut size = varint_size(check_tag) + CHECK_HASH_LEN;
     for i in 0..ops.kind.len() {
-        let tag = ((ops.len[i] as u32) << 2) | ops.kind[i] as u32;
-        size += varint_size(tag);
+        size += varint_size(op_tag(ops.kind[i], ops.len[i]));
         if ops.kind[i] == INSERT {
             size += ops.len[i];
         }
@@ -703,8 +739,7 @@ pub extern "C" fn diffDelta(a_ptr: u32, a_len: u32, b_ptr: u32, b_len: u32) -> u
     let mut b_at = 0usize;
     for i in 0..ops.kind.len() {
         let len = ops.len[i];
-        let tag = ((len as u32) << 2) | ops.kind[i] as u32;
-        o = unsafe { write_varint(o, tag) };
+        o = unsafe { write_varint(o, op_tag(ops.kind[i], len)) };
         if ops.kind[i] == INSERT {
             let lit = &b[b_at..b_at + len];
             unsafe {
@@ -733,37 +768,24 @@ pub extern "C" fn applyDelta(a_ptr: u32, a_len: u32, d_ptr: u32, d_len: u32) -> 
 
     // Pass 1: validate and size the output. The first op MUST be the CHECK op —
     // verify the base hash before trusting any EQUAL copy out of the source.
-    let mut r = d_ptr;
+    let Some((stored, ops_start)) = (unsafe { read_check_head(d_ptr, d_end) }) else {
+        // An unreadable first op is corrupt; a readable one that is not a whole
+        // CHECK head (pre-check-op legacy, or garbled) counts as a base failure.
+        let readable = unsafe { read_op(d_ptr, d_end) }.is_some();
+        return if readable { ERR_BASE } else { ERR };
+    };
+    let a = unsafe { core::slice::from_raw_parts(a_base as *const u8, a_len) };
+    if stored != fnv1a32(a) {
+        return ERR_BASE;
+    }
+    let mut r = ops_start;
     let mut out_len = 0usize;
     let mut src = 0usize;
-    {
-        let (tag, ok, next) = unsafe { read_varint(r, d_end) };
-        if !ok {
-            return ERR;
-        }
-        let kind = (tag & 3) as u8;
-        let len = (tag >> 2) as usize;
-        if kind != CHECK || len != CHECK_HASH_LEN || next + CHECK_HASH_LEN > d_end {
-            return ERR_BASE; // pre-check-op (legacy) or garbled delta head
-        }
-        let a = unsafe { core::slice::from_raw_parts(a_base as *const u8, a_len) };
-        let mut stored = [0u8; CHECK_HASH_LEN];
-        unsafe {
-            core::ptr::copy_nonoverlapping(next as *const u8, stored.as_mut_ptr(), CHECK_HASH_LEN);
-        }
-        if u32::from_le_bytes(stored) != fnv1a32(a) {
-            return ERR_BASE;
-        }
-        r = next + CHECK_HASH_LEN;
-    }
     while r < d_end {
-        let (tag, ok, next) = unsafe { read_varint(r, d_end) };
-        if !ok {
+        let Some((kind, len, next)) = (unsafe { read_op(r, d_end) }) else {
             return ERR;
-        }
+        };
         r = next;
-        let kind = (tag & 3) as u8;
-        let len = (tag >> 2) as usize;
         if kind == EQUAL {
             if src + len > a_len {
                 return ERR;
@@ -797,20 +819,16 @@ pub extern "C" fn applyDelta(a_ptr: u32, a_len: u32, d_ptr: u32, d_len: u32) -> 
 
     let out = unsafe { HEAP.raw_alloc(out_len) };
 
-    // Pass 2: materialize (skipping the already-verified CHECK head).
-    let mut r = d_ptr;
-    {
-        let (_tag, _ok, next) = unsafe { read_varint(r, d_end) };
-        r = next + CHECK_HASH_LEN;
-    }
+    // Pass 2: materialize, starting past the already-verified CHECK head.
+    let mut r = ops_start;
     let mut o = out;
     let mut src = 0usize;
     while r < d_end {
         // Pass 1 already validated structure, so reads here cannot fail.
-        let (tag, _ok, next) = unsafe { read_varint(r, d_end) };
+        let Some((kind, len, next)) = (unsafe { read_op(r, d_end) }) else {
+            core::arch::wasm32::unreachable()
+        };
         r = next;
-        let kind = (tag & 3) as u8;
-        let len = (tag >> 2) as usize;
         if kind == EQUAL {
             unsafe {
                 core::ptr::copy_nonoverlapping((a_base + src) as *const u8, o as *mut u8, len);
