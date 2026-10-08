@@ -8,10 +8,7 @@ import type { Terminal } from "@xterm/xterm";
 import type { SlideEvent } from "../core/src/slides";
 import { getXtermTerminal } from "../components/xtermRegistry";
 import { applyWhiteboardEvent, type WhiteboardEvent } from "../core/src/whiteboard";
-import {
-  CURSOR_REPLAY_ROOT_TARGET_ID,
-  CURSOR_REPLAY_TARGET_ATTRIBUTE,
-} from "../core/src/utils/cursorCoordinates";
+import { findCursorReplayRoot } from "../core/src/utils/cursorCoordinates";
 import {
   POINTER_PRESS_MS,
   POINTER_SETTLE_MS,
@@ -199,8 +196,6 @@ const MIN_SELECT_SCROLL_MS = 150;
 // a single recorded hand movement took at any range.
 const MIN_TRAVEL_MS = 150;
 
-const CURSOR_REPLAY_ROOT_SELECTOR = `[${CURSOR_REPLAY_TARGET_ATTRIBUTE}="${CURSOR_REPLAY_ROOT_TARGET_ID}"]`;
-
 interface PointerPoint {
   x: number;
   y: number;
@@ -220,7 +215,7 @@ const roundPoint = (point: PointerPoint): PointerPoint => ({
  * Hit-testing through the stack finds what the app itself shows at the point.
  */
 function topmostInReplayRoot(x: number, y: number): Element | null {
-  const root = document.querySelector(CURSOR_REPLAY_ROOT_SELECTOR);
+  const root = findCursorReplayRoot(document);
   const stack =
     typeof document.elementsFromPoint === "function" ? document.elementsFromPoint(x, y) : [];
   return stack.find((candidate) => !root || root.contains(candidate)) ?? null;
@@ -413,7 +408,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
   // the panel moves under it, whenever replay applies the layout change.
   const pinPointerToApp = () => {
     if (pointerHidden || !lastCursorPoint) return;
-    const root = document.querySelector(CURSOR_REPLAY_ROOT_SELECTOR);
+    const root = findCursorReplayRoot(document);
     if (!root) return;
     root.dispatchEvent(
       new PointerEvent("pointermove", {

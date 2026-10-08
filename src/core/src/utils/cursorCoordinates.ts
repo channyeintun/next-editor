@@ -166,7 +166,8 @@ function findReplayTargetById(id: string, ownerDocument: Document): Element | nu
   }
 }
 
-function findRootReplayTarget(ownerDocument: Document | null): Element | null {
+/** The app root, the element root-space cursor samples are measured from. */
+export function findCursorReplayRoot(ownerDocument: Document | null): Element | null {
   if (!ownerDocument) {
     return null;
   }
@@ -297,7 +298,7 @@ export function createCursorPositionFromClientPoint({
   const ownerDocument = getOwnerDocument(
     rootElement ?? replayTarget ?? eventElement ?? targetElement ?? null,
   );
-  const rootTarget = rootElement ?? findRootReplayTarget(ownerDocument);
+  const rootTarget = rootElement ?? findCursorReplayRoot(ownerDocument);
 
   if (rootTarget) {
     const rootRect = getRectSnapshot(rootTarget);
@@ -379,6 +380,23 @@ export function createCursorPositionFromClientPoint({
   };
 }
 
+// A sample with no usable target: offset from the app root when it was recorded
+// in root space and the root is on the page, else the raw point.
+function resolveUntargetedPoint(
+  cursor: CursorTweenEndpoint | MouseCursorPosition,
+  ownerDocument: Document | null,
+): CursorViewportPosition {
+  if (cursor.coordinateSpace === "root") {
+    const root = findCursorReplayRoot(ownerDocument);
+    if (root) {
+      const rootRect = getRectSnapshot(root);
+      return { x: rootRect.left + cursor.x, y: rootRect.top + cursor.y };
+    }
+  }
+
+  return { x: cursor.x, y: cursor.y };
+}
+
 function resolveEndpointToViewport(
   cursor: CursorTweenEndpoint | MouseCursorPosition,
   ownerDocument: Document | null,
@@ -386,22 +404,7 @@ function resolveEndpointToViewport(
   if (!cursor.visible) return null;
 
   const target = cursor.target;
-  if (!target) {
-    if (cursor.coordinateSpace === "root") {
-      const rootRect = ownerDocument
-        ? (() => {
-            const rootElement = findRootReplayTarget(ownerDocument);
-            return rootElement ? getRectSnapshot(rootElement) : null;
-          })()
-        : null;
-
-      if (rootRect) {
-        return { x: rootRect.left + cursor.x, y: rootRect.top + cursor.y };
-      }
-    }
-
-    return { x: cursor.x, y: cursor.y };
-  }
+  if (!target) return resolveUntargetedPoint(cursor, ownerDocument);
 
   const targetElement =
     target.id === CURSOR_REPLAY_VIEWPORT_TARGET_ID || !ownerDocument
@@ -424,16 +427,7 @@ function resolveEndpointToViewport(
         : null;
 
   if (!currentRect || target.rect.width <= 0 || target.rect.height <= 0) {
-    if (cursor.coordinateSpace === "root") {
-      const rootElement = ownerDocument ? findRootReplayTarget(ownerDocument) : null;
-      const rootRect = rootElement ? getRectSnapshot(rootElement) : null;
-
-      if (rootRect) {
-        return { x: rootRect.left + cursor.x, y: rootRect.top + cursor.y };
-      }
-    }
-
-    return { x: cursor.x, y: cursor.y };
+    return resolveUntargetedPoint(cursor, ownerDocument);
   }
 
   if (CURSOR_SCALING_TARGET_IDS.has(target.id)) {

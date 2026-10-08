@@ -1,9 +1,8 @@
 import { fromCallback, type EventObject } from "xstate";
 import type { MouseCursorPosition } from "../types";
 import {
-  CURSOR_REPLAY_ROOT_TARGET_ID,
-  CURSOR_REPLAY_TARGET_ATTRIBUTE,
   createCursorPositionFromClientPoint,
+  findCursorReplayRoot,
 } from "../utils/cursorCoordinates";
 import {
   isRecordedCursorVisibilityDetail,
@@ -86,10 +85,7 @@ export const mouseTrackingActor = fromCallback<MouseTrackingEvent, MouseTracking
     // Without it createCursorPositionFromClientPoint finds the root again by
     // itself, and this runs on every pointer event, ahead of the machine's frame
     // throttle.
-    const getRootElement = (): Element | null =>
-      document.querySelector(
-        `[${CURSOR_REPLAY_TARGET_ATTRIBUTE}="${CURSOR_REPLAY_ROOT_TARGET_ID}"]`,
-      );
+    const getRootElement = (): Element | null => findCursorReplayRoot(document);
 
     const handlePointerEvent = (e: MouseEvent) => {
       const rootElement = getRootElement();
