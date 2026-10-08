@@ -72,7 +72,17 @@ describe("time links", () => {
     expect(parseTimeParameter(value)).toBe(expected);
   });
 
-  it.each([null, "", "abc", "1:2:3:4", "-5", "5x"])("ignores %s", (value) => {
+  it.each([
+    null,
+    "",
+    "abc",
+    "1:2:3:4",
+    "-5",
+    "5x",
+    // Too long for a number: it would read as Infinity.
+    "9".repeat(400),
+    `${"9".repeat(400)}h`,
+  ])("ignores %s", (value) => {
     expect(parseTimeParameter(value)).toBeNull();
   });
 

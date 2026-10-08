@@ -73,24 +73,22 @@ export function findChapterIndexAt(chapters: readonly RecordingChapter[], time: 
  */
 export function parseTimeParameter(value: string | null | undefined): number | null {
   const text = value?.trim().toLowerCase();
-  if (!text) return null;
+  const seconds = text ? readLinkSeconds(text) : null;
+  // A run of digits too long for a number reads as Infinity, which is no moment either.
+  return seconds !== null && Number.isFinite(seconds * 1000) ? Math.round(seconds * 1000) : null;
+}
 
-  if (/^\d+(\.\d+)?s?$/.test(text)) {
-    return Math.round(Number.parseFloat(text) * 1000);
-  }
+/** The seconds a link's time names, in any of its forms, or null when it names none. */
+function readLinkSeconds(text: string): number | null {
+  if (/^\d+(\.\d+)?s?$/.test(text)) return Number.parseFloat(text);
   if (/^\d+(:\d{1,2}){1,2}(\.\d+)?$/.test(text)) {
     const parts = text.split(":").map(Number.parseFloat);
-    const seconds = parts.reduce((total, part) => total * 60 + part, 0);
-    return Math.round(seconds * 1000);
+    return parts.reduce((total, part) => total * 60 + part, 0);
   }
   const units = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?$/.exec(text);
-  if (units && (units[1] || units[2] || units[3])) {
-    const [, hours = "0", minutes = "0", seconds = "0"] = units;
-    return Math.round(
-      (Number(hours) * 3600 + Number(minutes) * 60 + Number.parseFloat(seconds)) * 1000,
-    );
-  }
-  return null;
+  if (!units || !(units[1] || units[2] || units[3])) return null;
+  const [, hours = "0", minutes = "0", seconds = "0"] = units;
+  return Number(hours) * 3600 + Number(minutes) * 60 + Number.parseFloat(seconds);
 }
 
 /** The link parameter for a moment: whole seconds, which every player understands. */
