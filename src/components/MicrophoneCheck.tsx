@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AudioLines, Mic, X } from "lucide-react";
-import { openMicrophone } from "../core/src/machine/audioActor";
+import { openMicrophone } from "../core/src/machine/microphone";
 import { useAudioInputDevices } from "../hooks/useAudioInputDevices";
 import { useLevelMeter } from "../hooks/useLevelMeter";
 import { useRecordingMicrophoneStream } from "../hooks/useNextEditorContext";

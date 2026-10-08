@@ -435,7 +435,7 @@ Before enabling Join voice, check the required WebRTC and media APIs. Do not use
 
 This section is a release blocker because remote voice can otherwise be captured unintentionally.
 
-The current application separately acquires a microphone in `src/core/src/machine/audioActor.ts`. It can also capture display/tab audio during screen recording. When voice is playing in the tab, tab-audio capture could include remote participants.
+The current application separately acquires a microphone in `src/core/src/machine/microphone.ts` (opened by the recorder in `audioActor.ts` and by the microphone check). It can also capture display/tab audio during screen recording. When voice is playing in the tab, tab-audio capture could include remote participants.
 
 Required MVP policy:
 
