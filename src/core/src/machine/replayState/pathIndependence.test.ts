@@ -13,7 +13,7 @@ import type {
   RuntimeRecordingEvent,
   RuntimeRecordingSnapshot,
   RuntimeTerminalSessionSnapshot,
-} from "../../../../types/runtime";
+} from "../../runtime";
 import {
   toWorkspaceDeltaSnapshot,
   type WorkspaceRecordingEvent,

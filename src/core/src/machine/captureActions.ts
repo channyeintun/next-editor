@@ -9,7 +9,7 @@ import {
   type RecordingSession,
 } from "./types";
 import type { MouseCursorPosition } from "../types";
-import type { RuntimeRecordingEvent } from "../../../types/runtime";
+import type { RuntimeRecordingEvent } from "../runtime";
 import type { WhiteboardEvent } from "../whiteboard";
 import {
   toSidebarWidthDeltaSnapshot,

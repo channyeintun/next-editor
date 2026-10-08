@@ -9,7 +9,7 @@ import type {
 } from "../../core/src/types";
 import type { Slide } from "../../core/src/slides";
 import type { RecordingTrackName } from "../../core/src/machine/recordingAssembly";
-import type { RuntimeRecordingSnapshot } from "../../types/runtime";
+import type { RuntimeRecordingSnapshot } from "../../core/src/runtime";
 import {
   isWorkspaceAssetDescriptor,
   type WorkspaceRecordingAsset,

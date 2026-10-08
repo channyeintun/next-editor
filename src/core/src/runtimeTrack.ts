@@ -4,7 +4,7 @@ import type {
   RuntimeRecordingSnapshot,
   RuntimeTerminalOutputDelta,
   RuntimeTerminalSessionSnapshot,
-} from "../../types/runtime";
+} from "./runtime";
 
 // ============================================================================
 // Runtime track: terminal output recorded as deltas.

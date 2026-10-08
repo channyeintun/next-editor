@@ -15,7 +15,7 @@ import type {
   RecordingTrackMeta,
 } from "../types";
 import type { WhiteboardEvent } from "../whiteboard";
-import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../types/runtime";
+import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../runtime";
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { ChatRecordingEvent } from "../../../types/chat";
 import { DELTA_CONFIG, type DeltaFrame } from "../utils/deltaTypes";

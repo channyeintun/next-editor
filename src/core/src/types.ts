@@ -8,7 +8,7 @@ import type {
   SlideEvent,
   SlidePreviewState,
 } from "./slides";
-import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../types/runtime";
+import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "./runtime";
 import type {
   WorkspaceRecordingAsset,
   WorkspaceRecordingEvent,

@@ -23,7 +23,7 @@ import type {
   ScreenRecordingReadyPayload,
 } from "../types";
 import type { FrameStreamEncoderState } from "../utils/frameStreamEncoder";
-import type { RuntimeRecordingSnapshot } from "../../../types/runtime";
+import type { RuntimeRecordingSnapshot } from "../runtime";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
 import type { RuntimeCheckpointProgress } from "../runtimeTrack";

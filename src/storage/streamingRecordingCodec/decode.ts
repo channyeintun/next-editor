@@ -8,7 +8,7 @@ import type {
 } from "../../core/src/slides";
 import type { DeltaFrame } from "../../core/src/utils/deltaTypes";
 import { markFramesNormalized, normalizeDeltaFrame } from "../../core/src/utils/editorState";
-import type { RuntimeRecordingEvent } from "../../types/runtime";
+import type { RuntimeRecordingEvent } from "../../core/src/runtime";
 import type { WorkspaceRecordingAsset, WorkspaceRecordingEvent } from "../../types/workspace";
 import type { WhiteboardEvent } from "../../core/src/whiteboard";
 import type { ChatRecordingEvent } from "../../types/chat";

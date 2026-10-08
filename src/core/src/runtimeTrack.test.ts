@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../types/runtime";
+import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "./runtime";
 import {
   decodeRecordingStream,
   encodeRecordingToStream,

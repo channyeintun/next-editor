@@ -1,4 +1,4 @@
-import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../../../types/runtime";
+import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../runtime";
 import { resolveRuntimeSnapshotAt } from "../../runtimeTrack";
 import { findTimedEventIndexAtOrBefore } from "./cursor";
 
