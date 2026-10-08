@@ -34,6 +34,8 @@ export class MemoryFault extends Error {
 interface Page {
   /** Allocated on first touch — a reserved page nobody writes costs nothing. */
   data: Uint8Array | null;
+  /** `data` read as words, made the first time a word is read or written. */
+  view: DataView | null;
   permission: PagePermission;
 }
 
@@ -48,10 +50,16 @@ export class Memory {
 
   /** Map a region, creating pages as needed and copying `bytes` into it. */
   map(start: bigint, length: bigint, permission: PagePermission, bytes?: Uint8Array): void {
+    // `length` is separate because .bss, the stack and the heap map space with
+    // no bytes behind it. Bytes that overrun it would land on pages this call
+    // never created, so that is the loader's mistake and is said so here.
+    if (bytes && BigInt(bytes.length) > length) {
+      throw new RangeError(`map: ${bytes.length} bytes do not fit in ${length}`);
+    }
     const first = start >> PAGE_BITS;
     const last = (start + (length > 0n ? length - 1n : 0n)) >> PAGE_BITS;
     for (let page = first; page <= last; page += 1n) {
-      if (!this.#pages.has(page)) this.#pages.set(page, { data: null, permission });
+      if (!this.#pages.has(page)) this.#pages.set(page, { data: null, view: null, permission });
     }
     // Pages are the unit of permission, but the last code page has zeros after
     // the last instruction, and those zeros are `add [rax], al` to a decoder.
@@ -65,6 +73,7 @@ export class Memory {
       // pages are read-only *to the program*, not to whoever mapped them.
       for (let offset = 0; offset < bytes.length; offset += 1) {
         const address = start + BigInt(offset);
+        // The guard above keeps every byte inside the pages just created.
         const page = this.#pages.get(address >> PAGE_BITS)!;
         this.#bytesOf(page)[Number(address & PAGE_MASK)] = bytes[offset];
       }
@@ -122,8 +131,13 @@ export class Memory {
     return page;
   }
 
-  #load(address: bigint, access: "read" | "execute" = "read"): number {
-    const page = this.#page(address, access);
+  #viewOf(page: Page): DataView {
+    page.view ??= new DataView(this.#bytesOf(page).buffer);
+    return page.view;
+  }
+
+  #load(address: bigint): number {
+    const page = this.#page(address, "read");
     return page.data === null ? 0 : page.data[Number(address & PAGE_MASK)];
   }
 
@@ -132,7 +146,30 @@ export class Memory {
     this.#bytesOf(page)[Number(address & PAGE_MASK)] = value & 0xff;
   }
 
+  /**
+   * Read a little-endian value of `size` bytes.
+   *
+   * Every memory operand, push, pop, call and ret comes through here and
+   * `write`, so a value that sits inside one page — nearly all of them —
+   * resolves that page once and reads the word whole. Only a value that runs
+   * onto the next page is walked a byte at a time.
+   */
   read(address: bigint, size: number): bigint {
+    const at = Number(address & PAGE_MASK);
+    if (at + size <= PAGE_BYTES) {
+      const page = this.#page(address, "read");
+      if (page.data === null) return 0n;
+      switch (size) {
+        case 1:
+          return BigInt(page.data[at]);
+        case 2:
+          return BigInt(this.#viewOf(page).getUint16(at, true));
+        case 4:
+          return BigInt(this.#viewOf(page).getUint32(at, true));
+        case 8:
+          return this.#viewOf(page).getBigUint64(at, true);
+      }
+    }
     let value = 0n;
     for (let offset = 0; offset < size; offset += 1) {
       value |= BigInt(this.#load(address + BigInt(offset))) << BigInt(offset * 8);
@@ -141,6 +178,32 @@ export class Memory {
   }
 
   write(address: bigint, size: number, value: bigint): void {
+    const at = Number(address & PAGE_MASK);
+    if (at + size <= PAGE_BYTES) {
+      const page = this.#page(address, "write");
+      switch (size) {
+        case 1:
+          this.#bytesOf(page)[at] = Number(value & 0xffn);
+          return;
+        case 2:
+          this.#viewOf(page).setUint16(at, Number(value & 0xffffn), true);
+          return;
+        case 4:
+          this.#viewOf(page).setUint32(at, Number(value & 0xffff_ffffn), true);
+          return;
+        case 8:
+          // setBigUint64 keeps the low 64 bits, as the byte loop does.
+          this.#viewOf(page).setBigUint64(at, value, true);
+          return;
+      }
+    } else {
+      // A store that runs onto the next page checks both pages before it
+      // writes anything, so a fault on the second leaves the first as it was
+      // rather than half-written. The fault still names the second page's
+      // first byte, the address the byte loop below would have stopped on.
+      this.#page(address, "write");
+      this.#page((address | PAGE_MASK) + 1n, "write");
+    }
     for (let offset = 0; offset < size; offset += 1) {
       this.#store(address + BigInt(offset), Number((value >> BigInt(offset * 8)) & 0xffn));
     }
@@ -189,7 +252,7 @@ export class Memory {
     const out = new Uint8Array(length);
     for (let index = 0; index < length; index += 1) {
       const at = address + BigInt(index);
-      out[index] = this.isMapped(at) ? this.#load(at, "read") : 0;
+      out[index] = this.isMapped(at) ? this.#load(at) : 0;
     }
     return out;
   }

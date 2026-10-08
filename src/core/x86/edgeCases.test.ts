@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { assemble } from "./assembler";
-import { assembleAndRun } from "./run";
+import { assembleAndRun, load } from "./run";
 
 /**
  * The corners where an x86 implementation is usually wrong.
@@ -479,5 +479,28 @@ _start:
       wrap(" mov rdi, -1\n xor rax, rax\n cmp rax, 1\n cmove edi, eax\n mov rax, 60\n syscall"),
     );
     expect(result.registers.find((entry) => entry.name === "rdi")?.value).toBe(0xffff_ffffn);
+  });
+
+  it("writes none of a store that runs off the end of writable memory", () => {
+    // `buf` fills its page exactly, and nothing is mapped above .bss until brk
+    // asks for it, so this store has four bytes in .bss and four past the end.
+    // Stored a byte at a time, the first four landed before the fifth faulted.
+    const program = assemble(`section .bss
+buf resb 4096
+section .text
+global _start
+_start:
+    mov rax, -1
+    mov [buf + 4092], rax
+    mov rax, 60
+    syscall
+`);
+    const machine = load(program);
+
+    expect(machine.run()).toEqual({
+      kind: "fault",
+      message: expect.stringContaining(`tried to write 0x${program.bssEnd.toString(16)}`),
+    });
+    expect(machine.memory.read(program.bssEnd - 4n, 4)).toBe(0n);
   });
 });
