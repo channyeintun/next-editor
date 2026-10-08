@@ -163,6 +163,13 @@ function tableEntry(form: InstructionForm): TableEntry {
 
 const TABLE = new Map<number, TableEntry[]>();
 
+/**
+ * Opcodes whose ModRM.reg field picks the instruction, keyed as `opcodeKey`
+ * keys them without an extension. Only for these is a `/digit` part of what a
+ * decode error has to name.
+ */
+const GROUP_OPCODES = new Set<number>();
+
 function add(key: number, entry: TableEntry): void {
   const bucket = TABLE.get(key);
   if (bucket) bucket.push(entry);
@@ -182,6 +189,7 @@ for (const form of INSTRUCTION_FORMS) {
     continue;
   }
   add(opcodeKey(form.opcode, form.ext ?? -1), entry);
+  if (form.ext !== undefined) GROUP_OPCODES.add(opcodeKey(form.opcode));
 }
 
 class ByteReader {
@@ -253,6 +261,36 @@ class ByteReader {
   }
 }
 
+/** The operand-size override: 16-bit operands where the default is 32. */
+const OPERAND_SIZE_PREFIX = 0x66;
+
+/** cs/ds/es/ss: segment overrides that have no effect in 64-bit mode. */
+const NO_OP_SEGMENT_PREFIXES: ReadonlySet<number> = new Set([0x2e, 0x3e, 0x26, 0x36]);
+
+/**
+ * Prefixes that still change what an instruction does in 64-bit mode, in ways
+ * this runner does not model: fs and gs add a segment base to the address,
+ * 0x67 cuts the address to 32 bits, lock and rep change how it executes.
+ * Skipping one would execute a different instruction than the bytes encode,
+ * and leaving it to the opcode lookup would report the prefix as an unknown
+ * opcode, so each is refused by name.
+ */
+const UNSUPPORTED_PREFIXES: ReadonlyMap<number, string> = new Map([
+  [0x64, "fs segment"],
+  [0x65, "gs segment"],
+  [0x67, "address-size"],
+  [0xf0, "lock"],
+  [0xf2, "repne"],
+  [0xf3, "rep"],
+]);
+
+/**
+ * The forms with no `opsize` that 0x66 still changes: it makes their stack
+ * slot 16 bits, so `66 50` is `push ax`. The table has no 16-bit stack forms,
+ * so these refuse the prefix rather than run the 64-bit one.
+ */
+const STACK_WIDTH_MNEMONICS: ReadonlySet<string> = new Set(["push", "pop", "leave"]);
+
 /**
  * Decode the instruction at `offset`.
  *
@@ -279,15 +317,22 @@ export function decodeInstruction(
       if (reader.consumed === 0) throw new AsmDecodeError("There is no instruction here", address);
       throw reader.truncated();
     }
-    if (next === 0x66) {
+    if (next === OPERAND_SIZE_PREFIX) {
       operandSizeOverride = true;
       reader.u8();
       continue;
     }
-    if (next === 0x67 || next === 0x2e || next === 0x3e || next === 0x26 || next === 0x36) {
-      // Segment and address-size overrides have no effect in this flat model.
+    if (NO_OP_SEGMENT_PREFIXES.has(next)) {
+      // 64-bit mode ignores these segment overrides, so they are skipped.
       reader.u8();
       continue;
+    }
+    const unsupported = UNSUPPORTED_PREFIXES.get(next);
+    if (unsupported !== undefined) {
+      throw new AsmDecodeError(
+        `This runner does not support the ${unsupported} prefix (0x${next.toString(16)})`,
+        address,
+      );
     }
     if (next >= 0x40 && next <= 0x4f) {
       rex = reader.u8();
@@ -312,20 +357,23 @@ export function decodeInstruction(
   // the bytes they can occupy, so a plain lookup finds them; which register it
   // was comes from the distance back to the form's own base byte.
   let candidates = TABLE.get(opcodeKey(opcodeBytes)) ?? [];
+  let opcodeName = describeOpcode(opcodeBytes);
 
   // A group opcode carries its real identity in ModRM.reg — 0x83 alone is not
-  // an instruction, `0x83 /0` is `add`. Look again with that field.
-  if (candidates.length === 0) {
+  // an instruction, `0x83 /0` is `add`. Look again with that field, and name it
+  // in any error: `0xc6 /0` is an instruction where `0xc6 /1` is not.
+  if (candidates.length === 0 && GROUP_OPCODES.has(opcodeKey(opcodeBytes))) {
     const peeked = reader.peek();
     if (peeked !== undefined) {
       const ext = (peeked >> 3) & 7;
       candidates = TABLE.get(opcodeKey(opcodeBytes, ext)) ?? [];
+      opcodeName += ` /${ext}`;
     }
   }
 
   if (candidates.length === 0) {
     throw new AsmDecodeError(
-      `The byte ${describeOpcode(opcodeBytes)} is not an instruction this runner knows`,
+      `The byte ${opcodeName} is not an instruction this runner knows`,
       address,
     );
   }
@@ -334,17 +382,21 @@ export function decodeInstruction(
   // this instruction. Falling back to whichever form came first would execute a
   // different instruction than the bytes encode, silently — `63 d8` without
   // REX.W is `movsxd ebx, eax` on real hardware, and this table only has the
-  // 64-bit form.
+  // 64-bit form. A form with no `opsize` takes its width from the opcode and
+  // accepts 0x66 the way the hardware ignores it there (`66 0f 05` is still
+  // `syscall`), except the stack forms, where the prefix asks for 16 bits.
+  // REX.W outranks 0x66, so `66 48 50` is still the 64-bit `push rax`.
   const matched =
     candidates.find((entry) => entry.form.opsize === wideSize) ??
     candidates.find((entry) => entry.form.opsize === 1) ??
-    candidates.find((entry) => entry.form.opsize === undefined);
+    candidates.find(
+      (entry) =>
+        entry.form.opsize === undefined &&
+        !(wideSize === 2 && STACK_WIDTH_MNEMONICS.has(entry.form.mnemonic)),
+    );
 
   if (matched === undefined) {
-    throw new AsmDecodeError(
-      `This runner has no ${wideSize}-byte form of ${describeOpcode(opcodeBytes)}`,
-      address,
-    );
+    throw new AsmDecodeError(`This runner has no ${wideSize}-byte form of ${opcodeName}`, address);
   }
 
   const form = matched.form;

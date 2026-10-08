@@ -77,11 +77,54 @@ describe("decoding bytes no form in the table claims", () => {
     expect(decode(0x0f, 0xb7, 0xc0)).toMatchObject({ mnemonic: "movzx", length: 3 });
   });
 
+  it("names the /digit a group opcode is missing, not just the opcode", () => {
+    // `0xc6 /0` is `mov r/m8, imm8`; the table has no `0xc6 /1`.
+    expect(() => decode(0xc6, 0x08)).toThrow(/The byte 0xc6 \/1 is not an instruction/);
+    expect(decode(0xc6, 0x00, 0x05)).toMatchObject({ mnemonic: "mov", length: 3 });
+  });
+
   it("names an implicit register from the register file", () => {
     // `cmp al, 'a'` and `sar eax, cl`: the register is named by the form, not
     // encoded in the bytes.
     expect(decode(0x3c, 0x61).operands[0]).toMatchObject({ kind: "register", index: 0, size: 1 });
     expect(decode(0xd3, 0xf8).operands[1]).toMatchObject({ kind: "register", index: 1, size: 1 });
+  });
+});
+
+describe("decoding prefixes that change the instruction", () => {
+  it("rejects 0x66 on the stack forms, which it would make 16-bit", () => {
+    // `66 50` is `push ax` on real hardware; these all used to run as the
+    // 64-bit form, moving rsp by 8 where the bytes say 2.
+    expect(() => decode(0x66, 0x50)).toThrow(AsmDecodeError);
+    expect(() => decode(0x66, 0x50)).toThrow(/2-byte form of 0x50/);
+    expect(() => decode(0x66, 0x58)).toThrow(/2-byte form of 0x58/);
+    expect(() => decode(0x66, 0x6a, 0x01)).toThrow(/2-byte form of 0x6a/);
+    expect(() => decode(0x66, 0xff, 0x30)).toThrow(/2-byte form of 0xff \/6/);
+    expect(() => decode(0x66, 0x8f, 0x00)).toThrow(/2-byte form of 0x8f \/0/);
+    expect(() => decode(0x66, 0xc9)).toThrow(/2-byte form of 0xc9/);
+  });
+
+  it("still takes 0x66 where the width comes from the opcode alone", () => {
+    expect(decode(0x66, 0x0f, 0x05)).toMatchObject({ mnemonic: "syscall", length: 3 });
+    // REX.W outranks 0x66, so this is still the 64-bit `push rax`.
+    expect(decode(0x66, 0x48, 0x50)).toMatchObject({ mnemonic: "push", operandSize: 8 });
+  });
+
+  it("rejects the address-size prefix instead of ignoring it", () => {
+    // `67 8b 03` reads through ebx, not rbx; it used to decode as `8b 03`.
+    expect(() => decode(0x67, 0x8b, 0x03)).toThrow(AsmDecodeError);
+    expect(() => decode(0x67, 0x8b, 0x03)).toThrow(/address-size prefix \(0x67\)/);
+  });
+
+  it("names an unsupported prefix rather than calling it an unknown opcode", () => {
+    expect(() => decode(0x64, 0x48, 0x8b, 0x00)).toThrow(/fs segment prefix \(0x64\)/);
+    expect(() => decode(0xf3, 0xc3)).toThrow(/rep prefix \(0xf3\)/);
+    expect(() => decode(0xf0, 0x48, 0x01, 0x00)).toThrow(/lock prefix/);
+  });
+
+  it("still skips the segment overrides 64-bit mode ignores", () => {
+    expect(decode(0x2e, 0x8b, 0x03)).toMatchObject({ mnemonic: "mov", length: 3 });
+    expect(decode(0x36, 0x48, 0x8b, 0x03)).toMatchObject({ mnemonic: "mov", length: 4 });
   });
 });
 
