@@ -184,7 +184,10 @@ function shortBranchStandIn(request: EncodeRequest, failure: AsmEncodeError): nu
   try {
     return encodeInstruction({
       ...request,
-      resolved: { ...request.resolved, targets: new Map([[0, request.address]]) },
+      resolved: {
+        ...request.resolved,
+        immediates: new Map(request.resolved.immediates).set(0, request.address),
+      },
     }).bytes;
   } catch (cause) {
     if (cause instanceof AsmEncodeError) {
@@ -511,7 +514,6 @@ function placeInstruction(
 ): Pick<Placed, "bytes" | "pendingReach"> {
   const resolved: ResolvedOperands = {
     immediates: new Map(),
-    targets: new Map(),
     displacements: new Map(),
   };
 
@@ -531,7 +533,6 @@ function placeInstruction(
         unresolved,
       );
       resolved.immediates.set(position, value);
-      resolved.targets.set(position, value);
     }
     if (operand.kind === "memory") {
       resolved.displacements.set(

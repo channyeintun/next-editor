@@ -41,10 +41,11 @@ import { forbidsRex, requiresRex, type OperandSize } from "./registers";
 
 /** Resolved operand values, supplied by the assembler once symbols are known. */
 export interface ResolvedOperands {
-  /** Immediate values, indexed by operand position. */
+  /**
+   * Immediate values, indexed by operand position. A relative branch's
+   * absolute target is the value of its operand 0.
+   */
   immediates: Map<number, bigint>;
-  /** Branch targets (absolute addresses), indexed by operand position. */
-  targets: Map<number, bigint>;
   /** Memory displacements, indexed by operand position. */
   displacements: Map<number, bigint>;
 }
@@ -569,7 +570,7 @@ function encodeWithForm(
     case "D": {
       const relPattern = form.operands[0];
       if (relPattern.k !== "rel") throw error("Internal: D form without a relative operand");
-      const target = resolved.targets.get(0);
+      const target = resolved.immediates.get(0);
       if (target === undefined) throw error("This jump target could not be worked out");
       const length = prefixes.length + opcode.length + relPattern.size;
       const relative = target - (address + BigInt(length));
