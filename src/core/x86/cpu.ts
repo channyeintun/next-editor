@@ -30,7 +30,7 @@ import {
 } from "./decoder";
 import { CONDITION_CODES } from "./isa";
 import { Memory, MemoryFault, PAGE_BYTES } from "./memory";
-import { physicalRegister, REGISTERS_64 } from "./registers";
+import { REGISTERS_64 } from "./registers";
 
 export const RAX = 0;
 export const RCX = 1;
@@ -40,15 +40,6 @@ export const RSP = 4;
 export const RBP = 5;
 export const RSI = 6;
 export const RDI = 7;
-/**
- * `ah` as the encoding names it.
- *
- * The register file is addressed by ModRM encoding, not by physical slot, and
- * for the high-byte names those differ — `ah` is encoding 4 and lives in
- * register 0. Passing 0 here with `high8` set would index four registers below
- * `rax`, which a typed array accepts and silently discards.
- */
-export const AH = 4;
 
 const U64 = (1n << 64n) - 1n;
 const MASKS: Record<number, bigint> = {
@@ -195,17 +186,19 @@ export class Machine {
 
   // -- register file --------------------------------------------------------
 
+  /**
+   * `index` is the physical register, as the decoder resolves it; `high8`
+   * picks bits 8-15 of it, so `ah` is `read(RAX, 1, true)`.
+   */
   read(index: number, size: number, high8 = false): bigint {
-    const slot = physicalRegister(index, high8);
-    const full = this.registers[slot];
+    const full = this.registers[index];
     if (high8) return (full >> 8n) & 0xffn;
     return full & MASKS[size];
   }
 
   write(index: number, size: number, value: bigint, high8 = false): void {
     if (high8) {
-      const slot = physicalRegister(index, true);
-      this.registers[slot] = (this.registers[slot] & ~0xff00n) | ((value & 0xffn) << 8n);
+      this.registers[index] = (this.registers[index] & ~0xff00n) | ((value & 0xffn) << 8n);
       return;
     }
     if (size === 8) {
@@ -581,7 +574,7 @@ export class Machine {
         const store = (quotient: bigint, remainder: bigint): void => {
           if (size === 1) {
             this.write(RAX, 1, quotient & 0xffn);
-            this.write(AH, 1, remainder & 0xffn, true);
+            this.write(RAX, 1, remainder & 0xffn, true);
           } else {
             this.write(RAX, size, quotient & mask);
             this.write(RDX, size, remainder & mask);

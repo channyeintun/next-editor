@@ -20,10 +20,26 @@
  */
 
 import { INSTRUCTION_FORMS, type Encoding, type InstructionForm } from "./isa";
-import { encodingNamesHighByte, lookupRegister, type OperandSize } from "./registers";
+import {
+  encodingNamesHighByte,
+  lookupRegister,
+  physicalRegister,
+  type OperandSize,
+} from "./registers";
 
 export type DecodedOperand =
-  | { kind: "register"; index: number; size: OperandSize; high8: boolean }
+  | {
+      kind: "register";
+      /**
+       * The physical register, 0-15 with `rax` first — not the ModRM encoding,
+       * which for `ah` is 4. The decoder resolves that here so the register
+       * file never has to know it.
+       */
+      index: number;
+      size: OperandSize;
+      /** Bits 8-15 of `index` rather than its low byte: `ah`, `ch`, `dh`, `bh`. */
+      high8: boolean;
+    }
   | { kind: "immediate"; value: bigint }
   | {
       kind: "memory";
@@ -93,10 +109,11 @@ function describeOpcode(opcode: readonly number[]): string {
  * A register operand as the bytes encode it, in ModRM, REX or the low bits of
  * the opcode. Whether a one-byte encoding of 4-7 means `ah` or `spl` depends on
  * whether the instruction carried REX, which is the register file's rule to
- * state.
+ * state; the operand comes back naming the physical register either way.
  */
-function encodedRegister(index: number, size: OperandSize, sawRex: boolean): DecodedOperand {
-  return { kind: "register", index, size, high8: encodingNamesHighByte(size, index, sawRex) };
+function encodedRegister(encoding: number, size: OperandSize, sawRex: boolean): DecodedOperand {
+  const high8 = encodingNamesHighByte(size, encoding, sawRex);
+  return { kind: "register", index: physicalRegister(encoding, high8), size, high8 };
 }
 
 interface TableEntry {
@@ -349,7 +366,7 @@ export function decodeInstruction(
         }
         operands.push({
           kind: "register",
-          index: fixed.index,
+          index: physicalRegister(fixed.index, fixed.high8),
           size: fixed.size,
           high8: fixed.high8,
         });

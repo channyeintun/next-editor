@@ -209,9 +209,11 @@ describe("encode then decode", () => {
     });
   });
 
-  it("keeps ah as a high-byte register when there is no REX prefix", () => {
+  it("reads ah as bits 8-15 of rax when there is no REX prefix", () => {
+    // ah encodes as 4, the same three bits as spl; the decoder hands back the
+    // register it lives in, so the machine never sees the encoding.
     const decoded = decodeInstruction(Uint8Array.from(assembleOne("mov ah, bl")), 0, 0x401000n);
-    expect(decoded.operands[0]).toMatchObject({ kind: "register", index: 4, high8: true });
+    expect(decoded.operands[0]).toMatchObject({ kind: "register", index: 0, high8: true });
   });
 
   it("reads sil as a low byte, because REX is present", () => {

@@ -11,9 +11,10 @@ import { assembleAndRun } from "./run";
  * bugs and are kept as the regression:
  *
  *   * The byte form of `div` returns its remainder in `ah` — encoding 4, which
- *     lives in register 0. Writing it as "register 0, high byte" indexes four
- *     registers *below* `rax`, which a typed array quietly discards, and the
- *     remainder simply vanished.
+ *     lives in register 0. While the register file was addressed by encoding,
+ *     writing it as "register 0, high byte" indexed four registers *below*
+ *     `rax`, which a typed array quietly discards, and the remainder simply
+ *     vanished.
  *   * A 64-bit divide reads a **128-bit** dividend out of `rdx:rax`, and the
  *     mask table only knows the four real operand widths. Sign-extending it
  *     through that table produced a fault instead of a quotient.

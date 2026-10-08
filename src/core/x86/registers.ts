@@ -125,8 +125,9 @@ function define(names: readonly string[], size: OperandSize, high8 = false): voi
     // for the high-byte names those differ. `ah` encodes as 4, the same three
     // bits `spl` uses, and means "bits 8-15 of register 0". Storing 0 here
     // would assemble `mov ah, bl` as `mov al, bl`: a program that runs, prints
-    // something, and is wrong. `high8` is what tells the register file to look
-    // four registers down and one byte up.
+    // something, and is wrong. `high8` is what says to look four registers
+    // down (`physicalRegister`, which the decoder applies) and one byte up (the
+    // register file).
     TABLE.set(name, { name, index: high8 ? position + 4 : position, size, high8 });
   });
 }
