@@ -250,12 +250,14 @@ export function assembleRecording({
     cameraStartOffsetMs: camera.startOffsetMs,
     hasCamera: Boolean(camera.blob),
   });
+  // One clock read, so the id, the name and createdAt name the same instant.
+  const createdAt = Date.now();
 
   return {
     version: DELTA_CONFIG.VERSION,
-    id: Date.now().toString(),
-    name: `Recording ${Date.now()}`,
-    createdAt: Date.now(),
+    id: String(createdAt),
+    name: `Recording ${createdAt}`,
+    createdAt,
     frames: tracks.frames,
     keyframeInterval: DELTA_CONFIG.KEYFRAME_INTERVAL,
     slideEvents: tracks.slideEvents,
