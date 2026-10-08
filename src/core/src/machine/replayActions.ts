@@ -120,6 +120,19 @@ const REPLAY_CURSORS_RESET = {
   lastAppliedChatEventIndex: -1,
 } as const satisfies EditorContextUpdate;
 
+/**
+ * The replay cursors plus what the last apply rendered: the Monaco frame and the preview
+ * state. A seek resets only the cursors: it keeps currentFrame as applyFrameState's Monaco
+ * diff base, and the retained preview state for the preview resync. Resetting playback,
+ * entering `playing`, detaching the workspace, and loading or clearing a recording also
+ * drop what was rendered. A new rendered-state field belongs here.
+ */
+const APPLIED_PLAYBACK_STATE_RESET = {
+  currentFrame: null,
+  ...REPLAY_CURSORS_RESET,
+  lastAppliedPreviewState: undefined,
+} as const satisfies EditorContextUpdate;
+
 const editorModelBoundaryTimeCache = new WeakMap<readonly WorkspaceRecordingEvent[], number[]>();
 
 /**
@@ -252,15 +265,13 @@ export const setRecording = (
       speed: context.timeline.speed,
       volume: context.timeline.volume,
     },
-    currentFrame: null,
     // Every cursor starts before its track's first event (chat folds from the empty
     // transcript applied above), except workspace and runtime, whose first snapshot was
     // applied above. Their overrides follow the spread: the other order would reset them,
     // and the playback entry would apply those snapshots a second time.
-    ...REPLAY_CURSORS_RESET,
+    ...APPLIED_PLAYBACK_STATE_RESET,
     lastAppliedWorkspaceEventIndex: initialWorkspaceEvent ? 0 : -1,
     lastAppliedRuntimeEventIndex: initialRuntimeSnapshot ? 0 : -1,
-    lastAppliedPreviewState: undefined,
   };
 };
 
@@ -812,23 +823,17 @@ export const resetPlayback = ({ context }: EditorActionArgs): EditorContextUpdat
     ...context.timeline,
     currentTime: 0,
   },
-  currentFrame: null,
-  ...REPLAY_CURSORS_RESET,
-  lastAppliedPreviewState: undefined,
+  ...APPLIED_PLAYBACK_STATE_RESET,
 });
 
 export const invalidateAppliedPlaybackState = (): EditorContextUpdate => ({
-  currentFrame: null,
-  ...REPLAY_CURSORS_RESET,
-  lastAppliedPreviewState: undefined,
+  ...APPLIED_PLAYBACK_STATE_RESET,
 });
 
 export const detachPlaybackWorkspace = (): EditorContextUpdate => ({
   hasManualWorkspaceOverride: true,
   pendingPlaybackEditorSync: false,
-  currentFrame: null,
-  ...REPLAY_CURSORS_RESET,
-  lastAppliedPreviewState: undefined,
+  ...APPLIED_PLAYBACK_STATE_RESET,
 });
 
 export const reattachPlaybackWorkspace = ({ context }: EditorActionArgs): EditorContextUpdate => ({
@@ -883,11 +888,9 @@ export const clearRecording = ({ context }: EditorActionArgs): EditorContextUpda
   learnerWorkspaceBaseline: null,
   pendingPlaybackEditorSync: false,
   recording: null,
-  currentFrame: null,
-  ...REPLAY_CURSORS_RESET,
+  ...APPLIED_PLAYBACK_STATE_RESET,
   // No recording is left for a width delta to be relative to.
   lastAppliedWorkspaceEventIndex: -1,
-  lastAppliedPreviewState: undefined,
   timeline: {
     ...context.timeline,
     currentTime: 0,
