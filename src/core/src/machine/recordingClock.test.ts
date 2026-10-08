@@ -36,8 +36,9 @@ describe("recording clock", () => {
   it("skips a closed pause", () => {
     const clock = pausedOnce();
     expect(isRecordingClockPaused(clock)).toBe(false);
-    expect(clock.excludedPerfMs).toBe(5_000);
-    expect(clock.excludedWallMs).toBe(5_000);
+    expect(clock.exclusions).toEqual([
+      { startPerf: 3_000, endPerf: 8_000, startWall: 52_000, endWall: 57_000 },
+    ]);
     expect(readRecordingClock(clock, START_PERF, 8_000)).toBe(2_000);
     expect(readRecordingClock(clock, START_PERF, 9_500)).toBe(3_500);
   });
@@ -63,8 +64,13 @@ describe("recording clock", () => {
       8_000,
       51_000,
     );
-    expect(clock.excludedPerfMs).toBe(5_000);
-    expect(clock.excludedWallMs).toBe(0);
+    expect(clock.exclusions[0]).toMatchObject({
+      startPerf: 3_000,
+      endPerf: 8_000,
+      startWall: 52_000,
+      endWall: 52_000,
+    });
+    expect(toRecordingWallTime(clock, 52_500)).toBe(52_500);
   });
 
   it("rewinds to a moment it was running at and holds there", () => {
@@ -85,7 +91,6 @@ describe("recording clock", () => {
   it("drops exclusions a rewind to before them discards", () => {
     const rewound = rewindRecordingClock(pausedOnce(), 2_000, 51_000);
     expect(rewound.exclusions).toEqual([]);
-    expect(rewound.excludedPerfMs).toBe(0);
     expect(readRecordingClock(rewound, START_PERF, 30_000)).toBe(1_000);
   });
 

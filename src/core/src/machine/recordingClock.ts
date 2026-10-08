@@ -28,18 +28,12 @@ export interface RecordingClockExclusion {
 export interface RecordingClock {
   /** Closed exclusions, oldest first; they never overlap. */
   exclusions: readonly RecordingClockExclusion[];
-  /** Summed length of `exclusions` on the performance clock. */
-  excludedPerfMs: number;
-  /** Summed length of `exclusions` on the wall clock. */
-  excludedWallMs: number;
   /** Where the open exclusion (the current pause) began, or null while recording runs. */
   pausedAt: { perf: number; wall: number } | null;
 }
 
 export const createRecordingClock = (): RecordingClock => ({
   exclusions: [],
-  excludedPerfMs: 0,
-  excludedWallMs: 0,
   pausedAt: null,
 });
 
@@ -107,12 +101,7 @@ export function resumeRecordingClock(
     startWall: pausedAt.wall,
     endWall: Math.max(wall, pausedAt.wall),
   };
-  return {
-    exclusions: [...clock.exclusions, exclusion],
-    excludedPerfMs: clock.excludedPerfMs + (exclusion.endPerf - exclusion.startPerf),
-    excludedWallMs: clock.excludedWallMs + (exclusion.endWall - exclusion.startWall),
-    pausedAt: null,
-  };
+  return { exclusions: [...clock.exclusions, exclusion], pausedAt: null };
 }
 
 /**
@@ -126,14 +115,10 @@ export function rewindRecordingClock(
   perf: number,
   wall: number,
 ): RecordingClock {
-  const exclusions = clock.exclusions.filter((exclusion) => exclusion.endPerf <= perf);
-  let excludedPerfMs = 0;
-  let excludedWallMs = 0;
-  for (const exclusion of exclusions) {
-    excludedPerfMs += exclusion.endPerf - exclusion.startPerf;
-    excludedWallMs += exclusion.endWall - exclusion.startWall;
-  }
-  return { exclusions, excludedPerfMs, excludedWallMs, pausedAt: { perf, wall } };
+  return {
+    exclusions: clock.exclusions.filter((exclusion) => exclusion.endPerf <= perf),
+    pausedAt: { perf, wall },
+  };
 }
 
 /**
