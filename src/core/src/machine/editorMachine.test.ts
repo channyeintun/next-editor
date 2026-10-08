@@ -1901,6 +1901,53 @@ describe("editorMachine actor lifecycle", () => {
       expect(onError).toHaveBeenCalledTimes(1);
       actor.stop();
     });
+
+    // A skipped frame leaves no fold at lastAppliedFrameIndex to build on. The frame after
+    // it used to be folded onto whatever was applied before, so a relative caret delta
+    // landed on the wrong base and the caret drifted until the next keyframe. A seek keeps
+    // currentFrame as Monaco's diff base, so after a seek into the damage that base was
+    // the frame shown before the seek.
+    it.each([
+      { into: "a tick crossed", event: { type: "TICK", currentTime: 550 } },
+      { into: "a seek landed on", event: { type: "SEEK", time: 550 } },
+    ] as const)("skips the next frame too when $into the damage", async ({ event }) => {
+      const onError = vi.fn<(error: Error) => void>();
+      const recording = createDamagedRecording();
+      recording.frames.push({
+        timestamp: 600,
+        isKeyframe: false,
+        positionDelta: { lineDelta: 0, columnDelta: 3 },
+        selectionDelta: {
+          startColumnDelta: 3,
+          endColumnDelta: 3,
+          selectionStartColumnDelta: 3,
+          positionColumnDelta: 3,
+        },
+      });
+      const editor = new MockEditor(new MockTextModel(""));
+      const actor = createActor(editorMachine, {
+        input: {
+          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
+          onError,
+        },
+      }).start();
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      actor.send({ type: "PLAY" });
+      actor.send(event);
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(actor.getSnapshot().context.lastAppliedFrameIndex).toBe(1);
+
+      actor.send({ type: "TICK", currentTime: 650 });
+
+      const { context, status } = actor.getSnapshot();
+      expect(status).toBe("active");
+      expect(context.lastAppliedFrameIndex).toBe(2);
+      expect(context.currentFrame).toBeNull();
+      expect(editor.getSelection()).toEqual(selection);
+      expect(onError).toHaveBeenCalledTimes(2);
+      actor.stop();
+    });
   });
 
   // A tick often crosses more than one frame: a mouse frame and a content frame are

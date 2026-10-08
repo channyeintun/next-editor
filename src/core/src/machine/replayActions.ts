@@ -480,6 +480,11 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
   // — including recording — is a no-op, with `onError` never called. So one bad
   // frame used to freeze the whole editor for the rest of the page session.
   // Skipping the frame and reporting it lets playback continue past the damage.
+  // A skipped frame clears currentFrame, as the model-boundary skip above does, so
+  // the forward fold below never runs on a base that is not the fold at
+  // lastAppliedFrameIndex: relative caret deltas would land on the wrong base. The
+  // rest of the damaged keyframe span is then skipped too (one report per frame)
+  // until the next keyframe re-bases the editor.
   try {
     if (isKeyframe(targetFrame)) {
       // Keyframe: always use directly, most efficient
@@ -512,11 +517,11 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
         ? error
         : new Error(`Could not reconstruct recording frame ${frameIndex}`),
     );
-    return { lastAppliedFrameIndex: frameIndex };
+    return { lastAppliedFrameIndex: frameIndex, currentFrame: null };
   }
 
   if (!frame || !isValidEditorState(frame.state)) {
-    return { lastAppliedFrameIndex: frameIndex };
+    return { lastAppliedFrameIndex: frameIndex, currentFrame: null };
   }
 
   const newCollection = applyFrameState(
