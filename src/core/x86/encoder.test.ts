@@ -169,3 +169,34 @@ describe("encoding choices that have to stay stable", () => {
     expect(bytesOf("push r12")).toBe("41 54");
   });
 });
+
+describe("a branch that cannot reach its target", () => {
+  it.each(["jmp 0x100000000", "jz 0x100000000", "jmp 0x7fffffff00"])(
+    "%s says how far its long form reaches, not that a short one was ruled out",
+    (source) => {
+      // The first layout pass rules the rel8 form out, and its exclusion used to
+      // be the complaint reported: "a shorter jump was already ruled out".
+      expect(assembleLine(source)).toThrow(/out of reach .* about 2 GB either way$/);
+      expect(assembleLine(source)).not.toThrow(/ruled out/);
+    },
+  );
+
+  it("does not promise a call a longer form it does not have", () => {
+    expect(assembleLine("call 0x100000000")).toThrow(/reaches only about 2 GB either way$/);
+    expect(assembleLine("call 0x100000000")).not.toThrow(/longer form/);
+  });
+
+  it("tells a loop over a long body how far loop reaches, and what to write instead", () => {
+    const longLoop = `.top:\n${" nop\n".repeat(130)} loop .top`;
+    expect(assembleLine(longLoop)).toThrow(
+      "This target is out of reach — it is 132 bytes back, and loop reaches only 128 bytes back or 127 ahead — for a longer loop, count down with dec rcx and jnz",
+    );
+    expect(assembleLine(longLoop)).not.toThrow(/longer form/);
+  });
+
+  it("leaves out the dec/jnz hint for loope, which also tests ZF", () => {
+    expect(assembleLine(`loope .far\n${" nop\n".repeat(130)}.far:`)).toThrow(
+      /it is 130 bytes ahead, and loope reaches only 128 bytes back or 127 ahead$/,
+    );
+  });
+});

@@ -27,7 +27,7 @@
  * and never move anything. Whether one reaches is judged once, after the layout
  * has settled, because a distance read from a layout that has not — every
  * branch still long on the first pass, a target further down still where the
- * pass before left it — can say "does not reach" about a `loop` that does.
+ * pass before left it — can call a `loop` out of reach when it is not.
  *
  * Where it stops is *a* fixed point rather than *the* shortest layout, and the
  * difference is worth stating rather than glossing. A forward branch is first

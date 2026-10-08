@@ -372,14 +372,14 @@ ${"    nop\n".repeat(gap)}done:
     it("is rejected, on its own line, when the target is 128 bytes away", () => {
       const result = assembleAndRun(FORWARD_LOOP(mnemonic, 128));
       expect(result.status).toBe("assemble-error");
-      expect(result.diagnostics).toMatch(/^main\.asm:6:\d+: error: .*does not reach/);
+      expect(result.diagnostics).toMatch(/^main\.asm:6:\d+: error: This target is out of reach/);
     });
   });
 
   it("reaches back exactly 128 bytes with loop, and no further", () => {
     const backward = (gap: number) => `top:\n${" nop\n".repeat(gap)} loop top`;
     expect(bytes(backward(126)).endsWith("e2 80")).toBe(true);
-    expect(() => bytes(backward(127))).toThrow(/does not reach/);
+    expect(() => bytes(backward(127))).toThrow(/out of reach/);
   });
 
   it("takes a label difference that only fits a byte once the jumps have shrunk", () => {

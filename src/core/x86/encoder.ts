@@ -98,6 +98,12 @@ function encodeLittleEndian(value: bigint, bytes: number): number[] {
   return out;
 }
 
+/** The displacement width of a branch form, or null for any other form. */
+function relWidth(form: InstructionForm): 1 | 4 | null {
+  const first = form.operands[0];
+  return form.encoding === "D" && first?.k === "rel" ? first.size : null;
+}
+
 function patternMatches(
   pattern: OperandPattern,
   operand: Operand,
@@ -328,9 +334,28 @@ function suggestMnemonic(typed: string): string | null {
 
 /** Whether a mnemonic has a branch form with a four-byte displacement. */
 function hasLongBranchForm(mnemonic: string): boolean {
-  return formsFor(mnemonic).some(
-    (form) => form.encoding === "D" && form.operands[0]?.k === "rel" && form.operands[0].size === 4,
-  );
+  return formsFor(mnemonic).some((form) => relWidth(form) === 4);
+}
+
+/**
+ * Why a branch cannot reach its target, said about the instruction rather than
+ * about the form that was tried.
+ *
+ * A short form that does not reach simply loses to the long one, so this only
+ * reaches a learner when every form failed — and then the reach worth quoting
+ * is the mnemonic's longest, whichever form happened to complain first.
+ */
+function outOfReach(mnemonic: string, relative: bigint): string {
+  const distance = relative < 0n ? `${-relative} bytes back` : `${relative} bytes ahead`;
+  const message = `This target is out of reach — it is ${distance}, and ${mnemonic} reaches only`;
+  if (hasLongBranchForm(mnemonic)) return `${message} about 2 GB either way`;
+  // `loope` and `loopne` also test ZF, so the rewrite is only this simple for
+  // plain `loop`.
+  const hint =
+    mnemonic.toLowerCase() === "loop"
+      ? " — for a longer loop, count down with dec rcx and jnz"
+      : "";
+  return `${message} 128 bytes back or 127 ahead${hint}`;
 }
 
 /**
@@ -443,11 +468,24 @@ export function encodeInstruction(request: EncodeRequest): EncodedInstruction {
     }
   });
 
+  // The width floor exists so the first layout pass starts every branch in its
+  // long form, which needs a long form to exist. `loop`, `loope` and `loopne`
+  // have a one-byte displacement and nothing else — the instruction set offers
+  // no long form — and a floor applied to them would discard their only
+  // encoding, so it never removes the widest branch form still in the running.
+  // A `rel` pattern matches any immediate, so the branch forms in `matching`
+  // are either all of the mnemonic's or none of them.
+  const widestRel = Math.max(0, ...matching.map((form) => relWidth(form) ?? 0));
+  const eligible = matching.filter((form) => {
+    const width = relWidth(form);
+    return width === null || width >= minimumRelBytes || width === widestRel;
+  });
+
   const encodings: EncodedInstruction[] = [];
   const failures: AsmEncodeError[] = [];
-  for (const form of matching) {
+  for (const form of eligible) {
     try {
-      encodings.push(encodeWithForm(form, sized, address, resolved, minimumRelBytes, error));
+      encodings.push(encodeWithForm(form, sized, address, resolved, error));
     } catch (cause) {
       if (cause instanceof AsmEncodeError) {
         failures.push(cause);
@@ -458,7 +496,7 @@ export function encodeInstruction(request: EncodeRequest): EncodedInstruction {
   }
 
   // When nothing encoded, the first form's own complaint is almost always the
-  // real one — "ah cannot travel with a REX prefix", "this jump does not
+  // real one — "ah cannot travel with a REX prefix", "this target is out of
   // reach" — and a generic summary would throw that away. The generic message
   // is only for the case where no form said anything useful.
   if (encodings.length === 0) {
@@ -479,7 +517,6 @@ function encodeWithForm(
   statement: InstructionStatement,
   address: bigint,
   resolved: ResolvedOperands,
-  minimumRelBytes: 1 | 4,
   error: (message: string) => AsmEncodeError,
 ): EncodedInstruction {
   const operands = statement.operands;
@@ -532,21 +569,12 @@ function encodeWithForm(
     case "D": {
       const relPattern = form.operands[0];
       if (relPattern.k !== "rel") throw error("Internal: D form without a relative operand");
-      // The width floor exists so the first layout pass starts every branch in
-      // its long form. That needs a long form to exist. `loop`, `loope` and
-      // `loopne` have a one-byte displacement and nothing else — the
-      // instruction set offers no long form — so applying the floor to them
-      // would discard their only encoding and turn every use into "a shorter
-      // jump was already ruled out", which is both fatal and untrue.
-      if (relPattern.size < minimumRelBytes && hasLongBranchForm(statement.mnemonic)) {
-        throw error("A shorter jump was already ruled out");
-      }
       const target = resolved.targets.get(0);
       if (target === undefined) throw error("This jump target could not be worked out");
       const length = prefixes.length + opcode.length + relPattern.size;
       const relative = target - (address + BigInt(length));
       if (!fitsSigned(relative, relPattern.size)) {
-        throw error("This jump does not reach — it needs a longer form");
+        throw error(outOfReach(statement.mnemonic, relative));
       }
       body = encodeLittleEndian(relative, relPattern.size);
       break;
