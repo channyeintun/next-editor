@@ -167,14 +167,10 @@ const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.
 
 const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   // Recording Controls
+  // Forwarded whole, so a field added to StartRecordingEvent reaches the machine
+  // without a second edit here; `type` goes last so the options cannot override it.
   const startRecording = (options?: Omit<StartRecordingEvent, "type">) => {
-    actorRef.send({
-      type: "START_RECORDING",
-      audioBlob: options?.audioBlob,
-      enableCamera: options?.enableCamera,
-      screenStream: options?.screenStream,
-      microphoneDeviceId: options?.microphoneDeviceId,
-    });
+    actorRef.send({ ...options, type: "START_RECORDING" });
   };
 
   const stopRecording = () => {
@@ -280,11 +276,7 @@ const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   };
 
   const handleWorkspaceEvent = (event?: WorkspaceWidthDeltas) => {
-    actorRef.send({
-      type: "WORKSPACE_EVENT",
-      sidebarWidthDelta: event?.sidebarWidthDelta,
-      previewDockWidthDelta: event?.previewDockWidthDelta,
-    });
+    actorRef.send({ ...event, type: "WORKSPACE_EVENT" });
   };
 
   const handleRuntimeEvent = () => {
