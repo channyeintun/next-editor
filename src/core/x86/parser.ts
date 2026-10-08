@@ -160,14 +160,20 @@ const RESERVE_WIDTHS = new Map<string, DataWidth>([
 ]);
 
 /**
- * Words that mean "the thing before me was a label", even with no colon.
+ * Words that mean "the thing before me was a label", even with no colon: the
+ * data widths `db`/`dw`/`dd`/`dq` and the reserve widths
+ * `resb`/`resw`/`resd`/`resq`.
  *
  * `msg db "hello"` is how every NASM program declares data, and the colon is
  * optional there in a way it is not before an instruction. Rather than guess
  * from column position — NASM's own rule, and a bad one to depend on — a bare
  * word counts as a label only when the word after it is one of these.
+ *
+ * `equ` is not one of them. `name equ value` defines a symbol without
+ * reserving anything, so the equ branch of `#parseLine` reads it whole rather
+ * than splitting it into a label and a directive.
  */
-const LABEL_INTRODUCERS = new Set([...DATA_WIDTHS.keys(), ...RESERVE_WIDTHS.keys(), "equ"]);
+const DATA_LABEL_INTRODUCERS = new Set([...DATA_WIDTHS.keys(), ...RESERVE_WIDTHS.keys()]);
 
 class Parser {
   #tokens: Token[];
@@ -238,34 +244,7 @@ class Parser {
   }
 
   #parseLine(statements: Statement[]): void {
-    // A line may open with any number of `label:` prefixes before its body,
-    // and — for data — with one colon-less label.
-    for (;;) {
-      const token = this.#peek();
-      if (token.kind !== "word") break;
-      const following = this.#peek(1);
-      const hasColon = following.kind === "punct" && following.value === ":";
-      // `db` and friends mean "the word before me was a label" — but only when
-      // that word could be a label. `inc db` is an instruction whose operand
-      // happens to be spelled like a directive, and reading it as a label named
-      // `inc` followed by a `db` with no values is a parse error blamed on the
-      // wrong line.
-      const introducesData =
-        following.kind === "word" &&
-        LABEL_INTRODUCERS.has(following.value.toLowerCase()) &&
-        !isKnownMnemonic(token.value);
-      if (!hasColon && !introducesData) break;
-      // `name equ value` defines a symbol without reserving anything, so it is
-      // parsed whole below rather than split into a label and a directive.
-      if (introducesData && following.value.toLowerCase() === "equ") break;
-      this.#next();
-      if (hasColon) this.#next();
-      const name = this.#qualify(token.value, token);
-      if (!token.value.startsWith(".")) this.#lastGlobalLabel = token.value;
-      statements.push({ kind: "label", name, line: token.line, column: token.column });
-      if (introducesData) break;
-    }
-
+    this.#parseLabelPrefixes(statements);
     if (this.#atLineEnd()) return;
 
     const head = this.#peek();
@@ -395,6 +374,40 @@ class Parser {
     }
 
     // Anything left is an instruction.
+    this.#parseInstruction(head, keyword, statements);
+  }
+
+  /**
+   * A line may open with any number of `label:` prefixes before its body, and
+   * — for data — with one colon-less label.
+   */
+  #parseLabelPrefixes(statements: Statement[]): void {
+    for (;;) {
+      const token = this.#peek();
+      if (token.kind !== "word") break;
+      const following = this.#peek(1);
+      const hasColon = following.kind === "punct" && following.value === ":";
+      // `db` and friends mean "the word before me was a label" — but only when
+      // that word could be a label. `inc db` is an instruction whose operand
+      // happens to be spelled like a directive, and reading it as a label named
+      // `inc` followed by a `db` with no values is a parse error blamed on the
+      // wrong line.
+      const introducesData =
+        following.kind === "word" &&
+        DATA_LABEL_INTRODUCERS.has(following.value.toLowerCase()) &&
+        !isKnownMnemonic(token.value);
+      if (!hasColon && !introducesData) break;
+      this.#next();
+      if (hasColon) this.#next();
+      const name = this.#qualify(token.value, token);
+      if (!token.value.startsWith(".")) this.#lastGlobalLabel = token.value;
+      statements.push({ kind: "label", name, line: token.line, column: token.column });
+      if (introducesData) break;
+    }
+  }
+
+  /** An instruction: the mnemonic `head`, then its comma-separated operands. */
+  #parseInstruction(head: Token, keyword: string, statements: Statement[]): void {
     this.#next();
     const operands: Operand[] = [];
     if (!this.#atLineEnd()) {

@@ -301,6 +301,19 @@ done:
     expect(program.listing[0].bytes.slice(3)).toEqual([0x08, 0x10, 0x40, 0x00]);
   });
 
+  it("reads an equ that follows a colon label on the same line", () => {
+    const program = assemble(`section .text
+global _start
+_start:
+top: SIZE equ 16
+    mov rax, SIZE
+    ret
+`);
+    expect(program.symbols.has("top")).toBe(true);
+    expect(program.symbols.get("SIZE")).toBe(16n);
+    expect(program.listing[0].bytes).toEqual([0x48, 0xc7, 0xc0, 0x10, 0x00, 0x00, 0x00]);
+  });
+
   it("emits a string longer than the argument limit of a spread", () => {
     // `bytes.push(...entry.bytes)` overflows the call stack somewhere past a
     // hundred thousand arguments, and a RangeError is not a diagnostic.
