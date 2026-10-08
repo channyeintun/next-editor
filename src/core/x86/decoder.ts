@@ -20,7 +20,7 @@
  */
 
 import { INSTRUCTION_FORMS, type Encoding, type InstructionForm } from "./isa";
-import { lookupRegister, type OperandSize } from "./registers";
+import { encodingNamesHighByte, lookupRegister, type OperandSize } from "./registers";
 
 export type DecodedOperand =
   | { kind: "register"; index: number; size: OperandSize; high8: boolean }
@@ -90,12 +90,13 @@ function describeOpcode(opcode: readonly number[]): string {
 }
 
 /**
- * Whether a one-byte register encoding names `ah`/`ch`/`dh`/`bh`. Encodings 4-7
- * are the high-byte names only when no REX prefix is present; with REX they are
- * `spl`/`bpl`/`sil`/`dil`.
+ * A register operand as the bytes encode it, in ModRM, REX or the low bits of
+ * the opcode. Whether a one-byte encoding of 4-7 means `ah` or `spl` depends on
+ * whether the instruction carried REX, which is the register file's rule to
+ * state.
  */
-function isHighByteEncoding(size: OperandSize, index: number, sawRex: boolean): boolean {
-  return size === 1 && !sawRex && index >= 4 && index <= 7;
+function encodedRegister(index: number, size: OperandSize, sawRex: boolean): DecodedOperand {
+  return { kind: "register", index, size, high8: encodingNamesHighByte(size, index, sawRex) };
 }
 
 interface TableEntry {
@@ -308,13 +309,6 @@ export function decodeInstruction(
     modrm = readModRm(reader, rexR, rexX, rexB, sawRex, operandSize, form);
   }
 
-  const registerOperand = (index: number, size: OperandSize): DecodedOperand => ({
-    kind: "register",
-    index,
-    size,
-    high8: isHighByteEncoding(size, index, sawRex),
-  });
-
   const immediateWidth = form.immBytes ?? (operandSize === 8 ? 4 : operandSize);
 
   for (let position = 0; position < form.operands.length; position += 1) {
@@ -322,9 +316,9 @@ export function decodeInstruction(
     switch (pattern.k) {
       case "reg":
         if (form.encoding === "O" || form.encoding === "OI") {
-          operands.push(registerOperand(opcodeRegister + (rexB << 3), pattern.size));
+          operands.push(encodedRegister(opcodeRegister + (rexB << 3), pattern.size, sawRex));
         } else {
-          operands.push(registerOperand(modrm!.reg, pattern.size));
+          operands.push(encodedRegister(modrm!.reg, pattern.size, sawRex));
         }
         break;
       case "rm":
@@ -346,12 +340,19 @@ export function decodeInstruction(
         break;
       case "fixed": {
         // The implicit register is named, not encoded, so the register file is
-        // the one place that knows which index and width the name stands for.
+        // the one place that knows which index and width the name stands for —
+        // and a REX prefix on the instruction cannot turn an implicit `ah` into
+        // `spl`, so its `high8` is taken as named rather than worked out again.
         const fixed = lookupRegister(pattern.name);
         if (fixed === null) {
           throw new AsmDecodeError(`Internal: ${pattern.name} is not a register name`, address);
         }
-        operands.push(registerOperand(fixed.index, fixed.size));
+        operands.push({
+          kind: "register",
+          index: fixed.index,
+          size: fixed.size,
+          high8: fixed.high8,
+        });
         break;
       }
       case "one":
@@ -387,16 +388,7 @@ function readModRm(
   const memorySize = memoryOperandSize(form, operandSize);
 
   if (mod === 3) {
-    const index = rmField | (rexB << 3);
-    return {
-      reg,
-      rm: {
-        kind: "register",
-        index,
-        size: memorySize,
-        high8: isHighByteEncoding(memorySize, index, sawRex),
-      },
-    };
+    return { reg, rm: encodedRegister(rmField | (rexB << 3), memorySize, sawRex) };
   }
 
   if (mod === 0 && rmField === 5) {

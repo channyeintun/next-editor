@@ -165,6 +165,22 @@ export function requiresRex(reference: RegisterRef): boolean {
   return reference.size === 1 && !reference.high8 && reference.index >= 4 && reference.index <= 7;
 }
 
+/**
+ * Whether a one-byte register encoding names `ah`/`ch`/`dh`/`bh`. Encodings 4-7
+ * are the high-byte names only when no REX prefix is present; with REX they are
+ * `spl`/`bpl`/`sil`/`dil`.
+ *
+ * `requiresRex` is the same rule seen from the name side; this one starts from
+ * the bytes and asks which name they spell, which is the decoder's question.
+ */
+export function encodingNamesHighByte(
+  size: OperandSize,
+  index: RegisterIndex,
+  sawRex: boolean,
+): boolean {
+  return size === 1 && !sawRex && index >= 4 && index <= 7;
+}
+
 /** Whether a register name is unencodable alongside a REX prefix. */
 export function forbidsRex(reference: RegisterRef): boolean {
   return reference.high8;
