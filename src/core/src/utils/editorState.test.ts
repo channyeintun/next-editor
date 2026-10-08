@@ -6,6 +6,8 @@ import {
   markFramesNormalized,
   normalizeDeltaFrame,
   normalizeEditorFrame,
+  normalizeEditorPosition,
+  normalizeEditorSelection,
   normalizeRecordingData,
   withPrimaryCursorSelection,
 } from "./editorState";
@@ -41,6 +43,114 @@ const frameWithViewState = (): EditorFrame => ({
       contributionsState: {},
     } as unknown as monaco.editor.ICodeEditorViewState,
   },
+});
+
+describe("normalizeEditorPosition", () => {
+  it("takes a finite fallback for a non-finite position, truncated and floored at 1", () => {
+    expect(
+      normalizeEditorPosition(
+        { lineNumber: Number.NaN, column: Infinity },
+        { lineNumber: 4.9, column: 0 },
+      ),
+    ).toEqual({ lineNumber: 4, column: 1 });
+  });
+});
+
+describe("normalizeEditorSelection", () => {
+  it("collapses a missing selection at the fallback position, caret included", () => {
+    expect(normalizeEditorSelection(undefined, undefined, { lineNumber: 3, column: 7 })).toEqual({
+      startLineNumber: 3,
+      startColumn: 7,
+      endLineNumber: 3,
+      endColumn: 7,
+      selectionStartLineNumber: 3,
+      selectionStartColumn: 7,
+      positionLineNumber: 3,
+      positionColumn: 7,
+    });
+  });
+
+  it("puts the caret at the end when only start and end are given", () => {
+    expect(
+      normalizeEditorSelection({
+        startLineNumber: 1,
+        startColumn: 2,
+        endLineNumber: 3,
+        endColumn: 4,
+      }),
+    ).toEqual({
+      startLineNumber: 1,
+      startColumn: 2,
+      endLineNumber: 3,
+      endColumn: 4,
+      selectionStartLineNumber: 1,
+      selectionStartColumn: 2,
+      positionLineNumber: 3,
+      positionColumn: 4,
+    });
+  });
+
+  it("keeps the caret of a backward selection at its start", () => {
+    const backward: EditorSelection = {
+      startLineNumber: 1,
+      startColumn: 2,
+      endLineNumber: 3,
+      endColumn: 4,
+      selectionStartLineNumber: 3,
+      selectionStartColumn: 4,
+      positionLineNumber: 1,
+      positionColumn: 2,
+    };
+
+    expect(normalizeEditorSelection(backward, undefined, { lineNumber: 9, column: 9 })).toEqual(
+      backward,
+    );
+  });
+
+  it("fills a missing field from the fallback selection before deriving it", () => {
+    const fallback: EditorSelection = {
+      startLineNumber: 5,
+      startColumn: 6,
+      endLineNumber: 7,
+      endColumn: 8,
+      selectionStartLineNumber: 7,
+      selectionStartColumn: 8,
+      positionLineNumber: 5,
+      positionColumn: 6,
+    };
+
+    expect(normalizeEditorSelection({ startLineNumber: 2, endColumn: 3 }, fallback)).toEqual({
+      ...fallback,
+      startLineNumber: 2,
+      endColumn: 3,
+    });
+  });
+
+  it("falls back from non-finite values, floors at 1 and truncates", () => {
+    expect(
+      normalizeEditorSelection(
+        {
+          startLineNumber: Number.NaN,
+          startColumn: Infinity,
+          endLineNumber: 0,
+          endColumn: -3,
+          selectionStartLineNumber: 2.7,
+          selectionStartColumn: -Infinity,
+        },
+        undefined,
+        { lineNumber: 5, column: 6 },
+      ),
+    ).toEqual({
+      startLineNumber: 5,
+      startColumn: 6,
+      endLineNumber: 1,
+      endColumn: 1,
+      selectionStartLineNumber: 2,
+      selectionStartColumn: 6,
+      positionLineNumber: 1,
+      positionColumn: 1,
+    });
+  });
 });
 
 describe("normalizeEditorFrame", () => {

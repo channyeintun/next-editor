@@ -57,19 +57,39 @@ function getPrimaryCursorPosition(
   return (getPrimaryCursorState(viewState)?.position as Partial<EditorPosition> | null) ?? null;
 }
 
+/** Monaco lines and columns are 1-based. */
+const MIN_LINE_OR_COLUMN = 1;
+
+/**
+ * A line or column: `value` when it is finite, else `fallback` when that is, else
+ * `last`, truncated and floored at 1. It stays fixed-arity because it runs for every
+ * field of every selection a replayed delta fold normalizes.
+ */
+function toLineOrColumn(value: unknown, fallback: unknown, last: number): number {
+  return Math.max(MIN_LINE_OR_COLUMN, toFiniteInteger(value, toFiniteInteger(fallback, last)));
+}
+
 export function normalizeEditorPosition(
   position: Partial<EditorPosition> | null | undefined,
   fallback?: Partial<EditorPosition> | null,
 ): EditorPosition {
-  const fallbackLineNumber = Math.max(1, toFiniteInteger(fallback?.lineNumber, 1));
-  const fallbackColumn = Math.max(1, toFiniteInteger(fallback?.column, 1));
-
   return {
-    lineNumber: Math.max(1, toFiniteInteger(position?.lineNumber, fallbackLineNumber)),
-    column: Math.max(1, toFiniteInteger(position?.column, fallbackColumn)),
+    lineNumber: toLineOrColumn(position?.lineNumber, fallback?.lineNumber, 1),
+    column: toLineOrColumn(position?.column, fallback?.column, 1),
   };
 }
 
+/**
+ * A complete selection from a partial one. Each field takes the selection's own finite
+ * value, else `fallback`'s, else one derived from a field resolved before it:
+ *
+ * - start: `fallbackPosition`, else the fallback selection's caret, else 1:1;
+ * - end: start, so a missing selection collapses to a caret;
+ * - selectionStart (the anchor): start;
+ * - position (the caret): end, as in Monaco's default left-to-right selection.
+ *
+ * Values are truncated and floored at line and column 1.
+ */
 export function normalizeEditorSelection(
   selection: Partial<EditorSelection> | null | undefined,
   fallback?: Partial<EditorSelection> | null,
@@ -78,65 +98,44 @@ export function normalizeEditorSelection(
   const normalizedFallbackPosition = normalizeEditorPosition(
     fallbackPosition ?? selectionToPosition(fallback),
   );
-  const startLineNumber = Math.max(
-    1,
-    toFiniteInteger(
-      selection?.startLineNumber,
-      toFiniteInteger(fallback?.startLineNumber, normalizedFallbackPosition.lineNumber),
-    ),
+  const startLineNumber = toLineOrColumn(
+    selection?.startLineNumber,
+    fallback?.startLineNumber,
+    normalizedFallbackPosition.lineNumber,
   );
-  const startColumn = Math.max(
-    1,
-    toFiniteInteger(
-      selection?.startColumn,
-      toFiniteInteger(fallback?.startColumn, normalizedFallbackPosition.column),
-    ),
+  const startColumn = toLineOrColumn(
+    selection?.startColumn,
+    fallback?.startColumn,
+    normalizedFallbackPosition.column,
   );
-  const endLineNumber = Math.max(
-    1,
-    toFiniteInteger(
-      selection?.endLineNumber,
-      toFiniteInteger(fallback?.endLineNumber, startLineNumber),
-    ),
+  const endLineNumber = toLineOrColumn(
+    selection?.endLineNumber,
+    fallback?.endLineNumber,
+    startLineNumber,
   );
-  const endColumn = Math.max(
-    1,
-    toFiniteInteger(selection?.endColumn, toFiniteInteger(fallback?.endColumn, startColumn)),
-  );
+  const endColumn = toLineOrColumn(selection?.endColumn, fallback?.endColumn, startColumn);
 
   return {
     startLineNumber,
     startColumn,
     endLineNumber,
     endColumn,
-    selectionStartLineNumber: Math.max(
-      1,
-      toFiniteInteger(
-        selection?.selectionStartLineNumber,
-        toFiniteInteger(fallback?.selectionStartLineNumber, startLineNumber),
-      ),
+    selectionStartLineNumber: toLineOrColumn(
+      selection?.selectionStartLineNumber,
+      fallback?.selectionStartLineNumber,
+      startLineNumber,
     ),
-    selectionStartColumn: Math.max(
-      1,
-      toFiniteInteger(
-        selection?.selectionStartColumn,
-        toFiniteInteger(fallback?.selectionStartColumn, startColumn),
-      ),
+    selectionStartColumn: toLineOrColumn(
+      selection?.selectionStartColumn,
+      fallback?.selectionStartColumn,
+      startColumn,
     ),
-    positionLineNumber: Math.max(
-      1,
-      toFiniteInteger(
-        selection?.positionLineNumber,
-        toFiniteInteger(fallback?.positionLineNumber, endLineNumber),
-      ),
+    positionLineNumber: toLineOrColumn(
+      selection?.positionLineNumber,
+      fallback?.positionLineNumber,
+      endLineNumber,
     ),
-    positionColumn: Math.max(
-      1,
-      toFiniteInteger(
-        selection?.positionColumn,
-        toFiniteInteger(fallback?.positionColumn, endColumn),
-      ),
-    ),
+    positionColumn: toLineOrColumn(selection?.positionColumn, fallback?.positionColumn, endColumn),
   };
 }
 
