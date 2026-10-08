@@ -136,6 +136,12 @@ describe("applyChatDelta", () => {
     ]);
   });
 
+  it("leaves the state as it is for a kind this build does not know (a newer recording)", () => {
+    const state = applyChatDelta(INITIAL_CHAT_FOLD_STATE, { k: "status", status: "streaming" });
+
+    expect(applyChatDelta(state, { k: "future_kind" } as unknown as ChatDelta)).toBe(state);
+  });
+
   it("a full fold equals folding onto an intermediate checkpoint state incrementally", () => {
     const deltas: ChatDelta[] = [
       { k: "message_start", id: "msg-1", role: "user" },

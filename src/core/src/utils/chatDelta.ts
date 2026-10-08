@@ -106,7 +106,12 @@ export function applyChatDelta(state: ChatFoldState, delta: ChatDelta): ChatFold
     case "status":
       return { ...state, status: delta.status };
 
-    default:
+    default: {
+      // A new ChatDelta kind without a case here fails this assignment. At runtime
+      // an unknown kind (from a newer or malformed recording) stays a no-op.
+      const unhandled: never = delta;
+      void unhandled;
       return state;
+    }
   }
 }
