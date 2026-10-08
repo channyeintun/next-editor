@@ -7,7 +7,7 @@ import type {
   Recording,
 } from "../types";
 import type { DeltaFrame } from "./deltaTypes";
-import { findFrameIndexAtTime } from "./frameDelta";
+import { findTimedEventIndexAtOrBefore } from "./timedIndex";
 import { isKeyframe } from "./deltaTypes";
 import { areMouseCursorPositionsEqual } from "./cursorCoordinates";
 import { POINTER_SETTLE_MS, easePointerAim, pointerAimDurationMs } from "./pointerMotion";
@@ -269,7 +269,8 @@ export const getCursorPositionAtTime = (
 ): CursorReplayPositionResult | null => {
   if (!samples.length) return null;
 
-  const index = findFrameIndexAtTime(samples, time, startIndex);
+  // Before the first sample, hold the first one (samples is non-empty here).
+  const index = Math.max(0, findTimedEventIndexAtOrBefore(samples, time, startIndex));
   const previous = samples[index];
   const next = samples[index + 1];
 
