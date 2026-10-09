@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type * as monaco from "monaco-editor";
-import { useSelector } from "@xstate/react";
 import type { ActorRefFrom, SnapshotFrom } from "xstate";
 import { editorMachine } from "./machine/editorMachine";
 import type { EditorMachineInput, RecordingSession, StartRecordingEvent } from "./machine/types";
@@ -18,7 +17,7 @@ import type { ChatRecordingEvent } from "./chat";
 import type { TextEditEvent } from "./textEdit";
 import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "./workspace";
 import { isAtPlaybackEnd } from "./machine/playbackValues";
-import { isPressableTarget, isTypingTarget } from "./utils/playerKeyTargets";
+import { usePlaybackInteractionPause } from "./machine/playbackInteraction";
 import type { RecordingClock } from "./machine/recordingClock";
 
 // ============================================================================
@@ -26,35 +25,6 @@ import type { RecordingClock } from "./machine/recordingClock";
 // ============================================================================
 export type EditorMachineSnapshot = SnapshotFrom<typeof editorMachine>;
 export type EditorActorRef = ActorRefFrom<typeof editorMachine>;
-
-const IGNORED_PLAYBACK_INPUT_KEYS = new Set([
-  "ArrowLeft",
-  "ArrowRight",
-  "ArrowUp",
-  "ArrowDown",
-  "PageUp",
-  "PageDown",
-  "Home",
-  "End",
-  "Shift",
-  "Control",
-  "Alt",
-  "Meta",
-  "CapsLock",
-  "Escape",
-  "F1",
-  "F2",
-  "F3",
-  "F4",
-  "F5",
-  "F6",
-  "F7",
-  "F8",
-  "F9",
-  "F10",
-  "F11",
-  "F12",
-]);
 
 // ============================================================================
 // Selectors: plain functions of a snapshot, not memoized. useSelector re-renders its
@@ -160,7 +130,6 @@ export const selectRecordingSafePoints = (state: EditorMachineSnapshot) => {
 
 // Data selectors
 export const selectRecording = (state: EditorMachineSnapshot) => state.context.recording;
-const selectEditor = (state: EditorMachineSnapshot) => state.context.editorRefs.editor;
 
 const createNextEditorActorActions = (actorRef: EditorActorRef) => {
   // Recording Controls
@@ -363,16 +332,14 @@ export const useNextEditorActorActions = (actorRef: EditorActorRef) => {
 
 /**
  * Side-effect-only companion to useNextEditorActorActions: keeps the machine's
- * editor ref in sync and pauses playback on user interaction. Subscribes only to
- * the slices those effects need (isPlaying, editor); returns nothing.
+ * editor ref in sync and pauses playback on user interaction (the playback-owned
+ * usePlaybackInteractionPause, which subscribes only to isPlaying and the editor);
+ * returns nothing.
  */
 export const useNextEditorInteractionEffects = (
   actorRef: EditorActorRef,
   editorRef: EditorMachineInput["editorRef"],
 ): void => {
-  const isPlaying = useSelector(actorRef, selectIsPlaying);
-  const editor = useSelector(actorRef, selectEditor);
-
   // Keep the machine's editor ref attached. SET_EDITOR_REF sends are silently
   // discarded while the actor is stopped (StrictMode/Suspense effect reconnects
   // rehydrate the actor via stop+restart), so a single missed send must not be
@@ -395,57 +362,5 @@ export const useNextEditorInteractionEffects = (
     };
   }, [actorRef, editorRef]);
 
-  // Handle playback interaction detection via direct input listeners
-  // This is more stable than onChange for preventing machine/user feedback loops
-  useEffect(() => {
-    if (isPlaying && editor) {
-      const disposables: monaco.IDisposable[] = [];
-
-      // Listen for user keyboard input during replay
-      disposables.push(
-        editor.onKeyDown((e) => {
-          // Ignore navigation/modifier keys to only pause on potential value changes
-          if (!IGNORED_PLAYBACK_INPUT_KEYS.has(e.browserEvent.key)) {
-            actorRef.send({ type: "USER_INTERACTION" });
-          }
-        }),
-      );
-
-      // Listen for paste events
-      disposables.push(
-        editor.onDidPaste(() => {
-          actorRef.send({ type: "USER_INTERACTION" });
-        }),
-      );
-
-      return () => {
-        disposables.forEach((d) => d.dispose());
-      };
-    }
-  }, [isPlaying, editor, actorRef]);
-
-  // Global space key listener to pause playback
-  useEffect(() => {
-    if (isPlaying) {
-      const handleGlobalKeyDown = (e: KeyboardEvent) => {
-        if (!(e.code === "Space" || e.key === " ")) return;
-        // Typed into a field, the editor, the terminal or the whiteboard, Space pauses and
-        // still types, like every other key there.
-        if (isTypingTarget(e.target)) {
-          actorRef.send({ type: "USER_INTERACTION" });
-          return;
-        }
-        // On a button, a link, a tab or a summary the press is the control's, as when paused.
-        if (isPressableTarget(e.target)) return;
-        // Anywhere else Space pauses, and the page does not scroll.
-        e.preventDefault();
-        actorRef.send({ type: "USER_INTERACTION" }); // This triggers PAUSE in the machine
-      };
-
-      window.addEventListener("keydown", handleGlobalKeyDown, true); // Use capture phase to catch it early
-      return () => {
-        window.removeEventListener("keydown", handleGlobalKeyDown, true);
-      };
-    }
-  }, [isPlaying, actorRef]);
+  usePlaybackInteractionPause(actorRef);
 };

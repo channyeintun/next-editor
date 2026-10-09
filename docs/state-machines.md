@@ -485,7 +485,7 @@ flowchart TB
 `NextEditorProvider` creates the actor through `NextEditorActorContext.Provider` and wires it to React:
 
 1. `useNextEditorActorActions` wraps `send` in senders (`startRecording`, `play`, `syncEditorRef`, etc.). Their identities are held in `useState`, because the React Compiler skips hookless hooks and `CodeEditor` keys an unmount cleanup on `syncEditorRef`.
-2. `useNextEditorInteractionEffects` re-asserts `SET_EDITOR_REF` on mount and after every transition (a send to a stopped actor is dropped), and pauses playback on editor input or the Space key.
+2. `useNextEditorInteractionEffects` re-asserts `SET_EDITOR_REF` on mount and after every transition (a send to a stopped actor is dropped), and calls `usePlaybackInteractionPause` (`machine/playbackInteraction.ts`), which pauses playback on editor input or the Space key.
 3. `useLeavePageGuards` keeps the viewer's edits on `pagehide` or when the tab is hidden, and asks before unloading while a take is in progress (`selectIsTakeInProgress`).
 4. The machine input's host hooks come from the app's stores: `useWorkspaceRecordingAdapter` supplies `getWorkspaceSnapshot` / `applyWorkspaceSnapshot` and the suppression flag, and the slide hooks come from `src/stores/slidesRecordingAdapter.ts`. They are declared once, as `EditorMachineHostHooks`, for both the input and the context; `createInitialContext` copies each one by name, and a `satisfies` check makes a hook missing from that copy a type error.
 5. Components read state through the context hooks, which select slices with `NextEditorActorContext.useSelector` (`useNextEditorMetadata` for flags, `useNextEditorPlayback` for speed/volume/duration, `useLiveTime` for the playhead).
