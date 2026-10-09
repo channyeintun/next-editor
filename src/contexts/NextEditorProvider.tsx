@@ -19,13 +19,15 @@ import {
 } from "../stores/slidesRecordingAdapter";
 import { useWhiteboardStore } from "./WhiteboardStoreContext";
 import { useRuntimePanelStore } from "./RuntimePanelStoreContext";
-import { selectRecordingState } from "../stores/runtimePanelStore";
+import {
+  applyRuntimeRecordingState,
+  readRuntimeRecordingState,
+} from "../stores/runtimeRecordingAdapter";
 import { useWebContainerRuntimeSnapshotGetter } from "../hooks/useWebContainerRuntime";
 import { useEndViewerDockOverride } from "../hooks/useRuntimeDockLayout";
 import { useWorkspaceRecordingAdapter } from "../hooks/useWorkspaceRecordingAdapter";
 import { createRecordingStorage, type RecordingStorage } from "../storage/RecordingStorage";
 import { saveScreenRecordingLocally } from "../storage/screenRecordingSave";
-import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import type { WorkspaceWidthDeltas } from "../types/workspace";
 import { getAgentStore } from "../agent/agentStore";
 import { createChatCheckpoint } from "../agent/chatRecording";
@@ -188,27 +190,9 @@ export const NextEditorProvider: React.FC<NextEditorProviderProps> = ({
     applySlides: (nextSlides) => applyRecordingSlides(slidesStore, nextSlides),
     getWorkspaceSnapshot,
     applyWorkspaceSnapshot,
-    getRuntimeSnapshot: (): RuntimeRecordingSnapshot => {
-      const snapshot = getRuntimeRecordingSnapshot();
-
-      return {
-        mode: snapshot.previewUrl ? "webcontainer" : "single-file",
-        status: snapshot.status,
-        previewUrl: snapshot.previewUrl,
-        previewPort: snapshot.previewPort,
-        lastOutput: snapshot.lastOutput,
-        activeCommand: snapshot.activeCommand,
-        errorMessage: snapshot.errorMessage,
-        terminalSessions: snapshot.terminalSessions,
-        activeTerminalSessionId: snapshot.activeTerminalSessionId,
-        latestPreviewMessage: snapshot.latestPreviewMessage,
-        latestLifecycleEvent: snapshot.latestLifecycleEvent,
-        ...selectRecordingState(runtimePanelStore.getSnapshot().context),
-      };
-    },
-    applyRuntimeSnapshot: (snapshot) => {
-      runtimePanelStore.trigger.setPlaybackSnapshot({ snapshot });
-    },
+    getRuntimeSnapshot: () =>
+      readRuntimeRecordingState(getRuntimeRecordingSnapshot(), runtimePanelStore),
+    applyRuntimeSnapshot: (snapshot) => applyRuntimeRecordingState(runtimePanelStore, snapshot),
     applyChatSnapshot: (snapshot) => {
       getAgentStore().trigger.applyReplaySnapshot({ snapshot });
     },
