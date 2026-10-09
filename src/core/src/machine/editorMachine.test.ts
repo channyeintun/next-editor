@@ -4346,6 +4346,52 @@ describe("editorMachine learner workspace", () => {
     actor.stop();
   });
 
+  // STOP and a restart from the end rewind with resetPlayback, which returns the workspace
+  // to the recording outright: the frame is applied at once, without waiting for the
+  // playback model to be swapped in, as a resume from the pause does.
+  it("keeps edits once and gives the workspace back on STOP", async () => {
+    const { actor, saves, content, edit } = await setup();
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "TICK", currentTime: 600 });
+    actor.send({ type: "PAUSE" });
+    edit("before stop");
+
+    actor.send({ type: "STOP" });
+
+    expect(saves.map((save) => save.snapshot.project.files["index.html"].content)).toEqual([
+      "before stop",
+    ]);
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.matches({ playback: "ready" })).toBe(true);
+    expect(snapshot.context.timeline.currentTime).toBe(0);
+    expect(snapshot.context.hasManualWorkspaceOverride).toBe(false);
+    expect(snapshot.context.learnerWorkspaceBaseline).toBeNull();
+    expect(snapshot.context.pendingPlaybackEditorSync).toBe(false);
+    expect(content()).toBe("recorded-0");
+    actor.stop();
+  });
+
+  it("keeps edits once and gives the workspace back on a restart from the end", async () => {
+    const { actor, saves, edit } = await setup();
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "TICK", currentTime: 600 });
+    actor.send({ type: "FINISHED" });
+    edit("after the end");
+
+    actor.send({ type: "PLAY" });
+
+    expect(saves.map((save) => save.snapshot.project.files["index.html"].content)).toEqual([
+      "after the end",
+    ]);
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.matches({ playback: "playing" })).toBe(true);
+    expect(snapshot.context.timeline.currentTime).toBe(0);
+    expect(snapshot.context.hasManualWorkspaceOverride).toBe(false);
+    expect(snapshot.context.learnerWorkspaceBaseline).toBeNull();
+    expect(snapshot.context.pendingPlaybackEditorSync).toBe(false);
+    actor.stop();
+  });
+
   it("keeps edits made after the end before a scrub replaces them", async () => {
     const { actor, saves, content, edit } = await setup();
     actor.send({ type: "PLAY" });

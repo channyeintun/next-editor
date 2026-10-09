@@ -1044,12 +1044,13 @@ export const editorMachine = setup({
         SET_VOLUME: {
           actions: ["setVolume", "syncPlaybackAudioVolume"],
         },
+        // resetPlayback already returns the workspace to the recording, so there is no
+        // reattach: the frame is applied here, without waiting for SET_EDITOR_REF.
         STOP: {
           target: ".ready",
           actions: [
             "preserveLearnerWorkspace",
             "resetPlayback",
-            "reattachPlaybackWorkspace",
             "applyReplayStateAtTime",
             "seekPlaybackActors",
           ],
@@ -1162,7 +1163,9 @@ export const editorMachine = setup({
                 // Only rewind here. Playing's entry invalidates and re-applies every
                 // track at currentTime (now 0), seeks the timeline and audio there and
                 // notifies, so doing any of that here too ran every track twice.
-                actions: ["preserveLearnerWorkspace", "reattachPlaybackWorkspace", "resetPlayback"],
+                // resetPlayback also returns the workspace to the recording, so there is
+                // no reattach: the frame is applied without waiting for SET_EDITOR_REF.
+                actions: ["preserveLearnerWorkspace", "resetPlayback"],
               },
               {
                 target: "playing",
