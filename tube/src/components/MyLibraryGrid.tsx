@@ -84,11 +84,16 @@ export default function MyLibraryGrid() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 pb-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {data.map((lesson) => (
-            <MyLessonCard key={lesson.id} lesson={lesson} />
-          ))}
-        </div>
+        <>
+          {/* The lesson cards' h3 titles belong under their own section, not
+              under the Playlists h2 above; visually the border already splits them. */}
+          <h2 className="sr-only">Lessons</h2>
+          <div className="grid grid-cols-1 gap-5 pb-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {data.map((lesson) => (
+              <MyLessonCard key={lesson.id} lesson={lesson} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
