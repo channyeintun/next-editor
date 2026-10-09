@@ -1,6 +1,6 @@
 import { planActionBusyMs, type StudioPlan, type StudioPlanAction } from "./plan";
 import type { StudioDriver } from "./driver";
-import { StudioActionError, abortableSleep } from "./async";
+import { RENDER_CANCELLED_MESSAGE, StudioActionError, abortableSleep } from "./async";
 import type { ActionReceipt } from "./report";
 
 /**
@@ -211,7 +211,7 @@ export async function performPlan({
         await abortableSleep(waitMs, signal);
       }
     } catch (error) {
-      failure = error instanceof Error ? error.message : "The render was cancelled";
+      failure = error instanceof Error ? error.message : RENDER_CANCELLED_MESSAGE;
       const receipt: ActionReceipt = {
         actionId: action.id,
         actionType: action.type,

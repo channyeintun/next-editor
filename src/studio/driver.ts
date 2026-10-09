@@ -32,7 +32,14 @@ import type {
   StudioPreviewCommand,
   StudioPreviewCommandResult,
 } from "../utils/iframeStudioCommandBridge";
-import { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil } from "./async";
+import {
+  StudioActionError,
+  abortableSleep,
+  resolveAnchorOffset,
+  throwIfAborted,
+  tween,
+  waitUntil,
+} from "./async";
 import { consoleLineAimPoint, findConsoleLine, type ConsoleLineLookup } from "./consoleLines";
 import { chunkPlacements, easeInOutCubic } from "./cadence";
 import {
@@ -163,19 +170,6 @@ export interface StudioDriver {
   waitForOutput(input: { contains: string; timeoutMs: number }): Promise<Record<string, unknown>>;
   expectFile(input: { path: string; contains: string }): Promise<Record<string, unknown>>;
 }
-
-function throwIfAborted(signal: AbortSignal): void {
-  if (signal.aborted) {
-    throw new StudioActionError("The render was cancelled");
-  }
-}
-
-// One synthetic pointer sample per ~16ms (≈60fps). The reference human
-// recording (human-interactions.ne) samples the cursor at a 16–17ms median
-// during active motion; the lightweight cursor-events track is captured at
-// full rate (only full editor frames are throttled), so stepping this fine is
-// what makes the recorded motion read as a hand rather than a 30fps slideshow.
-const CURSOR_STEP_MS = 16;
 
 // How long a drag-select holds the button on its first character before the
 // sweep starts. A hand starts a drag from rest: the press lands, then the
@@ -507,18 +501,12 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       editor.setScrollTop(targetTop, monaco.editor.ScrollType.Immediate);
       return;
     }
-    const started = performance.now();
-    for (;;) {
-      throwIfAborted(signal);
-      const progress = Math.min(1, (performance.now() - started) / durationMs);
-      const eased = easeInOutCubic(progress);
+    await tween(durationMs, easeInOutCubic, signal, (eased) => {
       editor.setScrollTop(
         Math.round(fromTop + (targetTop - fromTop) * eased),
         monaco.editor.ScrollType.Immediate,
       );
-      if (progress >= 1) break;
-      await abortableSleep(CURSOR_STEP_MS, signal);
-    }
+    });
   };
 
   return {
@@ -722,25 +710,14 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
       if (!from) {
         revealPointerAt(roundPoint(destination().point));
       } else {
-        const moveStarted = performance.now();
-        for (;;) {
-          throwIfAborted(signal);
-          const progress =
-            travelMs > 0 ? Math.min(1, (performance.now() - moveStarted) / travelMs) : 1;
-          const eased = easePointerAim(progress);
+        await tween(travelMs, easePointerAim, signal, (eased) => {
           const { point, element } = destination();
           dispatchCursorPoint(
             Math.round(from.x + (point.x - from.x) * eased),
             Math.round(from.y + (point.y - from.y) * eased),
             element,
           );
-          if (progress >= 1) {
-            break;
-          }
-          // setTimeout stepping (not rAF): rAF pauses in background tabs and
-          // would stall an unattended render mid-tween.
-          await abortableSleep(CURSOR_STEP_MS, signal);
-        }
+        });
       }
 
       if (press) {
@@ -865,11 +842,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         // crosses each line's vertical band. It is never a synthetic
         // per-character crawl down a multi-line block.
         let activePosition: monaco.IPosition = startPosition;
-        const startedDrag = performance.now();
-        for (;;) {
-          throwIfAborted(signal);
-          const progress = Math.min(1, (performance.now() - startedDrag) / dragMs);
-          const eased = easePointerDrag(progress);
+        await tween(dragMs, easePointerDrag, signal, (eased) => {
           const px = Math.round(from.x + (to.x - from.x) * eased);
           const py = Math.round(from.y + (to.y - from.y) * eased);
           dispatchCursorPoint(px, py, node, 1);
@@ -888,13 +861,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
               activePosition.column,
             ),
           );
-          if (progress >= 1) {
-            break;
-          }
-          // setTimeout stepping (not rAF) so the drag advances in a background
-          // tab, matching moveCursor.
-          await abortableSleep(CURSOR_STEP_MS, signal);
-        }
+        });
         // Release at the range end so the recorded button state returns to idle.
         // The selection then simply holds here while the narration continues —
         // the recording shows a drag settling and the highlight resting, not the
@@ -984,20 +951,13 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         // the console so it is anchored to the line, as every move is.
         dispatchCursorPoint(aim.x, aim.y, container);
       } else {
-        const moveStarted = performance.now();
-        for (;;) {
-          throwIfAborted(signal);
-          const progress =
-            travelMs > 0 ? Math.min(1, (performance.now() - moveStarted) / travelMs) : 1;
-          const eased = easePointerAim(progress);
+        await tween(travelMs, easePointerAim, signal, (eased) => {
           dispatchCursorPoint(
             Math.round(from.x + (aim.x - from.x) * eased),
             Math.round(from.y + (aim.y - from.y) * eased),
             container,
           );
-          if (progress >= 1) break;
-          await abortableSleep(CURSOR_STEP_MS, signal);
-        }
+        });
       }
       return { line: visible.line.text, travelMs };
     },

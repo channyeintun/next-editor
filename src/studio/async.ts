@@ -16,15 +16,28 @@ export class StudioActionError extends Error {
   }
 }
 
+/** What every render step fails with once the render's signal has aborted. */
+export const RENDER_CANCELLED_MESSAGE = "The render was cancelled";
+
+export function cancelledError(): StudioActionError {
+  return new StudioActionError(RENDER_CANCELLED_MESSAGE);
+}
+
+export function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw cancelledError();
+  }
+}
+
 export function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
-      reject(new StudioActionError("The render was cancelled"));
+      reject(cancelledError());
       return;
     }
     const onAbort = () => {
       window.clearTimeout(timer);
-      reject(new StudioActionError("The render was cancelled"));
+      reject(cancelledError());
     };
     const timer = window.setTimeout(() => {
       signal.removeEventListener("abort", onAbort);
@@ -47,9 +60,7 @@ export async function waitUntil(
 ): Promise<void> {
   const deadline = performance.now() + timeoutMs;
   for (;;) {
-    if (signal.aborted) {
-      throw new StudioActionError("The render was cancelled");
-    }
+    throwIfAborted(signal);
     if (predicate()) {
       return;
     }
@@ -57,6 +68,41 @@ export async function waitUntil(
       throw new StudioActionError(`Timed out after ${timeoutMs}ms waiting for ${description}`);
     }
     await abortableSleep(intervalMs, signal);
+  }
+}
+
+// One synthetic pointer sample per ~16ms (≈60fps). The reference human
+// recording (human-interactions.ne) samples the cursor at a 16–17ms median
+// during active motion; the lightweight cursor-events track is captured at
+// full rate (only full editor frames are throttled), so stepping this fine is
+// what makes the recorded motion read as a hand rather than a 30fps slideshow.
+export const CURSOR_STEP_MS = 16;
+
+/**
+ * Run an eased animation one step per CURSOR_STEP_MS: each step checks the
+ * signal, measures progress (0→1) over `durationMs`, and hands `step` the
+ * eased value, ending on the step that reaches 1. A zero duration still steps
+ * once, straight to the end, so a zero-length move lands where it was going.
+ * Pointer moves, drags and editor scrolls all run on it, so their recorded
+ * cadence has one home.
+ */
+export async function tween(
+  durationMs: number,
+  ease: (progress: number) => number,
+  signal: AbortSignal,
+  step: (eased: number, progress: number) => void,
+): Promise<void> {
+  const started = performance.now();
+  for (;;) {
+    throwIfAborted(signal);
+    const progress = durationMs > 0 ? Math.min(1, (performance.now() - started) / durationMs) : 1;
+    step(ease(progress), progress);
+    if (progress >= 1) {
+      return;
+    }
+    // setTimeout stepping (not rAF): rAF pauses in background tabs and would
+    // stall an unattended render mid-tween.
+    await abortableSleep(CURSOR_STEP_MS, signal);
   }
 }
 

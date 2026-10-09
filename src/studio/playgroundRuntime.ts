@@ -55,7 +55,7 @@ import {
 import { collectAsmPlaygroundFiles, ASM_ENTRY_PATH } from "../runtime/asmPlayground/files";
 import { isSinglePlaygroundFile, PLAYGROUND_SOURCE_RULES } from "../runtime/playgroundFiles";
 import type { WorkspaceProject } from "../types/workspace";
-import { StudioActionError, abortableSleep } from "./async";
+import { StudioActionError, abortableSleep, cancelledError } from "./async";
 import { fixtureRunConsoleLines } from "./fixtureConsoleLines";
 import {
   PLAYGROUND_TRANSIENT_ERROR_KINDS,
@@ -153,7 +153,7 @@ async function liveAttempt<TResult>(
       if (deadlineHit && !signal.aborted) {
         throw new ServiceFailure("timeout", `No response within ${timeoutMs}ms`);
       }
-      throw new StudioActionError("The render was cancelled");
+      throw cancelledError();
     }
     if (service) {
       throw new ServiceFailure(service.kind, service.message);
