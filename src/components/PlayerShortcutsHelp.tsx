@@ -36,7 +36,7 @@ export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }
       <div className="mb-2 flex items-center justify-between">
         <p
           id={titleId}
-          className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase"
+          className="text-[11px] font-semibold tracking-wide text-slate-300 uppercase"
         >
           Keyboard shortcuts
         </p>
@@ -67,7 +67,7 @@ export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }
           </div>
         ))}
       </dl>
-      <p className="mt-2 text-[11px] text-slate-500">
+      <p className="mt-2 text-[11px] text-slate-300">
         Keys go to the player when you are not typing in the editor, terminal, or a field.
         Single-key shortcuts (letters, numbers and punctuation) can be turned off in Settings.
       </p>

@@ -8,6 +8,12 @@ describe("PlayerShortcutsHelp", () => {
     expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeInTheDocument();
   });
 
+  it("draws its title and footnote in slate-300, 11.9:1 on the panel (slate-500 was 3.72:1)", () => {
+    render(<PlayerShortcutsHelp onClose={() => {}} />);
+    expect(screen.getByText("Keyboard shortcuts")).toHaveClass("text-slate-300");
+    expect(screen.getByText(/^Keys go to the player/)).toHaveClass("text-slate-300");
+  });
+
   it("moves focus to its Close button and back to the opener when it closes", () => {
     const opener = document.createElement("button");
     opener.textContent = "Opener";
