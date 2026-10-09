@@ -14,7 +14,8 @@ import { findFrameIndexAtTime } from "../utils/timedIndex";
 import { isEditorReady, isValidEditorState } from "../utils/validation";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../utils/equality";
 import { applyContentDiff, applySelectionDiff, areSelectionsEqual } from "../utils/editorDiff";
-import { reportMachineError, resolveBoundedReplayTime } from "./replayStep";
+import { reportMachineError } from "./machineError";
+import { resolveBoundedReplayTime } from "./replayStep";
 
 // ============================================================================
 // Editor frame replay

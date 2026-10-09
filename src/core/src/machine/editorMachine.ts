@@ -95,7 +95,7 @@ import {
   startPlaybackActors,
   pausePlaybackActors,
 } from "./playbackActors";
-import { reportMachineError } from "./replayStep";
+import { reportMachineError } from "./machineError";
 import { isAtPlaybackEnd, normalizeTimelineDuration } from "./playbackValues";
 import { isDmpCodecLoaded } from "../../dmp/dmpCodec";
 

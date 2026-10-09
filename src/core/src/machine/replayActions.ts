@@ -31,7 +31,8 @@ import {
   normalizeTimelineTime,
 } from "./playbackValues";
 import { applyFrameAtTime, RENDERED_FRAME_RESET } from "./frameReplay";
-import { reportMachineError, resolveBoundedReplayTime, type ReplayStep } from "./replayStep";
+import { reportMachineError } from "./machineError";
+import { resolveBoundedReplayTime, type ReplayStep } from "./replayStep";
 
 // ============================================================================
 // Playback-replay action bodies
@@ -45,8 +46,9 @@ import { reportMachineError, resolveBoundedReplayTime, type ReplayStep } from ".
 // isn't independently nameable outside `setup()`.
 //
 // Siblings: the editor frame replay and Monaco rendering are in frameReplay.ts,
-// the narration player's driver in playbackActors.ts, and what the replay steps
-// share (reportMachineError, the bounded replay time) in replayStep.ts.
+// the narration player's driver in playbackActors.ts, what the replay steps
+// share (the bounded replay time, ReplayStep) in replayStep.ts, and
+// reportMachineError in machineError.ts.
 // ============================================================================
 
 /**

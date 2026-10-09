@@ -8,6 +8,8 @@ import type { SlideEvent } from "../slides";
 import type { WhiteboardEvent } from "../whiteboard";
 import type { RuntimeRecordingSnapshot } from "../runtime";
 import type { ChatRecordingEvent } from "../chat";
+import type { CursorRecordingEvent, MouseCursorPosition } from "../types";
+import { areMouseCursorPositionsEqual } from "../utils/cursorCoordinates";
 import {
   areWorkspaceSnapshotsEqual,
   isNonZeroWidthDelta,
@@ -249,5 +251,26 @@ export function appendChatDelta(
     timestamp: getRecordingTimestamp(session),
     event,
   });
+  return true;
+}
+
+/**
+ * Pushes in place, so `cursorEvents` keeps its identity until a retake replaces it (see
+ * the mutable capture buffer invariant on {@link RecordingSession}). Returns whether it
+ * appended: `false` when the position deduplicates against the last event.
+ */
+export function appendCursorEvent(
+  cursorEvents: CursorRecordingEvent[],
+  timestamp: number,
+  mousePosition: MouseCursorPosition | undefined,
+): boolean {
+  if (!mousePosition) return false;
+
+  const lastCursorEvent = cursorEvents[cursorEvents.length - 1];
+  if (areMouseCursorPositionsEqual(lastCursorEvent, mousePosition)) {
+    return false;
+  }
+
+  cursorEvents.push({ timestamp, ...mousePosition });
   return true;
 }

@@ -5,18 +5,12 @@ import type {
   EditorMachineInput,
   RecordingSession,
 } from "./types";
-import type {
-  CursorRecordingEvent,
-  EditorFrame,
-  EditorPosition,
-  EditorSelection,
-  MouseCursorPosition,
-} from "../types";
+import type { EditorFrame, EditorPosition, EditorSelection, MouseCursorPosition } from "../types";
 import type { TextEditEvent } from "../textEdit";
 import { hasRrwebPreviewSeed } from "../preview";
 import { createContentEditDelta, type CreatedContentEditDelta } from "../utils/contentDelta";
 import { pushFrame } from "../utils/frameStreamEncoder";
-import { getRecordingTimestamp } from "./recordingSession";
+import { appendCursorEvent, getRecordingTimestamp } from "./recordingSession";
 import { isRecordingClockPaused } from "./recordingClock";
 import { arePositionsEqual, areSelectionsEqual } from "../utils/editorDiff";
 import {
@@ -25,7 +19,6 @@ import {
   normalizeEditorViewState,
   withPrimaryCursorSelection,
 } from "../utils/editorState";
-import { areMouseCursorPositionsEqual } from "../utils/cursorCoordinates";
 
 // ============================================================================
 // Editor frame and cursor capture
@@ -199,36 +192,6 @@ export const createFrame = (
       position,
     },
   };
-};
-
-const didCursorPositionChange = (
-  previous: MouseCursorPosition | undefined,
-  next: MouseCursorPosition | undefined,
-): boolean => {
-  return !areMouseCursorPositionsEqual(previous, next);
-};
-
-/**
- * Pushes in place, so `cursorEvents` keeps its identity until a retake replaces it (see
- * the mutable capture buffer invariant on {@link RecordingSession}). Returns whether it
- * appended: `false` when the position deduplicates against the last event.
- */
-export const appendCursorEvent = (
-  cursorEvents: CursorRecordingEvent[],
-  timestamp: number,
-  mousePosition: MouseCursorPosition | undefined,
-): boolean => {
-  if (!mousePosition) return false;
-
-  const lastCursorEvent = cursorEvents[cursorEvents.length - 1];
-  const cursorChanged = didCursorPositionChange(lastCursorEvent, mousePosition);
-
-  if (!cursorChanged) {
-    return false;
-  }
-
-  cursorEvents.push({ timestamp, ...mousePosition });
-  return true;
 };
 
 /**

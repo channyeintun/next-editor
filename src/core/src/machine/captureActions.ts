@@ -16,6 +16,7 @@ import { toSidebarWidthDeltaSnapshot, type WorkspaceRecordingEvent } from "../wo
 import { createFrameStreamEncoder } from "../utils/frameStreamEncoder";
 import {
   appendChatDelta,
+  appendCursorEvent,
   appendPreviewInitialDocument,
   appendPreviewPatchBatch,
   appendPreviewRecordingEvent,
@@ -32,7 +33,6 @@ import {
   pauseRecordingClock,
   resumeRecordingClock,
 } from "./recordingClock";
-import { appendCursorEvent } from "./frameCapture";
 import { addSafePoint } from "./retake";
 import { chapterTitle } from "../utils/chapters";
 import { markFramesNormalized } from "../utils/editorState";
