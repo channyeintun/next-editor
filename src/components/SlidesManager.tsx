@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactElement } from "react";
+import { useId, useRef, useState, type ReactElement } from "react";
 import {
   Plus,
   Trash2,
@@ -99,10 +99,16 @@ function BackgroundPicker({
       const dataUrl = await readCustomBackgroundImage(file);
       onChange(dataUrl);
     } catch (err) {
+      // No timer clears this: it stays until the next background choice, so it can be
+      // read at any pace.
       setError(err instanceof CustomBackgroundError ? err.message : "Couldn't use that image.");
-      window.setTimeout(() => setError(null), 4000);
     }
     setIsUploading(false);
+  };
+
+  const choose = (background: string | undefined) => {
+    setError(null);
+    onChange(background);
   };
 
   return (
@@ -113,7 +119,7 @@ function BackgroundPicker({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => onChange(undefined)}
+          onClick={() => choose(undefined)}
           title="None"
           aria-label="No background"
           aria-pressed={!value}
@@ -129,7 +135,7 @@ function BackgroundPicker({
           <button
             key={preset.id}
             type="button"
-            onClick={() => onChange(preset.id)}
+            onClick={() => choose(preset.id)}
             title={preset.label}
             aria-label={preset.label}
             aria-pressed={value === preset.id}
@@ -178,7 +184,11 @@ function BackgroundPicker({
           onChange={handleFileChange}
         />
       </div>
-      {error && <p className="text-[10px] text-rose-400">{error}</p>}
+      {error && (
+        <p role="alert" className="text-[10px] text-rose-400">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -209,6 +219,7 @@ function GoogleSlidesImport({
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const errorId = useId();
 
   const googleSlides = slides.filter((slide) => slide.contentType === "google-svg");
   // Only the *import* path validates this URL (isPublishedDeckUrl). Slides
@@ -288,7 +299,11 @@ function GoogleSlidesImport({
             Remove deck
           </button>
         </div>
-        {error && <p className="text-[10px] text-rose-400">{error}</p>}
+        {error && (
+          <p role="alert" className="text-[10px] text-rose-400">
+            {error}
+          </p>
+        )}
       </div>
     );
   }
@@ -303,11 +318,16 @@ function GoogleSlidesImport({
         <input
           type="url"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setError(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && url.trim() && !isLoading) runImport(url.trim());
           }}
           placeholder="https://docs.google.com/presentation/d/e/…/pub"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
           className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#0f1219] px-3 py-1.5 text-xs text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-400/70"
         />
         <button
@@ -327,7 +347,11 @@ function GoogleSlidesImport({
       <p className="text-[10px] leading-relaxed text-slate-500">
         In Google Slides: File → Share → Publish to web, then paste the published link here.
       </p>
-      {error && <p className="text-[10px] text-rose-400">{error}</p>}
+      {error && (
+        <p id={errorId} role="alert" className="text-[10px] text-rose-400">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

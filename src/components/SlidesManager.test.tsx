@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Slide } from "../types/slides";
 import SlidesManager from "./SlidesManager";
@@ -28,6 +28,7 @@ function clickThumbnail(typeLabel: string) {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -166,6 +167,46 @@ describe("SlidesManager", () => {
     ]);
     // An untyped slide shows no corner label, so its thumbnail's name has no type either.
     expect(screen.getByRole("button", { name: "Edit slide 4" })).toBeInTheDocument();
+  });
+
+  it("announces a failed import and ties the message to the link field", async () => {
+    renderManager([]);
+    const link = screen.getByPlaceholderText(/docs\.google\.com/);
+
+    fireEvent.change(link, { target: { value: "https://example.com/deck" } });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/^Enter a published Google Slides link/);
+    expect(link).toHaveAttribute("aria-invalid", "true");
+    expect(link).toHaveAccessibleDescription(alert.textContent ?? "");
+
+    // Editing the link clears the error.
+    fireEvent.change(link, { target: { value: "https://example.com/deck2" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(link).not.toHaveAttribute("aria-invalid");
+    expect(link).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("keeps a failed upload's alert until the next background choice", async () => {
+    vi.useFakeTimers();
+    renderManager([]);
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+
+    await act(async () => {
+      fireEvent.change(fileInput, {
+        target: { files: [new File(["x"], "notes.txt", { type: "text/plain" })] },
+      });
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("Please choose an image file.");
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Texture 1"));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("does not open an imported Google slide for editing", () => {
