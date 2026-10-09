@@ -207,10 +207,18 @@ describe("StudioController voice focus", () => {
     vi.restoreAllMocks();
   });
 
+  it("names the voice delete button by its action and hides the glyph", async () => {
+    renderController();
+
+    const remove = await screen.findByRole("button", { name: "Delete voice" });
+    expect(remove).toHaveTextContent("✕");
+    expect(remove.querySelector('[aria-hidden="true"]')).toHaveTextContent("✕");
+  });
+
   it("keeps focus on the voice select after deleting the selected voice", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderController();
-    const remove = await screen.findByRole("button", { name: "✕" });
+    const remove = await screen.findByRole("button", { name: "Delete voice" });
 
     studio.voices = [];
     remove.focus();
@@ -219,6 +227,6 @@ describe("StudioController voice focus", () => {
     await waitFor(() =>
       expect(screen.getByRole("combobox", { name: "Narrator voice" })).toHaveFocus(),
     );
-    expect(screen.queryByRole("button", { name: "✕" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete voice" })).toBeNull();
   });
 });

@@ -1087,10 +1087,11 @@ export default function StudioController() {
                   onClick={() => {
                     void removeVoice();
                   }}
+                  aria-label="Delete voice"
                   className="shrink-0 rounded-md bg-[#3b2222] px-2.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-[#ef8d8d] transition-colors hover:bg-[#4d2a2a] disabled:cursor-not-allowed disabled:opacity-50"
                   title="Delete this reference voice from the browser"
                 >
-                  ✕
+                  <span aria-hidden="true">✕</span>
                 </button>
               </>
             ) : null}
