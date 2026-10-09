@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   ApiClientStoreProvider,
@@ -140,5 +140,65 @@ describe("ApiClientPanel request controls", () => {
       "Value",
     );
     expect(screen.getByRole("button", { name: "Remove header 1" })).toBeInTheDocument();
+  });
+});
+
+describe("ApiClientPanel toggle states", () => {
+  it("exposes which request tab is selected", () => {
+    const store = renderPanel();
+
+    act(() => {
+      store.trigger.setMethod({ method: "POST" });
+    });
+
+    const headersTab = screen.getByRole("button", { name: "Headers" });
+    const bodyTab = screen.getByRole("button", { name: "Body" });
+    expect(headersTab).toHaveAttribute("aria-pressed", "true");
+    expect(bodyTab).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(bodyTab);
+
+    expect(headersTab).toHaveAttribute("aria-pressed", "false");
+    expect(bodyTab).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("exposes whether the response headers are expanded", () => {
+    const store = renderPanel();
+
+    act(() => {
+      store.trigger.applyReplayState({
+        method: "GET",
+        path: "/api/items",
+        body: "",
+        headers: [],
+        sending: false,
+        history: [],
+        result: {
+          ok: true,
+          response: {
+            status: 200,
+            statusText: "OK",
+            headers: [
+              ["content-type", "application/json"],
+              ["x-request-id", "abc"],
+            ],
+            body: "{}",
+            durationMs: 12,
+            bodyBytes: 2,
+          },
+        },
+      });
+    });
+
+    const toggle = screen.getByRole("button", { name: "Headers (2)" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("aria-controls", "api-response-headers");
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.getElementById("api-response-headers")).toHaveTextContent(
+      "content-type:application/json",
+    );
   });
 });

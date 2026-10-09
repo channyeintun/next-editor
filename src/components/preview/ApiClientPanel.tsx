@@ -315,6 +315,7 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={`border-b-2 px-3 py-2 text-xs font-semibold transition-colors ${
         active
           ? "border-sky-400 text-sky-300"
@@ -453,6 +454,8 @@ function SuccessfulResponseView({
           <button
             type="button"
             onClick={() => setShowHeaders((v) => !v)}
+            aria-expanded={showHeaders}
+            aria-controls="api-response-headers"
             className="ml-auto text-[11px] text-slate-500 transition-colors hover:text-slate-300"
           >
             Headers ({response.headers.length})
@@ -462,7 +465,10 @@ function SuccessfulResponseView({
 
       {/* Response headers (collapsible) */}
       {showHeaders ? (
-        <div className="max-h-24 shrink-0 overflow-y-auto border-b border-slate-800 bg-[#151820] px-3 py-1.5">
+        <div
+          id="api-response-headers"
+          className="max-h-24 shrink-0 overflow-y-auto border-b border-slate-800 bg-[#151820] px-3 py-1.5"
+        >
           {response.headers.map(([key, value], i) => (
             <div key={i} className="flex gap-2 font-mono text-[11px]">
               <span className="shrink-0 font-semibold text-slate-400">{key}:</span>
