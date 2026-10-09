@@ -636,6 +636,22 @@ describe("WhiteboardPanel dialog", () => {
     expect(play).toHaveFocus();
   });
 
+  it("keeps the maximize toggle's name and reports its state as pressed", () => {
+    const view = render(<WhiteboardPanel />);
+    const toggle = screen.getByRole("button", { name: "Maximize whiteboard" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(toggle);
+    expect(whiteboardState.setMaximized).toHaveBeenCalledExactlyOnceWith(true);
+
+    whiteboardState = makeWhiteboardState("external");
+    whiteboardState.scene = { ...whiteboardState.scene, isMaximized: true };
+    view.rerender(<WhiteboardPanel />);
+    expect(
+      screen.getByRole("button", { name: "Maximize whiteboard", pressed: true }),
+    ).toHaveAttribute("title", "Restore whiteboard");
+  });
+
   it("closes on Escape in its header bar, but leaves Escape on the canvas to Excalidraw", () => {
     render(<WhiteboardPanel />);
 

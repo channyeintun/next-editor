@@ -253,8 +253,9 @@ export default function WhiteboardPanel() {
           <div className="flex items-center gap-1">
             <button
               type="button"
-              aria-label={scene.isMaximized ? "Restore whiteboard" : "Maximize whiteboard"}
+              aria-label="Maximize whiteboard"
               aria-pressed={scene.isMaximized}
+              title={scene.isMaximized ? "Restore whiteboard" : "Maximize whiteboard"}
               onClick={() => {
                 collaboration?.stopFollowing("local-whiteboard-input");
                 setMaximized(!scene.isMaximized);
