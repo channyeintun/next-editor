@@ -1,6 +1,6 @@
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "../../runtime";
 import { resolveRuntimeSnapshotAt } from "../../runtimeTrack";
-import { findTimedEventIndexAtOrBefore } from "./cursor";
+import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
 
 // ============================================================================
 // Runtime track replay.

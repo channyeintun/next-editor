@@ -4,7 +4,7 @@ import {
   type ChatRecordingEvent,
 } from "../../chat";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "../../utils/chatDelta";
-import { findTimedEventIndexAtOrBefore } from "./cursor";
+import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
 
 // ============================================================================
 // Chat track replay.

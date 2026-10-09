@@ -7,9 +7,7 @@
 // in utils/timedIndex, which editor frames share.
 // ============================================================================
 
-import { findTimedEventIndexAtOrBefore, type TimedReplayEvent } from "../../utils/timedIndex";
-
-export { findTimedEventIndexAtOrBefore };
+import type { TimedReplayEvent } from "../../utils/timedIndex";
 
 export type ReplayTriggerEvent = {
   type: string;

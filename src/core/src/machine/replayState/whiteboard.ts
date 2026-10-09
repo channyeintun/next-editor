@@ -6,7 +6,7 @@ import {
   type WhiteboardEvent,
   type WhiteboardSceneState,
 } from "../../whiteboard";
-import { findTimedEventIndexAtOrBefore } from "./cursor";
+import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
 
 // ============================================================================
 // Whiteboard track replay.

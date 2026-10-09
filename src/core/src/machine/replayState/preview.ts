@@ -4,7 +4,8 @@ import {
   type PreviewEvent,
   type PreviewState,
 } from "../../preview";
-import { findTimedEventIndexAtOrBefore, isCursorAheadOf } from "./cursor";
+import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
+import { isCursorAheadOf } from "./cursor";
 
 // ============================================================================
 // Preview track replay.

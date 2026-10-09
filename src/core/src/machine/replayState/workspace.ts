@@ -3,7 +3,7 @@ import {
   type WorkspaceRecordingEvent,
   type WorkspaceRecordingSnapshot,
 } from "../../../../types/workspace";
-import { findTimedEventIndexAtOrBefore } from "./cursor";
+import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
 
 // ============================================================================
 // Workspace track replay.

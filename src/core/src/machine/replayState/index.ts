@@ -1,7 +1,7 @@
 // Replay-state resolution — public API.
 //
 // Split by track concern on top of a shared cursor core:
-//   * cursor.ts    — time → event-index lookup shared by every track
+//   * cursor.ts    — replay time and cursor helpers shared by every track
 //   * preview.ts   — preview iframe state
 //   * workspace.ts — workspace/file/sidebar snapshot
 //   * runtime.ts   — runtime snapshot
@@ -12,21 +12,9 @@
 // Re-exported here so callers keep importing from "replayState" unchanged.
 
 export { resolveReplayTime, isReplayResync } from "./cursor";
-
 export { getPreviewReplayResult } from "./preview";
-export type { PreviewReplayResult } from "./preview";
-
 export { getWorkspaceReplayResult } from "./workspace";
-export type { WorkspaceReplayResult } from "./workspace";
-
 export { getRuntimeReplayResult } from "./runtime";
-export type { RuntimeReplayResult } from "./runtime";
-
 export { getChatReplayResult } from "./chat";
-export type { ChatReplayResult } from "./chat";
-
 export { getSlideReplayResult } from "./slide";
-export type { SlideReplayApplication, SlideReplayResult } from "./slide";
-
 export { getWhiteboardReplayResult } from "./whiteboard";
-export type { WhiteboardReplayResult } from "./whiteboard";

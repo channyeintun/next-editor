@@ -1,5 +1,6 @@
 import type { Slide, SlideEvent, SlidePreviewState } from "../../slides";
-import { findTimedEventIndexAtOrBefore, isCursorAheadOf } from "./cursor";
+import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
+import { isCursorAheadOf } from "./cursor";
 
 // ============================================================================
 // Slide track replay.

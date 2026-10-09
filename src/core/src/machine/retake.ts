@@ -50,7 +50,7 @@ export function findRetakeTargetNow(session: RecordingSession): RecordingSafePoi
  * retake the take resumes at the moment it rewound to, and the resumed anchor (its
  * clock readings, its media time past the discarded stretch) is the one to rewind to.
  */
-export function withSafePoint(
+function withSafePoint(
   safePoints: readonly RecordingSafePoint[],
   point: RecordingSafePoint,
 ): RecordingSafePoint[] {
@@ -64,7 +64,7 @@ export function withSafePoint(
  * Where the recorders' files stand at recorded time `recordingTime`: past every stretch
  * retakes discarded.
  */
-export function mediaTimeAt(session: RecordingSession, recordingTime: number): number {
+function mediaTimeAt(session: RecordingSession, recordingTime: number): number {
   return recordingTime + totalMediaSpanLength(session.mediaCuts);
 }
 

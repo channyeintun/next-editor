@@ -291,7 +291,7 @@ export const seekToTime = ({ context, event }: EditorActionArgs): EditorContextU
 };
 
 /** Moves the playhead to where the timeline actor ticked, clamped to the recording. */
-export const storeTickTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
+const storeTickTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   if (event.type !== "TICK") return {};
   return {
     timeline: {
@@ -539,10 +539,7 @@ export const setEditorRef = ({ context, event }: EditorActionArgs): EditorContex
   };
 };
 
-export const applyPreviewEventsAtTime = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
+const applyPreviewEventsAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const { recording, applyPreviewState, lastAppliedPreviewEventIndex } = context;
 
   if (!recording?.previewEvents?.length || !applyPreviewState) {
@@ -574,7 +571,7 @@ export const applyPreviewEventsAtTime = ({
   return {};
 };
 
-export const applyPreviewPatchBatchesAtTime = ({ context, event }: EditorActionArgs): void => {
+const applyPreviewPatchBatchesAtTime = ({ context, event }: EditorActionArgs): void => {
   const { recording, applyPreviewPatchReplay } = context;
 
   // An initial document alone is a complete replayable stream (Meta +
@@ -594,10 +591,7 @@ export const applyPreviewPatchBatchesAtTime = ({ context, event }: EditorActionA
   });
 };
 
-export const applyWorkspaceEventsAtTime = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
+const applyWorkspaceEventsAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const {
     hasManualWorkspaceOverride,
     recording,
@@ -667,10 +661,7 @@ export const applyWorkspaceEventsAtTime = ({
   return {};
 };
 
-export const applyRuntimeEventsAtTime = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
+const applyRuntimeEventsAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const { recording, applyRuntimeSnapshot, lastAppliedRuntimeEventIndex } = context;
 
   if (!recording?.runtimeEvents?.length || !applyRuntimeSnapshot) {
@@ -695,10 +686,7 @@ export const applyRuntimeEventsAtTime = ({
   return {};
 };
 
-export const applyChatEventsAtTime = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
+const applyChatEventsAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const { recording, applyChatSnapshot, lastAppliedChatEventIndex } = context;
 
   if (!recording?.chatEvents?.length || !applyChatSnapshot) {
@@ -736,10 +724,7 @@ export const applyChatEventsAtTime = ({
   return {};
 };
 
-export const applyWhiteboardEventsAtTime = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
+const applyWhiteboardEventsAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const { recording, applyWhiteboardState, lastAppliedWhiteboardEventIndex } = context;
 
   if (!recording?.whiteboardEvents?.length || !applyWhiteboardState) {
@@ -763,10 +748,7 @@ export const applyWhiteboardEventsAtTime = ({
   return {};
 };
 
-export const applySlideEventsAtTime = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
+const applySlideEventsAtTime = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const { recording, applySlideState, lastAppliedSlideEventIndex } = context;
 
   if (!recording?.slideEvents?.length || !applySlideState) {
