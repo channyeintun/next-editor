@@ -213,7 +213,6 @@ export class VoiceEngine {
     const url = buildVoiceWebSocketUrl(this.options.roomId, this.options.collaborationSessionId);
     try {
       const connection = connectVoiceCoordination(this.deps.createSocket, url, {
-        onOpen: () => undefined,
         onMessage: (message) => {
           if (this.connection === connection) this.handleServerMessage(message);
         },

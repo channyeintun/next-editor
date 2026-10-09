@@ -1,5 +1,5 @@
-import { PartyTracks, createAudioSink, getMic } from "partytracks/client";
-import type { MediaDevice, SinkApi, TrackMetadata } from "partytracks/client";
+import { PartyTracks, getMic } from "partytracks/client";
+import type { MediaDevice, TrackMetadata } from "partytracks/client";
 import {
   BehaviorSubject,
   type Observable,
@@ -36,12 +36,6 @@ export interface VoiceRemoteSubscription {
   close: () => void;
 }
 
-export interface VoiceAudioSinkHandle {
-  attach: (subscription: VoiceRemoteSubscription) => void;
-  element: HTMLAudioElement;
-  cleanup: () => void;
-}
-
 export interface VoiceMediaSession {
   // Lazily acquires the microphone and publishes one audio track. Resolves
   // with the published track metadata; rejects on permission/device failure.
@@ -49,15 +43,10 @@ export interface VoiceMediaSession {
   // Releases the physical capture (source disabled, underlying track
   // stopped) while keeping the negotiated publication fed by silence.
   muteAndReleaseMicrophone: () => void;
-  // Re-enables capture after a mute; requires publishMicrophone() to have
-  // succeeded once. May transparently reacquire the device.
-  resumeBroadcasting: () => void;
   onMicrophoneTrack: (listener: (track: MediaStreamTrack | null) => void) => void;
   // Device failures after a successful publish (unplugged, revoked).
   onMicrophoneError: (listener: (error: Error) => void) => void;
   pullTrack: (track: VoicePublishedTrack) => VoiceRemoteSubscription;
-  createSink: (audioElement: HTMLAudioElement) => SinkApi;
-  onConnectionState: (listener: (state: RTCPeerConnectionState) => void) => void;
   close: () => void;
 }
 
@@ -100,8 +89,8 @@ export function createVoiceMediaSession(config: VoiceMediaSessionConfig): VoiceM
   const ensureMicrophone = (): MediaDevice => {
     if (mic) return mic;
     // broadcasting/activateSource/retainIdleTrack all false: no capture until
-    // resumeBroadcasting(), and a mute stops the physical device (verified
-    // against the pinned build; plan §8.3).
+    // publishMicrophone() starts broadcasting, and a mute stops the physical
+    // device (verified against the pinned build; plan §8.3).
     mic = getMic({
       broadcasting: false,
       activateSource: false,
@@ -183,10 +172,6 @@ export function createVoiceMediaSession(config: VoiceMediaSessionConfig): VoiceM
       mic?.disableSource();
     },
 
-    resumeBroadcasting() {
-      mic?.startBroadcasting();
-    },
-
     onMicrophoneTrack(listener) {
       micTrackListeners.add(listener);
     },
@@ -223,16 +208,6 @@ export function createVoiceMediaSession(config: VoiceMediaSessionConfig): VoiceM
           subscriptions.remove(subscription);
         },
       };
-    },
-
-    createSink(audioElement) {
-      return createAudioSink({ audioElement });
-    },
-
-    onConnectionState(listener) {
-      subscriptions.add(
-        partyTracks.peerConnectionState$.subscribe({ next: listener, error: () => undefined }),
-      );
     },
 
     close() {

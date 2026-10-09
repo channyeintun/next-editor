@@ -22,14 +22,12 @@ export interface VoiceSocketLike {
 export type VoiceSocketFactory = (url: string) => VoiceSocketLike;
 
 export interface VoiceCoordinationHandlers {
-  onOpen: () => void;
   onMessage: (message: VoiceServerMessage) => void;
   // Fired once per connection for both error and close.
   onClose: (event: { code: number | null }) => void;
 }
 
 export interface VoiceCoordinationConnection {
-  send: (message: VoiceClientMessage) => void;
   sendMuteChanged: (revision: number, muted: boolean) => void;
   sendLeave: () => void;
   close: () => void;
@@ -73,7 +71,6 @@ export function connectVoiceCoordination(
     handlers.onClose({ code });
   };
 
-  socket.addEventListener("open", () => handlers.onOpen());
   socket.addEventListener("message", (event) => {
     if (typeof event.data !== "string") return;
     const message = parseVoiceServerMessage(event.data);
@@ -93,7 +90,6 @@ export function connectVoiceCoordination(
   };
 
   return {
-    send,
     sendMuteChanged(revision, muted) {
       send({
         type: "voice.mute-changed",

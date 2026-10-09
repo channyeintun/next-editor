@@ -45,7 +45,6 @@ class MockSocket implements VoiceSocketLike {
 class MockMediaSession implements VoiceMediaSession {
   publishCalls = 0;
   releaseCalls = 0;
-  resumeCalls = 0;
   closeCalls = 0;
   pulls: Array<{
     track: VoicePublishedTrack;
@@ -67,10 +66,6 @@ class MockMediaSession implements VoiceMediaSession {
 
   muteAndReleaseMicrophone(): void {
     this.releaseCalls += 1;
-  }
-
-  resumeBroadcasting(): void {
-    this.resumeCalls += 1;
   }
 
   onMicrophoneTrack(listener: (track: MediaStreamTrack | null) => void): void {
@@ -97,12 +92,6 @@ class MockMediaSession implements VoiceMediaSession {
       },
     };
   }
-
-  createSink(): never {
-    throw new Error("not used in tests");
-  }
-
-  onConnectionState(): void {}
 
   close(): void {
     this.closeCalls += 1;

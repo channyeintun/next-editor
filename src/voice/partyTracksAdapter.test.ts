@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { createVoiceMediaSession } from "./partyTracksAdapter";
 
 const partyMocks = vi.hoisted(() => ({
-  createAudioSink: vi.fn<(...args: unknown[]) => unknown>(),
   getMic: vi.fn<() => unknown>(),
   pull: vi.fn<(...args: unknown[]) => Observable<never>>(),
   push: vi.fn<(source$: Observable<MediaStreamTrack>) => Observable<unknown>>(),
@@ -12,11 +11,9 @@ const partyMocks = vi.hoisted(() => ({
 vi.mock("partytracks/client", () => ({
   PartyTracks: class {
     history = { entries: [], log: vi.fn<(...args: unknown[]) => void>() };
-    peerConnectionState$ = new Observable<never>();
     pull = partyMocks.pull;
     push = partyMocks.push;
   },
-  createAudioSink: partyMocks.createAudioSink,
   getMic: partyMocks.getMic,
 }));
 
