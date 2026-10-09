@@ -143,7 +143,7 @@ export default function RecordingDraftRecovery({
                   type="button"
                   disabled={busy}
                   onClick={() => void handleDiscard()}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-red-500/90 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-red-500 disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
                 >
                   <Trash2 size={12} aria-hidden="true" />
                   Delete
