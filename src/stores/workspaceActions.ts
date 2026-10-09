@@ -117,7 +117,7 @@ export function createWorkspaceActions(
 
     setSidebarCollapsed: (collapsed) => {
       workspaceStore.trigger.setSidebarCollapsed({ collapsed });
-      writeStoredFileSidebarCollapsed(workspaceStore.getSnapshot().context.sidebarCollapsed);
+      writeStoredFileSidebarCollapsed(collapsed);
     },
 
     // The same trigger with no write behind it: a lesson that opens with the

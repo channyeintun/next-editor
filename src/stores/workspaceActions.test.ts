@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WorkspaceSyncMutation } from "../contexts/WorkspaceContext";
 import type { WorkspaceAssetDescriptor, WorkspaceProject } from "../types/workspace";
+import { FILE_SIDEBAR_COLLAPSED_STORAGE_KEY } from "../utils/sidebarLayout";
 
 const assets = vi.hoisted(() => ({
   persist: vi.fn<(project: WorkspaceProject) => Promise<void>>(),
@@ -129,6 +130,42 @@ describe("createWorkspaceActions", () => {
     expect(actions.getProject().id).toBe("lesson");
     expect(actions.getActiveFilePath()).toBe("index.html");
     expect(isDirty(store)).toBe(false);
+  });
+
+  // The File explorer toggle and the width drag work while a `?url=` or /learn
+  // lesson is still loading, and the choice outlives the lesson's loadProject.
+  it("keeps the viewer's sidebar choices made before a project loads", () => {
+    const store = createWorkspaceStore(null);
+    const actions = createWorkspaceActions(store);
+
+    actions.setSidebarCollapsed(true);
+    actions.setSidebarWidth(300);
+    expect(store.getSnapshot().context).toMatchObject({
+      isInitialized: false,
+      sidebarCollapsed: true,
+      sidebarWidth: 300,
+    });
+    expect(window.localStorage.getItem(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe("true");
+
+    actions.loadProject(lesson(), "index.html");
+    const context = store.getSnapshot().context;
+    expect(context.isInitialized).toBe(true);
+    expect(context.sidebarCollapsed).toBe(true);
+    expect(context.sidebarWidth).toBe(300);
+    expect(context.isInitialized && context.sidebarState.sidebarWidth).toBe(300);
+  });
+
+  it("persists the sidebar toggle the viewer asked for", () => {
+    const store = createWorkspaceStore({ activeFilePath: "index.html", project: lesson() });
+    const actions = createWorkspaceActions(store);
+
+    actions.setSidebarCollapsed(true);
+    expect(store.getSnapshot().context.sidebarCollapsed).toBe(true);
+    expect(window.localStorage.getItem(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe("true");
+
+    actions.setSidebarCollapsed(false);
+    expect(store.getSnapshot().context.sidebarCollapsed).toBe(false);
+    expect(window.localStorage.getItem(FILE_SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe("false");
   });
 
   it("publishes an edit as a file mutation and a new file as a project mutation", () => {

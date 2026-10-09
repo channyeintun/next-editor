@@ -442,8 +442,9 @@ function commitProjectChange(
 }
 
 /**
- * Every transition but loadProject needs a loaded project. Until one is loaded
- * the event keeps the same context, which the store does not emit.
+ * Every transition but loadProject and the two sidebar-layout preferences needs a
+ * loaded project. Until one is loaded the event keeps the same context, which the
+ * store does not emit.
  */
 function whenInitialized<TEvent>(
   transition: (context: InitializedWorkspaceState, event: TEvent) => WorkspaceState,
@@ -676,7 +677,9 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           sidebarScrollTop,
         });
       }),
-      setSidebarWidth: whenInitialized((context, event: { width: number }) => {
+      // Like the collapsed state below, the width is a base field that needs no
+      // project: a drag while a lesson is still loading survives its loadProject.
+      setSidebarWidth: (context, event: { width: number }) => {
         const sidebarWidth = normalizeSidebarWidth(event.width);
 
         if (context.sidebarWidth === sidebarWidth) {
@@ -687,14 +690,15 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           ...context,
           sidebarWidth,
         });
-      }),
+      },
       // Viewer-side UI preference: the file explorer can be toggled at any time,
-      // including mid-replay, and only the viewer's own toggle is written back
+      // including mid-replay and before a project has loaded (a `?url=` or /learn
+      // lesson still streaming), and only the viewer's own toggle is written back
       // to storage. A recording may carry `sidebarCollapsed` on its initial
       // snapshot, and a lesson may ask to open with the tree shut — a one-file
       // lesson spends its width on nothing — but that chooses the opening frame
       // and nothing more: it is never persisted, and the next toggle is theirs.
-      setSidebarCollapsed: whenInitialized((context, event: { collapsed: boolean }) => {
+      setSidebarCollapsed: (context, event: { collapsed: boolean }) => {
         if (context.sidebarCollapsed === event.collapsed) {
           return context;
         }
@@ -703,7 +707,7 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           ...context,
           sidebarCollapsed: event.collapsed,
         };
-      }),
+      },
       createFile: whenInitialized(
         (
           context,
@@ -1048,9 +1052,14 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
           sidebarScrollTop?: number;
         },
       ) => {
+        // The viewer's sidebar choices made before the first project loaded carry over.
         const baseContext = context.isInitialized
           ? context
-          : createWorkspaceState(event.savedSnapshot);
+          : {
+              ...createWorkspaceState(event.savedSnapshot),
+              sidebarWidth: context.sidebarWidth,
+              sidebarCollapsed: context.sidebarCollapsed,
+            };
         const treeVersion = areWorkspaceTopologiesEqual(baseContext.project, event.project)
           ? baseContext.treeVersion
           : baseContext.treeVersion + 1;
