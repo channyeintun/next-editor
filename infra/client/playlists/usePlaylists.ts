@@ -32,10 +32,10 @@ export function usePlaylistsForLesson(lessonId: string | undefined) {
 
 // Owner-scoped membership (all members, including unpublished) for the
 // manage panel. Same "playlists" prefix, so every mutation below invalidates
-// it. staleTime 0 (not the app default of Infinity) because a member's
-// published status changes through the *lessons* mutations, which don't
-// invalidate playlist keys — the panel mounts fresh on open, so refetching
-// then is what keeps a just-unpublished member from showing stale.
+// it, and so do the lessons mutations in useMyLessons.ts (a member's published
+// status changes there). staleTime 0 (not the app default of Infinity) still
+// refetches each time the panel opens, so it never shows a list from an
+// earlier open.
 export function usePlaylistLessons(playlistId: string | undefined) {
   return useQuery({
     queryKey: ["playlists", "members", playlistId],

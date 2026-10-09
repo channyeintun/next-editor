@@ -1,11 +1,13 @@
 import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { uploadLesson, publishLesson, type UploadLessonInput } from "./uploadLesson";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateLessonDerivedQueries } from "../library/useMyLessons";
+import { uploadLesson, type UploadLessonInput } from "./uploadLesson";
 
 export { formatDuration } from "./uploadLesson";
 export type { UploadLessonInput, UploadedLesson } from "./uploadLesson";
 
 export function useUploadLesson() {
+  const queryClient = useQueryClient();
   const [progress, setProgress] = useState(0);
   // React Query does not abort a mutation when its component unmounts, and the
   // upload is a plain sequential promise chain — so closing the modal used to
@@ -20,6 +22,9 @@ export function useUploadLesson() {
       controllerRef.current = controller;
       return uploadLesson(lessonId, input, setProgress, controller.signal);
     },
+    // The query client keeps lists until a mutation marks them stale, so
+    // without this My Library would keep showing the list without the new draft.
+    onSuccess: () => invalidateLessonDerivedQueries(queryClient),
   });
 
   return {
@@ -30,10 +35,4 @@ export function useUploadLesson() {
     error: mutation.error,
     reset: mutation.reset,
   };
-}
-
-export function usePublishLesson() {
-  return useMutation({
-    mutationFn: (lessonId: string) => publishLesson(lessonId),
-  });
 }

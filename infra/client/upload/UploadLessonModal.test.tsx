@@ -1,4 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render as renderUi, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "@app/core/src";
 import {
@@ -7,6 +9,7 @@ import {
   MAX_TAGS,
   MAX_TITLE_CHARS,
 } from "../../lessons/metadataLimits";
+import type * as UploadLessonModule from "./uploadLesson";
 import type { UploadedLesson, UploadLessonInput } from "./useUploadLesson";
 
 const auth = vi.hoisted(() => ({ isSignedIn: false }));
@@ -14,6 +17,9 @@ const auth = vi.hoisted(() => ({ isSignedIn: false }));
 const upload = vi.hoisted(() =>
   vi.fn<(args: { lessonId: string; input: UploadLessonInput }) => Promise<UploadedLesson>>(),
 );
+
+// "Publish now" goes through My Library's publish mutation, which calls this.
+const publishLesson = vi.hoisted(() => vi.fn<(lessonId: string) => Promise<void>>());
 
 const signIn = vi.hoisted(() => ({
   calls: [] as string[],
@@ -35,8 +41,12 @@ vi.mock("./useUploadLesson", () => ({
     error: null,
     reset: vi.fn<() => void>(),
   }),
-  usePublishLesson: () => ({ mutateAsync: vi.fn<() => Promise<void>>() }),
   formatDuration: () => "0:01",
+}));
+
+vi.mock("./uploadLesson", async (importOriginal) => ({
+  ...(await importOriginal<typeof UploadLessonModule>()),
+  publishLesson: (lessonId: string) => publishLesson(lessonId),
 }));
 
 vi.mock("@app/storage/RecordingStorage", () => ({
@@ -46,6 +56,11 @@ vi.mock("@app/storage/RecordingStorage", () => ({
 vi.mock("./resumeIntent", () => ({ saveResumeIntent: signIn.saveResumeIntent }));
 
 const { default: UploadLessonModal } = await import("./UploadLessonModal");
+
+// The publish mutation reads the query client from context.
+function render(ui: ReactElement) {
+  return renderUi(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
+}
 
 const recording: Recording = {
   version: 4,
@@ -188,5 +203,49 @@ describe("UploadLessonModal text limits", () => {
     typeTags("intro");
 
     expect(screen.queryByText("each tag must be at most 50 characters")).toBeNull();
+  });
+});
+
+describe("UploadLessonModal publish", () => {
+  beforeEach(() => {
+    auth.isSignedIn = true;
+    upload.mockReset().mockResolvedValue({ id: "l1", slug: "s" });
+    publishLesson.mockReset();
+  });
+
+  afterEach(() => {
+    auth.isSignedIn = false;
+  });
+
+  async function uploadDraft(onClose: () => void) {
+    render(<UploadLessonModal recording={recording} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: /^upload$/i }));
+    await screen.findByRole("heading", { name: "Saved as a draft" });
+  }
+
+  it("closes once the draft is published", async () => {
+    publishLesson.mockResolvedValue();
+    const onClose = vi.fn<() => void>();
+    await uploadDraft(onClose);
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish now" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(publishLesson).toHaveBeenCalledWith("l1");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("says so and stays open when publishing fails", async () => {
+    publishLesson.mockRejectedValue(new Error("Request failed with status code 500"));
+    const onClose = vi.fn<() => void>();
+    await uploadDraft(onClose);
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish now" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Couldn't publish — try again.");
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Publish now" }).disabled).toBe(
+      false,
+    );
   });
 });

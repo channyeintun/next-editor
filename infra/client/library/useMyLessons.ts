@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { publishLesson, updateLessonName, updateLessonThumbnail } from "../upload/uploadLesson";
 import { deleteLesson, fetchMyLessons, unpublishLesson } from "./myLessonsApi";
 
@@ -30,7 +30,9 @@ function useMyLessonMutation(mutationFn: (lessonId: string) => Promise<void>) {
   });
 }
 
-function invalidateLessonDerivedQueries(queryClient: ReturnType<typeof useQueryClient>) {
+// Exported for useUploadLesson too: a newly uploaded draft belongs in My
+// Library the next time it mounts.
+export function invalidateLessonDerivedQueries(queryClient: QueryClient) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: MY_LESSONS_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: PLAYLISTS_QUERY_KEY }),

@@ -7,7 +7,8 @@ import { analytics } from "@app/utils/analytics";
 import { copyTextToClipboard } from "@app/utils/clipboard";
 import { createRecordingStorage } from "@app/storage/RecordingStorage";
 import { useAuth, signInUrl } from "../auth/useAuth";
-import { useUploadLesson, usePublishLesson, formatDuration } from "./useUploadLesson";
+import { usePublishFromLibrary } from "../library/useMyLessons";
+import { useUploadLesson, formatDuration } from "./useUploadLesson";
 import { saveResumeIntent, type ResumeIntent } from "./resumeIntent";
 import { THUMBNAIL_ACCEPT, MAX_THUMBNAIL_BYTES } from "./thumbnailConstraints";
 import { CAPTION_ACCEPT, MAX_CAPTION_BYTES } from "./captionConstraints";
@@ -98,7 +99,7 @@ export default function UploadLessonModal({
   const [signInError, setSignInError] = useState<string | null>(null);
 
   const { upload, cancel, progress, isUploading, error, reset } = useUploadLesson();
-  const publish = usePublishLesson();
+  const publish = usePublishFromLibrary();
 
   // Revoke the preview's object URL whenever it's replaced/cleared or the modal unmounts,
   // so a large image doesn't linger in memory past the form that offered it.
@@ -321,7 +322,12 @@ export default function UploadLessonModal({
 
   const handlePublish = async () => {
     if (!uploadResult) return;
-    await publish.mutateAsync(uploadResult.id);
+    try {
+      await publish.mutateAsync(uploadResult.id);
+    } catch {
+      // `publish.isError` shows the message; the draft stays, so they can retry.
+      return;
+    }
     analytics.capture("lesson_published", { lesson_id: uploadResult.id });
     onClose();
   };
@@ -426,6 +432,11 @@ export default function UploadLessonModal({
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
+          {publish.isError ? (
+            <p role="alert" className="text-xs text-rose-300">
+              Couldn't publish — try again.
+            </p>
+          ) : null}
           <div className="flex items-center justify-end gap-3">
             <button
               type="button"
