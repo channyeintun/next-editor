@@ -509,7 +509,7 @@ function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
           <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Editor</span>
         )}
         {isSaving ? (
-          <span className="text-[10px] text-slate-500" role="status">
+          <span className="text-[10px] text-slate-300" role="status">
             Saving…
           </span>
         ) : errorMessage ? (
