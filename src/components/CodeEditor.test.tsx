@@ -124,7 +124,10 @@ function press(name: string) {
   });
 }
 
-describe("CodeEditor bypass block", () => {
+// The first test pays for the lazy CodeEditor chunk's cold transform (see
+// renderWorkspace), which can outlast Vitest's 5 s default on a busy machine;
+// the test budget sits above that 20 s wait so the wait, not Vitest, decides.
+describe("CodeEditor bypass block", { timeout: 30_000 }, () => {
   it("skips the header to the main editor region without navigating", async () => {
     await renderWorkspace();
     const main = screen.getByRole("main");
@@ -145,7 +148,7 @@ describe("CodeEditor bypass block", () => {
   });
 });
 
-describe("CodeEditor accessible name", () => {
+describe("CodeEditor accessible name", { timeout: 30_000 }, () => {
   it("names the open file and how to leave the editor", async () => {
     await renderWorkspace();
     expect(
@@ -164,7 +167,7 @@ describe("CodeEditor accessible name", () => {
   });
 });
 
-describe("CodeEditor workspace under an overlay", () => {
+describe("CodeEditor workspace under an overlay", { timeout: 30_000 }, () => {
   it("is inert while the whiteboard covers it", async () => {
     const workspace = await renderWorkspace();
     expect(workspace).not.toHaveAttribute("inert");
