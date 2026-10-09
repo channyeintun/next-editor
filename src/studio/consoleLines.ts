@@ -18,7 +18,6 @@ import {
   logicalTerminalLines,
   type LogicalTerminalLine,
   type TerminalBuffer,
-  type TerminalBufferLine,
 } from "../core/src/utils/terminalLines";
 
 /**
@@ -33,21 +32,16 @@ export const CONSOLE_VISIBLE_ROWS = 6;
 /** Narrowest console the studio renders at, for counting how a long line wraps. */
 export const CONSOLE_MIN_COLUMNS = 80;
 
-export type ConsoleBuffer = TerminalBuffer;
-export type ConsoleBufferLine = TerminalBufferLine;
-export type LogicalConsoleLine = LogicalTerminalLine;
-export { endColumnOf, logicalTerminalLines as logicalConsoleLines };
-
 export type ConsoleLineLookup =
   | {
       status: "visible";
-      line: LogicalConsoleLine;
+      line: LogicalTerminalLine;
       /** Viewport row (0 = top of the console) holding the line's last character. */
       viewportRow: number;
       /** Column just past that last character. */
       endColumn: number;
     }
-  | { status: "offscreen"; line: LogicalConsoleLine }
+  | { status: "offscreen"; line: LogicalTerminalLine }
   | { status: "missing" };
 
 /**
@@ -62,7 +56,7 @@ export function findConsoleLine({
   occurrence,
   runHeader,
 }: {
-  buffer: ConsoleBuffer;
+  buffer: TerminalBuffer;
   rows: number;
   text: string;
   occurrence: number;

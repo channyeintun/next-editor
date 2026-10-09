@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  consoleLineAimPoint,
   endColumnOf,
-  findConsoleLine,
-  logicalConsoleLines,
-  type ConsoleBuffer,
-  type ConsoleBufferLine,
-} from "./consoleLines";
+  logicalTerminalLines,
+  type TerminalBuffer,
+  type TerminalBufferLine,
+} from "../core/src/utils/terminalLines";
+import { consoleLineAimPoint, findConsoleLine } from "./consoleLines";
 
 /** A fake xterm row: one cell per character, padded with blanks to `cols`. */
-function row(text: string, cols = 20, isWrapped = false): ConsoleBufferLine {
+function row(text: string, cols = 20, isWrapped = false): TerminalBufferLine {
   const cells = [...text.padEnd(cols, " ")].map((chars) => ({
     getChars: () => (chars === " " ? "" : chars),
     getWidth: () => 1,
@@ -22,15 +21,15 @@ function row(text: string, cols = 20, isWrapped = false): ConsoleBufferLine {
   };
 }
 
-function bufferOf(rows: ConsoleBufferLine[], viewportY = 0): ConsoleBuffer {
+function bufferOf(rows: TerminalBufferLine[], viewportY = 0): TerminalBuffer {
   return { length: rows.length, viewportY, getLine: (y) => rows[y] };
 }
 
-describe("logicalConsoleLines", () => {
+describe("logicalTerminalLines", () => {
   it("joins a wrapped line's rows back into the line that was written", () => {
     const buffer = bufferOf([row("[go-run] go run main"), row(".go", 20, true), row("0 apple")]);
 
-    expect(logicalConsoleLines(buffer)).toEqual([
+    expect(logicalTerminalLines(buffer)).toEqual([
       { text: "[go-run] go run main.go", firstRow: 0, lastRow: 1 },
       { text: "0 apple", firstRow: 2, lastRow: 2 },
     ]);
@@ -44,7 +43,7 @@ describe("endColumnOf", () => {
   });
 
   it("counts a wide character's two cells", () => {
-    const wide: ConsoleBufferLine = {
+    const wide: TerminalBufferLine = {
       isWrapped: false,
       length: 4,
       translateToString: () => "a漢",

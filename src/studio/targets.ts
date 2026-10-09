@@ -1,4 +1,4 @@
-import type { StudioPlaygroundRuntimeKind, StudioTargetRef } from "./plan";
+import type { StudioTargetRef } from "./plan";
 
 /**
  * Durable UI target resolution for the studio pointer's clicks. Product
@@ -30,36 +30,13 @@ export const STUDIO_DOCK_TOGGLE_TARGET_ID = "runtime-dock-toggle";
 const PREVIEW_FRAME_SELECTOR = '[data-cursor-replay-target="preview-frame"]';
 
 /**
- * Runner dock containers, one per playground kind. The pointer clicks the Run
- * button or the dock's chevron rather than the dock itself (the middle of a
- * dock is empty console), but the runner panels still mark their docks.
+ * A runner dock container's target id, named after its console's scroll
+ * surface ("go-runner" → "go-runner-dock"). The pointer clicks the Run button
+ * or the dock's chevron rather than the dock itself (the middle of a dock is
+ * empty console), but the runner panels still mark their docks.
  */
-export const STUDIO_GO_DOCK_TARGET_ID = "go-runner-dock";
-export const STUDIO_KOTLIN_DOCK_TARGET_ID = "kotlin-runner-dock";
-export const STUDIO_RUST_DOCK_TARGET_ID = "rust-runner-dock";
-export const STUDIO_ZIG_DOCK_TARGET_ID = "zig-runner-dock";
-export const STUDIO_HASKELL_DOCK_TARGET_ID = "haskell-runner-dock";
-export const STUDIO_KITE_DOCK_TARGET_ID = "kite-runner-dock";
-export const STUDIO_ASM_DOCK_TARGET_ID = "asm-runner-dock";
-
-/** The runner dock container for a playground kind. */
-export function dockTargetIdForRuntime(kind: StudioPlaygroundRuntimeKind): string {
-  switch (kind) {
-    case "go-playground":
-      return STUDIO_GO_DOCK_TARGET_ID;
-    case "kotlin-playground":
-      return STUDIO_KOTLIN_DOCK_TARGET_ID;
-    case "rust-playground":
-      return STUDIO_RUST_DOCK_TARGET_ID;
-    case "zig-playground":
-      return STUDIO_ZIG_DOCK_TARGET_ID;
-    case "haskell-playground":
-      return STUDIO_HASKELL_DOCK_TARGET_ID;
-    case "kite-playground":
-      return STUDIO_KITE_DOCK_TARGET_ID;
-    case "asm-playground":
-      return STUDIO_ASM_DOCK_TARGET_ID;
-  }
+export function runnerDockTargetId(scrollSurface: string): string {
+  return `${scrollSurface}-dock`;
 }
 
 function findByStudioTargetId(id: string): Element | null {

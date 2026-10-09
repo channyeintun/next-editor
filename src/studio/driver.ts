@@ -59,8 +59,6 @@ import {
   planWhiteboardDrawFrames,
 } from "./whiteboardAssets";
 
-export { StudioActionError, abortableSleep, resolveAnchorOffset, waitUntil };
-
 /**
  * StudioDriver — the narrow application seam the Performer drives
  * (docs/agent-lesson-production.md §4.2). Every command goes through the same
@@ -164,7 +162,6 @@ export interface StudioDriver {
   }): Promise<Record<string, unknown>>;
   waitForOutput(input: { contains: string; timeoutMs: number }): Promise<Record<string, unknown>>;
   expectFile(input: { path: string; contains: string }): Promise<Record<string, unknown>>;
-  dispose(): void;
 }
 
 function throwIfAborted(signal: AbortSignal): void {
@@ -1539,11 +1536,6 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
         throw new StudioActionError(`File "${path}" does not contain ${JSON.stringify(contains)}`);
       }
       return { path };
-    },
-
-    dispose() {
-      // Live playground clients abort via the shared signal; nothing else to
-      // release — the engine instances are per-run closures.
     },
   };
 }

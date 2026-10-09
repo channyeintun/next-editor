@@ -86,7 +86,6 @@ function makePlan(overrides?: { failRun?: boolean }): {
       calls.push(`expectFile:${path}`);
       return { path };
     },
-    dispose() {},
   };
 
   const plan = parseStudioPlan({

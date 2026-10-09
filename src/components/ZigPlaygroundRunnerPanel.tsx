@@ -19,7 +19,7 @@ import {
 import { collectZigPlaygroundFiles } from "../runtime/zigPlayground/files";
 import type { ZigPlaygroundRunResult } from "../runtime/zigPlayground/types";
 import { isSinglePlaygroundFile, PLAYGROUND_SOURCE_RULES } from "../runtime/playgroundFiles";
-import { STUDIO_ZIG_DOCK_TARGET_ID } from "../studio/targets";
+import { runnerDockTargetId } from "../studio/targets";
 
 const SINGLE_FILE_FORMAT_LINE = "[zig-fmt error] Zig lessons format a single main.zig file";
 
@@ -34,7 +34,7 @@ export const ZIG_RUNNER: PlaygroundRunnerLanguage<
   ZigPlaygroundRunResult
 > = {
   scrollSurface: "zig-runner",
-  dockTargetId: STUDIO_ZIG_DOCK_TARGET_ID,
+  dockTargetId: runnerDockTargetId("zig-runner"),
   runnerTab: { label: "Zig Runner", icon: Cog },
   consoleTags: { pattern: ZIG_CONSOLE_TAG_PATTERN },
   client: {

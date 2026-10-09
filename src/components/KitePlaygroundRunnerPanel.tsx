@@ -18,7 +18,7 @@ import {
 } from "../runtime/kitePlayground/console";
 import { collectKitePlaygroundFiles } from "../runtime/kitePlayground/files";
 import type { KitePlaygroundRunResult } from "../runtime/kitePlayground/types";
-import { STUDIO_KITE_DOCK_TARGET_ID } from "../studio/targets";
+import { runnerDockTargetId } from "../studio/targets";
 
 /**
  * Kite lessons, where **there is no service**. `kitec` is a Rust program,
@@ -41,7 +41,7 @@ export const KITE_RUNNER: PlaygroundRunnerLanguage<
   KitePlaygroundRunResult
 > = {
   scrollSurface: "kite-runner",
-  dockTargetId: STUDIO_KITE_DOCK_TARGET_ID,
+  dockTargetId: runnerDockTargetId("kite-runner"),
   runnerTab: { label: "Kite Runner", icon: Cog },
   consoleTags: { pattern: KITE_CONSOLE_TAG_PATTERN },
   client: {

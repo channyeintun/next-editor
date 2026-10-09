@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { CaptionTrack } from "../core/src/types";
 import { parseAsmPlaygroundRunResult } from "../runtime/asmPlayground/types";
 import { parseGoPlaygroundRunResult } from "../runtime/goPlayground/types";
 import { parseHaskellPlaygroundRunResult } from "../runtime/haskellPlayground/types";
@@ -1228,8 +1227,4 @@ export function parseStudioPlan(candidate: unknown): StudioPlan {
     throw new StudioPlanError(`Invalid studio plan: ${details}`, result.error.issues);
   }
   return result.data;
-}
-
-export function planCaptionTrack(plan: StudioPlan): CaptionTrack {
-  return plan.narration.captions;
 }

@@ -12,7 +12,7 @@ import type { WorkspaceProject } from "../types/workspace";
 import { collectWorkspaceFolders } from "../types/workspacePaths";
 import { createWorkspaceFile } from "../starters/shared";
 import { workspacePathFromMonacoModelUri } from "../monaco";
-import { compareRenderSemantics, extractRenderSemantics, type RenderSemantics } from "./compare";
+import { extractRenderSemantics, type RenderSemantics } from "./compare";
 import { StudioActionError, waitUntil } from "./async";
 import { createStudioDriver, type StudioDriverDeps } from "./driver";
 import { sha256Hex, sha256HexOfJson, hashWorkspaceFiles } from "./hash";
@@ -392,25 +392,20 @@ export async function runStudioRender(
     signal,
   });
 
-  let performOutcome: Awaited<ReturnType<typeof performPlan>>;
-  try {
-    performOutcome = await performPlan({
-      plan,
-      driver,
-      clock,
-      signal,
-      abort: (reason) => {
-        errors.push(reason);
-        abortController.abort(reason);
-      },
-      onProgress: (receipt) => {
-        receipts.push(receipt);
-        deps.onProgress?.(receipt);
-      },
-    });
-  } finally {
-    driver.dispose();
-  }
+  const performOutcome = await performPlan({
+    plan,
+    driver,
+    clock,
+    signal,
+    abort: (reason) => {
+      errors.push(reason);
+      abortController.abort(reason);
+    },
+    onProgress: (receipt) => {
+      receipts.push(receipt);
+      deps.onProgress?.(receipt);
+    },
+  });
 
   // ---- Finalize ------------------------------------------------------------
   phase("finalize");
@@ -640,5 +635,3 @@ async function baseManifest(
     artifact,
   };
 }
-
-export { compareRenderSemantics };

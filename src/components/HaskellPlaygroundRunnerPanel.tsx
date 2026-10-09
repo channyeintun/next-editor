@@ -15,7 +15,7 @@ import {
 import { collectHaskellPlaygroundFiles } from "../runtime/haskellPlayground/files";
 import type { HaskellPlaygroundRunResult } from "../runtime/haskellPlayground/types";
 import { isSinglePlaygroundFile, PLAYGROUND_SOURCE_RULES } from "../runtime/playgroundFiles";
-import { STUDIO_HASKELL_DOCK_TARGET_ID } from "../studio/targets";
+import { runnerDockTargetId } from "../studio/targets";
 
 /**
  * Haskell lessons: Run remotely through the play.haskell.org proxy, with no
@@ -31,7 +31,7 @@ export const HASKELL_RUNNER: PlaygroundRunnerLanguage<
   HaskellPlaygroundRunResult
 > = {
   scrollSurface: "haskell-runner",
-  dockTargetId: STUDIO_HASKELL_DOCK_TARGET_ID,
+  dockTargetId: runnerDockTargetId("haskell-runner"),
   runnerTab: { label: "Haskell Runner", icon: SquareFunction },
   // GHC warns far more readily than it errors, so — as in the Kotlin console —
   // the [haskell-warn] tag gets its own color rather than reading as a success

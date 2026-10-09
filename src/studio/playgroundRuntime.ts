@@ -80,7 +80,7 @@ import {
 
 const RETRYABLE_KINDS = new Set<string>(PLAYGROUND_TRANSIENT_ERROR_KINDS);
 const RETRY_DELAY_MS = 500;
-export const MAX_RUN_ATTEMPTS = 2;
+const MAX_RUN_ATTEMPTS = 2;
 
 export interface PlaygroundRunFailure {
   attempt: number;

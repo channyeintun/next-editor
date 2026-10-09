@@ -2,6 +2,7 @@ import type { z } from "zod";
 import {
   isTimelineIssue,
   parseStudioPlan,
+  STUDIO_PLAN_SCHEMA_VERSION,
   StudioPlanError,
   type StudioPlan,
   type StudioSlide,
@@ -244,7 +245,7 @@ export function compileLessonScript({
   const timingCheck = script.checks.find((check) => check.type === "timing.p95Ms");
 
   const candidate = {
-    schemaVersion: 1,
+    schemaVersion: STUDIO_PLAN_SCHEMA_VERSION,
     lesson: {
       slug: script.lesson.slug,
       title: script.lesson.title,

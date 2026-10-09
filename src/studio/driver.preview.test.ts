@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { PreviewEvent, PreviewPanelMode, PreviewState } from "../types/slides";
-import { createStudioDriver, StudioActionError, type StudioDriverDeps } from "./driver";
+import { StudioActionError } from "./async";
+import { createStudioDriver, type StudioDriverDeps } from "./driver";
 
 vi.mock("../monaco", () => ({
   monaco: {},

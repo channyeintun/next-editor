@@ -18,7 +18,7 @@ import {
 } from "../runtime/goPlayground/console";
 import { collectGoPlaygroundFiles } from "../runtime/goPlayground/files";
 import type { GoPlaygroundRunResult } from "../runtime/goPlayground/types";
-import { STUDIO_GO_DOCK_TARGET_ID } from "../studio/targets";
+import { runnerDockTargetId } from "../studio/targets";
 
 /**
  * Go lessons: Run (`go run`) and Format (`gofmt`) every .go file together,
@@ -31,7 +31,7 @@ export const GO_RUNNER: PlaygroundRunnerLanguage<
   GoPlaygroundRunResult
 > = {
   scrollSurface: "go-runner",
-  dockTargetId: STUDIO_GO_DOCK_TARGET_ID,
+  dockTargetId: runnerDockTargetId("go-runner"),
   runnerTab: { label: "Go Runner", icon: Diamond },
   consoleTags: { pattern: GO_CONSOLE_TAG_PATTERN, warningPrefix: "[go-vet" },
   client: {

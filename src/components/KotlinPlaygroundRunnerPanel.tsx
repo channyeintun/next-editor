@@ -14,7 +14,7 @@ import {
 } from "../runtime/kotlinPlayground/console";
 import { collectKotlinPlaygroundFiles } from "../runtime/kotlinPlayground/files";
 import type { KotlinPlaygroundRunResult } from "../runtime/kotlinPlayground/types";
-import { STUDIO_KOTLIN_DOCK_TARGET_ID } from "../studio/targets";
+import { runnerDockTargetId } from "../studio/targets";
 
 /**
  * Kotlin lessons: Run every .kt file remotely through the Kotlin Playground
@@ -27,7 +27,7 @@ export const KOTLIN_RUNNER: PlaygroundRunnerLanguage<
   KotlinPlaygroundRunResult
 > = {
   scrollSurface: "kotlin-runner",
-  dockTargetId: STUDIO_KOTLIN_DOCK_TARGET_ID,
+  dockTargetId: runnerDockTargetId("kotlin-runner"),
   runnerTab: { label: "Kotlin Runner", icon: Hexagon },
   consoleTags: { pattern: KOTLIN_CONSOLE_TAG_PATTERN, warningPrefix: "[kotlin-warn" },
   client: {

@@ -173,7 +173,7 @@ import {
 import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
 import type { StudioPlaygroundRuntimeKind } from "../studio/plan";
 import {
-  dockTargetIdForRuntime,
+  runnerDockTargetId,
   STUDIO_DOCK_TOGGLE_TARGET_ID,
   STUDIO_RUN_BUTTON_TARGET_ID,
 } from "../studio/targets";
@@ -502,7 +502,8 @@ describe("playground runner panels", () => {
     const { container } = await renderPanel(panel);
 
     const dock = container.firstElementChild;
-    expect(dock).toHaveAttribute("data-studio-target", dockTargetIdForRuntime(panel.kind));
+    // The rule itself rather than the helper: a dock is "<scroll surface>-dock".
+    expect(dock).toHaveAttribute("data-studio-target", `${panel.surface}-dock`);
     expect(dock).toHaveAttribute("data-cursor-replay-target", "runtime-dock");
     expect(screen.getByRole("button", { name: panel.runnerTab })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Agent" })).toHaveAttribute("data-tour", "agent");
@@ -984,7 +985,7 @@ describe("playground runner panels", () => {
 
 describe("playground runner languages", () => {
   it.each(CASES)("$kind: agrees with the studio on its dock", (panel) => {
-    expect(panel.language.dockTargetId).toBe(dockTargetIdForRuntime(panel.kind));
+    expect(panel.language.dockTargetId).toBe(runnerDockTargetId(panel.language.scrollSurface));
     expect(panel.language.scrollSurface).toBe(panel.surface);
   });
 });

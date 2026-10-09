@@ -14,7 +14,7 @@ import {
 } from "../runtime/asmPlayground/console";
 import { collectAsmPlaygroundFiles } from "../runtime/asmPlayground/files";
 import type { AsmPlaygroundRunResult } from "../runtime/asmPlayground/types";
-import { STUDIO_ASM_DOCK_TARGET_ID } from "../studio/targets";
+import { runnerDockTargetId } from "../studio/targets";
 
 /**
  * x86-64 assembly lessons. Like Kite's and unlike the proxied languages,
@@ -42,7 +42,7 @@ export const ASM_RUNNER: PlaygroundRunnerLanguage<
   AsmPlaygroundRunResult
 > = {
   scrollSurface: "asm-runner",
-  dockTargetId: STUDIO_ASM_DOCK_TARGET_ID,
+  dockTargetId: runnerDockTargetId("asm-runner"),
   runnerTab: { label: "Assembly Runner", icon: Cpu },
   consoleTags: { pattern: ASM_CONSOLE_TAG_PATTERN },
   client: {

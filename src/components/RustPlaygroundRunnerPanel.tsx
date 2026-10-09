@@ -19,7 +19,7 @@ import {
 import { collectRustPlaygroundFiles } from "../runtime/rustPlayground/files";
 import type { RustPlaygroundRunResult } from "../runtime/rustPlayground/types";
 import { isSinglePlaygroundFile, PLAYGROUND_SOURCE_RULES } from "../runtime/playgroundFiles";
-import { STUDIO_RUST_DOCK_TARGET_ID } from "../studio/targets";
+import { runnerDockTargetId } from "../studio/targets";
 
 /**
  * Rust lessons: Run and Format (`rustfmt`) remotely through the Rust
@@ -32,7 +32,7 @@ export const RUST_RUNNER: PlaygroundRunnerLanguage<
   RustPlaygroundRunResult
 > = {
   scrollSurface: "rust-runner",
-  dockTargetId: STUDIO_RUST_DOCK_TARGET_ID,
+  dockTargetId: runnerDockTargetId("rust-runner"),
   runnerTab: { label: "Rust Runner", icon: Cog },
   consoleTags: { pattern: RUST_CONSOLE_TAG_PATTERN },
   client: {
