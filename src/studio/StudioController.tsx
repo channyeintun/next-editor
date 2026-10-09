@@ -66,7 +66,7 @@ import {
 import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
 import { synthesizePocketWav } from "./tts/pocketSynth";
 import { critiqueScript, type CritiqueNote } from "./script/critic";
-import { extractNarration } from "./script/markers";
+import { extractScriptNarration } from "./script/markers";
 import { runStudioRender, type StudioRenderOptions, type StudioRunResult } from "./runStudioRender";
 import type { RenderSemantics } from "./compare";
 import {
@@ -558,9 +558,7 @@ export default function StudioController() {
       // Same validation the render path runs — fail here with the schema
       // message rather than at render time.
       const script = parseLessonScriptYaml(yamlText);
-      const extracted = extractNarration(
-        script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
-      );
+      const extracted = extractScriptNarration(script);
       const critique = critiqueScript(script, extracted);
       setCriticNotes(critique.notes);
 

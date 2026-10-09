@@ -7,6 +7,8 @@
  * every anchor must reference an existing marker.
  */
 
+import type { LessonScript } from "./schema";
+
 const MARKER_PATTERN = /\[\[mark:([A-Za-z0-9_-]+)\]\]/g;
 
 export interface NarrationMarker {
@@ -98,6 +100,13 @@ export function extractNarration(
   }
 
   return { tokens, scenes, markers };
+}
+
+/** {@link extractNarration} over a script's scenes, in authored order. */
+export function extractScriptNarration(script: Pick<LessonScript, "scenes">): ExtractedNarration {
+  return extractNarration(
+    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
+  );
 }
 
 /** The display text (markers removed) — the caption source of truth. */

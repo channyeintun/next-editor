@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright-core";
 import YAML from "yaml";
 import { estimateNarrationMsForRenderWait, studioRenderWaitMs } from "../src/studio/plan.ts";
-import { extractNarration } from "../src/studio/script/markers.ts";
+import { extractScriptNarration } from "../src/studio/script/markers.ts";
 import { parseLessonScript } from "../src/studio/script/schema.ts";
 
 interface CliOptions {
@@ -102,9 +102,7 @@ function estimatedNarrationMsFor(slug: string): number {
     return 0;
   }
   const script = parseLessonScript(YAML.parse(readFileSync(scriptPath, "utf8")));
-  const extracted = extractNarration(
-    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
-  );
+  const extracted = extractScriptNarration(script);
   return estimateNarrationMsForRenderWait(extracted.tokens.length);
 }
 

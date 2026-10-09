@@ -7,7 +7,7 @@ import { estimateAlignment, sceneStartMs } from "./alignment";
 import { CompileError, compileLessonScript, type CompileInput } from "./compile";
 import { splitIntoDialogs } from "./dialogs";
 import { LEXICON_V1, speechTextOf, spokenFormOf } from "./lexicon";
-import { extractNarration } from "./markers";
+import { extractScriptNarration } from "./markers";
 import { scheduleDialogs } from "./schedule";
 import { parseLessonScript, type LessonScript } from "./schema";
 
@@ -24,9 +24,7 @@ function loadPilotScript(): LessonScript {
  * impossible timelines when fed one.
  */
 function compileInputFor(script: LessonScript, durationMs = PILOT_DURATION_MS): CompileInput {
-  const extracted = extractNarration(
-    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
-  );
+  const extracted = extractScriptNarration(script);
   return {
     script,
     extracted,
@@ -40,9 +38,7 @@ function compileInputFor(script: LessonScript, durationMs = PILOT_DURATION_MS): 
  * for typing), with deterministic fake per-dialog durations.
  */
 function scheduledInputFor(script: LessonScript): CompileInput {
-  const extracted = extractNarration(
-    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
-  );
+  const extracted = extractScriptNarration(script);
   const dialogs = splitIntoDialogs(extracted);
   const schedule = scheduleDialogs({
     script,

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { MarkerError, displayTextOf, extractNarration, requireMarker } from "./markers";
+import {
+  MarkerError,
+  displayTextOf,
+  extractNarration,
+  extractScriptNarration,
+  requireMarker,
+} from "./markers";
+import type { LessonScript } from "./schema";
 
 describe("extractNarration", () => {
   it("extracts tokens and binds markers to the next token", () => {
@@ -49,5 +56,19 @@ describe("extractNarration", () => {
   it("names known markers when an unknown one is requested", () => {
     const extracted = extractNarration([{ sceneId: "a", narration: "x [[mark:known]] y" }]);
     expect(() => requireMarker(extracted, "missing")).toThrow(/known markers: known/);
+  });
+});
+
+describe("extractScriptNarration", () => {
+  it("extracts a script's scenes in authored order", () => {
+    const scenes = [
+      { id: "a", narration: "one [[mark:go]] two" },
+      { id: "b", narration: "three four" },
+    ];
+    const fromScript = extractScriptNarration({ scenes } as Pick<LessonScript, "scenes">);
+    expect(fromScript).toEqual(
+      extractNarration(scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration }))),
+    );
+    expect(requireMarker(fromScript, "go").beforeTokenIndex).toBe(1);
   });
 });

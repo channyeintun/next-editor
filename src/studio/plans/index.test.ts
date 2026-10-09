@@ -6,7 +6,7 @@ import type { StudioSlide } from "../plan";
 import { compileLessonScript } from "../script/compile";
 import { splitIntoDialogs } from "../script/dialogs";
 import { LEXICON_V1 } from "../script/lexicon";
-import { extractNarration } from "../script/markers";
+import { extractScriptNarration } from "../script/markers";
 import { RECORDING_BUFFER_MS, scheduleDialogs } from "../script/schedule";
 import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_SOURCES } from "./index";
 
@@ -90,9 +90,7 @@ describe("studio lesson registry", () => {
     for (const [slug, source] of Object.entries(STUDIO_SOURCES)) {
       if (source.kind !== "script") continue;
       const script = source.load();
-      const extracted = extractNarration(
-        script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
-      );
+      const extracted = extractScriptNarration(script);
       const dialogs = splitIntoDialogs(extracted);
       const schedule = scheduleDialogs({
         script,

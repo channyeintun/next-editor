@@ -10,7 +10,7 @@ import {
 } from "./compile";
 import { splitIntoDialogs } from "./dialogs";
 import { LEXICON_V1 } from "./lexicon";
-import { extractNarration, type ExtractedNarration } from "./markers";
+import { extractScriptNarration, type ExtractedNarration } from "./markers";
 import { RECORDING_BUFFER_MS, ScheduleError, scheduleDialogs } from "./schedule";
 import { parseLessonScript, type LessonScript } from "./schema";
 
@@ -21,9 +21,7 @@ function loadPilot(name: string): LessonScript {
 }
 
 function extractedOf(script: LessonScript): ExtractedNarration {
-  return extractNarration(
-    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
-  );
+  return extractScriptNarration(script);
 }
 
 /** Deterministic fake per-dialog durations: proportional to token count. */

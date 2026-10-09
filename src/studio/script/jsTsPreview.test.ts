@@ -5,7 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { compileLessonScript, type CompileInput } from "./compile";
 import { splitIntoDialogs } from "./dialogs";
 import { LEXICON_V1 } from "./lexicon";
-import { extractNarration } from "./markers";
+import { extractScriptNarration } from "./markers";
 import { scheduleDialogs } from "./schedule";
 import { parseLessonScript, type LessonScript } from "./schema";
 import { computeTimingStats, timingGateCheck, type ActionReceipt } from "../report";
@@ -17,9 +17,7 @@ function loadFixture(name: string): LessonScript {
 }
 
 function scheduledInputFor(script: LessonScript): CompileInput {
-  const extracted = extractNarration(
-    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
-  );
+  const extracted = extractScriptNarration(script);
   const dialogs = splitIntoDialogs(extracted);
   const schedule = scheduleDialogs({
     script,

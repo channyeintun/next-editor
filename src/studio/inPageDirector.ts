@@ -6,7 +6,7 @@ import { resolveScriptSlides } from "./script/googleSlides";
 import { splitIntoDialogs, type NarrationDialog } from "./script/dialogs";
 import { isBurmeseLocale } from "./narrationLanguage";
 import { LEXICON_V1, speechTextOf, type PronunciationLexicon } from "./script/lexicon";
-import { extractNarration } from "./script/markers";
+import { extractScriptNarration } from "./script/markers";
 import { scheduleDialogs } from "./script/schedule";
 import type { LessonScript } from "./script/schema";
 import {
@@ -236,9 +236,7 @@ export async function buildPlanFromScript(
   const slidesResolution = resolveScriptSlides(script.lesson.slides, fetchPublishedDeck);
   slidesResolution.catch(() => {});
 
-  const extracted = extractNarration(
-    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
-  );
+  const extracted = extractScriptNarration(script);
   const dialogs = splitIntoDialogs(extracted);
   const lexicon = narrationLexiconFor(script.lesson.locale);
 

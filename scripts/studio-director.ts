@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
 import { parseLessonScript } from "../src/studio/script/schema.ts";
-import { extractNarration, requireMarker } from "../src/studio/script/markers.ts";
+import { extractScriptNarration, requireMarker } from "../src/studio/script/markers.ts";
 import { splitIntoDialogs } from "../src/studio/script/dialogs.ts";
 import { critiqueScript } from "../src/studio/script/critic.ts";
 import { deckUrlsOf, resolveSlidesFromDecks } from "../src/studio/script/googleSlides.ts";
@@ -46,9 +46,7 @@ async function directScript(scriptPath: string): Promise<void> {
   console.log(`  script sha256 ${scriptHash.slice(0, 16)}…`);
 
   // Marker resolution + dialog segmentation fail here, before any render.
-  const extracted = extractNarration(
-    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
-  );
+  const extracted = extractScriptNarration(script);
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
       if ("mark" in action.at) {

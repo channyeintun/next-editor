@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
 import { CRITIC_VERSION, PERSONA_GUIDE_VERSION, critiqueScript } from "./critic";
-import { extractNarration } from "./markers";
+import { extractScriptNarration } from "./markers";
 import { parseLessonScript, type LessonScript } from "./schema";
 
 function loadPilot(name: string): LessonScript {
@@ -13,9 +13,7 @@ function loadPilot(name: string): LessonScript {
 }
 
 function extractedOf(script: LessonScript) {
-  return extractNarration(
-    script.scenes.map((scene) => ({ sceneId: scene.id, narration: scene.narration })),
-  );
+  return extractScriptNarration(script);
 }
 
 describe("critiqueScript", () => {
