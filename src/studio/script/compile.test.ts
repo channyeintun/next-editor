@@ -254,9 +254,11 @@ describe("compileLessonScript", () => {
     expect(plan.actions.some((action) => action.id === "cursor-read")).toBe(false);
   });
 
+  // A script-only check: the schema rejects it at parse time, before any
+  // narration is synthesized for a render that would fail at the pointer.
   it("rejects a console.point at a line the pinned output never prints", () => {
     const base = selectScript();
-    const script = parseLessonScript({
+    const script = {
       ...base,
       scenes: [
         {
@@ -268,9 +270,9 @@ describe("compileLessonScript", () => {
           ],
         },
       ],
-    });
+    };
 
-    expect(() => compileLessonScript(scheduledInputFor(script))).toThrow(
+    expect(() => parseLessonScript(script)).toThrow(
       /console.point "read" targets output line 1 containing "bye", but the run's console has 0 such lines/,
     );
   });
@@ -635,6 +637,37 @@ describe("lessonScriptSchema", () => {
     const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
     raw.scenes[1].actions[3].at = { afterAction: "ghost" };
     expect(() => parseLessonScript(raw)).toThrow(/unknown action "ghost"/);
+    // Reported once, as unknown — not again as an unresolvable chain.
+    expect(() => parseLessonScript(raw)).not.toThrow(/cycle/);
+  });
+
+  // Script-only failures used to surface from the compiler, after every dialog
+  // had been synthesized; the schema now rejects them wherever a script parses.
+  it("rejects an anchor to an unknown mark and names the known ones", () => {
+    const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
+    raw.scenes[0].actions[0].at = { mark: "no-such-mark" };
+    expect(() => parseLessonScript(raw)).toThrow(
+      /scenes\.0\.actions\.0\.at\.mark: Unknown marker "no-such-mark" — known markers: /,
+    );
+  });
+
+  it("rejects narration whose markers cannot be extracted", () => {
+    const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
+    raw.scenes[1].narration = `${raw.scenes[1].narration} [[mark:oops`;
+    expect(() => parseLessonScript(raw)).toThrow(/malformed marker/);
+  });
+
+  it("rejects an afterAction cycle", () => {
+    const raw = YAML.parse(readFileSync(PILOT_PATH, "utf8"));
+    const actions: { id: string; at: unknown }[] = raw.scenes[1].actions;
+    const run = actions.find((action) => action.id === "run")!;
+    const expectOutput = actions.find((action) => action.id === "expect-output")!;
+    run.at = { afterAction: "expect-output" };
+    expectOutput.at = { afterAction: "run" };
+    // expect-file-main runs after `run`, so it hangs off the cycle too.
+    expect(() => parseLessonScript(raw)).toThrow(
+      /Unresolvable afterAction chain \(cycle\?\): run, expect-output, expect-file-main$/,
+    );
   });
 
   // Every skill and doc says to include the timing gate, but `checks` defaulted

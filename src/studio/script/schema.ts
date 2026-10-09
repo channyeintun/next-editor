@@ -10,6 +10,13 @@ import {
   studioWorkspacePinSchema as planWorkspacePinSchema,
 } from "../plan";
 import { actionContractIssues, runtimeContractIssues } from "../runtimeContract";
+import { consolePointIssues } from "./consolePoints";
+import {
+  MarkerError,
+  extractScriptNarration,
+  requireMarker,
+  type ExtractedNarration,
+} from "./markers";
 
 /**
  * `LessonScript` — the authored, reviewable source of a lesson
@@ -469,6 +476,65 @@ export const lessonScriptSchema = z
           }
         }
       }
+    }
+
+    // Everything below is decidable from the script text alone, so it fails
+    // here — at Import, picker load, the Director CLI and render start — rather
+    // than in the compiler after every dialog has been synthesized.
+    let extracted: ExtractedNarration | null = null;
+    try {
+      extracted = extractScriptNarration(script);
+    } catch (error) {
+      if (!(error instanceof MarkerError)) throw error;
+      ctx.addIssue({ code: "custom", message: error.message });
+    }
+    if (extracted) {
+      script.scenes.forEach((scene, sceneIndex) => {
+        scene.actions.forEach((action, actionIndex) => {
+          if (!("mark" in action.at)) return;
+          try {
+            requireMarker(extracted, action.at.mark);
+          } catch (error) {
+            if (!(error instanceof MarkerError)) throw error;
+            ctx.addIssue({
+              code: "custom",
+              message: error.message,
+              path: ["scenes", sceneIndex, "actions", actionIndex, "at", "mark"],
+            });
+          }
+        });
+      });
+    }
+
+    // afterAction chains must bottom out at a mark or scene anchor. An unknown
+    // predecessor is reported above, so it counts as resolved here; whatever
+    // stays unresolved sits on (or hangs off) a cycle — the compiler's message.
+    const resolved = new Set(
+      actions
+        .filter((action) => !("afterAction" in action.at) || !actionIds.has(action.at.afterAction))
+        .map((action) => action.id),
+    );
+    let pending = actions.filter((action) => !resolved.has(action.id));
+    let progressed = true;
+    while (pending.length > 0 && progressed) {
+      const stillPending = pending.filter(
+        (action) => "afterAction" in action.at && !resolved.has(action.at.afterAction),
+      );
+      progressed = stillPending.length < pending.length;
+      for (const action of pending) {
+        if (!stillPending.includes(action)) resolved.add(action.id);
+      }
+      pending = stillPending;
+    }
+    if (pending.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Unresolvable afterAction chain (cycle?): ${pending.map((action) => action.id).join(", ")}`,
+      });
+    }
+
+    for (const message of consolePointIssues(script)) {
+      ctx.addIssue({ code: "custom", message });
     }
   });
 

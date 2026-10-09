@@ -127,8 +127,8 @@ export function scheduleDialogs({
     }
   }
   // Fixpoint: an afterAction action inherits its predecessor's resolved anchor.
-  // Leftovers are cycles/unknown references, which the compiler reports with full
-  // context; here they simply contribute no narration push.
+  // Leftovers are cycles/unknown references, which the script schema rejects
+  // when the script parses; here they simply contribute no narration push.
   const unresolved = new Map(predecessorById);
   let anchorProgressed = true;
   while (unresolved.size > 0 && anchorProgressed) {
@@ -145,7 +145,7 @@ export function scheduleDialogs({
   for (const scene of script.scenes) {
     for (const action of scene.actions) {
       const dialogIndex = resolvedDialog.get(action.id);
-      // Unknown marker or unresolved afterAction — the compiler reports it.
+      // Unknown marker or unresolved afterAction — the script schema rejects both.
       if (dialogIndex === undefined || dialogIndex === null) {
         continue;
       }

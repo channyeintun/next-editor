@@ -13,7 +13,8 @@ import type { StudioPlaygroundRuntime } from "./plan";
  * compiler warnings first, stderr, an assembly lesson's registers, the exit
  * line) — built by the same console builders the fixture run uses
  * (playgroundRuntime's `runFixtureResult`). Pure: no client is loaded, so the
- * Director CLI can check `console.point` targets against it.
+ * script schema (script/consolePoints.ts) checks `console.point` targets
+ * against it wherever a script is parsed.
  */
 export function fixtureRunConsoleLines(runtime: StudioPlaygroundRuntime): string[] {
   switch (runtime.kind) {

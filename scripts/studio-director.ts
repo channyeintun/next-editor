@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
 import { parseLessonScript } from "../src/studio/script/schema.ts";
-import { extractScriptNarration, requireMarker } from "../src/studio/script/markers.ts";
+import { extractScriptNarration } from "../src/studio/script/markers.ts";
 import { splitIntoDialogs } from "../src/studio/script/dialogs.ts";
 import { critiqueScript } from "../src/studio/script/critic.ts";
 import { deckUrlsOf, resolveSlidesFromDecks } from "../src/studio/script/googleSlides.ts";
@@ -45,15 +45,9 @@ async function directScript(scriptPath: string): Promise<void> {
   console.log(`\n▶ ${script.lesson.slug} (${scriptPath})`);
   console.log(`  script sha256 ${scriptHash.slice(0, 16)}…`);
 
-  // Marker resolution + dialog segmentation fail here, before any render.
+  // Parsing already resolved every marker, afterAction chain and console.point
+  // target; dialog segmentation fails here, before any render.
   const extracted = extractScriptNarration(script);
-  for (const scene of script.scenes) {
-    for (const action of scene.actions) {
-      if ("mark" in action.at) {
-        requireMarker(extracted, action.at.mark);
-      }
-    }
-  }
   const dialogs = splitIntoDialogs(extracted);
   const profile = requireVoiceProfile(script.build.voiceProfile);
   if (profile.providerId === "voxcpm2-modal") {

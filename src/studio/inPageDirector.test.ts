@@ -348,6 +348,22 @@ describe("buildPlanFromScript narration", () => {
     expect(tts.putCachedDialogWav).not.toHaveBeenCalled();
   });
 
+  // The render path builds from `source.load()`, which parses: a typo in a
+  // mark name used to surface from the compiler after every dialog had been
+  // synthesized (paid takes included); now it never reaches synthesis.
+  it("rejects an unknown mark before any narration is synthesized", async () => {
+    const raw = YAML.parse(
+      readFileSync(resolve(__dirname, "./script/__fixtures__/go-swap.yaml"), "utf8"),
+    );
+    raw.scenes[0].actions[0].at = { mark: "type-swpa" };
+
+    await expect(async () => buildPlanFromScript(parseLessonScript(raw))).rejects.toThrow(
+      /Unknown marker "type-swpa"/,
+    );
+    expect(tts.preloadPocket).not.toHaveBeenCalled();
+    expect(tts.synthesizePocketDialog).not.toHaveBeenCalled();
+  });
+
   it("names the dialog when its synthesis request fails", async () => {
     tts.synthesizePocketDialog.mockRejectedValueOnce(new Error("engine exploded"));
     await expect(buildPlanFromScript(loadPilot())).rejects.toThrow(
