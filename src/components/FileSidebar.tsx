@@ -1,4 +1,4 @@
-import { type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type UIEvent, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FilePlus2, FolderPlus, Upload } from "lucide-react";
 import {
   getParentWorkspacePath,
@@ -43,6 +43,7 @@ function FileSidebarPanel() {
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
+  const inlineHintId = useId();
   // The row the context menu was opened from, to take focus back when the menu
   // closes without moving it anywhere else.
   const contextMenuOpenerRef = useRef<HTMLElement | null>(null);
@@ -432,6 +433,13 @@ function FileSidebarPanel() {
       ) : (
         <FilePlus2 size={13} className="text-slate-400" />
       );
+    // The placeholder is the only visible label, and a rename never shows it, so
+    // the field is named for its action and, when renaming, for its item.
+    const kindLabel = kind === "folder" ? "Folder" : "File";
+    const inputLabel =
+      editState?.mode === "rename"
+        ? `${kindLabel} name for ${getWorkspaceBaseName(editState.path)}`
+        : `New ${kindLabel.toLowerCase()} name`;
 
     return (
       <div className="px-1.5">
@@ -451,9 +459,14 @@ function FileSidebarPanel() {
               commitInlineEdit();
             }}
             placeholder={kind === "folder" ? "Folder name" : "File name"}
+            aria-label={inputLabel}
+            aria-describedby={inlineHintId}
             className="min-w-0 flex-1 bg-transparent text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-500"
           />
         </div>
+        <span id={inlineHintId} className="sr-only">
+          Press Enter to save or Escape to cancel
+        </span>
       </div>
     );
   };

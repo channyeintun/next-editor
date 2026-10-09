@@ -206,6 +206,30 @@ describe("FileSidebar rows from the keyboard", () => {
 });
 
 describe("FileSidebar name field", () => {
+  it("is named for the item it renames, and says how to save or cancel", () => {
+    render(<FileSidebar />);
+
+    fireEvent.keyDown(row("app.ts"), { key: "F2" });
+    const fileField = screen.getByRole("textbox", { name: "File name for app.ts" });
+    expect(fileField).toHaveAccessibleDescription("Press Enter to save or Escape to cancel");
+    fireEvent.keyDown(fileField, { key: "Escape" });
+
+    fireEvent.keyDown(row("lib"), { key: "F2" });
+    expect(screen.getByRole("textbox", { name: "Folder name for lib" })).toHaveValue("lib");
+  });
+
+  it("is named for what it creates", () => {
+    render(<FileSidebar />);
+
+    fireEvent.click(row("Create file"));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "New file name" }), { key: "Escape" });
+
+    fireEvent.click(row("Create folder"));
+    expect(screen.getByRole("textbox", { name: "New folder name" })).toHaveAccessibleDescription(
+      "Press Enter to save or Escape to cancel",
+    );
+  });
+
   it("hands focus back to the row when Escape cancels a rename", () => {
     render(<FileSidebar />);
     fireEvent.keyDown(row("app.ts"), { key: "F2" });
