@@ -10,9 +10,9 @@ import {
 } from "./playlistQueries";
 
 /**
- * The playlist queries against real SQLite, so the ownership checks, the slug
- * each mutation answers with and the public read's membership come from the SQL
- * itself. Only the columns these statements touch are created.
+ * The playlist queries against real SQLite, so the ownership checks, each
+ * mutation's outcome and the public read's membership come from the SQL itself.
+ * Only the columns these statements touch are created.
  */
 function createDb(): D1Database {
   const db = new DatabaseSync(":memory:");
@@ -55,35 +55,34 @@ function createDb(): D1Database {
 }
 
 describe("playlist mutations", () => {
-  it("answer the owner with the playlist's slug", async () => {
+  it("succeed for the owner", async () => {
     const db = createDb();
 
     await expect(addLessonToPlaylist(db, "playlist-1", "owner", "lesson-1")).resolves.toEqual({
       status: "ok",
-      slug: "my-list",
     });
     await addLessonToPlaylist(db, "playlist-1", "owner", "lesson-2");
     await expect(
       reorderPlaylistLessons(db, "playlist-1", "owner", ["lesson-2", "lesson-1"]),
-    ).resolves.toBe("my-list");
+    ).resolves.toBe(true);
     await expect(removeLessonFromPlaylist(db, "playlist-1", "owner", "lesson-1")).resolves.toBe(
-      "my-list",
+      true,
     );
-    await expect(deletePlaylist(db, "playlist-1", "owner")).resolves.toBe("my-list");
+    await expect(deletePlaylist(db, "playlist-1", "owner")).resolves.toBe(true);
   });
 
-  it("answer anyone else, or a no-op, with nothing", async () => {
+  it("fail for anyone else, or a no-op", async () => {
     const db = createDb();
 
     await expect(addLessonToPlaylist(db, "playlist-1", "intruder", "lesson-1")).resolves.toEqual({
       status: "not_found",
     });
-    await expect(reorderPlaylistLessons(db, "playlist-1", "intruder", [])).resolves.toBeNull();
-    await expect(
-      removeLessonFromPlaylist(db, "playlist-1", "owner", "lesson-1"),
-    ).resolves.toBeNull();
-    await expect(deletePlaylist(db, "playlist-1", "intruder")).resolves.toBeNull();
-    await expect(deletePlaylist(db, "playlist-1", "owner")).resolves.toBe("my-list");
+    await expect(reorderPlaylistLessons(db, "playlist-1", "intruder", [])).resolves.toBe(false);
+    await expect(removeLessonFromPlaylist(db, "playlist-1", "owner", "lesson-1")).resolves.toBe(
+      false,
+    );
+    await expect(deletePlaylist(db, "playlist-1", "intruder")).resolves.toBe(false);
+    await expect(deletePlaylist(db, "playlist-1", "owner")).resolves.toBe(true);
   });
 
   it("answer a second add of the same lesson with already_added", async () => {

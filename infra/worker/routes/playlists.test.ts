@@ -18,7 +18,7 @@ vi.mock("../auth/session", () => ({
 vi.mock("../../db/playlistQueries", () => ({
   insertPlaylist: vi.fn<() => Promise<PlaylistRow>>(),
   updatePlaylist: vi.fn<() => Promise<PlaylistRow | null>>(async () => null),
-  deletePlaylist: vi.fn<() => Promise<string | null>>(),
+  deletePlaylist: vi.fn<() => Promise<boolean>>(),
   addLessonToPlaylist: vi.fn<() => Promise<unknown>>(),
   getPlaylistBySlug: vi.fn<() => Promise<PlaylistWithLessons | null>>(),
 }));
@@ -93,10 +93,9 @@ describe("playlistsRoute text limits", () => {
 });
 
 describe("playlistsRoute mutations", () => {
-  // The mutation answers with the playlist's slug, or null when the caller
-  // does not own it.
+  // The mutation answers false when the caller does not own the playlist.
   it("deletes the caller's playlist", async () => {
-    vi.mocked(deletePlaylist).mockResolvedValue("my-list");
+    vi.mocked(deletePlaylist).mockResolvedValue(true);
 
     const response = await playlistsRoute.request(
       "https://nexteditor.dev/playlist-1",
@@ -108,7 +107,7 @@ describe("playlistsRoute mutations", () => {
   });
 
   it("answers 404 for a playlist the caller does not own", async () => {
-    vi.mocked(deletePlaylist).mockResolvedValue(null);
+    vi.mocked(deletePlaylist).mockResolvedValue(false);
 
     const response = await playlistsRoute.request(
       "https://nexteditor.dev/playlist-1",
@@ -120,7 +119,7 @@ describe("playlistsRoute mutations", () => {
   });
 
   it("adds a lesson to the caller's playlist", async () => {
-    vi.mocked(addLessonToPlaylist).mockResolvedValue({ status: "ok", slug: "my-list" });
+    vi.mocked(addLessonToPlaylist).mockResolvedValue({ status: "ok" });
 
     const response = await send("POST", "/playlist-1/lessons", { lessonId: "lesson-1" });
 

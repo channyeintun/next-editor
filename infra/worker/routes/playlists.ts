@@ -167,8 +167,7 @@ playlistsRoute.patch("/:id", requireUser, async (c) => {
 playlistsRoute.delete("/:id", requireUser, async (c) => {
   const user = c.get("user");
 
-  const deletedSlug = await deletePlaylist(c.env.DB, c.req.param("id"), user.id);
-  if (deletedSlug === null) {
+  if (!(await deletePlaylist(c.env.DB, c.req.param("id"), user.id))) {
     return c.json({ error: "not found" }, 404);
   }
 
@@ -209,8 +208,7 @@ playlistsRoute.delete("/:id/lessons/:lessonId", requireUser, async (c) => {
   const user = c.get("user");
 
   const { id, lessonId } = c.req.param();
-  const slug = await removeLessonFromPlaylist(c.env.DB, id, user.id, lessonId);
-  if (slug === null) {
+  if (!(await removeLessonFromPlaylist(c.env.DB, id, user.id, lessonId))) {
     return c.json({ error: "not found" }, 404);
   }
 
@@ -237,13 +235,13 @@ playlistsRoute.post("/:id/reorder", requireUser, async (c) => {
     return c.json({ error: "lessonIds must be an array of strings" }, 400);
   }
 
-  const slug = await reorderPlaylistLessons(
+  const reordered = await reorderPlaylistLessons(
     c.env.DB,
     c.req.param("id"),
     user.id,
     body.lessonIds as string[],
   );
-  if (slug === null) {
+  if (!reordered) {
     return c.json({ error: "not found" }, 404);
   }
 
