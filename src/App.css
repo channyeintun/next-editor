@@ -235,6 +235,20 @@
   color: #f1f5f9;
 }
 
+/* driver.css unsets these buttons' outline (unlayered, so it beats the global
+   ring in index.css) and the overrides above replace its only focus cues, so
+   draw the app's keyboard focus ring here. The close button sits in the
+   popover's corner, so its ring is drawn inside it, not over the border. */
+.driver-popover.ne-tour-popover .driver-popover-footer-btn:focus-visible {
+  outline: 2px solid var(--color-pinata-purple);
+  outline-offset: 2px;
+}
+
+.driver-popover.ne-tour-popover .driver-popover-close-btn:focus-visible {
+  outline: 2px solid var(--color-pinata-purple);
+  outline-offset: -2px;
+}
+
 .driver-popover.ne-tour-popover .driver-popover-arrow-side-left.driver-popover-arrow,
 .driver-popover.ne-tour-popover .driver-popover-arrow-side-right.driver-popover-arrow,
 .driver-popover.ne-tour-popover .driver-popover-arrow-side-top.driver-popover-arrow,
