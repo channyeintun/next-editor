@@ -16,6 +16,7 @@ import {
   type AthanLabVoice,
   type AthanLabVoiceList,
 } from "@next-editor/infra";
+import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
 
 /**
  * AthanLab narration setup inside the Studio render panel: connect the user's
@@ -34,19 +35,11 @@ const ATHANLAB_DASHBOARD_URL = "https://athanlab.com/dashboard/api";
 const UNUSABLE_KEY_CODES = new Set(["key_invalid", "key_stale", "key_missing"]);
 
 function readStoredVoiceId(): string | null {
-  try {
-    return localStorage.getItem(ATHANLAB_VOICE_KEY);
-  } catch {
-    return null;
-  }
+  return readStoredPreference(ATHANLAB_VOICE_KEY);
 }
 
 function storeVoiceId(voiceId: string): void {
-  try {
-    localStorage.setItem(ATHANLAB_VOICE_KEY, voiceId);
-  } catch {
-    // Storage unavailable — the choice still holds until reload.
-  }
+  writeStoredPreference(ATHANLAB_VOICE_KEY, voiceId);
 }
 
 /** Official AthanLab voices first, then the user's own library. */

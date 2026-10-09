@@ -23,7 +23,9 @@ import { usePreviewPanel } from "../contexts/PreviewPanelContext";
 import { usePreviewAdapterHandle } from "../contexts/PreviewAdapterHandleContext";
 import { markTourSeen } from "../components/tour/productTour";
 import { useRecordingSettings, useRecordingSettingsTrigger } from "../hooks/useRecordingSettings";
+import { readStoredPreference, writeStoredPreference } from "../stores/preferenceStorage";
 import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/displayCapture";
+import { downloadBlob } from "../utils/downloadBlob";
 import { describeDraftDescription, describeDraftProvenance } from "./draftProvenance";
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript } from "./inPageDirector";
@@ -92,20 +94,12 @@ const VOICE_CHOICE_KEY = "next-editor:studio:voice-choice";
 const NARRATION_PROVIDER_KEY = "next-editor:studio:narration-provider";
 
 function readStoredNarrationProvider(): StudioNarrationProvider {
-  try {
-    const stored = localStorage.getItem(NARRATION_PROVIDER_KEY);
-    return isStudioNarrationProvider(stored) ? stored : "pocket";
-  } catch {
-    return "pocket";
-  }
+  const stored = readStoredPreference(NARRATION_PROVIDER_KEY);
+  return isStudioNarrationProvider(stored) ? stored : "pocket";
 }
 
 function storeNarrationProvider(provider: StudioNarrationProvider): void {
-  try {
-    localStorage.setItem(NARRATION_PROVIDER_KEY, provider);
-  } catch {
-    // Storage unavailable — the choice still holds until reload.
-  }
+  writeStoredPreference(NARRATION_PROVIDER_KEY, provider);
 }
 
 /** Until <AthanLabPanel> reports, a render with AthanLab cannot start. */
@@ -245,15 +239,6 @@ function isBurmeseReferenceReady(voice: SavedCustomVoice): boolean {
   return durationSeconds >= MIN_VOXCPM2_REFERENCE_SECONDS && durationSeconds <= MAX_SAMPLE_SECONDS;
 }
 
-function downloadBlob(name: string, blob: Blob): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
 function publishWindowHandle(comparison: StudioCheckResult[] | null, running: boolean): void {
   window.__NEXT_EDITOR_STUDIO__ = {
     runs: runHistory.map((entry) => ({
@@ -357,7 +342,7 @@ export default function StudioController() {
   // authenticated Worker at render time.
   const [customVoices, setCustomVoices] = useState<SavedCustomVoice[]>([]);
   const [voiceChoice, setVoiceChoice] = useState<string>(
-    () => localStorage.getItem(VOICE_CHOICE_KEY) ?? "default",
+    () => readStoredPreference(VOICE_CHOICE_KEY) ?? "default",
   );
   const [voiceBusy, setVoiceBusy] = useState<string | null>(null);
   const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -424,7 +409,7 @@ export default function StudioController() {
 
   const chooseVoice = (value: string) => {
     setVoiceChoice(value);
-    localStorage.setItem(VOICE_CHOICE_KEY, value);
+    writeStoredPreference(VOICE_CHOICE_KEY, value);
   };
 
   const saveVoiceFromAudio = async (bytes: ArrayBuffer, suggestedName: string) => {
@@ -863,15 +848,15 @@ export default function StudioController() {
       return;
     }
     const base = `lesson-${activeRun.result.report.planSlug}`;
-    downloadBlob(`${base}.ne`, artifacts.neBlob);
-    downloadBlob(artifacts.audioFileName || `${base}.m4a`, artifacts.audioBlob);
+    downloadBlob(artifacts.neBlob, `${base}.ne`);
+    downloadBlob(artifacts.audioBlob, artifacts.audioFileName || `${base}.m4a`);
     downloadBlob(
-      "build-manifest.json",
       new Blob([canonicalJson(activeRun.result.manifest)], { type: "application/json" }),
+      "build-manifest.json",
     );
     downloadBlob(
-      "render-report.json",
       new Blob([JSON.stringify(activeRun.result.report, null, 2)], { type: "application/json" }),
+      "render-report.json",
     );
   };
 
@@ -880,8 +865,8 @@ export default function StudioController() {
       return;
     }
     downloadBlob(
-      "render-report.json",
       new Blob([JSON.stringify(activeRun.result.report, null, 2)], { type: "application/json" }),
+      "render-report.json",
     );
   };
 

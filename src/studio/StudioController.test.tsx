@@ -198,6 +198,38 @@ describe("StudioController status messages", () => {
   });
 });
 
+describe("StudioController preferences", () => {
+  let ownLocalStorage: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    studio.searchParams = new URLSearchParams();
+    studio.voices = [];
+    ownLocalStorage = Object.getOwnPropertyDescriptor(window, "localStorage");
+  });
+
+  afterEach(() => {
+    if (ownLocalStorage) Object.defineProperty(window, "localStorage", ownLocalStorage);
+    else delete (window as { localStorage?: Storage }).localStorage;
+  });
+
+  it("falls back to the default provider and voice where site data is blocked", () => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("blocked", "SecurityError");
+      },
+    });
+    renderController();
+
+    expect(screen.getByRole("combobox", { name: "Narration language and provider" })).toHaveValue(
+      "pocket",
+    );
+    expect(screen.getByRole("combobox", { name: "Narrator voice" })).toHaveValue("default");
+  });
+});
+
 describe("StudioController voice focus", () => {
   beforeEach(() => {
     vi.clearAllMocks();
