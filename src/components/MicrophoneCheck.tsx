@@ -102,7 +102,7 @@ function MicrophoneCheckPanel({ onClose }: { onClose: () => void }) {
       className="absolute bottom-full left-0 z-46 mb-2 w-72 rounded-lg border border-slate-700 bg-[#151821] p-3 text-sm text-slate-200 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
     >
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+        <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
           Microphone
         </p>
         <button

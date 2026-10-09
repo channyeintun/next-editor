@@ -342,7 +342,7 @@ export default function RecordingEditPanel({
       <div className="mb-2 flex items-center gap-2">
         <Scissors size={14} className="text-slate-400" aria-hidden="true" />
         <span className="font-semibold text-slate-100">Edit recording</span>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-400">
           Drag across the waveform, or set a start and end at the playhead; click to jump there
         </span>
         <button
@@ -384,7 +384,7 @@ export default function RecordingEditPanel({
         ) : null}
         <EditPlayhead durationMs={durationMs} cuts={cuts} mutes={mutes} />
         {narrationState !== "ready" ? (
-          <span className="pointer-events-none absolute right-2 top-1.5 text-[11px] text-slate-500">
+          <span className="pointer-events-none absolute right-2 top-1.5 text-[11px] text-slate-300">
             {NARRATION_NOTICE[narrationState]}
           </span>
         ) : null}
