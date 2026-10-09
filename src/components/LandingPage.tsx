@@ -511,7 +511,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                       videos while remaining fully interactive.
                     </p>
                     <div className="relative pt-2">
-                      <div className="bg-white rounded-lg p-2 text-slate-900 font-mono text-xs flex items-center shadow-lg border border-slate-200">
+                      <div className="bg-white rounded-lg p-2 text-slate-900 font-mono text-xs flex flex-wrap items-center shadow-lg border border-slate-200">
                         <span className="text-slate-400">nexteditor.dev/</span>
                         <span className="relative inline-block text-slate-950 font-bold whitespace-nowrap">
                           learn/introduction
