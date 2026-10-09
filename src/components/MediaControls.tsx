@@ -233,7 +233,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
   const { durationMs: timelineDurationMs, editorActor } = useNextEditorPlayback();
 
   const captionPreference = useCaptionStore();
-  const { autoplay, continueToNext } = usePlaybackSettings();
+  const { autoplay, continueToNext, characterShortcuts } = usePlaybackSettings();
   const playbackSettingsTrigger = usePlaybackSettingsTrigger();
   const { screenRecordingEnabled, microphoneDeviceId } = useRecordingSettings();
   const recordingSettingsTrigger = useRecordingSettingsTrigger();
@@ -782,6 +782,13 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                       ) : null}
                     </div>
                     <div className="mt-3 border-t border-slate-700 pt-3">
+                      <Switch
+                        checked={characterShortcuts}
+                        onChange={(enabled) =>
+                          playbackSettingsTrigger.setCharacterShortcuts({ enabled })
+                        }
+                        label="Single-key shortcuts"
+                      />
                       <button
                         type="button"
                         onClick={() => {

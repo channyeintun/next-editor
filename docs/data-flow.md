@@ -131,6 +131,9 @@ Current playback behavior:
   terminal, whiteboard, a field, a dialog or a menu has focus, when a modifier is held, and when
   another handler already took them (`defaultPrevented`): during playback Space still reaches
   `useNextEditor`'s capture-phase listener first, which pauses without typing into the editor.
+  The "Single-key shortcuts" switch in the player's settings (`playbackSettingsStore`, stored as
+  `playback-character-shortcuts`, on by default) turns off the letter, number and punctuation
+  keys (WCAG 2.1.4); Space, the arrows, Home and End keep working.
 
 ## Storage Flow
 

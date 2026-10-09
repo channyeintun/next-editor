@@ -10,12 +10,16 @@ import {
 } from "./useNextEditorContext";
 import { useCaptionStore, useCaptionStoreTrigger } from "./useCaptionStore";
 import { useApplySpeedAndVolume } from "./usePlaybackSettings";
+import { playbackSettingsStore } from "../stores/playbackSettingsStore";
 
 // ============================================================================
 // Keyboard control of the player, as in video players: play and pause, seek,
 // step, speed, chapters, mute and captions. Keys go to the player only when
 // nothing else wants them: typing in the editor, the terminal, the whiteboard
 // or a field, a dialog, and a key another handler already took all win.
+// The letter, number and punctuation keys can be turned off in the player's
+// settings ("Single-key shortcuts", WCAG 2.1.4); Space, the arrows, Home and
+// End keep working.
 // ============================================================================
 
 const SEEK_MS = 5_000;
@@ -102,6 +106,10 @@ export function playerShortcutFor(event: KeyPress): PlayerShortcut | null {
     return { type: "seekToFraction", fraction: Number(event.key) / 10 };
   return null;
 }
+
+/** A printable key (a letter, a number or punctuation), which the "Single-key shortcuts"
+ *  setting turns off. Space is not one: it stays the play and pause key. */
+export const isCharacterKey = (key: string): boolean => key.length === 1 && key !== " ";
 
 /** Places that take typing: the editor, the terminal, the whiteboard, and form fields. */
 const TYPING_TARGETS =
@@ -244,6 +252,12 @@ export function usePlayerShortcuts() {
       // A key another handler took (the editor's Space-to-pause, the slides' arrows) is theirs.
       // Held Space would flip between play and pause on every repeat.
       if (event.defaultPrevented || (event.repeat && event.key === " ")) return;
+      // Read here, not from a hook, so the setting changes without adding the listener again.
+      if (
+        isCharacterKey(event.key) &&
+        !playbackSettingsStore.getSnapshot().context.characterShortcuts
+      )
+        return;
       const shortcut = playerShortcutFor(event);
       if (!shortcut || !isPlayerKeyTarget(event.target, event.key)) return;
       if (runShortcut(shortcut)) event.preventDefault();

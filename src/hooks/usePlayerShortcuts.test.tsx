@@ -3,10 +3,12 @@ import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   chapterTarget,
+  isCharacterKey,
   isPlayerKeyTarget,
   playerShortcutFor,
   usePlayerShortcuts,
 } from "./usePlayerShortcuts";
+import { playbackSettingsStore } from "../stores/playbackSettingsStore";
 import { NextEditorProvider } from "../contexts/NextEditorProvider";
 import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
 import { RuntimePanelStoreProvider } from "../contexts/RuntimePanelStoreContext";
@@ -54,6 +56,15 @@ describe("playerShortcutFor", () => {
     expect(playerShortcutFor(key("k", { metaKey: true }))).toBeNull();
     expect(playerShortcutFor(key("ArrowLeft", { altKey: true }))).toBeNull();
     expect(playerShortcutFor(key("c", { ctrlKey: true }))).toBeNull();
+  });
+});
+
+describe("isCharacterKey", () => {
+  it("counts letters, numbers and punctuation, but not Space or named keys", () => {
+    for (const value of ["k", "M", "5", ",", ">", "[", "?"])
+      expect(isCharacterKey(value)).toBe(true);
+    for (const value of [" ", "ArrowLeft", "Home", "End", "Enter", "Escape"])
+      expect(isCharacterKey(value)).toBe(false);
   });
 });
 
@@ -232,6 +243,7 @@ describe("usePlayerShortcuts", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    playbackSettingsStore.trigger.setCharacterShortcuts({ enabled: true });
     window.localStorage.clear();
   });
 
@@ -303,6 +315,29 @@ describe("usePlayerShortcuts", () => {
 
     expect(bubbleKeydown(addListener.mock.calls)).toHaveLength(0);
     expect(bubbleKeydown(removeListener.mock.calls)).toHaveLength(0);
+  });
+
+  it("ignores letter, number and punctuation keys when single-key shortcuts are off", async () => {
+    act(() => playbackSettingsStore.trigger.setCharacterShortcuts({ enabled: false }));
+    press("m");
+    press("5");
+    press("]");
+    press("?");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(seen.volume).toBe(1);
+    expect(seen.time).toBe(0);
+    expect(seen.shortcuts?.helpOpen).toBe(false);
+
+    // Arrows, Home and End are not character keys, so keyboard seeking still works.
+    press("ArrowRight");
+    await waitFor(() => expect(seen.time).toBe(5_000));
+    press("End");
+    await waitFor(() => expect(seen.time).toBe(60_000));
+
+    // Turned back on, the same listener takes them again.
+    act(() => playbackSettingsStore.trigger.setCharacterShortcuts({ enabled: true }));
+    press("m");
+    await waitFor(() => expect(seen.volume).toBe(0));
   });
 
   it("opens the shortcuts with ?", async () => {

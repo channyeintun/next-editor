@@ -5,6 +5,7 @@ const AUTOPLAY_KEY = "playback-autoplay";
 const CONTINUE_TO_NEXT_KEY = "playback-continue-to-next";
 const SPEED_KEY = "playback-speed";
 const VOLUME_KEY = "playback-volume";
+const CHARACTER_SHORTCUTS_KEY = "playback-character-shortcuts";
 
 // Match the MediaControls slider ranges — clamping (rather than rejecting)
 // keeps a hand-edited or stale localStorage value usable instead of silently
@@ -22,6 +23,10 @@ export interface PlaybackSettingsContext {
   speed: number;
   /** Playback volume 0..1, persisted alongside speed. */
   volume: number;
+  /** Whether the player takes its letter, number and punctuation keys (M, C, 0–9, "?" …).
+   *  On by default; a viewer can turn them off (WCAG 2.1.4). Space, the arrows, Home and End
+   *  are not character keys and keep working either way. */
+  characterShortcuts: boolean;
 }
 
 const clampSpeed = (speed: number): number => Math.min(SPEED_MAX, Math.max(SPEED_MIN, speed));
@@ -40,6 +45,7 @@ function readInitialContext(): PlaybackSettingsContext {
     continueToNext: readStoredPreference(CONTINUE_TO_NEXT_KEY) === "true",
     speed: readStoredNumber(SPEED_KEY, 1, clampSpeed),
     volume: readStoredNumber(VOLUME_KEY, 1, clampVolume),
+    characterShortcuts: readStoredPreference(CHARACTER_SHORTCUTS_KEY) !== "false",
   };
 }
 
@@ -61,15 +67,20 @@ export function createPlaybackSettingsStore() {
         const volume = Number.isFinite(event.volume) ? clampVolume(event.volume) : context.volume;
         return volume === context.volume ? context : { ...context, volume };
       },
+      setCharacterShortcuts: (context, event: { enabled: boolean }) =>
+        event.enabled === context.characterShortcuts
+          ? context
+          : { ...context, characterShortcuts: event.enabled },
     },
   });
 
   store.subscribe((snapshot) => {
-    const { autoplay, continueToNext, speed, volume } = snapshot.context;
+    const { autoplay, continueToNext, speed, volume, characterShortcuts } = snapshot.context;
     writeStoredPreference(AUTOPLAY_KEY, String(autoplay));
     writeStoredPreference(CONTINUE_TO_NEXT_KEY, String(continueToNext));
     writeStoredPreference(SPEED_KEY, String(speed));
     writeStoredPreference(VOLUME_KEY, String(volume));
+    writeStoredPreference(CHARACTER_SHORTCUTS_KEY, String(characterShortcuts));
   });
 
   return store;
@@ -88,3 +99,5 @@ export const selectContinueToNext = (context: PlaybackSettingsContext): boolean 
   context.continueToNext;
 export const selectSpeed = (context: PlaybackSettingsContext): number => context.speed;
 export const selectVolume = (context: PlaybackSettingsContext): number => context.volume;
+export const selectCharacterShortcuts = (context: PlaybackSettingsContext): boolean =>
+  context.characterShortcuts;

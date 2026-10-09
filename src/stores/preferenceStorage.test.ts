@@ -41,6 +41,7 @@ describe("preference stores without usable storage", () => {
       continueToNext: false,
       speed: 1,
       volume: 1,
+      characterShortcuts: true,
     });
     expect(recordingSettingsStore.getSnapshot().context.screenRecordingEnabled).toBe(false);
     expect(captionStore.getSnapshot().context).toEqual({

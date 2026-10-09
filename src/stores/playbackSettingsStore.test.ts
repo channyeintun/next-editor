@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from "vite-plus/test";
 import {
   createPlaybackSettingsStore,
   selectAutoplay,
+  selectCharacterShortcuts,
   selectContinueToNext,
   selectSpeed,
   selectVolume,
@@ -24,6 +25,23 @@ describe("playbackSettingsStore", () => {
     expect(selectContinueToNext(c)).toBe(false);
     expect(selectSpeed(c)).toBe(1);
     expect(selectVolume(c)).toBe(1);
+  });
+
+  it("defaults single-key shortcuts to on", () => {
+    expect(selectCharacterShortcuts(ctx(createPlaybackSettingsStore()))).toBe(true);
+  });
+
+  it("persists single-key shortcuts turned off, and on again", () => {
+    const store = createPlaybackSettingsStore();
+    store.trigger.setCharacterShortcuts({ enabled: false });
+
+    expect(selectCharacterShortcuts(ctx(store))).toBe(false);
+    expect(window.localStorage.getItem("playback-character-shortcuts")).toBe("false");
+    expect(selectCharacterShortcuts(ctx(createPlaybackSettingsStore()))).toBe(false);
+
+    store.trigger.setCharacterShortcuts({ enabled: true });
+    expect(window.localStorage.getItem("playback-character-shortcuts")).toBe("true");
+    expect(selectCharacterShortcuts(ctx(createPlaybackSettingsStore()))).toBe(true);
   });
 
   it("setAutoplay updates autoplay independently of continueToNext", () => {

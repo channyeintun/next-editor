@@ -2,6 +2,7 @@ import { useSelector } from "@xstate/store-react";
 import {
   playbackSettingsStore,
   selectAutoplay,
+  selectCharacterShortcuts,
   selectContinueToNext,
   selectSpeed,
   selectVolume,
@@ -14,7 +15,10 @@ export function usePlaybackSettings(): PlaybackSettingsContext {
   const continueToNext = useSelector(playbackSettingsStore, (s) => selectContinueToNext(s.context));
   const speed = useSelector(playbackSettingsStore, (s) => selectSpeed(s.context));
   const volume = useSelector(playbackSettingsStore, (s) => selectVolume(s.context));
-  return { autoplay, continueToNext, speed, volume };
+  const characterShortcuts = useSelector(playbackSettingsStore, (s) =>
+    selectCharacterShortcuts(s.context),
+  );
+  return { autoplay, continueToNext, speed, volume, characterShortcuts };
 }
 
 export function usePlaybackSettingsTrigger() {

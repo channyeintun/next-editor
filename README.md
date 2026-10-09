@@ -70,7 +70,8 @@ header). Each runs in one of three places:
   saved as a version the learner can restore later (up to 10 per lesson).
 - Chapters, and links that open a lesson at a moment (`?t=90`, `?t=1m30s`).
 - Video-player keyboard shortcuts: Space/K, ←/→ and J/L to seek, `,`/`.` to step, `<`/`>` for
-  speed, `[`/`]` for chapters, 0–9, Home/End, M, C, and `?` to list them.
+  speed, `[`/`]` for chapters, 0–9, Home/End, M, C, and `?` to list them. The single-key ones
+  (letters, numbers, punctuation) can be turned off in the player's settings.
 - Progressive loading: `/code?url=<file>.ne` starts playing from the first playable prefix of the
   download and extends the timeline as the rest arrives.
 - `.ne` import and export, with audio and camera as sibling files. Dropping a `.ne` file or URL

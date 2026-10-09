@@ -50,6 +50,7 @@ export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }
       </dl>
       <p className="mt-2 text-[11px] text-slate-500">
         Keys go to the player when you are not typing in the editor, terminal, or a field.
+        Single-key shortcuts (letters, numbers and punctuation) can be turned off in Settings.
       </p>
     </div>
   );
