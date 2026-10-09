@@ -40,6 +40,16 @@ describe("inlinableSlideImageHrefs", () => {
       "/api/proxy?url=https%3A%2F%2Flh3.example%2Fx",
     ]);
   });
+
+  // Only the targets storeImageHrefs/proxyHref produce are inlined; anything
+  // else keeps loading through its own href.
+  it("keeps only the /media/ and single-parameter /api/proxy targets", () => {
+    const svg =
+      `<svg><image href="/media/x"/><image href="/api/proxy?url=https%3A%2F%2Fa"/>` +
+      `<image href="https://example.com/a.png"/><image href="/api/proxy?url=a&b"/></svg>`;
+
+    expect(inlinableSlideImageHrefs(svg)).toEqual(["/media/x", "/api/proxy?url=https%3A%2F%2Fa"]);
+  });
 });
 
 describe("loadSlideImages", () => {
@@ -57,6 +67,21 @@ describe("loadSlideImages", () => {
     expect(peekSlideImages([JPEG, PNG])).toEqual(new Map([...second, [PNG, first.get(PNG)]]));
     await loadSlideImages([PNG]);
     expect(fetchImage).toHaveBeenCalledTimes(2);
+  });
+
+  it("inlines exactly the image types the slide sanitizer accepts", async () => {
+    const types = new Map([
+      ["/media/svg", "image/svg+xml"],
+      ["/media/avif", "image/avif"],
+      ["/media/jpg", "image/jpg"],
+      ["/media/bad", "image/svgxml"],
+      ["/media/bmp", "image/bmp"],
+    ]);
+    fetchImage.mockImplementation(async (href) => respond(types.get(href) ?? ""));
+
+    const images = await loadSlideImages([...types.keys()]);
+
+    expect([...images.keys()]).toEqual(["/media/svg", "/media/avif", "/media/jpg"]);
   });
 
   it("leaves out an image it cannot inline, so the frame loads it itself", async () => {

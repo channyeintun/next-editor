@@ -16,7 +16,13 @@ const FORBIDDEN_ELEMENTS = new Set([
 
 const URL_ATTRIBUTES = new Set(["href", "src", "xlink:href", "action", "formaction"]);
 
-const IMAGE_DATA_URL = /^data:image\/(?:png|gif|jpe?g|webp|avif|svg\+xml);/i;
+/**
+ * The image types a slide may carry as data: URLs, as a regex alternation.
+ * slideImageCache.ts inlines only these, so a type added here is inlined too.
+ */
+export const SLIDE_INLINE_IMAGE_TYPES = "png|gif|jpe?g|webp|avif|svg\\+xml";
+
+const IMAGE_DATA_URL = new RegExp(`^data:image/(?:${SLIDE_INLINE_IMAGE_TYPES});`, "i");
 
 function isImageElement(elementName: string): boolean {
   return elementName === "img" || elementName === "image";

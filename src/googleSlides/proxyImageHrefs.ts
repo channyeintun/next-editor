@@ -21,7 +21,12 @@
 
 import { isGoogleImageUrl } from "../shared/googleImageHosts";
 
-const HREF_PATTERN = /((?:xlink:)?href\s*=\s*)(["'])([^"']*)\2/gi;
+/**
+ * Every href/xlink:href attribute in markup; groups: 1 the `href=` prefix, 2 the
+ * quote, 3 the value. Global, so use it only with matchAll and replace, which
+ * never leave its lastIndex set.
+ */
+export const HREF_PATTERN = /((?:xlink:)?href\s*=\s*)(["'])([^"']*)\2/gi;
 
 /**
  * Returns every href/xlink:href value in `svg` that points at a Google-hosted
@@ -49,4 +54,15 @@ export function rewriteGoogleImageHrefs(svg: string, rewrite: (url: string) => s
 /** Same-origin live-proxy URL for `url` (see src/shared/proxy.ts). */
 export function proxyHref(url: string): string {
   return `/api/proxy?url=${encodeURIComponent(url)}`;
+}
+
+const SAME_ORIGIN_IMAGE_HREF = /^\/(?:media\/|api\/proxy\?)[^&]*$/;
+
+/**
+ * Whether `href` is one of the two same-origin targets above: an R2 copy under
+ * /media/ (storeImageHrefs.ts) or a single-parameter /api/proxy?url= fallback
+ * (proxyHref). slideImageCache.ts inlines only these.
+ */
+export function isSameOriginSlideImageHref(href: string): boolean {
+  return SAME_ORIGIN_IMAGE_HREF.test(href);
 }

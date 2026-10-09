@@ -13,14 +13,11 @@
 // Render-time only: the stored deck keeps its /media hrefs (see
 // proxyImageHrefs.ts for why it is not inlined there).
 
-/** The same-origin image targets proxyImageHrefs.ts rewrites imported hrefs to. */
-const INLINABLE_HREF = /^\/(?:media\/|api\/proxy\?)[^&]*$/;
-
-/** Every href/xlink:href value in markup. */
-const HREF_PATTERN = /(?:xlink:)?href\s*=\s*(["'])([^"']*)\1/gi;
+import { HREF_PATTERN, isSameOriginSlideImageHref } from "../googleSlides/proxyImageHrefs";
+import { SLIDE_INLINE_IMAGE_TYPES } from "./sanitizeSlideContent";
 
 /** The image types the slide sanitizer accepts as data: URLs; others keep their href. */
-const INLINABLE_TYPE = /^image\/(?:png|gif|jpe?g|webp|avif|svg\+xml)$/i;
+const INLINABLE_TYPE = new RegExp(`^image/(?:${SLIDE_INLINE_IMAGE_TYPES})$`, "i");
 
 /** Bounds memory when one deck holds unusually many or large images. */
 const MAX_CACHED_CHARS = 48 * 1024 * 1024;
@@ -92,7 +89,7 @@ function collect(hrefs: readonly string[], entries: readonly CachedImage[]) {
 export function inlinableSlideImageHrefs(content: string): string[] {
   const hrefs = new Set<string>();
   for (const match of content.matchAll(HREF_PATTERN)) {
-    if (INLINABLE_HREF.test(match[2])) hrefs.add(match[2]);
+    if (isSameOriginSlideImageHref(match[3])) hrefs.add(match[3]);
   }
   return [...hrefs];
 }
