@@ -246,7 +246,7 @@ export default function WhiteboardPanel() {
         >
           <h2
             id="whiteboard-title"
-            className="text-xs font-bold text-slate-400 uppercase tracking-wider"
+            className="text-xs font-bold text-slate-300 uppercase tracking-wider"
           >
             Whiteboard
           </h2>
