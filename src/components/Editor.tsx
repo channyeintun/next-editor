@@ -45,7 +45,11 @@ import RecordingDraftRecovery from "./RecordingDraftRecovery";
 import { useLinkedStartTime } from "../hooks/useLinkedStartTime";
 import { ApiClientStoreProvider } from "../contexts/ApiClientStoreContext";
 import { CaptionStoreProvider } from "../contexts/CaptionStoreContext";
-import { useProductTourOnce, type ProductTourOnceOptions } from "./tour/useProductTourOnce";
+import {
+  useAuthorInteractionFlag,
+  useProductTourOnce,
+  type ProductTourOnceOptions,
+} from "./tour/useProductTourOnce";
 import CollaborationSurfaceBridge from "./CollaborationSurfaceBridge";
 import CollaborationFollowOverlay from "./CollaborationFollowOverlay";
 import { loadWhiteboardPanel } from "./whiteboardPanelLoader";
@@ -60,6 +64,9 @@ const WhiteboardPanel = lazy(loadWhiteboardPanel);
 // there, and with Monaco downloading alongside the route rather than ahead of
 // it, CodeEditor can mount well after this shell. Started from the shell, the
 // tour would pick its steps from the record bar alone, then mark itself seen.
+// Its `authorInteracted` flag comes from the shell (EditorLayout), which mounts
+// before this Suspense resolves, so a key or pointer press during the chunk
+// load still keeps the tour from taking focus.
 function ProductTourOnce(options: ProductTourOnceOptions) {
   useProductTourOnce(options);
   return null;
@@ -159,6 +166,7 @@ function EditorLayout({
   // source of truth with the rest of the app and react to in-app param changes.
   const [searchParams] = useSearchParams();
   const readOnly = readOnlyProp ?? searchParams.get("readOnly") === "true";
+  const authorInteracted = useAuthorInteractionFlag();
 
   // Enlarge the playback controls for small embeds (e.g. a scaled-down demo iframe).
   const largeControlsOverride = useDemoEmbedLargeControls();
@@ -212,6 +220,7 @@ function EditorLayout({
             recordingLoading={recordingLoading}
             loadError={loadError}
             readOnly={readOnly}
+            authorInteracted={authorInteracted}
           />
         </Suspense>
         <CursorComponent />
