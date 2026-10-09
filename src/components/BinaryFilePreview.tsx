@@ -1,5 +1,5 @@
 import { Download, FileBox, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import {
   approximateBase64ByteLength,
@@ -17,6 +17,9 @@ import {
 interface BinaryFilePreviewProps {
   file: WorkspaceFile;
 }
+
+/** What the last Retry press led to; "" until the reader presses Retry. */
+type RetryOutcome = "" | "retrying" | "failed" | "loaded";
 
 function formatByteSize(byteLength: number): string {
   if (byteLength < 1024) {
@@ -50,6 +53,8 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
   const [loadedAsset, setLoadedAsset] = useState<{ assetId: string; url: string } | null>(null);
   const [unavailableAssetId, setUnavailableAssetId] = useState<string | null>(null);
   const [retryVersion, setRetryVersion] = useState(0);
+  const [retryOutcome, setRetryOutcome] = useState<RetryOutcome>("");
+  const downloadLinkRef = useRef<HTMLAnchorElement>(null);
   const objectUrl = loadedAsset && loadedAsset.assetId === assetId ? loadedAsset.url : null;
   const assetUnavailable = unavailableAssetId === assetId;
   const legacyDataUrl = isLegacyWorkspaceBinaryFile(file)
@@ -82,9 +87,14 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
           currentUrl = nextUrl;
           setLoadedAsset({ assetId, url: nextUrl });
           setUnavailableAssetId(null);
+          // A load that follows a Retry press (even one that first failed) is
+          // its outcome; a load nobody asked for stays silent.
+          setRetryOutcome((outcome) => (outcome === "" ? outcome : "loaded"));
         })
         .catch(() => {
-          if (!disposed) setUnavailableAssetId(assetId);
+          if (disposed) return;
+          setUnavailableAssetId(assetId);
+          setRetryOutcome((outcome) => (outcome === "retrying" ? "failed" : outcome));
         });
     };
     load();
@@ -98,8 +108,30 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
     };
   }, [assetId, descriptorMimeType, descriptorSize, retryVersion]);
 
+  // The Retry button the reader pressed unmounts once the asset loads, which
+  // drops focus to the page. Hand it to the Download link that took its place,
+  // unless the reader has already moved focus somewhere else.
+  useEffect(() => {
+    if (retryOutcome !== "loaded") return;
+    const link = downloadLinkRef.current;
+    const activeElement = link?.ownerDocument.activeElement;
+    if (link && (!activeElement || activeElement === link.ownerDocument.body)) link.focus();
+  }, [retryOutcome]);
+
+  const retryMessage =
+    retryOutcome === "retrying"
+      ? "Retrying asset…"
+      : retryOutcome === "failed"
+        ? "Asset still unavailable"
+        : retryOutcome === "loaded"
+          ? `${file.name} loaded`
+          : "";
+
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 overflow-auto bg-[#11141c] p-8 text-slate-300">
+      <p role="status" className="sr-only">
+        {retryMessage}
+      </p>
       <div className="flex max-h-[60%] max-w-full items-center justify-center">
         {isAwaitingSharedAsset ? (
           <div className="flex size-28 items-center justify-center rounded-2xl border border-amber-700/50 bg-amber-950/20">
@@ -141,6 +173,7 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
         <button
           type="button"
           onClick={() => {
+            setRetryOutcome("retrying");
             setRetryVersion((version) => version + 1);
             collaboration?.retryAssets();
           }}
@@ -151,6 +184,7 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
         </button>
       ) : mediaUrl ? (
         <a
+          ref={downloadLinkRef}
           href={mediaUrl}
           download={file.name}
           className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"

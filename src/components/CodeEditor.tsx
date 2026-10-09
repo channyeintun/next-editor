@@ -1339,7 +1339,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
               data-cursor-replay-target="code-editor"
             >
               {isBinaryActiveFile || !activeModel ? (
-                <BinaryFilePreview file={activeFile} />
+                <BinaryFilePreview key={activeFile.path} file={activeFile} />
               ) : (
                 <MonacoEditor
                   className="size-full"
