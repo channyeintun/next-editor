@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
-import { WorkspaceActionsContext } from "./WorkspaceContext";
-import {
-  WorkspaceStoreContext,
-  createInitialWorkspaceSnapshot,
-  createWorkspaceStore,
-} from "../stores/workspaceStore";
+import { WorkspaceActionsContext, WorkspaceStoreContext } from "./WorkspaceContext";
+import { createInitialWorkspaceSnapshot, createWorkspaceStore } from "../stores/workspaceStore";
 import { createWorkspaceActions } from "../stores/workspaceActions";
 import { migrateLegacyWorkspaceAssets } from "../storage/workspaceAssetStore";
 

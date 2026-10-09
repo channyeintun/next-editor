@@ -1,7 +1,7 @@
 import { useContext, useEffect, useId, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { Bot, Plus, Send, Settings, Square } from "lucide-react";
-import { WorkspaceStoreContext } from "../../stores/workspaceStore";
+import { WorkspaceStoreContext } from "../../contexts/WorkspaceContext";
 import {
   getAgentStore,
   selectDraft,

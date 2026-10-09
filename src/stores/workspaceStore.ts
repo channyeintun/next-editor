@@ -1,10 +1,4 @@
-import { createContext } from "react";
 import { createStore } from "@xstate/store-react";
-import type {
-  WorkspaceDirtyState,
-  WorkspaceEditorState,
-  WorkspaceSidebarState,
-} from "../contexts/WorkspaceContext";
 import {
   areWorkspaceProjectsEqual,
   collectWorkspaceFolders,
@@ -55,6 +49,38 @@ export interface StoredWorkspaceSnapshot {
   project: WorkspaceProject;
   /** Legacy v1 generation key; removed after descriptor migration. */
   assetGeneration?: string;
+}
+
+export interface WorkspaceEditorState {
+  activeFile: WorkspaceFile;
+  projectVersion: number;
+}
+
+export interface WorkspaceSidebarState {
+  activeFilePath: string;
+  files: WorkspaceTreeFile[];
+  folders: string[];
+  treeVersion: number;
+  collapsedFolders: string[];
+  sidebarScrollTop: number;
+  sidebarWidth: number;
+  lessonType: WorkspaceLessonType;
+  previewFilePath: string;
+}
+
+export interface WorkspaceDirtyState {
+  dirtyFilePaths: string[];
+  addedFilePaths: string[];
+  modifiedFilePaths: string[];
+  deletedFilePaths: string[];
+  projectMetadataChanged: boolean;
+  folderStructureChanged: boolean;
+  hasUnsavedChanges: boolean;
+}
+
+export interface WorkspaceSaveStatus {
+  isSaving: boolean;
+  errorMessage: string | null;
 }
 
 /** What the store tracks before and after a project is loaded. */
@@ -1201,8 +1227,6 @@ export function createWorkspaceStore(initialSnapshot?: StoredWorkspaceSnapshot |
 }
 
 export type WorkspaceStoreInstance = ReturnType<typeof createWorkspaceStore>;
-
-export const WorkspaceStoreContext = createContext<WorkspaceStoreInstance | null>(null);
 
 const emptyEditorState: WorkspaceEditorState = {
   activeFile: { path: "", name: "", language: "", content: "" },

@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { WorkspaceActions, WorkspaceSidebarState } from "../contexts/WorkspaceContext";
+import type { WorkspaceSidebarState } from "../stores/workspaceStore";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
 import type { WorkspaceTreeFile } from "../types/workspace";
 import FileSidebar from "./FileSidebar";

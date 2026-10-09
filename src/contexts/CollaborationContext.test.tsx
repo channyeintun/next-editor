@@ -5,7 +5,7 @@ import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
-import type { WorkspaceActions } from "./WorkspaceContext";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 
 const mocks = vi.hoisted(() => ({
   closeRoom: vi.fn(),

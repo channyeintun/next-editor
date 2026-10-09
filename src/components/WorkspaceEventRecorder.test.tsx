@@ -1,7 +1,8 @@
 import { act, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { WorkspaceEventRecorder } from "./WorkspaceEventRecorder";
-import { createWorkspaceStore, WorkspaceStoreContext } from "../stores/workspaceStore";
+import { createWorkspaceStore } from "../stores/workspaceStore";
+import { WorkspaceStoreContext } from "../contexts/WorkspaceContext";
 import type { WorkspaceProject, WorkspaceTextFile } from "../types/workspace";
 
 function file(path: string, content: string): WorkspaceTextFile {

@@ -38,7 +38,7 @@ import {
   useWorkspaceLessonType,
   useWorkspaceProjectId,
 } from "../hooks/useWorkspace";
-import type { WorkspaceSyncMutation } from "./WorkspaceContext";
+import type { WorkspaceSyncMutation } from "../stores/workspaceActions";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
 import { useWebContainerWorkspaceSync } from "./useWebContainerWorkspaceSync";

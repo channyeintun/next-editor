@@ -12,13 +12,14 @@ import {
 } from "../hooks/useWebContainerRuntime";
 import { useWorkspaceActions, useWorkspaceDirtyState } from "../hooks/useWorkspace";
 import { createWorkspaceFile } from "../starters/shared";
-import { WorkspaceStoreContext } from "../stores/workspaceStore";
+import type { WorkspaceDirtyState } from "../stores/workspaceStore";
 import {
   isWorkspaceTextFile,
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
-import type { WorkspaceActions, WorkspaceDirtyState } from "./WorkspaceContext";
+import { WorkspaceStoreContext } from "./WorkspaceContext";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 import type {
   WebContainerRuntimeActions,
   WebContainerRuntimeOutput,

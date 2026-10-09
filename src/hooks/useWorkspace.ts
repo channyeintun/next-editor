@@ -1,15 +1,8 @@
 import { useContext } from "react";
 import { useSelector } from "@xstate/store-react";
+import { WorkspaceActionsContext, WorkspaceStoreContext } from "../contexts/WorkspaceContext";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 import {
-  WorkspaceActionsContext,
-  type WorkspaceActions,
-  type WorkspaceDirtyState,
-  type WorkspaceEditorState,
-  type WorkspaceSaveStatus,
-  type WorkspaceSidebarState,
-} from "../contexts/WorkspaceContext";
-import {
-  WorkspaceStoreContext,
   type WorkspaceState,
   selectWorkspaceActiveFilePath,
   selectWorkspaceDirtyState,
@@ -27,6 +20,10 @@ import {
   selectWorkspaceSidebarState,
   selectWorkspaceSidebarWidth,
   selectWorkspaceTreeVersion,
+  type WorkspaceDirtyState,
+  type WorkspaceEditorState,
+  type WorkspaceSaveStatus,
+  type WorkspaceSidebarState,
 } from "../stores/workspaceStore";
 import type { WorkspaceLessonType } from "../types/workspace";
 

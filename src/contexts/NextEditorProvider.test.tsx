@@ -24,7 +24,7 @@ import {
 } from "../stores/runtimePanelStore";
 import type { Recording } from "../core/src/types";
 import type { WorkspaceRecordingSnapshot } from "../types/workspace";
-import type { WorkspaceActions } from "./WorkspaceContext";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 
 /** The providers Editor.tsx wraps NextEditorProvider in, minus collaboration and UI. */
 function EditorProviders({ children }: PropsWithChildren) {

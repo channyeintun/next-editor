@@ -9,7 +9,7 @@ import { messageFromError } from "../../collaboration/errorMessage";
 import { getWorkspaceAssetBytes } from "../../storage/workspaceAssetStore";
 import { applyTextEditEvent, type TextEditEvent } from "../../types/textEdit";
 import { isWorkspaceAssetDescriptor, isWorkspaceTextFile } from "../../types/workspace";
-import type { WorkspaceActions } from "../WorkspaceContext";
+import type { WorkspaceActions } from "../../stores/workspaceActions";
 
 interface CollaborativeWorkspaceActionsOptions {
   /** The workspace's own actions, which the room's actions extend. */

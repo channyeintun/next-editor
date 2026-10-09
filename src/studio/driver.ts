@@ -1,5 +1,5 @@
 import { monaco, workspacePathFromMonacoModelUri } from "../monaco";
-import type { WorkspaceActions } from "../contexts/WorkspaceContext";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 import { selectIsCollapsed, type RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
 import { selectPreviewState, type SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";

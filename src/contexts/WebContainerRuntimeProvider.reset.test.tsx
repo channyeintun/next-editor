@@ -11,7 +11,7 @@ import { useWorkspaceActions } from "../hooks/useWorkspace";
 import { getOrBootSharedWebContainer } from "../runtime/webcontainer/sharedContainer";
 import { createWorkspaceFile } from "../starters/shared";
 import type { WorkspaceLessonType, WorkspaceProject } from "../types/workspace";
-import type { WorkspaceActions } from "./WorkspaceContext";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 import type {
   WebContainerRuntimeActions,
   WebContainerRuntimeMetadata,

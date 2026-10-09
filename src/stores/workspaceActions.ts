@@ -1,4 +1,3 @@
-import type { WorkspaceActions } from "../contexts/WorkspaceContext";
 import {
   WORKSPACE_STORAGE_KEY,
   normalizeProject,
@@ -16,9 +15,13 @@ import {
 import {
   isWorkspaceTextFile,
   normalizeWorkspacePath,
+  type WorkspaceFile,
+  type WorkspaceFileContent,
+  type WorkspaceFileEncoding,
+  type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
-import { prepareTextEditEvent } from "../types/textEdit";
+import { prepareTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import { writeStoredFileSidebarCollapsed } from "../utils/sidebarLayout";
 
 /**
@@ -71,6 +74,56 @@ async function persistWorkspace(
     console.warn("Failed to save workspace snapshot:", error);
   }
 }
+
+export interface WorkspaceActions {
+  setActiveFilePath: (path: string) => void;
+  setPreviewFilePath: (path: string) => void;
+  setCollapsedFolders: (paths: string[]) => void;
+  setSidebarScrollTop: (scrollTop: number) => void;
+  setSidebarWidth: (width: number) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  /**
+   * Where a replay starts the file explorer, without touching what the viewer
+   * has stored. Their own preference is still there the next time they open
+   * the editor themselves; a lesson only gets to choose its opening frame.
+   */
+  startSidebarCollapsed: (collapsed: boolean) => void;
+  createFile: (
+    path: string,
+    content?: WorkspaceFileContent,
+    encoding?: WorkspaceFileEncoding,
+  ) => void;
+  createFolder: (path: string) => void;
+  renameFile: (currentPath: string, nextPath: string) => void;
+  renameFolder: (currentPath: string, nextPath: string) => void;
+  deleteFile: (path: string) => void;
+  deleteFolder: (path: string) => void;
+  updateFileContent: (path: string, content: string) => void;
+  applyFileTextEdits: (event: TextEditEvent) => string | null;
+  notifyAssetAvailable: (assetId: string) => void;
+  saveProject: () => Promise<void>;
+  loadProject: (
+    project: WorkspaceProject,
+    activeFilePath?: string,
+    collapsedFolders?: string[],
+    sidebarScrollTop?: number,
+  ) => void;
+  reconcileExternalProject: (project: WorkspaceProject) => void;
+  updateLessonType: (lessonType: WorkspaceLessonType) => void;
+  getProject: () => WorkspaceProject;
+  getWorkspaceRevision: () => number;
+  getActiveFilePath: () => string;
+  getCollapsedFolders: () => string[];
+  getSidebarScrollTop: () => number;
+  getSidebarWidth: () => number;
+  getSidebarCollapsed: () => boolean;
+  getFile: (path: string) => WorkspaceFile | null;
+  subscribeWorkspaceSync: (listener: (mutation: WorkspaceSyncMutation) => void) => () => void;
+}
+
+export type WorkspaceSyncMutation =
+  | { kind: "file"; revision: number; file: WorkspaceFile }
+  | { kind: "project"; revision: number; project: WorkspaceProject };
 
 /**
  * The imperative workspace API over one store, as WorkspaceActionsContext

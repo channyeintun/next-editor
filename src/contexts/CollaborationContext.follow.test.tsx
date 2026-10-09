@@ -230,7 +230,8 @@ import {
 } from "../storage/workspaceAssetStore";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
-import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
+import { WorkspaceActionsContext } from "./WorkspaceContext";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 import type { WorkspaceFile } from "../types/workspace";
 
 /**

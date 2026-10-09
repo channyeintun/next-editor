@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { NextEditorActionsContext, type NextEditorActions } from "../../contexts/NextEditorContext";
-import { WorkspaceActionsContext, type WorkspaceActions } from "../../contexts/WorkspaceContext";
+import { WorkspaceActionsContext } from "../../contexts/WorkspaceContext";
+import type { WorkspaceActions } from "../../stores/workspaceActions";
 import type { WorkspaceProject } from "../../types/workspace";
 import { MAX_WORKSPACE_ASSET_BYTES } from "../../utils/workspaceFileUpload";
 import { useWorkspaceFileImport } from "./useWorkspaceFileImport";

@@ -17,7 +17,7 @@ import {
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
 } from "../../contexts/WebContainerRuntimeContext";
-import type { WorkspaceActions } from "../../contexts/WorkspaceContext";
+import type { WorkspaceActions } from "../../stores/workspaceActions";
 import { WorkspaceProvider } from "../../contexts/WorkspaceProvider";
 import { useWorkspaceActions } from "../../hooks/useWorkspace";
 import type { PreviewAdapterHandle } from "../../stores/previewAdapterHandle";

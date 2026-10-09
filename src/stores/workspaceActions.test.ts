@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { WorkspaceSyncMutation } from "../contexts/WorkspaceContext";
+import type { WorkspaceSyncMutation } from "./workspaceActions";
 import type { WorkspaceAssetDescriptor, WorkspaceProject } from "../types/workspace";
 import { FILE_SIDEBAR_COLLAPSED_STORAGE_KEY } from "../utils/sidebarLayout";
 

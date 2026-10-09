@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import * as Y from "yjs";
-import type { WorkspaceActions } from "../contexts/WorkspaceContext";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import {
   COLLABORATION_ORIGIN,

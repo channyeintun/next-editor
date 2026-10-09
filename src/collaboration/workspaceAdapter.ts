@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import type { WorkspaceActions } from "../contexts/WorkspaceContext";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 import type { TextEditEvent } from "../types/textEdit";
 import {
   getCollaborationTexts,

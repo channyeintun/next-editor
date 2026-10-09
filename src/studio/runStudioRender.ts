@@ -1,7 +1,7 @@
 import type { Recording } from "../core/src";
 import type { EditorActorRef } from "../core/src/useNextEditor";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
-import type { WorkspaceActions } from "../contexts/WorkspaceContext";
+import type { WorkspaceActions } from "../stores/workspaceActions";
 import type { RuntimePanelStoreInstance } from "../stores/runtimePanelStore";
 import type { SlidesStoreInstance } from "../stores/slidesStore";
 import type { WhiteboardStoreInstance } from "../stores/whiteboardStore";

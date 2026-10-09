@@ -14,7 +14,8 @@ import { getAgentCredentialStore } from "../../agent/credentials";
 import { getAgentSessionStore, resolveConfirmation, startAgentRun } from "../../agent/agentSession";
 import { MAX_CHAT_IMAGES } from "../../agent/imageAttachments";
 import type { ChatStatus } from "../../types/chat";
-import { WorkspaceStoreContext, type WorkspaceStoreInstance } from "../../stores/workspaceStore";
+import type { WorkspaceStoreInstance } from "../../stores/workspaceStore";
+import { WorkspaceStoreContext } from "../../contexts/WorkspaceContext";
 import AgentPanel from "./AgentPanel";
 
 const metadata = vi.hoisted(() => ({ isPlaying: false, isRecording: false }));
