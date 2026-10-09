@@ -323,6 +323,25 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     return promise;
   };
 
+  /**
+   * The instance when the runtime is up and nothing is preparing it; null means go
+   * through prepareRuntime.
+   */
+  const getReadyInstance = (generation: number): WebContainer | null => {
+    const instance = instanceRef.current;
+    if (
+      !instance ||
+      !isProjectMounted() ||
+      prepareRuntimePromiseRef.current !== null ||
+      !isRuntimeGenerationActive(generation)
+    ) {
+      return null;
+    }
+
+    const initCommand = runnerConfigRef.current.initCommand.trim();
+    return !initCommand || hasRunInitCommandRef.current ? instance : null;
+  };
+
   const runPrepareRuntime = async (generation: number) => {
     if (!isSupported) {
       setStatus("error");
@@ -443,6 +462,12 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   /**
    * Prepares the runtime (joining a boot or install already under way) and runs a
    * terminal task on it; a failure is reported in the runner console.
+   *
+   * A runtime that is already up is not prepared again: sendTerminalInput runs per
+   * keystroke, and a full prepare would clear the runner's error and re-sync the whole
+   * project before each key. The workspace-sync subscription keeps the container
+   * current, and sendTerminalInput still flushes queued writes first. A changed init
+   * command resets hasRunInitCommandRef, so the next call prepares and installs again.
    */
   const withPreparedRuntime = async (
     task: (instance: WebContainer, generation: number) => Promise<void>,
@@ -454,7 +479,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     const generation = getRuntimeGeneration();
 
     await reportFailure(async () => {
-      const instance = await prepareRuntime();
+      const instance = getReadyInstance(generation) ?? (await prepareRuntime());
       if (instance && isRuntimeGenerationActive(generation)) {
         await task(instance, generation);
       }

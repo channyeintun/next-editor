@@ -29,6 +29,15 @@ vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
   };
 });
 
+// A pass-through spy, so a test can count whole-project syncs.
+vi.mock("../runtime/webcontainer/files", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runtime/webcontainer/files")>();
+  return {
+    ...actual,
+    syncWorkspaceProject: vi.fn<typeof actual.syncWorkspaceProject>(actual.syncWorkspaceProject),
+  };
+});
+
 interface DirEntry {
   name: string;
   isDirectory: () => boolean;
@@ -753,6 +762,121 @@ describe("WebContainerRuntimeProvider runner control", () => {
 
     expect(probes.lastOutput).toContain("one\ntwo\nthree\n");
     expect(probes.metadataRenders).toBe(metadataRendersBefore);
+  });
+});
+
+describe("WebContainerRuntimeProvider terminal", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("crossOriginIsolated", true);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Starts the runtime on a container whose install succeeds, whose shell stays
+   * open and whose runner exits with `runnerExitCode`.
+   */
+  async function startRuntimeWithRunnerExit(runnerExitCode: number) {
+    const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
+    const { instance } = createFakeInstance(fakeFs);
+    const spawned: string[] = [];
+    vi.mocked(instance.spawn).mockImplementation((async (command: string, args: string[]) => {
+      const line = [command, ...(args ?? [])].join(" ");
+      spawned.push(line);
+      const isShell = command === "jsh";
+      return {
+        output: new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        input: new WritableStream(),
+        exit: isShell
+          ? new Promise<number>(() => {})
+          : Promise.resolve(line.includes("pnpm dev") ? runnerExitCode : 0),
+        kill: vi.fn<() => void>(),
+        resize: vi.fn<() => void>(),
+      } as unknown as WebContainerProcess;
+    }) as never);
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
+    vi.mocked(getOrBootSharedWebContainer).mockReset().mockResolvedValue(instance);
+
+    const captured: {
+      runtime: WebContainerRuntimeActions | null;
+      workspace: WorkspaceActions | null;
+      status: string | null;
+      errorMessage: string | null;
+    } = { runtime: null, workspace: null, status: null, errorMessage: null };
+    function Capture() {
+      captured.runtime = useWebContainerRuntimeActions();
+      captured.workspace = useWorkspaceActions();
+      const metadata = useWebContainerRuntimeMetadata();
+      captured.status = metadata.status;
+      captured.errorMessage = metadata.errorMessage;
+      return null;
+    }
+    render(
+      <WorkspaceProvider>
+        <WebContainerRuntimeProvider allowAmbientStart={false}>
+          <Capture />
+        </WebContainerRuntimeProvider>
+      </WorkspaceProvider>,
+    );
+    await act(async () => {
+      await captured.runtime?.startRuntime();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    return { captured, fakeFs, spawned };
+  }
+
+  // Opening the Terminal tab or typing in it used to re-run the whole prepare,
+  // whose stale-error clear wiped the runner's failure while status stayed "error".
+  it("keeps a runner error while the viewer uses the terminal", async () => {
+    const { captured, spawned } = await startRuntimeWithRunnerExit(1);
+    expect(captured.status).toBe("error");
+    const runnerError = captured.errorMessage;
+    expect(runnerError).toBeTruthy();
+
+    await act(async () => {
+      await captured.runtime?.startTerminalSession();
+      await captured.runtime?.sendTerminalInput("l");
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(captured.errorMessage).toBe(runnerError);
+    expect(captured.status).toBe("error");
+    expect(spawned.filter((line) => line.includes("install"))).toHaveLength(1);
+    expect(spawned.filter((line) => line === "jsh")).toHaveLength(1);
+  });
+
+  it("does not re-sync the project per keystroke", async () => {
+    const { syncWorkspaceProject } = await import("../runtime/webcontainer/files");
+    const { captured, fakeFs } = await startRuntimeWithRunnerExit(0);
+    await act(async () => {
+      await captured.runtime?.startTerminalSession();
+    });
+    const projectSyncs = vi.mocked(syncWorkspaceProject).mock.calls.length;
+
+    await act(async () => {
+      for (const key of ["l", "s", " "]) {
+        await captured.runtime?.sendTerminalInput(key);
+      }
+    });
+    expect(vi.mocked(syncWorkspaceProject).mock.calls.length).toBe(projectSyncs);
+
+    // The workspace subscription still carries an edit into the container.
+    act(() => captured.workspace?.createFile("notes.txt", "draft"));
+    await act(async () => {
+      await captured.runtime?.sendTerminalInput("\n");
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    await expect(fakeFs.fs.readFile("notes.txt", "utf-8")).resolves.toBe("draft");
   });
 });
 
