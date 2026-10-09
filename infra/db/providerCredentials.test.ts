@@ -100,7 +100,7 @@ describe("provider credentials", () => {
   it("replaces a key in place, keeping created_at and clearing invalidated_at", async () => {
     const { db } = openDb();
     await putProviderCredential(db, sealed());
-    await invalidateProviderCredential(db, "user-1", "athanlab", 1_500);
+    await invalidateProviderCredential(db, "user-1", "athanlab", 1_500, IV);
 
     await putProviderCredential(
       db,
@@ -121,8 +121,8 @@ describe("provider credentials", () => {
     const { db } = openDb();
     await putProviderCredential(db, sealed());
 
-    await invalidateProviderCredential(db, "user-1", "athanlab", 1_500);
-    await invalidateProviderCredential(db, "user-1", "athanlab", 1_900);
+    await invalidateProviderCredential(db, "user-1", "athanlab", 1_500, IV);
+    await invalidateProviderCredential(db, "user-1", "athanlab", 1_900, IV);
 
     expect((await getProviderCredential(db, "user-1", "athanlab"))?.invalidated_at).toBe(1_500);
   });
@@ -191,7 +191,7 @@ describe("provider credentials", () => {
     const { db } = openDb();
     await putProviderCredential(db, sealed());
     await acquireCredentialProbe(db, "user-1", "athanlab", IV, "a", 1_000, 15_000);
-    await invalidateProviderCredential(db, "user-1", "athanlab", 1_500);
+    await invalidateProviderCredential(db, "user-1", "athanlab", 1_500, IV);
 
     expect(await acquireCredentialProbe(db, "user-1", "athanlab", IV, "b", 20_000, 15_000)).toBe(
       false,

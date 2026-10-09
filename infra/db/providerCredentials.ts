@@ -90,27 +90,17 @@ export async function putProviderCredential(
 
 /**
  * Mark a stored key dead after the provider answered 401 for it, so it is
- * never sent again. Pass the `iv` of the row that was used: every seal draws a
- * fresh nonce, so a key the user replaced while that request was in flight is
- * left alone instead of being invalidated for the old key's failure.
+ * never sent again. The `iv` of the row that was used is required: every seal
+ * draws a fresh nonce, so a key the user replaced while that request was in
+ * flight is left alone instead of being invalidated for the old key's failure.
  */
 export async function invalidateProviderCredential(
   db: D1Database,
   userId: string,
   provider: CredentialProvider,
   at: number,
-  iv?: string,
+  iv: string,
 ): Promise<void> {
-  if (iv === undefined) {
-    await db
-      .prepare(
-        `UPDATE user_provider_credentials SET invalidated_at = ?
-         WHERE user_id = ? AND provider = ? AND invalidated_at IS NULL`,
-      )
-      .bind(at, userId, provider)
-      .run();
-    return;
-  }
   await db
     .prepare(
       `UPDATE user_provider_credentials SET invalidated_at = ?
