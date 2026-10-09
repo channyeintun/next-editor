@@ -172,6 +172,7 @@ export default function PlaylistCard({
           <div className="flex items-center gap-1.5">
             <input
               autoFocus
+              aria-label="Playlist name"
               value={titleValue}
               onChange={(e) => setTitleValue(e.target.value)}
               onKeyDown={(e) => {

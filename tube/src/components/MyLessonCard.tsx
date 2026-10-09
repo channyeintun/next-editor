@@ -272,6 +272,7 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
           <div className="flex items-center gap-1.5">
             <input
               autoFocus
+              aria-label="Lesson name"
               value={titleValue}
               onChange={(e) => setTitleValue(e.target.value)}
               onKeyDown={(e) => {

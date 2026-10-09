@@ -60,9 +60,14 @@ export default function UsernameEditor({ username }: { username: string }) {
   return (
     <div className="mb-4 flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <span className="text-sm text-slate-500">@</span>
+        <span aria-hidden="true" className="text-sm text-slate-500">
+          @
+        </span>
         <input
           autoFocus
+          aria-label="Username"
+          autoComplete="username"
+          spellCheck={false}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
