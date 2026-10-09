@@ -42,8 +42,7 @@ import { reportMachineError, resolveBoundedReplayTime, type ReplayStep } from ".
 // editorMachine.ts wires each of these into `actions: {}` via `assign(fn)` —
 // kept there (rather than wrapped here) so XState's `setup()` can still infer
 // the machine's exact context/event/actor types for the wrapped action, which
-// isn't independently nameable outside `setup()`. Extracted purely so the
-// machine file reads as wiring; zero behavior change.
+// isn't independently nameable outside `setup()`.
 //
 // Siblings: the editor frame replay and Monaco rendering are in frameReplay.ts,
 // the narration player's driver in playbackActors.ts, and what the replay steps

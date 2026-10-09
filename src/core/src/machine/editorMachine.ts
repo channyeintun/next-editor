@@ -300,7 +300,9 @@ export const editorMachine = setup({
   actions: {
     // Recording (capture-side) actions — bodies live in captureActions.ts,
     // frameCapture.ts and screenCaptureActions.ts, wrapped here so `setup()` can
-    // infer this machine's exact context/event/actor types.
+    // infer this machine's exact context/event/actor types. The recorder actions
+    // (start, pause, resume and stop of the microphone, camera and screen
+    // recorders) and retakeRecording keep their bodies inline.
     setCameraRecordingEnabled: assign(setCameraRecordingEnabled),
     setMicrophoneDevice: assign(setMicrophoneDevice),
     prepareExternalAudioRecording: assign(prepareExternalAudioRecording),
@@ -500,7 +502,8 @@ export const editorMachine = setup({
 
     // Playback (replay-side) actions — bodies live in replayActions.ts and
     // frameReplay.ts, wrapped here so `setup()` can infer this machine's exact
-    // context/event/actor types.
+    // context/event/actor types. preserveLearnerWorkspace and
+    // syncStreamedRecordingGrowth keep their bodies inline.
     extendRecording: assign(extendRecording),
     appendRecordingDelta: assign(appendRecordingDelta),
     addCaptionTrack: assign(addCaptionTrack),
@@ -999,9 +1002,10 @@ export const editorMachine = setup({
           actions: ["detachPlaybackWorkspace"],
         },
         // Streamed growth catches the replay up only while it owns the workspace. Once the
-        // viewer has taken over (paused always detaches; ready/ended detach on WORKSPACE_EVENT),
-        // detachPlaybackWorkspace has reset the replay cursors, so re-applying would rebuild the
-        // recording on top of the viewer's edits. PLAY/SEEK reattach and pick up the new data.
+        // viewer has taken over (paused and ended detach on entry; ready detaches on
+        // WORKSPACE_EVENT), detachPlaybackWorkspace has reset the replay cursors, so re-applying
+        // would rebuild the recording on top of the viewer's edits. PLAY/SEEK reattach and pick
+        // up the new data.
         EXTEND_RECORDING: [
           {
             guard: "isGrowthWhileViewerOwnsWorkspace",

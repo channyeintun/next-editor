@@ -50,8 +50,7 @@ import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 // into `actions: {}` via `assign(fn)` / `enqueueActions(fn)` — kept there
 // (rather than wrapped here) so XState's `setup()` can still infer the
 // machine's exact context/event/actor types for the wrapped action, which
-// isn't independently nameable outside `setup()`. Extracted purely so the
-// machine file reads as wiring; zero behavior change.
+// isn't independently nameable outside `setup()`.
 // ============================================================================
 
 /**

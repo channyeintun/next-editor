@@ -363,10 +363,12 @@ export interface EditorMachineContext extends EditorMachineHostHooks {
   /** Per-machine sequence used to allocate collision-free screen-recorder child ids. */
   screenRecorderGeneration: number;
   /**
-   * Display capture stream acquired at record-button click time (transient-activation
-   * constraint), carried on the START_RECORDING event. Owned by the screen actor once spawned;
-   * held here only across the arming gap so abort paths can release it. Null when screen
-   * recording is off or after the actor has taken ownership/finished.
+   * The display stream of the current capture, acquired at record-button click time
+   * (transient-activation constraint) and set by START_RECORDING. Owned by the screen actor
+   * once spawned (it stops the tracks on teardown), but kept here until that capture's
+   * SCREEN_STOPPED/SCREEN_ERROR, so the arming-gap abort paths can release it and a re-sent
+   * START_RECORDING carrying the same stream is not released. Null when screen recording is
+   * off or the capture has ended.
    */
   screenStream: MediaStream | null;
   /** Editor references */
@@ -413,8 +415,8 @@ export interface EditorMachineContext extends EditorMachineHostHooks {
   /** Whether manual workspace changes should suppress recorded workspace replay */
   hasManualWorkspaceOverride: boolean;
   /**
-   * The recorded workspace as it was handed to the viewer — on load, on pause, at the
-   * end — or as they had it when their edits were last saved. Anything the viewer
+   * The recorded workspace as it was handed to the viewer — on pause and at the end —
+   * or as they had it when their edits were last saved. Anything the viewer
    * changes after that is theirs, and is saved through `onLearnerWorkspaceSaved`
    * before the recording takes the workspace back. Null while the recording owns it.
    */
