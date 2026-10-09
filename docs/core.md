@@ -11,6 +11,7 @@ flowchart TB
     Types[types.ts]
     Slides[slides.ts]
     Preview[preview.ts<br/>preview, iframe-interaction + API-client model]
+    TextEdit[textEdit.ts<br/>Monaco text-edit model]
     Hook[useNextEditor.ts<br/>actor senders + interaction effects]
     Machine[machine/editorMachine.ts]
     Timeline[machine/timelineMachine.ts]

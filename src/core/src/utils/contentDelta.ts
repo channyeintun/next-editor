@@ -12,7 +12,7 @@ import {
   applyTextEditEvent,
   type TextEditChange,
   type TextEditEvent,
-} from "../../../types/textEdit";
+} from "../textEdit";
 
 const contentTextEncoder = new TextEncoder();
 const contentTextDecoder = new TextDecoder();
