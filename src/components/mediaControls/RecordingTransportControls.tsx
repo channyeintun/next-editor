@@ -101,7 +101,8 @@ const RecordingTransportControls = ({
       <button
         type="button"
         onClick={isRecordingPaused ? resumeRecording : pauseRecording}
-        aria-pressed={isRecordingPaused}
+        // An action button, not a toggle: its name says what a click does, so a pressed
+        // state would contradict it ("Resume recording, pressed" while paused).
         aria-label={isRecordingPaused ? "Resume recording" : "Pause recording"}
         title={
           isRecordingPaused

@@ -35,14 +35,17 @@ const renderControls = () => render(<RecordingTransportControls iconSize={16} cl
 describe("RecordingTransportControls", () => {
   it("pauses a running take and resumes a paused one", () => {
     const { unmount } = renderControls();
-    fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
+    const pause = screen.getByRole("button", { name: "Pause recording" });
+    // Named for the action it takes, so it has no pressed state to contradict that name.
+    expect(pause).not.toHaveAttribute("aria-pressed");
+    fireEvent.click(pause);
     expect(actions.pauseRecording).toHaveBeenCalledTimes(1);
     unmount();
 
     take.isRecordingPaused = true;
     renderControls();
     const resume = screen.getByRole("button", { name: "Resume recording" });
-    expect(resume).toHaveAttribute("aria-pressed", "true");
+    expect(resume).not.toHaveAttribute("aria-pressed");
     fireEvent.click(resume);
     expect(actions.resumeRecording).toHaveBeenCalledTimes(1);
   });
