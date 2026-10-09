@@ -19,6 +19,7 @@ const VOICE_ORIGIN = "https://collaboration-voice.internal";
 const ROOM_ID = "10000000-0000-4000-8000-000000000001";
 const MEMBER_ID = "20000000-0000-4000-8000-000000000002";
 const PEER_ID = "20000000-0000-4000-8000-000000000003";
+const OTHER_PEER_ID = "20000000-0000-4000-8000-000000000004";
 
 let nextId = 1;
 function uuid(): string {
@@ -170,5 +171,50 @@ describe("CollaborationVoiceRoomDurableObject roster upserts", () => {
         }),
       );
     }
+  });
+
+  it("sends every member the identical upsert frame", async () => {
+    const { join, message } = createVoiceRoom(VOICE_ENABLED_ENV);
+    const member = join(MEMBER_ID);
+    const peers = [join(PEER_ID), join(OTHER_PEER_ID)];
+
+    await message(member, {
+      type: "voice.mute-changed",
+      version: COLLABORATION_VOICE_PROTOCOL_VERSION,
+      revision: 1,
+      muted: false,
+    });
+
+    const upsertFrames = [member, ...peers].map((socket) =>
+      socket.sent.filter(
+        (frame): frame is string =>
+          typeof frame === "string" && frame.includes('"voice.participant-upsert"'),
+      ),
+    );
+    expect(upsertFrames[0]).toHaveLength(1);
+    expect(upsertFrames[1]).toEqual(upsertFrames[0]);
+    expect(upsertFrames[2]).toEqual(upsertFrames[0]);
+  });
+
+  it("closes a member whose send fails and still reaches the rest", async () => {
+    const { join, message } = createVoiceRoom(VOICE_ENABLED_ENV);
+    const member = join(MEMBER_ID);
+    const broken = join(PEER_ID);
+    const peer = join(OTHER_PEER_ID);
+    broken.send = () => {
+      throw new Error("send failed");
+    };
+
+    await message(member, {
+      type: "voice.mute-changed",
+      version: COLLABORATION_VOICE_PROTOCOL_VERSION,
+      revision: 1,
+      muted: false,
+    });
+
+    expect(broken.closeCode).toBe(1011);
+    expect(peer.messages()).toContainEqual(
+      expect.objectContaining({ type: "voice.participant-upsert" }),
+    );
   });
 });

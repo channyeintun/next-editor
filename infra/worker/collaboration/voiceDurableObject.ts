@@ -135,9 +135,13 @@ function attachmentFor(socket: WebSocket): VoiceSocketAttachment | null {
   return result.success ? result.data : null;
 }
 
+function encodeVoiceMessage(message: VoiceServerMessage): string {
+  return JSON.stringify(voiceServerMessageSchema.parse(message));
+}
+
 function sendVoiceMessage(socket: WebSocket, message: VoiceServerMessage): void {
   if (!isOpen(socket)) return;
-  socket.send(JSON.stringify(voiceServerMessageSchema.parse(message)));
+  socket.send(encodeVoiceMessage(message));
 }
 
 export function isVoiceChatEnabled(env: Env): boolean {
@@ -337,10 +341,16 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     return publications;
   }
 
+  // Validated and encoded once, then the same frame goes to every member.
   private broadcast(message: VoiceServerMessage, except?: WebSocket): void {
+    const encoded = encodeVoiceMessage(message);
     for (const { socket } of this.activeSockets()) {
-      if (socket === except) continue;
-      sendVoiceMessage(socket, message);
+      if (socket === except || !isOpen(socket)) continue;
+      try {
+        socket.send(encoded);
+      } catch {
+        socket.close(1011, "broadcast failed");
+      }
     }
   }
 
