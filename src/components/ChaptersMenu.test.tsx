@@ -71,6 +71,8 @@ describe("ChaptersMenu", () => {
     expect(actions.setChapters).toHaveBeenLastCalledWith("lesson", [
       { time: 60_000, title: "Routing" },
     ]);
+    // Focus stays in the panel, on the next row, not on the page's start.
+    expect(screen.getByRole("button", { name: "Delete Routing" })).toHaveFocus();
 
     fireEvent.click(screen.getByRole("button", { name: /Add a chapter at 1:05/ }));
     expect(actions.setChapters).toHaveBeenLastCalledWith("lesson", [
@@ -78,6 +80,26 @@ describe("ChaptersMenu", () => {
       { time: 60_000, title: "Routing" },
       { time: 65_000, title: "Chapter 3" },
     ]);
+  });
+
+  it("moves focus to Add when the author deletes the last chapter", () => {
+    const oneChapter = { ...lesson, chapters: [{ time: 0, title: "Setup" }] } as Recording;
+    const { rerender } = render(
+      <ChaptersMenu recording={oneChapter} editable iconSize={16} buttonClassName="" />,
+    );
+    openMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Setup" }));
+    expect(actions.setChapters).toHaveBeenLastCalledWith("lesson", []);
+    rerender(
+      <ChaptersMenu
+        recording={{ ...oneChapter, chapters: [] }}
+        editable
+        iconSize={16}
+        buttonClassName=""
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Add a chapter at/ })).toHaveFocus();
   });
 
   it("names a chapter by its place when the author clears its title", () => {

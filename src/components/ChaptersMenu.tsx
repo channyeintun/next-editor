@@ -70,6 +70,7 @@ export default function ChaptersMenu({
   const panelId = useId();
   const headingId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const addChapterRef = useRef<HTMLButtonElement>(null);
   const chapters = recording.chapters ?? [];
   // Only the open menu shows the playhead (the exact time, the chapter playing), so a
   // closed one does not re-render every tick.
@@ -191,7 +192,16 @@ export default function ChaptersMenu({
                   {editable ? (
                     <button
                       type="button"
-                      onClick={() => update(chapters.filter((_, at) => at !== index))}
+                      onClick={(event) => {
+                        // The focused button unmounts with its row: focus a neighbour's
+                        // Delete (its row is keyed, so it survives), or Add when none is left.
+                        const row = event.currentTarget.closest("li");
+                        const next = (
+                          row?.nextElementSibling ?? row?.previousElementSibling
+                        )?.querySelector<HTMLElement>('button[aria-label^="Delete"]');
+                        update(chapters.filter((_, at) => at !== index));
+                        (next ?? addChapterRef.current)?.focus();
+                      }}
                       aria-label={`Delete ${chapter.title}`}
                       className="inline-flex size-6 shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:text-red-400"
                     >
@@ -205,6 +215,7 @@ export default function ChaptersMenu({
           <div className="mt-1 flex flex-col border-t border-slate-700 pt-1">
             {editable ? (
               <button
+                ref={addChapterRef}
                 type="button"
                 onClick={() =>
                   update([
