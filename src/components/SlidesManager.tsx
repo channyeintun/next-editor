@@ -83,6 +83,7 @@ function BackgroundPicker({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const labelId = useId();
 
   const customImage = isCustomSlideBackground(value) ? getSlideBackgroundImage(value) : undefined;
 
@@ -113,15 +114,17 @@ function BackgroundPicker({
 
   return (
     <div className="space-y-1.5">
-      <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+      <span
+        id={labelId}
+        className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400"
+      >
         Background
       </span>
-      <div className="flex items-center gap-2">
+      <div role="group" aria-labelledby={labelId} className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => choose(undefined)}
-          title="None"
-          aria-label="No background"
+          title="No background"
           aria-pressed={!value}
           className={`flex size-7 shrink-0 items-center justify-center rounded-md border ${noneBgClass} text-[10px] font-semibold text-slate-400 transition-colors ${
             !value

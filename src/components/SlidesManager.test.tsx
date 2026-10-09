@@ -103,7 +103,7 @@ describe("SlidesManager", () => {
     );
     // The text and background clear for the next slide; the type stays.
     expect(screen.getByPlaceholderText(/<h1>Title<\/h1>/)).toHaveValue("");
-    expect(screen.getByLabelText("No background")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "None" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("gives an empty new slide its type's starter content", () => {
@@ -136,6 +136,23 @@ describe("SlidesManager", () => {
 
     expect(html).toHaveAttribute("aria-pressed", "true");
     expect(markdown).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("names the background picker's options by their visible text, under its caption", () => {
+    renderManager([slide("a", 0)]);
+    const picker = screen.getByRole("group", { name: "Background" });
+    const none = screen.getByRole("button", { name: "None" });
+
+    expect(picker).toContainElement(none);
+    expect(picker).toContainElement(screen.getByRole("button", { name: "Texture 1" }));
+    expect(none).toHaveAccessibleDescription("No background");
+    expect(none).toHaveAttribute("aria-pressed", "true");
+
+    // The slide editor has a second picker; the first is the new-slide form's.
+    clickThumbnail("markdown");
+    const pickers = screen.getAllByRole("group", { name: "Background" });
+    expect(pickers).toHaveLength(2);
+    expect(pickers[1]).toContainElement(screen.getAllByRole("button", { name: "None" })[1]);
   });
 
   it("edits a slide's text and background in place", () => {
