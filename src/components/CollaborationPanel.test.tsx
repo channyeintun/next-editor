@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { useCollaboration } from "../contexts/CollaborationContext";
 
@@ -412,6 +412,30 @@ describe("CollaborationPanel lists", () => {
       expect.stringContaining("editor · 2/10 used"),
       expect.stringContaining("viewer · 0/10 used"),
     ]);
+  });
+
+  it("names each Revoke button after the invitation it revokes", async () => {
+    const state = makeOwnerCollaborationState();
+    collaborationState = state;
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    const list = listUnder("Active invitation records");
+    expect(
+      within(list)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Revoke", "Revoke"]);
+    expect(
+      within(list).getByRole("button", { name: "Revoke viewer invitation, 0 of 10 used" }),
+    ).toBeInTheDocument();
+
+    const revoke = within(list).getByRole("button", {
+      name: "Revoke editor invitation, 2 of 10 used",
+    });
+    fireEvent.click(revoke);
+    expect(state.revokeInvitation).toHaveBeenCalledWith("70000000-0000-4000-8000-000000000001");
+    await waitFor(() => expect(revoke).toBeEnabled());
   });
 });
 

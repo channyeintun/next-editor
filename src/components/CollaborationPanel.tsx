@@ -522,9 +522,10 @@ function RoomOwnerSection({
                   </span>
                   <button
                     type="button"
+                    aria-label={`Revoke ${invitation.role} invitation, ${invitation.useCount} of ${invitation.maxUses} used`}
                     disabled={isBusy}
                     onClick={() => void run(() => collaboration.revokeInvitation(invitation.id))}
-                    className="text-rose-300 hover:text-rose-200"
+                    className="inline-flex min-h-6 items-center rounded px-1.5 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200 disabled:opacity-50"
                   >
                     Revoke
                   </button>
