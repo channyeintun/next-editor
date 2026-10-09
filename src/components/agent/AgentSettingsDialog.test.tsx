@@ -84,16 +84,39 @@ describe("AgentSettingsDialog", () => {
     expect(screen.getByText("No models match “nothing”.")).toBeInTheDocument();
   });
 
+  it("announces how many models the search text matches", () => {
+    render(<Dialog />);
+    const search = screen.getByLabelText("Search OpenRouter models");
+    // The filter status is mounted empty before the first keystroke, so a
+    // screen reader hears every change to it.
+    const filterStatus = screen.getAllByRole("status").find((region) => region.textContent === "");
+    expect(filterStatus).toBeDefined();
+
+    fireEvent.change(search, { target: { value: "vendor" } });
+    expect(filterStatus).toHaveTextContent("2 models match");
+
+    fireEvent.change(search, { target: { value: "VISION" } });
+    expect(filterStatus).toHaveTextContent("1 model matches");
+
+    fireEvent.change(search, { target: { value: "  nothing " } });
+    expect(filterStatus).toHaveTextContent("No models match nothing");
+
+    fireEvent.change(search, { target: { value: "" } });
+    expect(filterStatus).toBeEmptyDOMElement();
+  });
+
   it("says when the list is loading or why it fell back, and shows this session's usage", () => {
     act(() => getAgentStore().trigger.addUsage({ usage: { inputTokens: 1200, outputTokens: 34 } }));
     const { rerender } = render(
       <Dialog catalog={{ ...loadedCatalog, isModelCatalogLoading: true }} />,
     );
-    expect(screen.getByText("Loading models from OpenRouter…")).toBeInTheDocument();
+    const catalogStatus = screen.getByText("Loading models from OpenRouter…");
+    expect(catalogStatus).toHaveAttribute("role", "status");
     expect(screen.getByText("Usage this session: 1200 in / 34 out tokens.")).toBeInTheDocument();
 
     rerender(<Dialog catalog={{ ...loadedCatalog, modelCatalogError: "Offline; fallbacks." }} />);
-    expect(screen.getByText("Offline; fallbacks.")).toBeInTheDocument();
+    // The same live region now carries the failure, so it is announced.
+    expect(catalogStatus).toHaveTextContent("Offline; fallbacks.");
   });
 
   it("saves the trimmed key, empties the field, and clears a saved key", () => {

@@ -36,6 +36,15 @@ function ModelSection({
   const usage = useSelector(agentStore, (s) => selectUsage(s.context));
   const { modelOptions, isModelCatalogLoading, modelCatalogError } = catalog;
   const filteredModelOptions = filterModelOptions(modelOptions, query);
+  const trimmedQuery = query.trim();
+  const matchCount = filteredModelOptions.length;
+  let filterStatus = "";
+  if (trimmedQuery) {
+    filterStatus =
+      matchCount === 0
+        ? `No models match ${trimmedQuery}`
+        : `${matchCount} ${matchCount === 1 ? "model matches" : "models match"}`;
+  }
 
   // A fieldset names the radio group; min-w-0 drops its min-content minimum
   // width so long model names still truncate instead of widening the card.
@@ -53,6 +62,11 @@ function ModelSection({
           className="h-9 w-full rounded-md border border-slate-700 bg-[#11141c] pl-9 pr-3 text-xs text-slate-100 outline-none placeholder:text-slate-400 focus:border-slate-500"
         />
       </div>
+      {/* Always mounted, so each filter result is announced as the search
+          text changes. */}
+      <p role="status" className="sr-only">
+        {filterStatus}
+      </p>
       <div className="mt-2 flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-md border border-slate-800 p-2">
         {filteredModelOptions.map((option) => (
           <label
@@ -79,7 +93,7 @@ function ModelSection({
           <p className="px-1.5 py-2 text-xs text-slate-400">No models match “{query.trim()}”.</p>
         ) : null}
       </div>
-      <p className="mt-2 text-[11px] text-slate-400">
+      <p role="status" className="mt-2 text-[11px] text-slate-400">
         {isModelCatalogLoading
           ? "Loading models from OpenRouter…"
           : (modelCatalogError ?? `${modelOptions.length} models from OpenRouter.`)}
