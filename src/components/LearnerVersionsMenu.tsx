@@ -128,7 +128,7 @@ export default function LearnerVersionsMenu({
         aria-live="polite"
         className={
           hasVersions
-            ? "sr-only text-xs text-slate-400 sm:not-sr-only sm:mr-1 sm:whitespace-nowrap"
+            ? "sr-only text-xs text-slate-300 sm:not-sr-only sm:mr-1 sm:whitespace-nowrap"
             : "sr-only"
         }
       >
@@ -166,7 +166,7 @@ export default function LearnerVersionsMenu({
           aria-label="Your edits"
           className="absolute bottom-full right-0 z-46 mb-2 w-64 rounded-lg border border-slate-700 bg-[#151821] py-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
         >
-          <p className="px-3 pt-1.5 pb-1 text-xs text-slate-400">
+          <p className="px-3 pt-1.5 pb-1 text-xs text-slate-300">
             Your edits are saved when the lesson continues. Restore one to pick up where you left
             off.
           </p>
@@ -213,7 +213,7 @@ export default function LearnerVersionsMenu({
                     <span className="text-sm text-white">
                       Restore edits at {formatPlaybackTime(version.recordingTime)}
                     </span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-300">
                       Saved {formatSavedAgo(version.savedAt, now)}
                     </span>
                   </button>

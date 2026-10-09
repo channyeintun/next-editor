@@ -22,7 +22,7 @@ export default function RecordingLoadError({
     <div className="absolute inset-0 z-10 flex items-center justify-center p-6" role="alert">
       <div className="max-w-sm rounded-xl border border-slate-700 bg-[#151821] p-6 text-center shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
         <p className="text-sm font-semibold text-white">Couldn&rsquo;t load this recording</p>
-        <p className="mt-2 text-xs leading-relaxed text-slate-400 wrap-break-word">{message}</p>
+        <p className="mt-2 text-xs leading-relaxed text-slate-300 wrap-break-word">{message}</p>
         {onRetry || onDismiss ? (
           <div className="mt-4 flex items-center justify-center gap-2">
             {onRetry ? (
@@ -38,7 +38,7 @@ export default function RecordingLoadError({
               <button
                 type="button"
                 onClick={onDismiss}
-                className="rounded-lg px-4 py-2 text-xs font-medium text-slate-400 transition-colors hover:text-white"
+                className="rounded-lg px-4 py-2 text-xs font-medium text-slate-300 transition-colors hover:text-white"
               >
                 Dismiss
               </button>

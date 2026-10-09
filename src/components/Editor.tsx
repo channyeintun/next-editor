@@ -242,7 +242,7 @@ function EditorLayout({
         {recordingLoading ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3">
             <LoadingSpinner label={null} />
-            <p aria-hidden="true" className="text-sm text-slate-400">
+            <p aria-hidden="true" className="text-sm text-slate-300">
               Loading recording…
             </p>
           </div>

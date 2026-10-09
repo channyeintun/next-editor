@@ -13,7 +13,7 @@ const DragDropOverlay: React.FC<DragDropOverlayProps> = ({ isDragging }) => {
     // drops) instead of this purely-visual hint capturing every drop.
     <div className="pointer-events-none fixed inset-0 bg-black/50 flex items-center justify-center z-105">
       <div className="bg-gray-800 rounded-lg border-2 border-dashed border-blue-400 p-8 text-center">
-        <div className="text-blue-400">
+        <div className="text-blue-300">
           <p className="text-lg font-medium">Drop lesson file URL here</p>
         </div>
       </div>

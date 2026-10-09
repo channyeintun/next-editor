@@ -475,7 +475,7 @@ function EditorHeader({ showImportExport, breadcrumb }: EditorHeaderProps) {
       <div className="flex items-center gap-2 min-w-0">
         <FileSidebarToggleButton />
         {breadcrumb ?? (
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Editor</span>
+          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Editor</span>
         )}
         {isSaving ? (
           <span className="text-[10px] text-slate-500" role="status">
