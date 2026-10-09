@@ -1215,11 +1215,23 @@ export function setCollaborationCurrentSlide(
   return nextRevision;
 }
 
+export interface CollaborationWhiteboardDeltaResult {
+  /** The room's whiteboard after the delta, in scene order. */
+  elements: WhiteboardElementJSON[];
+  /**
+   * Whether the room now shows exactly what the delta asked for: each upsert
+   * is (or equals) its element's winner and no removed ID has an element.
+   * False when another client's version won, so the caller's canvas does not
+   * show the room's result.
+   */
+  accepted: boolean;
+}
+
 export function applyCollaborationWhiteboardDelta(
   doc: Y.Doc,
   event: Pick<WhiteboardEvent, "upserts" | "removedIds">,
   origin: CollaborationTransactionOrigin = COLLABORATION_ORIGIN.localWhiteboard,
-): WhiteboardElementJSON[] {
+): CollaborationWhiteboardDeltaResult {
   // The O(1) check, not a projection: this runs for every local delta while
   // drawing, and the reads below reject a malformed or oversized board anyway.
   if (!isCollaborationTeachingInitialized(doc)) {
@@ -1245,8 +1257,10 @@ export function applyCollaborationWhiteboardDelta(
     winners.set(id, tombstone);
     changed.set(id, tombstone);
   }
+  const requested: SerializedCollaborationWhiteboardCandidate[] = [];
   for (const candidateValue of event.upserts ?? []) {
     const candidate = elementWhiteboardCandidate(candidateValue);
+    requested.push(candidate);
     const id = candidate.candidate.kind === "element" ? candidate.candidate.element.id : "";
     const previous = winners.get(id);
     if (!previous || compareWhiteboardCandidates(candidate, previous) > 0) {
@@ -1313,5 +1327,17 @@ export function applyCollaborationWhiteboardDelta(
       }
     }, origin);
   }
-  return next;
+  // Both sides are schema-normalized elements, so a request equal to the
+  // element already stored still counts as accepted.
+  const accepted =
+    requested.every(({ candidate }) => {
+      if (candidate.kind !== "element") return false;
+      const winner = winners.get(candidate.element.id)?.candidate;
+      return (
+        winner?.kind === "element" &&
+        (winner === candidate ||
+          JSON.stringify(winner.element) === JSON.stringify(candidate.element))
+      );
+    }) && (event.removedIds ?? []).every((id) => winners.get(id)?.candidate.kind !== "element");
+  return { elements: next, accepted };
 }

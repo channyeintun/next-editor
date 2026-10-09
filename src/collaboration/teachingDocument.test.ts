@@ -408,10 +408,65 @@ describe("collaboration teaching document", () => {
       whiteboardElements: [element("shape", 3)],
     });
 
-    const next = applyCollaborationWhiteboardDelta(doc, { upserts: [element("shape", 2)] });
+    const { elements, accepted } = applyCollaborationWhiteboardDelta(doc, {
+      upserts: [element("shape", 2)],
+    });
 
-    expect(next).toEqual([expect.objectContaining({ id: "shape", version: 3 })]);
-    expect(projectCollaborationTeachingDocument(doc).whiteboardElements).toEqual(next);
+    expect(elements).toEqual([expect.objectContaining({ id: "shape", version: 3 })]);
+    expect(projectCollaborationTeachingDocument(doc).whiteboardElements).toEqual(elements);
+    // Another client's version won, so the canvas does not show the result.
+    expect(accepted).toBe(false);
+
+    doc.destroy();
+  });
+
+  it("accepts a delta whose upserts win and whose removals take", () => {
+    const doc = new Y.Doc();
+    seedCollaborationTeachingDocument(doc, {
+      slides: [],
+      whiteboardElements: [element("shape", 1, "a0"), element("note", 1, "a1")],
+    });
+
+    expect(
+      applyCollaborationWhiteboardDelta(doc, {
+        upserts: [element("shape", 2, "a0")],
+        removedIds: ["note"],
+      }).accepted,
+    ).toBe(true);
+    // An ID the room never had is already absent.
+    expect(applyCollaborationWhiteboardDelta(doc, { removedIds: ["missing"] }).accepted).toBe(true);
+
+    doc.destroy();
+  });
+
+  it("accepts an upsert equal to the stored winner, whatever its key order", () => {
+    const doc = new Y.Doc();
+    seedCollaborationTeachingDocument(doc, {
+      slides: [],
+      whiteboardElements: [element("shape", 3)],
+    });
+    const reordered = Object.fromEntries(Object.entries(element("shape", 3)).reverse());
+
+    expect(
+      applyCollaborationWhiteboardDelta(doc, {
+        upserts: [reordered as ReturnType<typeof element>],
+      }).accepted,
+    ).toBe(true);
+
+    doc.destroy();
+  });
+
+  it("does not accept a removal that a newer upsert of the same element overrides", () => {
+    const doc = new Y.Doc();
+    seedCollaborationTeachingDocument(doc, { slides: [], whiteboardElements: [element("shape")] });
+
+    const { elements, accepted } = applyCollaborationWhiteboardDelta(doc, {
+      upserts: [element("shape", 5)],
+      removedIds: ["shape"],
+    });
+
+    expect(elements).toEqual([expect.objectContaining({ id: "shape", version: 5 })]);
+    expect(accepted).toBe(false);
 
     doc.destroy();
   });
@@ -427,12 +482,12 @@ describe("collaboration teaching document", () => {
     ]);
 
     applyCollaborationWhiteboardDelta(doc, { upserts: [partial] });
-    expect(applyCollaborationWhiteboardDelta(doc, { upserts: [completed] })[0]?.points).toEqual(
-      completed.points,
-    );
-    expect(applyCollaborationWhiteboardDelta(doc, { upserts: [partial] })[0]?.points).toEqual(
-      completed.points,
-    );
+    const longer = applyCollaborationWhiteboardDelta(doc, { upserts: [completed] });
+    expect(longer.elements[0]?.points).toEqual(completed.points);
+    expect(longer.accepted).toBe(true);
+    const shorter = applyCollaborationWhiteboardDelta(doc, { upserts: [partial] });
+    expect(shorter.elements[0]?.points).toEqual(completed.points);
+    expect(shorter.accepted).toBe(false);
 
     doc.destroy();
   });

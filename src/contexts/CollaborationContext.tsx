@@ -85,7 +85,6 @@ import {
   isCollaborationTeachingInitialized,
   projectCollaborationTeachingDocument,
   setCollaborationCurrentSlide,
-  validateCollaborationWhiteboardElement,
   type CollaborationTeachingProjection,
 } from "../collaboration/teachingDocument";
 import {
@@ -1222,30 +1221,18 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       if (!current || !canWriteRef.current || playbackRef.current) return false;
       if (!(event.upserts?.length || event.removedIds?.length)) return true;
       try {
-        const next = applyCollaborationWhiteboardDelta(current.doc, event);
-        const nextById = new Map(next.map((element) => [element.id, element] as const));
-        // `next` holds validated elements, whose keys come out in schema order,
-        // so compare with the validated form of each request, not the raw one.
-        const matchesRequestedDelta =
-          (event.upserts ?? []).every((element) => {
-            const projected = nextById.get(element.id);
-            return (
-              projected !== undefined &&
-              JSON.stringify(projected) ===
-                JSON.stringify(validateCollaborationWhiteboardElement(element))
-            );
-          }) && (event.removedIds ?? []).every((id) => !nextById.has(id));
+        const { elements: next, accepted } = applyCollaborationWhiteboardDelta(current.doc, event);
         // The teaching projection of these transactions runs in a microtask and
         // React applies it to the stores in an effect, both after this callback.
         // Tag that exact authoritative result so normalization cannot make this
         // local canvas echo look like a remote scene update. Only an accepted
         // delta is an echo: when another client's version won, the canvas does
         // not show the result and the projection must reach it.
-        if (matchesRequestedDelta) {
+        if (accepted) {
           localWhiteboardProjectionFingerprintRef.current = JSON.stringify(next);
         }
         setLocalError(null);
-        return matchesRequestedDelta;
+        return accepted;
       } catch (error) {
         setLocalError(messageFromError(error, "The whiteboard change could not be shared."));
         return false;
