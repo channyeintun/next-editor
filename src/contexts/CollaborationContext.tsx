@@ -69,6 +69,11 @@ import { WorkspaceActionsContext } from "./WorkspaceContext";
 import { useCollaborationInvitation } from "./collaboration/useCollaborationInvitation";
 import { useCollaborationRoster } from "./collaboration/useCollaborationRoster";
 import { useCollaborativeWorkspaceActions } from "./collaboration/useCollaborativeWorkspaceActions";
+import {
+  RoomPresenceContext,
+  type CollaborationParticipant,
+  type RoomPresenceValue,
+} from "./collaboration/RoomPresenceContext";
 import { WebContainerRuntimeActionsContext } from "./WebContainerRuntimeContext";
 import type { TextEditEvent } from "../types/textEdit";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -107,7 +112,7 @@ import { snapshotWhiteboardStore } from "../stores/whiteboardStore";
 import type { Slide } from "../types/slides";
 import type { WhiteboardEvent } from "../core/src/whiteboard";
 
-export type CollaborationParticipant = Extract<CollaborationAwarenessEvent, { kind: "state" }>;
+export type { CollaborationParticipant } from "./collaboration/RoomPresenceContext";
 
 export type CollaborationFollowStopReason =
   | "user"
@@ -133,16 +138,6 @@ interface CollaborationContextValue {
   hasOfflineChanges: boolean;
   members: CollaborationMember[];
   invitations: CollaborationInvitation[];
-  participants: CollaborationParticipant[];
-  /** This tab's own participant's collaborationParticipantKey; null without a room or user. */
-  ownParticipantKey: string | null;
-  followedParticipantKey: string | null;
-  followedParticipant: CollaborationParticipant | null;
-  /**
-   * Bumps once when a follow ended during a follow application's release
-   * window, where publishSurface still bails; the surface bridge republishes on it.
-   */
-  surfaceRepublishVersion: number;
   teaching: CollaborationTeachingProjection;
   teachingSlides: Slide[] | null;
   isTeachingLoading: boolean;
@@ -241,6 +236,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const [participantsBySession, setParticipantsBySession] = useState(
     () => new Map<string, CollaborationParticipant>(),
   );
+  // followParticipant reads the latest participants through this ref, so its
+  // identity, and with it the context value, does not change on every
+  // awareness event.
+  const participantsBySessionRef = useRef(participantsBySession);
+  participantsBySessionRef.current = participantsBySession;
   const [followedParticipantKey, setFollowedParticipantKey] = useState<string | null>(null);
   const followedParticipantKeyRef = useRef<string | null>(null);
   const followedSurfaceKindRef = useRef<CollaborationSurface["kind"] | null>(null);
@@ -997,7 +997,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       const current = providerRef.current;
       const key = collaborationParticipantKey(target);
       if (!current || key === ownParticipantKey) return;
-      const participant = participantsBySession.get(key);
+      const participant = participantsBySessionRef.current.get(key);
       if (!participant || participant.expiresAt <= Date.now()) return;
       if (followedParticipantKeyRef.current === key) {
         stopFollowing("user");
@@ -1009,7 +1009,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       setFollowedParticipantKey(key);
       analytics.capture("collaboration_follow_started");
     },
-    [ownParticipantKey, participantsBySession, stopFollowing],
+    [ownParticipantKey, stopFollowing],
   );
 
   const runFollowApplication = useCallback((application: () => void) => {
@@ -1264,11 +1264,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       hasOfflineChanges: machineSnapshot?.context.hasOfflineChanges ?? false,
       members,
       invitations,
-      participants,
-      ownParticipantKey,
-      followedParticipantKey,
-      followedParticipant,
-      surfaceRepublishVersion,
       teaching,
       teachingSlides,
       isTeachingLoading,
@@ -1323,8 +1318,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       getNodeIdForPath,
       getPathForNodeId,
       invitations,
-      followedParticipant,
-      followedParticipantKey,
       followParticipant,
       initializeTeachingSurfaces,
       isCreatingRoom,
@@ -1335,8 +1328,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       members,
       machineSnapshot?.context.error,
       machineSnapshot?.context.hasOfflineChanges,
-      ownParticipantKey,
-      participants,
       publishCurrentSlide,
       publishSurface,
       publishWhiteboardDelta,
@@ -1352,7 +1343,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       runFollowApplication,
       session,
       stopFollowing,
-      surfaceRepublishVersion,
       teaching,
       teachingSlides,
       updateCursor,
@@ -1362,9 +1352,28 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     ],
   );
 
+  const presenceValue = useMemo<RoomPresenceValue>(
+    () => ({
+      participants,
+      ownParticipantKey,
+      followedParticipantKey,
+      followedParticipant,
+      surfaceRepublishVersion,
+    }),
+    [
+      followedParticipant,
+      followedParticipantKey,
+      ownParticipantKey,
+      participants,
+      surfaceRepublishVersion,
+    ],
+  );
+
   return (
     <CollaborationContext value={value}>
-      <WorkspaceActionsContext value={collaborativeActions}>{children}</WorkspaceActionsContext>
+      <RoomPresenceContext value={presenceValue}>
+        <WorkspaceActionsContext value={collaborativeActions}>{children}</WorkspaceActionsContext>
+      </RoomPresenceContext>
     </CollaborationContext>
   );
 }

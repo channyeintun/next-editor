@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
 import { useCollaboration } from "../contexts/CollaborationContext";
+import { useRoomPresence } from "../contexts/collaboration/RoomPresenceContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -13,6 +14,7 @@ import {
 /** Coordinates the durable teaching projection with ephemeral followed view state. */
 export default function CollaborationSurfaceBridge() {
   const collaboration = useCollaboration();
+  const presence = useRoomPresence();
   const slides = useSlidesContext();
   const whiteboard = useWhiteboardContext();
   const { usesPlaybackModel } = useNextEditorMetadata();
@@ -24,8 +26,10 @@ export default function CollaborationSurfaceBridge() {
   const slidesOpen = slides.previewState.isOpen;
   const whiteboardOpen = whiteboard.isOpen;
 
-  // surfaceRepublishVersion re-runs this after a follow that ended while
-  // publishSurface was still suppressed.
+  // publishSurface bails while this member follows someone, so stopping
+  // (followedParticipantKey) publishes the surface they now show, and
+  // surfaceRepublishVersion does so after a follow that ended while
+  // publication was still suppressed.
   useEffect(() => {
     if (!collaboration.provider || usesPlaybackModel) return;
     if (whiteboardOpen) {
@@ -51,7 +55,8 @@ export default function CollaborationSurfaceBridge() {
   }, [
     activeFilePath,
     collaboration,
-    collaboration.surfaceRepublishVersion,
+    presence.followedParticipantKey,
+    presence.surfaceRepublishVersion,
     slides.previewState.isMaximized,
     slidesOpen,
     usesPlaybackModel,
@@ -68,7 +73,7 @@ export default function CollaborationSurfaceBridge() {
   }, [collaboration, slides, slidesOpen, whiteboardOpen]);
 
   useEffect(() => {
-    const target = collaboration.followedParticipant;
+    const target = presence.followedParticipant;
     if (!target) {
       appliedRevisionRef.current = null;
       return;
@@ -131,6 +136,7 @@ export default function CollaborationSurfaceBridge() {
   }, [
     activeFilePath,
     collaboration,
+    presence.followedParticipant,
     setActiveFilePath,
     slides,
     usesPlaybackModel,

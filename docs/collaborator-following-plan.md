@@ -369,13 +369,22 @@ interface CollaborationFollowState {
 The public context should expose:
 
 ```ts
-ownParticipantKey: string | null;
-followedParticipantKey: string | null;
-followedParticipant: CollaborationParticipant | null;
 followParticipant(participant: Pick<CollaborationParticipant, "actorId" | "sessionId">): void;
 stopFollowing(reason?: CollaborationFollowStopReason): void;
 publishSurface(surface: LocalCollaborationSurface): void;
 runFollowApplication(application: () => void): void;
+```
+
+The same provider exposes the follow state through a separate room presence context
+(`useRoomPresence`), because every awareness event changes it and components that read only the
+room or its commands should not re-render on each remote cursor move or scroll:
+
+```ts
+participants: CollaborationParticipant[];
+ownParticipantKey: string | null;
+followedParticipantKey: string | null;
+followedParticipant: CollaborationParticipant | null;
+surfaceRepublishVersion: number;
 ```
 
 Required invariants:

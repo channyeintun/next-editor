@@ -3,6 +3,7 @@ import { resolveCollaborationEditorViewport } from "../../collaboration/editorVi
 import { collaborationParticipantKey } from "../../collaboration/participantKey";
 import { resolveCollaborationCursor } from "../../collaboration/relativePosition";
 import type { useOptionalCollaboration } from "../../contexts/CollaborationContext";
+import type { RoomPresenceValue } from "../../contexts/collaboration/RoomPresenceContext";
 import { monaco } from "../../monaco";
 import type { WorkspaceFile } from "../../types/workspace";
 
@@ -16,12 +17,14 @@ import type { WorkspaceFile } from "../../types/workspace";
 export function useFollowViewport({
   editorRef,
   collaboration,
+  presence,
   activeFile,
   activeModel,
   usesPlaybackModel,
 }: {
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   collaboration: ReturnType<typeof useOptionalCollaboration>;
+  presence: RoomPresenceValue | null;
   activeFile: Pick<WorkspaceFile, "path" | "content">;
   activeModel: monaco.editor.ITextModel | null;
   usesPlaybackModel: boolean;
@@ -32,7 +35,7 @@ export function useFollowViewport({
   const appliedFollowViewportRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
-    const target = collaboration?.followedParticipant;
+    const target = presence?.followedParticipant;
     if (!target) {
       appliedFollowViewportRef.current = null;
       return;
@@ -99,11 +102,11 @@ export function useFollowViewport({
     activeFile.path,
     activeModel,
     collaboration?.connectionState,
-    collaboration?.followedParticipant,
     collaboration?.getNodeIdForPath,
     collaboration?.provider,
     collaboration?.runFollowApplication,
     editorRef,
+    presence?.followedParticipant,
     usesPlaybackModel,
   ]);
 }

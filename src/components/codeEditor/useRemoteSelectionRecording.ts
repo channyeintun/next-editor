@@ -4,6 +4,7 @@ import { resolveMonacoAwarenessSelections } from "../../collaboration/monacoAwar
 import { canPublishCollaborationUpdate } from "../../collaboration/protocol";
 import type { CollaborationRoomProvider } from "../../collaboration/roomProvider";
 import type { useOptionalCollaboration } from "../../contexts/CollaborationContext";
+import type { RoomPresenceValue } from "../../contexts/collaboration/RoomPresenceContext";
 import type { NextEditorActions } from "../../contexts/NextEditorContext";
 import type { EditorSelection } from "../../core/src/types";
 import type { monaco } from "../../monaco";
@@ -25,6 +26,7 @@ import {
 export function useRemoteSelectionRecording({
   editorRef,
   collaboration,
+  presence,
   activeFile,
   usesPlaybackModel,
   isRecording,
@@ -33,6 +35,7 @@ export function useRemoteSelectionRecording({
 }: {
   editorRef: RefObject<monaco.editor.IStandaloneCodeEditor | null>;
   collaboration: ReturnType<typeof useOptionalCollaboration>;
+  presence: RoomPresenceValue | null;
   activeFile: Pick<WorkspaceFile, "path" | "content">;
   usesPlaybackModel: boolean;
   isRecording: boolean;
@@ -59,7 +62,7 @@ export function useRemoteSelectionRecording({
     const model = editor?.getModel();
     const provider = collaboration?.provider ?? null;
     const collaborationDoc = collaboration?.doc ?? null;
-    const participants = collaboration?.participants ?? [];
+    const participants = presence?.participants ?? [];
     const scope = remoteCursorRecordingScopeRef.current;
     const scopeChanged =
       scope.provider !== provider ||
@@ -90,7 +93,7 @@ export function useRemoteSelectionRecording({
           : [],
         doc: collaborationDoc,
         participants,
-        ownParticipantKey: collaboration.ownParticipantKey,
+        ownParticipantKey: presence?.ownParticipantKey ?? null,
         activeFileNodeId: collaboration.getNodeIdForPath(activeFile.path) ?? undefined,
       })) {
         // A viewer's selection is drawn, but never recorded.
@@ -126,11 +129,11 @@ export function useRemoteSelectionRecording({
     activeFile.path,
     collaboration?.doc,
     collaboration?.getNodeIdForPath,
-    collaboration?.ownParticipantKey,
-    collaboration?.participants,
     collaboration?.provider,
     editorRef,
     isRecording,
+    presence?.ownParticipantKey,
+    presence?.participants,
     usesPlaybackModel,
   ]);
 }

@@ -85,10 +85,15 @@ function props(participants: CollaborationParticipant[], overrides: Partial<Prop
     collaboration: {
       provider,
       doc,
-      participants,
-      ownParticipantKey: null,
       getNodeIdForPath,
     } as unknown as Collaboration,
+    presence: {
+      participants,
+      ownParticipantKey: null,
+      followedParticipantKey: null,
+      followedParticipant: null,
+      surfaceRepublishVersion: 0,
+    },
     activeFile: ACTIVE_FILE,
     usesPlaybackModel: false,
     isRecording: true,

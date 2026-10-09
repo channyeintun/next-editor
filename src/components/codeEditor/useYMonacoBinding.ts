@@ -5,6 +5,7 @@ import { collaborationTextForPath } from "../../collaboration/collaborationTextF
 import type { CollaborationRoomProvider } from "../../collaboration/roomProvider";
 import { trackCollaborationUndoOrigin } from "../../collaboration/undo";
 import type { useOptionalCollaboration } from "../../contexts/CollaborationContext";
+import type { RoomPresenceValue } from "../../contexts/collaboration/RoomPresenceContext";
 import { acknowledgeWorkspaceModelContent, monaco } from "../../monaco";
 import type { TextEditEvent } from "../../types/textEdit";
 import { yMonacoBindsModel } from "../remoteCursors";
@@ -61,6 +62,7 @@ export type YMonacoEditRoute = "binding-setup" | "incremental" | "direct-ytext";
 export function useYMonacoBinding({
   editorRef,
   collaboration,
+  presence,
   activeFilePath,
   activeModel,
   usesPlaybackModel,
@@ -70,6 +72,7 @@ export function useYMonacoBinding({
 }: {
   editorRef: RefObject<StandaloneEditor | null>;
   collaboration: ReturnType<typeof useOptionalCollaboration>;
+  presence: RoomPresenceValue | null;
   activeFilePath: string;
   activeModel: monaco.editor.ITextModel | null;
   usesPlaybackModel: boolean;
@@ -115,7 +118,7 @@ export function useYMonacoBinding({
       return false;
     }
 
-    const shouldPublishSelection = !isEditorCovered && !collaboration.followedParticipantKey;
+    const shouldPublishSelection = !isEditorCovered && !presence?.followedParticipantKey;
     const current = yMonacoBindingRef.current;
     if (
       current?.editor === editor &&
@@ -168,10 +171,10 @@ export function useYMonacoBinding({
     activeModel,
     collaboration?.canWrite,
     collaboration?.connectionState,
-    collaboration?.followedParticipantKey,
     collaboration?.provider,
     isBinaryActiveFile,
     isEditorCovered,
+    presence?.followedParticipantKey,
     usesPlaybackModel,
   ]);
 

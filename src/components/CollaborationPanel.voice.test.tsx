@@ -20,8 +20,12 @@ vi.mock("@next-editor/infra", () => ({
   useAuth: () => ({ isSignedIn: true }),
 }));
 
+// One state stands in for both of the collaboration provider's contexts.
 vi.mock("../contexts/CollaborationContext", () => ({
   useCollaboration: () => collaborationState,
+}));
+vi.mock("../contexts/collaboration/RoomPresenceContext", () => ({
+  useRoomPresence: () => collaborationState,
 }));
 
 vi.mock("../contexts/CollaborationVoiceContext", () => ({

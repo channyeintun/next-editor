@@ -196,6 +196,7 @@ vi.mock("../hooks/useNextEditorContext", () => ({
 }));
 
 import { CollaborationProvider, useCollaboration } from "./CollaborationContext";
+import { useRoomPresence } from "./collaboration/RoomPresenceContext";
 import { SlidesStoreProvider, useSlidesStore } from "./SlidesStoreContext";
 import { WhiteboardStoreProvider, useWhiteboardStore } from "./WhiteboardStoreContext";
 import type { SlidesStoreInstance } from "../stores/slidesStore";
@@ -231,6 +232,22 @@ import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import { collaborationParticipantKey } from "../collaboration/participantKey";
 import { WorkspaceActionsContext, type WorkspaceActions } from "./WorkspaceContext";
 import type { WorkspaceFile } from "../types/workspace";
+
+/**
+ * Waits until this member's own presence publications have settled (one once
+ * the room is live, one from the debounced surface publish), so none of them
+ * re-renders a probe in the middle of a test.
+ */
+async function ownPresenceSettled(provider: (typeof controls.providers)[number]) {
+  await waitFor(() =>
+    expect(provider.awarenessPublications.filter(({ kind }) => kind === "state")).toHaveLength(2),
+  );
+}
+
+/** Both of the provider's contexts, read as one value by the probes below. */
+function useRoom() {
+  return { ...useCollaboration(), ...useRoomPresence() };
+}
 
 function Providers({ children }: { children: ReactNode }) {
   return (
@@ -280,9 +297,9 @@ describe("CollaborationContext follow lifecycle", () => {
   });
 
   it("rejects self-follow and switches exactly between owner, editor, and viewer sessions", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     const view = render(
@@ -330,9 +347,9 @@ describe("CollaborationContext follow lifecycle", () => {
   });
 
   it("consumes first Escape, retains follow through reconnect, and stops on leave or playback", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     const view = render(
@@ -397,9 +414,9 @@ describe("CollaborationContext follow lifecycle", () => {
   });
 
   it("keeps the exact expired target visible while reconnecting and stops if it is absent live", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     const view = render(
@@ -435,9 +452,9 @@ describe("CollaborationContext follow lifecycle", () => {
   // A session ID is chosen by the client and visible to every member, so
   // another member can publish awareness under the same one.
   it("follows the member chosen, not another member reusing their session ID", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     const view = render(
@@ -483,9 +500,9 @@ describe("CollaborationContext follow lifecycle", () => {
   });
 
   it("refuses to follow this member's own session but follows another member reusing its ID", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     const view = render(
@@ -518,11 +535,11 @@ describe("CollaborationContext follow lifecycle", () => {
   });
 
   it("isolates room switches from late providers and restores the exact standalone stores", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     let slidesStore: SlidesStoreInstance | null = null;
     let whiteboardStore: WhiteboardStoreInstance | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       slidesStore = useSlidesStore().store;
       whiteboardStore = useWhiteboardStore().store;
       return null;
@@ -606,9 +623,9 @@ describe("CollaborationContext retry", () => {
   });
 
   it("resumes a failed room, but rebuilds it once the room has refused local edits", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     const view = render(
@@ -654,9 +671,9 @@ describe("CollaborationContext leaving a failed room", () => {
   // the participant in the room.
   for (const action of ["leaveRoom", "closeRoom"] as const) {
     it(`lets ${action} finish with edits the room can no longer accept`, async () => {
-      let collaboration: ReturnType<typeof useCollaboration> | null = null;
+      let collaboration: ReturnType<typeof useRoom> | null = null;
       function Probe() {
-        collaboration = useCollaboration();
+        collaboration = useRoom();
         return null;
       }
       const view = render(
@@ -724,9 +741,9 @@ describe("CollaborationContext teaching projection", () => {
   // room limit; the teaching tree must not be re-projected (and every element
   // re-validated) after each of them.
   it("projects a multi-element whiteboard delta once", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     const view = render(
@@ -758,9 +775,9 @@ describe("CollaborationContext teaching projection", () => {
   // Validation re-emits an element's keys in schema order; Excalidraw's order
   // differs, so the acceptance check must not compare raw serializations.
   it("changes the shared slide without extra teaching projections", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     render(
@@ -802,9 +819,9 @@ describe("CollaborationContext teaching projection", () => {
   });
 
   it("reports an applied whiteboard delta as accepted", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     const view = render(
@@ -835,9 +852,9 @@ describe("CollaborationContext teaching projection", () => {
   // that loses to the current winner) must not hand every collaboration
   // consumer a new projection.
   it("keeps the teaching projection when a teaching transaction changes nothing shown", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     const view = render(
@@ -908,10 +925,10 @@ describe("CollaborationContext teaching projection", () => {
     vi.mocked(downloadCollaborationAsset).mockImplementation(async (_roomId, assetId) =>
       payloads.get(assetId)!,
     );
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     let slidesStore: SlidesStoreInstance | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       slidesStore = useSlidesStore().store;
       return null;
     }
@@ -977,10 +994,10 @@ describe("CollaborationContext teaching projection", () => {
   // not, and the canvas must receive it.
   describe("the whiteboard scene a published delta projects", () => {
     async function renderRoom(whiteboardElements: WhiteboardElementJSON[]) {
-      let collaboration: ReturnType<typeof useCollaboration> | null = null;
+      let collaboration: ReturnType<typeof useRoom> | null = null;
       let whiteboardStore: WhiteboardStoreInstance | null = null;
       function Probe() {
-        collaboration = useCollaboration();
+        collaboration = useRoom();
         whiteboardStore = useWhiteboardStore().store;
         return null;
       }
@@ -1046,9 +1063,9 @@ describe("CollaborationContext teaching projection", () => {
     });
 
     async function renderRecordingRoom(hostUserId: string) {
-      let collaboration: ReturnType<typeof useCollaboration> | null = null;
+      let collaboration: ReturnType<typeof useRoom> | null = null;
       function Probe() {
-        collaboration = useCollaboration();
+        collaboration = useRoom();
         return null;
       }
       const view = render(
@@ -1135,6 +1152,77 @@ describe("CollaborationContext presence", () => {
     usesPlaybackModel = false;
   });
 
+  it("re-renders presence readers, not room-only readers, on a remote awareness event", async () => {
+    const renders = { room: 0, presence: 0 };
+    function RoomProbe() {
+      useCollaboration();
+      renders.room += 1;
+      return null;
+    }
+    function PresenceProbe() {
+      useRoomPresence();
+      renders.presence += 1;
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <RoomProbe />
+          <PresenceProbe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    await ownPresenceSettled(provider);
+    const before = { ...renders };
+
+    act(() =>
+      provider.emitAwareness(
+        participant({
+          actorId: "50000000-0000-4000-8000-000000000001",
+          sessionId: "60000000-0000-4000-8000-000000000001",
+        }),
+      ),
+    );
+
+    expect(renders.room).toBe(before.room);
+    expect(renders.presence).toBe(before.presence + 1);
+    view.unmount();
+  });
+
+  it("follows a participant who joined after followParticipant was read", async () => {
+    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let presence: ReturnType<typeof useRoomPresence> | null = null;
+    function Probe() {
+      collaboration = useCollaboration();
+      presence = useRoomPresence();
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    await ownPresenceSettled(provider);
+    const followParticipant = collaboration!.followParticipant;
+    const late = participant({
+      actorId: "50000000-0000-4000-8000-000000000001",
+      sessionId: "60000000-0000-4000-8000-000000000001",
+    });
+
+    act(() => provider.emitAwareness(late));
+    expect(collaboration!.followParticipant).toBe(followParticipant);
+    act(() => followParticipant(late));
+
+    expect(presence!.followedParticipantKey).toBe(collaborationParticipantKey(late));
+    view.unmount();
+  });
+
   // The room broadcasts a membership change to every socket (an invitation
   // claimed, a role changed, a member removed) and each provider then stores a
   // fresh session object. A leave here reaches every peer, which drops this
@@ -1180,11 +1268,11 @@ describe("CollaborationContext follow application", () => {
 
   async function renderRoom() {
     const probe = {
-      collaboration: null as ReturnType<typeof useCollaboration> | null,
+      collaboration: null as ReturnType<typeof useRoom> | null,
       renders: 0,
     };
     function Probe() {
-      probe.collaboration = useCollaboration();
+      probe.collaboration = useRoom();
       probe.renders += 1;
       return null;
     }
@@ -1197,11 +1285,7 @@ describe("CollaborationContext follow application", () => {
     );
     await waitFor(() => expect(controls.providers).toHaveLength(1));
     const provider = controls.providers[0]!;
-    // Let this member's own presence publications settle first, so none of
-    // them re-renders the probe in the middle of a test.
-    await waitFor(() =>
-      expect(provider.awarenessPublications.filter(({ kind }) => kind === "state")).toHaveLength(2),
-    );
+    await ownPresenceSettled(provider);
     const target = participant({
       actorId: "50000000-0000-4000-8000-000000000001",
       sessionId: "60000000-0000-4000-8000-000000000001",
@@ -1319,9 +1403,9 @@ describe("CollaborationContext write access while reconnecting", () => {
   });
 
   it("keeps a synced room writable through every reconnect state", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     render(
@@ -1360,9 +1444,9 @@ describe("CollaborationContext participant expiry", () => {
 
   // expiresAt is stamped with the room's clock; this browser's clock may differ.
   it("lists and follows a participant whose server expiry looks past on a fast local clock", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     render(
@@ -1433,9 +1517,9 @@ describe("CollaborationContext room switch", () => {
   });
 
   it("starts the next room without the previous room's presence or follow target", async () => {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     render(
@@ -1503,9 +1587,9 @@ describe("CollaborationContext room roster", () => {
   type MemberList = { members: ReturnType<typeof member>[]; roleVersion: number };
 
   async function renderRoom() {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       return null;
     }
     const view = render(
@@ -1676,10 +1760,10 @@ describe("CollaborationContext workspace actions", () => {
   });
 
   function renderEditor(url: string) {
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     let actions: WorkspaceActions | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       actions = useContext(WorkspaceActionsContext);
       return null;
     }
@@ -1806,10 +1890,10 @@ describe("CollaborationContext asset retry", () => {
       encoding: "asset",
       content: descriptor,
     };
-    let collaboration: ReturnType<typeof useCollaboration> | null = null;
+    let collaboration: ReturnType<typeof useRoom> | null = null;
     let setSearchParams: SetURLSearchParams | null = null;
     function Probe() {
-      collaboration = useCollaboration();
+      collaboration = useRoom();
       setSearchParams = useSearchParams()[1];
       return null;
     }

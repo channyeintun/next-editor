@@ -3,6 +3,7 @@ import { collaborationTextForPath } from "../../collaboration/collaborationTextF
 import { resolveMonacoAwarenessSelections } from "../../collaboration/monacoAwareness";
 import { collaborationParticipantColorIndex } from "../../collaboration/relativePosition";
 import type { useOptionalCollaboration } from "../../contexts/CollaborationContext";
+import type { RoomPresenceValue } from "../../contexts/collaboration/RoomPresenceContext";
 import { monaco } from "../../monaco";
 import {
   CollaborationCursorLabelManager,
@@ -29,11 +30,13 @@ type StandaloneEditor = monaco.editor.IStandaloneCodeEditor;
 export function useRemoteCursorDecorations({
   editorRef,
   collaboration,
+  presence,
   activeFilePath,
   getYMonacoBinding,
 }: {
   editorRef: RefObject<StandaloneEditor | null>;
   collaboration: ReturnType<typeof useOptionalCollaboration>;
+  presence: RoomPresenceValue | null;
   activeFilePath: string;
   getYMonacoBinding: () => YMonacoBindingTarget | null;
 }) {
@@ -78,8 +81,8 @@ export function useRemoteCursorDecorations({
         ? resolveMonacoAwarenessSelections(collaboration.provider.awareness, awarenessText)
         : [],
       doc: collaborationDoc,
-      participants: collaboration.participants,
-      ownParticipantKey: collaboration.ownParticipantKey,
+      participants: presence?.participants ?? [],
+      ownParticipantKey: presence?.ownParticipantKey ?? null,
       activeFileNodeId,
     })) {
       if (!selection.fromAwareness) {
@@ -169,9 +172,9 @@ export function useRemoteCursorDecorations({
     collaboration?.connectionState,
     collaboration?.doc,
     collaboration?.getNodeIdForPath,
-    collaboration?.ownParticipantKey,
-    collaboration?.participants,
     collaboration?.provider,
+    presence?.ownParticipantKey,
+    presence?.participants,
   ]);
 
   return {

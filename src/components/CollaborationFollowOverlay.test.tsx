@@ -12,6 +12,12 @@ let isInRoom = true;
 vi.mock("../contexts/CollaborationContext", () => ({
   useOptionalCollaboration: () => ({
     provider: isInRoom ? {} : null,
+    getPathForNodeId: () => "src/index.ts",
+    stopFollowing,
+  }),
+}));
+vi.mock("../contexts/collaboration/RoomPresenceContext", () => ({
+  useOptionalRoomPresence: () => ({
     followedParticipant: isFollowing
       ? {
           actorId: "10000000-0000-4000-8000-000000000001",
@@ -21,8 +27,6 @@ vi.mock("../contexts/CollaborationContext", () => ({
           surface: targetSurface,
         }
       : null,
-    getPathForNodeId: () => "src/index.ts",
-    stopFollowing,
   }),
 }));
 

@@ -8,6 +8,7 @@ import type {
   CollaborationParticipant,
   useOptionalCollaboration,
 } from "../../contexts/CollaborationContext";
+import type { RoomPresenceValue } from "../../contexts/collaboration/RoomPresenceContext";
 import type { monaco } from "../../monaco";
 
 // The real "../../monaco" loads the whole editor. Decorations only construct
@@ -85,15 +86,22 @@ const ADA: CollaborationParticipant = {
 const ROOM = {
   provider: { doc, awareness: { clientID: 1, getStates: () => new Map() } },
   doc,
-  participants: [ADA],
-  ownParticipantKey: null,
   getNodeIdForPath: (path: string) => (path === "main.ts" ? "file-1" : null),
 } as unknown as Collaboration;
+
+const PRESENCE: RoomPresenceValue = {
+  participants: [ADA],
+  ownParticipantKey: null,
+  followedParticipantKey: null,
+  followedParticipant: null,
+  surfaceRepublishVersion: 0,
+};
 
 function props(editor: ReturnType<typeof fakeEditor>, collaboration: Collaboration | null): Props {
   return {
     editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
     collaboration,
+    presence: collaboration ? PRESENCE : null,
     activeFilePath: "main.ts",
     getYMonacoBinding: () => null,
   };

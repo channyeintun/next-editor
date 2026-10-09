@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { avatarProxyUrl, signInUrl, useAuth } from "@next-editor/infra";
 import { useCollaboration, type CollaborationParticipant } from "../contexts/CollaborationContext";
+import { useRoomPresence } from "../contexts/collaboration/RoomPresenceContext";
 import {
   useCollaborationVoice,
   useCollaborationVoiceState,
@@ -595,6 +596,7 @@ function describePresenceChange(
 
 export default function CollaborationPanel() {
   const collaboration = useCollaboration();
+  const presence = useRoomPresence();
   const { isSignedIn } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -606,19 +608,19 @@ export default function CollaborationPanel() {
 
   // Joins and leaves are worked out while rendering, against the last roster
   // seen, so the status region updates in the same commit as the list.
-  const rosterKey = collaboration.participants.map(collaborationParticipantKey).join("|");
+  const rosterKey = presence.participants.map(collaborationParticipantKey).join("|");
   const [roster, setRoster] = useState({
     key: rosterKey,
-    participants: collaboration.participants,
+    participants: presence.participants,
   });
   const [presenceMessage, setPresenceMessage] = useState("");
   if (roster.key !== rosterKey) {
-    setRoster({ key: rosterKey, participants: collaboration.participants });
+    setRoster({ key: rosterKey, participants: presence.participants });
     setPresenceMessage(
       describePresenceChange(
         roster.participants,
-        collaboration.participants,
-        collaboration.ownParticipantKey,
+        presence.participants,
+        presence.ownParticipantKey,
       ),
     );
   }
@@ -709,9 +711,9 @@ export default function CollaborationPanel() {
       >
         {isInRoom ? <Radio size={15} /> : <Users size={15} />}
         <span>{isInRoom ? status : "Live"}</span>
-        {collaboration.participants.length > 0 ? (
+        {presence.participants.length > 0 ? (
           <span className="rounded-full bg-white/10 px-1.5 text-[10px] text-slate-200">
-            {collaboration.participants.length}
+            {presence.participants.length}
           </span>
         ) : null}
       </button>
@@ -816,14 +818,14 @@ export default function CollaborationPanel() {
                   </p>
                 ) : null}
 
-                {collaboration.followedParticipant ? (
+                {presence.followedParticipant ? (
                   <button
                     type="button"
                     onClick={() => collaboration.stopFollowing("user")}
                     className="flex w-full items-center justify-between rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100"
                   >
                     <span className="truncate">
-                      Following {collaboratorDisplayName(collaboration.followedParticipant)}
+                      Following {collaboratorDisplayName(presence.followedParticipant)}
                     </span>
                     <span className="font-semibold">Stop</span>
                   </button>
@@ -844,11 +846,11 @@ export default function CollaborationPanel() {
                   <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
                     Online now
                   </h3>
-                  {collaboration.participants.length === 0 ? (
+                  {presence.participants.length === 0 ? (
                     <p className="text-xs text-slate-300">Waiting for presence…</p>
                   ) : (
                     <ul role="list" className="space-y-1.5">
-                      {collaboration.participants.map((participant) => {
+                      {presence.participants.map((participant) => {
                         const participantKey = collaborationParticipantKey(participant);
                         return (
                           <ParticipantRow
@@ -858,8 +860,8 @@ export default function CollaborationPanel() {
                               participant.surface,
                               collaboration,
                             )}
-                            isSelf={participantKey === collaboration.ownParticipantKey}
-                            isFollowed={participantKey === collaboration.followedParticipantKey}
+                            isSelf={participantKey === presence.ownParticipantKey}
+                            isFollowed={participantKey === presence.followedParticipantKey}
                             onFollow={() => collaboration.followParticipant(participant)}
                             onStopFollowing={() => collaboration.stopFollowing("user")}
                           />

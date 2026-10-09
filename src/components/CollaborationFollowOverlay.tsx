@@ -3,6 +3,7 @@ import {
   useOptionalCollaboration,
   type CollaborationParticipant,
 } from "../contexts/CollaborationContext";
+import { useOptionalRoomPresence } from "../contexts/collaboration/RoomPresenceContext";
 import { collaboratorColor, collaboratorDisplayName } from "./collaboratorAppearance";
 
 function followedSurfaceLabel(
@@ -18,7 +19,7 @@ function followedSurfaceLabel(
 
 export default function CollaborationFollowOverlay() {
   const collaboration = useOptionalCollaboration();
-  const target = collaboration?.followedParticipant ?? null;
+  const target = useOptionalRoomPresence()?.followedParticipant ?? null;
   const name = target ? collaboratorDisplayName(target) : "";
   const surface =
     collaboration && target ? followedSurfaceLabel(target, collaboration.getPathForNodeId) : "";

@@ -7,8 +7,10 @@ import type {
   CollaborationParticipant,
   useOptionalCollaboration,
 } from "../contexts/CollaborationContext";
+import type { RoomPresenceValue } from "../contexts/collaboration/RoomPresenceContext";
 
-type Collaboration = NonNullable<ReturnType<typeof useOptionalCollaboration>>;
+// One fake stands in for both of the collaboration provider's contexts.
+type Collaboration = NonNullable<ReturnType<typeof useOptionalCollaboration>> & RoomPresenceValue;
 type Listener = (...args: unknown[]) => void;
 
 // What the mocked modules below hand CodeEditor. A test sets these and
@@ -105,6 +107,9 @@ vi.mock("../hooks/useRuntimeDockLayout", () => ({
 vi.mock("../contexts/CollaborationContext", () => ({
   useOptionalCollaboration: () => harness.collaboration,
 }));
+vi.mock("../contexts/collaboration/RoomPresenceContext", () => ({
+  useOptionalRoomPresence: () => harness.collaboration,
+}));
 vi.mock("../contexts/SlidesContext", () => ({
   useSlidesContext: () => ({ previewState: { isOpen: false } }),
 }));
@@ -197,6 +202,7 @@ function fakeCollaboration(overrides: Partial<Collaboration> = {}): Collaboratio
     ownParticipantKey: null,
     followedParticipantKey: null,
     followedParticipant: null,
+    surfaceRepublishVersion: 0,
     getNodeIdForPath: () => null,
     stopFollowing: vi.fn<Collaboration["stopFollowing"]>(),
     queueLocalTextEdit: vi.fn<Collaboration["queueLocalTextEdit"]>(),

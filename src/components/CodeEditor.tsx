@@ -10,6 +10,7 @@ import {
 import { useWebContainerRuntimeSaveWorkspace } from "../hooks/useWebContainerRuntime";
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
+import { useOptionalRoomPresence } from "../contexts/collaboration/RoomPresenceContext";
 import { isWorkspaceTextFile, lessonSupportsPreview } from "../types/workspace";
 import type { TextEditEvent } from "../types/textEdit";
 import EditorHeader from "./EditorHeader";
@@ -78,6 +79,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   // exactly when the dock shows itself full height (the viewer's choice included).
   const { fillsColumn: isRunnerDockFullHeight } = useRuntimeDockLayout();
   const collaboration = useOptionalCollaboration();
+  const roomPresence = useOptionalRoomPresence();
   const slidesContext = useSlidesContext();
   const whiteboardContext = useWhiteboardContext();
   // Slides or the whiteboard cover the editor, so this member's published
@@ -460,6 +462,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const yMonacoBinding = useYMonacoBinding({
     editorRef,
     collaboration,
+    presence: roomPresence,
     activeFilePath: activeFile.path,
     activeModel,
     usesPlaybackModel,
@@ -467,16 +470,25 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
     isEditorCovered,
     isRecording,
   });
-  useFollowViewport({ editorRef, collaboration, activeFile, activeModel, usesPlaybackModel });
+  useFollowViewport({
+    editorRef,
+    collaboration,
+    presence: roomPresence,
+    activeFile,
+    activeModel,
+    usesPlaybackModel,
+  });
   const remoteCursorDecorations = useRemoteCursorDecorations({
     editorRef,
     collaboration,
+    presence: roomPresence,
     activeFilePath: activeFile.path,
     getYMonacoBinding: yMonacoBinding.getActive,
   });
   useRemoteSelectionRecording({
     editorRef,
     collaboration,
+    presence: roomPresence,
     activeFile,
     usesPlaybackModel,
     isRecording,
