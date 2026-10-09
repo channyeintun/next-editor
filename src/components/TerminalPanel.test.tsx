@@ -1,0 +1,112 @@
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  WebContainerRuntimeActionsContext,
+  WebContainerRuntimeMetadataContext,
+  WebContainerRuntimeOutputContext,
+  type WebContainerRuntimeActions,
+  type WebContainerRuntimeMetadata,
+  type WebContainerRuntimeOutput,
+  type WebContainerRuntimeStatus,
+} from "../contexts/WebContainerRuntimeContext";
+import { RuntimePanelStoreProvider } from "../contexts/RuntimePanelStoreContext";
+import TerminalPanel from "./TerminalPanel";
+
+// The WebContainer dock with its runtime given through the real contexts; the
+// editor session, the xterm surfaces and the agent are stand-ins.
+vi.mock("../hooks/useNextEditorContext", () => ({
+  useNextEditorActions: () => ({ handleRuntimeEvent: () => {} }),
+  useNextEditorMetadata: () => ({
+    currentRecording: null,
+    isRecording: false,
+    isPlaying: false,
+    isReplayLoaded: false,
+  }),
+}));
+vi.mock("./XtermTerminal", async () => {
+  const { createElement } = await import("react");
+  return {
+    default: (props: { label: string; output: string }) =>
+      createElement("pre", { "data-testid": props.label }, props.output),
+  };
+});
+vi.mock("./agent/AgentPanel", () => ({ default: () => null }));
+
+const actions = {
+  clearRunnerOutput: () => {},
+  closeTerminalSession: () => {},
+  createTerminalSession: async () => {},
+  rerunRunner: async () => {},
+  resizeTerminal: () => {},
+  sendTerminalInput: async () => {},
+  setActiveTerminalSession: () => {},
+  startTerminalSession: async () => {},
+  updateRunnerConfig: () => {},
+} as unknown as WebContainerRuntimeActions;
+
+function dock(status: WebContainerRuntimeStatus) {
+  const metadata = {
+    activeTerminalSessionId: null,
+    status,
+    errorMessage: null,
+    activeCommand: null,
+    latestPreviewMessage: null,
+    previewPort: null,
+    previewUrl: null,
+    runnerConfig: { enabled: true, runCommand: "npm run dev", initCommand: "npm install" },
+  } as unknown as WebContainerRuntimeMetadata;
+  const output: WebContainerRuntimeOutput = { lastOutput: null, terminalSessions: [] };
+
+  return (
+    <RuntimePanelStoreProvider>
+      <WebContainerRuntimeActionsContext value={actions}>
+        <WebContainerRuntimeMetadataContext value={metadata}>
+          <WebContainerRuntimeOutputContext value={output}>
+            <TerminalPanel />
+          </WebContainerRuntimeOutputContext>
+        </WebContainerRuntimeMetadataContext>
+      </WebContainerRuntimeActionsContext>
+    </RuntimePanelStoreProvider>
+  );
+}
+
+describe("TerminalPanel", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("says in its status region that the runner is starting, and hides the spinner", () => {
+    const view = render(dock("ready"));
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+
+    view.rerender(dock("installing"));
+
+    expect(status.textContent).toBe("Runner is starting");
+    // The spinner is decoration: the status region carries its meaning.
+    expect(screen.queryByLabelText("Runner is starting")).toBeNull();
+    expect(document.querySelector(".animate-spin")).toHaveAttribute("aria-hidden", "true");
+
+    view.rerender(dock("ready"));
+
+    expect(status).toBeEmptyDOMElement();
+  });
+
+  it("keeps its status region mounted on every tab and while collapsed", () => {
+    render(dock("starting"));
+    const status = screen.getByRole("status");
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Console" }));
+    });
+    expect(screen.getByTestId("Console")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toBe(status);
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Collapse runtime dock" }));
+    });
+    expect(screen.queryByTestId("Console")).toBeNull();
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toHaveTextContent("Runner is starting");
+  });
+});

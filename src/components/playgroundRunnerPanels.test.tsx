@@ -563,6 +563,9 @@ describe("playground runner panels", () => {
 
       expect(consoleLines()).toEqual([panel.refusedRun!.line]);
       expect(harness.client.run).not.toHaveBeenCalled();
+      expect(screen.getByRole("status").textContent).toBe(
+        panel.refusedRun!.line.replace(/^\[[^\]]+\] /, ""),
+      );
     },
   );
 
@@ -595,6 +598,51 @@ describe("playground runner panels", () => {
       "[go-run error] This program can't run in a Go lesson",
       'import "os/exec" is not allowed',
     ]);
+  });
+
+  it("go: says in its status region that a run is busy, then how it ended", async () => {
+    const [go] = CASES;
+    setFiles({ "main.go": SOURCE });
+    let finishRun: (result: unknown) => void = () => {};
+    harness.client.run.mockReturnValue(new Promise((resolve) => (finishRun = resolve)));
+    await renderPanel(go);
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+
+    await click(screen.getByRole("button", { name: "Run" }));
+    expect(status).toHaveTextContent("Program is running");
+
+    await act(async () => {
+      finishRun(go.run.result);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status.textContent).toBe("Program exited");
+  });
+
+  it("go: names a refused program's failure ahead of the service's detail", async () => {
+    const [go] = CASES;
+    setFiles({ "main.go": SOURCE });
+    harness.client.run.mockRejectedValue(
+      new GoPlaygroundServiceError("invalid-source", 'import "os/exec" is not allowed'),
+    );
+    await renderPanel(go);
+
+    await click(screen.getByRole("button", { name: "Run" }));
+
+    expect(screen.getByRole("status").textContent).toBe("This program can't run in a Go lesson");
+  });
+
+  it("go: keeps its status region while the dock is collapsed", async () => {
+    const [go] = CASES;
+    setFiles({ "main.go": SOURCE });
+    await renderPanel(go);
+    const status = screen.getByRole("status");
+
+    await click(screen.getByRole("button", { name: "Collapse runtime dock" }));
+
+    expect(screen.queryByTestId("console")).toBeNull();
+    expect(screen.getByRole("status")).toBe(status);
   });
 
   it("haskell: says nothing for a run a newer one superseded", async () => {
@@ -713,7 +761,20 @@ describe("playground runner panels", () => {
     await click(screen.getByRole("button", { name: "Format" }));
 
     expect(screen.getByText(panel.format.command, { selector: "p" })).toBeInTheDocument();
-    expect(screen.getByLabelText(panel.format.busyLabel)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(panel.format.busyLabel);
+  });
+
+  it.each(FORMAT_CASES)("$kind: says how a format ended", async (panel) => {
+    setFiles({ [panel.entry]: SOURCE });
+    formatEveryFile();
+    await renderPanel(panel);
+
+    await click(screen.getByRole("button", { name: "Format" }));
+
+    // The result line without its tag: "Formatted main.go".
+    expect(screen.getByRole("status").textContent).toBe(
+      panel.format.formattedLines.at(-1)!.replace(/^\[[^\]]+\] /, ""),
+    );
   });
 
   it.each(FORMAT_CASES)("$kind: refuses files the formatter cannot take", async (panel) => {

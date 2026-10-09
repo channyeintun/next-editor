@@ -55,7 +55,7 @@ export interface PlaygroundFormat<Client, ErrorKind extends string> {
   providerDisplayName: string;
   /** What the console header names while formatting. */
   commandLabel: string;
-  /** The spinner's accessible name while formatting. */
+  /** What the dock's status region says while formatting. */
   busyLabel: string;
   buttonTitle: string;
   /** What Format prints in a shared lesson this viewer cannot edit. */

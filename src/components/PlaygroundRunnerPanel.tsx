@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useSelector } from "@xstate/store-react";
 import { Bot, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
@@ -71,6 +71,15 @@ function decorateConsoleLine(line: string, tags: PlaygroundConsoleTags): string 
   return `${prefixColor}${prefix}${ANSI_RESET}${ANSI_DIM}${suffix}${ANSI_RESET}`;
 }
 
+// What the status region says once Run or Format has finished: the first error
+// line, which names the failure ahead of any diagnostics or detail after it,
+// or else the last line ("Program exited", "Formatted main.go"), without its tag.
+function describeOutcome(lines: readonly string[], tags: PlaygroundConsoleTags): string {
+  const summary =
+    lines.find((line) => line.match(tags.pattern)?.[0].includes("error")) ?? lines.at(-1) ?? "";
+  return summary.replace(tags.pattern, "").trim();
+}
+
 interface RuntimeEventState {
   activeTab: RuntimeDockTab;
   isCollapsed: boolean;
@@ -114,6 +123,8 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   >(language.client);
   const isRunning = activeOperation === "run";
   const isFormatting = activeOperation === "format";
+  // The finished Run or Format, for the status region; the busy text replaces it.
+  const [outcomeText, setOutcomeText] = useState("");
   const previousRuntimeEventStateRef = useRef<RuntimeEventState | null>(null);
 
   // The tab state is shared with the WebContainer dock's store; anything other
@@ -156,6 +167,13 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     appendRunnerConsoleLines(runtimePanelStore, lines);
   };
 
+  // Prints how a Run or Format ended, refusals included, and says it in the
+  // status region.
+  const appendOutcomeLines = (lines: string[]) => {
+    appendConsoleLines(lines);
+    setOutcomeText(describeOutcome(lines, consoleTags));
+  };
+
   const formatProject = async (
     activeModel: monaco.editor.ITextModel | null = null,
   ): Promise<monaco.languages.TextEdit[]> => {
@@ -163,7 +181,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       return [];
     }
     if (!canFormatWorkspace) {
-      appendConsoleLines([format.readOnlyLine]);
+      appendOutcomeLines([format.readOnlyLine]);
       return [];
     }
 
@@ -171,7 +189,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     const submittedFiles = collectFiles(project);
     const rejection = format.rejectFiles(submittedFiles);
     if (rejection) {
-      appendConsoleLines([rejection]);
+      appendOutcomeLines([rejection]);
       return [];
     }
 
@@ -181,24 +199,25 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       ? submittedFiles.find((file) => file.path === activePath)
       : null;
     if (activeModel && !submittedActiveFile && format.unsubmittedModelLine) {
-      appendConsoleLines([format.unsubmittedModelLine]);
+      appendOutcomeLines([format.unsubmittedModelLine]);
       return [];
     }
     if (
       activeModel &&
       (!submittedActiveFile || activeModel.getValue() !== submittedActiveFile.content)
     ) {
-      appendConsoleLines(format.staleLines());
+      appendOutcomeLines(format.staleLines());
       return [];
     }
 
+    setOutcomeText("");
     appendConsoleLines(format.startedLines(submittedFiles));
     const outcome = await request("format", (client) => format.execute(client, submittedFiles));
     if (outcome.kind === "superseded") {
       return [];
     }
     if (outcome.kind === "service-error") {
-      appendConsoleLines(format.serviceErrorLines(outcome.errorKind, outcome.message));
+      appendOutcomeLines(format.serviceErrorLines(outcome.errorKind, outcome.message));
       return [];
     }
 
@@ -211,7 +230,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       (activeModel && activeModel.getVersionId() !== activeModelVersion) ||
       (activeModel && activeModel.getValue() !== submittedActiveFile?.content)
     ) {
-      appendConsoleLines(format.staleLines());
+      appendOutcomeLines(format.staleLines());
       return [];
     }
 
@@ -230,7 +249,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
         updateFileContent(file.path, file.content);
       }
     }
-    appendConsoleLines(format.resultLines(changedFiles.map((file) => file.path)));
+    appendOutcomeLines(format.resultLines(changedFiles.map((file) => file.path)));
 
     const formattedActiveFile = activePath
       ? outcome.result.files.find((file) => file.path === activePath)
@@ -331,10 +350,11 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     const files = collectFiles(project);
     const rejection = run.rejectFiles?.(files);
     if (rejection) {
-      appendConsoleLines([rejection]);
+      appendOutcomeLines([rejection]);
       return;
     }
 
+    setOutcomeText("");
     appendConsoleLines(run.startedLines(files));
     const outcome = await request("run", (client) => run.execute(client, files));
 
@@ -343,7 +363,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       return;
     }
 
-    appendConsoleLines(
+    appendOutcomeLines(
       outcome.kind === "result"
         ? run.resultLines(outcome.result)
         : run.serviceErrorLines(outcome.errorKind, outcome.message),
@@ -472,7 +492,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
               </p>
               {isRunning || isFormatting ? (
                 <span
-                  aria-label={format && isFormatting ? format.busyLabel : "Program is running"}
+                  aria-hidden="true"
                   className="inline-block size-2.5 shrink-0 animate-spin rounded-full border-2 border-[#d48a37] border-t-transparent"
                 />
               ) : null}
@@ -524,6 +544,13 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
           </div>
         </div>
       )}
+
+      {/* Mounted with the dock rather than the runner tab, so a Format started
+          from the editor, or a Run that ends after a switch to the Agent tab, is
+          still announced, and a tab switch never re-announces an old result. */}
+      <span role="status" className="sr-only">
+        {format && isFormatting ? format.busyLabel : isRunning ? "Program is running" : outcomeText}
+      </span>
     </div>
   );
 }

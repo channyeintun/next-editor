@@ -535,7 +535,7 @@ function TerminalPanel() {
                     </p>
                     {isBusy ? (
                       <span
-                        aria-label="Runner is starting"
+                        aria-hidden="true"
                         className="inline-block size-2.5 shrink-0 animate-spin rounded-full border-2 border-[#d48a37] border-t-transparent"
                       />
                     ) : null}
@@ -679,6 +679,12 @@ function TerminalPanel() {
             )}
           </>
         )}
+
+        {/* Mounted with the dock rather than the runner tab, so the runtime's
+            start is announced from any tab and a tab switch never repeats it. */}
+        <span role="status" className="sr-only">
+          {isBusy ? "Runner is starting" : ""}
+        </span>
       </div>
 
       {displayIsSettingsOpen && (
