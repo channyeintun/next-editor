@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import { recorderErrorMessage, syncRecorderPause } from "./recorderControl";
+import { recorderErrorMessage, stopRecorderIfActive, syncRecorderPause } from "./recorderControl";
 
-/** Just the part of a MediaRecorder that pausing touches. */
+/** Just the part of a MediaRecorder that pausing and stopping touch. */
 function fakeRecorder(state: RecordingState) {
   const recorder = {
     state,
@@ -13,6 +13,10 @@ function fakeRecorder(state: RecordingState) {
     resume() {
       recorder.calls.push("resume");
       recorder.state = "recording";
+    },
+    stop() {
+      recorder.calls.push("stop");
+      recorder.state = "inactive";
     },
   };
   return recorder;
@@ -33,6 +37,22 @@ describe("syncRecorderPause", () => {
   ] as const)("brings a %s recorder to paused=%s", (state, paused, calls, change) => {
     const recorder = fakeRecorder(state);
     expect(syncRecorderPause(recorder as unknown as MediaRecorder, paused)).toBe(change);
+    expect(recorder.calls).toEqual(calls);
+  });
+});
+
+describe("stopRecorderIfActive", () => {
+  it("does nothing without a recorder", () => {
+    expect(() => stopRecorderIfActive(null)).not.toThrow();
+  });
+
+  it.each([
+    ["recording", ["stop"]],
+    ["paused", ["stop"]],
+    ["inactive", []],
+  ] as const)("stops a %s recorder only while it runs", (state, calls) => {
+    const recorder = fakeRecorder(state);
+    stopRecorderIfActive(recorder as unknown as MediaRecorder);
     expect(recorder.calls).toEqual(calls);
   });
 });

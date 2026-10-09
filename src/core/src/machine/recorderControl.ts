@@ -1,5 +1,12 @@
 // What the microphone, camera and screen recorder actors share: the events the machine
-// sends them, following the take's pauses, and reading a recorder's error.
+// sends them, the timeslice they record with, following the take's pauses, stopping a
+// recorder and reading a recorder's error.
+
+/**
+ * MediaRecorder timeslice (ms): the recorder hands its data over every second, and the
+ * blob is assembled from those chunks on stop.
+ */
+export const RECORDER_TIMESLICE_MS = 1000;
 
 /**
  * What the machine sends a recorder actor. PAUSE and RESUME follow the take's clock: a
@@ -31,6 +38,11 @@ export function syncRecorderPause(
     return "resumed";
   }
   return null;
+}
+
+/** Stops `recorder` unless there is none or it has stopped already. */
+export function stopRecorderIfActive(recorder: MediaRecorder | null): void {
+  if (recorder && recorder.state !== "inactive") recorder.stop();
 }
 
 /** The message a MediaRecorder `error` event carries, or `fallback` when it has none. */

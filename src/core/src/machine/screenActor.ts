@@ -1,13 +1,13 @@
 import { fromTypedCallback } from "./fromTypedCallback";
 import {
+  RECORDER_TIMESLICE_MS,
   recorderErrorMessage,
+  stopRecorderIfActive,
   syncRecorderPause,
   type RecorderControlEvent,
 } from "./recorderControl";
 import { getSupportedRecorderMimeType, SCREEN_VIDEO_MIME_TYPES } from "../utils/recorderMimeType";
 import { fixWebmDuration } from "../utils/webmDuration";
-
-const SCREEN_TIMESLICE_MS = 1000;
 
 // This is the keep-forever local file, so budget generously (unlike the session's telephony-grade
 // audio). VP9 screencast at 1080p is transparent at ~2.5 Mbps for low-motion text content.
@@ -279,7 +279,7 @@ export const screenRecordingActor = fromTypedCallback<
         cleanup();
       };
 
-      mediaRecorder.start(SCREEN_TIMESLICE_MS);
+      mediaRecorder.start(RECORDER_TIMESLICE_MS);
     } catch (error) {
       if (!disposed) {
         sendBack({
@@ -293,9 +293,7 @@ export const screenRecordingActor = fromTypedCallback<
   };
 
   const stopRecording = () => {
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
+    stopRecorderIfActive(mediaRecorder);
   };
 
   receive((event) => {
@@ -320,9 +318,7 @@ export const screenRecordingActor = fromTypedCallback<
   return () => {
     disposed = true;
     displayVideoTrack?.removeEventListener("ended", handleTrackEnded);
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
+    stopRecorderIfActive(mediaRecorder);
     cleanup();
   };
 });

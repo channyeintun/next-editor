@@ -1,7 +1,9 @@
 import { fromTypedCallback } from "./fromTypedCallback";
 import { openMicrophone } from "./microphone";
 import {
+  RECORDER_TIMESLICE_MS,
   recorderErrorMessage,
+  stopRecorderIfActive,
   syncRecorderPause,
   type RecorderControlEvent,
 } from "./recorderControl";
@@ -27,12 +29,6 @@ const AUDIO_SYNC_DRIFT_THRESHOLD_MS = 500;
  * threshold.
  */
 const AUDIO_EXACT_SYNC_EPSILON_MS = 50;
-
-/**
- * MediaRecorder timeslice (ms), as for the camera and screen recorders: the recorder
- * hands its data over every second, and the blob is assembled from those chunks on stop.
- */
-const AUDIO_TIMESLICE_MS = 1000;
 
 // ============================================================================
 // Audio Actor Types
@@ -196,7 +192,7 @@ export const audioRecordingActor = fromTypedCallback<
         });
       };
 
-      mediaRecorder.start(AUDIO_TIMESLICE_MS);
+      mediaRecorder.start(RECORDER_TIMESLICE_MS);
     } catch (error) {
       cleanupStream();
       if (!disposed && !stopRequested) {
@@ -212,9 +208,7 @@ export const audioRecordingActor = fromTypedCallback<
 
   const stopRecording = () => {
     stopRequested = true;
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
+    stopRecorderIfActive(mediaRecorder);
   };
 
   receive((event) => {
@@ -239,9 +233,7 @@ export const audioRecordingActor = fromTypedCallback<
   return () => {
     disposed = true;
     stopRequested = true;
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
+    stopRecorderIfActive(mediaRecorder);
     cleanupStream();
   };
 });

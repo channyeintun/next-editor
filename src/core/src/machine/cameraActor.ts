@@ -1,12 +1,12 @@
 import { fromTypedCallback } from "./fromTypedCallback";
 import {
+  RECORDER_TIMESLICE_MS,
   recorderErrorMessage,
+  stopRecorderIfActive,
   syncRecorderPause,
   type RecorderControlEvent,
 } from "./recorderControl";
 import { getSupportedRecorderMimeType, CAMERA_VIDEO_MIME_TYPES } from "../utils/recorderMimeType";
-
-const CAMERA_TIMESLICE_MS = 1000;
 
 // The face camera records a small square tile (480x480 at 24fps by default), so ~400 kbps
 // keeps the file light.
@@ -136,13 +136,11 @@ export const cameraRecordingActor = fromTypedCallback<
           type: "CAMERA_ERROR",
           error: recorderErrorMessage(event, "Camera recording error"),
         });
-        if (mediaRecorder && mediaRecorder.state !== "inactive") {
-          mediaRecorder.stop();
-        }
+        stopRecorderIfActive(mediaRecorder);
         cleanupStream();
       };
 
-      mediaRecorder.start(CAMERA_TIMESLICE_MS);
+      mediaRecorder.start(RECORDER_TIMESLICE_MS);
     } catch (error) {
       cleanupStream();
       if (!disposed && !stopRequested) {
@@ -160,9 +158,7 @@ export const cameraRecordingActor = fromTypedCallback<
   const stopRecording = () => {
     stopRequested = true;
     if (mediaRecorder) {
-      if (mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-      }
+      stopRecorderIfActive(mediaRecorder);
       return;
     }
     // STOP while getUserMedia is still pending (warm-up or an open permission prompt): no
@@ -195,9 +191,7 @@ export const cameraRecordingActor = fromTypedCallback<
 
   return () => {
     disposed = true;
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
+    stopRecorderIfActive(mediaRecorder);
     cleanupStream();
   };
 });
