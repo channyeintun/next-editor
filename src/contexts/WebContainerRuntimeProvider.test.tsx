@@ -1008,6 +1008,35 @@ describe("WebContainerRuntimeProvider saveWorkspace", () => {
     expect(runs()).toBe(started + 2);
     await save({ rerunOnlyIfChanged: true });
     expect(runs()).toBe(started + 2);
+
+    // The editor machine keeps the first render's save function. Once the variables
+    // dialog replaces the variables and the runner reruns on them, that frozen save
+    // must still recognise the code it already ran.
+    const frozenSave = captured.save;
+    try {
+      act(() => captured.runtime?.updateEnvironmentVariables({ FOO: "1" }));
+      await act(async () => {
+        await captured.runtime?.rerunRunner();
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      const rerunOnEnv = runs();
+      expect(rerunOnEnv).toBeGreaterThan(started + 2);
+
+      const frozenSaveIfChanged = async () => {
+        await act(async () => {
+          await frozenSave?.({ rerunOnlyIfChanged: true });
+          await vi.advanceTimersByTimeAsync(200);
+        });
+      };
+      await frozenSaveIfChanged();
+      expect(runs()).toBe(rerunOnEnv);
+
+      act(() => captured.workspace?.createFile("todo.txt", "next"));
+      await frozenSaveIfChanged();
+      expect(runs()).toBe(rerunOnEnv + 1);
+    } finally {
+      window.localStorage.removeItem("next-editor-runtime-environment");
+    }
   });
 
   function lessonProject(id: string, lessonType: WorkspaceLessonType): WorkspaceProject {

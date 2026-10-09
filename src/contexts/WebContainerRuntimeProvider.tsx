@@ -107,6 +107,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const [environmentVariables, setEnvironmentVariables] = useState<EnvironmentVariables>(
     loadStoredEnvironmentVariables,
   );
+  // saveWorkspace reads the current variables through this ref: the editor machine
+  // keeps the first render's save function, whose closure never sees a replaced object.
+  const environmentVariablesRef = useRef(environmentVariables);
   const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
   const {
     ensureProjectMounted,
@@ -260,6 +263,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   useLayoutEffect(() => {
     lessonTypeRef.current = lessonType;
     runnerConfigRef.current = runnerConfig;
+    environmentVariablesRef.current = environmentVariables;
   });
 
   const isSupported = isWebContainerRuntimeSupported();
@@ -496,12 +500,13 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     // every replayed file switch or sidebar scroll, mostly with code the runner already
     // ran. Running it again would spawn the program only to print the same output. The
     // replay's loadProject has queued the project sync already; the whole-project sync
-    // below only exists for the rerun to read.
+    // below only exists for the rerun to read. The machine holds the first render's
+    // save function, so the variables and runner config come from refs, not the closure.
     const lastRun = lastRunRef.current;
     if (
       options?.rerunOnlyIfChanged &&
       lastRun &&
-      lastRun.environmentVariables === environmentVariables &&
+      lastRun.environmentVariables === environmentVariablesRef.current &&
       lastRun.commandLine ===
         resolveRuntimeRunCommand(project, runnerConfigRef.current.runCommand) &&
       areWorkspaceProjectsEqual(lastRun.project, project)
@@ -558,6 +563,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const updateEnvironmentVariables = (variables: EnvironmentVariables) => {
     const normalizedVariables = normalizeEnvironmentVariables(variables);
 
+    environmentVariablesRef.current = normalizedVariables;
     setEnvironmentVariables(normalizedVariables);
     persistEnvironmentVariables(normalizedVariables);
   };
@@ -565,6 +571,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   const configureRuntime: WebContainerRuntimeActions["configureRuntime"] = (configuration) => {
     const normalizedVariables = normalizeEnvironmentVariables(configuration.environmentVariables);
     runnerConfigRef.current = configuration.runnerConfig;
+    environmentVariablesRef.current = normalizedVariables;
     setRunnerConfig(configuration.runnerConfig);
     setEnvironmentVariables(normalizedVariables);
   };
