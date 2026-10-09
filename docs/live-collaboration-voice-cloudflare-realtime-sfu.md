@@ -409,7 +409,7 @@ Extend `CollaborationPanel` rather than introducing a second unrelated panel.
 ### 10.1 Controls
 
 - Show Join voice when an eligible member is not connected.
-- After join, show Leave voice and a prominent Mute/Unmute control.
+- After join, show Leave voice and a prominent Mute/Unmute control. Mute and Unmute are one button whose label changes, so keyboard focus stays on it as the state changes. Join voice stays a separate button, so pressing it twice can never turn the microphone on.
 - Use distinct text and icons; do not communicate mute state by color alone.
 - Show a compact voice connection status: Connecting, Listening, Live, Reconnecting, or Failed.
 - Keep the user in listening/muted state after joining until they explicitly unmute.

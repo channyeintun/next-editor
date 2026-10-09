@@ -164,6 +164,37 @@ describe("voice controls", () => {
     expect(voiceMocks.mute).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps focus on the microphone button as Unmute and Mute replace each other", () => {
+    voiceState = idleVoiceState({ state: "listening" });
+    const view = render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /live/i }));
+    const micButton = screen.getByRole("button", { name: "Unmute" });
+    micButton.focus();
+
+    for (const state of ["unmuting", "live", "listening"] as const) {
+      voiceState = idleVoiceState({ state });
+      view.rerender(<CollaborationPanel />);
+      expect(micButton).toBeInTheDocument();
+      expect(micButton).toHaveFocus();
+      expect(micButton).toHaveAccessibleName(state === "listening" ? "Unmute" : "Mute");
+    }
+
+    fireEvent.click(micButton);
+    expect(voiceMocks.unmute).toHaveBeenCalledTimes(1);
+    expect(voiceMocks.mute).not.toHaveBeenCalled();
+  });
+
+  it("keeps Join voice apart from the microphone button", () => {
+    const view = render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /live/i }));
+    const join = screen.getByRole("button", { name: "Join voice" });
+
+    voiceState = idleVoiceState({ state: "listening" });
+    view.rerender(<CollaborationPanel />);
+    expect(join).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unmute" })).not.toBe(join);
+  });
+
   it("preserves the correct microphone control while reconnecting", () => {
     voiceState = idleVoiceState({ state: "reconnecting", wantsMicrophone: true });
     openPanel();

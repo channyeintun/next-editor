@@ -234,6 +234,20 @@ describe("CollaborationPanel follow actions", () => {
     expect(mocks.stopFollowing).toHaveBeenCalledWith("user");
   });
 
+  it("returns focus to the header button when the panel is closed", () => {
+    render(<CollaborationPanel />);
+    const trigger = screen.getByRole("button", { name: /^Live/ });
+    fireEvent.click(trigger);
+
+    const close = screen.getByRole("button", { name: "Close collaboration panel" });
+    close.focus();
+    fireEvent.click(close);
+
+    expect(screen.queryByRole("dialog", { name: "Live collaboration" })).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("offers asset retry only for a retryable hydration failure", () => {
     collaborationState = {
       ...makeCollaborationState(),

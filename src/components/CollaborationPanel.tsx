@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   Check,
   Copy,
@@ -87,6 +87,24 @@ function VoiceControls() {
     (state.state === "reconnecting" && state.wantsMicrophone);
   const showUnmute =
     state.state === "listening" || (state.state === "reconnecting" && !state.wantsMicrophone);
+  // Mute and Unmute are one button, so React keeps its DOM node, and the
+  // keyboard focus on it, when one replaces the other. Join stays separate:
+  // a second press on Join must never turn the microphone on.
+  const micToggle = showMute
+    ? {
+        label: "Mute",
+        Icon: MicOff,
+        onClick: voice.mute,
+        className: "bg-amber-500/15 text-amber-200 hover:bg-amber-500/25",
+      }
+    : showUnmute
+      ? {
+          label: "Unmute",
+          Icon: Mic,
+          onClick: voice.unmute,
+          className: "bg-sky-500/15 text-sky-200 hover:bg-sky-500/25",
+        }
+      : null;
 
   return (
     <section
@@ -121,22 +139,14 @@ function VoiceControls() {
             <Headphones size={13} aria-hidden="true" /> Join voice
           </button>
         ) : null}
-        {showUnmute ? (
+        {micToggle ? (
           <button
+            key="mic-toggle"
             type="button"
-            onClick={voice.unmute}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500/15 px-3 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-500/25"
+            onClick={micToggle.onClick}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${micToggle.className}`}
           >
-            <Mic size={13} aria-hidden="true" /> Unmute
-          </button>
-        ) : null}
-        {showMute ? (
-          <button
-            type="button"
-            onClick={voice.mute}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/25"
-          >
-            <MicOff size={13} aria-hidden="true" /> Mute
+            <micToggle.Icon size={13} aria-hidden="true" /> {micToggle.label}
           </button>
         ) : null}
         {state.state === "failed" ? (
@@ -570,6 +580,7 @@ export default function CollaborationPanel() {
   const collaboration = useCollaboration();
   const { isSignedIn } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -664,6 +675,7 @@ export default function CollaborationPanel() {
       ) : null}
 
       <button
+        ref={triggerRef}
         data-tour="collaboration"
         type="button"
         aria-expanded={isOpen}
@@ -703,7 +715,11 @@ export default function CollaborationPanel() {
             <button
               type="button"
               aria-label="Close collaboration panel"
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                // Closing unmounts this button; hand focus back to the opener.
+                setIsOpen(false);
+                triggerRef.current?.focus();
+              }}
               className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-white"
             >
               <X size={16} />
