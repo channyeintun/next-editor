@@ -276,6 +276,51 @@ describe("AgentPanel status announcements", () => {
   });
 });
 
+describe("AgentPanel transcript", () => {
+  it("says who wrote each message and marks tool calls and their output", () => {
+    metadata.isPlaying = true;
+    act(() =>
+      getAgentStore().trigger.applyReplaySnapshot({
+        snapshot: {
+          status: "done",
+          items: [
+            { kind: "message", id: "m1", role: "user", text: "Run the tests" },
+            {
+              kind: "tool_call",
+              id: "t1",
+              callId: "c1",
+              name: "bash",
+              arguments: '{"command":"npm test"}',
+            },
+            { kind: "tool_result", id: "r1", callId: "c1", output: "1 passed" },
+            { kind: "tool_call", id: "t2", callId: "c2", name: "read", arguments: "{}" },
+            { kind: "tool_result", id: "r2", callId: "c2", output: "No such file", isError: true },
+            { kind: "message", id: "m2", role: "assistant", text: "All tests pass." },
+          ],
+        },
+      }),
+    );
+    renderPanel();
+
+    expect(screen.getByText("Run the tests").parentElement).toHaveTextContent(
+      "You said: Run the tests",
+    );
+    expect(screen.getByText("All tests pass.").parentElement).toHaveTextContent(
+      "Agent: All tests pass.",
+    );
+    expect(screen.getByText("npm test").parentElement).toHaveTextContent("Tool call: bashnpm test");
+    expect(screen.getByText("1 passed").parentElement).toHaveTextContent("Tool output: 1 passed");
+    expect(screen.getByText("No such file").parentElement).toHaveTextContent(
+      "Tool error: No such file",
+    );
+    for (const prefix of ["You said:", "Agent:", "Tool call:", "Tool output:", "Tool error:"]) {
+      for (const label of screen.getAllByText(prefix)) {
+        expect(label).toHaveClass("sr-only");
+      }
+    }
+  });
+});
+
 describe("AgentPanel API key hint", () => {
   it("explains why Send is disabled when there is no API key", () => {
     getAgentCredentialStore().trigger.clear();

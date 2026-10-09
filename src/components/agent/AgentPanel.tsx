@@ -79,6 +79,7 @@ function ToolCallChip({ item }: { item: Extract<ChatItem, { kind: "tool_call" }>
 
   return (
     <div className="ml-4 inline-flex max-w-full items-center gap-1.5 rounded-md bg-[#1e2129] px-2.5 py-1 font-mono text-[11px] text-slate-400">
+      <span className="sr-only">Tool call: </span>
       <span className="text-[#64a3ff]">{item.name}</span>
       {summary ? <span className="truncate text-slate-500">{summary}</span> : null}
     </div>
@@ -103,6 +104,7 @@ function ToolResultRow({ item }: { item: Extract<ChatItem, { kind: "tool_result"
           : "border-slate-800 bg-[#171b22] text-slate-400"
       }`}
     >
+      <span className="sr-only">{item.isError ? "Tool error: " : "Tool output: "}</span>
       <pre className="whitespace-pre-wrap wrap-break-word">{shown}</pre>
       {isLong ? (
         <button
@@ -130,6 +132,8 @@ function MessageRow({ item }: { item: Extract<ChatItem, { kind: "message" }> }) 
             item.role === "user" ? "bg-[#233047] text-slate-100" : "bg-transparent text-slate-200"
           }`}
         >
+          {/* Who wrote it is otherwise shown only by alignment and colour. */}
+          <span className="sr-only">{item.role === "user" ? "You said: " : "Agent: "}</span>
           {item.images?.length ? (
             <div className={`mb-2 grid gap-2 ${item.images.length > 1 ? "grid-cols-2" : ""}`}>
               {item.images.map((image) => (
@@ -431,7 +435,9 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {/* relative: the transcript's sr-only labels are absolutely positioned, so
+              they must scroll with it rather than stretch the page's overflow. */}
+          <div className="relative min-h-0 flex-1 overflow-y-auto p-3">
             {items.length === 0 ? (
               <p className="px-1 text-xs text-slate-500">
                 Ask the agent to build or fix something in this workspace.
