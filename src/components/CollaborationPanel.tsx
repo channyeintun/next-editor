@@ -176,7 +176,7 @@ function VoiceControls() {
       ) : null}
 
       {state.state === "listening" ? (
-        <p className="mt-2 text-[10px] leading-4 text-slate-500">
+        <p className="mt-2 text-[10px] leading-4 text-slate-300">
           You are muted. Others cannot hear you until you unmute.
         </p>
       ) : null}
@@ -313,11 +313,11 @@ function ParticipantRow({
           {name}
           {isSelf ? " (you)" : ""}
         </span>
-        <span className="block truncate text-[10px] text-slate-500">{surfaceLabel}</span>
+        <span className="block truncate text-[10px] text-slate-300">{surfaceLabel}</span>
       </span>
       <VoiceParticipantBadge userId={participant.actorId} sessionId={participant.sessionId} />
       {participant.isHost ? <Crown size={13} className="text-amber-300" aria-label="Host" /> : null}
-      <span className="text-[10px] capitalize text-slate-500">{participant.role}</span>
+      <span className="text-[10px] capitalize text-slate-300">{participant.role}</span>
       {!isSelf ? (
         <button
           type="button"
@@ -407,7 +407,7 @@ function RoomOwnerSection({
   return (
     <>
       <section>
-        <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
           Invite people
         </h3>
         <div className="grid grid-cols-2 gap-2">
@@ -440,13 +440,13 @@ function RoomOwnerSection({
             </span>
           </button>
         ) : null}
-        <p className="mt-1.5 text-[10px] leading-4 text-slate-500">
+        <p className="mt-1.5 text-[10px] leading-4 text-slate-300">
           Invitation tokens are shown only when created. Revoke unused links below.
         </p>
       </section>
 
       <section>
-        <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
           Members
         </h3>
         <div className="space-y-1.5">
@@ -494,7 +494,7 @@ function RoomOwnerSection({
 
       {collaboration.invitations.length > 0 ? (
         <section>
-          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
             Active invitation records
           </h3>
           <div className="space-y-1">
@@ -804,12 +804,12 @@ export default function CollaborationPanel() {
                 ) : null}
 
                 <section>
-                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
                     Online now
                   </h3>
                   <div className="space-y-1.5">
                     {collaboration.participants.length === 0 ? (
-                      <p className="text-xs text-slate-500">Waiting for presence…</p>
+                      <p className="text-xs text-slate-300">Waiting for presence…</p>
                     ) : (
                       collaboration.participants.map((participant) => {
                         const participantKey = collaborationParticipantKey(participant);
