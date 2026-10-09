@@ -62,7 +62,7 @@ function PublicAuthorProfile({ username }: { username: string }) {
   if (isPending) {
     return (
       <Shell>
-        <div className="flex justify-center py-20 text-slate-400">Loading profile…</div>
+        <div className="flex justify-center py-20 text-slate-300">Loading profile…</div>
       </Shell>
     );
   }
@@ -71,7 +71,7 @@ function PublicAuthorProfile({ username }: { username: string }) {
     return (
       <Shell>
         <div className="flex flex-col items-center gap-4 py-20 text-center">
-          <p className="text-red-400">Failed to load this profile</p>
+          <p className="text-rose-300">Failed to load this profile</p>
           <button
             type="button"
             onClick={() => refetch()}
@@ -88,7 +88,7 @@ function PublicAuthorProfile({ username }: { username: string }) {
   if (!data) {
     return (
       <Shell>
-        <div className="flex flex-col items-center gap-4 py-20 text-center text-slate-400">
+        <div className="flex flex-col items-center gap-4 py-20 text-center text-slate-300">
           <p>Author not found.</p>
           <Link
             to="/learn"
@@ -124,17 +124,17 @@ function PublicAuthorProfile({ username }: { username: string }) {
         )}
         <div>
           <h1 className="text-lg font-semibold text-white">{displayName}</h1>
-          <p className="text-sm text-slate-400">@{data.user.username}</p>
+          <p className="text-sm text-slate-300">@{data.user.username}</p>
         </div>
       </div>
 
       {data.playlists.length === 0 && data.lessons.length === 0 ? (
-        <div className="flex justify-center py-20 text-slate-400">No published lessons yet.</div>
+        <div className="flex justify-center py-20 text-slate-300">No published lessons yet.</div>
       ) : (
         <div className="space-y-10">
           {data.playlists.length > 0 && (
             <section>
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.06em] text-slate-400">
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.06em] text-slate-300">
                 Playlists
               </h2>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -149,7 +149,7 @@ function PublicAuthorProfile({ username }: { username: string }) {
               {/* Heading only when playlists share the page — otherwise the
                   profile is just a lesson grid, same as before this section existed. */}
               {data.playlists.length > 0 && (
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.06em] text-slate-400">
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.06em] text-slate-300">
                   Lessons
                 </h2>
               )}

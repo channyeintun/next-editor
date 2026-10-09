@@ -30,7 +30,7 @@ export default function PlaylistDetailRoute() {
       ) : playlist ? (
         <PlaylistDetail playlist={playlist} />
       ) : (
-        <div className="flex flex-col items-center gap-4 py-20 text-center text-slate-400">
+        <div className="flex flex-col items-center gap-4 py-20 text-center text-slate-300">
           <p className="text-sm">{isError ? "Failed to load playlist." : "Playlist not found."}</p>
           <Link
             to="/learn"
