@@ -77,7 +77,7 @@ describe("applyFrameState cursor", () => {
       positionColumn: 1,
     });
 
-    applyFrameState(editor, frameWith(target), null, false, previous);
+    applyFrameState(editor, frameWith(target), null, previous);
 
     expect(setPosition).not.toHaveBeenCalled();
     expect(setSelection).toHaveBeenCalledTimes(1);
@@ -87,7 +87,7 @@ describe("applyFrameState cursor", () => {
     });
 
     // Already there: no cursor write at all.
-    applyFrameState(editor, frameWith(target), null, false, frameWith(target));
+    applyFrameState(editor, frameWith(target), null, frameWith(target));
     expect(setSelection).toHaveBeenCalledTimes(1);
   });
 });

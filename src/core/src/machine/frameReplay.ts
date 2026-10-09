@@ -87,7 +87,6 @@ export const applyFrameState = (
   editor: monaco.editor.IStandaloneCodeEditor,
   frame: EditorFrame,
   decorationsCollection: monaco.editor.IEditorDecorationsCollection | null,
-  isPlaying: boolean,
   previousFrame?: EditorFrame | null,
 ): monaco.editor.IEditorDecorationsCollection | null => {
   if (!frame.state || !isEditorReady(editor)) return decorationsCollection;
@@ -120,10 +119,10 @@ export const applyFrameState = (
 
     applySelectionDiff(editor, state.selection);
 
-    // Add cursor decorations during playback only when Monaco's own caret is
-    // not visible. This avoids duplicate carets and preserves native
-    // multi-cursor behavior while the editor has text focus.
-    if (isPlaying && !editor.hasTextFocus()) {
+    // Add cursor decorations only when Monaco's own caret is not visible. This
+    // avoids duplicate carets and preserves native multi-cursor behavior while
+    // the editor has text focus.
+    if (!editor.hasTextFocus()) {
       // Only update decorations if selection changed or collection is missing
       const selectionChanged =
         !previousFrame || !areSelectionsEqual(previousFrame.state.selection, frame.state.selection);
@@ -355,7 +354,6 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
     editorRefs.editor,
     frame,
     editorRefs.cursorDecorationsCollection,
-    true,
     currentFrame,
   );
 
