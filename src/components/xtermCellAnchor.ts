@@ -1,6 +1,11 @@
-import type { Terminal } from "@xterm/xterm";
+import type { IBuffer, Terminal } from "@xterm/xterm";
 import type { CursorCellAnchor } from "../core/src/types";
 import type { CursorCellAnchorProvider } from "../core/src/utils/cursorCellAnchors";
+import {
+  firstRowOfWrittenLine,
+  writtenLineAtRow,
+  writtenLineStarts,
+} from "../core/src/utils/terminalLines";
 
 const roundFraction = (value: number) => Math.round(value * 100) / 100;
 
@@ -9,11 +14,15 @@ const roundFraction = (value: number) => Math.round(value * 100) / 100;
  * point becomes "written line N, character K" from the live buffer, and back.
  * The grid is the `.xterm-screen` box split into `cols` × `rows` cells — the
  * same box xterm lays its rows out in, inside the container's padding.
+ *
+ * Replay asks for a point every frame the pointer is over the console, so the
+ * rows that start each written line are kept until a write, a resize (which
+ * rewraps) or a different buffer could have moved them.
  */
 export function createXtermCellAnchor(
   container: Element,
   terminal: Terminal,
-): CursorCellAnchorProvider {
+): CursorCellAnchorProvider & { dispose(): void } {
   const grid = () => {
     const screen = (container.querySelector(".xterm-screen") ?? container).getBoundingClientRect();
     const cols = Math.max(1, terminal.cols);
@@ -29,6 +38,23 @@ export function createXtermCellAnchor(
     };
   };
 
+  let starts: number[] | null = null;
+  let startsBuffer: IBuffer | null = null;
+  let startsLength = -1;
+  const startsOf = (buffer: IBuffer) => {
+    if (!starts || startsBuffer !== buffer || startsLength !== buffer.length) {
+      starts = writtenLineStarts(buffer);
+      startsBuffer = buffer;
+      startsLength = buffer.length;
+    }
+    return starts;
+  };
+  const forgetStarts = () => {
+    starts = null;
+  };
+  const writeDisposable = terminal.onWriteParsed(forgetStarts);
+  const resizeDisposable = terminal.onResize(forgetStarts);
+
   return {
     toCell(clientX, clientY) {
       const g = grid();
@@ -38,20 +64,12 @@ export function createXtermCellAnchor(
       const buffer = terminal.buffer.active;
       const row = buffer.viewportY + Math.floor(rowF);
       if (row >= buffer.length) return null;
-      // The written line holding this row: count line starts (unwrapped rows).
-      let line = -1;
-      let firstRow = 0;
-      for (let y = 0; y <= row; y++) {
-        if (!buffer.getLine(y)?.isWrapped) {
-          line += 1;
-          firstRow = y;
-        }
-      }
-      if (line < 0) return null;
+      const written = writtenLineAtRow(startsOf(buffer), row);
+      if (!written) return null;
       const col = Math.floor(colF);
       return {
-        line,
-        offset: (row - firstRow) * g.cols + col,
+        line: written.line,
+        offset: (row - written.firstRow) * g.cols + col,
         dx: roundFraction(colF - col),
         dy: roundFraction(rowF - Math.floor(rowF)),
       };
@@ -60,24 +78,20 @@ export function createXtermCellAnchor(
       const g = grid();
       if (!g.ok) return null;
       const buffer = terminal.buffer.active;
-      let line = -1;
-      let firstRow = -1;
-      for (let y = 0; y < buffer.length; y++) {
-        if (!buffer.getLine(y)?.isWrapped) {
-          line += 1;
-          if (line === cell.line) {
-            firstRow = y;
-            break;
-          }
-        }
-      }
-      if (firstRow < 0) return null;
+      const firstRow = firstRowOfWrittenLine(startsOf(buffer), cell.line);
+      if (firstRow === null) return null;
       const viewRow = firstRow + Math.floor(cell.offset / g.cols) - buffer.viewportY;
       if (viewRow < 0 || viewRow >= g.rows) return null;
       return {
         x: g.left + ((cell.offset % g.cols) + cell.dx) * g.cellWidth,
         y: g.top + (viewRow + cell.dy) * g.cellHeight,
       };
+    },
+    dispose() {
+      writeDisposable.dispose();
+      resizeDisposable.dispose();
+      starts = null;
+      startsBuffer = null;
     },
   };
 }

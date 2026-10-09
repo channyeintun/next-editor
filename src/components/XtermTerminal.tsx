@@ -201,6 +201,7 @@ function XtermTerminal({
 
     return () => {
       unregisterCursorCellAnchor(container, cellAnchor);
+      cellAnchor.dispose();
       unregisterXtermTerminal(container, terminal);
       dataDisposable.dispose();
       scrollDisposable.dispose();

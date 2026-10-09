@@ -39,6 +39,12 @@ const xterm = vi.hoisted(() => {
     onScroll() {
       return { dispose() {} };
     }
+    onWriteParsed() {
+      return { dispose() {} };
+    }
+    onResize() {
+      return { dispose() {} };
+    }
     reset() {
       this.calls.push("reset");
     }

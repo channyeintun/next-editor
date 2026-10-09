@@ -2,22 +2,61 @@ import type { Terminal } from "@xterm/xterm";
 import { describe, expect, it } from "vite-plus/test";
 import { createXtermCellAnchor } from "./xtermCellAnchor";
 
-// A console showing `lines` with `rows` rows on screen, scrolled to the bottom
-// the way a console follows its output; 8px × 20px cells starting at (100, 50).
-function console_(lines: string[], rows: number, cols = 40) {
+// A console showing `rows` buffer rows (true = wrapped continuation), with
+// `screenRows` of them on screen, scrolled to the bottom the way a console
+// follows its output; 8px × 20px cells starting at (100, 50).
+function fakeConsole(wrapped: boolean[], screenRows: number, cols = 40) {
   const container = document.createElement("div");
   const screen = document.createElement("div");
   screen.className = "xterm-screen";
   container.append(screen);
   screen.getBoundingClientRect = () =>
-    ({ left: 100, top: 50, width: cols * 8, height: rows * 20 }) as DOMRect;
+    ({ left: 100, top: 50, width: cols * 8, height: screenRows * 20 }) as DOMRect;
   const buffer = {
-    length: lines.length,
-    viewportY: Math.max(0, lines.length - rows),
-    getLine: (y: number) => (y < lines.length ? { isWrapped: false } : undefined),
+    rows: wrapped,
+    get length() {
+      return this.rows.length;
+    },
+    viewportY: Math.max(0, wrapped.length - screenRows),
+    getLine(y: number) {
+      return y < this.rows.length ? { isWrapped: this.rows[y] } : undefined;
+    },
   };
-  const terminal = { cols, rows, buffer: { active: buffer } } as unknown as Terminal;
-  return createXtermCellAnchor(container, terminal);
+  const listeners = { write: [] as Array<() => void>, resize: [] as Array<() => void> };
+  const listen = (list: Array<() => void>) => (listener: () => void) => {
+    list.push(listener);
+    return { dispose: () => list.splice(list.indexOf(listener), 1) };
+  };
+  const terminal = {
+    cols,
+    rows: screenRows,
+    buffer: { active: buffer },
+    onWriteParsed: listen(listeners.write),
+    onResize: listen(listeners.resize),
+  } as unknown as Terminal;
+  return { anchor: createXtermCellAnchor(container, terminal), buffer, listeners };
+}
+
+function console_(lines: string[], rows: number, cols = 40) {
+  return fakeConsole(
+    lines.map(() => false),
+    rows,
+    cols,
+  ).anchor;
+}
+
+// The written-line walk xtermCellAnchor did inline before it shared core's
+// terminalLines: count unwrapped rows from row 0.
+function inlineLineOf(wrapped: boolean[], row: number) {
+  let line = -1;
+  let firstRow = 0;
+  for (let y = 0; y <= row; y++) {
+    if (!wrapped[y]) {
+      line += 1;
+      firstRow = y;
+    }
+  }
+  return { line, firstRow };
 }
 
 const output = [
@@ -56,5 +95,46 @@ describe("createXtermCellAnchor", () => {
     expect(anchor.toClient({ line: 1, offset: 3, dx: 0.5, dy: 0.5 })).toBeNull();
     expect(anchor.toCell(90, 60)).toBeNull();
     expect(anchor.toCell(100 + 41 * 8, 60)).toBeNull();
+  });
+
+  it("numbers wrapped lines exactly as the inline row walk did", () => {
+    const wrapped = [false, true, true, false, false, true, false, true, true, true, false];
+    const { anchor } = fakeConsole(wrapped, wrapped.length);
+    for (let row = 0; row < wrapped.length; row++) {
+      const { line, firstRow } = inlineLineOf(wrapped, row);
+      const cell = anchor.toCell(100 + 3.5 * 8, 50 + (row + 0.5) * 20);
+      expect(cell).toEqual({ line, offset: (row - firstRow) * 40 + 3, dx: 0.5, dy: 0.5 });
+      expect(anchor.toClient(cell!)).toEqual({ x: 100 + 3.5 * 8, y: 50 + (row + 0.5) * 20 });
+    }
+  });
+
+  it("reads the buffer again after a write or a resize, and stops listening on dispose", () => {
+    const { anchor, buffer, listeners } = fakeConsole([false, false, false], 3);
+    const cell = { line: 1, offset: 0, dx: 0.5, dy: 0.5 };
+    expect(anchor.toClient(cell)).toEqual({ x: 104, y: 80 });
+
+    // The first line now wraps onto the second row, at the same buffer length:
+    // line 1 starts a row lower.
+    buffer.rows = [false, true, false];
+    expect(anchor.toClient(cell)).toEqual({ x: 104, y: 80 });
+    listeners.write.forEach((listener) => listener());
+    expect(anchor.toClient(cell)).toEqual({ x: 104, y: 100 });
+
+    buffer.rows = [false, false, false];
+    listeners.resize.forEach((listener) => listener());
+    expect(anchor.toClient(cell)).toEqual({ x: 104, y: 80 });
+
+    anchor.dispose();
+    expect(listeners.write).toEqual([]);
+    expect(listeners.resize).toEqual([]);
+  });
+
+  it("reads the buffer again when its length changes without an event", () => {
+    // clear() drops scrollback without a parsed write.
+    const { anchor, buffer } = fakeConsole([false, true, false], 3);
+    expect(anchor.toClient({ line: 1, offset: 0, dx: 0, dy: 0 })).toEqual({ x: 100, y: 90 });
+    buffer.rows = [false, false];
+    buffer.viewportY = 0;
+    expect(anchor.toClient({ line: 1, offset: 0, dx: 0, dy: 0 })).toEqual({ x: 100, y: 70 });
   });
 });
