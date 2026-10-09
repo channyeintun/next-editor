@@ -54,3 +54,39 @@ export function dockContentSizeClassName(fillsColumn: boolean): string {
 export function dockRootSizeClassName(fillsColumn: boolean): string {
   return fillsColumn ? "min-h-0 flex-1" : "shrink-0";
 }
+
+/**
+ * The escape codes the docks' consoles colour with. Dim is ANSI 90, which
+ * XtermTerminal's theme (brightBlack) keeps at 7:1 on the dock background.
+ */
+export const ANSI = {
+  reset: "\u001b[0m",
+  dim: "\u001b[90m",
+  blue: "\u001b[94m",
+  cyan: "\u001b[96m",
+  green: "\u001b[92m",
+  red: "\u001b[91m",
+  yellow: "\u001b[93m",
+} as const;
+
+/**
+ * The docks' console idiom: a line that starts with a tag `pattern` matches
+ * gets the tag coloured (the colour `pickPrefixColor` picks for it) and the
+ * rest dimmed; any other line, raw program output among them, is left as is.
+ */
+export function colorizeTaggedLine(
+  line: string,
+  pattern: RegExp,
+  pickPrefixColor: (prefix: string) => string,
+): string {
+  const prefixMatch = line.match(pattern);
+
+  if (!prefixMatch) {
+    return line;
+  }
+
+  const prefix = prefixMatch[0];
+  const suffix = line.slice(prefix.length);
+
+  return `${pickPrefixColor(prefix)}${prefix}${ANSI.reset}${ANSI.dim}${suffix}${ANSI.reset}`;
+}

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  ANSI,
+  colorizeTaggedLine,
   describeRunnerOutput,
   dockContentSizeClassName,
   dockRootSizeClassName,
@@ -70,5 +72,36 @@ describe("dock size classes", () => {
   it("keeps the dock's own height and the content's fixed height otherwise", () => {
     expect(dockRootSizeClassName(false)).toBe("shrink-0");
     expect(dockContentSizeClassName(false)).toBe("h-72");
+  });
+});
+
+describe("colorizeTaggedLine", () => {
+  const TAG = /^\[(?:run|run error)\]/;
+  const pick = (prefix: string) => (prefix.includes("error") ? ANSI.red : ANSI.green);
+
+  it("colours the tag, then dims the rest of the line", () => {
+    expect(colorizeTaggedLine("[run] Program exited.", TAG, pick)).toBe(
+      "\u001b[92m[run]\u001b[0m\u001b[90m Program exited.\u001b[0m",
+    );
+    expect(colorizeTaggedLine("[run error] timed out", TAG, pick)).toBe(
+      `${ANSI.red}[run error]${ANSI.reset}${ANSI.dim} timed out${ANSI.reset}`,
+    );
+  });
+
+  it("returns an untagged line verbatim", () => {
+    expect(colorizeTaggedLine("hello, world", TAG, pick)).toBe("hello, world");
+  });
+
+  it("leaves a line alone when its bracketed start is not one of the tags", () => {
+    expect(colorizeTaggedLine("[1 2 3]", TAG, pick)).toBe("[1 2 3]");
+  });
+
+  it("passes the tag as written to the colour picker", () => {
+    const seen: string[] = [];
+    colorizeTaggedLine("[Runtime] ready", /^\[[^\]]+\]/, (prefix) => {
+      seen.push(prefix);
+      return ANSI.cyan;
+    });
+    expect(seen).toEqual(["[Runtime]"]);
   });
 });

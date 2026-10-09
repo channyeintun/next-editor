@@ -26,6 +26,8 @@ import type {
   RuntimeTerminalScrollLines,
 } from "../types/runtime";
 import {
+  ANSI,
+  colorizeTaggedLine,
   describeRunnerOutput,
   dockContentSizeClassName,
   dockRootSizeClassName,
@@ -33,45 +35,32 @@ import {
 } from "./terminalPanel/runtimeDockHelpers";
 import { useRuntimeDockRecording } from "./terminalPanel/useRuntimeDockRecording";
 
-const ANSI_RESET = "\u001b[0m";
 const DEFAULT_CONSOLE_LINES: string[] = [];
 const RUNTIME_PANEL_BG = "bg-[#15191f]";
 const RUNTIME_COMMAND_BAR_CLASS =
   "flex min-h-15.5 items-center justify-between border-b border-[#11151d] bg-[#191d25] px-4 py-3";
 const RUNTIME_COMMAND_TEXT_CLASS = "truncate font-mono text-[13px] font-semibold text-slate-300";
-const ANSI_COLORS: Record<string, string> = {
-  dim: "\u001b[90m",
-  blue: "\u001b[94m",
-  cyan: "\u001b[96m",
-  green: "\u001b[92m",
-  red: "\u001b[91m",
-  yellow: "\u001b[93m",
-};
 
-function decorateConsoleLine(line: string): string {
-  const prefixMatch = line.match(/^\[[^\]]+\]/);
-
-  if (!prefixMatch) {
-    return line;
-  }
-
-  const prefix = prefixMatch[0];
-  const suffix = line.slice(prefix.length);
+function pickWebContainerPrefixColor(prefix: string): string {
   const normalizedPrefix = prefix.toLowerCase();
 
-  let prefixColor = ANSI_COLORS.blue;
-
   if (normalizedPrefix.includes("error")) {
-    prefixColor = ANSI_COLORS.red;
-  } else if (normalizedPrefix.startsWith("[runtime")) {
-    prefixColor = ANSI_COLORS.cyan;
-  } else if (normalizedPrefix.startsWith("[preview")) {
-    prefixColor = ANSI_COLORS.yellow;
-  } else if (normalizedPrefix.startsWith("[command")) {
-    prefixColor = ANSI_COLORS.green;
+    return ANSI.red;
   }
+  if (normalizedPrefix.startsWith("[runtime")) {
+    return ANSI.cyan;
+  }
+  if (normalizedPrefix.startsWith("[preview")) {
+    return ANSI.yellow;
+  }
+  if (normalizedPrefix.startsWith("[command")) {
+    return ANSI.green;
+  }
+  return ANSI.blue;
+}
 
-  return `${prefixColor}${prefix}${ANSI_RESET}${ANSI_COLORS.dim}${suffix}${ANSI_RESET}`;
+function decorateConsoleLine(line: string): string {
+  return colorizeTaggedLine(line, /^\[[^\]]+\]/, pickWebContainerPrefixColor);
 }
 
 interface RuntimeEventState {

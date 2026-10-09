@@ -5,6 +5,8 @@ import AgentPanel from "./agent/AgentPanel";
 import XtermTerminal from "./XtermTerminal";
 import RuntimeDockHeader, { type RuntimeDockTabConfig } from "./terminalPanel/RuntimeDockHeader";
 import {
+  ANSI,
+  colorizeTaggedLine,
   dockContentSizeClassName,
   dockRootSizeClassName,
 } from "./terminalPanel/runtimeDockHelpers";
@@ -47,32 +49,18 @@ import type { RuntimeDockTab, RuntimeTerminalScrollLines } from "../types/runtim
  * runner never reuses another language's client.
  */
 
-const ANSI_RESET = "\u001b[0m";
-const ANSI_DIM = "\u001b[90m";
-const ANSI_GREEN = "\u001b[92m";
-const ANSI_RED = "\u001b[91m";
-const ANSI_YELLOW = "\u001b[93m";
-
 // Same prefix-coloring idiom as the WebContainer dock's console: color the
 // [tag], dim the rest, leave raw program output undecorated. Only the tags the
 // language's console module emits match, so a program's own bracketed line — a
 // printed list, say — is left alone.
 function decorateConsoleLine(line: string, tags: PlaygroundConsoleTags): string {
-  const prefixMatch = line.match(tags.pattern);
-
-  if (!prefixMatch) {
-    return line;
-  }
-
-  const prefix = prefixMatch[0];
-  const suffix = line.slice(prefix.length);
-  const prefixColor = prefix.includes("error")
-    ? ANSI_RED
-    : tags.warningPrefix && prefix.startsWith(tags.warningPrefix)
-      ? ANSI_YELLOW
-      : ANSI_GREEN;
-
-  return `${prefixColor}${prefix}${ANSI_RESET}${ANSI_DIM}${suffix}${ANSI_RESET}`;
+  return colorizeTaggedLine(line, tags.pattern, (prefix) =>
+    prefix.includes("error")
+      ? ANSI.red
+      : tags.warningPrefix && prefix.startsWith(tags.warningPrefix)
+        ? ANSI.yellow
+        : ANSI.green,
+  );
 }
 
 // What the status region says once Run or Format has finished: the first error
