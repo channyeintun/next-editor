@@ -440,6 +440,33 @@ describe("voice engine roster", () => {
     expect(harness.sinks[0].cleanups).toBe(1);
     expect(harness.sinks).toHaveLength(2);
   });
+
+  it("shows its own publishing state from its own upsert without pulling it", () => {
+    const harness = createHarness();
+    joinWithRemote(harness);
+    harness.sockets[0].emit("message", {
+      data: JSON.stringify({
+        type: "voice.participant-upsert",
+        version: 1,
+        revision: 2,
+        participant: {
+          ...selfParticipant(),
+          muted: false,
+          publishedTrack: {
+            sessionId: "sfu-session-self",
+            trackName: "self-track",
+            location: "remote",
+          },
+          revision: 2,
+        },
+      }),
+    });
+    const self = harness.engine.getUiState().roster.find((entry) => entry.isSelf);
+    expect(self?.participant.muted).toBe(false);
+    expect(self?.participant.publishedTrack?.trackName).toBe("self-track");
+    expect(harness.mediaSessions[0].pulls).toHaveLength(1);
+    expect(harness.mediaSessions[0].pulls[0].track.trackName).toBe("remote-track");
+  });
 });
 
 describe("voice engine cleanup", () => {

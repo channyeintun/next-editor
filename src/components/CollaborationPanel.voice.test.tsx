@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { VoiceUiState } from "../voice/types";
 
@@ -269,6 +269,22 @@ describe("participant voice badges", () => {
         }),
       ],
     });
+    openPanel();
+    expect(screen.getByRole("img", { name: "Speaking" })).toBeInTheDocument();
+  });
+
+  it("marks the own row from its own roster entry and local speaking", () => {
+    voiceState = idleVoiceState({
+      state: "live",
+      roster: [
+        voiceRosterEntry(OWN_USER, OWN_SESSION, { muted: false, published: true, isSelf: true }),
+      ],
+    });
+    openPanel();
+    expect(screen.getByRole("img", { name: "In voice" })).toBeInTheDocument();
+    cleanup();
+
+    voiceState = { ...voiceState, isLocalSpeaking: true };
     openPanel();
     expect(screen.getByRole("img", { name: "Speaking" })).toBeInTheDocument();
   });

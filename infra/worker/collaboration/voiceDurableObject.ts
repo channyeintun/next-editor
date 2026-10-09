@@ -344,6 +344,10 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     }
   }
 
+  // The socket whose change caused the upsert receives it too, so its own
+  // roster row shows the server's mute and publishing state; the engine never
+  // pulls audio for itself. Only a joining socket is excluded, because its
+  // snapshot already carries the same revision.
   private broadcastUpsert(attachment: VoiceSocketAttachment, except?: WebSocket): void {
     this.broadcast(
       {
@@ -598,7 +602,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       participantRevision: this.nextRevision(),
     };
     this.serializeAttachment(socket, updated);
-    this.broadcastUpsert(updated, socket);
+    this.broadcastUpsert(updated);
   }
 
   private async refreshAccess(
@@ -649,7 +653,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       accessCheckedAt: Date.now(),
       ...(roleChanged ? { participantRevision: this.nextRevision() } : {}),
     });
-    if (roleChanged) this.broadcastUpsert(updated, socket);
+    if (roleChanged) this.broadcastUpsert(updated);
     return updated;
   }
 
@@ -806,7 +810,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
           roleVersion: session.roleVersion,
           ...(roleChanged ? { participantRevision: this.nextRevision() } : {}),
         });
-        if (roleChanged) this.broadcastUpsert(authorizedAttachment, socket);
+        if (roleChanged) this.broadcastUpsert(authorizedAttachment);
       }
 
       const second = Math.floor(Date.now() / 1000);
@@ -988,7 +992,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
             ...(hadPublication ? { participantRevision: this.nextRevision() } : {}),
           }));
           if (!cleared) return noStoreJson({ error: "unauthorized" }, 403);
-          if (hadPublication) this.broadcastUpsert(cleared, socket);
+          if (hadPublication) this.broadcastUpsert(cleared);
         }
         const response = await upstream(null);
         if (!response || !response.ok) {
@@ -1033,7 +1037,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
               participantRevision: this.nextRevision(),
             }));
             if (!cleared) return noStoreJson({ error: "unauthorized" }, 403);
-            this.broadcastUpsert(cleared, socket);
+            this.broadcastUpsert(cleared);
           }
           const response = await upstream(push.data);
           if (!response || !response.ok) return upstreamFailure("push-tracks", response?.status);
@@ -1075,7 +1079,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
               await closeSfuMids(operation.sessionId, [acceptedMid]);
               return noStoreJson({ error: "unauthorized" }, 403);
             }
-            this.broadcastUpsert(next, socket);
+            this.broadcastUpsert(next);
           }
           logOutcome("push-tracks", 200);
           return noStoreJson(parsed.data);
@@ -1265,7 +1269,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
         };
       });
       if (!next) return noStoreJson({ error: "unauthorized" }, 403);
-      if (wasPublishing) this.broadcastUpsert(next, socket);
+      if (wasPublishing) this.broadcastUpsert(next);
       logOutcome("close-tracks", 200);
       return noStoreJson(parsed.data);
     });

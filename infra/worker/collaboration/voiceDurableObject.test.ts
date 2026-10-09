@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { CollaborationRole } from "../../../src/collaboration/protocol";
+import { COLLABORATION_VOICE_PROTOCOL_VERSION } from "../../../src/collaboration/voiceProtocol";
 import type { Env } from "../env";
 import { FakeWebSocket } from "../testing/fakeWebSocket";
 import { CollaborationVoiceRoomDurableObject } from "./voiceDurableObject";
@@ -24,17 +25,21 @@ function uuid(): string {
   return `40000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`;
 }
 
-function createVoiceRoom() {
+const VOICE_ENABLED_ENV = {
+  VOICE_CHAT_ENABLED: "true",
+  COLLABORATION_VOICE_ROOMS: {},
+  REALTIME_SFU_APP_ID: "app",
+  REALTIME_SFU_APP_SECRET: "secret",
+} as unknown as Env;
+
+function createVoiceRoom(env: Env = {} as Env) {
   const sockets: FakeWebSocket[] = [];
   const ctx = {
     id: { name: ROOM_ID },
     setWebSocketAutoResponse: () => undefined,
     getWebSockets: () => sockets,
   };
-  const room = new CollaborationVoiceRoomDurableObject(
-    ctx as unknown as DurableObjectState,
-    {} as Env,
-  );
+  const room = new CollaborationVoiceRoomDurableObject(ctx as unknown as DurableObjectState, env);
 
   /** A joined voice socket as acceptConnection leaves it (the 101 upgrade needs workerd). */
   function join(userId: string, roleVersion = 1): FakeWebSocket {
@@ -57,6 +62,8 @@ function createVoiceRoom() {
       publishedMid: null,
       receivingMids: [],
       receivingTracks: [],
+      // Fresh, so a message skips the D1 access revalidation.
+      accessCheckedAt: Date.now(),
     });
     sockets.push(socket);
     return socket;
@@ -84,7 +91,11 @@ function createVoiceRoom() {
     );
   }
 
-  return { join, control };
+  function message(socket: FakeWebSocket, body: Record<string, unknown>) {
+    return room.webSocketMessage(socket as unknown as WebSocket, JSON.stringify(body));
+  }
+
+  return { join, control, message };
 }
 
 describe("CollaborationVoiceRoomDurableObject membership control", () => {
@@ -130,5 +141,34 @@ describe("CollaborationVoiceRoomDurableObject membership control", () => {
 
     expect(member.closeCode).toBeNull();
     expect(member.deserializeAttachment()).toMatchObject({ role: "editor", roleVersion: 3 });
+  });
+});
+
+describe("CollaborationVoiceRoomDurableObject roster upserts", () => {
+  it("sends a mute change to the sender as well as the room", async () => {
+    const { join, message } = createVoiceRoom(VOICE_ENABLED_ENV);
+    const member = join(MEMBER_ID);
+    const peer = join(PEER_ID);
+    const memberConnectionId = (member.deserializeAttachment() as { voiceConnectionId: string })
+      .voiceConnectionId;
+
+    await message(member, {
+      type: "voice.mute-changed",
+      version: COLLABORATION_VOICE_PROTOCOL_VERSION,
+      revision: 1,
+      muted: false,
+    });
+
+    for (const socket of [member, peer]) {
+      expect(socket.messages()).toContainEqual(
+        expect.objectContaining({
+          type: "voice.participant-upsert",
+          participant: expect.objectContaining({
+            voiceConnectionId: memberConnectionId,
+            muted: false,
+          }),
+        }),
+      );
+    }
   });
 });
