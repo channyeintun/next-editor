@@ -1,10 +1,10 @@
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import {
+  areStringArraysEqual,
   isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetDescriptor,
   type WorkspaceAssetDescriptor,
   type WorkspaceFile,
-  type WorkspaceFileContent,
   type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
@@ -15,34 +15,11 @@ import {
   collectWorkspaceFolders,
   DEFAULT_WORKSPACE_ENTRY_PATH,
   getParentWorkspacePath,
-  getWorkspaceBaseName,
   normalizeWorkspacePath,
   parseWorkspacePath,
   WorkspacePathError,
 } from "../types/workspacePaths";
-import { inferLanguageFromPath } from "../types/workspaceFiles";
-
-export function areStringArraysEqual(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-export function areWorkspaceFilesEqual(left: WorkspaceFile, right: WorkspaceFile): boolean {
-  const contentEqual =
-    typeof left.content === "string" && typeof right.content === "string"
-      ? left.content === right.content
-      : isWorkspaceAssetDescriptor(left.content) &&
-        isWorkspaceAssetDescriptor(right.content) &&
-        left.content.assetId === right.content.assetId &&
-        left.content.mimeType === right.content.mimeType &&
-        left.content.size === right.content.size;
-  return (
-    left.path === right.path &&
-    left.name === right.name &&
-    left.language === right.language &&
-    contentEqual &&
-    (left.encoding ?? "utf-8") === (right.encoding ?? "utf-8")
-  );
-}
+import { createWorkspaceFile } from "../types/workspaceFiles";
 
 export function projectSizeBucket(fileCount: number): "small" | "medium" | "large" {
   if (fileCount <= 25) return "small";
@@ -127,11 +104,12 @@ export function areWorkspaceTopologiesEqual(
   right: WorkspaceProject,
 ): boolean {
   if (!areStringArraysEqual(left.folders, right.folders)) return false;
-  const leftPaths = Object.keys(left.files).sort((first, second) => first.localeCompare(second));
-  const rightPaths = Object.keys(right.files).sort((first, second) => first.localeCompare(second));
-  if (!areStringArraysEqual(leftPaths, rightPaths)) return false;
+  // Unique record keys: equal counts plus every left key on the right is the same set.
+  const leftPaths = Object.keys(left.files);
+  if (leftPaths.length !== Object.keys(right.files).length) return false;
 
   return leftPaths.every((path) => {
+    if (!Object.hasOwn(right.files, path)) return false;
     const leftFile = left.files[path];
     const rightFile = right.files[path];
     return (
@@ -141,26 +119,6 @@ export function areWorkspaceTopologiesEqual(
       (leftFile.encoding ?? "utf-8") === (rightFile.encoding ?? "utf-8")
     );
   });
-}
-
-export function createWorkspaceFile(
-  path: string,
-  content: WorkspaceFileContent,
-  encoding?: WorkspaceFileEncoding | "base64",
-): WorkspaceFile {
-  const normalizedPath = normalizeWorkspacePath(path);
-  const metadata = {
-    path: normalizedPath,
-    name: getWorkspaceBaseName(normalizedPath),
-    language: inferLanguageFromPath(normalizedPath),
-  };
-  if (encoding === "asset" && isWorkspaceAssetDescriptor(content)) {
-    return { ...metadata, content, encoding };
-  }
-  if (encoding === "base64" && typeof content === "string") {
-    return { ...metadata, content, encoding };
-  }
-  return { ...metadata, content: typeof content === "string" ? content : "" };
 }
 
 export function isPathWithinFolder(path: string, folderPath: string): boolean {

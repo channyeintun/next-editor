@@ -1,6 +1,7 @@
 import type { Recording } from "../core/src";
 import type { DecodedRecording } from "./streamingRecordingCodec";
 import {
+  areWorkspaceAssetDescriptorsEqual,
   isWorkspaceAssetDescriptor,
   isWorkspaceAssetFile,
   type WorkspaceAssetDescriptor,
@@ -8,15 +9,6 @@ import {
   type WorkspaceRecordingSnapshot,
 } from "../types/workspace";
 import { getWorkspaceAssetBytes, registerWorkspaceAsset } from "./workspaceAssetStore";
-
-function descriptorsMatch(
-  left: WorkspaceAssetDescriptor,
-  right: WorkspaceAssetDescriptor,
-): boolean {
-  return (
-    left.assetId === right.assetId && left.mimeType === right.mimeType && left.size === right.size
-  );
-}
 
 /** Rejects an asset payload whose descriptor is malformed or whose bytes do not match it. */
 function assertValidWorkspaceAsset(asset: WorkspaceRecordingAsset): void {
@@ -38,7 +30,7 @@ function collectSnapshotDescriptors(
   for (const file of Object.values(snapshot.project.files)) {
     if (!isWorkspaceAssetFile(file)) continue;
     const existing = descriptors.get(file.content.assetId);
-    if (existing && !descriptorsMatch(existing, file.content)) {
+    if (existing && !areWorkspaceAssetDescriptorsEqual(existing, file.content)) {
       throw new Error(`Workspace asset ${file.content.assetId} has conflicting descriptors`);
     }
     descriptors.set(file.content.assetId, file.content);
@@ -64,7 +56,7 @@ export async function* iterateRecordingWorkspaceAssets(
   for (const asset of recording.workspaceAssets ?? []) {
     assertValidWorkspaceAsset(asset);
     const duplicate = supplied.get(asset.descriptor.assetId);
-    if (duplicate && !descriptorsMatch(duplicate.descriptor, asset.descriptor)) {
+    if (duplicate && !areWorkspaceAssetDescriptorsEqual(duplicate.descriptor, asset.descriptor)) {
       throw new Error(`Workspace asset ${asset.descriptor.assetId} has conflicting descriptors`);
     }
     supplied.set(asset.descriptor.assetId, asset);
@@ -73,7 +65,7 @@ export async function* iterateRecordingWorkspaceAssets(
   for (const descriptor of descriptors) {
     const existing = supplied.get(descriptor.assetId);
     if (existing) {
-      if (!descriptorsMatch(existing.descriptor, descriptor)) {
+      if (!areWorkspaceAssetDescriptorsEqual(existing.descriptor, descriptor)) {
         throw new Error(`Workspace asset ${descriptor.assetId} has conflicting descriptors`);
       }
       yield existing;

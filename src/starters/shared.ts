@@ -1,21 +1,9 @@
-import type { WorkspaceFile } from "../types/workspace";
-import { getWorkspaceBaseName, normalizeWorkspacePath } from "../types/workspacePaths";
-import { inferLanguageFromPath } from "../types/workspaceFiles";
-
 const STARTER_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><rect width="64" height="64" rx="18" fill="#121826"/><path d="M20 44 30 20h4l10 24h-5.1l-2-5.2H27.1L25 44H20Zm8.6-9.3h6.8L32 25.6l-3.4 9.1Z" fill="#7dd3fc"/><path d="m41 19 4.6 8-4.6 8h-5.4l4.6-8-4.6-8H41Z" fill="#f59e0b"/></svg>`;
 
 export { STARTER_FAVICON_SVG };
 
-export function createWorkspaceFile(path: string, content: string): WorkspaceFile {
-  const normalizedPath = normalizeWorkspacePath(path);
-
-  return {
-    path: normalizedPath,
-    name: getWorkspaceBaseName(normalizedPath),
-    language: inferLanguageFromPath(normalizedPath),
-    content,
-  };
-}
+// The one workspace-file builder; re-exported so every starter keeps importing it from here.
+export { createWorkspaceFile } from "../types/workspaceFiles";
 
 export function createHtmlCssLessonPackageJson(): string {
   return JSON.stringify(

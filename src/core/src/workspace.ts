@@ -133,7 +133,7 @@ export interface WorkspaceRecordingEvent {
   snapshot: WorkspaceRecordingSnapshot;
 }
 
-function areStringArraysEqual(left: string[], right: string[]): boolean {
+export function areStringArraysEqual(left: string[], right: string[]): boolean {
   if (left.length !== right.length) {
     return false;
   }
@@ -141,42 +141,59 @@ function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.every((value, index) => value === right[index]);
 }
 
-function areWorkspaceFilesEqual(
+export function areWorkspaceAssetDescriptorsEqual(
+  left: WorkspaceAssetDescriptor,
+  right: WorkspaceAssetDescriptor,
+): boolean {
+  return (
+    left.assetId === right.assetId && left.mimeType === right.mimeType && left.size === right.size
+  );
+}
+
+/** One file's metadata, content and encoding; a missing encoding means "utf-8". */
+export function areWorkspaceFilesEqual(left: WorkspaceFile, right: WorkspaceFile): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  const contentEqual =
+    typeof left.content === "string" && typeof right.content === "string"
+      ? left.content === right.content
+      : isWorkspaceAssetDescriptor(left.content) &&
+        isWorkspaceAssetDescriptor(right.content) &&
+        areWorkspaceAssetDescriptorsEqual(left.content, right.content);
+
+  return (
+    left.path === right.path &&
+    left.name === right.name &&
+    left.language === right.language &&
+    contentEqual &&
+    (left.encoding ?? "utf-8") === (right.encoding ?? "utf-8")
+  );
+}
+
+/**
+ * Record keys are unique, so equal key counts plus every left key present on the
+ * right is the same key set; no sort needed. This runs on every runtime reverse
+ * sync and every replayed workspace event.
+ */
+function areWorkspaceFileRecordsEqual(
   left: Record<string, WorkspaceFile>,
   right: Record<string, WorkspaceFile>,
 ): boolean {
-  const leftPaths = Object.keys(left).sort((firstPath, secondPath) =>
-    firstPath.localeCompare(secondPath),
-  );
-  const rightPaths = Object.keys(right).sort((firstPath, secondPath) =>
-    firstPath.localeCompare(secondPath),
-  );
+  if (left === right) {
+    return true;
+  }
 
-  if (!areStringArraysEqual(leftPaths, rightPaths)) {
+  const leftPaths = Object.keys(left);
+
+  if (leftPaths.length !== Object.keys(right).length) {
     return false;
   }
 
-  return leftPaths.every((path) => {
-    const leftFile = left[path];
-    const rightFile = right[path];
-
-    const contentEqual =
-      typeof leftFile.content === "string" && typeof rightFile.content === "string"
-        ? leftFile.content === rightFile.content
-        : isWorkspaceAssetDescriptor(leftFile.content) &&
-          isWorkspaceAssetDescriptor(rightFile.content) &&
-          leftFile.content.assetId === rightFile.content.assetId &&
-          leftFile.content.mimeType === rightFile.content.mimeType &&
-          leftFile.content.size === rightFile.content.size;
-
-    return (
-      leftFile.path === rightFile.path &&
-      leftFile.name === rightFile.name &&
-      leftFile.language === rightFile.language &&
-      contentEqual &&
-      (leftFile.encoding ?? "utf-8") === (rightFile.encoding ?? "utf-8")
-    );
-  });
+  return leftPaths.every(
+    (path) => Object.hasOwn(right, path) && areWorkspaceFilesEqual(left[path], right[path]),
+  );
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -220,7 +237,7 @@ export function areWorkspaceProjectsEqual(
     left.lessonType === right.lessonType &&
     left.entryFilePath === right.entryFilePath &&
     areStringArraysEqual(left.folders, right.folders) &&
-    areWorkspaceFilesEqual(left.files, right.files)
+    areWorkspaceFileRecordsEqual(left.files, right.files)
   );
 }
 

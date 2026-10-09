@@ -1,10 +1,7 @@
 import { unzipSync, strFromU8 } from "fflate";
 import {
-  isWorkspaceAssetDescriptor,
   isWorkspaceTextFile,
   type WorkspaceFile,
-  type WorkspaceFileContent,
-  type WorkspaceFileEncoding,
   type WorkspaceLessonType,
   type WorkspaceProject,
 } from "../types/workspace";
@@ -16,8 +13,8 @@ import {
   WorkspacePathError,
 } from "../types/workspacePaths";
 import {
+  createWorkspaceFile,
   getWorkspaceFileMimeType,
-  inferLanguageFromPath,
   isBinaryWorkspacePath,
 } from "../types/workspaceFiles";
 import { registerWorkspaceAsset } from "../storage/workspaceAssetStore";
@@ -298,23 +295,6 @@ function toProjectId(name: string): string {
   return `imported-${slug || "project"}`;
 }
 
-function createWorkspaceFile(
-  path: string,
-  content: WorkspaceFileContent,
-  encoding: WorkspaceFileEncoding | undefined,
-): WorkspaceFile {
-  const normalizedPath = normalizeWorkspacePath(path);
-  const metadata = {
-    path: normalizedPath,
-    name: getWorkspaceBaseName(normalizedPath),
-    language: inferLanguageFromPath(normalizedPath),
-  };
-  if (encoding === "asset" && isWorkspaceAssetDescriptor(content)) {
-    return { ...metadata, content, encoding };
-  }
-  return { ...metadata, content: typeof content === "string" ? content : "" };
-}
-
 /**
  * Parse an uploaded `.zip` into a {@link WorkspaceProject} that can be handed to
  * `loadProject`, exactly like selecting a starter template — only the contents
@@ -443,7 +423,7 @@ export async function importWorkspaceProjectFromZip(file: File): Promise<Workspa
       });
       files.set(workspacePath, createWorkspaceFile(workspacePath, descriptor, "asset"));
     } else {
-      files.set(workspacePath, createWorkspaceFile(workspacePath, strFromU8(bytes), undefined));
+      files.set(workspacePath, createWorkspaceFile(workspacePath, strFromU8(bytes)));
     }
   }
 

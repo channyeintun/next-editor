@@ -1,5 +1,7 @@
 import { createStore } from "@xstate/store-react";
 import {
+  areStringArraysEqual,
+  areWorkspaceFilesEqual,
   areWorkspaceProjectsEqual,
   isLegacyWorkspaceBinaryFile,
   isWorkspaceAssetFile,
@@ -17,6 +19,7 @@ import {
   normalizeWorkspaceFolderPath,
   normalizeWorkspacePath,
 } from "../types/workspacePaths";
+import { createWorkspaceFile } from "../types/workspaceFiles";
 import { createStarterWorkspaceProject } from "../starters/react";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,
@@ -27,10 +30,7 @@ import { startPerformanceSpan } from "../utils/performanceMetrics";
 import { isNextEditorUrl, resolveRecordingUrl } from "../utils/recordingUrl";
 import { applyTextEditEvent, type TextEditEvent } from "../types/textEdit";
 import {
-  areStringArraysEqual,
-  areWorkspaceFilesEqual,
   areWorkspaceTopologiesEqual,
-  createWorkspaceFile,
   getDefaultFile,
   hasFilePathConflict,
   hasFolderPathConflict,

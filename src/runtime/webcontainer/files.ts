@@ -11,13 +11,12 @@ import {
 } from "../../types/workspace";
 import {
   collectWorkspaceFolders,
-  getWorkspaceBaseName,
   normalizeWorkspacePath,
   parseWorkspacePath,
 } from "../../types/workspacePaths";
 import {
+  createWorkspaceFile,
   getWorkspaceFileMimeType,
-  inferLanguageFromPath,
   isBinaryWorkspacePath,
 } from "../../types/workspaceFiles";
 import { base64ToBytes } from "../../shared/base64";
@@ -175,13 +174,7 @@ async function readRuntimeDirectory(
         mimeType: getWorkspaceFileMimeType(nextWorkspacePath),
       });
 
-      files[nextWorkspacePath] = {
-        path: nextWorkspacePath,
-        name: getWorkspaceBaseName(nextWorkspacePath),
-        language: inferLanguageFromPath(nextWorkspacePath),
-        content,
-        encoding: "asset",
-      };
+      files[nextWorkspacePath] = createWorkspaceFile(nextWorkspacePath, content, "asset");
       continue;
     }
 
@@ -189,12 +182,7 @@ async function readRuntimeDirectory(
       await instance.fs.readFile(nextRuntimePath, "utf-8"),
     );
 
-    files[nextWorkspacePath] = {
-      path: nextWorkspacePath,
-      name: getWorkspaceBaseName(nextWorkspacePath),
-      language: inferLanguageFromPath(nextWorkspacePath),
-      content,
-    };
+    files[nextWorkspacePath] = createWorkspaceFile(nextWorkspacePath, content);
   }
 }
 

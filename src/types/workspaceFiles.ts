@@ -1,5 +1,11 @@
 // What a workspace file is, judged from its path: the Monaco language it edits
 // as, whether it is stored as bytes, and its MIME type and media kind.
+import {
+  isWorkspaceAssetDescriptor,
+  type WorkspaceFile,
+  type WorkspaceFileContent,
+  type WorkspaceFileEncoding,
+} from "../core/src/workspace";
 import { getWorkspaceBaseName, normalizeWorkspacePath } from "./workspacePaths";
 
 export function inferLanguageFromPath(path: string): string {
@@ -215,4 +221,30 @@ export function getWorkspaceMediaKind(path: string): WorkspaceMediaKind {
   }
 
   return "other";
+}
+
+/**
+ * A workspace file at `path`, its name and language derived from the path. An
+ * asset descriptor keeps encoding "asset" and a legacy base64 string keeps
+ * "base64"; anything else is a text file (a descriptor without "asset" becomes
+ * empty text).
+ */
+export function createWorkspaceFile(
+  path: string,
+  content: WorkspaceFileContent,
+  encoding?: WorkspaceFileEncoding | "base64",
+): WorkspaceFile {
+  const normalizedPath = normalizeWorkspacePath(path);
+  const metadata = {
+    path: normalizedPath,
+    name: getWorkspaceBaseName(normalizedPath),
+    language: inferLanguageFromPath(normalizedPath),
+  };
+  if (encoding === "asset" && isWorkspaceAssetDescriptor(content)) {
+    return { ...metadata, content, encoding };
+  }
+  if (encoding === "base64" && typeof content === "string") {
+    return { ...metadata, content, encoding };
+  }
+  return { ...metadata, content: typeof content === "string" ? content : "" };
 }
