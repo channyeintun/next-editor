@@ -138,7 +138,11 @@ interface CollaborationContextValue {
   ownParticipantKey: string | null;
   followedParticipantKey: string | null;
   followedParticipant: CollaborationParticipant | null;
-  isApplyingFollow: boolean;
+  /**
+   * Bumps once when a follow ended during a follow application's release
+   * window, where publishSurface still bails; the surface bridge republishes on it.
+   */
+  surfaceRepublishVersion: number;
   teaching: CollaborationTeachingProjection;
   teachingSlides: Slide[] | null;
   isTeachingLoading: boolean;
@@ -246,9 +250,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     user && provider
       ? collaborationParticipantKey({ actorId: user.id, sessionId: provider.awarenessSessionId })
       : null;
-  const [isApplyingFollow, setIsApplyingFollow] = useState(false);
   const applyingFollowDepthRef = useRef(0);
   const applyingFollowReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stoppedDuringFollowApplicationRef = useRef(false);
+  const [surfaceRepublishVersion, setSurfaceRepublishVersion] = useState(0);
   const [teaching, setTeaching] =
     useState<CollaborationTeachingProjection>(EMPTY_TEACHING_PROJECTION);
   const [teachingSlides, setTeachingSlides] = useState<Slide[] | null>(null);
@@ -279,6 +284,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     if (!followedParticipantKeyRef.current) return;
     followedParticipantKeyRef.current = null;
     followedSurfaceKindRef.current = null;
+    // publishSurface bails until the application's release timer lifts the
+    // suppression, so that timer asks the surface bridge to republish.
+    if (applyingFollowDepthRef.current > 0) stoppedDuringFollowApplicationRef.current = true;
     providerRef.current?.setAwarenessPublicationSuppressed(applyingFollowDepthRef.current > 0);
     setFollowedParticipantKey(null);
     analytics.capture("collaboration_follow_stopped", { reason });
@@ -499,7 +507,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       applyingFollowReleaseTimerRef.current = null;
     }
     applyingFollowDepthRef.current = 0;
-    setIsApplyingFollow(false);
+    stoppedDuringFollowApplicationRef.current = false;
     stopFollowing("room-changed");
     setParticipantsBySession(new Map());
     resetRoster();
@@ -1011,7 +1019,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     }
     applyingFollowDepthRef.current += 1;
     providerRef.current?.setAwarenessPublicationSuppressed(true);
-    setIsApplyingFollow(true);
     try {
       application();
     } finally {
@@ -1026,7 +1033,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         providerRef.current?.setAwarenessPublicationSuppressed(
           followedParticipantKeyRef.current !== null,
         );
-        setIsApplyingFollow(false);
+        if (stoppedDuringFollowApplicationRef.current) {
+          stoppedDuringFollowApplicationRef.current = false;
+          setSurfaceRepublishVersion((version) => version + 1);
+        }
       }, 0);
     }
   }, []);
@@ -1258,7 +1268,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       ownParticipantKey,
       followedParticipantKey,
       followedParticipant,
-      isApplyingFollow,
+      surfaceRepublishVersion,
       teaching,
       teachingSlides,
       isTeachingLoading,
@@ -1317,7 +1327,6 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       followedParticipantKey,
       followParticipant,
       initializeTeachingSurfaces,
-      isApplyingFollow,
       isCreatingRoom,
       isTeachingLoading,
       joinRoom,
@@ -1343,6 +1352,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       runFollowApplication,
       session,
       stopFollowing,
+      surfaceRepublishVersion,
       teaching,
       teachingSlides,
       updateCursor,

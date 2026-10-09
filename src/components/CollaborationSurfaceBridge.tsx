@@ -24,6 +24,8 @@ export default function CollaborationSurfaceBridge() {
   const slidesOpen = slides.previewState.isOpen;
   const whiteboardOpen = whiteboard.isOpen;
 
+  // surfaceRepublishVersion re-runs this after a follow that ended while
+  // publishSurface was still suppressed.
   useEffect(() => {
     if (!collaboration.provider || usesPlaybackModel) return;
     if (whiteboardOpen) {
@@ -49,6 +51,7 @@ export default function CollaborationSurfaceBridge() {
   }, [
     activeFilePath,
     collaboration,
+    collaboration.surfaceRepublishVersion,
     slides.previewState.isMaximized,
     slidesOpen,
     usesPlaybackModel,

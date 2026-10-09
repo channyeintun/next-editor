@@ -1171,6 +1171,95 @@ describe("CollaborationContext presence", () => {
   });
 });
 
+describe("CollaborationContext follow application", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+  });
+
+  async function renderRoom() {
+    const probe = {
+      collaboration: null as ReturnType<typeof useCollaboration> | null,
+      renders: 0,
+    };
+    function Probe() {
+      probe.collaboration = useCollaboration();
+      probe.renders += 1;
+      return null;
+    }
+    const view = render(
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    // Let this member's own presence publications settle first, so none of
+    // them re-renders the probe in the middle of a test.
+    await waitFor(() =>
+      expect(provider.awarenessPublications.filter(({ kind }) => kind === "state")).toHaveLength(2),
+    );
+    const target = participant({
+      actorId: "50000000-0000-4000-8000-000000000001",
+      sessionId: "60000000-0000-4000-8000-000000000001",
+    });
+    act(() => provider.emitAwareness(target));
+    return { probe, target, view };
+  }
+
+  // The application's release timer is a 0 ms timeout.
+  const releaseFollowApplication = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+  it("applies a followed view without re-rendering collaboration consumers", async () => {
+    const { probe, view } = await renderRoom();
+    const renders = probe.renders;
+
+    act(() => probe.collaboration!.runFollowApplication(() => {}));
+    await releaseFollowApplication();
+
+    expect(probe.renders).toBe(renders);
+    view.unmount();
+  });
+
+  it("asks for no republish when the follow outlives the application", async () => {
+    const { probe, target, view } = await renderRoom();
+    act(() => probe.collaboration!.followParticipant(target));
+
+    act(() => probe.collaboration!.runFollowApplication(() => {}));
+    await releaseFollowApplication();
+
+    expect(probe.collaboration!.followedParticipantKey).toBe(collaborationParticipantKey(target));
+    expect(probe.collaboration!.surfaceRepublishVersion).toBe(0);
+    view.unmount();
+  });
+
+  it("asks once for a republish when the follow ends while publication is still suppressed", async () => {
+    const { probe, target, view } = await renderRoom();
+    act(() => probe.collaboration!.followParticipant(target));
+
+    act(() => {
+      probe.collaboration!.runFollowApplication(() => {});
+      probe.collaboration!.stopFollowing("user");
+    });
+    expect(probe.collaboration!.surfaceRepublishVersion).toBe(0);
+    await releaseFollowApplication();
+    expect(probe.collaboration!.surfaceRepublishVersion).toBe(1);
+
+    // A stop outside an application's release window publishes directly.
+    act(() => probe.collaboration!.followParticipant(target));
+    act(() => probe.collaboration!.stopFollowing("user"));
+    await releaseFollowApplication();
+    expect(probe.collaboration!.surfaceRepublishVersion).toBe(1);
+    view.unmount();
+  });
+});
+
 describe("CollaborationContext asset hydration", () => {
   beforeEach(() => {
     vi.clearAllMocks();

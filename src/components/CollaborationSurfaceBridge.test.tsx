@@ -67,6 +67,7 @@ function resetState() {
     provider: {},
     connectionState: "live",
     followedParticipant: participant(1, { kind: "slides", isMaximized: true }),
+    surfaceRepublishVersion: 0,
     teaching: { currentSlideId: "slide-1" },
     publishSurface: mocks.publishSurface,
     runFollowApplication: mocks.runFollowApplication,
@@ -176,6 +177,21 @@ describe("CollaborationSurfaceBridge", () => {
 
     expect(mocks.closePresentation).toHaveBeenCalledTimes(1);
     expect(mocks.runFollowApplication).toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("republishes the current surface when the provider asks for it", async () => {
+    collaborationState = { ...collaborationState, followedParticipant: null };
+    const view = render(<CollaborationSurfaceBridge />);
+    const editorSurface = { kind: "editor", fileNodeId: "file-1", viewport: null };
+    expect(mocks.publishSurface).toHaveBeenCalledTimes(1);
+    expect(mocks.publishSurface).toHaveBeenLastCalledWith(editorSurface);
+
+    collaborationState = { ...collaborationState, surfaceRepublishVersion: 1 };
+    await act(async () => view.rerender(<CollaborationSurfaceBridge />));
+
+    expect(mocks.publishSurface).toHaveBeenCalledTimes(2);
+    expect(mocks.publishSurface).toHaveBeenLastCalledWith(editorSurface);
     view.unmount();
   });
 

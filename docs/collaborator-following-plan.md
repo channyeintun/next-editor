@@ -375,7 +375,7 @@ followedParticipant: CollaborationParticipant | null;
 followParticipant(participant: Pick<CollaborationParticipant, "actorId" | "sessionId">): void;
 stopFollowing(reason?: CollaborationFollowStopReason): void;
 publishSurface(surface: LocalCollaborationSurface): void;
-isApplyingFollow: boolean;
+runFollowApplication(application: () => void): void;
 ```
 
 Required invariants:

@@ -118,7 +118,7 @@ beforeEach(() => {
     ownParticipantKey: collaborationParticipantKey({ actorId: OWN_USER, sessionId: OWN_SESSION }),
     followedParticipantKey: null,
     followedParticipant: null,
-    isApplyingFollow: false,
+    surfaceRepublishVersion: 0,
     teaching: { initialized: true, slideOrder: [], slides: new Map(), currentSlideId: null },
     teachingSlides: [],
     isTeachingLoading: false,
