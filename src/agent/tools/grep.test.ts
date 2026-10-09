@@ -81,6 +81,43 @@ describe("grep tool", () => {
     expect(result).toBe("src/b.tsx:1:needle");
   });
 
+  it("emits context lines before and after a match", async () => {
+    const store = makeStore([makeFile("a.ts", "a\nb\nneedle\nc\nd")]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({
+      pattern: "needle",
+      context: 1,
+    });
+    expect(result).toBe("a.ts:2:b\na.ts:3:needle\na.ts:4:c");
+  });
+
+  // Overlapping windows used to push the shared lines twice ("3:b" repeated).
+  it("emits each line once when context windows overlap", async () => {
+    const store = makeStore([makeFile("a.ts", "a\nneedle\nb\nneedle\nc")]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({
+      pattern: "needle",
+      context: 1,
+    });
+    expect(result).toBe("a.ts:1:a\na.ts:2:needle\na.ts:3:b\na.ts:4:needle\na.ts:5:c");
+  });
+
+  it("emits adjacent matches once each when one sits in the other's context", async () => {
+    const store = makeStore([makeFile("a.ts", "a\nneedle\nneedle\nb")]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({
+      pattern: "needle",
+      context: 1,
+    });
+    expect(result).toBe("a.ts:1:a\na.ts:2:needle\na.ts:3:needle\na.ts:4:b");
+  });
+
+  it("keeps separate windows when context does not overlap", async () => {
+    const store = makeStore([makeFile("a.ts", "needle\nx\ny\nz\nneedle")]);
+    const result = await makeGrepTool(makeCtx(store)).function.execute({
+      pattern: "needle",
+      context: 1,
+    });
+    expect(result).toBe("a.ts:1:needle\na.ts:2:x\na.ts:4:z\na.ts:5:needle");
+  });
+
   it("reports no matches", async () => {
     const store = makeStore([makeFile("a.ts", "hello")]);
     const result = await makeGrepTool(makeCtx(store)).function.execute({ pattern: "zzz" });

@@ -86,6 +86,11 @@ export function makeGrepTool(ctx: ToolContext) {
         }
 
         const lines = file.content.split("\n");
+        // The last line index already pushed for this file. Two matches within
+        // 2 * context lines share part of their windows; without this the
+        // shared lines were pushed twice, misstating the file and eating into
+        // `limit`.
+        let lastEmitted = -1;
         for (let i = 0; i < lines.length; i++) {
           if (matchLines.length >= limit) break;
 
@@ -93,15 +98,19 @@ export function makeGrepTool(ctx: ToolContext) {
           const lineNumber = i + 1;
 
           if (regex.test(line)) {
-            for (let j = Math.max(0, i - context); j < i; j++) {
+            for (let j = Math.max(lastEmitted + 1, i - context); j < i; j++) {
               matchLines.push(`${filePath}:${j + 1}:${lines[j]}`);
             }
 
-            matchLines.push(`${filePath}:${lineNumber}:${line}`);
+            if (i > lastEmitted) {
+              matchLines.push(`${filePath}:${lineNumber}:${line}`);
+            }
 
-            for (let j = i + 1; j <= Math.min(lines.length - 1, i + context); j++) {
+            const contextEnd = Math.min(lines.length - 1, i + context);
+            for (let j = Math.max(lastEmitted + 1, i + 1); j <= contextEnd; j++) {
               matchLines.push(`${filePath}:${j + 1}:${lines[j]}`);
             }
+            lastEmitted = contextEnd;
 
             regex.lastIndex = 0;
           }
