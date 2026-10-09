@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  isTimelineIssue,
   parseRuntimeModeParam,
   parseStudioPlan,
+  StudioPlanError,
   planActionBusyMs,
   shouldAutostartRender,
   estimateNarrationMsForRenderWait,
@@ -206,6 +208,38 @@ describe("studio plan schema", () => {
     const last = plan.actions.at(-1)!;
     last.at = plan.narration.expectedDurationMs + 1;
     expect(() => parseStudioPlan(plan)).toThrow(/after the narration ends/);
+  });
+
+  // The compiler gives its marks/offsets advice from this flag, not by matching
+  // the messages, so only the two timeline issues may carry it.
+  it("flags its timeline issues, and only those, on the thrown error", () => {
+    const issuesOf = (plan: StudioPlan) => {
+      try {
+        parseStudioPlan(plan);
+      } catch (error) {
+        if (error instanceof StudioPlanError) return error.issues;
+        throw error;
+      }
+      throw new Error("plan parsed");
+    };
+
+    const late = clonePlan(createTestPlan());
+    late.actions.at(-1)!.at = late.narration.expectedDurationMs + 1;
+    const lateIssue = issuesOf(late).find((issue) =>
+      /after the narration ends/.test(issue.message),
+    );
+    expect(lateIssue && isTimelineIssue(lateIssue)).toBe(true);
+
+    const overlapping = clonePlan(createTestPlan());
+    const typing = overlapping.actions.find((action) => action.type === "editor.type");
+    if (typing?.type !== "editor.type") throw new Error("fixture has no typing action");
+    typing.chunks[0] = { ...typing.chunks[0], delayMs: 60_000 };
+    const overlap = issuesOf(overlapping).find((issue) => /overlaps/.test(issue.message));
+    expect(overlap && isTimelineIssue(overlap)).toBe(true);
+
+    const duplicate = clonePlan(createTestPlan());
+    duplicate.actions[1].id = duplicate.actions[0].id;
+    expect(issuesOf(duplicate).some(isTimelineIssue)).toBe(false);
   });
 
   // `actions: []` is a *continuable* failure, so Zod still runs the plan's

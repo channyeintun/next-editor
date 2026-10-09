@@ -1,6 +1,8 @@
 import type { z } from "zod";
 import {
+  isTimelineIssue,
   parseStudioPlan,
+  StudioPlanError,
   type StudioPlan,
   type StudioSlide,
   type studioPlanActionSchema,
@@ -80,16 +82,6 @@ interface TimedAction {
    */
   authoredIndex: number;
 }
-
-/**
- * The plan schema's timeline failures: a busy action running into the next
- * one, or the last action starting after the narration ends. It mirrors the
- * wording of the two timeline issues in plan.ts's superRefine (the overlap
- * and "starts after the narration ends" messages); reword those and this must
- * follow, or the marks/offsets advice silently disappears.
- */
-const PLAN_TIMING_ERROR =
-  /(?:Typing|Selection|Pointing|Whiteboard drawing) action "[^"]*" \([\d.]+ms\) overlaps|starts after the narration ends/;
 
 export function compileLessonScript({
   script,
@@ -309,8 +301,9 @@ export function compileLessonScript({
     // Marks and offsets only fix a timeline that does not fit. Any other
     // failure is a rule the script schema let through, and moving marks
     // would not help.
+    const timeline = error instanceof StudioPlanError && error.issues.some(isTimelineIssue);
     throw new CompileError(
-      PLAN_TIMING_ERROR.test(message)
+      timeline
         ? `Compiled plan failed validation — adjust the script's marks/offsets: ${message}`
         : `Compiled plan failed validation: ${message}`,
     );

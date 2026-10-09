@@ -1178,6 +1178,7 @@ export const studioPlanSchema = z
         ctx.addIssue({
           code: "custom",
           message: `${label} action "${action.id}" (${busyMs}ms) overlaps "${next.id}" at ${next.at}ms`,
+          params: { timeline: true },
         });
       }
     }
@@ -1191,6 +1192,7 @@ export const studioPlanSchema = z
       ctx.addIssue({
         code: "custom",
         message: `Action "${lastAction.id}" starts after the narration ends; the recording stops with the audio`,
+        params: { timeline: true },
       });
     }
 
@@ -1216,6 +1218,27 @@ export const studioPlanSchema = z
 
 export type StudioPlan = z.infer<typeof studioPlanSchema>;
 
+/**
+ * A candidate plan that failed validation. `issues` lets a caller tell kinds of
+ * failure apart without reading the message: the two timeline issues — a busy
+ * action running into the next one, the last action starting after the
+ * narration ends — carry `params.timeline`.
+ */
+export class StudioPlanError extends Error {
+  readonly issues: z.core.$ZodIssue[];
+
+  constructor(message: string, issues: z.core.$ZodIssue[]) {
+    super(message);
+    this.name = "StudioPlanError";
+    this.issues = issues;
+  }
+}
+
+/** Whether a plan issue is one of the timeline failures marks and offsets can fix. */
+export function isTimelineIssue(issue: z.core.$ZodIssue): boolean {
+  return issue.code === "custom" && issue.params?.timeline === true;
+}
+
 /** Parse + validate a candidate plan, throwing a readable error on failure. */
 export function parseStudioPlan(candidate: unknown): StudioPlan {
   const result = studioPlanSchema.safeParse(candidate);
@@ -1223,7 +1246,7 @@ export function parseStudioPlan(candidate: unknown): StudioPlan {
     const details = result.error.issues
       .map((issue) => `${issue.path.join(".") || "(plan)"}: ${issue.message}`)
       .join("; ");
-    throw new Error(`Invalid studio plan: ${details}`);
+    throw new StudioPlanError(`Invalid studio plan: ${details}`, result.error.issues);
   }
   return result.data;
 }
