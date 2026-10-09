@@ -5,6 +5,7 @@ import {
   inferLanguageFromPath,
   isWorkspaceLessonType,
   lessonRunsInWebContainer,
+  WORKSPACE_LESSON_TYPES,
   lessonSupportsPreview,
   lessonSupportsTerminal,
   type WorkspaceExecutionKind,
@@ -68,6 +69,15 @@ describe("execution selection", () => {
   it.each(ALL_LESSON_TYPES)("selects the right backend for %s", (lessonType) => {
     expect(executionKindForLessonType(lessonType)).toBe(EXPECTED_EXECUTION_KIND[lessonType]);
   });
+
+  it.each(WORKSPACE_LESSON_TYPES)(
+    "runs %s in the WebContainer exactly when its kind is webcontainer",
+    (lessonType) => {
+      expect(lessonRunsInWebContainer(lessonType)).toBe(
+        EXPECTED_EXECUTION_KIND[lessonType] === "webcontainer",
+      );
+    },
+  );
 
   it("keeps playground lessons out of the WebContainer set without touching existing types", () => {
     for (const lessonType of ALL_LESSON_TYPES) {

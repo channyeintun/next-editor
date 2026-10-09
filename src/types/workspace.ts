@@ -47,40 +47,6 @@ export function isWorkspaceLessonType(value: unknown): value is WorkspaceLessonT
 }
 
 /**
- * Every browser-runtime lesson type is served by its own dev server inside the
- * WebContainer: the Vite-based SPAs (react, vue, solid, svelte) and html-css
- * run a Vite dev server, while htmx-express, alpine-express, and express-ts run
- * an Express server. The language-level javascript and typescript lessons run
- * their entry script with Node (exit-and-rerun, like python), but keep the
- * full Node runtime — they may install packages or start servers. Python also
- * runs in the WebContainer, but through its experimental WASI interpreter —
- * the runner executes the script and exits instead of keeping a server alive.
- * Go, Kotlin, Rust, Zig, and Haskell are deliberately excluded because they
- * use the selective Playground execution paths below.
- */
-const WEB_CONTAINER_LESSON_TYPES: ReadonlySet<WorkspaceLessonType> = new Set([
-  "html-css",
-  "react",
-  "vue",
-  "solid",
-  "svelte",
-  "htmx-express",
-  "alpine-express",
-  "express-ts",
-  "javascript",
-  "typescript",
-  "python",
-  // Kite's compiler is WebAssembly, so `vite-plugin-kite` builds inside the
-  // container with nothing native installed — which a `kite` lesson does not
-  // need, because it compiles in the page and has no server or preview.
-  "kite-web",
-]);
-
-export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boolean {
-  return WEB_CONTAINER_LESSON_TYPES.has(lessonType);
-}
-
-/**
  * Which backend executes code for a lesson. `go`, `kotlin`, `rust`, `zig`,
  * and `haskell` lessons compile through their respective playground proxies
  * on the main Worker. `kite` compiles in the browser: `kitec` is a Rust
@@ -101,27 +67,55 @@ export type WorkspaceExecutionKind =
   | "kite-playground"
   | "asm-playground";
 
+/**
+ * Every browser-runtime lesson type is served by its own dev server inside the
+ * WebContainer: the Vite-based SPAs (react, vue, solid, svelte) and html-css
+ * run a Vite dev server, while htmx-express, alpine-express, and express-ts run
+ * an Express server. The language-level javascript and typescript lessons run
+ * their entry script with Node (exit-and-rerun, like python), but keep the
+ * full Node runtime — they may install packages or start servers. Python also
+ * runs in the WebContainer, but through its experimental WASI interpreter —
+ * the runner executes the script and exits instead of keeping a server alive.
+ * Go, Kotlin, Rust, Zig, and Haskell are deliberately excluded because they
+ * use the selective Playground execution paths.
+ *
+ * A `Record` keyed by the union, like the labels above: a new lesson type that
+ * has not chosen its backend fails the typecheck instead of falling through to
+ * "webcontainer" while lessonRunsInWebContainer says otherwise.
+ */
+const EXECUTION_KIND_BY_LESSON_TYPE: Record<WorkspaceLessonType, WorkspaceExecutionKind> = {
+  "html-css": "webcontainer",
+  react: "webcontainer",
+  vue: "webcontainer",
+  solid: "webcontainer",
+  svelte: "webcontainer",
+  "htmx-express": "webcontainer",
+  "alpine-express": "webcontainer",
+  "express-ts": "webcontainer",
+  javascript: "webcontainer",
+  typescript: "webcontainer",
+  go: "go-playground",
+  kotlin: "kotlin-playground",
+  python: "webcontainer",
+  rust: "rust-playground",
+  zig: "zig-playground",
+  haskell: "haskell-playground",
+  kite: "kite-playground",
+  // Kite's compiler is WebAssembly, so `vite-plugin-kite` builds inside the
+  // container with nothing native installed — which a `kite` lesson does not
+  // need, because it compiles in the page and has no server or preview.
+  "kite-web": "webcontainer",
+  asm: "asm-playground",
+};
+
 export function executionKindForLessonType(
   lessonType: WorkspaceLessonType,
 ): WorkspaceExecutionKind {
-  switch (lessonType) {
-    case "kite":
-      return "kite-playground";
-    case "go":
-      return "go-playground";
-    case "kotlin":
-      return "kotlin-playground";
-    case "rust":
-      return "rust-playground";
-    case "zig":
-      return "zig-playground";
-    case "haskell":
-      return "haskell-playground";
-    case "asm":
-      return "asm-playground";
-    default:
-      return "webcontainer";
-  }
+  return EXECUTION_KIND_BY_LESSON_TYPE[lessonType];
+}
+
+export function lessonRunsInWebContainer(lessonType: WorkspaceLessonType): boolean {
+  return executionKindForLessonType(lessonType) === "webcontainer";
 }
 
 // Capability predicates stay separate from the execution kind so a Go lesson
