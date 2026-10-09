@@ -17,7 +17,11 @@ vi.mock("react-router", () => ({
 
 vi.mock("@next-editor/infra", () => ({
   invalidateAthanLabAccount: () => Promise.resolve(),
-  UploadLessonModal: () => null,
+  UploadLessonModal: ({ onClose }: { onClose: () => void }) => (
+    <button type="button" onClick={onClose}>
+      Close draft upload
+    </button>
+  ),
   useAuth: () => ({ user: null, isLoading: false }),
   useStudioCapabilities: () => ({
     capabilities: { athanlab: false, burmeseVoxCpm2: false },
@@ -228,5 +232,42 @@ describe("StudioController voice focus", () => {
       expect(screen.getByRole("combobox", { name: "Narrator voice" })).toHaveFocus(),
     );
     expect(screen.queryByRole("button", { name: "Delete voice" })).toBeNull();
+  });
+});
+
+// Last: a passing render stays in the module's run history for every later mount.
+describe("StudioController draft upload focus", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    studio.searchParams = new URLSearchParams();
+    studio.voices = [];
+  });
+
+  it("returns focus to Create draft… when the draft upload closes", async () => {
+    studio.runRender.mockResolvedValue({
+      report: { planSlug: "english-plan", outcome: "passed", checks: [], errors: [] },
+      manifest: { planSlug: "english-plan", planHash: "0".repeat(64), runtimeMode: "fixture" },
+      semantics: null,
+      artifacts: {
+        neBlob: new Blob(),
+        audioBlob: new Blob(),
+        audioFileName: "lesson-english-plan.m4a",
+        recording: {},
+      },
+    } as unknown as Awaited<ReturnType<typeof runStudioRender>>);
+    renderController();
+
+    fireEvent.click(startButton());
+    const createDraft = await screen.findByRole("button", { name: "Create draft…" });
+    createDraft.focus();
+    fireEvent.click(createDraft);
+    expect(screen.queryByRole("button", { name: "Create draft…" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close draft upload" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Create draft…" })).toHaveFocus(),
+    );
   });
 });

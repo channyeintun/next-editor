@@ -330,6 +330,17 @@ export default function StudioController() {
   }>(ATHANLAB_NOT_REPORTED);
   const runningRef = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  // The draft modal replaces the whole console (see the early return below), so
+  // its "Create draft…" trigger unmounts while it is open. Closing it puts focus
+  // back on the re-mounted trigger instead of leaving it on <body>.
+  const draftButtonRef = useRef<HTMLButtonElement | null>(null);
+  const restoreDraftFocusRef = useRef(false);
+  useEffect(() => {
+    if (!showDraftModal && restoreDraftFocusRef.current) {
+      restoreDraftFocusRef.current = false;
+      draftButtonRef.current?.focus();
+    }
+  }, [showDraftModal]);
 
   // Opt-in screen recording: capture the performance to a standalone local video
   // (narration muxed in via tab audio) alongside the .ne bundle. Reuses the shared
@@ -888,7 +899,10 @@ export default function StudioController() {
     return (
       <UploadLessonModal
         recording={artifacts.recording}
-        onClose={() => setShowDraftModal(false)}
+        onClose={() => {
+          restoreDraftFocusRef.current = true;
+          setShowDraftModal(false);
+        }}
         initialTitle={activeRun.title}
         initialDescription={describeDraftDescription(activeRun)}
         initialTags="studio, ai-produced"
@@ -1212,6 +1226,7 @@ export default function StudioController() {
           ) : null}
           {artifacts ? (
             <button
+              ref={draftButtonRef}
               type="button"
               onClick={() => setShowDraftModal(true)}
               className="rounded-md bg-[#2b2340] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#c4b0f5] transition-colors hover:bg-[#382e52]"
