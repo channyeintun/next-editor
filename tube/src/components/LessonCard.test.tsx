@@ -35,6 +35,14 @@ describe("LessonCard", () => {
     expect(burmese[0].textContent).toBe("တွေ");
   });
 
+  it("clamps the title on the link itself so the heading does not clip its focus ring", () => {
+    renderCard(lesson());
+
+    const link = screen.getByRole("link", { name: "Rust from zero: Data type တွေ" });
+    expect(link).toHaveClass("line-clamp-2", "focus-visible:ring-2");
+    expect(screen.getByRole("heading", { level: 3 })).not.toHaveClass("line-clamp-2");
+  });
+
   it("renders an English title with no lang override", () => {
     renderCard(lesson({ title: "Rust from zero: Ownership" }));
 

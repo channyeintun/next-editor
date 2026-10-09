@@ -66,10 +66,13 @@ export default function LessonCard({
       </Link>
 
       <div className="mt-3">
-        <h3 className="line-clamp-2 text-sm font-semibold leading-snug">
+        {/* The two-line clamp (overflow: hidden) sits on the link, not the h3:
+            an element's own focus ring is not clipped by its own overflow, but
+            it is by an ancestor's, which left only slivers of the ring. */}
+        <h3 className="text-sm font-semibold leading-snug">
           <Link
             to={href}
-            className="rounded text-white outline-none focus-visible:ring-2 focus-visible:ring-pinata-purple focus-visible:ring-offset-2 focus-visible:ring-offset-[#11141c]"
+            className="line-clamp-2 rounded text-white outline-none focus-visible:ring-2 focus-visible:ring-pinata-purple focus-visible:ring-offset-2 focus-visible:ring-offset-[#11141c]"
           >
             <LangText text={lesson.title} />
           </Link>
