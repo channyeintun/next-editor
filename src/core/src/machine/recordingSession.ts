@@ -7,7 +7,7 @@ import type {
 import type { SlideEvent } from "../slides";
 import type { WhiteboardEvent } from "../whiteboard";
 import type { RuntimeRecordingSnapshot } from "../runtime";
-import type { ChatRecordingEvent } from "../../../types/chat";
+import type { ChatRecordingEvent } from "../chat";
 import {
   areWorkspaceSnapshotsEqual,
   toWorkspaceDeltaSnapshot,

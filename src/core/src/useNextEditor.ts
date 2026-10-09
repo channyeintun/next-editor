@@ -14,7 +14,7 @@ import type {
 import type { PreviewDomPatchBatch, PreviewEvent, PreviewInitialDocument } from "./preview";
 import type { SlideEvent } from "./slides";
 import type { WhiteboardEvent } from "./whiteboard";
-import type { ChatRecordingEvent } from "../../types/chat";
+import type { ChatRecordingEvent } from "./chat";
 import type { TextEditEvent } from "./textEdit";
 import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "../../types/workspace";
 import { isAtPlaybackEnd } from "./machine/playbackValues";

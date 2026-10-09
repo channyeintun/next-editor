@@ -18,7 +18,7 @@ import { selectNextEditorMetadata } from "../useNextEditor";
 import { reconstructFrameAtIndex } from "../utils/frameDelta";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { RuntimeRecordingSnapshot } from "../runtime";
-import type { ChatCheckpoint } from "../../../types/chat";
+import type { ChatCheckpoint } from "../chat";
 
 const audioEdit = vi.hoisted(() => ({
   editRecordedAudio:

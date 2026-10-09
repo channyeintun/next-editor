@@ -25,7 +25,7 @@ import type { RuntimeRecordingSnapshot } from "../runtime";
 import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
 import type { RuntimeCheckpointProgress } from "../runtimeTrack";
-import type { ChatCheckpoint, ChatRecordingEvent } from "../../../types/chat";
+import type { ChatCheckpoint, ChatRecordingEvent } from "../chat";
 import type { TextEditEvent } from "../textEdit";
 import type { RecordingClock } from "./recordingClock";
 import type { RecordingTracks } from "./recordingAssembly";

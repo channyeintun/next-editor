@@ -11,7 +11,7 @@ import { markFramesNormalized, normalizeDeltaFrame } from "../../core/src/utils/
 import type { RuntimeRecordingEvent } from "../../core/src/runtime";
 import type { WorkspaceRecordingAsset, WorkspaceRecordingEvent } from "../../types/workspace";
 import type { WhiteboardEvent } from "../../core/src/whiteboard";
-import type { ChatRecordingEvent } from "../../types/chat";
+import type { ChatRecordingEvent } from "../../core/src/chat";
 import {
   decodeRecords,
   createInflationBudget,

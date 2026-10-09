@@ -1,4 +1,4 @@
-import type { ChatDelta, ChatItem, ChatStatus } from "../../../types/chat";
+import type { ChatDelta, ChatItem, ChatStatus } from "../chat";
 import { applyContentDelta } from "./contentDelta";
 
 export interface ChatFoldState {

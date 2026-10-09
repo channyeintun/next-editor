@@ -2,7 +2,7 @@ import {
   CHAT_CHECKPOINT_DELTA_INTERVAL,
   type ChatCheckpoint,
   type ChatRecordingEvent,
-} from "../../../../types/chat";
+} from "../../chat";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "../../utils/chatDelta";
 import { findTimedEventIndexAtOrBefore } from "./cursor";
 

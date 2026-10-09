@@ -8,7 +8,7 @@ import type {
   ChatRecordingEvent,
   ChatRole,
   ChatStatus,
-} from "../../../../types/chat";
+} from "../../chat";
 import type {
   RuntimeRecordingEvent,
   RuntimeRecordingSnapshot,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { ChatCheckpoint, ChatDelta, ChatRecordingEvent } from "../../../../types/chat";
+import type { ChatCheckpoint, ChatDelta, ChatRecordingEvent } from "../../chat";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE, type ChatFoldState } from "../../utils/chatDelta";
 import { createContentDelta } from "../../utils/contentDelta";
 import { getChatReplayResult } from "./chat";
