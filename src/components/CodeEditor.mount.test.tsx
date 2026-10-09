@@ -1,6 +1,12 @@
 import { render } from "@testing-library/react";
+import * as Y from "yjs";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { useOptionalCollaboration } from "../contexts/CollaborationContext";
+import { getCollaborationTexts } from "../collaboration/projectDocument";
+import { createCollaborationCursor } from "../collaboration/relativePosition";
+import type {
+  CollaborationParticipant,
+  useOptionalCollaboration,
+} from "../contexts/CollaborationContext";
 
 type Collaboration = NonNullable<ReturnType<typeof useOptionalCollaboration>>;
 type Listener = (...args: unknown[]) => void;
@@ -206,6 +212,56 @@ function fakeCollaboration(overrides: Partial<Collaboration> = {}): Collaboratio
   } as Collaboration;
 }
 
+const ADA: CollaborationParticipant = {
+  kind: "state",
+  roomId: "20000000-0000-4000-8000-000000000001",
+  actorId: "30000000-0000-4000-8000-000000000002",
+  sessionId: "40000000-0000-4000-8000-000000000002",
+  revision: 1,
+  role: "editor",
+  username: "ada",
+  name: "Ada",
+  avatarUrl: null,
+  isHost: false,
+  surface: { kind: "editor", fileNodeId: null, viewport: null },
+  cursor: null,
+  occurredAt: 1,
+  expiresAt: 2,
+};
+
+/**
+ * A live room whose shared copy of the open file matches it, with one remote
+ * editor, Ada. Returns the context value with Ada's cursor at given offsets.
+ */
+function roomWithAda() {
+  const doc = new Y.Doc();
+  getCollaborationTexts(doc).set("file-1", new Y.Text(ACTIVE_FILE.content));
+  const provider = {
+    doc,
+    awareness: { clientID: 1, getStates: () => new Map(), setLocalStateField: () => {} },
+    flushNow: async () => {},
+  } as unknown as Collaboration["provider"];
+  const getNodeIdForPath = (path: string) => (path === ACTIVE_FILE.path ? "file-1" : null);
+  let revision = 0;
+  return (anchorOffset: number, headOffset: number) => {
+    revision += 1;
+    return fakeCollaboration({
+      provider,
+      doc,
+      connectionState: "live",
+      getNodeIdForPath,
+      participants: [
+        {
+          ...ADA,
+          revision,
+          occurredAt: revision,
+          cursor: createCollaborationCursor(doc, "file-1", anchorOffset, headOffset),
+        },
+      ],
+    });
+  };
+}
+
 let editor: ReturnType<typeof fakeEditor>;
 let handleEditorChange: ReturnType<typeof vi.fn<(...args: unknown[]) => void>>;
 
@@ -261,5 +317,40 @@ describe("CodeEditor's Monaco listeners", () => {
     editor.fire("onDidChangeCursorSelection");
 
     expect(handleEditorChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CodeEditor's remote selection recording", () => {
+  it("records a remote cursor only during a take, from its second run on", () => {
+    const adaAt = roomWithAda();
+    harness.collaboration = adaAt(0, 0);
+    const { rerender } = render(<CodeEditor />);
+    for (const offset of [1, 2, 3]) {
+      harness.collaboration = adaAt(offset, offset);
+      rerender(<CodeEditor />);
+    }
+    expect(handleEditorChange).not.toHaveBeenCalled();
+
+    // The take's first run only takes the baseline.
+    harness.isRecording = true;
+    rerender(<CodeEditor />);
+    expect(handleEditorChange).not.toHaveBeenCalled();
+
+    harness.collaboration = adaAt(2, 4);
+    rerender(<CodeEditor />);
+    expect(handleEditorChange.mock.calls).toEqual([
+      [
+        {
+          startLineNumber: 1,
+          startColumn: 3,
+          endLineNumber: 1,
+          endColumn: 5,
+          selectionStartLineNumber: 1,
+          selectionStartColumn: 3,
+          positionLineNumber: 1,
+          positionColumn: 5,
+        },
+      ],
+    ]);
   });
 });

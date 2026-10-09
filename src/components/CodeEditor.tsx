@@ -1003,6 +1003,14 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       scope.provider !== provider ||
       scope.path !== activeFile.path ||
       scope.isRecording !== isRecording;
+    // Outside a take nothing is recorded, and a take's first run finds its
+    // scope changed and starts from a fresh baseline, so there is nothing to
+    // resolve until then. The scope is still kept for that first run.
+    if (!isRecording) {
+      recordedRemoteCursorSignaturesRef.current = new Map();
+      remoteCursorRecordingScopeRef.current = { provider, path: activeFile.path, isRecording };
+      return;
+    }
     const currentSignatures = new Map<string, string>();
     const changedSelections: Array<{
       key: string;
@@ -1020,11 +1028,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
         const key = collaborationParticipantKey(participant);
         const signature = `${anchorOffset}:${headOffset}`;
         currentSignatures.set(key, signature);
-        if (
-          !scopeChanged &&
-          isRecording &&
-          recordedRemoteCursorSignaturesRef.current.get(key) !== signature
-        ) {
+        if (!scopeChanged && recordedRemoteCursorSignaturesRef.current.get(key) !== signature) {
           changedSelections.push({
             key,
             occurredAt: participant.occurredAt,
@@ -1076,7 +1080,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
       isRecording,
     };
 
-    if (!isRecording || scopeChanged || changedSelections.length === 0) return;
+    if (scopeChanged || changedSelections.length === 0) return;
     changedSelections.sort(
       (left, right) => right.occurredAt - left.occurredAt || left.key.localeCompare(right.key),
     );
