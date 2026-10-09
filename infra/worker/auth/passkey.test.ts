@@ -90,4 +90,24 @@ describe("passkey sign-in challenge", () => {
     expect(response.status).toBe(400);
     expect(verifyAuthenticationResponse).not.toHaveBeenCalled();
   });
+
+  // /login/verify is reachable without a session, so its body is read under
+  // a byte ceiling before it is parsed.
+  it("refuses an assertion body over the request ceiling", async () => {
+    const cookie = await issueLoginChallenge();
+
+    const response = await passkeyRoute.request(
+      "https://nexteditor.dev/login/verify",
+      {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ id: "cred-1", response: {}, padding: "x".repeat(32 * 1024) }),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "request body is too large" });
+    expect(verifyAuthenticationResponse).not.toHaveBeenCalled();
+  });
 });

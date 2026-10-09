@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
 import type { Env } from "../env";
+import { isJsonObject, readJsonWithLimit } from "../httpBody";
 import { upsertUserByGoogleSub, createSession } from "../../db/queries";
 import { userRowToAuthUser } from "../../db/types";
 import { isHttps, setSessionCookie } from "./session";
@@ -10,6 +11,8 @@ const HANDSHAKE_COOKIE = "ne_oauth";
 const HANDSHAKE_MAX_AGE_SECONDS = 10 * 60; // just long enough for the Google round trip
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+// A One Tap request carries one Google ID token (a JWT of a couple of KB).
+const MAX_ONETAP_REQUEST_BYTES = 8 * 1024;
 
 interface HandshakePayload {
   state: string;
@@ -100,7 +103,11 @@ googleAuthRoute.get("/config", (c) => c.json({ clientId: c.env.GOOGLE_CLIENT_ID 
 // client, so it goes through full JWKS signature verification (see
 // googleIdToken.ts) before its claims are believed.
 googleAuthRoute.post("/onetap", async (c) => {
-  const body = await c.req.json<{ credential?: unknown }>().catch(() => null);
+  const read = await readJsonWithLimit(c.req.raw, MAX_ONETAP_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  const body = read.status === "ok" && isJsonObject(read.value) ? read.value : null;
   const credential = typeof body?.credential === "string" ? body.credential : null;
   if (!credential) {
     return c.json({ error: "Missing credential." }, 400);

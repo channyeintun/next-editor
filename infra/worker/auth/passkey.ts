@@ -10,6 +10,7 @@ import {
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import type { Env } from "../env";
+import { readJsonWithLimit } from "../httpBody";
 import { createSession } from "../../db/queries";
 import {
   getPasskeyCredentialWithUser,
@@ -22,6 +23,8 @@ import { requireUser } from "./requireUser";
 import { isHttps, setSessionCookie } from "./session";
 
 const RP_NAME = "Next Editor";
+// A WebAuthn registration or authentication response is a few KB at most.
+const MAX_VERIFY_REQUEST_BYTES = 32 * 1024;
 
 // Same transient-signed-cookie pattern as the OAuth handshake in google.ts: the
 // challenge has no DB backing, so the cookie carries it, signed so it cannot be
@@ -166,7 +169,11 @@ passkeyRoute.post("/register/verify", requireUser, async (c) => {
     return c.json({ error: "Registration challenge missing or expired. Please try again." }, 400);
   }
 
-  const body = await c.req.json<RegistrationResponseJSON>().catch(() => null);
+  const read = await readJsonWithLimit(c.req.raw, MAX_VERIFY_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  const body = read.status === "ok" ? (read.value as RegistrationResponseJSON | null) : null;
   if (!body) {
     return c.json({ error: "Malformed registration response." }, 400);
   }
@@ -221,7 +228,11 @@ passkeyRoute.post("/login/verify", async (c) => {
     return c.json({ error: "Sign-in challenge missing or expired. Please try again." }, 400);
   }
 
-  const body = await c.req.json<AuthenticationResponseJSON>().catch(() => null);
+  const read = await readJsonWithLimit(c.req.raw, MAX_VERIFY_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  const body = read.status === "ok" ? (read.value as AuthenticationResponseJSON | null) : null;
   if (!body || typeof body.id !== "string") {
     return c.json({ error: "Malformed authentication response." }, 400);
   }

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
+import { readJsonWithLimit } from "../httpBody";
 import {
   deleteLesson,
   getOwnedLessonById,
@@ -21,6 +22,9 @@ import { isLessonId, LESSON_ID_PATTERN } from "../lessonIds";
 import { isLessonMediaFilename } from "../lessonMediaFiles";
 
 const DEFAULT_PAGE_SIZE = 12;
+// Well above the largest lesson metadata metadataLimits.ts allows (a
+// 10,000-character description is at most ~60 KB of JSON).
+const MAX_LESSON_REQUEST_BYTES = 128 * 1024;
 
 function slugify(title: string): string {
   const base = title
@@ -100,7 +104,11 @@ interface CreateLessonBody {
 lessonsRoute.post("/", requireUser, async (c) => {
   const user = c.get("user");
 
-  const body = await c.req.json<CreateLessonBody>().catch(() => null);
+  const read = await readJsonWithLimit(c.req.raw, MAX_LESSON_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  const body = read.status === "ok" ? (read.value as CreateLessonBody | null) : null;
   if (!body || !isLessonId(body.id)) {
     return c.json({ error: "a lesson id is required" }, 400);
   }
@@ -170,7 +178,11 @@ lessonsRoute.post("/", requireUser, async (c) => {
 lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
   const user = c.get("user");
 
-  const body = await c.req.json<CreateLessonBody>().catch(() => null);
+  const read = await readJsonWithLimit(c.req.raw, MAX_LESSON_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  const body = read.status === "ok" ? (read.value as CreateLessonBody | null) : null;
   if (!body) {
     return c.json({ error: "invalid body" }, 400);
   }

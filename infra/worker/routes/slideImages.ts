@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
+import { isJsonObject, readJsonWithLimit } from "../httpBody";
 import { requireUser } from "../auth/requireUser";
 import { proxyUrl, readProxyBody } from "../../../src/shared/proxy";
 import { isGoogleImageUrl } from "../../../src/shared/googleImageHosts";
@@ -31,6 +32,8 @@ export const slideImagesRoute = new Hono<{ Bindings: Env }>();
 // this invocation's subrequests (head + fetch + put per image) well under
 // Cloudflare's per-request limit.
 const MAX_URLS_PER_REQUEST = 8;
+// Room for MAX_URLS_PER_REQUEST long signed image URLs; an abuse backstop.
+const MAX_REQUEST_BYTES = 64 * 1024;
 // Slide images are typically well under 2 MB; this is an abuse backstop, not
 // a tuned product limit.
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -85,15 +88,16 @@ async function ingestImage(bucket: R2Bucket, url: string): Promise<IngestResult>
 }
 
 slideImagesRoute.post("/", requireUser, async (c) => {
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
+  const read = await readJsonWithLimit(c.req.raw, MAX_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  if (read.status !== "ok") {
     return c.json({ error: "invalid JSON body" }, 400);
   }
 
   // `null` is valid JSON too, and has no properties to read.
-  const urls = typeof body === "object" && body !== null ? (body as { urls?: unknown }).urls : null;
+  const urls = isJsonObject(read.value) ? read.value.urls : null;
   if (!Array.isArray(urls) || urls.length === 0 || urls.some((url) => typeof url !== "string")) {
     return c.json({ error: "'urls' must be a non-empty array of strings" }, 400);
   }

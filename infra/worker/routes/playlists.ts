@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
+import { readJsonWithLimit } from "../httpBody";
 import {
   addLessonToPlaylist,
   deletePlaylist,
@@ -40,6 +41,11 @@ function slugify(title: string): string {
 // Everything else requires the signed-in owner.
 export const playlistsRoute = new Hono<{ Bindings: Env }>();
 
+// Well above the largest playlist metadata metadataLimits.ts allows (a
+// 10,000-character description is at most ~60 KB of JSON); reorder lists are
+// far smaller.
+const MAX_PLAYLIST_REQUEST_BYTES = 128 * 1024;
+
 interface CreatePlaylistBody {
   title?: unknown;
   description?: unknown;
@@ -48,7 +54,11 @@ interface CreatePlaylistBody {
 playlistsRoute.post("/", requireUser, async (c) => {
   const user = c.get("user");
 
-  const body = await c.req.json<CreatePlaylistBody>().catch(() => null);
+  const read = await readJsonWithLimit(c.req.raw, MAX_PLAYLIST_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  const body = read.status === "ok" ? (read.value as CreatePlaylistBody | null) : null;
   const title = typeof body?.title === "string" ? body.title.trim() : "";
   if (!title) {
     return c.json({ error: "title is required" }, 400);
@@ -120,7 +130,11 @@ playlistsRoute.get("/:id/lessons", requireUser, async (c) => {
 playlistsRoute.patch("/:id", requireUser, async (c) => {
   const user = c.get("user");
 
-  const body = await c.req.json<CreatePlaylistBody>().catch(() => null);
+  const read = await readJsonWithLimit(c.req.raw, MAX_PLAYLIST_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  const body = read.status === "ok" ? (read.value as CreatePlaylistBody | null) : null;
   if (!body) {
     return c.json({ error: "invalid body" }, 400);
   }
@@ -173,7 +187,11 @@ interface AddLessonBody {
 playlistsRoute.post("/:id/lessons", requireUser, async (c) => {
   const user = c.get("user");
 
-  const body = await c.req.json<AddLessonBody>().catch(() => null);
+  const read = await readJsonWithLimit(c.req.raw, MAX_PLAYLIST_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  const body = read.status === "ok" ? (read.value as AddLessonBody | null) : null;
   if (!body || typeof body.lessonId !== "string" || !body.lessonId) {
     return c.json({ error: "lessonId is required" }, 400);
   }
@@ -211,7 +229,11 @@ interface ReorderBody {
 playlistsRoute.post("/:id/reorder", requireUser, async (c) => {
   const user = c.get("user");
 
-  const body = await c.req.json<ReorderBody>().catch(() => null);
+  const read = await readJsonWithLimit(c.req.raw, MAX_PLAYLIST_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  const body = read.status === "ok" ? (read.value as ReorderBody | null) : null;
   if (
     !body ||
     !Array.isArray(body.lessonIds) ||

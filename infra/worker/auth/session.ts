@@ -2,10 +2,13 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { Env } from "../env";
+import { isJsonObject, readJsonWithLimit } from "../httpBody";
 import { deleteSession, getSessionUser, updateUsername, USERNAME_PATTERN } from "../../db/queries";
 import { type SessionRow, userRowToAuthUser } from "../../db/types";
 
 export const SESSION_COOKIE = "ne_session";
+// A username change carries one short username.
+const MAX_USERNAME_REQUEST_BYTES = 1024;
 
 /**
  * Whether this request arrived over https, for a cookie's `secure` flag: derived
@@ -60,7 +63,11 @@ authRoute.patch("/username", async (c) => {
     return c.json({ error: "not signed in" }, 401);
   }
 
-  const body = await c.req.json<{ username?: unknown }>().catch(() => null);
+  const read = await readJsonWithLimit(c.req.raw, MAX_USERNAME_REQUEST_BYTES);
+  if (read.status === "too-large") {
+    return c.json({ error: "request body is too large" }, 413);
+  }
+  const body = read.status === "ok" && isJsonObject(read.value) ? read.value : null;
   const requested = typeof body?.username === "string" ? body.username.trim().toLowerCase() : "";
   if (!USERNAME_PATTERN.test(requested)) {
     return c.json(

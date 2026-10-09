@@ -79,6 +79,16 @@ describe("playlistsRoute text limits", () => {
     expect(response.status).toBe(400);
     expect(updatePlaylist).not.toHaveBeenCalled();
   });
+
+  // The body is read under a byte ceiling before it is parsed, so a client
+  // cannot make the Worker buffer and JSON.parse an arbitrarily large body.
+  it("refuses a body over the request ceiling", async () => {
+    const response = await send("POST", "/", { title: "Mine", padding: "x".repeat(128 * 1024) });
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "request body is too large" });
+    expect(insertPlaylist).not.toHaveBeenCalled();
+  });
 });
 
 describe("playlistsRoute mutations", () => {

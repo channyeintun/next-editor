@@ -14,8 +14,8 @@ function ingest(body: string) {
 }
 
 describe("slideImagesRoute request validation", () => {
-  // Every JSON value is a valid body to c.req.json(), including `null`, which
-  // has no properties to read.
+  // Every JSON value is a valid body, including `null`, which has no
+  // properties to read.
   it.each(["null", "[]", "1", '"urls"', "{}", '{"urls":[]}', '{"urls":[1]}'])(
     "answers the body %s with 400",
     async (body) => {
@@ -27,4 +27,18 @@ describe("slideImagesRoute request validation", () => {
       });
     },
   );
+
+  it("answers a body that is not JSON with 400", async () => {
+    const response = await ingest("{urls");
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid JSON body" });
+  });
+
+  it("refuses a body over the request ceiling before parsing it", async () => {
+    const response = await ingest(JSON.stringify({ urls: ["x".repeat(64 * 1024)] }));
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "request body is too large" });
+  });
 });

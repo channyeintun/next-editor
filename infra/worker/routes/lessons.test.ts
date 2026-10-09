@@ -258,6 +258,36 @@ describe("lessonsRoute text limits", () => {
     expect(response.status).toBe(400);
     expect(updateLesson).not.toHaveBeenCalled();
   });
+
+  // The body is read under a byte ceiling before it is parsed, so a client
+  // cannot make the Worker buffer and JSON.parse an arbitrarily large body.
+  it("refuses a create body over the request ceiling", async () => {
+    const response = await createLesson({
+      id: LESSON_ID,
+      title: "A lesson",
+      ne: `lessons/${LESSON_ID}/${LESSON_ID}.ne`,
+      padding: "x".repeat(128 * 1024),
+    });
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "request body is too large" });
+    expect(insertDraftLesson).not.toHaveBeenCalled();
+  });
+
+  it("refuses an edit whose declared length is over the request ceiling", async () => {
+    const response = await lessonsRoute.request(
+      `https://nexteditor.dev/${LESSON_ID}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ title: "A lesson" }),
+        headers: { "content-type": "application/json", "content-length": String(128 * 1024 + 1) },
+      },
+      env,
+    );
+
+    expect(response.status).toBe(413);
+    expect(updateLesson).not.toHaveBeenCalled();
+  });
 });
 
 describe("lessonsRoute route order", () => {
