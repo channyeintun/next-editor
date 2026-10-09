@@ -79,6 +79,8 @@ export interface DecodedInstruction {
   /** The width this instruction operates at. */
   operandSize: OperandSize;
   operands: DecodedOperand[];
+  /** The condition a Jcc, SETcc or CMOVcc tests (see InstructionForm). */
+  condition?: InstructionForm["condition"];
 }
 
 /**
@@ -99,8 +101,9 @@ export class AsmDecodeError extends Error {
 }
 
 /**
- * The table key for an opcode, as a number. This runs once per executed
- * instruction, so the one or two opcode bytes are folded into an integer rather
+ * The table key for an opcode, as a number. This runs on every decode, which
+ * the machine does once per distinct address it executes (it caches the
+ * result), so the one or two opcode bytes are folded into an integer rather
  * than a string that has to be built and hashed every time. The `/digit`
  * extension — what tells `0x83 /0` (`add`) from `0x83 /5` (`sub`) — rides in the
  * low bits, with -1 meaning "the form has none".
@@ -483,6 +486,7 @@ export function decodeInstruction(
     length: reader.consumed,
     operandSize,
     operands,
+    condition: form.condition,
   };
 }
 

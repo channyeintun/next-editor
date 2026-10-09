@@ -28,7 +28,6 @@ import {
   type DecodedInstruction,
   type DecodedOperand,
 } from "./decoder";
-import { CONDITION_CODES } from "./isa";
 import { Memory, MemoryFault, PAGE_BYTES } from "./memory";
 import { REGISTERS_64 } from "./registers";
 
@@ -83,9 +82,9 @@ export interface MachineOptions {
 /**
  * The instruction budget, chosen from measured throughput rather than taste.
  *
- * This interpreter runs about a million instructions a second, so five million
- * is roughly five seconds of a program that will not stop — long enough that no
- * real lesson program ever reaches it, short enough that a runaway loop answers
+ * This interpreter runs a few million instructions a second, so five million is
+ * a second or two of a program that will not stop — long enough that no real
+ * lesson program ever reaches it, short enough that a runaway loop answers
  * while the person who wrote it is still looking at the screen.
  */
 export const DEFAULT_MAX_INSTRUCTIONS = 5_000_000;
@@ -101,12 +100,6 @@ export const DEFAULT_MAX_HEAP_BYTES = 64 * 1024 * 1024;
 const MAX_BRK_STEP_BYTES = 0x40_0000n;
 /** Linux's "bad file descriptor" errno, returned negated in `rax`. */
 const EBADF = 9n;
-
-/** Canonical condition mnemonic suffix (`e`, `ge`, …) to its 4-bit code. */
-const CONDITION_BY_NAME = new Map<string, number>();
-for (const { code, names } of CONDITION_CODES) {
-  for (const name of names) CONDITION_BY_NAME.set(name, code);
-}
 
 class Halt extends Error {
   readonly reason: StopReason;
@@ -128,8 +121,17 @@ function parityOf(value: bigint): boolean {
   return bits % 2 === 0;
 }
 
-function signBit(value: bigint, size: number): boolean {
-  return ((value >> BigInt(size * 8 - 1)) & 1n) === 1n;
+/** The top bit of each operand size, built once: the flag helpers ask constantly. */
+const SIGN_BITS: Record<number, bigint> = {
+  1: 0x80n,
+  2: 0x8000n,
+  4: 0x8000_0000n,
+  8: 1n << 63n,
+};
+
+/** Whether the top bit of a `size`-byte value is set. */
+export function signBit(value: bigint, size: number): boolean {
+  return (value & SIGN_BITS[size]) !== 0n;
 }
 
 function toSigned(value: bigint, size: number): bigint {
@@ -435,6 +437,29 @@ export class Machine {
       if (operand.kind === "register" || operand.kind === "memory") return operand.size;
       return size;
     };
+
+    // Every Jcc, SETcc and CMOVcc carries its condition from the form table, so
+    // the hottest branch in a loop skips the mnemonic switch.
+    if (decoded.condition) {
+      const holds = this.#condition(decoded.condition.code);
+      switch (decoded.condition.family) {
+        case "j":
+          if (holds) {
+            this.rip = readAt(0) & U64;
+            branched = true;
+          }
+          break;
+        case "set":
+          writeAt(0, holds ? 1n : 0n);
+          break;
+        case "cmov":
+          if (holds) writeAt(0, readAt(1));
+          else if (width(0) === 4) writeAt(0, readAt(0));
+          break;
+      }
+      if (!branched) this.rip = nextRip;
+      return;
+    }
 
     switch (mnemonic) {
       case "mov":
@@ -755,33 +780,8 @@ export class Machine {
         this.#syscall();
         break;
 
-      default: {
-        if (mnemonic.startsWith("set")) {
-          const code = CONDITION_BY_NAME.get(mnemonic.slice(3));
-          if (code === undefined) break;
-          writeAt(0, this.#condition(code) ? 1n : 0n);
-          break;
-        }
-        if (mnemonic.startsWith("cmov")) {
-          const code = CONDITION_BY_NAME.get(mnemonic.slice(4));
-          if (code === undefined) break;
-          if (this.#condition(code)) writeAt(0, readAt(1));
-          else if (width(0) === 4) writeAt(0, readAt(0));
-          break;
-        }
-        if (mnemonic.startsWith("j")) {
-          const code = CONDITION_BY_NAME.get(mnemonic.slice(1));
-          if (code === undefined) {
-            throw new Halt({ kind: "fault", message: `Unhandled instruction ${mnemonic}` });
-          }
-          if (this.#condition(code)) {
-            this.rip = readAt(0) & U64;
-            branched = true;
-          }
-          break;
-        }
+      default:
         throw new Halt({ kind: "fault", message: `Unhandled instruction ${mnemonic}` });
-      }
     }
 
     if (!branched) this.rip = nextRip;

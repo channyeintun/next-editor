@@ -59,6 +59,11 @@ export interface InstructionForm {
   immBytes?: 1 | 2 | 4 | 8;
   /** Aliases that assemble to this same form (`sal` → `shl`, `jz` → `je`). */
   aliases?: string[];
+  /**
+   * For a conditional jump, set or move: which of the three it is and the
+   * 4-bit condition it tests, so the interpreter does not look it up by name.
+   */
+  condition?: { family: "j" | "set" | "cmov"; code: number };
 }
 
 const forms: InstructionForm[] = [];
@@ -510,6 +515,7 @@ for (const { code, names } of CONDITION_CODES) {
     opcode: [0x70 + code],
     encoding: "D",
     aliases: rest.map((name) => `j${name}`),
+    condition: { family: "j", code },
   });
   form({
     mnemonic: `j${canonical}`,
@@ -517,6 +523,7 @@ for (const { code, names } of CONDITION_CODES) {
     opcode: [0x0f, 0x80 + code],
     encoding: "D",
     aliases: rest.map((name) => `j${name}`),
+    condition: { family: "j", code },
   });
   form({
     mnemonic: `set${canonical}`,
@@ -526,6 +533,7 @@ for (const { code, names } of CONDITION_CODES) {
     encoding: "M",
     opsize: 1,
     aliases: rest.map((name) => `set${name}`),
+    condition: { family: "set", code },
   });
   for (const size of WIDE) {
     form({
@@ -535,6 +543,7 @@ for (const { code, names } of CONDITION_CODES) {
       encoding: "RM",
       opsize: size,
       aliases: rest.map((name) => `cmov${name}`),
+      condition: { family: "cmov", code },
     });
   }
 }

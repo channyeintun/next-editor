@@ -239,9 +239,10 @@ export class Memory {
    * section would otherwise fault on bytes it never uses. Those tail bytes read
    * as zero and the decoder stops when it has enough.
    *
-   * This runs for every instruction the machine executes, so the common case —
-   * a window that stays inside one page — resolves that page once and hands the
-   * decoder a view of it, rather than walking the page table per byte.
+   * This runs for every instruction the machine decodes — once per distinct
+   * address, since it caches what it decoded — so the common case, a window
+   * that stays inside one page, resolves that page once and hands the decoder a
+   * view of it, rather than walking the page table per byte.
    */
   readCode(address: bigint, length: number): Uint8Array {
     const page = this.#page(address, "execute");
