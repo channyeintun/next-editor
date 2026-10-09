@@ -130,7 +130,10 @@ Current playback behavior:
   0–9 jump to tenths, Home/End, M mutes, C toggles captions. Keys are left alone while the editor,
   terminal, whiteboard, a field, a dialog or a menu has focus, when a modifier is held, and when
   another handler already took them (`defaultPrevented`): during playback Space still reaches
-  `useNextEditor`'s capture-phase listener first, which pauses without typing into the editor.
+  `useNextEditor`'s capture-phase listener first, which pauses. In the editor, the terminal, the
+  whiteboard or a field the space still types; on a button, link, tab or summary the press is the
+  control's and nothing pauses; anywhere else it is taken (`preventDefault`), so the page does not
+  scroll. Both read the target rule from `core/src/utils/playerKeyTargets.ts`.
   The "Single-key shortcuts" switch in the player's settings (`playbackSettingsStore`, stored as
   `playback-character-shortcuts`, on by default) turns off the letter, number and punctuation
   keys (WCAG 2.1.4); Space, the arrows, Home and End keep working.

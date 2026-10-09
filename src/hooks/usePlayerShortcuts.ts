@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { RecordingChapter } from "../core/src";
 import { findChapterIndexAt } from "../core/src/utils/chapters";
+import { isPlayerKeyTarget } from "../core/src/utils/playerKeyTargets";
 import { resumeSharedAudioContext } from "../core/src/utils/audioContext";
 import { MAX_PLAYBACK_SPEED, MIN_PLAYBACK_SPEED } from "../core/src/machine/playbackValues";
 import {
@@ -111,23 +112,6 @@ export function playerShortcutFor(event: KeyPress): PlayerShortcut | null {
  *  setting turns off. Space is not one: it stays the play and pause key. */
 export const isCharacterKey = (key: string): boolean => key.length === 1 && key !== " ";
 
-/** Places that take typing: the editor, the terminal, the whiteboard, and form fields. */
-const TYPING_TARGETS =
-  "input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='textbox'], .monaco-editor, .xterm, .excalidraw";
-/** Places with keys of their own: dialogs, menus, and widgets that arrow keys move. */
-const OWN_KEYS_TARGETS =
-  "[role='dialog'], [aria-modal='true'], [role='menu'], [role='listbox'], [role='slider'], [role='separator'], [role='tablist'], [role='tree'], [role='grid'], [role='radiogroup']";
-/** Elements Space presses; the press is theirs. */
-const PRESSABLE = "button, [role='button'], a[href], summary, [role='menuitem'], [role='tab']";
-
-/** Whether a key pressed with focus on `target` belongs to the player. */
-export function isPlayerKeyTarget(target: EventTarget | null, key: string): boolean {
-  if (!(target instanceof Element)) return true;
-  if (target.closest(TYPING_TARGETS) || target.closest(OWN_KEYS_TARGETS)) return false;
-  if ((target as HTMLElement).isContentEditable) return false;
-  return !(key === " " && target.closest(PRESSABLE));
-}
-
 /** Where "previous" or "next chapter" goes from `time`, or null when there is none. */
 export function chapterTarget(
   chapters: readonly RecordingChapter[],
@@ -188,8 +172,9 @@ export function usePlayerShortcuts() {
 
     switch (shortcut.type) {
       case "togglePlay":
-        // Pressed during playback, Space never gets here: the editor's own listener
-        // pauses on it first (useNextEditor), so this only ever plays for Space.
+        // Pressed on the page during playback, Space never gets here: the editor's own
+        // listener pauses on it first (useNextEditor, defaultPrevented), so this only ever
+        // plays for Space. Typing and pressable targets keep their Space either way.
         resumeSharedAudioContext();
         if (isPlaying) pause();
         else play();

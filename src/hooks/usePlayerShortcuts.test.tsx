@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import {
   chapterTarget,
   isCharacterKey,
-  isPlayerKeyTarget,
   playerShortcutFor,
   usePlayerShortcuts,
 } from "./usePlayerShortcuts";
@@ -66,38 +65,6 @@ describe("isCharacterKey", () => {
       expect(isCharacterKey(value)).toBe(true);
     for (const value of [" ", "ArrowLeft", "Home", "End", "Enter", "Escape"])
       expect(isCharacterKey(value)).toBe(false);
-  });
-});
-
-describe("isPlayerKeyTarget", () => {
-  const within = (html: string, selector: string) => {
-    document.body.innerHTML = html;
-    return document.querySelector(selector);
-  };
-
-  it("takes keys on the page and on the player's buttons", () => {
-    expect(isPlayerKeyTarget(document.body, "k")).toBe(true);
-    expect(isPlayerKeyTarget(within("<button>Play</button>", "button"), "ArrowLeft")).toBe(true);
-  });
-
-  it("leaves Space on a button to the button", () => {
-    expect(isPlayerKeyTarget(within("<button>Settings</button>", "button"), " ")).toBe(false);
-  });
-
-  it("never takes keys from places that are typed in or have keys of their own", () => {
-    for (const [html, selector] of [
-      ["<input>", "input"],
-      ["<textarea></textarea>", "textarea"],
-      ["<div class='monaco-editor'><div class='view-lines'></div></div>", ".view-lines"],
-      ["<div class='xterm'><span></span></div>", "span"],
-      ["<div class='excalidraw'><canvas></canvas></div>", "canvas"],
-      ["<div contenteditable='true'><p></p></div>", "p"],
-      ["<div role='dialog'><button>OK</button></div>", "button"],
-      ["<div role='menu'><button>Item</button></div>", "button"],
-      ["<div role='separator' tabindex='0'></div>", "div"],
-    ]) {
-      expect(isPlayerKeyTarget(within(html, selector), "k")).toBe(false);
-    }
   });
 });
 

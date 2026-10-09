@@ -1,8 +1,9 @@
-import { renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createActor } from "xstate";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { createActor, waitFor } from "xstate";
 import type * as monaco from "monaco-editor";
 import { editorMachine } from "./machine/editorMachine";
+import type { Recording } from "./types";
 import {
   useNextEditorActorActions,
   useNextEditorInteractionEffects,
@@ -89,6 +90,82 @@ describe("useNextEditorInteractionEffects", () => {
 
     expect(actor.getSnapshot().matches("recording")).toBe(true);
     expect(actor.getSnapshot().context.editorRefs.editor).toBe(editor);
+  });
+
+  describe("Space during playback", () => {
+    const recording: Recording = {
+      version: 4,
+      id: "recording-1",
+      name: "Recording 1",
+      createdAt: 1,
+      duration: 60_000,
+      keyframeInterval: 120,
+      frames: [
+        {
+          timestamp: 0,
+          isKeyframe: true,
+          state: {
+            content: "hello",
+            selection,
+            position: { lineNumber: 1, column: 1 },
+            viewState: null,
+            mouseCursor: { x: 0, y: 0, visible: false },
+          },
+        },
+      ],
+    };
+
+    // Renders the hook over a playing actor, presses Space on `target`, and reports what
+    // the press did: whether it paused and whether the target lost its default action.
+    const pressSpaceOn = async (target: HTMLElement) => {
+      const editorRef: EditorRef = { current: null };
+      const actor = startActor(editorRef);
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      actor.send({ type: "PLAY" });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "playing" }));
+      renderHook(() => useNextEditorInteractionEffects(actor, editorRef));
+
+      const send = vi.spyOn(actor, "send");
+      document.body.replaceChildren(target);
+      const event = new KeyboardEvent("keydown", {
+        key: " ",
+        code: "Space",
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        target.dispatchEvent(event);
+      });
+      const paused = send.mock.calls.some(([sent]) => sent.type === "USER_INTERACTION");
+      return { paused, defaultPrevented: event.defaultPrevented };
+    };
+
+    afterEach(() => {
+      document.body.replaceChildren();
+    });
+
+    it("pauses and keeps the page from scrolling on the page", async () => {
+      const target = document.createElement("div");
+      expect(await pressSpaceOn(target)).toEqual({ paused: true, defaultPrevented: true });
+    });
+
+    it("pauses and still types the space into a field", async () => {
+      const target = document.createElement("input");
+      expect(await pressSpaceOn(target)).toEqual({ paused: true, defaultPrevented: false });
+    });
+
+    it("leaves Space on a button to the button", async () => {
+      const target = document.createElement("button");
+      expect(await pressSpaceOn(target)).toEqual({ paused: false, defaultPrevented: false });
+    });
+
+    it("still pauses on a focused widget Space does not press, such as the seek bar", async () => {
+      const target = document.createElement("div");
+      target.setAttribute("role", "slider");
+      target.tabIndex = 0;
+      expect(await pressSpaceOn(target)).toEqual({ paused: true, defaultPrevented: true });
+    });
   });
 });
 

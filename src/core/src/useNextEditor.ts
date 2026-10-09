@@ -18,6 +18,7 @@ import type { ChatRecordingEvent } from "./chat";
 import type { TextEditEvent } from "./textEdit";
 import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "./workspace";
 import { isAtPlaybackEnd } from "./machine/playbackValues";
+import { isPressableTarget, isTypingTarget } from "./utils/playerKeyTargets";
 import type { RecordingClock } from "./machine/recordingClock";
 
 // ============================================================================
@@ -427,11 +428,18 @@ export const useNextEditorInteractionEffects = (
   useEffect(() => {
     if (isPlaying) {
       const handleGlobalKeyDown = (e: KeyboardEvent) => {
-        // Only trigger on Space key
-        if (e.code === "Space" || e.key === " ") {
-          e.preventDefault(); // Prevent page scrolling
-          actorRef.send({ type: "USER_INTERACTION" }); // This triggers PAUSE in the machine
+        if (!(e.code === "Space" || e.key === " ")) return;
+        // Typed into a field, the editor, the terminal or the whiteboard, Space pauses and
+        // still types, like every other key there.
+        if (isTypingTarget(e.target)) {
+          actorRef.send({ type: "USER_INTERACTION" });
+          return;
         }
+        // On a button, a link, a tab or a summary the press is the control's, as when paused.
+        if (isPressableTarget(e.target)) return;
+        // Anywhere else Space pauses, and the page does not scroll.
+        e.preventDefault();
+        actorRef.send({ type: "USER_INTERACTION" }); // This triggers PAUSE in the machine
       };
 
       window.addEventListener("keydown", handleGlobalKeyDown, true); // Use capture phase to catch it early
