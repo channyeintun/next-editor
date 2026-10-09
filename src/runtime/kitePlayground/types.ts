@@ -38,7 +38,10 @@ export interface KitePlaygroundRunResult {
   status: KitePlaygroundRunStatus;
   /** Program stdout. Empty for compile errors. */
   stdout: string;
-  /** Program stderr — `io.error` output. Empty for compile errors. */
+  /**
+   * Always empty: the in-page compiler answers with one stream, never split.
+   * It exists so the result has the proxied languages' shape.
+   */
   stderr: string;
   /**
    * Kite diagnostics, rendered exactly as `kitec` renders them in a terminal;

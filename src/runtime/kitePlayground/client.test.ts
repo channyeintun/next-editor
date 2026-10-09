@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vite-plus/test";
 
+import { runKiteSource } from "./client";
 import { instantiateKiteCompiler, type KiteCompiler } from "./compiler";
 import { kiteRunResultToConsoleLines } from "./console";
 import { parseKitePlaygroundRunResult } from "./types";
@@ -55,6 +56,67 @@ describe("kite compiler", () => {
     for (let i = 0; i < 40; i += 1) {
       expect(kite.run(`fn main() {\n    io.print(${i})\n}\n`)).toBe(`${i}\n`);
     }
+  });
+});
+
+describe("runKiteSource", () => {
+  let kite: KiteCompiler;
+
+  beforeAll(async () => {
+    kite = await instantiateKiteCompiler(readFileSync(wasmPath));
+  });
+
+  it("reports a trap after the output the program printed before it", () => {
+    const result = runKiteSource(
+      kite,
+      'fn main() {\n    io.print("before")\n    let a = 0\n    io.print(10 / a)\n}\n',
+    );
+    expect(result).toEqual({
+      status: "runtime-error",
+      stdout: "before\n",
+      stderr: "",
+      exitDetail: "divide by zero",
+    });
+    expect(kiteRunResultToConsoleLines(result)).toEqual([
+      "before",
+      "[kite-run error] divide by zero",
+    ]);
+  });
+
+  it("reports a trap with no output before it", () => {
+    const result = runKiteSource(
+      kite,
+      "fn main() {\n    let xs = [1, 2]\n    io.print(xs[5])\n}\n",
+    );
+    expect(result.status).toBe("runtime-error");
+    expect(result.stdout).toBe("");
+    expect(result.exitDetail).toContain("out of range");
+  });
+
+  it("leaves a program's own `error:` line as output", () => {
+    // Kite teaches errors as values, so a correct program printing one is
+    // ordinary output, not diagnostics.
+    expect(
+      runKiteSource(
+        kite,
+        'fn main() {\n    io.print("checking")\n    io.print("error: bad input")\n}\n',
+      ),
+    ).toEqual({ status: "success", stdout: "checking\nerror: bad input\n", stderr: "" });
+  });
+
+  it("leaves a program's own line starting with `trap` as output", () => {
+    expect(runKiteSource(kite, 'fn main() {\n    io.print("trapezoid area: 12")\n}\n')).toEqual({
+      status: "success",
+      stdout: "trapezoid area: 12\n",
+      stderr: "",
+    });
+  });
+
+  it("reports a program that does not compile as a compile error", () => {
+    const result = runKiteSource(kite, 'fn main() {\n    var x: int = "s"\n}\n');
+    expect(result.status).toBe("compile-error");
+    expect(result.stdout).toBe("");
+    expect(result.compileErrors).toContain("error[E0200]");
   });
 });
 

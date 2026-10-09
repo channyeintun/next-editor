@@ -56,19 +56,39 @@ function entryOf(files: readonly KitePlaygroundFile[]): KitePlaygroundFile {
 }
 
 /**
- * Whether a `kitec` answer is diagnostics rather than program output.
- *
- * `kite_run` answers with what the program printed, or — when it did not
- * compile — with the diagnostics, rendered exactly as a terminal renders them.
- * The two are told apart the same way a reader tells them apart.
+ * The trailer `kite_run` appends when a program traps: the trap's message on an
+ * `error:` line, then a fixed note. Anchored to the end of the answer, because
+ * a trap ends the program and nothing can print after it.
  */
-function isDiagnostics(answer: string): boolean {
-  return /^error(\[[A-Z]\d{4}\])?:/m.test(answer);
-}
+const TRAP_TRAILER = /\nerror: ([^\n]*)\nnote: traps are not catchable[^\n]*\n?$/;
 
-/** Whether a run's own output reports a trap rather than a compile failure. */
-function isTrap(answer: string): boolean {
-  return /^(trap|thread .* panicked|error: the program trapped)/m.test(answer);
+/**
+ * Compile and run one source, and say which of the three outcomes it was.
+ *
+ * The compiler's own verdict decides compile-versus-run: `kite_check` answers
+ * with nothing for a program that compiles and with exactly the diagnostics
+ * `kite_run` would print for one that does not. Reading `kite_run`'s answer
+ * instead cannot tell them apart — a program is free to print a line that
+ * starts with `error:` — so a program that does not compile is never run, and
+ * a trap is recognised only by the trailer the compiler writes for one.
+ */
+export function runKiteSource(compiler: KiteCompiler, source: string): KitePlaygroundRunResult {
+  const diagnostics = compiler.check(source);
+  if (diagnostics) {
+    return { status: "compile-error", stdout: "", stderr: "", compileErrors: diagnostics };
+  }
+
+  const answer = compiler.run(source);
+  const trap = TRAP_TRAILER.exec(answer);
+  if (trap) {
+    return {
+      status: "runtime-error",
+      stdout: answer.slice(0, trap.index),
+      stderr: "",
+      exitDetail: trap[1],
+    };
+  }
+  return { status: "success", stdout: answer, stderr: "" };
 }
 
 /**
@@ -118,13 +138,7 @@ export class KitePlaygroundClient {
       throw new KitePlaygroundServiceError("aborted", "Superseded by a newer operation");
     }
 
-    const answer = compiler.run(entry.content);
-
-    const result: KitePlaygroundRunResult = isDiagnostics(answer)
-      ? { status: "compile-error", stdout: "", stderr: "", compileErrors: answer }
-      : isTrap(answer)
-        ? { status: "runtime-error", stdout: "", stderr: answer, exitDetail: answer.trim() }
-        : { status: "success", stdout: answer, stderr: "" };
+    const result = runKiteSource(compiler, entry.content);
 
     const parsed = parseKitePlaygroundRunResult(result);
     if (!parsed) {
