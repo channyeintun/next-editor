@@ -421,6 +421,7 @@ export default function SlidesManager({
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [editBackground, setEditBackground] = useState<string | undefined>(undefined);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   const addSlide = ({ content, contentType, background }: NewSlide) => {
     const newSlide: Slide = {
@@ -464,6 +465,17 @@ export default function SlidesManager({
     setEditBackground(slide.background);
   };
 
+  /**
+   * Puts focus back on a slide's thumbnail once its editor has closed: the Update and
+   * Cancel buttons unmount with the editor, which would otherwise drop focus to the page.
+   */
+  const focusThumbnail = (slideId: string) => {
+    requestAnimationFrame(() => {
+      const thumbnails = listRef.current?.querySelectorAll<HTMLElement>("[data-slide-thumb]");
+      [...(thumbnails ?? [])].find((thumb) => thumb.dataset.slideThumb === slideId)?.focus();
+    });
+  };
+
   const saveEdit = () => {
     if (!editingSlideId) return;
 
@@ -476,9 +488,11 @@ export default function SlidesManager({
     setEditingSlideId(null);
     setEditContent("");
     setEditBackground(undefined);
+    focusThumbnail(editingSlideId);
   };
 
   const cancelEdit = () => {
+    if (editingSlideId) focusThumbnail(editingSlideId);
     setEditingSlideId(null);
     setEditContent("");
     setEditBackground(undefined);
@@ -546,9 +560,29 @@ export default function SlidesManager({
               </p>
             </div>
           ) : (
-            <div className="space-y-3 pb-4">
+            <div ref={listRef} className="space-y-3 pb-4">
               {slides.map((slide, index) => {
                 const backgroundImage = getSlideBackgroundImage(slide.background);
+                // Imported Google slides are artwork, so their thumbnail is not a control.
+                const isEditable = slide.contentType !== "google-svg";
+                const typeLabel = isEditable ? slide.contentType : "slides";
+                const thumbClass =
+                  "group/thumb relative h-11 w-14 shrink-0 overflow-hidden rounded-md border border-slate-700 bg-[#151821]";
+                const thumbStyle = backgroundImage
+                  ? { backgroundImage: `url(${backgroundImage})`, backgroundSize: "cover" }
+                  : undefined;
+                // Spans, not divs: this sits inside a button, which takes phrasing content.
+                const thumbContent = (
+                  <>
+                    {backgroundImage && <span className="absolute inset-0 bg-[#151821]/50" />}
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      {slideTypeIcon(slide.contentType)}
+                    </span>
+                    <span className="absolute right-0 top-0 border-b border-l border-slate-700 bg-slate-800 px-1 py-0.5 text-[6px] font-bold uppercase leading-none text-slate-400">
+                      {typeLabel}
+                    </span>
+                  </>
+                );
 
                 return (
                   <div
@@ -558,6 +592,9 @@ export default function SlidesManager({
                     {editingSlideId === slide.id ? (
                       <div className="space-y-3">
                         <textarea
+                          // The thumbnail that opened the editor unmounts; focus moves here
+                          // rather than falling back to the page.
+                          autoFocus
                           value={editContent}
                           onChange={(e) => setEditContent(e.target.value)}
                           className="h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#0f1219] px-3 py-2 font-mono text-xs text-slate-200 outline-none transition-colors focus:border-cyan-400/70"
@@ -590,31 +627,32 @@ export default function SlidesManager({
                     ) : (
                       <div className="flex items-center gap-4">
                         {/* Left: Thumbnail area */}
-                        <div
-                          className="group/thumb relative h-11 w-14 shrink-0 cursor-pointer overflow-hidden rounded-md border border-slate-700 bg-[#151821] transition-shadow hover:ring-2 hover:ring-cyan-400/40"
-                          style={
-                            backgroundImage
-                              ? {
-                                  backgroundImage: `url(${backgroundImage})`,
-                                  backgroundSize: "cover",
-                                }
-                              : undefined
-                          }
-                          onClick={() => startEditing(slide)}
-                        >
-                          {backgroundImage && <div className="absolute inset-0 bg-[#151821]/50" />}
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            {slideTypeIcon(slide.contentType)}
-                          </div>
-                          <div className="absolute right-0 top-0 border-b border-l border-slate-700 bg-slate-800 px-1 py-0.5 text-[6px] font-bold uppercase leading-none text-slate-400">
-                            {slide.contentType === "google-svg" ? "slides" : slide.contentType}
-                          </div>
-                          {slide.contentType !== "google-svg" && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-cyan-400/10 py-1 opacity-0 transition-opacity group-hover/thumb:opacity-100">
+                        {isEditable ? (
+                          <button
+                            type="button"
+                            onClick={() => startEditing(slide)}
+                            // Names the slide by its visible corner label, so the spoken
+                            // name contains what is on screen. A recording's deck reaches
+                            // the store unchecked, so that label can be missing.
+                            aria-label={
+                              typeLabel
+                                ? `Edit ${typeLabel} slide ${index + 1}`
+                                : `Edit slide ${index + 1}`
+                            }
+                            data-slide-thumb={slide.id}
+                            className={`${thumbClass} cursor-pointer transition-shadow hover:ring-2 hover:ring-cyan-400/40`}
+                            style={thumbStyle}
+                          >
+                            {thumbContent}
+                            <span className="absolute inset-0 flex items-center justify-center bg-cyan-400/10 py-1 opacity-0 transition-opacity group-hover/thumb:opacity-100 group-focus-visible/thumb:opacity-100">
                               <Edit3 className="text-white size-3" />
-                            </div>
-                          )}
-                        </div>
+                            </span>
+                          </button>
+                        ) : (
+                          <div className={thumbClass} style={thumbStyle}>
+                            {thumbContent}
+                          </div>
+                        )}
 
                         {/* Center: Info */}
                         <div className="flex-1 min-w-0">

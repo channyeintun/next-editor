@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Slide } from "../types/slides";
 import SlidesManager from "./SlidesManager";
@@ -125,6 +125,21 @@ describe("SlidesManager", () => {
     expect(screen.getByDisplayValue("# a")).toBeInTheDocument();
   });
 
+  it("opens the editor from the thumbnail button and hands focus back when it closes", async () => {
+    renderManager([slide("a", 0)]);
+    const thumbnail = () => screen.getByRole("button", { name: "Edit markdown slide 1" });
+
+    fireEvent.click(thumbnail());
+    expect(screen.getByDisplayValue("# a")).toHaveFocus();
+    fireEvent.click(screen.getByLabelText("Cancel editing slide"));
+    await waitFor(() => expect(thumbnail()).toHaveFocus());
+
+    fireEvent.click(thumbnail());
+    expect(screen.getByDisplayValue("# a")).toHaveFocus();
+    fireEvent.click(screen.getByText("Update"));
+    await waitFor(() => expect(thumbnail()).toHaveFocus());
+  });
+
   it("shows each slide type's icon, and the Markdown one for any other type", () => {
     const typed = (id: string, contentType: string) =>
       ({ id, content: id, contentType, order: 0 }) as unknown as Slide;
@@ -149,6 +164,8 @@ describe("SlidesManager", () => {
       "lucide lucide-file-text text-cyan-300/60 size-4",
       "lucide lucide-file-text text-cyan-300/60 size-4",
     ]);
+    // An untyped slide shows no corner label, so its thumbnail's name has no type either.
+    expect(screen.getByRole("button", { name: "Edit slide 4" })).toBeInTheDocument();
   });
 
   it("does not open an imported Google slide for editing", () => {
@@ -165,5 +182,6 @@ describe("SlidesManager", () => {
     clickThumbnail("slides");
 
     expect(screen.queryByLabelText("Cancel editing slide")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Edit / })).toBeNull();
   });
 });
