@@ -468,7 +468,8 @@ export default function RecordingEditPanel({
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        <span className="mr-auto text-xs text-slate-400">
+        {/* A status, so the time the cuts remove is announced as Cut or Suggest adds them. */}
+        <span role="status" className="mr-auto text-xs text-slate-400">
           {removedMs > 0
             ? `Removes ${formatPlaybackTime(removedMs)} — ${formatPlaybackTime(
                 durationMs - removedMs,

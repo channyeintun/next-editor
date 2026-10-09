@@ -125,7 +125,8 @@ describe("RecordingEditPanel", () => {
     fireEvent.pointerUp(waveform, { clientX: 70, pointerId: 1 });
     fireEvent.click(screen.getByRole("button", { name: /Cut selection/ }));
 
-    expect(screen.getByText(/Removes 0:05/)).toBeInTheDocument();
+    // Announced: the Cut button it was pressed on is disabled again.
+    expect(screen.getByText(/Removes 0:05/)).toHaveRole("status");
     fireEvent.click(screen.getByRole("button", { name: /Apply edits/ }));
 
     await waitFor(() => expect(onApplied).toHaveBeenCalledTimes(1));
