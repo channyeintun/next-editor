@@ -420,9 +420,11 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                         // Until hydration settles isMobile, the cached SSR markup can't
                         // know the device, so the card shows only on touch-first
                         // screens; desktops keep the dark panel the iframe will fill.
+                        // The card fills the overflow-hidden container, so its focus
+                        // ring is drawn inset or it would be clipped away entirely.
                         <a
                           href={DEMO_URL}
-                          className={`group flex flex-col items-center justify-center gap-5 px-8 py-14 text-center ${
+                          className={`group flex flex-col items-center justify-center gap-5 px-8 py-14 text-center focus-visible:outline-offset-[-4px] ${
                             isMobile === null ? "invisible h-full pointer-coarse:visible" : ""
                           }`}
                         >
