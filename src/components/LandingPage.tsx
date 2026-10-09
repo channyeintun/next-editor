@@ -476,7 +476,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                             <p className="text-lg font-semibold text-white">
                               Play the interactive demo
                             </p>
-                            <p className="text-sm text-slate-400">Tap to open the full editor</p>
+                            <p className="text-sm text-slate-300">Tap to open the full editor</p>
                           </div>
                         </a>
                       ) : isDemoMounted ? (
@@ -629,7 +629,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
               {rotationPaused ? "Play animation" : "Pause animation"}
             </button>
           )}
-          <p className="text-lg md:text-xl text-slate-400 font-telegraf mb-12 max-w-2xl mx-auto">
+          <p className="text-lg md:text-xl text-slate-300 font-telegraf mb-12 max-w-2xl mx-auto">
             Record lessons for any stack — or even with vanilla HTML, CSS, and JavaScript.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
@@ -656,7 +656,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
           <h2 className="text-3xl md:text-5xl font-machina uppercase tracking-tight text-center mb-4">
             Use Cases
           </h2>
-          <p className="text-lg text-slate-400 font-telegraf text-center mb-16 max-w-2xl mx-auto">
+          <p className="text-lg text-slate-300 font-telegraf text-center mb-16 max-w-2xl mx-auto">
             From interactive tutorials to async code reviews — Next Editor fits wherever you need to
             show, not just tell.
           </p>
@@ -691,7 +691,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
           <h2 className="text-3xl md:text-5xl font-machina uppercase tracking-tight mb-6">
             How It Works
           </h2>
-          <p className="text-lg md:text-xl text-slate-400 font-telegraf mb-10 max-w-2xl mx-auto">
+          <p className="text-lg md:text-xl text-slate-300 font-telegraf mb-10 max-w-2xl mx-auto">
             Curious about what's under the hood? Explore the technical architecture behind Next
             Editor — from event-based recording to the runtime sandbox.
           </p>
@@ -717,7 +717,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
             <br />
             forever
           </h2>
-          <p className="text-lg md:text-xl text-slate-400 font-telegraf mb-10 max-w-xl mx-auto">
+          <p className="text-lg md:text-xl text-slate-300 font-telegraf mb-10 max-w-xl mx-auto">
             Open source under the MIT License. No account required. Self-hostable.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
@@ -749,7 +749,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
           <h2 className="text-3xl md:text-4xl font-machina uppercase tracking-tight mb-4">
             Like what you see?
           </h2>
-          <p className="text-lg text-slate-400 font-telegraf mb-10">
+          <p className="text-lg text-slate-300 font-telegraf mb-10">
             Star us on GitHub and help spread the word.
           </p>
           <a
