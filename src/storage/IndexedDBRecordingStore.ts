@@ -1,5 +1,5 @@
 import type { Recording } from "../core/src";
-import { requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
+import { createDatabaseOpener, requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
 import {
   deleteRecordingOpfs,
   isRecordingOpfsAvailable,
@@ -66,7 +66,76 @@ export interface StoredRecordingEntry {
 }
 
 export class IndexedDBRecordingStore {
-  private databasePromise: Promise<IDBDatabase> | null = null;
+  private readonly opener = createDatabaseOpener({
+    name: RECORDING_DATABASE_NAME,
+    version: RECORDING_DATABASE_VERSION,
+    upgrade: (database, upgradeTransaction, oldVersion) => {
+      const discardUnsupportedRecordings = oldVersion > 0 && oldVersion < 5;
+
+      if (upgradeTransaction && discardUnsupportedRecordings) {
+        // Recordings older than v5 are not retained across an upgrade. Clear every
+        // store they could have rows in (camera since v3, audio since v4): a blob
+        // left behind has no metadata left to find it by, so nothing could delete it.
+        // No build before v5 ever called save, so a database already upgraded past
+        // v4 holds no such blobs and needs no reclaim pass.
+        for (const storeName of [
+          RECORDING_METADATA_STORE,
+          RECORDING_SEGMENTS_STORE,
+          RECORDING_CAMERA_STORE,
+          RECORDING_AUDIO_STORE,
+        ]) {
+          if (database.objectStoreNames.contains(storeName)) {
+            upgradeTransaction.objectStore(storeName).clear();
+          }
+        }
+      }
+
+      if (!database.objectStoreNames.contains(RECORDING_METADATA_STORE)) {
+        database.createObjectStore(RECORDING_METADATA_STORE, {
+          keyPath: "id",
+        });
+      }
+
+      // Drop the pre-2 single-blob payload store; the segment store is the only payload.
+      if (database.objectStoreNames.contains("recording-payload")) {
+        database.deleteObjectStore("recording-payload");
+      }
+
+      if (!database.objectStoreNames.contains(RECORDING_SEGMENTS_STORE)) {
+        database.createObjectStore(RECORDING_SEGMENTS_STORE, {
+          keyPath: ["recordingId", "seq"],
+        });
+      }
+
+      // v3: camera video moved out of the SCR3 stream into its own store.
+      if (!database.objectStoreNames.contains(RECORDING_CAMERA_STORE)) {
+        database.createObjectStore(RECORDING_CAMERA_STORE, {
+          keyPath: "recordingId",
+        });
+      }
+
+      // v4: audio moved out of the SCR3 stream into its own store.
+      if (!database.objectStoreNames.contains(RECORDING_AUDIO_STORE)) {
+        database.createObjectStore(RECORDING_AUDIO_STORE, {
+          keyPath: "recordingId",
+        });
+      }
+
+      // Held per-recording state for incremental appends while recording, which
+      // are gone. Nothing reads it and nothing adds rows; delete() only clears
+      // rows earlier builds left. It stays in the v7 schema only because every
+      // earlier build names it in its save and delete transactions, and would
+      // fail both if a rollback met a database without it. Drop it in the next
+      // version bump that has a reason of its own.
+      if (!database.objectStoreNames.contains(RECORDING_STREAM_STATE_STORE)) {
+        database.createObjectStore(RECORDING_STREAM_STATE_STORE, {
+          keyPath: "recordingId",
+        });
+      }
+    },
+    openError: "Failed to open recording database",
+    blockedError: "Recording database upgrade is blocked",
+  });
 
   private getIndexedDB(): IDBFactory {
     if (typeof indexedDB === "undefined") {
@@ -77,109 +146,7 @@ export class IndexedDBRecordingStore {
   }
 
   private async getDatabase(): Promise<IDBDatabase> {
-    if (!this.databasePromise) {
-      this.databasePromise = this.openDatabase();
-    }
-
-    return this.databasePromise;
-  }
-
-  private openDatabase(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-      const request = this.getIndexedDB().open(RECORDING_DATABASE_NAME, RECORDING_DATABASE_VERSION);
-
-      request.onupgradeneeded = (event) => {
-        const database = request.result;
-        const upgradeTransaction = request.transaction;
-        const oldVersion = (event as IDBVersionChangeEvent).oldVersion;
-        const discardUnsupportedRecordings = oldVersion > 0 && oldVersion < 5;
-
-        if (upgradeTransaction && discardUnsupportedRecordings) {
-          // Recordings older than v5 are not retained across an upgrade. Clear every
-          // store they could have rows in (camera since v3, audio since v4): a blob
-          // left behind has no metadata left to find it by, so nothing could delete it.
-          // No build before v5 ever called save, so a database already upgraded past
-          // v4 holds no such blobs and needs no reclaim pass.
-          for (const storeName of [
-            RECORDING_METADATA_STORE,
-            RECORDING_SEGMENTS_STORE,
-            RECORDING_CAMERA_STORE,
-            RECORDING_AUDIO_STORE,
-          ]) {
-            if (database.objectStoreNames.contains(storeName)) {
-              upgradeTransaction.objectStore(storeName).clear();
-            }
-          }
-        }
-
-        if (!database.objectStoreNames.contains(RECORDING_METADATA_STORE)) {
-          database.createObjectStore(RECORDING_METADATA_STORE, {
-            keyPath: "id",
-          });
-        }
-
-        // Drop the pre-2 single-blob payload store; the segment store is the only payload.
-        if (database.objectStoreNames.contains("recording-payload")) {
-          database.deleteObjectStore("recording-payload");
-        }
-
-        if (!database.objectStoreNames.contains(RECORDING_SEGMENTS_STORE)) {
-          database.createObjectStore(RECORDING_SEGMENTS_STORE, {
-            keyPath: ["recordingId", "seq"],
-          });
-        }
-
-        // v3: camera video moved out of the SCR3 stream into its own store.
-        if (!database.objectStoreNames.contains(RECORDING_CAMERA_STORE)) {
-          database.createObjectStore(RECORDING_CAMERA_STORE, {
-            keyPath: "recordingId",
-          });
-        }
-
-        // v4: audio moved out of the SCR3 stream into its own store.
-        if (!database.objectStoreNames.contains(RECORDING_AUDIO_STORE)) {
-          database.createObjectStore(RECORDING_AUDIO_STORE, {
-            keyPath: "recordingId",
-          });
-        }
-
-        // Held per-recording state for incremental appends while recording, which
-        // are gone. Nothing reads it and nothing adds rows; delete() only clears
-        // rows earlier builds left. It stays in the v7 schema only because every
-        // earlier build names it in its save and delete transactions, and would
-        // fail both if a rollback met a database without it. Drop it in the next
-        // version bump that has a reason of its own.
-        if (!database.objectStoreNames.contains(RECORDING_STREAM_STATE_STORE)) {
-          database.createObjectStore(RECORDING_STREAM_STATE_STORE, {
-            keyPath: "recordingId",
-          });
-        }
-      };
-
-      request.onsuccess = () => {
-        const database = request.result;
-        database.onversionchange = () => {
-          database.close();
-          this.databasePromise = null;
-        };
-        resolve(database);
-      };
-
-      request.onerror = () => {
-        this.databasePromise = null;
-        reject(request.error ?? new Error("Failed to open recording database"));
-      };
-
-      request.onblocked = () => {
-        // Clear the cache before rejecting, exactly as `onerror` above and
-        // workspaceAssetStore's own openDatabase do. Without this, `getDatabase`
-        // keeps handing out this one rejected promise for the rest of the
-        // session — so every later save/load fails long after the blocking
-        // connection has gone, and only a reload recovers.
-        this.databasePromise = null;
-        reject(new Error("Recording database upgrade is blocked"));
-      };
-    });
+    return this.opener.open(this.getIndexedDB());
   }
 
   private segmentRange(recordingId: string): IDBKeyRange {

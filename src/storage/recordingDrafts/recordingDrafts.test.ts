@@ -6,7 +6,11 @@ import { FakeIndexedDB } from "../../test/fakeIndexedDB";
 import { createEmptyRecordingTracks } from "../../core/src/machine/recordingAssembly";
 import { compressFrames } from "../../core/src/utils/frameStreamEncoder";
 import type { EditorFrame } from "../../core/src/types";
-import { getRecordingDraftStore, RecordingDraftStore } from "./recordingDraftStore";
+import {
+  getRecordingDraftStore,
+  RecordingDraftStore,
+  type RecordingDraftRecord,
+} from "./recordingDraftStore";
 import {
   claimRecordingDraftFor,
   discardRecordingDraftFor,
@@ -92,6 +96,25 @@ describe("RecordingDraftStore", () => {
     await store.deleteDraft("a");
     expect(await store.readDraft("a")).toBeNull();
     expect((await store.readDraft("b"))?.records).toHaveLength(1);
+  });
+
+  it("opens the database again after a failed open, so later writes still journal", async () => {
+    // A newer build left the drafts database at v2, so this build's v1 open fails.
+    await fake.seed("next-editor-recording-drafts", 2, {});
+    const store = getRecordingDraftStore();
+    const meta = { id: "a", startedAt: 1, updatedAt: 1, finished: false, durationMs: 0 };
+    const record: RecordingDraftRecord = { kind: "append", track: "frames", entries: [1] };
+
+    await expect(store.write(meta, [record], 0)).rejects.toMatchObject({ name: "VersionError" });
+
+    await new Promise<void>((resolve, reject) => {
+      const request = fake.indexedDB.deleteDatabase("next-editor-recording-drafts");
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+    await store.write(meta, [record], 0);
+    expect((await store.readDraft("a"))?.records).toEqual([record]);
+    expect((await store.listDrafts()).map((listed) => listed.id)).toEqual(["a"]);
   });
 });
 

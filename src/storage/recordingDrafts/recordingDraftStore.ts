@@ -2,7 +2,7 @@ import type { Slide } from "../../core/src/slides";
 import type { RecordingChapter } from "../../core/src/types";
 import type { RecordingTrackName } from "../../core/src/machine/recordingAssembly";
 import type { MediaSpan } from "../../core/src/utils/mediaSpans";
-import { requestToPromise, transactionToPromise } from "../idb";
+import { createDatabaseOpener, requestToPromise, transactionToPromise } from "../idb";
 
 // ============================================================================
 // Where a take's draft lives while it is recorded.
@@ -75,32 +75,29 @@ export interface StoredRecordingDraft {
 const draftKeyRange = (id: string) => IDBKeyRange.bound([id], [id, []]);
 
 export class RecordingDraftStore {
-  private databasePromise: Promise<IDBDatabase> | null = null;
+  private readonly opener = createDatabaseOpener({
+    name: DATABASE_NAME,
+    version: DATABASE_VERSION,
+    upgrade: (database) => {
+      if (!database.objectStoreNames.contains(DRAFTS_STORE)) {
+        database.createObjectStore(DRAFTS_STORE, { keyPath: "id" });
+      }
+      if (!database.objectStoreNames.contains(RECORDS_STORE)) {
+        database.createObjectStore(RECORDS_STORE, { keyPath: ["draftId", "seq"] });
+      }
+      if (!database.objectStoreNames.contains(MEDIA_STORE)) {
+        database.createObjectStore(MEDIA_STORE, { keyPath: ["draftId", "track", "seq"] });
+      }
+    },
+    openError: "Failed to open the drafts database",
+    blockedError: "Drafts database upgrade is blocked",
+  });
 
   private getDatabase(): Promise<IDBDatabase> {
-    this.databasePromise ??= new Promise((resolve, reject) => {
-      if (typeof indexedDB === "undefined") {
-        reject(new Error("IndexedDB is not available in this environment"));
-        return;
-      }
-      const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-      request.onupgradeneeded = () => {
-        const database = request.result;
-        if (!database.objectStoreNames.contains(DRAFTS_STORE)) {
-          database.createObjectStore(DRAFTS_STORE, { keyPath: "id" });
-        }
-        if (!database.objectStoreNames.contains(RECORDS_STORE)) {
-          database.createObjectStore(RECORDS_STORE, { keyPath: ["draftId", "seq"] });
-        }
-        if (!database.objectStoreNames.contains(MEDIA_STORE)) {
-          database.createObjectStore(MEDIA_STORE, { keyPath: ["draftId", "track", "seq"] });
-        }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () =>
-        reject(request.error ?? new Error("Failed to open the drafts database"));
-    });
-    return this.databasePromise;
+    if (typeof indexedDB === "undefined") {
+      return Promise.reject(new Error("IndexedDB is not available in this environment"));
+    }
+    return this.opener.open(indexedDB);
   }
 
   /**

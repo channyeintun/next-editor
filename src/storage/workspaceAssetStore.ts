@@ -6,7 +6,7 @@ import {
   type WorkspaceAssetDescriptor,
   type WorkspaceProject,
 } from "../types/workspace";
-import { requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
+import { createDatabaseOpener, requestToPromise, toArrayBuffer, transactionToPromise } from "./idb";
 
 /**
  * Binary workspace assets live outside the project graph. The graph carries a
@@ -43,41 +43,21 @@ function getIndexedDB(): IDBFactory | null {
   return typeof indexedDB === "undefined" ? null : indexedDB;
 }
 
-let databasePromise: Promise<IDBDatabase> | null = null;
-
-function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = factory.open(ASSET_DATABASE_NAME, ASSET_DATABASE_VERSION);
-
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(ASSET_STORE)) {
-        request.result.createObjectStore(ASSET_STORE);
-      }
-    };
-    request.onsuccess = () => {
-      const database = request.result;
-      database.onversionchange = () => {
-        database.close();
-        databasePromise = null;
-      };
-      resolve(database);
-    };
-    request.onerror = () => {
-      databasePromise = null;
-      reject(request.error ?? new Error("Failed to open workspace asset database"));
-    };
-    request.onblocked = () => {
-      databasePromise = null;
-      reject(new Error("Workspace asset database upgrade is blocked"));
-    };
-  });
-}
+const databaseOpener = createDatabaseOpener({
+  name: ASSET_DATABASE_NAME,
+  version: ASSET_DATABASE_VERSION,
+  upgrade: (database) => {
+    if (!database.objectStoreNames.contains(ASSET_STORE)) {
+      database.createObjectStore(ASSET_STORE);
+    }
+  },
+  openError: "Failed to open workspace asset database",
+  blockedError: "Workspace asset database upgrade is blocked",
+});
 
 function getDatabase(): Promise<IDBDatabase> | null {
   const factory = getIndexedDB();
-  if (!factory) return null;
-  databasePromise ??= openDatabase(factory);
-  return databasePromise;
+  return factory ? databaseOpener.open(factory) : null;
 }
 
 /**
@@ -371,10 +351,8 @@ export function pruneLegacyWorkspaceAssetKeys(): Promise<void> {
 
 /** Reset cached IDB and Blob state between isolated unit-test factories. */
 export function resetWorkspaceAssetStoreForTests(): void {
-  const pendingDatabase = databasePromise;
-  databasePromise = null;
+  databaseOpener.reset();
   assetWriteQueue = Promise.resolve();
   blobCache.clear();
   assetListeners.clear();
-  void pendingDatabase?.then((database) => database.close()).catch(() => undefined);
 }

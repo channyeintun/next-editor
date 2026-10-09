@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { FakeIndexedDB } from "../test/fakeIndexedDB";
-import { requestToPromise, transactionToPromise } from "./idb";
+import { createDatabaseOpener, requestToPromise, transactionToPromise } from "./idb";
 
 async function openItems(fake: FakeIndexedDB): Promise<IDBDatabase> {
   const request = fake.indexedDB.open("db", 1) as unknown as IDBOpenDBRequest;
@@ -34,5 +34,77 @@ describe("transactionToPromise", () => {
     transaction.objectStore("items").put({ id: 1 });
 
     await expect(done).rejects.toBe(quota);
+  });
+});
+
+describe("createDatabaseOpener", () => {
+  const itemsOpener = (version = 1) =>
+    createDatabaseOpener({
+      name: "db",
+      version,
+      upgrade: (database) => {
+        if (!database.objectStoreNames.contains("items")) {
+          database.createObjectStore("items", { keyPath: "id" });
+        }
+      },
+      openError: "Failed to open db",
+      blockedError: "db upgrade is blocked",
+    });
+
+  it("returns the same connection while it stays open", async () => {
+    const fake = new FakeIndexedDB();
+    const opener = itemsOpener();
+
+    const first = opener.open(fake.indexedDB);
+    expect(opener.open(fake.indexedDB)).toBe(first);
+    const database = await first;
+    expect(await opener.open(fake.indexedDB)).toBe(database);
+    expect(Array.from(database.objectStoreNames)).toEqual(["items"]);
+  });
+
+  it("tries again after a failed open instead of handing out the failure", async () => {
+    const fake = new FakeIndexedDB();
+    // A newer build left the database at v2, so opening v1 fails with VersionError.
+    await fake.seed("db", 2, {});
+    const opener = itemsOpener();
+
+    await expect(opener.open(fake.indexedDB)).rejects.toMatchObject({ name: "VersionError" });
+
+    await requestToPromise(fake.indexedDB.deleteDatabase("db"));
+    const database = await opener.open(fake.indexedDB);
+    expect(database.version).toBe(1);
+  });
+
+  it("tries again after an upgrade an older connection blocked", async () => {
+    const fake = new FakeIndexedDB();
+    // An older tab's connection that does not close for the upgrade.
+    const older = await requestToPromise(fake.indexedDB.open("db", 1));
+    const opener = itemsOpener(2);
+
+    await expect(opener.open(fake.indexedDB)).rejects.toThrow("db upgrade is blocked");
+
+    older.close();
+    const database = await opener.open(fake.indexedDB);
+    expect(database.version).toBe(2);
+    expect(Array.from(database.objectStoreNames)).toEqual(["items"]);
+  });
+
+  it("closes its connection when another one upgrades the database, so it never blocks it", async () => {
+    const fake = new FakeIndexedDB();
+    const opener = itemsOpener();
+    const stale = await opener.open(fake.indexedDB);
+
+    const upgrade = fake.indexedDB.open("db", 2);
+    const blocked = vi.fn<() => void>();
+    upgrade.onblocked = blocked;
+    (await requestToPromise(upgrade)).close();
+
+    expect(blocked).not.toHaveBeenCalled();
+    // A closed connection refuses new transactions.
+    expect(() => stale.transaction("items")).toThrow(
+      expect.objectContaining({ name: "InvalidStateError" }),
+    );
+    // The cache let go of it: the next open is a new request, which meets v2.
+    await expect(opener.open(fake.indexedDB)).rejects.toMatchObject({ name: "VersionError" });
   });
 });

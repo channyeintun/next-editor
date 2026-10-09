@@ -1,6 +1,6 @@
 import type { LearnerWorkspaceSave } from "../core/src/machine/types";
 import { areWorkspaceProjectsEqual, type WorkspaceRecordingSnapshot } from "../types/workspace";
-import { requestToPromise, transactionToPromise } from "./idb";
+import { createDatabaseOpener, requestToPromise, transactionToPromise } from "./idb";
 
 /**
  * A viewer's own edits to a lesson, kept on this device. The machine hands them over
@@ -29,42 +29,22 @@ const DATABASE_VERSION = 1;
 const VERSION_STORE = "versions";
 const RECORDING_INDEX = "recordingId";
 
-let databasePromise: Promise<IDBDatabase> | null = null;
-
-function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = factory.open(DATABASE_NAME, DATABASE_VERSION);
-
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      if (!database.objectStoreNames.contains(VERSION_STORE)) {
-        const store = database.createObjectStore(VERSION_STORE, { keyPath: "id" });
-        store.createIndex(RECORDING_INDEX, "recordingId", { unique: false });
-      }
-    };
-    request.onsuccess = () => {
-      const database = request.result;
-      database.onversionchange = () => {
-        database.close();
-        databasePromise = null;
-      };
-      resolve(database);
-    };
-    request.onerror = () => {
-      databasePromise = null;
-      reject(request.error ?? new Error("Failed to open the learner workspace database"));
-    };
-    request.onblocked = () => {
-      databasePromise = null;
-      reject(new Error("Learner workspace database upgrade is blocked"));
-    };
-  });
-}
+const databaseOpener = createDatabaseOpener({
+  name: DATABASE_NAME,
+  version: DATABASE_VERSION,
+  upgrade: (database) => {
+    if (!database.objectStoreNames.contains(VERSION_STORE)) {
+      const store = database.createObjectStore(VERSION_STORE, { keyPath: "id" });
+      store.createIndex(RECORDING_INDEX, "recordingId", { unique: false });
+    }
+  },
+  openError: "Failed to open the learner workspace database",
+  blockedError: "Learner workspace database upgrade is blocked",
+});
 
 function getDatabase(): Promise<IDBDatabase> | null {
   if (typeof indexedDB === "undefined") return null;
-  databasePromise ??= openDatabase(indexedDB);
-  return databasePromise;
+  return databaseOpener.open(indexedDB);
 }
 
 /** Newest first. */
@@ -145,5 +125,5 @@ export async function deleteLearnerWorkspaceVersion(id: string): Promise<void> {
 }
 
 export function resetLearnerWorkspaceVersionsForTests(): void {
-  databasePromise = null;
+  databaseOpener.reset();
 }
