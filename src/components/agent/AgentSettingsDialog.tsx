@@ -37,9 +37,11 @@ function ModelSection({
   const { modelOptions, isModelCatalogLoading, modelCatalogError } = catalog;
   const filteredModelOptions = filterModelOptions(modelOptions, query);
 
+  // A fieldset names the radio group; min-w-0 drops its min-content minimum
+  // width so long model names still truncate instead of widening the card.
   return (
-    <div>
-      <p className="text-sm font-medium text-slate-100">Model</p>
+    <fieldset className="min-w-0">
+      <legend className="text-sm font-medium text-slate-100">Model</legend>
       <div className="relative mt-2">
         <Search size={14} className="pointer-events-none absolute left-3 top-2.5 text-slate-500" />
         <input
@@ -85,7 +87,7 @@ function ModelSection({
       <p className="mt-2 text-[11px] text-slate-400">
         Usage this session: {usage.inputTokens} in / {usage.outputTokens} out tokens.
       </p>
-    </div>
+    </fieldset>
   );
 }
 
@@ -171,8 +173,8 @@ function KeyStorageSection() {
   const credentialStorage = useSelector(credentialStore, (s) => selectCredentialStorage(s.context));
 
   return (
-    <div>
-      <p className="text-sm font-medium text-slate-100">Remember key</p>
+    <fieldset className="min-w-0">
+      <legend className="text-sm font-medium text-slate-100">Remember key</legend>
       <div className="mt-2 flex flex-col gap-2">
         {STORAGE_OPTIONS.map((option) => (
           <label key={option.id} className="flex items-start gap-2 text-xs text-slate-300">
@@ -190,7 +192,7 @@ function KeyStorageSection() {
           </label>
         ))}
       </div>
-    </div>
+    </fieldset>
   );
 }
 

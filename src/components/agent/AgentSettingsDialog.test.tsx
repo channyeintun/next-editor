@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { getAgentStore } from "../../agent/agentStore";
@@ -57,6 +57,8 @@ describe("AgentSettingsDialog", () => {
     act(() => getAgentStore().trigger.setModel({ model: visionModel.id }));
     render(<Dialog />);
 
+    const modelGroup = screen.getByRole("group", { name: "Model" });
+    expect(within(modelGroup).getAllByRole("radio")).toHaveLength(2);
     expect(screen.getByLabelText(/Vendor: Vision/)).toBeChecked();
     expect(screen.getByLabelText(/Vendor: Text Only/)).not.toBeChecked();
     expect(screen.getByText("vendor/text-only · no image input")).toBeInTheDocument();
@@ -137,6 +139,8 @@ describe("AgentSettingsDialog", () => {
 
   it("remembers the key where the user chooses", () => {
     render(<Dialog />);
+    const storageGroup = screen.getByRole("group", { name: "Remember key" });
+    expect(within(storageGroup).getAllByRole("radio")).toHaveLength(3);
     expect(screen.getByLabelText(/Memory only/)).toBeChecked();
 
     fireEvent.click(screen.getByLabelText(/This tab/));
