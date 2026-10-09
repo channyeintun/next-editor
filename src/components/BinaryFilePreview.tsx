@@ -124,12 +124,12 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
 
       <div className="flex flex-col items-center gap-1 text-center">
         <p className="text-sm font-medium text-slate-100">{file.name}</p>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-300">
           {isAwaitingSharedAsset
             ? "Shared asset unavailable or still loading"
             : `${mimeType} · ${byteSize}`}
         </p>
-        <p className="max-w-sm text-xs text-slate-500">
+        <p className="max-w-sm text-xs text-slate-300">
           Binary asset stored in this workspace. Reference it from your code with
           <code className="mx-1 rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">
             /{file.path}
