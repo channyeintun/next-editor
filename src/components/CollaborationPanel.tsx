@@ -312,7 +312,7 @@ function ParticipantRow({
   const colorIndex = collaborationParticipantColorIndex(participant);
   const name = collaboratorDisplayName(participant);
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-white/3 px-2.5 py-2">
+    <li className="flex items-center gap-2 rounded-lg bg-white/3 px-2.5 py-2">
       {participant.avatarUrl ? (
         <img src={avatarProxyUrl(participant.avatarUrl)} alt="" className="size-6 rounded-full" />
       ) : (
@@ -341,7 +341,7 @@ function ParticipantRow({
           {isFollowed ? "Following" : "Follow"}
         </button>
       ) : null}
-    </div>
+    </li>
   );
 }
 
@@ -459,9 +459,11 @@ function RoomOwnerSection({
         <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
           Members
         </h3>
-        <div className="space-y-1.5">
+        {/* The panel's lists keep an explicit role="list": Tailwind's preflight
+            sets list-style: none, and Safari then drops the list role. */}
+        <ul role="list" className="space-y-1.5">
           {collaboration.members.map((member) => (
-            <div key={member.userId} className="flex items-center gap-2 text-xs">
+            <li key={member.userId} className="flex items-center gap-2 text-xs">
               <span className="min-w-0 flex-1 truncate text-slate-300">
                 {collaboratorDisplayName(member)}
               </span>
@@ -497,9 +499,9 @@ function RoomOwnerSection({
                   </button>
                 </>
               )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
 
       {collaboration.invitations.length > 0 ? (
@@ -507,11 +509,11 @@ function RoomOwnerSection({
           <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
             Active invitation records
           </h3>
-          <div className="space-y-1">
+          <ul role="list" className="space-y-1">
             {collaboration.invitations
               .filter((invitation) => invitation.revokedAt === null)
               .map((invitation) => (
-                <div
+                <li
                   key={invitation.id}
                   className="flex items-center justify-between text-[11px] text-slate-400"
                 >
@@ -526,9 +528,9 @@ function RoomOwnerSection({
                   >
                     Revoke
                   </button>
-                </div>
+                </li>
               ))}
-          </div>
+          </ul>
         </section>
       ) : null}
 
@@ -823,11 +825,11 @@ export default function CollaborationPanel() {
                   <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
                     Online now
                   </h3>
-                  <div className="space-y-1.5">
-                    {collaboration.participants.length === 0 ? (
-                      <p className="text-xs text-slate-300">Waiting for presence…</p>
-                    ) : (
-                      collaboration.participants.map((participant) => {
+                  {collaboration.participants.length === 0 ? (
+                    <p className="text-xs text-slate-300">Waiting for presence…</p>
+                  ) : (
+                    <ul role="list" className="space-y-1.5">
+                      {collaboration.participants.map((participant) => {
                         const participantKey = collaborationParticipantKey(participant);
                         return (
                           <ParticipantRow
@@ -843,9 +845,9 @@ export default function CollaborationPanel() {
                             onStopFollowing={() => collaboration.stopFollowing("user")}
                           />
                         );
-                      })
-                    )}
-                  </div>
+                      })}
+                    </ul>
+                  )}
                 </section>
 
                 {collaboration.role === "owner" ? (

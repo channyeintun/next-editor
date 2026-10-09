@@ -306,6 +306,102 @@ describe("CollaborationPanel participant surfaces", () => {
   });
 });
 
+/** The room as its owner sees it: two members and three invitations, one revoked. */
+function makeOwnerCollaborationState() {
+  const member = (userId: string, name: string, role: "owner" | "editor" | "viewer") => ({
+    userId,
+    role,
+    username: name.toLowerCase(),
+    name,
+    avatarUrl: null,
+    joinedAt: 1,
+    updatedAt: 1,
+  });
+  const invitation = (id: string, role: "editor" | "viewer", revokedAt: number | null = null) => ({
+    id,
+    roomId: "20000000-0000-4000-8000-000000000001",
+    role,
+    maxUses: 10,
+    useCount: role === "editor" ? 2 : 0,
+    expiresAt: Date.now() + 86_400_000,
+    revokedAt,
+    createdAt: 1,
+  });
+  return {
+    ...makeCollaborationState(),
+    role: "owner",
+    members: [
+      member("30000000-0000-4000-8000-000000000002", "Ada", "owner"),
+      member("30000000-0000-4000-8000-000000000003", "Grace", "editor"),
+    ],
+    invitations: [
+      invitation("70000000-0000-4000-8000-000000000001", "editor"),
+      invitation("70000000-0000-4000-8000-000000000002", "viewer"),
+      invitation("70000000-0000-4000-8000-000000000003", "viewer", 1),
+    ],
+  };
+}
+
+describe("CollaborationPanel lists", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    collaborationState = makeCollaborationState();
+  });
+
+  /** The list under one of the panel's section headings. */
+  function listUnder(heading: string) {
+    const section = screen.getByRole("heading", { name: heading }).closest("section");
+    if (!section) throw new Error(`No section for ${heading}`);
+    return within(section).getByRole("list");
+  }
+
+  it("lists the people online, one item each", () => {
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    const items = within(listUnder("Online now")).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      expect.stringContaining("Self (you)"),
+      expect.stringContaining("Ada"),
+      expect.stringContaining("Grace"),
+      expect.stringContaining("Lin"),
+    ]);
+    expect(within(items[1]).getByRole("button", { name: "Follow Ada" })).toBeInTheDocument();
+  });
+
+  it("shows the waiting message instead of an empty online list", () => {
+    collaborationState = { ...makeCollaborationState(), participants: [] };
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    const section = screen.getByRole("heading", { name: "Online now" }).closest("section");
+    if (!section) throw new Error("No section for Online now");
+    expect(within(section).queryByRole("list")).toBeNull();
+    expect(within(section).getByText("Waiting for presence…")).toBeInTheDocument();
+  });
+
+  it("lists the members and the unrevoked invitations for the room owner", () => {
+    collaborationState = makeOwnerCollaborationState();
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    const members = within(listUnder("Members")).getAllByRole("listitem");
+    expect(members.map((item) => item.textContent)).toEqual([
+      expect.stringContaining("Ada"),
+      expect.stringContaining("Grace"),
+    ]);
+    expect(
+      within(members[1]).getByRole("combobox", { name: "Role for Grace" }),
+    ).toBeInTheDocument();
+
+    const invitations = within(listUnder("Active invitation records")).getAllByRole("listitem");
+    expect(invitations.map((item) => item.textContent)).toEqual([
+      expect.stringContaining("editor · 2/10 used"),
+      expect.stringContaining("viewer · 0/10 used"),
+    ]);
+  });
+});
+
 /** The panel's one status region, found through a message it is reading. */
 function statusRegionOf(message: string) {
   return screen.getByText(message).closest('[role="status"]');
