@@ -291,7 +291,7 @@ function SlidePreview({
               type="button"
               onClick={handleMinimize}
               aria-label="Minimize slides"
-              className="flex size-9 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
+              className="flex size-9 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/80"
             >
               <Minimize2 className="size-4" />
             </button>
@@ -300,7 +300,7 @@ function SlidePreview({
               onClick={handleClose}
               aria-label="Close slides"
               data-slides-initial-focus
-              className="flex size-9 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
+              className="flex size-9 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/80"
             >
               <X className="size-4" />
             </button>
@@ -313,7 +313,7 @@ function SlidePreview({
                 onClick={goToPrevSlide}
                 disabled={isFirst}
                 aria-label="Previous slide"
-                className="absolute left-4 top-1/2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60 disabled:cursor-not-allowed disabled:opacity-30"
+                className="absolute left-4 top-1/2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ChevronLeft className="size-5" />
               </button>
@@ -322,7 +322,7 @@ function SlidePreview({
                 onClick={goToNextSlide}
                 disabled={isLast}
                 aria-label="Next slide"
-                className="absolute right-4 top-1/2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60 disabled:cursor-not-allowed disabled:opacity-30"
+                className="absolute right-4 top-1/2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ChevronRight className="size-5" />
               </button>
@@ -330,7 +330,7 @@ function SlidePreview({
           )}
 
           {/* Slide counter */}
-          <div className="absolute bottom-4 right-4 rounded-full bg-black/40 px-3 py-1 text-xs font-medium text-white/80">
+          <div className="absolute bottom-4 right-4 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white">
             {currentSlideIndex + 1} / {slides.length}
           </div>
 
