@@ -129,16 +129,15 @@ function MicrophoneCheckPanel({ onClose }: { onClose: () => void }) {
           </option>
         ))}
       </select>
-      {error ? (
-        <p className="text-xs text-red-400">{error}</p>
-      ) : (
-        <>
-          <LevelBar meterRef={meterRef} />
-          <p className="mt-2 text-xs text-slate-400" aria-live="polite">
-            {VERDICT_TEXT[verdict]}
-          </p>
-        </>
-      )}
+      {error ? null : <LevelBar meterRef={meterRef} />}
+      {/* One live line, mounted throughout, so an error that replaces the verdict (most
+          often a blocked microphone) is announced like the verdict is. */}
+      <p
+        aria-live="polite"
+        className={error ? "text-xs text-red-400" : "mt-2 text-xs text-slate-400"}
+      >
+        {error ?? VERDICT_TEXT[verdict]}
+      </p>
       {pickedIsMissing ? (
         <p className="mt-2 text-xs text-amber-300">
           The microphone picked before is not connected; takes use the system default.
@@ -210,8 +209,13 @@ export function RecordingMicrophoneLevel() {
       <div className="w-10">
         <LevelBar meterRef={meterRef} />
       </div>
+      {/* Mounted before the warning, and at every width, so it is announced: the short
+          visible note is hidden on narrow screens and says less. */}
+      <span role="status" className="sr-only">
+        {noSpeechYet ? "No sound from the microphone yet. Check that it is on and not muted." : ""}
+      </span>
       {noSpeechYet ? (
-        <span className="hidden text-[11px] text-amber-300 sm:inline" role="status">
+        <span aria-hidden="true" className="hidden text-[11px] text-amber-300 sm:inline">
           No sound yet
         </span>
       ) : null}

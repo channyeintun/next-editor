@@ -1,8 +1,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import MicrophoneCheck from "./MicrophoneCheck";
+import MicrophoneCheck, { RecordingMicrophoneLevel } from "./MicrophoneCheck";
 import { listAudioInputs } from "../hooks/useAudioInputDevices";
 import { recordingSettingsStore } from "../stores/recordingSettingsStore";
+
+/** The running take's microphone, for RecordingMicrophoneLevel. */
+const take = vi.hoisted(() => ({ stream: null as MediaStream | null }));
+vi.mock("../hooks/useNextEditorContext", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../hooks/useNextEditorContext")>()),
+  useRecordingMicrophoneStream: () => take.stream,
+}));
 
 const DEFAULTS = { autoGainControl: true, echoCancellation: true, noiseSuppression: true };
 
@@ -200,7 +207,38 @@ describe("MicrophoneCheck", () => {
     });
     render(<MicrophoneCheck />);
     fireEvent.click(screen.getByTitle("Check the microphone"));
+    const region = screen.getByRole("dialog").querySelector('[aria-live="polite"]');
+    expect(region).not.toBeNull();
 
     expect(await screen.findByText(/Microphone access is blocked/)).toBeTruthy();
+    // Announced: the error replaces the verdict in the live region that was already there.
+    expect(region).toBeInTheDocument();
+    expect(region).toHaveTextContent("Microphone access is blocked");
+  });
+});
+
+describe("RecordingMicrophoneLevel", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    take.stream = null;
+  });
+
+  it("announces a take that hears nothing, at every width", async () => {
+    stubAudio(0);
+    take.stream = fakeStream("Built-in Microphone").stream as unknown as MediaStream;
+    render(<RecordingMicrophoneLevel />);
+
+    // The status is there, empty, before the warning arrives.
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+
+    await waitFor(() =>
+      expect(status).toHaveTextContent(
+        "No sound from the microphone yet. Check that it is on and not muted.",
+      ),
+    );
+    // The short visible note (wide screens only) is not read a second time.
+    expect(screen.getByText("No sound yet")).toHaveAttribute("aria-hidden", "true");
   });
 });
