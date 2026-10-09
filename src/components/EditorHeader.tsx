@@ -62,7 +62,12 @@ const HEADER_ICON_BUTTON_CLASS =
   "inline-flex size-8 items-center justify-center rounded-lg transition-colors";
 const HEADER_ICON_BUTTON_NEUTRAL_CLASS = "text-slate-400 hover:bg-white/5 hover:text-white";
 
-function FileSidebarToggleButton() {
+// The panel toggles keep one accessible name and carry their state in
+// aria-pressed; a name that flipped with the state ("Hide …", pressed) would
+// read as the opposite of what is showing. The title keeps the action as a
+// hover hint.
+
+export function FileSidebarToggleButton() {
   const isCollapsed = useWorkspaceSidebarCollapsed();
   const { setSidebarCollapsed } = useWorkspaceActions();
   const isOpen = !isCollapsed;
@@ -70,7 +75,7 @@ function FileSidebarToggleButton() {
   return (
     <button
       type="button"
-      aria-label={isOpen ? "Hide file explorer" : "Show file explorer"}
+      aria-label="File explorer"
       aria-pressed={isOpen}
       title={isOpen ? "Hide file explorer" : "Show file explorer"}
       onClick={() => setSidebarCollapsed(!isCollapsed)}
@@ -88,7 +93,7 @@ export function PreviewHeaderButton() {
     <button
       data-tour="preview"
       type="button"
-      aria-label={isOpen ? "Close preview" : "Open preview"}
+      aria-label="Preview"
       aria-pressed={isOpen}
       title={isOpen ? "Close preview" : "Open preview"}
       onClick={togglePreview}
@@ -99,7 +104,7 @@ export function PreviewHeaderButton() {
   );
 }
 
-function WhiteboardHeaderButton() {
+export function WhiteboardHeaderButton() {
   const { isOpen, setOpen } = useWhiteboardContext();
   const slides = useSlidesContext();
   const collaboration = useOptionalCollaboration();
@@ -110,7 +115,7 @@ function WhiteboardHeaderButton() {
     <button
       data-tour="whiteboard"
       type="button"
-      aria-label={isOpen ? "Close whiteboard" : "Open whiteboard"}
+      aria-label="Whiteboard"
       aria-pressed={isOpen}
       title={isOpen ? "Close whiteboard" : "Open whiteboard"}
       onClick={() => {

@@ -7,9 +7,13 @@ import type { WorkspaceLessonType } from "../types/workspace";
 const mocks = vi.hoisted(() => ({
   downloadWorkspaceProjectAsZip: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   startTour: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  setSidebarCollapsed: vi.fn<(collapsed: boolean) => void>(),
+  setWhiteboardOpen: vi.fn<(open: boolean) => void>(),
 }));
 
 let lessonType: WorkspaceLessonType = "react";
+let sidebarCollapsed = false;
+let whiteboardOpen = false;
 
 vi.mock("../hooks/useWorkspace", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../hooks/useWorkspace")>()),
@@ -17,10 +21,24 @@ vi.mock("../hooks/useWorkspace", async (importOriginal) => ({
     getProject: () => ({}),
     reconcileExternalProject: () => {},
     saveProject: () => Promise.resolve(),
+    setSidebarCollapsed: mocks.setSidebarCollapsed,
   }),
   useWorkspaceDirtyState: () => ({ hasUnsavedChanges: false }),
   useWorkspaceFileCount: () => 0,
   useWorkspaceLessonType: () => lessonType,
+  useWorkspaceSidebarCollapsed: () => sidebarCollapsed,
+}));
+vi.mock("../contexts/WhiteboardContext", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../contexts/WhiteboardContext")>()),
+  useWhiteboardContext: () => ({ isOpen: whiteboardOpen, setOpen: mocks.setWhiteboardOpen }),
+}));
+vi.mock("../contexts/SlidesContext", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../contexts/SlidesContext")>()),
+  useSlidesContext: () => ({ previewState: { isOpen: false } }),
+}));
+vi.mock("../contexts/CollaborationContext", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../contexts/CollaborationContext")>()),
+  useOptionalCollaboration: () => null,
 }));
 vi.mock("../hooks/useNextEditorContext", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../hooks/useNextEditorContext")>()),
@@ -45,10 +63,15 @@ vi.mock("./tour/productTour", async (importOriginal) => ({
   startTour: mocks.startTour,
 }));
 
-import { PreviewHeaderButton, WorkspaceSettingsButton } from "./EditorHeader";
+import {
+  FileSidebarToggleButton,
+  PreviewHeaderButton,
+  WhiteboardHeaderButton,
+  WorkspaceSettingsButton,
+} from "./EditorHeader";
 
 describe("PreviewHeaderButton", () => {
-  it("opens the preview on the first click", () => {
+  it("opens the preview on the first click, keeping its name and reporting it pressed", () => {
     render(
       <PreviewAdapterHandleProvider>
         <PreviewPanelProvider>
@@ -57,10 +80,59 @@ describe("PreviewHeaderButton", () => {
       </PreviewAdapterHandleProvider>,
     );
 
-    const button = screen.getByRole("button", { name: "Open preview" });
+    const button = screen.getByRole("button", { name: "Preview" });
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    expect(button).toHaveAccessibleDescription("Open preview");
+
     fireEvent.click(button);
 
-    expect(screen.getByRole("button", { name: "Close preview" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Preview" })).toHaveAttribute("aria-pressed", "true");
+    expect(button).toHaveAccessibleDescription("Close preview");
+  });
+});
+
+describe("FileSidebarToggleButton", () => {
+  beforeEach(() => {
+    mocks.setSidebarCollapsed.mockClear();
+  });
+
+  it("keeps the name File explorer and reports the open sidebar as pressed", () => {
+    sidebarCollapsed = false;
+    const { rerender } = render(<FileSidebarToggleButton />);
+    const button = screen.getByRole("button", { name: "File explorer" });
+
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(button);
+    expect(mocks.setSidebarCollapsed).toHaveBeenCalledWith(true);
+
+    sidebarCollapsed = true;
+    rerender(<FileSidebarToggleButton />);
+
+    expect(screen.getByRole("button", { name: "File explorer" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+});
+
+describe("WhiteboardHeaderButton", () => {
+  beforeEach(() => {
+    mocks.setWhiteboardOpen.mockClear();
+  });
+
+  it("keeps the name Whiteboard and reports the open whiteboard as pressed", () => {
+    whiteboardOpen = false;
+    const { rerender } = render(<WhiteboardHeaderButton />);
+    const button = screen.getByRole("button", { name: "Whiteboard" });
+
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(button);
+    expect(mocks.setWhiteboardOpen).toHaveBeenCalledWith(true);
+
+    whiteboardOpen = true;
+    rerender(<WhiteboardHeaderButton />);
+
+    expect(screen.getByRole("button", { name: "Whiteboard" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
