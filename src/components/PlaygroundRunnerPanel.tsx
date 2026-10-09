@@ -3,7 +3,12 @@ import { useSelector } from "@xstate/store-react";
 import { Bot, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
 import AgentPanel from "./agent/AgentPanel";
 import XtermTerminal from "./XtermTerminal";
-import { DOCK_TAB_STRIP_CLASS, dockTabStateClassName } from "./terminalPanel/runtimeDockHelpers";
+import {
+  DOCK_TAB_STRIP_CLASS,
+  dockContentSizeClassName,
+  dockRootSizeClassName,
+  dockTabStateClassName,
+} from "./terminalPanel/runtimeDockHelpers";
 import type { PlaygroundConsoleTags, PlaygroundRunnerLanguage } from "./playgroundRunnerLanguage";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
@@ -105,6 +110,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
     displayActiveTab: rawActiveTab,
     displayIsCollapsed,
     displayIsFullHeight,
+    fillsColumn,
     toggleFullHeight,
   } = useRuntimeDockLayout();
   const consoleLines = useSelector(runtimePanelStore, (s) => selectConsoleLines(s.context));
@@ -373,8 +379,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
   const consoleContent = effectiveConsoleLines
     .map((line) => decorateConsoleLine(line, consoleTags))
     .join("\n");
-  const dockContentSizeClass =
-    displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
+  const dockContentSizeClass = dockContentSizeClassName(fillsColumn);
   const toolLabel = format && isFormatting ? format.commandLabel : run.commandLabel;
   const RunnerIcon = runnerTab.icon;
   // Playground lessons have no shell or preview, but the agent works on the
@@ -408,9 +413,9 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
 
   return (
     <div
-      className={`flex flex-col overflow-hidden rounded-t-md bg-[#15191f] ${
-        displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "shrink-0"
-      }`}
+      className={`flex flex-col overflow-hidden rounded-t-md bg-[#15191f] ${dockRootSizeClassName(
+        fillsColumn,
+      )}`}
       data-cursor-replay-target="runtime-dock"
       {...{ [STUDIO_TARGET_ATTRIBUTE]: dockTargetId }}
     >
@@ -479,7 +484,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       </div>
 
       {!displayIsCollapsed && displayActiveTab === "agent" && (
-        <AgentPanel isFullHeight={dockContentSizeClass !== "h-72"} />
+        <AgentPanel isFullHeight={fillsColumn} />
       )}
 
       {!displayIsCollapsed && displayActiveTab === "runner" && (

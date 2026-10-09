@@ -39,6 +39,8 @@ import { areStructuredDataEqual } from "../core/src/utils/equality";
 import {
   DOCK_TAB_STRIP_CLASS,
   describeRunnerOutput,
+  dockContentSizeClassName,
+  dockRootSizeClassName,
   dockTabStateClassName,
 } from "./terminalPanel/runtimeDockHelpers";
 
@@ -139,6 +141,7 @@ function TerminalPanel() {
     displayActiveTab,
     displayIsCollapsed,
     displayIsFullHeight,
+    fillsColumn,
     toggleFullHeight,
   } = useRuntimeDockLayout();
   const isSettingsOpen = useSelector(runtimePanelStore, (s) => selectIsSettingsOpen(s.context));
@@ -373,8 +376,7 @@ function TerminalPanel() {
     errorMessage: effectiveErrorMessage,
     status: runtimeStatus,
   });
-  const dockContentSizeClass =
-    displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "h-72";
+  const dockContentSizeClass = dockContentSizeClassName(fillsColumn);
   // Scroll lines are recorded and replayed as indexes into a terminal buffer
   // that holds exactly the (capped) output, so only a dock doing neither lets
   // older output stay in the scrollback.
@@ -383,9 +385,9 @@ function TerminalPanel() {
   return (
     <>
       <div
-        className={`flex flex-col overflow-hidden rounded-t-md bg-[#15191f] ${
-          displayIsFullHeight && !displayIsCollapsed ? "min-h-0 flex-1" : "shrink-0"
-        }`}
+        className={`flex flex-col overflow-hidden rounded-t-md bg-[#15191f] ${dockRootSizeClassName(
+          fillsColumn,
+        )}`}
         data-cursor-replay-target="runtime-dock"
       >
         <div className="flex items-center border-b border-[#11151d] bg-[#1e2129] px-2">
@@ -659,9 +661,7 @@ function TerminalPanel() {
               </div>
             )}
 
-            {displayActiveTab === "agent" && (
-              <AgentPanel isFullHeight={dockContentSizeClass !== "h-72"} />
-            )}
+            {displayActiveTab === "agent" && <AgentPanel isFullHeight={fillsColumn} />}
           </>
         )}
 

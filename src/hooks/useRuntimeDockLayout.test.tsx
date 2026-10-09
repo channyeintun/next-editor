@@ -71,6 +71,7 @@ describe("useRuntimeDockLayout", () => {
       displayActiveTab: "agent",
       displayIsCollapsed: true,
       displayIsFullHeight: true,
+      fillsColumn: false,
       toggleFullHeight: expect.any(Function),
     });
   });
@@ -96,6 +97,7 @@ describe("useRuntimeDockLayout", () => {
       displayActiveTab: "agent",
       displayIsCollapsed: true,
       displayIsFullHeight: true,
+      fillsColumn: false,
       toggleFullHeight: expect.any(Function),
     });
   });
@@ -134,6 +136,43 @@ describe("useRuntimeDockLayout", () => {
       isPlaybackSnapshotActive: false,
       recordedRuntimeSnapshot: null,
       displayActiveTab: "runner",
+    });
+  });
+
+  describe("fillsColumn", () => {
+    function layoutWith(isFullHeight: boolean, isCollapsed: boolean) {
+      const { result } = renderLayout();
+      act(() => {
+        result.current.store.trigger.setIsFullHeight({ fullHeight: isFullHeight });
+        result.current.store.trigger.setIsCollapsed({ collapsed: isCollapsed });
+      });
+      return result.current.layout;
+    }
+
+    it("is false for a collapsed full-height dock, which shows only its header", () => {
+      expect(layoutWith(true, true).fillsColumn).toBe(false);
+    });
+
+    it("is true for an open full-height dock", () => {
+      expect(layoutWith(true, false).fillsColumn).toBe(true);
+    });
+
+    it("is false at normal height", () => {
+      expect(layoutWith(false, false).fillsColumn).toBe(false);
+      expect(layoutWith(false, true).fillsColumn).toBe(false);
+    });
+
+    it("follows the height and collapse on screen during playback", () => {
+      replaying({
+        mode: "single-file",
+        status: "idle",
+        isCollapsed: false,
+        isFullHeight: true,
+      });
+      const { result } = renderLayout();
+
+      expect(result.current.layout.isFullHeight).toBe(false);
+      expect(result.current.layout.fillsColumn).toBe(true);
     });
   });
 

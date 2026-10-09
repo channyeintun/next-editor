@@ -34,6 +34,7 @@ import {
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 import { useWorkspaceLoadVersion } from "../../hooks/useWorkspace";
 import { createChatCheckpoint } from "../../agent/chatRecording";
+import { dockContentSizeClassName } from "../terminalPanel/runtimeDockHelpers";
 import AgentErrorNotice from "./AgentErrorNotice";
 import AgentSettingsDialog from "./AgentSettingsDialog";
 import DraftImageStrip from "./DraftImageStrip";
@@ -361,7 +362,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   return (
     <>
       <div
-        className={`flex ${isFullHeight ? "min-h-0 flex-1" : "h-72"} flex-col bg-[#15191f]`}
+        className={`flex ${dockContentSizeClassName(isFullHeight)} flex-col bg-[#15191f]`}
         data-cursor-replay-target="agent-panel"
       >
         <div className="flex min-h-11 items-center gap-2 border-b border-[#11151d] bg-[#191d25] px-4 py-2.5">

@@ -100,7 +100,7 @@ vi.mock("../hooks/useWebContainerRuntime", () => ({
   useWebContainerRuntimeSaveWorkspace: () => async () => {},
 }));
 vi.mock("../hooks/useRuntimeDockLayout", () => ({
-  useRuntimeDockLayout: () => ({ displayIsCollapsed: false, displayIsFullHeight: false }),
+  useRuntimeDockLayout: () => ({ fillsColumn: false }),
 }));
 vi.mock("../contexts/CollaborationContext", () => ({
   useOptionalCollaboration: () => harness.collaboration,

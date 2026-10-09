@@ -23,6 +23,11 @@ export interface RuntimeDockLayout {
   /** The height on screen: the viewer's own choice once they made one during this replay. */
   displayIsFullHeight: boolean;
   /**
+   * The dock takes the whole editor column: it is shown full height and not
+   * collapsed. The editor hides behind it while this holds.
+   */
+  fillsColumn: boolean;
+  /**
    * The full-height toggle. While a replay is loaded (playing, paused, ready or
    * ended), or once the viewer has chosen a height during one, it flips the
    * viewer's choice; otherwise (record mode, idle) it flips the live value.
@@ -55,6 +60,10 @@ export function useRuntimeDockLayout(): RuntimeDockLayout {
       ? (recordedRuntimeSnapshot?.isFullHeight ?? false)
       : isFullHeight;
 
+  const displayIsCollapsed = isPlaybackSnapshotActive
+    ? (recordedRuntimeSnapshot?.isCollapsed ?? false)
+    : isCollapsed;
+
   const toggleFullHeight = () => {
     // Any press while a replay is loaded is the viewer's, even before the first play or
     // while paused, so resuming keeps it rather than snapping back to the recording.
@@ -76,10 +85,9 @@ export function useRuntimeDockLayout(): RuntimeDockLayout {
     displayActiveTab: isPlaybackSnapshotActive
       ? (recordedRuntimeSnapshot?.activeTab ?? "runner")
       : activeTab,
-    displayIsCollapsed: isPlaybackSnapshotActive
-      ? (recordedRuntimeSnapshot?.isCollapsed ?? false)
-      : isCollapsed,
+    displayIsCollapsed,
     displayIsFullHeight,
+    fillsColumn: displayIsFullHeight && !displayIsCollapsed,
     toggleFullHeight,
   };
 }

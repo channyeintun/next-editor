@@ -48,3 +48,19 @@ export function dockTabStateClassName(isActive: boolean): string {
  */
 export const DOCK_TAB_STRIP_CLASS =
   "flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+
+/**
+ * The size classes of a dock tab's content: it grows into the column while the
+ * dock fills it, and otherwise keeps the dock's fixed height.
+ */
+export function dockContentSizeClassName(fillsColumn: boolean): string {
+  return fillsColumn ? "min-h-0 flex-1" : "h-72";
+}
+
+/**
+ * The size classes of the dock itself: it grows into the column while it fills
+ * it, and otherwise keeps its own height (a header row, or that plus the content).
+ */
+export function dockRootSizeClassName(fillsColumn: boolean): string {
+  return fillsColumn ? "min-h-0 flex-1" : "shrink-0";
+}

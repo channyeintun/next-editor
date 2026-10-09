@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { describeRunnerOutput, dockTabStateClassName } from "./runtimeDockHelpers";
+import {
+  describeRunnerOutput,
+  dockContentSizeClassName,
+  dockRootSizeClassName,
+  dockTabStateClassName,
+} from "./runtimeDockHelpers";
 
 describe("describeRunnerOutput", () => {
   it("shows the runner's output", () => {
@@ -53,5 +58,17 @@ describe("dockTabStateClassName", () => {
   it("underlines and lights the active tab, and dims the others until hovered", () => {
     expect(dockTabStateClassName(true)).toBe("border-b border-b-[#64a3ff] bg-[#171b22] text-white");
     expect(dockTabStateClassName(false)).toBe("text-slate-300 hover:bg-[#171b22] hover:text-white");
+  });
+});
+
+describe("dock size classes", () => {
+  it("grows the dock and its content into the column while the dock fills it", () => {
+    expect(dockRootSizeClassName(true)).toBe("min-h-0 flex-1");
+    expect(dockContentSizeClassName(true)).toBe("min-h-0 flex-1");
+  });
+
+  it("keeps the dock's own height and the content's fixed height otherwise", () => {
+    expect(dockRootSizeClassName(false)).toBe("shrink-0");
+    expect(dockContentSizeClassName(false)).toBe("h-72");
   });
 });

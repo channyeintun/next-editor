@@ -76,7 +76,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const treeVersion = useWorkspaceTreeVersion();
   // The dock's on-screen layout, so the editor hides behind a full-height dock
   // exactly when the dock shows itself full height (the viewer's choice included).
-  const { displayIsCollapsed, displayIsFullHeight } = useRuntimeDockLayout();
+  const { fillsColumn: isRunnerDockFullHeight } = useRuntimeDockLayout();
   const collaboration = useOptionalCollaboration();
   const slidesContext = useSlidesContext();
   const whiteboardContext = useWhiteboardContext();
@@ -91,7 +91,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({
   const isWorkspaceCovered =
     (slidesContext.previewState.isOpen && slidesContext.previewState.isMaximized === true) ||
     whiteboardContext.isOpen;
-  const isRunnerDockFullHeight = displayIsFullHeight && !displayIsCollapsed;
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
   const viewStatesRef = useRef(new Map<string, monaco.editor.ICodeEditorViewState | null>());
