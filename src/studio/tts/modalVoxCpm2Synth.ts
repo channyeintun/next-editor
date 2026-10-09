@@ -1,4 +1,9 @@
-import { getCustomVoice, MAX_SAMPLE_SECONDS, MIN_VOXCPM2_REFERENCE_SECONDS } from "./customVoices";
+import {
+  getCustomVoice,
+  isVoxCpm2ReferenceReady,
+  MAX_SAMPLE_SECONDS,
+  MIN_VOXCPM2_REFERENCE_SECONDS,
+} from "./customVoices";
 import type { ModalVoxCpm2VoiceProfile } from "./profiles";
 import { encodeWavPcm16, floatTo16BitPcm } from "./wav";
 
@@ -39,8 +44,7 @@ async function loadReferenceAudioBase64(profile: ModalVoxCpm2VoiceProfile): Prom
           `Reference voice uses ${voice.sampleRate}Hz audio; expected ${profile.referenceSampleRate}Hz`,
         );
       }
-      const durationSeconds = voice.samples.length / voice.sampleRate;
-      if (durationSeconds < MIN_VOXCPM2_REFERENCE_SECONDS || durationSeconds > MAX_SAMPLE_SECONDS) {
+      if (!isVoxCpm2ReferenceReady(voice)) {
         throw new Error(
           `Burmese narration requires ${MIN_VOXCPM2_REFERENCE_SECONDS}–${MAX_SAMPLE_SECONDS}s of reference speech`,
         );

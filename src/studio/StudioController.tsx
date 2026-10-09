@@ -46,6 +46,7 @@ import type { ActionReceipt, StudioCheckResult } from "./report";
 import { CheckList, ReceiptList, RepeatabilityVerdict } from "./StudioRunResults";
 import {
   deleteCustomVoice,
+  isVoxCpm2ReferenceReady,
   listCustomVoices,
   MAX_SAMPLE_SECONDS,
   MIN_SAMPLE_SECONDS,
@@ -53,7 +54,7 @@ import {
   prepareVoiceSample,
   saveCustomVoice,
   type SavedCustomVoice,
-  VOICE_SAMPLE_RATE,
+  voxCpm2ReferenceTooShort,
 } from "./tts/customVoices";
 import {
   athanLabProfileOf,
@@ -222,15 +223,6 @@ function storeSemantics(slug: string, mode: StudioRuntimeMode, semantics: Render
   }
 }
 
-/**
- * Whether a narrator reference can condition Burmese VoxCPM2 narration: long enough
- * to keep one speaker, and within the stored-sample limit.
- */
-function isBurmeseReferenceReady(voice: SavedCustomVoice): boolean {
-  const durationSeconds = voice.samples.length / voice.sampleRate;
-  return durationSeconds >= MIN_VOXCPM2_REFERENCE_SECONDS && durationSeconds <= MAX_SAMPLE_SECONDS;
-}
-
 function publishWindowHandle(comparison: StudioCheckResult[] | null, running: boolean): void {
   window.__NEXT_EDITOR_STUDIO__ = {
     runs: runHistory.map((entry) => ({
@@ -339,8 +331,29 @@ export default function StudioController() {
   const [voiceBusy, setVoiceBusy] = useState<string | null>(null);
   const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
   const voiceSelectRef = useRef<HTMLSelectElement | null>(null);
-  const voiceRecorderRef = useRef<{ recorder: MediaRecorder; chunks: Blob[] } | null>(null);
+  const voiceRecorderRef = useRef<{
+    recorder: MediaRecorder;
+    stream: MediaStream;
+    stopTimer: number;
+  } | null>(null);
+  const voiceLibraryMountedRef = useRef(false);
   const [voiceRecording, setVoiceRecording] = useState(false);
+
+  // Leaving the console mid-take stops the microphone at once and discards the
+  // take: once unmounted, nothing can show it or confirm saving it.
+  useEffect(() => {
+    voiceLibraryMountedRef.current = true;
+    return () => {
+      voiceLibraryMountedRef.current = false;
+      const active = voiceRecorderRef.current;
+      if (!active) return;
+      voiceRecorderRef.current = null;
+      window.clearTimeout(active.stopTimer);
+      active.recorder.onstop = null;
+      if (active.recorder.state !== "inactive") active.recorder.stop();
+      for (const track of active.stream.getTracks()) track.stop();
+    };
+  }, []);
 
   const chooseProvider = (next: StudioNarrationProvider) => {
     if (next === provider) return;
@@ -395,7 +408,7 @@ export default function StudioController() {
 
   const selectedVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
   const selectedVoiceIsBurmeseReady =
-    selectedVoice !== null && isBurmeseReferenceReady(selectedVoice);
+    selectedVoice !== null && isVoxCpm2ReferenceReady(selectedVoice);
   const requiredVoiceSeconds =
     provider === "voxcpm2" ? MIN_VOXCPM2_REFERENCE_SECONDS : MIN_SAMPLE_SECONDS;
 
@@ -408,10 +421,7 @@ export default function StudioController() {
     setVoiceBusy("Preparing the sample (24 kHz mono)…");
     try {
       const samples = await prepareVoiceSample(bytes);
-      if (
-        provider === "voxcpm2" &&
-        samples.length < MIN_VOXCPM2_REFERENCE_SECONDS * VOICE_SAMPLE_RATE
-      ) {
+      if (provider === "voxcpm2" && voxCpm2ReferenceTooShort(samples)) {
         throw new Error(
           `Burmese narration requires at least ${MIN_VOXCPM2_REFERENCE_SECONDS}s of clear reference speech`,
         );
@@ -440,12 +450,19 @@ export default function StudioController() {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!voiceLibraryMountedRef.current) {
+        // The console unmounted while the permission prompt was open.
+        for (const track of stream.getTracks()) track.stop();
+        return;
+      }
       const recorder = new MediaRecorder(stream);
       const chunks: Blob[] = [];
+      let stopTimer = 0;
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunks.push(event.data);
       };
       recorder.onstop = () => {
+        window.clearTimeout(stopTimer);
         voiceRecorderRef.current = null;
         setVoiceRecording(false);
         for (const track of stream.getTracks()) track.stop();
@@ -456,15 +473,15 @@ export default function StudioController() {
             setFatal(error instanceof Error ? error.message : String(error)),
           );
       };
-      voiceRecorderRef.current = { recorder, chunks };
       setVoiceRecording(true);
       recorder.start();
-      // The engine conditions on at most 20s — stop the mic there.
-      setTimeout(() => {
+      // The engine conditions on at most MAX_SAMPLE_SECONDS — stop the mic there.
+      stopTimer = window.setTimeout(() => {
         if (voiceRecorderRef.current?.recorder === recorder && recorder.state === "recording") {
           recorder.stop();
         }
-      }, 20_000);
+      }, MAX_SAMPLE_SECONDS * 1000);
+      voiceRecorderRef.current = { recorder, stream, stopTimer };
     } catch (error) {
       setFatal(error instanceof Error ? error.message : String(error));
     }
@@ -605,7 +622,7 @@ export default function StudioController() {
         if (!studioCapabilities.burmeseVoxCpm2) {
           throw new Error("Burmese · VoxCPM2 (Modal) is not enabled for this user");
         }
-        if (!renderVoice || !isBurmeseReferenceReady(renderVoice)) {
+        if (!renderVoice || !isVoxCpm2ReferenceReady(renderVoice)) {
           throw new Error(
             `Burmese narration requires a ${MIN_VOXCPM2_REFERENCE_SECONDS}–${MAX_SAMPLE_SECONDS}s narrator reference. Record or upload one first.`,
           );

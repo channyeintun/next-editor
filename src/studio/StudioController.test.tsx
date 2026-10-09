@@ -9,6 +9,7 @@ const studio = vi.hoisted(() => ({
   runRender: vi.fn<typeof runStudioRender>(),
   voices: [] as SavedCustomVoice[],
   synthesizePocket: vi.fn<() => Promise<Uint8Array>>(),
+  saveVoice: vi.fn<(name: string, samples: Float32Array) => Promise<SavedCustomVoice>>(),
 }));
 
 vi.mock("react-router", () => ({
@@ -87,6 +88,8 @@ vi.mock("./tts/customVoices", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./tts/customVoices")>()),
   listCustomVoices: () => Promise.resolve(studio.voices),
   deleteCustomVoice: () => Promise.resolve(),
+  prepareVoiceSample: () => Promise.resolve(new Float32Array(24_000 * 6)),
+  saveCustomVoice: studio.saveVoice,
 }));
 // One English script that can start with the default English provider, one
 // Burmese script that cannot, and one imported-style script that no longer
@@ -341,6 +344,88 @@ describe("StudioController voice focus", () => {
       expect(screen.getByRole("combobox", { name: "Narrator voice" })).toHaveFocus(),
     );
     expect(screen.queryByRole("button", { name: "Delete voice" })).toBeNull();
+  });
+});
+
+/** A MediaRecorder double: start records, stop ends the take and fires onstop. */
+class FakeMediaRecorder {
+  static instances: FakeMediaRecorder[] = [];
+  state: RecordingState = "inactive";
+  mimeType = "audio/webm";
+  ondataavailable: ((event: { data: Blob }) => void) | null = null;
+  onstop: (() => void) | null = null;
+  stop = vi.fn<() => void>(() => {
+    this.state = "inactive";
+    this.onstop?.();
+  });
+
+  constructor() {
+    FakeMediaRecorder.instances.push(this);
+  }
+
+  start() {
+    this.state = "recording";
+  }
+}
+
+describe("StudioController narrator recording", () => {
+  const track = { stop: vi.fn<() => void>() };
+  let ownMediaDevices: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    studio.searchParams = new URLSearchParams();
+    studio.voices = [];
+    studio.saveVoice.mockResolvedValue(narrator);
+    FakeMediaRecorder.instances = [];
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    ownMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: () => Promise.resolve({ getTracks: () => [track] } as unknown as MediaStream),
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    if (ownMediaDevices) Object.defineProperty(navigator, "mediaDevices", ownMediaDevices);
+    else delete (navigator as { mediaDevices?: MediaDevices }).mediaDevices;
+  });
+
+  it("stops at the sample cap on its own and saves the take", async () => {
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    renderController();
+
+    fireEvent.click(screen.getByRole("button", { name: "Record" }));
+    await screen.findByRole("button", { name: "Stop" });
+    const autoStop = setTimeoutSpy.mock.calls.find(([, delay]) => delay === 20_000)?.[0];
+    if (typeof autoStop !== "function") throw new Error("No 20 s auto-stop scheduled");
+    autoStop();
+
+    expect(FakeMediaRecorder.instances[0]?.stop).toHaveBeenCalledTimes(1);
+    expect(track.stop).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(studio.saveVoice).toHaveBeenCalledWith("My voice", expect.any(Float32Array)),
+    );
+    expect(await screen.findByRole("button", { name: "Record" })).toBeInTheDocument();
+  });
+
+  it("stops the microphone and discards the take when the console unmounts mid-take", async () => {
+    const { unmount } = renderController();
+
+    fireEvent.click(screen.getByRole("button", { name: "Record" }));
+    await screen.findByRole("button", { name: "Stop" });
+    const recorder = FakeMediaRecorder.instances[0];
+    unmount();
+
+    expect(recorder?.stop).toHaveBeenCalledTimes(1);
+    expect(track.stop).toHaveBeenCalled();
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+    expect(studio.saveVoice).not.toHaveBeenCalled();
   });
 });
 

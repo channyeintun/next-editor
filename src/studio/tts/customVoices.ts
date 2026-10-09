@@ -16,6 +16,23 @@ export const MIN_SAMPLE_SECONDS = 2;
 export const MIN_VOXCPM2_REFERENCE_SECONDS = 5;
 export const MAX_SAMPLE_SECONDS = 20;
 
+/**
+ * Whether a narrator reference can condition Burmese VoxCPM2 narration: long
+ * enough to keep one speaker, and within the stored-sample limit.
+ */
+export function isVoxCpm2ReferenceReady(voice: {
+  samples: Float32Array;
+  sampleRate: number;
+}): boolean {
+  const durationSeconds = voice.samples.length / voice.sampleRate;
+  return durationSeconds >= MIN_VOXCPM2_REFERENCE_SECONDS && durationSeconds <= MAX_SAMPLE_SECONDS;
+}
+
+/** Whether a prepared (VOICE_SAMPLE_RATE) sample is too short for a VoxCPM2 reference. */
+export function voxCpm2ReferenceTooShort(samples: Float32Array): boolean {
+  return samples.length < MIN_VOXCPM2_REFERENCE_SECONDS * VOICE_SAMPLE_RATE;
+}
+
 export interface SavedCustomVoice {
   id: string;
   name: string;
