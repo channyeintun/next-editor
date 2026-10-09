@@ -130,7 +130,7 @@ export default function SlidesButton({
             className={`flex items-center justify-center min-w-4.5 h-4.5 px-1 rounded-md text-[10px] font-black ${
               showManager || isPresentationVisible
                 ? "bg-[#5da4ff] text-slate-950"
-                : "bg-slate-700 text-slate-300"
+                : "bg-slate-700 text-slate-200"
             }`}
           >
             {slides.length}
