@@ -23,12 +23,10 @@ export default function PlaylistCard({
   playlist,
   isManaging,
   onManage,
-  onDeleted,
 }: {
   playlist: OwnedPlaylist;
   isManaging: boolean;
   onManage: () => void;
-  onDeleted: () => void;
 }) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -270,7 +268,6 @@ export default function PlaylistCard({
                   setDeleteError(null);
                   triggerRef.current?.focus();
                   del.mutate(playlist.id, {
-                    onSuccess: onDeleted,
                     onError: () => setDeleteError("Couldn't delete the playlist — try again."),
                   });
                 }}

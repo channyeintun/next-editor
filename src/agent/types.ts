@@ -52,8 +52,3 @@ export type ToolOutputContent =
   | { type: "input_image"; imageUrl: string; detail: "auto" | "low" | "high" };
 
 export type CredentialStorage = "memory" | "session" | "local";
-
-export interface AgentCredential {
-  apiKey: string;
-  storage: CredentialStorage;
-}

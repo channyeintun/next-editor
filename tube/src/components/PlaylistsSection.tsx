@@ -50,9 +50,6 @@ export default function PlaylistsSection({ playlists }: { playlists: OwnedPlayli
               playlist={playlist}
               isManaging={playlist.id === managingPlaylistId}
               onManage={() => setManagingPlaylistId(playlist.id)}
-              onDeleted={() => {
-                if (managingPlaylistId === playlist.id) setManagingPlaylistId(null);
-              }}
             />
           ))}
         </div>

@@ -105,7 +105,7 @@ export const selectCredentialStorage = (context: CredentialContext): CredentialS
 
 let sharedCredentialStore: CredentialStoreInstance | null = null;
 
-/** App-wide singleton — there is exactly one Anthropic key per browser, not one per panel instance. */
+/** App-wide singleton — there is exactly one OpenRouter key per browser, not one per panel instance. */
 export function getAgentCredentialStore(): CredentialStoreInstance {
   if (!sharedCredentialStore) {
     sharedCredentialStore = createCredentialStore();

@@ -31,18 +31,6 @@ export function readFile(store: WorkspaceStoreInstance, path: string): Workspace
   return project.files[normalizeWorkspacePath(path)] ?? null;
 }
 
-export function exists(store: WorkspaceStoreInstance, path: string): boolean {
-  const project = getProject(store);
-  if (!project) {
-    return false;
-  }
-
-  return (
-    Boolean(project.files[normalizeWorkspacePath(path)]) ||
-    project.folders.includes(normalizeWorkspaceFolderPath(path))
-  );
-}
-
 export interface WorkspaceDirListing {
   files: WorkspaceFile[];
   folders: string[];
@@ -100,14 +88,4 @@ export function writeFile(
     throw new Error(`Cannot create "${normalizedPath}" because it conflicts with another path`);
   }
   return { created: true };
-}
-
-/** Generic pass-through to `store.trigger.<event>(payload)`, typed off the store's own event map. */
-export function mutate<K extends keyof WorkspaceStoreInstance["trigger"]>(
-  store: WorkspaceStoreInstance,
-  event: K,
-  payload: Parameters<WorkspaceStoreInstance["trigger"][K]>[0],
-): void {
-  type Payload = Parameters<WorkspaceStoreInstance["trigger"][K]>[0];
-  (store.trigger[event] as (p: Payload) => void)(payload);
 }

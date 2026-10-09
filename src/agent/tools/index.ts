@@ -15,8 +15,8 @@ import { makeCapturePreviewTool } from "./capturePreview";
 // The third entry scopes each tool to an execution kind: file tools are available
 // everywhere, while shell/runtime/preview observation only exists where the
 // WebContainer runtime does. Every Playground lesson runs its code on an explicit
-// Run — remotely for Go, Kotlin and Rust, in-page for Kite — so each of them gets
-// the same file-tools-only profile.
+// Run — remotely for Go, Kotlin, Rust, Zig and Haskell, in-page for Kite and
+// assembly — so each of them gets the same file-tools-only profile.
 const CODING_TOOL_DEFINITIONS = [
   ["read", makeReadTool, "all"],
   ["ls", makeLsTool, "all"],
@@ -39,19 +39,6 @@ function codingToolDefinitionsFor(executionKind: WorkspaceExecutionKind) {
 export function codingToolNamesFor(executionKind: WorkspaceExecutionKind): string[] {
   return codingToolDefinitionsFor(executionKind).map(([name]) => name);
 }
-
-export {
-  makeReadTool,
-  makeWriteTool,
-  makeEditTool,
-  makeLsTool,
-  makeGlobTool,
-  makeGrepTool,
-  makeBashTool,
-  makeRuntimeDiagnosticsTool,
-  makeInspectPreviewTool,
-  makeCapturePreviewTool,
-};
 
 /** What a tool reports to the model instead of acting, once the run was stopped. */
 export const ABORTED_TOOL_OUTPUT = "The run was stopped before this tool ran; nothing was changed.";

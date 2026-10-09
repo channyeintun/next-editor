@@ -7,9 +7,10 @@ import PlaylistsSection from "./PlaylistsSection";
 
 export default function MyLibraryGrid() {
   const { data, isPending, isError, refetch } = useMyLessons();
-  // Independent of the lessons query's pending/error state below: playlists
-  // render as soon as they're ready regardless of whether the lessons grid
-  // is still loading, same as any other independent section on this page.
+  // Its own query with its own pending/error states, handled inside the
+  // lessons-loaded branch below: the playlists section renders only once the
+  // lessons query has loaded, then shows a skeleton, an error with retry, or
+  // the playlists.
   const {
     data: playlists,
     isPending: playlistsPending,

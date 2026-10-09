@@ -32,7 +32,6 @@ function renderCard(onManage: () => void = () => {}, overrides: Partial<OwnedPla
         playlist={{ ...playlist, ...overrides }}
         isManaging={false}
         onManage={onManage}
-        onDeleted={() => {}}
       />
     </MemoryRouter>,
   );

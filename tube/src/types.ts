@@ -12,10 +12,6 @@ export interface Lesson {
   publishedAt?: string;
 }
 
-export interface LessonsManifest {
-  lessons: Lesson[];
-}
-
 /** A public, always-visible ordered collection of the owner's own lessons. */
 export interface Playlist {
   slug: string;
