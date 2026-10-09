@@ -608,7 +608,7 @@ function TerminalPanel() {
               >
                 <div className="relative min-h-0 flex-1 overflow-hidden">
                   {!effectiveActiveTerminalSessionId && (
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center font-mono text-[13px] text-slate-500">
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center font-mono text-[13px] text-slate-300">
                       Open the terminal to start a shell session.
                     </div>
                   )}

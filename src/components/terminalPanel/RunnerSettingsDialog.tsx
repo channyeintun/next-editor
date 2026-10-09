@@ -70,7 +70,7 @@ function RunnerCommandField({
         onChange={(event) => onChange(event.target.value)}
         className="mt-2 h-11 w-full rounded-lg border border-slate-700 bg-[#11141c] px-3 font-mono text-sm text-slate-100 outline-none transition-colors focus:border-slate-500 disabled:cursor-default disabled:opacity-70"
       />
-      <span className="mt-2 block text-xs text-slate-500">{description}</span>
+      <span className="mt-2 block text-xs text-slate-300">{description}</span>
     </label>
   );
 }
