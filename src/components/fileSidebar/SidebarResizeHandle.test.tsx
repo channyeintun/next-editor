@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { getEditorOptions } from "../../monaco/theme";
 import {
   DEFAULT_FILE_SIDEBAR_WIDTH,
   FILE_SIDEBAR_KEYBOARD_LARGE_STEP,
@@ -58,6 +59,27 @@ describe("SidebarResizeHandle", () => {
     expect(handle()).toHaveAttribute("aria-valuenow", "280");
     expect(handle()).toHaveAttribute("tabindex", "0");
     expect(handle()).toHaveAccessibleDescription("Drag, click, or use the arrow keys to resize");
+  });
+
+  it("offers a 24px hit area centred on the edge, with the line on the edge", () => {
+    const { handle } = renderHandle();
+
+    // w-6 is 24px and -right-3 moves it 12px past the edge: centred on it.
+    expect(handle()).toHaveClass("w-6", "-right-3");
+    expect(handle()).toHaveClass("before:left-1/2", "before:-translate-x-1/2", "before:w-px");
+  });
+
+  it("reaches no further into the editor than its line-number column", () => {
+    // How far the hit area extends past the sidebar's edge (-right-3).
+    const reachIntoEditor = 12;
+    const editor = getEditorOptions(false);
+
+    // Monaco starts right at the edge. With no glyph margin, its leftmost
+    // column is the right-aligned line numbers, at least lineNumbersMinChars
+    // digits wide. Even at a narrow 0.5em digit that column is wider than the
+    // reach, so the handle never covers editor text or a gutter glyph.
+    expect(editor.glyphMargin).toBe(false);
+    expect(reachIntoEditor).toBeLessThan(editor.lineNumbersMinChars * editor.fontSize * 0.5);
   });
 
   it("steps the width with the arrow keys, Home and End", () => {

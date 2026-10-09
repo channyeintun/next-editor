@@ -161,6 +161,11 @@ export default function SidebarResizeHandle({ width, onWidthChange }: SidebarRes
       {isResizing ? (
         <div aria-hidden="true" className="fixed inset-0 z-40 cursor-col-resize" />
       ) : null}
+      {/* A 24px hit area centred on the sidebar's edge, the 1px line drawn
+          on the edge itself. Its outer 12px lie over the editor's
+          line-number column (no glyph margin), short of the editor's text;
+          its inner 12px lie over the tree's scrollbar strip, which the rows
+          stop short of. */}
       <div
         role="separator"
         aria-label="Resize file sidebar"
@@ -174,7 +179,7 @@ export default function SidebarResizeHandle({ width, onWidthChange }: SidebarRes
         tabIndex={0}
         onPointerDown={handlePointerDown}
         onKeyDown={handleKeyDown}
-        className={`absolute inset-y-0 -right-1 z-50 w-2 cursor-col-resize touch-none outline-none before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-transparent before:transition-colors hover:before:bg-sky-400 focus-visible:before:bg-sky-400 ${
+        className={`absolute inset-y-0 -right-3 z-50 w-6 cursor-col-resize touch-none outline-none before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-transparent before:transition-colors hover:before:bg-sky-400 focus-visible:before:bg-sky-400 ${
           isResizing ? "before:bg-sky-400" : ""
         }`}
       />
