@@ -43,6 +43,23 @@ describe("LessonCard", () => {
     expect(screen.getByRole("heading", { level: 3 })).not.toHaveClass("line-clamp-2");
   });
 
+  it("gives screen readers the duration in the heading, outside the title link's name", () => {
+    renderCard(lesson({ title: "Rust from zero: Ownership", duration: "4:12" }));
+
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Rust from zero: Ownership, duration 4:12" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Rust from zero: Ownership" })).toBeInTheDocument();
+  });
+
+  it("adds no duration text when the lesson has none", () => {
+    renderCard(lesson({ title: "Rust from zero: Ownership", duration: undefined }));
+
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Rust from zero: Ownership" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders an English title with no lang override", () => {
     renderCard(lesson({ title: "Rust from zero: Ownership" }));
 

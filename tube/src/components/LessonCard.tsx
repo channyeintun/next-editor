@@ -76,6 +76,11 @@ export default function LessonCard({
           >
             <LangText text={lesson.title} />
           </Link>
+          {/* The visible duration badge sits inside the aria-hidden thumbnail
+              link, so screen readers get it here, after the link: heading and
+              browse navigation read "title, duration 4:12" while the link's
+              name stays exactly its visible title. */}
+          {lesson.duration && <span className="sr-only">, duration {lesson.duration}</span>}
         </h3>
         {(lesson.author || published) && (
           // slate-300 on the #11141c page is 12.4:1 (WCAG AAA); slate-400 renders
