@@ -82,19 +82,30 @@ export function scheduleDialogs({
 
   const warnings: string[] = [];
 
-  // Marker name → the dialog whose start it anchors ("end" markers → null).
+  // Marker name → the dialog whose start it anchors. Every marker starts a
+  // dialog except one after the narration's last word — a scene-final marker
+  // elsewhere starts the next scene's first dialog. That one anchors the last
+  // dialog's end instead, where the compiler resolves it too (the last token's
+  // end), so its actions still reserve narration time.
   const dialogStartByToken = new Map<number, number>();
   dialogs.forEach((dialog, index) => dialogStartByToken.set(dialog.firstTokenIndex, index));
   const markerDialogIndex = new Map<string, number | null>();
+  const endMarkers = new Set<string>();
   for (const [name, marker] of extracted.markers) {
-    markerDialogIndex.set(name, dialogStartByToken.get(marker.beforeTokenIndex) ?? null);
+    if (marker.beforeTokenIndex >= extracted.tokens.length) {
+      markerDialogIndex.set(name, dialogs.length - 1);
+      endMarkers.add(name);
+    } else {
+      markerDialogIndex.set(name, dialogStartByToken.get(marker.beforeTokenIndex) ?? null);
+    }
   }
 
-  // Actions anchored to each dialog's opening mark (or their scene's start),
-  // grouped so their busy time can push the *next* dialog.
+  // Actions anchored to each dialog's opening mark (or their scene's start, or
+  // the narration's end), grouped so their busy time can push the *next*
+  // dialog and the recording's tail.
   const actionsByDialog = new Map<
     number,
-    { offsetMs: number; busyMs: number; actionId: string }[]
+    { offsetMs: number; busyMs: number; actionId: string; atEnd: boolean }[]
   >();
   const sceneFirstDialog = new Map<string, number>();
   dialogs.forEach((dialog, index) => {
@@ -110,6 +121,7 @@ export function scheduleDialogs({
   // both pretending to begin at the root mark (STUDIO-03).
   const resolvedDialog = new Map<string, number | null | undefined>();
   const directOffset = new Map<string, number>();
+  const endAnchoredIds = new Set<string>();
   const busyById = actionBusyMsById(script);
   const predecessorById = new Map<string, string>();
   for (const scene of script.scenes) {
@@ -118,6 +130,7 @@ export function scheduleDialogs({
       if ("mark" in anchor) {
         resolvedDialog.set(action.id, markerDialogIndex.get(anchor.mark));
         directOffset.set(action.id, anchor.offsetMs);
+        if (endMarkers.has(anchor.mark)) endAnchoredIds.add(action.id);
       } else if ("scene" in anchor) {
         resolvedDialog.set(action.id, sceneFirstDialog.get(scene.id) ?? null);
         directOffset.set(action.id, anchor.offsetMs);
@@ -154,6 +167,7 @@ export function scheduleDialogs({
         offsetMs: directOffset.get(action.id) ?? 0,
         busyMs: busyById.get(action.id) ?? 0,
         actionId: action.id,
+        atEnd: endAnchoredIds.has(action.id),
       });
       actionsByDialog.set(dialogIndex, entries);
     }
@@ -177,9 +191,13 @@ export function scheduleDialogs({
     // BUSY_PAD_MS therefore lets such an action begin while the previous edit is
     // still typing — an overlap the plan gate rejects, after the whole narration
     // has been synthesized. Reserve whatever the pull-back needs beyond the lead.
+    // An action anchored at the narration's end pulls back from the dialog's last
+    // word, not its first, so it does not move the dialog's start.
     const pullBackMs = -Math.min(
       0,
-      ...(actionsByDialog.get(i) ?? []).map((entry) => entry.offsetMs),
+      ...(actionsByDialog.get(i) ?? [])
+        .filter((entry) => !entry.atEnd)
+        .map((entry) => entry.offsetMs),
     );
     const naturalStartMs = i === 0 ? RECORDING_BUFFER_MS : previousEndMs + MIN_GAP_MS;
     const startMs = Math.max(
@@ -217,6 +235,9 @@ export function scheduleDialogs({
 
     // This dialog's anchored actions may outlast it; the next dialog waits.
     const markerTimeMs = combinedTokens[dialog.firstTokenIndex].startMs;
+    // Only the last dialog holds end-anchored actions, and by then this is the
+    // narration's last word.
+    const endMarkerTimeMs = combinedTokens[combinedTokens.length - 1].endMs;
     const pendingActionIds = new Set((actionsByDialog.get(i) ?? []).map((entry) => entry.actionId));
     const entriesById = new Map(
       (actionsByDialog.get(i) ?? []).map((entry) => [entry.actionId, entry]),
@@ -229,7 +250,7 @@ export function scheduleDialogs({
         const entry = entriesById.get(actionId)!;
         let actionAt: number | undefined;
         if (directOffset.has(actionId)) {
-          actionAt = Math.max(0, markerTimeMs + entry.offsetMs);
+          actionAt = Math.max(0, (entry.atEnd ? endMarkerTimeMs : markerTimeMs) + entry.offsetMs);
         } else {
           const predecessorId = predecessorById.get(actionId);
           if (predecessorId !== undefined) {

@@ -240,6 +240,52 @@ describe("scheduleDialogs", () => {
     ).not.toThrow();
   });
 
+  // A mark after the narration's last word starts no dialog. The scheduler used
+  // to skip its actions, so a final edit anchored there reserved no time and ran
+  // past the audio into auto-finalize while the compiler, which resolves the
+  // mark to the last word's end, raised nothing.
+  it("reserves busy time for an action anchored at the narration's final mark", () => {
+    const script = loadPilot("go-cube");
+    const lastScene = script.scenes.at(-1)!;
+    lastScene.narration = `${lastScene.narration.trimEnd()} [[mark:end]]`;
+    lastScene.actions.push({
+      id: "type-closing",
+      type: "editor.type",
+      at: { mark: "end", offsetMs: 0 },
+      timeoutMs: 10_000,
+      target: { file: "main.go", after: ", square(i))\n\t}\n", occurrence: 1 },
+      cadence: "natural",
+      text: "\n\t// one more line, typed once the narration has finished\n",
+    });
+
+    const { extracted, dialogs, schedule } = scheduleFor(script);
+    expect(extracted.markers.get("end")!.beforeTokenIndex).toBe(extracted.tokens.length);
+    const lastWordEndMs = schedule.alignment.tokens.at(-1)!.endMs;
+    const typingMs = actionBusyMsById(script).get("type-closing")!;
+    expect(typingMs).toBeGreaterThan(0);
+    expect(schedule.totalDurationMs).toBeGreaterThanOrEqual(
+      lastWordEndMs + typingMs + RECORDING_BUFFER_MS,
+    );
+    // The last dialog itself is not pushed: the action runs after its last word.
+    const lastDialog = schedule.timeline.at(-1)!;
+    expect(lastDialog.dialog).toBe(dialogs.at(-1));
+
+    const { plan } = compileLessonScript({
+      script,
+      extracted,
+      alignment: schedule.alignment,
+      narration: {
+        audioPath: "studio-tts://test",
+        mimeType: "audio/wav",
+        durationMs: schedule.totalDurationMs,
+      },
+    });
+    const closing = plan.actions.at(-1)!;
+    expect(closing.id).toBe("type-closing");
+    expect(closing.at).toBe(lastWordEndMs);
+    expect(closing.at + planActionBusyMs(closing)).toBeLessThan(plan.narration.expectedDurationMs);
+  });
+
   it("is deterministic for identical inputs", () => {
     const first = scheduleFor(loadPilot("go-swap")).schedule;
     const second = scheduleFor(loadPilot("go-swap")).schedule;
