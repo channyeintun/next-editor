@@ -186,14 +186,17 @@ The row shows the participant's active surface:
 - `Whiteboard`;
 - `Loading shared slide…` when a durable content reference arrived before its asset.
 
-The follow action must have an accessible name such as `Follow Ada` and an accessible pressed
-state. Color alone must not communicate follow state.
+The follow action is a toggle with one constant accessible name, such as `Following Ada`, and an
+accessible pressed state that alone carries whether the session is followed. Color alone must not
+communicate follow state.
 
 ### Active follow indicator
 
 While following:
 
 - render an EditorLayout-level overlay such as `Following Ada · Slides · Esc to stop`;
+- announce the target and surface through one polite status region that is mounted with the room,
+  before following starts, rather than with the overlay;
 - outline the currently visible editor, slide, or whiteboard surface with the target's existing
   participant color;
 - show `Following` on the target's participant row;
