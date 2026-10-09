@@ -28,6 +28,7 @@ import {
   getDefaultFileContent,
   getEditableSelectionEnd,
   getFileIcon,
+  getInlineNameError,
   getSidebarTreePaddingLeft,
   removeFolderFromCollapsedState,
   type SidebarContextMenuState,
@@ -42,8 +43,11 @@ function FileSidebarPanel() {
   const [draftName, setDraftName] = useState("");
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
+  // Why the name field refused its name, shown under it until the name changes.
+  const [inlineError, setInlineError] = useState<string | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
   const inlineHintId = useId();
+  const inlineErrorId = useId();
   // The row the context menu was opened from, to take focus back when the menu
   // closes without moving it anywhere else.
   const contextMenuOpenerRef = useRef<HTMLElement | null>(null);
@@ -197,6 +201,7 @@ function FileSidebarPanel() {
   const clearInlineEdit = () => {
     setEditState(null);
     setDraftName("");
+    setInlineError(null);
   };
 
   // Prefers the row a menu was opened from over the menu item about to unmount.
@@ -217,6 +222,7 @@ function FileSidebarPanel() {
       parentPath,
     });
     setDraftName("");
+    setInlineError(null);
   };
 
   const handleCreateFile = () => {
@@ -242,12 +248,14 @@ function FileSidebarPanel() {
       parentPath: getParentWorkspacePath(path),
     });
     setDraftName(getWorkspaceBaseName(path));
+    setInlineError(null);
   };
 
   /**
    * Creates or renames the entry the name field is for and closes the field.
    * Returns the path whose row should take focus afterwards: the new path, or
-   * the unchanged one when an empty name cancels a rename; null otherwise.
+   * the unchanged one when an empty name cancels a rename; null otherwise. A
+   * name the workspace would refuse keeps the field open and says why.
    */
   const commitInlineEdit = (): string | null => {
     if (!editState) {
@@ -261,8 +269,15 @@ function FileSidebarPanel() {
     }
 
     const nextPath = joinWorkspacePath(editState.parentPath, normalizedName);
+    const nameError = getInlineNameError(
+      files,
+      folders,
+      nextPath,
+      editState.mode === "rename" ? editState.path : undefined,
+    );
 
-    if (!nextPath) {
+    if (nameError) {
+      setInlineError(nameError);
       return null;
     }
 
@@ -444,26 +459,43 @@ function FileSidebarPanel() {
     return (
       <div className="px-1.5">
         <div
-          className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 transition-colors focus-within:border-slate-500"
+          className={`flex items-center gap-2 rounded-md border bg-slate-900 px-2 py-1.5 transition-colors ${
+            inlineError ? "border-rose-400" : "border-slate-700 focus-within:border-slate-500"
+          }`}
           style={{ paddingLeft: getSidebarTreePaddingLeft(depth) }}
         >
           <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
           <input
             ref={editInputRef}
             value={draftName}
-            onChange={(event) => setDraftName(event.target.value)}
+            onChange={(event) => {
+              setDraftName(event.target.value);
+              setInlineError(null);
+            }}
             onKeyDown={handleDraftKeyDown}
             onBlur={() => {
+              // A refused name keeps the field open, and its alert says why.
               // Also drops a focus return left by an Enter the field refused.
               inlineEditFocusReturnRef.current = null;
               commitInlineEdit();
             }}
             placeholder={kind === "folder" ? "Folder name" : "File name"}
             aria-label={inputLabel}
-            aria-describedby={inlineHintId}
+            aria-invalid={inlineError ? true : undefined}
+            aria-describedby={inlineError ? `${inlineErrorId} ${inlineHintId}` : inlineHintId}
             className="min-w-0 flex-1 bg-transparent text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-500"
           />
         </div>
+        {inlineError ? (
+          <p
+            id={inlineErrorId}
+            role="alert"
+            className="px-2 pt-1 text-xs wrap-break-word text-rose-300"
+            style={{ paddingLeft: getSidebarTreePaddingLeft(depth) }}
+          >
+            {inlineError}
+          </p>
+        ) : null}
         <span id={inlineHintId} className="sr-only">
           Press Enter to save or Escape to cancel
         </span>

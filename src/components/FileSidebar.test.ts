@@ -13,6 +13,7 @@ import type { WorkspaceTreeFile } from "../types/workspace";
 import {
   deletesEveryFile,
   FolderIcon,
+  getInlineNameError,
   getViewportClampedContextMenuPlacement,
 } from "./fileSidebarHelpers";
 
@@ -93,6 +94,52 @@ describe("deletesEveryFile", () => {
 
   it("is false for one of two files", () => {
     expect(deletesEveryFile([treeFile("a.ts"), treeFile("b.ts")], "a.ts")).toBe(false);
+  });
+});
+
+describe("getInlineNameError", () => {
+  function treeFile(path: string): WorkspaceTreeFile {
+    return { path, name: path.split("/").at(-1) ?? path, language: "typescript" };
+  }
+
+  const files = [treeFile("index.html"), treeFile("src/app.ts"), treeFile("src/lib/util.ts")];
+  const folders = ["src", "src/lib"];
+
+  it("refuses a name the workspace cannot hold", () => {
+    expect(getInlineNameError(files, folders, "")).toBe("That name can't be used here.");
+  });
+
+  it("refuses a file that already exists", () => {
+    expect(getInlineNameError(files, folders, "src/app.ts")).toBe('"app.ts" already exists here.');
+    expect(getInlineNameError(files, folders, "src/app.ts", "src/main.ts")).toBe(
+      '"app.ts" already exists here.',
+    );
+  });
+
+  it("refuses a file and a folder that would share a path", () => {
+    // A new file named like a folder, a folder named like a file, and a path
+    // that would put an entry inside a file.
+    expect(getInlineNameError(files, folders, "src/lib")).toBe('"lib" already exists here.');
+    expect(getInlineNameError(files, folders, "index.html")).toBe(
+      '"index.html" already exists here.',
+    );
+    expect(getInlineNameError(files, folders, "index.html/page.html")).toBe(
+      '"index.html" is a file, not a folder.',
+    );
+  });
+
+  it("accepts renaming an entry to its own path, or a folder past its own contents", () => {
+    expect(getInlineNameError(files, folders, "src/app.ts", "src/app.ts")).toBeNull();
+    expect(getInlineNameError(files, folders, "src/lib", "src/lib")).toBeNull();
+    expect(getInlineNameError(files, folders, "src/shared", "src/lib")).toBeNull();
+    expect(getInlineNameError(files, folders, "src/main.ts")).toBeNull();
+  });
+
+  it("refuses a folder moved inside itself, but not a file made into a folder", () => {
+    expect(getInlineNameError(files, folders, "src/lib/inner", "src/lib")).toBe(
+      "A folder can't be moved inside itself.",
+    );
+    expect(getInlineNameError(files, folders, "src/app.ts/main.ts", "src/app.ts")).toBeNull();
   });
 });
 

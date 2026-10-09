@@ -230,6 +230,45 @@ describe("FileSidebar name field", () => {
     );
   });
 
+  it("stays open and says why when the name is taken, until the name changes", () => {
+    render(<FileSidebar />);
+    fireEvent.click(row("Create file"));
+    const field = screen.getByRole("textbox", { name: "New file name" });
+
+    fireEvent.change(field, { target: { value: "index.html" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(actions.createFile).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent('"index.html" already exists here.');
+    expect(field).toHaveFocus();
+    expect(field).toBeInvalid();
+    expect(field).toHaveAccessibleDescription(
+      '"index.html" already exists here. Press Enter to save or Escape to cancel',
+    );
+
+    fireEvent.change(field, { target: { value: "about.html" } });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(field).toBeValid();
+    expect(field).toHaveAccessibleDescription("Press Enter to save or Escape to cancel");
+  });
+
+  it("stays open on blur after refusing a rename the workspace cannot hold", () => {
+    render(<FileSidebar />);
+    fireEvent.keyDown(row("app.ts"), { key: "F2" });
+    const field = screen.getByRole("textbox", { name: "File name for app.ts" });
+
+    fireEvent.change(field, { target: { value: ".." } });
+    act(() => field.blur());
+
+    expect(actions.renameFile).not.toHaveBeenCalled();
+    expect(field).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("That name can't be used here.");
+
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("hands focus back to the row when Escape cancels a rename", () => {
     render(<FileSidebar />);
     fireEvent.keyDown(row("app.ts"), { key: "F2" });
