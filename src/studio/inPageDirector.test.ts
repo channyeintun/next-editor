@@ -51,8 +51,8 @@ vi.mock("./tts/athanlabSynth", () => ({
 const slides = vi.hoisted(() => ({
   fetchPublishedDeck: vi.fn<(url: string) => Promise<ParsedDeck>>(),
 }));
-vi.mock("../googleSlides", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../googleSlides")>()),
+vi.mock("../googleSlides/fetchPublishedDeck", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../googleSlides/fetchPublishedDeck")>()),
   fetchPublishedDeck: slides.fetchPublishedDeck,
 }));
 

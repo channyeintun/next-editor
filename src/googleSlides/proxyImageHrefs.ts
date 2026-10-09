@@ -50,12 +50,3 @@ export function rewriteGoogleImageHrefs(svg: string, rewrite: (url: string) => s
 export function proxyHref(url: string): string {
   return `/api/proxy?url=${encodeURIComponent(url)}`;
 }
-
-/**
- * Rewrites every Google-hosted image href in `svg` to the live /api/proxy
- * route. Fallback path — storeImageHrefs.ts is the preferred R2-backed
- * rewrite at import time.
- */
-export function proxyImageHrefs(svg: string): string {
-  return rewriteGoogleImageHrefs(svg, proxyHref);
-}

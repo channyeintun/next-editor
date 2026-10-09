@@ -25,7 +25,7 @@ import { extractScriptNarration } from "../src/studio/script/markers.ts";
 import { splitIntoDialogs } from "../src/studio/script/dialogs.ts";
 import { critiqueScript } from "../src/studio/script/critic.ts";
 import { deckUrlsOf, resolveSlidesFromDecks } from "../src/studio/script/googleSlides.ts";
-import { fetchPublishedDeck } from "../src/googleSlides/index.ts";
+import { fetchPublishedDeck } from "../src/googleSlides/fetchPublishedDeck.ts";
 import type { ParsedDeck } from "../src/googleSlides/types.ts";
 import { requireVoiceProfile } from "../src/studio/tts/profiles.ts";
 import { sha256HexOfText } from "../src/studio/hash.ts";

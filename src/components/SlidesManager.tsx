@@ -26,7 +26,8 @@ import {
   readCustomBackgroundImage,
   CustomBackgroundError,
 } from "../config/slideBackgrounds";
-import { fetchPublishedDeck, GoogleSlidesParseError } from "../googleSlides";
+import { fetchPublishedDeck } from "../googleSlides/fetchPublishedDeck";
+import { GoogleSlidesParseError } from "../googleSlides/types";
 import { applyDeckToSlides } from "../googleSlides/importDeck";
 
 /** Guards an href/fetch target that came out of deserialized slide data. */

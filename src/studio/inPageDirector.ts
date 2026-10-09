@@ -1,4 +1,4 @@
-import { fetchPublishedDeck } from "../googleSlides";
+import { fetchPublishedDeck } from "../googleSlides/fetchPublishedDeck";
 import { sha256Hex, sha256HexOfJson } from "./hash";
 import type { StudioPlan } from "./plan";
 import { compileLessonScript } from "./script/compile";

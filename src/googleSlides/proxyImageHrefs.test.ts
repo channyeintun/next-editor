@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
-import { proxyImageHrefs } from "./proxyImageHrefs";
+import { proxyHref, rewriteGoogleImageHrefs } from "./proxyImageHrefs";
 
-describe("proxyImageHrefs", () => {
+// The live-proxy fallback rewrite storeImageHrefs.ts applies to any image the
+// R2 ingest did not store.
+describe("rewriteGoogleImageHrefs with proxyHref", () => {
   it("rewrites a docs.google.com image href to the proxy route", () => {
     const svg =
       '<svg><image xlink:href="https://docs.google.com/slides-images-rt/AOd6-abc=s2048" /></svg>';
 
-    const result = proxyImageHrefs(svg);
+    const result = rewriteGoogleImageHrefs(svg, proxyHref);
 
     expect(result).toBe(
       '<svg><image xlink:href="/api/proxy?url=' +
@@ -18,7 +20,7 @@ describe("proxyImageHrefs", () => {
   it("rewrites a googleusercontent.com-hosted image href", () => {
     const svg = '<svg><image href="https://lh3.googleusercontent.com/photo.jpg" /></svg>';
 
-    const result = proxyImageHrefs(svg);
+    const result = rewriteGoogleImageHrefs(svg, proxyHref);
 
     expect(result).toContain('href="/api/proxy?url=');
     expect(result).toContain(encodeURIComponent("https://lh3.googleusercontent.com/photo.jpg"));
@@ -26,12 +28,12 @@ describe("proxyImageHrefs", () => {
 
   it("leaves data: URIs untouched", () => {
     const svg = '<image href="data:image/png;base64,AAAA"/>';
-    expect(proxyImageHrefs(svg)).toBe(svg);
+    expect(rewriteGoogleImageHrefs(svg, proxyHref)).toBe(svg);
   });
 
   it("leaves an unrelated external host untouched", () => {
     const svg = '<image href="https://example.com/photo.jpg"/>';
-    expect(proxyImageHrefs(svg)).toBe(svg);
+    expect(rewriteGoogleImageHrefs(svg, proxyHref)).toBe(svg);
   });
 
   it("rewrites multiple distinct images independently", () => {
@@ -42,7 +44,7 @@ describe("proxyImageHrefs", () => {
       '<image href="https://lh3.googleusercontent.com/b.jpg" />' +
       "</svg>";
 
-    const result = proxyImageHrefs(svg);
+    const result = rewriteGoogleImageHrefs(svg, proxyHref);
 
     expect(result).toContain(
       encodeURIComponent("https://docs.google.com/slides-images-rt/a=s2048"),
