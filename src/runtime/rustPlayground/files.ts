@@ -1,5 +1,5 @@
 import type { WorkspaceProject } from "../../types/workspace";
-import { arePlaygroundFilesEqual, collectPlaygroundFiles } from "../playgroundFiles";
+import { collectPlaygroundFiles } from "../playgroundFiles";
 import type { RustPlaygroundFile } from "./types";
 
 /**
@@ -13,6 +13,3 @@ export function collectRustPlaygroundFiles(
 ): RustPlaygroundFile[] {
   return collectPlaygroundFiles(project, { extensions: [".rs"], entryPath: "main.rs" });
 }
-
-/** Exact source snapshot comparison used to prevent stale rustfmt overwrites. */
-export const areRustPlaygroundFilesEqual = arePlaygroundFilesEqual;

@@ -14,10 +14,6 @@ import type { HaskellPlaygroundFile } from "./types";
  * (code lives in `>`-prefixed lines or `\begin{code}` blocks) that the
  * Playground does not accept. `endsWith(".hs")` already excludes it, and this
  * comment is here so nobody "fixes" the filter into accepting both.
- *
- * There is no companion `areHaskellPlaygroundFilesEqual`: that helper exists
- * only to catch edits that landed while a format request was in flight, and
- * the Haskell path has no formatter.
  */
 export function collectHaskellPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,

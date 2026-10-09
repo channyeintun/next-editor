@@ -1,5 +1,5 @@
 import type { WorkspaceProject } from "../../types/workspace";
-import { arePlaygroundFilesEqual, collectPlaygroundFiles } from "../playgroundFiles";
+import { collectPlaygroundFiles } from "../playgroundFiles";
 import type { ZigPlaygroundFile } from "./types";
 
 /**
@@ -13,6 +13,3 @@ export function collectZigPlaygroundFiles(
 ): ZigPlaygroundFile[] {
   return collectPlaygroundFiles(project, { extensions: [".zig"], entryPath: "main.zig" });
 }
-
-/** Exact source snapshot comparison used to prevent stale `zig fmt` overwrites. */
-export const areZigPlaygroundFilesEqual = arePlaygroundFilesEqual;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { WorkspaceProject } from "../../types/workspace";
-import { areRustPlaygroundFilesEqual, collectRustPlaygroundFiles } from "./files";
+import { collectRustPlaygroundFiles } from "./files";
 
 describe("collectRustPlaygroundFiles", () => {
   it("collects every text Rust file main.rs-first and excludes assets", () => {
@@ -36,19 +36,5 @@ describe("collectRustPlaygroundFiles", () => {
       { path: "main.rs", content: "fn main() {}\n" },
       { path: "extra.rs", content: "fn extra() {}\n" },
     ]);
-  });
-});
-
-describe("areRustPlaygroundFilesEqual", () => {
-  it("detects content and topology changes while a format request is in flight", () => {
-    const files = [{ path: "main.rs", content: "fn main() {}\n" }];
-
-    expect(areRustPlaygroundFilesEqual(files, files)).toBe(true);
-    expect(
-      areRustPlaygroundFilesEqual(files, [{ path: "main.rs", content: "fn main() {}\n\n" }]),
-    ).toBe(false);
-    expect(
-      areRustPlaygroundFilesEqual(files, [...files, { path: "extra.rs", content: "fn e() {}\n" }]),
-    ).toBe(false);
   });
 });

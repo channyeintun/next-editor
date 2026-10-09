@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { WorkspaceProject } from "../../types/workspace";
-import { areGoPlaygroundFilesEqual, collectGoPlaygroundFiles } from "./files";
+import { collectGoPlaygroundFiles } from "./files";
 
 describe("collectGoPlaygroundFiles", () => {
   it("collects every text Go file in deterministic order and excludes assets", () => {
@@ -36,22 +36,5 @@ describe("collectGoPlaygroundFiles", () => {
       { path: "main.go", content: "package main\n\nfunc main() {}\n" },
       { path: "helper.go", content: "package main\n" },
     ]);
-  });
-});
-
-describe("areGoPlaygroundFilesEqual", () => {
-  it("detects content and topology changes while a format request is in flight", () => {
-    const files = [{ path: "main.go", content: "package main\n" }];
-
-    expect(areGoPlaygroundFilesEqual(files, files)).toBe(true);
-    expect(
-      areGoPlaygroundFilesEqual(files, [{ path: "main.go", content: "package main\n\n" }]),
-    ).toBe(false);
-    expect(
-      areGoPlaygroundFilesEqual(files, [
-        ...files,
-        { path: "helper.go", content: "package main\n" },
-      ]),
-    ).toBe(false);
   });
 });

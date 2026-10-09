@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { WorkspaceProject } from "../../types/workspace";
-import { areZigPlaygroundFilesEqual, collectZigPlaygroundFiles } from "./files";
+import { collectZigPlaygroundFiles } from "./files";
 
 describe("collectZigPlaygroundFiles", () => {
   it("collects every text Zig file main.zig-first and excludes assets", () => {
@@ -36,19 +36,5 @@ describe("collectZigPlaygroundFiles", () => {
       { path: "main.zig", content: "fn main() {}\n" },
       { path: "extra.zig", content: "fn extra() {}\n" },
     ]);
-  });
-});
-
-describe("areZigPlaygroundFilesEqual", () => {
-  it("detects content and topology changes while a format request is in flight", () => {
-    const files = [{ path: "main.zig", content: "fn main() {}\n" }];
-
-    expect(areZigPlaygroundFilesEqual(files, files)).toBe(true);
-    expect(
-      areZigPlaygroundFilesEqual(files, [{ path: "main.zig", content: "fn main() {}\n\n" }]),
-    ).toBe(false);
-    expect(
-      areZigPlaygroundFilesEqual(files, [...files, { path: "extra.zig", content: "fn e() {}\n" }]),
-    ).toBe(false);
   });
 });

@@ -16,10 +16,6 @@ export const ASM_ENTRY_PATH = "main.asm";
  * no `%include` here and no linker, so a second file is never part of the same
  * program, and a workspace with several and none named `main.asm` is a question
  * rather than a guess.
- *
- * There is no companion `areAsmPlaygroundFilesEqual`: that helper exists only
- * to catch edits that landed while a format request was in flight, and
- * assembly has no formatter.
  */
 export function collectAsmPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,

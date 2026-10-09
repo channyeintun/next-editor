@@ -21,7 +21,7 @@
 // needs to be async except the first load.
 
 /** The exports this module uses. Narrower than what the module provides. */
-export interface KiteCompilerExports {
+interface KiteCompilerExports {
   memory: WebAssembly.Memory;
   kite_alloc(length: number): number;
   kite_free(pointer: number, length: number): void;
@@ -79,7 +79,7 @@ function callWithBytes(
 }
 
 /** Wrap instantiated exports. */
-export function kiteCompilerFromExports(exports: KiteCompilerExports): KiteCompiler {
+function kiteCompilerFromExports(exports: KiteCompilerExports): KiteCompiler {
   return {
     run: (source) => callWithBytes(exports, exports.kite_run, encoder.encode(source)),
     check: (source) => callWithBytes(exports, exports.kite_check, encoder.encode(source)),
@@ -168,9 +168,4 @@ export function loadKiteCompiler(): Promise<KiteCompiler> {
       });
   }
   return pending;
-}
-
-/** Drop the cached compiler. Tests use this; nothing else should. */
-export function resetKiteCompilerForTests(): void {
-  pending = null;
 }

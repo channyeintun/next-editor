@@ -1,5 +1,5 @@
 import type { WorkspaceProject } from "../../types/workspace";
-import { arePlaygroundFilesEqual, collectPlaygroundFiles } from "../playgroundFiles";
+import { collectPlaygroundFiles } from "../playgroundFiles";
 import type { KitePlaygroundFile } from "./types";
 
 /**
@@ -16,6 +16,3 @@ export function collectKitePlaygroundFiles(
 ): KitePlaygroundFile[] {
   return collectPlaygroundFiles(project, { extensions: [".kite"], entryPath: "main.kite" });
 }
-
-/** Exact source snapshot comparison, used to prevent stale format overwrites. */
-export const areKitePlaygroundFilesEqual = arePlaygroundFilesEqual;
