@@ -22,6 +22,7 @@ import YAML from "yaml";
 import { estimateNarrationMsForRenderWait, studioRenderWaitMs } from "../src/studio/plan.ts";
 import { extractScriptNarration } from "../src/studio/script/markers.ts";
 import { parseLessonScript } from "../src/studio/script/schema.ts";
+import type { StudioWindowHandle } from "../src/studio/studioWindowHandle.ts";
 
 interface CliOptions {
   slug: string;
@@ -59,16 +60,10 @@ function parseArgs(argv: string[]): CliOptions {
   return options;
 }
 
-interface StudioWindowState {
-  runs: { index: number; mode: string; outcome: string; report: unknown; manifest: unknown }[];
-  comparison: { id: string; ok: boolean; detail: string }[] | null;
-  running: boolean;
-}
-
-async function readStudioState(page: Page): Promise<StudioWindowState | null> {
+async function readStudioState(page: Page): Promise<StudioWindowHandle | null> {
   return page.evaluate(() => {
-    const handle = (window as { __NEXT_EDITOR_STUDIO__?: unknown }).__NEXT_EDITOR_STUDIO__;
-    return handle ? (JSON.parse(JSON.stringify(handle)) as never) : null;
+    const handle = window.__NEXT_EDITOR_STUDIO__;
+    return handle ? (JSON.parse(JSON.stringify(handle)) as StudioWindowHandle) : null;
   });
 }
 
@@ -76,7 +71,7 @@ async function waitForRunCount(
   page: Page,
   count: number,
   timeoutMs: number,
-): Promise<StudioWindowState> {
+): Promise<StudioWindowHandle> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const state = await readStudioState(page);
@@ -154,7 +149,7 @@ try {
     throw new Error("navigator.webdriver is false — the studio will not autostart the render");
   }
 
-  let finalState: StudioWindowState | null = null;
+  let finalState: StudioWindowHandle | null = null;
   for (let run = 1; run <= options.runs; run++) {
     console.log(`  render #${run}…`);
     if (run > 1) {

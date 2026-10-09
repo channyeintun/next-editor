@@ -39,6 +39,7 @@ import { checkRepeatability, runExposedForSelection, sourceRevisionOf } from "./
 import { DEFAULT_STUDIO_PLAN_SLUG, mergeStudioSources, parseLessonScriptYaml } from "./plans";
 import type { ActionReceipt, StudioCheckResult } from "./report";
 import { CheckList, ReceiptList, RepeatabilityVerdict } from "./StudioRunResults";
+import type { StudioWindowHandle } from "./studioWindowHandle";
 import {
   isVoxCpm2ReferenceReady,
   MAX_SAMPLE_SECONDS,
@@ -156,22 +157,6 @@ interface StudioRunEntry {
 const runHistory: StudioRunEntry[] = [];
 let autostartFired = false;
 
-declare global {
-  interface Window {
-    __NEXT_EDITOR_STUDIO__?: {
-      runs: {
-        index: number;
-        mode: StudioRuntimeMode;
-        outcome: string;
-        report: StudioRunEntry["result"]["report"];
-        manifest: StudioRunEntry["result"]["manifest"];
-      }[];
-      comparison: StudioCheckResult[] | null;
-      running: boolean;
-    };
-  }
-}
-
 function semanticsStorageKey(slug: string, mode: StudioRuntimeMode): string {
   // v2 stores passing renders only; ignore older session entries that may have
   // been written by a failed artifact check and poisoned the next comparison.
@@ -196,7 +181,7 @@ function storeSemantics(slug: string, mode: StudioRuntimeMode, semantics: Render
 }
 
 function publishWindowHandle(comparison: StudioCheckResult[] | null, running: boolean): void {
-  window.__NEXT_EDITOR_STUDIO__ = {
+  const handle: StudioWindowHandle = {
     runs: runHistory.map((entry) => ({
       index: entry.index,
       mode: entry.mode,
@@ -207,6 +192,7 @@ function publishWindowHandle(comparison: StudioCheckResult[] | null, running: bo
     comparison,
     running,
   };
+  window.__NEXT_EDITOR_STUDIO__ = handle;
 }
 
 export default function StudioController() {
