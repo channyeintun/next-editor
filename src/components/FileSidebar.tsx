@@ -48,6 +48,7 @@ function FileSidebarPanel() {
   const editInputRef = useRef<HTMLInputElement | null>(null);
   const inlineHintId = useId();
   const inlineErrorId = useId();
+  const titleId = useId();
   // The row the context menu was opened from, to take focus back when the menu
   // closes without moving it anywhere else.
   const contextMenuOpenerRef = useRef<HTMLElement | null>(null);
@@ -527,7 +528,7 @@ function FileSidebarPanel() {
                 data-sidebar-path={node.path}
                 aria-keyshortcuts="Shift+F10 F2 Delete"
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5 transition-colors hover:bg-slate-900 ${
-                  node.hasActiveFile ? "text-slate-200" : "text-slate-400"
+                  node.hasActiveFile ? "text-slate-200" : "text-slate-300"
                 }`}
                 style={{ paddingLeft: getSidebarTreePaddingLeft(depth) }}
                 aria-expanded={isExpanded}
@@ -590,6 +591,7 @@ function FileSidebarPanel() {
 
   return (
     <aside
+      aria-labelledby={titleId}
       className="relative flex h-full shrink-0 flex-col bg-[#11141c] text-slate-100"
       style={{ width: sidebarWidth }}
       data-cursor-replay-target="file-sidebar"
@@ -599,9 +601,12 @@ function FileSidebarPanel() {
     >
       <div className="border-b border-slate-800 px-3 py-2">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+          <h2
+            id={titleId}
+            className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300"
+          >
             Files
-          </p>
+          </h2>
           <div className="flex items-center gap-1">
             <button
               type="button"

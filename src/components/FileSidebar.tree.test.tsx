@@ -323,6 +323,15 @@ describe("FileSidebar name field", () => {
   });
 });
 
+describe("FileSidebar landmark", () => {
+  it("is a complementary region named by its Files heading", () => {
+    render(<FileSidebar />);
+
+    const sidebar = screen.getByRole("complementary", { name: "Files" });
+    expect(within(sidebar).getByRole("heading", { level: 2, name: "Files" })).toBeInTheDocument();
+  });
+});
+
 describe("FileSidebar active file", () => {
   it("marks only the open file's row as current, and follows a click", () => {
     render(<FileSidebar />);
