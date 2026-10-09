@@ -111,6 +111,7 @@ export default function PlaylistCard({
         <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/80 px-1.5 py-0.5 text-xs font-semibold text-white">
           <ListMusic className="size-3" />
           {playlist.lessonCount}
+          <span className="sr-only">{playlist.lessonCount === 1 ? " lesson" : " lessons"}</span>
         </span>
 
         <div className="absolute right-2 top-2">

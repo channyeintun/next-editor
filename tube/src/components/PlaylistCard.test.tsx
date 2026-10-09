@@ -25,11 +25,11 @@ const playlist: OwnedPlaylist = {
   thumbnail: null,
 };
 
-function renderCard(onManage: () => void = () => {}) {
+function renderCard(onManage: () => void = () => {}, overrides: Partial<OwnedPlaylist> = {}) {
   render(
     <MemoryRouter>
       <PlaylistCard
-        playlist={playlist}
+        playlist={{ ...playlist, ...overrides }}
         isManaging={false}
         onManage={onManage}
         onDeleted={() => {}}
@@ -133,6 +133,17 @@ describe("PlaylistCard", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Playlist name can't be empty.");
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input).toHaveAccessibleDescription("Playlist name can't be empty.");
+  });
+
+  it("says what the lesson-count badge counts", () => {
+    renderCard();
+    // The badge's icon is decorative; hidden text names the unit.
+    expect(screen.getByText("2").textContent).toBe("2 lessons");
+  });
+
+  it("uses the singular for a one-lesson playlist", () => {
+    renderCard(undefined, { lessonCount: 1 });
+    expect(screen.getByText("1").textContent).toBe("1 lesson");
   });
 
   it("announces a failed delete", () => {

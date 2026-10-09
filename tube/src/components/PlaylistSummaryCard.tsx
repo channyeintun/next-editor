@@ -44,6 +44,9 @@ export default function PlaylistSummaryCard({ playlist }: { playlist: PlaylistSu
             className="rounded text-white outline-none hover:underline focus-visible:ring-2 focus-visible:ring-pinata-purple focus-visible:ring-offset-2 focus-visible:ring-offset-[#11141c]"
           >
             {playlist.title}
+            <span className="sr-only">
+              {`, ${playlist.lessonCount} ${playlist.lessonCount === 1 ? "lesson" : "lessons"}`}
+            </span>
           </Link>
         </h3>
       </div>
