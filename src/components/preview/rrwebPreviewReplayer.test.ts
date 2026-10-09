@@ -1,3 +1,4 @@
+import { within } from "@testing-library/react";
 import type { eventWithTime } from "@rrweb/types";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { PreviewDomPatchBatch, PreviewInitialDocument } from "../../types/slides";
@@ -95,6 +96,26 @@ describe("RrwebPreviewReplayer", () => {
     // rrweb's pause(offset) casts every event older than events[0].timestamp + offset.
     const offset = fakeRrweb.instances[0]?.pause.mock.lastCall?.[0] as number;
     expect(events[0].timestamp + offset).toBeGreaterThan(scroll.timestamp);
+    preview.destroy();
+  });
+
+  it("names the replay frame like the live runtime frame, also after a restart", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const preview = await createRrwebPreviewReplayer({
+      root,
+      events: [rrwebEvent(4, 100), rrwebEvent(2, 100)],
+    });
+
+    expect(within(root).getByTitle("Runtime Preview").tagName).toBe("IFRAME");
+
+    // Seeking back to the start replaces the Replayer and its iframe.
+    preview.seekToRecordingTime(1_000);
+    preview.seekToRecordingTime(100);
+
+    expect(fakeRrweb.instances).toHaveLength(2);
+    expect(within(root).getByTitle("Runtime Preview")).toBe(root.querySelector("iframe"));
+
     preview.destroy();
   });
 

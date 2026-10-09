@@ -214,6 +214,9 @@ export class RrwebPreviewReplayer {
     }
 
     if (iframe) {
+      // rrweb creates this frame with no name; give it the live frame's title
+      // so screen readers can identify it during playback (WCAG 4.1.2, H64).
+      iframe.title = "Runtime Preview";
       iframe.style.width = "100%";
       iframe.style.height = "100%";
       iframe.style.border = "0";
