@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { ChevronLeft, ChevronRight, Minimize2, RefreshCw, X } from "lucide-react";
 import type { Slide, SlideEvent } from "../types/slides";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -39,8 +39,6 @@ function SlidePreview({
   const { isPlaying } = useNextEditorMetadata();
   const collaboration = useOptionalCollaboration();
 
-  const onSlideEventRef = useRef(onSlideEvent);
-  onSlideEventRef.current = onSlideEvent;
   const slideContentRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -52,7 +50,7 @@ function SlidePreview({
     isMaximizedState?: boolean,
     indexv?: number,
   ) => {
-    onSlideEventRef.current?.({
+    onSlideEvent?.({
       type,
       timestamp: performance.now(),
       slideId,
@@ -82,8 +80,12 @@ function SlidePreview({
   };
 
   // Handle messages from slide frames that run the shared interaction-capture
-  // script (see src/utils/iframeInteractionCapture.ts).
-  useEffect(() => {
+  // script (see src/utils/iframeInteractionCapture.ts). An effect event, so the
+  // listener below stays subscribed while it reads the latest playback state,
+  // room and slide.
+  const handleSlideFrameMessage = useEffectEvent((event: MessageEvent) => {
+    if (isPlaying) return;
+
     // The code preview's capture script posts to this same window from a same-origin
     // frame. Without this check every preview hover, scroll and mousemove (once per
     // animation frame) was recorded a second time as a slide event, deck open or not.
@@ -94,43 +96,42 @@ function SlidePreview({
         (frame) => frame.contentWindow === source,
       );
 
-    const handleMessage = (event: MessageEvent) => {
-      if (isPlaying) return;
+    // Only frames belonging to this page may drive recording state. Slide and
+    // preview frames are sandboxed, so they post from an opaque ("null")
+    // origin; everything legitimate is one of those or same-origin. Without
+    // this, any page framing the app — the worker sets no frame-ancestors —
+    // as well as window.opener and the untrusted runtime preview frame could
+    // cancel follow-mode and forge interaction events into a live recording.
+    if (event.origin !== "null" && event.origin !== window.location.origin) return;
+    if (!isFromSlideFrame(event.source)) return;
 
-      // Only frames belonging to this page may drive recording state. Slide and
-      // preview frames are sandboxed, so they post from an opaque ("null")
-      // origin; everything legitimate is one of those or same-origin. Without
-      // this, any page framing the app — the worker sets no frame-ancestors —
-      // as well as window.opener and the untrusted runtime preview frame could
-      // cancel follow-mode and forge interaction events into a live recording.
-      if (event.origin !== "null" && event.origin !== window.location.origin) return;
-      if (!isFromSlideFrame(event.source)) return;
+    const { type, payload } = event.data || {};
+    // payload was dereferenced unguarded, so a bare {type:"IFRAME_INTERACTION"}
+    // threw a TypeError inside the listener.
+    if (type === "IFRAME_INTERACTION" && payload && typeof payload === "object") {
+      collaboration?.stopFollowing("local-slide-input");
+      const interaction = {
+        type: payload.type,
+        timestamp: performance.now(),
+        target: payload.target,
+        data: payload.data,
+      };
 
-      const { type, payload } = event.data || {};
-      // payload was dereferenced unguarded, so a bare {type:"IFRAME_INTERACTION"}
-      // threw a TypeError inside the listener.
-      if (type === "IFRAME_INTERACTION" && payload && typeof payload === "object") {
-        collaboration?.stopFollowing("local-slide-input");
-        const interaction = {
-          type: payload.type,
-          timestamp: performance.now(),
-          target: payload.target,
-          data: payload.data,
-        };
+      // Send the interaction event without stale position data
+      onSlideEvent?.({
+        type: "slide_interaction",
+        timestamp: performance.now(),
+        slideId: currentSlide?.id,
+        interaction,
+      });
+    }
+  });
 
-        // Send the interaction event without stale position data
-        onSlideEventRef.current?.({
-          type: "slide_interaction",
-          timestamp: performance.now(),
-          slideId: currentSlide?.id,
-          interaction,
-        });
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [collaboration, isPlaying, currentSlide?.id]);
+  useEffect(() => {
+    const listener = (event: MessageEvent) => handleSlideFrameMessage(event);
+    window.addEventListener("message", listener);
+    return () => window.removeEventListener("message", listener);
+  }, []);
 
   // Number of build steps on a slide (0 for html/markdown slides).
   const stepCountOf = (slide?: Slide): number =>
@@ -178,33 +179,35 @@ function SlidePreview({
     }
   };
 
-  // Keyboard navigation while the slide preview is open.
+  // Keyboard navigation while the slide preview is open. An effect event, so the
+  // listener is added once per opening rather than again on every render.
+  const handleDeckKeyDown = useEffectEvent((e: KeyboardEvent) => {
+    switch (e.key) {
+      case "ArrowLeft":
+      case "ArrowRight":
+        // During playback the recording drives the slides, so the arrows stay the
+        // player's seek keys (it skips keys taken here); a field or a slider keeps
+        // its own arrows.
+        if (isPlaying) return;
+        if (e.target instanceof Element && e.target.closest(OWN_ARROW_TARGETS)) return;
+        e.preventDefault();
+        if (e.key === "ArrowLeft") goToPrevSlide();
+        else goToNextSlide();
+        break;
+      case "Escape":
+        e.preventDefault();
+        handleClose();
+        break;
+    }
+  });
+
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case "ArrowLeft":
-        case "ArrowRight":
-          // During playback the recording drives the slides, so the arrows stay the
-          // player's seek keys (it skips keys taken here); a field or a slider keeps
-          // its own arrows.
-          if (isPlaying) return;
-          if (e.target instanceof Element && e.target.closest(OWN_ARROW_TARGETS)) return;
-          e.preventDefault();
-          if (e.key === "ArrowLeft") goToPrevSlide();
-          else goToNextSlide();
-          break;
-        case "Escape":
-          e.preventDefault();
-          handleClose();
-          break;
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, isPlaying, goToPrevSlide, goToNextSlide, handleClose]);
+    const listener = (e: KeyboardEvent) => handleDeckKeyDown(e);
+    document.addEventListener("keydown", listener);
+    return () => document.removeEventListener("keydown", listener);
+  }, [isOpen]);
 
   if (!isOpen) {
     return null;

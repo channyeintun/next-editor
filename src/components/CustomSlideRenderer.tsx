@@ -88,16 +88,12 @@ function isSameSlideDocument(left: Slide, right: Slide): boolean {
 
 function BufferedSlideContent({ slide, stepsRevealed }: { slide: Slide; stepsRevealed: number }) {
   const nextLayerKeyRef = useRef(1);
-  const currentSlideRef = useRef(slide);
-  currentSlideRef.current = slide;
   const [displayed, setDisplayed] = useState<SlideLayer>(() => ({
     key: 0,
     slide,
     stepsRevealed,
   }));
   const [pending, setPending] = useState<SlideLayer | null>(null);
-  const pendingRef = useRef(pending);
-  pendingRef.current = pending;
 
   useEffect(() => {
     if (isSameSlideDocument(displayed.slide, slide)) {
@@ -114,13 +110,11 @@ function BufferedSlideContent({ slide, stepsRevealed }: { slide: Slide; stepsRev
     });
   }, [displayed.slide, slide, stepsRevealed]);
 
+  // Reads the committed render's layer and slide: each commit hands the frames a
+  // fresh onLoad, so a load always sees the latest committed pending layer.
   const promoteLoadedLayer = (key: number) => {
-    const loaded = pendingRef.current;
-    if (
-      !loaded ||
-      loaded.key !== key ||
-      !isSameSlideDocument(loaded.slide, currentSlideRef.current)
-    ) {
+    const loaded = pending;
+    if (!loaded || loaded.key !== key || !isSameSlideDocument(loaded.slide, slide)) {
       return;
     }
     setDisplayed(loaded);

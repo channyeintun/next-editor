@@ -46,8 +46,6 @@ const NOT_COMPILED: Record<string, string> = {
   "src/hooks/useUrlLoader.ts": "try/finally, and a throw inside a try block",
   "src/studio/StudioController.tsx": "try/finally, and throws inside try blocks",
   "src/components/RecordingDraftRecovery.tsx": "try/finally",
-  "src/components/CustomSlideRenderer.tsx": "reads refs during render",
-  "src/components/SlidePreview.tsx": "reads refs during render",
   "src/components/LandingPage.tsx": "reads refs during render",
   "infra/client/upload/UploadLessonModal.tsx": "an await import() inside the component",
 };
