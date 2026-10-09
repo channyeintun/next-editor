@@ -313,9 +313,9 @@ export const editorMachine = setup({
     stopExternalAudioRecording: assign(stopExternalAudioRecording),
     resetAudioAfterRecorderStop: assign(resetAudioAfterRecorderStop),
     initRecordingSession: assign(initRecordingSession),
-    captureInitialFrame: assign(captureInitialFrame),
-    captureFrame: assign(captureFrame),
-    capturePreviewRefreshFrame: assign(capturePreviewRefreshFrame),
+    captureInitialFrame,
+    captureFrame,
+    capturePreviewRefreshFrame,
     captureSlideEvent,
     capturePreviewEvent,
     capturePreviewInitialDocument,
@@ -456,10 +456,10 @@ export const editorMachine = setup({
         if (checkpoint) appendChatDelta(session, { k: "checkpoint", state: checkpoint });
       }
 
-      enqueue.assign({
-        session,
-        currentFrame: restore.frame,
-      });
+      // The session changed in place. A retake from `paused` lands in `paused` again, a
+      // transition that changes no state, so this assign is what publishes a new snapshot
+      // for the selectors that read the rewound clock, safe points and chapters.
+      enqueue.assign({ session });
 
       // Put the editor back the way it was at the safe point. These write to the app's
       // stores, whose own capture records any remaining difference at that moment.

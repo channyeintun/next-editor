@@ -183,6 +183,8 @@ describe("capture editor fallback", () => {
     const snapshot = actor.getSnapshot();
     expect(snapshot.matches("recording")).toBe(true);
     expect(snapshot.context.editorRefs.editor).toBeNull();
-    expect(snapshot.context.currentFrame?.state.content).toBe("const captured = true;");
+    expect(snapshot.context.session?.encoder.lastFullFrame?.state.content).toBe(
+      "const captured = true;",
+    );
   });
 });

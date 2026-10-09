@@ -355,7 +355,7 @@ interface EditorMachineContext {
   timeline: TimelineState;
   session: RecordingSession | null;
   recording: Recording | null;
-  currentFrame: EditorFrame | null;
+  currentFrame: EditorFrame | null; // Replay only: the fold applied to Monaco at lastAppliedFrameIndex
   audio: AudioState;
   camera: CameraState;
   editorRefs: EditorRefs;
@@ -444,7 +444,8 @@ interface RecordingSession extends RecordingTracks {
   lastRuntimeSnapshot?: RuntimeRecordingSnapshot; // Resolved state of the last runtime event (diff base)
   runtimeCheckpointProgress?: RuntimeCheckpointProgress; // Places the next checkpoint
   lastMousePosition: MouseCursorPosition;
-  lastCapturedViewStateRef?: CapturedViewStateRef; // Perf: reuse saveViewState() result and, by its versionId + modelId, the content string when unchanged
+  lastCapturedViewStateRef?: CapturedViewStateRef; // Perf: reuse the saveViewState() result when unchanged
+  lastCapturedContent?: CapturedContentRef; // Perf: reuse the content string while its versionId + modelId match (and the exact-edit base)
 }
 ```
 

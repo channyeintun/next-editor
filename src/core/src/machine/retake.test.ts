@@ -14,7 +14,11 @@ import { fromTypedCallback } from "./fromTypedCallback";
 import type { EditorMachineInput } from "./types";
 import type { PreviewState } from "../preview";
 import { getRecordingTimestamp } from "./recordingSession";
-import { selectNextEditorMetadata } from "../useNextEditor";
+import {
+  selectNextEditorMetadata,
+  selectRecordingClock,
+  selectRecordingSafePoints,
+} from "../useNextEditor";
 import { reconstructFrameAtIndex } from "../utils/frameDelta";
 import type { WorkspaceRecordingSnapshot } from "../workspace";
 import type { RuntimeRecordingSnapshot } from "../runtime";
@@ -105,6 +109,33 @@ afterEach(() => {
 });
 
 describe("retaking", () => {
+  // A retake from `paused` lands in `paused` again, which changes no state. React's
+  // useSelector reuses its last result while the snapshot object is the same, so the
+  // retake must publish a new one for the rewound clock and safe points.
+  it("publishes a new snapshot on a retake from paused, so the take's selectors see it", () => {
+    const advance = pinClocks();
+    const actor = startTake();
+
+    advance(1_000);
+    actor.send({ type: "PAUSE_RECORDING" });
+    actor.send({ type: "RESUME_RECORDING" });
+    advance(1_000);
+    actor.send({ type: "PAUSE_RECORDING" });
+    const before = actor.getSnapshot();
+    const safePointsBefore = selectRecordingSafePoints(before);
+    const clockBefore = selectRecordingClock(before)?.clock;
+
+    actor.send({ type: "RETAKE_RECORDING" });
+
+    const after = actor.getSnapshot();
+    expect(after.matches({ recording: "paused" })).toBe(true);
+    expect(after).not.toBe(before);
+    expect(selectRecordingSafePoints(after)).not.toBe(safePointsBefore);
+    expect(selectRecordingClock(after)?.clock).not.toBe(clockBefore);
+    expect(getRecordingTimestamp(sessionOf(actor))).toBe(1_000);
+    actor.stop();
+  });
+
   it("rewinds a running take to its start and holds it paused there", () => {
     const advance = pinClocks();
     const editor = new RecordingEditor();
@@ -284,7 +315,8 @@ describe("retaking", () => {
     actor.send({ type: "RETAKE_RECORDING" });
 
     expect(getRecordingTimestamp(sessionOf(actor))).toBe(1_000);
-    expect(actor.getSnapshot().context.currentFrame?.state.previewState).toBeUndefined();
+    // The rebuilt safe-point frame, which the next capture is diffed against.
+    expect(sessionOf(actor).encoder.lastStoredFrame?.state.previewState).toBeUndefined();
     expect(applyPreviewState).not.toHaveBeenCalled();
     actor.stop();
   });

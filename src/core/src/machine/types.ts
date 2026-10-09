@@ -13,7 +13,6 @@ import type {
   EditorFrame,
   Recording,
   RecordingStreamDelta,
-  EditorPosition,
   EditorSelection,
   RecordingAudioSource,
   RecordingCameraSource,
@@ -33,6 +32,7 @@ import type { MediaSpan } from "../utils/mediaSpans";
 import type { AudioPlaybackEmit, AudioRecordingEmit } from "./audioActor";
 import type { CameraRecordingEmit } from "./cameraActor";
 import type { ScreenRecordingEmit } from "./screenActor";
+import type { CapturedContentRef, CapturedViewStateRef } from "./frameCapture";
 import { normalizePlaybackSpeed } from "./playbackValues";
 
 // ============================================================================
@@ -64,33 +64,6 @@ export interface RecordingSafePoint {
   perf: number;
   wall: number;
   mediaTime: number;
-}
-
-/** Content string plus the model identity it was read at, for reuse across captures. */
-export interface CapturedContentRef {
-  value: string;
-  versionId: number;
-  /**
-   * `model.id`, unique to one model instance. Version ids restart at 1 on every new
-   * model, so identity needs both: a file switch can land on the same version id, and
-   * a file removed and re-created comes back as a new model under the same URI.
-   */
-  modelId: string;
-}
-
-/**
- * `saveViewState()` result plus the cheap scalars that fully determine whether
- * it would come out identical if recomputed, for reuse across captures.
- */
-export interface CapturedViewStateRef {
-  value: monaco.editor.ICodeEditorViewState | null;
-  versionId: number;
-  /** `model.id`; see {@link CapturedContentRef.modelId}. */
-  modelId: string;
-  scrollTop: number;
-  scrollLeft: number;
-  selection: EditorSelection;
-  position: EditorPosition;
 }
 
 /**
@@ -166,10 +139,11 @@ export interface RecordingSession extends RecordingTracks {
    * derived from (content version, model, scroll, selection, position). When a
    * new capture's scalars all match, `createFrame` reuses the `viewState` object
    * by reference instead of calling `editor.saveViewState()` again — see
-   * `CapturedViewStateRef` above.
-   *
-   * Its `versionId` and `modelId` also identify the model that last captured frame's
-   * `state.content` was read from (see `currentFrame` on the machine context). When a
+   * `CapturedViewStateRef` in frameCapture.ts.
+   */
+  lastCapturedViewStateRef?: CapturedViewStateRef;
+  /**
+   * The last captured content string and the model identity it was read at. When a
    * new capture's version id AND model id both match, the content string is reused
    * by reference instead of re-reading `editor.getValue()`. Version ids restart at 1
    * on every new model, so the model instance must match too — otherwise a file
@@ -177,7 +151,7 @@ export interface RecordingSession extends RecordingTracks {
    * (same numeric version id, different model) would silently reuse the previous
    * model's content.
    */
-  lastCapturedViewStateRef?: CapturedViewStateRef;
+  lastCapturedContent?: CapturedContentRef;
 }
 
 /**
@@ -347,7 +321,7 @@ export interface EditorMachineContext extends EditorMachineHostHooks {
   recording: Recording | null;
   /** Last append-only SCR delta cursor accepted for the loaded recording. */
   recordingStreamCursor: number;
-  /** Current frame being displayed */
+  /** Replay only: the normalized fold applied to Monaco at lastAppliedFrameIndex. */
   currentFrame: EditorFrame | null;
   /** Audio state */
   audio: AudioState;

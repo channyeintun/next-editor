@@ -163,6 +163,7 @@ export function rewindSessionToSafePoint(
   session.encoder = resumeFrameStreamEncoder(session.frames, frame);
   // Nothing captured since the safe point may be reused for the next frame.
   session.lastCapturedViewStateRef = undefined;
+  session.lastCapturedContent = undefined;
 
   // The live terminal cannot be rewound, so its next state is recorded whole: a
   // checkpoint, not a delta against output the take no longer has.

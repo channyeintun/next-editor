@@ -21,6 +21,7 @@ import { fromTypedCallback } from "./fromTypedCallback";
 import type { CaptionTrack, EditorFrame, Recording, RecordingStreamDelta } from "../types";
 import type { ChatCheckpoint } from "../chat";
 import type { PreviewEvent } from "../preview";
+import type { TextEditEvent } from "../textEdit";
 import type { WhiteboardSceneState } from "../whiteboard";
 import {
   ContentEditBaseMismatchError,
@@ -4170,7 +4171,7 @@ describe("editorMachine pointer captures while recording", () => {
       { x: 100, visible: true },
       { x: 140, visible: true },
     ]);
-    expect(actor.getSnapshot().context.currentFrame?.state.mouseCursor).toEqual({
+    expect(session().lastMousePosition).toEqual({
       x: 140,
       y: 20,
       visible: true,
@@ -4208,16 +4209,18 @@ describe("editorMachine pointer captures while recording", () => {
     const actor = startTake(editor);
     const reads = editor.getValueCalls;
 
+    const capturedContent = () => actor.getSnapshot().context.session!.lastCapturedContent;
+
     clock.now += 60;
     actor.send({ type: "CAPTURE_FRAME" });
     expect(editor.getValueCalls).toBe(reads);
-    expect(actor.getSnapshot().context.currentFrame?.state.content).toBe("const a = 1;");
+    expect(capturedContent()?.value).toBe("const a = 1;");
 
     clock.now += 60;
     editor.type("!");
     actor.send({ type: "CAPTURE_FRAME" });
     expect(editor.getValueCalls).toBe(reads + 1);
-    expect(actor.getSnapshot().context.currentFrame?.state.content).toBe("const a = 1;!");
+    expect(capturedContent()?.value).toBe("const a = 1;!");
     actor.stop();
   });
 
@@ -4230,9 +4233,94 @@ describe("editorMachine pointer captures while recording", () => {
     editor.open("file:///other.ts", "let b = 2;");
     actor.send({ type: "CAPTURE_FRAME" });
 
-    expect(actor.getSnapshot().context.currentFrame?.state.content).toBe("let b = 2;");
+    expect(actor.getSnapshot().context.session!.lastCapturedContent?.value).toBe("let b = 2;");
     expect(actor.getSnapshot().context.session!.frames).toHaveLength(2);
     actor.stop();
+  });
+
+  /** The edit `editor.type(text)` makes, as the host reports it with CAPTURE_FRAME. */
+  const typeWithEdit = (editor: RecordingEditor, text: string): TextEditEvent => {
+    const beforeLength = editor.content.length;
+    const beforeVersion = editor.versionId;
+    editor.type(text);
+    return {
+      fileId: "main",
+      path: "/main.ts",
+      beforeVersion,
+      afterVersion: editor.versionId,
+      beforeLength,
+      afterLength: editor.content.length,
+      changes: [{ offset: beforeLength, deleteLength: 0, text }],
+    };
+  };
+
+  // The reuse base lives on the session. It used to be read back through currentFrame,
+  // which the root SET_EDITOR_REF handler clears for the replay, so an editor remount
+  // mid-take cost the next capture its exact edit and a full read of the file.
+  it("keeps the exact edit across SET_EDITOR_REF mid-take", () => {
+    const clock = pinPerformanceClock();
+    const editor = new RecordingEditor();
+    const actor = startTake(editor);
+    const reads = editor.getValueCalls;
+
+    actor.send({
+      type: "SET_EDITOR_REF",
+      editor: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+    });
+    clock.now += 60;
+    actor.send({ type: "CAPTURE_FRAME", textEdit: typeWithEdit(editor, "!") });
+
+    const frames = actor.getSnapshot().context.session!.frames;
+    expect(frames).toHaveLength(2);
+    expect(frames[1]).toHaveProperty("contentEditDelta");
+    expect(frames[1]).not.toHaveProperty("contentDelta");
+    expect(editor.getValueCalls).toBe(reads);
+    actor.stop();
+  });
+
+  it("records the same frames whether or not the editor is remounted mid-take", () => {
+    const clock = pinPerformanceClock();
+    const recordTake = (remount: boolean) => {
+      clock.now = 1_000;
+      const editor = new RecordingEditor();
+      const actor = startTake(editor);
+      const remountWith = (next: RecordingEditor) => {
+        if (!remount) return;
+        actor.send({
+          type: "SET_EDITOR_REF",
+          editor: next as unknown as monaco.editor.IStandaloneCodeEditor,
+        });
+      };
+
+      remountWith(editor);
+      clock.now += 60;
+      actor.send({ type: "CAPTURE_FRAME", textEdit: typeWithEdit(editor, "!") });
+      // A new editor instance on the same model, as a remount gives.
+      const remounted = Object.assign(new RecordingEditor(), {
+        content: editor.content,
+        versionId: editor.versionId,
+      });
+      remountWith(remounted);
+      const live = remount ? remounted : editor;
+      clock.now += 60;
+      actor.send({ type: "CAPTURE_FRAME", textEdit: typeWithEdit(live, "?") });
+      clock.now += 60;
+      actor.send({
+        type: "CAPTURE_FRAME",
+        isMouseMovement: true,
+        mousePosition: { x: 10, y: 20, visible: true },
+      });
+      clock.now += 60;
+      actor.send({ type: "CAPTURE_FRAME" });
+
+      const frames = actor.getSnapshot().context.session!.frames;
+      actor.stop();
+      return frames;
+    };
+
+    const frames = recordTake(false);
+    expect(frames.filter((frame) => "contentEditDelta" in frame)).toHaveLength(2);
+    expect(recordTake(true)).toEqual(frames);
   });
 
   // capturePreviewEvent is a plain action and capturePreviewRefreshFrame follows it in

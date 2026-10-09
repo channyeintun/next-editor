@@ -1,9 +1,6 @@
 import type * as monaco from "monaco-editor";
 import type {
-  CapturedContentRef,
-  CapturedViewStateRef,
   EditorActionArgs,
-  EditorContextUpdate,
   EditorMachineContext,
   EditorMachineInput,
   RecordingSession,
@@ -11,6 +8,7 @@ import type {
 import type {
   CursorRecordingEvent,
   EditorFrame,
+  EditorPosition,
   EditorSelection,
   MouseCursorPosition,
 } from "../types";
@@ -36,9 +34,36 @@ import { areMouseCursorPositionsEqual } from "../utils/cursorCoordinates";
 // take's frame stream (captureInitialFrame, captureFrame,
 // capturePreviewRefreshFrame) and the pointer into its cursor track, with the
 // caching that lets a capture reuse the previous content string and view
-// state by reference. editorMachine.ts wires them into `setup()` like the
-// other capture bodies in captureActions.ts.
+// state by reference. They write only the session, in place, so editorMachine.ts
+// registers them as plain actions.
 // ============================================================================
+
+/** Content string plus the model identity it was read at, for reuse across captures. */
+export interface CapturedContentRef {
+  value: string;
+  versionId: number;
+  /**
+   * `model.id`, unique to one model instance. Version ids restart at 1 on every new
+   * model, so identity needs both: a file switch can land on the same version id, and
+   * a file removed and re-created comes back as a new model under the same URI.
+   */
+  modelId: string;
+}
+
+/**
+ * `saveViewState()` result plus the cheap scalars that fully determine whether
+ * it would come out identical if recomputed, for reuse across captures.
+ */
+export interface CapturedViewStateRef {
+  value: monaco.editor.ICodeEditorViewState | null;
+  versionId: number;
+  /** `model.id`; see {@link CapturedContentRef.modelId}. */
+  modelId: string;
+  scrollTop: number;
+  scrollLeft: number;
+  selection: EditorSelection;
+  position: EditorPosition;
+}
 
 // Capture reads the live editor: fall back to the input ref getter so a
 // SET_EDITOR_REF event lost to a stopped-actor window (StrictMode/Suspense
@@ -207,25 +232,6 @@ export const appendCursorEvent = (
 };
 
 /**
- * The last captured content string paired with the model identity it was read at, for
- * `createFrame` to reuse by reference. `lastCapturedViewStateRef` holds that identity: it
- * comes from the same `createFrame` call that produced `currentFrame`.
- */
-const getPreviousCapturedContent = (
-  session: RecordingSession,
-  currentFrame: EditorFrame | null,
-): CapturedContentRef | undefined => {
-  const viewStateRef = session.lastCapturedViewStateRef;
-  return currentFrame && viewStateRef
-    ? {
-        value: currentFrame.state.content,
-        versionId: viewStateRef.versionId,
-        modelId: viewStateRef.modelId,
-      }
-    : undefined;
-};
-
-/**
  * A frame's previewState.content is the preview page's whole HTML: the replay
  * fallback for a take whose live preview has no rrweb seed. Once the take holds one
  * (an initial document with events), replay rebuilds the preview from that stream
@@ -249,7 +255,11 @@ const withoutUnreplayedPreviewContent = (
   return { ...frame, state: { ...frame.state, previewState: rest } };
 };
 
-/** Encode a captured frame into the session (in place) and keep its view state for reuse. */
+/**
+ * Encode a captured frame into the session (in place) and keep its view state and
+ * content for the next capture to reuse. A frame read without an editor has no model
+ * identity, so its content is not kept.
+ */
 const commitCapturedFrame = (
   session: RecordingSession,
   frame: EditorFrame,
@@ -266,11 +276,18 @@ const commitCapturedFrame = (
   }
   session.encoder = encoder;
   session.lastCapturedViewStateRef = viewStateRef;
+  session.lastCapturedContent = viewStateRef
+    ? {
+        value: frame.state.content,
+        versionId: viewStateRef.versionId,
+        modelId: viewStateRef.modelId,
+      }
+    : undefined;
 };
 
-export const captureInitialFrame = ({ context }: EditorActionArgs): EditorContextUpdate => {
+export const captureInitialFrame = ({ context }: EditorActionArgs): void => {
   const session = context.session;
-  if (!session) return {};
+  if (!session) return;
 
   const lastMousePosition = session.lastMousePosition;
 
@@ -309,23 +326,6 @@ export const captureInitialFrame = ({ context }: EditorActionArgs): EditorContex
   }
 
   commitCapturedFrame(session, initialFrame, viewStateRef);
-
-  return {
-    session,
-    currentFrame: initialFrame,
-  };
-};
-
-/**
- * A capture that stores no frame still keeps its pointer sample: the live pointer goes
- * to `lastMousePosition` for the next capture to store.
- */
-const keepPointerOnly = (
-  session: RecordingSession,
-  mousePosition: MouseCursorPosition,
-): EditorContextUpdate => {
-  session.lastMousePosition = mousePosition;
-  return { session };
 };
 
 /**
@@ -375,9 +375,9 @@ const resolveCapturedContent = (
   return { capturedContent: previousContent };
 };
 
-export const captureFrame = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
+export const captureFrame = ({ context, event }: EditorActionArgs): void => {
   const session = context.session;
-  if (!session) return {};
+  if (!session) return;
   const editor = getCaptureEditor(context);
 
   const timestamp = getRecordingTimestamp(session);
@@ -391,7 +391,7 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
   // the pause's single instant. Resuming records where it ended up.
   if (isPointerMove && isRecordingClockPaused(session.clock)) {
     session.lastMousePosition = mousePosition;
-    return {};
+    return;
   }
   if (isPointerMove) appendCursorEvent(session.cursorEvents, timestamp, mousePosition);
 
@@ -400,17 +400,16 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
   // null editor before this point dropped every cursor sample for as long as the
   // active file was a binary asset (CodeEditor nulls both refs then), so the
   // replayed pointer froze while the presenter talked over an image and then
-  // teleported when a code file reopened.
-  if (!editor) {
-    return keepPointerOnly(session, mousePosition);
-  }
-
-  if (isPointerMove && isThrottledPointerSample(session, timestamp, mousePosition)) {
-    return keepPointerOnly(session, mousePosition);
+  // teleported when a code file reopened. Such a capture, like a pointer move inside
+  // the frame throttle, stores no frame: the live pointer goes to `lastMousePosition`
+  // for the next capture to store.
+  if (!editor || (isPointerMove && isThrottledPointerSample(session, timestamp, mousePosition))) {
+    session.lastMousePosition = mousePosition;
+    return;
   }
 
   const { capturedContent, contentEditDelta } = resolveCapturedContent(
-    getPreviousCapturedContent(session, context.currentFrame),
+    session.lastCapturedContent,
     capture?.textEdit,
     editor.getModel(),
   );
@@ -428,8 +427,8 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
   // reads frame pointers only for recordings that have no cursor track. A
   // pointer capture therefore gives the encoder the last stored pointer, so
   // it stores a frame only when the capture also sampled something the frame
-  // track owns (scroll, preview). currentFrame and lastMousePosition keep the
-  // live pointer, which the next capture that is not a pointer move stores.
+  // track owns (scroll, preview). lastMousePosition keeps the live pointer,
+  // which the next capture that is not a pointer move stores.
   const lastStoredFrame = session.encoder.lastStoredFrame;
   const encoderFrame =
     isPointerMove && lastStoredFrame
@@ -437,24 +436,16 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
       : frame;
   commitCapturedFrame(session, encoderFrame, viewStateRef, contentEditDelta);
   session.lastMousePosition = mousePosition;
-
-  return {
-    session,
-    currentFrame: frame,
-  };
 };
 
-export const capturePreviewRefreshFrame = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
+export const capturePreviewRefreshFrame = ({ context, event }: EditorActionArgs): void => {
   if (event.type !== "PREVIEW_EVENT" || event.event.type !== "preview_refresh") {
-    return {};
+    return;
   }
 
   const editor = getCaptureEditor(context);
   if (!editor || !context.session) {
-    return {};
+    return;
   }
 
   const timestamp = getRecordingTimestamp(context.session);
@@ -464,7 +455,7 @@ export const capturePreviewRefreshFrame = ({
     getSlideState: context.getSlideState,
     getPreviewState: context.getPreviewState,
     previous: {
-      content: getPreviousCapturedContent(context.session, context.currentFrame),
+      content: context.session.lastCapturedContent,
       viewState: context.session.lastCapturedViewStateRef,
     },
   });
@@ -477,9 +468,4 @@ export const capturePreviewRefreshFrame = ({
   }
 
   commitCapturedFrame(context.session, frame, viewStateRef);
-
-  return {
-    session: context.session,
-    currentFrame: frame,
-  };
 };
