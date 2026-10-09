@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { useCollaboration } from "../contexts/CollaborationContext";
 
 type CollaborationContextValue = ReturnType<typeof useCollaboration>;
@@ -292,6 +292,104 @@ describe("CollaborationPanel participant surfaces", () => {
   });
 });
 
+/** The panel's one status region, found through a message it is reading. */
+function statusRegionOf(message: string) {
+  return screen.getByText(message).closest('[role="status"]');
+}
+
+describe("CollaborationPanel status messages", () => {
+  const writeText = vi.fn<(text: string) => Promise<void>>();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    writeText.mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    collaborationState = makeCollaborationState();
+  });
+
+  afterEach(() => {
+    // An own property added above; deleting it restores jsdom's default.
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+
+  it("announces a copied invitation link, and shows a copy that failed", async () => {
+    const createInvitation = vi.fn<CollaborationContextValue["createInvitation"]>(async (role) => ({
+      id: "70000000-0000-4000-8000-000000000001",
+      roomId: "20000000-0000-4000-8000-000000000001",
+      role,
+      maxUses: 10,
+      useCount: 0,
+      expiresAt: Date.now() + 86_400_000,
+      revokedAt: null,
+      createdAt: Date.now(),
+      token: "invite-token",
+    }));
+    collaborationState = { ...makeCollaborationState(), role: "owner", createInvitation };
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Editor link" }));
+    const copied = await screen.findByText("Invitation link copied to clipboard.");
+    expect(copied.closest('[role="status"]')).not.toBeNull();
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("invite=invite-token"));
+
+    writeText.mockRejectedValueOnce(new Error("Clipboard permission denied"));
+    fireEvent.click(screen.getByRole("button", { name: "Copied invitation link" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The invitation link could not be copied. Select and copy it manually.",
+    );
+  });
+
+  it("announces connection changes while the panel is closed", () => {
+    const view = render(<CollaborationPanel />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(statusRegionOf("Live collaboration: Live")).not.toBeNull();
+
+    collaborationState = { ...makeCollaborationState(), connectionState: "failed" };
+    view.rerender(<CollaborationPanel />);
+    expect(statusRegionOf("Live collaboration: Connection failed")).not.toBeNull();
+
+    collaborationState = {
+      ...makeCollaborationState(),
+      connectionState: "reconnecting",
+      hasOfflineChanges: true,
+    };
+    view.rerender(<CollaborationPanel />);
+    expect(statusRegionOf("Live collaboration: Reconnecting…, changes waiting")).not.toBeNull();
+
+    collaborationState = { ...makeCollaborationState(), provider: null };
+    view.rerender(<CollaborationPanel />);
+    expect(screen.queryByText(/^Live collaboration:/)).toBeNull();
+  });
+
+  it("announces who joins and leaves, but not who was already in the room", () => {
+    const state = makeCollaborationState();
+    const [self, ada, grace, lin] = state.participants;
+    const view = render(<CollaborationPanel />);
+    expect(screen.queryByText(/ (joined|left)$/)).toBeNull();
+
+    collaborationState = { ...state, participants: [self, ada, lin] };
+    view.rerender(<CollaborationPanel />);
+    expect(statusRegionOf("Grace left")).not.toBeNull();
+
+    const noor = participant({
+      actorId: "30000000-0000-4000-8000-000000000006",
+      sessionId: "40000000-0000-4000-8000-000000000006",
+      name: "Noor",
+      role: "editor",
+      surface: { kind: "editor", fileNodeId: null, viewport: null },
+    });
+    collaborationState = { ...state, participants: [self, ada, grace, lin, noor] };
+    view.rerender(<CollaborationPanel />);
+    expect(statusRegionOf("Grace joined. Noor joined")).not.toBeNull();
+
+    // Leaving the room empties the list; that is not everyone else leaving.
+    collaborationState = { ...state, provider: null, participants: [] };
+    view.rerender(<CollaborationPanel />);
+    expect(screen.queryByText(/ (joined|left)/)).toBeNull();
+  });
+});
+
 describe("CollaborationPanel invitation prompt", () => {
   const acceptInvitation = vi.fn<CollaborationContextValue["acceptInvitation"]>(async () => {});
   const declineInvitation = vi.fn<CollaborationContextValue["declineInvitation"]>();
@@ -335,5 +433,50 @@ describe("CollaborationPanel invitation prompt", () => {
     render(<CollaborationPanel />);
 
     expect(screen.queryByRole("dialog", { name: "Collaboration invitation" })).toBeNull();
+  });
+
+  it("announces the staged invitation and the joining state", () => {
+    const view = render(<CollaborationPanel />);
+    expect(
+      screen.getByRole("dialog", { name: "Collaboration invitation" }),
+    ).toHaveAccessibleDescription(/^Accepting replaces your current workspace/);
+    expect(
+      statusRegionOf(
+        "Collaboration invitation: join this collaboration room? Use the Join room or Not now buttons in the editor header.",
+      ),
+    ).not.toBeNull();
+
+    collaborationState = { ...collaborationState, isAcceptingInvitation: true };
+    view.rerender(<CollaborationPanel />);
+    expect(statusRegionOf("Joining collaboration room…")).not.toBeNull();
+  });
+
+  it("shows a failed claim in the prompt", () => {
+    collaborationState = {
+      ...collaborationState,
+      error: "The collaboration invitation could not be accepted.",
+    };
+    render(<CollaborationPanel />);
+
+    const prompt = screen.getByRole("dialog", { name: "Collaboration invitation" });
+    expect(within(prompt).getByRole("alert")).toHaveTextContent(
+      "The collaboration invitation could not be accepted.",
+    );
+  });
+
+  it("shows collaboration errors in the panel outside a room", () => {
+    collaborationState = {
+      ...collaborationState,
+      provider: null,
+      pendingInviteToken: null,
+      error: "Sign in to accept this collaboration invitation.",
+    };
+    render(<CollaborationPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /^Live/ }));
+
+    expect(screen.getByRole("button", { name: "Start live room" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Sign in to accept this collaboration invitation.",
+    );
   });
 });

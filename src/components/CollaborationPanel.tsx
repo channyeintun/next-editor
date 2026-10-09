@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   Check,
   Copy,
@@ -222,6 +222,8 @@ function VoiceParticipantBadge({ userId, sessionId }: { userId: string; sessionI
 
 interface InvitationPromptProps {
   isAccepting: boolean;
+  /** Why the last claim failed, shown where the user pressed Join. */
+  error: string | null;
   onAccept: () => void;
   onDecline: () => void;
 }
@@ -232,15 +234,17 @@ interface InvitationPromptProps {
  * never happen from a bare link, so a `?invite=` token is staged and only
  * claimed from this prompt's Join button.
  */
-function InvitationPrompt({ isAccepting, onAccept, onDecline }: InvitationPromptProps) {
+function InvitationPrompt({ isAccepting, error, onAccept, onDecline }: InvitationPromptProps) {
+  const descriptionId = useId();
   return (
     <div
       role="dialog"
       aria-label="Collaboration invitation"
+      aria-describedby={descriptionId}
       className="absolute right-0 top-10 z-50 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700 bg-[#171b25] p-4 text-left shadow-2xl"
     >
       <p className="text-sm font-semibold text-white">Join this collaboration room?</p>
-      <p className="mt-2 text-xs leading-relaxed text-slate-400">
+      <p id={descriptionId} className="mt-2 text-xs leading-relaxed text-slate-400">
         Accepting replaces your current workspace with the room&apos;s files and runs that project.
         Your name and what you have open become visible to everyone in the room.
       </p>
@@ -262,6 +266,11 @@ function InvitationPrompt({ isAccepting, onAccept, onDecline }: InvitationPrompt
           Not now
         </button>
       </div>
+      {error ? (
+        <p role="alert" className="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -525,6 +534,38 @@ function RoomOwnerSection({
   );
 }
 
+/**
+ * Who joined and who left between two snapshots of the online list, for the
+ * panel's status region. Never reports this member's own session, and says
+ * nothing when either snapshot is empty: entering a room would otherwise read
+ * out everyone already in it, and leaving one would read them all out as gone.
+ */
+function describePresenceChange(
+  before: readonly CollaborationParticipant[],
+  after: readonly CollaborationParticipant[],
+  ownParticipantKey: string | null,
+): string {
+  if (before.length === 0 || after.length === 0) return "";
+  const byKey = (participants: readonly CollaborationParticipant[]) =>
+    new Map(
+      participants.map((participant) => [collaborationParticipantKey(participant), participant]),
+    );
+  const beforeByKey = byKey(before);
+  const afterByKey = byKey(after);
+  const changes = (
+    from: Map<string, CollaborationParticipant>,
+    to: Map<string, CollaborationParticipant>,
+    verb: string,
+  ) =>
+    [...from]
+      .filter(([key]) => key !== ownParticipantKey && !to.has(key))
+      .map(([, participant]) => `${collaboratorDisplayName(participant)} ${verb}`);
+  return [
+    ...changes(afterByKey, beforeByKey, "joined"),
+    ...changes(beforeByKey, afterByKey, "left"),
+  ].join(". ");
+}
+
 export default function CollaborationPanel() {
   const collaboration = useCollaboration();
   const { isSignedIn } = useAuth();
@@ -533,6 +574,25 @@ export default function CollaborationPanel() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
+
+  // Joins and leaves are worked out while rendering, against the last roster
+  // seen, so the status region updates in the same commit as the list.
+  const rosterKey = collaboration.participants.map(collaborationParticipantKey).join("|");
+  const [roster, setRoster] = useState({
+    key: rosterKey,
+    participants: collaboration.participants,
+  });
+  const [presenceMessage, setPresenceMessage] = useState("");
+  if (roster.key !== rosterKey) {
+    setRoster({ key: rosterKey, participants: collaboration.participants });
+    setPresenceMessage(
+      describePresenceChange(
+        roster.participants,
+        collaboration.participants,
+        collaboration.ownParticipantKey,
+      ),
+    );
+  }
 
   const run = async (operation: () => Promise<unknown>) => {
     setIsBusy(true);
@@ -561,19 +621,43 @@ export default function CollaborationPanel() {
 
   const copyShareUrl = async () => {
     if (!shareUrl) return;
-    await navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2_000);
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2_000);
+    } catch {
+      setPanelError("The invitation link could not be copied. Select and copy it manually.");
+    }
   };
 
   const isInRoom = Boolean(collaboration.provider);
   const status = STATUS_LABELS[collaboration.connectionState];
+  const connectionMessage = isInRoom
+    ? `Live collaboration: ${status}${collaboration.hasOfflineChanges ? ", changes waiting" : ""}`
+    : "";
+  const invitationMessage = collaboration.isAcceptingInvitation
+    ? "Joining collaboration room…"
+    : collaboration.pendingInviteToken
+      ? "Collaboration invitation: join this collaboration room? Use the Join room or Not now buttons in the editor header."
+      : "";
 
   return (
     <div className="relative">
+      {/* The panel's one status region. It is mounted with the header button,
+          so connection, presence, invitation and copy messages are heard
+          whether or not the panel is open. aria-atomic is off so a change to
+          one line is read on its own, not together with the others. */}
+      <div role="status" aria-atomic="false" className="sr-only">
+        <p>{connectionMessage}</p>
+        <p>{presenceMessage}</p>
+        <p>{invitationMessage}</p>
+        <p>{copied ? "Invitation link copied to clipboard." : ""}</p>
+      </div>
+
       {collaboration.pendingInviteToken ? (
         <InvitationPrompt
           isAccepting={collaboration.isAcceptingInvitation}
+          error={collaboration.error}
           onAccept={() => void collaboration.acceptInvitation()}
           onDecline={collaboration.declineInvitation}
         />
@@ -647,6 +731,14 @@ export default function CollaborationPanel() {
                 >
                   {isSignedIn ? "Start live room" : "Sign in to start live"}
                 </button>
+                {panelError || collaboration.error ? (
+                  <div
+                    role="alert"
+                    className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200"
+                  >
+                    <p>{panelError ?? collaboration.error}</p>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <>
