@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import type { Recording } from "../core/src";
@@ -137,6 +137,10 @@ function EditorLayout({
     retry: retryLoad,
     clearError: dismissLoadError,
   } = recordingLoader;
+  // A dismissed load error leaves an empty workspace with no lesson coming, so it must not
+  // keep the player-bar placeholder that stands in while one loads. A new load clears it.
+  const [loadErrorDismissed, setLoadErrorDismissed] = useState(false);
+  if (recordingLoading && loadErrorDismissed) setLoadErrorDismissed(false);
 
   const { isRecording, isPlaying, currentRecording, hasEnded } = useNextEditorMetadata();
   const { isOpen: isWhiteboardOpen } = useWhiteboardContext();
@@ -247,11 +251,16 @@ function EditorLayout({
             </p>
           </div>
         ) : loadError ? (
-          // A dropped file can't be re-fetched, so it gets Dismiss rather than Retry.
+          // Dismiss is always offered, so a link that keeps failing never leaves the panel
+          // covering the whole editor; Retry sits beside it unless the load was a dropped
+          // file, which can't be re-fetched.
           <RecordingLoadError
             message={loadError}
             onRetry={retryLoad}
-            onDismiss={retryLoad ? undefined : dismissLoadError}
+            onDismiss={() => {
+              dismissLoadError();
+              setLoadErrorDismissed(true);
+            }}
           />
         ) : null}
       </div>
@@ -259,7 +268,9 @@ function EditorLayout({
       {/* MediaControls renders nothing until a recording exists, so a surface
           that is fetching one (the /learn detail view) would otherwise grow a
           player bar mid-load and shove the code surface upward. */}
-      {recordingUrl && !currentRecording && !loadError ? <EditorPlayerBarSkeleton /> : null}
+      {recordingUrl && !currentRecording && !loadError && !loadErrorDismissed ? (
+        <EditorPlayerBarSkeleton />
+      ) : null}
 
       <MediaControls
         recordMode={!readOnly}

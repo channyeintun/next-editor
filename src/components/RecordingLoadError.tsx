@@ -3,7 +3,10 @@ interface RecordingLoadErrorProps {
   message: string;
   /** Re-run the load. Omitted when there is nothing sensible to retry (e.g. a dropped file). */
   onRetry?: () => void;
-  /** Dismiss the panel without retrying. Used when the failure isn't retryable. */
+  /**
+   * Dismiss the panel without retrying, uncovering the editor behind it. Offered for every
+   * failure, retryable or not: Retry alone is no way out when the link keeps failing.
+   */
   onDismiss?: () => void;
 }
 
