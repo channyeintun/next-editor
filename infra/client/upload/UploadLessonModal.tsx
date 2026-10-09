@@ -326,10 +326,11 @@ export default function UploadLessonModal({
     onClose();
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     if (!uploadResult) return;
-    copyTextToClipboard(`${window.location.origin}/learn/${uploadResult.slug}`);
-    setCopied(true);
+    if (await copyTextToClipboard(`${window.location.origin}/learn/${uploadResult.slug}`)) {
+      setCopied(true);
+    }
   };
 
   // Uploading past the halfway point (or once media, not just the tiny .ne,
@@ -419,7 +420,7 @@ export default function UploadLessonModal({
             </span>
             <button
               type="button"
-              onClick={handleCopyLink}
+              onClick={() => void handleCopyLink()}
               className="shrink-0 text-xs font-semibold text-slate-300 hover:text-white"
             >
               {copied ? "Copied" : "Copy"}

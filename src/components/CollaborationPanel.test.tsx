@@ -505,6 +505,9 @@ describe("CollaborationPanel status messages", () => {
     const copyLink = await screen.findByRole("button", {
       name: /^Copy invitation link: http:\/\/\S+\/code\?invite=invite-token$/,
     });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The invitation link could not be copied. Select and copy it manually.",
+    );
 
     fireEvent.click(copyLink);
     expect(

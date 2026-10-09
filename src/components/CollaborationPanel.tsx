@@ -26,6 +26,7 @@ import { collaborationParticipantColorIndex } from "../collaboration/relativePos
 import type { CollaborationInviteRole, CollaborationSurface } from "../collaboration/protocol";
 import type { VoiceClientErrorCode } from "../voice/machine";
 import { COLLABORATOR_DOT_CLASSES, collaboratorDisplayName } from "./collaboratorAppearance";
+import { copyTextToClipboard } from "../utils/clipboard";
 
 const STATUS_LABELS = {
   disconnected: "Disconnected",
@@ -635,27 +636,28 @@ export default function CollaborationPanel() {
     }
   };
 
+  const copyInvitationLink = async (link: string) => {
+    if (await copyTextToClipboard(link)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2_000);
+    } else {
+      setPanelError("The invitation link could not be copied. Select and copy it manually.");
+    }
+  };
+
   const createShareLink = async (role: CollaborationInviteRole) => {
     await run(async () => {
       const invitation = await collaboration.createInvitation(role);
       const url = new URL("/code", window.location.origin);
       url.searchParams.set("invite", invitation.token);
       setShareUrl(url.toString());
-      await navigator.clipboard.writeText(url.toString());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2_000);
+      await copyInvitationLink(url.toString());
     });
   };
 
   const copyShareUrl = async () => {
     if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2_000);
-    } catch {
-      setPanelError("The invitation link could not be copied. Select and copy it manually.");
-    }
+    await copyInvitationLink(shareUrl);
   };
 
   const isInRoom = Boolean(collaboration.provider);

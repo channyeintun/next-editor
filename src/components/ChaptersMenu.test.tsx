@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import ChaptersMenu, { linkToMoment } from "./ChaptersMenu";
 import type { Recording, RecordingChapter } from "../core/src";
@@ -8,7 +8,7 @@ const actions = vi.hoisted(() => ({
   setChapters: vi.fn<(recordingId: string, chapters: RecordingChapter[]) => void>(),
 }));
 const clipboard = vi.hoisted(() => ({
-  copyTextToClipboard: vi.fn<(text: string) => void>(),
+  copyTextToClipboard: vi.fn<(text: string) => Promise<boolean>>(() => Promise.resolve(true)),
 }));
 
 vi.mock("../hooks/useNextEditorContext", () => ({
@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe("ChaptersMenu", () => {
-  it("jumps to a chapter and copies a link that opens the lesson there", () => {
+  it("jumps to a chapter and copies a link that opens the lesson there", async () => {
     render(<ChaptersMenu recording={lesson} editable={false} iconSize={16} buttonClassName="" />);
     openMenu();
 
@@ -56,9 +56,24 @@ describe("ChaptersMenu", () => {
       `${window.location.origin}/learn/router-basics?t=60`,
     );
     // Said, not only shown by the check mark.
-    expect(screen.getByRole("status")).toHaveTextContent("Link copied");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Link copied"));
     // Only the author can change them.
     expect(screen.queryByRole("button", { name: /Delete/ })).not.toBeInTheDocument();
+  });
+
+  it("does not say the link was copied when the copy failed", async () => {
+    clipboard.copyTextToClipboard.mockResolvedValueOnce(false);
+    render(<ChaptersMenu recording={lesson} editable={false} iconSize={16} buttonClassName="" />);
+    openMenu();
+
+    // act waits for the click's copy to settle before the status region is read.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Copy a link to Routing" }));
+    });
+
+    expect(clipboard.copyTextToClipboard).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(screen.getByRole("button", { name: "Copy a link to Routing" })).toBeInTheDocument();
   });
 
   it("lets the author rename, delete, and add a chapter at the playhead", () => {

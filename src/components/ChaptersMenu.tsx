@@ -87,9 +87,8 @@ export default function ChaptersMenu({
 
   const update = (next: RecordingChapter[]) => setChapters(recording.id, normalizeChapters(next));
 
-  const copyLink = (time: number) => {
-    copyTextToClipboard(linkToMoment(time));
-    setCopiedTime(time);
+  const copyLink = async (time: number) => {
+    if (await copyTextToClipboard(linkToMoment(time))) setCopiedTime(time);
   };
 
   return (
@@ -182,7 +181,7 @@ export default function ChaptersMenu({
                   )}
                   <button
                     type="button"
-                    onClick={() => copyLink(chapter.time)}
+                    onClick={() => void copyLink(chapter.time)}
                     aria-label={`Copy a link to ${chapter.title}`}
                     title="Copy a link to this chapter"
                     className="inline-flex size-6 shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:text-white"
@@ -235,7 +234,7 @@ export default function ChaptersMenu({
             ) : null}
             <button
               type="button"
-              onClick={() => copyLink(currentTime)}
+              onClick={() => void copyLink(currentTime)}
               className="flex items-center gap-2 px-3 py-1.5 text-left text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700"
             >
               {copiedTime === currentTime ? (

@@ -175,7 +175,7 @@ export default function FileContextMenu({
       <button
         type="button"
         onClick={() => {
-          copyTextToClipboard(`/${menu.path}`);
+          void copyTextToClipboard(`/${menu.path}`);
           onDismiss();
         }}
         className={MENU_ITEM_CLASS}
@@ -185,7 +185,7 @@ export default function FileContextMenu({
       <button
         type="button"
         onClick={() => {
-          copyTextToClipboard(menu.path);
+          void copyTextToClipboard(menu.path);
           onDismiss();
         }}
         className={MENU_ITEM_CLASS}
