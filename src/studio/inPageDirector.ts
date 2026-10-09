@@ -4,8 +4,7 @@ import type { StudioPlan } from "./plan";
 import { compileLessonScript } from "./script/compile";
 import { resolveScriptSlides } from "./script/googleSlides";
 import { splitIntoDialogs, type NarrationDialog } from "./script/dialogs";
-import { isBurmeseLocale } from "./narrationLanguage";
-import { LEXICON_V1, speechTextOf, type PronunciationLexicon } from "./script/lexicon";
+import { LEXICON_V1, narrationLexiconFor, speechTextOf } from "./script/lexicon";
 import { extractScriptNarration } from "./script/markers";
 import { scheduleDialogs } from "./script/schedule";
 import type { LessonScript } from "./script/schema";
@@ -15,12 +14,12 @@ import {
   putCachedDialogWav,
   type CachedDialogWav,
 } from "./tts/dialogCache";
-import { narrationNoiseSeed } from "./tts/pocket/noise";
-import { preloadPocket, synthesizePocketDialog } from "./tts/pocketSynth";
+import { pocketSynthProvider } from "./tts/pocketSynth";
 import { requireVoiceProfile, ttsRequestHash, type VoiceProfile } from "./tts/profiles";
 import { levelNarrationDialogs, NARRATION_LEVELING } from "./tts/loudness";
-import { synthesizeModalVoxCpm2Wav } from "./tts/modalVoxCpm2Synth";
-import { synthesizeAthanLabWav } from "./tts/athanlabSynth";
+import { voxCpm2SynthProvider } from "./tts/modalVoxCpm2Synth";
+import { athanLabSynthProvider } from "./tts/athanlabSynth";
+import type { DialogSynthProvider } from "./tts/synthProvider";
 import { decodeWavPcm16, stitchPcmSegments, validateDialogWav } from "./tts/wav";
 
 /**
@@ -65,80 +64,20 @@ export interface InPageDirectorOptions {
   voiceProfile?: VoiceProfile;
 }
 
-interface InPageSynthProvider {
-  sampleRate: number;
-  mimeType: string;
-  preload(): Promise<unknown>;
-  synthesize(speechText: string): Promise<CachedDialogWav>;
-  /** Shared narration seed folded into each dialog's request hash. */
-  seed: number;
-}
-
+/** The selected voice's provider; each adapter owns its seed and preload policy. */
 function providerFor(
   profile: VoiceProfile,
   buildSeed: number,
   onPhase?: (phase: string) => void,
-): InPageSynthProvider {
+): DialogSynthProvider {
   switch (profile.providerId) {
-    case "pocket-tts-web": {
-      const noiseSeed = narrationNoiseSeed(buildSeed);
-      return {
-        sampleRate: profile.sampleRate,
-        mimeType: profile.mimeType,
-        seed: noiseSeed,
-        preload: () => preloadPocket(profile, onPhase),
-        synthesize: async (speechText) => {
-          const { wav, cappedChunkCount } = await synthesizePocketDialog(
-            profile,
-            speechText,
-            noiseSeed,
-          );
-          return { wav, hitFrameCap: cappedChunkCount > 0 };
-        },
-      };
-    }
+    case "pocket-tts-web":
+      return pocketSynthProvider(profile, buildSeed, onPhase);
     case "voxcpm2-modal":
-      return {
-        sampleRate: profile.sampleRate,
-        mimeType: profile.mimeType,
-        seed: buildSeed,
-        // The first synthesis request intentionally owns any scale-to-zero
-        // cold start; a separate preload request would spend Modal credits
-        // without producing reusable audio.
-        preload: async () => undefined,
-        synthesize: async (speechText) => ({
-          wav: await synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
-          hitFrameCap: false,
-        }),
-      };
+      return voxCpm2SynthProvider(profile, buildSeed);
     case "athanlab":
-      return {
-        sampleRate: profile.sampleRate,
-        mimeType: profile.mimeType,
-        // AthanLab takes no seed. A fixed one keeps a change to the script's
-        // seed from re-keying — and so buying again — every AthanLab take.
-        seed: 0,
-        // Nothing to warm up: each dialog is one Worker request, and a
-        // separate request would only spend the user's AthanLab balance.
-        preload: async () => undefined,
-        synthesize: async (speechText) => ({
-          wav: await synthesizeAthanLabWav(profile, speechText),
-          hitFrameCap: false,
-        }),
-      };
+      return athanLabSynthProvider(profile);
   }
-}
-
-/**
- * LEXICON_V1's respellings ("struckt", "funk", letter-by-letter initialisms)
- * are tuned for the English Pocket voice. Handed to the Burmese narrator they
- * are just misspelled English, so Burmese narration speaks (and aligns
- * captions on) its display tokens as written.
- */
-const NO_RESPELLINGS: PronunciationLexicon = { version: 0, entries: {} };
-
-function narrationLexiconFor(locale: string): PronunciationLexicon {
-  return isBurmeseLocale(locale) ? NO_RESPELLINGS : LEXICON_V1;
 }
 
 const LABEL_PREVIEW_TOKENS = 6;
@@ -198,7 +137,7 @@ async function readCachedTake(
  * this render only rather than being replayed by every later one.
  */
 async function synthesizeTake(
-  provider: InPageSynthProvider,
+  provider: DialogSynthProvider,
   speechText: string,
   label: string,
 ): Promise<DialogTake> {

@@ -1,6 +1,8 @@
 import { getCustomVoice } from "./customVoices";
 import { PocketTtsEngine } from "./pocket/engine";
+import { narrationNoiseSeed } from "./pocket/noise";
 import type { PocketVoiceProfile } from "./profiles";
+import type { DialogSynthProvider } from "./synthProvider";
 import { encodeWavPcm16, floatTo16BitPcm, trimSilence } from "./wav";
 
 /**
@@ -48,7 +50,7 @@ function loadEngine(
 }
 
 /** Warm the bundle download/session build before the first dialog needs it. */
-export function preloadPocket(
+function preloadPocket(
   profile: PocketVoiceProfile,
   onPhase?: (phase: string) => void,
 ): Promise<unknown> {
@@ -80,6 +82,34 @@ export async function synthesizePocketDialog(
   return {
     wav: encodeWavPcm16(floatTo16BitPcm(trimmed), result.sampleRate),
     cappedChunkCount: result.cappedChunkCount,
+  };
+}
+
+/**
+ * The Director's Pocket-TTS provider: every dialog of a render shares one
+ * noise seed derived from the script's, and preload warms the engine before
+ * the first uncached dialog needs it. A take that hit the engine's frame cap
+ * is flagged so the Director can warn about it.
+ */
+export function pocketSynthProvider(
+  profile: PocketVoiceProfile,
+  buildSeed: number,
+  onPhase?: (phase: string) => void,
+): DialogSynthProvider {
+  const noiseSeed = narrationNoiseSeed(buildSeed);
+  return {
+    sampleRate: profile.sampleRate,
+    mimeType: profile.mimeType,
+    seed: noiseSeed,
+    preload: () => preloadPocket(profile, onPhase),
+    synthesize: async (speechText) => {
+      const { wav, cappedChunkCount } = await synthesizePocketDialog(
+        profile,
+        speechText,
+        noiseSeed,
+      );
+      return { wav, hitFrameCap: cappedChunkCount > 0 };
+    },
   };
 }
 

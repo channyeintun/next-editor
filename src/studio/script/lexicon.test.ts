@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { LEXICON_V1, spokenFormOf } from "./lexicon";
+import { LEXICON_V1, narrationLexiconFor, spokenFormOf } from "./lexicon";
 
 describe("spokenFormOf", () => {
   it("replaces a listed term and keeps surrounding punctuation", () => {
@@ -41,5 +41,12 @@ describe("spokenFormOf", () => {
     for (const token of ["constructor", "toString", "valueOf", "hasOwnProperty"]) {
       expect(spokenFormOf(token, LEXICON_V1)).toBe(token);
     }
+  });
+});
+
+describe("narrationLexiconFor", () => {
+  it("respells English narration and speaks Burmese as written", () => {
+    expect(narrationLexiconFor("en-US")).toBe(LEXICON_V1);
+    expect(narrationLexiconFor("my-MM").entries).toEqual({});
   });
 });

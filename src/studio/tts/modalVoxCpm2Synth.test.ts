@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { SavedCustomVoice } from "./customVoices";
 import { modalVoxCpm2BurmeseProfileOf, MODAL_VOXCPM2_BURMESE_PROFILE } from "./profiles";
-import { synthesizeModalVoxCpm2Wav } from "./modalVoxCpm2Synth";
+import { synthesizeModalVoxCpm2Wav, voxCpm2SynthProvider } from "./modalVoxCpm2Synth";
 
 const voiceStore = vi.hoisted(() => ({
   getCustomVoice: vi.fn<(id: string) => Promise<SavedCustomVoice | null>>(),
@@ -134,5 +134,25 @@ describe("synthesizeModalVoxCpm2Wav", () => {
     );
 
     await expect(synthesizeModalVoxCpm2Wav(PROFILE, "စာသား", 1)).rejects.toThrow("non-WAV");
+  });
+});
+
+describe("voxCpm2SynthProvider", () => {
+  it("sends the script's seed and makes no request to preload", async () => {
+    const fetchSpy = vi.fn<FetchMock>(async () => wavResponse());
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const provider = voxCpm2SynthProvider(PROFILE, 42);
+
+    expect(provider).toMatchObject({
+      sampleRate: PROFILE.sampleRate,
+      mimeType: PROFILE.mimeType,
+      seed: 42,
+    });
+    await provider.preload();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect((await provider.synthesize("စာသား")).hitFrameCap).toBe(false);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body)).seed).toBe(42);
   });
 });

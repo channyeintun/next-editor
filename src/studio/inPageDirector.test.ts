@@ -7,7 +7,15 @@ import { sha256Hex, sha256HexOfJson } from "./hash";
 import { LEXICON_V1 } from "./script/lexicon";
 import { parseLessonScript } from "./script/schema";
 import { measureIntegratedLoudness, NARRATION_LOUDNESS_TARGET_LUFS } from "./tts/loudness";
-import { athanLabProfileOf, ttsRequestHash, VOICE_PROFILES } from "./tts/profiles";
+import {
+  athanLabProfileOf,
+  ttsRequestHash,
+  VOICE_PROFILES,
+  type AthanLabVoiceProfile,
+  type ModalVoxCpm2VoiceProfile,
+  type PocketVoiceProfile,
+} from "./tts/profiles";
+import type { DialogSynthProvider } from "./tts/synthProvider";
 import { decodeWavPcm16, encodeWavPcm16 } from "./tts/wav";
 
 type PcmSegment = { pcm: Int16Array; startMs: number };
@@ -29,6 +37,17 @@ const tts = vi.hoisted(() => ({
   synthesizeModalVoxCpm2Wav:
     vi.fn<(profile: unknown, speechText: string, seed: number) => Promise<Uint8Array>>(),
   synthesizeAthanLabWav: vi.fn<(profile: unknown, speechText: string) => Promise<Uint8Array>>(),
+  pocketSynthProvider:
+    vi.fn<
+      (
+        profile: PocketVoiceProfile,
+        buildSeed: number,
+        onPhase?: (phase: string) => void,
+      ) => DialogSynthProvider
+    >(),
+  voxCpm2SynthProvider:
+    vi.fn<(profile: ModalVoxCpm2VoiceProfile, buildSeed: number) => DialogSynthProvider>(),
+  athanLabSynthProvider: vi.fn<(profile: AthanLabVoiceProfile) => DialogSynthProvider>(),
 }));
 
 vi.mock("./tts/dialogCache", () => ({
@@ -37,18 +56,12 @@ vi.mock("./tts/dialogCache", () => ({
   putCachedDialogWav: tts.putCachedDialogWav,
 }));
 
-vi.mock("./tts/pocketSynth", () => ({
-  preloadPocket: tts.preloadPocket,
-  synthesizePocketDialog: tts.synthesizePocketDialog,
-}));
-
-vi.mock("./tts/modalVoxCpm2Synth", () => ({
-  synthesizeModalVoxCpm2Wav: tts.synthesizeModalVoxCpm2Wav,
-}));
-
-vi.mock("./tts/athanlabSynth", () => ({
-  synthesizeAthanLabWav: tts.synthesizeAthanLabWav,
-}));
+// Each adapter's own test pins its provider's seed and preload policy. Here the
+// factories are stand-ins that route to the spies above, so these tests see
+// which provider the Director picks, what it passes it, and how it drives it.
+vi.mock("./tts/pocketSynth", () => ({ pocketSynthProvider: tts.pocketSynthProvider }));
+vi.mock("./tts/modalVoxCpm2Synth", () => ({ voxCpm2SynthProvider: tts.voxCpm2SynthProvider }));
+vi.mock("./tts/athanlabSynth", () => ({ athanLabSynthProvider: tts.athanLabSynthProvider }));
 
 const slides = vi.hoisted(() => ({
   fetchPublishedDeck: vi.fn<(url: string) => Promise<ParsedDeck>>(),
@@ -137,6 +150,36 @@ describe("buildPlanFromScript narration", () => {
     tts.synthesizeAthanLabWav.mockReset().mockImplementation(async (_, speechText) => {
       return voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000);
     });
+    tts.pocketSynthProvider.mockReset().mockImplementation((profile, buildSeed, onPhase) => ({
+      sampleRate: profile.sampleRate,
+      mimeType: profile.mimeType,
+      seed: buildSeed,
+      preload: () => tts.preloadPocket(profile, onPhase),
+      synthesize: async (speechText) => {
+        const take = await tts.synthesizePocketDialog(profile, speechText, buildSeed);
+        return { wav: take.wav, hitFrameCap: take.cappedChunkCount > 0 };
+      },
+    }));
+    tts.voxCpm2SynthProvider.mockReset().mockImplementation((profile, buildSeed) => ({
+      sampleRate: profile.sampleRate,
+      mimeType: profile.mimeType,
+      seed: buildSeed,
+      preload: async () => undefined,
+      synthesize: async (speechText) => ({
+        wav: await tts.synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
+        hitFrameCap: false,
+      }),
+    }));
+    tts.athanLabSynthProvider.mockReset().mockImplementation((profile) => ({
+      sampleRate: profile.sampleRate,
+      mimeType: profile.mimeType,
+      seed: 0,
+      preload: async () => undefined,
+      synthesize: async (speechText) => ({
+        wav: await tts.synthesizeAthanLabWav(profile, speechText),
+        hitFrameCap: false,
+      }),
+    }));
     slides.fetchPublishedDeck.mockReset().mockResolvedValue(PUBLISHED_DECK);
   });
 
@@ -151,6 +194,11 @@ describe("buildPlanFromScript narration", () => {
     const result = await buildPlanFromScript(script);
     const calls = tts.synthesizePocketDialog.mock.calls;
 
+    expect(tts.pocketSynthProvider).toHaveBeenCalledExactlyOnceWith(
+      VOICE_PROFILES[script.build.voiceProfile],
+      script.build.seed,
+      undefined,
+    );
     expect(calls.length).toBeGreaterThan(1);
     expect(calls.map(([, , noiseSeed]) => noiseSeed)).toEqual(
       Array.from({ length: calls.length }, () => script.build.seed),
@@ -176,6 +224,11 @@ describe("buildPlanFromScript narration", () => {
       voiceProfile: VOICE_PROFILES["modal-voxcpm2-burmese-v1"],
     });
 
+    expect(tts.voxCpm2SynthProvider).toHaveBeenCalledExactlyOnceWith(
+      VOICE_PROFILES["modal-voxcpm2-burmese-v1"],
+      script.build.seed,
+    );
+    expect(tts.pocketSynthProvider).not.toHaveBeenCalled();
     expect(tts.preloadPocket).not.toHaveBeenCalled();
     expect(tts.synthesizePocketDialog).not.toHaveBeenCalled();
     expect(tts.synthesizeModalVoxCpm2Wav).toHaveBeenCalled();
@@ -192,6 +245,8 @@ describe("buildPlanFromScript narration", () => {
     script.lesson.locale = "my-MM";
     const result = await buildPlanFromScript(script, { voiceProfile: profile });
 
+    expect(tts.athanLabSynthProvider).toHaveBeenCalledExactlyOnceWith(profile);
+    expect(tts.pocketSynthProvider).not.toHaveBeenCalled();
     expect(tts.preloadPocket).not.toHaveBeenCalled();
     expect(tts.synthesizePocketDialog).not.toHaveBeenCalled();
     expect(tts.synthesizeModalVoxCpm2Wav).not.toHaveBeenCalled();

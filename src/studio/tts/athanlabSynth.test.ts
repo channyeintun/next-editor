@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { AthanLabSynthesisError, synthesizeAthanLabWav } from "./athanlabSynth";
+import {
+  AthanLabSynthesisError,
+  athanLabSynthProvider,
+  synthesizeAthanLabWav,
+} from "./athanlabSynth";
 import { athanLabProfileOf } from "./profiles";
 import { decodeWavPcm16, encodeWavPcm16, floatTo16BitPcm } from "./wav";
 
@@ -342,5 +346,26 @@ describe("synthesizeAthanLabWav", () => {
       /this dialog is 5001 characters long/,
     );
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("athanLabSynthProvider", () => {
+  it("keys every take on seed 0 and makes no request to preload", async () => {
+    const fetchSpy = vi.fn<FetchMock>(async () => wavResponse());
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const provider = athanLabSynthProvider(PROFILE);
+
+    expect(provider).toMatchObject({
+      sampleRate: PROFILE.sampleRate,
+      mimeType: PROFILE.mimeType,
+      seed: 0,
+    });
+    await provider.preload();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const take = await provider.synthesize("စာသား");
+    expect(take.hitFrameCap).toBe(false);
+    expect(decodeWavPcm16(take.wav).sampleRate).toBe(PROFILE.sampleRate);
+    expect(fetchSpy).toHaveBeenCalledOnce();
   });
 });

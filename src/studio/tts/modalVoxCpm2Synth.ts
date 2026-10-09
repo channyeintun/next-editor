@@ -5,6 +5,7 @@ import {
   MIN_VOXCPM2_REFERENCE_SECONDS,
 } from "./customVoices";
 import type { ModalVoxCpm2VoiceProfile } from "./profiles";
+import type { DialogSynthProvider } from "./synthProvider";
 import { encodeWavPcm16, floatTo16BitPcm } from "./wav";
 import { bytesToBase64 } from "../../shared/base64";
 
@@ -87,6 +88,26 @@ export async function synthesizeModalVoxCpm2Wav(
       await new Promise((resolve) => setTimeout(resolve, NETWORK_RETRY_DELAYS_MS[attempt - 1]));
     }
   }
+}
+
+/** The Director's Modal VoxCPM2 provider: the script's seed goes to Modal as it is. */
+export function voxCpm2SynthProvider(
+  profile: ModalVoxCpm2VoiceProfile,
+  buildSeed: number,
+): DialogSynthProvider {
+  return {
+    sampleRate: profile.sampleRate,
+    mimeType: profile.mimeType,
+    seed: buildSeed,
+    // The first synthesis request intentionally owns any scale-to-zero
+    // cold start; a separate preload request would spend Modal credits
+    // without producing reusable audio.
+    preload: async () => undefined,
+    synthesize: async (speechText) => ({
+      wav: await synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
+      hitFrameCap: false,
+    }),
+  };
 }
 
 async function requestSynthesis(body: string): Promise<Uint8Array> {

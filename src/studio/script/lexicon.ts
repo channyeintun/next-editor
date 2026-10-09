@@ -1,3 +1,5 @@
+import { isBurmeseLocale } from "../narrationLanguage";
+
 /**
  * Versioned pronunciation lexicon (docs/agent-lesson-production.md §6):
  * applied to the speech text handed to the TTS provider, never to the display
@@ -77,4 +79,17 @@ function replacementFor(core: string, lexicon: PronunciationLexicon): string {
 /** Speech text for the TTS request: spoken forms joined in token order. */
 export function speechTextOf(tokens: readonly string[], lexicon: PronunciationLexicon): string {
   return tokens.map((token) => spokenFormOf(token, lexicon)).join(" ");
+}
+
+/**
+ * LEXICON_V1's respellings ("struckt", "funk", letter-by-letter initialisms)
+ * are tuned for the English Pocket voice. Handed to the Burmese narrator they
+ * are just misspelled English, so Burmese narration speaks (and aligns
+ * captions on) its display tokens as written.
+ */
+const NO_RESPELLINGS: PronunciationLexicon = { version: 0, entries: {} };
+
+/** The lexicon a lesson's narration is spoken with, by its locale. */
+export function narrationLexiconFor(locale: string): PronunciationLexicon {
+  return isBurmeseLocale(locale) ? NO_RESPELLINGS : LEXICON_V1;
 }

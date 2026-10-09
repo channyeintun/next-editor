@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import { narrationNoiseSeed } from "./pocket/noise";
 import { requireVoiceProfile, type PocketVoiceProfile } from "./profiles";
 import { decodeWavPcm16 } from "./wav";
 
@@ -17,7 +18,8 @@ vi.mock("./pocket/engine", () => ({
 
 vi.mock("./customVoices", () => ({ getCustomVoice: async () => null }));
 
-const { synthesizePocketDialog, synthesizePocketWav } = await import("./pocketSynth");
+const { pocketSynthProvider, synthesizePocketDialog, synthesizePocketWav } =
+  await import("./pocketSynth");
 
 const PROFILE = requireVoiceProfile("pocket-alba-v1") as PocketVoiceProfile;
 
@@ -34,5 +36,31 @@ describe("synthesizePocketDialog", () => {
     expect(dialog.cappedChunkCount).toBe(1);
     expect(decodeWavPcm16(dialog.wav).sampleRate).toBe(24_000);
     expect(await synthesizePocketWav(PROFILE, "Hello there.", 7)).toEqual(dialog.wav);
+  });
+});
+
+describe("pocketSynthProvider", () => {
+  it("shares one noise seed across dialogs, loads the engine on preload, and flags capped takes", async () => {
+    const take = { samples: new Float32Array(2_400).fill(0.5), sampleRate: 24_000 };
+    synthesize
+      .mockReset()
+      .mockResolvedValueOnce({ ...take, cappedChunkCount: 1 })
+      .mockResolvedValueOnce({ ...take, cappedChunkCount: 0 });
+    const buildSeed = 2 ** 32 + 7;
+
+    const provider = pocketSynthProvider(PROFILE, buildSeed);
+
+    expect(provider).toMatchObject({
+      sampleRate: PROFILE.sampleRate,
+      mimeType: PROFILE.mimeType,
+      seed: narrationNoiseSeed(buildSeed),
+    });
+    expect(await provider.preload()).toEqual({ synthesize });
+    expect((await provider.synthesize("Hello there.")).hitFrameCap).toBe(true);
+    expect((await provider.synthesize("General Kenobi.")).hitFrameCap).toBe(false);
+    expect(synthesize.mock.calls.map(([, seed]) => seed)).toEqual([
+      narrationNoiseSeed(buildSeed),
+      narrationNoiseSeed(buildSeed),
+    ]);
   });
 });

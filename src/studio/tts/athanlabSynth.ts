@@ -1,6 +1,7 @@
 import { normalizeAthanLabWav } from "./athanlab/normalizeWav";
 import { prepareAthanLabText } from "./athanlab/textPrep";
 import type { AthanLabVoiceProfile } from "./profiles";
+import type { DialogSynthProvider } from "./synthProvider";
 
 /**
  * AthanLab synthesis adapter: one same-origin Worker request per dialog. The
@@ -151,6 +152,27 @@ export async function synthesizeAthanLabWav(
     retriesUsed.set(response.code, used + 1);
     await wait(response.retryAfterSeconds * 1000);
   }
+}
+
+/**
+ * The Director's AthanLab provider. It takes no script seed: AthanLab is not
+ * seedable, and a take is reproduced from the dialog cache.
+ */
+export function athanLabSynthProvider(profile: AthanLabVoiceProfile): DialogSynthProvider {
+  return {
+    sampleRate: profile.sampleRate,
+    mimeType: profile.mimeType,
+    // A fixed seed keeps a change to the script's seed from re-keying — and
+    // so buying again — every AthanLab take.
+    seed: 0,
+    // Nothing to warm up: each dialog is one Worker request, and a
+    // separate request would only spend the user's AthanLab balance.
+    preload: async () => undefined,
+    synthesize: async (speechText) => ({
+      wav: await synthesizeAthanLabWav(profile, speechText),
+      hitFrameCap: false,
+    }),
+  };
 }
 
 function normalizeTake(bytes: Uint8Array, sampleRate: number): Uint8Array {
