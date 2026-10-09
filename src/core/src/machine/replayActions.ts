@@ -253,9 +253,17 @@ export const extendRecording = ({ context, event }: EditorActionArgs): EditorCon
   // imports arrive through ADD_CAPTION_TRACK and are not part of the SCR stream. The small
   // .vtt fetch usually lands before the audio download's extend, which carries only the
   // stream's own captions, so taking its list wholesale dropped the lesson's subtitles.
+  //
+  // Chapters are machine-owned after load too: they are decoded once from the header, and
+  // SET_CHAPTERS is their only writer afterwards. Both senders rebuild the extend from that
+  // header, so the loaded copy is never the older one. It is taken as is, without the
+  // captions' fallback: a cleared list is `undefined` and must stay cleared.
   const captions = context.recording.captions ?? event.recording.captions;
+  const chapters = context.recording.chapters;
   const recording =
-    captions === event.recording.captions ? event.recording : { ...event.recording, captions };
+    captions === event.recording.captions && chapters === event.recording.chapters
+      ? event.recording
+      : { ...event.recording, captions, chapters };
   const duration = normalizeTimelineDuration(recording.duration, context.timeline.duration);
   return {
     recording,

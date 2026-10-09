@@ -333,7 +333,9 @@ the track belongs to and is dropped when another one is loaded (`isForLoadedReco
 late sibling `.vtt` cannot land on the next lesson. Once a recording has captions,
 `EXTEND_RECORDING` keeps its list instead of taking the extended recording's, so a late audio
 or stream extend does not drop tracks added after load. Chapters are edited the same way:
-`SET_CHAPTERS` replaces the loaded recording's `chapters` (normalized) outside the timeline.
+`SET_CHAPTERS` replaces the loaded recording's `chapters` (normalized) outside the timeline,
+and `EXTEND_RECORDING` always keeps the loaded list, so an edit (or a cleared list) made during
+the download survives the extend.
 
 ## Key Events
 

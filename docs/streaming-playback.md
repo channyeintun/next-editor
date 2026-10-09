@@ -202,9 +202,11 @@ prefix and let later prefixes fill in **without any re-seek or visible jump**.
 
 - `extendRecording` (action) replaces `context.recording` with the larger prefix. Since it is an
   append-only superset, `lastAppliedFrameIndex` and the other replay cursors remain valid, and
-  `timeline.currentTime` is untouched. The one field it does not take from the new recording is
-  `captions`: once the loaded recording has caption tracks (sibling `.vtt` files and viewer
-  imports arrive through `ADD_CAPTION_TRACK`, outside the stream), that list is kept.
+  `timeline.currentTime` is untouched. Two fields it does not take from the new recording:
+  `captions`, once the loaded recording has caption tracks (sibling `.vtt` files and viewer
+  imports arrive through `ADD_CAPTION_TRACK`, outside the stream), and `chapters`, which
+  `SET_CHAPTERS` owns after load, so an edit made during the download (a cleared list included)
+  survives the extend.
 - The replay actions (`applyFrameAtTime`, `applyPreviewEventsAtTime`, …) then run so any
   newly-available frames/events at the current time are applied immediately — but only while the
   replay owns the workspace. Once the viewer has taken it over (`hasManualWorkspaceOverride`:

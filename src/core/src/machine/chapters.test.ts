@@ -142,4 +142,65 @@ describe("editing a recording's chapters", () => {
     expect(actor.getSnapshot().context.recording?.chapters).toBeUndefined();
     actor.stop();
   });
+
+  // useUrlLoader extends the recording once the sibling narration has downloaded, and the
+  // stream extends it once more at its end. Both rebuild it from the file's header, so an
+  // edit made in between used to be reverted to the header's chapters.
+  describe("across EXTEND_RECORDING", () => {
+    const headerChapters = [{ time: 2_000, title: "From the header" }];
+
+    const loadThenEdit = async (edit?: {
+      recordingId: string;
+      chapters: Recording["chapters"];
+    }) => {
+      const loaded: Recording = { ...recording, chapters: headerChapters };
+      const actor = createActor(editorMachine, { input: { editorRef: { current: null } } }).start();
+      actor.send({ type: "LOAD_RECORDING", recording: loaded });
+      await vi.waitFor(() => expect(actor.getSnapshot().matches("playback")).toBe(true));
+      if (edit)
+        actor.send({
+          type: "SET_CHAPTERS",
+          recordingId: edit.recordingId,
+          chapters: edit.chapters ?? [],
+        });
+
+      actor.send({
+        type: "EXTEND_RECORDING",
+        recording: { ...loaded, cameraUrl: "https://example.com/camera.webm" },
+      });
+      expect(actor.getSnapshot().context.recording?.cameraUrl).toBe(
+        "https://example.com/camera.webm",
+      );
+      return actor;
+    };
+
+    it("keeps chapters edited after load", async () => {
+      const actor = await loadThenEdit({
+        recordingId: "lesson",
+        chapters: [{ time: 5_000, title: "Edited" }],
+      });
+      expect(actor.getSnapshot().context.recording?.chapters).toEqual([
+        { time: 5_000, title: "Edited" },
+      ]);
+      actor.stop();
+    });
+
+    it("keeps a cleared list cleared", async () => {
+      const actor = await loadThenEdit({ recordingId: "lesson", chapters: [] });
+      expect(actor.getSnapshot().context.recording?.chapters).toBeUndefined();
+      actor.stop();
+    });
+
+    it("keeps the header's chapters when nothing was edited", async () => {
+      const actor = await loadThenEdit();
+      expect(actor.getSnapshot().context.recording?.chapters).toEqual(headerChapters);
+      actor.stop();
+    });
+
+    it("still drops an edit sent for another recording", async () => {
+      const actor = await loadThenEdit({ recordingId: "other", chapters: [] });
+      expect(actor.getSnapshot().context.recording?.chapters).toEqual(headerChapters);
+      actor.stop();
+    });
+  });
 });
