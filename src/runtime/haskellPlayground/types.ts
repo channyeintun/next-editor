@@ -19,17 +19,18 @@
  * like something the program printed.
  */
 
+import {
+  isOptionalString,
+  type PlaygroundFile,
+  type PlaygroundFilesRequest,
+} from "../playgroundContract";
+
 export type HaskellPlaygroundRunStatus = "success" | "compile-error" | "runtime-error";
 
-export interface HaskellPlaygroundFile {
-  /** Top-level `.hs` path in the lesson workspace; the Playground runs exactly one `Main.hs`. */
-  path: string;
-  content: string;
-}
+/** A source file at a top-level `.hs` path in the lesson workspace; the Playground runs exactly one `Main.hs`. */
+export type HaskellPlaygroundFile = PlaygroundFile;
 
-export interface HaskellPlaygroundRunRequest {
-  files: readonly HaskellPlaygroundFile[];
-}
+export type HaskellPlaygroundRunRequest = PlaygroundFilesRequest;
 
 export interface HaskellPlaygroundRunResult {
   status: HaskellPlaygroundRunStatus;
@@ -55,10 +56,6 @@ export interface HaskellPlaygroundRunResult {
 }
 
 const RUN_STATUSES: ReadonlySet<string> = new Set(["success", "compile-error", "runtime-error"]);
-
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
-}
 
 /**
  * Validate a decoded Worker response into a run result, or null when the

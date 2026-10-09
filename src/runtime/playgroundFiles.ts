@@ -1,10 +1,7 @@
 import { isWorkspaceTextFile, type WorkspaceProject } from "../types/workspace";
+import type { PlaygroundFile } from "./playgroundContract";
 
-/** A lesson source file as every playground client takes it. */
-export interface PlaygroundFile {
-  path: string;
-  content: string;
-}
+export type { PlaygroundFile };
 
 /**
  * The current editable sources with one of `extensions`, in the deterministic

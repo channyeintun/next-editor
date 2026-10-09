@@ -5,25 +5,24 @@
  * result types below (docs/go-lessons-selective-runtime-plan.md §7).
  */
 
+import {
+  isOptionalString,
+  parsePlaygroundFormatResult,
+  type PlaygroundFile,
+  type PlaygroundFilesRequest,
+  type PlaygroundFormatResult,
+} from "../playgroundContract";
+
 export type GoPlaygroundRunStatus = "success" | "compile-error" | "vet-error" | "runtime-error";
 
-export interface GoPlaygroundFile {
-  /** Top-level `.go` path in the lesson workspace. */
-  path: string;
-  content: string;
-}
+/** A source file at a top-level `.go` path in the lesson workspace. */
+export type GoPlaygroundFile = PlaygroundFile;
 
-export interface GoPlaygroundRunRequest {
-  files: readonly GoPlaygroundFile[];
-}
+export type GoPlaygroundRunRequest = PlaygroundFilesRequest;
 
-export interface GoPlaygroundFormatRequest {
-  files: readonly GoPlaygroundFile[];
-}
+export type GoPlaygroundFormatRequest = PlaygroundFilesRequest;
 
-export interface GoPlaygroundFormatResult {
-  files: GoPlaygroundFile[];
-}
+export type GoPlaygroundFormatResult = PlaygroundFormatResult;
 
 export interface GoPlaygroundRunResult {
   status: GoPlaygroundRunStatus;
@@ -46,10 +45,6 @@ const RUN_STATUSES: ReadonlySet<string> = new Set([
   "runtime-error",
 ]);
 
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
-}
-
 function isOptionalInteger(value: unknown): value is number | undefined {
   return (
     value === undefined || (typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
@@ -57,39 +52,7 @@ function isOptionalInteger(value: unknown): value is number | undefined {
 }
 
 /** Validate the Worker's normalized multi-file gofmt response. */
-export function parseGoPlaygroundFormatResult(value: unknown): GoPlaygroundFormatResult | null {
-  if (typeof value !== "object" || value === null) {
-    return null;
-  }
-
-  const rawFiles = (value as Record<string, unknown>).files;
-  if (!Array.isArray(rawFiles) || rawFiles.length === 0) {
-    return null;
-  }
-
-  const files: GoPlaygroundFile[] = [];
-  const seenPaths = new Set<string>();
-  for (const rawFile of rawFiles) {
-    if (typeof rawFile !== "object" || rawFile === null) {
-      return null;
-    }
-
-    const candidate = rawFile as Record<string, unknown>;
-    if (
-      typeof candidate.path !== "string" ||
-      candidate.path.length === 0 ||
-      typeof candidate.content !== "string" ||
-      seenPaths.has(candidate.path)
-    ) {
-      return null;
-    }
-
-    seenPaths.add(candidate.path);
-    files.push({ path: candidate.path, content: candidate.content });
-  }
-
-  return { files };
-}
+export const parseGoPlaygroundFormatResult = parsePlaygroundFormatResult;
 
 /**
  * Validate a decoded Worker response into a run result, or null when the

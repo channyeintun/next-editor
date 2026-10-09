@@ -14,25 +14,23 @@
  * language the same way. Only the transport differs.
  */
 
+import {
+  isOptionalString,
+  type PlaygroundFile,
+  type PlaygroundFilesRequest,
+  type PlaygroundFormatResult,
+} from "../playgroundContract";
+
 export type KitePlaygroundRunStatus = "success" | "compile-error" | "runtime-error";
 
-export interface KitePlaygroundFile {
-  /** Top-level `.kite` path in the lesson workspace. */
-  path: string;
-  content: string;
-}
+/** A source file at a top-level `.kite` path in the lesson workspace. */
+export type KitePlaygroundFile = PlaygroundFile;
 
-export interface KitePlaygroundRunRequest {
-  files: readonly KitePlaygroundFile[];
-}
+export type KitePlaygroundRunRequest = PlaygroundFilesRequest;
 
-export interface KitePlaygroundFormatRequest {
-  files: readonly KitePlaygroundFile[];
-}
+export type KitePlaygroundFormatRequest = PlaygroundFilesRequest;
 
-export interface KitePlaygroundFormatResult {
-  files: KitePlaygroundFile[];
-}
+export type KitePlaygroundFormatResult = PlaygroundFormatResult;
 
 export interface KitePlaygroundRunResult {
   status: KitePlaygroundRunStatus;
@@ -53,10 +51,6 @@ export interface KitePlaygroundRunResult {
 }
 
 const RUN_STATUSES: ReadonlySet<string> = new Set(["success", "compile-error", "runtime-error"]);
-
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
-}
 
 /**
  * Validate a run result, or null when the payload does not match the contract.

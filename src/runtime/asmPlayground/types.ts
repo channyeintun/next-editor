@@ -20,13 +20,12 @@
  * language the same way.
  */
 
+import { isOptionalString, type PlaygroundFile } from "../playgroundContract";
+
 export type AsmPlaygroundRunStatus = "success" | "assemble-error" | "runtime-error";
 
-export interface AsmPlaygroundFile {
-  /** Top-level `.asm` / `.s` path in the lesson workspace. */
-  path: string;
-  content: string;
-}
+/** A source file at a top-level `.asm` / `.s` path in the lesson workspace. */
+export type AsmPlaygroundFile = PlaygroundFile;
 
 export interface AsmPlaygroundRunRequest {
   files: readonly AsmPlaygroundFile[];
@@ -83,10 +82,6 @@ export interface AsmPlaygroundRunResult {
 }
 
 const RUN_STATUSES: ReadonlySet<string> = new Set(["success", "assemble-error", "runtime-error"]);
-
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
-}
 
 function isOptionalNumber(value: unknown): value is number | undefined {
   return value === undefined || (typeof value === "number" && Number.isFinite(value));

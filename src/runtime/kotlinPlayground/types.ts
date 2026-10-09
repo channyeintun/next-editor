@@ -6,17 +6,18 @@
  * ../goPlayground/types.ts.
  */
 
+import {
+  isOptionalString,
+  type PlaygroundFile,
+  type PlaygroundFilesRequest,
+} from "../playgroundContract";
+
 export type KotlinPlaygroundRunStatus = "success" | "compile-error" | "runtime-error";
 
-export interface KotlinPlaygroundFile {
-  /** Top-level `.kt` path in the lesson workspace. */
-  path: string;
-  content: string;
-}
+/** A source file at a top-level `.kt` path in the lesson workspace. */
+export type KotlinPlaygroundFile = PlaygroundFile;
 
-export interface KotlinPlaygroundRunRequest {
-  files: readonly KotlinPlaygroundFile[];
-}
+export type KotlinPlaygroundRunRequest = PlaygroundFilesRequest;
 
 export interface KotlinPlaygroundRunResult {
   status: KotlinPlaygroundRunStatus;
@@ -31,10 +32,6 @@ export interface KotlinPlaygroundRunResult {
 }
 
 const RUN_STATUSES: ReadonlySet<string> = new Set(["success", "compile-error", "runtime-error"]);
-
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
-}
 
 /**
  * Validate a decoded Worker response into a run result, or null when the

@@ -5,25 +5,24 @@
  * the result types below, mirroring the Go and Kotlin Playground contracts.
  */
 
+import {
+  isOptionalString,
+  parsePlaygroundFormatResult,
+  type PlaygroundFile,
+  type PlaygroundFilesRequest,
+  type PlaygroundFormatResult,
+} from "../playgroundContract";
+
 export type RustPlaygroundRunStatus = "success" | "compile-error" | "runtime-error";
 
-export interface RustPlaygroundFile {
-  /** Top-level `.rs` path in the lesson workspace; the Playground runs exactly one `main.rs`. */
-  path: string;
-  content: string;
-}
+/** A source file at a top-level `.rs` path in the lesson workspace; the Playground runs exactly one `main.rs`. */
+export type RustPlaygroundFile = PlaygroundFile;
 
-export interface RustPlaygroundRunRequest {
-  files: readonly RustPlaygroundFile[];
-}
+export type RustPlaygroundRunRequest = PlaygroundFilesRequest;
 
-export interface RustPlaygroundFormatRequest {
-  files: readonly RustPlaygroundFile[];
-}
+export type RustPlaygroundFormatRequest = PlaygroundFilesRequest;
 
-export interface RustPlaygroundFormatResult {
-  files: RustPlaygroundFile[];
-}
+export type RustPlaygroundFormatResult = PlaygroundFormatResult;
 
 export interface RustPlaygroundRunResult {
   status: RustPlaygroundRunStatus;
@@ -43,44 +42,8 @@ export interface RustPlaygroundRunResult {
 
 const RUN_STATUSES: ReadonlySet<string> = new Set(["success", "compile-error", "runtime-error"]);
 
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
-}
-
 /** Validate the Worker's normalized rustfmt response. */
-export function parseRustPlaygroundFormatResult(value: unknown): RustPlaygroundFormatResult | null {
-  if (typeof value !== "object" || value === null) {
-    return null;
-  }
-
-  const rawFiles = (value as Record<string, unknown>).files;
-  if (!Array.isArray(rawFiles) || rawFiles.length === 0) {
-    return null;
-  }
-
-  const files: RustPlaygroundFile[] = [];
-  const seenPaths = new Set<string>();
-  for (const rawFile of rawFiles) {
-    if (typeof rawFile !== "object" || rawFile === null) {
-      return null;
-    }
-
-    const candidate = rawFile as Record<string, unknown>;
-    if (
-      typeof candidate.path !== "string" ||
-      candidate.path.length === 0 ||
-      typeof candidate.content !== "string" ||
-      seenPaths.has(candidate.path)
-    ) {
-      return null;
-    }
-
-    seenPaths.add(candidate.path);
-    files.push({ path: candidate.path, content: candidate.content });
-  }
-
-  return { files };
-}
+export const parseRustPlaygroundFormatResult = parsePlaygroundFormatResult;
 
 /**
  * Validate a decoded Worker response into a run result, or null when the

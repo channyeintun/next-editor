@@ -13,25 +13,24 @@
  * first thing every Zig program uses, `std.debug.print`, writes to stderr.
  */
 
+import {
+  isOptionalString,
+  parsePlaygroundFormatResult,
+  type PlaygroundFile,
+  type PlaygroundFilesRequest,
+  type PlaygroundFormatResult,
+} from "../playgroundContract";
+
 export type ZigPlaygroundRunStatus = "success" | "compile-error" | "runtime-error";
 
-export interface ZigPlaygroundFile {
-  /** Top-level `.zig` path in the lesson workspace; the Playground runs exactly one `main.zig`. */
-  path: string;
-  content: string;
-}
+/** A source file at a top-level `.zig` path in the lesson workspace; the Playground runs exactly one `main.zig`. */
+export type ZigPlaygroundFile = PlaygroundFile;
 
-export interface ZigPlaygroundRunRequest {
-  files: readonly ZigPlaygroundFile[];
-}
+export type ZigPlaygroundRunRequest = PlaygroundFilesRequest;
 
-export interface ZigPlaygroundFormatRequest {
-  files: readonly ZigPlaygroundFile[];
-}
+export type ZigPlaygroundFormatRequest = PlaygroundFilesRequest;
 
-export interface ZigPlaygroundFormatResult {
-  files: ZigPlaygroundFile[];
-}
+export type ZigPlaygroundFormatResult = PlaygroundFormatResult;
 
 export interface ZigPlaygroundRunResult {
   status: ZigPlaygroundRunStatus;
@@ -50,44 +49,8 @@ export interface ZigPlaygroundRunResult {
 
 const RUN_STATUSES: ReadonlySet<string> = new Set(["success", "compile-error", "runtime-error"]);
 
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
-}
-
 /** Validate the Worker's normalized `zig fmt` response. */
-export function parseZigPlaygroundFormatResult(value: unknown): ZigPlaygroundFormatResult | null {
-  if (typeof value !== "object" || value === null) {
-    return null;
-  }
-
-  const rawFiles = (value as Record<string, unknown>).files;
-  if (!Array.isArray(rawFiles) || rawFiles.length === 0) {
-    return null;
-  }
-
-  const files: ZigPlaygroundFile[] = [];
-  const seenPaths = new Set<string>();
-  for (const rawFile of rawFiles) {
-    if (typeof rawFile !== "object" || rawFile === null) {
-      return null;
-    }
-
-    const candidate = rawFile as Record<string, unknown>;
-    if (
-      typeof candidate.path !== "string" ||
-      candidate.path.length === 0 ||
-      typeof candidate.content !== "string" ||
-      seenPaths.has(candidate.path)
-    ) {
-      return null;
-    }
-
-    seenPaths.add(candidate.path);
-    files.push({ path: candidate.path, content: candidate.content });
-  }
-
-  return { files };
-}
+export const parseZigPlaygroundFormatResult = parsePlaygroundFormatResult;
 
 /**
  * Validate a decoded Worker response into a run result, or null when the
