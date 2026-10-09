@@ -1,4 +1,5 @@
 import { assemble, AsmError, formatDiagnostic, load, summarizeRun } from "../../core/x86";
+import { pickPlaygroundEntry } from "../playgroundFiles";
 import { ASM_ENTRY_PATH } from "./files";
 import {
   parseAsmPlaygroundRunResult,
@@ -49,22 +50,21 @@ const yieldToBrowser = (): Promise<void> =>
 
 /** Pick the file to assemble. */
 function entryOf(files: readonly AsmPlaygroundFile[]): AsmPlaygroundFile {
-  if (files.length === 0) {
+  const entry = pickPlaygroundEntry(files, ASM_ENTRY_PATH);
+  if (entry === "empty") {
     throw new AsmPlaygroundServiceError(
       "invalid-source",
       `Add a ${ASM_ENTRY_PATH} file to run this lesson`,
     );
   }
-  const named = files.find(
-    (file) => file.path === ASM_ENTRY_PATH || file.path.endsWith(`/${ASM_ENTRY_PATH}`),
-  );
-  if (named) return named;
-  if (files.length === 1) return files[0];
-  throw new AsmPlaygroundServiceError(
-    "invalid-source",
-    `Name the file this lesson runs \`${ASM_ENTRY_PATH}\` — there is no linker here, so with ` +
-      `${files.length} files there is no way to tell which one is the program`,
-  );
+  if (entry === "ambiguous") {
+    throw new AsmPlaygroundServiceError(
+      "invalid-source",
+      `Name the file this lesson runs \`${ASM_ENTRY_PATH}\` — there is no linker here, so with ` +
+        `${files.length} files there is no way to tell which one is the program`,
+    );
+  }
+  return entry;
 }
 
 /**

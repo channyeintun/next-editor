@@ -18,7 +18,7 @@ import {
 } from "../runtime/rustPlayground/console";
 import { collectRustPlaygroundFiles } from "../runtime/rustPlayground/files";
 import type { RustPlaygroundRunResult } from "../runtime/rustPlayground/types";
-import { isSinglePlaygroundFile } from "../runtime/playgroundFiles";
+import { isSinglePlaygroundFile, PLAYGROUND_SOURCE_RULES } from "../runtime/playgroundFiles";
 import { STUDIO_RUST_DOCK_TARGET_ID } from "../studio/targets";
 
 /**
@@ -44,7 +44,7 @@ export const RUST_RUNNER: PlaygroundRunnerLanguage<
   run: {
     commandLabel: "cargo run",
     rejectFiles: (files) =>
-      isSinglePlaygroundFile(files, "main.rs")
+      isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.rust.entryPath)
         ? null
         : "[rust-run error] Rust lessons run a single main.rs file",
     execute: (client, files) => client.run(files),
@@ -60,7 +60,7 @@ export const RUST_RUNNER: PlaygroundRunnerLanguage<
     buttonTitle: "Format main.rs with rustfmt (Shift+Alt+F)",
     readOnlyLine: "[rustfmt error] This shared lesson is read-only",
     rejectFiles: (files) =>
-      isSinglePlaygroundFile(files, "main.rs")
+      isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.rust.entryPath)
         ? null
         : "[rustfmt error] Rust lessons format a single main.rs file",
     execute: (client, files) => client.format(files),

@@ -53,6 +53,7 @@ import {
   asmRunStartedConsoleLines,
 } from "../runtime/asmPlayground/console";
 import { collectAsmPlaygroundFiles, ASM_ENTRY_PATH } from "../runtime/asmPlayground/files";
+import { isSinglePlaygroundFile, PLAYGROUND_SOURCE_RULES } from "../runtime/playgroundFiles";
 import type { WorkspaceProject } from "../types/workspace";
 import { StudioActionError, abortableSleep } from "./async";
 import { fixtureRunConsoleLines } from "./fixtureConsoleLines";
@@ -273,7 +274,7 @@ function engineFor(kind: StudioPlaygroundRuntimeKind): PlaygroundEngine {
         collectFiles: collectRustPlaygroundFiles,
         // The upstream Playground compiles one crate from one source string.
         validateFiles: (files) =>
-          files.length === 1 && files[0].path === "main.rs"
+          isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.rust.entryPath)
             ? null
             : "Rust lessons run exactly one main.rs",
         startedLines: () => rustRunStartedConsoleLines(),
@@ -311,7 +312,7 @@ function engineFor(kind: StudioPlaygroundRuntimeKind): PlaygroundEngine {
         collectFiles: collectZigPlaygroundFiles,
         // The upstream compiles one root source file from one text body.
         validateFiles: (files) =>
-          files.length === 1 && files[0].path === "main.zig"
+          isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.zig.entryPath)
             ? null
             : "Zig lessons run exactly one main.zig",
         startedLines: () => zigRunStartedConsoleLines(),
@@ -351,7 +352,7 @@ function engineFor(kind: StudioPlaygroundRuntimeKind): PlaygroundEngine {
         // string: there is no cabal file to name a second, and no package
         // manager behind it.
         validateFiles: (files) =>
-          files.length === 1 && files[0].path === "Main.hs"
+          isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.haskell.entryPath)
             ? null
             : "Haskell lessons run exactly one Main.hs",
         startedLines: () => haskellRunStartedConsoleLines(),
@@ -392,7 +393,8 @@ function engineFor(kind: StudioPlaygroundRuntimeKind): PlaygroundEngine {
         validateFiles: (files) =>
           files.length === 0
             ? "Add a .kite file to run this lesson"
-            : files.length === 1 || files.some((file) => file.path === "main.kite")
+            : files.length === 1 ||
+                files.some((file) => file.path === PLAYGROUND_SOURCE_RULES.kite.entryPath)
               ? null
               : "Name the file this lesson runs main.kite",
         startedLines: () => kiteRunStartedConsoleLines(),

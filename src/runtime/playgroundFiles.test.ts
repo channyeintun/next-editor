@@ -8,6 +8,7 @@ import { collectKotlinPlaygroundFiles } from "./kotlinPlayground/files";
 import {
   arePlaygroundFilesEqual,
   collectPlaygroundFiles,
+  pickPlaygroundEntry,
   PLAYGROUND_SOURCE_RULES,
 } from "./playgroundFiles";
 import { collectRustPlaygroundFiles } from "./rustPlayground/files";
@@ -126,5 +127,38 @@ describe("arePlaygroundFilesEqual", () => {
     expect(
       arePlaygroundFilesEqual(files, [files[0], { path: "util.go", content: "package util\n" }]),
     ).toBe(false);
+  });
+});
+
+describe("pickPlaygroundEntry", () => {
+  const main = { path: "main.kite", content: "main" };
+  const helper = { path: "helper.kite", content: "helper" };
+
+  it("takes the file named for the entry at the root", () => {
+    expect(pickPlaygroundEntry([helper, main], "main.kite")).toBe(main);
+  });
+
+  it("takes the file named for the entry in a folder", () => {
+    const nested = { path: "src/main.kite", content: "nested" };
+    expect(pickPlaygroundEntry([helper, nested], "main.kite")).toBe(nested);
+  });
+
+  it("does not take a file whose name only ends with the entry's", () => {
+    const lookalike = { path: "notmain.kite", content: "lookalike" };
+    expect(pickPlaygroundEntry([helper, lookalike], "main.kite")).toBe("ambiguous");
+  });
+
+  it("takes a single file whatever its name", () => {
+    expect(pickPlaygroundEntry([helper], "main.kite")).toBe(helper);
+  });
+
+  it("is ambiguous with several files and none named for the entry", () => {
+    expect(
+      pickPlaygroundEntry([helper, { path: "other.kite", content: "other" }], "main.kite"),
+    ).toBe("ambiguous");
+  });
+
+  it("is empty with no files", () => {
+    expect(pickPlaygroundEntry([], "main.kite")).toBe("empty");
   });
 });

@@ -80,6 +80,26 @@ export function arePlaygroundFilesEqual(
  * Whether the sources are exactly one file, at `path`: the only lesson a
  * playground that compiles a single source string can run.
  */
-export function isSinglePlaygroundFile(files: readonly PlaygroundFile[], path: string): boolean {
+export function isSinglePlaygroundFile(files: readonly { path: string }[], path: string): boolean {
   return files.length === 1 && files[0].path === path;
+}
+
+/**
+ * The file a run starts from, for a playground that is handed one source: the
+ * file named `entryPath` (at the root or in a folder) wins, a single file is the
+ * program whatever its name, and otherwise there is no way to tell — "empty"
+ * when there are no files, "ambiguous" when there are several and none is
+ * named. Each caller turns the two outcomes into its own language's message.
+ */
+export function pickPlaygroundEntry<File extends { path: string }>(
+  files: readonly File[],
+  entryPath: string,
+): File | "empty" | "ambiguous" {
+  if (files.length === 0) return "empty";
+  const named = files.find(
+    (file) => file.path === entryPath || file.path.endsWith(`/${entryPath}`),
+  );
+  if (named) return named;
+  if (files.length === 1) return files[0];
+  return "ambiguous";
 }

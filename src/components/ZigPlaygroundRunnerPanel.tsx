@@ -18,7 +18,7 @@ import {
 } from "../runtime/zigPlayground/console";
 import { collectZigPlaygroundFiles } from "../runtime/zigPlayground/files";
 import type { ZigPlaygroundRunResult } from "../runtime/zigPlayground/types";
-import { isSinglePlaygroundFile } from "../runtime/playgroundFiles";
+import { isSinglePlaygroundFile, PLAYGROUND_SOURCE_RULES } from "../runtime/playgroundFiles";
 import { STUDIO_ZIG_DOCK_TARGET_ID } from "../studio/targets";
 
 const SINGLE_FILE_FORMAT_LINE = "[zig-fmt error] Zig lessons format a single main.zig file";
@@ -46,7 +46,7 @@ export const ZIG_RUNNER: PlaygroundRunnerLanguage<
   run: {
     commandLabel: "zig run main.zig",
     rejectFiles: (files) =>
-      isSinglePlaygroundFile(files, "main.zig")
+      isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.zig.entryPath)
         ? null
         : "[zig-run error] Zig lessons run a single main.zig file",
     execute: (client, files) => client.run(files),
@@ -62,7 +62,9 @@ export const ZIG_RUNNER: PlaygroundRunnerLanguage<
     buttonTitle: "Format main.zig with zig fmt (Shift+Alt+F)",
     readOnlyLine: "[zig-fmt error] This shared lesson is read-only",
     rejectFiles: (files) =>
-      isSinglePlaygroundFile(files, "main.zig") ? null : SINGLE_FILE_FORMAT_LINE,
+      isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.zig.entryPath)
+        ? null
+        : SINGLE_FILE_FORMAT_LINE,
     // `.zon` files are Zig-highlighted (inferLanguageFromPath maps them), so
     // the provider fires for a build.zig.zon model that the collector never
     // submits. That is not a concurrent edit, so it gets the single-file

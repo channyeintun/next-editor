@@ -1,4 +1,5 @@
 import { wrap } from "comlink";
+import { pickPlaygroundEntry, PLAYGROUND_SOURCE_RULES } from "../playgroundFiles";
 import { kiteOperations, type KiteOperations } from "./operations";
 import {
   parseKitePlaygroundRunResult,
@@ -30,9 +31,6 @@ export class KitePlaygroundServiceError extends Error {
   }
 }
 
-/** The one file a run compiles, and the reason it is one. */
-const ENTRY = "main.kite";
-
 /**
  * Pick the file to compile.
  *
@@ -40,20 +38,22 @@ const ENTRY = "main.kite";
  * part of the same program — but the compiler running here is handed one
  * source, so a lesson with siblings would compile only part of itself. Rather
  * than compile the wrong thing quietly, a workspace with more than one file
- * says so.
+ * and none named `main.kite` says so.
  */
 function entryOf(files: readonly KitePlaygroundFile[]): KitePlaygroundFile {
-  if (files.length === 0) {
+  const { entryPath } = PLAYGROUND_SOURCE_RULES.kite;
+  const entry = pickPlaygroundEntry(files, entryPath);
+  if (entry === "empty") {
     throw new KitePlaygroundServiceError("invalid-source", "Add a .kite file to run this lesson");
   }
-  const named = files.find((file) => file.path === ENTRY || file.path.endsWith(`/${ENTRY}`));
-  if (named) return named;
-  if (files.length === 1) return files[0];
-  throw new KitePlaygroundServiceError(
-    "invalid-source",
-    `Name the file this lesson runs \`${ENTRY}\` — a Kite module is a directory, and with ` +
-      `${files.length} files there is no way to tell which one is the program`,
-  );
+  if (entry === "ambiguous") {
+    throw new KitePlaygroundServiceError(
+      "invalid-source",
+      `Name the file this lesson runs \`${entryPath}\` — a Kite module is a directory, and with ` +
+        `${files.length} files there is no way to tell which one is the program`,
+    );
+  }
+  return entry;
 }
 
 /**

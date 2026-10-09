@@ -14,7 +14,7 @@ import {
 } from "../runtime/haskellPlayground/console";
 import { collectHaskellPlaygroundFiles } from "../runtime/haskellPlayground/files";
 import type { HaskellPlaygroundRunResult } from "../runtime/haskellPlayground/types";
-import { isSinglePlaygroundFile } from "../runtime/playgroundFiles";
+import { isSinglePlaygroundFile, PLAYGROUND_SOURCE_RULES } from "../runtime/playgroundFiles";
 import { STUDIO_HASKELL_DOCK_TARGET_ID } from "../studio/targets";
 
 /**
@@ -46,7 +46,7 @@ export const HASKELL_RUNNER: PlaygroundRunnerLanguage<
   run: {
     commandLabel: "runghc Main.hs",
     rejectFiles: (files) =>
-      isSinglePlaygroundFile(files, "Main.hs")
+      isSinglePlaygroundFile(files, PLAYGROUND_SOURCE_RULES.haskell.entryPath)
         ? null
         : "[haskell-run error] Haskell lessons run a single Main.hs file",
     execute: (client, files) => client.run(files),
