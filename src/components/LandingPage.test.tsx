@@ -67,6 +67,7 @@ describe("LandingPage demo embed", () => {
     });
 
     expect(screen.queryByTitle("Next Editor Live Demo")).toBe(null);
-    expect(screen.getByRole("link", { name: "Open the interactive demo" })).toBeInTheDocument();
+    // Named by its visible label, so "click Play the interactive demo" matches.
+    expect(screen.getByRole("link", { name: /^Play the interactive demo/ })).toBeInTheDocument();
   });
 });

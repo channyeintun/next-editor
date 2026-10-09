@@ -425,7 +425,6 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                           className={`group flex flex-col items-center justify-center gap-5 px-8 py-14 text-center ${
                             isMobile === null ? "invisible h-full pointer-coarse:visible" : ""
                           }`}
-                          aria-label="Open the interactive demo"
                         >
                           <span className="flex size-16 items-center justify-center rounded-full bg-pinata-purple shadow-[0_10px_35px_-5px_rgba(109,87,255,0.6)] ring-1 ring-white/20 transition-transform group-active:scale-95">
                             <Play
