@@ -33,17 +33,13 @@ import {
 } from "../../agent/imageAttachments";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 import { useWorkspaceLoadVersion } from "../../hooks/useWorkspace";
-import { usePreviewAdapterHandle } from "../../contexts/PreviewAdapterHandleContext";
-import {
-  useWebContainerRuntimeMetadata,
-  useWebContainerRuntimeSnapshotGetter,
-} from "../../hooks/useWebContainerRuntime";
 import { createChatCheckpoint } from "../../agent/chatRecording";
 import AgentErrorNotice from "./AgentErrorNotice";
 import AgentSettingsDialog from "./AgentSettingsDialog";
 import DraftImageStrip from "./DraftImageStrip";
 import ToolConfirmationCard from "./ToolConfirmationCard";
 import { formatToolResultOutput } from "./toolResultOutput";
+import { useAgentObservers } from "./useAgentObservers";
 import { useOpenRouterModelCatalog } from "./useOpenRouterModelCatalog";
 
 const STATUS_LABEL: Record<ChatStatus, string> = {
@@ -172,9 +168,6 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const sessionStore = getAgentSessionStore();
   const { handleChatEvent } = useNextEditorActions();
   const { isPlaying, isRecording } = useNextEditorMetadata();
-  const previewHandle = usePreviewAdapterHandle();
-  const runtimeMetadata = useWebContainerRuntimeMetadata();
-  const getRuntimeSnapshot = useWebContainerRuntimeSnapshotGetter();
   const workspaceLoadVersion = useWorkspaceLoadVersion();
 
   const liveItems = useSelector(agentStore, (s) => selectItems(s.context));
@@ -208,7 +201,6 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const keyHintId = useId();
   const wasRecordingRef = useRef(false);
-  const runtimeMetadataRef = useRef(runtimeMetadata);
 
   useEffect(() => {
     if (!workspaceStore || isReplayActive) {
@@ -232,10 +224,6 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ block: "end" });
   }, [items]);
-
-  useEffect(() => {
-    runtimeMetadataRef.current = runtimeMetadata;
-  }, [runtimeMetadata]);
 
   // Called after the effects above so its fetch effect keeps its place in their order.
   const modelCatalog = useOpenRouterModelCatalog(isSettingsOpen);
@@ -262,6 +250,10 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
   const isKeyHintShown = !apiKey && !isReplayActive;
   const selectedModelOption = modelCatalog.modelOptions.find((option) => option.id === model);
   const selectedModelLabel = selectedModelOption?.label ?? model;
+  const observers = useAgentObservers(
+    selectedModelLabel,
+    selectedModelOption?.supportsImages ?? false,
+  );
 
   const applyDraft = (text: string) => {
     const delta = { k: "draft", text } as const;
@@ -293,35 +285,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
       prompt,
       images,
       handleChatEvent,
-      getRuntimeDiagnostics: () => {
-        const metadata = runtimeMetadataRef.current;
-        const snapshot = getRuntimeSnapshot();
-        return {
-          activeCommand: snapshot.activeCommand,
-          errorMessage: snapshot.errorMessage,
-          isSupported: metadata.isSupported,
-          lastOutput: snapshot.lastOutput,
-          latestLifecycleEvent: snapshot.latestLifecycleEvent,
-          latestPreviewMessage: snapshot.latestPreviewMessage,
-          previewPort: snapshot.previewPort,
-          previewUrl: snapshot.previewUrl,
-          status: snapshot.status,
-        };
-      },
-      getPreviewInspection: async () =>
-        (await previewHandle.livePreviewInspectionGetter.current?.()) ?? null,
-      capturePreviewScreenshot: async () => {
-        if (!selectedModelOption?.supportsImages) {
-          throw new Error(
-            `${selectedModelLabel} does not advertise image input support on OpenRouter. Use inspect_preview instead.`,
-          );
-        }
-        const capture = previewHandle.previewScreenshotCapturer.current;
-        if (!capture) {
-          throw new Error("The live preview is not mounted.");
-        }
-        return capture();
-      },
+      observers,
     });
     // Starting the run swaps Send for Stop; keep focus in the (now read-only)
     // composer instead of letting it fall to the body with the unmounted button.

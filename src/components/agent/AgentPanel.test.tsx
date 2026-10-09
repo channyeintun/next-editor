@@ -31,8 +31,10 @@ vi.mock("../../contexts/PreviewAdapterHandleContext", () => ({
   }),
 }));
 vi.mock("../../hooks/useWebContainerRuntime", () => ({
-  useWebContainerRuntimeMetadata: () => ({ isSupported: true }),
   useWebContainerRuntimeSnapshotGetter: () => () => ({}),
+}));
+vi.mock("../../runtime/webcontainer/sharedContainer", () => ({
+  isWebContainerRuntimeSupported: () => true,
 }));
 vi.mock("./useOpenRouterModelCatalog", () => ({
   useOpenRouterModelCatalog: () => ({

@@ -4,6 +4,8 @@ import { createOpenRouterClient } from "./openrouterClient";
 import {
   DEFAULT_AGENT_MODEL,
   type AgentModelId,
+  type AgentObservers,
+  type AgentUsage,
   type ToolConfirmationRequest,
   type ToolContext,
 } from "./types";
@@ -24,11 +26,6 @@ const MAX_STEPS = 30;
 /** The one bound `callModel` method off an `OpenRouter` client — the only surface this loop needs. */
 type CallModel = OpenRouter["callModel"];
 
-export interface AgentUsage {
-  inputTokens: number;
-  outputTokens: number;
-}
-
 export interface RunAgentLoopOptions {
   apiKey: string;
   model?: AgentModelId;
@@ -39,9 +36,7 @@ export interface RunAgentLoopOptions {
   images?: ChatImage[];
   signal: AbortSignal;
   requestConfirmation: (request: ToolConfirmationRequest) => Promise<boolean>;
-  getRuntimeDiagnostics?: ToolContext["getRuntimeDiagnostics"];
-  getPreviewInspection?: ToolContext["getPreviewInspection"];
-  capturePreviewScreenshot?: ToolContext["capturePreviewScreenshot"];
+  observers?: AgentObservers;
   onDelta: (delta: ChatDelta) => void;
   onUsage?: (usage: AgentUsage) => void;
   maxSteps?: number;
@@ -122,12 +117,10 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
   };
 
   const toolContext: ToolContext = {
+    ...options.observers,
     workspace,
     signal,
     requestConfirmation: gatedConfirmation,
-    getRuntimeDiagnostics: options.getRuntimeDiagnostics,
-    getPreviewInspection: options.getPreviewInspection,
-    capturePreviewScreenshot: options.capturePreviewScreenshot,
   };
   // Playground lessons (Go, Kotlin, Rust, Kite) have no in-browser runtime, so
   // their agent runs with file tools only — no bash and no runtime/preview

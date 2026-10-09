@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { OpenRouter } from "@openrouter/agent";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatDelta } from "../types/chat";
-import { runAgentLoop, type AgentUsage } from "./agentLoop";
+import { runAgentLoop } from "./agentLoop";
+import type { AgentUsage } from "./types";
 
 // Drives runAgentLoop through the real @openrouter/agent SDK — its tool loop,
 // stream parsing, abort wiring and usage accounting — against a fake Responses

@@ -2,12 +2,7 @@ import { createStore } from "@xstate/store-react";
 import type { ChatCheckpoint, ChatDelta, ChatImage, ChatItem, ChatStatus } from "../types/chat";
 import { applyChatDelta, INITIAL_CHAT_FOLD_STATE } from "../core/src/utils/chatDelta";
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
-import { DEFAULT_AGENT_MODEL, type AgentModelId } from "./types";
-
-export interface AgentUsage {
-  inputTokens: number;
-  outputTokens: number;
-}
+import { DEFAULT_AGENT_MODEL, type AgentModelId, type AgentUsage } from "./types";
 
 export interface AgentWorkspaceScope {
   workspace: WorkspaceStoreInstance;

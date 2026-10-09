@@ -1,5 +1,5 @@
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
-import type { RuntimeLifecycleEvent, RuntimePreviewMessage } from "../types/runtime";
+import type { WebContainerRuntimeRecordingSnapshot } from "../contexts/WebContainerRuntimeContext";
 import type { LivePreviewInspection } from "../stores/previewAdapterHandle";
 import type { PreviewScreenshotResult } from "../utils/iframeScreenshotBridge";
 
@@ -14,17 +14,24 @@ export interface ToolConfirmationRequest {
   summary: string;
 }
 
-export interface AgentRuntimeDiagnostics {
-  activeCommand: string | null;
-  errorMessage: string | null;
-  isSupported: boolean;
-  lastOutput: string | null;
-  latestLifecycleEvent: RuntimeLifecycleEvent | null;
-  latestPreviewMessage: RuntimePreviewMessage | null;
-  previewPort: number | null;
-  previewUrl: string | null;
-  status: string;
+/** Token totals across every model call a run made. */
+export interface AgentUsage {
+  inputTokens: number;
+  outputTokens: number;
 }
+
+/** What `runtime_diagnostics` reports: the live runtime snapshot's fields plus support. */
+export type AgentRuntimeDiagnostics = Pick<
+  WebContainerRuntimeRecordingSnapshot,
+  | "activeCommand"
+  | "errorMessage"
+  | "lastOutput"
+  | "latestLifecycleEvent"
+  | "latestPreviewMessage"
+  | "previewPort"
+  | "previewUrl"
+  | "status"
+> & { isSupported: boolean };
 
 /**
  * Injected into each agent tool's `execute` via a closure (see `tools/index.ts`).
@@ -42,6 +49,16 @@ export interface ToolContext {
   getPreviewInspection?: () => Promise<LivePreviewInspection | null>;
   capturePreviewScreenshot?: () => Promise<PreviewScreenshotResult>;
 }
+
+/**
+ * The runtime and preview observation hooks the panel hands a run, carried as
+ * one object from Send through the loop to the tools, so a Retry cannot carry a
+ * different set than the Send it repeats.
+ */
+export type AgentObservers = Pick<
+  ToolContext,
+  "getRuntimeDiagnostics" | "getPreviewInspection" | "capturePreviewScreenshot"
+>;
 
 /** Content-array output blocks a tool may return instead of a plain string (e.g. images). */
 export type ToolOutputContent =

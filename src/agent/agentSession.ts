@@ -1,7 +1,7 @@
 import { createStore } from "@xstate/store-react";
 import { getAgentStore, type AgentWorkspaceScope } from "./agentStore";
 import { createChatRecorder, type ChatEventHandler } from "./chatRecording";
-import type { AgentModelId, ToolConfirmationRequest, ToolContext } from "./types";
+import type { AgentModelId, AgentObservers, ToolConfirmationRequest } from "./types";
 import { selectWorkspaceLoadVersion, type WorkspaceStoreInstance } from "../stores/workspaceStore";
 import type { ChatImage } from "../types/chat";
 import { formatAgentError } from "./agentError";
@@ -162,9 +162,7 @@ export interface StartAgentRunOptions {
   prompt: string;
   images?: ChatImage[];
   handleChatEvent: ChatEventHandler;
-  getRuntimeDiagnostics?: ToolContext["getRuntimeDiagnostics"];
-  getPreviewInspection?: ToolContext["getPreviewInspection"];
-  capturePreviewScreenshot?: ToolContext["capturePreviewScreenshot"];
+  observers?: AgentObservers;
 }
 
 export function clearAgentRetry(): void {
@@ -239,9 +237,7 @@ async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
       images: options.images,
       signal: controller.signal,
       requestConfirmation: (request) => requestConfirmation(request, controller.signal),
-      getRuntimeDiagnostics: options.getRuntimeDiagnostics,
-      getPreviewInspection: options.getPreviewInspection,
-      capturePreviewScreenshot: options.capturePreviewScreenshot,
+      observers: options.observers,
       onDelta: (delta) => {
         if (!isCurrentWorkspaceScope(workspaceScope)) {
           return;
@@ -263,14 +259,11 @@ async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
       message: formatAgentError(error),
     });
     const firstTurnItem = agentStore.getSnapshot().context.items[history.length];
+    // Everything the Send carried except the key and model, which Retry takes
+    // fresh from the panel, so no option can be dropped from the repeat.
+    const { apiKey: _apiKey, model: _model, ...repeatOptions } = options;
     retryOptions = {
-      workspace: options.workspace,
-      prompt: options.prompt,
-      images: options.images,
-      handleChatEvent: options.handleChatEvent,
-      getRuntimeDiagnostics: options.getRuntimeDiagnostics,
-      getPreviewInspection: options.getPreviewInspection,
-      capturePreviewScreenshot: options.capturePreviewScreenshot,
+      ...repeatOptions,
       ...(firstTurnItem ? { fromId: firstTurnItem.id } : {}),
     };
     agentSessionStore.trigger.setCanRetry({ canRetry: true });
