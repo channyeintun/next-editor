@@ -904,7 +904,10 @@ export default function StudioController() {
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-semibold text-white">Studio render</h2>
         <div className="flex items-center gap-1.5">
+          {/* The status region lives in the header, outside the hidden body, so
+              a render's progress and outcome are announced while collapsed. */}
           <span
+            role="status"
             className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
               phase === "done"
                 ? "bg-emerald-500/15 text-emerald-300"
@@ -915,6 +918,7 @@ export default function StudioController() {
                     : "bg-slate-500/15 text-slate-300"
             }`}
           >
+            <span className="sr-only">Render status: </span>
             {running ? phase : phase === "idle" ? "ready" : phase}
           </span>
           <button
@@ -1100,13 +1104,16 @@ export default function StudioController() {
             />
           </div>
         )}
-        {voiceBusy ? <p className="mt-1 text-[12px] text-slate-400">{voiceBusy}</p> : null}
-        {voiceRecording ? (
-          <p className="mt-1 text-[12px] text-amber-300">
-            Recording… speak naturally for at least {requiredVoiceSeconds}s; stops automatically at{" "}
-            {MAX_SAMPLE_SECONDS}s.
-          </p>
-        ) : null}
+        {/* Always mounted, so the voice-task notices it fills are announced. */}
+        <div role="status">
+          {voiceBusy ? <p className="mt-1 text-[12px] text-slate-400">{voiceBusy}</p> : null}
+          {voiceRecording ? (
+            <p className="mt-1 text-[12px] text-amber-300">
+              Recording… speak naturally for at least {requiredVoiceSeconds}s; stops automatically
+              at {MAX_SAMPLE_SECONDS}s.
+            </p>
+          ) : null}
+        </div>
         {provider === "voxcpm2" ? (
           <p
             className={`mt-1 text-[12px] ${
@@ -1173,6 +1180,9 @@ export default function StudioController() {
               (provider === "voxcpm2" && !selectedVoiceIsBurmeseReady) ||
               startBlockedReason !== null
             }
+            aria-describedby={
+              startBlockedReason && !running ? "studio-start-blocked-reason" : undefined
+            }
             className="rounded-md bg-[#173925] px-3 py-1.5 font-bold uppercase tracking-[0.04em] text-[#58d88d] transition-colors hover:bg-[#1f4a31] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {runHistory.length === 0 ? "Start render" : "Render again"}
@@ -1208,12 +1218,19 @@ export default function StudioController() {
           ) : null}
         </div>
 
+        {/* Describes the disabled Start button. Not a live region: for AthanLab
+            it repeats the panel's own message, which would be announced twice. */}
         {startBlockedReason && !running ? (
-          <p className="mt-2 text-[12px] text-amber-300">{startBlockedReason}</p>
+          <p id="studio-start-blocked-reason" className="mt-2 text-[12px] text-amber-300">
+            {startBlockedReason}
+          </p>
         ) : null}
 
         {fatal ? (
-          <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200">
+          <p
+            role="alert"
+            className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200"
+          >
             {fatal}
           </p>
         ) : null}
