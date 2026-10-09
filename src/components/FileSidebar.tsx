@@ -43,6 +43,9 @@ function FileSidebarPanel() {
   const [editState, setEditState] = useState<SidebarEditState>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
   const editInputRef = useRef<HTMLInputElement | null>(null);
+  // The row the context menu was opened from, to take focus back when the menu
+  // closes without moving it anywhere else.
+  const contextMenuOpenerRef = useRef<HTMLElement | null>(null);
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const sidebarScrollAnimationFrameRef = useRef<number | null>(null);
   const pendingSidebarScrollTopRef = useRef(0);
@@ -105,6 +108,24 @@ function FileSidebarPanel() {
     const selectionEnd = getEditableSelectionEnd(input.value, editState.kind);
     input.setSelectionRange(0, selectionEnd);
   }, [editState]);
+
+  // Declared after the effect above on purpose: Rename, New File and New Folder
+  // close the menu and open the name field in one commit, so the field has
+  // focus by now and keeps it. Every other way out of the menu (Escape, a copy,
+  // Open in Preview, a cancelled delete) unmounts the focused item and leaves
+  // focus on the body, so it goes back to the row.
+  useEffect(() => {
+    if (contextMenu) {
+      return;
+    }
+
+    const opener = contextMenuOpenerRef.current;
+    contextMenuOpenerRef.current = null;
+    const active = document.activeElement;
+    if (opener?.isConnected && (!active || active === document.body)) {
+      opener.focus({ preventScroll: true });
+    }
+  }, [contextMenu]);
 
   useLayoutEffect(() => {
     const container = sidebarScrollContainerRef.current;
@@ -287,6 +308,7 @@ function FileSidebarPanel() {
       openFile(path);
     }
 
+    contextMenuOpenerRef.current = event.currentTarget;
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
@@ -294,6 +316,50 @@ function FileSidebarPanel() {
       path,
       parentPath: getParentWorkspacePath(path),
     });
+  };
+
+  /**
+   * The row's keyboard route to everything its context menu offers, since
+   * macOS keyboards have no Menu key and Chrome and Safari there never turn
+   * Shift+F10 into a contextmenu event. Shift+F10 or the Menu key opens the
+   * menu under the row, F2 renames, and Delete (Cmd+Backspace on a Mac
+   * keyboard, as in Finder) deletes after the same confirm as the menu. Unlike
+   * a right-click, no key here opens a file: the focused row is the target.
+   */
+  const handleRowKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    kind: SidebarEntryKind,
+    path: string,
+  ) => {
+    if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
+      event.preventDefault();
+      const rect = event.currentTarget.getBoundingClientRect();
+      contextMenuOpenerRef.current = event.currentTarget;
+      setContextMenu({
+        x: rect.left + 16,
+        y: rect.bottom,
+        kind,
+        path,
+        parentPath: getParentWorkspacePath(path),
+      });
+      return;
+    }
+
+    if (event.key === "F2") {
+      event.preventDefault();
+      startRenameEntry(kind, path);
+      return;
+    }
+
+    if (event.key === "Delete" || (event.key === "Backspace" && event.metaKey)) {
+      // The menu disables this delete; the key does nothing either.
+      if (deletesEveryFile(files, path)) {
+        return;
+      }
+
+      event.preventDefault();
+      handleDeleteEntry(kind, path);
+    }
   };
 
   const toggleFolder = (path: string) => {
@@ -353,6 +419,8 @@ function FileSidebarPanel() {
                 type="button"
                 onClick={() => toggleFolder(node.path)}
                 onContextMenu={(event) => handleRowContextMenu(event, "folder", node.path)}
+                onKeyDown={(event) => handleRowKeyDown(event, "folder", node.path)}
+                aria-keyshortcuts="Shift+F10 F2 Delete"
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5 transition-colors hover:bg-slate-900 ${
                   node.hasActiveFile ? "text-slate-200" : "text-slate-400"
                 }`}
@@ -390,6 +458,8 @@ function FileSidebarPanel() {
           {...{ [STUDIO_TARGET_ATTRIBUTE]: studioTargetIdForFile(node.path) }}
           onClick={() => openFile(node.path)}
           onContextMenu={(event) => handleRowContextMenu(event, "file", node.path)}
+          onKeyDown={(event) => handleRowKeyDown(event, "file", node.path)}
+          aria-keyshortcuts="Shift+F10 F2 Delete"
           className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5 transition-colors ${
             isActive
               ? "bg-slate-800 text-white"

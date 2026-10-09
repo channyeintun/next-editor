@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDismissOnOutsideInteraction } from "../../hooks/useDismissOnOutsideInteraction";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import {
@@ -33,6 +33,10 @@ interface FileContextMenuProps {
  * The file sidebar's right-click menu, kept inside the viewport. The sidebar
  * renders it for as long as the sidebar is mounted, so the menu's last measured
  * size carries over to the next opening, as it did when the sidebar held it.
+ *
+ * It sits after the whole tree in the DOM, so opening it moves focus to its
+ * first item, and tabbing out of it closes it; the sidebar then hands focus
+ * back to the row it was opened from when nothing else took it.
  */
 export default function FileContextMenu({
   menu,
@@ -47,6 +51,7 @@ export default function FileContextMenu({
   onDelete,
 }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const firstItemRef = useRef<HTMLButtonElement | null>(null);
   const [menuSize, setMenuSize] = useState({
     width: CONTEXT_MENU_FALLBACK_WIDTH,
     height: CONTEXT_MENU_FALLBACK_HEIGHT,
@@ -72,6 +77,12 @@ export default function FileContextMenu({
       return nextSize;
     });
   }, [menu, canOpenInPreview]);
+
+  useEffect(() => {
+    if (menu) {
+      firstItemRef.current?.focus({ preventScroll: true });
+    }
+  }, [menu]);
 
   useDismissOnOutsideInteraction({
     isOpen: menu !== null,
@@ -105,6 +116,20 @@ export default function FileContextMenu({
   return (
     <div
       ref={menuRef}
+      role="group"
+      aria-label={menu.kind === "folder" ? "Folder actions" : "File actions"}
+      onBlur={(event) => {
+        // A null relatedTarget is ignored: Safari does not focus a button on
+        // mousedown, so a click on an item blurs to nothing before it fires.
+        // Pointer-downs outside the menu are dismissed by the hook above.
+        const next = event.relatedTarget as Node | null;
+        if (next && !event.currentTarget.contains(next)) {
+          onDismiss();
+        }
+      }}
+      // Windows sends the Menu key's contextmenu on keyup, after this menu has
+      // taken focus; without this the browser's own menu opens over it.
+      onContextMenu={(event) => event.preventDefault()}
       className="fixed z-60 min-w-56 overflow-y-auto rounded-xl border border-slate-700 bg-[#1b2029] py-2 shadow-[0_20px_40px_rgba(2,6,23,0.55)]"
       style={{
         left: placement.left,
@@ -113,6 +138,7 @@ export default function FileContextMenu({
       }}
     >
       <button
+        ref={firstItemRef}
         type="button"
         onClick={() => onCreate("file", createParentPath)}
         className={MENU_ITEM_CLASS}
@@ -178,6 +204,9 @@ export default function FileContextMenu({
       >
         {menu.kind === "folder" ? "Delete Folder" : "Delete File"}
       </button>
+      {isDeleteRefused ? (
+        <p className="px-4 pb-1 text-xs text-slate-300">A project needs at least one file</p>
+      ) : null}
     </div>
   );
 }

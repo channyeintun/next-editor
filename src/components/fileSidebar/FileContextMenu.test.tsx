@@ -106,14 +106,21 @@ describe("FileContextMenu", () => {
     expect(onDelete).toHaveBeenCalledWith("folder", "src");
   });
 
-  it("refuses a delete that would leave no file", () => {
+  it("refuses a delete that would leave no file, and says why", () => {
     const { onDelete } = renderMenu(fileMenu, { isDeleteRefused: true });
 
     const deleteFile = item("Delete File");
     expect(deleteFile).toBeDisabled();
     expect(deleteFile).toHaveAttribute("title", "A project needs at least one file");
+    expect(screen.getByText("A project needs at least one file")).toBeVisible();
     fireEvent.click(deleteFile);
     expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it("shows the reason only when the delete is refused", () => {
+    renderMenu(fileMenu);
+
+    expect(screen.queryByText("A project needs at least one file")).not.toBeInTheDocument();
   });
 
   it("offers Open in Preview only when it can, and marks the file already shown", () => {
@@ -126,6 +133,42 @@ describe("FileContextMenu", () => {
     expect(openInPreview).toHaveClass("text-sky-200");
     fireEvent.click(openInPreview);
     expect(onOpenInPreview).toHaveBeenCalledWith("src/index.html");
+  });
+
+  it("names its group of actions after the entry kind", () => {
+    const onFile = renderMenu(fileMenu);
+    expect(screen.getByRole("group", { name: "File actions" })).toContainElement(item("Rename"));
+    onFile.unmount();
+
+    renderMenu({ ...fileMenu, kind: "folder", path: "src" });
+    expect(screen.getByRole("group", { name: "Folder actions" })).toBeInTheDocument();
+  });
+
+  it("moves focus to its first item when it opens", () => {
+    renderMenu(fileMenu);
+
+    expect(item("New File")).toHaveFocus();
+  });
+
+  it("dismisses when focus moves out of it, but not between its items", () => {
+    const { onDismiss } = renderMenu(fileMenu);
+
+    fireEvent.blur(item("New File"), { relatedTarget: item("Rename") });
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    // Safari blurs to nothing on a mousedown over an item; the click must still land.
+    fireEvent.blur(item("Rename"), { relatedTarget: null });
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    fireEvent.blur(item("Rename"), { relatedTarget: item("Outside") });
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the browser's own menu from opening over it", () => {
+    renderMenu(fileMenu);
+
+    // fireEvent returns false when the event's default action was prevented.
+    expect(fireEvent.contextMenu(item("New File"))).toBe(false);
   });
 
   it("dismisses on a pointer-down outside it or on Escape", () => {
