@@ -918,7 +918,15 @@ export default function ArchitecturePage() {
             </div>
           </div>
 
-          <div className="diagram-wrap">
+          {/* The diagram scrolls sideways on narrow screens; Safari does not
+              focus scroll containers on its own, so the wrapper takes focus
+              to let keyboard users scroll it with the arrow keys. */}
+          <div
+            className="diagram-wrap"
+            role="region"
+            tabIndex={0}
+            aria-label="System architecture diagram"
+          >
             <svg
               viewBox={`0 0 1320 ${VIEW_HEIGHT}`}
               width="100%"
