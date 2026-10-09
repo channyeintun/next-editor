@@ -80,6 +80,7 @@ export default function EnvironmentVariablesDialog({
   returnFocusRef,
 }: EnvironmentVariablesDialogProps) {
   const titleId = useId();
+  const errorId = useId();
   const { rerunRunner, updateEnvironmentVariables } = useWebContainerRuntimeActions();
   const { environmentVariables, runnerConfig, status } = useWebContainerRuntimeMetadata();
   const [draftValue, setDraftValue] = useState(() =>
@@ -133,12 +134,18 @@ export default function EnvironmentVariablesDialog({
             }}
             rows={12}
             spellCheck={false}
+            aria-invalid={errorMessage ? true : undefined}
+            aria-describedby={errorMessage ? errorId : undefined}
             className="min-h-64 w-full rounded-lg border border-slate-700 bg-[#11141c] font-mono text-sm leading-6 text-slate-100 outline-none transition-colors focus:border-slate-500 p-3"
             placeholder="API_URL=https://example.com\nNODE_ENV=development"
           />
         </label>
 
-        {errorMessage ? <p className="text-sm text-rose-300">{errorMessage}</p> : null}
+        {errorMessage ? (
+          <p id={errorId} role="alert" className="text-sm text-rose-300">
+            {errorMessage}
+          </p>
+        ) : null}
 
         <div className="flex items-center justify-end gap-3">
           <button

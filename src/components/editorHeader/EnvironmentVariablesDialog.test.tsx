@@ -126,16 +126,24 @@ describe("EnvironmentVariablesDialog", () => {
   it("shows a malformed line instead of saving, until the next edit", () => {
     const { actions, onClose, textarea } = renderDialog();
 
+    expect(textarea()).not.toHaveAttribute("aria-invalid");
+    expect(textarea()).not.toHaveAttribute("aria-describedby");
+
     fireEvent.change(textarea(), { target: { value: "not a variable" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(screen.getByText("Line 1 must use KEY=value format.")).toBeInTheDocument();
+    // Announced as an alert, since focus stays on Save, and tied to the field.
+    expect(screen.getByRole("alert")).toHaveTextContent("Line 1 must use KEY=value format.");
+    expect(textarea()).toHaveAttribute("aria-invalid", "true");
+    expect(textarea()).toHaveAccessibleDescription("Line 1 must use KEY=value format.");
     expect(actions.updateEnvironmentVariables).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
 
     fireEvent.change(textarea(), { target: { value: "NOW=valid" } });
 
-    expect(screen.queryByText("Line 1 must use KEY=value format.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(textarea()).not.toHaveAttribute("aria-invalid");
+    expect(textarea()).not.toHaveAttribute("aria-describedby");
   });
 
   it("is a modal dialog titled Edit Environment that starts in the text area", () => {
