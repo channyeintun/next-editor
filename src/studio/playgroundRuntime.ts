@@ -55,7 +55,12 @@ import {
 import { collectAsmPlaygroundFiles, ASM_ENTRY_PATH } from "../runtime/asmPlayground/files";
 import type { WorkspaceProject } from "../types/workspace";
 import { StudioActionError, abortableSleep } from "./async";
-import type { StudioRuntime } from "./plan";
+import { fixtureRunConsoleLines } from "./fixtureConsoleLines";
+import {
+  PLAYGROUND_TRANSIENT_ERROR_KINDS,
+  type StudioPlaygroundRuntime,
+  type StudioPlaygroundRuntimeKind,
+} from "./plan";
 
 /**
  * Execution-kind adapters for `runtime.run` (docs/agent-lesson-production.md
@@ -72,27 +77,9 @@ import type { StudioRuntime } from "./plan";
  * replays the pinned result, optionally simulating transient failures first.
  */
 
-const RETRYABLE_KINDS = new Set(["rate-limited", "timeout", "unavailable"]);
+const RETRYABLE_KINDS = new Set<string>(PLAYGROUND_TRANSIENT_ERROR_KINDS);
 const RETRY_DELAY_MS = 500;
 export const MAX_RUN_ATTEMPTS = 2;
-
-type PlaygroundRuntime = Extract<
-  StudioRuntime,
-  {
-    kind:
-      | "go-playground"
-      | "kotlin-playground"
-      | "rust-playground"
-      | "zig-playground"
-      | "haskell-playground"
-      | "kite-playground"
-      | "asm-playground";
-  }
->;
-type FixtureOf<K extends PlaygroundRuntime["kind"]> = Extract<
-  PlaygroundRuntime,
-  { kind: K }
->["fixture"];
 
 export interface PlaygroundRunFailure {
   attempt: number;
@@ -135,11 +122,6 @@ interface PlaygroundEngine {
     timeoutMs: number,
     signal: AbortSignal,
   ): Promise<{ resultLines: string[]; ok: boolean; status: string }>;
-  runFixtureResult(fixture: { result: unknown }): {
-    resultLines: string[];
-    ok: boolean;
-    status: string;
-  };
   /** Console lines for a terminal service failure. */
   serviceErrorLines(kind: string, message: string): string[];
 }
@@ -214,7 +196,7 @@ class ServiceFailure extends Error {
   }
 }
 
-function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
+function engineFor(kind: StudioPlaygroundRuntimeKind): PlaygroundEngine {
   switch (kind) {
     case "go-playground": {
       let client: GoPlaygroundClient | null = null;
@@ -237,14 +219,6 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
             timeoutMs,
             signal,
           );
-          return {
-            resultLines: goRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
-        runFixtureResult: (fixture) => {
-          const result = (fixture as FixtureOf<"go-playground">).result;
           return {
             resultLines: goRunResultToConsoleLines(result),
             ok: result.status === "success",
@@ -285,14 +259,6 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
             status: result.status,
           };
         },
-        runFixtureResult: (fixture) => {
-          const result = (fixture as FixtureOf<"kotlin-playground">).result;
-          return {
-            resultLines: kotlinRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
         serviceErrorLines: (errorKind, message) =>
           kotlinRunServiceErrorToConsoleLines(
             errorKind as Parameters<typeof kotlinRunServiceErrorToConsoleLines>[0],
@@ -324,14 +290,6 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
             timeoutMs,
             signal,
           );
-          return {
-            resultLines: rustRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
-        runFixtureResult: (fixture) => {
-          const result = (fixture as FixtureOf<"rust-playground">).result;
           return {
             resultLines: rustRunResultToConsoleLines(result),
             ok: result.status === "success",
@@ -376,14 +334,6 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
             status: result.status,
           };
         },
-        runFixtureResult: (fixture) => {
-          const result = (fixture as FixtureOf<"zig-playground">).result;
-          return {
-            resultLines: zigRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
         serviceErrorLines: (errorKind, message) =>
           zigRunServiceErrorToConsoleLines(
             errorKind as Parameters<typeof zigRunServiceErrorToConsoleLines>[0],
@@ -418,14 +368,6 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
             timeoutMs,
             signal,
           );
-          return {
-            resultLines: haskellRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
-        runFixtureResult: (fixture) => {
-          const result = (fixture as FixtureOf<"haskell-playground">).result;
           return {
             resultLines: haskellRunResultToConsoleLines(result),
             ok: result.status === "success",
@@ -473,14 +415,6 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
             status: result.status,
           };
         },
-        runFixtureResult: (fixture) => {
-          const result = (fixture as FixtureOf<"kite-playground">).result;
-          return {
-            resultLines: kiteRunResultToConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
         serviceErrorLines: (errorKind, message) =>
           kiteRunServiceErrorToConsoleLines(
             errorKind as Parameters<typeof kiteRunServiceErrorToConsoleLines>[0],
@@ -521,14 +455,6 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
             status: result.status,
           };
         },
-        runFixtureResult: (fixture) => {
-          const result = (fixture as FixtureOf<"asm-playground">).result;
-          return {
-            resultLines: asmRunConsoleLines(result),
-            ok: result.status === "success",
-            status: result.status,
-          };
-        },
         serviceErrorLines: (errorKind, message) =>
           asmRunServiceErrorToConsoleLines(
             errorKind as Parameters<typeof asmRunServiceErrorToConsoleLines>[0],
@@ -540,7 +466,7 @@ function engineFor(kind: PlaygroundRuntime["kind"]): PlaygroundEngine {
 }
 
 export interface PlaygroundRunInput {
-  runtime: PlaygroundRuntime;
+  runtime: StudioPlaygroundRuntime;
   mode: "live" | "fixture";
   project: Pick<WorkspaceProject, "files">;
   timeoutMs: number;
@@ -553,7 +479,7 @@ export interface PlaygroundRunPrepared {
 }
 
 /** `[<label>-run error]` prefix for the runtime's console error lines. */
-export function runErrorPrefixFor(kind: PlaygroundRuntime["kind"]): string {
+export function runErrorPrefixFor(kind: StudioPlaygroundRuntimeKind): string {
   return `[${engineFor(kind).label}-run error]`;
 }
 
@@ -582,7 +508,15 @@ export function preparePlaygroundRun(input: PlaygroundRunInput): PlaygroundRunPr
           if (transientKind) {
             throw new ServiceFailure(transientKind, `Simulated transient ${transientKind}`);
           }
-          return { ...engine.runFixtureResult(fixture), attempts: attempt, transientFailures };
+          // The pinned result goes through the same console builders a live
+          // run's result does; every runner reports a clean run as "success".
+          return {
+            resultLines: fixtureRunConsoleLines(input.runtime),
+            ok: fixture.result.status === "success",
+            status: fixture.result.status,
+            attempts: attempt,
+            transientFailures,
+          };
         }
         const outcome = await engine.runLive(files, input.timeoutMs, input.signal);
         return { ...outcome, attempts: attempt, transientFailures };

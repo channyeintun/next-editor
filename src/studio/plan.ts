@@ -615,6 +615,13 @@ function runnerContract(
 }
 
 /**
+ * The service failures a server-backed Playground run retries — the transient
+ * kinds a fixture may simulate, and the kinds the run engine treats as
+ * retryable. The in-page runners (Kite, asm) can only be "unavailable".
+ */
+export const PLAYGROUND_TRANSIENT_ERROR_KINDS = ["rate-limited", "timeout", "unavailable"] as const;
+
+/**
  * Deterministic stand-in for a live run: the exact normalized result the
  * Playground would return for the pinned sources. Fixture renders replay it
  * through the same console formatting path after `latencyMs`.
@@ -625,7 +632,7 @@ export const goRunFixtureSchema = z.object({
    * Transient service failures to simulate before the result, one per attempt
    * — exercises the driver's declared-idempotent retry path deterministically.
    */
-  transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
+  transientErrorKinds: z.array(z.enum(PLAYGROUND_TRANSIENT_ERROR_KINDS)).default([]),
   result: z
     .object({
       status: z.enum(["success", "compile-error", "vet-error", "runtime-error"]),
@@ -640,7 +647,7 @@ export const goRunFixtureSchema = z.object({
 /** Kotlin Playground stand-in result — mirrors the worker-normalized contract. */
 export const kotlinRunFixtureSchema = z.object({
   latencyMs: positiveMs,
-  transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
+  transientErrorKinds: z.array(z.enum(PLAYGROUND_TRANSIENT_ERROR_KINDS)).default([]),
   result: z
     .object({
       status: z.enum(["success", "compile-error", "runtime-error"]),
@@ -660,7 +667,7 @@ export const kotlinRunFixtureSchema = z.object({
  */
 export const zigRunFixtureSchema = z.object({
   latencyMs: positiveMs,
-  transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
+  transientErrorKinds: z.array(z.enum(PLAYGROUND_TRANSIENT_ERROR_KINDS)).default([]),
   result: z
     .object({
       status: z.enum(["success", "compile-error", "runtime-error"]),
@@ -674,7 +681,7 @@ export const zigRunFixtureSchema = z.object({
 /** Rust Playground stand-in result — mirrors the worker-normalized contract. */
 export const rustRunFixtureSchema = z.object({
   latencyMs: positiveMs,
-  transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
+  transientErrorKinds: z.array(z.enum(PLAYGROUND_TRANSIENT_ERROR_KINDS)).default([]),
   result: z
     .object({
       status: z.enum(["success", "compile-error", "runtime-error"]),
@@ -704,7 +711,7 @@ export const rustRunFixtureSchema = z.object({
  */
 export const haskellRunFixtureSchema = z.object({
   latencyMs: positiveMs,
-  transientErrorKinds: z.array(z.enum(["rate-limited", "timeout", "unavailable"])).default([]),
+  transientErrorKinds: z.array(z.enum(PLAYGROUND_TRANSIENT_ERROR_KINDS)).default([]),
   result: z
     .object({
       status: z.enum(["success", "compile-error", "runtime-error"]),

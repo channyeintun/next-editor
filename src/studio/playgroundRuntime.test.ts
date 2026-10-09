@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { createWorkspaceFile } from "../starters/shared";
 import { StudioActionError } from "./async";
+import { fixtureRunConsoleLines } from "./fixtureConsoleLines";
 import {
   PlaygroundTerminalError,
   preparePlaygroundRun,
   runErrorPrefixFor,
 } from "./playgroundRuntime";
 import {
+  isPlaygroundRuntime,
   isPlaygroundRuntimeKind,
   runtimeDockStartsCollapsed,
   studioRuntimeSchema,
@@ -287,6 +289,55 @@ const PLAYGROUND_FIXTURE_INPUTS: Record<StudioPlaygroundRuntimeKind, unknown> = 
   "kite-playground": { latencyMs: 5, result: { status: "success", stdout: "", stderr: "" } },
   "asm-playground": { latencyMs: 5, result: { status: "success", stdout: "", stderr: "" } },
 };
+
+/** The file each kind's fixture run compiles. */
+const PLAYGROUND_ENTRY_PATHS: Record<StudioPlaygroundRuntimeKind, string> = {
+  "go-playground": "main.go",
+  "kotlin-playground": "Main.kt",
+  "rust-playground": "main.rs",
+  "zig-playground": "main.zig",
+  "haskell-playground": "Main.hs",
+  "kite-playground": "main.kite",
+  "asm-playground": "main.asm",
+};
+
+describe("fixture runs", () => {
+  it("print exactly the pinned result's fixtureRunConsoleLines on every kind", async () => {
+    for (const [kind, fixture] of Object.entries(PLAYGROUND_FIXTURE_INPUTS)) {
+      const runtime = studioRuntimeSchema.parse({ kind, defaultMode: "fixture", fixture });
+      if (!isPlaygroundRuntime(runtime)) throw new Error(`${kind} is not a Playground runtime`);
+      const outcome = await prepare(
+        runtime,
+        projectWith(PLAYGROUND_ENTRY_PATHS[runtime.kind]),
+      ).run();
+      // The kind rides along so a failing diff names the language.
+      expect({ kind, ...outcome }).toEqual({
+        kind,
+        resultLines: fixtureRunConsoleLines(runtime),
+        ok: true,
+        status: "success",
+        attempts: 1,
+        transientFailures: [],
+      });
+    }
+  });
+
+  it("report a pinned program failure as not ok, with its status", async () => {
+    const runtime = studioRuntimeSchema.parse({
+      kind: "rust-playground",
+      defaultMode: "fixture",
+      fixture: {
+        latencyMs: 5,
+        result: { status: "compile-error", stdout: "", stderr: "", compileErrors: "boom" },
+      },
+    });
+    if (!isPlaygroundRuntime(runtime)) throw new Error("not a Playground runtime");
+    const outcome = await prepare(runtime, projectWith("main.rs")).run();
+    expect(outcome.ok).toBe(false);
+    expect(outcome.status).toBe("compile-error");
+    expect(outcome.resultLines).toEqual(fixtureRunConsoleLines(runtime));
+  });
+});
 
 describe("studioRuntimeSchema", () => {
   it("keeps an authored dockStartsCollapsed on every Playground kind", () => {

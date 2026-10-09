@@ -11,10 +11,11 @@ import type { StudioPlaygroundRuntime } from "./plan";
  * The console lines a Playground lesson's pinned run prints after its header
  * line — the program's output plus whatever the runner adds around it (vet and
  * compiler warnings first, stderr, an assembly lesson's registers, the exit
- * line) — built by the same console builders the fixture run uses
- * (playgroundRuntime's `runFixtureResult`). Pure: no client is loaded, so the
- * script schema (script/consolePoints.ts) checks `console.point` targets
- * against it wherever a script is parsed.
+ * line), built by the same console builders a live run's result goes through.
+ * It is the one fixture console path: a fixture-mode run prints these lines
+ * (playgroundRuntime's `preparePlaygroundRun`), and because it is pure (no
+ * client is loaded) the script schema (script/consolePoints.ts) checks
+ * `console.point` targets against it wherever a script is parsed.
  */
 export function fixtureRunConsoleLines(runtime: StudioPlaygroundRuntime): string[] {
   switch (runtime.kind) {
