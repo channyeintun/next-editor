@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { getCollaborationTexts } from "./projectDocument";
 import type { CollaborationAwarenessEvent, CollaborationCursor } from "./protocol";
-import { base64ToBytes, bytesToBase64 } from "./base64";
+import { base64ToBytes, bytesToBase64 } from "../shared/base64";
 import { collaborationParticipantKey } from "./participantKey";
 
 /**

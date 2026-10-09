@@ -9,7 +9,7 @@ import {
   type CollaborationCreateRoomInput,
   type CollaborationTeachingInitializationInput,
 } from "./protocol";
-import { base64ToBytes, bytesToBase64 } from "./base64";
+import { base64ToBytes, bytesToBase64 } from "../shared/base64";
 
 export function encodeYjsUpdate(update: Uint8Array): string {
   return encodedYjsUpdateSchema.parse(bytesToBase64(update));

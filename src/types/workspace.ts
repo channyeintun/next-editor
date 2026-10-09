@@ -504,29 +504,8 @@ export function getWorkspaceMediaKind(path: string): WorkspaceMediaKind {
   return "other";
 }
 
-/** Encode raw bytes as base64 in chunks so large assets don't overflow the stack. */
-export function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    const chunk = bytes.subarray(index, index + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-
-  return btoa(binary);
-}
-
-export function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
-}
+// Asset bytes travel as chunked base64; the codec lives in src/shared.
+export { base64ToBytes, bytesToBase64 } from "../shared/base64";
 
 /** Estimate the decoded byte length of base64 content without decoding it. */
 export function approximateBase64ByteLength(base64: string): number {

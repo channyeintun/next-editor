@@ -11,6 +11,7 @@ import {
   type PocketBundleMetadata,
   type StateManifestEntry,
 } from "./bundleAssets";
+import { bytesToBase64 } from "../../../shared/base64";
 import { createSeededGaussian } from "./noise";
 import { prepareTextPrompt, splitIntoBestSentences, type PocketTokenizer } from "./textPrep";
 import {
@@ -286,14 +287,9 @@ export class PocketTtsEngine {
     const tokenizerBytes = new Uint8Array(
       await fetchBundleAsset(base, engine.metadata.tokenizer_file),
     );
-    let tokenizerB64 = "";
-    const chunkSize = 0x8000;
-    for (let i = 0; i < tokenizerBytes.length; i += chunkSize) {
-      tokenizerB64 += String.fromCharCode(...tokenizerBytes.subarray(i, i + chunkSize));
-    }
     const spModule = await import("./vendor/sentencepiece.js");
     const processor = new spModule.SentencePieceProcessor();
-    await processor.loadFromB64StringModel(btoa(tokenizerB64));
+    await processor.loadFromB64StringModel(bytesToBase64(tokenizerBytes));
     engine.tokenizer = processor;
 
     onPhase?.("tts-voice");

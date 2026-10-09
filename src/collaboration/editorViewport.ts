@@ -7,7 +7,7 @@ import {
 } from "./protocol";
 import { getCollaborationTexts } from "./projectDocument";
 import { decodeForeignRelativePosition } from "./relativePosition";
-import { bytesToBase64 } from "./base64";
+import { bytesToBase64 } from "../shared/base64";
 
 function clampFinite(value: number, minimum: number, maximum: number): number {
   if (!Number.isFinite(value)) return minimum;

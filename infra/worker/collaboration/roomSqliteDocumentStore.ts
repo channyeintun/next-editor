@@ -11,6 +11,9 @@ import {
   decodeYjsSnapshot,
   decodeYjsUpdate,
 } from "../../../src/collaboration/yjsUpdates";
+// The raw encoder, not yjsUpdates': a stored room may exceed the 4 MiB limit
+// yjsUpdates enforces on the snapshots clients send.
+import { bytesToBase64 } from "../../../src/shared/base64";
 import { exactArrayBuffer } from "./bytes";
 
 // Updates folded into the snapshot per compaction pass; the room's alarm runs
@@ -97,21 +100,9 @@ export class CollaborationRoomSqliteQuotaError extends Error {
   }
 }
 
-const BASE64_CHUNK_BYTES = 0x8000;
-
-// Not yjsUpdates' snapshot encoder: that one enforces the 4 MiB limit on
-// snapshots clients send, and a stored room may grow past it.
-function encodeBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK_BYTES) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + BASE64_CHUNK_BYTES));
-  }
-  return btoa(binary);
-}
-
 function legacySnapshotColumn(snapshot: Uint8Array): string {
   return 4 * Math.ceil(snapshot.byteLength / 3) <= LEGACY_SNAPSHOT_MAX_LENGTH
-    ? encodeBase64(snapshot)
+    ? bytesToBase64(snapshot)
     : "";
 }
 
@@ -422,7 +413,7 @@ export class RoomSqliteDocumentStore {
       snapshot: {
         generation: metadata.generation,
         streamCutoff: cutoff,
-        update: encodeBase64(this.readSnapshot(metadata)),
+        update: bytesToBase64(this.readSnapshot(metadata)),
       },
       updates: [],
       nextCursor: cutoff,

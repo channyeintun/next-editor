@@ -1,19 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { bytesToBase64 } from "../../../src/shared/base64";
 import { encodeWavPcm16 } from "../../../src/studio/tts/wav";
 import type { UserRow } from "../../db/types";
 import type { Env } from "../env";
 import { studioRoute } from "./studio";
 
-function base64Of(bytes: Uint8Array): string {
-  const chunks: string[] = [];
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
-  }
-  return btoa(chunks.join(""));
-}
-
 function referenceAudioBase64(seconds = 5): string {
-  return base64Of(encodeWavPcm16(new Int16Array(24_000 * seconds), 24_000));
+  return bytesToBase64(encodeWavPcm16(new Int16Array(24_000 * seconds), 24_000));
 }
 
 const REFERENCE_AUDIO_BASE64 = referenceAudioBase64();

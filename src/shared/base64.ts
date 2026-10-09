@@ -1,6 +1,8 @@
-// Collaboration payloads (Yjs updates and snapshots, relative positions) travel
-// as base64 inside JSON. Encoding is chunked so String.fromCharCode's argument
-// list stays small for multi-megabyte snapshots.
+// Standard base64 for byte payloads that travel as text: collaboration Yjs
+// updates, snapshots and relative positions, workspace assets, studio audio
+// and tokenizer models, and the Worker's stored room snapshots. Encoding is
+// chunked so String.fromCharCode's argument list stays small for
+// multi-megabyte inputs.
 const BINARY_CHUNK_SIZE = 0x8000;
 
 export function bytesToBase64(bytes: Uint8Array): string {

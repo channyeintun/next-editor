@@ -6,6 +6,7 @@ import {
 } from "./customVoices";
 import type { ModalVoxCpm2VoiceProfile } from "./profiles";
 import { encodeWavPcm16, floatTo16BitPcm } from "./wav";
+import { bytesToBase64 } from "../../shared/base64";
 
 interface ErrorPayload {
   error?: unknown;
@@ -14,14 +15,6 @@ interface ErrorPayload {
 const referenceAudioCache = new Map<string, Promise<string>>();
 const NETWORK_ATTEMPTS = 3;
 const NETWORK_RETRY_DELAYS_MS = [2_000, 5_000];
-
-function base64Of(bytes: Uint8Array): string {
-  const chunks: string[] = [];
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
-  }
-  return btoa(chunks.join(""));
-}
 
 async function loadReferenceAudioBase64(profile: ModalVoxCpm2VoiceProfile): Promise<string> {
   const referenceVoiceId = profile.referenceVoiceId;
@@ -49,7 +42,9 @@ async function loadReferenceAudioBase64(profile: ModalVoxCpm2VoiceProfile): Prom
           `Burmese narration requires ${MIN_VOXCPM2_REFERENCE_SECONDS}–${MAX_SAMPLE_SECONDS}s of reference speech`,
         );
       }
-      return base64Of(encodeWavPcm16(floatTo16BitPcm(voice.samples), profile.referenceSampleRate));
+      return bytesToBase64(
+        encodeWavPcm16(floatTo16BitPcm(voice.samples), profile.referenceSampleRate),
+      );
     })();
     promise.catch(() => referenceAudioCache.delete(key));
     referenceAudioCache.set(key, promise);
