@@ -115,22 +115,24 @@ describe("useRecordingDraftJournal", () => {
 });
 
 describe("RecordingDraftRecovery", () => {
-  /** A finished take in a draft no open tab owns. */
-  async function seedOrphanedDraft(recordingId: string): Promise<string> {
+  /** A finished take in a draft no open tab owns; `empty` leaves it without a frame. */
+  async function seedOrphanedDraft(recordingId: string, { empty = false } = {}): Promise<string> {
     const tracks = createEmptyRecordingTracks();
-    tracks.frames.push(
-      ...compressFrames([
-        {
-          timestamp: 0,
-          state: {
-            content: "hi",
-            selection,
-            position: { lineNumber: 1, column: 1 },
-            viewState: null,
+    if (!empty) {
+      tracks.frames.push(
+        ...compressFrames([
+          {
+            timestamp: 0,
+            state: {
+              content: "hi",
+              selection,
+              position: { lineNumber: 1, column: 1 },
+              viewState: null,
+            },
           },
-        },
-      ]),
-    );
+        ]),
+      );
+    }
     const journal = new RecordingDraftJournal(tracks, Date.now());
     await journal.flush({ durationMs: 65_000, finished: true, recordingId });
     return journal.id;
@@ -168,5 +170,30 @@ describe("RecordingDraftRecovery", () => {
 
     await waitFor(() => expect(screen.queryByText("Unsaved recording")).not.toBeInTheDocument());
     expect(await getRecordingDraftStore().readDraft(draftId)).toBeNull();
+  });
+
+  it("keeps focus on the prompt as Discard and Keep swap its buttons", async () => {
+    await seedOrphanedDraft("take-9");
+    renderRecovery(vi.fn<(recording: Recording) => void>());
+
+    fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("button", { name: "Keep" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    expect(screen.getByRole("button", { name: "Discard" })).toHaveFocus();
+  });
+
+  it("announces a take with nothing to play and offers to delete it", async () => {
+    await seedOrphanedDraft("take-10", { empty: true });
+    const onRecovered = vi.fn<(recording: Recording) => void>();
+    renderRecovery(onRecovered);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Recover" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nothing in this recording could be played back.",
+    );
+    expect(screen.getByRole("button", { name: "Keep" })).toHaveFocus();
+    expect(onRecovered).not.toHaveBeenCalled();
   });
 });

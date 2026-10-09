@@ -47,6 +47,8 @@ export default function RecordingDraftRecovery({
   const [draft, setDraft] = useState<RecordingDraftMeta | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  // Keep unmounts as it is pressed, so the Discard that replaces it takes focus.
+  const [returnFocusToDiscard, setReturnFocusToDiscard] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -58,6 +60,7 @@ export default function RecordingDraftRecovery({
           if (cancelled) return;
           setDraft(found);
           setConfirmingDiscard(false);
+          setReturnFocusToDiscard(false);
           setError(null);
         })
         .catch((reason: unknown) => {
@@ -124,12 +127,19 @@ export default function RecordingDraftRecovery({
             {formatStartedAt(draft.startedAt)} · {formatPlaybackTime(draft.durationMs)}
             {draft.finished ? "" : " before the page closed"}
           </p>
-          {error ? <p className="mt-1.5 text-xs text-red-400">{error}</p> : null}
+          {error ? (
+            <p role="alert" className="mt-1.5 text-xs text-red-400">
+              {error}
+            </p>
+          ) : null}
           <div className="mt-2.5 flex items-center gap-2">
             {confirmingDiscard ? (
               <>
                 <span className="mr-auto text-xs text-slate-300">Delete it for good?</span>
+                {/* Keyed apart from Discard, which holds the same slot: React would reuse one
+                    node for both, leaving focus on Delete and never mounting Discard afresh. */}
                 <button
+                  key="delete"
                   type="button"
                   disabled={busy}
                   onClick={() => void handleDiscard()}
@@ -138,10 +148,16 @@ export default function RecordingDraftRecovery({
                   <Trash2 size={12} aria-hidden="true" />
                   Delete
                 </button>
+                {/* Mounts only after a press (Discard, or a Recover that found nothing), so it
+                    takes focus from the button that just went away. */}
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => setConfirmingDiscard(false)}
+                  autoFocus
+                  onClick={() => {
+                    setConfirmingDiscard(false);
+                    setReturnFocusToDiscard(true);
+                  }}
                   className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-60"
                 >
                   Keep
@@ -158,9 +174,14 @@ export default function RecordingDraftRecovery({
                   {busy ? "Recovering…" : "Recover"}
                 </button>
                 <button
+                  key="discard"
                   type="button"
                   disabled={busy}
-                  onClick={() => setConfirmingDiscard(true)}
+                  autoFocus={returnFocusToDiscard}
+                  onClick={() => {
+                    setConfirmingDiscard(true);
+                    setReturnFocusToDiscard(false);
+                  }}
                   className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-60"
                 >
                   Discard
