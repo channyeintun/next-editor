@@ -45,7 +45,9 @@ describe("UsernameEditor", () => {
   it("hides the decorative @ prefix from assistive technology", () => {
     openEditor();
 
-    expect(screen.getByText("@")).toHaveAttribute("aria-hidden", "true");
+    const prefix = screen.getByText("@");
+    expect(prefix).toHaveAttribute("aria-hidden", "true");
+    expect(prefix).toHaveClass("text-slate-400");
   });
 
   it("keeps the global focus ring on the username field", () => {

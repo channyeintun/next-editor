@@ -10,7 +10,10 @@ const removeLesson = vi.hoisted(() =>
 
 vi.mock("@next-editor/infra", () => ({
   usePlaylistLessons: () => ({
-    data: [{ id: "l1", title: "Intro", status: "published" }],
+    data: [
+      { id: "l1", title: "Intro", status: "published" },
+      { id: "l2", title: "Old draft", status: "draft" },
+    ],
     isPending: false,
   }),
   useRemoveLessonFromPlaylist: () => ({ mutate: removeLesson, isPending: false }),
@@ -37,8 +40,16 @@ describe("PlaylistManagePanel", () => {
     });
     render(<PlaylistManagePanel playlist={playlist} onClose={() => {}} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't remove that lesson — try again.");
+  });
+
+  it("keeps draft member titles and the footer hint at AA contrast", () => {
+    render(<PlaylistManagePanel playlist={playlist} onClose={() => {}} />);
+
+    expect(screen.getByText("Intro")).toHaveClass("text-slate-300");
+    expect(screen.getByText("Old draft")).toHaveClass("text-slate-400");
+    expect(screen.getByText(/Add more from a lesson's own menu/)).toHaveClass("text-slate-400");
   });
 });

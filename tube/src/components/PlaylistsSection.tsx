@@ -39,7 +39,7 @@ export default function PlaylistsSection({ playlists }: { playlists: OwnedPlayli
       {creating && <CreatePlaylistModal onClose={() => setCreating(false)} />}
 
       {playlists.length === 0 ? (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-400">
           Group related lessons into a playlist so viewers can watch them in order.
         </p>
       ) : (

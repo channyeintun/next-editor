@@ -140,13 +140,13 @@ export default function AddToPlaylistPopover({
           }
         >
           {isPending ? (
-            <p className="px-2.5 py-2 text-xs text-slate-500">Loading…</p>
+            <p className="px-2.5 py-2 text-xs text-slate-400">Loading…</p>
           ) : isError ? (
             <p role="alert" className="px-2.5 py-2 text-xs text-rose-300">
               Couldn't load your playlists.
             </p>
           ) : trimmedFilter && visiblePlaylists?.length === 0 ? (
-            <p className="px-2.5 py-2 text-xs text-slate-500">
+            <p className="px-2.5 py-2 text-xs text-slate-400">
               No playlists match "{filter.trim()}".
             </p>
           ) : (

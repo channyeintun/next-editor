@@ -108,9 +108,9 @@ export default function PlaylistManagePanel({
           )}
 
           {membersPending ? (
-            <p className="text-xs text-slate-500">Loading…</p>
+            <p className="text-xs text-slate-400">Loading…</p>
           ) : orderedMembers.length === 0 ? (
-            <p className="text-xs text-slate-500">No lessons yet.</p>
+            <p className="text-xs text-slate-400">No lessons yet.</p>
           ) : (
             <ul className="space-y-1.5">
               {orderedMembers.map((lesson, index) => (
@@ -137,7 +137,7 @@ export default function PlaylistManagePanel({
                   </span>
                   <span
                     className={`min-w-0 flex-1 truncate ${
-                      lesson.status === "published" ? "text-slate-300" : "text-slate-500"
+                      lesson.status === "published" ? "text-slate-300" : "text-slate-400"
                     }`}
                   >
                     {lesson.title}
@@ -164,7 +164,7 @@ export default function PlaylistManagePanel({
           )}
         </div>
 
-        <p className="border-t border-white/10 px-5 py-3 text-xs text-slate-500">
+        <p className="border-t border-white/10 px-5 py-3 text-xs text-slate-400">
           Add more from a lesson's own menu — &ldquo;Add to playlist&rdquo;.
         </p>
       </div>

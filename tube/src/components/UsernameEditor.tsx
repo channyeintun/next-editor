@@ -72,7 +72,7 @@ export default function UsernameEditor({ username }: { username: string }) {
   return (
     <div className="mb-4 flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <span aria-hidden="true" className="text-sm text-slate-500">
+        <span aria-hidden="true" className="text-sm text-slate-400">
           @
         </span>
         <input
