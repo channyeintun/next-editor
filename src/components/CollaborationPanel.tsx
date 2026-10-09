@@ -70,7 +70,7 @@ function VoiceControls() {
   if (state.state === "unavailable") {
     if (state.unavailableReason === "unsupported-browser") {
       return (
-        <p className="rounded-lg border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-[11px] text-slate-400">
+        <p className="rounded-lg border border-slate-700/70 bg-slate-950/30 px-3 py-2 text-[11px] text-slate-300">
           Voice chat is not supported in this browser. Document collaboration still works.
         </p>
       );
@@ -254,7 +254,7 @@ function InvitationPrompt({ isAccepting, error, onAccept, onDecline }: Invitatio
       className="absolute right-0 top-10 z-50 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700 bg-[#171b25] p-4 text-left shadow-2xl"
     >
       <h2 className="text-sm font-semibold text-white">Join this collaboration room?</h2>
-      <p id={descriptionId} className="mt-2 text-xs leading-relaxed text-slate-400">
+      <p id={descriptionId} className="mt-2 text-xs leading-relaxed text-slate-300">
         Accepting replaces your current workspace with the room&apos;s files and runs that project.
         Your name and what you have open become visible to everyone in the room.
       </p>
@@ -271,7 +271,7 @@ function InvitationPrompt({ isAccepting, error, onAccept, onDecline }: Invitatio
           type="button"
           disabled={isAccepting}
           onClick={onDecline}
-          className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-semibold text-slate-400 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
+          className="inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
         >
           Not now
         </button>
@@ -515,7 +515,7 @@ function RoomOwnerSection({
               .map((invitation) => (
                 <li
                   key={invitation.id}
-                  className="flex items-center justify-between text-[11px] text-slate-400"
+                  className="flex items-center justify-between text-[11px] text-slate-300"
                 >
                   <span className="capitalize">
                     {invitation.role} · {invitation.useCount}/{invitation.maxUses} used
@@ -687,7 +687,7 @@ export default function CollaborationPanel() {
         className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors ${
           isInRoom
             ? "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
-            : "text-slate-400 hover:bg-white/5 hover:text-white"
+            : "text-slate-300 hover:bg-white/5 hover:text-white"
         }`}
         title={isInRoom ? status : "Start live collaboration"}
       >
@@ -711,7 +711,7 @@ export default function CollaborationPanel() {
               <h2 id={titleId} className="text-sm font-semibold text-white">
                 Live collaboration
               </h2>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-300">
                 {isInRoom
                   ? `${status} · ${collaboration.role ?? "checking access"}`
                   : "Edit together in real time"}
