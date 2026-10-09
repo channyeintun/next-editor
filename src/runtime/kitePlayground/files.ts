@@ -1,5 +1,5 @@
 import type { WorkspaceProject } from "../../types/workspace";
-import { collectPlaygroundFiles } from "../playgroundFiles";
+import { collectPlaygroundFiles, PLAYGROUND_SOURCE_RULES } from "../playgroundFiles";
 import type { KitePlaygroundFile } from "./types";
 
 /**
@@ -14,5 +14,5 @@ import type { KitePlaygroundFile } from "./types";
 export function collectKitePlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
 ): KitePlaygroundFile[] {
-  return collectPlaygroundFiles(project, { extensions: [".kite"], entryPath: "main.kite" });
+  return collectPlaygroundFiles(project, PLAYGROUND_SOURCE_RULES.kite);
 }

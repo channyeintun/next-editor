@@ -1,5 +1,5 @@
 import type { WorkspaceProject } from "../../types/workspace";
-import { collectPlaygroundFiles } from "../playgroundFiles";
+import { collectPlaygroundFiles, PLAYGROUND_SOURCE_RULES } from "../playgroundFiles";
 import type { HaskellPlaygroundFile } from "./types";
 
 /**
@@ -10,13 +10,10 @@ import type { HaskellPlaygroundFile } from "./types";
  * GHC's diagnostics name `Main.hs`, and a learner matching an error message to
  * a file in the tree should find the same spelling in both.
  *
- * Only `.hs` counts: `.lhs` is literate Haskell, a different source format
- * (code lives in `>`-prefixed lines or `\begin{code}` blocks) that the
- * Playground does not accept. `endsWith(".hs")` already excludes it, and this
- * comment is here so nobody "fixes" the filter into accepting both.
+ * Only `.hs` counts — PLAYGROUND_SOURCE_RULES says why `.lhs` does not.
  */
 export function collectHaskellPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
 ): HaskellPlaygroundFile[] {
-  return collectPlaygroundFiles(project, { extensions: [".hs"], entryPath: "Main.hs" });
+  return collectPlaygroundFiles(project, PLAYGROUND_SOURCE_RULES.haskell);
 }

@@ -1,7 +1,48 @@
-import { isWorkspaceTextFile, type WorkspaceProject } from "../types/workspace";
+import {
+  isWorkspaceTextFile,
+  type WorkspaceLessonType,
+  type WorkspaceProject,
+} from "../types/workspace";
 import type { PlaygroundFile } from "./playgroundContract";
 
 export type { PlaygroundFile };
+
+/** The lesson types whose sources a playground runner collects. */
+export type PlaygroundSourceLanguage = Extract<
+  WorkspaceLessonType,
+  "go" | "rust" | "kotlin" | "zig" | "haskell" | "asm" | "kite"
+>;
+
+/** The file a language's run starts from, and every extension its sources may carry. */
+export interface PlaygroundSourceRule {
+  entryPath: string;
+  extensions: readonly string[];
+}
+
+/**
+ * Which workspace files each playground language runs. The runner collectors
+ * (src/runtime/<lang>Playground/files.ts) and the zip importer's lesson
+ * detection both read this table, so an archive the runner would run is always
+ * recognized as that language.
+ */
+export const PLAYGROUND_SOURCE_RULES: Readonly<
+  Record<PlaygroundSourceLanguage, PlaygroundSourceRule>
+> = {
+  go: { entryPath: "main.go", extensions: [".go"] },
+  rust: { entryPath: "main.rs", extensions: [".rs"] },
+  kotlin: { entryPath: "Main.kt", extensions: [".kt"] },
+  zig: { entryPath: "main.zig", extensions: [".zig"] },
+  // `.hs` only: `.lhs` is literate Haskell, a different source format (code
+  // lives in `>`-prefixed lines or `\begin{code}` blocks) that the playground
+  // does not compile. `endsWith(".hs")` already excludes it, and this comment
+  // is here so nobody "fixes" the filter into accepting both.
+  haskell: { entryPath: "Main.hs", extensions: [".hs"] },
+  // Every extension an assembly source is written with: a single-extension
+  // probe would fail to recognize an archive of `.s` files that the runner
+  // would then happily assemble.
+  asm: { entryPath: "main.asm", extensions: [".asm", ".s", ".nasm"] },
+  kite: { entryPath: "main.kite", extensions: [".kite"] },
+};
 
 /**
  * The current editable sources with one of `extensions`, in the deterministic
@@ -9,7 +50,7 @@ export type { PlaygroundFile };
  */
 export function collectPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
-  { extensions, entryPath }: { extensions: readonly string[]; entryPath: string },
+  { extensions, entryPath }: PlaygroundSourceRule,
 ): PlaygroundFile[] {
   return Object.values(project.files)
     .filter(isWorkspaceTextFile)

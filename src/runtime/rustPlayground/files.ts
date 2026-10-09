@@ -1,5 +1,5 @@
 import type { WorkspaceProject } from "../../types/workspace";
-import { collectPlaygroundFiles } from "../playgroundFiles";
+import { collectPlaygroundFiles, PLAYGROUND_SOURCE_RULES } from "../playgroundFiles";
 import type { RustPlaygroundFile } from "./types";
 
 /**
@@ -11,5 +11,5 @@ import type { RustPlaygroundFile } from "./types";
 export function collectRustPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
 ): RustPlaygroundFile[] {
-  return collectPlaygroundFiles(project, { extensions: [".rs"], entryPath: "main.rs" });
+  return collectPlaygroundFiles(project, PLAYGROUND_SOURCE_RULES.rust);
 }

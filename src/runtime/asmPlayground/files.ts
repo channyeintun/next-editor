@@ -1,12 +1,9 @@
 import type { WorkspaceProject } from "../../types/workspace";
-import { collectPlaygroundFiles } from "../playgroundFiles";
+import { collectPlaygroundFiles, PLAYGROUND_SOURCE_RULES } from "../playgroundFiles";
 import type { AsmPlaygroundFile } from "./types";
 
-/** Extensions an assembly source file is written with. */
-const SOURCE_EXTENSIONS = [".asm", ".s", ".nasm"];
-
 /** The one file a run assembles. */
-export const ASM_ENTRY_PATH = "main.asm";
+export const ASM_ENTRY_PATH = PLAYGROUND_SOURCE_RULES.asm.entryPath;
 
 /**
  * Current editable assembly sources in deterministic order.
@@ -20,8 +17,5 @@ export const ASM_ENTRY_PATH = "main.asm";
 export function collectAsmPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
 ): AsmPlaygroundFile[] {
-  return collectPlaygroundFiles(project, {
-    extensions: SOURCE_EXTENSIONS,
-    entryPath: ASM_ENTRY_PATH,
-  });
+  return collectPlaygroundFiles(project, PLAYGROUND_SOURCE_RULES.asm);
 }

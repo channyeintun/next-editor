@@ -1,5 +1,5 @@
 import type { WorkspaceProject } from "../../types/workspace";
-import { collectPlaygroundFiles } from "../playgroundFiles";
+import { collectPlaygroundFiles, PLAYGROUND_SOURCE_RULES } from "../playgroundFiles";
 import type { ZigPlaygroundFile } from "./types";
 
 /**
@@ -11,5 +11,5 @@ import type { ZigPlaygroundFile } from "./types";
 export function collectZigPlaygroundFiles(
   project: Pick<WorkspaceProject, "files">,
 ): ZigPlaygroundFile[] {
-  return collectPlaygroundFiles(project, { extensions: [".zig"], entryPath: "main.zig" });
+  return collectPlaygroundFiles(project, PLAYGROUND_SOURCE_RULES.zig);
 }

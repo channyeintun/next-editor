@@ -18,6 +18,11 @@ import {
   isBinaryWorkspacePath,
 } from "../types/workspaceFiles";
 import { registerWorkspaceAsset } from "../storage/workspaceAssetStore";
+import {
+  PLAYGROUND_SOURCE_RULES,
+  type PlaygroundSourceLanguage,
+  type PlaygroundSourceRule,
+} from "../runtime/playgroundFiles";
 
 /**
  * Upper bound on the decoded size of an imported archive. Imported projects are
@@ -130,34 +135,31 @@ function htmlReferences(files: Record<string, WorkspaceFile>, needle: string): b
  * Playground lesson shapes carry no package.json manifest: their sources are
  * compiled by the language's playground proxy, or — for assembly and Kite — by
  * the first-party assembler/compiler in the page. Ordered so the canonical
- * entry file decides first when an archive mixes languages, matching the runner
- * collectors in src/runtime/{go,rust,kotlin,zig,haskell,asm,kite}Playground/files.ts.
+ * entry file decides first when an archive mixes languages. Kite is last, and
+ * only reached when there is no package.json: a kite-web archive carries one
+ * and is decided by the manifest branch.
  */
-const PLAYGROUND_LESSON_RULES: ReadonlyArray<{
-  lessonType: Extract<
-    WorkspaceLessonType,
-    "go" | "rust" | "kotlin" | "zig" | "haskell" | "asm" | "kite"
-  >;
-  entryPath: string;
-  /**
-   * Every extension the language's runner collector accepts. Assembly has
-   * three; a single-extension probe here would fail to recognize an archive of
-   * `.s` files that the runner would then happily assemble.
-   */
-  extensions: readonly string[];
-}> = [
-  { lessonType: "go", entryPath: "main.go", extensions: [".go"] },
-  { lessonType: "rust", entryPath: "main.rs", extensions: [".rs"] },
-  { lessonType: "kotlin", entryPath: "Main.kt", extensions: [".kt"] },
-  { lessonType: "zig", entryPath: "main.zig", extensions: [".zig"] },
-  // `.hs` only: `.lhs` is literate Haskell, which the playground does not
-  // compile, so an archive of them must not be imported as a runnable lesson.
-  { lessonType: "haskell", entryPath: "Main.hs", extensions: [".hs"] },
-  { lessonType: "asm", entryPath: "main.asm", extensions: [".asm", ".s", ".nasm"] },
-  // Last, and only reached when there is no package.json: a kite-web archive
-  // carries one and is decided by the manifest branch above.
-  { lessonType: "kite", entryPath: "main.kite", extensions: [".kite"] },
-];
+const PLAYGROUND_DETECTION_ORDER = [
+  "go",
+  "rust",
+  "kotlin",
+  "zig",
+  "haskell",
+  "asm",
+  "kite",
+] as const satisfies readonly PlaygroundSourceLanguage[];
+
+/**
+ * Each playground language with the sources its runner collects, from the one
+ * table the collectors read, so an archive the runner would run is always
+ * recognized.
+ */
+const PLAYGROUND_LESSON_RULES: ReadonlyArray<
+  { lessonType: PlaygroundSourceLanguage } & PlaygroundSourceRule
+> = PLAYGROUND_DETECTION_ORDER.map((lessonType) => ({
+  lessonType,
+  ...PLAYGROUND_SOURCE_RULES[lessonType],
+}));
 
 function detectPlaygroundLessonType(
   files: Record<string, WorkspaceFile>,

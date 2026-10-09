@@ -121,6 +121,9 @@ compilers are remote.
 It follows the same shape as every other language:
 
 - `src/runtime/asmPlayground/{types,client,console,files}.ts`
+- its row in `PLAYGROUND_SOURCE_RULES` (`src/runtime/playgroundFiles.ts`): the
+  entry file and extensions both its collector and the zip importer's lesson
+  detection read
 - `src/components/AsmPlaygroundRunnerPanel.tsx` (its `PlaygroundRunnerLanguage`,
   which the shared `PlaygroundRunnerPanel` renders)
 - `src/monaco/asmLanguage.ts`, `src/starters/asm.ts`
