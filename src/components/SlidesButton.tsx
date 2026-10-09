@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Presentation, Circle } from "lucide-react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { useSlidesContext } from "../contexts/SlidesContext";
@@ -26,6 +26,7 @@ export default function SlidesButton({
   const { pause } = useNextEditorActions();
   const { isRecording, isPlaying, usesPlaybackModel } = useNextEditorMetadata();
   const [showManager, setShowManager] = useState(false);
+  const managerId = useId();
   const collaboration = useOptionalCollaboration();
   const whiteboard = useWhiteboardContext();
 
@@ -48,6 +49,7 @@ export default function SlidesButton({
     isRecording ||
     previewState.isOpen;
   const isPresentationVisible = previewState.isOpen && previewState.isMaximized === true;
+  const isManagerOpen = showManager && !showPresentationToggle;
 
   useEffect(() => {
     if (showPresentationToggle) {
@@ -96,14 +98,13 @@ export default function SlidesButton({
           setShowManager(!showManager);
         }}
         disabled={showPresentationToggle && !hasSlides}
-        aria-pressed={showPresentationToggle ? isPresentationVisible : showManager}
-        aria-label={
-          showPresentationToggle
-            ? isPresentationVisible
-              ? "Hide slides"
-              : "Show slides"
-            : "Manage presentation slides"
-        }
+        // As a slide-visibility toggle the name stays "Slides" and aria-pressed carries
+        // the state (Show/Hide stays in the title); as the manager's trigger it is a
+        // disclosure, so it reports aria-expanded and names the dropdown it opens.
+        aria-pressed={showPresentationToggle ? isPresentationVisible : undefined}
+        aria-expanded={showPresentationToggle ? undefined : isManagerOpen}
+        aria-controls={isManagerOpen ? managerId : undefined}
+        aria-label={showPresentationToggle ? "Slides" : "Manage presentation slides"}
         className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors ${
           showPresentationToggle
             ? isPresentationVisible
@@ -145,11 +146,14 @@ export default function SlidesButton({
       )}
 
       {/* Slides Manager Dropdown */}
-      {showManager && !showPresentationToggle && (
+      {isManagerOpen && (
         <>
           {/* Backdrop for mobile/click away */}
           <div className="fixed inset-0 z-103 bg-black/5" onClick={() => setShowManager(false)} />
-          <div className="fixed inset-x-4 top-20 z-104 animate-in fade-in slide-in-from-top-2 duration-300 ease-out origin-top sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-3 sm:w-auto sm:origin-top-right">
+          <div
+            id={managerId}
+            className="fixed inset-x-4 top-20 z-104 animate-in fade-in slide-in-from-top-2 duration-300 ease-out origin-top sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-3 sm:w-auto sm:origin-top-right"
+          >
             <SlidesManager
               slides={slides}
               onSlidesChange={setSlides}

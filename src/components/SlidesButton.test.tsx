@@ -71,8 +71,15 @@ describe("SlidesButton room presentation mode", () => {
 
   it("closes the manager as soon as room creation starts and becomes a follow-stopping presentation toggle", async () => {
     const view = render(<SlidesButton />);
-    fireEvent.click(screen.getByRole("button", { name: /Manage presentation slides/i }));
-    expect(screen.getByRole("dialog", { name: "Slide manager" })).toBeInTheDocument();
+    const manage = screen.getByRole("button", { name: "Manage presentation slides" });
+    expect(manage).toHaveAttribute("aria-expanded", "false");
+    expect(manage).not.toHaveAttribute("aria-pressed");
+    fireEvent.click(manage);
+    expect(manage).toHaveAttribute("aria-expanded", "true");
+    const manager = screen.getByRole("dialog", { name: "Slide manager" });
+    expect(document.getElementById(manage.getAttribute("aria-controls")!)).toContainElement(
+      manager,
+    );
 
     collaborationState = {
       provider: null,
@@ -83,10 +90,27 @@ describe("SlidesButton room presentation mode", () => {
     view.rerender(<SlidesButton />);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Slide manager" })).toBeNull());
 
-    fireEvent.click(screen.getByRole("button", { name: /Show slides/i }));
+    const toggle = screen.getByRole("button", { name: "Slides" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle).not.toHaveAttribute("aria-expanded");
+    expect(toggle).toHaveAttribute("title", "Show slides");
+    fireEvent.click(toggle);
     expect(mocks.stopFollowing).toHaveBeenCalledWith("local-surface-change");
     expect(mocks.setWhiteboardOpen).toHaveBeenCalledWith(false);
     expect(mocks.openPresentation).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the toggle's name constant and reports the shown deck as pressed", () => {
+    slidesState = {
+      ...slidesState,
+      previewState: { isOpen: true, isMaximized: true, currentSlideId: "one", indexv: 0 },
+    };
+    render(<SlidesButton presentationToggleOnly />);
+
+    const toggle = screen.getByRole("button", { name: "Slides", pressed: true });
+    expect(toggle).toHaveAttribute("title", "Hide slides");
+    fireEvent.click(toggle);
+    expect(mocks.closePresentation).toHaveBeenCalledTimes(1);
   });
 
   it("does not expose the manager or an import path for an empty room deck", () => {
@@ -118,7 +142,7 @@ describe("SlidesButton focus on a user open", () => {
     </button>
   );
 
-  it("moves focus into the presentation after Show slides", () => {
+  it("moves focus into the presentation after the Slides toggle opens it", () => {
     render(
       <>
         <SlidesButton presentationToggleOnly />
@@ -126,7 +150,7 @@ describe("SlidesButton focus on a user open", () => {
       </>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Show slides/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Slides" }));
     expect(mocks.openPresentation).toHaveBeenCalledTimes(1);
     flushFrames();
 
