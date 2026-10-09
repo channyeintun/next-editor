@@ -145,6 +145,20 @@ describe("run results become console lines", () => {
     ]);
   });
 
+  it("renders more output lines than a spread call can take", () => {
+    // V8 caps a spread call near 125,000 arguments and the compiler sets no
+    // output budget, so a long loop must still render rather than throw.
+    const result = parseKitePlaygroundRunResult({
+      status: "success",
+      stdout: "x\n".repeat(200_000),
+      stderr: "",
+    });
+    const lines = kiteRunResultToConsoleLines(result!);
+    expect(lines).toHaveLength(200_001);
+    expect(lines[199_999]).toBe("x");
+    expect(lines[200_000]).toBe("[kite-run] Program exited");
+  });
+
   it("says so when a program printed nothing", () => {
     const result = parseKitePlaygroundRunResult({ status: "success", stdout: "", stderr: "" });
     expect(kiteRunResultToConsoleLines(result!)).toEqual([

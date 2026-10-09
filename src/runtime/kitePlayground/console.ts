@@ -44,10 +44,12 @@ export function kiteRunResultToConsoleLines(result: KitePlaygroundRunResult): st
     return ["[kite-run error] Build failed", ...splitOutputLines(result.compileErrors ?? "")];
   }
 
-  const lines: string[] = [];
-
-  const outputLines = [...splitOutputLines(result.stdout), ...splitOutputLines(result.stderr)];
-  lines.push(...(outputLines.length > 0 ? outputLines : ["[kite-run] (no output)"]));
+  // Concatenated rather than spread into `push`: a spread call is capped at
+  // roughly 125,000 arguments, and the compiler sets no output budget. The
+  // proxied runners cannot reach the cap because their services cut the output
+  // first; this compiler prints straight into the page.
+  const outputLines = splitOutputLines(result.stdout).concat(splitOutputLines(result.stderr));
+  const lines: string[] = outputLines.length > 0 ? outputLines : ["[kite-run] (no output)"];
 
   lines.push(
     result.status === "runtime-error"
