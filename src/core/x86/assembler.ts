@@ -47,12 +47,17 @@
  */
 
 import { AsmEncodeError, AsmError, AsmSyntaxError } from "./errors";
+// The longest an x86 instruction can be, used here as a first-pass placeholder.
+import { MAX_INSTRUCTION_BYTES } from "./decoder";
 import {
   encodeInstruction,
+  encodeLittleEndian,
+  immediateFits,
   isShortOnlyBranch,
   type EncodeRequest,
   type ResolvedOperands,
 } from "./encoder";
+import { PAGE_BYTES } from "./memory";
 import {
   parse,
   type EquStatement,
@@ -62,8 +67,9 @@ import {
   type Statement,
 } from "./parser";
 
-export const TEXT_BASE = 0x401000n;
-export const PAGE_SIZE = 0x1000n;
+const TEXT_BASE = 0x401000n;
+/** Each section starts on its own page, the unit memory maps and sets permissions on. */
+const PAGE_SIZE = BigInt(PAGE_BYTES);
 /** The top of the stack, matching a typical Linux placement. */
 export const STACK_TOP = 0x7fff_ffff_f000n;
 export const STACK_SIZE = 0x10_0000n;
@@ -168,9 +174,6 @@ function alignUp(value: bigint, boundary: bigint): bigint {
  * addresses would have to grow.
  */
 const UNKNOWN_SYMBOL = 0x7fff_ffffn;
-
-/** The longest an x86 instruction can be, used as a first-pass placeholder. */
-const MAX_INSTRUCTION_BYTES = 15;
 
 /**
  * The bytes a branch with no long form occupies while its reach is pending.
@@ -365,12 +368,6 @@ const WIDTH_NAMES: Record<number, string> = {
   8: "a qword",
 };
 
-function fitsWidth(value: bigint, width: number): boolean {
-  const bits = BigInt(width * 8);
-  // Either spelling is fine: `db 0xff` and `db -1` are both the same byte.
-  return value >= -(1n << (bits - 1n)) && value < 1n << bits;
-}
-
 function dataBytes(
   statement: Extract<Statement, { kind: "data" }>,
   symbols: SymbolTable,
@@ -402,17 +399,15 @@ function dataBytes(
     // A value built on a forward reference is not this pass's business; the
     // check runs for real once every symbol has one, the same way the
     // instruction path defers its own diagnostics.
-    if (!unresolved.used && !fitsWidth(value, statement.width)) {
+    // Either spelling is fine: `db 0xff` and `db -1` are both the same byte.
+    if (!unresolved.used && !immediateFits(value, statement.width)) {
       throw new AsmError(
         `${value} does not fit in ${WIDTH_NAMES[statement.width]}`,
         statement.line,
         statement.column,
       );
     }
-    const masked = value & ((1n << BigInt(statement.width * 8)) - 1n);
-    for (let index = 0; index < statement.width; index += 1) {
-      bytes.push(Number((masked >> BigInt(index * 8)) & 0xffn));
-    }
+    bytes.push(...encodeLittleEndian(value, statement.width));
   }
   return bytes;
 }

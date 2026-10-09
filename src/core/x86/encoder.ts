@@ -85,11 +85,11 @@ function fitsUnsigned(value: bigint, bytes: number): boolean {
  * write both: `mov al, 0xff` means the bit pattern, and `mov al, -1` means the
  * same bit pattern by another name.
  */
-function immediateFits(value: bigint, bytes: number): boolean {
+export function immediateFits(value: bigint, bytes: number): boolean {
   return fitsSigned(value, bytes) || fitsUnsigned(value, bytes);
 }
 
-function encodeLittleEndian(value: bigint, bytes: number): number[] {
+export function encodeLittleEndian(value: bigint, bytes: number): number[] {
   const out: number[] = [];
   let remaining = value & ((1n << BigInt(bytes * 8)) - 1n);
   for (let index = 0; index < bytes; index += 1) {
