@@ -4,9 +4,9 @@ const styles = `
 .arch-page{
   --arch-page-bg:#e4e9ee;
   --paper:#eef2f6; --paper-strong:#e2e9f1; --grid-line:#c9d6e3;
-  --ink:#14243a; --ink-soft:#4a5d75; --ink-faint:#56687f;
+  --ink:#14243a; --ink-soft:#384a62; --ink-faint:#56687f;
   --blue:#2f6fa8; --blue-fill:#dce7f0;
-  --redline:#b23a2e; --redline-fill:#f6e3e0;
+  --redline:#8a271d; --redline-fill:#f6e3e0;
   --dashline:#5f7790;
   --font-mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace;
   --font-sans: -apple-system,"Segoe UI",system-ui,"Helvetica Neue",Arial,sans-serif;
@@ -15,9 +15,9 @@ const styles = `
   .arch-page{
     --arch-page-bg:#081a30;
     --paper:#0d2542; --paper-strong:#123055; --grid-line:#1f4870;
-    --ink:#eaf3fb; --ink-soft:#a9c6e2; --ink-faint:#6f93b8;
+    --ink:#eaf3fb; --ink-soft:#b1cee8; --ink-faint:#6f93b8;
     --blue:#7fb3d9; --blue-fill:#163a5c;
-    --redline:#ff8b72; --redline-fill:#4a2420;
+    --redline:#ffa58f; --redline-fill:#4a2420;
     --dashline:#4d719a;
   }
 }
