@@ -58,11 +58,74 @@ function getNormalizedProjectFiles(project: WorkspaceProject | null): Map<string
   return files;
 }
 
-function stripRuntimeSnapshotScript(content: string): string {
-  return content
-    .replace(/\s*<script data-next-editor-rrweb-record>[\s\S]*?<\/script>\s*/g, "\n")
-    .replace(/\s*<script data-next-editor-runtime-snapshot>[\s\S]*?<\/script>\s*/g, "\n")
-    .replace(/\s*<script data-next-editor-api-client-proxy>[\s\S]*?<\/script>\s*/g, "\n");
+/** What every legacy injected script starts with; no file without it carries one. */
+const INJECTED_SCRIPT_HEAD = "<script data-next-editor-";
+
+/**
+ * The scripts older builds injected into a project's HTML, in the order they
+ * are stripped. Nothing writes them any more; they are removed from files read
+ * back from the container so an old recording's workspace comes back clean.
+ */
+const INJECTED_SCRIPT_OPENERS = [
+  "<script data-next-editor-rrweb-record>",
+  "<script data-next-editor-runtime-snapshot>",
+  "<script data-next-editor-api-client-proxy>",
+] as const;
+
+const SCRIPT_CLOSER = "</script>";
+
+function isRegexWhitespace(char: string): boolean {
+  return /\s/.test(char);
+}
+
+/**
+ * `content` with every `opener … </script>` block, and the whitespace around
+ * it, replaced by one newline — exactly what the global regex
+ * `\s*<opener>[\s\S]*?<\/script>\s*` replaced, found with `indexOf` in one
+ * pass instead. The regex was quadratic: its leading `\s*` retried at every
+ * position of a whitespace run, and its lazy body rescanned to the end for
+ * every opener that had no closer.
+ */
+function stripInjectedScript(content: string, opener: string): string {
+  const parts: string[] = [];
+  let copied = 0;
+  let from = 0;
+  for (;;) {
+    const hit = content.indexOf(opener, from);
+    if (hit === -1) break;
+    const close = content.indexOf(SCRIPT_CLOSER, hit + opener.length);
+    // No closer after this opener means none after any later one either.
+    if (close === -1) break;
+
+    // The leading whitespace reaches back no further than the previous
+    // block's end, which is where the regex resumed its scan.
+    let start = hit;
+    while (start > from && isRegexWhitespace(content[start - 1])) start -= 1;
+    let end = close + SCRIPT_CLOSER.length;
+    while (end < content.length && isRegexWhitespace(content[end])) end += 1;
+
+    parts.push(content.slice(copied, start), "\n");
+    copied = end;
+    from = end;
+  }
+  if (copied === 0) return content;
+  parts.push(content.slice(copied));
+  return parts.join("");
+}
+
+/**
+ * Strip the scripts older builds injected into HTML. Read-back runs this on
+ * every text file of every reverse sync, and those files can come from any
+ * shared recording, so a file without the marker returns untouched and one
+ * with it costs a linear scan.
+ */
+export function stripRuntimeSnapshotScript(content: string): string {
+  if (!content.includes(INJECTED_SCRIPT_HEAD)) return content;
+  let stripped = content;
+  for (const opener of INJECTED_SCRIPT_OPENERS) {
+    stripped = stripInjectedScript(stripped, opener);
+  }
+  return stripped;
 }
 
 export function shouldIgnoreRuntimeImportPath(path: string): boolean {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { WebContainer } from "@webcontainer/api";
 import type { WorkspaceProject } from "../../types/workspace";
-import { createWorkspaceTree, syncWorkspaceProject } from "./files";
+import { createWorkspaceTree, stripRuntimeSnapshotScript, syncWorkspaceProject } from "./files";
 
 function nodeProject(htmlContent: string): WorkspaceProject {
   return {
@@ -135,5 +135,83 @@ describe("syncWorkspaceProject", () => {
     expect(writeFile).toHaveBeenCalledWith("src/components/Button.tsx", "button");
     // Each level is reported so its fs.watch event is recognized as our own write.
     expect(written).toEqual(["src", "src/components", "src/components/Button.tsx"]);
+  });
+});
+
+describe("stripRuntimeSnapshotScript", () => {
+  const RECORD = "<script data-next-editor-rrweb-record>";
+  const SNAPSHOT = "<script data-next-editor-runtime-snapshot>";
+  const PROXY = "<script data-next-editor-api-client-proxy>";
+  const CLOSE = "</script>";
+
+  // The implementation this replaced, kept as the oracle: the linear scan must
+  // answer exactly what these three regexes did, for every input.
+  function legacyStrip(content: string): string {
+    return content
+      .replace(/\s*<script data-next-editor-rrweb-record>[\s\S]*?<\/script>\s*/g, "\n")
+      .replace(/\s*<script data-next-editor-runtime-snapshot>[\s\S]*?<\/script>\s*/g, "\n")
+      .replace(/\s*<script data-next-editor-api-client-proxy>[\s\S]*?<\/script>\s*/g, "\n");
+  }
+
+  it("removes an injected script and the whitespace around it", () => {
+    const html = `<head>\n  ${RECORD}window.rec()${CLOSE}\n  <title>x</title>\n</head>`;
+    expect(stripRuntimeSnapshotScript(html)).toBe("<head>\n<title>x</title>\n</head>");
+  });
+
+  it("returns a file without the marker untouched", () => {
+    const html = "<head>\n  <script>window.app()</script>\n</head>";
+    expect(stripRuntimeSnapshotScript(html)).toBe(html);
+  });
+
+  it("matches the legacy regexes on adjacent, unclosed and mixed tags", () => {
+    const cases = [
+      `a ${RECORD}x${CLOSE}  ${RECORD}y${CLOSE} b`,
+      `a ${RECORD}x${CLOSE}\n${SNAPSHOT}y${CLOSE}\n${PROXY}z${CLOSE} b`,
+      `${RECORD}${RECORD}x${CLOSE}${CLOSE}`,
+      `a ${RECORD} never closed`,
+      `a ${SNAPSHOT}x${CLOSE} ${RECORD} unclosed ${PROXY}y${CLOSE}`,
+      `\u00a0\t${PROXY}${CLOSE}\u00a0`,
+      `<script data-next-editor-other>${CLOSE}`,
+    ];
+    expect(
+      cases.filter((input) => stripRuntimeSnapshotScript(input) !== legacyStrip(input)),
+    ).toEqual([]);
+  });
+
+  it("matches the legacy regexes on generated inputs", () => {
+    const tokens = [RECORD, SNAPSHOT, PROXY, CLOSE, " ", "\n", "\t", "\u00a0", "a", "<", "x"];
+    // mulberry32: a fixed seed keeps every run on the same 2,000 inputs.
+    let seed = 0x5eed;
+    const next = () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const mismatches: string[] = [];
+    for (let i = 0; i < 2_000; i += 1) {
+      const length = Math.floor(next() * 13);
+      let input = "";
+      for (let j = 0; j < length; j += 1) input += tokens[Math.floor(next() * tokens.length)];
+      if (stripRuntimeSnapshotScript(input) !== legacyStrip(input)) mismatches.push(input);
+    }
+    expect(mismatches).toEqual([]);
+  });
+
+  // Read-back runs this on every text file of every reverse sync, including
+  // files from a shared recording, and the regexes were quadratic on both of
+  // these. The bound is loose for a busy machine; the regexes took seconds.
+  it("stays linear on long whitespace runs and many unclosed openers", () => {
+    const inputs = [
+      `${" ".repeat(200_000)}x`,
+      `${RECORD}${CLOSE}x${" ".repeat(200_000)}x`,
+      `${" ".repeat(200_000)}${RECORD}x`,
+      RECORD.repeat(20_000),
+    ];
+    for (const input of inputs) {
+      const started = performance.now();
+      stripRuntimeSnapshotScript(input);
+      expect(performance.now() - started).toBeLessThan(250);
+    }
   });
 });
