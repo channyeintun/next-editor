@@ -22,6 +22,9 @@ function renderManager(slides: Slide[]) {
   return emitted;
 }
 
+const LINK_HINT =
+  "In Google Slides: File → Share → Publish to web, then paste the published link here.";
+
 /** A slide row's thumbnail opens its editor; its corner label names the slide's type. */
 function clickThumbnail(typeLabel: string) {
   fireEvent.click(screen.getByText(typeLabel));
@@ -131,12 +134,12 @@ describe("SlidesManager", () => {
     const thumbnail = () => screen.getByRole("button", { name: "Edit markdown slide 1" });
 
     fireEvent.click(thumbnail());
-    expect(screen.getByDisplayValue("# a")).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Slide 1 content" })).toHaveFocus();
     fireEvent.click(screen.getByLabelText("Cancel editing slide"));
     await waitFor(() => expect(thumbnail()).toHaveFocus());
 
     fireEvent.click(thumbnail());
-    expect(screen.getByDisplayValue("# a")).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Slide 1 content" })).toHaveFocus();
     fireEvent.click(screen.getByText("Update"));
     await waitFor(() => expect(thumbnail()).toHaveFocus());
   });
@@ -169,9 +172,23 @@ describe("SlidesManager", () => {
     expect(screen.getByRole("button", { name: "Edit slide 4" })).toBeInTheDocument();
   });
 
+  it("labels the slide text fields", () => {
+    renderManager([slide("a", 0)]);
+
+    expect(screen.getByLabelText("Slide content")).toHaveAttribute(
+      "placeholder",
+      "# Title\n\nContent here...",
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Import from Google Slides" }),
+    ).toHaveAccessibleDescription(LINK_HINT);
+    clickThumbnail("markdown");
+    expect(screen.getByRole("textbox", { name: "Slide 1 content" })).toHaveValue("# a");
+  });
+
   it("announces a failed import and ties the message to the link field", async () => {
     renderManager([]);
-    const link = screen.getByPlaceholderText(/docs\.google\.com/);
+    const link = screen.getByLabelText("Import from Google Slides");
 
     fireEvent.change(link, { target: { value: "https://example.com/deck" } });
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
@@ -179,13 +196,13 @@ describe("SlidesManager", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/^Enter a published Google Slides link/);
     expect(link).toHaveAttribute("aria-invalid", "true");
-    expect(link).toHaveAccessibleDescription(alert.textContent ?? "");
+    expect(link).toHaveAccessibleDescription(`${LINK_HINT} ${alert.textContent}`);
 
     // Editing the link clears the error.
     fireEvent.change(link, { target: { value: "https://example.com/deck2" } });
     expect(screen.queryByRole("alert")).toBeNull();
     expect(link).not.toHaveAttribute("aria-invalid");
-    expect(link).not.toHaveAttribute("aria-describedby");
+    expect(link).toHaveAccessibleDescription(LINK_HINT);
   });
 
   it("keeps a failed upload's alert until the next background choice", async () => {

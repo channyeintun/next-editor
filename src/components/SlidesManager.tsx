@@ -219,6 +219,8 @@ function GoogleSlidesImport({
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const urlId = useId();
+  const hintId = useId();
   const errorId = useId();
 
   const googleSlides = slides.filter((slide) => slide.contentType === "google-svg");
@@ -312,10 +314,13 @@ function GoogleSlidesImport({
     <div className="space-y-2 rounded-lg border border-slate-800 bg-[#11141c] p-3">
       <div className="flex items-center gap-2">
         <Presentation className="size-4 shrink-0 text-amber-300" />
-        <span className="text-xs font-semibold text-slate-200">Import from Google Slides</span>
+        <label htmlFor={urlId} className="text-xs font-semibold text-slate-200">
+          Import from Google Slides
+        </label>
       </div>
       <div className="flex gap-2">
         <input
+          id={urlId}
           type="url"
           value={url}
           onChange={(e) => {
@@ -327,8 +332,8 @@ function GoogleSlidesImport({
           }}
           placeholder="https://docs.google.com/presentation/d/e/…/pub"
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#0f1219] px-3 py-1.5 text-xs text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-400/70"
+          aria-describedby={error ? `${hintId} ${errorId}` : hintId}
+          className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#0f1219] px-3 py-1.5 text-xs text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-300"
         />
         <button
           type="button"
@@ -344,7 +349,7 @@ function GoogleSlidesImport({
           Import
         </button>
       </div>
-      <p className="text-[10px] leading-relaxed text-slate-500">
+      <p id={hintId} className="text-[10px] leading-relaxed text-slate-500">
         In Google Slides: File → Share → Publish to web, then paste the published link here.
       </p>
       {error && (
@@ -367,6 +372,7 @@ function NewSlideForm({ onCreate }: { onCreate: (slide: NewSlide) => void }) {
   const [newSlideContent, setNewSlideContent] = useState("");
   const [contentType, setContentType] = useState<SlideContentType>("markdown");
   const [background, setBackground] = useState<string | undefined>(undefined);
+  const contentId = useId();
 
   const addSlide = () => {
     const content =
@@ -411,14 +417,21 @@ function NewSlideForm({ onCreate }: { onCreate: (slide: NewSlide) => void }) {
         </button>
       </div>
 
-      <div className="relative group">
+      <div className="relative group space-y-1.5">
+        <label
+          htmlFor={contentId}
+          className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400"
+        >
+          Slide content
+        </label>
         <textarea
+          id={contentId}
           value={newSlideContent}
           onChange={(e) => setNewSlideContent(e.target.value)}
           placeholder={
             contentType === "html" ? "<h1>Title</h1>\n<p>Content</p>" : "# Title\n\nContent here..."
           }
-          className="h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#11141c] px-4 py-3 font-mono text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-400/70"
+          className="h-32 w-full resize-none rounded-lg border border-slate-500 bg-[#11141c] px-4 py-3 font-mono text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-300"
         />
       </div>
 
@@ -619,9 +632,10 @@ export default function SlidesManager({
                           // The thumbnail that opened the editor unmounts; focus moves here
                           // rather than falling back to the page.
                           autoFocus
+                          aria-label={`Slide ${index + 1} content`}
                           value={editContent}
                           onChange={(e) => setEditContent(e.target.value)}
-                          className="h-32 w-full resize-none rounded-lg border border-slate-700 bg-[#0f1219] px-3 py-2 font-mono text-xs text-slate-200 outline-none transition-colors focus:border-cyan-400/70"
+                          className="h-32 w-full resize-none rounded-lg border border-slate-500 bg-[#0f1219] px-3 py-2 font-mono text-xs text-slate-200 outline-none transition-colors focus:border-cyan-300"
                         />
                         <BackgroundPicker
                           value={editBackground}
