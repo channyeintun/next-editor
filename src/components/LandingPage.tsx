@@ -584,7 +584,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                   {i + 1}
                 </div>
                 <h3 className="text-2xl font-machina mb-4">{feature.title}</h3>
-                <div className="text-slate-400 leading-relaxed">{feature.desc}</div>
+                <div className="text-slate-300 leading-relaxed">{feature.desc}</div>
               </div>
             ))}
           </div>
@@ -673,7 +673,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                   <uc.icon className="size-6 text-slate-950" />
                 </div>
                 <h3 className="text-2xl font-machina mb-4">{uc.title}</h3>
-                <p className="text-slate-400 leading-relaxed">{uc.desc}</p>
+                <p className="text-slate-300 leading-relaxed">{uc.desc}</p>
               </div>
             ))}
           </div>
