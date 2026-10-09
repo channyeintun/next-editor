@@ -59,9 +59,9 @@ const RESPONSE_BODY_EDITOR_OPTIONS: MonacoEditorProps["options"] = {
 const METHOD_COLORS: Record<HttpMethod, string> = {
   GET: "text-emerald-400",
   POST: "text-amber-400",
-  PUT: "text-blue-400",
-  PATCH: "text-purple-400",
-  DELETE: "text-red-400",
+  PUT: "text-blue-300",
+  PATCH: "text-purple-300",
+  DELETE: "text-red-300",
   QUERY: "text-cyan-400",
 };
 
@@ -284,7 +284,7 @@ export default function ApiClientPanel({
                 <span className={`font-mono text-[11px] font-bold ${METHOD_COLORS[entry.method]}`}>
                   {entry.method}
                 </span>
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-400">
+                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-300">
                   {entry.path}
                 </span>
                 {entry.result.ok ? (
@@ -400,7 +400,7 @@ function ResponseView({ result }: { result: NonNullable<ReturnType<typeof select
         <span className="rounded bg-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-300">
           Error
         </span>
-        <span className="text-xs text-slate-400">{result.error.error}</span>
+        <span className="text-xs text-slate-300">{result.error.error}</span>
         <span className="flex items-center gap-1 text-[11px] text-slate-300">
           <Clock size={11} />
           {formatDuration(result.error.durationMs)}
@@ -476,7 +476,7 @@ function SuccessfulResponseView({
         >
           {response.headers.map(([key, value], i) => (
             <div key={i} className="flex gap-2 font-mono text-[11px]">
-              <span className="shrink-0 font-semibold text-slate-400">{key}:</span>
+              <span className="shrink-0 font-semibold text-slate-300">{key}:</span>
               <span className="min-w-0 break-all text-slate-300">{value}</span>
             </div>
           ))}

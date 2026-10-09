@@ -224,7 +224,7 @@ function PreviewToolbar({
               className={`rounded-[5px] px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                 activeMode === "browser"
                   ? "bg-slate-700 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-300 hover:text-white"
               }`}
             >
               Preview
@@ -237,7 +237,7 @@ function PreviewToolbar({
               className={`rounded-[5px] px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                 activeMode === "api"
                   ? "bg-slate-700 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-300 hover:text-white"
               }`}
             >
               API
