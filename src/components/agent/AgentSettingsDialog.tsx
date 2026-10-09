@@ -1,6 +1,6 @@
 import { useSelector } from "@xstate/store-react";
 import { Search, X } from "lucide-react";
-import { useId } from "react";
+import { useId, useRef } from "react";
 import { getAgentStore, selectModel, selectUsage } from "../../agent/agentStore";
 import {
   getAgentCredentialStore,
@@ -98,6 +98,11 @@ function ApiKeySection({
 }) {
   const credentialStore = getAgentCredentialStore();
   const apiKey = useSelector(credentialStore, (s) => selectApiKey(s.context));
+  const keyInputId = useId();
+  const keyStatusId = `${keyInputId}-status`;
+  // Save goes disabled and Clear unmounts once they act, so focus moves back to
+  // the field instead of falling to the page.
+  const keyInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveKey = () => {
     const trimmed = keyDraft.trim();
@@ -106,21 +111,38 @@ function ApiKeySection({
     }
     credentialStore.trigger.setApiKey({ apiKey: trimmed });
     onKeyDraftChange("");
+    keyInputRef.current?.focus();
+  };
+
+  const handleClearKey = () => {
+    credentialStore.trigger.clear();
+    keyInputRef.current?.focus();
   };
 
   return (
     <div>
-      <p className="text-sm font-medium text-slate-100">API key</p>
+      <label htmlFor={keyInputId} className="block text-sm font-medium text-slate-100">
+        API key
+      </label>
       {/* ph-no-capture blocks this field from PostHog session replays so the
           API key is never recorded, independent of the global maskAllInputs
           setting (see posthog init in src/utils/posthogClient.ts). */}
       <input
+        ref={keyInputRef}
+        id={keyInputId}
         type="password"
+        autoComplete="off"
+        aria-describedby={apiKey ? keyStatusId : undefined}
         value={keyDraft}
         onChange={(event) => onKeyDraftChange(event.target.value)}
         placeholder={apiKey ? "•••• (set) — paste to replace" : "sk-or-v1-..."}
         className="ph-no-capture mt-2 h-9 w-full rounded-md border border-slate-700 bg-[#11141c] px-3 font-mono text-xs text-slate-100 outline-none focus:border-slate-500"
       />
+      {apiKey ? (
+        <p id={keyStatusId} className="mt-1 text-[11px] text-slate-400">
+          A key is saved. Paste a new one to replace it.
+        </p>
+      ) : null}
       <div className="mt-2 flex gap-2">
         <button
           type="button"
@@ -133,7 +155,7 @@ function ApiKeySection({
         {apiKey ? (
           <button
             type="button"
-            onClick={() => credentialStore.trigger.clear()}
+            onClick={handleClearKey}
             className="rounded-md px-3 py-1.5 text-xs font-semibold text-slate-400 hover:text-white"
           >
             Clear

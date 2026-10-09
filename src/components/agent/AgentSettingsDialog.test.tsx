@@ -100,15 +100,39 @@ describe("AgentSettingsDialog", () => {
     expect(save).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
 
-    const keyInput = screen.getByPlaceholderText("sk-or-v1-...");
+    const keyInput = screen.getByLabelText("API key");
+    expect(keyInput).toHaveAttribute("placeholder", "sk-or-v1-...");
+    expect(keyInput).toHaveAttribute("autocomplete", "off");
+    expect(keyInput).not.toHaveAccessibleDescription();
     fireEvent.change(keyInput, { target: { value: "  sk-or-v1-secret  " } });
     fireEvent.click(save);
 
     expect(getAgentCredentialStore().getSnapshot().context.apiKey).toBe("sk-or-v1-secret");
-    expect(screen.getByPlaceholderText("•••• (set) — paste to replace")).toHaveValue("");
+    expect(keyInput).toHaveValue("");
+    expect(keyInput).toHaveAttribute("placeholder", "•••• (set) — paste to replace");
+    expect(keyInput).toHaveAccessibleDescription("A key is saved. Paste a new one to replace it.");
 
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(getAgentCredentialStore().getSnapshot().context.apiKey).toBe("");
+    expect(keyInput).not.toHaveAccessibleDescription();
+  });
+
+  it("keeps focus on the key field after Save and Clear", () => {
+    render(<Dialog />);
+    const keyInput = screen.getByLabelText("API key");
+
+    fireEvent.change(keyInput, { target: { value: "sk-or-v1-secret" } });
+    const save = screen.getByRole("button", { name: "Save" });
+    save.focus();
+    fireEvent.click(save);
+    expect(save).toBeDisabled();
+    expect(keyInput).toHaveFocus();
+
+    const clear = screen.getByRole("button", { name: "Clear" });
+    clear.focus();
+    fireEvent.click(clear);
+    expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
+    expect(keyInput).toHaveFocus();
   });
 
   it("remembers the key where the user chooses", () => {
