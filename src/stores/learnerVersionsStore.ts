@@ -81,12 +81,19 @@ export async function keepLearnerWorkspace(save: LearnerWorkspaceSave): Promise<
   }
 }
 
+/**
+ * Deletes a saved version. The menu drops it at once (the popup closes and moves
+ * focus synchronously); a failed delete reloads the list from IndexedDB so the
+ * menu shows the version again rather than hiding one that is still stored.
+ */
 export async function forgetLearnerVersion(id: string): Promise<void> {
   getLearnerVersionsStore().trigger.removed({ id });
   try {
     await deleteLearnerWorkspaceVersion(id);
   } catch (error) {
     console.warn("Could not delete a saved version of your edits:", error);
+    const { recordingId } = getLearnerVersionsStore().getSnapshot().context;
+    if (recordingId) await openLearnerVersions(recordingId);
   }
 }
 
