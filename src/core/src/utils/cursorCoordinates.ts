@@ -4,7 +4,7 @@ import type {
   CursorTargetSnapshot,
   CursorTweenEndpoint,
   MouseCursorPosition,
-} from "../types";
+} from "../cursor";
 import { getCursorCellAnchor } from "./cursorCellAnchors";
 
 export const CURSOR_REPLAY_TARGET_ATTRIBUTE = "data-cursor-replay-target";

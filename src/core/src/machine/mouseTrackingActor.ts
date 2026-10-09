@@ -1,5 +1,5 @@
 import { fromCallback, type EventObject } from "xstate";
-import type { MouseCursorPosition } from "../types";
+import type { MouseCursorPosition } from "../cursor";
 import {
   createCursorPositionFromClientPoint,
   findCursorReplayRoot,

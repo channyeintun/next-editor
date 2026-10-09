@@ -10,6 +10,7 @@ import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "./runtime"
 import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "./workspace";
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "./chat";
+import type { CursorRecordingEvent, MouseCursorPosition } from "./cursor";
 import type { RECORDING_SCHEMA_VERSION } from "./utils/deltaTypes";
 import type { MediaSpan } from "./utils/mediaSpans";
 import type { AudioEdit } from "./utils/audioEdit";
@@ -88,79 +89,16 @@ export type EditorSelection = monaco.ISelection & monaco.IRange;
  */
 export type EditorPosition = monaco.IPosition;
 
-/**
- * Bounding box for the UI region that a cursor sample was recorded against.
- */
-export interface CursorTargetRect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-/**
- * A place in a target's text content: the written line, the character offset
- * within it, and where inside that character's cell (0–1 each way).
- */
-export interface CursorCellAnchor {
-  line: number;
-  offset: number;
-  dx: number;
-  dy: number;
-}
-
-/**
- * Cursor coordinates relative to a stable UI region. Playback can use this
- * to remap a recorded position onto the current layout.
- */
-export interface CursorTargetSnapshot {
-  id: string;
-  rect: CursorTargetRect;
-  x: number;
-  y: number;
-  /** Set over a terminal: replay resolves it before the pixel offset. */
-  cell?: CursorCellAnchor;
-}
-
-export type CursorCoordinateSpace = "viewport" | "root";
-
-export interface CursorTweenEndpoint {
-  x: number;
-  y: number;
-  visible: boolean;
-  coordinateSpace?: CursorCoordinateSpace;
-  target?: CursorTargetSnapshot;
-}
-
-export interface CursorTweenSnapshot {
-  from: CursorTweenEndpoint;
-  to: CursorTweenEndpoint;
-  progress: number;
-}
-
-/**
- * Mouse cursor position. New recordings use root-relative pixels; older
- * recordings omit coordinateSpace and remain viewport-relative.
- */
-export interface MouseCursorPosition {
-  x: number;
-  y: number;
-  visible: boolean; // Whether cursor is within editor bounds
-  coordinateSpace?: CursorCoordinateSpace;
-  flags?: number;
-  hover?: string | null;
-  angle?: number;
-  pressure?: number;
-  target?: CursorTargetSnapshot;
-  tween?: CursorTweenSnapshot;
-}
-
-/**
- * Lightweight cursor sample used for smooth fake-cursor playback.
- */
-export interface CursorRecordingEvent extends MouseCursorPosition {
-  timestamp: number;
-}
+export type {
+  CursorTargetRect,
+  CursorCellAnchor,
+  CursorTargetSnapshot,
+  CursorCoordinateSpace,
+  CursorTweenEndpoint,
+  CursorTweenSnapshot,
+  MouseCursorPosition,
+  CursorRecordingEvent,
+} from "./cursor";
 
 /**
  * Editor frame containing the complete state at a specific timestamp

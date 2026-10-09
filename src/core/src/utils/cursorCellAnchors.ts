@@ -1,4 +1,4 @@
-import type { CursorCellAnchor } from "../types";
+import type { CursorCellAnchor } from "../cursor";
 
 /**
  * Replay targets whose content can scroll or reflow under a still pointer —

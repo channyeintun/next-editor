@@ -4,8 +4,8 @@ import type {
   CursorTweenEndpoint,
   CursorTweenSnapshot,
   MouseCursorPosition,
-  Recording,
-} from "../types";
+} from "../cursor";
+import type { Recording } from "../types";
 import type { DeltaFrame } from "./deltaTypes";
 import { findTimedEventIndexAtOrBefore } from "./timedIndex";
 import { isKeyframe } from "./deltaTypes";
