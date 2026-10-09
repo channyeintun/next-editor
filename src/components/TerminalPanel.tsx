@@ -10,6 +10,7 @@ import {
   selectConsoleLines,
   selectIsSettingsOpen,
   selectTerminalScrollLines,
+  setTerminalScrollLineIfChanged,
 } from "../stores/runtimePanelStore";
 import XtermTerminal from "./XtermTerminal";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
@@ -226,17 +227,7 @@ function TerminalPanel() {
       return;
     }
 
-    const current = runtimePanelStore.getSnapshot().context.terminalScrollLines;
-    if (current[surfaceId] === scrollLine) {
-      return;
-    }
-
-    runtimePanelStore.trigger.setTerminalScrollLines({
-      terminalScrollLines: {
-        ...current,
-        [surfaceId]: scrollLine,
-      },
-    });
+    setTerminalScrollLineIfChanged(runtimePanelStore, surfaceId, scrollLine);
   };
 
   useEffect(() => {

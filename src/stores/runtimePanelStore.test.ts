@@ -3,7 +3,9 @@ import {
   createRuntimePanelStore,
   selectIsFullHeight,
   selectRecordingState,
+  selectTerminalScrollLines,
   selectViewerFullHeight,
+  setTerminalScrollLineIfChanged,
 } from "./runtimePanelStore";
 
 describe("runtimePanelStore viewer full height", () => {
@@ -50,5 +52,40 @@ describe("runtimePanelStore viewer full height", () => {
 
     expect(recorded.isFullHeight).toBe(false);
     expect(recorded).not.toHaveProperty("viewerFullHeight");
+  });
+});
+
+describe("setTerminalScrollLineIfChanged", () => {
+  it("updates only that surface's line and keeps the others", () => {
+    const store = createRuntimePanelStore();
+    store.trigger.setTerminalScrollLines({ terminalScrollLines: { runner: 3, console: 7 } });
+
+    setTerminalScrollLineIfChanged(store, "runner", 12);
+    setTerminalScrollLineIfChanged(store, "shell-1", 0);
+
+    expect(selectTerminalScrollLines(store.getSnapshot().context)).toEqual({
+      runner: 12,
+      console: 7,
+      "shell-1": 0,
+    });
+  });
+
+  it("writes nothing, and so notifies no one, when the line is unchanged", () => {
+    const store = createRuntimePanelStore();
+    setTerminalScrollLineIfChanged(store, "runner", 5);
+    const before = store.getSnapshot().context;
+    let notifications = 0;
+    const subscription = store.subscribe(() => {
+      notifications += 1;
+    });
+
+    setTerminalScrollLineIfChanged(store, "runner", 5);
+
+    expect(notifications).toBe(0);
+    expect(store.getSnapshot().context).toBe(before);
+
+    setTerminalScrollLineIfChanged(store, "runner", 6);
+    expect(notifications).toBe(1);
+    subscription.unsubscribe();
   });
 });

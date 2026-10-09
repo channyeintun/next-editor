@@ -87,6 +87,26 @@ export function createRuntimePanelStore() {
 
 export type RuntimePanelStoreInstance = ReturnType<typeof createRuntimePanelStore>;
 
+/**
+ * Records where one terminal surface is scrolled, keeping the other surfaces'
+ * lines. An unchanged line writes nothing, so the store does not notify and a
+ * recording sees no runtime change.
+ */
+export function setTerminalScrollLineIfChanged(
+  store: RuntimePanelStoreInstance,
+  surfaceId: string,
+  scrollLine: number,
+): void {
+  const current = store.getSnapshot().context.terminalScrollLines;
+  if (current[surfaceId] === scrollLine) {
+    return;
+  }
+
+  store.trigger.setTerminalScrollLines({
+    terminalScrollLines: { ...current, [surfaceId]: scrollLine },
+  });
+}
+
 export const selectActiveTab = (context: RuntimePanelContext): RuntimeDockTab => context.activeTab;
 export const selectIsCollapsed = (context: RuntimePanelContext): boolean => context.isCollapsed;
 export const selectIsFullHeight = (context: RuntimePanelContext): boolean => context.isFullHeight;

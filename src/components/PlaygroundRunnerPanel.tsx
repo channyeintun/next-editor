@@ -14,7 +14,11 @@ import { useRuntimeDockRecording } from "./terminalPanel/useRuntimeDockRecording
 import type { PlaygroundConsoleTags, PlaygroundRunnerLanguage } from "./playgroundRunnerLanguage";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
-import { selectConsoleLines, selectTerminalScrollLines } from "../stores/runtimePanelStore";
+import {
+  selectConsoleLines,
+  selectTerminalScrollLines,
+  setTerminalScrollLineIfChanged,
+} from "../stores/runtimePanelStore";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import { usePlaygroundRunner } from "../hooks/usePlaygroundRunner";
 import { useRuntimeDockLayout } from "../hooks/useRuntimeDockLayout";
@@ -290,14 +294,7 @@ function PlaygroundRunnerPanel<Client, ErrorKind extends string, RunResult>({
       return;
     }
 
-    const current = runtimePanelStore.getSnapshot().context.terminalScrollLines;
-    if (current[scrollSurface] === scrollLine) {
-      return;
-    }
-
-    runtimePanelStore.trigger.setTerminalScrollLines({
-      terminalScrollLines: { ...current, [scrollSurface]: scrollLine },
-    });
+    setTerminalScrollLineIfChanged(runtimePanelStore, scrollSurface, scrollLine);
   };
 
   const runtimeEventState: RuntimeEventState = {
