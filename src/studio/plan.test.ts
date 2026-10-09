@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   parseRuntimeModeParam,
   parseStudioPlan,
+  planActionBusyMs,
   shouldAutostartRender,
   estimateNarrationMsForRenderWait,
   studioRenderWaitMs,
@@ -222,6 +223,25 @@ describe("studio plan schema", () => {
     // Word timings inside the shifted cue no longer matter for this test; the
     // cue-overlap issue alone must reject the plan.
     expect(() => parseStudioPlan(plan)).toThrow(/overlaps cue/);
+  });
+});
+
+describe("planActionBusyMs", () => {
+  it("counts each timed action's busy time and nothing for the rest", () => {
+    const typing = createTestPlan().actions.find((action) => action.id === "type-helper")!;
+    expect(planActionBusyMs(typing)).toBe(270);
+    expect(planActionBusyMs({ type: "editor.select", durationMs: 640 })).toBe(640);
+    expect(planActionBusyMs({ type: "console.point", durationMs: 900 })).toBe(900);
+    // A drawn apply spends one 50ms frame per drawn step, at least one per asset.
+    expect(planActionBusyMs({ type: "whiteboard.apply", upsertIds: ["a"], drawMs: 800 })).toBe(800);
+    expect(
+      planActionBusyMs({ type: "whiteboard.apply", upsertIds: ["a", "b", "c"], drawMs: 100 }),
+    ).toBe(150);
+    expect(planActionBusyMs({ type: "whiteboard.apply", upsertIds: ["a"], drawMs: 0 })).toBe(0);
+    // A pointer move's duration is its own travel, not busy time it adds.
+    const cursor = createTestPlan().actions.find((action) => action.id === "cursor-type")!;
+    expect(planActionBusyMs(cursor)).toBe(0);
+    expect(planActionBusyMs({ type: "runtime.run" })).toBe(0);
   });
 });
 

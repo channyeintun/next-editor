@@ -7,6 +7,7 @@ import { parseKitePlaygroundRunResult } from "../runtime/kitePlayground/types";
 import { parseKotlinPlaygroundRunResult } from "../runtime/kotlinPlayground/types";
 import { parseRustPlaygroundRunResult } from "../runtime/rustPlayground/types";
 import { parseZigPlaygroundRunResult } from "../runtime/zigPlayground/types";
+import { totalTypingDurationMs } from "./cadence";
 import { actionContractIssues, runtimeContractIssues } from "./runtimeContract";
 import { whiteboardDrawDurationMs } from "./whiteboardAssets";
 
@@ -319,6 +320,44 @@ export const studioPlanActionSchema = z.discriminatedUnion("type", [
 ]);
 export type StudioPlanAction = z.infer<typeof studioPlanActionSchema>;
 export type StudioPlanActionType = StudioPlanAction["type"];
+
+/**
+ * The fields that decide how long an action keeps the Performer busy. Every
+ * plan action is one; the Director builds one from a script action's
+ * materialized chunks/durations (script/actionTiming.ts) before the plan exists.
+ */
+export type StudioActionTiming =
+  | { type: "editor.type"; chunks: readonly TypingChunk[] }
+  | { type: "editor.select" | "console.point"; durationMs: number }
+  | { type: "whiteboard.apply"; upsertIds: readonly string[]; drawMs: number }
+  | {
+      type: Exclude<
+        StudioPlanActionType,
+        "editor.type" | "editor.select" | "console.point" | "whiteboard.apply"
+      >;
+    };
+
+/**
+ * How long an action keeps the sequential Performer busy before it can
+ * acknowledge — the one rule behind the overlap gate, the Performer's
+ * deadline and the Director's busy windows. Typing spends its chunk delays, a
+ * select its drag-glide duration, pointing at a console line its travel
+ * budget, and a drawn whiteboard apply one 20 fps frame per drawn step;
+ * every other action owns its waits inside its timeout.
+ */
+export function planActionBusyMs(action: StudioActionTiming): number {
+  switch (action.type) {
+    case "editor.type":
+      return totalTypingDurationMs(action.chunks);
+    case "editor.select":
+    case "console.point":
+      return action.durationMs;
+    case "whiteboard.apply":
+      return whiteboardDrawDurationMs(action.upsertIds.length, action.drawMs);
+    default:
+      return 0;
+  }
+}
 
 /**
  * Lesson types are the languages the platform teaches — not the starter
@@ -1035,20 +1074,10 @@ export const studioPlanSchema = z
 
     // A timed action must fit between its start and the next scheduled action:
     // the Performer is sequential, so a later action scheduled before this one
-    // can finish is an impossible overlap (§5). Typing spends its chunk delays,
-    // a select spends its drag-glide duration, pointing at a console line its
-    // travel budget, and a drawn whiteboard apply spends one 20 fps frame
-    // budget per sequential asset.
+    // can finish is an impossible overlap (§5).
     for (let i = 0; i < plan.actions.length; i++) {
       const action = plan.actions[i];
-      const busyMs =
-        action.type === "editor.type"
-          ? action.chunks.reduce((total, chunk) => total + chunk.delayMs, 0)
-          : action.type === "editor.select" || action.type === "console.point"
-            ? action.durationMs
-            : action.type === "whiteboard.apply"
-              ? whiteboardDrawDurationMs(action.upsertIds.length, action.drawMs)
-              : 0;
+      const busyMs = planActionBusyMs(action);
       if (busyMs === 0) continue;
       const next = plan.actions[i + 1];
       if (next && action.at + busyMs > next.at) {

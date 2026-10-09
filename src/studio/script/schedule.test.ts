@@ -2,19 +2,16 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
-import {
-  actionBusyMsById,
-  typingDurationOf,
-  typingSeedsOf,
-  whiteboardDrawDurationOf,
-} from "./actionTiming";
+import { totalTypingDurationMs } from "../cadence";
+import { planActionBusyMs } from "../plan";
+import { whiteboardDrawDurationMs } from "../whiteboardAssets";
+import { actionBusyMsById, typingChunksOf, typingSeedsOf } from "./actionTiming";
 import { compileLessonScript } from "./compile";
 import { splitIntoDialogs } from "./dialogs";
 import { LEXICON_V1 } from "./lexicon";
 import { extractScriptNarration, type ExtractedNarration } from "./markers";
 import { RECORDING_BUFFER_MS, ScheduleError, scheduleDialogs } from "./schedule";
 import { parseLessonScript, type LessonScript } from "./schema";
-import { whiteboardDrawDurationMs } from "../whiteboardAssets";
 
 function loadPilot(name: string): LessonScript {
   return parseLessonScript(
@@ -82,7 +79,9 @@ describe("scheduleDialogs", () => {
     // type-cube anchors to the dialog that starts at mark "type-cube"; the
     // following dialog may not begin until its typing is done.
     const typeCube = script.scenes[0].actions.find((action) => action.id === "type-cube")!;
-    if (!("mark" in typeCube.at)) throw new Error("pilot changed");
+    if (typeCube.type !== "editor.type" || !("mark" in typeCube.at)) {
+      throw new Error("pilot changed");
+    }
     const marker = extracted.markers.get(typeCube.at.mark)!;
     const dialogIndex = dialogs.findIndex(
       (dialog) => dialog.firstTokenIndex === marker.beforeTokenIndex,
@@ -90,7 +89,9 @@ describe("scheduleDialogs", () => {
     expect(dialogIndex).toBeGreaterThanOrEqual(0);
 
     const markTime = schedule.alignment.tokens[marker.beforeTokenIndex].startMs;
-    const typingMs = typingDurationOf(typeCube, typingSeedsOf(script).get("type-cube")!);
+    const typingMs = totalTypingDurationMs(
+      typingChunksOf(typeCube, typingSeedsOf(script).get("type-cube")!),
+    );
     const typingEnds = Math.max(0, markTime + typeCube.at.offsetMs) + typingMs;
     const nextDialog = schedule.timeline[dialogIndex + 1];
     expect(nextDialog.startMs).toBeGreaterThanOrEqual(Math.floor(typingEnds));
@@ -114,7 +115,9 @@ describe("scheduleDialogs", () => {
     expect(dialogIndex).toBeGreaterThanOrEqual(0);
 
     const markTime = schedule.alignment.tokens[marker.beforeTokenIndex].startMs;
-    const drawingEnds = Math.max(0, markTime + draw.at.offsetMs) + whiteboardDrawDurationOf(draw);
+    const drawingEnds =
+      Math.max(0, markTime + draw.at.offsetMs) +
+      whiteboardDrawDurationMs(draw.upsertIds.length, draw.drawMs);
     const nextDialog = schedule.timeline[dialogIndex + 1];
     expect(nextDialog.startMs).toBeGreaterThanOrEqual(Math.floor(drawingEnds));
   });
@@ -190,14 +193,7 @@ describe("scheduleDialogs", () => {
       let timedActions = 0;
       for (const action of plan.actions) {
         if (!busyById.has(action.id)) continue;
-        const carriedMs =
-          action.type === "editor.type"
-            ? action.chunks.reduce((total, chunk) => total + chunk.delayMs, 0)
-            : action.type === "editor.select" || action.type === "console.point"
-              ? action.durationMs
-              : action.type === "whiteboard.apply"
-                ? whiteboardDrawDurationMs(action.upsertIds.length, action.drawMs)
-                : 0;
+        const carriedMs = planActionBusyMs(action);
         if (carriedMs > 0) timedActions += 1;
         expect(busyById.get(action.id), `${plan.lesson.slug}/${action.id}`).toBe(carriedMs);
       }

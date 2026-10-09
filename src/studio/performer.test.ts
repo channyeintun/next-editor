@@ -309,6 +309,45 @@ describe("performPlan", () => {
     expect(result.error).toMatch(/did not acknowledge within/);
   });
 
+  it("budgets a drawn whiteboard.apply's frames into its deadline", async () => {
+    const { plan, driver } = makePlan();
+    // The driver sleeps one 50ms frame per drawn step — at least one per
+    // asset — before acknowledging, so ten assets drawn over a short drawMs
+    // legitimately outlast the bare 50ms timeout.
+    const drawingDriver: StudioDriver = {
+      ...driver,
+      applyWhiteboard: () => new Promise((resolve) => window.setTimeout(() => resolve({}), 300)),
+    };
+    const upsertIds = Array.from({ length: 10 }, (_, index) => `asset-${index}`);
+    const controller = new AbortController();
+
+    const result = await performPlan({
+      plan: {
+        ...plan,
+        actions: [
+          {
+            id: "draw",
+            type: "whiteboard.apply",
+            at: 0,
+            timeoutMs: 50,
+            open: true,
+            maximized: false,
+            upsertIds,
+            clear: false,
+            drawMs: 40,
+          },
+        ],
+      },
+      driver: drawingDriver,
+      clock: makeClock(),
+      signal: controller.signal,
+      abort: () => controller.abort(),
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.status).toBe("completed");
+  });
+
   it("dispatches the authored WebContainer preview sequence through the driver", async () => {
     const { calls, driver } = makePlan();
     const plan = parseStudioPlan({

@@ -1,4 +1,4 @@
-import type { StudioPlan, StudioPlanAction } from "./plan";
+import { planActionBusyMs, type StudioPlan, type StudioPlanAction } from "./plan";
 import type { StudioDriver } from "./driver";
 import { StudioActionError, abortableSleep } from "./async";
 import type { ActionReceipt } from "./report";
@@ -139,16 +139,11 @@ async function invokeWithDeadline(
   driver: StudioDriver,
   signal: AbortSignal,
 ): Promise<Record<string, unknown>> {
-  // editor.type spends its planned chunk delays and editor.select spends its
-  // drag-glide duration before acknowledging; expect/run actions own their
-  // internal waits. The outer deadline covers the whole command either way.
-  const timedEditBudgetMs =
-    action.type === "editor.type"
-      ? action.chunks.reduce((total, chunk) => total + chunk.delayMs, 0)
-      : action.type === "editor.select" || action.type === "console.point"
-        ? action.durationMs
-        : 0;
-  const deadlineMs = action.timeoutMs + timedEditBudgetMs;
+  // Typing spends its planned chunk delays, a select its drag-glide, a console
+  // point its travel and a drawn whiteboard apply its frames before
+  // acknowledging; expect/run actions own their internal waits. The outer
+  // deadline covers the whole command either way.
+  const deadlineMs = action.timeoutMs + planActionBusyMs(action);
 
   let deadlineTimer: number | undefined;
   const deadline = new Promise<never>((_, reject) => {

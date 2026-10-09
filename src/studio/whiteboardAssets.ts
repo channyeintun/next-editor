@@ -90,9 +90,9 @@ export function planWhiteboardDrawFrames(
 }
 
 /**
- * How long a drawn apply keeps the Performer busy. The compiler models this as
- * busy time (script/actionTiming.ts) — the Performer is strictly sequential, so
- * without it every following action starts late and fails the timing gate.
+ * How long a drawn apply keeps the Performer busy. planActionBusyMs (plan.ts)
+ * counts it as busy time — the Performer is strictly sequential, so without it
+ * every following action starts late and fails the timing gate.
  */
 export function whiteboardDrawDurationMs(assetCount: number, drawMs: number): number {
   return planWhiteboardDrawFrames(assetCount, drawMs).length * WHITEBOARD_DRAW_FRAME_MS;

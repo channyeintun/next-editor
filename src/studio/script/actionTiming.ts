@@ -7,16 +7,17 @@ import {
   createSeededRandom,
 } from "../cadence";
 import { POINTER_AIM_MAX_MS } from "../../core/src/utils/pointerMotion";
-import type { TypingChunk } from "../plan";
-import { whiteboardDrawDurationMs } from "../whiteboardAssets";
+import { planActionBusyMs, type StudioActionTiming, type TypingChunk } from "../plan";
 import type { LessonScript, ScriptAction } from "./schema";
 
 /**
- * How long each script action keeps the sequential Performer busy — the one
- * home of the rule. The compiler (compile.ts) places actions and materializes
+ * How long each script action keeps the sequential Performer busy, before
+ * the plan exists. The compiler (compile.ts) places actions and materializes
  * their chunks/durations with these helpers, and the dialog scheduler
  * (schedule.ts) reserves narration time with the same numbers, so the two
- * stages can never disagree about an action's busy window.
+ * stages can never disagree about an action's busy window. The busy rule
+ * itself is plan.ts's planActionBusyMs, read over those materialized fields —
+ * the same rule the plan's overlap gate and the Performer's deadline apply.
  */
 
 const CADENCES = {
@@ -61,13 +62,6 @@ export function typingChunksOf(
   return compileTypingChunks(action.text, CADENCES[action.cadence], seed);
 }
 
-export function typingDurationOf(action: ScriptAction, seed: number): number {
-  if (action.type !== "editor.type") {
-    return 0;
-  }
-  return typingChunksOf(action, seed).reduce((total, chunk) => total + chunk.delayMs, 0);
-}
-
 /**
  * Materialized drag-glide duration for an `editor.select` (0 for any other
  * action). Longer spans travel a little longer, capped so a whole-block
@@ -93,26 +87,32 @@ export function pointDurationOf(action: ScriptAction): number {
   return action.type === "console.point" ? POINTER_AIM_MAX_MS : 0;
 }
 
-/** Time a drawn whiteboard apply spends emitting its frames. */
-export function whiteboardDrawDurationOf(action: ScriptAction): number {
-  if (action.type !== "whiteboard.apply") {
-    return 0;
+/**
+ * A script action's timing fields as its compiled plan action carries them: the
+ * seeded typing chunks, select drag and point travel the compiler materializes.
+ * A whiteboard apply's asset count and drawMs pass through as authored.
+ */
+function actionTimingOf(action: ScriptAction, seed: number): StudioActionTiming {
+  switch (action.type) {
+    case "editor.type":
+      return { type: action.type, chunks: typingChunksOf(action, seed) };
+    case "editor.select":
+      return { type: action.type, durationMs: selectDurationOf(action, seed) };
+    case "console.point":
+      return { type: action.type, durationMs: pointDurationOf(action) };
+    default:
+      return action;
   }
-  return whiteboardDrawDurationMs(action.upsertIds.length, action.drawMs);
 }
 
 /**
  * Time a timed action keeps the Performer busy: typing chunks, a select drag,
- * or the frames of a drawn whiteboard apply. The Performer runs plan order
- * sequentially, so anything not modeled here pushes every later action late.
+ * point travel, or the frames of a drawn whiteboard apply. The Performer runs
+ * plan order sequentially, so anything not modeled here pushes every later
+ * action late.
  */
 export function actionBusyMs(action: ScriptAction, seed: number): number {
-  return (
-    typingDurationOf(action, seed) +
-    selectDurationOf(action, seed) +
-    pointDurationOf(action) +
-    whiteboardDrawDurationOf(action)
-  );
+  return planActionBusyMs(actionTimingOf(action, seed));
 }
 
 /** {@link actionBusyMs} for every action of the script, by action id. */
