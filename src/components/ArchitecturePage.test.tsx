@@ -30,4 +30,16 @@ describe("ArchitecturePage", () => {
     expect(within(noteItems[0]).getByText("01")).toBeInTheDocument();
     expect(within(noteItems[40]).getByText("41")).toBeInTheDocument();
   });
+
+  it("names the build table and marks each label as its row header", () => {
+    render(<ArchitecturePage />);
+    const table = screen.getByRole("table", { name: "Build & tooling" });
+
+    const rowHeaders = within(table).getAllByRole("rowheader");
+    expect(rowHeaders).toHaveLength(12);
+    expect(rowHeaders[0]).toHaveAccessibleName("package manager");
+    expect(rowHeaders[0]).toHaveAttribute("scope", "row");
+    expect(rowHeaders[11]).toHaveAccessibleName("deploy");
+    expect(within(table).queryAllByRole("columnheader")).toHaveLength(0);
+  });
 });

@@ -80,9 +80,9 @@ const styles = `
 .arch-page .spec-table{ width:100%; border-collapse:collapse; font-size:13px; }
 .arch-page .spec-table tr{ border-bottom:1px solid var(--grid-line); }
 .arch-page .spec-table tr:last-child{ border-bottom:none; }
-.arch-page .spec-table td{ padding:9px 14px 9px 0; vertical-align:top; }
-.arch-page .spec-table td:first-child{
-  font-family:var(--font-mono); color:var(--ink-soft); font-size:11px;
+.arch-page .spec-table th, .arch-page .spec-table td{ padding:9px 14px 9px 0; vertical-align:top; }
+.arch-page .spec-table th{
+  font-family:var(--font-mono); color:var(--ink-soft); font-size:11px; font-weight:400; text-align:left;
   letter-spacing:.03em; white-space:nowrap; width:1%; padding-top:11px;
 }
 .arch-page .spec-table td:last-child code{
@@ -1126,17 +1126,17 @@ export default function ArchitecturePage() {
           </div>
 
           <div className="build">
-            <h2>Build &amp; tooling</h2>
-            <table className="spec-table">
+            <h2 id="build-heading">Build &amp; tooling</h2>
+            <table className="spec-table" aria-labelledby="build-heading">
               <tbody>
                 <tr>
-                  <td>package manager</td>
+                  <th scope="row">package manager</th>
                   <td>
                     <code>bun</code>
                   </td>
                 </tr>
                 <tr>
-                  <td>toolchain</td>
+                  <th scope="row">toolchain</th>
                   <td>
                     <code>vite 8</code>
                     <code>rolldown</code>
@@ -1150,7 +1150,7 @@ export default function ArchitecturePage() {
                   </td>
                 </tr>
                 <tr>
-                  <td>compiler</td>
+                  <th scope="row">compiler</th>
                   <td>
                     <code>react compiler</code>{" "}
                     <span className="note-inline">
@@ -1159,13 +1159,13 @@ export default function ArchitecturePage() {
                   </td>
                 </tr>
                 <tr>
-                  <td>styling</td>
+                  <th scope="row">styling</th>
                   <td>
                     <code>tailwind css 4</code>
                   </td>
                 </tr>
                 <tr>
-                  <td>wasm</td>
+                  <th scope="row">wasm</th>
                   <td>
                     <code>rust</code>
                     <code>wasm32-unknown-unknown</code>
@@ -1177,7 +1177,7 @@ export default function ArchitecturePage() {
                   </td>
                 </tr>
                 <tr>
-                  <td>types</td>
+                  <th scope="row">types</th>
                   <td>
                     <code>typescript 7</code>{" "}
                     <span className="note-inline">
@@ -1186,7 +1186,7 @@ export default function ArchitecturePage() {
                   </td>
                 </tr>
                 <tr>
-                  <td>collaboration</td>
+                  <th scope="row">collaboration</th>
                   <td>
                     <code>yjs</code>
                     <code>durable objects + sqlite</code>{" "}
@@ -1196,7 +1196,7 @@ export default function ArchitecturePage() {
                   </td>
                 </tr>
                 <tr>
-                  <td>voice chat</td>
+                  <th scope="row">voice chat</th>
                   <td>
                     <code>partytracks 0.0.56</code>
                     <code>cloudflare realtime sfu</code>{" "}
@@ -1206,7 +1206,7 @@ export default function ArchitecturePage() {
                   </td>
                 </tr>
                 <tr>
-                  <td>public cache</td>
+                  <th scope="row">public cache</th>
                   <td>
                     <code>workers kv</code>{" "}
                     <span className="note-inline">
@@ -1215,7 +1215,7 @@ export default function ArchitecturePage() {
                   </td>
                 </tr>
                 <tr>
-                  <td>tests</td>
+                  <th scope="row">tests</th>
                   <td>
                     <code>vitest</code>
                     <code>fast-check</code>{" "}
@@ -1227,7 +1227,7 @@ export default function ArchitecturePage() {
                   </td>
                 </tr>
                 <tr>
-                  <td>observability</td>
+                  <th scope="row">observability</th>
                   <td>
                     <code>posthog</code>
                     <code>workers logs + traces</code>{" "}
@@ -1237,7 +1237,7 @@ export default function ArchitecturePage() {
                   </td>
                 </tr>
                 <tr>
-                  <td>deploy</td>
+                  <th scope="row">deploy</th>
                   <td>
                     <code>wrangler</code>{" "}
                     <span className="note-inline">
