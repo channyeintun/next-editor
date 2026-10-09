@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
@@ -28,6 +28,7 @@ import {
   RUNTIME_INITIAL_DOCUMENT_MESSAGE_TYPE,
   RUNTIME_TAKE_SNAPSHOT_MESSAGE_TYPE,
 } from "./rrwebPreview";
+import { RuntimePreviewRenderer } from "./RuntimePreviewRenderer";
 import { usePreviewController } from "./usePreviewController";
 
 const editor = vi.hoisted(() => ({
@@ -403,6 +404,56 @@ describe("usePreviewController rrweb replay surface", () => {
     });
 
     expect(result.current.isRrwebReplayActive).toBe(false);
+  });
+});
+
+describe("usePreviewController runtime placeholder", () => {
+  // Mirrors Preview.tsx: the frame exists only while the panel is open, so every
+  // reopen mounts a new, empty iframe.
+  function renderPreviewSurface() {
+    const surface: { controller?: ReturnType<typeof usePreviewController> } = {};
+    function PreviewSurface() {
+      const controller = usePreviewController();
+      surface.controller = controller;
+      return controller.isOpen ? (
+        <RuntimePreviewRenderer
+          iframeRef={controller.iframeRef}
+          replayContainerRef={controller.replayContainerRef}
+          isRrwebReplayActive={controller.isRrwebReplayActive}
+          allowSameOrigin={controller.allowSameOriginPreview}
+          disablePointerEvents={false}
+        />
+      ) : null;
+    }
+    const view = render(<PreviewSurface />, { wrapper: Providers });
+    const controller = () => {
+      if (!surface.controller) throw new Error("PreviewSurface did not render");
+      return surface.controller;
+    };
+    const frame = () => view.container.querySelector("iframe");
+    return { controller, frame };
+  }
+
+  it("paints the placeholder into the new frame each time the panel reopens", () => {
+    const { controller, frame } = renderPreviewSurface();
+
+    act(() => {
+      controller().handleFloat();
+    });
+    const firstFrame = frame();
+    expect(firstFrame?.getAttribute("srcdoc")).toContain("Runtime preview is waiting");
+
+    act(() => {
+      controller().handleClose();
+    });
+    expect(frame()).toBeNull();
+
+    act(() => {
+      controller().handleFloat();
+    });
+    const reopenedFrame = frame();
+    expect(reopenedFrame).not.toBe(firstFrame);
+    expect(reopenedFrame?.getAttribute("srcdoc")).toContain("Runtime preview is waiting");
   });
 });
 

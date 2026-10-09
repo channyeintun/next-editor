@@ -35,7 +35,7 @@ interface UsePreviewPlaybackRegistrationOptions {
   sizeRef: RefObject<PreviewSize>;
   isOpenRef: RefObject<boolean>;
   modeRef: RefObject<PreviewPanelMode>;
-  updateIframeContent: (content: string, options?: { force?: boolean }) => void;
+  updateIframeContent: (content: string) => void;
   setSize: Dispatch<SetStateAction<PreviewSize>>;
   applyPreviewRoute: (route: string) => void;
   applyPreviewPanelState: (state: { isOpen?: boolean; mode?: PreviewPanelMode }) => void;
@@ -324,7 +324,7 @@ export function usePreviewPlaybackRegistration({
         previewState.content !== undefined &&
         (didRefreshKeyChange || previewState.content !== lastContentRef.current)
       ) {
-        updateIframeContent(previewState.content, { force: true });
+        updateIframeContent(previewState.content);
       }
     };
 

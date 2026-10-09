@@ -222,6 +222,25 @@ function writeIframeContent(iframe: HTMLIFrameElement, content: string): boolean
 }
 
 /**
+ * Shows the runtime placeholder in the frame, and records it as the frame's
+ * content. Asks the element, not `lastContentRef`, whether the placeholder is
+ * already there: closing the panel, a playback, or a sandbox change mounts a new,
+ * empty frame while the ref still holds what the old one showed. Module-level so
+ * the uncompiled controller hook does not grow.
+ */
+function showRuntimePlaceholder(
+  iframe: HTMLIFrameElement,
+  lastContentRef: RefObject<string>,
+  placeholder: string,
+): void {
+  if (iframe.getAttribute("srcdoc") !== placeholder) {
+    iframe.removeAttribute("src");
+    iframe.srcdoc = placeholder;
+  }
+  lastContentRef.current = placeholder;
+}
+
+/**
  * A cross-origin runtime iframe (e.g. the :PORT runtime preview) can paint
  * blank inside the floating panel's clipped/composited container — it is
  * `position: fixed` with `rounded-xl`, `overflow-hidden`, a box-shadow and a
@@ -765,16 +784,9 @@ export function usePreviewController(): PreviewController {
     onApiClientResponse: apiClient.handleResponse,
   });
 
-  const updateIframeContent = (content: string, options?: { force?: boolean }) => {
-    if (!iframeRef.current || (isLiveRuntimePreviewActive && !options?.force)) {
-      return;
-    }
-
-    if (!options?.force && lastContentRef.current === content) {
-      return;
-    }
-
-    if (writeIframeContent(iframeRef.current, content)) {
+  const updateIframeContent = (content: string) => {
+    const iframe = iframeRef.current;
+    if (iframe && writeIframeContent(iframe, content)) {
       lastContentRef.current = content;
     }
   };
@@ -870,9 +882,7 @@ export function usePreviewController(): PreviewController {
     }
 
     if (isRuntimeManagedPreview) {
-      lastContentRef.current = "";
-      iframe.removeAttribute("src");
-      iframe.srcdoc = runtimePreviewPlaceholder;
+      showRuntimePlaceholder(iframe, lastContentRef, runtimePreviewPlaceholder);
       emitPreviewEvent("preview_refresh");
       finishRefresh();
       return;
@@ -978,13 +988,7 @@ export function usePreviewController(): PreviewController {
     }
 
     if (isRuntimeManagedPreview) {
-      if (lastContentRef.current === runtimePreviewPlaceholder) {
-        return;
-      }
-
-      lastContentRef.current = runtimePreviewPlaceholder;
-      iframe.removeAttribute("src");
-      iframe.srcdoc = runtimePreviewPlaceholder;
+      showRuntimePlaceholder(iframe, lastContentRef, runtimePreviewPlaceholder);
     }
   }, [
     isOpen,
@@ -997,18 +1001,10 @@ export function usePreviewController(): PreviewController {
     requestRuntimePreviewSnapshot,
     // Changing the sandbox mode remounts the frame (RuntimePreviewRenderer keys
     // on it, because a sandbox change does not apply to an already-loaded
-    // document). The new element starts empty, so this effect has to re-run and
-    // repaint it — otherwise the preview would go blank on the transition.
+    // document). The new element starts empty, so this effect has to re-run;
+    // showRuntimePlaceholder's element check then repaints it.
     allowSameOriginPreview,
   ]);
-
-  // Paired with the dependency above: the content short-circuits below compare
-  // against `lastContentRef`, which still holds what the *previous* element was
-  // showing. Clearing it on a remount lets the placeholder/content path write
-  // again instead of deciding it is already up to date.
-  useEffect(() => {
-    lastContentRef.current = "";
-  }, [allowSameOriginPreview]);
 
   // Frames recorded from a live runtime carry its last HTML snapshot, the
   // fallback for recordings rrweb cannot replay. While recording, refresh it
