@@ -125,7 +125,7 @@ export default function LearnerVersionsMenu({
           <History size={iconSize} aria-hidden="true" />
           <span
             aria-hidden="true"
-            className="absolute -top-1 -right-1 min-w-3.5 rounded-full bg-blue-500 px-0.5 text-center text-[10px] leading-3.5 font-semibold text-white"
+            className="absolute -top-1 -right-1 min-w-3.5 rounded-full bg-blue-400 px-0.5 text-center text-[10px] leading-3.5 font-semibold text-slate-950"
           >
             {versions.length}
           </span>
