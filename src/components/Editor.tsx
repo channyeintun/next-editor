@@ -229,12 +229,22 @@ function EditorLayout({
           />
         ) : null}
 
+        {/* Announces the load to screen readers, including one a Retry or a drop
+            starts. Mounted before the load begins rather than with it: a status
+            region inserted already filled is often not announced. The overlay
+            below is the visual copy and stays hidden from assistive technology. */}
+        <p role="status" className="sr-only">
+          {recordingLoading ? "Loading recording…" : ""}
+        </p>
+
         {/* Loading / error overlays live inside the (relative) editor surface so they
             center on the editor region in both viewport and `fill` layouts. */}
         {recordingLoading ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3">
-            <LoadingSpinner />
-            <p className="text-sm text-slate-400">Loading recording…</p>
+            <LoadingSpinner label={null} />
+            <p aria-hidden="true" className="text-sm text-slate-400">
+              Loading recording…
+            </p>
           </div>
         ) : loadError ? (
           // A dropped file can't be re-fetched, so it gets Dismiss rather than Retry.
