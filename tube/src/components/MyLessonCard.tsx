@@ -171,6 +171,8 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
               <button
                 type="button"
                 aria-label="Close menu"
+                tabIndex={-1}
+                aria-hidden="true"
                 className="fixed inset-0 z-40 cursor-default"
                 onClick={() => setMenuOpen(false)}
               />

@@ -73,6 +73,18 @@ describe("AddToPlaylistPopover", () => {
     expect(screen.getByRole("button", { name: "Web tour", pressed: false })).toBeInTheDocument();
   });
 
+  it("keeps the click-outside backdrop out of the tab order and the accessibility tree", () => {
+    const onClose = vi.fn<() => void>();
+    render(<AddToPlaylistPopover lesson={lesson} onClose={onClose} />);
+
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+    const backdrop = screen.getByLabelText("Close");
+    expect(backdrop).toHaveAttribute("tabindex", "-1");
+
+    fireEvent.click(backdrop);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("caps a new playlist's name at the Worker's limit", () => {
     render(<AddToPlaylistPopover lesson={lesson} onClose={() => {}} />);
 

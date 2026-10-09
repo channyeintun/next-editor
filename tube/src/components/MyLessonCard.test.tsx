@@ -64,6 +64,18 @@ describe("MyLessonCard", () => {
     rename.isPending = false;
   });
 
+  it("keeps the click-outside backdrop out of the tab order and the accessibility tree", () => {
+    render(card());
+    fireEvent.click(screen.getByRole("button", { name: "Lesson options" }));
+
+    expect(screen.queryByRole("button", { name: "Close menu" })).not.toBeInTheDocument();
+    const backdrop = screen.getByLabelText("Close menu");
+    expect(backdrop).toHaveAttribute("tabindex", "-1");
+
+    fireEvent.click(backdrop);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   it("names the rename field", () => {
     startRename();
 

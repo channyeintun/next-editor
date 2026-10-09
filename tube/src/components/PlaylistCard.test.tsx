@@ -48,6 +48,18 @@ describe("PlaylistCard", () => {
     del.mockReset();
   });
 
+  it("keeps the click-outside backdrop out of the tab order and the accessibility tree", () => {
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "Playlist options" }));
+
+    expect(screen.queryByRole("button", { name: "Close menu" })).not.toBeInTheDocument();
+    const backdrop = screen.getByLabelText("Close menu");
+    expect(backdrop).toHaveAttribute("tabindex", "-1");
+
+    fireEvent.click(backdrop);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   it("names the rename field", () => {
     renderCard();
     openMenuItem("Rename");

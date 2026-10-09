@@ -110,6 +110,8 @@ export default function AddToPlaylistPopover({
       <button
         type="button"
         aria-label="Close"
+        tabIndex={-1}
+        aria-hidden="true"
         className="fixed inset-0 z-40 cursor-default"
         onClick={onClose}
       />
