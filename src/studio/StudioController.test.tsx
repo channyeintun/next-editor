@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { AthanLabPanelProps } from "./AthanLabPanel";
 import type { runStudioRender } from "./runStudioRender";
 import type { SavedCustomVoice } from "./tts/customVoices";
+import type { VoiceProfile } from "./tts/profiles";
 
 const studio = vi.hoisted(() => ({
   searchParams: new URLSearchParams(),
@@ -10,6 +12,12 @@ const studio = vi.hoisted(() => ({
   voices: [] as SavedCustomVoice[],
   synthesizePocket: vi.fn<() => Promise<Uint8Array>>(),
   saveVoice: vi.fn<(name: string, samples: Float32Array) => Promise<SavedCustomVoice>>(),
+  /** When set, the voice library read waits on this instead of resolving `voices`. */
+  voicesLoad: null as Promise<SavedCustomVoice[]> | null,
+  capabilities: { athanlab: false, burmeseVoxCpm2: false },
+  athanLabPanel: null as AthanLabPanelProps | null,
+  /** The voice the last plan build synthesized with. */
+  builtVoiceProfile: undefined as VoiceProfile | undefined,
 }));
 
 vi.mock("react-router", () => ({
@@ -24,13 +32,15 @@ vi.mock("@next-editor/infra", () => ({
     </button>
   ),
   useAuth: () => ({ user: null, isLoading: false }),
-  useStudioCapabilities: () => ({
-    capabilities: { athanlab: false, burmeseVoxCpm2: false },
-    isLoading: false,
-  }),
+  useStudioCapabilities: () => ({ capabilities: studio.capabilities, isLoading: false }),
 }));
 
-vi.mock("./AthanLabPanel", () => ({ default: () => null }));
+vi.mock("./AthanLabPanel", () => ({
+  default: (props: AthanLabPanelProps) => {
+    studio.athanLabPanel = props;
+    return null;
+  },
+}));
 vi.mock("../contexts/NextEditorActorContext", () => ({
   NextEditorActorContext: { useActorRef: () => ({}) },
 }));
@@ -72,12 +82,17 @@ vi.mock("../utils/displayCapture", () => ({
 // The plan carries what the controller reads back: the slug and title it
 // records and the runtime its mode defaults from.
 vi.mock("./inPageDirector", () => ({
-  buildPlanFromScript: (script: { lesson: unknown; runtime: unknown }) =>
-    Promise.resolve({
+  buildPlanFromScript: (
+    script: { lesson: unknown; runtime: unknown },
+    options: { voiceProfile?: VoiceProfile },
+  ) => {
+    studio.builtVoiceProfile = options.voiceProfile;
+    return Promise.resolve({
       plan: { lesson: script.lesson, runtime: script.runtime },
       narration: { blob: new Blob(), bytes: new Uint8Array(), audioSha256: "0".repeat(64) },
       warnings: [],
-    }),
+    });
+  },
 }));
 vi.mock("./runStudioRender", () => ({ runStudioRender: studio.runRender }));
 vi.mock("./tts/pocketSynth", () => ({ synthesizePocketWav: studio.synthesizePocket }));
@@ -86,7 +101,7 @@ vi.mock("./tts/modalVoxCpm2Synth", () => ({
 }));
 vi.mock("./tts/customVoices", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./tts/customVoices")>()),
-  listCustomVoices: () => Promise.resolve(studio.voices),
+  listCustomVoices: () => studio.voicesLoad ?? Promise.resolve(studio.voices),
   deleteCustomVoice: () => Promise.resolve(),
   prepareVoiceSample: () => Promise.resolve(new Float32Array(24_000 * 6)),
   saveCustomVoice: studio.saveVoice,
@@ -295,6 +310,65 @@ describe("StudioController unattended render", () => {
 
   afterEach(() => {
     restoreWebdriver();
+    studio.voicesLoad = null;
+    studio.capabilities = { athanlab: false, burmeseVoxCpm2: false };
+    studio.athanLabPanel = null;
+  });
+
+  /** Long enough for every effect and resolved promise of the mount to settle. */
+  const settle = () => act(() => new Promise((resolve) => window.setTimeout(resolve, 20)));
+
+  it("waits for the saved voices, then renders with the stored one", async () => {
+    let resolveVoices: (voices: SavedCustomVoice[]) => void = () => {};
+    studio.voicesLoad = new Promise((resolve) => {
+      resolveVoices = resolve;
+    });
+    localStorage.setItem("next-editor:studio:voice-choice", narrator.id);
+    studio.runRender.mockReturnValue(new Promise(() => {}));
+    studio.searchParams = new URLSearchParams("autostart=1");
+    renderController(await freshStudioController());
+
+    await settle();
+    expect(studio.runRender).not.toHaveBeenCalled();
+
+    resolveVoices([narrator]);
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    expect(studio.builtVoiceProfile).toMatchObject({ customVoiceId: narrator.id });
+  });
+
+  it("renders in English when the stored VoxCPM2 provider is not enabled, as the console falls back", async () => {
+    localStorage.setItem("next-editor:studio:narration-provider", "voxcpm2");
+    studio.runRender.mockReturnValue(new Promise(() => {}));
+    studio.searchParams = new URLSearchParams("autostart=1");
+    renderController(await freshStudioController());
+
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("combobox", { name: "Narration language and provider" })).toHaveValue(
+      "pocket",
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("waits for a ready AthanLab panel before an AthanLab render", async () => {
+    studio.capabilities = { athanlab: true, burmeseVoxCpm2: false };
+    localStorage.setItem("next-editor:studio:narration-provider", "athanlab");
+    studio.runRender.mockReturnValue(new Promise(() => {}));
+    studio.searchParams = new URLSearchParams("plan=burmese-script&autostart=1");
+    renderController(await freshStudioController());
+
+    await settle();
+    const panel = studio.athanLabPanel;
+    if (!panel) throw new Error("AthanLabPanel not rendered");
+    act(() => panel.onReadyChange(false, "Checking your AthanLab key…"));
+    await settle();
+    expect(studio.runRender).not.toHaveBeenCalled();
+
+    act(() => {
+      panel.onVoiceChange("voice-a", "Voice A");
+      panel.onReadyChange(true, null);
+    });
+    await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("refuses a script the provider cannot narrate with the Start guard's own reason", async () => {

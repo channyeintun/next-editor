@@ -402,8 +402,14 @@ export default function StudioController() {
     );
   };
 
+  // Whether the voice library has been read (or failed to), so the unattended
+  // render never starts with the empty pre-load list.
+  const [customVoicesLoaded, setCustomVoicesLoaded] = useState(false);
   useEffect(() => {
-    void listCustomVoices().then(setCustomVoices);
+    void listCustomVoices()
+      .then(setCustomVoices)
+      .catch((error: unknown) => console.warn("Narrator voices unavailable:", error))
+      .finally(() => setCustomVoicesLoaded(true));
   }, []);
 
   const selectedVoice = customVoices.find((voice) => voice.id === voiceChoice) ?? null;
@@ -780,13 +786,23 @@ export default function StudioController() {
   // One-shot per page load (module flag): StrictMode remounts and later
   // re-renders must not restart an unattended render. `autostart` is already
   // false outside an automation-controlled browser (shouldAutostartRender).
+  // It waits for the state a clicked Start render would see: the session and
+  // its capabilities (and the VoxCPM2 fallback they trigger), the saved
+  // voices, and — for AthanLab, whose Start stays disabled until then — a
+  // ready panel. Before that, runRender would read the mount-time defaults.
+  const autostartReady =
+    !authLoading &&
+    !studioCapabilitiesLoading &&
+    (provider !== "voxcpm2" || studioCapabilities.burmeseVoxCpm2) &&
+    customVoicesLoaded &&
+    (provider !== "athanlab" || athanLabReadiness.ready);
   useEffect(() => {
-    if (!autostart || autostartFired) {
+    if (!autostart || !autostartReady || autostartFired) {
       return;
     }
     autostartFired = true;
     void runRender();
-  }, [autostart, runRender]);
+  }, [autostart, autostartReady, runRender]);
 
   const source = sources[planSlug];
   // A completed run's bundle/report/draft are exposed only while the current
