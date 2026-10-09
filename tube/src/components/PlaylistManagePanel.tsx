@@ -101,7 +101,11 @@ export default function PlaylistManagePanel({
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto p-5">
-          {actionError && <p className="mb-2 text-xs text-rose-300">{actionError}</p>}
+          {actionError && (
+            <p role="alert" className="mb-2 text-xs text-rose-300">
+              {actionError}
+            </p>
+          )}
 
           {membersPending ? (
             <p className="text-xs text-slate-500">Loading…</p>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router";
 import {
   Check,
@@ -42,6 +42,7 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
   const [renaming, setRenaming] = useState(false);
   const [titleValue, setTitleValue] = useState(lesson.title);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const titleErrorId = useId();
   const thumbnailInputRef = useRef<HTMLInputElement | null>(null);
 
   const publish = usePublishFromLibrary();
@@ -273,6 +274,8 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
             <input
               autoFocus
               aria-label="Lesson name"
+              aria-invalid={titleError ? true : undefined}
+              aria-describedby={titleError ? titleErrorId : undefined}
               value={titleValue}
               onChange={(e) => setTitleValue(e.target.value)}
               onKeyDown={(e) => {
@@ -317,16 +320,30 @@ export default function MyLessonCard({ lesson }: { lesson: OwnedLesson }) {
           </h3>
         )}
 
-        {thumbnailError ? <p className="text-xs text-rose-300">{thumbnailError}</p> : null}
-        {titleError ? <p className="text-xs text-rose-300">{titleError}</p> : null}
+        {thumbnailError ? (
+          <p role="alert" className="text-xs text-rose-300">
+            {thumbnailError}
+          </p>
+        ) : null}
+        {titleError ? (
+          <p id={titleErrorId} role="alert" className="text-xs text-rose-300">
+            {titleError}
+          </p>
+        ) : null}
         {!thumbnailError && !titleError && hasMutationError && confirming === null ? (
-          <p className="text-xs text-rose-300">Something went wrong — try again.</p>
+          <p role="alert" className="text-xs text-rose-300">
+            Something went wrong — try again.
+          </p>
         ) : null}
         {updateThumbnail.isPending ? (
-          <p className="text-xs text-slate-400">Updating thumbnail…</p>
+          <p role="status" className="text-xs text-slate-400">
+            Updating thumbnail…
+          </p>
         ) : null}
         {updateName.isPending ? (
-          <p className="text-xs text-slate-400">Updating lesson name…</p>
+          <p role="status" className="text-xs text-slate-400">
+            Updating lesson name…
+          </p>
         ) : null}
 
         {confirming === "unpublish" ? (

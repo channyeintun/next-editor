@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import axios from "axios";
 import { Check, Pencil, X } from "lucide-react";
@@ -12,8 +12,17 @@ export default function UsernameEditor({ username }: { username: string }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(username);
   const [error, setError] = useState<string | null>(null);
+  const errorId = useId();
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const mutation = useUpdateUsername();
   const navigate = useNavigate();
+
+  // The input is disabled while the save is in flight, so focus falls to the
+  // body; once a failure re-enables it, put focus back on the field the error
+  // describes.
+  useEffect(() => {
+    if (error && !mutation.isPending) inputRef.current?.focus();
+  }, [error, mutation.isPending]);
 
   if (!editing) {
     return (
@@ -41,6 +50,9 @@ export default function UsernameEditor({ username }: { username: string }) {
       setEditing(false);
       return;
     }
+    // Clear the previous error so a repeat failure re-inserts the alert and
+    // is announced again.
+    setError(null);
     mutation.mutate(next, {
       onSuccess: () => {
         navigate(`/learn/@${next}`, { replace: true });
@@ -64,8 +76,11 @@ export default function UsernameEditor({ username }: { username: string }) {
           @
         </span>
         <input
+          ref={inputRef}
           autoFocus
           aria-label="Username"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
           autoComplete="username"
           spellCheck={false}
           value={value}
@@ -96,7 +111,11 @@ export default function UsernameEditor({ username }: { username: string }) {
           <X className="size-4" />
         </button>
       </div>
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && (
+        <p id={errorId} role="alert" className="text-xs text-red-400">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

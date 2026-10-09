@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { MAX_DESCRIPTION_CHARS, MAX_TITLE_CHARS } from "../../../infra/lessons/metadataLimits";
 
@@ -19,5 +19,17 @@ describe("CreatePlaylistModal", () => {
     expect(screen.getByPlaceholderText<HTMLInputElement>("Description (optional)").maxLength).toBe(
       MAX_DESCRIPTION_CHARS,
     );
+  });
+
+  it("announces an empty name and ties the error to the name field", () => {
+    render(<CreatePlaylistModal onClose={() => {}} />);
+    const input = screen.getByPlaceholderText("Playlist name");
+    expect(input).not.toHaveAttribute("aria-invalid");
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Playlist name can't be empty.");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("Playlist name can't be empty.");
   });
 });

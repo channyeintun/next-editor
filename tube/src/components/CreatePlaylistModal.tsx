@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { X } from "lucide-react";
 import { MAX_DESCRIPTION_CHARS, MAX_TITLE_CHARS, useCreatePlaylist } from "@next-editor/infra";
 
@@ -14,6 +14,7 @@ export default function CreatePlaylistModal({ onClose }: { onClose: () => void }
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [titleError, setTitleError] = useState<string | null>(null);
+  const titleErrorId = useId();
   const createPlaylist = useCreatePlaylist();
 
   useEffect(() => {
@@ -65,6 +66,8 @@ export default function CreatePlaylistModal({ onClose }: { onClose: () => void }
         <div className="space-y-3 p-5">
           <input
             autoFocus
+            aria-invalid={titleError ? true : undefined}
+            aria-describedby={titleError ? titleErrorId : undefined}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => {
@@ -86,7 +89,11 @@ export default function CreatePlaylistModal({ onClose }: { onClose: () => void }
             disabled={createPlaylist.isPending}
             className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-pinata-purple/60 disabled:opacity-60"
           />
-          {titleError && <p className="text-xs text-rose-300">{titleError}</p>}
+          {titleError && (
+            <p id={titleErrorId} role="alert" className="text-xs text-rose-300">
+              {titleError}
+            </p>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-white/10 px-5 py-4">

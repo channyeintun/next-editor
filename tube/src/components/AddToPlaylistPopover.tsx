@@ -142,7 +142,9 @@ export default function AddToPlaylistPopover({
           {isPending ? (
             <p className="px-2.5 py-2 text-xs text-slate-500">Loading…</p>
           ) : isError ? (
-            <p className="px-2.5 py-2 text-xs text-rose-300">Couldn't load your playlists.</p>
+            <p role="alert" className="px-2.5 py-2 text-xs text-rose-300">
+              Couldn't load your playlists.
+            </p>
           ) : trimmedFilter && visiblePlaylists?.length === 0 ? (
             <p className="px-2.5 py-2 text-xs text-slate-500">
               No playlists match "{filter.trim()}".
@@ -171,7 +173,11 @@ export default function AddToPlaylistPopover({
           )}
         </div>
 
-        {toggleError && <p className="px-4 pb-2 text-xs text-rose-300">{toggleError}</p>}
+        {toggleError && (
+          <p role="alert" className="px-4 pb-2 text-xs text-rose-300">
+            {toggleError}
+          </p>
+        )}
 
         <div className="border-t border-white/10 p-1.5">
           {creatingNew ? (
@@ -217,7 +223,11 @@ export default function AddToPlaylistPopover({
               New playlist
             </button>
           )}
-          {createError && <p className="px-2.5 pt-1 text-xs text-rose-300">{createError}</p>}
+          {createError && (
+            <p role="alert" className="px-2.5 pt-1 text-xs text-rose-300">
+              {createError}
+            </p>
+          )}
         </div>
       </div>
     </>

@@ -3,12 +3,18 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type { OwnedLesson } from "@next-editor/infra";
 import { MAX_TITLE_CHARS } from "../../../infra/lessons/metadataLimits";
 
+type MutateOptions = { onSuccess?: (created: { id: string }) => void; onError?: () => void };
+
+const createPlaylist = vi.hoisted(() =>
+  vi.fn<(variables: { title: string }, options?: MutateOptions) => void>(),
+);
+
 vi.mock("@next-editor/infra", async () => {
   const idleMutation = () => ({ mutate: vi.fn<() => void>(), isPending: false });
   return {
     ...(await import("../../../infra/lessons/metadataLimits")),
     usePlaylistsForLesson: () => ({ data: [], isPending: false, isError: false }),
-    useCreatePlaylist: idleMutation,
+    useCreatePlaylist: () => ({ mutate: createPlaylist, isPending: false }),
     useAddLessonToPlaylist: idleMutation,
     useRemoveLessonFromPlaylist: idleMutation,
   };
@@ -37,6 +43,20 @@ describe("AddToPlaylistPopover", () => {
 
     expect(screen.getByPlaceholderText<HTMLInputElement>("Playlist name").maxLength).toBe(
       MAX_TITLE_CHARS,
+    );
+  });
+
+  it("announces a failed quick-create", () => {
+    createPlaylist.mockImplementation((_variables, options) => options?.onError?.());
+    render(<AddToPlaylistPopover lesson={lesson} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /new playlist/i }));
+    const input = screen.getByPlaceholderText("Playlist name");
+
+    fireEvent.change(input, { target: { value: "Rust basics" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Couldn't create the playlist — try again.",
     );
   });
 });

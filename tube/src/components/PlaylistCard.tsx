@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link } from "react-router";
 import { Check, ListMusic, MoreVertical, Trash2, X } from "lucide-react";
 import {
@@ -36,6 +36,7 @@ export default function PlaylistCard({
   const [renaming, setRenaming] = useState(false);
   const [titleValue, setTitleValue] = useState(playlist.title);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const titleErrorId = useId();
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const update = useUpdatePlaylist();
@@ -173,6 +174,8 @@ export default function PlaylistCard({
             <input
               autoFocus
               aria-label="Playlist name"
+              aria-invalid={titleError ? true : undefined}
+              aria-describedby={titleError ? titleErrorId : undefined}
               value={titleValue}
               onChange={(e) => setTitleValue(e.target.value)}
               onKeyDown={(e) => {
@@ -213,8 +216,16 @@ export default function PlaylistCard({
           </h3>
         )}
 
-        {titleError && <p className="text-xs text-rose-300">{titleError}</p>}
-        {deleteError && <p className="text-xs text-rose-300">{deleteError}</p>}
+        {titleError && (
+          <p id={titleErrorId} role="alert" className="text-xs text-rose-300">
+            {titleError}
+          </p>
+        )}
+        {deleteError && (
+          <p role="alert" className="text-xs text-rose-300">
+            {deleteError}
+          </p>
+        )}
 
         {confirming === "delete" && (
           <div className="space-y-2 rounded-lg border border-rose-500/30 bg-rose-500/5 p-2.5">

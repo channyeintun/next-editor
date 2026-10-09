@@ -29,7 +29,9 @@ export default function MyLibraryGrid() {
   if (isError) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-center">
-        <p className="text-red-400">Failed to load your lessons</p>
+        <p role="alert" className="text-red-400">
+          Failed to load your lessons
+        </p>
         <button
           type="button"
           onClick={() => refetch()}
@@ -45,7 +47,9 @@ export default function MyLibraryGrid() {
     <div>
       {playlistsError ? (
         <div className="mb-8 flex flex-col items-center gap-3 border-b border-white/10 py-8 text-center">
-          <p className="text-sm text-red-400">Failed to load your playlists</p>
+          <p role="alert" className="text-sm text-red-400">
+            Failed to load your playlists
+          </p>
           <button
             type="button"
             onClick={() => refetchPlaylists()}
