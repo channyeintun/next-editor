@@ -310,10 +310,46 @@ describe("areRuntimeRecordingSnapshotsEqual", () => {
     ["activeCommand", { activeCommand: "npm run dev" }],
     ["errorMessage", { errorMessage: "boom" }],
     ["activeTerminalSessionId", { activeTerminalSessionId: "s1" }],
+    [
+      "latestPreviewMessage",
+      {
+        latestPreviewMessage: { id: 2, kind: "console-error", text: "x", port: null, pathname: "" },
+      },
+    ],
+    [
+      "latestLifecycleEvent",
+      {
+        latestLifecycleEvent: { id: 2, kind: "internal-error", text: "x", port: null, url: null },
+      },
+    ],
   ] as [string, Partial<RuntimeRecordingSnapshot>][])(
     "reports a lone %s change as different",
     (_field, change) => {
       expect(areRuntimeRecordingSnapshotsEqual(dockSnapshot(), dockSnapshot(change))).toBe(false);
     },
   );
+
+  // The runtime context hands out a new message object per event, so the gate
+  // compares their contents, not their identities.
+  it("treats equal preview and lifecycle messages in different objects as equal", () => {
+    const messages = () => ({
+      latestPreviewMessage: {
+        id: 2,
+        kind: "console-error" as const,
+        text: "x",
+        port: null,
+        pathname: "/",
+      },
+      latestLifecycleEvent: {
+        id: 3,
+        kind: "port-open" as const,
+        text: "ready",
+        port: 3000,
+        url: "http://localhost:3000",
+      },
+    });
+    expect(
+      areRuntimeRecordingSnapshotsEqual(dockSnapshot(messages()), dockSnapshot(messages())),
+    ).toBe(true);
+  });
 });

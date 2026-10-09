@@ -106,6 +106,8 @@ interface RuntimeEventState {
   terminalSessions: RuntimeRecordingSnapshot["terminalSessions"];
   activeTerminalSessionId: string | null;
   terminalScrollLines: RuntimeTerminalScrollLines;
+  latestPreviewMessage: RuntimeRecordingSnapshot["latestPreviewMessage"];
+  latestLifecycleEvent: RuntimeRecordingSnapshot["latestLifecycleEvent"];
 }
 
 const DOCK_TABS: RuntimeDockTabConfig[] = [
@@ -172,6 +174,7 @@ function TerminalPanel() {
     status,
     errorMessage,
     activeCommand,
+    latestLifecycleEvent,
     latestPreviewMessage,
     previewPort,
     previewUrl,
@@ -332,6 +335,10 @@ function TerminalPanel() {
     terminalSessions,
     activeTerminalSessionId,
     terminalScrollLines,
+    // Recorded too (studio QA's no-errors gates read them), so a lone new message
+    // must reach the recorder rather than wait for another field to change.
+    latestPreviewMessage,
+    latestLifecycleEvent,
   };
 
   useEffect(() => {

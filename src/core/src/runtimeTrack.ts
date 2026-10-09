@@ -6,6 +6,7 @@ import type {
   RuntimeTerminalScrollLines,
   RuntimeTerminalSessionSnapshot,
 } from "./runtime";
+import { areStructuredDataEqual } from "./utils/equality";
 
 // ============================================================================
 // Runtime track: terminal output recorded as deltas.
@@ -179,31 +180,51 @@ function areTerminalScrollLinesEqual(
   );
 }
 
+const same = <T>(left: T, right: T): boolean => left === right;
+
+// One comparer per recorded field. The mapped type makes a field missing here a
+// compile error, so a new field cannot slip past the dedupe gate below. Cheap
+// fields come first: `every` stops at the first difference.
+const SNAPSHOT_COMPARERS = {
+  mode: same,
+  status: same,
+  previewUrl: same,
+  previewPort: same,
+  lastOutput: same,
+  activeCommand: same,
+  errorMessage: same,
+  activeTerminalSessionId: same,
+  activeTab: same,
+  isCollapsed: same,
+  isFullHeight: same,
+  isSettingsOpen: same,
+  latestPreviewMessage: areStructuredDataEqual,
+  latestLifecycleEvent: areStructuredDataEqual,
+  consoleLines: areStringArraysEqual,
+  terminalSessions: areTerminalSessionSnapshotsEqual,
+  terminalScrollLines: areTerminalScrollLinesEqual,
+} satisfies {
+  [K in keyof RuntimeRecordingSnapshot]-?: (
+    left: RuntimeRecordingSnapshot[K],
+    right: RuntimeRecordingSnapshot[K],
+  ) => boolean;
+};
+
+const SNAPSHOT_KEYS = Object.keys(SNAPSHOT_COMPARERS) as (keyof RuntimeRecordingSnapshot)[];
+
 /**
  * Whether two snapshots hold the same runtime state. It is the recorder's only
  * dedupe gate for runtime events, so it compares every recorded field: a field
  * it skipped would be dropped whenever it was the only thing that changed.
+ * Adding a field to RuntimeRecordingSnapshot without a comparer in
+ * SNAPSHOT_COMPARERS fails to compile.
  */
 export function areRuntimeRecordingSnapshotsEqual(
   left: RuntimeRecordingSnapshot,
   right: RuntimeRecordingSnapshot,
 ): boolean {
-  return (
-    left.mode === right.mode &&
-    left.status === right.status &&
-    left.previewUrl === right.previewUrl &&
-    left.previewPort === right.previewPort &&
-    left.lastOutput === right.lastOutput &&
-    left.activeCommand === right.activeCommand &&
-    left.errorMessage === right.errorMessage &&
-    left.activeTerminalSessionId === right.activeTerminalSessionId &&
-    left.activeTab === right.activeTab &&
-    left.isCollapsed === right.isCollapsed &&
-    left.isFullHeight === right.isFullHeight &&
-    left.isSettingsOpen === right.isSettingsOpen &&
-    areStringArraysEqual(left.consoleLines, right.consoleLines) &&
-    areTerminalSessionSnapshotsEqual(left.terminalSessions, right.terminalSessions) &&
-    areTerminalScrollLinesEqual(left.terminalScrollLines, right.terminalScrollLines)
+  return SNAPSHOT_KEYS.every((key) =>
+    (SNAPSHOT_COMPARERS[key] as (left: unknown, right: unknown) => boolean)(left[key], right[key]),
   );
 }
 
