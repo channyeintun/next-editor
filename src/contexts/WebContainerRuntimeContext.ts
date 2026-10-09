@@ -59,18 +59,20 @@ export interface WebContainerRuntimeRecordingSnapshot {
 }
 
 /**
- * The runner console and the terminal sessions' text: the fields that change on
- * every output chunk, so they have a context of their own and only the
- * components that render output re-render while a process streams.
+ * The runner console, the terminal sessions' text and the latest preview error
+ * and port event: the fields that change on every output chunk or preview/port
+ * event, so they have a context of their own and only the components that
+ * render them re-render while a process streams or a preview logs errors.
  */
 export type WebContainerRuntimeOutput = Pick<
   WebContainerRuntimeRecordingSnapshot,
-  "lastOutput" | "terminalSessions"
+  "lastOutput" | "terminalSessions" | "latestPreviewMessage" | "latestLifecycleEvent"
 >;
 
 /**
- * Everything a recording snapshot holds except the streaming output and the
- * always-null activeCommand, plus the runtime's support and settings.
+ * Everything a recording snapshot holds except the per-chunk and per-event
+ * output and the always-null activeCommand, plus the runtime's support and
+ * settings.
  */
 export interface WebContainerRuntimeMetadata extends Omit<
   WebContainerRuntimeRecordingSnapshot,

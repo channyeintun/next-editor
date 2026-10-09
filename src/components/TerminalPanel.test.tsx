@@ -52,12 +52,16 @@ function dock(
     activeTerminalSessionId: terminalSessions[0]?.id ?? null,
     status,
     errorMessage: null,
-    latestPreviewMessage: null,
     previewPort: null,
     previewUrl: null,
     runnerConfig: { enabled: true, runCommand: "npm run dev", initCommand: "npm install" },
   } as unknown as WebContainerRuntimeMetadata;
-  const output: WebContainerRuntimeOutput = { lastOutput: null, terminalSessions };
+  const output: WebContainerRuntimeOutput = {
+    lastOutput: null,
+    terminalSessions,
+    latestPreviewMessage: null,
+    latestLifecycleEvent: null,
+  };
 
   return (
     <RuntimePanelStoreProvider>

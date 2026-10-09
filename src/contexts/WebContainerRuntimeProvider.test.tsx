@@ -19,7 +19,10 @@ import {
   type WorkspaceProject,
 } from "../types/workspace";
 import type { WorkspaceActions, WorkspaceDirtyState } from "./WorkspaceContext";
-import type { WebContainerRuntimeActions } from "./WebContainerRuntimeContext";
+import type {
+  WebContainerRuntimeActions,
+  WebContainerRuntimeOutput,
+} from "./WebContainerRuntimeContext";
 
 vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../runtime/webcontainer/sharedContainer")>();
@@ -761,6 +764,71 @@ describe("WebContainerRuntimeProvider runner control", () => {
     });
 
     expect(probes.lastOutput).toContain("one\ntwo\nthree\n");
+    expect(probes.metadataRenders).toBe(metadataRendersBefore);
+  });
+
+  // A preview page can log errors in a loop and a dev server opens and closes
+  // ports; only the output's consumers (the dock) render those events.
+  it("reports preview errors and port events without re-rendering metadata consumers", async () => {
+    const fakeFs = createFakeFs({ "index.html": "<main>Hello</main>" });
+    const { instance, listeners } = createFakeInstance(fakeFs);
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
+    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+
+    const probes: {
+      runtime: WebContainerRuntimeActions | null;
+      metadataRenders: number;
+      outputRenders: number;
+      output: WebContainerRuntimeOutput | null;
+    } = { runtime: null, metadataRenders: 0, outputRenders: 0, output: null };
+    function Capture() {
+      probes.runtime = useWebContainerRuntimeActions();
+      return null;
+    }
+    function MetadataConsumer() {
+      useWebContainerRuntimeMetadata();
+      probes.metadataRenders += 1;
+      return null;
+    }
+    function OutputConsumer() {
+      probes.output = useWebContainerRuntimeOutput();
+      probes.outputRenders += 1;
+      return null;
+    }
+    render(
+      <WorkspaceProvider>
+        <WebContainerRuntimeProvider allowAmbientStart={false}>
+          <Capture />
+          <MetadataConsumer />
+          <OutputConsumer />
+        </WebContainerRuntimeProvider>
+      </WorkspaceProvider>,
+    );
+    await act(async () => {
+      await probes.runtime?.startRuntime();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    const metadataRendersBefore = probes.metadataRenders;
+    const outputRendersBefore = probes.outputRenders;
+
+    act(() => {
+      listeners.get("preview-message")?.({
+        type: "PREVIEW_UNCAUGHT_EXCEPTION",
+        message: "boom",
+        port: 5173,
+        pathname: "/",
+      });
+    });
+    act(() => {
+      listeners.get("port")?.(5173, "close", "http://localhost:5173");
+    });
+
+    expect(probes.output?.latestPreviewMessage).toMatchObject({
+      kind: "uncaught-exception",
+      text: "boom",
+    });
+    expect(probes.output?.latestLifecycleEvent).toMatchObject({ kind: "port-close", port: 5173 });
+    expect(probes.outputRenders).toBe(outputRendersBefore + 2);
     expect(probes.metadataRenders).toBe(metadataRendersBefore);
   });
 });

@@ -747,17 +747,21 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     previewPort,
     isSupported,
     errorMessage,
-    latestPreviewMessage,
-    latestLifecycleEvent,
     activeTerminalSessionId,
     environmentVariables,
     runnerConfig,
     ambientStartEnabled: allowAmbientStart,
   };
 
-  // Kept out of metadataValue so a streamed chunk does not re-render every
-  // metadata consumer (the preview controller among them), only the output's.
-  const outputValue: WebContainerRuntimeOutput = { lastOutput, terminalSessions };
+  // Kept out of metadataValue so a streamed chunk, a preview console error or a
+  // port event does not re-render every metadata consumer (the preview
+  // controller among them), only the output's.
+  const outputValue: WebContainerRuntimeOutput = {
+    lastOutput,
+    terminalSessions,
+    latestPreviewMessage,
+    latestLifecycleEvent,
+  };
 
   return (
     <WebContainerRuntimeSnapshotGetterContext value={getRecordingSnapshot}>

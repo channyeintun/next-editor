@@ -168,17 +168,10 @@ function TerminalPanel() {
     startTerminalSession,
     updateRunnerConfig,
   } = useWebContainerRuntimeActions();
-  const {
-    activeTerminalSessionId,
-    status,
-    errorMessage,
-    latestLifecycleEvent,
-    latestPreviewMessage,
-    previewPort,
-    previewUrl,
-    runnerConfig,
-  } = useWebContainerRuntimeMetadata();
-  const { lastOutput, terminalSessions } = useWebContainerRuntimeOutput();
+  const { activeTerminalSessionId, status, errorMessage, previewPort, previewUrl, runnerConfig } =
+    useWebContainerRuntimeMetadata();
+  const { lastOutput, terminalSessions, latestLifecycleEvent, latestPreviewMessage } =
+    useWebContainerRuntimeOutput();
   const { currentRecording, isRecording } = useNextEditorMetadata();
   const displayIsSettingsOpen = isPlaybackSnapshotActive
     ? (recordedRuntimeSnapshot?.isSettingsOpen ?? false)
