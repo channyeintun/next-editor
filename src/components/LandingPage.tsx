@@ -722,7 +722,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
           </p>
           <div className="flex flex-wrap justify-center gap-3">
             {[
-              { label: "MIT License", color: "border-pinata-purple text-pinata-purple" },
+              { label: "MIT License", color: "border-pinata-purple text-violet-300" },
               { label: "Open Source", color: "border-pinata-cyan text-pinata-cyan" },
               { label: "No Sign-up", color: "border-pinata-green text-pinata-green" },
               { label: "Self-hostable", color: "border-pinata-orange text-pinata-orange" },
