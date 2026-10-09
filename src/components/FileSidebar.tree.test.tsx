@@ -260,6 +260,21 @@ describe("FileSidebar name field", () => {
   });
 });
 
+describe("FileSidebar active file", () => {
+  it("marks only the open file's row as current, and follows a click", () => {
+    render(<FileSidebar />);
+
+    expect(row("index.html")).toHaveAttribute("aria-current", "true");
+    expect(row("app.ts")).not.toHaveAttribute("aria-current");
+    expect(row("src")).not.toHaveAttribute("aria-current");
+
+    fireEvent.click(row("app.ts"));
+
+    expect(row("app.ts")).toHaveAttribute("aria-current", "true");
+    expect(row("index.html")).not.toHaveAttribute("aria-current");
+  });
+});
+
 describe("FileSidebar tree structure", () => {
   const itemOf = (element: HTMLElement) => element.closest("li")!;
 

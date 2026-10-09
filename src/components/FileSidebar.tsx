@@ -522,9 +522,12 @@ function FileSidebarPanel() {
           onKeyDown={(event) => handleRowKeyDown(event, "file", node.path)}
           data-sidebar-path={node.path}
           aria-keyshortcuts="Shift+F10 F2 Delete"
+          // The file open in the editor: announced as current, and marked by a
+          // sky-400 bar, since its background alone is 1.26:1 against the panel.
+          aria-current={isActive ? "true" : undefined}
           className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5 transition-colors ${
             isActive
-              ? "bg-slate-800 text-white"
+              ? "bg-slate-800 text-white shadow-[inset_2px_0_0_#00bcff]"
               : "text-slate-300 hover:bg-slate-900 hover:text-white"
           }`}
           style={{ paddingLeft: getSidebarTreePaddingLeft(depth) }}
