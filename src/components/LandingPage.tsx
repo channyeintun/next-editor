@@ -398,7 +398,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                           <span className="block truncate text-xs font-semibold uppercase tracking-[0.16em]">
                             introduction.ne
                           </span>
-                          <span className="hidden truncate text-[11px] text-slate-500 sm:block">
+                          <span className="hidden truncate text-[11px] text-slate-400 sm:block">
                             Recorded editor session
                           </span>
                         </div>
@@ -780,7 +780,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
             <span className="font-machina tracking-tight">next-editor</span>
           </div>
           <div className="flex flex-col md:flex-row items-center gap-6">
-            <p className="text-slate-500 text-sm">© 2026 Next Editor</p>
+            <p className="text-slate-300 text-sm">© 2026 Next Editor</p>
           </div>
         </div>
       </footer>
