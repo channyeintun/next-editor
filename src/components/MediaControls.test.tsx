@@ -139,6 +139,11 @@ describe("MediaControls", () => {
     expect(playedFill()).toHaveStyle({ backgroundColor: "#3b82f6" });
   });
 
+  it("shows the time left in slate-300, 12.4:1 on the bar (slate-400 was 6.9997:1)", async () => {
+    await renderPlayer();
+    expect(screen.getByText("-1:00")).toHaveClass("text-slate-300");
+  });
+
   it("opens the caption picker from Import captions without a hidden Tab stop of its own", async () => {
     const { container } = await renderPlayer();
     const picker = filePicker(container, ".vtt");

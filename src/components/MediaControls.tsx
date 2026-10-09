@@ -199,7 +199,7 @@ const PlaybackTimer = ({
 
   return (
     <span
-      className={`inline-flex items-center gap-2 text-slate-400 font-mono pointer-events-auto ${large ? "text-4xl" : "text-sm"}`}
+      className={`inline-flex items-center gap-2 text-slate-300 font-mono pointer-events-auto ${large ? "text-4xl" : "text-sm"}`}
     >
       {isRecording && isRecordingPaused ? (
         <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-sans text-[11px] font-semibold uppercase tracking-wide text-amber-300">
