@@ -50,6 +50,31 @@ describe("mediaRoute", () => {
     expect(response.headers.get("content-disposition")).toBe("attachment");
   });
 
+  it("serves a stored image/bmp slide image inline", async () => {
+    // routes/slideImages.ts stores image/bmp, so the renderable set (derived
+    // from the writers' allow-lists) must hand it to the browser as-is.
+    const bucket = {
+      get: vi.fn<() => Promise<unknown>>(async () => ({
+        body: new Response("BM").body!,
+        size: 2,
+        httpEtag: '"bmp"',
+        writeHttpMetadata(headers: Headers) {
+          headers.set("content-type", "image/bmp");
+        },
+      })),
+    } as unknown as R2Bucket;
+
+    const response = await mediaRoute.request(
+      `https://nexteditor.dev/slide-images/${"a".repeat(64)}`,
+      undefined,
+      { BUCKET: bucket },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/bmp");
+    expect(response.headers.get("content-disposition")).toBeNull();
+  });
+
   // The route sends `must-revalidate` with an ETag, so every reuse of a cached
   // recording or thumbnail revalidates. R2 evaluates the preconditions when
   // given the request headers and returns the object without a body when the

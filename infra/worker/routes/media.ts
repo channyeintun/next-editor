@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
 import { requestWaitUntil } from "../waitUntil";
+import { LESSON_MEDIA_CONTENT_TYPES } from "../lessonMediaFiles";
+import { SLIDE_IMAGE_CONTENT_TYPES } from "./slideImages";
 
 // Mounted at /media in worker/index.ts. Serves R2 objects directly — the R2
 // key is exactly the wildcard tail (e.g. request "/media/lessons/l1/l1.ne" ->
@@ -17,26 +19,16 @@ export const mediaRoute = new Hono<{ Bindings: Env }>();
 
 // Content types this route will hand to a browser as-is. Everything else is
 // rewritten to application/octet-stream + Content-Disposition: attachment, so
-// no stored type can turn a /media URL into a same-origin HTML document. Kept
-// in sync with the extension map in routes/uploads.ts plus the raster types
-// routes/slideImages.ts stores. Deliberately excludes text/html, image/svg+xml,
-// and anything else a browser executes script from.
-const RENDERABLE_CONTENT_TYPES = new Set([
+// no stored type can turn a /media URL into a same-origin HTML document. The
+// set is derived from the two writers' allow-lists, the extension map
+// routes/uploads.ts stores from (lessonMediaFiles.ts) and the raster types
+// routes/slideImages.ts stores, so a type either of them writes is served
+// inline. Neither contains text/html, image/svg+xml, or anything else a
+// browser executes script from, so those stay excluded by construction.
+const RENDERABLE_CONTENT_TYPES: ReadonlySet<string> = new Set([
   "application/octet-stream",
-  "audio/mp4",
-  "audio/mpeg",
-  "audio/ogg",
-  "audio/wav",
-  "audio/webm",
-  "image/avif",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "text/vtt",
-  "video/mp4",
-  "video/quicktime",
-  "video/webm",
+  ...Object.values(LESSON_MEDIA_CONTENT_TYPES),
+  ...SLIDE_IMAGE_CONTENT_TYPES,
 ]);
 
 // Hono's bare "/*" wildcard doesn't populate a "*" param (verified empirically

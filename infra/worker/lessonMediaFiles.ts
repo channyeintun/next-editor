@@ -27,6 +27,36 @@ export const LESSON_MEDIA_EXTENSIONS = [
 
 export type LessonMediaExtension = (typeof LESSON_MEDIA_EXTENSIONS)[number];
 
+// The content-type routes/uploads.ts stores for each uploadable extension
+// (plus captions), derived from the filename extension, never copied from the
+// request header. R2 replays whatever type was stored (routes/media.ts ->
+// writeHttpMetadata) from the app's own origin, so trusting the uploader's
+// header would let any signed-in user park `Content-Type: text/html` on a
+// `.png` key and get script execution on nexteditor.dev. `nosniff` does NOT
+// help here: it stops the browser sniffing *away from* a declared type, but a
+// declared text/html is still parsed as a document. The route's extension
+// allow-list constrains the URL, not the type the browser acts on — so the
+// type has to come from the extension. Mirrors the SLIDE_IMAGE_CONTENT_TYPES
+// approach already used by routes/slideImages.ts. `satisfies` makes the
+// compiler refuse an uploadable extension with no type. routes/media.ts serves
+// every type in this map inline.
+export const LESSON_MEDIA_CONTENT_TYPES: Readonly<Record<string, string>> = {
+  ne: "application/octet-stream",
+  ogg: "audio/ogg",
+  weba: "audio/webm",
+  webm: "video/webm",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  m4a: "audio/mp4",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  vtt: "text/vtt",
+} satisfies Record<LessonMediaExtension | "vtt", string>;
+
 /** A lesson media filename as a Hono route-parameter pattern: `:filename{${LESSON_MEDIA_FILENAME_PATTERN}}`. */
 export const LESSON_MEDIA_FILENAME_PATTERN = `[\\w-]+\\.(${LESSON_MEDIA_EXTENSIONS.join("|")})`;
 

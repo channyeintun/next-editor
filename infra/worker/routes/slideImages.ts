@@ -34,7 +34,8 @@ const MAX_URLS_PER_REQUEST = 8;
 // Slide images are typically well under 2 MB; this is an abuse backstop, not
 // a tuned product limit.
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-const ALLOWED_CONTENT_TYPES = new Set([
+// The raster types this route stores; routes/media.ts serves each one inline.
+export const SLIDE_IMAGE_CONTENT_TYPES: ReadonlySet<string> = new Set([
   "image/png",
   "image/jpeg",
   "image/gif",
@@ -69,7 +70,7 @@ async function ingestImage(bucket: R2Bucket, url: string): Promise<IngestResult>
   }
 
   const contentType = (result.contentType ?? "").split(";")[0].trim().toLowerCase();
-  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+  if (!SLIDE_IMAGE_CONTENT_TYPES.has(contentType)) {
     return { url, error: `Unsupported content type '${contentType}'.` };
   }
   let body: Uint8Array;
