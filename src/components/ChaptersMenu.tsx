@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { BookmarkPlus, Check, Link, ListVideo, Trash2 } from "lucide-react";
 import type { Recording, RecordingChapter } from "../core/src";
 import { useLiveTimeValue, useNextEditorActions } from "../hooks/useNextEditorContext";
@@ -50,6 +50,8 @@ export function CurrentChapterTitle({
 /**
  * The recording's chapters: jump to one, or copy a link that opens the lesson there.
  * The author (record mode) can also add a chapter at the playhead, rename and delete.
+ * A disclosure, not a menu: the panel holds a list, a text field and plain buttons, so it
+ * is a labelled group that Tab moves through. Escape closes it and returns to the button.
  */
 export default function ChaptersMenu({
   recording,
@@ -65,6 +67,9 @@ export default function ChaptersMenu({
   const { seekTo, setChapters } = useNextEditorActions();
   const [open, setOpen] = useState(false);
   const [copiedTime, setCopiedTime] = useState<number | null>(null);
+  const panelId = useId();
+  const headingId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const chapters = recording.chapters ?? [];
   // Only the open menu shows the playhead (the exact time, the chapter playing), so a
   // closed one does not re-render every tick.
@@ -89,10 +94,11 @@ export default function ChaptersMenu({
   return (
     <div className="relative pointer-events-auto">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((current) => !current)}
-        aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
         title="Chapters"
         className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white ${buttonClassName}`}
       >
@@ -101,10 +107,22 @@ export default function ChaptersMenu({
 
       {open ? (
         <div
-          role="menu"
+          id={panelId}
+          role="group"
+          aria-labelledby={headingId}
+          onKeyDown={(event) => {
+            // Not while an input method is composing in the title field: Escape cancels that.
+            if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            setOpen(false);
+            triggerRef.current?.focus();
+          }}
           className="absolute right-0 bottom-full z-46 mb-2 w-72 rounded-lg border border-slate-700 bg-[#151821] py-1.5 text-sm shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
         >
-          <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+          <p
+            id={headingId}
+            className="px-3 pb-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase"
+          >
             Chapters
           </p>
           {chapters.length === 0 ? (
@@ -122,7 +140,6 @@ export default function ChaptersMenu({
                 >
                   <button
                     type="button"
-                    role="menuitem"
                     onClick={() => seekTo(chapter.time)}
                     className="shrink-0 font-mono text-xs text-sky-300 hover:underline"
                   >

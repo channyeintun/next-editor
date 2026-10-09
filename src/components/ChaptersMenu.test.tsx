@@ -90,6 +90,32 @@ describe("ChaptersMenu", () => {
     ]);
   });
 
+  it("is a disclosure of a labelled group that Escape closes back to its button", () => {
+    render(<ChaptersMenu recording={lesson} editable iconSize={16} buttonClassName="" />);
+    const trigger = screen.getByRole("button", { name: "Chapters" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).not.toHaveAttribute("aria-haspopup");
+    openMenu();
+
+    // Not a menu: it holds a text field and plain buttons, which Tab moves through.
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("menuitem")).toBeNull();
+    const panel = screen.getByRole("group", { name: "Chapters" });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(trigger).toHaveAttribute("aria-controls", panel.id);
+
+    const title = screen.getByLabelText("Title of the chapter at 1:00");
+    title.focus();
+    expect(fireEvent.keyDown(title, { key: "Escape", isComposing: true })).toBe(true);
+    expect(screen.getByRole("group", { name: "Chapters" })).toBeInTheDocument();
+
+    expect(fireEvent.keyDown(title, { key: "Escape" })).toBe(false);
+    expect(screen.queryByRole("group", { name: "Chapters" })).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).not.toHaveAttribute("aria-controls");
+  });
+
   it("stays out of the way of a lesson with no chapters for its viewers", () => {
     const { container } = render(
       <ChaptersMenu
