@@ -32,48 +32,55 @@ function makeProject(): WorkspaceProject {
 /**
  * Keyed by execution kind, so a new playground backend is a typecheck error
  * here instead of a row nobody remembered to add. Every playground language
- * needs its own prompt branch: without one the lesson falls through to the
+ * needs its own agent stack entry: without one the lesson falls through to the
  * WebContainer stack and the agent is told the lesson's own language is an
  * off-limits runtime.
  */
 const PLAYGROUND_STACK_EXPECTATIONS: Record<
   Exclude<WorkspaceExecutionKind, "webcontainer">,
-  { entryFilePath: string; expectedStack: string; expectedRunner: string }
+  { entryFilePath: string; expectedStack: string; expectedRunner: string; expectedSpecific: string }
 > = {
   "go-playground": {
     entryFilePath: "main.go",
     expectedStack: "Supported stack: Go only",
     expectedRunner: "Go Playground",
+    expectedSpecific: "Go Playground constraints",
   },
   "kotlin-playground": {
     entryFilePath: "Main.kt",
     expectedStack: "Supported stack: Kotlin only",
     expectedRunner: "Kotlin Playground",
+    expectedSpecific: "only the Kotlin/Java standard library",
   },
   "rust-playground": {
     entryFilePath: "main.rs",
     expectedStack: "Supported stack: Rust only",
     expectedRunner: "Rust Playground",
+    expectedSpecific: "use inline `mod` blocks for structure",
   },
   "kite-playground": {
     entryFilePath: "main.kite",
     expectedStack: "Supported stack: Kite only",
     expectedRunner: "Kite Runner panel",
+    expectedSpecific: "a run compiles main.kite",
   },
   "zig-playground": {
     entryFilePath: "main.zig",
     expectedStack: "Supported stack: Zig only",
     expectedRunner: "Zig Playground",
+    expectedSpecific: "`std.heap.DebugAllocator(.{})`",
   },
   "haskell-playground": {
     entryFilePath: "Main.hs",
     expectedStack: "Supported stack: Haskell only",
     expectedRunner: "Haskell Playground",
+    expectedSpecific: "compiled as `module Main`",
   },
   "asm-playground": {
     entryFilePath: "main.asm",
     expectedStack: "Supported stack: x86-64 assembly only",
     expectedRunner: "Assembly Runner panel",
+    expectedSpecific: "getpid (39)",
   },
 };
 
@@ -103,7 +110,7 @@ describe("buildSystemPrompt", () => {
 
   it.each(PLAYGROUND_CASES)(
     "describes the $lessonType Playground stack, never the WebContainer one",
-    ({ lessonType, entryFilePath, expectedStack, expectedRunner }) => {
+    ({ lessonType, entryFilePath, expectedStack, expectedRunner, expectedSpecific }) => {
       const prompt = buildSystemPrompt(
         {
           id: `test-${lessonType}`,
@@ -125,6 +132,9 @@ describe("buildSystemPrompt", () => {
 
       expect(prompt).toContain(expectedStack);
       expect(prompt).toContain(expectedRunner);
+      // A phrase from the runtime's own constraints, so a stack mapped to the
+      // wrong execution kind fails.
+      expect(prompt).toContain(expectedSpecific);
       expect(prompt).toContain("you cannot execute code yourself");
       expect(prompt).toContain(`Lesson type: ${lessonType}`);
       // The two sentences every playground branch shares. They live in one

@@ -1,8 +1,17 @@
 import {
   executionKindForLessonType,
   isWorkspaceTextFile,
+  type WorkspaceExecutionKind,
   type WorkspaceProject,
 } from "../types/workspace";
+import type { PlaygroundAgentStack } from "../runtime/playgroundAgentStack";
+import { ASM_AGENT_STACK } from "../runtime/asmPlayground/agentStack";
+import { GO_AGENT_STACK } from "../runtime/goPlayground/agentStack";
+import { HASKELL_AGENT_STACK } from "../runtime/haskellPlayground/agentStack";
+import { KITE_AGENT_STACK } from "../runtime/kitePlayground/agentStack";
+import { KOTLIN_AGENT_STACK } from "../runtime/kotlinPlayground/agentStack";
+import { RUST_AGENT_STACK } from "../runtime/rustPlayground/agentStack";
+import { ZIG_AGENT_STACK } from "../runtime/zigPlayground/agentStack";
 
 export interface SystemPromptOptions {
   toolNames: string[];
@@ -78,11 +87,11 @@ function buildIntroduction(): string {
   return "You are an expert coding assistant embedded in a browser-based lesson editor. You read, write, search, and edit files in the user's in-browser workspace to help them build, debug, and iterate on lessons. Work collaboratively to understand their intent and provide clear explanations for your changes.";
 }
 
-// The two sentences every playground branch ends up repeating. Hoisted so a
-// change to the shared policy — say the observation tools reach playground
-// lessons and the "no preview" claim stops being true — lands once instead of
-// having to be applied identically in seven string literals, which is how the
-// wording drifted in the first place.
+// The two sentences every playground paragraph shares. Kept here, out of the
+// runtimes' agentStack.ts files, so a change to the shared policy — say the
+// observation tools reach playground lessons and the "no preview" claim stops
+// being true — lands once instead of having to be applied identically in seven
+// string literals, which is how the wording drifted in the first place.
 const NO_RUNTIME_SURFACE =
   "There is no shell, terminal, dev server, or preview in this workspace: work purely " +
   "through the file tools and reason about program behavior from the source.";
@@ -93,124 +102,35 @@ function buildPlaygroundStack(lead: string, specifics: string): string {
   return [lead, NO_RUNTIME_SURFACE, specifics, NO_OTHER_RUNTIMES].join(" ");
 }
 
+// One entry per playground execution kind, like RuntimeDock's RUNNER_PANELS:
+// the `Record` makes adding a playground language a compile error here instead
+// of a lesson that silently inherits the WebContainer stack and gets told its
+// own language is off-limits. Each runtime owns its paragraph's text.
+const PLAYGROUND_AGENT_STACKS: Record<
+  Exclude<WorkspaceExecutionKind, "webcontainer">,
+  PlaygroundAgentStack
+> = {
+  "go-playground": GO_AGENT_STACK,
+  "kotlin-playground": KOTLIN_AGENT_STACK,
+  "rust-playground": RUST_AGENT_STACK,
+  "zig-playground": ZIG_AGENT_STACK,
+  "haskell-playground": HASKELL_AGENT_STACK,
+  "kite-playground": KITE_AGENT_STACK,
+  "asm-playground": ASM_AGENT_STACK,
+};
+
 function buildSupportedStack(project: WorkspaceProject): string {
   const executionKind = executionKindForLessonType(project.lessonType);
-
-  // Switched on the execution kind rather than chained ifs so adding a
-  // playground language is a compile error here instead of a lesson that
-  // silently inherits the WebContainer stack and gets told its own language is
-  // off-limits. The switch cannot catch a *lesson type* that runs a non-JS
-  // language inside the WebContainer, so those get their own branch below.
-  switch (executionKind) {
-    case "kotlin-playground":
-      return buildPlaygroundStack(
-        "Supported stack: Kotlin only. This lesson's Kotlin files compile and run remotely " +
-          "on the Kotlin Playground (JVM target) when the user presses Run in the Kotlin " +
-          "Runner panel — you cannot execute code yourself.",
-        "Keep solutions within Kotlin Playground constraints (sandboxed execution, no " +
-          "network access, no stdin, only the Kotlin/Java standard library, limited compute " +
-          "time).",
-      );
-
-    case "rust-playground":
-      return buildPlaygroundStack(
-        "Supported stack: Rust only. This lesson's single main.rs compiles and runs remotely " +
-          "on the Rust Playground (stable channel, 2024 edition, debug profile) when the user " +
-          "presses Run or Format in the Rust Runner panel — you cannot execute code yourself.",
-        "The whole program lives in main.rs (use inline `mod` blocks for structure), and " +
-          "solutions must stay within Rust Playground constraints (sandboxed execution, no " +
-          "network access, no stdin, standard library plus the playground's built-in crates, " +
-          "limited compute time).",
-      );
-
-    case "zig-playground":
-      return buildPlaygroundStack(
-        "Supported stack: Zig only. This lesson's single main.zig compiles and runs remotely " +
-          "on the Zig Playground (Zig 0.16.0, Debug build) when the user presses Run or Format " +
-          "in the Zig Runner panel — you cannot execute code yourself.",
-        "The whole program lives in main.zig — there is no build.zig and no package manager, " +
-          "so structure it with structs and functions rather than extra files. Target Zig 0.16 " +
-          "exactly: `std.ArrayList` is unmanaged (`.empty`, and the allocator is passed to " +
-          "`append`/`deinit`, not to `init`), the general-purpose allocator is " +
-          "`std.heap.DebugAllocator(.{})`, and `std.fs.File` has moved to `std.Io.File`. " +
-          "Prefer `std.debug.print` for output. Solutions must stay within Zig Playground " +
-          "constraints (sandboxed execution, no network access, no stdin, standard library " +
-          "only, limited compute time).",
-      );
-
-    case "haskell-playground":
-      return buildPlaygroundStack(
-        "Supported stack: Haskell only. This lesson's single Main.hs compiles and runs " +
-          "remotely on the Haskell Playground (play.haskell.org, GHC 9.12.4, -O1) when the " +
-          "user presses Run in the Haskell Runner panel — you cannot execute code yourself. " +
-          "There is no Format action: the playground has no formatter, so lay the code out by " +
-          "hand and keep the indentation legal, because Haskell's layout rule makes it part " +
-          "of the syntax.",
-        "The whole program is one module — Main.hs is compiled as `module Main`, and there " +
-          "is no cabal file, no package manager, and no way to add a second module, so " +
-          "structure it with types and functions in that one file. Only GHC's boot packages " +
-          "are importable (base, containers and text are verified present); nothing from " +
-          "Hackage can be installed, so do not reach for a library that is not shipped with " +
-          "the compiler. stdin is empty, so `getLine` and `getContents` read nothing and a " +
-          "program that waits for input has nothing to wait for — never write an interactive " +
-          "one. Solutions must also stay within the rest of the playground's constraints " +
-          "(sandboxed execution, no network access, limited compute time).",
-      );
-
-    case "go-playground":
-      return buildPlaygroundStack(
-        "Supported stack: Go only. This lesson's Go files compile and run remotely on the " +
-          "Go Playground when the user presses Run or Format in the Go Runner panel — you " +
-          "cannot execute code yourself.",
-        "Keep solutions within Go Playground constraints (sandboxed execution, no network " +
-          "access, limited compute time).",
-      );
-
-    case "kite-playground":
-      return buildPlaygroundStack(
-        "Supported stack: Kite only. This lesson's .kite files compile and run entirely in " +
-          "this page — the Kite compiler itself is built to WebAssembly, so there is no " +
-          "service, no sign-in, and no network round trip — when the user presses Run or " +
-          "Format in the Kite Runner panel; you cannot execute code yourself.",
-        "A Kite module is a directory, so every .kite file beside the entry belongs to the " +
-          "same program and a run compiles main.kite. Kite targets WasmGC and has no package " +
-          "ecosystem here: keep solutions to the language and its std/ modules.",
-      );
-
-    case "asm-playground":
-      return buildPlaygroundStack(
-        "Supported stack: x86-64 assembly only, in NASM syntax. This lesson's main.asm " +
-          "assembles and runs entirely in this page — the assembler and the x86-64 Linux " +
-          "machine are part of the editor, so there is no service, no sign-in and no network " +
-          "round trip — when the user presses Run in the Assembly Runner panel; you cannot " +
-          "execute code yourself.",
-        "There is no linker and no C library, so the whole program lives in main.asm, starts " +
-          "at `_start`, and must end by asking the kernel to exit (`mov rax, 60` then " +
-          "`syscall`) — falling off the end is a fault. Use the Linux system-call convention: " +
-          "the call number in rax, arguments in rdi, rsi, rdx, r10, r8, r9, and the result " +
-          "back in rax. Only read (0), write (1), brk (12), getpid (39) and exit (60/231) " +
-          "exist here; any other call stops the program. The instruction set covers integer " +
-          "work only — moves and the widening moves, lea, the ALU and unary groups, inc/dec, " +
-          "imul/mul/div/idiv, shifts and rotates, push/pop, call/ret/leave, jmp, every " +
-          "jcc/setcc/cmovcc, loop, the sign-extension instructions and syscall — with no " +
-          "floating point, no SSE and no threads. Directives available: section " +
-          "(.text/.rodata/.data/.bss), global, db/dw/dd/dq, resb/resw/resd/resq, equ, align, " +
-          "`$` and `$$`, size keywords, and local labels like .loop.",
-      );
-
-    case "webcontainer":
-      break;
-
-    default: {
-      // The compile error the comment above promises: a new execution kind
-      // without a branch here fails this assignment. At runtime it still falls
-      // through to the WebContainer text rather than throwing at the user.
-      const unhandled: never = executionKind;
-      void unhandled;
-      break;
-    }
+  // An execution kind missing from the table at runtime still falls through to
+  // the WebContainer text below rather than throwing at the user.
+  const playgroundStack =
+    executionKind === "webcontainer" ? null : PLAYGROUND_AGENT_STACKS[executionKind];
+  if (playgroundStack) {
+    return buildPlaygroundStack(playgroundStack.lead, playgroundStack.specifics);
   }
 
+  // The table cannot catch a *lesson type* that runs a non-JS language inside
+  // the WebContainer, so those get their own branch below.
   if (project.lessonType === "python") {
     return (
       "Supported stack: Python 3 (standard library only). This lesson runs inside the " +

@@ -122,9 +122,9 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<void> 
     signal,
     requestConfirmation: gatedConfirmation,
   };
-  // Playground lessons (Go, Kotlin, Rust, Kite) have no in-browser runtime, so
-  // their agent runs with file tools only — no bash and no runtime/preview
-  // observation.
+  // Playground lessons (Go, Kotlin, Rust, Zig, Haskell, Kite, assembly) have no
+  // WebContainer runtime, so their agent runs with file tools only — no bash and
+  // no runtime/preview observation.
   const executionKind = executionKindForLessonType(project.lessonType);
   const tools = createCodingTools(toolContext, executionKind);
   const systemPrompt = buildSystemPrompt(project, {
