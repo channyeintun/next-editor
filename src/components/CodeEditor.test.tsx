@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { useSlidesContext } from "../contexts/SlidesContext";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { useWorkspaceActions } from "../hooks/useWorkspace";
@@ -45,6 +45,13 @@ vi.mock("./whiteboardPanelLoader", () => ({
 }));
 
 const { default: Editor } = await import("./Editor");
+
+// CodeEditor is a lazy chunk whose first import transforms the whole workspace
+// graph, which can outlast one test's timeout on a busy machine. Load it once
+// up front, so whichever test runs first does not pay for it.
+beforeAll(async () => {
+  await import("./CodeEditor");
+}, 60_000);
 
 /**
  * Opens and closes the overlays the way playback, a presenter or the header
