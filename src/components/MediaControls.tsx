@@ -740,8 +740,12 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                         <Captions size={14} aria-hidden="true" />
                         Import captions…
                       </button>
+                      {/* Alerts: they come after the picker closes, with focus left on the
+                          button, and are inserted (not changed in place) on each failure. */}
                       {captionImportError && (
-                        <p className="px-2 pt-2 text-xs text-red-400">{captionImportError}</p>
+                        <p role="alert" className="px-2 pt-2 text-xs text-red-400">
+                          {captionImportError}
+                        </p>
                       )}
                       {effectiveRecordMode && hasNarration ? (
                         isGeneratingCaptions ? (
@@ -772,7 +776,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                         )
                       ) : null}
                       {captionGeneration.state.status === "failed" ? (
-                        <p className="px-2 pt-1 text-xs text-red-400">
+                        <p role="alert" className="px-2 pt-1 text-xs text-red-400">
                           {describeCaptionGeneration(captionGeneration.state)}
                         </p>
                       ) : null}

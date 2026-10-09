@@ -14,6 +14,22 @@ import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEdi
 import { compressFrames } from "../core/src/utils/frameStreamEncoder";
 import type { Recording } from "../core/src/types";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
+import type { CaptionGenerationState } from "../hooks/useCaptionGeneration";
+
+// Captioning runs a speech model; here it only needs to end the way a failed job does.
+const generation = vi.hoisted(() => ({ fail: null as ((message: string) => void) | null }));
+vi.mock("../hooks/useCaptionGeneration", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../hooks/useCaptionGeneration")>();
+  const { useState } = await import("react");
+  return {
+    ...actual,
+    useCaptionGeneration: () => {
+      const [state, setState] = useState<CaptionGenerationState>({ status: "idle" });
+      generation.fail = (message) => setState({ status: "failed", message });
+      return { state, start: async () => {}, cancel: () => setState({ status: "idle" }) };
+    },
+  };
+});
 
 const selection = {
   startLineNumber: 1,
@@ -151,5 +167,31 @@ describe("MediaControls", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "File" }));
     expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces a caption file it could not import", async () => {
+    const { container } = await renderPlayer();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    // The picker has closed and focus is still on Import captions…: only an alert is heard.
+    // jsdom's File has no text(); a browser's reads the same words.
+    const notCaptions = Object.assign(
+      new File(["just some notes"], "notes.vtt", { type: "text/vtt" }),
+      { text: async () => "just some notes" },
+    );
+    fireEvent.change(filePicker(container, ".vtt"), { target: { files: [notCaptions] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      'No captions found in "notes.vtt" — expected WebVTT or SRT.',
+    );
+  });
+
+  it("announces captioning that failed", async () => {
+    await renderPlayer();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    act(() => generation.fail!("The narration could not be loaded (404)."));
+    expect(screen.getByRole("alert")).toHaveTextContent("The narration could not be loaded (404).");
   });
 });
