@@ -104,7 +104,7 @@ export function diffRuntimeSnapshot(
   };
 }
 
-export function applyRuntimeDelta(
+function applyRuntimeDelta(
   previous: RuntimeRecordingSnapshot,
   delta: RuntimeRecordingDelta,
 ): RuntimeRecordingSnapshot {

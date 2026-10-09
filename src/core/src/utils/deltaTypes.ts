@@ -92,7 +92,7 @@ export interface PreviewStateContentPatched extends Omit<PreviewState, "content"
  */
 export interface FrameDelta {
   timestamp: number;
-  /** If true, this is a keyframe with full state */
+  /** Always false: marks a delta (see Keyframe). */
   isKeyframe: false;
   /** Content delta (omitted if content unchanged) */
   contentDelta?: ContentDelta;
@@ -149,11 +149,4 @@ export const DELTA_CONFIG = {
  */
 export function isKeyframe(frame: DeltaFrame): frame is Keyframe {
   return "isKeyframe" in frame && frame.isKeyframe === true;
-}
-
-/**
- * Type guard to check if a frame is a delta
- */
-export function isDelta(frame: DeltaFrame): frame is FrameDelta {
-  return "isKeyframe" in frame && frame.isKeyframe === false;
 }

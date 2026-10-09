@@ -16,7 +16,7 @@ import { encodeWavPcm16, floatTo16BitPcm } from "./wavPcm16";
  * Speech needs no more. Opus codes it super-wideband at this rate, and decoding a
  * take costs half the memory it would at 48 kHz (20 minutes is ~115 MB).
  */
-export const AUDIO_EDIT_SAMPLE_RATE = 24_000;
+const AUDIO_EDIT_SAMPLE_RATE = 24_000;
 
 /** Fades either side of a cut, so a splice mid-waveform does not click. */
 const SPLICE_FADE_MS = 8;
@@ -110,7 +110,7 @@ async function decodeToMono(blob: Blob, sampleRate: number): Promise<Float32Arra
 }
 
 /** Ogg/Opus, or 16-bit WAV where WebCodecs cannot encode Opus. */
-export async function encodeEditedAudio(
+async function encodeEditedAudio(
   samples: Float32Array<ArrayBuffer>,
   sampleRate: number,
 ): Promise<Blob> {

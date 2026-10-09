@@ -98,10 +98,6 @@ export interface CursorTargetRect {
 }
 
 /**
- * Cursor coordinates relative to a stable UI region. Playback can use this
- * to remap a recorded position onto the current layout.
- */
-/**
  * A place in a target's text content: the written line, the character offset
  * within it, and where inside that character's cell (0–1 each way).
  */
@@ -112,6 +108,10 @@ export interface CursorCellAnchor {
   dy: number;
 }
 
+/**
+ * Cursor coordinates relative to a stable UI region. Playback can use this
+ * to remap a recorded position onto the current layout.
+ */
 export interface CursorTargetSnapshot {
   id: string;
   rect: CursorTargetRect;

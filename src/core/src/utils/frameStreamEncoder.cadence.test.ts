@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
-import { reconstructFrameAtIndex } from "../frameDelta";
-import { compressFrames } from "../frameStreamEncoder";
-import { isKeyframe, isDelta } from "../deltaTypes";
-import type { EditorFrame } from "../../types";
+import { reconstructFrameAtIndex } from "./frameDelta";
+import { compressFrames } from "./frameStreamEncoder";
+import { isKeyframe } from "./deltaTypes";
+import type { EditorFrame } from "../types";
 
 describe("Delta Compression Optimization", () => {
   const createMockFrame = (content: string, timestamp: number): EditorFrame => ({
@@ -43,7 +43,7 @@ describe("Delta Compression Optimization", () => {
     expect(compressed[0].timestamp).toBe(0);
     expect(isKeyframe(compressed[0])).toBe(true);
     expect(compressed[1].timestamp).toBe(300);
-    expect(isDelta(compressed[1])).toBe(true);
+    expect(isKeyframe(compressed[1])).toBe(false);
   });
 
   it("should still create keyframes at regular intervals if there are changes", () => {

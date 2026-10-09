@@ -58,17 +58,6 @@ export function mapTimeThroughCuts(time: number, cuts: readonly MediaSpan[]): nu
   return time - removed;
 }
 
-/** The inverse of mapTimeThroughCuts for moments outside cut windows (a cut window maps to its span's end). */
-export function unmapTimeThroughCuts(time: number, cuts: readonly MediaSpan[]): number {
-  let original = time;
-  for (const cut of cuts) {
-    const window = Math.min(CUT_WINDOW_MS, cut.end - cut.start);
-    if (original <= cut.start) break;
-    original += cut.end - cut.start - window;
-  }
-  return original;
-}
-
 const isInsideCut = (time: number, cuts: readonly MediaSpan[]) =>
   cuts.some((cut) => time > cut.start && time <= cut.end);
 
@@ -197,7 +186,8 @@ const toAudioTime = (spans: readonly MediaSpan[], offsetMs: number) =>
 /**
  * The recording with `edit` applied: cut spans collapsed on every track, muted spans
  * silenced, the narration edit left for loading to apply, and the camera mapped
- * around the cuts. Pure; the recording given is not changed.
+ * around the cuts. Does not change the recording given; returns a new one with a
+ * fresh id.
  */
 export function applyRecordingEdit(recording: Recording, edit: RecordingEdit): Recording {
   const hasAudio = recording.audioBlob instanceof Blob;

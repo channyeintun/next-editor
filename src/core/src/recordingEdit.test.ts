@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import {
-  applyRecordingEdit,
-  CUT_WINDOW_MS,
-  mapTimeThroughCuts,
-  unmapTimeThroughCuts,
-} from "./recordingEdit";
+import { applyRecordingEdit, CUT_WINDOW_MS, mapTimeThroughCuts } from "./recordingEdit";
 import { compressFrames } from "./utils/frameStreamEncoder";
 import { reconstructFrameAtIndex } from "./utils/frameDelta";
 import { isKeyframe } from "./utils/deltaTypes";
@@ -72,11 +67,6 @@ describe("mapping time through cuts", () => {
       expect(mapped).toBeGreaterThanOrEqual(previous);
       previous = mapped;
     }
-  });
-
-  it("maps moments after a cut back to where they were", () => {
-    expect(unmapTimeThroughCuts(mapTimeThroughCuts(6_000, cuts), cuts)).toBe(6_000);
-    expect(unmapTimeThroughCuts(1_000, cuts)).toBe(1_000);
   });
 });
 

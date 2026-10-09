@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type * as monaco from "monaco-editor";
 import type { EditorFrame } from "../types";
-import { DELTA_CONFIG, isDelta, isKeyframe, type DeltaFrame } from "./deltaTypes";
+import { DELTA_CONFIG, isKeyframe, type DeltaFrame } from "./deltaTypes";
 import { createContentEditDelta } from "./contentDelta";
 import { applyFrameDelta, reconstructFrameAtIndex } from "./frameDelta";
 import {
@@ -177,7 +177,7 @@ describe("pushFrame content deltas", () => {
     const first = pushFrame(createFrameStreamEncoder(), base);
     const { emitted } = pushFrame(first.state, frameAt(10, created.content), created);
 
-    if (!emitted || !isDelta(emitted)) throw new Error("Expected a delta frame");
+    if (!emitted || isKeyframe(emitted)) throw new Error("Expected a delta frame");
     expect(emitted.contentEditDelta).toEqual(created.delta);
     expect(emitted.contentDelta).toBeUndefined();
   });

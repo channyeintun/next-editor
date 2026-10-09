@@ -8,7 +8,7 @@ import type {
 import { getCursorCellAnchor } from "./cursorCellAnchors";
 
 export const CURSOR_REPLAY_TARGET_ATTRIBUTE = "data-cursor-replay-target";
-export const CURSOR_REPLAY_VIEWPORT_TARGET_ID = "viewport";
+const CURSOR_REPLAY_VIEWPORT_TARGET_ID = "viewport";
 export const CURSOR_REPLAY_ROOT_TARGET_ID = "app";
 
 // Set to "content" on a target whose *content* is scaled to fit its box (the

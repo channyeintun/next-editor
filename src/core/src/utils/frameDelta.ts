@@ -34,10 +34,7 @@ const keyframeIndexCache = new WeakMap<readonly DeltaFrame[], KeyframeIndex>();
 /**
  * Creates a position delta, returns null if identical.
  */
-export function createPositionDelta(
-  prev: EditorPosition,
-  next: EditorPosition,
-): PositionDelta | null {
+function createPositionDelta(prev: EditorPosition, next: EditorPosition): PositionDelta | null {
   const lineDelta = next.lineNumber - prev.lineNumber;
   const columnDelta = next.column - prev.column;
   if (lineDelta === 0 && columnDelta === 0) return null;
@@ -47,7 +44,7 @@ export function createPositionDelta(
 /**
  * Applies a position delta to a base position.
  */
-export function applyPositionDelta(base: EditorPosition, delta: PositionDelta): EditorPosition {
+function applyPositionDelta(base: EditorPosition, delta: PositionDelta): EditorPosition {
   return {
     lineNumber: base.lineNumber + delta.lineDelta,
     column: base.column + delta.columnDelta,
