@@ -15,10 +15,7 @@ import {
 import AgentPanel from "./agent/AgentPanel";
 import RunnerSettingsDialog from "./terminalPanel/RunnerSettingsDialog";
 import { useRuntimePanelStore } from "../contexts/RuntimePanelStoreContext";
-import {
-  isRuntimeBusy,
-  type WebContainerRuntimeStatus,
-} from "../contexts/WebContainerRuntimeContext";
+import { isRuntimeBusy } from "../runtime/webcontainer/types";
 import {
   selectConsoleLines,
   selectIsSettingsOpen,
@@ -362,9 +359,7 @@ function TerminalPanel() {
     void startTerminalSession();
   }, [activeTab, isCreatingTerminal, isPlaybackSnapshotActive, startTerminalSession]);
 
-  // A recorded status is typed as a plain string; isRuntimeBusy only compares it
-  // with the busy statuses, so any other string reads as not busy.
-  const isBusy = isRuntimeBusy(runtimeStatus as WebContainerRuntimeStatus);
+  const isBusy = isRuntimeBusy(runtimeStatus);
 
   const effectiveRunnerOutput = isPlaybackSnapshotActive ? recordedOutput : lastOutput;
   const consoleContent =

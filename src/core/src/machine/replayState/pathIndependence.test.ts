@@ -12,6 +12,7 @@ import type {
 import type {
   RuntimeRecordingEvent,
   RuntimeRecordingSnapshot,
+  RuntimeStatus,
   RuntimeTerminalSessionSnapshot,
 } from "../../runtime";
 import {
@@ -671,7 +672,7 @@ type RuntimeOp =
   /** The session's screen replaced by unrelated text (a clear). */
   | { k: "clear"; session: number; text: string }
   | { k: "close"; session: number }
-  | { k: "status"; status: string };
+  | { k: "status"; status: RuntimeStatus };
 
 const RUNTIME_SESSION_IDS = ["t1", "t2"];
 
@@ -701,7 +702,7 @@ const arbRuntimeOp: fc.Arbitrary<RuntimeOp> = fc.oneof(
     weight: 1,
     arbitrary: fc.record({
       k: fc.constant("status"),
-      status: fc.constantFrom("running", "ready", "error"),
+      status: fc.constantFrom<RuntimeStatus>("starting", "ready", "error"),
     }),
   },
 );

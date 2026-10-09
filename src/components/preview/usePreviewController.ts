@@ -23,10 +23,7 @@ import {
 } from "../../hooks/useWebContainerRuntime";
 import { IFRAME_NAVIGATION_COMMAND_MESSAGE_TYPE } from "../../utils/iframeInteractionCapture";
 import { requestPreviewScreenshot } from "../../utils/iframeScreenshotBridge";
-import {
-  isRuntimeBusy,
-  type WebContainerRuntimeStatus,
-} from "../../contexts/WebContainerRuntimeContext";
+import { isRuntimeBusy, type WebContainerRuntimeStatus } from "../../runtime/webcontainer/types";
 import type {
   ApiClientRecordedRequest,
   ApiClientRecordedResult,

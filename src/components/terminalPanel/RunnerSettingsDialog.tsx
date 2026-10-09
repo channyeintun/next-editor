@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { useId } from "react";
-import type { RunnerConfig } from "../../contexts/WebContainerRuntimeContext";
+import type { RunnerConfig } from "../../runtime/webcontainer/types";
 import ModalShell from "../ModalShell";
 
 interface RunnerToggleProps {

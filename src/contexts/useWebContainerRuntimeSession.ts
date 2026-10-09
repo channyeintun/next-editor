@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
+import type { WebContainerRuntimeRecordingSnapshot } from "./WebContainerRuntimeContext";
 import type {
   EnvironmentVariables,
-  RuntimeLifecycleEvent,
-  RuntimePreviewMessage,
-  WebContainerRuntimeRecordingSnapshot,
   WebContainerRuntimeStatus,
-} from "./WebContainerRuntimeContext";
+} from "../runtime/webcontainer/types";
+import type { RuntimeLifecycleEvent, RuntimePreviewMessage } from "../types/runtime";
 import type { RuntimeTerminalSessionSnapshot } from "../types/runtime";
 import {
   formatCommandError,

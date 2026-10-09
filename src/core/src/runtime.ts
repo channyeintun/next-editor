@@ -16,9 +16,47 @@ export interface RuntimePanelRecordingState {
   terminalScrollLines?: RuntimeTerminalScrollLines;
 }
 
+/**
+ * The runtime's lifecycle status. A decoded recording is trusted to carry one of
+ * these: the recorder only ever stores a value of this union.
+ */
+export type RuntimeStatus =
+  | "idle"
+  | "booting"
+  | "mounting"
+  | "installing"
+  | "starting"
+  | "ready"
+  | "error";
+
+export type RuntimePreviewMessageKind =
+  | "console-error"
+  | "uncaught-exception"
+  | "unhandled-rejection";
+
+/** An error the preview page reported: a console.error, an uncaught exception or a rejection. */
+export interface RuntimePreviewMessage {
+  id: number;
+  kind: RuntimePreviewMessageKind;
+  text: string;
+  port: number | null;
+  pathname: string;
+}
+
+export type RuntimeLifecycleEventKind = "port-open" | "port-close" | "internal-error";
+
+/** A port opening or closing, or an internal runtime error. */
+export interface RuntimeLifecycleEvent {
+  id: number;
+  kind: RuntimeLifecycleEventKind;
+  text: string;
+  port: number | null;
+  url: string | null;
+}
+
 export interface RuntimeRecordingSnapshot extends RuntimePanelRecordingState {
   mode: "single-file" | "webcontainer";
-  status: string;
+  status: RuntimeStatus;
   previewUrl?: string | null;
   previewPort?: number | null;
   lastOutput?: string | null;
@@ -26,20 +64,8 @@ export interface RuntimeRecordingSnapshot extends RuntimePanelRecordingState {
   errorMessage?: string | null;
   terminalSessions?: RuntimeTerminalSessionSnapshot[];
   activeTerminalSessionId?: string | null;
-  latestPreviewMessage?: {
-    id: number;
-    kind: "console-error" | "uncaught-exception" | "unhandled-rejection";
-    text: string;
-    port: number | null;
-    pathname: string;
-  } | null;
-  latestLifecycleEvent?: {
-    id: number;
-    kind: "port-open" | "port-close" | "internal-error";
-    text: string;
-    port: number | null;
-    url: string | null;
-  } | null;
+  latestPreviewMessage?: RuntimePreviewMessage | null;
+  latestLifecycleEvent?: RuntimeLifecycleEvent | null;
 }
 
 /**

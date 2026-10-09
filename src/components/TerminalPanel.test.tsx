@@ -7,8 +7,8 @@ import {
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
   type WebContainerRuntimeOutput,
-  type WebContainerRuntimeStatus,
 } from "../contexts/WebContainerRuntimeContext";
+import type { WebContainerRuntimeStatus } from "../runtime/webcontainer/types";
 import { RuntimePanelStoreProvider } from "../contexts/RuntimePanelStoreContext";
 import TerminalPanel from "./TerminalPanel";
 

@@ -1,6 +1,6 @@
 // The environment variables every runtime process is spawned with, and where
 // they persist between visits.
-import type { EnvironmentVariables } from "../../contexts/WebContainerRuntimeContext";
+import type { EnvironmentVariables } from "./types";
 
 const RUNTIME_ENVIRONMENT_STORAGE_KEY = "next-editor-runtime-environment";
 

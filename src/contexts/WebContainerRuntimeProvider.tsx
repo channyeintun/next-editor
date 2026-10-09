@@ -1,19 +1,21 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type { WebContainer } from "@webcontainer/api";
 import {
-  isRuntimeBusy,
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
   WebContainerRuntimeOutputContext,
   WebContainerRuntimeSnapshotGetterContext,
   WebContainerRuntimeSaveWorkspaceContext,
-  type EnvironmentVariables,
-  type RunnerConfig,
   type SaveWorkspaceOptions,
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
   type WebContainerRuntimeOutput,
 } from "./WebContainerRuntimeContext";
+import {
+  isRuntimeBusy,
+  type EnvironmentVariables,
+  type RunnerConfig,
+} from "../runtime/webcontainer/types";
 import {
   DEFAULT_RUNNER_CONFIG,
   formatCommandError,

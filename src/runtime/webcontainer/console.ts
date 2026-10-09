@@ -1,6 +1,6 @@
 // What the runtime's consoles show: process output without its terminal
 // control sequences, errors the preview reports, and runtime failures.
-import type { RuntimePreviewMessage } from "../../contexts/WebContainerRuntimeContext";
+import type { RuntimePreviewMessage } from "../../types/runtime";
 
 const ESCAPE_CHARACTER = String.fromCharCode(27);
 const BELL_CHARACTER = String.fromCharCode(7);

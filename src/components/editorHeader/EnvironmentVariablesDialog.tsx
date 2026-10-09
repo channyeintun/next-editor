@@ -1,8 +1,5 @@
 import { useEffect, useId, useState, type RefObject } from "react";
-import {
-  isRuntimeBusy,
-  type EnvironmentVariables,
-} from "../../contexts/WebContainerRuntimeContext";
+import { isRuntimeBusy, type EnvironmentVariables } from "../../runtime/webcontainer/types";
 import {
   useWebContainerRuntimeActions,
   useWebContainerRuntimeMetadata,

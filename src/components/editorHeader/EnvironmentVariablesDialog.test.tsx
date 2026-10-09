@@ -4,11 +4,13 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import {
   WebContainerRuntimeActionsContext,
   WebContainerRuntimeMetadataContext,
-  type EnvironmentVariables,
   type WebContainerRuntimeActions,
   type WebContainerRuntimeMetadata,
-  type WebContainerRuntimeStatus,
 } from "../../contexts/WebContainerRuntimeContext";
+import type {
+  EnvironmentVariables,
+  WebContainerRuntimeStatus,
+} from "../../runtime/webcontainer/types";
 import EnvironmentVariablesDialog, {
   parseEnvironmentInput,
   stringifyEnvironmentVariables,

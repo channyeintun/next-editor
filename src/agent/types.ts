@@ -1,8 +1,5 @@
 import type { WorkspaceStoreInstance } from "../stores/workspaceStore";
-import type {
-  RuntimeLifecycleEvent,
-  RuntimePreviewMessage,
-} from "../contexts/WebContainerRuntimeContext";
+import type { RuntimeLifecycleEvent, RuntimePreviewMessage } from "../types/runtime";
 import type { LivePreviewInspection } from "../stores/previewAdapterHandle";
 import type { PreviewScreenshotResult } from "../utils/iframeScreenshotBridge";
 

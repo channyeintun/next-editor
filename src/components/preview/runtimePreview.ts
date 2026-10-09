@@ -1,4 +1,4 @@
-import type { WebContainerRuntimeStatus } from "../../contexts/WebContainerRuntimeContext";
+import type { WebContainerRuntimeStatus } from "../../runtime/webcontainer/types";
 
 // ============================================================================
 // Runtime preview helpers

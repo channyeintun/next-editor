@@ -1,57 +1,14 @@
 import { createContext } from "react";
-import type { RuntimeTerminalSessionSnapshot } from "../types/runtime";
-
-export type WebContainerRuntimeStatus =
-  | "idle"
-  | "booting"
-  | "mounting"
-  | "installing"
-  | "starting"
-  | "ready"
-  | "error";
-
-/** A boot, mount, install or runner start is under way. */
-export function isRuntimeBusy(status: WebContainerRuntimeStatus): boolean {
-  return (
-    status === "booting" ||
-    status === "mounting" ||
-    status === "installing" ||
-    status === "starting"
-  );
-}
-
-export interface RunnerConfig {
-  enabled: boolean;
-  runOnStartup: boolean;
-  runOnFileSave: boolean;
-  initCommand: string;
-  runCommand: string;
-}
-
-export type EnvironmentVariables = Record<string, string>;
-
-export type RuntimePreviewMessageKind =
-  | "console-error"
-  | "uncaught-exception"
-  | "unhandled-rejection";
-
-export interface RuntimePreviewMessage {
-  id: number;
-  kind: RuntimePreviewMessageKind;
-  text: string;
-  port: number | null;
-  pathname: string;
-}
-
-export type RuntimeLifecycleEventKind = "port-open" | "port-close" | "internal-error";
-
-export interface RuntimeLifecycleEvent {
-  id: number;
-  kind: RuntimeLifecycleEventKind;
-  text: string;
-  port: number | null;
-  url: string | null;
-}
+import type {
+  EnvironmentVariables,
+  RunnerConfig,
+  WebContainerRuntimeStatus,
+} from "../runtime/webcontainer/types";
+import type {
+  RuntimeLifecycleEvent,
+  RuntimePreviewMessage,
+  RuntimeTerminalSessionSnapshot,
+} from "../types/runtime";
 
 export interface WebContainerRuntimeActions {
   startRuntime: () => Promise<void>;

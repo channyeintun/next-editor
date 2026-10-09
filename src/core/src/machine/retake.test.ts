@@ -224,7 +224,7 @@ describe("retaking", () => {
     const advance = pinClocks();
     let live: RuntimeRecordingSnapshot = {
       mode: "webcontainer",
-      status: "running",
+      status: "ready",
       terminalSessions: [{ id: "t", title: "t", output: "$ npm start\n" }],
     } as RuntimeRecordingSnapshot;
     const actor = startTake(new RecordingEditor(), { getRuntimeSnapshot: () => live });

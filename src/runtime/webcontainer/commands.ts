@@ -1,6 +1,6 @@
 // The command lines the runtime runs: the runner's default init and run
 // commands, the shells a terminal tries, and how a command line is spawned.
-import type { RunnerConfig } from "../../contexts/WebContainerRuntimeContext";
+import type { RunnerConfig } from "./types";
 import { isWorkspaceTextFile, type WorkspaceProject } from "../../types/workspace";
 
 export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {

@@ -1,6 +1,7 @@
 import { act, render } from "@testing-library/react";
 import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import type { RuntimeRecordingSnapshot } from "../types/runtime";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 
 vi.mock("../runtime/webcontainer/sharedContainer", async (importOriginal) => {
@@ -224,6 +225,37 @@ describe("useWebContainerRuntimeSession", () => {
 
     expect(await exitCode).toBe(0);
     expect(tracked.hook?.getRecordingSnapshot().activeCommand).toBeNull();
+  });
+
+  // The live message is the recorded type itself (core owns it), so a new kind
+  // cannot compile here while the recording disagrees.
+  it("records a preview message in the shape the runtime track stores", async () => {
+    const { instance, listeners } = createFakeInstance();
+    const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
+    vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+    const hook = renderRuntimeSessionHook();
+
+    await act(async () => {
+      await hook.bootInstance();
+    });
+    act(() => {
+      listeners.get("preview-message")?.({
+        type: "PREVIEW_CONSOLE_ERROR",
+        args: ["boom"],
+        port: 3000,
+        pathname: "/about",
+      });
+    });
+
+    const recorded: RuntimeRecordingSnapshot["latestPreviewMessage"] =
+      hook.getRecordingSnapshot().latestPreviewMessage;
+    expect(recorded).toEqual({
+      id: 1,
+      kind: "console-error",
+      text: "boom",
+      port: 3000,
+      pathname: "/about",
+    });
   });
 
   it("invokes onServerReady when the dev server reports ready with an active runner", async () => {

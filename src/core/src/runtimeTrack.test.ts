@@ -31,7 +31,7 @@ const ROLLING_WINDOW_TIMEOUT_MS = 60_000;
 function snapshot(output: string, extra: Partial<RuntimeRecordingSnapshot> = {}) {
   return {
     mode: "webcontainer",
-    status: "running",
+    status: "starting",
     terminalSessions: [{ id: "t1", title: "npm", output }],
     ...extra,
   } satisfies RuntimeRecordingSnapshot;

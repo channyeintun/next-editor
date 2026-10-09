@@ -63,7 +63,7 @@ function makeRecording(plan: StudioPlan): Recording {
   };
   const runtimeSnapshot = {
     mode: "single-file" as const,
-    status: "idle",
+    status: "idle" as const,
     activeTab: "runner" as const,
     isCollapsed: false,
     isFullHeight: false,
