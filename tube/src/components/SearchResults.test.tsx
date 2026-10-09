@@ -45,4 +45,29 @@ describe("SearchResults", () => {
       "/learn/@chan",
     );
   });
+
+  it("heads the matching lessons with their own section, not the Authors one", () => {
+    searchState.data = {
+      authors: [{ username: "chan", name: "Chan Nyein Tun", avatarUrl: null }],
+      lessons: [{ slug: "closures", title: "Closures in Rust" }],
+    };
+    renderResults();
+
+    const headings = screen.getAllByRole("heading");
+    expect(headings.map((h) => [h.tagName, h.textContent])).toEqual([
+      ["H2", "Authors"],
+      ["H2", "Lessons"],
+      ["H3", "Closures in Rust"],
+    ]);
+  });
+
+  it("has no Lessons heading when only authors match", () => {
+    searchState.data = {
+      authors: [{ username: "chan", name: "Chan Nyein Tun", avatarUrl: null }],
+      lessons: [],
+    };
+    renderResults();
+
+    expect(screen.queryByRole("heading", { name: "Lessons" })).not.toBeInTheDocument();
+  });
 });

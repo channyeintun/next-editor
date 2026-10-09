@@ -78,11 +78,15 @@ export default function SearchResults({ query }: { query: string }) {
       )}
 
       {lessons.length > 0 && (
-        <div className="grid grid-cols-1 gap-5 pb-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {lessons.map((lesson) => (
-            <LessonCard key={lesson.slug} lesson={lesson} />
-          ))}
-        </div>
+        <>
+          {/* Without it the lesson card h3s read as children of "Authors". */}
+          <h2 className="sr-only">Lessons</h2>
+          <div className="grid grid-cols-1 gap-5 pb-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {lessons.map((lesson) => (
+              <LessonCard key={lesson.slug} lesson={lesson} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

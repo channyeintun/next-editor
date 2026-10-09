@@ -12,6 +12,9 @@ export default function LearnPage() {
 
       {/* Content-first, like YouTube: straight to the lessons, no marketing copy. */}
       <main className="mx-auto w-full max-w-7xl flex-1 px-6 pb-20 pt-2 sm:px-8">
+        {/* No visible title (content-first), but heading navigation still
+            needs a top-level heading naming the view. */}
+        <h1 className="sr-only">Lessons</h1>
         <LessonGrid />
       </main>
     </div>
