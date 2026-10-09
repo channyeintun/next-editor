@@ -59,14 +59,33 @@ export default function PlayerShortcutsHelp({ onClose }: { onClose: () => void }
   );
 }
 
-/** A brief word over the player about what a key just did ("+5 s", "1.25×", "Muted"). */
-export function PlayerShortcutFeedback({ text }: { text: string }) {
+/**
+ * A brief word over the player about what a key just did ("+5 s", "1.25×", "Muted").
+ *
+ * The status region is always mounted and only its child changes, so screen readers announce
+ * each message: a region inserted with its text already inside is often not read. Each press
+ * gets a new keyed span, so a repeated "+5 s" is announced again. The visible bubble is a
+ * separate node, hidden from assistive technology so the message is not heard twice.
+ */
+export function PlayerShortcutFeedback({
+  feedback,
+}: {
+  feedback: { text: string; at: number } | null;
+}) {
   return (
-    <div
-      role="status"
-      className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-3 -translate-x-1/2 rounded-full bg-black/75 px-3 py-1 text-sm font-medium text-white shadow"
-    >
-      {text}
-    </div>
+    <>
+      <div role="status" className="sr-only">
+        {feedback ? <span key={feedback.at}>{feedback.text}</span> : null}
+      </div>
+      {feedback ? (
+        <div
+          key={feedback.at}
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-3 -translate-x-1/2 rounded-full bg-black/75 px-3 py-1 text-sm font-medium text-white shadow"
+        >
+          {feedback.text}
+        </div>
+      ) : null}
+    </>
   );
 }

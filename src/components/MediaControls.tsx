@@ -463,12 +463,7 @@ const MediaControls: React.FC<MediaControlsProps> = ({
         className="hidden"
         onChange={(event) => void handleCaptionFileChange(event)}
       />
-      {playerShortcuts.feedback ? (
-        <PlayerShortcutFeedback
-          key={playerShortcuts.feedback.at}
-          text={playerShortcuts.feedback.text}
-        />
-      ) : null}
+      <PlayerShortcutFeedback feedback={playerShortcuts.feedback} />
       {playerShortcuts.helpOpen ? (
         <PlayerShortcutsHelp onClose={playerShortcuts.closeHelp} />
       ) : null}
