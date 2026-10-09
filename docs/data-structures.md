@@ -354,7 +354,6 @@ The complete state machine context:
 interface EditorMachineContext {
   timeline: TimelineState;
   session: RecordingSession | null;
-  sessionRevision: number; // bumped on every in-place session mutation
   recording: Recording | null;
   currentFrame: EditorFrame | null;
   audio: AudioState;
@@ -414,7 +413,7 @@ interface TimelineState {
 
 ### RecordingSession
 
-`RecordingSession` is a mutable capture buffer: its object identity stays stable for the whole recording, and appenders push into its track arrays in place (O(1) per sample) instead of spreading into new arrays. Each track array is append-only until a retake, which replaces every track array with a copy cut back to the safe point. So a reader that follows a session while it records keeps a cursor per track, made of the array it read and the length it saw, as `RecordingDraftTrackWriter` does. `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-equality selectors can still detect a change.
+`RecordingSession` is a mutable capture buffer: its object identity stays stable for the whole recording, and appenders push into its track arrays in place (O(1) per sample) instead of spreading into new arrays. Each track array is append-only until a retake, which replaces every track array with a copy cut back to the safe point. So a reader that follows a session while it records keeps a cursor per track, made of the array it read and the length it saw, as `RecordingDraftTrackWriter` does. The appenders run as plain actions, so a capture that changes no machine state leaves the snapshot object as it was (observers are still notified after every event); the fields a selector follows (`clock`, `safePoints`, `chapters`) are replaced, never mutated, by actions that publish a new snapshot.
 
 The session declares its tracks only through `RecordingTracks` (`recordingAssembly.ts`), which it extends. A retake's cut and the draft journal both go by `RecordingTracks`, so they cover every track.
 

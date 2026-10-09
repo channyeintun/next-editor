@@ -50,7 +50,8 @@ import type { AudioPlaybackEvent, AudioPlaybackInput } from "./audioActor";
 // into `actions: {}` via `assign(fn)` / `enqueueActions(fn)` — kept there
 // (rather than wrapped here) so XState's `setup()` can still infer the
 // machine's exact context/event/actor types for the wrapped action, which
-// isn't independently nameable outside `setup()`.
+// isn't independently nameable outside `setup()`. The bodies that return
+// void only mutate the session in place and are registered as plain actions.
 // ============================================================================
 
 /**
@@ -289,60 +290,47 @@ export const initRecordingSession = ({ context, event }: EditorActionArgs): Edit
       cursorEvents: [{ timestamp: 0, ...initialMousePosition }],
       lastMousePosition: initialMousePosition,
     },
-    sessionRevision: 0,
   };
 };
 
 /**
- * Shared "append to session + bump revision" shape for the recording-state event
- * handlers below. `append` mutates `session`'s arrays in place by design (see the
- * invariant on {@link RecordingSession}) and returns `false` when nothing was
- * appended (deduplicated event), in which case the revision must not bump.
+ * Runs `append` on the take's session, if there is one. Appenders mutate the session's
+ * arrays in place by design (see the invariant on {@link RecordingSession}), so the
+ * recording-state event handlers below are plain actions: nothing in the context is
+ * replaced.
  */
-const appendToSession = (
+const withSession = (
   context: EditorMachineContext,
-  append: (session: RecordingSession) => boolean,
-): EditorContextUpdate =>
-  !context.session || !append(context.session)
-    ? {}
-    : { session: context.session, sessionRevision: context.sessionRevision + 1 };
-
-export const captureSlideEvent = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "SLIDE_EVENT") return {};
-  return appendToSession(context, (session) => appendSlideRecordingEvent(session, event.event));
+  append: (session: RecordingSession) => void,
+): void => {
+  if (context.session) append(context.session);
 };
 
-export const capturePreviewEvent = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "PREVIEW_EVENT") return {};
-  return appendToSession(context, (session) => appendPreviewRecordingEvent(session, event.event));
+export const captureSlideEvent = ({ context, event }: EditorActionArgs): void => {
+  if (event.type !== "SLIDE_EVENT") return;
+  withSession(context, (session) => appendSlideRecordingEvent(session, event.event));
 };
 
-export const capturePreviewInitialDocument = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "PREVIEW_INITIAL_DOCUMENT") return {};
-  return appendToSession(context, (session) =>
-    appendPreviewInitialDocument(session, event.document),
-  );
+export const capturePreviewEvent = ({ context, event }: EditorActionArgs): void => {
+  if (event.type !== "PREVIEW_EVENT") return;
+  withSession(context, (session) => appendPreviewRecordingEvent(session, event.event));
 };
 
-export const capturePreviewPatchBatch = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "PREVIEW_PATCH_BATCH") return {};
-  return appendToSession(context, (session) => appendPreviewPatchBatch(session, event.batch));
+export const capturePreviewInitialDocument = ({ context, event }: EditorActionArgs): void => {
+  if (event.type !== "PREVIEW_INITIAL_DOCUMENT") return;
+  withSession(context, (session) => appendPreviewInitialDocument(session, event.document));
 };
 
-export const captureWorkspaceEvent = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "WORKSPACE_EVENT") return {};
+export const capturePreviewPatchBatch = ({ context, event }: EditorActionArgs): void => {
+  if (event.type !== "PREVIEW_PATCH_BATCH") return;
+  withSession(context, (session) => appendPreviewPatchBatch(session, event.batch));
+};
+
+export const captureWorkspaceEvent = ({ context, event }: EditorActionArgs): void => {
+  if (event.type !== "WORKSPACE_EVENT") return;
   const snapshot = context.getWorkspaceSnapshot?.();
-  if (!snapshot) return {};
-  return appendToSession(context, (session) =>
+  if (!snapshot) return;
+  withSession(context, (session) =>
     appendWorkspaceRecordingEvent(session, snapshot, {
       sidebarWidthDelta: event.sidebarWidthDelta,
       previewDockWidthDelta: event.previewDockWidthDelta,
@@ -350,55 +338,56 @@ export const captureWorkspaceEvent = ({
   );
 };
 
-export const captureRuntimeEvent = ({ context }: EditorActionArgs): EditorContextUpdate => {
+export const captureRuntimeEvent = ({ context }: EditorActionArgs): void => {
   const snapshot = context.getRuntimeSnapshot?.();
-  if (!snapshot) return {};
-  return appendToSession(context, (session) => appendRuntimeRecordingEvent(session, snapshot));
+  if (!snapshot) return;
+  withSession(context, (session) => appendRuntimeRecordingEvent(session, snapshot));
 };
 
-export const captureChatEvent = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "CHAT_EVENT") return {};
-  return appendToSession(context, (session) => appendChatDelta(session, event.event));
+export const captureChatEvent = ({ context, event }: EditorActionArgs): void => {
+  if (event.type !== "CHAT_EVENT") return;
+  withSession(context, (session) => appendChatDelta(session, event.event));
 };
 
-export const captureWhiteboardEvent = ({
-  context,
-  event,
-}: EditorActionArgs): EditorContextUpdate => {
-  if (event.type !== "WHITEBOARD_EVENT") return {};
-  return appendToSession(context, (session) =>
-    appendWhiteboardRecordingEvent(session, event.event),
-  );
+export const captureWhiteboardEvent = ({ context, event }: EditorActionArgs): void => {
+  if (event.type !== "WHITEBOARD_EVENT") return;
+  withSession(context, (session) => appendWhiteboardRecordingEvent(session, event.event));
 };
 
-/** Stops the take's clock. Its recorders are paused by the machine alongside. */
-export const pauseRecordingSession = ({ context }: EditorActionArgs): EditorContextUpdate => {
+/**
+ * Stops the take's clock. Its recorders are paused by the machine alongside. A plain
+ * action: the transition into `paused` publishes the snapshot that carries the new clock.
+ */
+export const pauseRecordingSession = ({ context }: EditorActionArgs): void => {
   const session = context.session;
-  if (!session || isRecordingClockPaused(session.clock)) return {};
+  if (!session || isRecordingClockPaused(session.clock)) return;
   session.clock = pauseRecordingClock(session.clock, performance.now(), Date.now());
-  return { session, sessionRevision: context.sessionRevision + 1 };
 };
 
 /**
  * Runs the take's clock again. The pointer was followed but not recorded while paused,
  * so the resumed stretch starts with a sample of where it is now. The moment it resumes
- * is where a later retake can rewind to.
+ * is where a later retake can rewind to. A plain action, like pauseRecordingSession: the
+ * transition into `running` publishes the new snapshot.
  */
-export const resumeRecordingSession = ({ context }: EditorActionArgs): EditorContextUpdate => {
+export const resumeRecordingSession = ({ context }: EditorActionArgs): void => {
   const session = context.session;
-  if (!session || !isRecordingClockPaused(session.clock)) return {};
+  if (!session || !isRecordingClockPaused(session.clock)) return;
   const perf = performance.now();
   const wall = Date.now();
   session.clock = resumeRecordingClock(session.clock, perf, wall);
   const recordingTime = getRecordingTimestamp(session);
   addSafePoint(session, recordingTime, { perf, wall });
   appendCursorEvent(session.cursorEvents, recordingTime, session.lastMousePosition);
-  return { session, sessionRevision: context.sessionRevision + 1 };
 };
 
 /**
  * Marks a chapter at the take's current moment. A chapter is where the author is happy
  * with the take so far, so it is also a safe point a retake can rewind to.
+ *
+ * It stays an assign: ADD_CHAPTER_MARKER changes no state, so only a new context makes
+ * a new snapshot, and the selectors that read `chapters` and `safePoints` (memoized on
+ * the snapshot object) would otherwise not see the new chapter.
  */
 export const addChapterMarker = ({ context, event }: EditorActionArgs): EditorContextUpdate => {
   const session = context.session;
@@ -415,7 +404,7 @@ export const addChapterMarker = ({ context, event }: EditorActionArgs): EditorCo
   // While paused, the clock stands at the moment the pause began: that is the anchor.
   const at = session.clock.pausedAt ?? { perf: performance.now(), wall: Date.now() };
   addSafePoint(session, recordingTime, at);
-  return { session, sessionRevision: context.sessionRevision + 1 };
+  return { session };
 };
 
 export const finalizeRecording = ({ context }: EditorActionArgs): EditorContextUpdate => {
@@ -471,7 +460,6 @@ export const finalizeRecording = ({ context }: EditorActionArgs): EditorContextU
   return {
     recording,
     session: null,
-    sessionRevision: 0,
     // The recording above already holds everything it needs from the audio slice. Keeping
     // the blob here would pin the narration after UNLOAD and hand it to the next take that
     // records without audio. A mic blob that arrives after this point is re-added by
@@ -623,6 +611,5 @@ export const handleExternalAudioError = ({ event }: EditorActionArgs): EditorCon
     error: event.error,
     audio: createIdleAudioState(),
     session: null,
-    sessionRevision: 0,
   };
 };

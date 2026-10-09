@@ -2967,13 +2967,14 @@ describe("audioPlaybackActor", () => {
     });
     await waitFor(actor, (snapshot) => snapshot.matches("recording"));
     const audio = MockAudio.instances[0]!;
-    const sessionRevision = actor.getSnapshot().context.sessionRevision;
+    const audioBefore = actor.getSnapshot().context.audio;
     audio.duration = Number.POSITIVE_INFINITY;
     audio.oncanplay?.();
     audio.oncanplay?.();
 
     expect(actor.getSnapshot().context.audio.externalDurationMs).toBeNull();
-    expect(actor.getSnapshot().context.sessionRevision).toBe(sessionRevision);
+    // Nothing was stored: the audio slice is the one the take started with.
+    expect(actor.getSnapshot().context.audio).toBe(audioBefore);
 
     clock.now += 300;
     audio.onended?.();
@@ -4231,6 +4232,41 @@ describe("editorMachine pointer captures while recording", () => {
 
     expect(actor.getSnapshot().context.currentFrame?.state.content).toBe("let b = 2;");
     expect(actor.getSnapshot().context.session!.frames).toHaveLength(2);
+    actor.stop();
+  });
+
+  // capturePreviewEvent is a plain action and capturePreviewRefreshFrame follows it in
+  // the same transition: the event lands in its track before the frame is committed.
+  it("records a preview refresh as an event and then a frame carrying its page", () => {
+    const clock = pinPerformanceClock();
+    const editor = new RecordingEditor();
+    const actor = createActor(
+      editorMachine.provide({ actors: { mouseTracking: fromCallback(() => {}) } }),
+      {
+        input: {
+          editorRef: { current: editor as unknown as monaco.editor.IStandaloneCodeEditor },
+          getPreviewState: () => ({ isOpen: true, size: "small", content: "<p>before</p>" }),
+        },
+      },
+    ).start();
+    actor.send({ type: "START_RECORDING" });
+    const session = () => actor.getSnapshot().context.session!;
+    const previewEventCount = session().previewEvents.length;
+    const frameCount = session().frames.length;
+
+    clock.now += 60;
+    actor.send({
+      type: "PREVIEW_EVENT",
+      event: { type: "preview_refresh", timestamp: 0, content: "<p>after</p>" },
+    });
+
+    expect(session().previewEvents).toHaveLength(previewEventCount + 1);
+    expect(session().previewEvents.at(-1)).toMatchObject({
+      type: "preview_refresh",
+      content: "<p>after</p>",
+    });
+    expect(session().frames).toHaveLength(frameCount + 1);
+    expect(session().encoder.lastFullFrame?.state.previewState?.content).toBe("<p>after</p>");
     actor.stop();
   });
 });

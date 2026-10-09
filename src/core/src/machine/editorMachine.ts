@@ -300,8 +300,10 @@ export const editorMachine = setup({
   actions: {
     // Recording (capture-side) actions — bodies live in captureActions.ts,
     // frameCapture.ts and screenCaptureActions.ts, wrapped here so `setup()` can
-    // infer this machine's exact context/event/actor types. The recorder actions
-    // (start, pause, resume and stop of the microphone, camera and screen
+    // infer this machine's exact context/event/actor types. The ones that only
+    // append to the session in place are plain actions: they replace nothing in the
+    // context, so an assign would only copy it on every captured event. The recorder
+    // actions (start, pause, resume and stop of the microphone, camera and screen
     // recorders) and retakeRecording keep their bodies inline.
     setCameraRecordingEnabled: assign(setCameraRecordingEnabled),
     setMicrophoneDevice: assign(setMicrophoneDevice),
@@ -314,18 +316,18 @@ export const editorMachine = setup({
     captureInitialFrame: assign(captureInitialFrame),
     captureFrame: assign(captureFrame),
     capturePreviewRefreshFrame: assign(capturePreviewRefreshFrame),
-    captureSlideEvent: assign(captureSlideEvent),
-    capturePreviewEvent: assign(capturePreviewEvent),
-    capturePreviewInitialDocument: assign(capturePreviewInitialDocument),
-    capturePreviewPatchBatch: assign(capturePreviewPatchBatch),
-    captureWorkspaceEvent: assign(captureWorkspaceEvent),
-    captureRuntimeEvent: assign(captureRuntimeEvent),
-    captureWhiteboardEvent: assign(captureWhiteboardEvent),
-    captureChatEvent: assign(captureChatEvent),
+    captureSlideEvent,
+    capturePreviewEvent,
+    capturePreviewInitialDocument,
+    capturePreviewPatchBatch,
+    captureWorkspaceEvent,
+    captureRuntimeEvent,
+    captureWhiteboardEvent,
+    captureChatEvent,
     finalizeRecording: assign(finalizeRecording),
     addChapterMarker: assign(addChapterMarker),
-    pauseRecordingSession: assign(pauseRecordingSession),
-    resumeRecordingSession: assign(resumeRecordingSession),
+    pauseRecordingSession,
+    resumeRecordingSession,
     startMicrophoneRecorder: enqueueActions(({ context, enqueue }) => {
       // A previous take's recorder can outlive its session while it waits on a
       // late blob. Spawning under the same id would only replace the reference
@@ -456,7 +458,6 @@ export const editorMachine = setup({
 
       enqueue.assign({
         session,
-        sessionRevision: context.sessionRevision + 1,
         currentFrame: restore.frame,
       });
 

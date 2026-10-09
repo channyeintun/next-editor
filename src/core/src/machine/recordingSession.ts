@@ -67,9 +67,8 @@ function withRecordingWallEvents<T extends { events?: PreviewRecordedEvent[] }>(
 
 /**
  * All appenders below mutate `session`'s arrays in place — see the invariant documented
- * on {@link RecordingSession} — and return whether they appended anything. Callers bump
- * `sessionRevision` only then, so the mutation is still visible to reference-equality
- * selectors. The appenders without a dedupe always append and always return `true`.
+ * on {@link RecordingSession} — and return whether they appended anything. The appenders
+ * without a dedupe always append and always return `true`.
  */
 
 export function appendSlideRecordingEvent(session: RecordingSession, event: SlideEvent): boolean {
@@ -166,11 +165,10 @@ function isNonZeroWidthDelta(value: unknown): boolean {
 }
 
 /**
- * Returns `false` when the snapshot deduplicates against the last recorded event (no
- * push happened) so callers know whether to bump `sessionRevision`. A snapshot that
- * carries a non-zero panel width delta is always recorded. It pushes in place, so
- * `session` and its `workspaceEvents` array keep their identity (only a retake replaces
- * the array, see {@link RecordingSession}).
+ * Returns whether it appended: `false` when the snapshot deduplicates against the last
+ * recorded event. A snapshot that carries a non-zero panel width delta is always
+ * recorded. It pushes in place, so `session` and its `workspaceEvents` array keep their
+ * identity (only a retake replaces the array, see {@link RecordingSession}).
  */
 export function appendWorkspaceRecordingEvent(
   session: RecordingSession,
@@ -203,8 +201,8 @@ export function appendWorkspaceRecordingEvent(
 
 /**
  * Records terminal output as a delta against the previous event (see runtimeTrack.ts).
- * Returns `false` when the snapshot deduplicates against the last recorded state (no
- * push happened) so callers know whether to bump `sessionRevision`.
+ * Returns whether it appended: `false` when the snapshot deduplicates against the last
+ * recorded state.
  */
 export function appendRuntimeRecordingEvent(
   session: RecordingSession,

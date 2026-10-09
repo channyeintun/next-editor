@@ -3,6 +3,7 @@ import { createActor, fromCallback } from "xstate";
 import { editorMachine } from "./editorMachine";
 import { getRecordingTimestamp } from "./recordingSession";
 import type { Recording } from "../types";
+import { selectRecordingChapterCount, selectRecordingSafePoints } from "../useNextEditor";
 
 function pinClocks() {
   const clock = { perf: 1_000, wall: 50_000 };
@@ -44,6 +45,24 @@ describe("chapter markers while recording", () => {
       { time: 3_000, title: "Routing" },
     ]);
     expect(session().safePoints.map((point) => point.recordingTime)).toEqual([0, 2_000, 3_000]);
+    actor.stop();
+  });
+
+  // ADD_CHAPTER_MARKER changes no state. React's useSelector reuses its last result
+  // while the snapshot object is the same, so the marker must publish a new one.
+  it("publishes a new snapshot for each chapter, so the take's selectors see it", () => {
+    const advance = pinClocks();
+    const actor = startTake();
+    const before = actor.getSnapshot();
+    const safePointsBefore = selectRecordingSafePoints(before);
+
+    advance(1_000);
+    actor.send({ type: "ADD_CHAPTER_MARKER" });
+
+    const after = actor.getSnapshot();
+    expect(after).not.toBe(before);
+    expect(selectRecordingChapterCount(after)).toBe(1);
+    expect(selectRecordingSafePoints(after)).not.toBe(safePointsBefore);
     actor.stop();
   });
 

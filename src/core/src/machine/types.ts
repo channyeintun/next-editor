@@ -105,8 +105,10 @@ export interface CapturedViewStateRef {
  * must keep its own read cursor per track: the array it read and the length it saw
  * (see RecordingDraftTrackWriter). A new array means the track was cut back and must
  * be read again from the start. Snapshots share these arrays and cannot be diffed.
- * `EditorMachineContext.sessionRevision` is bumped on every mutation so reference-
- * equality selectors can still detect a change.
+ * Most appenders run as plain actions, so a capture that changes no machine state
+ * leaves the snapshot object as it was; observers are still notified after every event.
+ * The fields a selector follows (`clock`, `safePoints`, `chapters`) are replaced, never
+ * mutated, by actions that publish a new snapshot (a state change or an assign).
  */
 export interface RecordingSession extends RecordingTracks {
   /**
@@ -341,13 +343,6 @@ export interface EditorMachineContext extends EditorMachineHostHooks {
   timeline: TimelineState;
   /** Current recording session (during recording) */
   session: RecordingSession | null;
-  /**
-   * Bumped whenever `session`'s arrays are mutated in place (append-only capture
-   * buffer — see {@link RecordingSession}). `session` keeps a stable object identity
-   * for the whole recording, so this is the only signal a reference-equality selector
-   * can use to detect a capture-buffer change.
-   */
-  sessionRevision: number;
   /** Loaded recording data */
   recording: Recording | null;
   /** Last append-only SCR delta cursor accepted for the loaded recording. */
@@ -832,7 +827,6 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
       volume: 1,
     },
     session: null,
-    sessionRevision: 0,
     recording: null,
     recordingStreamCursor: 0,
     currentFrame: null,

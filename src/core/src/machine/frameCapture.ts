@@ -185,9 +185,8 @@ const didCursorPositionChange = (
 
 /**
  * Pushes in place, so `cursorEvents` keeps its identity until a retake replaces it (see
- * the mutable capture buffer invariant on {@link RecordingSession}). Returns `false` when
- * the position deduplicates against the last event (no push happened) so callers know
- * whether to bump `sessionRevision`.
+ * the mutable capture buffer invariant on {@link RecordingSession}). Returns whether it
+ * appended: `false` when the position deduplicates against the last event.
  */
 export const appendCursorEvent = (
   cursorEvents: CursorRecordingEvent[],
@@ -313,27 +312,20 @@ export const captureInitialFrame = ({ context }: EditorActionArgs): EditorContex
 
   return {
     session,
-    sessionRevision: context.sessionRevision + 1,
     currentFrame: initialFrame,
   };
 };
 
 /**
  * A capture that stores no frame still keeps its pointer sample: the live pointer goes
- * to `lastMousePosition` for the next capture to store, and the revision moves only
- * when the sample was appended to the cursor track.
+ * to `lastMousePosition` for the next capture to store.
  */
 const keepPointerOnly = (
-  context: EditorMachineContext,
   session: RecordingSession,
   mousePosition: MouseCursorPosition,
-  cursorAppended: boolean,
 ): EditorContextUpdate => {
   session.lastMousePosition = mousePosition;
-  return {
-    session,
-    sessionRevision: cursorAppended ? context.sessionRevision + 1 : context.sessionRevision,
-  };
+  return { session };
 };
 
 /**
@@ -401,8 +393,7 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
     session.lastMousePosition = mousePosition;
     return {};
   }
-  const cursorAppended =
-    isPointerMove && appendCursorEvent(session.cursorEvents, timestamp, mousePosition);
+  if (isPointerMove) appendCursorEvent(session.cursorEvents, timestamp, mousePosition);
 
   // The cursor track has no dependency on Monaco — `mousePosition` arrives from
   // mouseTrackingActor fully resolved and lives in its own track. Bailing on a
@@ -411,11 +402,11 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
   // replayed pointer froze while the presenter talked over an image and then
   // teleported when a code file reopened.
   if (!editor) {
-    return keepPointerOnly(context, session, mousePosition, cursorAppended);
+    return keepPointerOnly(session, mousePosition);
   }
 
   if (isPointerMove && isThrottledPointerSample(session, timestamp, mousePosition)) {
-    return keepPointerOnly(context, session, mousePosition, cursorAppended);
+    return keepPointerOnly(session, mousePosition);
   }
 
   const { capturedContent, contentEditDelta } = resolveCapturedContent(
@@ -449,7 +440,6 @@ export const captureFrame = ({ context, event }: EditorActionArgs): EditorContex
 
   return {
     session,
-    sessionRevision: context.sessionRevision + 1,
     currentFrame: frame,
   };
 };
@@ -490,7 +480,6 @@ export const capturePreviewRefreshFrame = ({
 
   return {
     session: context.session,
-    sessionRevision: context.sessionRevision + 1,
     currentFrame: frame,
   };
 };
