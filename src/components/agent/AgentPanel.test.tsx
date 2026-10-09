@@ -12,6 +12,8 @@ import {
 import { getAgentStore } from "../../agent/agentStore";
 import { getAgentCredentialStore } from "../../agent/credentials";
 import { getAgentSessionStore, resolveConfirmation } from "../../agent/agentSession";
+import { MAX_CHAT_IMAGES } from "../../agent/imageAttachments";
+import type { ChatStatus } from "../../types/chat";
 import { WorkspaceStoreContext, type WorkspaceStoreInstance } from "../../stores/workspaceStore";
 import AgentPanel from "./AgentPanel";
 
@@ -90,6 +92,7 @@ afterEach(() => {
   cleanup();
   getAgentCredentialStore().trigger.clear();
   getAgentStore().trigger.reset();
+  getAgentStore().trigger.applyReplaySnapshot({ snapshot: null });
   getAgentSessionStore().trigger.setRunning({ isRunning: false });
   getAgentSessionStore().trigger.clear();
   metadata.isPlaying = false;
@@ -213,6 +216,63 @@ describe("AgentPanel tool permission", () => {
     expect(resolveConfirmation).toHaveBeenCalledWith(7, approved);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(composer()).toHaveFocus();
+  });
+});
+
+describe("AgentPanel status announcements", () => {
+  const setStatus = (status: ChatStatus) =>
+    act(() => getAgentStore().trigger.applyDelta({ delta: { k: "status", status } }));
+  const runStatus = () => screen.getAllByRole("status")[0];
+
+  it("announces run progress in one status region and leaves errors to the error alert", () => {
+    renderPanel();
+    const region = runStatus();
+    expect(region).toBeEmptyDOMElement();
+
+    setStatus("streaming");
+    expect(runStatus()).toBe(region);
+    expect(region).toHaveTextContent("Agent is working");
+    expect(screen.queryByLabelText("Agent is working")).toBeNull();
+
+    setStatus("waiting-confirmation");
+    expect(region).toHaveTextContent("The agent needs your permission to run a command");
+
+    setStatus("done");
+    expect(region).toHaveTextContent("Agent finished");
+
+    setStatus("error");
+    expect(region).toBeEmptyDOMElement();
+  });
+
+  it("stays silent while a lesson replays", () => {
+    metadata.isPlaying = true;
+    act(() =>
+      getAgentStore().trigger.applyReplaySnapshot({ snapshot: { items: [], status: "streaming" } }),
+    );
+    renderPanel();
+
+    expect(screen.getByText("Streaming…")).toBeInTheDocument();
+    expect(runStatus()).toBeEmptyDOMElement();
+  });
+
+  it("announces attachment errors in a status region that is always there", () => {
+    act(() =>
+      getAgentStore().trigger.addDraftImages({
+        images: Array.from({ length: MAX_CHAT_IMAGES }, (_, index) => ({
+          id: `image-${index}`,
+          dataUrl: "data:image/png;base64,AA==",
+          mimeType: "image/png",
+        })),
+      }),
+    );
+    renderPanel();
+    const [, attachmentStatus] = screen.getAllByRole("status");
+    expect(attachmentStatus).toBeEmptyDOMElement();
+    const image = new File(["x"], "shot.png", { type: "image/png" });
+
+    fireEvent.paste(composer(), { clipboardData: { items: [], files: [image] } });
+
+    expect(attachmentStatus).toHaveTextContent(`You can attach up to ${MAX_CHAT_IMAGES} images.`);
   });
 });
 

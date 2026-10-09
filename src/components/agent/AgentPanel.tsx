@@ -55,6 +55,15 @@ const STATUS_LABEL: Record<ChatStatus, string> = {
   error: "Error",
 };
 
+// Spoken through the header's status region. Errors are left out: AgentErrorNotice
+// already announces them as an alert.
+const STATUS_ANNOUNCEMENT: Partial<Record<ChatStatus, string>> = {
+  streaming: "Agent is working",
+  "running-tool": "Agent is working",
+  "waiting-confirmation": "The agent needs your permission to run a command",
+  done: "Agent finished",
+};
+
 function summarizeToolArguments(rawArguments: string): string {
   try {
     const parsed = JSON.parse(rawArguments) as Record<string, unknown>;
@@ -388,9 +397,14 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
           <span className="truncate text-[11px] font-semibold text-slate-400">
             {STATUS_LABEL[status]}
           </span>
+          {/* Always mounted so screen readers hear each change; silent during lesson
+              replay so recorded statuses do not talk over the narration. */}
+          <span role="status" className="sr-only">
+            {isReplayActive ? "" : (STATUS_ANNOUNCEMENT[status] ?? "")}
+          </span>
           {isActiveStatus ? (
             <span
-              aria-label="Agent is working"
+              aria-hidden="true"
               className="inline-block size-2.5 shrink-0 animate-spin rounded-full border-2 border-[#64a3ff] border-t-transparent"
             />
           ) : null}
@@ -470,9 +484,11 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
                 rows={2}
                 className="h-14 min-h-14 w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-500 read-only:cursor-wait disabled:cursor-not-allowed disabled:opacity-60"
               />
-              {attachmentError ? (
-                <p className="px-3 pb-2 text-[11px] text-amber-400">{attachmentError}</p>
-              ) : null}
+              <div role="status">
+                {attachmentError ? (
+                  <p className="px-3 pb-2 text-[11px] text-amber-400">{attachmentError}</p>
+                ) : null}
+              </div>
               {isKeyHintShown ? (
                 <p id={keyHintId} className="px-3 pb-2 text-[11px] text-slate-400">
                   Add an OpenRouter API key in agent settings to send messages.
