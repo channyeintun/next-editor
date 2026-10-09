@@ -190,7 +190,6 @@ export function useWebContainerRuntimeSession({
   const pendingOutputFlushRef = useRef<PendingOutputFlush | null>(null);
   const [activeTerminalSessionId, activeTerminalSessionIdRef, setActiveTerminalSession] =
     useMirroredState<string | null>(null);
-  const [activeCommand, activeCommandRef, setActiveCommand] = useMirroredState<string | null>(null);
 
   // The callbacks are read only from async process and container events, so a
   // layout effect keeps them current.
@@ -399,7 +398,6 @@ export function useWebContainerRuntimeSession({
     setLastOutput(null);
     setTerminalSessions([]);
     setActiveTerminalSession(null);
-    setActiveCommand(null);
   };
 
   const removeInstanceListeners = () => {
@@ -485,25 +483,14 @@ export function useWebContainerRuntimeSession({
     return instance;
   };
 
-  const runForegroundCommand = async (
-    instance: WebContainer,
-    commandLine: string,
-    options: { clearOutput?: boolean; trackAsActiveCommand?: boolean } = {},
-  ) => {
+  const runForegroundCommand = async (instance: WebContainer, commandLine: string) => {
     const parsedCommand = parseCommand(commandLine);
     if (!parsedCommand) {
       return 0;
     }
 
-    if (options.clearOutput) {
-      setLastOutput(null);
-    }
-
+    setLastOutput(null);
     appendOutput(`$ ${commandLine}\n`);
-
-    if (options.trackAsActiveCommand) {
-      setActiveCommand(commandLine);
-    }
 
     const generation = runtimeGenerationRef.current;
     let process: WebContainerProcess | null = null;
@@ -581,10 +568,6 @@ export function useWebContainerRuntimeSession({
         }
 
         flushOutput();
-
-        if (options.trackAsActiveCommand && isRuntimeGenerationActive(generation)) {
-          setActiveCommand(null);
-        }
       },
     );
   };
@@ -887,7 +870,9 @@ export function useWebContainerRuntimeSession({
     previewUrl: previewUrlRef.current,
     previewPort: previewPortRef.current,
     lastOutput: lastOutputRef.current,
-    activeCommand: activeCommandRef.current,
+    // No foreground command is tracked any more; the field stays in the
+    // recorded shape because older recordings carry it.
+    activeCommand: null,
     errorMessage: errorMessageRef.current,
     terminalSessions: toTerminalSessionSnapshots(terminalSessionsRef.current),
     activeTerminalSessionId: activeTerminalSessionIdRef.current,
@@ -907,7 +892,6 @@ export function useWebContainerRuntimeSession({
   }, []);
 
   return {
-    activeCommand,
     activeTerminalSessionId,
     bootInstance,
     closeTerminalSession,

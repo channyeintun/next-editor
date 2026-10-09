@@ -52,7 +52,6 @@ function dock(
     activeTerminalSessionId: terminalSessions[0]?.id ?? null,
     status,
     errorMessage: null,
-    activeCommand: null,
     latestPreviewMessage: null,
     previewPort: null,
     previewUrl: null,

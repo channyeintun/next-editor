@@ -92,6 +92,7 @@ export interface WebContainerRuntimeRecordingSnapshot {
   previewUrl: string | null;
   previewPort: number | null;
   lastOutput: string | null;
+  /** Always null now; kept because older recordings carry a foreground command here. */
   activeCommand: string | null;
   errorMessage: string | null;
   terminalSessions: RuntimeTerminalSessionSnapshot[];
@@ -111,12 +112,12 @@ export type WebContainerRuntimeOutput = Pick<
 >;
 
 /**
- * Everything a recording snapshot holds except the streaming output, plus the
- * runtime's support and settings.
+ * Everything a recording snapshot holds except the streaming output and the
+ * always-null activeCommand, plus the runtime's support and settings.
  */
 export interface WebContainerRuntimeMetadata extends Omit<
   WebContainerRuntimeRecordingSnapshot,
-  keyof WebContainerRuntimeOutput
+  keyof WebContainerRuntimeOutput | "activeCommand"
 > {
   isSupported: boolean;
   environmentVariables: EnvironmentVariables;

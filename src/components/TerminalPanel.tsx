@@ -100,7 +100,6 @@ interface RuntimeEventState {
   status: string;
   previewUrl: string | null;
   previewPort: number | null;
-  activeCommand: string | null;
   errorMessage: string | null;
   consoleLines: string[];
   terminalSessions: RuntimeRecordingSnapshot["terminalSessions"];
@@ -173,7 +172,6 @@ function TerminalPanel() {
     activeTerminalSessionId,
     status,
     errorMessage,
-    activeCommand,
     latestLifecycleEvent,
     latestPreviewMessage,
     previewPort,
@@ -211,7 +209,6 @@ function TerminalPanel() {
   const effectiveTerminalOutput =
     effectiveTerminalSessions.find((session) => session.id === effectiveActiveTerminalSessionId)
       ?.output ?? null;
-  const previousCommandRef = useRef<string | null>(null);
   const previousPreviewMessageIdRef = useRef<number | null>(null);
   const previousRuntimeEventStateRef = useRef<RuntimeEventState | null>(null);
 
@@ -286,21 +283,6 @@ function TerminalPanel() {
   };
 
   useEffect(() => {
-    if (isPlaybackSnapshotActive) {
-      return;
-    }
-
-    if (activeCommand && previousCommandRef.current !== activeCommand) {
-      previousCommandRef.current = activeCommand;
-      setActiveTab("terminal");
-    }
-
-    if (!activeCommand) {
-      previousCommandRef.current = null;
-    }
-  }, [activeCommand, isPlaybackSnapshotActive]);
-
-  useEffect(() => {
     if (isPlaybackSnapshotActive || !latestPreviewMessage) {
       return;
     }
@@ -329,7 +311,6 @@ function TerminalPanel() {
     status,
     previewUrl: previewUrl ?? null,
     previewPort: previewPort ?? null,
-    activeCommand,
     errorMessage,
     consoleLines,
     terminalSessions,

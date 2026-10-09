@@ -192,7 +192,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   };
 
   const {
-    activeCommand,
     activeTerminalSessionId,
     bootInstance,
     closeTerminalSession,
@@ -383,9 +382,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     }
 
     setStatus("installing");
-    const initExitCode = await runForegroundCommand(instance, initCommand, {
-      clearOutput: true,
-    });
+    const initExitCode = await runForegroundCommand(instance, initCommand);
 
     if (!isRuntimeGenerationActive(generation)) {
       return null;
@@ -751,7 +748,6 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     latestPreviewMessage,
     latestLifecycleEvent,
     activeTerminalSessionId,
-    activeCommand,
     environmentVariables,
     runnerConfig,
     ambientStartEnabled: allowAmbientStart,

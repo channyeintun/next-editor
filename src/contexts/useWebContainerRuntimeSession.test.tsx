@@ -199,6 +199,33 @@ describe("useWebContainerRuntimeSession", () => {
     expect(frames.pending).toBe(0);
   });
 
+  // The recorded shape keeps activeCommand for older recordings; nothing sets it.
+  it("records no active command while or after a foreground command runs", async () => {
+    const { instance } = createFakeInstance();
+    const runner = createControlledRunner();
+    vi.mocked(instance.spawn).mockResolvedValue(runner.process);
+    const tracked = renderTrackedRuntimeSession();
+
+    let exitCode: Promise<number> | undefined;
+    await act(async () => {
+      exitCode = tracked.hook?.runForegroundCommand(instance, "npm install");
+      await Promise.resolve();
+    });
+
+    expect(tracked.hook?.getRecordingSnapshot()).toMatchObject({
+      activeCommand: null,
+      lastOutput: "$ npm install\n",
+    });
+
+    await act(async () => {
+      runner.exit(0);
+      await exitCode;
+    });
+
+    expect(await exitCode).toBe(0);
+    expect(tracked.hook?.getRecordingSnapshot().activeCommand).toBeNull();
+  });
+
   it("invokes onServerReady when the dev server reports ready with an active runner", async () => {
     const { instance, listeners } = createFakeInstance();
     const { getOrBootSharedWebContainer } = await import("../runtime/webcontainer/sharedContainer");
