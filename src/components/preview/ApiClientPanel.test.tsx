@@ -63,3 +63,25 @@ describe("ApiClientPanel response", () => {
     expect(screen.getByText("Truncated")).toBeInTheDocument();
   });
 });
+
+describe("ApiClientPanel request controls", () => {
+  it("names the method select and every per-header control", () => {
+    const store = renderPanel();
+
+    act(() => {
+      store.trigger.addHeader();
+    });
+
+    expect(screen.getByRole("combobox", { name: "HTTP method" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Send header 1" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Header 1 name" })).toHaveAttribute(
+      "placeholder",
+      "Header",
+    );
+    expect(screen.getByRole("textbox", { name: "Header 1 value" })).toHaveAttribute(
+      "placeholder",
+      "Value",
+    );
+    expect(screen.getByRole("button", { name: "Remove header 1" })).toBeInTheDocument();
+  });
+});

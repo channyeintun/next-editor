@@ -149,6 +149,7 @@ export default function ApiClientPanel({
       {/* Request line */}
       <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
         <select
+          aria-label="HTTP method"
           value={method}
           onChange={(e) => store.trigger.setMethod({ method: e.target.value as HttpMethod })}
           className={`h-8 rounded-md border border-slate-700 bg-[#242938] px-2 font-mono text-xs font-bold ${METHOD_COLORS[method]} focus:outline-none focus:ring-1 focus:ring-sky-500`}
@@ -328,6 +329,7 @@ function HeadersEditor({
             type="checkbox"
             checked={h.enabled}
             onChange={(e) => onUpdate(i, { enabled: e.target.checked })}
+            aria-label={`Send header ${i + 1}`}
             className="accent-sky-500"
           />
           <input
@@ -335,6 +337,7 @@ function HeadersEditor({
             value={h.key}
             onChange={(e) => onUpdate(i, { key: e.target.value })}
             placeholder="Header"
+            aria-label={`Header ${i + 1} name`}
             className="h-7 w-1/3 rounded border border-slate-700 bg-[#242938] px-2 font-mono text-[11px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
           <input
@@ -342,11 +345,14 @@ function HeadersEditor({
             value={h.value}
             onChange={(e) => onUpdate(i, { value: e.target.value })}
             placeholder="Value"
+            aria-label={`Header ${i + 1} value`}
             className="h-7 min-w-0 flex-1 rounded border border-slate-700 bg-[#242938] px-2 font-mono text-[11px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
           <button
             type="button"
             onClick={() => onRemove(i)}
+            aria-label={`Remove header ${i + 1}`}
+            title="Remove header"
             className="text-slate-600 transition-colors hover:text-red-400"
           >
             <Minus size={14} />
