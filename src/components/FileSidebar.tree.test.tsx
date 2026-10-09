@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { WorkspaceActions, WorkspaceSidebarState } from "../contexts/WorkspaceContext";
 import type { NextEditorActions } from "../contexts/NextEditorContext";
@@ -92,6 +92,16 @@ beforeEach(() => {
   );
   actions.setActiveFilePath.mockImplementation((path) =>
     workspace.update({ activeFilePath: path }),
+  );
+  actions.createFile.mockImplementation((path) =>
+    workspace.update({ files: [...workspace.store.state.files, treeFile(path)] }),
+  );
+  actions.renameFile.mockImplementation((currentPath, nextPath) =>
+    workspace.update({
+      files: workspace.store.state.files.map((file) =>
+        file.path === currentPath ? treeFile(nextPath) : file,
+      ),
+    }),
   );
 });
 
@@ -192,5 +202,60 @@ describe("FileSidebar rows from the keyboard", () => {
 
     expect(confirm).not.toHaveBeenCalled();
     expect(actions.deleteFile).not.toHaveBeenCalled();
+  });
+});
+
+describe("FileSidebar name field", () => {
+  it("hands focus back to the row when Escape cancels a rename", () => {
+    render(<FileSidebar />);
+    fireEvent.keyDown(row("app.ts"), { key: "F2" });
+
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(row("app.ts")).toHaveFocus();
+  });
+
+  it("moves focus to the renamed row when Enter commits", () => {
+    render(<FileSidebar />);
+    fireEvent.keyDown(row("app.ts"), { key: "F2" });
+    const field = screen.getByRole("textbox");
+
+    fireEvent.change(field, { target: { value: "main.ts" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(actions.renameFile).toHaveBeenCalledWith("src/app.ts", "src/main.ts");
+    expect(row("main.ts")).toHaveFocus();
+  });
+
+  it("moves focus to a new file's row, or back to Create file when cancelled", () => {
+    render(<FileSidebar />);
+    const createFile = row("Create file");
+    createFile.focus();
+    fireEvent.click(createFile);
+
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+    expect(createFile).toHaveFocus();
+
+    fireEvent.click(createFile);
+    const field = screen.getByRole("textbox");
+    fireEvent.change(field, { target: { value: "notes.md" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(actions.createFile).toHaveBeenCalledWith("notes.md", expect.any(String));
+    expect(row("notes.md")).toHaveFocus();
+  });
+
+  it("leaves focus alone when a blur closes the field", () => {
+    render(<FileSidebar />);
+    const createFile = row("Create file");
+    createFile.focus();
+    fireEvent.click(createFile);
+
+    const field = screen.getByRole("textbox");
+    act(() => field.blur());
+
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(document.body).toHaveFocus();
   });
 });

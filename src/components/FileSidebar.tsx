@@ -46,6 +46,11 @@ function FileSidebarPanel() {
   // The row the context menu was opened from, to take focus back when the menu
   // closes without moving it anywhere else.
   const contextMenuOpenerRef = useRef<HTMLElement | null>(null);
+  // Enter and Escape unmount the focused name field. They set where focus goes
+  // next: the row for the committed (or kept) path, else whatever opened the
+  // field. A blur that closes the field leaves focus where the user put it.
+  const inlineEditOpenerRef = useRef<HTMLElement | null>(null);
+  const inlineEditFocusReturnRef = useRef<{ path: string | null } | null>(null);
   const sidebarScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const sidebarScrollAnimationFrameRef = useRef<number | null>(null);
   const pendingSidebarScrollTopRef = useRef(0);
@@ -127,6 +132,33 @@ function FileSidebarPanel() {
     }
   }, [contextMenu]);
 
+  useEffect(() => {
+    if (editState) {
+      return;
+    }
+
+    const focusReturn = inlineEditFocusReturnRef.current;
+    const opener = inlineEditOpenerRef.current;
+    inlineEditFocusReturnRef.current = null;
+    inlineEditOpenerRef.current = null;
+    const active = document.activeElement;
+    // Never take focus from something that has it, such as Monaco mounting.
+    if (!focusReturn || (active && active !== document.body)) {
+      return;
+    }
+
+    // Looked up afresh: a rename or create re-creates the row.
+    const rows =
+      sidebarScrollContainerRef.current?.querySelectorAll<HTMLElement>("[data-sidebar-path]");
+    const row = focusReturn.path
+      ? Array.from(rows ?? []).find(
+          (candidate) => candidate.dataset.sidebarPath === focusReturn.path,
+        )
+      : undefined;
+    const target = row ?? (opener?.isConnected ? opener : null);
+    target?.focus({ preventScroll: true });
+  }, [editState]);
+
   useLayoutEffect(() => {
     const container = sidebarScrollContainerRef.current;
     if (!container) {
@@ -166,7 +198,16 @@ function FileSidebarPanel() {
     setDraftName("");
   };
 
+  // Prefers the row a menu was opened from over the menu item about to unmount.
+  const rememberInlineEditOpener = () => {
+    const active = document.activeElement;
+    inlineEditOpenerRef.current =
+      contextMenuOpenerRef.current ??
+      (active instanceof HTMLElement && active !== document.body ? active : null);
+  };
+
   const openCreateInput = (kind: SidebarEntryKind, parentPath: string) => {
+    rememberInlineEditOpener();
     setContextMenu(null);
     commitCollapsedFolders(removeFolderFromCollapsedState(collapsedFolders, parentPath));
     setEditState({
@@ -191,6 +232,7 @@ function FileSidebarPanel() {
   };
 
   const startRenameEntry = (kind: SidebarEntryKind, path: string) => {
+    rememberInlineEditOpener();
     setContextMenu(null);
     setEditState({
       mode: "rename",
@@ -201,21 +243,26 @@ function FileSidebarPanel() {
     setDraftName(getWorkspaceBaseName(path));
   };
 
-  const commitInlineEdit = () => {
+  /**
+   * Creates or renames the entry the name field is for and closes the field.
+   * Returns the path whose row should take focus afterwards: the new path, or
+   * the unchanged one when an empty name cancels a rename; null otherwise.
+   */
+  const commitInlineEdit = (): string | null => {
     if (!editState) {
-      return;
+      return null;
     }
 
     const normalizedName = draftName.trim();
     if (!normalizedName) {
       clearInlineEdit();
-      return;
+      return editState.mode === "rename" ? editState.path : null;
     }
 
     const nextPath = joinWorkspacePath(editState.parentPath, normalizedName);
 
     if (!nextPath) {
-      return;
+      return null;
     }
 
     if (editState.mode === "create") {
@@ -226,7 +273,7 @@ function FileSidebarPanel() {
       }
 
       clearInlineEdit();
-      return;
+      return nextPath;
     }
 
     if (nextPath !== editState.path) {
@@ -238,6 +285,7 @@ function FileSidebarPanel() {
     }
 
     clearInlineEdit();
+    return nextPath;
   };
 
   const handleDeleteEntry = (kind: SidebarEntryKind, path: string) => {
@@ -268,12 +316,15 @@ function FileSidebarPanel() {
   const handleDraftKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      commitInlineEdit();
+      inlineEditFocusReturnRef.current = { path: commitInlineEdit() };
       return;
     }
 
     if (event.key === "Escape") {
       event.preventDefault();
+      inlineEditFocusReturnRef.current = {
+        path: editState?.mode === "rename" ? editState.path : null,
+      };
       clearInlineEdit();
     }
   };
@@ -394,7 +445,11 @@ function FileSidebarPanel() {
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
             onKeyDown={handleDraftKeyDown}
-            onBlur={commitInlineEdit}
+            onBlur={() => {
+              // Also drops a focus return left by an Enter the field refused.
+              inlineEditFocusReturnRef.current = null;
+              commitInlineEdit();
+            }}
             placeholder={kind === "folder" ? "Folder name" : "File name"}
             className="min-w-0 flex-1 bg-transparent text-[13px] leading-5 text-slate-100 outline-none placeholder:text-slate-500"
           />
@@ -420,6 +475,7 @@ function FileSidebarPanel() {
                 onClick={() => toggleFolder(node.path)}
                 onContextMenu={(event) => handleRowContextMenu(event, "folder", node.path)}
                 onKeyDown={(event) => handleRowKeyDown(event, "folder", node.path)}
+                data-sidebar-path={node.path}
                 aria-keyshortcuts="Shift+F10 F2 Delete"
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5 transition-colors hover:bg-slate-900 ${
                   node.hasActiveFile ? "text-slate-200" : "text-slate-400"
@@ -459,6 +515,7 @@ function FileSidebarPanel() {
           onClick={() => openFile(node.path)}
           onContextMenu={(event) => handleRowContextMenu(event, "file", node.path)}
           onKeyDown={(event) => handleRowKeyDown(event, "file", node.path)}
+          data-sidebar-path={node.path}
           aria-keyshortcuts="Shift+F10 F2 Delete"
           className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5 transition-colors ${
             isActive
