@@ -46,16 +46,20 @@ afterEach(() => {
 describe("CaptionsMenuButton", () => {
   it("turns a lesson's only track on and off", () => {
     renderPlayer([english]);
-    const button = screen.getByRole("button", { name: "Show captions" });
-    expect(button).toHaveAttribute("aria-pressed", "false");
+    // One name in both states: aria-pressed says whether captions are on.
+    const button = screen.getByRole("button", { name: "Captions", pressed: false });
     expect(button).not.toHaveAttribute("aria-haspopup");
     expect(button).toHaveClass("text-slate-500", "w-6");
+    // Off shows a struck-through icon, not only a dimmer one.
+    expect(button.querySelector(".lucide-captions-off")).not.toBeNull();
 
     fireEvent.click(button);
     expect(seen.enabled).toBe(true);
-    expect(button).toHaveAttribute("title", "Hide captions");
+    expect(button).toHaveAccessibleName("Captions");
     expect(button).toHaveAttribute("aria-pressed", "true");
     expect(button).toHaveClass("text-white");
+    expect(button.querySelector(".lucide-captions-off")).toBeNull();
+    expect(button.querySelector(".lucide-captions")).not.toBeNull();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 

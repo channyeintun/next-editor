@@ -39,6 +39,15 @@ describe("RecordingOptionToggle", () => {
     expect(button.querySelector(".lucide-video-off")).not.toBeNull();
   });
 
+  it("keeps its label as its name when narrow screens hide the label", () => {
+    const { button } = renderToggle(false);
+
+    // The label's span is `hidden sm:inline`; jsdom applies no stylesheet, so hide it here.
+    screen.getByText("Camera").style.display = "none";
+    expect(button).toHaveAccessibleName("Camera");
+    expect(button).toHaveAccessibleDescription("Do not record camera");
+  });
+
   it("asks to switch the option when pressed", () => {
     const { button, onToggle } = renderToggle(false);
 

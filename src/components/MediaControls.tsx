@@ -624,7 +624,8 @@ const MediaControls: React.FC<MediaControlsProps> = ({
                 type="button"
                 onClick={handleToggleCameraOverlay}
                 aria-pressed={isCameraOverlayVisible}
-                title={isCameraOverlayVisible ? "Hide camera" : "Show camera"}
+                // One name in both states; aria-pressed and the icon say which.
+                title="Camera"
                 className={`flex items-center justify-center text-slate-300 transition-colors hover:text-white pointer-events-auto ${transportButtonWidth}`}
               >
                 {isCameraOverlayVisible ? (

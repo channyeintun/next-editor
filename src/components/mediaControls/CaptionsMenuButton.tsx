@@ -1,17 +1,14 @@
 import type { Dispatch, SetStateAction } from "react";
-import { Captions, Check } from "lucide-react";
+import { Captions, CaptionsOff, Check } from "lucide-react";
 import type { CaptionTrack } from "../../core/src/types";
 import { useCaptionStore, useCaptionStoreTrigger } from "../../hooks/useCaptionStore";
 import { captionTrackLabel, selectCaptionTrack } from "../../captions/captionTracks";
 
-function captionsButtonTitle(hasMultipleTracks: boolean, captionsEnabled: boolean): string {
-  if (hasMultipleTracks) return "Captions";
-  return captionsEnabled ? "Hide captions" : "Show captions";
-}
-
 /**
  * Turns the lesson's captions on and off or, when it has several tracks, opens a menu to
  * pick one. Whether the menu is open is the player bar's state (see MediaControls).
+ * Named "Captions" either way: as an on/off toggle its state is aria-pressed, which a
+ * changing "Show/Hide captions" name would contradict.
  */
 const CaptionsMenuButton = ({
   tracks,
@@ -46,12 +43,17 @@ const CaptionsMenuButton = ({
         {...(hasMultipleTracks
           ? { "aria-haspopup": "menu" as const, "aria-expanded": menuOpen }
           : { "aria-pressed": captionsEnabled })}
-        title={captionsButtonTitle(hasMultipleTracks, captionsEnabled)}
+        title="Captions"
         className={`flex items-center justify-center transition-colors hover:text-white ${
           captionsEnabled ? "text-white" : "text-slate-500"
         } ${className}`}
       >
-        <Captions size={iconSize} aria-hidden="true" />
+        {/* Off reads as a struck-through icon too, not only as a dimmer one. */}
+        {captionsEnabled || hasMultipleTracks ? (
+          <Captions size={iconSize} aria-hidden="true" />
+        ) : (
+          <CaptionsOff size={iconSize} aria-hidden="true" />
+        )}
       </button>
 
       {menuOpen && hasMultipleTracks && (

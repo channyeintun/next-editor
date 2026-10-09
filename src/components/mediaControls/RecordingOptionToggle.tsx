@@ -28,6 +28,8 @@ const RecordingOptionToggle = ({
       type="button"
       onClick={onToggle}
       aria-pressed={on}
+      // The name stays the label when narrow screens hide it; the title describes the state.
+      aria-label={label}
       title={on ? title.on : title.off}
       className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold shadow-sm transition-colors ${
         on
