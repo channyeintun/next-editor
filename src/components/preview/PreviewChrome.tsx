@@ -2,6 +2,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type RefObject,
   type PointerEvent as ReactPointerEvent,
@@ -124,14 +125,51 @@ function PreviewWindowMenu({
 }: PreviewWindowMenuProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useDismissOnOutsideInteraction({
     isOpen: isMenuOpen,
     containerRef: menuRef,
-    onDismiss: () => setIsMenuOpen(false),
-    dismissOnEscape: false,
+    onDismiss: () => {
+      // Escape from inside the menu unmounts the focused item: hand focus back to the
+      // button that opened it rather than dropping it on <body>.
+      if (menuRef.current?.contains(document.activeElement)) {
+        triggerRef.current?.focus();
+      }
+      setIsMenuOpen(false);
+    },
+    dismissOnEscape: true,
     listenOn: "window",
   });
+
+  // The menu's own keys: the arrows move between the items (wrapping), Home and End
+  // go to the first and last. preventDefault keeps the player's arrow seeks off them.
+  const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+    );
+    const last = items.length - 1;
+    const current = items.findIndex((item) => item === document.activeElement);
+    let target: number;
+    switch (event.key) {
+      case "ArrowDown":
+        target = current >= last ? 0 : current + 1;
+        break;
+      case "ArrowUp":
+        target = current <= 0 ? last : current - 1;
+        break;
+      case "Home":
+        target = 0;
+        break;
+      case "End":
+        target = last;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    items[target]?.focus();
+  };
 
   const handleDockMode = () => {
     setIsMenuOpen(false);
@@ -152,6 +190,7 @@ function PreviewWindowMenu({
   return (
     <div ref={menuRef} className="relative shrink-0">
       <button
+        ref={triggerRef}
         type="button"
         onClick={(event) => {
           event.stopPropagation();
@@ -171,6 +210,7 @@ function PreviewWindowMenu({
           role="menu"
           className="absolute right-0 top-full z-80 mt-2 w-44 rounded-lg border border-slate-700 bg-[#30343d] p-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
           onClick={(event) => event.stopPropagation()}
+          onKeyDown={handleMenuKeyDown}
         >
           <button
             type="button"

@@ -89,6 +89,44 @@ describe("Preview", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 
+  it("closes the window menu on Escape and hands focus back to its button", () => {
+    previewState.isOpen = true;
+    render(<Preview />);
+    const trigger = screen.getByRole("button", { name: "Preview options" });
+
+    fireEvent.click(trigger);
+    screen.getByRole("menuitem", { name: "Larger" }).focus();
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Larger" }), { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("moves between the window menu's items with the arrows, Home and End", () => {
+    previewState.isOpen = true;
+    render(<Preview />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview options" }));
+    const items = screen.getAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["Float", "Larger", "Smaller", "Close"]);
+    items[0]?.focus();
+
+    // fireEvent returns false once a handler has called preventDefault.
+    expect(fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" })).toBe(false);
+    expect(items[1]).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    expect(items[3]).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(items[3]).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    expect(items[0]).toHaveFocus();
+    // Moving between items leaves the menu open.
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
   it("makes the runtime frame inert while the opaque API client covers it", async () => {
     previewState.isOpen = true;
     previewState.showModeToggle = true;
