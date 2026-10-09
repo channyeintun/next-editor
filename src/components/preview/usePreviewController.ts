@@ -11,7 +11,7 @@ import {
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
 import { usePreviewAdapterHandle } from "../../contexts/PreviewAdapterHandleContext";
 import { useRuntimePanelStore } from "../../contexts/RuntimePanelStoreContext";
-import { clampPreviewDockWidth, usePreviewPanel } from "../../contexts/PreviewPanelContext";
+import { usePreviewPanel } from "../../contexts/PreviewPanelContext";
 import {
   useWorkspaceActions,
   useWorkspaceLessonType,
@@ -62,11 +62,7 @@ import { usePreviewInteractionCapture } from "./usePreviewInteractionCapture";
 import { usePreviewMessageBridge } from "./usePreviewMessageBridge";
 import { requestStudioPreviewCommand } from "../../utils/iframeStudioCommandBridge";
 import { usePreviewPlaybackRegistration } from "./usePreviewPlaybackRegistration";
-import {
-  clampCustomPreviewSize,
-  getCustomPreviewSizeFromResize,
-  isCustomPreviewSize,
-} from "./previewSizeUtils";
+import { usePreviewResize } from "./usePreviewResize";
 import {
   applyRouteToRuntimePreviewLocation,
   createRuntimePreviewLocationFromUrl,
@@ -133,48 +129,6 @@ interface PendingRuntimeSnapshotRequest {
 }
 
 const RUNTIME_SNAPSHOT_REQUEST_TIMEOUT_MS = 1_200;
-
-/** How far one Larger/Smaller menu step resizes the preview, in CSS pixels. */
-const PREVIEW_RESIZE_STEP_PX = 48;
-
-/**
- * Follows the pointer that pressed a resize handle until it is released or
- * cancelled (a system gesture, palm rejection). The handle captures the pointer,
- * so moves keep arriving over the preview iframe and outside the window, for
- * mouse, touch and pen alike. Returns a function that stops following without
- * ending the drag, for when the controller unmounts mid-drag.
- */
-function followPointerDrag(
-  event: ReactPointerEvent<HTMLElement>,
-  onMove: (moveEvent: PointerEvent) => void,
-  onEnd: () => void,
-): () => void {
-  const { pointerId } = event;
-  event.currentTarget.setPointerCapture(pointerId);
-
-  const handleMove = (moveEvent: PointerEvent) => {
-    if (moveEvent.pointerId === pointerId) {
-      onMove(moveEvent);
-    }
-  };
-  const handleEnd = (endEvent: PointerEvent) => {
-    if (endEvent.pointerId !== pointerId) {
-      return;
-    }
-    stopFollowing();
-    onEnd();
-  };
-  const stopFollowing = () => {
-    window.removeEventListener("pointermove", handleMove);
-    window.removeEventListener("pointerup", handleEnd);
-    window.removeEventListener("pointercancel", handleEnd);
-  };
-
-  window.addEventListener("pointermove", handleMove);
-  window.addEventListener("pointerup", handleEnd);
-  window.addEventListener("pointercancel", handleEnd);
-  return stopFollowing;
-}
 
 /**
  * Navigates the preview iframe's history. Falls back to a postMessage command when the
@@ -322,7 +276,6 @@ export function usePreviewController(): PreviewController {
   const [size, setSize] = useState<PreviewSize>("medium");
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
   const [previewRoute, setPreviewRoute] = useState("/");
   const [activeMode, setActiveMode] = useState<PreviewActiveMode>("browser");
 
@@ -1155,33 +1108,16 @@ export function usePreviewController(): PreviewController {
     title: previewAddressLocation?.href ?? effectiveRuntimePreviewUrl ?? "Preview",
   };
 
-  useEffect(() => {
-    const clampCurrentCustomSize = () => {
-      setSize((currentSize) => {
-        if (!isCustomPreviewSize(currentSize)) {
-          return currentSize;
-        }
-
-        const nextSize = clampCustomPreviewSize(currentSize, {
-          width: window.innerWidth,
-          height: window.innerHeight,
-        });
-
-        if (nextSize.width === currentSize.width && nextSize.height === currentSize.height) {
-          return currentSize;
-        }
-
-        return nextSize;
-      });
-    };
-
-    clampCurrentCustomSize();
-    window.addEventListener("resize", clampCurrentCustomSize);
-
-    return () => {
-      window.removeEventListener("resize", clampCurrentCustomSize);
-    };
-  }, []);
+  const resize = usePreviewResize({
+    containerRef,
+    panelMode,
+    dockWidth,
+    setDockWidth,
+    setSize,
+    isRecordingRef,
+    handleWorkspaceEvent,
+    emitPreviewEvent,
+  });
 
   // Recording start: capture the preview's starting point in both replay formats.
   useEffect(() => {
@@ -1210,139 +1146,6 @@ export function usePreviewController(): PreviewController {
     // carrying the runtime page's snapshot.
     handleRefresh();
   }, [isRecording]);
-
-  // Stops the window listeners of a resize drag still in progress; the unmount
-  // cleanup below calls it so a drag cannot outlive the preview.
-  const stopFollowingDragRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => () => stopFollowingDragRef.current?.(), []);
-
-  const handleResizeStart = (event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    setIsResizing(true);
-
-    const startPointer = { x: event.clientX, y: event.clientY };
-    const startSize = { width: rect.width, height: rect.height };
-
-    setSize(
-      clampCustomPreviewSize(startSize, { width: window.innerWidth, height: window.innerHeight }),
-    );
-
-    let resizeRaf: number | null = null;
-    const onMove = (moveEvent: PointerEvent) => {
-      const newSize = getCustomPreviewSizeFromResize({
-        startSize,
-        startPointer,
-        currentPointer: { x: moveEvent.clientX, y: moveEvent.clientY },
-        viewport: { width: window.innerWidth, height: window.innerHeight },
-      });
-      setSize(newSize);
-
-      if (resizeRaf) {
-        cancelAnimationFrame(resizeRaf);
-      }
-      resizeRaf = requestAnimationFrame(() => {
-        emitPreviewEvent("preview_resize", { newSize });
-      });
-    };
-
-    const onEnd = () => {
-      stopFollowingDragRef.current = null;
-      setIsResizing(false);
-      if (resizeRaf) {
-        cancelAnimationFrame(resizeRaf);
-      }
-      emitPreviewEvent("preview_resize");
-    };
-
-    stopFollowingDragRef.current?.();
-    stopFollowingDragRef.current = followPointerDrag(event, onMove, onEnd);
-  };
-
-  const handleDockResizeStart = (event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    setIsResizing(true);
-
-    const startX = event.clientX;
-    const startWidth = rect.width;
-    let lastWidth = startWidth;
-
-    const onMove = (moveEvent: PointerEvent) => {
-      lastWidth = clampPreviewDockWidth(startWidth + startX - moveEvent.clientX, window.innerWidth);
-      setDockWidth(lastWidth);
-    };
-
-    const onEnd = () => {
-      stopFollowingDragRef.current = null;
-      setIsResizing(false);
-
-      // Record the net resize as an offset (not an absolute width) so playback
-      // applies the same delta to whatever dock width the viewer has.
-      const previewDockWidthDelta = Math.round(lastWidth - startWidth);
-      if (isRecordingRef.current && previewDockWidthDelta !== 0) {
-        handleWorkspaceEvent({ previewDockWidthDelta });
-      }
-    };
-
-    stopFollowingDragRef.current?.();
-    stopFollowingDragRef.current = followPointerDrag(event, onMove, onEnd);
-  };
-
-  // The non-drag way to resize (WCAG 2.1.1 and 2.5.7): the window menu's
-  // Larger/Smaller items step the panel by a fixed amount. Each step is
-  // recorded the same way a finished drag is, so playback is unchanged.
-  const handleResizeStep = (direction: 1 | -1) => {
-    const step = PREVIEW_RESIZE_STEP_PX * direction;
-
-    if (panelMode === "docked") {
-      const nextWidth = clampPreviewDockWidth(dockWidth + step, window.innerWidth);
-      const previewDockWidthDelta = Math.round(nextWidth - dockWidth);
-      if (previewDockWidthDelta === 0) {
-        return;
-      }
-
-      setDockWidth(nextWidth);
-      if (isRecordingRef.current) {
-        handleWorkspaceEvent({ previewDockWidthDelta });
-      }
-      return;
-    }
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) {
-      return;
-    }
-
-    const newSize = clampCustomPreviewSize(
-      { width: rect.width + step, height: rect.height + step },
-      { width: window.innerWidth, height: window.innerHeight },
-    );
-    setSize(newSize);
-    // One event carrying the new size. The drag path's trailing size-less
-    // event reads sizeRef, which still holds the old size until this render
-    // commits, so emitting one here would record the panel shrinking back.
-    emitPreviewEvent("preview_resize", { newSize });
-  };
 
   const handleTransitionStart = () => {
     setIsTransitioning(true);
@@ -1396,7 +1199,7 @@ export function usePreviewController(): PreviewController {
     dockWidth,
     isRefreshing,
     isTransitioning,
-    disablePointerEvents: isTransitioning || isResizing,
+    disablePointerEvents: isTransitioning || resize.isResizing,
     previewAddressLabel: previewAddress.label,
     previewAddressTitle: previewAddress.title,
     activeMode,
@@ -1409,9 +1212,9 @@ export function usePreviewController(): PreviewController {
     handleForward,
     handleReload,
     handleOpenConsole,
-    handleResizeStart,
-    handleDockResizeStart,
-    handleResizeStep,
+    handleResizeStart: resize.handleResizeStart,
+    handleDockResizeStart: resize.handleDockResizeStart,
+    handleResizeStep: resize.handleResizeStep,
     handleTransitionStart,
     handleTransitionComplete,
     setActiveMode: (mode: PreviewActiveMode) => {
