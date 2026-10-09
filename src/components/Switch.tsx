@@ -19,7 +19,7 @@ const Switch: React.FC<SwitchProps> = ({ checked, onChange, label, disabled = fa
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-          checked ? "bg-[#10c776]" : "bg-slate-600"
+          checked ? "bg-[#10c776]" : "bg-slate-500"
         } ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
       >
         <span
