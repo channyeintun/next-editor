@@ -80,7 +80,7 @@ function ToolCallChip({ item }: { item: Extract<ChatItem, { kind: "tool_call" }>
   return (
     <div className="ml-4 inline-flex max-w-full items-center gap-1.5 rounded-md bg-[#1e2129] px-2.5 py-1 font-mono text-[11px] text-slate-400">
       <span className="sr-only">Tool call: </span>
-      <span className="text-[#64a3ff]">{item.name}</span>
+      <span className="text-[#82b4ff]">{item.name}</span>
       {summary ? <span className="truncate text-slate-300">{summary}</span> : null}
     </div>
   );
@@ -101,7 +101,7 @@ function ToolResultRow({ item }: { item: Extract<ChatItem, { kind: "tool_result"
       className={`ml-4 rounded-md border px-3 py-2 font-mono text-xs ${
         item.isError
           ? "border-red-900 bg-red-950/40 text-red-300"
-          : "border-slate-800 bg-[#171b22] text-slate-400"
+          : "border-slate-800 bg-[#171b22] text-slate-300"
       }`}
     >
       <span className="sr-only">{item.isError ? "Tool error: " : "Tool output: "}</span>
@@ -398,7 +398,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
       >
         <div className="flex min-h-11 items-center gap-2 border-b border-[#11151d] bg-[#191d25] px-4 py-2.5">
           <Bot size={14} className="text-[#64a3ff]" />
-          <span className="truncate text-[11px] font-semibold text-slate-400">
+          <span className="truncate text-[11px] font-semibold text-slate-300">
             {STATUS_LABEL[status]}
           </span>
           {/* Always mounted so screen readers hear each change; silent during lesson

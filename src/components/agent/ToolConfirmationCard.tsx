@@ -21,7 +21,7 @@ export default function ToolConfirmationCard({
           <ShieldCheck size={15} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#64a3ff]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#82b4ff]">
             Permission required
           </p>
           <p className="mt-0.5 text-xs font-medium text-slate-200">
