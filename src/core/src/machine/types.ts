@@ -22,7 +22,7 @@ import type {
 } from "../types";
 import type { FrameStreamEncoderState } from "../utils/frameStreamEncoder";
 import type { RuntimeRecordingSnapshot } from "../runtime";
-import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { WorkspaceRecordingSnapshot } from "../workspace";
 import type { WhiteboardEvent, WhiteboardSceneState } from "../whiteboard";
 import type { RuntimeCheckpointProgress } from "../runtimeTrack";
 import type { ChatCheckpoint, ChatRecordingEvent } from "../chat";

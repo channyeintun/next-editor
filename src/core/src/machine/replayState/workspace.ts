@@ -2,7 +2,7 @@ import {
   areWorkspaceSnapshotsEqual,
   type WorkspaceRecordingEvent,
   type WorkspaceRecordingSnapshot,
-} from "../../../../types/workspace";
+} from "../../workspace";
 import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
 
 // ============================================================================

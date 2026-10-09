@@ -12,10 +12,7 @@ import {
 import type { MouseCursorPosition } from "../types";
 import type { RuntimeRecordingEvent } from "../runtime";
 import type { WhiteboardEvent } from "../whiteboard";
-import {
-  toSidebarWidthDeltaSnapshot,
-  type WorkspaceRecordingEvent,
-} from "../../../types/workspace";
+import { toSidebarWidthDeltaSnapshot, type WorkspaceRecordingEvent } from "../workspace";
 import { createFrameStreamEncoder } from "../utils/frameStreamEncoder";
 import {
   appendChatDelta,

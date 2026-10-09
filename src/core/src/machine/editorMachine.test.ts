@@ -35,7 +35,7 @@ import {
   installDmpCodec,
   type DmpCodec,
 } from "../../dmp/dmpCodec";
-import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { WorkspaceRecordingSnapshot } from "../workspace";
 import type { LearnerWorkspaceSave } from "./types";
 
 const selection = {

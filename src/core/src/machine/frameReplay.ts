@@ -3,7 +3,7 @@ import type { EditorActionArgs, EditorContextUpdate, EditorMachineContext } from
 import type { EditorFrame } from "../types";
 import type { PreviewState } from "../preview";
 import { isKeyframe, type DeltaFrame, type FrameDelta } from "../utils/deltaTypes";
-import type { WorkspaceRecordingEvent } from "../../../types/workspace";
+import type { WorkspaceRecordingEvent } from "../workspace";
 import {
   reconstructFrameAtIndex,
   applyFrameDeltaToNormalized,

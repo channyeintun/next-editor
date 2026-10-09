@@ -1,5 +1,5 @@
 import type { EditorFrame } from "../types";
-import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { WorkspaceRecordingSnapshot } from "../workspace";
 import {
   applyWhiteboardEvent,
   EMPTY_WHITEBOARD_SCENE,

@@ -13,6 +13,7 @@ flowchart TB
     Preview[preview.ts<br/>preview, iframe-interaction + API-client model]
     TextEdit[textEdit.ts<br/>Monaco text-edit model]
     Chat[chat.ts<br/>agent chat recording model]
+    Workspace[workspace.ts<br/>workspace files, project + snapshot model]
     Hook[useNextEditor.ts<br/>actor senders + interaction effects]
     Machine[machine/editorMachine.ts]
     Timeline[machine/timelineMachine.ts]
@@ -42,6 +43,8 @@ Core responsibilities:
 - Expose stable controls such as `startRecording`, `play`, `seekTo`, `loadRecording`, `extendRecording`, and caption-track management (`addCaptionTrack`).
 
 The app layer is responsible for React composition, WebContainer integration, IndexedDB persistence, import/export UI, and route-level behavior.
+
+Core's dependencies point inward: nothing under `src/core` imports the app layer. The models the recording stores (`runtime.ts`, `slides.ts`, `preview.ts`, `textEdit.ts`, `chat.ts`, `workspace.ts`) are defined in core, and `src/types/*` re-exports them for app code. `src/core/src/coreBoundary.test.ts` fails on any non-test module under `src/core` whose relative import resolves outside it.
 
 ## Public API Surface
 

@@ -5,12 +5,12 @@ import type {
   LearnerWorkspaceSave,
 } from "./types";
 import type { Recording } from "../types";
-import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { WorkspaceRecordingSnapshot } from "../workspace";
 import {
   areWorkspaceProjectsEqual,
   areWorkspaceSnapshotsEqual,
   isWorkspaceTextFile,
-} from "../../../types/workspace";
+} from "../workspace";
 import { normalizeRecordingData } from "../utils/editorState";
 import { normalizeChapters } from "../utils/chapters";
 import { resolveRuntimeSnapshotAt } from "../runtimeTrack";

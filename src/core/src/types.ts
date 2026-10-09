@@ -7,7 +7,7 @@ import type {
 } from "./preview";
 import type { Slide, SlideEvent, SlidePreviewState } from "./slides";
 import type { RuntimeRecordingEvent, RuntimeRecordingSnapshot } from "./runtime";
-import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "../../types/workspace";
+import type { WorkspaceRecordingEvent, WorkspaceRecordingSnapshot } from "./workspace";
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "./chat";
 import type { MediaSpan } from "./utils/mediaSpans";

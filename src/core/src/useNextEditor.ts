@@ -16,7 +16,7 @@ import type { SlideEvent } from "./slides";
 import type { WhiteboardEvent } from "./whiteboard";
 import type { ChatRecordingEvent } from "./chat";
 import type { TextEditEvent } from "./textEdit";
-import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "../../types/workspace";
+import type { WorkspaceRecordingSnapshot, WorkspaceWidthDeltas } from "./workspace";
 import { isAtPlaybackEnd } from "./machine/playbackValues";
 import type { RecordingClock } from "./machine/recordingClock";
 

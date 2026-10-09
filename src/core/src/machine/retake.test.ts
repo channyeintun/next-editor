@@ -16,7 +16,7 @@ import type { PreviewState } from "../preview";
 import { getRecordingTimestamp } from "./recordingSession";
 import { selectNextEditorMetadata } from "../useNextEditor";
 import { reconstructFrameAtIndex } from "../utils/frameDelta";
-import type { WorkspaceRecordingSnapshot } from "../../../types/workspace";
+import type { WorkspaceRecordingSnapshot } from "../workspace";
 import type { RuntimeRecordingSnapshot } from "../runtime";
 import type { ChatCheckpoint } from "../chat";
 

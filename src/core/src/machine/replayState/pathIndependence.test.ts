@@ -18,7 +18,7 @@ import {
   toWorkspaceDeltaSnapshot,
   type WorkspaceRecordingEvent,
   type WorkspaceRecordingSnapshot,
-} from "../../../../types/workspace";
+} from "../../workspace";
 import { diffRuntimeSnapshot, resolveRuntimeSnapshotAt } from "../../runtimeTrack";
 import type { PreviewEvent } from "../../preview";
 import type { Slide, SlideEvent } from "../../slides";

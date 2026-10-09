@@ -13,7 +13,7 @@ import {
   toWorkspaceDeltaSnapshot,
   type WorkspaceRecordingSnapshot,
   type WorkspaceWidthDeltas,
-} from "../../../types/workspace";
+} from "../workspace";
 import {
   areRuntimeRecordingSnapshotsEqual,
   createRuntimeRecordingEvent,
