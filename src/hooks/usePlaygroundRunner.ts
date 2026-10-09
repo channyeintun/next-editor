@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { PlaygroundClientBinding } from "../runtime/playgroundLanguage";
 
 /** How one playground request ended, as a runner panel renders it. */
 export type PlaygroundRequestOutcome<Result, ErrorKind extends string> =
@@ -10,24 +11,6 @@ export type PlaygroundRequestOutcome<Result, ErrorKind extends string> =
     }
   /** A newer operation (or unmount) took over; the caller must render nothing. */
   | { kind: "superseded" };
-
-/** A runtime client's typed error: every playground client throws one of these. */
-type PlaygroundServiceErrorClass<ErrorKind extends string> = abstract new (
-  kind: ErrorKind,
-  message: string,
-) => Error & { readonly kind: ErrorKind };
-
-export interface PlaygroundClientBinding<Client, ErrorKind extends string> {
-  create: () => Client;
-  /**
-   * Ends whatever the client is doing: aborts the service request of a proxied language,
-   * terminates Kite's busy compiler worker, or abandons assembly's sliced run (a generation bump
-   * its machine checks between slices, since there is no request to abort).
-   */
-  stop: (client: Client) => void;
-  /** Its errors carry their own kind; anything else it throws is reported as "unavailable". */
-  ServiceError: PlaygroundServiceErrorClass<ErrorKind>;
-}
 
 /**
  * Explicit Run/Format orchestration for a playground lesson. Owns one client, so a newer

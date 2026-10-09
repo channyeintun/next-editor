@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
-import { type PlaygroundClientBinding, usePlaygroundRunner } from "./usePlaygroundRunner";
+import type { PlaygroundClientBinding } from "../runtime/playgroundLanguage";
+import { usePlaygroundRunner } from "./usePlaygroundRunner";
 
 type FakeErrorKind = "rate-limited" | "unavailable" | "aborted";
 

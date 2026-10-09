@@ -120,12 +120,15 @@ compilers are remote.
 `asm-playground`, alongside Kite as the second backend that needs no service.
 It follows the same shape as every other language:
 
-- `src/runtime/asmPlayground/{types,client,console,files}.ts`
+- `src/runtime/asmPlayground/{types,client,console,files,runner}.ts`, where
+  `runner.ts` holds its UI-free `PlaygroundLanguage` (client, collector, run
+  and format lines)
 - its row in `PLAYGROUND_SOURCE_RULES` (`src/runtime/playgroundFiles.ts`): the
   entry file and extensions both its collector and the zip importer's lesson
   detection read
-- `src/components/AsmPlaygroundRunnerPanel.tsx` (its `PlaygroundRunnerLanguage`,
-  which the shared `PlaygroundRunnerPanel` renders)
+- `src/components/AsmPlaygroundRunnerPanel.tsx` (its `PlaygroundRunnerLanguage`:
+  that language plus the dock's names, tab and console colours, which the
+  shared `PlaygroundRunnerPanel` renders)
 - `src/monaco/asmLanguage.ts`, `src/starters/asm.ts`
 - `src/studio/plan.ts` (`asm-playground` runtime kind) and
   `src/studio/playgroundRuntime.ts` (the run adapter)
