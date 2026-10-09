@@ -113,7 +113,7 @@ function BackgroundPicker({
 
   return (
     <div className="space-y-1.5">
-      <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+      <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
         Background
       </span>
       <div className="flex items-center gap-2">
@@ -123,7 +123,7 @@ function BackgroundPicker({
           title="None"
           aria-label="No background"
           aria-pressed={!value}
-          className={`flex size-7 shrink-0 items-center justify-center rounded-md border ${noneBgClass} text-[10px] font-semibold text-slate-500 transition-colors ${
+          className={`flex size-7 shrink-0 items-center justify-center rounded-md border ${noneBgClass} text-[10px] font-semibold text-slate-400 transition-colors ${
             !value
               ? "border-cyan-400/70 ring-1 ring-cyan-400/40"
               : "border-slate-700 hover:border-slate-600"
@@ -333,7 +333,7 @@ function GoogleSlidesImport({
           placeholder="https://docs.google.com/presentation/d/e/…/pub"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${hintId} ${errorId}` : hintId}
-          className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#0f1219] px-3 py-1.5 text-xs text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-300"
+          className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#0f1219] px-3 py-1.5 text-xs text-slate-200 outline-none transition-colors placeholder:text-slate-400 focus:border-cyan-300"
         />
         <button
           type="button"
@@ -349,7 +349,7 @@ function GoogleSlidesImport({
           Import
         </button>
       </div>
-      <p id={hintId} className="text-[10px] leading-relaxed text-slate-500">
+      <p id={hintId} className="text-[10px] leading-relaxed text-slate-400">
         In Google Slides: File → Share → Publish to web, then paste the published link here.
       </p>
       {error && (
@@ -431,7 +431,7 @@ function NewSlideForm({ onCreate }: { onCreate: (slide: NewSlide) => void }) {
           placeholder={
             contentType === "html" ? "<h1>Title</h1>\n<p>Content</p>" : "# Title\n\nContent here..."
           }
-          className="h-32 w-full resize-none rounded-lg border border-slate-500 bg-[#11141c] px-4 py-3 font-mono text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-300"
+          className="h-32 w-full resize-none rounded-lg border border-slate-500 bg-[#11141c] px-4 py-3 font-mono text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-400 focus:border-cyan-300"
         />
       </div>
 
@@ -547,7 +547,7 @@ export default function SlidesManager({
             <h3 className="text-sm font-semibold tracking-tight text-slate-100">
               Presentation Slides
             </h3>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               Slide presentations
             </p>
           </div>
@@ -577,7 +577,7 @@ export default function SlidesManager({
         {/* List Section */}
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
-            <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               Your Presentation
             </h4>
             <span className="rounded-full border border-slate-700 bg-[#1d1f29] px-2 py-0.5 text-[10px] text-slate-400">
@@ -695,7 +695,7 @@ export default function SlidesManager({
                         {/* Center: Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] font-semibold text-slate-500">
+                            <span className="text-[10px] font-semibold text-slate-400">
                               #{index + 1}
                             </span>
                             <span className="h-px flex-1 bg-slate-800"></span>
