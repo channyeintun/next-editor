@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { RefObject } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   WebContainerRuntimeActionsContext,
@@ -52,12 +53,14 @@ interface RenderOptions {
   environmentVariables?: EnvironmentVariables;
   runnerEnabled?: boolean;
   status?: WebContainerRuntimeStatus;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 function renderDialog({
   environmentVariables = { NODE_ENV: "development", API_URL: "https://example.com" },
   runnerEnabled = true,
   status = "ready",
+  returnFocusRef,
 }: RenderOptions = {}) {
   const actions = {
     rerunRunner: vi.fn<() => Promise<void>>(() => Promise.resolve()),
@@ -75,7 +78,7 @@ function renderDialog({
           } as unknown as WebContainerRuntimeMetadata
         }
       >
-        <EnvironmentVariablesDialog onClose={onClose} />
+        <EnvironmentVariablesDialog onClose={onClose} returnFocusRef={returnFocusRef} />
       </WebContainerRuntimeMetadataContext>
     </WebContainerRuntimeActionsContext>
   );
@@ -135,14 +138,36 @@ describe("EnvironmentVariablesDialog", () => {
     expect(screen.queryByText("Line 1 must use KEY=value format.")).not.toBeInTheDocument();
   });
 
-  it("closes without saving on Cancel or a backdrop click", () => {
-    const { actions, onClose, container } = renderDialog();
+  it("is a modal dialog titled Edit Environment that starts in the text area", () => {
+    const { textarea } = renderDialog();
+
+    expect(screen.getByRole("dialog", { name: "Edit Environment" })).toHaveAttribute(
+      "aria-modal",
+      "true",
+    );
+    expect(textarea()).toHaveFocus();
+  });
+
+  it("closes without saving on Cancel, a backdrop click, or Escape", () => {
+    const { actions, onClose, container, textarea } = renderDialog();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     fireEvent.click(container.firstElementChild!);
+    fireEvent.keyDown(textarea(), { key: "Escape" });
 
-    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(onClose).toHaveBeenCalledTimes(3);
     expect(actions.updateEnvironmentVariables).not.toHaveBeenCalled();
+  });
+
+  it("gives focus to returnFocusRef when it closes", () => {
+    const settingsButton = document.createElement("button");
+    document.body.append(settingsButton);
+    const { unmount } = renderDialog({ returnFocusRef: { current: settingsButton } });
+
+    unmount();
+
+    expect(settingsButton).toHaveFocus();
+    settingsButton.remove();
   });
 
   it("replaces the draft and any error when the variables change while it is open", () => {

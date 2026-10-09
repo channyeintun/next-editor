@@ -1,3 +1,5 @@
+import { X } from "lucide-react";
+import { useId } from "react";
 import type { RunnerConfig } from "../../contexts/WebContainerRuntimeContext";
 import ModalShell from "../ModalShell";
 
@@ -77,7 +79,8 @@ interface RunnerSettingsDialogProps {
   runnerConfig: RunnerConfig;
   /**
    * Set while a recording plays back: the dialog then mirrors the recording, so
-   * nothing in it can be changed and a click on the backdrop does not close it.
+   * nothing in it can be changed, nothing closes it, and it is not modal (it
+   * takes no focus and leaves the player reachable).
    */
   isReadOnly: boolean;
   onChange: (config: Partial<RunnerConfig>) => void;
@@ -91,15 +94,34 @@ export default function RunnerSettingsDialog({
   onChange,
   onClose,
 }: RunnerSettingsDialogProps) {
+  const titleId = useId();
+
   return (
     <ModalShell
       maxWidthClassName="max-w-md"
-      onBackdropClick={() => {
+      labelledBy={titleId}
+      modal={!isReadOnly}
+      onDismiss={() => {
         if (!isReadOnly) {
           onClose();
         }
       }}
     >
+      <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+        <h2 id={titleId} className="text-sm font-semibold text-slate-100">
+          Runner settings
+        </h2>
+        {isReadOnly ? null : (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close runner settings"
+            className="-my-1.5 -mr-2 inline-flex size-8 items-center justify-center text-slate-400 hover:text-white"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
       <div className="space-y-5 overflow-y-auto p-5">
         <RunnerToggle
           checked={runnerConfig.enabled}

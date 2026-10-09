@@ -121,6 +121,26 @@ describe("AgentSettingsDialog", () => {
     expect(screen.getByLabelText(/This tab/)).toBeChecked();
   });
 
+  it("is a modal dialog titled Agent settings that starts on its Close button", () => {
+    render(<Dialog />);
+
+    expect(screen.getByRole("dialog", { name: "Agent settings" })).toHaveAttribute(
+      "aria-modal",
+      "true",
+    );
+    expect(screen.getByRole("heading", { level: 2, name: "Agent settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close settings" })).toHaveFocus();
+  });
+
+  it("closes on Escape", () => {
+    const onClose = vi.fn<() => void>();
+    render(<Dialog onClose={onClose} />);
+
+    fireEvent.keyDown(screen.getByLabelText("Search OpenRouter models"), { key: "Escape" });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("closes from the backdrop and the close button, not from a click inside", () => {
     const onClose = vi.fn<() => void>();
     render(<Dialog onClose={onClose} />);

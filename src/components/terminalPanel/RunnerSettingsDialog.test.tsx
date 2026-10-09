@@ -67,7 +67,15 @@ describe("RunnerSettingsDialog", () => {
     ]);
   });
 
-  it("closes on a backdrop click", () => {
+  it("is a modal dialog titled Runner settings that starts on its Close button", () => {
+    renderDialog();
+
+    const dialog = screen.getByRole("dialog", { name: "Runner settings" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(screen.getByRole("button", { name: "Close runner settings" })).toHaveFocus();
+  });
+
+  it("closes on a backdrop click, the Close button, or Escape", () => {
     const { backdrop, onClose } = renderDialog();
 
     fireEvent.click(screen.getByRole("textbox", { name: /^Run Command/ }));
@@ -75,16 +83,28 @@ describe("RunnerSettingsDialog", () => {
 
     fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close runner settings" }));
+    expect(onClose).toHaveBeenCalledTimes(2);
+
+    fireEvent.keyDown(screen.getByRole("textbox", { name: /^Run Command/ }), { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(3);
   });
 
-  it("while a recording plays back, locks every control and stays open", () => {
+  it("while a recording plays back, locks every control, stays open and is not modal", () => {
     const { backdrop, onClose } = renderDialog(true);
 
     for (const control of [...screen.getAllByRole("switch"), ...screen.getAllByRole("textbox")]) {
       expect(control).toBeDisabled();
     }
+    // A mirror of the author's screen: the player behind it stays reachable.
+    const dialog = screen.getByRole("dialog", { name: "Runner settings" });
+    expect(dialog).not.toHaveAttribute("aria-modal");
+    expect(screen.queryByRole("button", { name: "Close runner settings" })).toBeNull();
+    expect(document.body).toHaveFocus();
 
     fireEvent.click(backdrop);
+    fireEvent.keyDown(dialog, { key: "Escape" });
     expect(onClose).not.toHaveBeenCalled();
   });
 });

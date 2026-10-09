@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import axios from "axios";
 import { Captions, ImagePlus, X } from "lucide-react";
 import type { CaptionCue, Recording } from "@app/core/src";
@@ -73,6 +73,8 @@ export default function UploadLessonModal({
   initialTags,
 }: UploadLessonModalProps) {
   const { isSignedIn, isLoading: authLoading } = useAuth();
+  // Titles whichever of the modal's views is showing; only one renders at a time.
+  const titleId = useId();
   const [title, setTitle] = useState(initialTitle ?? defaultTitle(recording.createdAt));
   const [description, setDescription] = useState(initialDescription ?? "");
   const [tagsInput, setTagsInput] = useState(initialTags ?? "");
@@ -354,10 +356,12 @@ export default function UploadLessonModal({
   }
 
   return (
-    <ModalShell maxWidthClassName="max-w-xl" onBackdropClick={requestClose}>
+    <ModalShell maxWidthClassName="max-w-xl" labelledBy={titleId} onDismiss={requestClose}>
       {closeConfirmOpen ? (
         <div className="space-y-5 p-5">
-          <p className="text-sm font-medium text-slate-100">Cancel upload?</p>
+          <h2 id={titleId} className="text-sm font-medium text-slate-100">
+            Cancel upload?
+          </h2>
           <p className="text-xs text-slate-400">
             Your recording is already saved — only the upload in progress will stop.
           </p>
@@ -380,7 +384,9 @@ export default function UploadLessonModal({
         </div>
       ) : !isSignedIn ? (
         <div className="space-y-5 p-5">
-          <p className="text-sm font-medium text-slate-100">Share this recording?</p>
+          <h2 id={titleId} className="text-sm font-medium text-slate-100">
+            Share this recording?
+          </h2>
           <p className="text-xs text-slate-400">
             Sign in to save and share this recording — {formatDuration(recording.duration)} long.
           </p>
@@ -404,7 +410,9 @@ export default function UploadLessonModal({
         </div>
       ) : uploadResult ? (
         <div className="space-y-5 p-5">
-          <p className="text-sm font-medium text-slate-100">Saved as a draft</p>
+          <h2 id={titleId} className="text-sm font-medium text-slate-100">
+            Saved as a draft
+          </h2>
           <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#11141c] px-3 py-2">
             <span className="flex-1 truncate font-mono text-xs text-slate-300">
               {window.location.origin}/learn/{uploadResult.slug}
@@ -437,7 +445,9 @@ export default function UploadLessonModal({
         </div>
       ) : (
         <div className="space-y-5 overflow-y-auto p-5">
-          <p className="text-sm font-medium text-slate-100">Share this recording</p>
+          <h2 id={titleId} className="text-sm font-medium text-slate-100">
+            Share this recording
+          </h2>
 
           <label className="block space-y-1">
             <span className="text-xs font-medium text-slate-300">Title</span>

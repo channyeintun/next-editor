@@ -1,5 +1,6 @@
 import { useSelector } from "@xstate/store-react";
 import { Search, X } from "lucide-react";
+import { useId } from "react";
 import { getAgentStore, selectModel, selectUsage } from "../../agent/agentStore";
 import {
   getAgentCredentialStore,
@@ -190,10 +191,14 @@ export default function AgentSettingsDialog({
   onKeyDraftChange: (keyDraft: string) => void;
   onClose: () => void;
 }) {
+  const titleId = useId();
+
   return (
-    <ModalShell maxWidthClassName="max-w-md" onBackdropClick={onClose}>
+    <ModalShell maxWidthClassName="max-w-md" labelledBy={titleId} onDismiss={onClose}>
       <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-        <p className="text-sm font-semibold text-slate-100">Agent settings</p>
+        <h2 id={titleId} className="text-sm font-semibold text-slate-100">
+          Agent settings
+        </h2>
         <button
           type="button"
           onClick={onClose}

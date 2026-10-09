@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState, type RefObject } from "react";
 import {
   isRuntimeBusy,
   type EnvironmentVariables,
@@ -64,13 +64,22 @@ export function parseEnvironmentInput(value: string): {
 
 interface EnvironmentVariablesDialogProps {
   onClose: () => void;
+  /**
+   * Where focus goes when the dialog closes: the menu item that opens it
+   * unmounts as it does, so it cannot take focus back itself.
+   */
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 /**
  * Edits the runtime's environment variables as `KEY=value` lines. Saving
  * reruns the runner when it is on and the runtime is not busy.
  */
-export default function EnvironmentVariablesDialog({ onClose }: EnvironmentVariablesDialogProps) {
+export default function EnvironmentVariablesDialog({
+  onClose,
+  returnFocusRef,
+}: EnvironmentVariablesDialogProps) {
+  const titleId = useId();
   const { rerunRunner, updateEnvironmentVariables } = useWebContainerRuntimeActions();
   const { environmentVariables, runnerConfig, status } = useWebContainerRuntimeMetadata();
   const [draftValue, setDraftValue] = useState(() =>
@@ -101,9 +110,16 @@ export default function EnvironmentVariablesDialog({ onClose }: EnvironmentVaria
   };
 
   return (
-    <ModalShell maxWidthClassName="max-w-xl" onBackdropClick={onClose}>
+    <ModalShell
+      maxWidthClassName="max-w-xl"
+      labelledBy={titleId}
+      onDismiss={onClose}
+      returnFocusTo={returnFocusRef}
+    >
       <div className="space-y-5 overflow-y-auto p-5">
-        <p className="text-sm font-medium text-slate-100">Edit Environment</p>
+        <h2 id={titleId} className="text-sm font-medium text-slate-100">
+          Edit Environment
+        </h2>
 
         <label className="block">
           <span className="sr-only">Environment variables</span>
