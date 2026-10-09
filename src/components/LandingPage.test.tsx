@@ -82,6 +82,23 @@ describe("LandingPage decorative graphics", () => {
   });
 });
 
+describe("LandingPage heading outline", () => {
+  it("never skips a heading level and makes the feature titles h2s", () => {
+    renderLandingPage();
+    const levels = screen
+      .getAllByRole("heading")
+      .map((heading) => Number(heading.tagName.slice(1)));
+
+    expect(levels[0]).toBe(1);
+    levels.slice(1).forEach((level, i) => {
+      expect(level).toBeLessThanOrEqual(levels[i] + 1);
+    });
+    for (const title of ["Live Coding Studio", "Interactive Slides", "Event-Based Efficiency"]) {
+      expect(screen.getByRole("heading", { level: 2, name: title })).toBeInTheDocument();
+    }
+  });
+});
+
 describe("LandingPage framework rotation", () => {
   function worksWithHeading() {
     // One stable name for screen readers; the rotating word is aria-hidden.

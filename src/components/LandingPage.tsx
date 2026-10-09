@@ -583,7 +583,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                 >
                   {i + 1}
                 </div>
-                <h3 className="text-2xl font-machina mb-4">{feature.title}</h3>
+                <h2 className="text-2xl font-machina mb-4">{feature.title}</h2>
                 <div className="text-slate-300 leading-relaxed">{feature.desc}</div>
               </div>
             ))}
