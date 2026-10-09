@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, Keyboard, Minimize2, RefreshCw, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Minimize2, RefreshCw, X } from "lucide-react";
 import type { Slide, SlideEvent } from "../types/slides";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import CustomSlideRenderer from "./CustomSlideRenderer";
@@ -38,8 +38,6 @@ function SlidePreview({
 }: SlidePreviewProps) {
   const { isPlaying } = useNextEditorMetadata();
   const collaboration = useOptionalCollaboration();
-  // Check record mode from sessionStorage
-  const recordMode = sessionStorage.getItem("recordMode") === "true";
 
   const onSlideEventRef = useRef(onSlideEvent);
   onSlideEventRef.current = onSlideEvent;
@@ -342,16 +340,6 @@ function SlidePreview({
             <span className="sr-only"> of </span>
             {slides.length}
           </div>
-
-          {/* Keyboard navigation hint */}
-          {recordMode && (
-            <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-3 bg-slate-900 border border-white/10 px-4 py-2 rounded-2xl shadow-2xl opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-              <div className="p-1.5 rounded-lg bg-indigo-500/20 border border-indigo-500/20">
-                <Keyboard className="text-indigo-400 size-4" />
-              </div>
-              <span className="text-xs font-bold text-slate-200">Use Arrow Keys to Navigate</span>
-            </div>
-          )}
         </div>
       </div>
     </>
