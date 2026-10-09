@@ -8,8 +8,10 @@ import {
   shouldAutostartRender,
   estimateNarrationMsForRenderWait,
   studioRenderWaitMs,
+  studioRuntimeSchema,
   studioWhiteboardAssetSchema,
   type StudioPlan,
+  type StudioPlaygroundRuntimeKind,
 } from "./plan";
 
 /** Even per-word interpolation inside a cue, like the compiler emits. */
@@ -293,6 +295,64 @@ describe("studio whiteboard asset defaults", () => {
     });
     expect(asset.strokeColor).toBe("#1e1e1e");
     expect(asset.fontSize).toBe(28);
+  });
+});
+
+/** A minimal valid pinned result per Playground kind. */
+const PLAYGROUND_RESULTS: Record<StudioPlaygroundRuntimeKind, unknown> = {
+  "go-playground": { status: "success", output: "", exitCode: 0 },
+  "kotlin-playground": { status: "success", output: "" },
+  "rust-playground": { status: "success", stdout: "", stderr: "" },
+  "zig-playground": { status: "success", output: "" },
+  "haskell-playground": { status: "success", stdout: "", stderr: "" },
+  "kite-playground": { status: "success", stdout: "", stderr: "" },
+  "asm-playground": { status: "success", stdout: "", stderr: "" },
+};
+
+describe("studio Playground runtime schemas", () => {
+  it("give every kind the same defaults and keep what was authored", () => {
+    for (const [kind, result] of Object.entries(PLAYGROUND_RESULTS)) {
+      const fixture = { latencyMs: 5, result };
+      expect(studioRuntimeSchema.parse({ kind, defaultMode: "fixture", fixture })).toEqual({
+        kind,
+        dockStartsCollapsed: false,
+        defaultMode: "fixture",
+        fixture: { latencyMs: 5, transientErrorKinds: [], result },
+      });
+      expect(
+        studioRuntimeSchema.parse({
+          kind,
+          dockStartsCollapsed: true,
+          defaultMode: "live",
+          fixture,
+        }),
+      ).toMatchObject({ kind, dockStartsCollapsed: true, defaultMode: "live" });
+    }
+  });
+
+  it("admit only the transient failures each runner can have", () => {
+    const parses = (kind: StudioPlaygroundRuntimeKind, transientErrorKinds: string[]) =>
+      studioRuntimeSchema.safeParse({
+        kind,
+        defaultMode: "fixture",
+        fixture: { latencyMs: 5, transientErrorKinds, result: PLAYGROUND_RESULTS[kind] },
+      }).success;
+
+    for (const kind of [
+      "go-playground",
+      "kotlin-playground",
+      "rust-playground",
+      "zig-playground",
+      "haskell-playground",
+    ] as const) {
+      expect(parses(kind, ["rate-limited", "timeout", "unavailable"])).toBe(true);
+    }
+    // Kite and asm run in the page: there is no service to rate-limit or time out.
+    for (const kind of ["kite-playground", "asm-playground"] as const) {
+      expect(parses(kind, ["unavailable"])).toBe(true);
+      expect(parses(kind, ["timeout"])).toBe(false);
+      expect(parses(kind, ["rate-limited"])).toBe(false);
+    }
   });
 });
 

@@ -624,16 +624,28 @@ export const PLAYGROUND_TRANSIENT_ERROR_KINDS = ["rate-limited", "timeout", "una
 /**
  * Deterministic stand-in for a live run: the exact normalized result the
  * Playground would return for the pinned sources. Fixture renders replay it
- * through the same console formatting path after `latencyMs`.
+ * through the same console formatting path after `latencyMs`. Each language
+ * keeps its own result schema; this factory owns the fields they all share.
  */
-export const goRunFixtureSchema = z.object({
-  latencyMs: positiveMs,
-  /**
-   * Transient service failures to simulate before the result, one per attempt
-   * — exercises the driver's declared-idempotent retry path deterministically.
-   */
-  transientErrorKinds: z.array(z.enum(PLAYGROUND_TRANSIENT_ERROR_KINDS)).default([]),
-  result: z
+function playgroundFixture<
+  TransientKinds extends readonly [string, ...string[]],
+  Result extends z.ZodType,
+>(transientKinds: TransientKinds, result: Result) {
+  return z.object({
+    latencyMs: positiveMs,
+    /**
+     * Transient service failures to simulate before the result, one per attempt
+     * — exercises the driver's declared-idempotent retry path deterministically.
+     */
+    transientErrorKinds: z.array(z.enum(transientKinds)).default([]),
+    result,
+  });
+}
+
+/** Go Playground stand-in result — mirrors the worker-normalized contract. */
+export const goRunFixtureSchema = playgroundFixture(
+  PLAYGROUND_TRANSIENT_ERROR_KINDS,
+  z
     .object({
       status: z.enum(["success", "compile-error", "vet-error", "runtime-error"]),
       output: z.string(),
@@ -642,13 +654,12 @@ export const goRunFixtureSchema = z.object({
       exitCode: z.number().int().optional(),
     })
     .superRefine(runnerContract(parseGoPlaygroundRunResult, "Go")),
-});
+);
 
 /** Kotlin Playground stand-in result — mirrors the worker-normalized contract. */
-export const kotlinRunFixtureSchema = z.object({
-  latencyMs: positiveMs,
-  transientErrorKinds: z.array(z.enum(PLAYGROUND_TRANSIENT_ERROR_KINDS)).default([]),
-  result: z
+export const kotlinRunFixtureSchema = playgroundFixture(
+  PLAYGROUND_TRANSIENT_ERROR_KINDS,
+  z
     .object({
       status: z.enum(["success", "compile-error", "runtime-error"]),
       output: z.string(),
@@ -657,7 +668,7 @@ export const kotlinRunFixtureSchema = z.object({
       exception: z.string().optional(),
     })
     .superRefine(runnerContract(parseKotlinPlaygroundRunResult, "Kotlin")),
-});
+);
 
 /**
  * Zig's fixture result shape differs from the others by one field: zig-play.dev
@@ -665,10 +676,9 @@ export const kotlinRunFixtureSchema = z.object({
  * is no stdout/stderr split to pin. Pinning two fields where the service
  * reports one would invite a fixture that no live run could ever reproduce.
  */
-export const zigRunFixtureSchema = z.object({
-  latencyMs: positiveMs,
-  transientErrorKinds: z.array(z.enum(PLAYGROUND_TRANSIENT_ERROR_KINDS)).default([]),
-  result: z
+export const zigRunFixtureSchema = playgroundFixture(
+  PLAYGROUND_TRANSIENT_ERROR_KINDS,
+  z
     .object({
       status: z.enum(["success", "compile-error", "runtime-error"]),
       output: z.string(),
@@ -676,13 +686,12 @@ export const zigRunFixtureSchema = z.object({
       exitDetail: z.string().optional(),
     })
     .superRefine(runnerContract(parseZigPlaygroundRunResult, "Zig")),
-});
+);
 
 /** Rust Playground stand-in result — mirrors the worker-normalized contract. */
-export const rustRunFixtureSchema = z.object({
-  latencyMs: positiveMs,
-  transientErrorKinds: z.array(z.enum(PLAYGROUND_TRANSIENT_ERROR_KINDS)).default([]),
-  result: z
+export const rustRunFixtureSchema = playgroundFixture(
+  PLAYGROUND_TRANSIENT_ERROR_KINDS,
+  z
     .object({
       status: z.enum(["success", "compile-error", "runtime-error"]),
       stdout: z.string(),
@@ -691,7 +700,7 @@ export const rustRunFixtureSchema = z.object({
       exitDetail: z.string().optional(),
     })
     .superRefine(runnerContract(parseRustPlaygroundRunResult, "Rust")),
-});
+);
 
 /**
  * Haskell Playground stand-in result.
@@ -709,10 +718,9 @@ export const rustRunFixtureSchema = z.object({
  * GHC either rejected the module (nothing ran, so there is no exit status) or
  * built it and the program exited non-zero.
  */
-export const haskellRunFixtureSchema = z.object({
-  latencyMs: positiveMs,
-  transientErrorKinds: z.array(z.enum(PLAYGROUND_TRANSIENT_ERROR_KINDS)).default([]),
-  result: z
+export const haskellRunFixtureSchema = playgroundFixture(
+  PLAYGROUND_TRANSIENT_ERROR_KINDS,
+  z
     .object({
       status: z.enum(["success", "compile-error", "runtime-error"]),
       stdout: z.string(),
@@ -722,7 +730,7 @@ export const haskellRunFixtureSchema = z.object({
       exitDetail: z.string().optional(),
     })
     .superRefine(runnerContract(parseHaskellPlaygroundRunResult, "Haskell")),
-});
+);
 
 /**
  * Assembly stand-in result.
@@ -741,10 +749,9 @@ export const haskellRunFixtureSchema = z.object({
  * carries the other two for the same reason this schema does — so a fixture
  * that grows a flag line later already holds the values it needs.
  */
-export const asmRunFixtureSchema = z.object({
-  latencyMs: positiveMs,
-  transientErrorKinds: z.array(z.enum(["unavailable"])).default([]),
-  result: z
+export const asmRunFixtureSchema = playgroundFixture(
+  ["unavailable"] as const,
+  z
     .object({
       status: z.enum(["success", "assemble-error", "runtime-error"]),
       stdout: z.string(),
@@ -768,19 +775,18 @@ export const asmRunFixtureSchema = z.object({
         .optional(),
     })
     .superRefine(runnerContract(parseAsmPlaygroundRunResult, "Assembly")),
-});
+);
 
 /**
  * Kite stand-in result.
  *
- * The transient error kinds are two rather than three: Kite's compiler is
- * WebAssembly running in the page, so a lesson cannot be rate-limited by a
- * service it does not call.
+ * The only transient error kind is "unavailable": Kite's compiler is
+ * WebAssembly running in the page, so a lesson cannot be rate-limited or timed
+ * out by a service it does not call.
  */
-export const kiteRunFixtureSchema = z.object({
-  latencyMs: positiveMs,
-  transientErrorKinds: z.array(z.enum(["unavailable"])).default([]),
-  result: z
+export const kiteRunFixtureSchema = playgroundFixture(
+  ["unavailable"] as const,
+  z
     .object({
       status: z.enum(["success", "compile-error", "runtime-error"]),
       stdout: z.string(),
@@ -789,7 +795,37 @@ export const kiteRunFixtureSchema = z.object({
       exitDetail: z.string().optional(),
     })
     .superRefine(runnerContract(parseKitePlaygroundRunResult, "Kite")),
-});
+);
+
+/**
+ * One Playground runtime variant, so every kind carries the same fields.
+ *
+ * `dockStartsCollapsed` in particular is not optional per kind: these objects
+ * are not strict, so a variant that omitted it would have an authored
+ * `dockStartsCollapsed: true` stripped by zod and render with the dock open —
+ * no error, no diagnostic, exactly the invisible failure
+ * `runtimeDockStartsCollapsed` exists to prevent.
+ */
+function playgroundRuntime<Kind extends string, Fixture extends z.ZodType>(
+  kind: Kind,
+  fixture: Fixture,
+) {
+  return z.object({
+    kind: z.literal(kind),
+    /**
+     * The dock opens expanded, and a lesson that runs nothing until its last
+     * scenes pays 288px of editor for an empty console the whole way there —
+     * a Kite or Zig lesson that opens on the whiteboard, a Haskell lesson on
+     * types and laws, an assembly lesson drawing the register file. Declaring
+     * it shut is pinned by the render before the recording clock starts —
+     * frame one, no visible collapse — and `runtime.run` opens it again when
+     * there is finally output to read.
+     */
+    dockStartsCollapsed: z.boolean().default(false),
+    defaultMode: z.enum(["live", "fixture"]),
+    fixture,
+  });
+}
 
 /**
  * Execution-kind-specific runtime declaration. "live" calls the real
@@ -820,77 +856,13 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
     lockfilePath: z.string().min(1).optional(),
     environment: z.record(z.string().min(1), z.string()).default({}),
   }),
-  z.object({
-    kind: z.literal("go-playground"),
-    /**
-     * Every Playground runtime carries this field, including the kinds whose
-     * lessons have never used it. These objects are not strict, so a kind that
-     * omitted it would have an authored `dockStartsCollapsed: true` stripped by
-     * zod and render with the dock open — no error, no diagnostic, exactly the
-     * invisible failure `runtimeDockStartsCollapsed` exists to prevent.
-     */
-    dockStartsCollapsed: z.boolean().default(false),
-    defaultMode: z.enum(["live", "fixture"]),
-    fixture: goRunFixtureSchema,
-  }),
-  z.object({
-    kind: z.literal("kotlin-playground"),
-    dockStartsCollapsed: z.boolean().default(false),
-    defaultMode: z.enum(["live", "fixture"]),
-    fixture: kotlinRunFixtureSchema,
-  }),
-  z.object({
-    kind: z.literal("rust-playground"),
-    dockStartsCollapsed: z.boolean().default(false),
-    defaultMode: z.enum(["live", "fixture"]),
-    fixture: rustRunFixtureSchema,
-  }),
-  z.object({
-    kind: z.literal("zig-playground"),
-    /**
-     * Same reason as Kite: a Zig lesson that spends its first minutes on the
-     * whiteboard should not hold 288px open for an empty console until the
-     * first run.
-     */
-    dockStartsCollapsed: z.boolean().default(false),
-    defaultMode: z.enum(["live", "fixture"]),
-    fixture: zigRunFixtureSchema,
-  }),
-  z.object({
-    kind: z.literal("haskell-playground"),
-    /**
-     * Same reason as Kite and Zig: a Haskell lesson usually spends its opening
-     * minutes on types and laws before it runs anything, and should not hold
-     * 288px open over an empty console to do it.
-     */
-    dockStartsCollapsed: z.boolean().default(false),
-    defaultMode: z.enum(["live", "fixture"]),
-    fixture: haskellRunFixtureSchema,
-  }),
-  z.object({
-    kind: z.literal("kite-playground"),
-    /**
-     * The dock opens expanded, and a Kite lesson that runs nothing until its
-     * last scenes pays 288px of editor for an empty console the whole way
-     * there. Declaring it shut is pinned by the render before the recording
-     * clock starts — frame one, no visible collapse — and `runtime.run` opens
-     * it again when there is finally output to read.
-     */
-    dockStartsCollapsed: z.boolean().default(false),
-    defaultMode: z.enum(["live", "fixture"]),
-    fixture: kiteRunFixtureSchema,
-  }),
-  z.object({
-    kind: z.literal("asm-playground"),
-    /**
-     * Same reason as Kite and Zig: an assembly lesson that draws the register
-     * file on the whiteboard before writing a line should not hold 288px open
-     * over an empty console to do it.
-     */
-    dockStartsCollapsed: z.boolean().default(false),
-    defaultMode: z.enum(["live", "fixture"]),
-    fixture: asmRunFixtureSchema,
-  }),
+  playgroundRuntime("go-playground", goRunFixtureSchema),
+  playgroundRuntime("kotlin-playground", kotlinRunFixtureSchema),
+  playgroundRuntime("rust-playground", rustRunFixtureSchema),
+  playgroundRuntime("zig-playground", zigRunFixtureSchema),
+  playgroundRuntime("haskell-playground", haskellRunFixtureSchema),
+  playgroundRuntime("kite-playground", kiteRunFixtureSchema),
+  playgroundRuntime("asm-playground", asmRunFixtureSchema),
 ]);
 export type StudioRuntime = z.infer<typeof studioRuntimeSchema>;
 export type StudioRuntimeKind = StudioRuntime["kind"];
