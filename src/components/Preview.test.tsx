@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import Preview from "./Preview";
 
@@ -6,6 +6,7 @@ const previewState = vi.hoisted(() => ({
   isOpen: false,
   activeMode: "browser" as "browser" | "api",
   showModeToggle: false,
+  handleResizeStep: vi.fn<(direction: 1 | -1) => void>(),
 }));
 
 vi.mock("../hooks/useNextEditorContext", () => ({
@@ -46,6 +47,7 @@ vi.mock("./preview/usePreviewController", () => ({
       handleOpenConsole: noop,
       handleResizeStart: noop,
       handleDockResizeStart: noop,
+      handleResizeStep: previewState.handleResizeStep,
       handleTransitionStart: noop,
       handleTransitionComplete: noop,
       setActiveMode: noop,
@@ -60,6 +62,7 @@ afterEach(() => {
   previewState.isOpen = false;
   previewState.activeMode = "browser";
   previewState.showModeToggle = false;
+  previewState.handleResizeStep.mockClear();
 });
 
 describe("Preview", () => {
@@ -71,6 +74,19 @@ describe("Preview", () => {
     view.rerender(<Preview />);
 
     expect(screen.getByRole("complementary", { name: "Preview" })).toHaveStyle({ width: "432px" });
+  });
+
+  it("offers Larger and Smaller as a non-drag way to resize", () => {
+    previewState.isOpen = true;
+    render(<Preview />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Larger" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Smaller" }));
+
+    expect(previewState.handleResizeStep.mock.calls).toEqual([[1], [-1]]);
+    // The menu stays open so repeated presses keep resizing.
+    expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 
   it("makes the runtime frame inert while the opaque API client covers it", async () => {

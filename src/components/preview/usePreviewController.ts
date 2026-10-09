@@ -108,6 +108,8 @@ export interface PreviewController {
   handleOpenConsole: () => void;
   handleResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
   handleDockResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
+  /** Click/keyboard alternative to dragging a resize handle: one step bigger or smaller. */
+  handleResizeStep: (direction: 1 | -1) => void;
   handleTransitionStart: () => void;
   handleTransitionComplete: () => void;
   setActiveMode: (mode: PreviewActiveMode) => void;
@@ -133,6 +135,9 @@ interface PendingRuntimeSnapshotRequest {
 }
 
 const RUNTIME_SNAPSHOT_REQUEST_TIMEOUT_MS = 1_200;
+
+/** How far one Larger/Smaller menu step resizes the preview, in CSS pixels. */
+const PREVIEW_RESIZE_STEP_PX = 48;
 
 /**
  * Follows the pointer that pressed a resize handle until it is released or
@@ -1309,6 +1314,42 @@ export function usePreviewController(): PreviewController {
     stopFollowingDragRef.current = followPointerDrag(event, onMove, onEnd);
   };
 
+  // The non-drag way to resize (WCAG 2.1.1 and 2.5.7): the window menu's
+  // Larger/Smaller items step the panel by a fixed amount. Each step is
+  // recorded the same way a finished drag is, so playback is unchanged.
+  const handleResizeStep = (direction: 1 | -1) => {
+    const step = PREVIEW_RESIZE_STEP_PX * direction;
+
+    if (panelMode === "docked") {
+      const nextWidth = clampPreviewDockWidth(dockWidth + step, window.innerWidth);
+      const previewDockWidthDelta = Math.round(nextWidth - dockWidth);
+      if (previewDockWidthDelta === 0) {
+        return;
+      }
+
+      setDockWidth(nextWidth);
+      if (isRecordingRef.current) {
+        handleWorkspaceEvent({ previewDockWidthDelta });
+      }
+      return;
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
+    const newSize = clampCustomPreviewSize(
+      { width: rect.width + step, height: rect.height + step },
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+    setSize(newSize);
+    // One event carrying the new size. The drag path's trailing size-less
+    // event reads sizeRef, which still holds the old size until this render
+    // commits, so emitting one here would record the panel shrinking back.
+    emitPreviewEvent("preview_resize", { newSize });
+  };
+
   const handleTransitionStart = () => {
     setIsTransitioning(true);
   };
@@ -1376,6 +1417,7 @@ export function usePreviewController(): PreviewController {
     handleOpenConsole,
     handleResizeStart,
     handleDockResizeStart,
+    handleResizeStep,
     handleTransitionStart,
     handleTransitionComplete,
     setActiveMode: (mode: PreviewActiveMode) => {

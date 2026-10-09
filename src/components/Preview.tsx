@@ -65,6 +65,7 @@ function Preview() {
       onOpenConsole={controller.handleOpenConsole}
       onResizeStart={controller.handleResizeStart}
       onDockResizeStart={controller.handleDockResizeStart}
+      onResizeStep={controller.handleResizeStep}
       onTransitionStart={controller.handleTransitionStart}
       onTransitionComplete={controller.handleTransitionComplete}
       previewAddressLabel={controller.previewAddressLabel}

@@ -10,6 +10,8 @@ import { useDismissOnOutsideInteraction } from "../../hooks/useDismissOnOutsideI
 import {
   ArrowLeft,
   ArrowRight,
+  Maximize2,
+  Minimize2,
   MoreVertical,
   PanelRight,
   PictureInPicture2,
@@ -40,6 +42,8 @@ interface PreviewChromeProps {
   onOpenConsole: () => void;
   onResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
   onDockResizeStart: (event: ReactPointerEvent<HTMLElement>) => void;
+  /** Click/keyboard resize: one step larger (1) or smaller (-1). */
+  onResizeStep: (direction: 1 | -1) => void;
   onTransitionStart: () => void;
   onTransitionComplete: () => void;
   previewAddressLabel: string;
@@ -89,6 +93,7 @@ interface PreviewToolbarProps {
   onClose: () => void;
   onFloat: () => void;
   onDock: () => void;
+  onResizeStep: (direction: 1 | -1) => void;
   onBack: () => void;
   onForward: () => void;
   onRefresh: () => void;
@@ -104,11 +109,19 @@ interface PreviewWindowMenuProps {
   onClose: () => void;
   onFloat: () => void;
   onDock: () => void;
+  onResizeStep: (direction: 1 | -1) => void;
 }
 
-/** Float/dock/close window controls — shared by both frames, so it lives in the
- *  panel bar (or, when there is no frame selector, the browser navbar). */
-function PreviewWindowMenu({ mode, onClose, onFloat, onDock }: PreviewWindowMenuProps) {
+/** Float/dock/resize/close window controls — shared by both frames, so it lives
+ *  in the panel bar (or, when there is no frame selector, the browser navbar).
+ *  Larger/Smaller are the non-drag way to resize the panel. */
+function PreviewWindowMenu({
+  mode,
+  onClose,
+  onFloat,
+  onDock,
+  onResizeStep,
+}: PreviewWindowMenuProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -169,6 +182,27 @@ function PreviewWindowMenu({ mode, onClose, onFloat, onDock }: PreviewWindowMenu
             {mode === "floating" ? "Unfloat" : "Float"}
           </button>
 
+          {/* Resize steps keep the menu open so repeated presses keep resizing. */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => onResizeStep(1)}
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700"
+          >
+            <Maximize2 size={15} />
+            Larger
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => onResizeStep(-1)}
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700"
+          >
+            <Minimize2 size={15} />
+            Smaller
+          </button>
+
           <button
             type="button"
             role="menuitem"
@@ -191,6 +225,7 @@ function PreviewToolbar({
   onClose,
   onFloat,
   onDock,
+  onResizeStep,
   onBack,
   onForward,
   onRefresh,
@@ -201,7 +236,13 @@ function PreviewToolbar({
   onModeChange,
 }: PreviewToolbarProps) {
   const windowMenu = (
-    <PreviewWindowMenu mode={mode} onClose={onClose} onFloat={onFloat} onDock={onDock} />
+    <PreviewWindowMenu
+      mode={mode}
+      onClose={onClose}
+      onFloat={onFloat}
+      onDock={onDock}
+      onResizeStep={onResizeStep}
+    />
   );
   const hasPanelBar = showModeToggle && Boolean(onModeChange);
 
@@ -375,6 +416,7 @@ export function PreviewChrome({
   onOpenConsole,
   onResizeStart,
   onDockResizeStart,
+  onResizeStep,
   onTransitionStart,
   onTransitionComplete,
   previewAddressLabel,
@@ -392,6 +434,7 @@ export function PreviewChrome({
         onClose={onClose}
         onFloat={onFloat}
         onDock={onDock}
+        onResizeStep={onResizeStep}
         onBack={onBack}
         onForward={onForward}
         onRefresh={onRefresh}

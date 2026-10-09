@@ -9,7 +9,7 @@ import {
   PreviewAdapterHandleProvider,
   usePreviewAdapterHandle,
 } from "../../contexts/PreviewAdapterHandleContext";
-import { PreviewPanelProvider } from "../../contexts/PreviewPanelContext";
+import { clampPreviewDockWidth, PreviewPanelProvider } from "../../contexts/PreviewPanelContext";
 import { RuntimePanelStoreProvider } from "../../contexts/RuntimePanelStoreContext";
 import {
   WebContainerRuntimeActionsContext,
@@ -37,14 +37,16 @@ const editor = vi.hoisted(() => ({
     isRecording: false,
     usesPlaybackModel: false,
   },
+  handlePreviewEvent: vi.fn<(event: { type: string; size?: unknown }) => void>(),
+  handleWorkspaceEvent: vi.fn<(event?: { previewDockWidthDelta?: number }) => void>(),
 }));
 
 vi.mock("../../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => ({
-    handlePreviewEvent: vi.fn<() => void>(),
+    handlePreviewEvent: editor.handlePreviewEvent,
     handlePreviewInitialDocument: vi.fn<() => void>(),
     handlePreviewPatchBatch: vi.fn<() => void>(),
-    handleWorkspaceEvent: vi.fn<() => void>(),
+    handleWorkspaceEvent: editor.handleWorkspaceEvent,
   }),
   useNextEditorMetadata: () => editor.metadata,
 }));
@@ -140,6 +142,8 @@ function firePointer(type: string, clientX = 0, clientY = 0) {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
+  editor.handlePreviewEvent.mockClear();
+  editor.handleWorkspaceEvent.mockClear();
   controllerRenders = 0;
   runtimeMetadata = idleRuntimeMetadata;
   editor.metadata = {
@@ -210,6 +214,85 @@ describe("usePreviewController resize", () => {
 
     const removed = removeEventListener.mock.calls.map(([type]) => type);
     expect(removed).toEqual(expect.arrayContaining(["pointermove", "pointerup", "pointercancel"]));
+  });
+});
+
+describe("usePreviewController resize steps", () => {
+  it("steps the docked width by 48px and records each step as a dock delta", () => {
+    editor.metadata = { ...editor.metadata, isRecording: true };
+    const { result } = renderController();
+    const startWidth = result.current.dockWidth;
+
+    act(() => {
+      result.current.handleResizeStep(1);
+    });
+
+    expect(result.current.dockWidth).toBe(startWidth + 48);
+    expect(editor.handleWorkspaceEvent).toHaveBeenLastCalledWith({ previewDockWidthDelta: 48 });
+
+    act(() => {
+      result.current.handleResizeStep(-1);
+    });
+
+    expect(result.current.dockWidth).toBe(startWidth);
+    expect(editor.handleWorkspaceEvent).toHaveBeenLastCalledWith({ previewDockWidthDelta: -48 });
+  });
+
+  it("clamps the docked width at its maximum and records nothing once there", () => {
+    editor.metadata = { ...editor.metadata, isRecording: true };
+    const { result } = renderController();
+    const startWidth = result.current.dockWidth;
+    const maxWidth = clampPreviewDockWidth(Number.POSITIVE_INFINITY, window.innerWidth);
+
+    for (let i = 0; i < 20; i += 1) {
+      act(() => {
+        result.current.handleResizeStep(1);
+      });
+    }
+
+    expect(result.current.dockWidth).toBe(maxWidth);
+    const deltas = editor.handleWorkspaceEvent.mock.calls.map(
+      ([event]) => event?.previewDockWidthDelta ?? 0,
+    );
+    expect(deltas.every((delta) => delta !== 0)).toBe(true);
+    expect(deltas.reduce((sum, delta) => sum + delta, 0)).toBe(maxWidth - startWidth);
+  });
+
+  it("does not record a docked step outside a recording", () => {
+    const { result } = renderController();
+    const startWidth = result.current.dockWidth;
+
+    act(() => {
+      result.current.handleResizeStep(1);
+    });
+
+    expect(result.current.dockWidth).toBe(startWidth + 48);
+    expect(editor.handleWorkspaceEvent).not.toHaveBeenCalled();
+  });
+
+  it("steps the floating panel and records one resize carrying the new size", () => {
+    editor.metadata = { ...editor.metadata, isRecording: true };
+    const { result } = renderController();
+    act(() => {
+      result.current.handleFloat();
+    });
+    const panel = document.createElement("div");
+    vi.spyOn(panel, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ width: 400, height: 300 }),
+    );
+    result.current.containerRef.current = panel;
+    editor.handlePreviewEvent.mockClear();
+
+    act(() => {
+      result.current.handleResizeStep(1);
+    });
+
+    expect(result.current.size).toEqual({ width: 448, height: 348 });
+    const resizes = editor.handlePreviewEvent.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.type === "preview_resize");
+    expect(resizes).toHaveLength(1);
+    expect(resizes[0]?.size).toEqual({ width: 448, height: 348 });
   });
 });
 
