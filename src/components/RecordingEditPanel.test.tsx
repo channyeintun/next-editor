@@ -173,6 +173,50 @@ describe("RecordingEditPanel", () => {
     expect(screen.getByRole("button", { name: "Start at playhead" })).toHaveFocus();
   });
 
+  it("keeps focus in the panel as each edit is removed", async () => {
+    const captured: { actions: NextEditorActions | null; current: Recording | null } = {
+      actions: null,
+      current: null,
+    };
+    function Capture() {
+      captured.actions = useNextEditorActions();
+      captured.current = useNextEditorMetadata().currentRecording;
+      return null;
+    }
+
+    render(
+      <Providers>
+        <Capture />
+        <RecordingEditPanel recording={take} onClose={() => {}} onApplied={() => {}} />
+      </Providers>,
+    );
+    act(() => captured.actions!.loadRecording(take));
+    await waitFor(() => expect(captured.current?.id).toBe("take"));
+    await screen.findByText(/No narration/);
+
+    const cutBetween = (start: number, end: number) => {
+      act(() => captured.actions!.seekTo(start));
+      fireEvent.click(screen.getByRole("button", { name: "Start at playhead" }));
+      act(() => captured.actions!.seekTo(end));
+      fireEvent.click(screen.getByRole("button", { name: "End at playhead" }));
+      fireEvent.click(screen.getByRole("button", { name: /Cut selection/ }));
+    };
+    cutBetween(1_000, 2_000);
+    cutBetween(4_000, 6_000);
+
+    const [first, second] = screen.getAllByRole("button", { name: "Remove this cut" });
+    second.focus();
+    fireEvent.click(second);
+    // The removed button is gone: focus moves to the edit before it.
+    expect(screen.getAllByRole("button", { name: "Remove this cut" })).toHaveLength(1);
+    expect(first).toHaveFocus();
+
+    fireEvent.click(first);
+    // With no edit left before it, focus goes to where the next stretch starts.
+    expect(screen.queryByRole("button", { name: "Remove this cut" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start at playhead" })).toHaveFocus();
+  });
+
   it("takes focus when it opens and gives it back to the opener when it closes", async () => {
     function Harness() {
       const [open, setOpen] = useState(false);

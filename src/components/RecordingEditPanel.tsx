@@ -175,6 +175,7 @@ export default function RecordingEditPanel({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ startX: number; startTime: number } | null>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);
+  const removeButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
 
   const durationMs = recording.duration;
   const audioOffsetMs = recording.audioStartOffsetMs ?? 0;
@@ -279,6 +280,16 @@ export default function RecordingEditPanel({
     // Cut and Mute are disabled once the selection clears, which would drop keyboard
     // focus to the page; the next stretch starts from here.
     startButtonRef.current?.focus();
+  };
+
+  // Removing an edit unmounts its focused remove button, which would drop keyboard focus
+  // to the page: it moves first to the previous edit's remove button, or with none left
+  // before it, to the start of the selection row.
+  const removeEdit = (index: number) => {
+    if (document.activeElement === removeButtonsRef.current[index]) {
+      (removeButtonsRef.current[index - 1] ?? startButtonRef.current)?.focus();
+    }
+    setEdits((current) => current.filter((_, at) => at !== index));
   };
 
   const handleSuggest = () => {
@@ -438,7 +449,7 @@ export default function RecordingEditPanel({
           {edits.map((edit, index) => (
             <li
               key={`${edit.kind}-${index}`}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 py-0.5 pr-1 pl-2 text-xs"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 py-0.5 pr-1 pl-2 text-xs"
             >
               <button
                 type="button"
@@ -449,10 +460,13 @@ export default function RecordingEditPanel({
                 {formatPlaybackTime(edit.end)}
               </button>
               <button
+                ref={(node) => {
+                  removeButtonsRef.current[index] = node;
+                }}
                 type="button"
                 aria-label={`Remove this ${edit.kind}`}
                 disabled={applying}
-                onClick={() => setEdits((current) => current.filter((_, at) => at !== index))}
+                onClick={() => removeEdit(index)}
                 className="rounded-full p-0.5 text-slate-500 transition-colors hover:text-white"
               >
                 <X size={11} aria-hidden="true" />
