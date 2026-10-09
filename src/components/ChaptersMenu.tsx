@@ -180,7 +180,7 @@ export default function ChaptersMenu({
                     onClick={() => copyLink(chapter.time)}
                     aria-label={`Copy a link to ${chapter.title}`}
                     title="Copy a link to this chapter"
-                    className="shrink-0 text-slate-500 transition-colors hover:text-white"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:text-white"
                   >
                     {copiedTime === chapter.time ? (
                       <Check size={13} aria-hidden="true" />
@@ -193,7 +193,7 @@ export default function ChaptersMenu({
                       type="button"
                       onClick={() => update(chapters.filter((_, at) => at !== index))}
                       aria-label={`Delete ${chapter.title}`}
-                      className="shrink-0 text-slate-500 transition-colors hover:text-red-400"
+                      className="inline-flex size-6 shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:text-red-400"
                     >
                       <Trash2 size={13} aria-hidden="true" />
                     </button>
