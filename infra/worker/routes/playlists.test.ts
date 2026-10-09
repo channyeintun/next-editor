@@ -27,6 +27,7 @@ vi.mock("../../db/slug", () => ({
   generateUniqueSlug: vi.fn<() => Promise<string>>(async () => "a-playlist"),
   isSlugUniqueViolation: () => false,
   MAX_SLUG_INSERT_ATTEMPTS: 3,
+  slugifyTitle: (title: string, fallback: string) => title || fallback,
 }));
 
 const env = { DB: {} as D1Database } as never;

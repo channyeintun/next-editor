@@ -1,4 +1,5 @@
 import type { LessonRow, SessionRow, UserRow } from "./types";
+import { isUniqueViolation } from "./uniqueViolation";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -72,14 +73,6 @@ async function generateUniqueUsername(db: D1Database, base: string): Promise<str
   // Past the ceiling, stop probing and take a random suffix. The caller's
   // INSERT retry still covers the (vanishingly unlikely) collision.
   return `${slug}-${crypto.randomUUID().slice(0, 8)}`;
-}
-
-// SQLite's own message format ("UNIQUE constraint failed: <table>.<column>"),
-// stable across D1/wrangler versions since it comes from sqlite3 itself — more
-// specific than matching bare "UNIQUE", which would also match an unrelated
-// column's collision (e.g. google_sub or email) on the same table.
-function isUniqueConstraintViolation(error: unknown, column: string): boolean {
-  return String(error).includes(`UNIQUE constraint failed: users.${column}`);
 }
 
 // Bounds the retry loop below: a persistent, unrelated failure should surface
@@ -156,10 +149,7 @@ export async function upsertUserByGoogleSub(
       // generated the same username between generateUniqueUsername's read and
       // this INSERT. D1 serializes writes, so a retry's SELECT will see the
       // winner's row and pick the next suffix instead of colliding again.
-      if (
-        !isUniqueConstraintViolation(error, "username") ||
-        attempt >= MAX_USERNAME_INSERT_ATTEMPTS
-      ) {
+      if (!isUniqueViolation(error, "users.username") || attempt >= MAX_USERNAME_INSERT_ATTEMPTS) {
         throw error;
       }
     }
@@ -470,7 +460,7 @@ export async function updateUsername(
     }
     return { status: "ok", user: row };
   } catch (error) {
-    if (isUniqueConstraintViolation(error, "username")) {
+    if (isUniqueViolation(error, "users.username")) {
       return { status: "taken" };
     }
     throw error;

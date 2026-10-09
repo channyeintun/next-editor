@@ -4,6 +4,7 @@ import type {
   PlaylistRowWithCount,
   PlaylistRowWithMembership,
 } from "./types";
+import { isUniqueViolation } from "./uniqueViolation";
 
 // Shared subquery for PlaylistRowWithCount's first_lesson_thumbnail — the
 // lowest-position currently-published member's thumbnail, used as the
@@ -313,7 +314,11 @@ export async function addLessonToPlaylist(
       db.prepare("UPDATE playlists SET updated_at = ? WHERE id = ?").bind(now, playlistId),
     ]);
   } catch (error) {
-    if (String(error).includes("UNIQUE constraint failed")) return { status: "already_added" };
+    // The membership's PRIMARY KEY (playlist_id, lesson_id) is the only UNIQUE
+    // constraint the INSERT can hit; SQLite names it by its first column.
+    if (isUniqueViolation(error, "playlist_lessons.playlist_id")) {
+      return { status: "already_added" };
+    }
     throw error;
   }
 

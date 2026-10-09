@@ -12,7 +12,12 @@ import {
   updateLesson,
   type UpdateLessonParams,
 } from "../../db/queries";
-import { generateUniqueSlug, isSlugUniqueViolation, MAX_SLUG_INSERT_ATTEMPTS } from "../../db/slug";
+import {
+  generateUniqueSlug,
+  isSlugUniqueViolation,
+  MAX_SLUG_INSERT_ATTEMPTS,
+  slugifyTitle,
+} from "../../db/slug";
 import { lessonRowToLesson, lessonRowToOwnedLesson } from "../../db/types";
 import { requireUser } from "../auth/requireUser";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
@@ -25,16 +30,6 @@ const DEFAULT_PAGE_SIZE = 12;
 // Well above the largest lesson metadata metadataLimits.ts allows (a
 // 10,000-character description is at most ~60 KB of JSON).
 const MAX_LESSON_REQUEST_BYTES = 128 * 1024;
-
-function slugify(title: string): string {
-  const base = title
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-  return base || "lesson";
-}
 
 function asStringArray(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
@@ -138,7 +133,7 @@ lessonsRoute.post("/", requireUser, async (c) => {
   }
 
   for (let attempt = 1; ; attempt++) {
-    const slug = await generateUniqueSlug(c.env.DB, "lessons", slugify(title));
+    const slug = await generateUniqueSlug(c.env.DB, "lessons", slugifyTitle(title, "lesson"));
     try {
       const row = await insertDraftLesson(c.env.DB, {
         id: body.id,

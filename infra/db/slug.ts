@@ -1,10 +1,30 @@
-// Shared slug-uniqueness helpers for the lessons and playlists create routes.
+// Shared slug helpers for the lessons and playlists create routes.
 // Mirrors generateUniqueUsername in queries.ts: the bare slug is preferred and
 // a numeric suffix is appended only when that slug is already taken.
 
 import seedManifest from "../../tube/data/lessons.json";
+import { isUniqueViolation } from "./uniqueViolation";
 
 type SluggedTable = "lessons" | "playlists";
+
+const MAX_TITLE_SLUG_CHARS = 60;
+
+/**
+ * The base slug for a lesson or playlist title: lowercase ASCII letters and
+ * digits joined by single hyphens, at most 60 characters, `fallback` when the
+ * title has none (one written entirely in Burmese, say). It cuts before it
+ * trims, as slugifyUsername in queries.ts does, so a cut that lands on a hyphen
+ * cannot leave one at the end.
+ */
+export function slugifyTitle(title: string, fallback: string): string {
+  const slug = title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, MAX_TITLE_SLUG_CHARS)
+    .replace(/^-+|-+$/g, "");
+  return slug || fallback;
+}
 
 /**
  * Slugs the lesson catalog already answers for without a D1 row.
@@ -68,11 +88,8 @@ export async function generateUniqueSlug(
   return `${base}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-// SQLite's own message format ("UNIQUE constraint failed: <table>.<column>"),
-// stable across D1/wrangler versions since it comes from sqlite3 itself —
-// same matching approach as isUniqueConstraintViolation in queries.ts.
 export function isSlugUniqueViolation(error: unknown, table: SluggedTable): boolean {
-  return String(error).includes(`UNIQUE constraint failed: ${table}.slug`);
+  return isUniqueViolation(error, `${table}.slug`);
 }
 
 // Bounds the insert-retry loops in the create routes: two concurrent creates

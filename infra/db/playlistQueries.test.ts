@@ -85,6 +85,15 @@ describe("playlist mutations", () => {
     await expect(deletePlaylist(db, "playlist-1", "intruder")).resolves.toBeNull();
     await expect(deletePlaylist(db, "playlist-1", "owner")).resolves.toBe("my-list");
   });
+
+  it("answer a second add of the same lesson with already_added", async () => {
+    const db = createDb();
+    await addLessonToPlaylist(db, "playlist-1", "owner", "lesson-1");
+
+    await expect(addLessonToPlaylist(db, "playlist-1", "owner", "lesson-1")).resolves.toEqual({
+      status: "already_added",
+    });
+  });
 });
 
 describe("getPlaylistBySlug", () => {

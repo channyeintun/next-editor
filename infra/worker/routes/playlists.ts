@@ -21,19 +21,14 @@ import {
   playlistRowToOwnedPlaylistWithMembership,
   playlistRowToPlaylist,
 } from "../../db/types";
-import { generateUniqueSlug, isSlugUniqueViolation, MAX_SLUG_INSERT_ATTEMPTS } from "../../db/slug";
+import {
+  generateUniqueSlug,
+  isSlugUniqueViolation,
+  MAX_SLUG_INSERT_ATTEMPTS,
+  slugifyTitle,
+} from "../../db/slug";
 import { requireUser } from "../auth/requireUser";
 import { metadataTextError } from "../../lessons/metadataLimits";
-
-function slugify(title: string): string {
-  const base = title
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-  return base || "playlist";
-}
 
 // Mounted at /api/playlists in worker/index.ts. GET /:slug is public; a
 // playlist is always public once created (no draft/published state, unlike
@@ -71,7 +66,7 @@ playlistsRoute.post("/", requireUser, async (c) => {
 
   const id = crypto.randomUUID();
   for (let attempt = 1; ; attempt++) {
-    const slug = await generateUniqueSlug(c.env.DB, "playlists", slugify(title));
+    const slug = await generateUniqueSlug(c.env.DB, "playlists", slugifyTitle(title, "playlist"));
     try {
       const row = await insertPlaylist(c.env.DB, {
         id,

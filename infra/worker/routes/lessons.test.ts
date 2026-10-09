@@ -26,6 +26,7 @@ vi.mock("../../db/slug", () => ({
   generateUniqueSlug: vi.fn<() => Promise<string>>(async () => "a-lesson"),
   isSlugUniqueViolation: () => false,
   MAX_SLUG_INSERT_ATTEMPTS: 3,
+  slugifyTitle: (title: string, fallback: string) => title || fallback,
 }));
 
 const LESSON_ID = "4f0c2a5e-8c1b-4d0e-9a57-0b1f9d3e2c71";

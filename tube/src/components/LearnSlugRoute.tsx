@@ -9,8 +9,8 @@ import LessonDetailRoute from "./LessonDetailRoute";
 // it matches only the literal string "@:username". Disambiguating a profile
 // URL (/learn/@handle) from a lesson slug (/learn/some-title-abc12345) has
 // to happen here instead, by checking the "@" prefix on the single :slug
-// param — safe because lesson slugs (slugify() in
-// infra/worker/routes/lessons.ts) never start with "@".
+// param — safe because lesson slugs (slugifyTitle() in
+// infra/db/slug.ts) never start with "@".
 export default function LearnSlugRoute() {
   const { slug } = useParams();
   if (slug?.startsWith("@")) {

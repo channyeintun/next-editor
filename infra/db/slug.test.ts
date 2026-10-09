@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { generateUniqueSlug } from "./slug";
+import { generateUniqueSlug, isSlugUniqueViolation, slugifyTitle } from "./slug";
 
 /** D1 stand-in whose `lessons`/`playlists` tables hold the given slugs. */
 function makeDb(taken: string[]) {
@@ -68,5 +68,38 @@ describe("generateUniqueSlug", () => {
 
     expect(slug).toMatch(/^dup-[0-9a-f]{8}$/);
     expect(probed.length).toBeLessThanOrEqual(51);
+  });
+});
+
+describe("slugifyTitle", () => {
+  it("joins lowercase letters and digits with single hyphens", () => {
+    expect(slugifyTitle("  Hello, World! Part 2  ", "lesson")).toBe("hello-world-part-2");
+  });
+
+  it("falls back when the title has no ASCII letters or digits", () => {
+    expect(slugifyTitle("မင်္ဂလာပါ", "lesson")).toBe("lesson");
+    expect(slugifyTitle("", "playlist")).toBe("playlist");
+  });
+
+  it("caps the slug at 60 characters", () => {
+    expect(slugifyTitle("a".repeat(80), "lesson")).toBe("a".repeat(60));
+  });
+
+  // The cut used to run after the hyphen trim, so a cut landing on a hyphen
+  // kept it at the end of the slug.
+  it("never ends in a hyphen when the cut lands on one", () => {
+    expect(slugifyTitle(`${"a".repeat(59)} b`, "lesson")).toBe("a".repeat(59));
+  });
+});
+
+describe("isSlugUniqueViolation", () => {
+  it("matches only the slug column of the named table", () => {
+    const error = new Error("D1_ERROR: UNIQUE constraint failed: lessons.slug: SQLITE_CONSTRAINT");
+
+    expect(isSlugUniqueViolation(error, "lessons")).toBe(true);
+    expect(isSlugUniqueViolation(error, "playlists")).toBe(false);
+    expect(
+      isSlugUniqueViolation(new Error("UNIQUE constraint failed: lessons.id"), "lessons"),
+    ).toBe(false);
   });
 });
