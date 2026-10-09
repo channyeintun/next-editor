@@ -1,22 +1,13 @@
-# Know Which Machine You Are On
+## Always Follow Conway's Law
 
-This repository is worked on from two very different machines. Check the platform before assuming any resource constraint:
+Structure code to mirror who changes it. This repository is changed by one author plus parallel AI agents, and each usually owns one domain at a time (a recording track, audio, cursor, whiteboard, slides, preview, workspace, runtime, chat, x86, dmp, a studio stage). Module boundaries must match those domains:
 
-- **macOS workstation** (`darwin`, Apple Silicon — `uname -s` prints `Darwin`). This is Chan's Mac, where Claude Code runs. It is a normal development machine: run the full verification suite here (`vp check`, `bun run typecheck`, `vp lint`, `vp test`, builds) before claiming work is done. None of the VPS constraints below apply.
-- **Low-resource VPS** (`linux`, 1 × `x86_64` `DO-Regular` vCPU, ~961 MiB RAM — `uname -s` prints `Linux`). This is where Codex runs. The strict process and memory constraints in the next section are mandatory there and only there.
-
-## VPS-Only: Process and Memory Safety (skip entirely on macOS)
-
-On the VPS, this is the repository's highest-priority operational constraint. The VPS cannot safely absorb concurrent, lingering, or memory-heavy work:
-
-- Never create or run subagents.
-- Never run commands, tools, tests, or agents in the background, detached, or concurrently.
-- Run exactly one bounded foreground operation at a time.
-- Never use `&`, `nohup`, watch mode, detached servers, or leave a process running after a turn or interruption.
-- Treat an interrupted command as potentially still running; stop only the specifically identified process before doing further work.
-- Never run memory-heavy commands or tools, including full-repository builds, tests, typechecks, linters, browser automation, bundle analysis, or bulk code generation.
-- Do not run a full-repo-wide typecheck or test command. Scope typecheck/test/lint runs to the specific file(s) or package(s) you changed, using the smallest targeted check possible (e.g. `tsc --noEmit <file>` or one test file) with a single worker/thread whenever supported.
-- If verification cannot be performed on the VPS without a memory-heavy operation, do not run it there. Report the skipped check so it can be run on the workstation or in CI.
+- **One domain, one module.** A domain's logic lives in one cohesive module behind a narrow, explicit interface. A change to one domain should touch that module, not several others.
+- **Hubs wire, owners implement.** Do not grow the files every domain converges on (`editorMachine.ts`, `machine/types.ts`, `frameCapture.ts`, `frameReplay.ts`, `useNextEditor.ts`). Put new behavior in the owning domain's module and only register or wire it in the hub.
+- **Owners own their state.** Never write another domain's internal state directly; call a helper that the owning module exports.
+- **Dependencies point inward.** `src/core` never imports from the app layer (`src/storage`, `src/utils`, `src/components`, `src/types`, `src/contexts`). Move what core needs into core and re-export it from the app path if the app still uses it.
+- **One rule, one home.** When two domains need the same rule or constant, give it one owner and import it; do not copy it.
+- **Split by reason to change.** When a file mixes concerns that different people or agents change for different reasons, split it along those domains (no catch-all barrels) rather than letting it grow.
 
 ## Studio Lessons (agent-authorable)
 
@@ -27,7 +18,7 @@ follow `docs/lesson-script-authoring.md` — the complete authoring contract
 `lesson-script` skill for this. Never hand-edit the emitted JSON under
 `src/studio/plans/scripts/`.
 
-## Mandatory Workflow (all machines)
+## Mandatory Workflow
 
 After completing the work, provide:
 
