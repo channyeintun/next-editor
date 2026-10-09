@@ -29,19 +29,23 @@ afterEach(() => {
 describe("PlaybackSpeedVolume", () => {
   it("shows the player's speed and volume on sliders over the player's ranges", () => {
     render(<PlaybackSpeedVolume />);
-    const [speed, volume] = screen.getAllByRole("slider");
+    // Named by their visible labels, and read out with their units.
+    const speed = screen.getByRole("slider", { name: "Speed" });
+    const volume = screen.getByRole("slider", { name: "Volume" });
 
     expect(screen.getByText("1.25x")).toBeInTheDocument();
     expect(speed).toHaveAttribute("min", "0.5");
     expect(speed).toHaveAttribute("max", "2");
     expect(speed).toHaveAttribute("step", "0.25");
     expect(speed).toHaveValue("1.25");
+    expect(speed).toHaveAttribute("aria-valuetext", "1.25×");
 
     expect(screen.getByText("60")).toBeInTheDocument();
     expect(volume).toHaveAttribute("min", "0");
     expect(volume).toHaveAttribute("max", "1");
     expect(volume).toHaveAttribute("step", "0.1");
     expect(volume).toHaveValue("0.6");
+    expect(volume).toHaveAttribute("aria-valuetext", "60%");
   });
 
   it("applies a change to this playback first, then keeps it as the player's setting", () => {
@@ -52,7 +56,8 @@ describe("PlaybackSpeedVolume", () => {
       calls.push(`setting volume ${volume}`);
     });
     render(<PlaybackSpeedVolume />);
-    const [speed, volume] = screen.getAllByRole("slider");
+    const speed = screen.getByRole("slider", { name: "Speed" });
+    const volume = screen.getByRole("slider", { name: "Volume" });
 
     fireEvent.change(speed, { target: { value: "1.5" } });
     fireEvent.change(volume, { target: { value: "0.3" } });
@@ -68,7 +73,7 @@ describe("PlaybackSpeedVolume", () => {
   it("remembers a change for the next lesson", () => {
     render(<PlaybackSpeedVolume />);
 
-    fireEvent.change(screen.getAllByRole("slider")[0], { target: { value: "1.75" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Speed" }), { target: { value: "1.75" } });
     expect(window.localStorage.getItem("playback-speed")).toBe("1.75");
   });
 });
