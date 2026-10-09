@@ -78,9 +78,13 @@ describe("CaptionsMenuButton", () => {
     );
 
     // A track without a label goes by its language, named in full.
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "French" }));
+    const frenchItem = screen.getByRole("menuitemradio", { name: "French" });
+    frenchItem.focus();
+    fireEvent.click(frenchItem);
     expect(seen).toEqual({ enabled: true, trackId: "fr", language: "fr" });
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    // The chosen item went with the menu; focus is back on the button, not the page.
+    expect(button).toHaveFocus();
 
     fireEvent.click(button);
     expect(screen.getByRole("menuitemradio", { name: "French" })).toHaveAttribute(
@@ -132,5 +136,29 @@ describe("CaptionsMenuButton", () => {
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Off" }));
     expect(seen.enabled).toBe(false);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(button).toHaveFocus();
+  });
+
+  it("closes the menu on Escape, back on its button, without changing captions", () => {
+    renderPlayer([english, french]);
+    const button = screen.getByRole("button", { name: "Captions" });
+    fireEvent.click(button);
+    const englishItem = screen.getByRole("menuitemradio", { name: "English" });
+    englishItem.focus();
+
+    // fireEvent returns false once a handler has called preventDefault.
+    expect(fireEvent.keyDown(englishItem, { key: "Escape" })).toBe(false);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(button).toHaveFocus();
+    expect(seen.enabled).toBe(false);
+  });
+
+  it("leaves other keys in the menu alone", () => {
+    renderPlayer([english, french]);
+    fireEvent.click(screen.getByRole("button", { name: "Captions" }));
+
+    expect(fireEvent.keyDown(screen.getByRole("menu"), { key: "Tab" })).toBe(true);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 });

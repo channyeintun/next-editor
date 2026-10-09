@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useRef } from "react";
 import { Captions, CaptionsOff, Check } from "lucide-react";
 import type { CaptionTrack } from "../../core/src/types";
 import { useCaptionStore, useCaptionStoreTrigger } from "../../hooks/useCaptionStore";
@@ -28,10 +28,19 @@ const CaptionsMenuButton = ({
   const hasMultipleTracks = tracks.length > 1;
   // By id: a studio track and a generated one can share a language.
   const activeTrackId = selectCaptionTrack(tracks, { trackId, language })?.id;
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Choosing an item unmounts the focused item with the menu; focus goes back to the trigger
+  // instead of falling to the page's start.
+  const closeMenu = () => {
+    setMenuOpen(false);
+    triggerRef.current?.focus();
+  };
 
   return (
     <div className="relative pointer-events-auto">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => {
           if (hasMultipleTracks) {
@@ -59,6 +68,12 @@ const CaptionsMenuButton = ({
       {menuOpen && hasMultipleTracks && (
         <div
           role="menu"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeMenu();
+            }
+          }}
           className="absolute bottom-full right-0 z-46 mb-2 min-w-40 rounded-lg border border-slate-700 bg-[#151821] py-1 shadow-[0_18px_40px_rgba(2,6,23,0.45)]"
         >
           <button
@@ -67,7 +82,7 @@ const CaptionsMenuButton = ({
             aria-checked={!captionsEnabled}
             onClick={() => {
               captionTrigger.setEnabled({ enabled: false });
-              setMenuOpen(false);
+              closeMenu();
             }}
             className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-slate-700 ${
               !captionsEnabled ? "font-semibold text-white" : "font-normal text-slate-300"
@@ -89,7 +104,7 @@ const CaptionsMenuButton = ({
                 onClick={() => {
                   captionTrigger.selectTrack({ trackId: track.id, language: track.language });
                   if (!captionsEnabled) captionTrigger.toggleEnabled();
-                  setMenuOpen(false);
+                  closeMenu();
                 }}
                 className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-slate-700 ${
                   isSelected ? "font-semibold text-white" : "font-normal text-slate-300"
