@@ -968,7 +968,7 @@ export default function StudioController() {
             disabled={running}
             onChange={(event) => selectLesson(event.target.value)}
             aria-label="Lesson to render"
-            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+            className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
           >
             {Object.keys(sources)
               .sort()
@@ -1013,7 +1013,7 @@ export default function StudioController() {
               }
             }}
             aria-label="Narration language and provider"
-            className="w-full rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+            className="w-full rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
           >
             <option value="pocket">English · Pocket-TTS</option>
             <option value="athanlab">မြန်မာ · AthanLab (your API key)</option>
@@ -1044,7 +1044,7 @@ export default function StudioController() {
               disabled={running || voiceBusy !== null}
               onChange={(event) => chooseVoice(event.target.value)}
               aria-label="Narrator voice"
-              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
+              className="min-w-0 flex-1 rounded-md border border-slate-500 bg-[#151a22] px-2 py-1.5 font-mono text-[12px] text-slate-200 disabled:opacity-50"
             >
               <option value="default">
                 {provider === "voxcpm2" ? "voice: reference required" : "voice: script default"}

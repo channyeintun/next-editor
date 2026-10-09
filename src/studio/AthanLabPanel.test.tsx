@@ -115,6 +115,16 @@ describe("AthanLabPanel key form focus", () => {
     expect(keyInput()).not.toHaveFocus();
   });
 
+  it("keeps the app-wide focus ring and a visible border on the key field", () => {
+    athan.keyStatus = { connected: false };
+    renderPanel();
+
+    // src/index.css paints the :focus-visible ring; outline-none would remove it.
+    // The border is the field's only edge against the panel (slate-500, 3.97:1).
+    expect(keyInput()).not.toHaveClass("outline-none");
+    expect(keyInput()).toHaveClass("border-slate-500");
+  });
+
   it("keeps focus on the key field while checking, then announces the rejection and ties it to the field", async () => {
     const save = deferred<unknown>();
     athan.saveKey.mockReturnValue(save.promise);
