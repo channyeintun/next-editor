@@ -69,3 +69,32 @@ export async function readBodyWithLimit(
   const body = await readBytesWithLimit(message, maxBytes);
   return body.status === "ok" ? { status: "ok", text: new TextDecoder().decode(body.bytes) } : body;
 }
+
+export type LimitedJson =
+  | { status: "ok"; value: unknown }
+  | { status: "too-large" }
+  | { status: "read-error" }
+  | { status: "invalid-json" };
+
+/**
+ * readBodyWithLimit, parsed as JSON. Each status is left to the caller to
+ * answer, so every route keeps its own messages and codes; a missing body
+ * reads as "" and so as invalid JSON.
+ */
+export async function readJsonWithLimit(
+  message: Pick<Request, "body" | "headers">,
+  maxBytes: number,
+): Promise<LimitedJson> {
+  const body = await readBodyWithLimit(message, maxBytes);
+  if (body.status !== "ok") return body;
+  try {
+    return { status: "ok", value: JSON.parse(body.text) as unknown };
+  } catch {
+    return { status: "invalid-json" };
+  }
+}
+
+/** A parsed JSON value that is an object: not null, not an array. */
+export function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

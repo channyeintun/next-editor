@@ -60,7 +60,7 @@ import {
 } from "../collaboration/assetStore";
 import { exactArrayBuffer, randomToken, sha256Hex } from "../collaboration/bytes";
 import type { Env } from "../env";
-import { readBodyWithLimit, readBytesWithLimit } from "../httpBody";
+import { readBytesWithLimit, readJsonWithLimit } from "../httpBody";
 import {
   deleteCollaborationRoomSqliteDocument,
   exportCollaborationRoomSqliteDocument,
@@ -143,14 +143,10 @@ async function readBoundedJson(
   c: CollaborationContext,
   maxBytes: number,
 ): Promise<{ ok: true; body: unknown } | { ok: false; status: 400 | 413 }> {
-  const body = await readBodyWithLimit(c.req.raw, maxBytes);
+  const body = await readJsonWithLimit(c.req.raw, maxBytes);
   if (body.status === "too-large") return { ok: false, status: 413 };
-  if (body.status === "read-error") return { ok: false, status: 400 };
-  try {
-    return { ok: true, body: JSON.parse(body.text) as unknown };
-  } catch {
-    return { ok: false, status: 400 };
-  }
+  if (body.status !== "ok") return { ok: false, status: 400 };
+  return { ok: true, body: body.value };
 }
 
 /** The body as strict UTF-8: the maintenance job's signature covers exact text. */

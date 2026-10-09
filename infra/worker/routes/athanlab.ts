@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { requireUser, type SignedInEnv } from "../auth/requireUser";
 import type { Env } from "../env";
-import { readBodyWithLimit, type LimitedBody } from "../httpBody";
+import { isJsonObject, readBodyWithLimit, readJsonWithLimit, type LimitedBody } from "../httpBody";
 import {
   acquireCredentialProbe,
   deleteProviderCredential,
@@ -429,29 +429,21 @@ athanlabRoute.get("/key", requireUser, async (c) => {
 type KeyRequest = { ok: true; apiKey: string } | { ok: false; status: 400 | 413; error: string };
 
 async function readKeyRequest(request: Request): Promise<KeyRequest> {
-  const requestBody = await readBodyWithLimit(request, MAX_KEY_REQUEST_BYTES);
+  const requestBody = await readJsonWithLimit(request, MAX_KEY_REQUEST_BYTES);
   if (requestBody.status === "too-large") {
     return { ok: false, status: 413, error: "request body is too large" };
   }
   if (requestBody.status === "read-error") {
     return { ok: false, status: 400, error: "request body could not be read" };
   }
-  let body: unknown;
-  try {
-    body = JSON.parse(requestBody.text);
-  } catch {
+  if (requestBody.status === "invalid-json") {
     return { ok: false, status: 400, error: "invalid JSON body" };
   }
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    Array.isArray(body) ||
-    Object.keys(body).length !== 1 ||
-    typeof (body as { apiKey?: unknown }).apiKey !== "string"
-  ) {
+  const body = requestBody.value;
+  if (!isJsonObject(body) || Object.keys(body).length !== 1 || typeof body.apiKey !== "string") {
     return { ok: false, status: 400, error: "'apiKey' is the only supported field" };
   }
-  return { ok: true, apiKey: (body as { apiKey: string }).apiKey };
+  return { ok: true, apiKey: body.apiKey };
 }
 
 interface KeyQuote {
@@ -917,7 +909,7 @@ type TtsRequest =
   | { ok: false; status: 400 | 413; error: string; code: string };
 
 async function readTtsRequest(request: Request): Promise<TtsRequest> {
-  const requestBody = await readBodyWithLimit(request, MAX_TTS_REQUEST_BYTES);
+  const requestBody = await readJsonWithLimit(request, MAX_TTS_REQUEST_BYTES);
   if (requestBody.status === "too-large") {
     return { ok: false, status: 413, error: "request body is too large", code: "invalid_request" };
   }
@@ -929,14 +921,12 @@ async function readTtsRequest(request: Request): Promise<TtsRequest> {
       code: "invalid_request",
     };
   }
-  let body: unknown;
-  try {
-    body = JSON.parse(requestBody.text);
-  } catch {
+  if (requestBody.status === "invalid-json") {
     return { ok: false, status: 400, error: "invalid JSON body", code: "invalid_request" };
   }
-  const keys = typeof body === "object" && body !== null ? Object.keys(body).sort() : [];
-  if (Array.isArray(body) || keys.length !== 2 || keys[0] !== "text" || keys[1] !== "voiceId") {
+  const body = requestBody.value;
+  const keys = isJsonObject(body) ? Object.keys(body).sort() : [];
+  if (!isJsonObject(body) || keys.length !== 2 || keys[0] !== "text" || keys[1] !== "voiceId") {
     return {
       ok: false,
       status: 400,
@@ -944,7 +934,7 @@ async function readTtsRequest(request: Request): Promise<TtsRequest> {
       code: "invalid_request",
     };
   }
-  const { text: rawText, voiceId } = body as Record<string, unknown>;
+  const { text: rawText, voiceId } = body;
   const text = typeof rawText === "string" ? rawText.trim() : "";
   if (!text || text.length > MAX_TEXT_CHARS) {
     return {

@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { sha256Hex } from "../../src/shared/sha256Hex";
 import { getCurrentUser } from "./auth/session";
 import type { Env } from "./env";
-import { readBodyWithLimit } from "./httpBody";
+import { isJsonObject, readJsonWithLimit } from "./httpBody";
 import type { WaitUntil } from "./waitUntil";
 
 // Plumbing shared by the language playground proxy routes (routes/{go,kotlin,
@@ -203,22 +203,19 @@ async function readLessonFilesField(
   request: Request,
   maxRequestBytes: number,
 ): Promise<{ ok: true; rawFiles: unknown } | LessonRequestRejection> {
-  const requestBody = await readBodyWithLimit(request, maxRequestBytes);
+  const requestBody = await readJsonWithLimit(request, maxRequestBytes);
   if (requestBody.status === "too-large") {
     return { ok: false, status: 413, error: `request body exceeds ${maxRequestBytes} bytes` };
   }
   if (requestBody.status === "read-error") {
     return { ok: false, status: 400, error: "request body could not be read" };
   }
-
-  let body: unknown;
-  try {
-    body = JSON.parse(requestBody.text);
-  } catch {
+  if (requestBody.status === "invalid-json") {
     return { ok: false, status: 400, error: "invalid JSON body" };
   }
 
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+  const body = requestBody.value;
+  if (!isJsonObject(body)) {
     return { ok: false, status: 400, error: "JSON body must be an object" };
   }
 
@@ -227,7 +224,7 @@ async function readLessonFilesField(
     return { ok: false, status: 400, error: "'files' is the only supported field" };
   }
 
-  return { ok: true, rawFiles: (body as Record<string, unknown>).files };
+  return { ok: true, rawFiles: body.files };
 }
 
 /** `files[index]` as a record holding exactly `path` and `content`, or why it is not one. */

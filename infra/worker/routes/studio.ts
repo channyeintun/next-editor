@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { requireUser } from "../auth/requireUser";
 import type { Env } from "../env";
-import { readBodyWithLimit } from "../httpBody";
+import { isJsonObject, readBodyWithLimit, readJsonWithLimit } from "../httpBody";
 import { sanitizeUpstreamText } from "../upstreamText";
 import { isUserFeatureEnabled, STUDIO_BURMESE_VOXCPM2_FEATURE } from "../../db/featureFlags";
 import { keyVaultOf } from "../athanlab/keyVault";
@@ -224,21 +224,19 @@ function validateReferenceAudioBase64(
 }
 
 async function validateSynthesisRequest(request: Request): Promise<SynthesisRequestValidation> {
-  const requestBody = await readBodyWithLimit(request, MAX_REQUEST_BYTES);
+  const requestBody = await readJsonWithLimit(request, MAX_REQUEST_BYTES);
   if (requestBody.status === "too-large") {
     return { ok: false, status: 413, error: "request body is too large" };
   }
   if (requestBody.status === "read-error") {
     return { ok: false, status: 400, error: "request body could not be read" };
   }
-
-  let body: unknown;
-  try {
-    body = JSON.parse(requestBody.text);
-  } catch {
+  if (requestBody.status === "invalid-json") {
     return { ok: false, status: 400, error: "invalid JSON body" };
   }
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+
+  const body = requestBody.value;
+  if (!isJsonObject(body)) {
     return { ok: false, status: 400, error: "JSON body must be an object" };
   }
 
@@ -256,11 +254,7 @@ async function validateSynthesisRequest(request: Request): Promise<SynthesisRequ
     };
   }
 
-  const {
-    text: rawText,
-    seed,
-    referenceAudioBase64: rawReferenceAudio,
-  } = body as Record<string, unknown>;
+  const { text: rawText, seed, referenceAudioBase64: rawReferenceAudio } = body;
   const text = typeof rawText === "string" ? rawText.trim() : "";
   if (!text || text.length > MAX_TEXT_CHARS) {
     return {
