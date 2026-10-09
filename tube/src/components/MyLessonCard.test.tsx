@@ -72,6 +72,12 @@ describe("MyLessonCard", () => {
     expect(input).toHaveValue("Intro");
   });
 
+  it("keeps the global focus ring on the rename field", () => {
+    startRename();
+
+    expect(screen.getByRole("textbox", { name: "Lesson name" })).not.toHaveClass("outline-none");
+  });
+
   it("announces an empty name and ties the error to the rename field", () => {
     startRename();
     const input = screen.getByRole("textbox", { name: "Lesson name" });

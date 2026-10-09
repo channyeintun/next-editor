@@ -184,7 +184,7 @@ export default function PlaylistCard({
               }}
               maxLength={MAX_TITLE_CHARS}
               disabled={update.isPending}
-              className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white outline-none focus:border-pinata-purple/60 disabled:opacity-60"
+              className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white focus:border-pinata-purple/60 disabled:opacity-60"
             />
             <button
               type="button"

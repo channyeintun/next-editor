@@ -46,6 +46,14 @@ describe("AddToPlaylistPopover", () => {
     );
   });
 
+  it("keeps the global focus ring on the quick-create field", () => {
+    render(<AddToPlaylistPopover lesson={lesson} onClose={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /new playlist/i }));
+
+    expect(screen.getByPlaceholderText("Playlist name")).not.toHaveClass("outline-none");
+  });
+
   it("announces a failed quick-create", () => {
     createPlaylist.mockImplementation((_variables, options) => options?.onError?.());
     render(<AddToPlaylistPopover lesson={lesson} onClose={() => {}} />);

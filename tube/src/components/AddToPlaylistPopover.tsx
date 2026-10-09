@@ -129,7 +129,7 @@ export default function AddToPlaylistPopover({
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="Find a playlist"
-              className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white outline-none focus:border-pinata-purple/60"
+              className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white focus:border-pinata-purple/60"
             />
           </div>
         )}
@@ -192,7 +192,7 @@ export default function AddToPlaylistPopover({
                 placeholder="Playlist name"
                 maxLength={MAX_TITLE_CHARS}
                 disabled={createPlaylist.isPending}
-                className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white outline-none focus:border-pinata-purple/60 disabled:opacity-60"
+                className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white focus:border-pinata-purple/60 disabled:opacity-60"
               />
               <button
                 type="button"

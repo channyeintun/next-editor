@@ -90,7 +90,7 @@ export default function UsernameEditor({ username }: { username: string }) {
             if (e.key === "Escape") setEditing(false);
           }}
           disabled={mutation.isPending}
-          className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white outline-none focus:border-pinata-purple/60 disabled:opacity-60"
+          className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white focus:border-pinata-purple/60 disabled:opacity-60"
         />
         <button
           type="button"

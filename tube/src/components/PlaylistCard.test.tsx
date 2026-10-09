@@ -57,6 +57,13 @@ describe("PlaylistCard", () => {
     expect(input).toHaveValue("Rust basics");
   });
 
+  it("keeps the global focus ring on the rename field", () => {
+    renderCard();
+    openMenuItem("Rename");
+
+    expect(screen.getByRole("textbox", { name: "Playlist name" })).not.toHaveClass("outline-none");
+  });
+
   it("announces an empty name and ties the error to the rename field", () => {
     renderCard();
     openMenuItem("Rename");

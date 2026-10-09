@@ -76,7 +76,7 @@ export default function CreatePlaylistModal({ onClose }: { onClose: () => void }
             placeholder="Playlist name"
             maxLength={MAX_TITLE_CHARS}
             disabled={createPlaylist.isPending}
-            className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-pinata-purple/60 disabled:opacity-60"
+            className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-pinata-purple/60 disabled:opacity-60"
           />
           <input
             value={description}
@@ -87,7 +87,7 @@ export default function CreatePlaylistModal({ onClose }: { onClose: () => void }
             placeholder="Description (optional)"
             maxLength={MAX_DESCRIPTION_CHARS}
             disabled={createPlaylist.isPending}
-            className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-pinata-purple/60 disabled:opacity-60"
+            className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-pinata-purple/60 disabled:opacity-60"
           />
           {titleError && (
             <p id={titleErrorId} role="alert" className="text-xs text-rose-300">

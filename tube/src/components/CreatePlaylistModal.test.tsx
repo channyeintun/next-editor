@@ -21,6 +21,13 @@ describe("CreatePlaylistModal", () => {
     );
   });
 
+  it("keeps the global focus ring on both fields", () => {
+    render(<CreatePlaylistModal onClose={() => {}} />);
+
+    expect(screen.getByPlaceholderText("Playlist name")).not.toHaveClass("outline-none");
+    expect(screen.getByPlaceholderText("Description (optional)")).not.toHaveClass("outline-none");
+  });
+
   it("announces an empty name and ties the error to the name field", () => {
     render(<CreatePlaylistModal onClose={() => {}} />);
     const input = screen.getByPlaceholderText("Playlist name");

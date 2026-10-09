@@ -48,6 +48,12 @@ describe("UsernameEditor", () => {
     expect(screen.getByText("@")).toHaveAttribute("aria-hidden", "true");
   });
 
+  it("keeps the global focus ring on the username field", () => {
+    openEditor();
+
+    expect(screen.getByRole("textbox", { name: "Username" })).not.toHaveClass("outline-none");
+  });
+
   it("announces a failed save and ties the error to the field", () => {
     mutate.mockImplementation((_username, options) => options?.onError?.(conflict()));
     openEditor();
