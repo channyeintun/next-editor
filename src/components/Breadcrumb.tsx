@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { ChevronRight } from "lucide-react";
+import LangText from "./LangText";
 
 // Shared "Lessons > X" trail back to the gallery — used inside the editor's
 // header (the /learn/:slug detail view and the /code editor) and standalone
@@ -14,7 +15,9 @@ export default function Breadcrumb({ title }: { title: string }) {
         Lessons
       </Link>
       <ChevronRight className="size-3.5 shrink-0 text-slate-600" />
-      <span className="truncate font-bold capitalize tracking-wider text-slate-200">{title}</span>
+      <span className="truncate font-bold capitalize tracking-wider text-slate-200">
+        <LangText text={title} />
+      </span>
     </nav>
   );
 }

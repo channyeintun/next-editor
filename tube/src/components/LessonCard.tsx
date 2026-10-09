@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { Play } from "lucide-react";
+import LangText from "@app/components/LangText";
 import type { Lesson } from "../types";
 import { resolveThumb } from "../lib/links";
 
@@ -70,7 +71,7 @@ export default function LessonCard({
             to={href}
             className="rounded text-white outline-none focus-visible:ring-2 focus-visible:ring-pinata-purple focus-visible:ring-offset-2 focus-visible:ring-offset-[#11141c]"
           >
-            {lesson.title}
+            <LangText text={lesson.title} />
           </Link>
         </h3>
         {(lesson.author || published) && (
