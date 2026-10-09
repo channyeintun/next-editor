@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   athanLabErrorOf,
@@ -175,6 +175,12 @@ export default function AthanLabPanel({
   const [samplePlaying, setSamplePlaying] = useState(false);
   const [sampleError, setSampleError] = useState<string | null>(null);
   const sampleAudioRef = useRef<HTMLAudioElement | null>(null);
+  const keyErrorId = useId();
+  const keyInputRef = useRef<HTMLInputElement | null>(null);
+  const changeButtonRef = useRef<HTMLButtonElement | null>(null);
+  // Set when Cancel or a replacement save closes the form that Change opened:
+  // focus then returns to Change instead of dropping to the page.
+  const returnFocusToChangeRef = useRef(false);
 
   const voiceList = connected ? (voicesQuery.data ?? null) : null;
   const voices = voiceList ? orderedVoices(voiceList.voices) : [];
@@ -237,6 +243,13 @@ export default function AthanLabPanel({
     [],
   );
 
+  useEffect(() => {
+    if (!formOpen && returnFocusToChangeRef.current) {
+      returnFocusToChangeRef.current = false;
+      changeButtonRef.current?.focus();
+    }
+  }, [formOpen]);
+
   const chooseVoice = (voiceId: string) => {
     setPreferredVoiceId(voiceId);
     storeVoiceId(voiceId);
@@ -249,8 +262,16 @@ export default function AthanLabPanel({
     setRemoved(false);
     saveKey
       .mutateAsync(apiKey)
-      .then(() => setFormOpen(false))
-      .catch((error: unknown) => setSaveError(athanLabErrorOf(error)))
+      .then(() => {
+        // Only a form opened by Change has a Change button to return to.
+        if (formOpen) returnFocusToChangeRef.current = true;
+        setFormOpen(false);
+      })
+      .catch((error: unknown) => {
+        setSaveError(athanLabErrorOf(error));
+        // Back to the field the error describes and the author must fix.
+        keyInputRef.current?.focus();
+      })
       .finally(() => {
         // The key has left the page with this request: drop it from the field
         // and, through reset(), from the settled mutation's variables.
@@ -335,7 +356,9 @@ export default function AthanLabPanel({
   if (!keyStatus) {
     return keyError ? (
       <div className="mt-2 flex items-center gap-2 text-[12px] text-rose-300">
-        <p className="min-w-0 flex-1">{keyError.message}</p>
+        <p role="alert" className="min-w-0 flex-1">
+          {keyError.message}
+        </p>
         <button
           type="button"
           disabled={keyQuery.isFetching}
@@ -364,6 +387,7 @@ export default function AthanLabPanel({
           </p>
           {formOpen ? null : (
             <button
+              ref={changeButtonRef}
               type="button"
               disabled={disabled || removeKey.isPending}
               onClick={() => {
@@ -404,16 +428,27 @@ export default function AthanLabPanel({
 
       {showForm ? (
         <div>
+          <span role="status" className="sr-only">
+            {saveKey.isPending ? "Checking your AthanLab key…" : ""}
+          </span>
           <div className="flex items-center gap-2">
             {/* ph-no-capture keeps the field out of PostHog session replays
                 regardless of the global maskAllInputs setting, like the agent's
-                OpenRouter key field (AgentSettingsDialog). */}
+                OpenRouter key field (AgentSettingsDialog). It is read-only, not
+                disabled, while checking so Enter-to-save keeps focus here, and
+                autoFocus fires only when Change opened the form (never on first
+                connect). */}
             <input
+              ref={keyInputRef}
               type="password"
               autoComplete="off"
               spellCheck={false}
               value={keyDraft}
-              disabled={disabled || saveKey.isPending}
+              disabled={disabled}
+              readOnly={saveKey.isPending}
+              autoFocus={formOpen}
+              aria-invalid={saveError ? true : undefined}
+              aria-describedby={saveError ? keyErrorId : undefined}
               onChange={(event) => setKeyDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -440,6 +475,7 @@ export default function AthanLabPanel({
                 onClick={() => {
                   setKeyDraft("");
                   setSaveError(null);
+                  returnFocusToChangeRef.current = true;
                   setFormOpen(false);
                 }}
                 className="shrink-0 rounded-md px-2 py-1.5 text-[12px] font-semibold text-slate-400 hover:text-white disabled:opacity-50"
@@ -448,7 +484,11 @@ export default function AthanLabPanel({
               </button>
             ) : null}
           </div>
-          {saveError ? <p className="mt-1 text-rose-300">{saveError.message}</p> : null}
+          {saveError ? (
+            <p id={keyErrorId} role="alert" className="mt-1 text-rose-300">
+              {saveError.message}
+            </p>
+          ) : null}
           <p className="mt-1 text-slate-500">
             Get a key at{" "}
             <a
@@ -479,7 +519,11 @@ export default function AthanLabPanel({
           >
             {removeKey.isPending ? "Disconnecting…" : "Disconnect"}
           </button>
-          {removeError ? <p className="min-w-0 flex-1 text-rose-300">{removeError}</p> : null}
+          {removeError ? (
+            <p role="alert" className="min-w-0 flex-1 text-rose-300">
+              {removeError}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -527,8 +571,16 @@ export default function AthanLabPanel({
               {samplePlaying ? "Stop" : "Listen"}
             </button>
           </div>
-          {voicesError ? <p className="mt-1 text-rose-300">{voicesError.message}</p> : null}
-          {sampleError ? <p className="mt-1 text-rose-300">{sampleError}</p> : null}
+          {voicesError ? (
+            <p role="alert" className="mt-1 text-rose-300">
+              {voicesError.message}
+            </p>
+          ) : null}
+          {sampleError ? (
+            <p role="alert" className="mt-1 text-rose-300">
+              {sampleError}
+            </p>
+          ) : null}
           {balanceLine ? <p className="mt-1 text-slate-400">{balanceLine}</p> : null}
           {usageBlock ? (
             <p className="mt-1 text-amber-300">

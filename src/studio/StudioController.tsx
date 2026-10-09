@@ -350,6 +350,7 @@ export default function StudioController() {
   );
   const [voiceBusy, setVoiceBusy] = useState<string | null>(null);
   const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
+  const voiceSelectRef = useRef<HTMLSelectElement | null>(null);
   const voiceRecorderRef = useRef<{ recorder: MediaRecorder; chunks: Blob[] } | null>(null);
   const [voiceRecording, setVoiceRecording] = useState(false);
 
@@ -514,6 +515,9 @@ export default function StudioController() {
     await deleteCustomVoice(selectedVoice.id);
     setCustomVoices(await listCustomVoices());
     chooseVoice("default");
+    // The delete button unmounts with the voice; keep focus on the voice
+    // select, which stays mounted, instead of dropping it to the page.
+    voiceSelectRef.current?.focus();
   };
 
   // Memoized (this module is uncompiled) so `sources[planSlug]` keeps its
@@ -1019,6 +1023,7 @@ export default function StudioController() {
         {provider === "athanlab" ? null : (
           <div className="mt-2 flex items-center gap-2">
             <select
+              ref={voiceSelectRef}
               value={selectedVoice ? selectedVoice.id : "default"}
               disabled={running || voiceBusy !== null}
               onChange={(event) => chooseVoice(event.target.value)}

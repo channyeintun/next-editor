@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { runStudioRender } from "./runStudioRender";
 import type { SavedCustomVoice } from "./tts/customVoices";
 
@@ -191,5 +191,34 @@ describe("StudioController status messages", () => {
 
     const notice = await screen.findByText('Synthesizing a preview with "Narrator"…');
     expect(notice.closest('[role="status"]')).not.toBeNull();
+  });
+});
+
+describe("StudioController voice focus", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    studio.searchParams = new URLSearchParams();
+    studio.voices = [narrator];
+    localStorage.setItem("next-editor:studio:voice-choice", narrator.id);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("keeps focus on the voice select after deleting the selected voice", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderController();
+    const remove = await screen.findByRole("button", { name: "✕" });
+
+    studio.voices = [];
+    remove.focus();
+    fireEvent.click(remove);
+
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Narrator voice" })).toHaveFocus(),
+    );
+    expect(screen.queryByRole("button", { name: "✕" })).toBeNull();
   });
 });
