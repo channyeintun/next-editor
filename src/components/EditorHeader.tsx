@@ -125,9 +125,10 @@ function WhiteboardHeaderButton() {
   );
 }
 
-function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boolean }) {
+export function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boolean }) {
   const [isEnvironmentModalOpen, setIsEnvironmentModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const { resetRuntime, updateRunnerConfig } = useWebContainerRuntimeActions();
   const { exportAsFile, importFromFile, loadRecording } = useNextEditorActions();
@@ -170,13 +171,26 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     updateRunnerConfig({ enabled: true });
   };
 
-  const handleEditEnvironment = () => {
+  // Every action runs from a menu item, which unmounts as the menu closes and
+  // would drop focus to <body>. Focus goes back to the Settings button first,
+  // before any confirm or file picker, so the browser returns there after the
+  // native UI too. `restoreFocus` is false only where something else takes
+  // focus: the environment dialog (which returns it to the button on close)
+  // and the product tour.
+  const closeMenu = (restoreFocus = true) => {
     setIsMenuOpen(false);
+    if (restoreFocus) {
+      settingsButtonRef.current?.focus();
+    }
+  };
+
+  const handleEditEnvironment = () => {
+    closeMenu(false);
     setIsEnvironmentModalOpen(true);
   };
 
   const handleImportRecording = async () => {
-    setIsMenuOpen(false);
+    closeMenu();
 
     try {
       const importedRecordings = await importFromFile();
@@ -199,7 +213,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   };
 
   const handleExportRecording = async () => {
-    setIsMenuOpen(false);
+    closeMenu();
 
     if (!currentRecording) {
       return;
@@ -221,7 +235,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   };
 
   const handleDownload = async () => {
-    setIsMenuOpen(false);
+    closeMenu();
 
     try {
       await downloadWorkspaceProjectAsZip(getProject());
@@ -235,7 +249,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
   };
 
   const openImportDialog = () => {
-    setIsMenuOpen(false);
+    closeMenu();
     importInputRef.current?.click();
   };
 
@@ -286,7 +300,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
     // starter of the active lesson type rather than always falling back to HTML/CSS.
     const currentOption = activeLessonOption;
 
-    setIsMenuOpen(false);
+    closeMenu();
 
     if (
       !confirmReplaceWorkspace(
@@ -304,20 +318,20 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
   const handleSelectLessonType = async (nextLessonType: WorkspaceLessonType) => {
     if (lessonType === nextLessonType) {
-      setIsMenuOpen(false);
+      closeMenu();
       return;
     }
 
     const nextOption = LESSON_TYPE_OPTIONS.find((option) => option.value === nextLessonType);
 
     if (!nextOption) {
-      setIsMenuOpen(false);
+      closeMenu();
       return;
     }
 
     const nextLessonLabel = `a fresh ${nextOption.label} project`;
 
-    setIsMenuOpen(false);
+    closeMenu();
 
     if (
       !confirmReplaceWorkspace(
@@ -336,8 +350,17 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
 
   return (
     <>
-      <div className={`relative ${isMenuOpen ? "z-2147483647" : ""}`}>
+      <div
+        className={`relative ${isMenuOpen ? "z-2147483647" : ""}`}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && isMenuOpen) {
+            event.stopPropagation();
+            closeMenu();
+          }
+        }}
+      >
         <button
+          ref={settingsButtonRef}
           data-tour="settings"
           type="button"
           aria-label="Open workspace settings"
@@ -432,7 +455,7 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
                     icon={Compass}
                     label="Take a Tour"
                     onClick={() => {
-                      setIsMenuOpen(false);
+                      closeMenu(false);
                       void startTour({ force: true });
                     }}
                   />
@@ -454,7 +477,10 @@ function WorkspaceSettingsButton({ showImportExport }: { showImportExport: boole
       />
 
       {isEnvironmentModalOpen && (
-        <EnvironmentVariablesDialog onClose={() => setIsEnvironmentModalOpen(false)} />
+        <EnvironmentVariablesDialog
+          onClose={() => setIsEnvironmentModalOpen(false)}
+          returnFocusRef={settingsButtonRef}
+        />
       )}
     </>
   );
