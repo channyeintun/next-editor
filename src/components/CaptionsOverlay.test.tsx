@@ -61,4 +61,13 @@ describe("CaptionsOverlay", () => {
     expect(caption).toHaveAttribute("lang", "ar");
     expect(caption).toHaveAttribute("dir", "rtl");
   });
+
+  it("sits on a dark chip that keeps the white text readable over light slides and pages", () => {
+    showCaptions([burmese]);
+    // 75% of #0c1119: white text measures 8.50:1 over a white backdrop (15% gave 1.37:1).
+    expect(screen.getByText("မင်္ဂလာပါ။")).toHaveClass(
+      "bg-[lch(4.83_5.58_267.3/0.75)]",
+      "text-white",
+    );
+  });
 });

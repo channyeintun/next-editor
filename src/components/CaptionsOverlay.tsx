@@ -42,7 +42,7 @@ const CaptionsOverlay: React.FC = () => {
         // So screen readers voice, and the browser picks fonts for, the captions' language.
         lang={activeTrack.language || undefined}
         dir={isRtl ? "rtl" : undefined}
-        className="max-w-[78ch] rounded-xl bg-[lch(4.83_5.58_267.3/0.15)] px-4.5 py-2.25 text-center text-[24px] leading-8.5 font-medium text-white [text-shadow:0_1px_4px_#000] backdrop-blur-sm sm:text-[18px] sm:leading-6.5 sm:px-3.5"
+        className="max-w-[78ch] rounded-xl bg-[lch(4.83_5.58_267.3/0.75)] px-4.5 py-2.25 text-center text-[24px] leading-8.5 font-medium text-white [text-shadow:0_1px_4px_#000] backdrop-blur-sm sm:text-[18px] sm:leading-6.5 sm:px-3.5"
       >
         {activeCue.text}
       </div>
