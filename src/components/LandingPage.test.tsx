@@ -109,3 +109,64 @@ describe("LandingPage framework rotation", () => {
     expect(screen.queryByRole("button", { name: /animation/ })).toBe(null);
   });
 });
+
+describe("LandingPage fullscreen focus", () => {
+  let fullscreenElement: Element | null = null;
+  const setFullscreen = (element: Element | null) => {
+    fullscreenElement = element;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  };
+
+  beforeEach(() => {
+    fullscreenElement = null;
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => fullscreenElement,
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      configurable: true,
+      value: () => setFullscreen(null),
+    });
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value(this: HTMLElement) {
+        return setFullscreen(this);
+      },
+    });
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(document, "fullscreenElement");
+    Reflect.deleteProperty(document, "exitFullscreen");
+    Reflect.deleteProperty(HTMLElement.prototype, "requestFullscreen");
+  });
+
+  it("moves focus to the in-demo Exit button and back to the covered toggle", () => {
+    renderLandingPage();
+    const toggle = screen.getByRole("button", { name: "View demo in full screen" });
+    toggle.focus();
+
+    fireEvent.click(toggle);
+
+    // The header toggle is now covered; focus lands on the first tab stop
+    // inside the fullscreen element.
+    const exit = screen
+      .getAllByRole("button", { name: "Exit full screen" })
+      .find((button) => button !== toggle);
+    expect(exit).toBeDefined();
+    expect(document.activeElement).toBe(exit);
+    expect(fullscreenElement?.querySelector("a, button, iframe")).toBe(exit);
+
+    fireEvent.click(exit!);
+    expect(document.activeElement).toBe(toggle);
+
+    // Leaving with the browser's own Esc handling restores focus too.
+    fireEvent.click(toggle);
+    expect(document.activeElement).not.toBe(toggle);
+    act(() => {
+      void setFullscreen(null);
+    });
+    expect(document.activeElement).toBe(toggle);
+  });
+});

@@ -162,6 +162,9 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
 
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const fullscreenToggleRef = useRef<HTMLButtonElement>(null);
+  const exitFullscreenRef = useRef<HTMLButtonElement>(null);
+  const wasFullscreenRef = useRef(false);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   // The demo iframe boots a SECOND full copy of the editor (Monaco + recording
@@ -241,6 +244,15 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
       document.removeEventListener("webkitfullscreenchange", handleChange);
     };
   }, []);
+
+  // Fullscreen covers the header toggle, so focus would sit on a hidden
+  // control: hand it to the in-container Exit button on entry and back to the
+  // toggle on exit (Esc included).
+  useEffect(() => {
+    if (isFullscreen) exitFullscreenRef.current?.focus();
+    else if (wasFullscreenRef.current) fullscreenToggleRef.current?.focus();
+    wasFullscreenRef.current = isFullscreen;
+  }, [isFullscreen]);
 
   // The embed boots with ?largeControls=true (legible at ~0.45x scale), but
   // fullscreen renders it at native size where those controls are giant. Push the
@@ -393,6 +405,7 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                       <div className="flex shrink-0 items-center gap-1.5">
                         {isMobile === false && (
                           <button
+                            ref={fullscreenToggleRef}
                             type="button"
                             onClick={toggleFullscreen}
                             aria-label={
@@ -426,6 +439,20 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                         isMobile === true ? "" : "aspect-1440/900"
                       }`}
                     >
+                      {/* First in DOM order so it is the first tab stop inside the
+                          fullscreen element; absolute z-10 keeps it above the frame. */}
+                      {isFullscreen && (
+                        <button
+                          ref={exitFullscreenRef}
+                          type="button"
+                          onClick={toggleFullscreen}
+                          aria-label="Exit full screen"
+                          title="Exit full screen"
+                          className="absolute left-4 top-4 z-10 inline-flex items-center justify-center rounded-full border border-white/15 bg-slate-950/80 p-2.5 text-white backdrop-blur transition-colors hover:bg-slate-950"
+                        >
+                          <Minimize className="size-4" aria-hidden="true" />
+                        </button>
+                      )}
                       {isMobile !== false ? (
                         // Until hydration settles isMobile, the cached SSR markup can't
                         // know the device, so the card shows only on touch-first
@@ -475,17 +502,6 @@ const LandingPage = ({ onAnalyticsEvent, starCount = null }: LandingPageProps) =
                           title="Next Editor Live Demo"
                         />
                       ) : null}
-                      {isFullscreen && (
-                        <button
-                          type="button"
-                          onClick={toggleFullscreen}
-                          aria-label="Exit full screen"
-                          title="Exit full screen"
-                          className="absolute left-4 top-4 z-10 inline-flex items-center justify-center rounded-full border border-white/15 bg-slate-950/80 p-2.5 text-white backdrop-blur transition-colors hover:bg-slate-950"
-                        >
-                          <Minimize className="size-4" aria-hidden="true" />
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>
