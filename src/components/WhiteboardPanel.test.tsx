@@ -1,5 +1,5 @@
 /* oxlint-disable vitest/require-mock-type-parameters */
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
   WhiteboardElementJSON,
@@ -554,5 +554,99 @@ describe("WhiteboardPanel text sizing", () => {
     });
     expect(updateScene).toHaveBeenCalledTimes(2);
     expect(pushedElements(1)[0]).toMatchObject({ width: 240 });
+  });
+});
+
+describe("WhiteboardPanel dialog", () => {
+  // EditorHeader's whiteboard toggle and a player-bar button, both outside the panel.
+  function Page({ open }: { open: boolean }) {
+    return (
+      <>
+        <button type="button" data-tour="whiteboard">
+          Whiteboard toggle
+        </button>
+        <button type="button">Play</button>
+        {open ? <WhiteboardPanel /> : null}
+      </>
+    );
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    canvasElements = [];
+    usesPlaybackModel = false;
+    isInPlaybackSession = false;
+    whiteboardState = makeWhiteboardState("external");
+    whiteboardStore = createWhiteboardStore();
+  });
+
+  it("is a dialog named by its heading, and takes focus that was lost", () => {
+    render(<WhiteboardPanel />);
+
+    const dialog = screen.getByRole("dialog", { name: "Whiteboard" });
+    // Non-modal: the player bar stays usable above the board.
+    expect(dialog).not.toHaveAttribute("aria-modal");
+    expect(screen.getByRole("heading", { level: 2, name: "Whiteboard" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close whiteboard" })).toHaveFocus();
+  });
+
+  it("takes focus from its opener and gives it back on close", () => {
+    const view = render(<Page open={false} />);
+    const opener = screen.getByRole("button", { name: "Whiteboard toggle" });
+    opener.focus();
+
+    view.rerender(<Page open />);
+    expect(screen.getByRole("button", { name: "Close whiteboard" })).toHaveFocus();
+
+    view.rerender(<Page open={false} />);
+    expect(opener).toHaveFocus();
+  });
+
+  it("takes focus from a control left in the inert workspace", () => {
+    // CodeEditor's root goes inert while the board covers it.
+    function Workspace({ open }: { open: boolean }) {
+      return (
+        <>
+          <div inert={open}>
+            <button type="button">File tree</button>
+          </div>
+          {open ? <WhiteboardPanel /> : null}
+        </>
+      );
+    }
+    const view = render(<Workspace open={false} />);
+    screen.getByRole("button", { name: "File tree" }).focus();
+
+    // jsdom keeps focus on an element that goes inert; a browser drops it to the body.
+    view.rerender(<Workspace open />);
+    expect(screen.getByRole("button", { name: "Close whiteboard" })).toHaveFocus();
+  });
+
+  it("leaves focus on the player bar when playback opens the board", () => {
+    usesPlaybackModel = true;
+    isInPlaybackSession = true;
+    const view = render(<Page open={false} />);
+    const play = screen.getByRole("button", { name: "Play" });
+    play.focus();
+
+    view.rerender(<Page open />);
+    expect(play).toHaveFocus();
+
+    view.rerender(<Page open={false} />);
+    expect(play).toHaveFocus();
+  });
+
+  it("closes on Escape in its header bar, but leaves Escape on the canvas to Excalidraw", () => {
+    render(<WhiteboardPanel />);
+
+    // The canvas area follows the header bar.
+    const canvasArea = screen.getByRole("dialog", { name: "Whiteboard" }).lastElementChild;
+    expect(canvasArea).not.toBeNull();
+    fireEvent.keyDown(canvasArea as Element, { key: "Escape" });
+    expect(whiteboardState.setOpen).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Close whiteboard" }), { key: "Escape" });
+    expect(whiteboardState.setOpen).toHaveBeenCalledExactlyOnceWith(false);
+    expect(stopFollowing).toHaveBeenCalledWith("local-whiteboard-input");
   });
 });

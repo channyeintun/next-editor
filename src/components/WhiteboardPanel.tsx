@@ -54,6 +54,9 @@ function isCanvasGestureActive(appState: AppState): boolean {
 
 const REFIT_RETRY_MS = 250;
 
+/** EditorHeader's whiteboard toggle, which opens the board and takes focus back. */
+const WHITEBOARD_OPENER_SELECTOR = '[data-tour="whiteboard"]';
+
 function toExcalidrawView(view: WhiteboardView) {
   return {
     scrollX: view.scrollX,
@@ -186,28 +189,67 @@ export default function WhiteboardPanel() {
     };
   }, [isOpen]);
 
+  // The board is a non-modal dialog: the player bar stays usable above it, so a
+  // playback- or presenter-driven open leaves focus on the player alone. Focus
+  // that was lost or left in the covered workspace (the opener, or Monaco,
+  // blurred when CodeEditor went inert) moves to Close. On close, focus that the
+  // removed panel dropped returns to the header's whiteboard button. A passive
+  // effect, so the cleanup runs after CodeEditor has dropped `inert`.
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const active = document.activeElement;
+    if (
+      !active ||
+      active === document.body ||
+      active.closest("[inert]") ||
+      active.closest(WHITEBOARD_OPENER_SELECTOR)
+    ) {
+      closeButtonRef.current?.focus();
+    }
+    return () => {
+      if (document.activeElement === null || document.activeElement === document.body) {
+        document.querySelector<HTMLElement>(WHITEBOARD_OPENER_SELECTOR)?.focus();
+      }
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const close = () => {
+    collaboration?.stopFollowing("local-whiteboard-input");
+    setOpen(false);
+  };
 
   return (
     <>
       <div
         className="fixed inset-0 z-90 bg-[#0b0d12]/90 opacity-0 animate-[fade-in_0.2s_ease-out_forwards] motion-reduce:animate-none motion-reduce:opacity-100"
-        onClick={() => {
-          collaboration?.stopFollowing("local-whiteboard-input");
-          setOpen(false);
-        }}
+        onClick={close}
       />
       <div
+        role="dialog"
+        aria-labelledby="whiteboard-title"
         className={`fixed z-100 flex flex-col overflow-hidden bg-slate-900 shadow-2xl transition-[inset,border-radius] motion-reduce:transition-none ${
           scene.isMaximized
             ? "inset-0 rounded-none"
             : "top-[5%] left-[5%] right-[5%] bottom-[5%] rounded-2xl"
         }`}
       >
-        <div className="flex items-center justify-between px-4 py-2 bg-[#11141c] border-b border-white/10 shrink-0">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+        {/* Escape is handled here only: on the canvas it belongs to Excalidraw
+            (cancel a stroke, leave text editing, deselect). */}
+        <div
+          className="flex items-center justify-between px-4 py-2 bg-[#11141c] border-b border-white/10 shrink-0"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") close();
+          }}
+        >
+          <h2
+            id="whiteboard-title"
+            className="text-xs font-bold text-slate-400 uppercase tracking-wider"
+          >
             Whiteboard
-          </span>
+          </h2>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -222,12 +264,10 @@ export default function WhiteboardPanel() {
               {scene.isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             </button>
             <button
+              ref={closeButtonRef}
               type="button"
               aria-label="Close whiteboard"
-              onClick={() => {
-                collaboration?.stopFollowing("local-whiteboard-input");
-                setOpen(false);
-              }}
+              onClick={close}
               className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
             >
               <X size={16} />
